@@ -5,37 +5,39 @@ import 'package:test/test.dart';
 import '../support/cockpit_test_action_samples.dart';
 
 void main() {
-  const lowerer = CockpitTestActionLowerer();
+  const flutterLowerer = CockpitTestActionLowerer();
+  const systemLowerer = CockpitTestActionLowerer.system();
   final capabilities = _capabilities();
 
-  test(
-    'every V2 action lowers exhaustively for a fully capable Flutter target',
-    () {
-      for (final kind in CockpitTestActionKind.values) {
-        final result = lowerer.lower(
-          action: sampleBoundAction(kind),
-          commandId: 'command-${kind.name}',
-          timeoutMs: 5000,
-          requestedPlane: CockpitTestPlane.semantic,
-          capabilities: capabilities,
-        );
-        expect(
-          result.isSuccess,
-          isTrue,
-          reason: '${kind.name}: ${result.error?.message}',
-        );
-        expect(
-          result.value?.command.commandType.name,
-          kind.name,
-          reason: kind.name,
-        );
-        expect(result.value?.actualPlane, CockpitTestPlane.semantic);
-      }
-    },
-  );
+  test('every V2 action lowers exhaustively through its declared backend', () {
+    for (final kind in CockpitTestActionKind.values) {
+      final usesSystemBackend = kind == CockpitTestActionKind.system;
+      final requestedPlane = usesSystemBackend
+          ? CockpitTestPlane.native
+          : CockpitTestPlane.semantic;
+      final result = (usesSystemBackend ? systemLowerer : flutterLowerer).lower(
+        action: sampleBoundAction(kind),
+        commandId: 'command-${kind.name}',
+        timeoutMs: 5000,
+        requestedPlane: requestedPlane,
+        capabilities: capabilities,
+      );
+      expect(
+        result.isSuccess,
+        isTrue,
+        reason: '${kind.name}: ${result.error?.message}',
+      );
+      expect(
+        result.value?.command.commandType.name,
+        kind.name,
+        reason: kind.name,
+      );
+      expect(result.value?.actualPlane, requestedPlane);
+    }
+  });
 
   test('capture options lower without losing authored fields', () {
-    final command = lowerer
+    final command = flutterLowerer
         .lower(
           action: sampleBoundAction(CockpitTestActionKind.captureScreenshot),
           commandId: 'capture',
@@ -76,7 +78,7 @@ void main() {
   });
 
   test('unsupported planes, locators, and lossy gestures fail explicitly', () {
-    final nativePlane = lowerer.lower(
+    final nativePlane = flutterLowerer.lower(
       action: sampleBoundAction(CockpitTestActionKind.back),
       commandId: 'native',
       timeoutMs: 1000,
@@ -95,7 +97,7 @@ void main() {
         kind: CockpitTestActionKind.tap,
         locator: _locator(strategy),
       );
-      final result = lowerer.lower(
+      final result = flutterLowerer.lower(
         action: action,
         commandId: 'locator-${strategy.name}',
         timeoutMs: 1000,
@@ -115,7 +117,7 @@ void main() {
       'direction': 'up',
       'distance': 0.1,
     }, path: r'$.action');
-    final swipeResult = lowerer.lower(
+    final swipeResult = flutterLowerer.lower(
       action: swipe,
       commandId: 'lossy-swipe',
       timeoutMs: 1000,
@@ -139,7 +141,7 @@ void main() {
         ],
       ),
     );
-    final result = lowerer.lower(
+    final result = flutterLowerer.lower(
       action: action,
       commandId: 'fallback',
       timeoutMs: 1000,

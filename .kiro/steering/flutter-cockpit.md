@@ -1,17 +1,19 @@
-# Flutter Cockpit
+# Flutter Cockpit 2.0
 
-Use this steering note when a Flutter or host-control task needs live UI, route, screenshot, recording, or validation evidence.
+Use this steering note when Flutter development or black-box application
+testing needs live control, E2E execution, reports, or evidence.
 
-Use the Flutter Cockpit Power when installed, or read `skills/flutter-cockpit/SKILL.md` before controlling an app or claiming validation.
-
-Fast path:
+Use the Flutter Cockpit Power when installed, or read
+`skills/flutter-cockpit/SKILL.md` before controlling an application or
+claiming validation.
 
 ```bash
-dart run cockpit list-targets
-dart run cockpit launch-app --project-dir <dir> --platform <platform> --device-id <id>
-dart run cockpit read-app --profile minimal
-dart run cockpit hot-reload
-dart run cockpit capture-screenshot --name acceptance --profile inspect
+dart run cockpit daemon status
+dart run cockpit target discover
+dart run cockpit target inspect --target-id <targetId> --profile minimal
+dart run cockpit operation list --workspace-id <workspaceId>
 ```
 
-Prefer the smallest live evidence that answers the task. Use `.kiro/settings/mcp.json` or `dart run cockpit serve-mcp` when the agent supports MCP.
+Use a validated `cockpit.test/v2` case or suite for reusable E2E. Prefer
+`.kiro/settings/mcp.json` when MCP is available. Judge success from terminal
+run state, assertions, structured errors, and report-backed evidence.

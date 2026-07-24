@@ -1,181 +1,97 @@
-# AI Development Protocol
+# Cockpit 2.0 AI Development Protocol
 
-This contract defines the default AI-facing development loop for
-`flutter_cockpit`. It is the stable reference to load when an agent needs to
-build, debug, validate, or hand off an app change with runtime evidence.
+Use the authenticated Supervisor for both rapid development and release E2E.
+Do not call host application services directly and do not rely on implicit
+latest app, session, task, or workspace state.
 
-This protocol is intentionally separate from the workflow script syntax and the
-bundle layout:
-
-- Script syntax: [`control-workflow-protocol.md`](control-workflow-protocol.md)
-- Bundle layout: [`task-run-bundle.md`](task-run-bundle.md)
-- Skill capability contract:
-  [`flutter-cockpit-skill-contract.md`](flutter-cockpit-skill-contract.md)
-
-MCP resource URI: `cockpit://workspace/ai-development-protocol`.
-
-## Default Loop
-
-Use the smallest truthful loop that answers the current development question:
-
-1. `assess`
-2. `bootstrap`
-3. `baseline`
-4. `execute`
-5. `observe`
-6. `judge`
-7. `deliver`
-
-These are evidence gates, not required command counts. Skip commands that do
-not reduce uncertainty. Escalate from Flutter semantics to native/system control
-only when the current surface cannot answer the question.
-
-## Evidence Order
-
-Prefer low-token, structured evidence first:
-
-1. Target and capability metadata from `list-targets` or MCP discovery.
-2. Reusable app handle from `launch-app` or `.dart_tool/flutter_cockpit/latest_app.json`.
-3. Minimal runtime state from `read-app --profile minimal`.
-4. Focused action results from `run-command`, `run-batch`, or `hot-reload`.
-5. Current errors from `read-errors --max-errors 10`.
-6. Screenshot evidence for visible UI claims.
-7. Recording evidence only for motion, gesture, transition, or repro claims.
-8. Bundle summary, `issue_evidence.json`, `validation.json`, and `trace.json`
-   before raw artifacts or full step logs.
-
-Command success, file existence, or a bundle path alone is never product proof.
-
-## Runtime Paths
-
-Use app-first for instrumented Flutter applications:
+## Bootstrap
 
 ```bash
-dart run cockpit list-targets
-dart run cockpit launch-app --project-dir <dir> --platform <platform> --device-id <id>
-dart run cockpit read-app --profile minimal
-dart run cockpit hot-reload
-dart run cockpit read-errors --max-errors 10
+dart run cockpit daemon start
+dart run cockpit root add --path /absolute/project/root
+dart run cockpit workspace register --root-id <rootId> --path /absolute/checkout
+dart run cockpit target discover
 ```
 
-Use target-first for browser, desktop window, device, simulator, emulator, or
-non-Flutter system surfaces:
+Read the returned JSON and reuse its identifiers. When the current directory
+belongs to exactly one active workspace, `--workspace-id` may be omitted.
+
+Register an installed black-box app with its real platform identity:
 
 ```bash
-dart run cockpit launch-target --target-json <file>
-dart run cockpit read-target --profile minimal
-dart run cockpit inspect-surface --profile standard
+dart run cockpit target register \
+  --workspace-id <workspaceId> \
+  --platform android \
+  --device-id <deviceId> \
+  --target-kind nativeApp \
+  --environment test \
+  --app-id com.example.app \
+  --idempotency-key <uniqueKey>
+dart run cockpit target launch \
+  --workspace-id <workspaceId> \
+  --target-id <targetId> \
+  --idempotency-key <uniqueKey>
+dart run cockpit target inspect --target-id <targetId> --profile minimal
 ```
 
-Use native/system control only after reading capabilities:
+For Flutter development shells, register a `flutterApp` target with an indexed
+entrypoint document. Production Flutter code must not import
+`flutter_cockpit`; the bridge belongs to the development shell.
+
+## Fast Development Loop
+
+1. Read `operation list` and target capabilities.
+2. Execute only advertised operations using `operation run` with typed JSON.
+3. Use hot reload/restart operations when the target exposes them.
+4. Re-inspect target/UI/errors after mutation.
+5. Capture evidence only when the requested claim needs it.
 
 ```bash
-dart run cockpit read-system-capabilities --platform <platform> --device-id <id>
-dart run cockpit run-system-action --platform <platform> --device-id <id> --action <available-action>
+dart run cockpit operation list --workspace-id <workspaceId>
+dart run cockpit operation run \
+  --workspace-id <workspaceId> \
+  --kind <advertisedKind> \
+  --input-file /tmp/operation.json \
+  --idempotency-key <uniqueKey>
 ```
 
-Only run actions reported as `available`. Copy required parameter names and
-allowed values from capability metadata instead of guessing.
+Never guess operation parameters, target IDs, device IDs, or locators.
 
-## Workflow Escalation
+## Case And Suite Runs
 
-Use workflow files when the task needs branch, retry, loop, or replayable E2E
-steps. Prefer YAML for hand-written workflows and JSON for generated workflows.
+Author YAML or JSON with `schemaVersion: cockpit.test/v2`. Validate before
+indexing or running:
 
 ```bash
-dart run cockpit run-script --app-json /tmp/flutter_cockpit/app.json --script /tmp/flutter_cockpit/workflow.yaml --platform <platform> --output-root /tmp/flutter_cockpit/out
+dart run cockpit case validate --file case.yaml --format yaml
+dart run cockpit suite validate --file suite.yaml --format yaml
+dart run cockpit case list
+dart run cockpit suite list
+dart run cockpit case run --case-id <caseId> --idempotency-key <uniqueKey>
+dart run cockpit suite run --suite-id <suiteId> --idempotency-key <uniqueKey>
 ```
 
-Use `--platform` when one workflow is replayed across several targets; do not
-copy a YAML file just to change its top-level `platform`.
-
-For a full-fidelity board over the same artifacts:
+Observe and collect the terminal result:
 
 ```bash
-dart run cockpit devtools --history-root /tmp/flutter_cockpit/out
+dart run cockpit run events --run-id <runId> --after-sequence 0
+dart run cockpit run get --run-id <runId>
+dart run cockpit suite report --run-id <runId>
+dart run cockpit artifact list --run-id <runId>
+dart run cockpit artifact read \
+  --run-id <runId> --artifact-id <artifactId> \
+  --size <size> --sha256 <sha256>
 ```
 
-Use one stable workflow `sessionId` per isolated development or validation job,
-`taskId` for the current objective, and `runId` for one execution attempt. Reuse
-the same `sessionId` for retries of the same job; choose a new `sessionId` for
-unrelated work. The board opens the current latest `sessionId` scope, rewrites
-the URL to that concrete scope, and offers a scope selector for older sessions
-or `all runs` when cross-session audit is intentional. Timeline, screenshots,
-recordings, and failures stay traceable without mixing separate jobs. The main
-timeline is scope-level: retries with the same `sessionId` render together in
-execution order, while run details and bundle panels remain per-run. Artifact
-links carry the owning run and event key so repeated relative paths stay
-traceable. Use `--scope latest` only when a live operations board should keep
-following the newest job. API clients may pass `scope=current` or
-`scope=latest`; both resolve to the current latest scope and report `scopeMode`
-so readers can distinguish pinned and following views. Use `download bundle` or
-`GET /api/runs/<runId>/bundle-download` when a complete portable handoff is
-needed. The response is a streamed tar containing `download_manifest.json`,
-`run_metadata.json`, `bundle/**`, and `live/**`; absent roots are recorded in
-`missingRoots`.
+Use `artifact list` as the authority for artifact IDs, media types, sizes, and
+SHA-256 values. Never infer download metadata from filenames or report text.
 
-For tool-owned bootstrap and validation, embed the same script object under the
-task config `script` field:
+Use a suite for dependency ordering, matrix coverage, fixtures, retries,
+parallel rows, durable resume, and regression reports. Use a case for a focused
+development proof.
 
-```bash
-dart run cockpit run-task --config /tmp/flutter_cockpit/run_task.yaml
-dart run cockpit validate-task --config /tmp/flutter_cockpit/validate_task.yaml
-```
+## Acceptance Rule
 
-If the app needs build/run inputs, use the shared launch configuration in CLI
-flags or under `launch.launchConfiguration` in `run-task` / `validate-task`
-YAML:
-
-```yaml
-launchConfiguration:
-  dartDefines:
-    - API_URL=https://example.test
-  dartDefineFromFiles:
-    - config/dev.json
-  flutterArgs:
-    - --track-widget-creation
-    - --build-name
-    - AI Build
-  environment:
-    API_TOKEN: secret
-```
-
-Environment values are for the child process only. Default result JSON redacts
-them to keys, and app/session handles do not persist them. YAML and MCP
-`flutterArgs` are final argv tokens; put paired flag values in separate list
-items. Use structured fields for cockpit-managed target, device, flavor,
-dart-define, and environment inputs.
-
-Workflow nodes and schema are defined by
-[`control-workflow-protocol.md`](control-workflow-protocol.md).
-
-## Traceability Rules
-
-Every acceptance-facing run must be reconstructible from persisted artifacts:
-
-- `steps.json` is the complete action log.
-- `trace.json` is the compact step-to-command-to-artifact index.
-- `issue_evidence.json` is the first failure packet.
-- `validation.json` is the durable validation verdict after `validate-task`.
-- Screenshot, recording, keyframe, and diagnostics artifacts must be reachable
-  from `manifest.json`, `steps.json`, `trace.json`, or `validation.json`.
-
-External E2E consumers should read `trace.json` and `validation.json` first,
-then open `steps.json` only when the compact index does not explain the next
-action.
-
-## Completion Rule
-
-An agent may claim completion only after it has:
-
-- verified the target is reachable,
-- established a baseline or reused an equivalent fresh read,
-- executed the relevant change or workflow against the running target,
-- observed post-action state,
-- checked current errors,
-- captured visible evidence when the claim is visual, and
-- run `validate-task` for acceptance-facing delivery.
-
-If an environment capability is missing, report `blocked_by_environment` with
-the missing permission, device, adapter, or tool. Do not fake unsupported
-platform capabilities.
+Command success is not product proof. Compare baseline and terminal state,
+read runtime errors, and use the canonical run report. A required missing
+capability or artifact is a blocked/failed result, not a pass.

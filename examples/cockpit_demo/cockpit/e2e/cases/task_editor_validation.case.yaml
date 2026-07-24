@@ -1,0 +1,46 @@
+schemaVersion: cockpit.test/v2
+kind: case
+id: demoTaskEditorValidation
+name: Task editor validation
+tags: [acceptance, task-editor]
+target:
+  platform: flutter
+  targetKind: flutterApp
+  plane: semantic
+defaults:
+  commandTimeoutMs: 20000
+  cleanupTimeoutMs: 15000
+  failFast: true
+  evidence:
+    screenshot: onFailure
+    snapshot: onFailure
+    failurePolicy: recordWarning
+steps:
+  - stepId: waitForInbox
+    action:
+      type: waitFor
+      condition: {type: route, route: /inbox}
+  - stepId: openTaskEditor
+    action:
+      type: tap
+      locator: {strategy: text, value: New task}
+  - stepId: waitForTaskEditor
+    action:
+      type: waitFor
+      condition: {type: route, route: /editor}
+  - stepId: submitEmptyTask
+    action:
+      type: tap
+      locator: {strategy: text, value: Save task}
+  - stepId: verifyRequiredTitle
+    action:
+      type: assertVisible
+      locator: {strategy: text, value: Task title is required.}
+  - stepId: captureValidationState
+    action: {type: captureScreenshot, artifactName: task-editor-validation}
+  - stepId: returnToInbox
+    action: {type: back}
+  - stepId: verifyInboxRestored
+    action:
+      type: waitFor
+      condition: {type: route, route: /inbox}

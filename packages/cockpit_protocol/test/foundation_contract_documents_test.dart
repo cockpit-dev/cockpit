@@ -540,6 +540,7 @@ void main() {
       '/api/v2/runs/{runId}/events': <String>{'get'},
       '/api/v2/runs/{runId}/report': <String>{'get'},
       '/api/v2/runs/{runId}/cases': <String>{'get'},
+      '/api/v2/runs/{runId}/artifacts': <String>{'get'},
       '/api/v2/runs/{runId}/artifacts/{artifactId}': <String>{'get'},
     };
     expect(paths.keys.toSet(), expectedMethods.keys.toSet());

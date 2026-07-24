@@ -45,7 +45,7 @@ void main() {
       'packages/flutter_cockpit/pubspec.yaml',
       'packages/cockpit/pubspec.yaml',
       'examples/cockpit_demo/cockpit/pubspec.yaml',
-      '.github/workflows/runtime-loop.yml',
+      '.github/workflows/example-e2e.yml',
     ];
     final oldDependency = RegExp('^\\s*$oldPackage:', multiLine: true);
     final staleConfiguration = <String>[];

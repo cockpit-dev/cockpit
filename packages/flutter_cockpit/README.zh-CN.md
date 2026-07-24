@@ -3,7 +3,7 @@
 [![pub package](https://img.shields.io/pub/v/flutter_cockpit?logo=dart&label=pub.dev)](https://pub.dev/packages/flutter_cockpit)
 [![pub points](https://img.shields.io/pub/points/flutter_cockpit?logo=dart)](https://pub.dev/packages/flutter_cockpit/score)
 [![likes](https://img.shields.io/pub/likes/flutter_cockpit?logo=dart)](https://pub.dev/packages/flutter_cockpit/score)
-[![Runtime Loop](https://github.com/cockpit-dev/flutter_cockpit/actions/workflows/runtime-loop.yml/badge.svg)](https://github.com/cockpit-dev/flutter_cockpit/actions/workflows/runtime-loop.yml)
+[![E2E](https://github.com/cockpit-dev/flutter_cockpit/actions/workflows/example-e2e.yml/badge.svg)](https://github.com/cockpit-dev/flutter_cockpit/actions/workflows/example-e2e.yml)
 [![License](https://img.shields.io/github/license/cockpit-dev/flutter_cockpit)](https://github.com/cockpit-dev/flutter_cockpit/blob/main/packages/flutter_cockpit/LICENSE)
 
 [English](https://github.com/cockpit-dev/flutter_cockpit/blob/main/packages/flutter_cockpit/README.md)
@@ -78,7 +78,10 @@ Widget buildCockpitDevelopmentApp() {
 }
 ```
 
-把 `package:your_app/app_shell.dart` 换成你现有应用根组件或 bootstrap 的真实 import。`launch-app` 会注入 `FLUTTER_COCKPIT_REMOTE_*` 这组 dart-define，所以 `resolveFromEnvironment(...)` 可以在不接管生产入口的前提下启用远程控制面。
+把 `package:your_app/app_shell.dart` 换成你现有应用根组件或 bootstrap
+的真实 import。Cockpit 的 target launch 操作会注入
+`FLUTTER_COCKPIT_REMOTE_*` 这组 dart-define，所以
+`resolveFromEnvironment(...)` 可以在不接管生产入口的前提下启用远程控制面。
 只从独立 shell 的 `main.dart` 接入 `FlutterCockpit.navigatorObserver`。`FlutterCockpitApp` 会自动发现 Flutter Router、`RouterConfig`、`go_router` 及其他 Router 类库使用的公开 `RouteInformationProvider`，所以业务 app 自有 router 通常不需要额外 route bridge。
 
 嵌套 Navigator 需要各自使用独立 observer，这样嵌套路由 pop 后可以恢复当前父级路由：

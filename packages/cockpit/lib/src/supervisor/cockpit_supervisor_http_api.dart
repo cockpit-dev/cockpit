@@ -413,6 +413,24 @@ final class CockpitSupervisorHttpApi {
       );
       return;
     }
+    if (path.length == 5 && path[4] == 'artifacts') {
+      if (request.method != 'GET') {
+        return _methodNotAllowed(request, const <String>['GET']);
+      }
+      final page = support.pageRequest(request, 'run-artifacts:$runId');
+      final artifacts = await runtime.artifacts(runId);
+      await support.json(
+        request,
+        HttpStatus.ok,
+        support.page(
+          artifacts,
+          page,
+          'run-artifacts:$runId',
+          (item) => item.toJson(),
+        ),
+      );
+      return;
+    }
     if (path.length == 6 && path[4] == 'artifacts') {
       if (request.method != 'GET') {
         return _methodNotAllowed(request, const <String>['GET']);

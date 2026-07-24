@@ -390,6 +390,63 @@ void main() {
     expect(resumedExecutor.calls, isEmpty);
     expect(resumed.executions.single.outcome, CockpitRunOutcome.passed);
   });
+
+  test(
+    'durable resume converts an active attempt into a retry checkpoint',
+    () async {
+      final plan = await _compilePlan(
+        _singleCaseSuite(
+          isolation: CockpitTestSuiteIsolation.restartApp,
+          maxAttempts: 2,
+        ),
+      );
+      final node = plan.caseNodes.single;
+      final observer = _CheckpointObserver();
+      final executor = _RecordingExecutor();
+      final startedAt = DateTime.now().toUtc().subtract(
+        const Duration(seconds: 1),
+      );
+
+      final result = await _run(
+        runId: 'run_interrupted_resume',
+        plan: plan,
+        executor: executor,
+        observer: observer,
+        initialProgress: <CockpitSuiteNodeProgress>[
+          CockpitSuiteNodeProgress(
+            nodeId: node.nodeId,
+            entryId: node.entryId,
+            kind: node.kind,
+            startedAt: startedAt,
+            completedAttempts: const <CockpitTestAttemptReport>[],
+            activeAttempt: CockpitSuiteActiveAttempt(
+              attemptId: 'attempt_${node.nodeId}_1',
+              number: 1,
+              startedAt: startedAt,
+              targetId: 'targetA',
+            ),
+          ),
+        ],
+      );
+
+      final execution = result.executions.single;
+      expect(execution.outcome, CockpitRunOutcome.passed);
+      expect(execution.stability, CockpitRunStability.flaky);
+      expect(
+        execution.attempts.map((attempt) => attempt.outcome),
+        <CockpitRunOutcome>[
+          CockpitRunOutcome.interrupted,
+          CockpitRunOutcome.passed,
+        ],
+      );
+      expect(observer.startedNodes, isEmpty);
+      expect(observer.startedAttempts, <String>['attempt_${node.nodeId}_2']);
+      expect(observer.completedAttempts, <String>[
+        'attempt_${node.nodeId}_1',
+        'attempt_${node.nodeId}_2',
+      ]);
+    },
+  );
 }
 
 CockpitTestSuite _orderedSuite({bool failFast = true}) => CockpitTestSuite(
@@ -503,15 +560,58 @@ Future<CockpitSuiteScheduleResult> _run({
   CockpitSuiteCancellation? cancellation,
   Iterable<CockpitSuiteNodeExecution> initialExecutions =
       const <CockpitSuiteNodeExecution>[],
+  Iterable<CockpitSuiteNodeProgress> initialProgress =
+      const <CockpitSuiteNodeProgress>[],
+  CockpitSuiteSchedulerObserver? observer,
 }) =>
     CockpitSuiteScheduler(
       executor: CockpitSuiteRowAttemptExecutor(plan: plan, delegate: executor),
+      observer: observer,
     ).run(
       runId: runId,
       plan: plan,
       cancellation: cancellation ?? _Cancellation(),
       initialExecutions: initialExecutions,
+      initialProgress: initialProgress,
     );
+
+final class _CheckpointObserver implements CockpitSuiteSchedulerObserver {
+  final List<String> startedNodes = <String>[];
+  final List<String> startedAttempts = <String>[];
+  final List<String> completedAttempts = <String>[];
+
+  @override
+  Future<void> nodeStarted(
+    CockpitSuitePlanNode node,
+    DateTime startedAt,
+  ) async {
+    startedNodes.add(node.nodeId);
+  }
+
+  @override
+  Future<void> attemptStarted(
+    CockpitSuitePlanNode node,
+    String attemptId,
+    int attemptNumber,
+    DateTime startedAt,
+  ) async {
+    startedAttempts.add(attemptId);
+  }
+
+  @override
+  Future<void> attemptCompleted(
+    CockpitSuitePlanNode node,
+    CockpitTestAttemptReport attempt,
+  ) async {
+    completedAttempts.add(attempt.attemptId);
+  }
+
+  @override
+  Future<void> nodeCompleted(
+    CockpitSuitePlanNode node,
+    CockpitSuiteNodeExecution execution,
+  ) async {}
+}
 
 typedef _AttemptResultFactory =
     CockpitTestAttemptReport Function(

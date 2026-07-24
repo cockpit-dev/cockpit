@@ -23,6 +23,13 @@ abstract interface class CockpitSuiteCancellation {
 abstract interface class CockpitSuiteSchedulerObserver {
   Future<void> nodeStarted(CockpitSuitePlanNode node, DateTime startedAt);
 
+  Future<void> attemptStarted(
+    CockpitSuitePlanNode node,
+    String attemptId,
+    int attemptNumber,
+    DateTime startedAt,
+  );
+
   Future<void> attemptCompleted(
     CockpitSuitePlanNode node,
     CockpitTestAttemptReport attempt,
@@ -32,6 +39,174 @@ abstract interface class CockpitSuiteSchedulerObserver {
     CockpitSuitePlanNode node,
     CockpitSuiteNodeExecution execution,
   );
+}
+
+final class CockpitSuiteActiveAttempt {
+  const CockpitSuiteActiveAttempt({
+    required this.attemptId,
+    required this.number,
+    required this.startedAt,
+    required this.targetId,
+  });
+
+  final String attemptId;
+  final int number;
+  final DateTime startedAt;
+  final String targetId;
+
+  Map<String, Object?> toJson() => <String, Object?>{
+    'attemptId': attemptId,
+    'number': number,
+    'startedAt': startedAt.toUtc().toIso8601String(),
+    'targetId': targetId,
+  };
+
+  factory CockpitSuiteActiveAttempt.fromJson(
+    Object? value, {
+    String path = r'$',
+  }) {
+    if (value is! Map<Object?, Object?>) {
+      throw FormatException('Expected active suite attempt at $path.');
+    }
+    final json = Map<String, Object?>.from(value);
+    if (json.length != 4 ||
+        !const <String>{
+          'attemptId',
+          'number',
+          'startedAt',
+          'targetId',
+        }.every(json.containsKey) ||
+        json['attemptId'] is! String ||
+        json['number'] is! int ||
+        json['targetId'] is! String) {
+      throw FormatException('Invalid active suite attempt at $path.');
+    }
+    final startedAt = json['startedAt'] is String
+        ? DateTime.tryParse(json['startedAt']! as String)
+        : null;
+    final number = json['number']! as int;
+    if (startedAt == null ||
+        !startedAt.isUtc ||
+        number < 1 ||
+        (json['attemptId']! as String).isEmpty ||
+        (json['targetId']! as String).isEmpty) {
+      throw FormatException('Invalid active suite attempt at $path.');
+    }
+    return CockpitSuiteActiveAttempt(
+      attemptId: json['attemptId']! as String,
+      number: number,
+      startedAt: startedAt,
+      targetId: json['targetId']! as String,
+    );
+  }
+}
+
+final class CockpitSuiteNodeProgress {
+  CockpitSuiteNodeProgress({
+    required this.nodeId,
+    required this.entryId,
+    required this.kind,
+    required this.startedAt,
+    required Iterable<CockpitTestAttemptReport> completedAttempts,
+    required this.activeAttempt,
+  }) : completedAttempts = List<CockpitTestAttemptReport>.unmodifiable(
+         completedAttempts,
+       ) {
+    for (var index = 0; index < this.completedAttempts.length; index += 1) {
+      if (this.completedAttempts[index].number != index + 1) {
+        throw const FormatException(
+          'Persisted suite attempts must be contiguous.',
+        );
+      }
+    }
+    if (activeAttempt != null &&
+        activeAttempt!.number != this.completedAttempts.length + 1) {
+      throw const FormatException('Active suite attempt is not contiguous.');
+    }
+  }
+
+  final String nodeId;
+  final String entryId;
+  final CockpitSuitePlanNodeKind kind;
+  final DateTime startedAt;
+  final List<CockpitTestAttemptReport> completedAttempts;
+  final CockpitSuiteActiveAttempt? activeAttempt;
+
+  Map<String, Object?> toJson() => <String, Object?>{
+    'nodeId': nodeId,
+    'entryId': entryId,
+    'kind': kind.name,
+    'startedAt': startedAt.toUtc().toIso8601String(),
+    'completedAttempts': completedAttempts
+        .map((attempt) => attempt.toJson())
+        .toList(),
+    if (activeAttempt != null) 'activeAttempt': activeAttempt!.toJson(),
+  };
+
+  factory CockpitSuiteNodeProgress.fromJson(
+    Object? value, {
+    String path = r'$',
+  }) {
+    if (value is! Map<Object?, Object?>) {
+      throw FormatException('Expected suite node progress at $path.');
+    }
+    final json = Map<String, Object?>.from(value);
+    const allowed = <String>{
+      'nodeId',
+      'entryId',
+      'kind',
+      'startedAt',
+      'completedAttempts',
+      'activeAttempt',
+    };
+    if (json.keys.any((key) => !allowed.contains(key)) ||
+        !const <String>{
+          'nodeId',
+          'entryId',
+          'kind',
+          'startedAt',
+          'completedAttempts',
+        }.every(json.containsKey) ||
+        json['nodeId'] is! String ||
+        json['entryId'] is! String ||
+        json['kind'] is! String ||
+        json['completedAttempts'] is! List<Object?>) {
+      throw FormatException('Invalid suite node progress at $path.');
+    }
+    final kind = CockpitSuitePlanNodeKind.values
+        .where((value) => value.name == json['kind'])
+        .firstOrNull;
+    final startedAt = json['startedAt'] is String
+        ? DateTime.tryParse(json['startedAt']! as String)
+        : null;
+    if (kind == null ||
+        startedAt == null ||
+        !startedAt.isUtc ||
+        (json['nodeId']! as String).isEmpty ||
+        (json['entryId']! as String).isEmpty) {
+      throw FormatException('Invalid suite node progress at $path.');
+    }
+    final attempts = json['completedAttempts']! as List<Object?>;
+    return CockpitSuiteNodeProgress(
+      nodeId: json['nodeId']! as String,
+      entryId: json['entryId']! as String,
+      kind: kind,
+      startedAt: startedAt,
+      completedAttempts: <CockpitTestAttemptReport>[
+        for (var index = 0; index < attempts.length; index += 1)
+          CockpitTestAttemptReport.fromJson(
+            attempts[index],
+            path: '$path.completedAttempts[$index]',
+          ),
+      ],
+      activeAttempt: json['activeAttempt'] == null
+          ? null
+          : CockpitSuiteActiveAttempt.fromJson(
+              json['activeAttempt'],
+              path: '$path.activeAttempt',
+            ),
+    );
+  }
 }
 
 final class CockpitSuiteNodeExecution {
@@ -174,6 +349,8 @@ final class CockpitSuiteScheduler {
     required CockpitSuiteCancellation cancellation,
     Iterable<CockpitSuiteNodeExecution> initialExecutions =
         const <CockpitSuiteNodeExecution>[],
+    Iterable<CockpitSuiteNodeProgress> initialProgress =
+        const <CockpitSuiteNodeProgress>[],
   }) async {
     final nodes = <String, CockpitSuitePlanNode>{
       for (final node in plan.nodes) node.nodeId: node,
@@ -189,12 +366,33 @@ final class CockpitSuiteScheduler {
         throw const FormatException('Persisted suite execution is invalid.');
       }
     }
+    final progress = <String, CockpitSuiteNodeProgress>{};
+    for (final checkpoint in initialProgress) {
+      final node = nodes[checkpoint.nodeId];
+      if (node == null ||
+          checkpoint.entryId != node.entryId ||
+          checkpoint.kind != node.kind ||
+          completed.containsKey(checkpoint.nodeId) ||
+          progress.putIfAbsent(checkpoint.nodeId, () => checkpoint) !=
+              checkpoint ||
+          checkpoint.completedAttempts.length > node.retry.maxAttempts ||
+          (checkpoint.activeAttempt != null &&
+              checkpoint.activeAttempt!.number > node.retry.maxAttempts)) {
+        throw const FormatException('Persisted suite progress is invalid.');
+      }
+    }
     final pending = <String, CockpitSuitePlanNode>{
       for (final node in plan.nodes)
         if (!completed.containsKey(node.nodeId)) node.nodeId: node,
     };
     final running = <String, Future<CockpitSuiteNodeExecution>>{};
-    var failFast = false;
+    var failFast =
+        plan.suite.execution.failFast &&
+        completed.values.any(
+          (execution) =>
+              execution.kind == CockpitSuitePlanNodeKind.testCase &&
+              execution.outcome != CockpitRunOutcome.passed,
+        );
 
     while (pending.isNotEmpty || running.isNotEmpty) {
       final ready =
@@ -223,7 +421,8 @@ final class CockpitSuiteScheduler {
             : null;
         if (skipOutcome != null) {
           final inheritedAttempt =
-              dependencyFailed && node.kind == CockpitSuitePlanNodeKind.testCase
+              skipOutcome == CockpitRunOutcome.blocked &&
+                  node.kind == CockpitSuitePlanNodeKind.testCase
               ? _blockedAttempt(node, nodes, completed)
               : null;
           final skipped = _withoutAttempt(
@@ -231,9 +430,6 @@ final class CockpitSuiteScheduler {
             skipOutcome,
             attempt: inheritedAttempt,
           );
-          if (inheritedAttempt != null) {
-            await _observer?.attemptCompleted(node, inheritedAttempt);
-          }
           await _observer?.nodeCompleted(node, skipped);
           completed[node.nodeId] = skipped;
           if (plan.suite.execution.failFast &&
@@ -248,6 +444,7 @@ final class CockpitSuiteScheduler {
           runId: runId,
           node: node,
           cancellation: cancellation,
+          progress: progress.remove(node.nodeId),
         );
       }
 
@@ -279,14 +476,69 @@ final class CockpitSuiteScheduler {
     required String runId,
     required CockpitSuitePlanNode node,
     required CockpitSuiteCancellation cancellation,
+    CockpitSuiteNodeProgress? progress,
   }) async {
-    final startedAt = _utcNow();
-    await _observer?.nodeStarted(node, startedAt);
-    final attempts = <CockpitTestAttemptReport>[];
+    final startedAt = progress?.startedAt ?? _utcNow();
+    if (progress == null) await _observer?.nodeStarted(node, startedAt);
+    final attempts = <CockpitTestAttemptReport>[
+      ...?progress?.completedAttempts,
+    ];
     final attemptCancellation = node.alwaysRun
         ? const _NeverCancelled()
         : cancellation;
-    for (var number = 1; number <= node.retry.maxAttempts; number += 1) {
+    if (progress?.activeAttempt case final active?) {
+      final now = _utcNow();
+      final finishedAt = now.isBefore(active.startedAt)
+          ? active.startedAt
+          : now;
+      final interrupted = CockpitTestAttemptReport(
+        attemptId: active.attemptId,
+        number: active.number,
+        outcome: CockpitRunOutcome.interrupted,
+        startedAt: active.startedAt,
+        finishedAt: finishedAt,
+        durationMs: finishedAt.difference(active.startedAt).inMilliseconds,
+        targetId: active.targetId,
+        failure: CockpitFailure(
+          primary: CockpitApiError(
+            code: CockpitErrorCode.interrupted,
+            category: CockpitErrorCategory.interrupted,
+            message: 'Suite attempt was interrupted by worker termination.',
+            retryable: true,
+            responsibleLayer: CockpitResponsibleLayer.worker,
+          ),
+        ),
+      );
+      attempts.add(interrupted);
+      await _observer?.attemptCompleted(node, interrupted);
+    }
+    if (attempts.isNotEmpty) {
+      final last = attempts.last;
+      if (last.outcome == CockpitRunOutcome.passed ||
+          last.number >= node.retry.maxAttempts ||
+          !_shouldRetry(last, node.retry)) {
+        return _complete(
+          node,
+          last.outcome,
+          last.outcome == CockpitRunOutcome.passed && attempts.length > 1
+              ? CockpitRunStability.flaky
+              : CockpitRunStability.stable,
+          attempts,
+          startedAt,
+        );
+      }
+      if (node.retry.delayMs > 0) {
+        await _retryDelay(
+          Duration(milliseconds: node.retry.delayMs),
+          attemptCancellation,
+        );
+      }
+    }
+    for (
+      var number = attempts.length + 1;
+      number <= node.retry.maxAttempts;
+      number += 1
+    ) {
       if (attemptCancellation.isCancelled) {
         return _complete(
           node,
@@ -298,6 +550,12 @@ final class CockpitSuiteScheduler {
       }
       final attemptId = 'attempt_${node.nodeId}_$number';
       final attemptStartedAt = _utcNow();
+      await _observer?.attemptStarted(
+        node,
+        attemptId,
+        number,
+        attemptStartedAt,
+      );
       CockpitTestAttemptReport attempt;
       try {
         attempt = await _executor.execute(

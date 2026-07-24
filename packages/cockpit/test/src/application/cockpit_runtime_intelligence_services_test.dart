@@ -8,15 +8,11 @@ import 'package:cockpit/src/application/cockpit_app_handle.dart';
 import 'package:cockpit/src/application/cockpit_application_service_exception.dart';
 import 'package:cockpit/src/application/cockpit_app_reference_resolver.dart';
 import 'package:cockpit/src/application/cockpit_list_apps_service.dart';
-import 'package:cockpit/src/application/cockpit_latest_task_store.dart';
-import 'package:cockpit/src/application/cockpit_bundle_artifact_paths.dart';
 import 'package:cockpit/src/application/cockpit_list_launch_targets_service.dart';
 import 'package:cockpit/src/application/cockpit_read_logs_service.dart';
 import 'package:cockpit/src/application/cockpit_read_network_service.dart';
 import 'package:cockpit/src/application/cockpit_read_runtime_errors_service.dart';
 import 'package:cockpit/src/application/cockpit_read_session_logs_service.dart';
-import 'package:cockpit/src/application/cockpit_read_task_bundle_summary_service.dart';
-import 'package:cockpit/src/application/cockpit_run_task_service.dart';
 import 'package:cockpit/src/application/cockpit_session_registry.dart';
 import 'package:cockpit/src/development/cockpit_development_session_handle.dart';
 import 'package:cockpit/src/development/cockpit_development_session_status.dart';
@@ -530,7 +526,6 @@ void main() {
     final result =
         await CockpitReadRuntimeErrorsService(
           registry: CockpitSessionRegistry(),
-          latestTaskStore: CockpitLatestTaskStore(),
           readSnapshot: (baseUri, options) async {
             expect(baseUri.toString(), 'http://127.0.0.1:57331');
             expect(options.includeRuntimeActivity, isTrue);
@@ -607,7 +602,6 @@ void main() {
       final result =
           await CockpitReadRuntimeErrorsService(
             registry: CockpitSessionRegistry(),
-            latestTaskStore: CockpitLatestTaskStore(),
             retryDelay: Duration.zero,
             readSnapshot: (baseUri, options) async {
               readCount += 1;
@@ -909,35 +903,6 @@ void main() {
       expect(result.recentFailures.single.requestId, 'net-2');
     },
   );
-
-  test('combines latest task and active session runtime errors', () async {
-    final registry = CockpitSessionRegistry();
-    registry.recordDevelopmentSession(
-      handle: _developmentHandle(),
-      status: _developmentStatus(lastError: 'reload failed'),
-      supervisorLogPath: '/tmp/dev.log',
-    );
-    final latestTaskStore = CockpitLatestTaskStore();
-    latestTaskStore.recordRunTask(
-      CockpitRunTaskResult(
-        classification: CockpitRunTaskClassification.failedWithEvidence,
-        recommendedNextStep: 'inspect_bundle',
-        bundleSummary: _bundleSummaryWithRuntimeError(),
-      ),
-    );
-
-    final result = await CockpitReadRuntimeErrorsService(
-      registry: registry,
-      latestTaskStore: latestTaskStore,
-    ).read(const CockpitReadRuntimeErrorsRequest());
-
-    expect(result.hasErrors, isTrue);
-    expect(result.source, 'aggregate');
-    expect(
-      result.errors.map((error) => error.source),
-      containsAll(<String>['development_session', 'latest_task_bundle']),
-    );
-  });
 }
 
 final class _MachineProcessManager implements CockpitProcessManager {
@@ -1175,43 +1140,4 @@ CockpitDevelopmentSessionStatus _developmentStatus({String? lastError}) =>
       reloadGeneration: 0,
       lastError: lastError,
       lastStatusAt: DateTime.utc(2026, 3, 30),
-    );
-
-CockpitReadTaskBundleSummaryResult _bundleSummaryWithRuntimeError() =>
-    CockpitReadTaskBundleSummaryResult(
-      bundleDir: '/workspace/out/task',
-      manifest: CockpitRunManifest(
-        taskId: 'task-1',
-        sessionId: 'session-1',
-        platform: 'android',
-        status: CockpitTaskStatus.failed,
-        startedAt: DateTime.utc(2026, 3, 30),
-        finishedAt: DateTime.utc(2026, 3, 30, 0, 1),
-        commandCount: 0,
-        screenshotCount: 0,
-        deliveryArtifactsReady: false,
-        recordingCount: 0,
-        deliveryVideoReady: false,
-      ),
-      handoff: const <String, Object?>{},
-      delivery: const <String, Object?>{},
-      acceptanceMarkdown: '',
-      artifactPaths: CockpitBundleArtifactPaths(),
-      evidenceSummary: const <String, Object?>{},
-      runtimeSummary: CockpitBundleRuntimeSummary(
-        totalEntryCount: 1,
-        errorCount: 1,
-        warningCount: 0,
-        truncated: false,
-        errorEntries: <CockpitRuntimeEvent>[
-          CockpitRuntimeEvent(
-            eventId: 'runtime-1',
-            kind: CockpitRuntimeEventKind.flutterError,
-            severity: CockpitRuntimeEventSeverity.error,
-            message: 'Unhandled exception',
-            recordedAt: DateTime.utc(2026, 3, 30),
-            routeName: '/checkout',
-          ),
-        ],
-      ),
     );

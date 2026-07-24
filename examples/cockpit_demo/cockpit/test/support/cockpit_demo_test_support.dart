@@ -5,7 +5,6 @@ import 'package:drift/drift.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_cockpit/flutter_cockpit_flutter.dart';
-import 'package:cockpit/cockpit.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:cockpit_demo/src/data/cockpit_demo_database.dart';
 import 'package:cockpit_demo/src/cockpit_demo_app.dart';
@@ -364,18 +363,8 @@ CockpitSessionController buildTestController({
   );
 }
 
-TaskRunBundleWriter buildTestBundleWriter() {
-  return TaskRunBundleWriter(
-    keyframeExtractor: _StaticRecordingKeyframeExtractor(),
-  );
-}
-
 final List<int> validMp4Bytes = base64Decode(
   'AAAAIGZ0eXBpc29tAAACAGlzb21pc28yYXZjMW1wNDEAAAAIZnJlZQAAAuVtZGF0AAACrgYF//+q3EXpvebZSLeWLNgg2SPu73gyNjQgLSBjb3JlIDE2NSByMzIyMiBiMzU2MDVhIC0gSC4yNjQvTVBFRy00IEFWQyBjb2RlYyAtIENvcHlsZWZ0IDIwMDMtMjAyNSAtIGh0dHA6Ly93d3cudmlkZW9sYW4ub3JnL3gyNjQuaHRtbCAtIG9wdGlvbnM6IGNhYmFjPTEgcmVmPTMgZGVibG9jaz0xOjA6MCBhbmFseXNlPTB4MzoweDExMyBtZT1oZXggc3VibWU9NyBwc3k9MSBwc3lfcmQ9MS4wMDowLjAwIG1peGVkX3JlZj0xIG1lX3JhbmdlPTE2IGNocm9tYV9tZT0xIHRyZWxsaXM9MSA4eDhkY3Q9MSBjcW09MCBkZWFkem9uZT0yMSwxMSBmYXN0X3Bza2lwPTEgY2hyb21hX3FwX29mZnNldD0tMiB0aHJlYWRzPTEgbG9va2FoZWFkX3RocmVhZHM9MSBzbGljZWRfdGhyZWFkcz0wIG5yPTAgZGVjaW1hdGU9MSBpbnRlcmxhY2VkPTAgYmx1cmF5X2NvbXBhdD0wIGNvbnN0cmFpbmVkX2ludHJhPTAgYmZyYW1lcz0zIGJfcHlyYW1pZD0yIGJfYWRhcHQ9MSBiX2JpYXM9MCBkaXJlY3Q9MSB3ZWlnaHRiPTEgb3Blbl9nb3A9MCB3ZWlnaHRwPTIga2V5aW50PTI1MCBrZXlpbnRfbWluPTI1IHNjZW5lY3V0PTQwIGludHJhX3JlZnJlc2g9MCByY19sb29rYWhlYWQ9NDAgcmM9Y3JmIG1idHJlZT0xIGNyZj0yMy4wIHFjb21wPTAuNjAgcXBtaW49MCBxcG1heD02OSBxcHN0ZXA9NCBpcF9yYXRpbz0xLjQwIGFxPTE6MS4wMACAAAAAD2WIhAAz//727L4FNhTIwQAAAAhBmiJsQr/+wAAAAAgBnkF5Cv/EgQAAA1xtb292AAAAbG12aGQAAAAAAAAAAAAAAAAAAAPoAAAAeAABAAABAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACAAACh3RyYWsAAABcdGtoZAAAAAMAAAAAAAAAAAAAAAEAAAAAAAAAeAAAAAAAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAEAAAAAAEAAAABAAAAAAACRlZHRzAAAAHGVsc3QAAAAAAAAAAQAAAHgAAAQAAAEAAAAAAf9tZGlhAAAAIG1kaGQAAAAAAAAAAAAAAAAAADIAAAAIAFXEAAAAAAAtaGRscgAAAAAAAAAAdmlkZQAAAAAAAAAAAAAAAFZpZGVvSGFuZGxlcgAAAAGqbWluZgAAABR2bWhkAAAAAQAAAAAAAAAAAAAAJGRpbmYAAAAcZHJlZgAAAAAAAAABAAAADHVybCAAAAABAAABanN0YmwAAAC+c3RzZAAAAAAAAAABAAAArmF2YzEAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAEAAQAEgAAABIAAAAAAAAAAEVTGF2YzYyLjExLjEwMCBsaWJ4MjY0AAAAAAAAAAAAAAAY//8AAAA0YXZjQwFkAAr/4QAXZ2QACqzZXsBEAAADAAQAAAMAyDxIllgBAAZo6+PLIsD9+PgAAAAAEHBhc3AAAAABAAAAAQAAABRidHJ0AAAAAAAAvuIAAAAAAAAAGHN0dHMAAAAAAAAAAQAAAAMAAAIAAAAAFHN0c3MAAAAAAAAAAQAAAAEAAAAoY3R0cwAAAAAAAAADAAAAAQAABAAAAAABAAAGAAAAAAEAAAIAAAAAHHN0c2MAAAAAAAAAAQAAAAEAAAADAAAAAQAAACBzdHN6AAAAAAAAAAAAAAADAAACxQAAAAwAAAAMAAAAFHN0Y28AAAAAAAAAAQAAADAAAABhdWR0YQAAAFltZXRhAAAAAAAAACFoZGxyAAAAAAAAAABtZGlyYXBwbAAAAAAAAAAAAAAAACxpbHN0AAAAJKl0b28AAAAcZGF0YQAAAAEAAAAATGF2ZjYyLjMuMTAw',
-);
-
-final List<int> _validPngBytes = base64Decode(
-  'iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAACXBIWXMAAAABAAAAAQBPJcTWAAAADklEQVR4nGNkAAMWCAUAADgABkRoBWYAAAAASUVORK5CYII=',
 );
 
 final class FakeCockpitNativeRecording extends CockpitNativeRecording {
@@ -420,49 +409,3 @@ final class FakeCockpitNativeRecording extends CockpitNativeRecording {
 }
 
 final class _RealHttpOverrides extends HttpOverrides {}
-
-final class _StaticRecordingKeyframeExtractor
-    implements CockpitRecordingKeyframeExtractor {
-  @override
-  Future<CockpitRecordingKeyframeExtractionResult> extract({
-    required String recordingPath,
-    required String recordingRelativePath,
-    required List<CockpitStepRecord> steps,
-    String? bundleDirectoryPath,
-  }) async {
-    final baseName = p.basenameWithoutExtension(recordingRelativePath);
-    return CockpitRecordingKeyframeExtractionResult(
-      keyframes: <CockpitRecordingKeyframe>[
-        CockpitRecordingKeyframe(
-          relativePath: 'keyframes/${baseName}_baseline.png',
-          label: 'baseline',
-          offsetMs: 600,
-          source: CockpitRecordingKeyframeSource.stepCapture,
-        ),
-        CockpitRecordingKeyframe(
-          relativePath: 'keyframes/${baseName}_midpoint.png',
-          label: 'midpoint',
-          offsetMs: 3600,
-          source: CockpitRecordingKeyframeSource.syntheticCoverage,
-        ),
-        CockpitRecordingKeyframe(
-          relativePath: 'keyframes/${baseName}_tail.png',
-          label: 'tail_consistency',
-          offsetMs: 7600,
-          source: CockpitRecordingKeyframeSource.tailConsistency,
-        ),
-      ],
-      artifactPayloads: <String, List<int>>{
-        'keyframes/${baseName}_baseline.png': _validPngBytes,
-        'keyframes/${baseName}_midpoint.png': _validPngBytes,
-        'keyframes/${baseName}_tail.png': _validPngBytes,
-      },
-      coverage: const CockpitRecordingCoverage(
-        durationMs: 8000,
-        hasEarlyCoverage: true,
-        hasMidCoverage: true,
-        hasLateCoverage: true,
-      ),
-    );
-  }
-}

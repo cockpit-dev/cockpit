@@ -390,16 +390,8 @@ final class FlutterCockpitRootState extends State<FlutterCockpitRoot> {
     };
   }
 
-  Future<void> _startRemoteSessionIfEnabled() async {
-    final configuration = FlutterCockpit.binding.configuration.remoteSession;
-    if (configuration == null || !configuration.enabled) {
-      return;
-    }
-    if (_remoteSessionServer != null || _remoteSessionBridgeClient != null) {
-      return;
-    }
-
-    final executor = InAppCockpitCommandExecutor(
+  InAppCockpitCommandExecutor _buildRemoteCommandExecutor(String platform) {
+    return InAppCockpitCommandExecutor(
       registry: FlutterCockpit.binding.registry,
       captureHandler: captureScreenshot,
       snapshotProvider: snapshot,
@@ -486,8 +478,25 @@ final class FlutterCockpitRootState extends State<FlutterCockpitRoot> {
         }
         return cockpitMaybePopCurrentNavigator(context as Element);
       },
-      platform: defaultTargetPlatform.name,
+      platform: platform,
       transportType: 'remoteHttp',
+    );
+  }
+
+  Future<void> _startRemoteSessionIfEnabled() async {
+    final configuration = FlutterCockpit.binding.configuration.remoteSession;
+    if (configuration == null || !configuration.enabled) {
+      return;
+    }
+    if (_remoteSessionServer != null || _remoteSessionBridgeClient != null) {
+      return;
+    }
+
+    final executor = _buildRemoteCommandExecutor(
+      resolveCockpitRemoteSessionPlatform(
+        isWeb: kIsWeb,
+        targetPlatform: defaultTargetPlatform,
+      ),
     );
     final endpointHandler = CockpitRemoteSessionEndpointHandler(
       configuration: configuration,
@@ -629,75 +638,7 @@ final class FlutterCockpitRootState extends State<FlutterCockpitRoot> {
       targetPlatform: defaultTargetPlatform,
     );
     final currentRouteName = FlutterCockpit.binding.currentRouteName.value;
-    final executor = InAppCockpitCommandExecutor(
-      registry: FlutterCockpit.binding.registry,
-      captureHandler: captureScreenshot,
-      snapshotProvider: snapshot,
-      routeNameSynchronizer: FlutterCockpit.binding.setDiscoveredRouteName,
-      scrollStepHandler:
-          ({
-            required reverse,
-            required viewportFraction,
-            scrollableKey,
-            targetLocator,
-            scrollableLocator,
-            required duration,
-            required gestureProfile,
-            required continuous,
-            required postScrollEnsureVisible,
-          }) {
-            final surfaceState = _surfaceStateOrNull;
-            if (surfaceState == null) {
-              return Future<CockpitScrollStepResult>.value(
-                const CockpitScrollStepResult(didScroll: false),
-              );
-            }
-            return surfaceState.scrollByViewport(
-              reverse: reverse,
-              viewportFraction: viewportFraction,
-              scrollableKey: scrollableKey,
-              targetLocator: targetLocator,
-              scrollableLocator: scrollableLocator,
-              duration: duration,
-              gestureProfile: gestureProfile,
-              continuous: continuous,
-              postScrollEnsureVisible: postScrollEnsureVisible,
-            );
-          },
-      ensureVisibleHandler:
-          ({
-            required locator,
-            required duration,
-            required alignment,
-            required padding,
-          }) {
-            final surfaceState = _surfaceStateOrNull;
-            if (surfaceState == null) {
-              return Future<bool>.value(false);
-            }
-            return surfaceState.ensureLocatorVisible(
-              locator,
-              duration: duration,
-              alignment: alignment,
-              padding: padding,
-            );
-          },
-      gestureHandler: (action) {
-        final surfaceState = _surfaceStateOrNull;
-        if (surfaceState == null) {
-          return Future<void>.error(
-            StateError('FlutterCockpitRoot surface is not mounted.'),
-          );
-        }
-        return surfaceState.performGesture(action);
-      },
-      waitTickHandler: FlutterCockpit.binding.configuration.gestureDelay,
-      interactionPolicy: FlutterCockpit.binding.configuration.interactionPolicy,
-      isRecordingActive: () =>
-          FlutterCockpit.binding.activeRecordingSession != null,
-      platform: remoteSessionPlatform,
-      transportType: 'remoteHttp',
-    );
+    final executor = _buildRemoteCommandExecutor(remoteSessionPlatform);
     final baseCapabilities = await executor.describeCapabilities();
     final supportsNativeCapture = await FlutterCockpit.binding
         .queryNativeCaptureAvailability();

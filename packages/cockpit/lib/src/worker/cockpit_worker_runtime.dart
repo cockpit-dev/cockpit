@@ -73,10 +73,6 @@ final class CockpitWorkerRuntimeConfiguration {
     _validateAbsolutePath(stateRoot, 'stateRoot');
     _validateUniqueIds(this.supportedFeatures, 'supportedFeatures');
     _validateEnvironmentNames(this.allowedEnvironmentSecretNames);
-    _validateRuntimeSafetyAuthority(
-      this.allowedTargetEnvironments,
-      this.allowedSafetyEffects,
-    );
   }
 
   factory CockpitWorkerRuntimeConfiguration.parse(List<String> arguments) {
@@ -306,7 +302,7 @@ final class CockpitWorkerRuntime {
       caseIndex: documents,
       sessions: registry,
       secretResolver: secretResolver,
-      safetyPolicy: CockpitTrustedDevelopmentSafetyPolicy(
+      safetyPolicy: CockpitConfiguredSafetyPolicy(
         environments: configuration.allowedTargetEnvironments,
         allowedEffects: configuration.allowedSafetyEffects,
       ),
@@ -331,7 +327,7 @@ final class CockpitWorkerRuntime {
       sessions: registry,
       resourceAuthority: resourceAuthority,
       secretResolver: secretResolver,
-      safetyPolicy: CockpitTrustedDevelopmentSafetyPolicy(
+      safetyPolicy: CockpitConfiguredSafetyPolicy(
         environments: configuration.allowedTargetEnvironments,
         allowedEffects: configuration.allowedSafetyEffects,
       ),
@@ -589,18 +585,6 @@ Set<T> _parseEnumAllowlist<T extends Enum>(
     }
   }
   return Set<T>.unmodifiable(result);
-}
-
-void _validateRuntimeSafetyAuthority(
-  Set<CockpitTestTargetEnvironment> environments,
-  Set<CockpitTestSafetyEffect> effects,
-) {
-  if (environments.contains(CockpitTestTargetEnvironment.production) ||
-      environments.contains(CockpitTestTargetEnvironment.unknown) ||
-      environments.length > CockpitTestTargetEnvironment.values.length ||
-      effects.length > CockpitTestSafetyEffect.values.length) {
-    throw const FormatException('Worker safety authority is invalid.');
-  }
 }
 
 CockpitPermissionHardener _systemPermissionHardener() => Platform.isWindows

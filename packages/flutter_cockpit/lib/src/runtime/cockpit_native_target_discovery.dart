@@ -507,6 +507,7 @@ final class CockpitNativeTargetDiscovery {
     final doubleTapHandler = _doubleTapHandlerForElement(element);
     final enterTextHandler = _enterTextHandlerForElement(element);
     final textInputHandler = _textInputHandlerForElement(element);
+    final isTextInput = enterTextHandler != null || textInputHandler != null;
     final hasDirectHandlers =
         tapHandler != null ||
         longPressHandler != null ||
@@ -542,7 +543,7 @@ final class CockpitNativeTargetDiscovery {
       final metadata = _extractInteractiveMetadata(
         element,
         semantics: semantics,
-        isTextInput: enterTextHandler != null || textInputHandler != null,
+        isTextInput: isTextInput,
         session: session,
       );
       final scrollableMetadata = _scrollableMetadataForElement(
@@ -554,7 +555,9 @@ final class CockpitNativeTargetDiscovery {
           routeName: routeName,
           path: path,
           typeName: typeName,
-          bestLabel: metadata.displayLabel,
+          bestLabel: isTextInput
+              ? _inputLabelForElement(element) ?? metadata.displayLabel
+              : metadata.displayLabel,
         ),
         semanticId: metadata.semanticId,
         keyValue: metadata.keyValue,
@@ -1334,8 +1337,9 @@ final class CockpitNativeTargetDiscovery {
     required _DiscoverySession session,
   }) {
     final inputLabel = _inputLabelForElement(element);
+    final inputError = _inputErrorForElement(element);
     final text = isTextInput && inputLabel != null
-        ? inputLabel
+        ? _joinTextSignals(<String?>[inputLabel, inputError])
         : _firstNonEmpty(<String?>[
             policy.extractText?.call(element),
             semantics?.label,
@@ -1461,6 +1465,43 @@ final class CockpitNativeTargetDiscovery {
       );
     }
     return null;
+  }
+
+  String? _inputErrorForElement(Element element) {
+    final selfError = _inputErrorFromWidget(element.widget);
+    if (selfError != null) return selfError;
+
+    String? error;
+    void visit(Element candidate) {
+      if (error != null || !candidate.mounted) return;
+      error = _inputErrorFromWidget(candidate.widget);
+      if (error == null) candidate.visitChildElements(visit);
+    }
+
+    element.visitChildElements(visit);
+    if (error != null) return error;
+    element.visitAncestorElements((ancestor) {
+      error = _inputErrorFromWidget(ancestor.widget);
+      return error == null;
+    });
+    return error;
+  }
+
+  String? _inputErrorFromWidget(Widget widget) {
+    final errorText = switch (widget) {
+      TextField(:final decoration) => decoration?.errorText,
+      _ => null,
+    };
+    return _normalizeText(errorText);
+  }
+
+  String? _joinTextSignals(Iterable<String?> signals) {
+    final normalized = signals
+        .map(_normalizeText)
+        .whereType<String>()
+        .toSet()
+        .toList(growable: false);
+    return normalized.isEmpty ? null : normalized.join(' ');
   }
 
   String? _inputLabelFromDescendantTextField(Element element) {

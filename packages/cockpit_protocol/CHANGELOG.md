@@ -2,6 +2,10 @@
 
 ## 2.0.0
 
+- Added the public automation target DTOs plus foundation JSON Schema and
+  OpenAPI contracts used by CLI, MCP, and independent clients.
+- Added the strict `cockpit.test/v2` case/suite DSL and aggregate report models
+  shared by Flutter semantic and native black-box drivers.
 - Added project, suite, fixture, matrix, campaign policy, aggregate report, and
   report-case contracts to `cockpit.test/v2`.
 - Added native/test-id/role/coordinate locator strategies and a system action
@@ -22,6 +26,8 @@
   idempotency, version/feature negotiation, and structured recovery.
 - Published byte-identical embedded foundation schema and OpenAPI constants for
   compiled CLI, MCP, GUI, and third-party Dart clients.
+- Added the paginated run artifact collection contract so independent clients
+  can resolve immutable download metadata without private server access.
 
 ## 1.1.4
 

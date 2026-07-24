@@ -293,7 +293,13 @@ final class CockpitLeaseWorkerResourceAuthority
       return <String, Object?>{'released': true, 'alreadyTerminal': true};
     }
     if (active.reservation != null) {
-      await active.reservation!.release();
+      final reservation = active.reservation!;
+      if (!cancel &&
+          reservation.state == CockpitPortReservationState.handedOff) {
+        await reservation.relinquish();
+      } else {
+        await reservation.release();
+      }
     } else if (cancel) {
       await _leases.cancel(
         active.grant.leaseId,

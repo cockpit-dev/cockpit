@@ -1,5 +1,5 @@
 name: cockpit
-description: Host-side tooling for flutter_cockpit task execution and artifact handling.
+description: Production E2E automation CLI, daemon, MCP, drivers, and reports for Flutter and black-box apps.
 version: 2.0.0
 homepage: https://github.com/cockpit-dev/flutter_cockpit
 repository: https://github.com/cockpit-dev/flutter_cockpit

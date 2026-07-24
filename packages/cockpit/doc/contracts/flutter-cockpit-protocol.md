@@ -1,58 +1,80 @@
-# Flutter Cockpit Protocol
+# Cockpit 2.0 Protocol
 
-This is the stable entry point for AI agents and MCP hosts that need to load
-Flutter Cockpit context with minimum guessing. Start here, then open only the
-specific contract needed for the current task.
+Cockpit 2.0 is a resource-oriented E2E automation protocol for Flutter and
+black-box applications. A per-user Supervisor owns authentication, workspace
+isolation, target authority, run admission, events, artifacts, and worker
+lifecycle. CLI, MCP, GUI, and third-party clients use the same public contract.
 
-MCP resource URI: `cockpit://workspace/protocol`.
+## Canonical Contracts
 
-## Contract Map
+| Contract | Source |
+| --- | --- |
+| Authenticated HTTP/SSE API | `packages/cockpit_protocol/openapi/cockpit.v2.openapi.json` |
+| Foundation DTOs | `packages/cockpit_protocol/schema/cockpit.foundation.v2.schema.json` |
+| Case, suite, and project documents | `packages/cockpit_protocol/schema/cockpit.test.v2.schema.json` |
+| Dart DTOs and strict codecs | `package:cockpit_protocol/cockpit_protocol.dart` |
 
-| Need | File | MCP resource |
-| ---- | ---- | ------------ |
-| Default AI development loop | `docs/contracts/ai-development-protocol.md` | `cockpit://workspace/ai-development-protocol` |
-| Workflow script syntax and execution rules | `docs/contracts/control-workflow-protocol.md` | `cockpit://workspace/control-workflow-protocol` |
-| Machine validation for workflow YAML/JSON | `docs/contracts/control-workflow.schema.json` | `cockpit://workspace/control-workflow-schema` |
-| Bundle layout and artifact traceability | `docs/contracts/task-run-bundle.md` | `cockpit://workspace/task-bundle-contract` |
-| Maintainer-facing skill guarantees | `docs/contracts/flutter-cockpit-skill-contract.md` | `cockpit://workspace/skill-contract` |
+Generated schemas and Dart constants must remain byte-for-byte synchronized.
+Clients must reject unknown fields and unsupported schema versions.
 
-Published package fallback copies live under
-`packages/cockpit/doc/contracts/` and
-`doc/contracts/` when the current directory is the cockpit package root.
+## Resource Model
 
-## Loading Policy
-
-1. Load this protocol entry first when the host supports MCP resources.
-2. For normal app development, load the AI development protocol.
-3. For scripted E2E, branch, retry, loop, or replayable flows, load the
-   workflow protocol and schema.
-4. For produced evidence bundles, load the task bundle contract before reading
-   raw artifacts.
-5. For skill or prompt maintenance, load the skill contract.
-
-Do not load every contract by default. Each opened document should reduce a
-specific uncertainty in the current development or validation loop.
-
-## CLI And MCP Defaults
-
-`serve-mcp` exposes this entry point by default. Override only when embedding a
-custom contract set:
-
-```bash
-dart run cockpit serve-mcp \
-  --protocol-file docs/contracts/flutter-cockpit-protocol.md
+```text
+Supervisor
+  root
+    workspace
+      document
+      target
+      operation
+      case / suite
+  run
+    case attempt
+      step
+      artifact
+    event stream
+    report
 ```
 
-The default CLI stdout is AI-readable. Use `--stdout-format json` for shell
-pipelines and `--output <path> --output-format json` when another program must
-reopen structured output from disk.
+Every workspace-owned request carries a `workspaceId`. Run and artifact
+resources are resolved through Supervisor-owned indexes, never through global
+"latest" state. Multiple projects and checkouts can run concurrently.
 
-## Stability Rules
+## Transport
 
-- Resource URIs are stable public context boundaries.
-- Contract files may add fields or sections but must not remove shipped
-  meanings without a major protocol revision.
-- Unsupported platform capabilities must be reported as unavailable or blocked
-  by environment, not simulated as success.
-- Product proof requires live state or artifact evidence, not command success
-  alone.
+- `cockpitd` binds loopback only and publishes authenticated discovery data in
+  `COCKPIT_HOME`.
+- HTTP uses `/api/v2`; event streams use authenticated SSE and resumable event
+  sequence identifiers.
+- CLI and MCP are thin clients. They do not construct drivers or application
+  services in process.
+- `cockpit_worker` is private Supervisor infrastructure and is not a public
+  client transport.
+
+## Execution
+
+1. Register a project root and workspace checkout.
+2. Discover or register a workspace-owned target.
+3. Inspect capabilities before selecting operations or authored test steps.
+4. Validate and index a `cockpit.test/v2` case, suite, or project document.
+5. Submit a case or suite with an idempotency key.
+6. Observe the run event stream until a terminal state.
+7. Read the canonical report and digest-checked artifacts.
+
+Case runs provide typed inputs, setup, steps, guaranteed cleanup, safety
+authorization, evidence, and immutable attempt bundles. Suite runs add DAGs,
+matrix expansion, fixtures, isolation, concurrency, retry, fail-fast,
+checkpoint recovery, and JSON/JUnit/HTML/AI reports.
+
+## Target Families
+
+Flutter apps, native mobile apps, desktop apps, browser pages, system surfaces,
+devices, and host workspaces share one target contract. App-like black-box
+targets require a platform app identifier. iOS WebDriverAgent endpoints are
+target-scoped so concurrent devices and workspaces cannot overwrite each
+other. Unsupported capabilities remain explicit rather than being simulated.
+
+## Compatibility
+
+There is no 1.x runtime client, embedded dashboard, legacy artifact layout, or
+global session store. The offline importer is the only supported migration
+surface and produces a canonical 2.0 case plus migration manifest.

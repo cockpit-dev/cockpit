@@ -236,6 +236,28 @@ extension CockpitPortReservationOperations on CockpitPortReservation {
     }
   }
 
+  Future<CockpitLeaseResource> relinquish() async {
+    while (_transition != null) {
+      await _transition;
+    }
+    if (_state == CockpitPortReservationState.released) return _lease;
+    if (_state != CockpitPortReservationState.handedOff ||
+        _verifiedLease == null) {
+      throw CockpitLeaseException(
+        code: 'portHandoffRelinquishInvalid',
+        message: 'Only a verified port handoff can be relinquished.',
+        lease: _lease,
+      );
+    }
+    final operation = _verifiedLease!.relinquish();
+    _transition = operation;
+    try {
+      return await operation;
+    } finally {
+      if (identical(_transition, operation)) _transition = null;
+    }
+  }
+
   Future<CockpitLeaseResource> _performRelease() async {
     await _socket?.close();
     _socket = null;
@@ -306,6 +328,15 @@ final class CockpitVerifiedPortLease {
 
   Future<CockpitLeaseResource> release() async {
     _lease = await _leases.release(_lease.leaseId, holderId: _lease.holderId);
+    _onUpdate(_lease);
+    return _lease;
+  }
+
+  Future<CockpitLeaseResource> relinquish() async {
+    _lease = await _leases.relinquishPortHandoff(
+      leaseId: _lease.leaseId,
+      holderId: _lease.holderId,
+    );
     _onUpdate(_lease);
     return _lease;
   }

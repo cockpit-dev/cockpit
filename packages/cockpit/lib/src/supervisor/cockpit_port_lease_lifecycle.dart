@@ -70,4 +70,34 @@ extension CockpitPortLeaseLifecycleOperations on CockpitLeaseRegistry {
       _portReservation(state, updated),
     );
   });
+
+  Future<CockpitLeaseResource> relinquishPortHandoff({
+    required String leaseId,
+    required String holderId,
+  }) => _database.transact<CockpitLeaseResource>((state) async {
+    final now = _now;
+    _expireDue(state, now);
+    final record = _requireHolder(state, leaseId, holderId);
+    if (record.state != CockpitLeaseState.active ||
+        record.resourceKind != CockpitLeaseResourceKind.forwardedPort ||
+        record.portPhase != CockpitDurablePortPhase.handedOff ||
+        record.portOwner == null) {
+      throw CockpitLeaseException(
+        code: 'portHandoffRelinquishInvalid',
+        message: 'Only a verified active port handoff can be relinquished.',
+        lease: _resource(state, record),
+      );
+    }
+    final released = record.copyWith(
+      state: CockpitLeaseState.released,
+      releasedAt: now,
+      cleanupReason: null,
+      cleanupClaimId: null,
+      cleanupClaimExpiresAt: null,
+      failure: null,
+    );
+    _replace(state, released);
+    _grantAvailable(state, now);
+    return CockpitLockedJsonUpdate.write(state, released.toResource());
+  });
 }

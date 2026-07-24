@@ -1,5 +1,5 @@
 ---
-description: Use Flutter Cockpit when a Flutter or host-control task needs live UI, route, screenshot, recording, or validation evidence.
+description: Use Cockpit 2.0 when Flutter or black-box application work needs live control, E2E execution, reports, or evidence.
 globs:
   - "**/*.dart"
   - "pubspec.yaml"
@@ -7,16 +7,20 @@ globs:
 alwaysApply: false
 ---
 
-Load the `flutter-cockpit` skill from `.cursor/skills/flutter-cockpit` before driving a Flutter app or claiming runtime validation. If skill discovery is unavailable, read `skills/flutter-cockpit/SKILL.md`.
+Load the `flutter-cockpit` skill from
+`.cursor/skills/flutter-cockpit` before controlling an application or
+claiming runtime validation. If skill discovery is unavailable, read
+`skills/flutter-cockpit/SKILL.md`.
 
-Default to the smallest live loop:
+Use the authenticated Supervisor and resolve explicit identities:
 
 ```bash
-dart run cockpit list-targets
-dart run cockpit launch-app --project-dir <dir> --platform <platform> --device-id <id>
-dart run cockpit read-app --profile minimal
-dart run cockpit hot-reload
-dart run cockpit capture-screenshot --name acceptance --profile inspect
+dart run cockpit daemon status
+dart run cockpit target discover
+dart run cockpit target inspect --target-id <targetId> --profile minimal
+dart run cockpit operation list --workspace-id <workspaceId>
 ```
 
-Prefer `.cursor/mcp.json` or CLI through `dart run cockpit serve-mcp`. Do not treat command success as product proof; verify app state, errors, and evidence.
+Use a validated `cockpit.test/v2` case or suite for reusable E2E. Prefer
+`.cursor/mcp.json` when MCP is available. Judge success from terminal run
+state, assertions, structured errors, and report-backed evidence.

@@ -172,9 +172,11 @@ final class CockpitSuiteRunAdapterFactory {
       eventStore: _eventStore,
       runStore: _runStore,
       artifactPublisher: _artifactPublisher,
+      initialSessionBindings: reservation.sessionBindings,
       utcNow: _utcNow,
     );
-    late final CockpitSuiteScheduleResult schedule;
+    CockpitSuiteScheduleResult schedule;
+    CockpitFailure? executionFailure;
     try {
       schedule =
           await CockpitSuiteScheduler(
@@ -191,7 +193,15 @@ final class CockpitSuiteRunAdapterFactory {
             plan: plan,
             cancellation: execution,
             initialExecutions: reservation.executions,
+            initialProgress: reservation.progress,
           );
+    } on Object {
+      executionFailure = _suiteExecutionFailure();
+      schedule = await _finalizeFailedSchedule(
+        plan: plan,
+        execution: execution,
+        failure: executionFailure,
+      );
     } finally {
       await execution.closeResourceBoundaries();
     }
@@ -204,6 +214,7 @@ final class CockpitSuiteRunAdapterFactory {
       schedule: schedule,
       startedAt: reservation.startedAt,
       finishedAt: finishedAt,
+      failure: executionFailure,
       environment: <String, Object?>{
         'engineVersion': engineVersion,
         'requiredFeatures': submission.requiredFeatures,
@@ -287,6 +298,61 @@ final class CockpitSuiteRunAdapterFactory {
     };
     await _runStore.complete(runId: runId, output: output);
     return output;
+  }
+
+  Future<CockpitSuiteScheduleResult> _finalizeFailedSchedule({
+    required CockpitSuiteExecutionPlan plan,
+    required _SuiteAttemptExecution execution,
+    required CockpitFailure failure,
+  }) async {
+    final checkpoint = await _runStore.read(execution.runId);
+    final completed = <String, CockpitSuiteNodeExecution>{
+      for (final item in checkpoint.executions) item.nodeId: item,
+    };
+    final progress = <String, CockpitSuiteNodeProgress>{
+      for (final item in checkpoint.progress) item.nodeId: item,
+    };
+    for (final node in plan.nodes) {
+      if (completed.containsKey(node.nodeId)) continue;
+      final nodeProgress = progress[node.nodeId];
+      final attempts = <CockpitTestAttemptReport>[
+        ...?nodeProgress?.completedAttempts,
+      ];
+      if (nodeProgress?.activeAttempt case final active?) {
+        final now = _utcNow();
+        final finishedAt = now.isBefore(active.startedAt)
+            ? active.startedAt
+            : now;
+        final attempt = CockpitTestAttemptReport(
+          attemptId: active.attemptId,
+          number: active.number,
+          outcome: CockpitRunOutcome.internalError,
+          startedAt: active.startedAt,
+          finishedAt: finishedAt,
+          durationMs: finishedAt.difference(active.startedAt).inMilliseconds,
+          targetId: active.targetId,
+          failure: failure,
+        );
+        attempts.add(attempt);
+        await execution.attemptCompleted(node, attempt);
+      }
+      final nodeExecution = CockpitSuiteNodeExecution(
+        nodeId: node.nodeId,
+        entryId: node.entryId,
+        kind: node.kind,
+        outcome: CockpitRunOutcome.internalError,
+        stability: CockpitRunStability.unknown,
+        attempts: attempts,
+        startedAt: nodeProgress?.startedAt,
+        finishedAt: _utcNow(),
+      );
+      await execution.nodeCompleted(node, nodeExecution);
+      completed[node.nodeId] = nodeExecution;
+    }
+    return CockpitSuiteScheduleResult(
+      runId: execution.runId,
+      executions: plan.nodes.map((node) => completed[node.nodeId]!),
+    );
   }
 
   Future<void> _initializeEvents(String runId) async {
@@ -375,6 +441,7 @@ final class _SuiteAttemptExecution
     required CockpitWorkerRunEventStore eventStore,
     required CockpitWorkerSuiteRunStore runStore,
     required CockpitWorkerArtifactPublisher? artifactPublisher,
+    required Map<String, String> initialSessionBindings,
     required DateTime Function() utcNow,
   }) : _sessions = sessions,
        _resourceAuthority = resourceAuthority,
@@ -385,7 +452,10 @@ final class _SuiteAttemptExecution
        _runStore = runStore,
        _artifactPublisher = artifactPublisher,
        _utcNow = utcNow,
-       _rowSessionAffinity = CockpitSuiteRowSessionAffinity(plan);
+       _rowSessionAffinity = CockpitSuiteRowSessionAffinity(
+         plan,
+         initialBindings: initialSessionBindings,
+       );
 
   final String workspaceId;
   final String projectId;
@@ -418,6 +488,13 @@ final class _SuiteAttemptExecution
     CockpitSuitePlanNode node,
     DateTime startedAt,
   ) async {
+    await _runStore.recordNodeStarted(
+      runId: runId,
+      nodeId: node.nodeId,
+      entryId: node.entryId,
+      kind: node.kind,
+      startedAt: startedAt,
+    );
     if (node.kind != CockpitSuitePlanNodeKind.testCase) return;
     await _eventStore.append(
       runId,
@@ -432,10 +509,30 @@ final class _SuiteAttemptExecution
   }
 
   @override
+  Future<void> attemptStarted(
+    CockpitSuitePlanNode node,
+    String attemptId,
+    int attemptNumber,
+    DateTime startedAt,
+  ) => _runStore.recordAttemptStarted(
+    runId: runId,
+    nodeId: node.nodeId,
+    attemptId: attemptId,
+    attemptNumber: attemptNumber,
+    startedAt: startedAt,
+    targetId: node.targetId ?? 'unassigned',
+  );
+
+  @override
   Future<void> attemptCompleted(
     CockpitSuitePlanNode node,
     CockpitTestAttemptReport attempt,
   ) async {
+    await _runStore.recordAttemptCompleted(
+      runId: runId,
+      nodeId: node.nodeId,
+      attempt: attempt,
+    );
     if (node.kind != CockpitSuitePlanNodeKind.testCase) return;
     final existing = await _eventStore.eventsForRun(runId);
     if (existing.any(
@@ -466,7 +563,15 @@ final class _SuiteAttemptExecution
   Future<void> nodeCompleted(
     CockpitSuitePlanNode node,
     CockpitSuiteNodeExecution execution,
-  ) => _runStore.recordExecution(runId: runId, execution: execution);
+  ) async {
+    final releasedKeys = _rowSessionAffinity.bindingsReleasedBy(node);
+    await _runStore.recordExecution(
+      runId: runId,
+      execution: execution,
+      releasedSessionBindingKeys: releasedKeys,
+    );
+    _rowSessionAffinity.releaseBindings(releasedKeys);
+  }
 
   @override
   Future<CockpitTestAttemptReport> execute({
@@ -494,13 +599,13 @@ final class _SuiteAttemptExecution
     late final _SuiteRowResourceBoundary? rowBoundary;
     final startedAt = _utcNow();
     try {
-      session = await _sessions.selectHealthySession(
-        targetId: node.targetId,
-        requirements: testCase.target,
-      );
+      session = await _selectSession(node);
       rowBoundary = await _rowResourceBoundary(node, session);
     } on CockpitApplicationServiceException catch (error) {
-      if (error.code != 'suiteSessionDrift') rethrow;
+      if (error.code != 'suiteSessionDrift' &&
+          error.code != 'suiteSessionUnavailable') {
+        rethrow;
+      }
       return _suiteRuntimeFailure(
         attemptId: attemptId,
         attemptNumber: attemptNumber,
@@ -671,10 +776,26 @@ final class _SuiteAttemptExecution
       );
     }
     final isolation = node.isolation!;
-    final session = await _sessions.selectHealthySession(
-      targetId: node.targetId,
-      requirements: node.compiledCase.testCase.target,
-    );
+    late final CockpitWorkerHealthySession session;
+    try {
+      session = await _selectSession(node);
+    } on CockpitApplicationServiceException catch (error) {
+      if (error.code != 'suiteSessionDrift' &&
+          error.code != 'suiteSessionUnavailable') {
+        rethrow;
+      }
+      return _suiteRuntimeFailure(
+        attemptId: attemptId,
+        attemptNumber: attemptNumber,
+        startedAt: startedAt,
+        targetId: node.targetId ?? 'unassigned',
+        code: error.code,
+        message: error.message,
+        category: CockpitErrorCategory.environment,
+        retryable: false,
+        details: error.details,
+      );
+    }
     final rowBoundary = await _rowResourceBoundary(node, session);
     if (rowBoundary == null) {
       throw StateError('Suite isolation is missing its case row boundary.');
@@ -725,10 +846,7 @@ final class _SuiteAttemptExecution
           retryable: false,
         );
       }
-      final refreshed = await _sessions.selectHealthySession(
-        targetId: node.targetId,
-        requirements: node.compiledCase.testCase.target,
-      );
+      final refreshed = await _selectSession(node);
       await _rowResourceBoundary(node, refreshed);
     } on CockpitApplicationServiceException catch (error) {
       if (cancellation.isCancelled) {
@@ -806,16 +924,51 @@ final class _SuiteAttemptExecution
     );
   }
 
+  Future<CockpitWorkerHealthySession> _selectSession(
+    CockpitSuitePlanNode node,
+  ) async {
+    final preferredResourceId = _rowSessionAffinity.preferredResourceId(node);
+    late final CockpitWorkerHealthySession session;
+    try {
+      session = await _sessions.selectHealthySession(
+        targetId: node.targetId,
+        requirements: node.compiledCase.testCase.target,
+        preferredResourceId: preferredResourceId,
+      );
+    } on CockpitApplicationServiceException catch (error) {
+      if (preferredResourceId == null ||
+          error.code != 'healthySessionNotFound') {
+        rethrow;
+      }
+      throw CockpitApplicationServiceException(
+        code: 'suiteSessionUnavailable',
+        message:
+            'The session required by the durable suite checkpoint is unavailable.',
+        details: <String, Object?>{
+          'nodeId': node.nodeId,
+          'sessionResourceId': preferredResourceId,
+        },
+      );
+    }
+    final binding = _rowSessionAffinity.resolveBinding(
+      node,
+      session.resourceId,
+    );
+    await _runStore.bindSession(
+      runId: runId,
+      bindingKey: binding.key,
+      sessionResourceId: binding.resourceId,
+    );
+    return session;
+  }
+
   Future<_SuiteRowResourceBoundary?> _rowResourceBoundary(
     CockpitSuitePlanNode node,
     CockpitWorkerHealthySession session,
   ) async {
     final caseNodeId = node.caseNodeId;
     if (caseNodeId == null) return null;
-    final boundaryResourceId = _rowSessionAffinity.resolveBoundaryResourceId(
-      node,
-      session.resourceId,
-    );
+    final boundaryResourceId = session.resourceId;
     final boundaries = _rowBoundaries.putIfAbsent(
       caseNodeId,
       () => <String, Future<_SuiteRowResourceBoundary>>{},
@@ -863,17 +1016,22 @@ final class _SuiteAttemptExecution
       _closeRowResourceBoundary(caseNode.nodeId);
 
   Future<void> _closeRowResourceBoundary(String caseNodeId) async {
-    _rowSessionAffinity.release(caseNodeId);
     final boundaries = _rowBoundaries.remove(caseNodeId);
-    if (boundaries == null) return;
-    for (final pending in boundaries.values) {
-      try {
-        final boundary = await pending;
-        await boundary.scope.close(cancel: context.cancellation.isCancelled);
-      } on Object {
-        // Lease recovery remains owned by the Supervisor after release failure.
+    if (boundaries != null) {
+      for (final pending in boundaries.values) {
+        try {
+          final boundary = await pending;
+          await boundary.scope.close(cancel: context.cancellation.isCancelled);
+        } on Object {
+          // Lease recovery remains owned by the Supervisor after release failure.
+        }
       }
     }
+    final releasedKeys = _rowSessionAffinity.release(caseNodeId);
+    await _runStore.releaseSessionBindings(
+      runId: runId,
+      bindingKeys: releasedKeys,
+    );
   }
 
   Future<void> closeResourceBoundaries() async {
@@ -1101,51 +1259,159 @@ final class _SuiteRowResourceBoundary {
 }
 
 final class CockpitSuiteRowSessionAffinity {
-  CockpitSuiteRowSessionAffinity(CockpitSuiteExecutionPlan plan)
-    : _caseNodes = <String, CockpitSuitePlanNode>{
-        for (final node in plan.caseNodes) node.nodeId: node,
-      };
+  CockpitSuiteRowSessionAffinity(
+    CockpitSuiteExecutionPlan plan, {
+    Map<String, String> initialBindings = const <String, String>{},
+  }) : _caseNodes = <String, CockpitSuitePlanNode>{
+         for (final node in plan.caseNodes) node.nodeId: node,
+       },
+       _suiteFixtureSetups = <String, CockpitSuitePlanNode>{
+         for (final node in plan.nodes)
+           if (node.kind == CockpitSuitePlanNodeKind.fixtureSetup &&
+               node.caseNodeId == null)
+             node.nodeId: node,
+       },
+       _attemptNodes = plan.attemptNodes,
+       _bindings = <String, String>{...initialBindings} {
+    final allowed = <String>{
+      for (final node in plan.caseNodes)
+        _rowBindingKey(node.nodeId, node.targetId),
+      for (final node in plan.attemptNodes)
+        _rowBindingKey(node.caseNodeId!, node.targetId),
+      for (final node in plan.nodes)
+        if (node.kind == CockpitSuitePlanNodeKind.fixtureSetup &&
+            node.caseNodeId == null)
+          _suiteFixtureBindingKey(node.nodeId),
+    };
+    if (_bindings.keys.any((key) => !allowed.contains(key))) {
+      throw const FormatException(
+        'Persisted suite session binding does not belong to the plan.',
+      );
+    }
+  }
 
   final Map<String, CockpitSuitePlanNode> _caseNodes;
-  final Map<String, String> _primarySessionResourceIds = <String, String>{};
+  final Map<String, CockpitSuitePlanNode> _suiteFixtureSetups;
+  final List<CockpitSuitePlanNode> _attemptNodes;
+  final Map<String, String> _bindings;
 
-  String resolveBoundaryResourceId(
+  String? preferredResourceId(CockpitSuitePlanNode node) {
+    final direct = _bindings[_bindingKey(node)];
+    if (direct != null || node.caseNodeId == null) return direct;
+    final caseNode = _requireCaseNode(node.caseNodeId!);
+    final inherited = <String>{};
+    for (final dependency in caseNode.dependencies) {
+      final setup = _suiteFixtureSetups[dependency];
+      if (setup == null || setup.targetId != node.targetId) continue;
+      final resourceId = _bindings[_suiteFixtureBindingKey(setup.nodeId)];
+      if (resourceId != null) inherited.add(resourceId);
+    }
+    if (inherited.length > 1) {
+      throw CockpitApplicationServiceException(
+        code: 'suiteSessionDrift',
+        message: 'Suite fixtures require conflicting sessions for a case row.',
+        details: <String, Object?>{
+          'caseNodeId': caseNode.nodeId,
+          'sessionResourceIds': inherited.toList()..sort(),
+        },
+      );
+    }
+    return inherited.firstOrNull;
+  }
+
+  CockpitSuiteSessionBinding resolveBinding(
     CockpitSuitePlanNode node,
     String sessionResourceId,
   ) {
-    final caseNodeId = node.caseNodeId;
-    if (caseNodeId == null) return sessionResourceId;
-    final caseNode = _caseNodes[caseNodeId];
-    if (caseNode == null) {
-      throw StateError('Suite row references an unknown case node.');
-    }
-    final usesPrimarySession =
-        node.kind == CockpitSuitePlanNodeKind.isolation ||
-        node.kind == CockpitSuitePlanNodeKind.testCase ||
-        node.targetId == caseNode.targetId;
-    if (!usesPrimarySession) return sessionResourceId;
-    final primary = _primarySessionResourceIds.putIfAbsent(
-      caseNodeId,
-      () => sessionResourceId,
-    );
-    if (primary != sessionResourceId) {
+    final key = _bindingKey(node);
+    final expected = preferredResourceId(node);
+    if (expected != null && expected != sessionResourceId) {
       throw CockpitApplicationServiceException(
         code: 'suiteSessionDrift',
-        message: 'A suite case row resolved to a different primary session.',
+        message: 'A suite lifecycle resolved to a different session.',
         details: <String, Object?>{
-          'caseNodeId': caseNodeId,
-          'expectedSessionResourceId': primary,
+          'nodeId': node.nodeId,
+          'expectedSessionResourceId': expected,
           'actualSessionResourceId': sessionResourceId,
         },
       );
     }
-    return primary;
+    _bindings[key] = sessionResourceId;
+    return CockpitSuiteSessionBinding(key: key, resourceId: sessionResourceId);
   }
 
-  void release(String caseNodeId) {
-    _primarySessionResourceIds.remove(caseNodeId);
+  String resolveBoundaryResourceId(
+    CockpitSuitePlanNode node,
+    String sessionResourceId,
+  ) => resolveBinding(node, sessionResourceId).resourceId;
+
+  Set<String> release(String caseNodeId) {
+    _requireCaseNode(caseNodeId);
+    final keys = <String>{
+      for (final key in _bindings.keys)
+        if (key.startsWith('row:$caseNodeId:')) key,
+    };
+    releaseBindings(keys);
+    return keys;
+  }
+
+  Set<String> bindingsReleasedBy(CockpitSuitePlanNode node) {
+    if (node.kind != CockpitSuitePlanNodeKind.fixtureTeardown ||
+        node.caseNodeId != null) {
+      return const <String>{};
+    }
+    return <String>{_bindingKey(node)};
+  }
+
+  void releaseBindings(Iterable<String> keys) {
+    for (final key in keys) {
+      _bindings.remove(key);
+    }
+  }
+
+  CockpitSuitePlanNode _requireCaseNode(String caseNodeId) =>
+      _caseNodes[caseNodeId] ??
+      (throw StateError('Suite row references an unknown case node.'));
+
+  String _bindingKey(CockpitSuitePlanNode node) {
+    final caseNodeId = node.caseNodeId;
+    if (caseNodeId != null) {
+      _requireCaseNode(caseNodeId);
+      if (!identical(_caseNodes[caseNodeId], node) &&
+          !_attemptNodes.contains(node)) {
+        throw StateError('Suite row node does not belong to this plan.');
+      }
+      return _rowBindingKey(caseNodeId, node.targetId);
+    }
+    if (node.kind == CockpitSuitePlanNodeKind.fixtureSetup) {
+      if (!_suiteFixtureSetups.containsKey(node.nodeId)) {
+        throw StateError('Suite fixture setup does not belong to this plan.');
+      }
+      return _suiteFixtureBindingKey(node.nodeId);
+    }
+    if (node.kind == CockpitSuitePlanNodeKind.fixtureTeardown &&
+        node.cleanupGuardNodeId != null &&
+        _suiteFixtureSetups.containsKey(node.cleanupGuardNodeId)) {
+      return _suiteFixtureBindingKey(node.cleanupGuardNodeId!);
+    }
+    throw StateError('Suite node has no durable session binding.');
   }
 }
+
+final class CockpitSuiteSessionBinding {
+  const CockpitSuiteSessionBinding({
+    required this.key,
+    required this.resourceId,
+  });
+
+  final String key;
+  final String resourceId;
+}
+
+String _rowBindingKey(String caseNodeId, String? targetId) =>
+    'row:$caseNodeId:${targetId ?? 'default'}';
+
+String _suiteFixtureBindingKey(String setupNodeId) => 'fixture:$setupNodeId';
 
 CockpitRunOutcome _runOutcome(CockpitTestOutcome outcome) => switch (outcome) {
   CockpitTestOutcome.passed => CockpitRunOutcome.passed,
@@ -1245,6 +1511,16 @@ CockpitFailure _suiteFinalizationFailure() => CockpitFailure(
     category: CockpitErrorCategory.evidence,
     message: 'Suite report finalization or publication failed.',
     retryable: true,
+    responsibleLayer: CockpitResponsibleLayer.worker,
+  ),
+);
+
+CockpitFailure _suiteExecutionFailure() => CockpitFailure(
+  primary: CockpitApiError(
+    code: 'suiteExecutionInternalError',
+    category: CockpitErrorCategory.internal,
+    message: 'Suite scheduling failed internally.',
+    retryable: false,
     responsibleLayer: CockpitResponsibleLayer.worker,
   ),
 );

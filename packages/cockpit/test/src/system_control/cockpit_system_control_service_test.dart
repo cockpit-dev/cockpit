@@ -181,36 +181,37 @@ void main() {
     expect(probe.failureReason, "error: device 'emulator-5554' not found");
   });
 
-  test(
-    'ios physical profile reports XCTest dependency instead of fake support',
-    () async {
-      final service = CockpitSystemControlService();
+  test('ios physical profile reports WDA and devicectl capabilities', () async {
+    final service = CockpitSystemControlService();
 
-      final result = await service.describe(
-        const CockpitSystemControlDescribeRequest(
-          platform: 'ios',
-          deviceId: '00008110-001234',
-        ),
-      );
+    final result = await service.describe(
+      const CockpitSystemControlDescribeRequest(
+        platform: 'ios',
+        deviceId: '00008110-001234',
+      ),
+    );
 
-      expect(result.profile.adapter, 'ios.physical');
-      expect(
-        result.profile.availableActions,
-        isNot(contains(CockpitSystemControlAction.tap)),
-      );
-      expect(
-        result.profile.blockedActions,
-        contains(CockpitSystemControlAction.tap),
-      );
-      final tap = result.profile.capabilityFor(CockpitSystemControlAction.tap);
-      expect(tap?.availability, CockpitSystemControlAvailability.blocked);
-      expect(
-        tap?.requires,
-        contains('developer-signed XCTest/WebDriverAgent runner'),
-      );
-      expect(result.recommendedNextStep, 'preferFlutterSemanticPlane');
-    },
-  );
+    expect(result.profile.adapter, 'ios.physical+wda+devicectl');
+    expect(
+      result.profile.availableActions,
+      isNot(contains(CockpitSystemControlAction.tap)),
+    );
+    expect(
+      result.profile.blockedActions,
+      contains(CockpitSystemControlAction.tap),
+    );
+    final tap = result.profile.capabilityFor(CockpitSystemControlAction.tap);
+    expect(tap?.availability, CockpitSystemControlAvailability.blocked);
+    expect(
+      tap?.requires,
+      contains(contains('reachable WebDriverAgent endpoint')),
+    );
+    expect(
+      result.profile.availableActions,
+      contains(CockpitSystemControlAction.installApp),
+    );
+    expect(result.recommendedNextStep, 'startWebDriverAgent');
+  });
 
   test('ios simulator profile exposes real simctl system controls', () async {
     final service = CockpitSystemControlService();

@@ -6331,6 +6331,82 @@ const String cockpitV2OpenApiJson = r'''
         }
       }
     },
+    "/api/v2/runs/{runId}/artifacts": {
+      "parameters": [
+        {
+          "name": "runId",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "pattern": "^[A-Za-z][A-Za-z0-9._-]{0,127}$"
+          }
+        }
+      ],
+      "get": {
+        "operationId": "listRunArtifacts",
+        "summary": "List immutable artifact metadata for a run",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ApiVersion"
+          },
+          {
+            "$ref": "#/components/parameters/RequiredFeatures"
+          },
+          {
+            "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "$ref": "#/components/parameters/Cursor"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Run artifact metadata collection.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArtifactPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/TooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMedia"
+          },
+          "422": {
+            "$ref": "#/components/responses/Unprocessable"
+          },
+          "426": {
+            "$ref": "#/components/responses/UpgradeRequired"
+          },
+          "429": {
+            "$ref": "#/components/responses/ResourceBusy"
+          },
+          "500": {
+            "$ref": "#/components/responses/Internal"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        }
+      }
+    },
     "/api/v2/runs/{runId}/artifacts/{artifactId}": {
       "parameters": [
         {
@@ -6554,6 +6630,9 @@ const String cockpitV2OpenApiJson = r'''
       },
       "RunEvent": {
         "$ref": "../schema/cockpit.foundation.v2.schema.json#/$defs/RunEvent"
+      },
+      "ArtifactPage": {
+        "$ref": "../schema/cockpit.foundation.v2.schema.json#/$defs/ArtifactPage"
       },
       "ArtifactResource": {
         "$ref": "../schema/cockpit.foundation.v2.schema.json#/$defs/ArtifactResource"

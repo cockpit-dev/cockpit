@@ -71,6 +71,7 @@ abstract interface class CockpitWorkerSessionProvider {
   Future<CockpitWorkerHealthySession> selectHealthySession({
     required String? targetId,
     required CockpitTestTargetRequirements requirements,
+    String? preferredResourceId,
   });
 }
 

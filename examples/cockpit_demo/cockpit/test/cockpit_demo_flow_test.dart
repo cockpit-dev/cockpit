@@ -1,8 +1,5 @@
-import 'dart:io';
-
 import 'package:flutter_cockpit/flutter_cockpit_flutter.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:path/path.dart' as p;
 import 'package:cockpit_demo/src/data/cockpit_demo_database.dart';
 
 import 'support/cockpit_demo_test_support.dart';
@@ -12,78 +9,6 @@ void main() {
     expect(resolveCockpitDemoFile('main.dart').existsSync(), isTrue);
     expect(
       resolveCockpitDemoFile('cockpit_bootstrap.dart').existsSync(),
-      isTrue,
-    );
-  });
-
-  testWidgets('records a todo flow and writes a task bundle', (tester) async {
-    var tick = 0;
-    final database = CockpitDemoDatabase.inMemory();
-    addCockpitDemoDatabaseTearDown(tester, database);
-
-    final controller = CockpitSessionController(
-      sessionId: 'todo-flow-session',
-      taskId: 'todo-flow-task',
-      platform: 'android',
-      now: () => DateTime.utc(2026, 3, 20, 8, 0, tick++),
-    );
-    final outputRoot = p.join('.dart_tool', 'cockpit_demo_artifacts');
-    final outputDirectory = Directory(outputRoot);
-    addTearDown(() async {
-      if (outputDirectory.existsSync()) {
-        await outputDirectory.delete(recursive: true);
-      }
-    });
-
-    await tester.pumpWidget(
-      buildCockpitDemoApp(
-        configuration: FlutterCockpitConfiguration(
-          sessionController: controller,
-        ),
-        database: database,
-      ),
-    );
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.text('New task'));
-    await tester.pumpAndSettle();
-    await tester.enterText(
-      textFieldByLabel('Task title'),
-      'Review bundle output',
-    );
-    await tester.enterText(
-      textFieldByLabel('Notes'),
-      'Check manifest and delivery metadata',
-    );
-    await tester.tap(find.text('Save task'));
-    await tester.pumpAndSettle();
-
-    final bundle = controller.finish(
-      environment: const CockpitEnvironment(
-        platform: 'android',
-        flutterVersion: '3.38.9',
-        dartVersion: '3.10.8',
-      ),
-    );
-    final writtenBundle = await tester.runAsync(() async {
-      return buildTestBundleWriter().writeBundle(
-        bundle: bundle,
-        outputRoot: outputRoot,
-      );
-    });
-    final createdTasks = await database.select(database.tasks).get();
-    final createdTask = createdTasks.singleWhere(
-      (task) => task.title == 'Review bundle output',
-    );
-    await scrollTodoCollectionUntilVisible(
-      tester,
-      taskRowByTitle(createdTask.title),
-    );
-
-    expect(writtenBundle, isNotNull);
-    expect(find.text('Review bundle output'), findsWidgets);
-    expect(
-      File(p.join(writtenBundle!.path, 'manifest.json')).existsSync(),
       isTrue,
     );
   });

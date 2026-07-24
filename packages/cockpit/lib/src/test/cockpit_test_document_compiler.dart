@@ -123,9 +123,19 @@ final class CockpitTestDocumentCompiler {
   const CockpitTestDocumentCompiler();
 
   static const int _maximumDocumentBytes = 16777216;
-  static final JsonSchema _schema = JsonSchema.create(
-    jsonDecode(cockpitTestV2SchemaJson),
+  static final Map<String, Object?> _schemaDocument = Map<String, Object?>.from(
+    jsonDecode(cockpitTestV2SchemaJson) as Map<Object?, Object?>,
   );
+  static final JsonSchema _schema = JsonSchema.create(_schemaDocument);
+  static final Map<String, JsonSchema> _schemasByKind =
+      Map<String, JsonSchema>.unmodifiable(<String, JsonSchema>{
+        for (final kind in const <String>['case', 'suite', 'project'])
+          kind: JsonSchema.create(<String, Object?>{
+            r'$schema': _schemaDocument[r'$schema'],
+            r'$defs': _schemaDocument[r'$defs'],
+            r'$ref': '#/\$defs/$kind',
+          }),
+      });
 
   CockpitTestCompilationResult compile(String source) {
     final bytes = utf8.encode(source);
@@ -157,7 +167,11 @@ final class CockpitTestDocumentCompiler {
       return _failure('parseFailed', error.message, r'$');
     }
 
-    final schemaDiagnostics = _validateSchema(normalized, sourceMap);
+    final schemaDiagnostics = _validateSchema(
+      normalized,
+      sourceMap,
+      schema: _schemaFor(normalized),
+    );
     if (schemaDiagnostics.isNotEmpty) {
       final diagnostics = <CockpitTestDiagnostic>[...schemaDiagnostics];
       try {
@@ -243,6 +257,13 @@ final class CockpitTestDocumentCompiler {
       CockpitTestDiagnostic(code: code, message: message, path: path),
     ],
   );
+
+  static JsonSchema _schemaFor(Object? document) {
+    if (document is Map<Object?, Object?> && document['kind'] is String) {
+      return _schemasByKind[document['kind']] ?? _schema;
+    }
+    return _schema;
+  }
 }
 
 CockpitTestDocument _decodeDocument(Object? value) {
@@ -283,9 +304,10 @@ CockpitCompiledTestDocument _compiledDocument(
 
 List<CockpitTestDiagnostic> _validateSchema(
   Object? document,
-  Map<String, CockpitTestSourceLocation> sourceMap,
-) {
-  final errors = CockpitTestDocumentCompiler._schema.validate(document).errors;
+  Map<String, CockpitTestSourceLocation> sourceMap, {
+  required JsonSchema schema,
+}) {
+  final errors = schema.validate(document).errors;
   final diagnostics = <CockpitTestDiagnostic>[];
   final seen = <String>{};
   for (final error in errors) {

@@ -483,6 +483,25 @@ final class CockpitSupervisorRunProjection
     );
   }
 
+  Future<List<CockpitArtifactResource>> artifacts(String runId) async {
+    _validateRequestIdentity(workspaceId, runId);
+    final projection = _decodeProjection(
+      await _store.read(),
+      expectedWorkspaceId: workspaceId,
+      maximumRuns: maximumRuns,
+      maximumEventOwners: maximumEventOwners,
+      maximumArtifacts: maximumArtifacts,
+    );
+    final run = projection.runs[runId];
+    if (run == null) {
+      throw const FormatException('Run is not projected.');
+    }
+    return run.artifacts.values.toList(growable: false)..sort((left, right) {
+      final byPath = left.relativePath.compareTo(right.relativePath);
+      return byPath != 0 ? byPath : left.artifactId.compareTo(right.artifactId);
+    });
+  }
+
   Future<CockpitTestSuiteReport> requireSuiteReport(String runId) async {
     _validateRequestIdentity(workspaceId, runId);
     final projection = _decodeProjection(
@@ -993,13 +1012,8 @@ final class CockpitSupervisorRunProjection
     if (run == null) return;
     final terminal = run.events.any(
       (event) =>
-          event.lifecycle == CockpitRunLifecycle.completed &&
-          const <String>{
-            'run.completed',
-            'run.cancelled',
-            'run.interrupted',
-            'recovery.run.interrupted',
-          }.contains(event.kind),
+          event.entityKind == CockpitRunEventEntityKind.run &&
+          event.lifecycle == CockpitRunLifecycle.completed,
     );
     await _retentionIndex.retainRun(
       workspaceId: workspaceId,

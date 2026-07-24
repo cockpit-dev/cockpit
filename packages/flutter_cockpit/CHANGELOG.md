@@ -2,6 +2,8 @@
 
 ## 2.0.0
 
+- Integrated the Flutter semantic bridge with the workspace-scoped 2.0 target,
+  case, suite, checkpoint, and artifact runtime.
 - Kept Flutter semantic execution as one driver behind the shared 2.0 case and
   suite runtime while native black-box targets execute independently in the
   host package.

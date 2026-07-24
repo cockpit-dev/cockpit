@@ -1,641 +1,219 @@
+import 'dart:convert';
 import 'dart:io';
 
-import 'package:cockpit/src/cli/cockpit_control_script.dart';
 import 'package:test/test.dart';
 
+const _skillRoots = <String>[
+  'skills/flutter-cockpit',
+  '.agents/skills/flutter-cockpit',
+  '.claude/skills/flutter-cockpit',
+  '.cursor/skills/flutter-cockpit',
+  '.opencode/skills/flutter-cockpit',
+  '.pi/skills/flutter-cockpit',
+  'plugins/claude-code/flutter-cockpit/skills/flutter-cockpit',
+  'plugins/codex/flutter-cockpit/skills/flutter-cockpit',
+  'plugins/kiro/flutter-cockpit/skills/flutter-cockpit',
+];
+
 void main() {
-  final root = Directory.current.absolute.path;
+  final repositoryRoot = Directory.current.absolute.path;
 
-  String readRepoFile(String path) => File('$root/$path').readAsStringSync();
+  String read(String path) => File('$repositoryRoot/$path').readAsStringSync();
 
-  bool isSkillName(String value) {
-    return value.codeUnits.every((unit) {
-      return (unit >= 48 && unit <= 57) ||
-          (unit >= 65 && unit <= 90) ||
-          (unit >= 97 && unit <= 122) ||
-          unit == 45;
-    });
-  }
-
-  List<String> fencedBlocks(String markdown, String language) {
-    final pattern = RegExp(
-      '```$language\\n([\\s\\S]*?)\\n```',
-      multiLine: true,
+  test('all distributed skills are exact minimal mirrors', () {
+    final canonicalSkill = read('${_skillRoots.first}/SKILL.md');
+    final canonicalProtocol = read(
+      '${_skillRoots.first}/references/protocol.md',
     );
-    return pattern
-        .allMatches(markdown)
-        .map((match) => match.group(1)!)
-        .toList(growable: false);
-  }
 
-  List<String> localReferencePaths(String skill) {
-    return RegExp(
-      r'\]\(((?:examples|references)/[^)#]+\.md)\)',
-    ).allMatches(skill).map((match) => match.group(1)!).toList();
-  }
+    for (final root in _skillRoots) {
+      expect(
+        _relativeFiles(repositoryRoot, root),
+        <String>['SKILL.md', 'references/protocol.md'],
+        reason: '$root must contain only the deployable 2.0 skill assets.',
+      );
+      expect(read('$root/SKILL.md'), canonicalSkill, reason: root);
+      expect(
+        read('$root/references/protocol.md'),
+        canonicalProtocol,
+        reason: root,
+      );
+    }
+  });
 
-  test('flutter-cockpit skill follows writing-skills structure rules', () {
-    final skill = readRepoFile('skills/flutter-cockpit/SKILL.md');
-    final pressureScenarios = readRepoFile(
-      'skills/flutter-cockpit/pressure-scenarios.md',
-    );
-    final normalizedSkill = skill
-        .replaceAll('\n', ' ')
-        .replaceAll('\r', ' ')
-        .replaceAll('\t', ' ');
-    final wordCount = normalizedSkill.split(' ').where((word) {
-      return word.trim().isNotEmpty;
-    }).length;
-
-    expect(skill.startsWith('---\n'), isTrue);
+  test('skill teaches the Cockpit 2.0 control and evidence workflow', () {
+    final skill = read('${_skillRoots.first}/SKILL.md');
     final frontmatterEnd = skill.indexOf('\n---\n', 4);
+
+    expect(skill, startsWith('---\n'));
     expect(frontmatterEnd, greaterThan(0));
-    expect(
-      skill.substring(0, frontmatterEnd + '\n---\n'.length).length,
-      lessThanOrEqualTo(1024),
-    );
     final frontmatter = skill.substring(4, frontmatterEnd).split('\n');
     expect(frontmatter, hasLength(2));
-    expect(frontmatter[0], equals('name: flutter-cockpit'));
-    expect(isSkillName('flutter-cockpit'), isTrue);
-    expect(frontmatter[1], startsWith('description: Use when '));
+    expect(frontmatter.first, 'name: flutter-cockpit');
     expect(
-      frontmatter[1],
-      isNot(anyOf(contains(' -> '), contains(' then '), contains('workflow'))),
+      frontmatter.last,
+      allOf(
+        startsWith('description: Use when '),
+        contains('black-box application'),
+        contains('Cockpit 2.0'),
+      ),
     );
 
-    expect(skill, contains('## Overview'));
-    expect(skill, contains('## When To Use'));
-    expect(skill, contains('## First-Time App Wiring'));
-    expect(skill, contains('## Stage Protocol'));
-    expect(skill, contains('## Fast Command Pack'));
-    expect(skill, contains('## Escalation Commands'));
-    expect(skill, contains('## Common Mistakes'));
-    expect(wordCount, lessThanOrEqualTo(1400));
-    expect(skill, isNot(contains('@/')));
-    expect(skill, isNot(contains('@skills')));
-    expect(skill, isNot(contains('@superpowers')));
-
-    expect(pressureScenarios, contains('RED/GREEN/REFACTOR'));
-    expect(pressureScenarios, contains('Baseline Observation'));
-    expect(pressureScenarios, contains('Post-Skill Validation'));
-    expect(pressureScenarios, contains('Expected Naive Failure'));
-    expect(pressureScenarios, contains('Target Corrected Behavior'));
-  });
-
-  test('flutter-cockpit skill enforces the AI development protocol', () {
-    final skill = readRepoFile('skills/flutter-cockpit/SKILL.md');
-    final contract = readRepoFile(
-      'docs/contracts/flutter-cockpit-skill-contract.md',
-    );
-    final stages = <String>[
-      'assess',
-      'bootstrap',
-      'baseline',
-      'execute',
-      'observe',
-      'judge',
-      'deliver',
-    ];
-
-    var lastIndex = -1;
-    for (final stage in stages) {
-      final index = skill.indexOf('**$stage**');
-      expect(index, greaterThan(lastIndex), reason: '$stage stage order');
-      lastIndex = index;
-    }
-
-    expect(
-      skill,
-      contains(
-        '`assess -> bootstrap -> baseline -> execute -> observe -> judge -> deliver`',
-      ),
-    );
-    expect(contract, contains('The skill must enforce this order'));
-    for (final stage in stages) {
-      expect(contract, contains('`$stage`'));
-    }
-    expect(contract, contains('rapid development validation'));
-    expect(contract, contains('cheapest live loop'));
-    expect(contract, contains('main skill must be self-contained'));
-    expect(contract, contains('reference files are optional deep dives'));
-    expect(contract, contains('not reward running extra recording'));
-    expect(contract, contains('capture-screenshot'));
-    expect(contract, contains('capture_screenshot'));
-    expect(contract, contains('when they do not improve the decision'));
-    expect(contract, contains('small edit can be complete'));
-    expect(contract, contains('platform-discovery-first'));
-    expect(contract, contains('Platform and device ids must come from'));
-    expect(
-      contract,
-      contains('platform capabilities must be read from returned metadata'),
-    );
-    expect(
-      contract.toLowerCase(),
-      contains(
-        'action parameter contracts must be read from returned metadata',
-      ),
-    );
-    expect(
-      contract,
-      contains('parameters=[name*:type[range](allowed|values)]'),
-    );
-
-    expect(skill, contains('Default to app-first'));
-    expect(skill, contains('Default to rapid development validation'));
-    expect(skill, contains('cheapest live loop that answers the user'));
-    expect(skill, contains('then stop'));
-    expect(
-      skill,
-      contains('decision gates, not a fixed command script or command quota'),
-    );
-    expect(
-      skill,
-      contains('Satisfy each gate with the smallest fresh evidence available'),
-    );
-    expect(skill, contains('skip irrelevant commands'));
-    expect(
-      skill,
-      contains(
-        'choose CLI, MCP, app-first, target-first, persistent-session, or bundle flows',
-      ),
-    );
-    expect(skill, contains('launch once or reuse a handle'));
-    expect(skill, contains('never shell-background it'));
-    expect(skill, contains('.dart_tool/flutter_cockpit/latest_app.json'));
-    expect(skill, contains('standalone `cockpit/` dev project'));
-    expect(skill, contains('keep the production entrypoint intact'));
-    expect(skill, contains('FlutterCockpitApp'));
-    expect(skill, contains('FlutterCockpit.navigatorObserver'));
-    expect(
-      skill,
-      contains('CockpitRemoteSessionConfiguration.resolveFromEnvironment'),
-    );
-    expect(skill, contains('read before acting'));
-    expect(
-      skill,
-      contains(
-        'unless a fresh equivalent read already answers the same question',
-      ),
-    );
-    expect(skill, contains('read post-action state before judging'));
-    expect(skill, contains('Command success is not product proof'));
-    expect(
-      skill,
-      contains('Do not open screenshots, videos, or raw artifacts'),
-    );
-    expect(skill, contains('`stop-app` is cleanup or recovery only'));
-    expect(skill, contains('not a normal loop step'));
-    expect(skill, contains('use `start-recording` / `stop-recording`'));
-    expect(skill, contains('unless the content is the unresolved question'));
-    expect(skill, contains('run `capture-screenshot --name <proof-name>`'));
-    expect(skill, contains('Do not set `type: Text` for button labels'));
-    expect(skill, contains('do not replay blindly'));
-    expect(skill, contains('resume from the smallest remaining safe step'));
-    expect(skill, contains('Be flexible on commands, strict on proof'));
-    expect(skill, contains('Fast path for most edits'));
-    expect(skill, contains('Every command should reduce uncertainty'));
-    expect(
-      skill,
-      contains('use the returned platform, device id, and capability metadata'),
-    );
-    expect(
-      skill,
-      contains(
-        'Keep platform and device placeholders until `list-targets` returns real values',
-      ),
-    );
-    expect(
-      skill,
-      contains(
-        'read capabilities before choosing shell, recording, browser, or native paths',
-      ),
-    );
-    expect(skill, contains('parameters=[name*:type[range](allowed|values)]'));
-    expect(skill, contains('Do not guess payload keys'));
-    expect(
-      skill,
-      contains(
-        'Do not run recording, evidence profiles, bundle validation, or raw artifact reads just because they exist',
-      ),
-    );
-  });
-
-  test('flutter-cockpit skill keeps commands minimal and copy-ready', () {
-    final skill = readRepoFile('skills/flutter-cockpit/SKILL.md');
-    final cliReference = readRepoFile(
-      'skills/flutter-cockpit/examples/cli-command-reference.md',
-    );
-    final rapidLoop = readRepoFile(
-      'skills/flutter-cockpit/examples/rapid-dev-loop.md',
-    );
-    final runtimeValidation = readRepoFile(
-      'skills/flutter-cockpit/examples/runtime-validation.md',
-    );
-    final acceptanceDelivery = readRepoFile(
-      'skills/flutter-cockpit/examples/acceptance-delivery.md',
-    );
-    final hostSetup = readRepoFile(
-      'skills/flutter-cockpit/examples/host-devtools-setup.md',
-    );
-
-    expect(skill, contains('list-targets'));
-    expect(
-      skill,
-      contains(
-        'launch-app --project-dir cockpit --target main.dart --platform <platform> --device-id <id>',
-      ),
-    );
-    expect(skill, contains('read-app --profile minimal'));
-    expect(skill, contains('analyze-files --path <changed-file>'));
-    expect(skill, contains('hot-reload'));
-    expect(skill, contains('read-errors --max-errors 10'));
-    expect(skill, contains('run-command --command-file'));
-    expect(skill, contains('capture-screenshot --name acceptance'));
-    expect(skill, contains('run-batch --commands-file'));
-    expect(skill, contains('start-recording'));
-    expect(skill, contains('stop-recording'));
-    expect(skill, contains('validate-task --config'));
-    expect(skill, contains('download bundle'));
-    expect(skill, contains('/api/runs/<runId>/bundle-download'));
-    expect(skill, contains('download_manifest.json'));
-    expect(skill, contains('run_metadata.json'));
-    expect(skill, contains('bundle/**'));
-    expect(skill, contains('live/**'));
-    expect(skill, contains('missingRoots'));
-    expect(skill, contains('--stdout-format json'));
-    expect(skill, contains('--output <path>'));
-    expect(skill, contains('--output-format json'));
-    expect(skill, isNot(contains('--output-json')));
-    expect(skill, isNot(contains('--output-ai')));
-
-    final fastStart = skill.indexOf('## Fast Command Pack');
-    final escalationStart = skill.indexOf('## Escalation Commands');
-    expect(fastStart, isNonNegative);
-    expect(escalationStart, greaterThan(fastStart));
-    final fastSection = skill.substring(fastStart, escalationStart);
-    final escalationSection = skill.substring(escalationStart);
-    expect(fastSection, contains('run-command --command-file'));
-    expect(fastSection, isNot(contains('start-recording')));
-    expect(fastSection, isNot(contains('validate-task --config')));
-    expect(escalationSection, contains('run-batch --commands-file'));
-    expect(escalationSection, contains('start-recording'));
-    expect(escalationSection, contains('stop-recording'));
-    expect(escalationSection, contains('validate-task --config'));
-    expect(
-      escalationSection,
-      contains('Use these only when the next claim needs them'),
-    );
-
-    expect(cliReference, contains('--output'));
-    expect(cliReference, contains('--output-format json'));
-    expect(cliReference, contains('--stdout-format json'));
-    expect(cliReference, contains('launch-development-session'));
-    expect(cliReference, contains('execute-remote-command-batch'));
-    expect(cliReference, contains('capture-screenshot'));
-    expect(cliReference, contains('read-task-bundle-summary'));
-    expect(cliReference, contains('start-recording'));
-    expect(cliReference, contains('stop-recording'));
-    expect(
-      cliReference,
-      contains('Choose `--platform` and `--device-id` from `list-targets`'),
-    );
-    expect(cliReference, contains('Keep placeholders'));
-    expect(cliReference, contains('discovery returns real values'));
-    expect(cliReference, contains('--platform <platform-from-list-targets>'));
-    expect(cliReference, contains('--device-id <device-id-from-list-targets>'));
-    expect(cliReference, contains('parameters=[x*:integer'));
-    expect(cliReference, contains('capabilities[].parameters[]'));
-    expect(
-      cliReference,
-      contains('macOS host screenshots and\nrecordings need the app bundle id'),
-    );
-    expect(
-      cliReference,
-      contains(
-        'Windows and Linux can target either the app\nid or a process id from launch metadata',
-      ),
-    );
-    expect(cliReference, contains('--platform windows'));
-    expect(cliReference, contains('--process-id <pid>'));
-    expect(
-      cliReference,
-      contains('For desktop system recording, keep the same target context'),
-    );
-    expect(cliReference, isNot(contains('--output-json')));
-    expect(cliReference, isNot(contains('--output-ai')));
-
-    expect(
-      rapidLoop,
-      contains('Do not run `launch-app` with shell backgrounding'),
-    );
-    expect(rapidLoop, contains('Do not call `stop-app` after every loop'));
-    expect(
-      rapidLoop,
-      contains('final explicit `capture-screenshot --name <proof-name>`'),
-    );
-    expect(
-      rapidLoop,
-      contains('use Cockpit recording commands before external screen tools'),
-    );
-    expect(rapidLoop, contains('remoteUnavailable'));
-    expect(rapidLoop, contains('smallest remaining step'));
-    expect(rapidLoop, contains('`list-targets` if platform/device is unknown'));
-    expect(
-      rapidLoop,
-      contains(
-        'Choose shell, recording, browser, and native-surface commands from discovered capabilities',
-      ),
-    );
-    expect(
-      rapidLoop,
-      contains('Before claiming delivery, release readiness, or acceptance'),
-    );
-    expect(
-      rapidLoop,
-      contains('specifically requires delivery, release readiness, acceptance'),
-    );
-    expect(
-      rapidLoop,
-      contains(
-        'avoid bundle generation until the feature is ready for delivery, acceptance, release, or artifact-backed handoff',
-      ),
-    );
-    expect(
-      runtimeValidation,
-      contains('fastest loop that answers the current question'),
-    );
-    expect(
-      runtimeValidation,
-      contains(
-        '`list-targets` if the platform or device id is not already known',
-      ),
-    );
-    expect(
-      runtimeValidation,
-      contains(
-        'Read platform-specific behavior from discovered target metadata',
-      ),
-    );
-    expect(
-      runtimeValidation,
-      contains('not a release checklist for every edit'),
-    );
-    expect(
-      runtimeValidation,
-      contains('only for an existing bundle or acceptance-facing claim'),
-    );
-    expect(
-      runtimeValidation,
-      contains(
-        'Do not add recordings, full snapshots, target-first inspection, or bundle',
-      ),
-    );
-    expect(
-      runtimeValidation,
-      contains('unless they reduce a concrete remaining'),
-    );
-    expect(
-      acceptanceDelivery,
-      contains('Do not use it for ordinary edit -> reload -> verify loops'),
-    );
-    expect(
-      acceptanceDelivery,
-      contains('confirm this is acceptance-facing work'),
-    );
-    expect(acceptanceDelivery, contains('smallest useful artifact paths'));
-    expect(
-      acceptanceDelivery,
-      contains('return to the rapid loop instead of manufacturing extra'),
-    );
-    expect(acceptanceDelivery, contains('artifacts.'));
-    expect(acceptanceDelivery, contains('download bundle'));
-    expect(acceptanceDelivery, contains('download_manifest.json'));
-    expect(acceptanceDelivery, contains('run_metadata.json'));
-    expect(acceptanceDelivery, contains('bundle/**'));
-    expect(acceptanceDelivery, contains('live/**'));
-    expect(acceptanceDelivery, contains('missingRoots'));
-    expect(
-      hostSetup,
-      contains('low-cost public surface that answers the current task'),
-    );
-    expect(
-      hostSetup,
-      contains(
-        'Do not expose or invoke delivery workflows as the normal edit loop',
-      ),
-    );
-  });
-
-  test('flutter-cockpit skill documents truthful screenshot routing', () {
-    final skill = readRepoFile('skills/flutter-cockpit/SKILL.md');
-    final contract = readRepoFile(
-      'docs/contracts/flutter-cockpit-skill-contract.md',
-    );
-    final pressureScenarios = readRepoFile(
-      'skills/flutter-cockpit/pressure-scenarios.md',
-    );
-
-    for (final profile in <String>[
-      'diagnostic',
-      'acceptance',
-      'flutterPreferred',
-      'nativePreferred',
+    for (final contract in <String>[
+      'authenticated Supervisor',
+      'workspace',
+      'target discover',
+      'target register',
+      'target inspect --target-id',
+      'operation list',
+      'operation run',
+      'cockpit.test/v2',
+      'case validate',
+      'case run',
+      'suite validate',
+      'suite run',
+      'run events',
+      'run get',
+      'suite report',
+      'daemon policy show',
+      'idempotency',
+      'terminal run state',
+      'digest-checked artifacts',
     ]) {
-      expect(skill, contains('`$profile`'));
-    }
-    expect(
-      skill,
-      contains('Android/iOS Simulator acceptance and system UI: host first'),
-    );
-    expect(skill, contains('desktop, Web, and diagnostics: app first'));
-    expect(skill, contains('--capture-profile nativePreferred'));
-    expect(skill, contains('--no-capture-fallback'));
-    expect(skill, contains('`profile: nativePreferred`'));
-    expect(skill, contains('`captureProfile: nativePreferred`'));
-    expect(skill, contains('`allowFallback: false`'));
-    expect(skill, contains('`--profile inspect` controls output detail'));
-    expect(
-      skill,
-      isNot(contains('prefers system/host capture, falls back to app capture')),
-    );
-
-    expect(contract, contains('must not gate fallback on `/health`'));
-    expect(contract, contains('actual capture source'));
-    expect(pressureScenarios, contains('Screenshot Routing Pressure'));
-    expect(pressureScenarios, contains('`captureProfile: flutter`'));
-    expect(pressureScenarios, contains('`allowFallback: false`'));
-  });
-
-  test('flutter-cockpit skill workflow examples parse in production', () {
-    final skill = readRepoFile('skills/flutter-cockpit/SKILL.md');
-    final workflowBlocks = fencedBlocks(skill, 'yaml')
-        .where((block) => block.contains('schemaVersion: 1'))
-        .toList(growable: false);
-
-    expect(workflowBlocks, isNotEmpty);
-    for (final block in workflowBlocks) {
-      expect(
-        () => cockpitControlScriptFromText(block),
-        returnsNormally,
-        reason: block,
-      );
+      expect(skill, contains(contract), reason: contract);
     }
   });
 
-  test('flutter-cockpit skill references stay consistent', () {
-    final skillDir = Directory('$root/skills/flutter-cockpit');
-    final skillFiles =
-        skillDir
-            .listSync(recursive: true)
-            .whereType<File>()
-            .where((file) => file.path.endsWith('.md'))
-            .toList()
-          ..sort((a, b) => a.path.compareTo(b.path));
-    final docsByName = <String, String>{
-      for (final file in skillFiles) file.path: file.readAsStringSync(),
-    };
-    final allDocs = docsByName.values.join('\n');
+  test('skill distribution contains no retired client surface', () {
+    final distribution = _skillRoots
+        .expand(
+          (root) => _relativeFiles(
+            repositoryRoot,
+            root,
+          ).map((path) => read('$root/$path')),
+        )
+        .join('\n');
 
-    expect(skillFiles.map((file) => file.path), contains(endsWith('SKILL.md')));
-    expect(
-      skillFiles.map((file) => file.path),
-      contains(endsWith('INSTALL.md')),
-    );
-    expect(
-      skillFiles.map((file) => file.path),
-      contains(endsWith('pressure-scenarios.md')),
-    );
-    expect(
-      skillFiles.map((file) => file.path),
-      contains(endsWith('references/protocol.md')),
-    );
-
-    final skill = docsByName['${skillDir.path}/SKILL.md']!;
-    expect(
-      skill,
-      contains('[`references/protocol.md`](references/protocol.md)'),
-    );
-    for (final relativePath in localReferencePaths(skill)) {
-      expect(
-        File('${skillDir.path}/$relativePath').existsSync(),
-        isTrue,
-        reason: 'SKILL.md references missing file $relativePath',
-      );
+    for (final retired in <String>[
+      'launch-app',
+      'read-app',
+      'run-script',
+      'run-task',
+      'validate-task',
+      'control-workflow',
+      'task-run-bundle',
+      'latest-task',
+      'live-run',
+      'Maestro',
+      'Dify',
+    ]) {
+      expect(distribution, isNot(contains(retired)), reason: retired);
     }
+  });
 
-    expect(allDocs, isNot(contains('--output-json')));
-    expect(allDocs, isNot(contains('--output-ai')));
-    expect(allDocs, isNot(contains('@/')));
-    expect(allDocs, isNot(contains('@superpowers')));
-    expect(allDocs, isNot(contains('High-Value Rules')));
-    expect(allDocs, isNot(contains('first-use guardrails')));
+  test('skill protocol points clients at the authoritative 2.0 contracts', () {
+    final protocol = read('${_skillRoots.first}/references/protocol.md');
 
-    final runtimeValidation =
-        docsByName['${skillDir.path}/examples/runtime-validation.md']!;
-    expect(
-      runtimeValidation,
-      contains('keep the app alive while more edits are likely'),
-    );
-    expect(
-      runtimeValidation,
-      contains('cleanup or recovery requires `stop-app`'),
-    );
-    expect(runtimeValidation, contains('use Cockpit recording commands first'));
+    for (final authority in <String>[
+      'cockpit.v2.openapi.json',
+      'cockpit.foundation.v2.schema.json',
+      'cockpit.test.v2.schema.json',
+      'flutter-cockpit-protocol.md',
+      'ai-development-protocol.md',
+      'COCKPIT_HOME/authorization.json',
+      'SSE sequence numbers are monotonic and resumable',
+      'session affinity',
+      'always-run teardown',
+      'SHA-256',
+    ]) {
+      expect(protocol, contains(authority), reason: authority);
+    }
+  });
 
-    final install = docsByName['${skillDir.path}/INSTALL.md']!;
-    expect(install, contains('Do not assume the current agent is Codex'));
-    expect(install, contains('symlink'));
-    expect(install, contains('not an older checkout or a deleted path'));
-    expect(install, contains('Restart the AI host'));
-
-    final pressureScenarios =
-        docsByName['${skillDir.path}/pressure-scenarios.md']!;
-    expect(
-      pressureScenarios,
-      contains('post-action evidence read before judgment'),
+  test('referenced OpenAPI and schemas expose the complete 2.0 resources', () {
+    final openApi = _json(
+      read('packages/cockpit_protocol/openapi/cockpit.v2.openapi.json'),
     );
-    expect(
-      pressureScenarios,
-      contains('CLI `launch-app` + `read-app` + `run-command`'),
-    );
-    expect(pressureScenarios, contains('random command picker'));
-    expect(pressureScenarios, contains('Over-Validation Pressure'));
-    expect(pressureScenarios, contains('cheapest live loop'));
-    expect(
-      pressureScenarios,
-      contains('running heavy evidence just because it exists'),
-    );
-    expect(pressureScenarios, contains('Platform Discovery Pressure'));
-    expect(
-      pressureScenarios,
-      contains(
-        'start with `list-targets` whenever the platform or device id is unknown',
+    final foundation = _json(
+      read(
+        'packages/cockpit_protocol/schema/'
+        'cockpit.foundation.v2.schema.json',
       ),
     );
-    expect(
-      pressureScenarios,
-      contains(
-        'copied commands use placeholders until real platform and device ids are known',
-      ),
-    );
-    expect(
-      pressureScenarios,
-      contains('CLI reference launch examples use discovered placeholders'),
+    final testDocument = _json(
+      read('packages/cockpit_protocol/schema/cockpit.test.v2.schema.json'),
     );
 
-    final protocol = docsByName['${skillDir.path}/references/protocol.md']!;
-    expect(protocol, contains('cockpit://workspace/protocol'));
-    expect(protocol, contains('docs/contracts/flutter-cockpit-protocol.md'));
-    expect(protocol, contains('docs/contracts/ai-development-protocol.md'));
-    expect(protocol, contains('docs/contracts/control-workflow-protocol.md'));
-    expect(protocol, contains('docs/contracts/control-workflow.schema.json'));
-    expect(protocol, contains('docs/contracts/task-run-bundle.md'));
-    expect(protocol, contains('Load only'));
-  });
-
-  test('flutter-cockpit release evidence rules close delivery loopholes', () {
-    const requiredRules = <String>[
-      'after the judged deployment on the same target and state',
-      'Bundle production is not host delivery',
-      'Required missing checks are never `N/A`',
-      'proven app failure keeps the outcome `needs_more_work`',
-    ];
-    final canonical = <String, String>{
-      for (final path in <String>[
-        'SKILL.md',
-        'pressure-scenarios.md',
-        'examples/acceptance-delivery.md',
-        'examples/failure-with-evidence.md',
-      ])
-        path: readRepoFile('skills/flutter-cockpit/$path'),
-    };
-    final packaged = <String, String>{
-      for (final path in canonical.keys)
-        path: readRepoFile('.agents/skills/flutter-cockpit/$path'),
-    };
-    final contract = readRepoFile(
-      'docs/contracts/flutter-cockpit-skill-contract.md',
-    );
-
-    for (final entry in canonical.entries) {
-      expect(packaged[entry.key], entry.value, reason: entry.key);
+    expect(openApi['openapi'], '3.1.0');
+    expect((openApi['info'] as Map<String, Object?>)['version'], '2.0.0');
+    final paths = (openApi['paths'] as Map<String, Object?>).keys;
+    for (final path in <String>[
+      '/api/v2/workspaces',
+      '/api/v2/workspaces/{workspaceId}/operations',
+      '/api/v2/workspaces/{workspaceId}/targets',
+      '/api/v2/workspaces/{workspaceId}/cases',
+      '/api/v2/workspaces/{workspaceId}/runs',
+      '/api/v2/runs/{runId}/events',
+      '/api/v2/runs/{runId}/report',
+      '/api/v2/runs/{runId}/artifacts/{artifactId}',
+    ]) {
+      expect(paths, contains(path), reason: path);
     }
-    for (final rule in requiredRules) {
-      expect(canonical['SKILL.md'], contains(rule));
-      expect(contract, contains(rule));
+
+    expect(
+      foundation[r'$schema'],
+      'https://json-schema.org/draft/2020-12/schema',
+    );
+    final foundationDefinitions =
+        (foundation[r'$defs'] as Map<String, Object?>).keys;
+    for (final definition in <String>[
+      'WorkspaceResource',
+      'AutomationTargetResource',
+      'OperationDescriptor',
+      'RunResource',
+      'ArtifactResource',
+    ]) {
+      expect(foundationDefinitions, contains(definition), reason: definition);
     }
+
     expect(
-      canonical['pressure-scenarios.md'],
-      contains('Required missing checks are never `N/A`'),
+      testDocument[r'$schema'],
+      'https://json-schema.org/draft/2020-12/schema',
     );
-    expect(
-      canonical['examples/acceptance-delivery.md'],
-      contains('Bundle production is not host delivery'),
-    );
-    expect(
-      canonical['examples/failure-with-evidence.md'],
-      contains('proven app failure keeps the outcome `needs_more_work`'),
-    );
+    expect(testDocument['oneOf'], <Object?>[
+      <String, Object?>{r'$ref': r'#/$defs/project'},
+      <String, Object?>{r'$ref': r'#/$defs/suite'},
+      <String, Object?>{r'$ref': r'#/$defs/case'},
+    ]);
+    final testDefinitions =
+        (testDocument[r'$defs'] as Map<String, Object?>).keys;
+    for (final definition in <String>[
+      'project',
+      'suite',
+      'case',
+      'suiteReport',
+      'caseReport',
+    ]) {
+      expect(testDefinitions, contains(definition), reason: definition);
+    }
   });
+}
+
+Map<String, Object?> _json(String source) =>
+    jsonDecode(source) as Map<String, Object?>;
+
+List<String> _relativeFiles(String repositoryRoot, String directory) {
+  final absoluteRoot = '$repositoryRoot/$directory';
+  final files =
+      Directory(absoluteRoot)
+          .listSync(recursive: true)
+          .whereType<File>()
+          .map(
+            (file) => file.absolute.path
+                .substring(absoluteRoot.length + 1)
+                .replaceAll('\\', '/'),
+          )
+          .toList()
+        ..sort();
+  return files;
 }

@@ -70,10 +70,10 @@ void main() {
 
       expect(result.success, isFalse);
       expect(result.availability, CockpitSystemControlAvailability.blocked);
-      expect(result.recommendedNextStep, 'preferFlutterSemanticPlane');
+      expect(result.recommendedNextStep, 'startWebDriverAgent');
       expect(
         result.requires,
-        contains('developer-signed XCTest/WebDriverAgent runner'),
+        contains(contains('reachable WebDriverAgent endpoint')),
       );
       expect(processManager.starts, isEmpty);
     },
@@ -1733,34 +1733,37 @@ void main() {
     },
   );
 
-  test(
-    'ios physical device declares blocked capabilities for every action',
-    () async {
-      final processManager = _FakeProcessManager();
-      final service = CockpitSystemControlActionService(
-        processManager: processManager,
-      );
+  test('ios physical device installs apps through devicectl', () async {
+    final processManager = _FakeProcessManager();
+    final service = CockpitSystemControlActionService(
+      processManager: processManager,
+    );
 
-      final result = await service.run(
-        const CockpitSystemControlActionRequest(
-          platform: 'ios',
-          deviceId: '00008110-001234',
-          appId: 'dev.cockpit.example',
-          action: CockpitSystemControlAction.installApp,
-          parameters: <String, Object?>{'appPath': '/tmp/example.app'},
-        ),
-      );
+    final result = await service.run(
+      const CockpitSystemControlActionRequest(
+        platform: 'ios',
+        deviceId: '00008110-001234',
+        appId: 'dev.cockpit.example',
+        action: CockpitSystemControlAction.installApp,
+        parameters: <String, Object?>{'appPath': '/tmp/example.app'},
+      ),
+    );
 
-      expect(result.success, isFalse);
-      expect(result.errorCode, 'systemActionNotAvailable');
-      expect(result.availability, CockpitSystemControlAvailability.blocked);
-      expect(
-        result.requires.join('\n'),
-        contains('developer signing and device automation tooling'),
-      );
-      expect(processManager.starts, isEmpty);
-    },
-  );
+    expect(result.success, isTrue);
+    expect(result.availability, CockpitSystemControlAvailability.available);
+    expect(result.command, <String>[
+      'xcrun',
+      'devicectl',
+      'device',
+      'install',
+      'app',
+      '--device',
+      '00008110-001234',
+      '/tmp/example.app',
+    ]);
+    expect(processManager.starts.single.executable, 'xcrun');
+    expect(processManager.starts.single.arguments, result.command.skip(1));
+  });
 
   test('android setStatusBar drives SystemUI demo mode', () async {
     final processManager = _FakeProcessManager();

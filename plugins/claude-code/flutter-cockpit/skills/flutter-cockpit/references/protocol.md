@@ -1,60 +1,58 @@
-# Flutter Cockpit Protocol Reference
+# Cockpit 2.0 Reference
 
-Use this as the skill-local protocol map when MCP resources are unavailable or
-the repo root is not already loaded. Load only the contract that reduces the
-current uncertainty.
+## Authorities
 
-## Reference Contract
+| Need | Source |
+| --- | --- |
+| HTTP and SSE | `packages/cockpit_protocol/openapi/cockpit.v2.openapi.json` |
+| Foundation DTOs | `packages/cockpit_protocol/schema/cockpit.foundation.v2.schema.json` |
+| Case/suite/project documents | `packages/cockpit_protocol/schema/cockpit.test.v2.schema.json` |
+| Architecture and ownership | `docs/contracts/flutter-cockpit-protocol.md` |
+| AI execution policy | `docs/contracts/ai-development-protocol.md` |
+| Authorization policy | `COCKPIT_HOME/authorization.json` |
 
-This file is the stable, low-token reference entry for agents that already
-loaded the `flutter-cockpit` skill. It is not the full development workflow and
-must not replace the main `SKILL.md` fast path.
+Use schemas or tool metadata for exact fields. Do not infer payload keys from
+examples.
 
-Resolution order:
+## Command Map
 
-1. Prefer the MCP resource URI when MCP is available.
-2. Fall back to the repo file when working from a monorepo checkout.
-3. Fall back to `packages/cockpit/doc/contracts/` or
-   `doc/contracts/` when running from a published cockpit package.
+| Need | Command |
+| --- | --- |
+| Daemon health | `cockpit daemon status`, `cockpit daemon doctor` |
+| Roots/workspaces | `cockpit root ...`, `cockpit workspace ...` |
+| Target discovery/liveness | `cockpit target discover`, `target inspect` |
+| Typed development action | `cockpit operation list`, `operation run` |
+| Validate/run case | `cockpit case validate`, `case run` |
+| Validate/run suite | `cockpit suite validate`, `suite run` |
+| Observe/cancel | `cockpit run get`, `run events`, `run cancel` |
+| Report/artifact | `cockpit suite report`, `artifact list`, `artifact read` |
+| MCP | `cockpit serve-mcp` or the `cockpit_mcp` executable |
 
-Load only the contract needed for the current uncertainty; do not bulk-load the
-whole contract set.
+Run `cockpit help <command> <subcommand>` for current options.
 
-## Entry Points
+## Target Rules
 
-| Need | MCP resource | Repo file |
-| ---- | ------------ | --------- |
-| Protocol map | `cockpit://workspace/protocol` | `docs/contracts/flutter-cockpit-protocol.md` |
-| Fast AI development loop | `cockpit://workspace/ai-development-protocol` | `docs/contracts/ai-development-protocol.md` |
-| Workflow YAML/JSON syntax | `cockpit://workspace/control-workflow-protocol` | `docs/contracts/control-workflow-protocol.md` |
-| Workflow machine schema | `cockpit://workspace/control-workflow-schema` | `docs/contracts/control-workflow.schema.json` |
-| Bundle traceability | `cockpit://workspace/task-bundle-contract` | `docs/contracts/task-run-bundle.md` |
-| Skill maintenance contract | `cockpit://workspace/skill-contract` | `docs/contracts/flutter-cockpit-skill-contract.md` |
+- `nativeApp`, `desktopApp`, and `browserPage` require a nonblank `appId`.
+- A Flutter target uses an indexed entrypoint document and never requires
+  production code to depend on the bridge.
+- System/native capabilities are target and platform specific. Trust only
+  operations advertised as available.
+- Use one WDA URL per iOS target when multiple devices or workspaces run.
+- Persisted `registered`/`launched` metadata is not live state; inspect it.
 
-Published cockpit packages ship the same files under
-`doc/contracts/`; monorepo checkouts also expose them under
-`packages/cockpit/doc/contracts/`.
+## Run Rules
 
-## Selection Rules
+- Submission and mutation idempotency keys are stable per logical action.
+- SSE sequence numbers are monotonic and resumable.
+- Suite checkpoints preserve completed nodes, attempts, fixture state, and
+  session affinity across worker recovery.
+- A cancelled suite still runs eligible always-run teardown within bounded
+  grace, then publishes terminal events and reports.
+- List run artifacts first; use the returned artifact ID, size, and SHA-256 for
+  every bounded artifact read.
 
-- Start with `cockpit://workspace/protocol` when MCP is available.
-- For normal edit loops, open only the AI development protocol.
-- For E2E scripts, branches, conditions, retry, or loop behavior, open the
-  workflow protocol and schema.
-- For produced artifacts, open the bundle contract before raw screenshots,
-  recordings, or full step logs.
-- For skill edits, open the skill contract.
-- Do not load every contract by default.
+## Output Selection
 
-## Stable Boundaries
-
-- CLI stdout defaults to AI-readable output.
-- Use `--stdout-format json` for pipes and `--output <path> --output-format json`
-  for machine-readable files.
-- Workflow files may be YAML or JSON; persisted bundle files are JSON.
-- Workflow nodes include `command`, `if`, `retry`, `loop`, `startRecording`,
-  and `stopRecording`.
-- Unsupported platform actions must be unavailable or blocked by environment,
-  not reported as successful.
-- Product proof requires live state or traceable artifacts, not command success
-  or file existence alone.
+Use `minimal` target inspection for routine loops, `standard` for debugging,
+and `inspect`/`evidence` only when the additional state proves the claim. Prefer
+structured report and error data before opening large artifacts.

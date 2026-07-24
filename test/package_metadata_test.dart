@@ -99,8 +99,8 @@ void main() {
     final devtoolsReadmeZh = File(
       'packages/cockpit/README.zh-CN.md',
     ).readAsStringSync();
-    final runtimeLoop = File(
-      '.github/workflows/runtime-loop.yml',
+    final acceptanceWorkflow = File(
+      '.github/workflows/example-e2e.yml',
     ).readAsStringSync();
     final devtoolsVersion = _readPackageVersion('packages/cockpit');
 
@@ -140,7 +140,7 @@ void main() {
       expect(workspaceLockfile, contains('flutter: ">=3.32.0"'));
       expect(workspaceLockfile, isNot(contains('>=3.10.0-0')));
     }
-    expect(runtimeLoop, contains("FLUTTER_VERSION: '3.32.0'"));
+    expect(acceptanceWorkflow, contains("FLUTTER_VERSION: '3.32.0'"));
     expect(rootReadme, contains('Flutter 3.32.0'));
     expect(rootReadme, contains('Dart 3.8.0'));
     expect(rootReadmeZh, contains('Flutter 3.32.0'));
@@ -224,8 +224,10 @@ void main() {
     expect(devtoolsReadme, contains('cockpit: ^$devtoolsVersion'));
     expect(devtoolsReadme, contains('dart run cockpit'));
     expect(devtoolsReadme, contains('serve-mcp'));
-    expect(devtoolsReadme, contains('read-task-bundle-summary'));
-    expect(devtoolsReadme, contains('read_task_bundle_summary'));
+    expect(devtoolsReadme, contains('dart run cockpit_mcp'));
+    expect(devtoolsReadme, contains('case validate'));
+    expect(devtoolsReadme, contains('suite run'));
+    expect(devtoolsReadme, contains('/api/v2'));
     expect(devtoolsReadme, isNot(contains('flutter_pilot_devtools')));
     expect(devtoolsReadme, isNot(contains('flutter_pilot')));
 
@@ -240,16 +242,8 @@ void main() {
       'packages/flutter_cockpit/README.md',
     ).readAsStringSync();
     final skill = File('skills/flutter-cockpit/SKILL.md').readAsStringSync();
-    final setupExample = File(
-      'skills/flutter-cockpit/examples/flutter-app-setup.md',
-    ).readAsStringSync();
 
-    for (final document in <String>[
-      rootReadme,
-      runtimeReadme,
-      skill,
-      setupExample,
-    ]) {
+    for (final document in <String>[rootReadme, runtimeReadme]) {
       expect(
         document,
         contains(
@@ -257,6 +251,10 @@ void main() {
         ),
       );
     }
+    expect(
+      skill,
+      contains('production Flutter code must not import the bridge package'),
+    );
   });
 
   test('demo keeps cockpit integration out of production lib code', () {
@@ -300,23 +298,6 @@ void main() {
         source,
         isNot(contains('package:cockpit/')),
         reason: '${file.path} must remain production-only.',
-      );
-    }
-  });
-
-  test('agent command docs show top-level locators for tap commands', () {
-    final skill = File('skills/flutter-cockpit/SKILL.md').readAsStringSync();
-    final cliReference = File(
-      'skills/flutter-cockpit/examples/cli-command-reference.md',
-    ).readAsStringSync();
-    const tapWithLocator =
-        '{"commandId":"tap-settings","commandType":"tap","locator":{"text":"Settings"}';
-
-    for (final document in <String>[skill, cliReference]) {
-      expect(document, contains(tapWithLocator));
-      expect(
-        document,
-        isNot(contains('"commandType":"tap","parameters":{"text"')),
       );
     }
   });
@@ -419,8 +400,10 @@ void main() {
 
     expect(devtoolsSource, contains("package:cockpit/cockpit.dart"));
     expect(devtoolsSource, contains('CockpitCommandRunner'));
-    expect(devtoolsSource, contains('read-system-capabilities'));
-    expect(devtoolsSource, contains('capture-screenshot'));
+    expect(devtoolsSource, contains('daemon status'));
+    expect(devtoolsSource, contains('workspace list'));
+    expect(devtoolsSource, contains('case list'));
+    expect(devtoolsSource, contains('cockpit_mcp'));
   });
 
   test(
@@ -463,9 +446,6 @@ void main() {
       'ai-development-protocol.md',
       'flutter-cockpit-protocol.md',
       'flutter-cockpit-skill-contract.md',
-      'task-run-bundle.md',
-      'control-workflow-protocol.md',
-      'control-workflow.schema.json',
     ];
 
     for (final fileName in contractFiles) {
@@ -480,6 +460,18 @@ void main() {
             'cockpit package with the same contract text as the monorepo root.',
       );
     }
+
+    for (final retiredFile in <String>[
+      'task-run-bundle.md',
+      'control-workflow-protocol.md',
+      'control-workflow.schema.json',
+    ]) {
+      expect(File('docs/contracts/$retiredFile').existsSync(), isFalse);
+      expect(
+        File('packages/cockpit/doc/contracts/$retiredFile').existsSync(),
+        isFalse,
+      );
+    }
   });
 
   test('flutter-cockpit skill exposes a local protocol reference', () {
@@ -489,17 +481,19 @@ void main() {
     ).readAsStringSync();
 
     expect(skill, contains('references/protocol.md'));
-    expect(protocolReference, contains('## Reference Contract'));
-    expect(protocolReference, contains('cockpit://workspace/protocol'));
+    expect(protocolReference, contains('## Authorities'));
+    expect(protocolReference, contains('cockpit.v2.openapi.json'));
+    expect(protocolReference, contains('cockpit.foundation.v2.schema.json'));
+    expect(protocolReference, contains('cockpit.test.v2.schema.json'));
     expect(
       protocolReference,
       contains('docs/contracts/flutter-cockpit-protocol.md'),
     );
-    expect(protocolReference, contains('packages/cockpit/doc/contracts/'));
-    expect(protocolReference, contains('Load only the contract'));
+    expect(protocolReference, contains('COCKPIT_HOME/authorization.json'));
+    expect(protocolReference, contains('## Command Map'));
   });
 
-  test('devtools package readmes expose workflow protocol references', () {
+  test('cockpit package readmes expose the 2.0 client contract', () {
     final devtoolsReadme = File(
       'packages/cockpit/README.md',
     ).readAsStringSync();
@@ -508,16 +502,15 @@ void main() {
     ).readAsStringSync();
 
     for (final document in <String>[devtoolsReadme, devtoolsReadmeZh]) {
-      expect(document, contains('doc/contracts/ai-development-protocol.md'));
-      expect(document, contains('doc/contracts/control-workflow-protocol.md'));
-      expect(document, contains('doc/contracts/control-workflow.schema.json'));
-      expect(document, contains('cockpit://workspace/ai-development-protocol'));
-      expect(
-        document,
-        contains('cockpit://workspace/control-workflow-protocol'),
-      );
-      expect(document, contains('cockpit://workspace/control-workflow-schema'));
-      expect(document, contains('run-script --script'));
+      expect(document, contains('/api/v2'));
+      expect(document, contains('CockpitSupervisorApiClient'));
+      expect(document, contains('targets'));
+      expect(document, contains('suites'));
+      expect(document, contains('runs'));
+      expect(document, contains('artifacts'));
+      expect(document, contains('cockpit_mcp'));
+      expect(document, isNot(contains('control-workflow')));
+      expect(document, isNot(contains('run-script --script')));
     }
   });
 
@@ -530,7 +523,7 @@ void main() {
         contains('"mcpServers"'),
         contains('"flutter-cockpit"'),
         contains('"command": "dart"'),
-        contains('"serve-mcp"'),
+        contains('"cockpit_mcp"'),
       ),
     );
   });

@@ -5,6 +5,7 @@ import 'package:path/path.dart' as p;
 
 import '../application/cockpit_application_service_exception.dart';
 import '../application/cockpit_interactive_result_profile.dart';
+import 'cockpit_worker_forwarded_port_handoff.dart';
 import 'cockpit_worker_resource_grant.dart';
 import 'cockpit_worker_artifact_retainer.dart';
 import 'cockpit_worker_runtime_registry.dart';
@@ -99,6 +100,46 @@ Future<T> runWorkerApplicationOperation<T>({
   final result = await operation();
   context.cancellation.throwIfCancelled();
   return result;
+}
+
+Future<R> runWorkerTransactionalPortLaunch<T, R>({
+  required CockpitWorkerForwardedPortHandoff handoff,
+  required CockpitWorkerResourceGrant grant,
+  required DateTime deadline,
+  required Future<T> Function(int port) launch,
+  required Future<R> Function(T launched) commit,
+  required Future<void> Function(T launched) rollback,
+}) async {
+  T? launched;
+  var launchCompleted = false;
+  try {
+    final result = await handoff.launchWithGrant(
+      grant: grant,
+      deadline: deadline,
+      launch: (port) async {
+        final value = await launch(port);
+        launched = value;
+        launchCompleted = true;
+        return value;
+      },
+    );
+    return await commit(result);
+  } on Object catch (primary, primaryStackTrace) {
+    if (!launchCompleted) {
+      Error.throwWithStackTrace(primary, primaryStackTrace);
+    }
+    try {
+      await rollback(launched as T);
+    } on Object catch (cleanupError) {
+      throw CockpitWorkerOperationRollbackException(
+        primary: primary,
+        cleanupError: cleanupError,
+        warningCode: 'launchRollbackFailed',
+        warningMessage: 'Failed to stop an application after launch failed.',
+      );
+    }
+    Error.throwWithStackTrace(primary, primaryStackTrace);
+  }
 }
 
 Duration boundedWorkerDuration({

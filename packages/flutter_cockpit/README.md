@@ -3,12 +3,13 @@
 [![pub package](https://img.shields.io/pub/v/flutter_cockpit?logo=dart&label=pub.dev)](https://pub.dev/packages/flutter_cockpit)
 [![pub points](https://img.shields.io/pub/points/flutter_cockpit?logo=dart)](https://pub.dev/packages/flutter_cockpit/score)
 [![likes](https://img.shields.io/pub/likes/flutter_cockpit?logo=dart)](https://pub.dev/packages/flutter_cockpit/score)
-[![Runtime Loop](https://github.com/cockpit-dev/flutter_cockpit/actions/workflows/runtime-loop.yml/badge.svg)](https://github.com/cockpit-dev/flutter_cockpit/actions/workflows/runtime-loop.yml)
+[![E2E](https://github.com/cockpit-dev/flutter_cockpit/actions/workflows/example-e2e.yml/badge.svg)](https://github.com/cockpit-dev/flutter_cockpit/actions/workflows/example-e2e.yml)
 [![License](https://img.shields.io/github/license/cockpit-dev/flutter_cockpit)](https://github.com/cockpit-dev/flutter_cockpit/blob/main/packages/flutter_cockpit/LICENSE)
 
 [简体中文](https://github.com/cockpit-dev/flutter_cockpit/blob/main/packages/flutter_cockpit/README.zh-CN.md)
 
-`flutter_cockpit` is the in-app runtime for AI-driven Flutter development.
+`flutter_cockpit` is the optional in-app semantic bridge for Cockpit 2.0 E2E
+automation and AI-driven Flutter development.
 
 It provides:
 
@@ -85,7 +86,11 @@ Widget buildCockpitDevelopmentApp() {
 }
 ```
 
-Replace `package:your_app/app_shell.dart` with the import that already exposes your app root widget or bootstrap. `launch-app` injects the `FLUTTER_COCKPIT_REMOTE_*` dart-defines, so `resolveFromEnvironment(...)` enables the remote surface without taking over the production bootstrap.
+Replace `package:your_app/app_shell.dart` with the import that already exposes
+your app root widget or bootstrap. Cockpit's target launch operation injects
+the `FLUTTER_COCKPIT_REMOTE_*` dart-defines, so
+`resolveFromEnvironment(...)` enables the remote surface without taking over
+the production bootstrap.
 Only wire `FlutterCockpit.navigatorObserver` from the standalone shell entrypoint. `FlutterCockpitApp` automatically discovers the public `RouteInformationProvider` used by Flutter Router, `RouterConfig`, `go_router`, and other Router-based libraries, so an app-owned router normally needs no additional route bridge.
 
 For nested navigators, create one observer per navigator so route state can return to the parent stack after a nested pop:

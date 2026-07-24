@@ -583,6 +583,23 @@ List<CockpitMcpTool> _runTools(
   ),
   _CockpitApiTool(
     client: client,
+    name: 'artifact_list',
+    description: 'List immutable artifact metadata for an explicit run.',
+    inputSchema: _schema(
+      properties: <String, Object?>{'runId': _string()},
+      required: const <String>['runId'],
+    ),
+    action: (api, arguments) async {
+      _only(arguments, const <String>{'runId'});
+      return <String, Object?>{
+        'items': (await api.artifacts(
+          _requiredString(arguments, 'runId'),
+        )).map((artifact) => artifact.toJson()).toList(),
+      };
+    },
+  ),
+  _CockpitApiTool(
+    client: client,
     name: 'artifact_read',
     description: 'Read a bounded artifact with digest and size checks.',
     inputSchema: _schema(

@@ -1,7 +1,7 @@
 {
   "name": "flutter-cockpit",
-  "version": "1.0.0",
-  "description": "AI-first Flutter runtime control, host control, evidence, and validation workflows.",
+  "version": "2.0.0",
+  "description": "AI-first Flutter and black-box application development, E2E execution, and regression evidence through Cockpit 2.0.",
   "author": {
     "name": "Cockpit Dev"
   },
@@ -19,22 +19,23 @@
   "mcpServers": "./.mcp.json",
   "interface": {
     "displayName": "Flutter Cockpit",
-    "shortDescription": "Control and verify Flutter apps with live evidence.",
-    "longDescription": "Flutter Cockpit gives AI agents a fast app-first loop for launching, inspecting, controlling, capturing, recording, and validating Flutter apps and host surfaces.",
+    "shortDescription": "Develop and verify apps through Cockpit 2.0.",
+    "longDescription": "Flutter Cockpit gives AI agents and clients one authenticated Supervisor API for Flutter development operations, black-box application control, reusable E2E cases and suites, durable execution, and regression evidence.",
     "developerName": "Cockpit Dev",
     "category": "Developer Tools",
     "capabilities": [
-      "Flutter UI control",
-      "Host control",
+      "Flutter development operations",
+      "Black-box application control",
+      "E2E cases and suites",
+      "Durable regression runs",
       "Screenshots",
-      "Recording",
-      "Validation"
+      "Recordings and reports"
     ],
     "websiteURL": "https://github.com/cockpit-dev/flutter_cockpit",
     "defaultPrompt": [
-      "Use Flutter Cockpit to verify this Flutter change.",
-      "Launch the app, inspect state, and capture proof.",
-      "Run the smallest live validation loop."
+      "Use Cockpit 2.0 to verify this application change.",
+      "Resolve the workspace and target, inspect capabilities, then capture proof.",
+      "Validate and run the smallest suitable case or suite."
     ],
     "brandColor": "#0F766E"
   }

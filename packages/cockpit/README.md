@@ -3,7 +3,7 @@
 [![pub package](https://img.shields.io/pub/v/cockpit?logo=dart&label=pub.dev)](https://pub.dev/packages/cockpit)
 [![License](https://img.shields.io/github/license/cockpit-dev/flutter_cockpit)](https://github.com/cockpit-dev/flutter_cockpit/blob/main/packages/cockpit/LICENSE)
 
-[简体中文](README.zh-CN.md)
+[简体中文](https://github.com/cockpit-dev/flutter_cockpit/blob/main/packages/cockpit/README.zh-CN.md)
 
 `cockpit` is the authenticated host client and headless execution package for
 Cockpit 2.0. It contains the Supervisor daemon, isolated workspace worker,
@@ -12,8 +12,8 @@ dashboard.
 
 ## Install
 
-Cockpit requires Dart 3.8 or newer. Use the Dart SDK bundled with Flutter 3.32
-or newer for Flutter workspaces.
+Cockpit requires Dart 3.8.0 or newer. Flutter workspaces require Flutter 3.32.0
+or newer.
 
 ```yaml
 dev_dependencies:
@@ -62,6 +62,23 @@ dart run cockpit operation run \
   --input-json '{}'
 ```
 
+## Authorization Policy
+
+Dangerous operation kinds, operation safety effects, test safety effects,
+production targets, and worker environment secrets require explicit authority.
+The strict policy document is stored at `COCKPIT_HOME/authorization.json` and
+is loaded once when the daemon starts.
+
+```bash
+dart run cockpit daemon policy validate --file authorization.json
+dart run cockpit daemon policy apply --file authorization.json --restart
+dart run cockpit daemon policy show
+```
+
+Applying without `--restart` requires a stopped daemon. The default policy
+denies dangerous operations and sensitive test effects; it does not authorize
+production or unknown target environments.
+
 ## Canonical Case Replay
 
 Validate a case document, then submit an indexed case using its canonical
@@ -94,6 +111,11 @@ metadata or bytes differ.
 Suites reuse indexed cases and add dependency DAGs, scoped fixtures, matrix
 rows, concurrency, retries, fail-fast behavior, recovery, and aggregate
 JSON/JUnit/HTML/AI summary reports.
+
+Recovery persists node and attempt checkpoints plus exact fixture/row session
+bindings. An attempt active at worker termination becomes `interrupted` and is
+retried only when the suite policy allows it. A missing bound session is an
+explicit environment failure, never a silent replacement.
 
 The default `restartApp` isolation runs before each case's attempt fixtures.
 Use `resetAppData` only when the selected driver advertises it, and choose
@@ -182,9 +204,10 @@ structured API errors, and artifact integrity checks.
 
 ## MCP
 
-Run the dedicated executable:
+Run the CLI command or the dedicated executable:
 
 ```bash
+dart run cockpit serve-mcp
 dart run cockpit_mcp
 ```
 
@@ -200,10 +223,12 @@ dart run cockpit_mcp
 ```
 
 MCP exposes bounded resources for server, capabilities, roots, workspaces,
-operations, cases, and runs. Its tools cover root/workspace lifecycle,
-advertised operation execution, case validation/run, run get/cancel/events,
-and artifact reads. Every tool crosses the authenticated Supervisor HTTP
-boundary; the MCP process does not construct application services.
+operations, targets, documents, cases, suites, runs, and artifacts. Its tools
+cover root/workspace lifecycle, advertised operations, target lifecycle,
+case/suite validation and execution, run get/cancel/events, artifact listing,
+and verified artifact reads.
+Every tool crosses the authenticated Supervisor HTTP boundary; the MCP process
+does not construct application services.
 
 ## Client Boundary
 
@@ -215,5 +240,5 @@ services in-process.
 Generated `report.html` files remain portable run artifacts. They are not a
 server UI and do not require an HTML route in `cockpitd`.
 
-See [`doc/contracts`](doc/contracts) for protocol material and
+See [`../../docs/contracts`](../../docs/contracts) for protocol material and
 [`example/cases`](example/cases) for canonical YAML and JSON cases.

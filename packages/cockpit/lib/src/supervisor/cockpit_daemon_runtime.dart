@@ -12,6 +12,7 @@ import '../foundation/cockpit_permissions.dart';
 import 'cockpit_daemon_host.dart';
 import 'cockpit_daemon_discovery.dart';
 import 'cockpit_supervisor_http_api.dart';
+import 'cockpit_supervisor_authorization.dart';
 import 'cockpit_supervisor_runtime.dart';
 
 Future<int> runCockpitDaemon(List<String> arguments) async {
@@ -39,10 +40,16 @@ Future<int> runCockpitDaemon(List<String> arguments) async {
     permissionHardener: hardener,
   ).initialize();
   final workerEntrypoint = await _workerEntrypoint();
+  final authorization = await CockpitSupervisorAuthorizationPolicyStore(
+    path: paths.authorizationPolicy,
+    permissionHardener: hardener,
+    directorySyncer: syncer,
+  ).read();
   final runtime = await CockpitSupervisorRuntime.initialize(
     homeResolver: resolver,
     dartExecutable: Platform.resolvedExecutable,
     workerEntrypoint: workerEntrypoint,
+    authorization: authorization,
   );
   final startedAt = DateTime.now().toUtc();
   final serverInfo = runtime.serverInfo(

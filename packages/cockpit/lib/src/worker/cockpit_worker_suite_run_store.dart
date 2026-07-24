@@ -1,7 +1,10 @@
 import 'dart:convert';
 
+import 'package:cockpit_protocol/cockpit_protocol.dart';
+
 import '../foundation/cockpit_locked_json_store.dart';
 import '../foundation/cockpit_permissions.dart';
+import '../suite/cockpit_suite_execution_plan.dart';
 import '../suite/cockpit_suite_scheduler.dart';
 import 'cockpit_worker_value_reader.dart';
 
@@ -10,12 +13,16 @@ final class CockpitWorkerSuiteReservation {
     required this.runId,
     required this.startedAt,
     required this.executions,
+    required this.progress,
+    required this.sessionBindings,
     required this.completedOutput,
   });
 
   final String runId;
   final DateTime startedAt;
   final List<CockpitSuiteNodeExecution> executions;
+  final List<CockpitSuiteNodeProgress> progress;
+  final Map<String, String> sessionBindings;
   final Map<String, Object?>? completedOutput;
 
   bool get completed => completedOutput != null;
@@ -32,7 +39,7 @@ final class CockpitWorkerSuiteRunStore {
          path: path,
          codec: const _SuiteRunCodec(),
          createInitial: () => <String, Object?>{
-           'schemaVersion': 'cockpit.worker.suite-runs/v2',
+           'schemaVersion': 'cockpit.worker.suite-runs/v3',
            'workspaceId': workspaceId,
            'runs': <String, Object?>{},
          },
@@ -49,6 +56,12 @@ final class CockpitWorkerSuiteRunStore {
   final String workspaceId;
   final int maximumRuns;
   final CockpitLockedJsonStore<Map<String, Object?>> _store;
+
+  Future<CockpitWorkerSuiteReservation> read(String runId) async {
+    workerId(runId, r'$.runId');
+    final state = _state(await _store.read());
+    return _run(state.runs[runId], runId).reservation;
+  }
 
   Future<CockpitWorkerSuiteReservation> reserve({
     required String runId,
@@ -82,15 +95,190 @@ final class CockpitWorkerSuiteRunStore {
       sourceSha256: sourceSha256,
       startedAt: startedAt,
       executions: const <CockpitSuiteNodeExecution>[],
+      progress: const <CockpitSuiteNodeProgress>[],
+      sessionBindings: const <String, String>{},
       completedOutput: null,
     );
     runs[runId] = run.toJson();
     return CockpitLockedJsonUpdate.write(state.toJson(), run.reservation);
   });
 
+  Future<void> recordNodeStarted({
+    required String runId,
+    required String nodeId,
+    required String entryId,
+    required CockpitSuitePlanNodeKind kind,
+    required DateTime startedAt,
+  }) => _store.transact<void>((raw) {
+    final state = _state(raw);
+    final run = _run(state.runs[runId], runId);
+    _requireMutable(run);
+    if (run.executions.any((item) => item.nodeId == nodeId)) {
+      throw const FormatException('Completed suite node cannot be restarted.');
+    }
+    final existing = run.progress
+        .where((item) => item.nodeId == nodeId)
+        .singleOrNull;
+    final progress = CockpitSuiteNodeProgress(
+      nodeId: nodeId,
+      entryId: entryId,
+      kind: kind,
+      startedAt: startedAt.toUtc(),
+      completedAttempts: const <CockpitTestAttemptReport>[],
+      activeAttempt: null,
+    );
+    if (existing != null) {
+      if (_canonical(existing.toJson()) != _canonical(progress.toJson())) {
+        throw const FormatException('Suite node progress conflicts.');
+      }
+      return CockpitLockedJsonUpdate.readOnly(raw, null);
+    }
+    final updated = run.copyWith(
+      progress: <CockpitSuiteNodeProgress>[...run.progress, progress],
+    );
+    state.runs[runId] = updated.toJson();
+    return CockpitLockedJsonUpdate.write(state.toJson(), null);
+  });
+
+  Future<void> recordAttemptStarted({
+    required String runId,
+    required String nodeId,
+    required String attemptId,
+    required int attemptNumber,
+    required DateTime startedAt,
+    required String targetId,
+  }) => _store.transact<void>((raw) {
+    final state = _state(raw);
+    final run = _run(state.runs[runId], runId);
+    _requireMutable(run);
+    final index = run.progress.indexWhere((item) => item.nodeId == nodeId);
+    if (index < 0) {
+      throw const FormatException('Suite node was not started.');
+    }
+    final current = run.progress[index];
+    final active = CockpitSuiteActiveAttempt(
+      attemptId: attemptId,
+      number: attemptNumber,
+      startedAt: startedAt.toUtc(),
+      targetId: targetId,
+    );
+    if (current.activeAttempt case final existing?) {
+      if (_canonical(existing.toJson()) != _canonical(active.toJson())) {
+        throw const FormatException('Active suite attempt conflicts.');
+      }
+      return CockpitLockedJsonUpdate.readOnly(raw, null);
+    }
+    if (attemptNumber != current.completedAttempts.length + 1) {
+      throw const FormatException('Suite attempt sequence is invalid.');
+    }
+    final progress = <CockpitSuiteNodeProgress>[...run.progress];
+    progress[index] = CockpitSuiteNodeProgress(
+      nodeId: current.nodeId,
+      entryId: current.entryId,
+      kind: current.kind,
+      startedAt: current.startedAt,
+      completedAttempts: current.completedAttempts,
+      activeAttempt: active,
+    );
+    final updated = run.copyWith(progress: progress);
+    state.runs[runId] = updated.toJson();
+    return CockpitLockedJsonUpdate.write(state.toJson(), null);
+  });
+
+  Future<void> recordAttemptCompleted({
+    required String runId,
+    required String nodeId,
+    required CockpitTestAttemptReport attempt,
+  }) => _store.transact<void>((raw) {
+    final state = _state(raw);
+    final run = _run(state.runs[runId], runId);
+    _requireMutable(run);
+    final index = run.progress.indexWhere((item) => item.nodeId == nodeId);
+    if (index < 0) {
+      throw const FormatException('Suite node was not started.');
+    }
+    final current = run.progress[index];
+    final existing = current.completedAttempts
+        .where((item) => item.attemptId == attempt.attemptId)
+        .singleOrNull;
+    if (existing != null) {
+      if (_canonical(existing.toJson()) != _canonical(attempt.toJson())) {
+        throw const FormatException('Completed suite attempt conflicts.');
+      }
+      return CockpitLockedJsonUpdate.readOnly(raw, null);
+    }
+    final active = current.activeAttempt;
+    if (active == null ||
+        active.attemptId != attempt.attemptId ||
+        active.number != attempt.number) {
+      throw const FormatException('Suite attempt completion is inconsistent.');
+    }
+    final progress = <CockpitSuiteNodeProgress>[...run.progress];
+    progress[index] = CockpitSuiteNodeProgress(
+      nodeId: current.nodeId,
+      entryId: current.entryId,
+      kind: current.kind,
+      startedAt: current.startedAt,
+      completedAttempts: <CockpitTestAttemptReport>[
+        ...current.completedAttempts,
+        attempt,
+      ],
+      activeAttempt: null,
+    );
+    final updated = run.copyWith(progress: progress);
+    state.runs[runId] = updated.toJson();
+    return CockpitLockedJsonUpdate.write(state.toJson(), null);
+  });
+
+  Future<void> bindSession({
+    required String runId,
+    required String bindingKey,
+    required String sessionResourceId,
+  }) => _store.transact<void>((raw) {
+    final state = _state(raw);
+    final run = _run(state.runs[runId], runId);
+    _requireMutable(run);
+    final existing = run.sessionBindings[bindingKey];
+    if (existing != null) {
+      if (existing != sessionResourceId) {
+        throw const FormatException('Suite session binding conflicts.');
+      }
+      return CockpitLockedJsonUpdate.readOnly(raw, null);
+    }
+    final updated = run.copyWith(
+      sessionBindings: <String, String>{
+        ...run.sessionBindings,
+        bindingKey: sessionResourceId,
+      },
+    );
+    state.runs[runId] = updated.toJson();
+    return CockpitLockedJsonUpdate.write(state.toJson(), null);
+  });
+
+  Future<void> releaseSessionBindings({
+    required String runId,
+    required Iterable<String> bindingKeys,
+  }) => _store.transact<void>((raw) {
+    final keys = bindingKeys.toSet();
+    if (keys.isEmpty) return CockpitLockedJsonUpdate.readOnly(raw, null);
+    final state = _state(raw);
+    final run = _run(state.runs[runId], runId);
+    _requireMutable(run);
+    final bindings = <String, String>{...run.sessionBindings};
+    var changed = false;
+    for (final key in keys) {
+      changed = bindings.remove(key) != null || changed;
+    }
+    if (!changed) return CockpitLockedJsonUpdate.readOnly(raw, null);
+    final updated = run.copyWith(sessionBindings: bindings);
+    state.runs[runId] = updated.toJson();
+    return CockpitLockedJsonUpdate.write(state.toJson(), null);
+  });
+
   Future<void> recordExecution({
     required String runId,
     required CockpitSuiteNodeExecution execution,
+    Iterable<String> releasedSessionBindingKeys = const <String>[],
   }) => _store.transact<void>((raw) {
     final state = _state(raw);
     final run = _run(state.runs[runId], runId);
@@ -106,9 +294,29 @@ final class CockpitWorkerSuiteRunStore {
       }
       return CockpitLockedJsonUpdate.readOnly(raw, null);
     }
+    final releasedKeys = releasedSessionBindingKeys.toSet();
     final updated = run.copyWith(
       executions: <CockpitSuiteNodeExecution>[...run.executions, execution],
+      progress: run.progress
+          .where((item) => item.nodeId != execution.nodeId)
+          .toList(growable: false),
+      sessionBindings: <String, String>{
+        for (final entry in run.sessionBindings.entries)
+          if (!releasedKeys.contains(entry.key)) entry.key: entry.value,
+      },
     );
+    final progress = run.progress
+        .where((item) => item.nodeId == execution.nodeId)
+        .singleOrNull;
+    if (progress != null &&
+        _canonical(
+              progress.completedAttempts.map((item) => item.toJson()).toList(),
+            ) !=
+            _canonical(
+              execution.attempts.map((item) => item.toJson()).toList(),
+            )) {
+      throw const FormatException('Suite node execution loses progress.');
+    }
     state.runs[runId] = updated.toJson();
     return CockpitLockedJsonUpdate.write(state.toJson(), null);
   });
@@ -125,7 +333,13 @@ final class CockpitWorkerSuiteRunStore {
       }
       return CockpitLockedJsonUpdate.readOnly(raw, null);
     }
-    final updated = run.copyWith(completedOutput: output);
+    if (run.progress.isNotEmpty) {
+      throw const FormatException('Suite run has unfinished node progress.');
+    }
+    final updated = run.copyWith(
+      completedOutput: output,
+      sessionBindings: const <String, String>{},
+    );
     state.runs[runId] = updated.toJson();
     return CockpitLockedJsonUpdate.write(state.toJson(), null);
   });
@@ -138,7 +352,7 @@ final class CockpitWorkerSuiteRunStore {
       r'$',
       required: const <String>{'schemaVersion', 'workspaceId', 'runs'},
     );
-    if (json['schemaVersion'] != 'cockpit.worker.suite-runs/v2' ||
+    if (json['schemaVersion'] != 'cockpit.worker.suite-runs/v3' ||
         json['workspaceId'] != workspaceId) {
       throw const FormatException('Suite run store identity is invalid.');
     }
@@ -159,6 +373,12 @@ final class CockpitWorkerSuiteRunStore {
   }
 }
 
+void _requireMutable(_SuiteRunState run) {
+  if (run.completedOutput != null) {
+    throw const FormatException('Completed suite run is immutable.');
+  }
+}
+
 final class _SuiteStoreState {
   const _SuiteStoreState({required this.workspaceId, required this.runs});
 
@@ -166,7 +386,7 @@ final class _SuiteStoreState {
   final Map<String, Object?> runs;
 
   Map<String, Object?> toJson() => <String, Object?>{
-    'schemaVersion': 'cockpit.worker.suite-runs/v2',
+    'schemaVersion': 'cockpit.worker.suite-runs/v3',
     'workspaceId': workspaceId,
     'runs': runs,
   };
@@ -181,6 +401,8 @@ final class _SuiteRunState {
     required this.sourceSha256,
     required this.startedAt,
     required this.executions,
+    required this.progress,
+    required this.sessionBindings,
     required this.completedOutput,
   });
 
@@ -191,6 +413,8 @@ final class _SuiteRunState {
   final String sourceSha256;
   final DateTime startedAt;
   final List<CockpitSuiteNodeExecution> executions;
+  final List<CockpitSuiteNodeProgress> progress;
+  final Map<String, String> sessionBindings;
   final Map<String, Object?>? completedOutput;
 
   CockpitWorkerSuiteReservation get reservation =>
@@ -198,11 +422,15 @@ final class _SuiteRunState {
         runId: runId,
         startedAt: startedAt,
         executions: executions,
+        progress: progress,
+        sessionBindings: sessionBindings,
         completedOutput: completedOutput,
       );
 
   _SuiteRunState copyWith({
     List<CockpitSuiteNodeExecution>? executions,
+    List<CockpitSuiteNodeProgress>? progress,
+    Map<String, String>? sessionBindings,
     Map<String, Object?>? completedOutput,
   }) => _SuiteRunState(
     runId: runId,
@@ -212,6 +440,8 @@ final class _SuiteRunState {
     sourceSha256: sourceSha256,
     startedAt: startedAt,
     executions: executions ?? this.executions,
+    progress: progress ?? this.progress,
+    sessionBindings: sessionBindings ?? this.sessionBindings,
     completedOutput: completedOutput ?? this.completedOutput,
   );
 
@@ -223,6 +453,8 @@ final class _SuiteRunState {
     'sourceSha256': sourceSha256,
     'startedAt': startedAt.toIso8601String(),
     'executions': executions.map((item) => item.toJson()).toList(),
+    'progress': progress.map((item) => item.toJson()).toList(),
+    'sessionBindings': sessionBindings,
     if (completedOutput != null) 'completedOutput': completedOutput,
   };
 
@@ -238,6 +470,8 @@ final class _SuiteRunState {
         'sourceSha256',
         'startedAt',
         'executions',
+        'progress',
+        'sessionBindings',
         'completedOutput',
       },
       '\$.runs.$runId',
@@ -249,11 +483,18 @@ final class _SuiteRunState {
         'sourceSha256',
         'startedAt',
         'executions',
+        'progress',
+        'sessionBindings',
       },
     );
     final rawExecutions = workerList(
       json['executions'],
       '\$.runs.$runId.executions',
+    );
+    final rawProgress = workerList(json['progress'], '\$.runs.$runId.progress');
+    final rawBindings = workerObject(
+      json['sessionBindings'],
+      '\$.runs.$runId.sessionBindings',
     );
     final output = json['completedOutput'] == null
         ? null
@@ -285,6 +526,25 @@ final class _SuiteRunState {
             path: '\$.runs.$runId.executions[$index]',
           ),
       ],
+      progress: <CockpitSuiteNodeProgress>[
+        for (var index = 0; index < rawProgress.length; index += 1)
+          CockpitSuiteNodeProgress.fromJson(
+            rawProgress[index],
+            path: '\$.runs.$runId.progress[$index]',
+          ),
+      ],
+      sessionBindings: <String, String>{
+        for (final entry in rawBindings.entries)
+          workerString(
+            entry.key,
+            '\$.runs.$runId.sessionBindings.key',
+            minimum: 1,
+            maximum: 512,
+          ): workerId(
+            entry.value,
+            '\$.runs.$runId.sessionBindings.${entry.key}',
+          ),
+      },
       completedOutput: output,
     );
   }

@@ -7,6 +7,9 @@ import 'package:cockpit_protocol/cockpit_protocol.dart';
 import 'package:path/path.dart' as p;
 
 import '../application/cockpit_compact_json.dart';
+import '../foundation/cockpit_home.dart';
+import '../foundation/cockpit_locked_json_store.dart';
+import '../supervisor/cockpit_supervisor_authorization.dart';
 import '../supervisor/cockpit_supervisor_api_client.dart';
 
 const int cockpitSuccessExitCode = 0;
@@ -19,6 +22,8 @@ const int cockpitTemporaryExitCode = 75;
 
 typedef CockpitSupervisorClientProvider =
     Future<CockpitSupervisorApiClient> Function();
+typedef CockpitAuthorizationPolicyStoreProvider =
+    Future<CockpitSupervisorAuthorizationPolicyStore> Function();
 
 typedef CockpitCliAction = Future<int> Function(ArgResults arguments);
 
@@ -47,22 +52,51 @@ final class CockpitLeafCommand extends Command<int> {
 final class CockpitCliRuntime {
   CockpitCliRuntime({
     CockpitSupervisorClientProvider? clientProvider,
+    CockpitAuthorizationPolicyStoreProvider? authorizationPolicyStoreProvider,
     StringSink? stdoutSink,
     StringSink? stderrSink,
     String? workingDirectory,
   }) : _clientProvider =
            clientProvider ?? (() => createCockpitSupervisorApiClient()),
+       _authorizationPolicyStoreProvider =
+           authorizationPolicyStoreProvider ?? _systemAuthorizationPolicyStore,
        stdoutSink = stdoutSink ?? stdout,
        stderrSink = stderrSink ?? stderr,
        workingDirectory = workingDirectory ?? Directory.current.path;
 
   final CockpitSupervisorClientProvider _clientProvider;
+  final CockpitAuthorizationPolicyStoreProvider
+  _authorizationPolicyStoreProvider;
   final StringSink stdoutSink;
   final StringSink stderrSink;
   final String workingDirectory;
   Future<CockpitSupervisorApiClient>? _client;
+  Future<CockpitSupervisorAuthorizationPolicyStore>? _authorizationPolicyStore;
 
   Future<CockpitSupervisorApiClient> client() => _client ??= _clientProvider();
+
+  Future<CockpitSupervisorAuthorizationPolicyStore>
+  authorizationPolicyStore() =>
+      _authorizationPolicyStore ??= _authorizationPolicyStoreProvider();
+
+  CockpitSupervisorAuthorizationPolicy authorizationPolicyFile(String path) {
+    final resolved = p.normalize(
+      p.isAbsolute(path) ? path : p.join(workingDirectory, path),
+    );
+    final file = File(resolved);
+    if (!file.existsSync()) {
+      throw FileSystemException(
+        'Authorization policy file was not found.',
+        resolved,
+      );
+    }
+    if (file.lengthSync() > 1024 * 1024) {
+      throw const FormatException('Authorization policy exceeds 1 MiB.');
+    }
+    return CockpitSupervisorAuthorizationPolicy.fromJson(
+      jsonDecode(file.readAsStringSync()),
+    );
+  }
 
   void success(Object? data) {
     final value = <String, Object?>{'ok': true, 'data': data};
@@ -156,6 +190,18 @@ final class CockpitCliRuntime {
     }
     return Map<String, Object?>.from(value);
   }
+}
+
+Future<CockpitSupervisorAuthorizationPolicyStore>
+_systemAuthorizationPolicyStore() async {
+  final resolver = CockpitHomeResolver.system();
+  final home = CockpitHome.system();
+  final paths = await home.initialize();
+  return CockpitSupervisorAuthorizationPolicyStore(
+    path: paths.authorizationPolicy,
+    permissionHardener: home.permissionHardener,
+    directorySyncer: CockpitSystemDirectorySyncer(resolver.platform),
+  );
 }
 
 int cockpitExitCodeFor(CockpitApiError error) => switch (error.code) {

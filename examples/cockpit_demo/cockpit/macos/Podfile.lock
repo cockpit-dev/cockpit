@@ -52,7 +52,7 @@ EXTERNAL SOURCES:
     :path: Flutter/ephemeral/.symlinks/plugins/sqlite3_flutter_libs/darwin
 
 SPEC CHECKSUMS:
-  flutter_cockpit: 4a405877efd054242d7824cc81159e1bb1fa54f0
+  flutter_cockpit: 8be743489ba0db6565a4f0580e6ed77390f3c5c7
   FlutterMacOS: d0db08ddef1a9af05a5ec4b724367152bb0500b1
   path_provider_foundation: 080d55be775b7414fd5a5ef3ac137b97b097e564
   sqlite3: a51c07cf16e023d6c48abd5e5791a61a47354921

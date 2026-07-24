@@ -72,9 +72,8 @@ final class CockpitDenySensitiveSafetyPolicy
   }
 }
 
-final class CockpitTrustedDevelopmentSafetyPolicy
-    implements CockpitTestSafetyPolicy {
-  CockpitTrustedDevelopmentSafetyPolicy({
+final class CockpitConfiguredSafetyPolicy implements CockpitTestSafetyPolicy {
+  CockpitConfiguredSafetyPolicy({
     required Iterable<CockpitTestTargetEnvironment> environments,
     Iterable<CockpitTestSafetyEffect> allowedEffects =
         const <CockpitTestSafetyEffect>[],
@@ -83,14 +82,7 @@ final class CockpitTrustedDevelopmentSafetyPolicy
        ),
        allowedEffects = Set<CockpitTestSafetyEffect>.unmodifiable(
          allowedEffects,
-       ) {
-    if (this.environments.contains(CockpitTestTargetEnvironment.production) ||
-        this.environments.contains(CockpitTestTargetEnvironment.unknown)) {
-      throw ArgumentError(
-        'Trusted development policy cannot authorize production/unknown.',
-      );
-    }
-  }
+       );
 
   final Set<CockpitTestTargetEnvironment> environments;
   final Set<CockpitTestSafetyEffect> allowedEffects;

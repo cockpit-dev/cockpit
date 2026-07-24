@@ -8,9 +8,9 @@ void main() {
   test('root README uses flutter_cockpit branding', () {
     final readme = File('$root/README.md').readAsStringSync();
 
-    expect(readme, contains('# flutter_cockpit'));
+    expect(readme, contains('# Flutter Cockpit 2.0'));
     expect(readme, contains('packages/flutter_cockpit'));
-    expect(readme, contains('skills/flutter-cockpit'));
+    expect(readme, contains('docs/agent-integrations.md'));
     expect(readme, isNot(contains('packages/flutter_pilot`')));
     expect(readme, isNot(contains('skills/flutter-pilot')));
   });
@@ -30,7 +30,7 @@ void main() {
     expect(skill, contains('name: flutter-cockpit'));
     expect(skill, contains('# Flutter Cockpit'));
     expect(skill, isNot(contains('name: flutter-pilot')));
-    expect(contract, contains('# Flutter Cockpit Skill Contract'));
+    expect(contract, contains('# Flutter Cockpit 2.0 Skill Contract'));
     expect(contract, isNot(contains('`flutter-pilot` skill')));
   });
 
@@ -41,7 +41,6 @@ void main() {
       'packages/flutter_cockpit/README.md',
       'packages/flutter_cockpit/README.zh-CN.md',
       'skills/flutter-cockpit/SKILL.md',
-      'skills/flutter-cockpit/examples/flutter-app-setup.md',
       'packages/flutter_cockpit/lib/src/remote/cockpit_remote_session_configuration.dart',
       'packages/flutter_cockpit/lib/src/runtime/cockpit_runtime_environment.dart',
       'packages/cockpit/lib/src/development/cockpit_development_session_machine_launcher.dart',
@@ -95,25 +94,21 @@ void main() {
     expect(legacyPaths, isEmpty);
   });
 
-  test('root readmes teach low-token app-first workflow', () {
+  test('root readmes teach the Cockpit 2.0 resource workflow', () {
     final readme = File('$root/README.md').readAsStringSync();
     final readmeZh = File('$root/README.zh-CN.md').readAsStringSync();
 
-    expect(readme, contains('app.json'));
-    expect(readme, contains('--output-format json'));
-    expect(readme, contains('jq'));
-    expect(readme, contains('--command-file'));
-    expect(readme, contains('lower camel case keys'));
-    expect(readme, isNot(contains('--output-json')));
-    expect(readme, isNot(contains('--output-ai')));
-
-    expect(readmeZh, contains('app.json'));
-    expect(readmeZh, contains('--output-format json'));
-    expect(readmeZh, contains('jq'));
-    expect(readmeZh, contains('--command-file'));
-    expect(readmeZh, contains('lower camel case'));
-    expect(readmeZh, isNot(contains('--output-json')));
-    expect(readmeZh, isNot(contains('--output-ai')));
+    for (final document in <String>[readme, readmeZh]) {
+      expect(document, contains('daemon start'));
+      expect(document, contains('workspace register'));
+      expect(document, contains('target register'));
+      expect(document, contains('case run'));
+      expect(document, contains('suite run'));
+      expect(document, contains('/api/v2'));
+      expect(document, isNot(contains('app.json')));
+      expect(document, isNot(contains('run-task')));
+      expect(document, isNot(contains('validate-task')));
+    }
   });
 
   test('readmes document the public MCP control surface by category', () {
@@ -127,106 +122,43 @@ void main() {
         '$root/packages/cockpit/README.zh-CN.md',
       ).readAsStringSync(),
     };
-    const coreTools = <String>[
-      'list_targets',
-      'launch_app',
-      'launch_target',
-      'list_apps',
-      'read_app',
-      'read_target',
-      'inspect_ui',
-      'inspect_surface',
-      'run_command',
-      'run_batch',
-      'capture_screenshot',
-      'read_system_capabilities',
-      'run_system_action',
-      'run_shell',
-      'wait_idle',
-      'hot_reload',
-      'hot_restart',
-      'start_recording',
-      'stop_recording',
-      'read_network',
-      'read_logs',
-      'read_errors',
-      'stop_app',
-      'run_script',
-      'read_task_bundle_summary',
-      'run_task',
-      'validate_task',
-    ];
-    const advancedTools = <String>[
-      'list_active_sessions',
-      'launch_remote_session',
-      'query_remote_session',
-      'read_remote_status',
-      'read_remote_snapshot',
-      'collect_remote_snapshot',
-      'execute_remote_command',
-      'execute_remote_command_batch',
-      'wait_remote_ui_idle',
-      'start_remote_recording',
-      'stop_remote_recording',
-      'launch_development_session',
-      'query_development_session',
-      'reload_development_session',
-      'collect_development_probe',
-      'compare_development_probe',
-      'read_session_logs',
-      'stop_development_session',
-    ];
-    const workspaceTools = <String>[
-      'add_roots',
-      'remove_roots',
-      'pub_dev_search',
-      'pub',
-      'grep_package_uris',
-      'read_package_uris',
-      'lsp',
-      'analyze_files',
-      'create_project',
-      'analyze_workspace',
-      'format_workspace',
-      'run_tests',
-      'apply_fixes',
-    ];
-
     for (final entry in readmes.entries) {
-      for (final tool in <String>[
-        ...coreTools,
-        ...advancedTools,
-        ...workspaceTools,
+      for (final resource in const <String>[
+        'roots',
+        'workspaces',
+        'operations',
+        'targets',
+        'documents',
+        'cases',
+        'suites',
+        'runs',
+        'artifacts',
       ]) {
         expect(
           entry.value,
-          contains('`$tool`'),
-          reason: '${entry.key} does not document MCP tool $tool.',
+          contains(resource),
+          reason: '${entry.key} does not document MCP resource $resource.',
         );
       }
+      expect(entry.value, contains('/api/v2'));
+      expect(entry.value, contains('Supervisor'));
+      expect(entry.value, isNot(contains('`run_task`')));
+      expect(entry.value, isNot(contains('`validate_task`')));
     }
   });
 
-  test('devtools readmes keep output path and output format separate', () {
+  test('cockpit readmes keep the 2.0 client boundary explicit', () {
     final readme = File('$root/packages/cockpit/README.md').readAsStringSync();
     final readmeZh = File(
       '$root/packages/cockpit/README.zh-CN.md',
     ).readAsStringSync();
-    final runtimeLoopWorkflow = File(
-      '$root/.github/workflows/runtime-loop.yml',
-    ).readAsStringSync();
-
     for (final content in <String>[readme, readmeZh]) {
-      expect(content, contains('--output <path>'));
-      expect(content, contains('--output-format json'));
-      expect(content, contains('--stdout-format json'));
-      expect(content, isNot(contains('--output-json')));
-      expect(content, isNot(contains('--output-ai')));
+      expect(content, contains('/api/v2'));
+      expect(content, contains('cockpit_mcp'));
+      expect(content, contains('report.html'));
+      expect(content, isNot(contains('run-script --script')));
+      expect(content, isNot(contains('control-workflow')));
     }
-
-    expect(runtimeLoopWorkflow, contains('--output-format json'));
-    expect(runtimeLoopWorkflow, isNot(contains('--output-json')));
-    expect(runtimeLoopWorkflow, isNot(contains('--output-ai')));
   });
 
   test('tracked text files do not keep TODO or FIXME markers', () {

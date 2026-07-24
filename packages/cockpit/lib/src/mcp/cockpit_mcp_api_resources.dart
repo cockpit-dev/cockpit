@@ -112,6 +112,17 @@ List<CockpitMcpResource> cockpitMcpApiResources(
   ),
   _CockpitApiResource.template(
     client: client,
+    name: 'run_artifacts',
+    uriTemplate: 'cockpit://runs/{runId}/artifacts',
+    description: 'Immutable artifact metadata for an explicit run.',
+    read: (api, uri) async => <String, Object?>{
+      'items': (await api.artifacts(
+        _identifier(uri, 0, 'runId'),
+      )).map((item) => item.toJson()).toList(),
+    },
+  ),
+  _CockpitApiResource.template(
+    client: client,
     name: 'run_report',
     uriTemplate: 'cockpit://runs/{runId}/report',
     description: 'Finalized canonical suite report for a run.',
@@ -234,6 +245,10 @@ bool _matchesTemplate(Uri uri, String name) {
       uri.host == 'runs' &&
           uri.pathSegments.length == 2 &&
           uri.pathSegments[1] == 'report',
+    'run_artifacts' =>
+      uri.host == 'runs' &&
+          uri.pathSegments.length == 2 &&
+          uri.pathSegments[1] == 'artifacts',
     _ => false,
   };
 }

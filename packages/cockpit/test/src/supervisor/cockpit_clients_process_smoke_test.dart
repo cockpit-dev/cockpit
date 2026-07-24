@@ -60,6 +60,24 @@ cases:
         ...Platform.environment,
         'COCKPIT_HOME': await home.resolveSymbolicLinks(),
       };
+      final authorizationFile =
+          await File(
+            p.join(temporary.path, 'authorization.json'),
+          ).writeAsString(
+            jsonEncode(<String, Object?>{
+              'schemaVersion': 'cockpit.supervisor.authorization/v2',
+              'allowedDangerousOperations': <String>['target.launch'],
+              'allowedOperationSafetyEffects': <String>['externalSideEffect'],
+              'allowedTargetEnvironments': <String>[
+                'development',
+                'test',
+                'staging',
+                'production',
+              ],
+              'allowedSafetyEffects': <String>[],
+              'allowedEnvironmentSecretNames': <String>[],
+            }),
+          );
 
       addTearDown(() async {
         await _cli(packageRoot, environment, const <String>[
@@ -71,6 +89,28 @@ cases:
         if (await temporary.exists()) await temporary.delete(recursive: true);
       });
 
+      final validatedPolicy = await _cli(packageRoot, environment, <String>[
+        'daemon',
+        'policy',
+        'validate',
+        '--file',
+        authorizationFile.path,
+      ]);
+      expect(
+        validatedPolicy['allowedTargetEnvironments'],
+        contains('production'),
+      );
+      final appliedPolicy = await _cli(packageRoot, environment, <String>[
+        'daemon',
+        'policy',
+        'apply',
+        '--file',
+        authorizationFile.path,
+      ]);
+      expect(
+        (appliedPolicy['daemon']! as Map<String, Object?>)['running'],
+        isFalse,
+      );
       final started = await _cli(packageRoot, environment, const <String>[
         'daemon',
         'start',
@@ -272,6 +312,13 @@ cases:
         'smoke-case-cancel',
       ]);
       expect(cancellation['runId'], runId);
+      final listedArtifacts = await _cli(packageRoot, environment, <String>[
+        'artifact',
+        'list',
+        '--run-id',
+        runId,
+      ]);
+      expect(listedArtifacts['items'], isA<List<Object?>>());
 
       final mcp = await _mcp(
         packageRoot,
@@ -341,6 +388,20 @@ cases:
         (targetTool['structuredContent']! as Map<String, Object?>)['targetId'],
         registeredTargetId,
       );
+      final artifactResource = response(9)['result']! as Map<String, Object?>;
+      final artifactContents =
+          (artifactResource['contents']! as List<Object?>).single;
+      final artifactResourceJson =
+          jsonDecode(
+                (artifactContents as Map<String, Object?>)['text']! as String,
+              )
+              as Map<String, Object?>;
+      expect(artifactResourceJson['items'], isA<List<Object?>>());
+      final artifactTool = response(10)['result']! as Map<String, Object?>;
+      expect(
+        (artifactTool['structuredContent']! as Map<String, Object?>)['items'],
+        isA<List<Object?>>(),
+      );
     },
     timeout: const Timeout(Duration(minutes: 2)),
   );
@@ -393,7 +454,7 @@ Future<List<Map<String, Object?>>> _mcp(
     output.addAll(chunk);
     final count = _decodeFrames(output).length;
     if (count >= 1 && !initialized.isCompleted) initialized.complete();
-    if (count >= 8 && !responsesReceived.isCompleted) {
+    if (count >= 10 && !responsesReceived.isCompleted) {
       responsesReceived.complete();
     }
   }).asFuture<void>();
@@ -484,6 +545,21 @@ Future<List<Map<String, Object?>>> _mcp(
         },
       },
     },
+    <String, Object?>{
+      'jsonrpc': '2.0',
+      'id': 9,
+      'method': 'resources/read',
+      'params': <String, Object?>{'uri': 'cockpit://runs/$runId/artifacts'},
+    },
+    <String, Object?>{
+      'jsonrpc': '2.0',
+      'id': 10,
+      'method': 'tools/call',
+      'params': <String, Object?>{
+        'name': 'artifact_list',
+        'arguments': <String, Object?>{'runId': runId},
+      },
+    },
   ]) {
     process.stdin.add(_frame(message));
   }
@@ -493,7 +569,7 @@ Future<List<Map<String, Object?>>> _mcp(
   await Future.wait(<Future<void>>[outputDone, errorDone]);
   expect(exitCode, 0, reason: errors.toString());
   final responses = _decodeFrames(output);
-  expect(responses, hasLength(8), reason: errors.toString());
+  expect(responses, hasLength(10), reason: errors.toString());
   return responses;
 }
 

@@ -300,6 +300,20 @@ Map<String, Object?> buildFoundationApiPaths() => <String, Object?>{
       },
     ),
   },
+  '/api/v2/runs/{runId}/artifacts': <String, Object?>{
+    'parameters': <Object?>[_pathParameter('runId')],
+    'get': negotiatedOperation(
+      operationId: 'listRunArtifacts',
+      summary: 'List immutable artifact metadata for a run',
+      parameters: _pageParameters(),
+      responses: <String, Object?>{
+        '200': jsonResponse(
+          'Run artifact metadata collection.',
+          'ArtifactPage',
+        ),
+      },
+    ),
+  },
   '/api/v2/runs/{runId}/artifacts/{artifactId}': <String, Object?>{
     'parameters': <Object?>[
       _pathParameter('runId'),

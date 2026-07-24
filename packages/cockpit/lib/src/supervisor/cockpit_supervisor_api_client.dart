@@ -90,6 +90,20 @@ final class CockpitArtifactDownload {
   final String sha256;
 }
 
+final class CockpitArtifactDownloadReceipt {
+  const CockpitArtifactDownloadReceipt({
+    required this.file,
+    required this.mediaType,
+    required this.sizeBytes,
+    required this.sha256,
+  });
+
+  final File file;
+  final String mediaType;
+  final int sizeBytes;
+  final String sha256;
+}
+
 final class CockpitSupervisorApiClient {
   CockpitSupervisorApiClient({
     required this.lifecycle,
@@ -373,6 +387,15 @@ final class CockpitSupervisorApiClient {
     ),
   );
 
+  Future<List<CockpitArtifactResource>> artifacts(String runId) => _allPages(
+    '/api/v2/runs/${_segment(runId)}/artifacts',
+    (value, path, policy) => CockpitArtifactResource.fromJson(
+      value,
+      path: path,
+      decodePolicy: policy,
+    ),
+  );
+
   Future<List<T>> _allPages<T>(
     String path,
     T Function(Object? value, String path, CockpitDecodePolicy policy) decode,
@@ -566,6 +589,96 @@ final class CockpitSupervisorApiClient {
       );
     } finally {
       client.close(force: true);
+    }
+  }
+
+  Future<CockpitArtifactDownloadReceipt> downloadArtifactToFile({
+    required CockpitArtifactResource artifact,
+    required File destination,
+  }) async {
+    if (await destination.exists()) {
+      throw FileSystemException(
+        'Artifact destination already exists.',
+        destination.path,
+      );
+    }
+    await destination.parent.create(recursive: true);
+    final temporary = File(
+      '${destination.path}.part-$pid-${DateTime.now().microsecondsSinceEpoch}',
+    );
+    await temporary.create(exclusive: true);
+    IOSink? sink;
+    final session = await _ensureSession();
+    final client = _httpClientFactory();
+    try {
+      final request = await client.getUrl(
+        session.discovery.endpoint.resolve(
+          '/api/v2/runs/${_segment(artifact.runId)}/artifacts/'
+          '${_segment(artifact.artifactId)}',
+        ),
+      );
+      _authorize(request, session);
+      final response = await request.close();
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        final value = _decodeJson(
+          await _boundedBytes(response, cockpitSupervisorMaximumResponseBytes),
+        );
+        throw _decodeApiError(response.statusCode, value);
+      }
+      final mediaType =
+          response.headers.contentType?.mimeType ?? ContentType.binary.mimeType;
+      if (response.contentLength != artifact.sizeBytes ||
+          response.headers.value('Digest') != 'sha-256=${artifact.sha256}' ||
+          mediaType != artifact.mediaType) {
+        await response.drain<void>();
+        throw const CockpitSupervisorClientException(
+          code: 'artifactMetadataMismatch',
+          message: 'Artifact response metadata does not match its resource.',
+        );
+      }
+      sink = temporary.openWrite(mode: FileMode.writeOnly);
+      var received = 0;
+      await for (final chunk in response) {
+        received += chunk.length;
+        if (received > artifact.sizeBytes) {
+          throw const CockpitSupervisorClientException(
+            code: 'artifactIntegrityMismatch',
+            message: 'Artifact response exceeds its declared size.',
+          );
+        }
+        sink.add(chunk);
+      }
+      await sink.flush();
+      await sink.close();
+      sink = null;
+      final digest = (await sha256.bind(temporary.openRead()).first).toString();
+      if (received != artifact.sizeBytes || digest != artifact.sha256) {
+        throw const CockpitSupervisorClientException(
+          code: 'artifactIntegrityMismatch',
+          message: 'Artifact bytes failed size or digest verification.',
+        );
+      }
+      final committed = await temporary.rename(destination.path);
+      return CockpitArtifactDownloadReceipt(
+        file: committed,
+        mediaType: mediaType,
+        sizeBytes: received,
+        sha256: digest,
+      );
+    } on CockpitSupervisorClientException {
+      rethrow;
+    } on Object catch (error) {
+      throw CockpitSupervisorClientException(
+        code: CockpitErrorCode.transportFailed,
+        message: 'Artifact download failed: $error',
+      );
+    } finally {
+      try {
+        await sink?.close();
+      } finally {
+        client.close(force: true);
+        if (await temporary.exists()) await temporary.delete();
+      }
     }
   }
 

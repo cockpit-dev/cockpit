@@ -392,13 +392,48 @@ final class CockpitWorkerRuntimeRegistry
     final target =
         _targets[targetId] ?? (throw _unknownReference('target', targetId));
     await _handlePersistence.validateApp(handle);
+    final binding = _recordAppInMemory(target: target, handle: handle);
+    await _persist();
+    return binding;
+  });
+
+  Future<CockpitWorkerAppBinding> recordLaunchedApp({
+    required String targetId,
+    required CockpitTargetHandle targetHandle,
+    required CockpitAppHandle appHandle,
+  }) => _locked(() async {
+    await _ensureLoaded();
+    final target =
+        _targets[targetId] ?? (throw _unknownReference('target', targetId));
+    await _handlePersistence.validateTarget(targetHandle);
+    await _handlePersistence.validateApp(appHandle);
+    final updatedTarget = CockpitWorkerTargetBinding(
+      targetId: target.targetId,
+      deviceResourceId: target.deviceResourceId,
+      projectDir: target.projectDir,
+      registration: target.registration,
+      handle: targetHandle,
+    );
+    _targets[targetId] = updatedTarget;
+    final binding = _recordAppInMemory(
+      target: updatedTarget,
+      handle: appHandle,
+    );
+    await _persist();
+    return binding;
+  });
+
+  CockpitWorkerAppBinding _recordAppInMemory({
+    required CockpitWorkerTargetBinding target,
+    required CockpitAppHandle handle,
+  }) {
     final existing = _apps.values
         .where((binding) => binding.handle.appId == handle.appId)
         .firstOrNull;
     final appId = existing?.appId ?? _newId('app');
     final binding = CockpitWorkerAppBinding(
       appId: appId,
-      targetId: targetId,
+      targetId: target.targetId,
       handle: handle,
       updatedAt: _utcNow(),
     );
@@ -413,9 +448,8 @@ final class CockpitWorkerRuntimeRegistry
         environment: target.registration.environment,
       );
     }
-    await _persist();
     return binding;
-  });
+  }
 
   Future<CockpitWorkerAppBinding> requireApp(String appId) => _locked(() async {
     await _ensureLoaded();
@@ -913,18 +947,24 @@ final class CockpitWorkerRuntimeRegistry
   Future<CockpitWorkerHealthySession> selectHealthySession({
     required String? targetId,
     required CockpitTestTargetRequirements requirements,
+    String? preferredResourceId,
   }) => _locked(() async {
     await _ensureLoaded();
     if (requirements.targetKind != CockpitTargetKind.flutterApp.name) {
       return _selectHealthySystemSession(
         targetId: targetId,
         requirements: requirements,
+        preferredResourceId: preferredResourceId,
       );
     }
     final candidates =
         _sessions.values
             .where((binding) {
               if (targetId != null && binding.targetId != targetId) {
+                return false;
+              }
+              if (preferredResourceId != null &&
+                  binding.resourceId != preferredResourceId) {
                 return false;
               }
               if (requirements.appId != null &&
@@ -976,6 +1016,7 @@ final class CockpitWorkerRuntimeRegistry
   Future<CockpitWorkerHealthySession> _selectHealthySystemSession({
     required String? targetId,
     required CockpitTestTargetRequirements requirements,
+    required String? preferredResourceId,
   }) async {
     final candidates =
         _targets.values
@@ -1042,6 +1083,9 @@ final class CockpitWorkerRuntimeRegistry
           targetKind: requirements.targetKind,
           appId: platformAppId,
         );
+        if (preferredResourceId != null && resourceId != preferredResourceId) {
+          continue;
+        }
         return CockpitWorkerHealthySession(
           sessionId: 'system_${resourceId.substring('session_'.length)}',
           targetId: candidate.targetId,
@@ -1512,7 +1556,10 @@ final class CockpitWorkerRuntimeRegistry
       _validateRegistration(target.registration);
       final handle = target.handle;
       if (handle != null &&
-          (handle.targetKind != target.registration.targetKind ||
+          (!_targetHandleKindMatchesRegistration(
+                registration: target.registration.targetKind,
+                launched: handle.targetKind,
+              ) ||
               handle.platform != target.registration.platform ||
               handle.deviceId != target.registration.deviceId ||
               !_projectOwnedByTarget(target, handle.projectDir))) {
@@ -1681,6 +1728,15 @@ final class CockpitWorkerRuntimeRegistry
   ) =>
       p.equals(projectDir, target.projectDir) ||
       p.isWithin(target.projectDir, projectDir);
+
+  bool _targetHandleKindMatchesRegistration({
+    required CockpitTargetKind registration,
+    required CockpitTargetKind launched,
+  }) =>
+      registration == launched ||
+      registration == CockpitTargetKind.flutterApp &&
+          (launched == CockpitTargetKind.desktopApp ||
+              launched == CockpitTargetKind.browserPage);
 
   void _validateCollectionLimit(String name, int length, int maximum) {
     if (length > maximum) {

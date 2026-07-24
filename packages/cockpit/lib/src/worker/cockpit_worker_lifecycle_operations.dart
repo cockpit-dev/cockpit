@@ -352,18 +352,19 @@ final class CockpitWorkerLifecycleOperations {
       deadline: context.deadline,
     );
     if (mode == CockpitAppMode.development) {
-      final result = await _launchWorkerDevelopmentSession(
+      return _launchWorkerDevelopmentSession(
         target: target,
         context: context,
         portGrant: portGrant,
         timeout: timeout,
+        sanitizer: sanitizer,
       );
-      return _recordLaunchedApp(result.app, target.targetId, <String, Object?>{
-        'app': result.app.toJson(),
-        'status': result.status.toJson(),
-      }, sanitizer);
     }
-    final result = await _portHandoff.launchWithGrant(
+    return runWorkerTransactionalPortLaunch<
+      CockpitLaunchAppResult,
+      Map<String, Object?>
+    >(
+      handoff: _portHandoff,
       grant: portGrant,
       deadline: context.deadline,
       launch: (port) => runWorkerApplicationOperation(
@@ -383,12 +384,13 @@ final class CockpitWorkerLifecycleOperations {
           ),
         ),
       ),
-    );
-    return _recordLaunchedApp(
-      result.app,
-      target.targetId,
-      result.toJson(),
-      sanitizer,
+      commit: (result) => _recordLaunchedApp(
+        result.app,
+        target.targetId,
+        result.toJson(),
+        sanitizer,
+      ),
+      rollback: (result) => _rollbackLaunchedApp(result.app),
     );
   }
 
@@ -452,19 +454,20 @@ final class CockpitWorkerLifecycleOperations {
     );
     if (mode == CockpitAppMode.development &&
         target.registration.targetKind == CockpitTargetKind.flutterApp) {
-      final result = await _launchWorkerDevelopmentSession(
+      return _launchWorkerDevelopmentSession(
         target: target,
         context: context,
         portGrant: portGrant,
         timeout: timeout,
+        sanitizer: sanitizer,
+        includeTarget: true,
       );
-      return _recordLaunchedApp(result.app, target.targetId, <String, Object?>{
-        'target': CockpitTargetHandle.fromAppHandle(result.app).toJson(),
-        'app': result.app.toJson(),
-        'status': result.status.toJson(),
-      }, sanitizer);
     }
-    final result = await _portHandoff.launchWithGrant(
+    return runWorkerTransactionalPortLaunch<
+      CockpitLaunchTargetResult,
+      Map<String, Object?>
+    >(
+      handoff: _portHandoff,
       grant: portGrant,
       deadline: context.deadline,
       launch: (port) => runWorkerApplicationOperation(
@@ -485,23 +488,34 @@ final class CockpitWorkerLifecycleOperations {
           ),
         ),
       ),
+      commit: (result) async {
+        final app = result.app;
+        if (app == null) {
+          await _registry.recordTargetHandle(
+            targetId: target.targetId,
+            handle: result.target,
+          );
+          return <String, Object?>{
+            'targetId': target.targetId,
+            'targetKind': result.target.targetKind.name,
+            'platform': result.target.platform,
+            if (result.recommendedNextStep != null)
+              'recommendedNextStep': result.recommendedNextStep,
+            if (result.whatMatters != null) 'whatMatters': result.whatMatters,
+          };
+        }
+        return _recordLaunchedApp(
+          app,
+          target.targetId,
+          result.toJson(),
+          sanitizer,
+          targetHandle: result.target,
+        );
+      },
+      rollback: (result) async {
+        if (result.app case final app?) await _rollbackLaunchedApp(app);
+      },
     );
-    await _registry.recordTargetHandle(
-      targetId: target.targetId,
-      handle: result.target,
-    );
-    final app = result.app;
-    if (app == null) {
-      return <String, Object?>{
-        'targetId': target.targetId,
-        'targetKind': result.target.targetKind.name,
-        'platform': result.target.platform,
-        if (result.recommendedNextStep != null)
-          'recommendedNextStep': result.recommendedNextStep,
-        if (result.whatMatters != null) 'whatMatters': result.whatMatters,
-      };
-    }
-    return _recordLaunchedApp(app, target.targetId, result.toJson(), sanitizer);
   }
 
   Future<Map<String, Object?>> _stopApplication(
@@ -564,16 +578,13 @@ final class CockpitWorkerLifecycleOperations {
       grants: grants,
       deadline: context.deadline,
     );
-    final result = await _launchWorkerDevelopmentSession(
+    return _launchWorkerDevelopmentSession(
       target: target,
       context: context,
       portGrant: portGrant,
       timeout: timeout,
+      sanitizer: sanitizer,
     );
-    return _recordLaunchedApp(result.app, target.targetId, <String, Object?>{
-      'app': result.app.toJson(),
-      'status': result.status.toJson(),
-    }, sanitizer);
   }
 
   Future<Map<String, Object?>> _getDevelopmentSession(
@@ -850,32 +861,48 @@ final class CockpitWorkerLifecycleOperations {
     sessionId: sessionId,
   );
 
-  Future<CockpitLaunchDevelopmentSessionResult>
-  _launchWorkerDevelopmentSession({
+  Future<Map<String, Object?>> _launchWorkerDevelopmentSession({
     required CockpitWorkerTargetBinding target,
     required CockpitWorkspaceOperationContext context,
     required CockpitWorkerResourceGrant portGrant,
     required Duration timeout,
-  }) => _portHandoff.launchWithGrant(
-    grant: portGrant,
-    deadline: context.deadline,
-    launch: (port) => runWorkerApplicationOperation(
-      context: context,
-      operation: () => _developmentRuntime.launch(
-        CockpitLaunchDevelopmentSessionRequest(
-          projectDir: target.projectDir,
-          target: target.registration.entrypoint,
-          flavor: target.registration.flavor,
-          platform: target.registration.platform,
-          deviceId: target.registration.deviceId,
-          sessionPort: port,
-          launchTimeout: timeout,
-          allowSessionPortFallback: false,
-          launchConfiguration: CockpitFlutterLaunchConfiguration.empty,
+    required CockpitWorkerResultSanitizer sanitizer,
+    bool includeTarget = false,
+  }) =>
+      runWorkerTransactionalPortLaunch<
+        CockpitLaunchDevelopmentSessionResult,
+        Map<String, Object?>
+      >(
+        handoff: _portHandoff,
+        grant: portGrant,
+        deadline: context.deadline,
+        launch: (port) => runWorkerApplicationOperation(
+          context: context,
+          operation: () => _developmentRuntime.launch(
+            CockpitLaunchDevelopmentSessionRequest(
+              projectDir: target.projectDir,
+              target: target.registration.entrypoint,
+              flavor: target.registration.flavor,
+              platform: target.registration.platform,
+              deviceId: target.registration.deviceId,
+              sessionPort: port,
+              launchTimeout: timeout,
+              allowSessionPortFallback: false,
+              launchConfiguration: CockpitFlutterLaunchConfiguration.empty,
+            ),
+          ),
         ),
-      ),
-    ),
-  );
+        commit: (result) =>
+            _recordLaunchedApp(result.app, target.targetId, <String, Object?>{
+              if (includeTarget)
+                'target': CockpitTargetHandle.fromAppHandle(
+                  result.app,
+                ).toJson(),
+              'app': result.app.toJson(),
+              'status': result.status.toJson(),
+            }, sanitizer),
+        rollback: (result) => _rollbackLaunchedApp(result.app),
+      );
 
   String _recommendedDevelopmentNextStep(
     CockpitDevelopmentSessionStatus status,
@@ -901,23 +928,52 @@ final class CockpitWorkerLifecycleOperations {
     CockpitAppHandle app,
     String targetId,
     Map<String, Object?> result,
-    CockpitWorkerResultSanitizer sanitizer,
-  ) async {
-    await _registry.recordTargetHandle(
+    CockpitWorkerResultSanitizer sanitizer, {
+    CockpitTargetHandle? targetHandle,
+  }) async {
+    final binding = await _registry.recordLaunchedApp(
       targetId: targetId,
-      handle: CockpitTargetHandle.fromAppHandle(app),
+      targetHandle: targetHandle ?? CockpitTargetHandle.fromAppHandle(app),
+      appHandle: app,
     );
-    final binding = await _registry.recordApp(targetId: targetId, handle: app);
-    final sessionId = await _registry.sessionIdForApp(binding.appId);
-    final sanitized = await sanitizer.sanitize(
-      result,
-      appId: binding.appId,
-      sessionId: sessionId,
-      targetId: targetId,
-    );
-    return sanitized
-      ..['appId'] = binding.appId
-      ..['sessionId'] = sessionId
-      ..['targetId'] = targetId;
+    try {
+      final sessionId = await _registry.sessionIdForApp(binding.appId);
+      final sanitized = await sanitizer.sanitize(
+        result,
+        appId: binding.appId,
+        sessionId: sessionId,
+        targetId: targetId,
+      );
+      return sanitized
+        ..['appId'] = binding.appId
+        ..['sessionId'] = sessionId
+        ..['targetId'] = targetId;
+    } on Object catch (primary, primaryStackTrace) {
+      try {
+        await _registry.removeApp(binding.appId);
+      } on Object catch (cleanupError) {
+        throw CockpitWorkerOperationRollbackException(
+          primary: primary,
+          cleanupError: cleanupError,
+          warningCode: 'runtimeRegistrationRollbackFailed',
+          warningMessage:
+              'Failed to remove a partially registered application.',
+        );
+      }
+      Error.throwWithStackTrace(primary, primaryStackTrace);
+    }
+  }
+
+  Future<void> _rollbackLaunchedApp(CockpitAppHandle app) async {
+    if (app.developmentSession case final development?) {
+      try {
+        await _developmentRuntime.stop(development);
+        return;
+      } on Object {
+        await _stopApp.stop(CockpitStopAppRequest(app: app));
+        return;
+      }
+    }
+    await _stopApp.stop(CockpitStopAppRequest(app: app));
   }
 }

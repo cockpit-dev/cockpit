@@ -5,6 +5,12 @@
 - Added durable suite campaigns with DAG dependencies, scoped fixtures,
   matrices, bounded concurrency, retries, fail-fast policy, recovery, and
   JSON/JUnit/HTML/AI summary reports.
+- Added restart-safe suite node and attempt checkpoints. Active attempts recover
+  as `interrupted`, completed nodes are not replayed, and persisted fixture/row
+  session bindings must resolve to the same healthy resource.
+- Added strict home-scoped Supervisor authorization policy persistence and
+  `daemon policy show|validate|apply`, including explicit production/unknown
+  target authority and allowlisted worker environment secrets.
 - Enforced suite `sharedSession`, `restartApp`, and `resetAppData` isolation
   before case fixtures, preserved dependency teardown ordering, propagated
   setup failures into blocked case reports, and kept attempted teardown active
@@ -18,6 +24,8 @@
 - Added a durable per-user Supervisor with isolated workspace workers,
   authenticated HTTP/SSE clients, idempotent admission, cancellation, and
   canonical artifact retention.
+- Added paginated run artifact metadata across HTTP, CLI, and MCP plus
+  streaming, size- and SHA-256-verified downloads for large evidence files.
 - Migrated host CLI and MCP protocol imports to the platform-neutral
   `cockpit_protocol` package.
 - Removed the `flutter_cockpit_protocol` dependency and established the 2.0

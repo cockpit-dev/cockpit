@@ -8,11 +8,15 @@ void main() {
     final configuration = CockpitWorkerRuntimeConfiguration.parse(<String>[
       ..._baseArguments,
       '--allow-target-environment=development',
+      '--allow-target-environment=production',
+      '--allow-target-environment=unknown',
       '--allow-safety-effect=credentialSensitive',
     ]);
 
     expect(configuration.allowedTargetEnvironments, <Object?>{
       CockpitTestTargetEnvironment.development,
+      CockpitTestTargetEnvironment.production,
+      CockpitTestTargetEnvironment.unknown,
     });
     expect(configuration.allowedSafetyEffects, <Object?>{
       CockpitTestSafetyEffect.credentialSensitive,
@@ -31,8 +35,6 @@ void main() {
         '--allow-safety-effect=credentialSensitive',
         '--allow-safety-effect=credentialSensitive',
       ],
-      <String>['--allow-target-environment=production'],
-      <String>['--allow-target-environment=unknown'],
     ]) {
       expect(
         () => CockpitWorkerRuntimeConfiguration.parse(<String>[

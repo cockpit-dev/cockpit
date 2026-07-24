@@ -43,7 +43,7 @@ void main() {
   test(
     'trusted development policy allows declared sensitive effects only in non-production environments',
     () async {
-      final policy = CockpitTrustedDevelopmentSafetyPolicy(
+      final policy = CockpitConfiguredSafetyPolicy(
         environments: const <CockpitTestTargetEnvironment>{
           CockpitTestTargetEnvironment.development,
           CockpitTestTargetEnvironment.test,
@@ -97,7 +97,7 @@ void main() {
   test(
     'trusted development policy rejects undeclared secret effects',
     () async {
-      final policy = CockpitTrustedDevelopmentSafetyPolicy(
+      final policy = CockpitConfiguredSafetyPolicy(
         environments: const <CockpitTestTargetEnvironment>{
           CockpitTestTargetEnvironment.development,
         },
@@ -116,7 +116,7 @@ void main() {
   );
 
   test('trusted development policy denies effects by default', () async {
-    final policy = CockpitTrustedDevelopmentSafetyPolicy(
+    final policy = CockpitConfiguredSafetyPolicy(
       environments: const <CockpitTestTargetEnvironment>{
         CockpitTestTargetEnvironment.development,
       },
@@ -138,7 +138,7 @@ void main() {
   });
 
   test('declarations cannot expand credential-only authority', () async {
-    final policy = CockpitTrustedDevelopmentSafetyPolicy(
+    final policy = CockpitConfiguredSafetyPolicy(
       environments: const <CockpitTestTargetEnvironment>{
         CockpitTestTargetEnvironment.development,
       },
@@ -169,21 +169,31 @@ void main() {
     }
   });
 
-  test('trusted policy cannot authorize production or unknown', () {
-    for (final environment in const <CockpitTestTargetEnvironment>[
-      CockpitTestTargetEnvironment.production,
-      CockpitTestTargetEnvironment.unknown,
-    ]) {
-      expect(
-        () => CockpitTrustedDevelopmentSafetyPolicy(
+  test(
+    'configured policy explicitly authorizes production and unknown',
+    () async {
+      for (final environment in const <CockpitTestTargetEnvironment>[
+        CockpitTestTargetEnvironment.production,
+        CockpitTestTargetEnvironment.unknown,
+      ]) {
+        final policy = CockpitConfiguredSafetyPolicy(
           environments: <CockpitTestTargetEnvironment>{environment},
           allowedEffects: CockpitTestSafetyEffect.values,
-        ),
-        throwsArgumentError,
-        reason: environment.name,
-      );
-    }
-  });
+        );
+        final decision = await policy.authorize(
+          _secretRequest(
+            environment,
+            CockpitTestSafetyDeclaration(
+              effects: const <CockpitTestSafetyEffect>{
+                CockpitTestSafetyEffect.credentialSensitive,
+              },
+            ),
+          ),
+        );
+        expect(decision.allowed, isTrue, reason: environment.name);
+      }
+    },
+  );
 }
 
 CockpitTestSafetyRequest _secretRequest(

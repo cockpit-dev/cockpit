@@ -1,0 +1,42 @@
+schemaVersion: cockpit.test/v2
+kind: case
+id: demoSettingsNavigation
+name: Settings navigation
+tags: [acceptance, navigation]
+target:
+  platform: flutter
+  targetKind: flutterApp
+  plane: semantic
+defaults:
+  commandTimeoutMs: 20000
+  cleanupTimeoutMs: 15000
+  failFast: true
+  evidence:
+    screenshot: onFailure
+    snapshot: onFailure
+    failurePolicy: recordWarning
+steps:
+  - stepId: waitForInbox
+    action:
+      type: waitFor
+      condition: {type: route, route: /inbox}
+  - stepId: openSettings
+    action:
+      type: tap
+      locator: {strategy: label, value: Settings}
+  - stepId: waitForSettings
+    action:
+      type: waitFor
+      condition: {type: route, route: /settings}
+  - stepId: verifySettingsContent
+    action:
+      type: assertVisible
+      locator: {strategy: text, value: Tune the workspace.}
+  - stepId: captureSettings
+    action: {type: captureScreenshot, artifactName: settings-navigation}
+  - stepId: returnToInbox
+    action: {type: back}
+  - stepId: verifyInboxRestored
+    action:
+      type: waitFor
+      condition: {type: route, route: /inbox}

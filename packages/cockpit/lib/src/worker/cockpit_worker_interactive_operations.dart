@@ -10,7 +10,6 @@ import '../application/cockpit_inspect_surface_service.dart';
 import '../application/cockpit_inspect_ui_service.dart';
 import '../application/cockpit_interactive_result_profile.dart';
 import '../application/cockpit_interactive_snapshot_store.dart';
-import '../application/cockpit_latest_task_store.dart';
 import '../application/cockpit_query_development_session_service.dart';
 import '../application/cockpit_read_errors_service.dart';
 import '../application/cockpit_read_logs_service.dart';
@@ -107,10 +106,7 @@ final class CockpitWorkerInteractiveOperations {
           CockpitReadNetworkService(registry: retainedRegistry),
       readErrorsService:
           readErrorsService ??
-          CockpitReadErrorsService(
-            registry: retainedRegistry,
-            latestTaskStore: CockpitLatestTaskStore(),
-          ),
+          CockpitReadErrorsService(registry: retainedRegistry),
       sessionLogsServiceFactory:
           sessionLogsServiceFactory ??
           (sessionRegistry) =>
@@ -447,7 +443,6 @@ final class CockpitWorkerInteractiveOperations {
                 maximum: 1000,
               ) ??
               20,
-          includeLatestTask: false,
           includeSessions: false,
         ),
       ),

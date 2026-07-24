@@ -62,16 +62,6 @@ final class CockpitWorkspaceWorkerSpec {
         throw FormatException('Duplicate worker feature $feature.');
       }
     }
-    if (this.allowedTargetEnvironments.contains(
-          CockpitTestTargetEnvironment.production,
-        ) ||
-        this.allowedTargetEnvironments.contains(
-          CockpitTestTargetEnvironment.unknown,
-        )) {
-      throw const FormatException(
-        'Worker safety authority cannot allow production or unknown targets.',
-      );
-    }
   }
 
   final CockpitWorkspaceWorkerKey key;
@@ -359,7 +349,7 @@ final class CockpitWorkerPool {
         if (!slot.readyCompleter.isCompleted) {
           slot.readyCompleter.completeError(error, stackTrace);
         }
-        slot.readyCompleter = Completer<CockpitWorkspaceWorkerConnection>();
+        slot.readyCompleter = _workerReadyCompleter();
         _scheduleRestart(slot, generation);
       },
     );
@@ -403,7 +393,7 @@ final class CockpitWorkerPool {
     if (generation != slot.generation) return;
     slot.connection = null;
     if (slot.readyCompleter.isCompleted) {
-      slot.readyCompleter = Completer<CockpitWorkspaceWorkerConnection>();
+      slot.readyCompleter = _workerReadyCompleter();
     }
     _scheduleRestart(slot, generation);
   }
@@ -482,11 +472,10 @@ bool _sameSet<T>(Set<T> left, Set<T> right) =>
     left.length == right.length && left.containsAll(right);
 
 final class _WorkerSlot {
-  _WorkerSlot(this.spec);
+  _WorkerSlot(this.spec) : readyCompleter = _workerReadyCompleter();
 
   final CockpitWorkspaceWorkerSpec spec;
-  Completer<CockpitWorkspaceWorkerConnection> readyCompleter =
-      Completer<CockpitWorkspaceWorkerConnection>();
+  Completer<CockpitWorkspaceWorkerConnection> readyCompleter;
   Future<CockpitWorkspaceWorkerConnection>? launch;
   CockpitWorkspaceWorkerConnection? connection;
   Timer? restartTimer;
@@ -497,4 +486,10 @@ final class _WorkerSlot {
 
   Future<CockpitWorkspaceWorkerConnection> get ready =>
       connection == null ? readyCompleter.future : Future.value(connection);
+}
+
+Completer<CockpitWorkspaceWorkerConnection> _workerReadyCompleter() {
+  final completer = Completer<CockpitWorkspaceWorkerConnection>();
+  completer.future.ignore();
+  return completer;
 }

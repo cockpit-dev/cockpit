@@ -14,6 +14,7 @@ final class CockpitSuiteReportAssembler {
     required CockpitSuiteScheduleResult schedule,
     required DateTime startedAt,
     required DateTime finishedAt,
+    CockpitFailure? failure,
     Map<String, Object?> environment = const <String, Object?>{},
     Iterable<CockpitArtifactReference> artifacts =
         const <CockpitArtifactReference>[],
@@ -66,7 +67,7 @@ final class CockpitSuiteReportAssembler {
       durationMs: finishedAt.difference(startedAt).inMilliseconds,
       execution: plan.suite.execution,
       reportPolicy: plan.suite.report,
-      failure: _suiteCleanupFailure(failedSuiteCleanup),
+      failure: failure ?? _suiteCleanupFailure(failedSuiteCleanup),
       environment: environment,
       matrixAxes: plan.suite.matrix.axes,
       cases: cases,

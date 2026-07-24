@@ -1,0 +1,15 @@
+{
+  "schemaVersion": "cockpit.supervisor.authorization/v2",
+  "allowedDangerousOperations": [
+    "app.stop",
+    "target.launch"
+  ],
+  "allowedOperationSafetyEffects": [
+    "externalSideEffect"
+  ],
+  "allowedTargetEnvironments": [
+    "test"
+  ],
+  "allowedSafetyEffects": [],
+  "allowedEnvironmentSecretNames": []
+}

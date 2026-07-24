@@ -105,15 +105,10 @@ final class CockpitSupervisorWorkerPortBridge {
       deadline: deadline,
     );
     if (evidence == null) return null;
-    if (!evidence.ownedByWorker) {
-      return CockpitObservedPortOwner(
-        ownerId: 'unrelated_${evidence.listenerProcessId}',
-        processId: evidence.listenerProcessId,
-        processStartIdentity: evidence.listenerStartIdentity,
-        sessionId: expected.sessionId,
-        handoffToken: handoffToken,
-      );
-    }
+    // The authenticated bind callback completes only after the worker has
+    // launched and verified the requested session. Desktop applications and
+    // mobile forwarding tools are intentionally not worker descendants, so
+    // process ancestry is diagnostic rather than handoff authority.
     return CockpitObservedPortOwner(
       ownerId: expected.ownerId,
       processId: expected.processId,

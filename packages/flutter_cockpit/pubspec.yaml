@@ -1,5 +1,5 @@
 name: flutter_cockpit
-description: In-app runtime primitives for AI-driven Flutter development workflows.
+description: Flutter semantic automation, observation, capture, and recording bridge for Cockpit E2E tests.
 version: 2.0.0
 homepage: https://github.com/cockpit-dev/flutter_cockpit
 repository: https://github.com/cockpit-dev/flutter_cockpit

@@ -23,194 +23,165 @@ import 'package:test/test.dart';
 import '../supervisor/cockpit_lease_test_support.dart';
 
 void main() {
-  test('Supervisor verifies the worker-owned forwarded port', () async {
-    final fixture = await CockpitLeaseTestFixture.create();
-    final channels = _PeerChannels();
-    late CockpitJsonRpcPeer supervisorPeer;
-    late CockpitJsonRpcPeer workerPeer;
-    late CockpitSupervisorWorkerEndpoint endpoint;
-    late CockpitWorkerServer server;
-    ServerSocket? ownedSocket;
-    ServerSocket? unrelatedSocket;
-    final ownershipInspector = _PortInspector();
-    final bridge = CockpitSupervisorWorkerPortBridge(
-      workspaceId: 'workspaceA',
-      workerOwnerId: 'workerA',
-      workerProcessId: 4242,
-      processStartIdentity: 'processA',
-      ownershipInspector: ownershipInspector,
-      call: ({required method, required params, required deadline}) =>
-          supervisorPeer.call(
-            method: method,
-            params: params,
-            deadline: deadline,
-          ),
-    );
-    final authority = CockpitLeaseWorkerResourceAuthority(
-      workspaceId: 'workspaceA',
-      leases: fixture.registry,
-      ports: CockpitSafePortAllocator(leases: fixture.registry),
-      portBridge: bridge,
-    );
-    endpoint = CockpitSupervisorWorkerEndpoint(
-      workspaceId: 'workspaceA',
-      events: CockpitWorkerMemoryEventExchange(),
-      resourceAuthority: authority,
-    );
-    supervisorPeer = CockpitJsonRpcPeer(
-      input: channels.supervisorInput.stream,
-      output: channels.workerInput.sink,
-      requestHandler: endpoint.handle,
-    );
-    workerPeer = CockpitJsonRpcPeer(
-      input: channels.workerInput.stream,
-      output: channels.supervisorInput.sink,
-      requestHandler: (request, cancellation) =>
-          server.handle(request, cancellation),
-    );
-    final handoff = CockpitRpcWorkerForwardedPortHandoff(
-      workspaceId: 'workspaceA',
-      workerOwnerId: 'workerA',
-      workerProcessId: 4242,
-      processStartIdentity: 'processA',
-      peer: workerPeer,
-    );
-    final workspaceOperations = CockpitWorkspaceOperationRegistry(
-      workspaceId: 'workspaceA',
-      workspaceRoot: '/workspace/a',
-      adapters: <CockpitWorkspaceOperationAdapter>[
-        CockpitWorkspaceOperationAdapter(
-          kind: 'test.forwarded.launch',
-          mutationClass: CockpitMutationClass.mutating,
-          resourceKinds: const <String>['test.forwarded'],
-          prepare: (context, _) => CockpitPreparedWorkspaceOperation(
-            resources: <CockpitWorkerResourceRequest>[
-              CockpitWorkerResourceRequest(
-                resourceKind: CockpitLeaseResourceKind.forwardedPort,
-                resourceId: 'workspaceA:app.launch',
-                requiresPort: true,
-              ),
-            ],
-            execute: (grants) async {
-              final grant = grants.single;
-              final port = await handoff.launchWithGrant<int>(
-                grant: grant,
-                deadline: context.deadline,
-                launch: (port) async {
-                  ownedSocket = await ServerSocket.bind(
-                    InternetAddress.loopbackIPv4,
-                    port,
-                    shared: false,
-                  );
-                  return ownedSocket!.port;
-                },
-              );
-              return <String, Object?>{
-                'port': port,
-                'resourceId': grant.resourceId,
-                'leaseId': grant.leaseId,
-              };
-            },
-          ),
-        ),
-      ],
-      resourceAuthority: CockpitRpcResourceAuthorityClient(
+  test(
+    'Supervisor hands off an authenticated port without process ancestry',
+    () async {
+      final fixture = await CockpitLeaseTestFixture.create();
+      final channels = _PeerChannels();
+      late CockpitJsonRpcPeer supervisorPeer;
+      late CockpitJsonRpcPeer workerPeer;
+      late CockpitSupervisorWorkerEndpoint endpoint;
+      late CockpitWorkerServer server;
+      ServerSocket? ownedSocket;
+      final ownershipInspector = _PortInspector();
+      final bridge = CockpitSupervisorWorkerPortBridge(
         workspaceId: 'workspaceA',
+        workerOwnerId: 'workerA',
+        workerProcessId: 4242,
+        processStartIdentity: 'processA',
+        ownershipInspector: ownershipInspector,
+        call: ({required method, required params, required deadline}) =>
+            supervisorPeer.call(
+              method: method,
+              params: params,
+              deadline: deadline,
+            ),
+      );
+      final authority = CockpitLeaseWorkerResourceAuthority(
+        workspaceId: 'workspaceA',
+        leases: fixture.registry,
+        ports: CockpitSafePortAllocator(leases: fixture.registry),
+        portBridge: bridge,
+      );
+      endpoint = CockpitSupervisorWorkerEndpoint(
+        workspaceId: 'workspaceA',
+        events: CockpitWorkerMemoryEventExchange(),
+        resourceAuthority: authority,
+      );
+      supervisorPeer = CockpitJsonRpcPeer(
+        input: channels.supervisorInput.stream,
+        output: channels.workerInput.sink,
+        requestHandler: endpoint.handle,
+      );
+      workerPeer = CockpitJsonRpcPeer(
+        input: channels.workerInput.stream,
+        output: channels.supervisorInput.sink,
+        requestHandler: (request, cancellation) =>
+            server.handle(request, cancellation),
+      );
+      final handoff = CockpitRpcWorkerForwardedPortHandoff(
+        workspaceId: 'workspaceA',
+        workerOwnerId: 'workerA',
+        workerProcessId: 4242,
+        processStartIdentity: 'processA',
         peer: workerPeer,
-      ),
-      operationJournal: CockpitInMemoryWorkerOperationJournal(),
-      terminateUnsafeWorker: workerPeer.close,
-    );
-    server = CockpitWorkerServer(
-      workspaceId: 'workspaceA',
-      engineVersion: 'engineA',
-      workspaceRoot: '/workspace/a',
-      supportedFeatures: const <String>[],
-      operations: CockpitWorkerOperationRouter(
-        workspaceOperations: workspaceOperations,
-        internalDispatchers: <CockpitWorkerInternalOperationDispatcher>[
-          handoff,
-        ],
-      ),
-      events: CockpitWorkerMemoryEventExchange(),
-    );
-    server.bindPeer(workerPeer);
-    supervisorPeer.start();
-    workerPeer.start();
-    addTearDown(() async {
-      await ownedSocket?.close();
-      await unrelatedSocket?.close();
-      await supervisorPeer.close();
-      await workerPeer.close(closeOutput: false);
-      await fixture.dispose();
-    });
-    await _initialize(supervisorPeer);
-
-    final deadline = _deadline();
-    final launched = CockpitWorkerOperationResult.fromJson(
-      await supervisorPeer.call(
-        method: 'operation',
-        params: <String, Object?>{
-          'protocolVersion': cockpitWorkerProtocolVersion,
-          'workspaceId': 'workspaceA',
-          'idempotencyKey': 'registry-port-launch',
-          'invocation': CockpitOperationInvocation(
-            kind: 'test.forwarded.launch',
-            workspaceId: 'workspaceA',
-            idempotencyKey: CockpitIdempotencyKey('registry-port-launch'),
-            deadline: deadline,
-          ).toJson(),
-        },
-        deadline: deadline,
-      ),
-    ).result;
-    expect(launched.outcome, CockpitOperationOutcome.succeeded);
-    expect(launched.output!['port'], ownedSocket!.port);
-    expect(launched.output!['resourceId'], 'workspaceA:app.launch');
-    expect(launched.output!['leaseId'], isNot(launched.output!['resourceId']));
-    expect(ownedSocket?.address.isLoopback, isTrue);
-
-    ownershipInspector.ownedByWorker = false;
-    final unrelatedAcquired = await authority.execute(
-      CockpitOperationInvocation(
-        kind: 'resource.acquire',
+      );
+      final workspaceOperations = CockpitWorkspaceOperationRegistry(
         workspaceId: 'workspaceA',
-        idempotencyKey: CockpitIdempotencyKey('unrelated-port-acquire'),
-        deadline: _deadline(),
-        input: <String, Object?>{
-          ...CockpitWorkerResourceRequest(
-            resourceKind: CockpitLeaseResourceKind.forwardedPort,
-            resourceId: 'workspaceA:unrelated-listener',
-            requiresPort: true,
-          ).toJson(),
-          'holderId': 'operationB',
-        },
-      ),
-    );
-    final unrelatedGrant = CockpitWorkerResourceGrant.fromJson(
-      unrelatedAcquired.output!['grant'],
-    );
+        workspaceRoot: '/workspace/a',
+        adapters: <CockpitWorkspaceOperationAdapter>[
+          CockpitWorkspaceOperationAdapter(
+            kind: 'test.forwarded.launch',
+            mutationClass: CockpitMutationClass.mutating,
+            resourceKinds: const <String>['test.forwarded'],
+            prepare: (context, _) => CockpitPreparedWorkspaceOperation(
+              resources: <CockpitWorkerResourceRequest>[
+                CockpitWorkerResourceRequest(
+                  resourceKind: CockpitLeaseResourceKind.forwardedPort,
+                  resourceId: 'workspaceA:app.launch',
+                  requiresPort: true,
+                ),
+              ],
+              execute: (grants) async {
+                final grant = grants.single;
+                final port = await handoff.launchWithGrant<int>(
+                  grant: grant,
+                  deadline: context.deadline,
+                  launch: (port) async {
+                    ownedSocket = await ServerSocket.bind(
+                      InternetAddress.loopbackIPv4,
+                      port,
+                      shared: false,
+                    );
+                    return ownedSocket!.port;
+                  },
+                );
+                return <String, Object?>{
+                  'port': port,
+                  'resourceId': grant.resourceId,
+                  'leaseId': grant.leaseId,
+                };
+              },
+            ),
+          ),
+        ],
+        resourceAuthority: CockpitRpcResourceAuthorityClient(
+          workspaceId: 'workspaceA',
+          peer: workerPeer,
+        ),
+        operationJournal: CockpitInMemoryWorkerOperationJournal(),
+        terminateUnsafeWorker: workerPeer.close,
+      );
+      server = CockpitWorkerServer(
+        workspaceId: 'workspaceA',
+        engineVersion: 'engineA',
+        workspaceRoot: '/workspace/a',
+        supportedFeatures: const <String>[],
+        operations: CockpitWorkerOperationRouter(
+          workspaceOperations: workspaceOperations,
+          internalDispatchers: <CockpitWorkerInternalOperationDispatcher>[
+            handoff,
+          ],
+        ),
+        events: CockpitWorkerMemoryEventExchange(),
+      );
+      server.bindPeer(workerPeer);
+      supervisorPeer.start();
+      workerPeer.start();
+      addTearDown(() async {
+        await ownedSocket?.close();
+        await supervisorPeer.close();
+        await workerPeer.close(closeOutput: false);
+        await fixture.dispose();
+      });
+      await _initialize(supervisorPeer);
+      ownershipInspector.ownedByWorker = false;
 
-    await expectLater(
-      handoff.launchWithGrant<int>(
-        grant: unrelatedGrant,
-        deadline: _deadline(),
-        launch: (port) async {
-          unrelatedSocket = await ServerSocket.bind(
-            InternetAddress.loopbackIPv4,
-            port,
-            shared: false,
-          );
-          return port;
-        },
-      ),
-      throwsA(isA<Object>()),
-    );
-    expect(
-      (await fixture.registry.get(unrelatedGrant.leaseId)).state,
-      CockpitLeaseState.quarantined,
-    );
-  });
+      final deadline = _deadline();
+      final launched = CockpitWorkerOperationResult.fromJson(
+        await supervisorPeer.call(
+          method: 'operation',
+          params: <String, Object?>{
+            'protocolVersion': cockpitWorkerProtocolVersion,
+            'workspaceId': 'workspaceA',
+            'idempotencyKey': 'registry-port-launch',
+            'invocation': CockpitOperationInvocation(
+              kind: 'test.forwarded.launch',
+              workspaceId: 'workspaceA',
+              idempotencyKey: CockpitIdempotencyKey('registry-port-launch'),
+              deadline: deadline,
+            ).toJson(),
+          },
+          deadline: deadline,
+        ),
+      ).result;
+      expect(launched.outcome, CockpitOperationOutcome.succeeded);
+      expect(launched.output!['port'], ownedSocket!.port);
+      expect(launched.output!['resourceId'], 'workspaceA:app.launch');
+      expect(
+        launched.output!['leaseId'],
+        isNot(launched.output!['resourceId']),
+      );
+      expect(ownedSocket?.address.isLoopback, isTrue);
+      expect(
+        (await fixture.registry.get(
+          launched.output!['leaseId']! as String,
+        )).state,
+        CockpitLeaseState.released,
+      );
+      expect(ownedSocket?.port, launched.output!['port']);
+    },
+  );
 }
 
 Future<void> _initialize(CockpitJsonRpcPeer peer) async {

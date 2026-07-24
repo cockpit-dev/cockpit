@@ -134,6 +134,9 @@ After installing any adapter:
 
 1. Restart or reload the host so it rescans plugins, skills, rules, or steering files.
 2. Ask the host to load the `flutter-cockpit` skill, or read `skills/flutter-cockpit/SKILL.md` for repo-local rule/steering adapters.
-3. Run `dart run cockpit list-targets`.
-4. If MCP is configured, verify the host can see the Flutter Cockpit MCP tools.
-5. Keep app proof lightweight: baseline read, action, post-action read, current errors, and screenshot only when visible evidence matters.
+3. Run `dart run cockpit daemon status`, then
+   `dart run cockpit target discover`.
+4. If MCP is configured, verify the host can see the Cockpit 2.0 workspace,
+   target, operation, case, suite, run, and artifact resources.
+5. Keep app proof proportional: inspect, act through an advertised operation
+   or validated test document, re-inspect, and read report-backed evidence.

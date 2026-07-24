@@ -1,685 +1,229 @@
-# flutter_cockpit
+# Flutter Cockpit 2.0
 
-[![Runtime Loop](https://github.com/cockpit-dev/flutter_cockpit/actions/workflows/runtime-loop.yml/badge.svg)](https://github.com/cockpit-dev/flutter_cockpit/actions/workflows/runtime-loop.yml)
+[![E2E](https://github.com/cockpit-dev/flutter_cockpit/actions/workflows/example-e2e.yml/badge.svg)](https://github.com/cockpit-dev/flutter_cockpit/actions/workflows/example-e2e.yml)
 [![License](https://img.shields.io/github/license/cockpit-dev/flutter_cockpit)](https://github.com/cockpit-dev/flutter_cockpit/blob/main/packages/flutter_cockpit/LICENSE)
-[![flutter_cockpit on pub.dev](https://img.shields.io/pub/v/flutter_cockpit?logo=dart&label=flutter_cockpit)](https://pub.dev/packages/flutter_cockpit)
-[![cockpit on pub.dev](https://img.shields.io/pub/v/cockpit?logo=dart&label=cockpit)](https://pub.dev/packages/cockpit)
 
 [简体中文](README.zh-CN.md)
 
-`flutter_cockpit` is a production-grade AI control and verification stack for Flutter.
+Flutter Cockpit is a production E2E automation and verification stack for AI,
+CI, and local development. Cockpit 2.0 controls installed Android and iOS
+applications as black boxes, drives Flutter applications through their richer
+semantic bridge, and exposes the same typed resources to CLI, MCP, and future
+independent clients.
 
-It gives AI one closed loop:
+It provides:
 
-- launch or reuse an app
-- launch or reuse a target when the surface is not purely Flutter
-- inspect live route, UI, network, logs, runtime errors, and diagnostics
-- run single commands or batches
-- switch between Flutter semantic, native UI, system, and host planes with explicit capability truth
-- hot reload or hot restart during development
-- capture screenshots and recordings
-- write and validate delivery bundles
-- expose the same workflows through CLI and MCP
-
-## Install Packages
-
-Minimum toolchain: Flutter 3.32.0 or newer, which includes Dart 3.8.0 or newer.
-This floor keeps `flutter_test`, `dart_mcp`, and the host-side AI tooling on a
-single dependency graph without `dependency_overrides`.
-
-```yaml
-dev_dependencies:
-  flutter_cockpit: ^2.0.0
-  cockpit: ^2.0.0
-```
-
-Keep both packages development-only. Put every Cockpit import and integration
-under `cockpit/`; production `lib/` code and production entrypoints remain
-unchanged.
-
-On iOS and macOS, `flutter_cockpit` supports both CocoaPods and Swift Package
-Manager. The plugin ships a `.podspec` and `Package.swift` for each platform;
-Flutter uses the integration selected by the host project. Existing CocoaPods
-projects do not need to enable SwiftPM, and SwiftPM projects do not require a
-Podfile.
-
-Package pages:
-
-- [`flutter_cockpit` on pub.dev](https://pub.dev/packages/flutter_cockpit)
-- [`cockpit` on pub.dev](https://pub.dev/packages/cockpit)
-- [`cockpit_protocol` on pub.dev](https://pub.dev/packages/cockpit_protocol)
-
-Release order for maintainers: publish `packages/cockpit_protocol`,
-then `packages/flutter_cockpit`, and finally `packages/cockpit`. The runtime and
-host packages resolve their matching published dependencies from pub.dev, so
-each preceding 2.0.0 package must be available before publishing the next one.
-
-Installing the Dart packages does not automatically install the AI skill or expose a globally callable MCP launcher. Those are separate host-side setup steps.
-
-## Install Skill
-
-The repository-owned skill lives at [`skills/flutter-cockpit`](skills/flutter-cockpit).
-
-Preferred: ask the current AI host to install it for you. Copy this prompt:
-
-```text
-Install the flutter-cockpit skill for the current AI host by following https://github.com/cockpit-dev/flutter_cockpit/blob/main/skills/flutter-cockpit/INSTALL.md
-```
-
-Full host-specific instructions live in [`skills/flutter-cockpit/INSTALL.md`](skills/flutter-cockpit/INSTALL.md).
-
-## Agent Integrations
-
-Repo-local adapters are included for mainstream agents:
-
-- Codex marketplace: [`.agents/plugins/marketplace.json`](.agents/plugins/marketplace.json)
-- Codex plugin: [`plugins/codex/flutter-cockpit`](plugins/codex/flutter-cockpit)
-- Claude Code skill: [`.claude/skills/flutter-cockpit`](.claude/skills/flutter-cockpit)
-- Claude Code plugin: [`plugins/claude-code/flutter-cockpit`](plugins/claude-code/flutter-cockpit)
-- Cursor rule: [`.cursor/rules/flutter-cockpit.mdc`](.cursor/rules/flutter-cockpit.mdc)
-- Cursor skill/MCP: [`.cursor/skills/flutter-cockpit`](.cursor/skills/flutter-cockpit), [`.cursor/mcp.json`](.cursor/mcp.json)
-- Kiro steering: [`.kiro/steering/flutter-cockpit.md`](.kiro/steering/flutter-cockpit.md)
-- Kiro Power/MCP: [`plugins/kiro/flutter-cockpit`](plugins/kiro/flutter-cockpit), [`.kiro/settings/mcp.json`](.kiro/settings/mcp.json)
-- OpenCode/OMP skill: [`.opencode/skills/flutter-cockpit`](.opencode/skills/flutter-cockpit), [`.pi/skills/flutter-cockpit`](.pi/skills/flutter-cockpit), [`.agents/skills/flutter-cockpit`](.agents/skills/flutter-cockpit)
-- OpenCode config: [`opencode.json`](opencode.json)
-
-See [`docs/agent-integrations.md`](docs/agent-integrations.md) for plugin, rule, steering, skill, and MCP setup.
-
-## Install MCP
-
-`flutter_cockpit` does not ship a separate MCP package. The MCP server is provided by `cockpit`.
-
-One-shot launch:
-
-```bash
-dart run cockpit serve-mcp
-```
-
-If the host expects a globally callable command, install cockpit globally:
-
-```bash
-dart pub global activate cockpit
-cockpit_mcp
-```
-
-## Configure MCP In Mainstream Agents
-
-Typical local setup command:
-
-```bash
-dart run cockpit serve-mcp
-```
-
-If you already activated `cockpit` globally, you can replace the `dart run ... serve-mcp` command below with `cockpit_mcp`.
-
-### Codex
-
-Add the local stdio server:
-
-```bash
-codex mcp add flutterCockpit -- dart run cockpit serve-mcp
-```
-
-Verify:
-
-```bash
-codex mcp list
-```
-
-### Claude Code
-
-Add the local stdio server:
-
-```bash
-claude mcp add --transport stdio flutter-cockpit -- dart run cockpit serve-mcp
-```
-
-Verify inside Claude Code with `/mcp`, or from the shell:
-
-```bash
-claude mcp list
-```
-
-### Cursor
-
-Add a global MCP config at `~/.cursor/mcp.json`:
-
-```json
-{
-  "mcpServers": {
-    "flutter-cockpit": {
-      "type": "stdio",
-      "command": "dart",
-      "args": [
-        "run",
-        "cockpit",
-        "serve-mcp"
-      ]
-    }
-  }
-}
-```
-
-You can also use `.cursor/mcp.json` in a project for repo-local configuration.
-
-### VS Code
-
-Add a workspace config at `.vscode/mcp.json`, or add the same server entry to your user-profile `mcp.json`:
-
-```json
-{
-  "servers": {
-    "flutterCockpit": {
-      "type": "stdio",
-      "command": "dart",
-      "args": [
-        "run",
-        "cockpit",
-        "serve-mcp"
-      ]
-    }
-  }
-}
-```
-
-You can also add it from the Command Palette with `MCP: Add Server`.
-
-### OpenCode
-
-Add a global config at `~/.config/opencode/opencode.json`, or add the same block to a repo-local `opencode.json`:
-
-```json
-{
-  "$schema": "https://opencode.ai/config.json",
-  "instructions": [
-    "AGENTS.md"
-  ],
-  "mcp": {
-    "flutterCockpit": {
-      "type": "local",
-      "command": [
-        "dart",
-        "run",
-        "cockpit",
-        "serve-mcp"
-      ],
-      "enabled": true
-    }
-  }
-}
-```
-
-These host commands and config entry points can evolve. If a host UI or command differs on your machine, prefer the host's latest MCP docs:
-
-- Codex: local `codex mcp --help`
-- Claude Code: [Connect Claude Code to tools via MCP](https://docs.anthropic.com/en/docs/claude-code/mcp)
-- Cursor: [Cursor MCP docs](https://docs.cursor.com/context/model-context-protocol)
-- VS Code: [VS Code MCP configuration reference](https://code.visualstudio.com/docs/copilot/reference/mcp-configuration)
-- OpenCode: [OpenCode MCP servers](https://opencode.ai/docs/mcp-servers)
+- standalone YAML or JSON cases and suites;
+- semantic, native accessibility, system, visual, and coordinate planes;
+- target discovery, registration, launch, inspection, and capability truth;
+- dependency DAGs, fixtures, matrices, retries, bounded concurrency, and
+  fail-fast suites;
+- durable run events, restart-safe suite checkpoints, exact session affinity,
+  cancellation, artifacts, and JSON/JUnit/HTML/AI reports;
+- a per-user authenticated Supervisor with isolated per-workspace workers;
+- resource-oriented CLI, HTTP/SSE API, and MCP clients without a bundled GUI.
 
 ## Packages
 
-- [`packages/flutter_cockpit`](packages/flutter_cockpit): in-app runtime, remote session server, command execution, snapshots, capture, recording
-- [`packages/cockpit`](packages/cockpit): host-side CLI, MCP server, orchestration, bundle writing, validation, workspace tooling
+- [`cockpit_protocol`](packages/cockpit_protocol) owns platform-neutral DTOs,
+  the test DSL, JSON Schema, and OpenAPI contract.
+- [`cockpit`](packages/cockpit) owns the Supervisor, workspace workers, drivers,
+  CLI, MCP server, reports, and artifacts.
+- [`flutter_cockpit`](packages/flutter_cockpit) is the optional in-app Flutter
+  semantic, observation, capture, and recording bridge.
 
-## Recommended Loop
+Minimum versions are Dart 3.8.0 and Flutter 3.32.0. Add only what the project
+uses:
 
-For active development and debugging:
+```yaml
+dev_dependencies:
+  cockpit: ^2.0.0
+  flutter_cockpit: ^2.0.0 # Optional Flutter semantic bridge.
+```
 
-1. `list-targets`
-2. `launch-app`
-3. `read-app --profile minimal`
-4. `run-command`, `run-batch`, `inspect-ui`, `read-network`, `wait-idle`, `read-errors`, `read-logs`
-5. `hot-reload` or `hot-restart`
-6. repeat until the app is correct
+Keep Cockpit development-only. Native black-box testing does not require an
+application source dependency or a Flutter integration.
+Do not add `flutter_cockpit` imports to production `lib/` code.
 
-For delivery:
+## Runtime Model
 
-1. `run-script --script <workflow.yaml|script.json>` when you need a bundle from an already running app; YAML is the easiest format for hand-written `if`, `retry`, and bounded `loop` workflows
-2. `run-task` when the tool should own bootstrap, baseline, execution, and classification
-3. `validate-task` when making a final completion claim
+`cockpit` commands discover or start one daemon under `COCKPIT_HOME`. The daemon
+owns authentication, workspace identity, authorization, admissions, leases,
+ports, run projections, and artifacts. It starts an isolated worker for each
+active workspace and engine version. No command relies on a global "latest"
+project or session.
 
-Delivery bundles include `steps.json` as the full action log and `trace.json` as the compact step-to-command-to-artifact index. After `validate-task`, `validation.json` records the durable validation verdict for external E2E consumers. Start from the protocol map in [`docs/contracts/flutter-cockpit-protocol.md`](docs/contracts/flutter-cockpit-protocol.md); the workflow script protocol is documented in [`docs/contracts/control-workflow-protocol.md`](docs/contracts/control-workflow-protocol.md), with the machine-readable schema in [`docs/contracts/control-workflow.schema.json`](docs/contracts/control-workflow.schema.json).
-The full AI development loop contract is documented in [`docs/contracts/ai-development-protocol.md`](docs/contracts/ai-development-protocol.md).
+```text
+CLI / MCP / third-party client
+          |
+    authenticated HTTP/SSE
+          |
+    per-user Supervisor
+          |
+  workspace-scoped worker
+          |
+ Flutter bridge / Android ADB / iOS WDA / host driver
+```
 
-For full-fidelity delivery data, start the headless loopback observability API against the same output root used by the run:
+Register multiple projects once, then address them explicitly or run a command
+from inside exactly one registered workspace:
 
 ```bash
-dart run cockpit devtools --history-root /tmp/flutter_cockpit/out
+dart run cockpit daemon start
+dart run cockpit root add --path /work/projects --label projects
+dart run cockpit workspace register --root-id <rootId> --path /work/projects/app-a
+dart run cockpit workspace register --root-id <rootId> --path /work/projects/app-b
+dart run cockpit workspace list
 ```
 
-The command prints an `apiBaseUrl`, bearer `token`, and default `scope`, then stays running until interrupted. It bundles no HTML or Flutter UI. Authenticated clients can read run state, events, screenshots, recordings, bundle summaries, and bundle downloads through `/api/*`; CLI and MCP remain the built-in user and AI interfaces. Future Flutter or third-party clients consume the same service contract independently. A generated `report.html` is a portable regression artifact and does not depend on this service.
+## Authorization
 
-For target-first and non-Flutter/system work:
+Dangerous operations and test safety effects are denied unless explicitly
+authorized. Persist policy under `COCKPIT_HOME/authorization.json`; validate and
+apply it through the CLI. A running daemon must be restarted so one process
+cannot change authority mid-run.
 
-1. `launch-target`
-2. `read-target --profile minimal`
-3. `inspect-surface`, `run-shell`, or the existing app/batch commands when the target resolves to a Flutter app
-4. CLI `read-task-bundle-summary`, MCP `read_task_bundle_summary`, or `validate-task` to review `targetKind`, `primaryExecutionPlane`, `planesUsed`, `surfaceKindsUsed`, `fallbackCount`, and fallback gates before claiming success
-
-Target-first flows are platform-aware and capability-truthful:
-
-- `launch-target` persists a normalized `target.json` and maps desktop Flutter launches to `desktopApp` instead of pretending every session is a mobile `flutterApp`.
-- `read-target` stays summary-first. App-backed Flutter and desktop targets may reuse remote Flutter summaries, while browser or direct system targets fall back to capability-only summaries when no live semantic plane exists.
-- `inspect-surface` prefers the foreground surface for the resolved target. Flutter apps inspect the semantic plane; desktop Flutter targets try remote semantic inspection first and fall back to native/window capture only when that semantic path is unavailable; direct system targets stay capability/capture-first.
-- `run-shell` is target-aware. Use `--scope target --target-json /tmp/target.json` to bind shell execution to a normalized target, `--scope android --device-id <id>` for `adb shell`, `--scope ios --device-id <simulator-udid>` for `xcrun simctl spawn` (`/bin/sh -lc` is used for non-absolute simulator commands), and desktop host-aligned scopes when the platform truthfully exposes shell control.
-- `run-shell` is bounded and killable by default. Keep the default timeout for quick probes; pass `--timeout-seconds <n>` only for known-slow shell work.
-
-The public surface is app-first, not session-handle-first. If you omit `--app-json`, `launch-app` writes the latest handle to `.dart_tool/flutter_cockpit/latest_app.json` in the current working directory, and follow-up app commands reuse it automatically. CLI and MCP output uses lower camel case keys.
-`launch-app` is designed as a short command: it waits until the app is ready, writes the reusable handle, and exits. In development mode, a background supervisor keeps `flutter run --machine`, logs, reload, restart, and stop control alive. Agents should not shell-background `launch-app`; use the returned handle with the follow-up commands.
-When a command accepts both `--app-json` and `--base-url`, `--app-json` supplies app identity, platform, and recording metadata while the explicit `--base-url` overrides only the live connection address. If `--app-json` is omitted, explicit `--base-url` wins over the implicit latest-app handle in the current working directory.
-Prefer `--command-file`, `--commands-file`, and `--config` once a payload stops
-being trivial. Use YAML for hand-written task/workflow configs and JSON for
-generated configs.
-For production-safe development, keep Cockpit in a standalone `cockpit/` Flutter
-shell. Launch it explicitly with `--project-dir cockpit --target main.dart`;
-the target is resolved inside that shell rather than inside the production app.
-For code-side questions, prefer `analyze-files`, `lsp`, `grep-package-uris`, `read-package-uris`, and `pub` before workspace-wide commands.
-Serialize mutation, then observation. Do not parallelize `run-command` with the `read-app`, `inspect-ui`, or `read-network` step that depends on its side effects.
-When the next few mutations are already known and the flow will cross route boundaries such as list -> editor -> list, prefer one ordered `run-batch` over separate `run-command` round-trips to reduce token cost and avoid transition gaps between commands.
-For route-changing `tap`, include `parameters.expectedRouteName`; add `parameters.routeTimeoutMs` for CI, recording, simulator, or other acceptance flows where runner latency is expected. `timeoutMs` is the hard command ceiling, not the default route wait. For critical route crossings, follow the tap with `waitFor` on `parameters.routeName`. To wait for spinners, dialogs, or routes to disappear, use `waitFor` with `parameters.absent: true`.
-`read-app` and snapshots include focus state. When `uiSummary.focus.isTextInputFocus` is true or a software keyboard covers the next control, run a locator-free `dismissKeyboard` command before scrolling or tapping again.
-When an app summary already exposes bounded workflow counters or state fields, prefer those fields before reopening a heavier inspection payload.
-
-Locators are multi-signal. Start with `text`, `tooltip`, or `semanticId`. Use `key` only when the app already exposes a legitimate stable key for product reasons, then add `route`, `type`, `path`, nested `ancestor`, or short `fallbacks` only when needed. Avoid short repeated action words such as `Open`, `Edit`, or `Save` as the only signal; prefer the full accessible label surfaced by `read-app` / `inspect-ui` plus `route` or `ancestor`. `path` matching is fuzzy and ignores noise such as `body`, `slivers`, and numeric indexes.
-
-## Quick Start
-
-Create a standalone `cockpit/` development project with `main.dart`, and keep
-`flutter_cockpit` and `cockpit` in that shell's `dev_dependencies`. Keep the
-normal production entrypoint, production `lib/`, and production release
-dependency graph untouched. Do not add `flutter_cockpit` imports to production `lib/` code.
-
-```dart
-import 'package:flutter/material.dart';
-import 'package:flutter_cockpit/flutter_cockpit_flutter.dart';
-
-import 'package:your_app/app_shell.dart';
-
-Future<void> main() async {
-  runApp(buildCockpitDevelopmentApp());
-}
-
-Widget buildCockpitDevelopmentApp() {
-  return FlutterCockpitApp(
-    config: FlutterCockpitConfig.production(
-      remoteSession: CockpitRemoteSessionConfiguration.resolveFromEnvironment(
-        fallback: const CockpitRemoteSessionConfiguration(
-          enabled: true,
-          host: '127.0.0.1',
-          port: 47331,
-        ),
-      ),
-    ),
-    child: MaterialApp(
-      navigatorObservers: <NavigatorObserver>[
-        FlutterCockpit.navigatorObserver,
-      ],
-      home: const AppShell(),
-    ),
-  );
-}
-```
-
-Replace `package:your_app/app_shell.dart` with the import that already exposes your app root widget or bootstrap. `launch-app` injects the `FLUTTER_COCKPIT_REMOTE_*` dart-defines, so `resolveFromEnvironment(...)` enables the remote control surface without taking over the production bootstrap.
-Only wire `FlutterCockpit.navigatorObserver` from the standalone shell entrypoint. `FlutterCockpitApp` automatically discovers the public `RouteInformationProvider` used by Flutter Router, `RouterConfig`, `go_router`, and other Router-based libraries, so an app-owned router normally needs no additional route bridge.
-
-For nested navigators, create one observer per navigator so route state can return to the parent stack after a nested pop:
-
-```dart
-Navigator(
-  observers: <NavigatorObserver>[
-    FlutterCockpit.createNavigatorObserver(),
+```json
+{
+  "schemaVersion": "cockpit.supervisor.authorization/v2",
+  "allowedDangerousOperations": [
+    "app.launch",
+    "app.restart",
+    "app.stop",
+    "command.batch",
+    "command.run",
+    "evidence.screenshot.capture",
+    "recording.start",
+    "recording.stop",
+    "system.action",
+    "target.launch"
   ],
-  onGenerateRoute: buildRoute,
-)
-```
-
-The same factory works with router libraries that expose navigator observers, including root and shell navigators. For dynamically created routers that cannot be discovered from the mounted tree, bind their public provider from `cockpit/` with `FlutterCockpit.bindRouteInformationProvider(...)`. Use `FlutterCockpit.setCurrentRouteName(...)` only when a router exposes neither a provider nor observers; `flutter_cockpit` does not depend on any third-party router package.
-
-Run a minimal app loop:
-
-```bash
-dart run cockpit \
-  launch-app \
-  --project-dir <project-dir> \
-  --platform <platform> \
-  --device-id <device-id> \
-  --app-json /tmp/flutter_cockpit/app.json
-```
-
-When the app needs Flutter build/run inputs, use the same launch flags on
-`launch-app`, `launch-development-session`, `launch-remote-session`, and
-`launch-target`:
-
-```bash
-dart run cockpit launch-app \
-  --project-dir <project-dir> \
-  --platform <platform> \
-  --device-id <device-id> \
-  --dart-define API_URL=https://example.test \
-  --dart-define-from-file config/dev.json \
-  --env API_TOKEN=secret \
-  --flutter-arg=--web-renderer=canvaskit
-```
-
-Use structured flags for `target`, `device-id`, `flavor`, dart defines, and
-environment values.
-`--flutter-arg` is repeatable and accepts one CLI argument string; quote it
-when a Flutter flag needs a separate value, for example
-`--flutter-arg "--enable-experiment records"`. It rejects cockpit-managed
-Flutter flags such as `--target`, `-d`, `--flavor`, `--machine`,
-`--debug`, `--profile`, `--release`, and dart-define flags.
-
-```bash
-dart run cockpit \
-  read-app \
-  --app-json /tmp/flutter_cockpit/app.json \
-  --profile minimal
+  "allowedOperationSafetyEffects": [
+    "capture",
+    "externalSideEffect",
+    "permission",
+    "recording",
+    "reset",
+    "system"
+  ],
+  "allowedTargetEnvironments": [
+    "development",
+    "test",
+    "staging",
+    "production"
+  ],
+  "allowedSafetyEffects": [
+    "communication",
+    "credentialSensitive",
+    "destructive",
+    "externalNavigation",
+    "financial",
+    "permissionChange"
+  ],
+  "allowedEnvironmentSecretNames": ["E2E_PASSWORD"]
+}
 ```
 
 ```bash
-dart run cockpit \
-  run-command \
-  --app-json /tmp/flutter_cockpit/app.json \
-  --command-json '{"commandId":"assert-ready","commandType":"assertText","parameters":{"text":"<expected-text>"}}'
+dart run cockpit daemon policy validate --file authorization.json
+dart run cockpit daemon policy apply --file authorization.json --restart
+dart run cockpit daemon policy show
 ```
 
-Run the same loop on web with the exact browser device ID reported by `list-targets`:
+Only named environment secrets are copied into workspace workers. A policy may
+explicitly authorize `production` or `unknown`; the default policy does not.
+
+## Black-Box Targets
+
+Register an installed application without changing its source:
 
 ```bash
-dart run cockpit \
-  launch-app \
-  --project-dir <project-dir> \
-  --platform web \
-  --device-id <browser-device-id> \
-  --app-json /tmp/flutter_cockpit/web_app.json
+dart run cockpit target register \
+  --workspace-id <workspaceId> \
+  --platform android \
+  --device-id emulator-5554 \
+  --target-kind nativeApp \
+  --app-id com.example.app \
+  --environment test \
+  --mode automation \
+  --idempotency-key android-target-001
+
+dart run cockpit target launch --workspace-id <workspaceId> --target-id <targetId> \
+  --idempotency-key android-launch-001
+dart run cockpit target inspect --workspace-id <workspaceId> --target-id <targetId>
 ```
+
+Android uses ADB and native accessibility. iOS Simulator uses `simctl`; native
+iOS UI interaction uses a reachable WebDriverAgent endpoint. Physical iOS
+installation and lifecycle use `devicectl` where available. Cockpit reports
+unsupported or unavailable capabilities instead of claiming control it cannot
+prove.
+
+## Cases And Suites
+
+Cases and suites use `schemaVersion: cockpit.test/v2`. Validate documents before
+submitting them, and use stable idempotency keys for replay:
 
 ```bash
-dart run cockpit \
-  read-app \
-  --app-json /tmp/flutter_cockpit/web_app.json \
-  --profile minimal
+dart run cockpit case validate --workspace-id <workspaceId> --file cases/login.yaml
+dart run cockpit case run --workspace-id <workspaceId> \
+  --document-id <documentId> --case-id login \
+  --idempotency-key login-2026-07-24 --inputs-json '{}'
+
+dart run cockpit suite validate --workspace-id <workspaceId> --file suites/regression.yaml
+dart run cockpit suite run --workspace-id <workspaceId> \
+  --document-id <documentId> --suite-id regression \
+  --idempotency-key regression-2026-07-24
+dart run cockpit suite report --run-id <runId>
 ```
 
-If a browser-backed session reports a real route but `visibleTargetCount: 0`,
-rerun `read-app --profile standard` before assuming the app is broken. The
-result now surfaces `recommendedNextStep: "recoverBrowserVisibility"` when the
-page looks backgrounded, throttled, or still reconnecting.
+After worker termination, completed nodes stay complete, an active attempt
+becomes `interrupted`, and the suite continues only when its retry policy allows
+it. Persisted fixture and row bindings must resolve to the same healthy session;
+Cockpit fails explicitly when that session can no longer be proven.
 
-```bash
-dart run cockpit \
-  run-command \
-  --app-json /tmp/flutter_cockpit/web_app.json \
-  --command-json '{"commandId":"assert-ready","commandType":"assertText","parameters":{"text":"<expected-text>"}}'
-```
+## MCP And Clients
 
-For web, the host keeps the public HTTP session surface stable and runs a
-`127.0.0.1` bridge that the browser app joins over WebSocket. Browser DOM
-inspection, screenshots, `hot-reload`, and `hot-restart` should stay strict in
-normal development verification. Browser-host recording is a separate host
-environment gate: it depends on macOS/desktop screen-capture permission for the
-terminal, Dart, ffmpeg, and the browser host app, and it should fail at
-recording start when ffmpeg cannot prove startup or output evidence.
-
-For AI-first project validation, keep two verifier tiers:
-
-- A rapid verifier for the normal edit -> reload -> assert loop. It should launch the app, drive one representative production flow, hot reload, assert the changed state, capture one still artifact when useful, read runtime errors, and stop the app. Its JSON should stay compact: completed phases, failed command metadata, final route or state preview, bounded runtime error previews, and artifact refs.
-- A release verifier for the expensive surfaces. It should add recordings, hot restart, network and log reads, target-first inspection, multi-platform coverage, and acceptance or delivery gates.
-
-Platform-specific capture should be capability-driven rather than hard-coded:
-app-scoped desktop recording defaults to host adapters when the app handle
-carries a platform app id or process id, web may use browser-host capture when
-the host permission gate passes, iOS simulators may use simulator-native
-tooling, and Android emulators may use device tooling. Use direct remote
-recording only when intentionally working with a remote session instead of an
-app handle. If a host permission blocks recording while app control still
-passes, report it as a structured environment warning with the recorder failure
-reason instead of masking the app result.
-`capture-screenshot` follows the same app-first policy: when app metadata is
-available it attempts system/host capture first, then falls back to app capture
-with `usedCaptureFallback` metadata if the host path fails.
-Treat completed recording as evidence only when the stop result includes an
-artifact backed by non-empty bytes or a non-empty source/output file; empty or
-missing artifact content is a failed evidence result, not video proof.
-When a command accepts both `app.json` and `baseUrl`, keep passing the handle whenever available: the handle carries platform, device, process, and remote-session metadata, while `baseUrl` only overrides the live HTTP connection. For iOS recording without an app handle, pass `iosDeviceId` / `--ios-device-id` so the host-side simulator or device adapter can select the right recorder.
-
-## CLI Surface
-
-Recommended commands:
-
-- `list-targets`
-- `launch-app`
-- `read-app`
-- `inspect-ui`
-- `run-command`
-- `run-batch`
-- `read-system-capabilities`
-- `run-system-action`
-- `read-network`
-- `wait-idle`
-- `hot-reload`
-- `hot-restart`
-- `start-recording`
-- `stop-recording`
-- `read-logs`
-- `read-errors`
-- `stop-app`
-- `run-script`
-- `run-task`
-- `validate-task`
-- `serve-mcp`
-
-Advanced public commands are available when the default app-first path is not
-the smallest truthful surface:
-
-- use `launch-remote-session`, `query-remote-session`,
-  `read-remote-status`, `read-remote-snapshot`,
-  `execute-remote-command`, and `execute-remote-command-batch` for direct
-  remote-session loops
-- use `launch-development-session`, `reload-development-session`,
-  `collect-development-probe`, `compare-development-probe`, and
-  `stop-development-session` for persistent edit-reload-probe loops
-- use `read-system-capabilities` before `run-system-action` for native UI,
-  system dialogs, host windows, simulator state, device location, appearance,
-  content size, orientation, emulator network speed/delay, simulator status
-  bars, app install/uninstall/data clear, permission grant/revoke/reset,
-  file/media setup, screenshots, recordings, process/window/device/notification
-  reads, bounded native UI tree reads, and flow macros such as
-  `resolveBlockers`, `preparePermissions`, `recoverToApp`, `tapNotification`,
-  `readFocusState`, and `stabilizeForScreenshot`
-- use `start-remote-recording` and `stop-remote-recording` only when working
-  directly with a remote session instead of an app handle
-
-For simulator-first development, the system plane is explicit about what can be
-automated. Android emulator support is adb-backed: native coordinates, keys,
-Back/Home, volume keys, app install/uninstall/lifecycle/data clear, permission
-grant/revoke/reset, app settings, appearance, text scale, location, orientation,
-emulator network conditions, notification shade, quick settings, SystemUI
-demo-mode status bar overrides (`setStatusBar`/`clearStatusBar`), file
-push/pull, media import, screenshots, recordings, UI tree,
-process/window/device/system state reads, notification state reads, logcat
-tail (`readSystemLogs`), battery simulation (`setBattery`), connectivity
-toggles (`setConnectivity`), shell, and
-UIAutomator-assisted `dismissSystemDialog --decision accept|dismiss`. The
-Android adapter also backs the macro actions for blocker resolution, permission
-preparation, notification tap-through, app recovery, focus reads, and
-screenshot stabilization.
-iOS simulator support is simctl-backed for app lifecycle, privacy grant/revoke
-/reset, URLs, Settings, appearance, content size, locale (`setLocale`),
-location, status bar overrides, pasteboard, simulated APNS push, app
-install/uninstall/data clear, app-container file transfer, media import,
-screenshot, recording, process/device/state reads, unified log reads
-(`readSystemLogs`), and shell via `simctl spawn`. iOS native UI and
-system dialog control uses WebDriverAgent when reachable. The iOS simulator
-macros combine simctl and WDA according to reported availability, so unavailable
-WDA-only steps are reported as skipped or blocked instead of faked. iOS simulator
-`activateWindow` brings the app foreground without terminating an existing
-Flutter debug or hot-reload session; use `terminateApp` only when a restart is
-intentional. Simulator features
-with no stable public API, such as iOS simulator volume keys and
-clear-all-notifications, are reported as `unsupported` or `blocked`;
-Notification Center and Control Center expansion run through WebDriverAgent
-when it is reachable. JSON capability output also exposes
-`actionGroups` so callers can discover permission, notification, file, media,
-evidence, device-state, and inspection actions without hard-coding
-per-platform lists.
-Desktop hosts (macOS/Windows/Linux) expose host-plane actions through built-in
-tooling: URL/system-settings entry, host appearance, clipboard, host file
-push/pull and media copy, app activation/recovery/termination, focus and
-device/system reads, process/window lists, notifications, macOS `tccutil`
-permission resets, window-targeted input, native UI tree reads
-(macOS/Windows), and window screenshots/recordings. Web targets keep DOM-plane
-input blocked until a browser driver or bridge exists, while screenshots and
-recordings run through the host window adapters once the browser app id or
-process id is known.
-
-Use `--profile minimal|standard|inspect|evidence` to control token cost. Start small and escalate only when needed.
-When a CLI command exits non-zero, first look for `errorJson: {...}` on stderr.
-For non-usage failures, the `code`, `message`, and optional `details` fields are
-the machine-readable recovery surface for AI agents; the prose `Error:` line is
-only a human summary.
-Remote endpoint failures keep their original codes when possible, such as
-`bridgeUnavailable`, `artifactNotFound`, `recordingStartFailed`, or
-`invalidPayload`, so recovery can target the bridge, artifact transfer,
-recording prerequisite, or payload issue directly instead of retrying blindly.
-Large forensic snapshots stay summary-first in normal app and command reads. If
-the result includes `artifactDownloads`, treat those paths as deferred evidence
-and fetch or collect the full diagnostics artifact only when the summary cannot
-explain the next repair or acceptance decision.
-For `collect-remote-snapshot`, `--emit-artifact-when-large` asks the app to
-externalize oversized diagnostics, while `--download-diagnostics-artifacts`
-explicitly pulls that deferred artifact into the command output. Keep the
-download flag off unless the AI step truly needs the full forensic payload.
-`run-script` and `run-remote-control-script` exit non-zero when the written bundle status is `failed`.
-For dependency and source questions, prefer `analyze-files`, `lsp`, `grep-package-uris`, `read-package-uris`, and `pub` before broader workspace passes.
-
-## MCP Surface
-
-Start MCP over stdio:
+Start the MCP stdio client with either command:
 
 ```bash
 dart run cockpit serve-mcp
+dart run cockpit_mcp
 ```
 
-Recommended app and target tools:
+MCP is a thin authenticated Supervisor client. It does not construct drivers or
+application services in-process. It exposes bounded roots, workspaces,
+operations, targets, documents, cases, suites, runs, and artifacts. Official
+and third-party GUI clients should use `/api/v2`, authenticated SSE run events,
+public foundation DTOs, and digest-checked artifact downloads. Cockpit 2.0
+intentionally ships no Flutter GUI and no embedded HTML dashboard; generated
+HTML reports are portable run artifacts.
 
-- `list_targets`
-- `launch_app`
-- `launch_target`
-- `list_apps`
-- `read_app`
-- `read_target`
-- `inspect_ui`
-- `inspect_surface`
-- `run_command`
-- `run_batch`
-- `capture_screenshot`
-- `read_system_capabilities`
-- `run_system_action`
-- `run_shell`
-- `wait_idle`
-- `hot_reload`
-- `hot_restart`
-- `start_recording`
-- `stop_recording`
-- `read_network`
-- `read_logs`
-- `read_errors`
-- `stop_app`
-- `run_script`
-- `read_task_bundle_summary`
-- `run_task`
-- `validate_task`
+Agent host setup, including the OpenCode/OMP skill, is documented in the
+[agent integration guide](docs/agent-integrations.md).
 
-Advanced remote-session tools:
+## Foreground CI
 
-- `list_active_sessions`
-- `launch_remote_session`
-- `query_remote_session`
-- `read_remote_status`
-- `read_remote_snapshot`
-- `collect_remote_snapshot`
-- `execute_remote_command`
-- `execute_remote_command_batch`
-- `wait_remote_ui_idle`
-- `start_remote_recording`
-- `stop_remote_recording`
+Foreground mode owns an isolated daemon, registers one checkout, submits a
+`CockpitRunSubmission`, waits for terminal truth, and exits from the run outcome:
 
-Development-session tools:
+```bash
+dart run cockpitd \
+  --home=/tmp/cockpit-ci \
+  --foreground-workspace=/workspace/app \
+  --foreground-submission=/workspace/run-submission.json
+```
 
-- `launch_development_session`
-- `query_development_session`
-- `reload_development_session`
-- `collect_development_probe`
-- `compare_development_probe`
-- `read_session_logs`
-- `stop_development_session`
+## Release
 
-Workspace and roots tools:
+Publish in dependency order: `cockpit_protocol`, `flutter_cockpit`, then
+`cockpit`. All three packages use version `2.0.0`; no 1.x forwarding or runtime
+compatibility layer is included.
 
-- `add_roots`
-- `remove_roots`
-- `pub_dev_search`
-- `pub`
-- `grep_package_uris`
-- `read_package_uris`
-- `lsp`
-- `analyze_files`
-- `create_project`
-- `analyze_workspace`
-- `format_workspace`
-- `run_tests`
-- `apply_fixes`
+Detailed package and protocol documentation:
 
-Resources:
-
-- `cockpit://workspace/protocol`
-- `cockpit://workspace/ai-development-protocol`
-- `cockpit://workspace/skill-contract`
-- `cockpit://workspace/task-bundle-contract`
-- `cockpit://workspace/control-workflow-protocol`
-- `cockpit://workspace/control-workflow-schema`
-- `cockpit://workspace/roots`
-- `cockpit://workspace/capabilities`
-- `cockpit://app/list`
-- `cockpit://app/details{?appId}`
-- `cockpit://task/latest`
-- `cockpit://task/summary{?bundleDir}`
-- `cockpit://package/read{?workspaceRoot,uri}`
-
-Prompts:
-
-- `run_closed_loop_task`
-- `inspect_before_claiming_done`
-- `recover_from_failed_validation`
-- `prepare_acceptance_delivery`
-- `create_project_with_validation`
-
-## Example And Docs
-
-- Example app: [`examples/cockpit_demo`](examples/cockpit_demo)
-- Runtime package README: [`packages/flutter_cockpit/README.md`](packages/flutter_cockpit/README.md)
-- Host CLI package README: [`packages/cockpit/README.md`](packages/cockpit/README.md)
-- Skill: [`skills/flutter-cockpit/SKILL.md`](skills/flutter-cockpit/SKILL.md)
-- Skill install: [`skills/flutter-cockpit/INSTALL.md`](skills/flutter-cockpit/INSTALL.md)
-- App setup reference: [`skills/flutter-cockpit/examples/flutter-app-setup.md`](skills/flutter-cockpit/examples/flutter-app-setup.md)
-- CLI examples: [`skills/flutter-cockpit/examples/cli-command-reference.md`](skills/flutter-cockpit/examples/cli-command-reference.md)
-- Protocol map: [`docs/contracts/flutter-cockpit-protocol.md`](docs/contracts/flutter-cockpit-protocol.md)
-- AI development protocol: [`docs/contracts/ai-development-protocol.md`](docs/contracts/ai-development-protocol.md)
-- Skill contract: [`docs/contracts/flutter-cockpit-skill-contract.md`](docs/contracts/flutter-cockpit-skill-contract.md)
-- Bundle contract: [`docs/contracts/task-run-bundle.md`](docs/contracts/task-run-bundle.md)
-- Workflow protocol: [`docs/contracts/control-workflow-protocol.md`](docs/contracts/control-workflow-protocol.md)
-- Workflow schema: [`docs/contracts/control-workflow.schema.json`](docs/contracts/control-workflow.schema.json)
-
-## Acknowledgements
-
-Thanks to the Dart team's official [Dart Tooling MCP Server](https://github.com/dart-lang/ai/tree/main/pkgs/dart_mcp_server) for establishing a strong MCP tooling foundation for Dart and Flutter workflows.
-`flutter_cockpit` builds on that foundation and further optimizes the exposed methods for AI-first application development, including app-first handles, lower-token defaults, bounded result shapes, and closed-loop delivery workflows.
-
-Advanced development-session and remote-session building blocks still exist in the Dart API for lower-level hosts, but they are no longer the recommended public loop.
-
-`list_apps` is intentionally MCP-only. CLI is stateless; persist `app.json` and reuse it instead of expecting a host-side app registry.
-Interactive app commands use `timeoutMs`. Workspace tools use `timeoutSeconds`.
-For code-side work, CLI and MCP expose the same workspace intelligence. In shell agents, default CLI stdout is the full AI-readable semantic render. Add `--stdout-format json` for `jq` pipelines, or `--output <path> --output-format json` when another step must reopen structured JSON from disk.
+- [`packages/cockpit/README.md`](packages/cockpit/README.md)
+- [`packages/flutter_cockpit/README.md`](packages/flutter_cockpit/README.md)
+- [`packages/cockpit_protocol/README.md`](packages/cockpit_protocol/README.md)
+- [`docs/agent-integrations.md`](docs/agent-integrations.md)
+- [`docs/architecture/cockpit-2.0-foundation-migration-inventory.md`](docs/architecture/cockpit-2.0-foundation-migration-inventory.md)

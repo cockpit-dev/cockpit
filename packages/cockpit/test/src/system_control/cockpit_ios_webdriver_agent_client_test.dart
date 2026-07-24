@@ -191,7 +191,7 @@ void main() {
               action: CockpitIosWdaAction.resolveBlockers,
               parameters: const <String, Object?>{
                 'appId': 'dev.cockpit.example',
-                'deviceId': 'SIM-UDID',
+                'deviceId': '6FD25DED-11E9-4AE9-B4B5-EDF4601981DC',
               },
             ),
             timeout: const Duration(seconds: 2),
@@ -202,7 +202,7 @@ void main() {
         'xcrun',
         'simctl',
         'launch',
-        'SIM-UDID',
+        '6FD25DED-11E9-4AE9-B4B5-EDF4601981DC',
         'dev.cockpit.example',
       ]);
     },

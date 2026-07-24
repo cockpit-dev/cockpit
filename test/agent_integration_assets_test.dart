@@ -156,7 +156,6 @@ void main() {
     final docs = read('docs/agent-integrations.md');
     final readme = read('README.md');
     final zhReadme = read('README.zh-CN.md');
-    final install = read('skills/flutter-cockpit/INSTALL.md');
     for (final host in <String>[
       'Codex',
       'Claude Code',
@@ -184,10 +183,8 @@ void main() {
     expect(docs, contains('opencode.json'));
     expect(readme, contains('docs/agent-integrations.md'));
     expect(zhReadme, contains('docs/agent-integrations.md'));
-    expect(install, contains('docs/agent-integrations.md'));
     expect(readme, contains('OpenCode/OMP skill'));
     expect(zhReadme, contains('OpenCode/OMP skill'));
-    expect(install, contains('OpenCode/OMP skill'));
   });
 
   test('packaged skills are complete copies of the canonical skill', () {

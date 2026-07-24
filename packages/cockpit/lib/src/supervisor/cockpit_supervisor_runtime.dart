@@ -16,7 +16,6 @@ import '../foundation/cockpit_permissions.dart';
 import '../registry/cockpit_registry_models.dart';
 import '../registry/cockpit_workspace_registry.dart';
 import '../system_control/cockpit_system_control_service.dart';
-import '../test/cockpit_test_safety_policy.dart';
 import '../worker/cockpit_worker_protocol_result.dart';
 import '../worker/cockpit_worker_protocol_request.dart';
 import '../worker/cockpit_worker_value_reader.dart';
@@ -26,6 +25,7 @@ import 'cockpit_loopback_port_cleanup_probe.dart';
 import 'cockpit_supervisor_resource_registry.dart';
 import 'cockpit_supervisor_run_admission_store.dart';
 import 'cockpit_supervisor_run_projection.dart';
+import 'cockpit_supervisor_authorization.dart';
 import 'cockpit_supervisor_operation_catalog.dart';
 import 'cockpit_worker_pool.dart';
 import 'cockpit_worker_resource_authority.dart';
@@ -39,6 +39,16 @@ final cockpitSupervisorFeatures = <CockpitFeatureDescriptor>[
   ),
   CockpitFeatureDescriptor(id: 'suiteRuns', revision: 1, minimumApiMinor: 0),
   CockpitFeatureDescriptor(
+    id: 'durableSuiteResume',
+    revision: 1,
+    minimumApiMinor: 0,
+  ),
+  CockpitFeatureDescriptor(
+    id: 'automationTargets',
+    revision: 1,
+    minimumApiMinor: 0,
+  ),
+  CockpitFeatureDescriptor(
     id: 'durableRunEvents',
     revision: 1,
     minimumApiMinor: 0,
@@ -49,112 +59,6 @@ final cockpitSupervisorFeatures = <CockpitFeatureDescriptor>[
     minimumApiMinor: 0,
   ),
 ];
-
-final class CockpitSupervisorAuthorizationPolicy {
-  CockpitSupervisorAuthorizationPolicy({
-    Iterable<String> allowedDangerousOperations = const <String>[],
-    Iterable<CockpitSafetyEffect> allowedOperationSafetyEffects = const {},
-    Iterable<CockpitTestTargetEnvironment> allowedTargetEnvironments = const {
-      CockpitTestTargetEnvironment.development,
-      CockpitTestTargetEnvironment.test,
-      CockpitTestTargetEnvironment.staging,
-    },
-    Iterable<CockpitTestSafetyEffect> allowedSafetyEffects = const {},
-    Iterable<String> allowedEnvironmentSecretNames = const <String>[],
-  }) : allowedDangerousOperations = Set.unmodifiable(
-         allowedDangerousOperations,
-       ),
-       allowedOperationSafetyEffects = Set.unmodifiable(
-         allowedOperationSafetyEffects,
-       ),
-       allowedTargetEnvironments = Set.unmodifiable(allowedTargetEnvironments),
-       allowedSafetyEffects = Set.unmodifiable(allowedSafetyEffects),
-       allowedEnvironmentSecretNames = Set.unmodifiable(
-         allowedEnvironmentSecretNames,
-       ) {
-    if (this.allowedTargetEnvironments.contains(
-          CockpitTestTargetEnvironment.production,
-        ) ||
-        this.allowedTargetEnvironments.contains(
-          CockpitTestTargetEnvironment.unknown,
-        )) {
-      throw ArgumentError('Production and unknown targets cannot be trusted.');
-    }
-    for (final name in this.allowedEnvironmentSecretNames) {
-      if (!RegExp(r'^[A-Za-z_][A-Za-z0-9_]{0,127}$').hasMatch(name)) {
-        throw ArgumentError.value(name, 'allowedEnvironmentSecretNames');
-      }
-    }
-  }
-
-  final Set<String> allowedDangerousOperations;
-  final Set<CockpitSafetyEffect> allowedOperationSafetyEffects;
-  final Set<CockpitTestTargetEnvironment> allowedTargetEnvironments;
-  final Set<CockpitTestSafetyEffect> allowedSafetyEffects;
-  final Set<String> allowedEnvironmentSecretNames;
-
-  void authorizeOperation(
-    CockpitSupervisorOperationMetadata metadata,
-    CockpitOperationInvocation invocation,
-  ) {
-    final descriptor = metadata.descriptor;
-    if (metadata.requiresExplicitAuthorization &&
-        !allowedDangerousOperations.contains(descriptor.kind)) {
-      throw CockpitApiException(
-        CockpitApiError(
-          code: 'operationNotAuthorized',
-          category: CockpitErrorCategory.environment,
-          message:
-              'Operation ${descriptor.kind} is not explicitly authorized by Supervisor policy.',
-          retryable: false,
-          responsibleLayer: CockpitResponsibleLayer.supervisor,
-        ),
-      );
-    }
-    final deniedEffects = descriptor.safetyEffects
-        .map((effect) => effect.knownValue)
-        .whereType<CockpitSafetyEffect>()
-        .where((effect) => !allowedOperationSafetyEffects.contains(effect))
-        .toList(growable: false);
-    if (deniedEffects.isNotEmpty) {
-      throw CockpitApiException(
-        CockpitApiError(
-          code: CockpitErrorCode.authorizationDenied,
-          category: CockpitErrorCategory.environment,
-          message:
-              'Operation ${descriptor.kind} requests safety effects that are not authorized.',
-          retryable: false,
-          responsibleLayer: CockpitResponsibleLayer.supervisor,
-          redactedDetails: <String, Object?>{
-            'safetyEffects': deniedEffects
-                .map((effect) => effect.name)
-                .toList(),
-          },
-        ),
-      );
-    }
-    final environment = invocation.input['targetEnvironment'];
-    if (environment == null) return;
-    if (environment is! String) {
-      throw const FormatException('targetEnvironment must be a string.');
-    }
-    final targetEnvironment = CockpitTestTargetEnvironment.values
-        .where((value) => value.name == environment)
-        .firstOrNull;
-    if (targetEnvironment == null ||
-        !allowedTargetEnvironments.contains(targetEnvironment)) {
-      throw CockpitApiException(
-        CockpitApiError(
-          code: CockpitErrorCode.authorizationDenied,
-          category: CockpitErrorCategory.environment,
-          message: 'Target environment $environment is not authorized.',
-          retryable: false,
-          responsibleLayer: CockpitResponsibleLayer.supervisor,
-        ),
-      );
-    }
-  }
-}
 
 final class CockpitSupervisorRuntime {
   CockpitSupervisorRuntime._({
@@ -898,6 +802,11 @@ final class CockpitSupervisorRuntime {
     return _projection(workspaceId).requireArtifact(runId, artifactId);
   }
 
+  Future<List<CockpitArtifactResource>> artifacts(String runId) async {
+    final workspaceId = await _findRunOwner(runId);
+    return _projection(workspaceId).artifacts(runId);
+  }
+
   Future<({CockpitArtifactResource resource, File file})> artifactFile(
     String runId,
     String artifactId,
@@ -1178,12 +1087,14 @@ final class CockpitSupervisorRuntime {
     );
   }
 
-  Future<void> _initializeWorker(CockpitWorkspaceWorkerSpec spec) =>
-      _workerInitialization.putIfAbsent(spec.key.workspaceId, () async {
+  Future<void> _initializeWorker(CockpitWorkspaceWorkerSpec spec) {
+    final workspaceId = spec.key.workspaceId;
+    return _workerInitialization.putIfAbsent(workspaceId, () async {
+      try {
         await workerPool.call(
           spec,
           method: 'initialize',
-          idempotencyKey: 'initialize-${spec.key.workspaceId}',
+          idempotencyKey: 'initialize-$workspaceId',
           deadline: _deadline(),
           params: <String, Object?>{
             'engineVersion': spec.key.engineVersion,
@@ -1191,7 +1102,12 @@ final class CockpitSupervisorRuntime {
             'supportedFeatures': spec.supportedFeatures,
           },
         );
-      });
+      } on Object {
+        _workerInitialization.remove(workspaceId);
+        rethrow;
+      }
+    });
+  }
 
   Future<CockpitWorkspaceResource> _activeWorkspace(String workspaceId) async {
     final workspace = await resources.identity.workspaces.get(workspaceId);
@@ -1467,6 +1383,12 @@ final _resourceDescriptors = <CockpitResourceDescriptor>[
   ),
   CockpitResourceDescriptor(
     kind: 'run.artifacts',
+    scope: CockpitOperationScope.workspace,
+    uriTemplate: '/api/v2/runs/{runId}/artifacts',
+    mediaType: 'application/json',
+  ),
+  CockpitResourceDescriptor(
+    kind: 'run.artifact',
     scope: CockpitOperationScope.workspace,
     uriTemplate: '/api/v2/runs/{runId}/artifacts/{artifactId}',
     mediaType: 'application/octet-stream',

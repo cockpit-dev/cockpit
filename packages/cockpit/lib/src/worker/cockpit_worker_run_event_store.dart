@@ -484,13 +484,8 @@ final class CockpitWorkerRunEventStore implements CockpitWorkerEventExchange {
     final events = _events[runId] ?? const <CockpitRunEvent>[];
     final terminal = events.any(
       (event) =>
-          event.lifecycle == CockpitRunLifecycle.completed &&
-          const <String>{
-            'run.completed',
-            'run.cancelled',
-            'run.interrupted',
-            'recovery.run.interrupted',
-          }.contains(event.kind),
+          event.entityKind == CockpitRunEventEntityKind.run &&
+          event.lifecycle == CockpitRunLifecycle.completed,
     );
     if (terminal) return;
     final failure = _interruptedFailure();
@@ -600,9 +595,7 @@ final class CockpitWorkerRunEventStore implements CockpitWorkerEventExchange {
         events: events.sublist(cursor, end),
       );
       final result = await publisher.publish(request);
-      if (result.runId != runId ||
-          result.highestContiguousSequence < cursor ||
-          result.highestContiguousSequence > events.length) {
+      if (result.runId != runId || result.highestContiguousSequence < cursor) {
         throw const FormatException(
           'Supervisor event acknowledgement is invalid.',
         );
@@ -612,10 +605,10 @@ final class CockpitWorkerRunEventStore implements CockpitWorkerEventExchange {
           'Supervisor returned an unresolved event publication gap.',
         );
       }
-      final next = result.highestContiguousSequence;
-      if (next < 0 ||
-          next > events.length ||
-          next == cursor && cursor != events.length) {
+      final next = result.highestContiguousSequence > events.length
+          ? events.length
+          : result.highestContiguousSequence;
+      if (next == cursor && cursor != events.length) {
         throw const FormatException(
           'Supervisor event replay cursor made no progress.',
         );

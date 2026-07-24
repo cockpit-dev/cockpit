@@ -3,7 +3,6 @@ import 'package:cockpit_protocol/cockpit_protocol.dart';
 import 'cockpit_application_service_exception.dart';
 import '../remote/cockpit_remote_session_client.dart';
 import 'cockpit_app_reference_resolver.dart';
-import 'cockpit_latest_task_store.dart';
 import 'cockpit_session_registry.dart';
 
 final class CockpitRuntimeErrorEntry {
@@ -12,7 +11,6 @@ final class CockpitRuntimeErrorEntry {
     required this.message,
     this.recordedAt,
     this.sessionId,
-    this.bundleDir,
     this.kind,
     this.routeName,
   });
@@ -21,7 +19,6 @@ final class CockpitRuntimeErrorEntry {
   final String message;
   final DateTime? recordedAt;
   final String? sessionId;
-  final String? bundleDir;
   final String? kind;
   final String? routeName;
 
@@ -30,7 +27,6 @@ final class CockpitRuntimeErrorEntry {
     'message': message,
     if (recordedAt != null) 'recordedAt': recordedAt!.toUtc().toIso8601String(),
     if (sessionId != null) 'sessionId': sessionId,
-    if (bundleDir != null) 'bundleDir': bundleDir,
     if (kind != null) 'kind': kind,
     if (routeName != null) 'routeName': routeName,
   };
@@ -43,7 +39,6 @@ final class CockpitReadRuntimeErrorsRequest {
     this.baseUri,
     this.androidDeviceId,
     this.maxErrors = 20,
-    this.includeLatestTask,
     this.includeSessions,
   });
 
@@ -52,15 +47,12 @@ final class CockpitReadRuntimeErrorsRequest {
   final Uri? baseUri;
   final String? androidDeviceId;
   final int maxErrors;
-  final bool? includeLatestTask;
   final bool? includeSessions;
 
   bool get hasAppReference =>
       (appId != null && appId!.isNotEmpty) ||
       (appHandlePath != null && appHandlePath!.isNotEmpty) ||
       baseUri != null;
-
-  bool get effectiveIncludeLatestTask => includeLatestTask ?? !hasAppReference;
 
   bool get effectiveIncludeSessions => includeSessions ?? !hasAppReference;
 }
@@ -92,13 +84,11 @@ final class CockpitReadRuntimeErrorsResult {
 final class CockpitReadRuntimeErrorsService {
   CockpitReadRuntimeErrorsService({
     required CockpitSessionRegistry registry,
-    required CockpitLatestTaskStore latestTaskStore,
     CockpitAppReferenceResolver? appReferenceResolver,
     CockpitReadRuntimeErrorsSnapshotReader? readSnapshot,
     int maxSnapshotReadAttempts = 5,
     Duration retryDelay = const Duration(milliseconds: 400),
   }) : _registry = registry,
-       _latestTaskStore = latestTaskStore,
        _appReferenceResolver =
            appReferenceResolver ??
            CockpitAppReferenceResolver(registry: registry),
@@ -113,7 +103,6 @@ final class CockpitReadRuntimeErrorsService {
        _retryDelay = retryDelay;
 
   final CockpitSessionRegistry _registry;
-  final CockpitLatestTaskStore _latestTaskStore;
   final CockpitAppReferenceResolver _appReferenceResolver;
   final CockpitReadRuntimeErrorsSnapshotReader _readSnapshot;
   final int _maxSnapshotReadAttempts;
@@ -177,23 +166,6 @@ final class CockpitReadRuntimeErrorsService {
         );
       }
     }
-    if (request.effectiveIncludeLatestTask) {
-      final latest = _latestTaskStore.latest;
-      final runtimeErrors =
-          latest?.bundleSummary?.runtimeSummary?.errorEntries ?? const [];
-      for (final event in runtimeErrors) {
-        errors.add(
-          CockpitRuntimeErrorEntry(
-            source: 'latest_task_bundle',
-            message: event.message,
-            recordedAt: event.recordedAt,
-            bundleDir: latest?.bundleSummary?.bundleDir,
-            kind: event.kind.jsonValue,
-            routeName: event.routeName,
-          ),
-        );
-      }
-    }
     errors.sort((left, right) {
       final leftAt = left.recordedAt;
       final rightAt = right.recordedAt;
@@ -212,14 +184,8 @@ final class CockpitReadRuntimeErrorsService {
       appId: appId,
       routeName: routeName,
       source: request.hasAppReference
-          ? (request.effectiveIncludeSessions ||
-                    request.effectiveIncludeLatestTask
-                ? 'mixed'
-                : source)
-          : (request.effectiveIncludeSessions ||
-                    request.effectiveIncludeLatestTask
-                ? 'aggregate'
-                : null),
+          ? (request.effectiveIncludeSessions ? 'mixed' : source)
+          : (request.effectiveIncludeSessions ? 'aggregate' : null),
       errors: List<CockpitRuntimeErrorEntry>.unmodifiable(errors),
     );
   }

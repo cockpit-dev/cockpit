@@ -5,9 +5,9 @@ import 'package:cockpit_protocol/cockpit_protocol.dart';
 import '../application/cockpit_application_service_exception.dart';
 import '../foundation/cockpit_ids.dart';
 import 'cockpit_json_rpc_peer.dart';
+import 'cockpit_worker_logger.dart';
 import 'cockpit_worker_operation_journal.dart';
 import 'cockpit_worker_resource_grant.dart';
-import 'cockpit_worker_logger.dart';
 import 'cockpit_worker_server.dart';
 import 'cockpit_worker_value_reader.dart';
 
@@ -40,6 +40,20 @@ final class CockpitWorkspaceOperationContext {
   final String idempotencyKey;
   final List<String> requiredFeatures;
   final CockpitRpcCancellation cancellation;
+}
+
+final class CockpitWorkerOperationRollbackException implements Exception {
+  const CockpitWorkerOperationRollbackException({
+    required this.primary,
+    required this.cleanupError,
+    required this.warningCode,
+    required this.warningMessage,
+  });
+
+  final Object primary;
+  final Object cleanupError;
+  final String warningCode;
+  final String warningMessage;
 }
 
 final class CockpitPreparedWorkspaceOperation {
@@ -402,7 +416,7 @@ final class CockpitWorkspaceOperationRegistry
         try {
           await _resourceAuthority.release(
             grant,
-            cancel: cancellation.isCancelled,
+            cancel: primaryFailure != null || cancellation.isCancelled,
           );
         } on Object {
           cleanupWarning = CockpitApiWarning(
@@ -524,6 +538,28 @@ CockpitFailure _operationFailure(
   bool cancelled,
   CockpitWorkerLogRedactor redactor,
 ) {
+  if (error is CockpitWorkerOperationRollbackException) {
+    final primary = _operationFailure(error.primary, cancelled, redactor);
+    return CockpitFailure(
+      primary: primary.primary,
+      warnings: <CockpitApiWarning>[
+        ...primary.warnings,
+        CockpitApiWarning(
+          stage: CockpitWarningStage.cleanup,
+          error: CockpitApiError(
+            code: error.warningCode,
+            category: CockpitErrorCategory.application,
+            message: error.warningMessage,
+            retryable: true,
+            responsibleLayer: CockpitResponsibleLayer.worker,
+            redactedDetails: <String, Object?>{
+              'errorType': error.cleanupError.runtimeType.toString(),
+            },
+          ),
+        ),
+      ],
+    );
+  }
   if (error is _ResourceHeartbeatFailure) {
     return CockpitFailure(
       primary: CockpitApiError(

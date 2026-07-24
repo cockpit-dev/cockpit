@@ -1,0 +1,28 @@
+schemaVersion: cockpit.test/v2
+kind: suite
+id: cockpitDemoRegression
+name: Cockpit demo regression
+tags: [acceptance, regression]
+execution:
+  maxConcurrency: 1
+  failFast: true
+  isolation: sharedSession
+  retry:
+    maxAttempts: 2
+    delayMs: 500
+    retryOn: [blocked, interrupted, internalError]
+report:
+  formats: [json, junit, html, aiSummary]
+  includePassedAttempts: true
+cases:
+  - id: taskEditorValidation
+    source:
+      kind: file
+      relativePath: e2e/cases/task_editor_validation.case.yaml
+      caseId: demoTaskEditorValidation
+  - id: settingsNavigation
+    dependsOn: [taskEditorValidation]
+    source:
+      kind: file
+      relativePath: e2e/cases/settings_navigation.case.yaml
+      caseId: demoSettingsNavigation

@@ -2,9 +2,11 @@ import 'package:args/command_runner.dart';
 
 import '../../supervisor/cockpit_daemon_host.dart';
 import '../cockpit_cli_runtime.dart';
+import 'daemon_policy_commands.dart';
 
 final class CockpitDaemonCommand extends Command<int> {
   CockpitDaemonCommand(this.runtime) {
+    addSubcommand(CockpitDaemonPolicyCommand(runtime));
     addSubcommand(
       CockpitLeafCommand(
         name: 'start',

@@ -10,6 +10,7 @@ import '../application/cockpit_launch_remote_session_service.dart';
 import '../application/cockpit_query_remote_session_service.dart';
 import '../application/cockpit_read_remote_snapshot_service.dart';
 import '../application/cockpit_read_remote_status_service.dart';
+import '../application/cockpit_stop_app_service.dart';
 import '../application/cockpit_wait_remote_ui_idle_service.dart';
 import '../session/cockpit_flutter_launch_configuration.dart';
 import '../targets/cockpit_target_handle.dart';
@@ -28,6 +29,7 @@ final class CockpitWorkerRemoteOperations {
     required CockpitWorkerForwardedPortHandoff portHandoff,
     CockpitInteractiveSnapshotStore? snapshotStore,
     CockpitLaunchRemoteSessionService? launchService,
+    CockpitStopAppService? stopAppService,
     CockpitQueryRemoteSessionService? queryService,
     CockpitReadRemoteStatusService? statusService,
     CockpitReadRemoteSnapshotService? readSnapshotService,
@@ -43,6 +45,7 @@ final class CockpitWorkerRemoteOperations {
       targets: targets,
       portHandoff: portHandoff,
       launchService: launchService ?? CockpitLaunchRemoteSessionService(),
+      stopAppService: stopAppService ?? CockpitStopAppService(),
       queryService: queryService ?? CockpitQueryRemoteSessionService(),
       statusService:
           statusService ??
@@ -68,6 +71,7 @@ final class CockpitWorkerRemoteOperations {
     required CockpitWorkerTargetResolver targets,
     required CockpitWorkerForwardedPortHandoff portHandoff,
     required CockpitLaunchRemoteSessionService launchService,
+    required CockpitStopAppService stopAppService,
     required CockpitQueryRemoteSessionService queryService,
     required CockpitReadRemoteStatusService statusService,
     required CockpitReadRemoteSnapshotService readSnapshotService,
@@ -79,6 +83,7 @@ final class CockpitWorkerRemoteOperations {
        _targets = targets,
        _portHandoff = portHandoff,
        _launch = launchService,
+       _stopApp = stopAppService,
        _query = queryService,
        _status = statusService,
        _readSnapshot = readSnapshotService,
@@ -103,6 +108,7 @@ final class CockpitWorkerRemoteOperations {
   final CockpitWorkerTargetResolver _targets;
   final CockpitWorkerForwardedPortHandoff _portHandoff;
   final CockpitLaunchRemoteSessionService _launch;
+  final CockpitStopAppService _stopApp;
   final CockpitQueryRemoteSessionService _query;
   final CockpitReadRemoteStatusService _status;
   final CockpitReadRemoteSnapshotService _readSnapshot;
@@ -191,7 +197,11 @@ final class CockpitWorkerRemoteOperations {
       defaultValue: const Duration(minutes: 2),
       maximum: const Duration(minutes: 10),
     );
-    final result = await _portHandoff.launchWithGrant(
+    return runWorkerTransactionalPortLaunch<
+      CockpitLaunchRemoteSessionResult,
+      Map<String, Object?>
+    >(
+      handoff: _portHandoff,
       grant: portGrant,
       deadline: context.deadline,
       launch: (port) => runWorkerApplicationOperation(
@@ -210,27 +220,48 @@ final class CockpitWorkerRemoteOperations {
           ),
         ),
       ),
-    );
-    final app = CockpitAppHandle.fromRemoteSession(result.sessionHandle);
-    await _registry.recordTargetHandle(
-      targetId: targetId,
-      handle: CockpitTargetHandle.fromAppHandle(app),
-    );
-    final appBinding = await _registry.recordApp(
-      targetId: targetId,
-      handle: app,
-    );
-    final sessionId = await _registry.sessionIdForApp(appBinding.appId);
-    return sanitizer.sanitize(
-      <String, Object?>{
-        'sessionId': sessionId,
-        'appId': appBinding.appId,
-        'targetId': targetId,
-        'health': result.health.toJson(),
+      commit: (result) async {
+        final app = CockpitAppHandle.fromRemoteSession(result.sessionHandle);
+        final appBinding = await _registry.recordLaunchedApp(
+          targetId: targetId,
+          targetHandle: CockpitTargetHandle.fromAppHandle(app),
+          appHandle: app,
+        );
+        try {
+          final sessionId = await _registry.sessionIdForApp(appBinding.appId);
+          return sanitizer.sanitize(
+            <String, Object?>{
+              'sessionId': sessionId,
+              'appId': appBinding.appId,
+              'targetId': targetId,
+              'health': result.health.toJson(),
+            },
+            sessionId: sessionId,
+            appId: appBinding.appId,
+            targetId: targetId,
+          );
+        } on Object catch (primary, primaryStackTrace) {
+          try {
+            await _registry.removeApp(appBinding.appId);
+          } on Object catch (cleanupError) {
+            throw CockpitWorkerOperationRollbackException(
+              primary: primary,
+              cleanupError: cleanupError,
+              warningCode: 'runtimeRegistrationRollbackFailed',
+              warningMessage:
+                  'Failed to remove a partially registered application.',
+            );
+          }
+          Error.throwWithStackTrace(primary, primaryStackTrace);
+        }
       },
-      sessionId: sessionId,
-      appId: appBinding.appId,
-      targetId: targetId,
+      rollback: (result) async {
+        await _stopApp.stop(
+          CockpitStopAppRequest(
+            app: CockpitAppHandle.fromRemoteSession(result.sessionHandle),
+          ),
+        );
+      },
     );
   }
 

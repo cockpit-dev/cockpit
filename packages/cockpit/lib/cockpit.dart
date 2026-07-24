@@ -10,8 +10,6 @@ export 'src/infrastructure/cockpit_monotonic_clock.dart'
     show CockpitMonotonicClock, CockpitSystemMonotonicClock;
 export 'src/infrastructure/cockpit_process_manager.dart';
 export 'src/infrastructure/cockpit_sdk_environment.dart';
-export 'src/artifacts/task_run_bundle_writer.dart';
-export 'src/artifacts/cockpit_recording_keyframe_extractor.dart';
 export 'src/artifacts/cockpit_test_attempt_bundle_writer.dart'
     show
         CockpitTestAttemptBundleReader,
@@ -22,7 +20,6 @@ export 'src/adapters/cockpit_active_operation_aborter.dart';
 export 'src/adapters/cockpit_capture_adapter.dart';
 export 'src/adapters/cockpit_recording_adapter.dart';
 export 'src/application/cockpit_application_service_exception.dart';
-export 'src/application/cockpit_bundle_artifact_paths.dart';
 export 'src/application/cockpit_app_handle.dart';
 export 'src/application/cockpit_capture_screenshot_service.dart';
 export 'src/application/cockpit_command_evidence_defaults.dart';
@@ -47,7 +44,6 @@ export 'src/application/cockpit_interactive_result_data.dart';
 export 'src/application/cockpit_interactive_result_profile.dart';
 export 'src/application/cockpit_interactive_session_lock.dart';
 export 'src/application/cockpit_interactive_snapshot_store.dart';
-export 'src/application/cockpit_issue_evidence_builder.dart';
 export 'src/application/cockpit_launch_app_service.dart';
 export 'src/application/cockpit_launch_target_service.dart';
 export 'src/application/cockpit_launch_development_session_service.dart';
@@ -61,7 +57,6 @@ export 'src/application/cockpit_pub_dev_search_service.dart';
 export 'src/application/cockpit_pub_service.dart';
 export 'src/application/cockpit_query_development_session_service.dart';
 export 'src/application/cockpit_query_remote_session_service.dart';
-export 'src/application/cockpit_read_latest_task_summary_service.dart';
 export 'src/application/cockpit_read_app_service.dart';
 export 'src/application/cockpit_read_target_service.dart';
 export 'src/application/cockpit_read_errors_service.dart';
@@ -72,23 +67,15 @@ export 'src/application/cockpit_read_remote_snapshot_service.dart';
 export 'src/application/cockpit_read_remote_status_service.dart';
 export 'src/application/cockpit_read_runtime_errors_service.dart';
 export 'src/application/cockpit_read_session_logs_service.dart';
-export 'src/application/cockpit_read_task_bundle_summary_service.dart';
-export 'src/application/cockpit_read_workspace_contracts_service.dart';
 export 'src/application/cockpit_reload_development_session_service.dart';
 export 'src/application/cockpit_run_batch_service.dart';
 export 'src/application/cockpit_run_command_service.dart';
 export 'src/application/cockpit_run_shell_service.dart';
-export 'src/application/cockpit_run_remote_control_script_service.dart';
 export 'src/system_control/cockpit_system_control_action_service.dart';
 export 'src/system_control/cockpit_system_control_profile.dart';
 export 'src/system_control/cockpit_system_control_service.dart';
 export 'src/application/cockpit_start_remote_recording_service.dart';
 export 'src/application/cockpit_start_recording_service.dart';
-export 'src/application/cockpit_task_gate.dart';
-export 'src/application/cockpit_task_orchestration_result.dart';
-export 'src/application/cockpit_task_orchestration_service.dart';
-export 'src/application/cockpit_task_stage.dart';
-export 'src/application/cockpit_run_task_service.dart';
 export 'src/application/cockpit_run_tests_service.dart';
 export 'src/application/cockpit_run_workspace_tests_service.dart';
 export 'src/application/cockpit_stop_app_service.dart';
@@ -96,12 +83,10 @@ export 'src/application/cockpit_platform_app_stopper.dart';
 export 'src/application/cockpit_stop_recording_service.dart';
 export 'src/application/cockpit_stop_remote_recording_service.dart';
 export 'src/application/cockpit_stop_development_session_service.dart';
-export 'src/application/cockpit_validate_task_service.dart';
 export 'src/application/cockpit_wait_idle_service.dart';
 export 'src/application/cockpit_wait_remote_ui_idle_service.dart';
 export 'src/application/cockpit_workspace_document.dart';
 export 'src/application/cockpit_workspace_command_result.dart';
-export 'src/validation/cockpit_bundle_artifact_validator.dart';
 export 'src/cli/cockpit_command_runner.dart';
 export 'src/mcp/cockpit_mcp_error.dart';
 export 'src/mcp/cockpit_mcp_server.dart';
@@ -131,12 +116,6 @@ export 'src/development/cockpit_development_session_handle.dart';
 export 'src/development/cockpit_development_session_reference_resolver.dart';
 export 'src/development/cockpit_development_session_status.dart';
 export 'src/development/cockpit_development_session_supervisor.dart';
-export 'src/devtools/cockpit_live_run_event.dart';
-export 'src/devtools/cockpit_live_run_identity.dart';
-export 'src/devtools/cockpit_live_run_observer.dart';
-export 'src/devtools/cockpit_live_run_state.dart';
-export 'src/devtools/cockpit_live_run_store.dart';
-export 'src/devtools/cockpit_sensitive_data_redactor.dart';
 export 'src/session/cockpit_android_remote_session_launcher.dart';
 export 'src/session/cockpit_flutter_launch_configuration.dart';
 export 'src/session/cockpit_ios_physical_remote_session_launcher.dart';
@@ -147,9 +126,6 @@ export 'src/session/cockpit_remote_session_handle.dart';
 export 'src/session/cockpit_remote_session_launch_options.dart';
 export 'src/session/cockpit_remote_session_launcher.dart';
 export 'src/session/cockpit_windows_remote_session_launcher.dart';
-export 'src/runner/cockpit_control_runner.dart';
-export 'src/runner/cockpit_control_run_result.dart';
-export 'src/runner/cockpit_workflow_step.dart';
 export 'src/runner/cockpit_case_execution_control.dart'
     show CockpitCaseExecutionControl;
 export 'src/runner/cockpit_case_runner.dart';
@@ -157,9 +133,12 @@ export 'src/supervisor/cockpit_daemon_client.dart';
 export 'src/supervisor/cockpit_daemon_discovery.dart';
 export 'src/supervisor/cockpit_supervisor_api_client.dart';
 export 'src/supervisor/cockpit_daemon_host.dart' show CockpitDaemonShutdownMode;
-export 'src/supervisor/cockpit_supervisor_runtime.dart'
+export 'src/supervisor/cockpit_supervisor_authorization.dart'
     show
         CockpitSupervisorAuthorizationPolicy,
+        CockpitSupervisorAuthorizationPolicyStore;
+export 'src/supervisor/cockpit_supervisor_runtime.dart'
+    show
         CockpitSupervisorRuntime,
         cockpitSupervisorEngineVersion,
         cockpitSupervisorFeatures;

@@ -356,6 +356,21 @@ final class CockpitArtifactCommand extends Command<int> {
   CockpitArtifactCommand(this.runtime) {
     addSubcommand(
       CockpitLeafCommand(
+        name: 'list',
+        description: 'List immutable artifact metadata for a run.',
+        configure: (parser) => parser.addOption('run-id', mandatory: true),
+        action: (arguments) async {
+          runtime.success(<String, Object?>{
+            'items': (await (await runtime.client()).artifacts(
+              arguments.option('run-id')!,
+            )).map((artifact) => artifact.toJson()).toList(),
+          });
+          return cockpitSuccessExitCode;
+        },
+      ),
+    );
+    addSubcommand(
+      CockpitLeafCommand(
         name: 'read',
         description: 'Read a digest-checked bounded artifact.',
         configure: (parser) => parser
@@ -393,7 +408,7 @@ final class CockpitArtifactCommand extends Command<int> {
   String get name => 'artifact';
 
   @override
-  String get description => 'Read verified run artifacts.';
+  String get description => 'List and read verified run artifacts.';
 }
 
 CockpitDocumentFormat _documentFormat(String? requested, String path) {
