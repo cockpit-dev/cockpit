@@ -51,8 +51,8 @@ jobs:
           - platform: windows
             os: windows-latest
     env:
-      COCKPIT_HOME: ${{ github.workspace }}/.cockpit-ci-home
-      ACCEPTANCE_OUTPUT: ${{ github.workspace }}/.cockpit-ci-acceptance
+      COCKPIT_HOME: ${{ github.workspace }}/cockpit-ci-home
+      ACCEPTANCE_OUTPUT: ${{ github.workspace }}/cockpit-ci-acceptance
       FLUTTER_VERSION: '3.32.0'
 
     steps:
@@ -177,4 +177,6 @@ jobs:
           name: cockpit-2-${{ matrix.platform }}-regression
           retention-days: 14
           if-no-files-found: warn
-          path: ${{ env.ACCEPTANCE_OUTPUT }}
+          path: |
+            ${{ env.ACCEPTANCE_OUTPUT }}
+            ${{ env.COCKPIT_HOME }}/daemon.log
