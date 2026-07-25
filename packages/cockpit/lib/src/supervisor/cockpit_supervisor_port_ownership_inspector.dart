@@ -96,10 +96,11 @@ final class CockpitSystemSupervisorPortOwnershipInspector
       if (current.processId == workerProcessId) {
         return current.startIdentity == _workerStartIdentity;
       }
-      final parent = await _readProcessSnapshot(
-        current.parentProcessId,
-        deadline,
-      );
+      final parentProcessId = Platform.isWindows
+          ? await _readWindowsParentProcessId(current.processId, deadline)
+          : current.parentProcessId;
+      if (parentProcessId == null) return false;
+      final parent = await _readProcessSnapshot(parentProcessId, deadline);
       if (parent == null) return false;
       current = parent;
     }
@@ -166,23 +167,17 @@ final class CockpitSystemSupervisorPortOwnershipInspector
     int port,
     DateTime deadline,
   ) async {
-    final script =
-        '\$ids = @(Get-NetTCPConnection -State Listen -LocalPort $port '
-        '-ErrorAction SilentlyContinue | Select-Object -ExpandProperty '
-        'OwningProcess -Unique); \$ids -join "`n"';
     final result = await _run(
-      'powershell.exe',
-      <String>['-NoProfile', '-NonInteractive', '-Command', script],
+      'netstat.exe',
+      const <String>['-ano', '-p', 'tcp'],
       deadline,
       allowFailure: true,
     );
     if (result.exitCode != 0) return null;
-    final processIds = const LineSplitter()
-        .convert('${result.stdout}')
-        .map((line) => int.tryParse(line.trim()))
-        .whereType<int>()
-        .where((processId) => processId > 1)
-        .toSet();
+    final processIds = cockpitParseWindowsNetstatListenerProcessIds(
+      '${result.stdout}',
+      port: port,
+    );
     if (processIds.isEmpty) return null;
     if (processIds.length != 1) {
       throw StateError('Loopback port has multiple listener processes.');
@@ -244,27 +239,47 @@ final class CockpitSystemSupervisorPortOwnershipInspector
     DateTime deadline,
   ) async {
     final script =
-        'Get-CimInstance Win32_Process -Filter "ProcessId = $processId" | '
-        'Select-Object ProcessId,ParentProcessId,CreationDate | '
-        'ConvertTo-Json -Compress';
+        '\$process = Get-Process -Id $processId -ErrorAction SilentlyContinue; '
+        'if (\$null -ne \$process) { '
+        '"\$(\$process.Id)|\$(\$process.StartTime.ToUniversalTime().Ticks)" }';
     final result = await _run(
       'powershell.exe',
-      <String>['-NoProfile', '-NonInteractive', '-Command', script],
+      <String>['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', script],
       deadline,
       allowFailure: true,
     );
-    if (result.exitCode != 0 || '${result.stdout}'.trim().isEmpty) return null;
-    final json = jsonDecode('${result.stdout}');
-    if (json is! Map<Object?, Object?>) return null;
-    final id = json['ProcessId'];
-    final parentId = json['ParentProcessId'];
-    final creationDate = json['CreationDate'];
-    if (id is! int || parentId is! int || creationDate is! String) return null;
+    if (result.exitCode != 0) return null;
+    final parts = '${result.stdout}'.trim().split('|');
+    if (parts.length != 2) return null;
+    final id = int.tryParse(parts[0]);
+    final startIdentity = parts[1].trim();
+    if (id == null || id <= 1 || startIdentity.isEmpty) return null;
     return _ProcessSnapshot(
       processId: id,
-      parentProcessId: parentId,
-      startIdentity: creationDate,
+      parentProcessId: 0,
+      startIdentity: startIdentity,
     );
+  }
+
+  static Future<int?> _readWindowsParentProcessId(
+    int processId,
+    DateTime deadline,
+  ) async {
+    final script =
+        '\$process = Get-WmiObject -Class Win32_Process '
+        '-Filter "ProcessId = $processId" -ErrorAction SilentlyContinue; '
+        'if (\$null -ne \$process) { "\$(\$process.ParentProcessId)" }';
+    final result = await _run(
+      'powershell.exe',
+      <String>['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', script],
+      deadline,
+      allowFailure: true,
+    );
+    if (result.exitCode != 0) return null;
+    final parentProcessId = int.tryParse('${result.stdout}'.trim());
+    return parentProcessId != null && parentProcessId > 1
+        ? parentProcessId
+        : null;
   }
 
   static Future<ProcessResult> _run(
@@ -306,4 +321,31 @@ final class _ProcessSnapshot {
 
 Map<String, String> _probeEnvironment() {
   return cockpitMinimumChildEnvironment();
+}
+
+Set<int> cockpitParseWindowsNetstatListenerProcessIds(
+  String output, {
+  required int port,
+}) {
+  if (port < 1 || port > 65535) {
+    throw ArgumentError.value(port, 'port');
+  }
+  final processIds = <int>{};
+  for (final line in const LineSplitter().convert(output)) {
+    final fields = line.trim().split(RegExp(r'\s+'));
+    if (fields.length < 5 || fields.first.toUpperCase() != 'TCP') continue;
+    if (_windowsEndpointPort(fields[1]) != port ||
+        _windowsEndpointPort(fields[2]) != 0) {
+      continue;
+    }
+    final processId = int.tryParse(fields.last);
+    if (processId != null && processId > 1) processIds.add(processId);
+  }
+  return processIds;
+}
+
+int? _windowsEndpointPort(String endpoint) {
+  final separator = endpoint.lastIndexOf(':');
+  if (separator < 0 || separator == endpoint.length - 1) return null;
+  return int.tryParse(endpoint.substring(separator + 1));
 }

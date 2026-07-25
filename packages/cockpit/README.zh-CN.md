@@ -186,6 +186,11 @@ dart run cockpitd \
 submission 包含规范 case source、idempotency key、inputs 和 required features；
 foreground 模式负责填入注册后的 `workspaceId`。
 
+仓库发布门禁会先运行格式、分析、全部 package/示例测试和发布 dry-run，再启动
+Android、iOS、macOS、Linux、Web、Windows 真实回归。只有所有 job 都到达成功终态
+才允许发布。应等待完整矩阵结束后，再依据 report、event、artifact 和 daemon log
+统一定位失败，不在执行中反复猜测。
+
 ## API Discovery
 
 `CockpitDaemonLifecycleClient.ensure()` 初始化 Cockpit home、校验进程 identity，并返回

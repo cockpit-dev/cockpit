@@ -216,6 +216,15 @@ dart run cockpitd \
   --foreground-submission=/workspace/run-submission.json
 ```
 
+## 发布门禁
+
+`.github/workflows/example-e2e.yml` 是 Cockpit 2.0 发布前的强制门禁。
+quality job 会统一验证格式、静态分析、仓库契约、所有 package 与示例测试，并对三个
+公开包执行发布 dry-run；通过后才会运行 Android、iOS、macOS、Linux、Web 和
+Windows 真实回归。只有 quality 与全部平台 job 都成功终止，并产出可校验的终态报告
+和 artifact，版本才允许发布。排查失败时先等待整个矩阵结束，再统一以上传的 report、
+event stream、artifact 和 daemon log 为准，避免边运行边反复猜测。
+
 ## 文档
 
 详细文档：

@@ -1,25 +1,9 @@
-name: cockpit-2-e2e
+name: cockpit-2-release-gate
 
 on:
   push:
     branches: [main]
-    paths:
-      - 'packages/cockpit_protocol/**'
-      - 'packages/flutter_cockpit/**'
-      - 'packages/cockpit/**'
-      - 'examples/cockpit_demo/**'
-      - '.github/workflows/example-e2e.yml'
-      - '.github/scripts/install-android-sdk-for-emulator-runner.sh'
-      - 'pubspec.lock'
   pull_request:
-    paths:
-      - 'packages/cockpit_protocol/**'
-      - 'packages/flutter_cockpit/**'
-      - 'packages/cockpit/**'
-      - 'examples/cockpit_demo/**'
-      - '.github/workflows/example-e2e.yml'
-      - '.github/scripts/install-android-sdk-for-emulator-runner.sh'
-      - 'pubspec.lock'
   workflow_dispatch:
 
 permissions:
@@ -29,9 +13,71 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
+env:
+  FLUTTER_VERSION: '3.32.0'
+
 jobs:
+  quality:
+    name: complete quality gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+
+      - name: Bootstrap workspace
+        run: flutter pub get
+
+      - name: Verify formatting
+        run: >-
+          dart format --output=none --set-exit-if-changed
+          packages/flutter_cockpit packages/cockpit examples/cockpit_demo test
+
+      - name: Analyze workspace
+        run: dart analyze
+
+      - name: Verify repository contracts
+        run: dart test test
+
+      - name: Verify protocol package
+        working-directory: packages/cockpit_protocol
+        run: dart test
+
+      - name: Verify Cockpit runtime
+        working-directory: packages/cockpit
+        run: dart test
+
+      - name: Verify Flutter bridge
+        working-directory: packages/flutter_cockpit
+        run: flutter test
+
+      - name: Verify production example
+        working-directory: examples/cockpit_demo
+        run: flutter test
+
+      - name: Verify development shell
+        working-directory: examples/cockpit_demo/cockpit
+        run: flutter test
+
+      - name: Validate cockpit_protocol publication
+        working-directory: packages/cockpit_protocol
+        run: dart pub publish --dry-run
+
+      - name: Validate flutter_cockpit publication
+        working-directory: packages/flutter_cockpit
+        run: flutter pub publish --dry-run
+
+      - name: Validate cockpit publication
+        working-directory: packages/cockpit
+        run: dart pub publish --dry-run
+
   regression:
     name: ${{ matrix.platform }} regression
+    needs: quality
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     strategy:
@@ -53,7 +99,6 @@ jobs:
     env:
       COCKPIT_HOME: ${{ github.workspace }}/cockpit-ci-home
       ACCEPTANCE_OUTPUT: ${{ github.workspace }}/cockpit-ci-acceptance
-      FLUTTER_VERSION: '3.32.0'
 
     steps:
       - uses: actions/checkout@v6

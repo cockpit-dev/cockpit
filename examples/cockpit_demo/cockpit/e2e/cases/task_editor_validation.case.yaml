@@ -24,6 +24,7 @@ steps:
     action:
       type: tap
       locator: {strategy: text, value: New task}
+      activation: gesture
   - stepId: waitForTaskEditor
     action:
       type: waitFor
@@ -32,6 +33,7 @@ steps:
     action:
       type: tap
       locator: {strategy: text, value: Save task}
+      activation: gesture
   - stepId: verifyRequiredTitle
     action:
       type: assertVisible

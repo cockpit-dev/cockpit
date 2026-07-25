@@ -200,6 +200,12 @@ dart run cockpitd \
 The submission contains the canonical case source, idempotency key, inputs,
 and required features. Foreground mode fills the registered `workspaceId`.
 
+The repository release gate runs formatting, analysis, every package and
+example test suite, and publication dry-runs before starting real Android,
+iOS, macOS, Linux, web, and Windows regressions. Publication requires every
+job to reach a successful terminal state. Wait for the complete matrix, then
+diagnose from its reports, events, artifacts, and daemon logs in one pass.
+
 ## API Discovery
 
 `CockpitDaemonLifecycleClient.ensure()` initializes the Cockpit home, validates

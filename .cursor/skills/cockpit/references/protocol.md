@@ -64,3 +64,12 @@ to control its projection, `--stdout-format json` for an exact response,
 `jsonl` for streaming run events, and `--output <file>` for lossless JSON plus
 a bounded receipt. Use `minimal` target inspection for routine loops and
 `inspect`/`evidence` only when the additional runtime state proves the claim.
+
+## Release Gate
+
+Repository publication requires formatting, analysis, every package and
+example test, publication dry-runs, and successful Android, iOS, macOS, Linux,
+web, and Windows regressions. Wait for the whole matrix to reach terminal state
+before triage, then inspect its reports, event streams, verified artifacts, and
+daemon logs together. One local run or one passing platform is not release
+evidence.

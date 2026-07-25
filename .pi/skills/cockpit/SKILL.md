@@ -126,3 +126,10 @@ A pass requires terminal run state, required assertions, no disqualifying
 runtime errors, and readable required evidence. Artifact existence alone is
 not proof. Resume event streams by sequence and reuse idempotency keys; do not
 replay uncertain mutations blindly.
+
+For a repository release, require the complete quality job plus Android, iOS,
+macOS, Linux, web, and Windows regression jobs. The quality job must cover
+formatting, analysis, all package/example tests, and publication dry-runs.
+Wait for the entire matrix to finish before diagnosing it; then use terminal
+reports, events, verified artifacts, and daemon logs rather than partial job
+state. Never declare a release from one local run or one passing platform.

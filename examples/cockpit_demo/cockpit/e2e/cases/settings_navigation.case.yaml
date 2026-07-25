@@ -24,6 +24,7 @@ steps:
     action:
       type: tap
       locator: {strategy: label, value: Settings}
+      activation: gesture
   - stepId: waitForSettings
     action:
       type: waitFor

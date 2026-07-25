@@ -233,6 +233,17 @@ dart run cockpitd \
   --foreground-submission=/workspace/run-submission.json
 ```
 
+## Release Gate
+
+`.github/workflows/example-e2e.yml` is the required Cockpit 2.0 publication
+gate. Its quality job verifies formatting, static analysis, repository
+contracts, every package and example test suite, and dry-run publication for
+all three public packages. Only then does it run real Android, iOS, macOS,
+Linux, web, and Windows regression jobs. A release is eligible only when the
+quality job and every platform job complete successfully with terminal reports
+and verified artifacts. Wait for the whole matrix before diagnosing failures;
+use the uploaded report, event stream, artifacts, and daemon log as authority.
+
 ## Documentation
 
 Detailed package and protocol documentation:

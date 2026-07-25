@@ -5,6 +5,20 @@ import 'package:cockpit/src/supervisor/cockpit_supervisor_port_ownership_inspect
 import 'package:test/test.dart';
 
 void main() {
+  test('parses locale-independent Windows netstat listeners', () {
+    const output = '''
+  TCP    127.0.0.1:47331      0.0.0.0:0       LISTENING       1204
+  TCP    127.0.0.1:47331      127.0.0.1:52000 ESTABLISHED     1204
+  TCP    [::1]:47331          [::]:0          ABHOREN         1204
+  TCP    127.0.0.1:48000      0.0.0.0:0       LISTENING       9300
+''';
+
+    expect(
+      cockpitParseWindowsNetstatListenerProcessIds(output, port: 47331),
+      <int>{1204},
+    );
+  });
+
   test('accepts a real listener owned by the captured process', () async {
     final socket = await ServerSocket.bind(
       InternetAddress.loopbackIPv4,
