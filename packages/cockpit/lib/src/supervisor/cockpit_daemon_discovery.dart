@@ -193,13 +193,16 @@ final class CockpitSystemProcessIdentityProbe
   Future<String?> readStartIdentity(int processId) async {
     if (processId <= 1) return null;
     final result = Platform.isWindows
-        ? await Process.run('powershell.exe', <String>[
-            '-NoProfile',
-            '-NonInteractive',
-            '-Command',
-            r'$p = Get-Process -Id $args[0] -ErrorAction SilentlyContinue; if ($p) { $p.StartTime.ToUniversalTime().ToFileTimeUtc() }',
-            '$processId',
-          ])
+        ? await Process.run(
+            'powershell.exe',
+            <String>[
+              '-NoProfile',
+              '-NonInteractive',
+              '-Command',
+              r'$p = Get-Process -Id ([int]$env:COCKPIT_PROCESS_ID) -ErrorAction SilentlyContinue; if ($p) { $p.StartTime.ToUniversalTime().ToFileTimeUtc() }',
+            ],
+            environment: <String, String>{'COCKPIT_PROCESS_ID': '$processId'},
+          )
         : await Process.run('ps', <String>[
             '-o',
             'lstart=',

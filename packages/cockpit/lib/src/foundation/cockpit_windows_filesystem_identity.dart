@@ -28,14 +28,19 @@ final class CockpitPowerShellWindowsFileIdentityProbe
   Future<CockpitWindowsFileIdentityProbeResult> inspect(
     String canonicalPath,
   ) async {
-    final result = await cockpitRunIsolatedProcess('powershell.exe', <String>[
-      '-NoLogo',
-      '-NoProfile',
-      '-NonInteractive',
-      '-Command',
-      cockpitWindowsFileIdentityPowerShell,
-      canonicalPath,
-    ]);
+    final result = await cockpitRunIsolatedProcess(
+      'powershell.exe',
+      <String>[
+        '-NoLogo',
+        '-NoProfile',
+        '-NonInteractive',
+        '-Command',
+        cockpitWindowsFileIdentityPowerShell,
+      ],
+      environment: <String, String>{
+        'COCKPIT_FILE_IDENTITY_PATH': canonicalPath,
+      },
+    );
     return CockpitWindowsFileIdentityProbeResult(
       exitCode: result.exitCode,
       stdout: result.stdout.toString(),
@@ -123,6 +128,7 @@ bool _isFixedWidthHex(String value, int width) =>
 
 const cockpitWindowsFileIdentityPowerShell = r'''
 $ErrorActionPreference = 'Stop'
+$path = $env:COCKPIT_FILE_IDENTITY_PATH
 if (-not ('Cockpit.NativeFileIdentity' -as [type])) {
   Add-Type -TypeDefinition @'
 using System;
@@ -248,5 +254,5 @@ namespace Cockpit {
 }
 '@
 }
-[Console]::Out.WriteLine([Cockpit.NativeFileIdentity]::Read($args[0]))
+[Console]::Out.WriteLine([Cockpit.NativeFileIdentity]::Read($path))
 ''';

@@ -111,14 +111,19 @@ final class CockpitPowerShellWindowsSecurityProvider
 
   @override
   Future<CockpitDirectorySecurity> inspect(String canonicalPath) async {
-    final result = await cockpitRunIsolatedProcess('powershell.exe', <String>[
-      '-NoLogo',
-      '-NoProfile',
-      '-NonInteractive',
-      '-Command',
-      _windowsSecurityInspectionScript,
-      canonicalPath,
-    ]);
+    final result = await cockpitRunIsolatedProcess(
+      'powershell.exe',
+      <String>[
+        '-NoLogo',
+        '-NoProfile',
+        '-NonInteractive',
+        '-Command',
+        _windowsSecurityInspectionScript,
+      ],
+      environment: <String, String>{
+        'COCKPIT_DIRECTORY_SECURITY_PATH': canonicalPath,
+      },
+    );
     if (result.exitCode != 0) {
       throw FileSystemException(
         'Could not verify Windows directory ACL.',
@@ -251,7 +256,8 @@ final class CockpitDirectorySecurityInspector {
 
 const _windowsSecurityInspectionScript = r'''
 $ErrorActionPreference = 'Stop'
-$acl = Get-Acl -LiteralPath $args[0]
+$path = $env:COCKPIT_DIRECTORY_SECURITY_PATH
+$acl = Get-Acl -LiteralPath $path
 $descriptor = $acl.GetSecurityDescriptorBinaryForm()
 $control = [System.BitConverter]::ToUInt16($descriptor, 2)
 $daclOffset = [System.BitConverter]::ToUInt32($descriptor, 16)

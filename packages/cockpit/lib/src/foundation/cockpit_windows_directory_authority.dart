@@ -16,14 +16,19 @@ final class CockpitPowerShellWindowsDirectoryAuthorityProbe
   Future<CockpitWindowsFileIdentityProbeResult> inspect(
     String canonicalPath,
   ) async {
-    final result = await cockpitRunIsolatedProcess('powershell.exe', <String>[
-      '-NoLogo',
-      '-NoProfile',
-      '-NonInteractive',
-      '-Command',
-      cockpitWindowsDirectoryAuthorityPowerShell,
-      canonicalPath,
-    ]);
+    final result = await cockpitRunIsolatedProcess(
+      'powershell.exe',
+      <String>[
+        '-NoLogo',
+        '-NoProfile',
+        '-NonInteractive',
+        '-Command',
+        cockpitWindowsDirectoryAuthorityPowerShell,
+      ],
+      environment: <String, String>{
+        'COCKPIT_DIRECTORY_AUTHORITY_PATH': canonicalPath,
+      },
+    );
     return CockpitWindowsFileIdentityProbeResult(
       exitCode: result.exitCode,
       stdout: result.stdout.toString(),
@@ -104,6 +109,7 @@ bool? _parseBoolean(String value) => switch (value.toLowerCase()) {
 
 const cockpitWindowsDirectoryAuthorityPowerShell = r'''
 $ErrorActionPreference = 'Stop'
+$path = $env:COCKPIT_DIRECTORY_AUTHORITY_PATH
 if (-not ('Cockpit.NativeDirectoryAuthorityLease' -as [type])) {
   Add-Type -TypeDefinition @'
 using System;
@@ -245,10 +251,10 @@ namespace Cockpit {
 }
 '@
 }
-$lease = [Cockpit.NativeDirectoryAuthorityLease]::Open($args[0])
+$lease = [Cockpit.NativeDirectoryAuthorityLease]::Open($path)
 try {
   $identity = $lease.ReadIdentity()
-  $acl = Get-Acl -LiteralPath $args[0]
+  $acl = Get-Acl -LiteralPath $path
   $descriptor = $acl.GetSecurityDescriptorBinaryForm()
   $control = [System.BitConverter]::ToUInt16($descriptor, 2)
   $daclOffset = [System.BitConverter]::ToUInt32($descriptor, 16)

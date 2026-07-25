@@ -421,6 +421,7 @@ final class CockpitSupervisorRuntime {
         idempotencyKey: CockpitIdempotencyKey(
           'document-index-${DateTime.now().microsecondsSinceEpoch}',
         ),
+        deadline: DateTime.now().toUtc().add(const Duration(minutes: 2)),
       ),
     );
     _throwIfWorkspaceOperationFailed(result);
