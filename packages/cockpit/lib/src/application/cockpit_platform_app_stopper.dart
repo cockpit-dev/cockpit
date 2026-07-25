@@ -15,10 +15,12 @@ final class CockpitPlatformAppStopper {
     CockpitPlatformStopProcessRunner? processRunner,
     CockpitIosDeviceProcessTerminator? iosDeviceProcessTerminator,
   }) : _processRunner = processRunner ?? _defaultProcessRunner,
+       _usesDefaultProcessRunner = processRunner == null,
        _iosDeviceProcessTerminator =
            iosDeviceProcessTerminator ?? CockpitIosDeviceProcessTerminator();
 
   final CockpitPlatformStopProcessRunner _processRunner;
+  final bool _usesDefaultProcessRunner;
   final CockpitIosDeviceProcessTerminator _iosDeviceProcessTerminator;
 
   Future<void> stop(CockpitAppHandle app) async {
@@ -41,12 +43,25 @@ final class CockpitPlatformAppStopper {
         await _bestEffortRemoveAndroidForward(app);
       case 'ios':
         if (cockpitLooksLikeIosSimulatorDeviceId(app.deviceId)) {
-          await _bestEffortRun('xcrun', <String>[
+          final arguments = <String>[
             'simctl',
             'terminate',
             app.deviceId,
             appId,
-          ]);
+          ];
+          final stopped = await _bestEffortRun(
+            'xcrun',
+            arguments,
+            timeout: const Duration(seconds: 10),
+          );
+          if (!stopped) {
+            await Future<void>.delayed(const Duration(milliseconds: 250));
+            await _bestEffortRun(
+              'xcrun',
+              arguments,
+              timeout: const Duration(seconds: 10),
+            );
+          }
         } else {
           if (app.platformAppId == null || app.platformAppId!.trim().isEmpty) {
             return;
@@ -104,14 +119,23 @@ final class CockpitPlatformAppStopper {
     ]);
   }
 
-  Future<void> _bestEffortRun(String executable, List<String> arguments) async {
+  Future<bool> _bestEffortRun(
+    String executable,
+    List<String> arguments, {
+    Duration timeout = const Duration(seconds: 5),
+  }) async {
     try {
-      await _processRunner(
-        executable,
-        arguments,
-      ).timeout(const Duration(seconds: 5));
+      final result = _usesDefaultProcessRunner
+          ? await cockpitRunProcessWithTimeout(
+              executable,
+              arguments,
+              timeout: timeout,
+            )
+          : await _processRunner(executable, arguments).timeout(timeout);
+      return result.exitCode == 0;
     } on Object {
       // Reachability checks decide whether stop really succeeded.
+      return false;
     }
   }
 
@@ -131,11 +155,9 @@ final class CockpitPlatformAppStopper {
   static Future<ProcessResult> _defaultProcessRunner(
     String executable,
     List<String> arguments,
-  ) {
-    return cockpitRunProcessWithTimeout(
-      executable,
-      arguments,
-      timeout: const Duration(seconds: 5),
-    );
-  }
+  ) => cockpitRunProcessWithTimeout(
+    executable,
+    arguments,
+    timeout: const Duration(seconds: 30),
+  );
 }

@@ -278,7 +278,7 @@ final class CockpitStopAppService {
     CockpitAppHandle app, {
     String? lastError,
   }) async {
-    final deadline = DateTime.now().add(const Duration(seconds: 5));
+    final deadline = DateTime.now().add(const Duration(seconds: 10));
     while (DateTime.now().isBefore(deadline)) {
       final reachable = await _probeReachability(app.baseUri);
       if (!reachable) {

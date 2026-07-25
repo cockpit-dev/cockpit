@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import '../infrastructure/cockpit_process_manager.dart';
+import '../platform/windows/cockpit_windows_process_snapshot.dart';
 
 final class CockpitSupervisorPortOwnershipEvidence {
   const CockpitSupervisorPortOwnershipEvidence({
@@ -236,32 +237,15 @@ final class CockpitSystemSupervisorPortOwnershipInspector
     int processId,
     DateTime deadline,
   ) async {
-    final result = await _run(
-      'powershell.exe',
-      const <String>[
-        '-NoLogo',
-        '-NoProfile',
-        '-NonInteractive',
-        '-Command',
-        cockpitWindowsProcessSnapshotPowerShell,
-      ],
-      deadline,
-      allowFailure: true,
-      environment: <String, String>{'COCKPIT_PROCESS_ID': '$processId'},
-    );
-    if (result.exitCode != 0) return null;
-    final fields = '${result.stdout}'.trim().split('|');
-    if (fields.length != 3) return null;
-    final id = int.tryParse(fields[0]);
-    final parentId = int.tryParse(fields[1]);
-    final startIdentity = fields[2].trim();
-    if (id == null || id <= 1 || parentId == null || startIdentity.isEmpty) {
-      return null;
+    if (!deadline.isAfter(DateTime.now().toUtc())) {
+      throw TimeoutException('OS ownership probe deadline expired.');
     }
+    final snapshot = cockpitReadWindowsProcessSnapshot(processId);
+    if (snapshot == null) return null;
     return _ProcessSnapshot(
-      processId: id,
-      parentProcessId: parentId,
-      startIdentity: startIdentity,
+      processId: snapshot.processId,
+      parentProcessId: snapshot.parentProcessId,
+      startIdentity: snapshot.startIdentity,
     );
   }
 
@@ -270,7 +254,6 @@ final class CockpitSystemSupervisorPortOwnershipInspector
     List<String> arguments,
     DateTime deadline, {
     required bool allowFailure,
-    Map<String, String>? environment,
   }) async {
     final remaining = deadline.difference(DateTime.now().toUtc());
     if (remaining <= Duration.zero) {
@@ -279,7 +262,7 @@ final class CockpitSystemSupervisorPortOwnershipInspector
     final process = await Process.start(
       executable,
       arguments,
-      environment: <String, String>{..._probeEnvironment(), ...?environment},
+      environment: _probeEnvironment(),
       includeParentEnvironment: false,
     );
     await process.stdin.close();
@@ -350,152 +333,3 @@ int? _windowsEndpointPort(String endpoint) {
   if (separator < 0 || separator == endpoint.length - 1) return null;
   return int.tryParse(endpoint.substring(separator + 1));
 }
-
-const cockpitWindowsProcessSnapshotPowerShell = r'''
-$ErrorActionPreference = 'Stop'
-if (-not ('Cockpit.NativeProcessSnapshot' -as [type])) {
-  Add-Type -TypeDefinition @'
-using System;
-using System.ComponentModel;
-using System.Globalization;
-using System.Runtime.InteropServices;
-
-namespace Cockpit {
-  [StructLayout(LayoutKind.Sequential)]
-  internal struct NativeFileTime {
-    public uint Low;
-    public uint High;
-  }
-
-  [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
-  internal struct NativeProcessEntry {
-    public uint Size;
-    public uint Usage;
-    public uint ProcessId;
-    public IntPtr DefaultHeapId;
-    public uint ModuleId;
-    public uint ThreadCount;
-    public uint ParentProcessId;
-    public int BasePriority;
-    public uint Flags;
-
-    [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 260)]
-    public string ExecutableFile;
-  }
-
-  public static class NativeProcessSnapshot {
-    private const uint SnapshotProcesses = 0x00000002;
-    private const uint QueryLimitedInformation = 0x00001000;
-    private static readonly IntPtr InvalidHandle = new IntPtr(-1);
-
-    [DllImport("kernel32.dll", ExactSpelling = true, SetLastError = true)]
-    private static extern IntPtr CreateToolhelp32Snapshot(
-      uint flags,
-      uint processId
-    );
-
-    [DllImport(
-      "kernel32.dll",
-      CharSet = CharSet.Unicode,
-      ExactSpelling = true,
-      SetLastError = true
-    )]
-    private static extern bool Process32FirstW(
-      IntPtr snapshot,
-      ref NativeProcessEntry entry
-    );
-
-    [DllImport(
-      "kernel32.dll",
-      CharSet = CharSet.Unicode,
-      ExactSpelling = true,
-      SetLastError = true
-    )]
-    private static extern bool Process32NextW(
-      IntPtr snapshot,
-      ref NativeProcessEntry entry
-    );
-
-    [DllImport("kernel32.dll", ExactSpelling = true, SetLastError = true)]
-    private static extern IntPtr OpenProcess(
-      uint desiredAccess,
-      bool inheritHandle,
-      uint processId
-    );
-
-    [DllImport("kernel32.dll", ExactSpelling = true, SetLastError = true)]
-    private static extern bool GetProcessTimes(
-      IntPtr process,
-      out NativeFileTime creation,
-      out NativeFileTime exit,
-      out NativeFileTime kernel,
-      out NativeFileTime user
-    );
-
-    [DllImport("kernel32.dll", ExactSpelling = true, SetLastError = true)]
-    private static extern bool CloseHandle(IntPtr handle);
-
-    public static string Read(uint processId) {
-      uint parentProcessId = ReadParentProcessId(processId);
-      ulong creationTime = ReadCreationTime(processId);
-      return processId.ToString(CultureInfo.InvariantCulture) + "|" +
-        parentProcessId.ToString(CultureInfo.InvariantCulture) + "|" +
-        creationTime.ToString(CultureInfo.InvariantCulture);
-    }
-
-    private static uint ReadParentProcessId(uint processId) {
-      IntPtr snapshot = CreateToolhelp32Snapshot(SnapshotProcesses, 0);
-      if (snapshot == InvalidHandle) {
-        throw new Win32Exception(Marshal.GetLastWin32Error());
-      }
-      try {
-        NativeProcessEntry entry = new NativeProcessEntry();
-        entry.Size = (uint)Marshal.SizeOf(typeof(NativeProcessEntry));
-        if (!Process32FirstW(snapshot, ref entry)) {
-          throw new Win32Exception(Marshal.GetLastWin32Error());
-        }
-        do {
-          if (entry.ProcessId == processId) return entry.ParentProcessId;
-        } while (Process32NextW(snapshot, ref entry));
-        throw new ArgumentException("Process does not exist.", "processId");
-      } finally {
-        CloseHandle(snapshot);
-      }
-    }
-
-    private static ulong ReadCreationTime(uint processId) {
-      IntPtr process = OpenProcess(
-        QueryLimitedInformation,
-        false,
-        processId
-      );
-      if (process == IntPtr.Zero) {
-        throw new Win32Exception(Marshal.GetLastWin32Error());
-      }
-      try {
-        NativeFileTime creation;
-        NativeFileTime exit;
-        NativeFileTime kernel;
-        NativeFileTime user;
-        if (!GetProcessTimes(
-          process,
-          out creation,
-          out exit,
-          out kernel,
-          out user
-        )) {
-          throw new Win32Exception(Marshal.GetLastWin32Error());
-        }
-        return ((ulong)creation.High << 32) | creation.Low;
-      } finally {
-        CloseHandle(process);
-      }
-    }
-  }
-}
-'@
-}
-[Cockpit.NativeProcessSnapshot]::Read(
-  [uint32]$env:COCKPIT_PROCESS_ID
-)
-''';
