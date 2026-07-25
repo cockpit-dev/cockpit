@@ -243,3 +243,7 @@ jobs:
           path: |
             ${{ env.ACCEPTANCE_OUTPUT }}
             ${{ env.COCKPIT_HOME }}/daemon.log
+            ${{ env.COCKPIT_WINDOWS_WORKSPACE }}/examples/cockpit_demo/cockpit/build/windows/x64/CMakeCache.txt
+            ${{ env.COCKPIT_WINDOWS_WORKSPACE }}/examples/cockpit_demo/cockpit/build/windows/x64/CMakeFiles/CMakeConfigureLog.yaml
+            ${{ env.COCKPIT_WINDOWS_WORKSPACE }}/examples/cockpit_demo/cockpit/build/windows/x64/CMakeFiles/CMakeError.log
+            ${{ env.COCKPIT_WINDOWS_WORKSPACE }}/examples/cockpit_demo/cockpit/build/windows/x64/CMakeFiles/CMakeOutput.log
