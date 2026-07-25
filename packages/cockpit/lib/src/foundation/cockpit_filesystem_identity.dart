@@ -270,7 +270,12 @@ try {
     [System.Security.Principal.SecurityIdentifier]
   )
 }
-$allowedWriters = @($current.Value, 'S-1-5-18', 'S-1-5-32-544')
+$allowedWriters = @(
+  $current.Value,
+  'S-1-5-18',
+  'S-1-5-32-544',
+  'S-1-5-80-956008885-3418522649-1831038044-1853292631-2271478464'
+)
 # Generic rights may remain unexpanded in an ACE.
 $writeRights =
   [System.Security.AccessControl.FileSystemRights]::WriteData -bor

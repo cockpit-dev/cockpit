@@ -367,8 +367,9 @@ final class CockpitSupervisorRuntime {
 
   Future<CockpitOperationResult> executeWorkspaceOperation(
     String workspaceId,
-    CockpitOperationInvocation invocation,
-  ) async {
+    CockpitOperationInvocation invocation, {
+    Duration defaultTimeout = const Duration(seconds: 30),
+  }) async {
     _requireAccepting();
     if (invocation.workspaceId != workspaceId || invocation.rootId != null) {
       throw const FormatException('Workspace operation scope mismatch.');
@@ -390,7 +391,12 @@ final class CockpitSupervisorRuntime {
     final key =
         invocation.idempotencyKey?.value ??
         'readonly-${CockpitSecureTokenGenerator().nextToken(byteLength: 16)}';
-    final deadline = invocation.deadline ?? _deadline();
+    if (defaultTimeout <= Duration.zero ||
+        defaultTimeout > const Duration(minutes: 5)) {
+      throw ArgumentError.value(defaultTimeout, 'defaultTimeout');
+    }
+    final deadline =
+        invocation.deadline ?? DateTime.now().toUtc().add(defaultTimeout);
     final workerInvocation = CockpitOperationInvocation(
       kind: invocation.kind,
       input: invocation.input,
@@ -421,8 +427,8 @@ final class CockpitSupervisorRuntime {
         idempotencyKey: CockpitIdempotencyKey(
           'document-index-${DateTime.now().microsecondsSinceEpoch}',
         ),
-        deadline: DateTime.now().toUtc().add(const Duration(minutes: 2)),
       ),
+      defaultTimeout: const Duration(minutes: 2),
     );
     _throwIfWorkspaceOperationFailed(result);
     final raw = result.output?['documents'];
