@@ -96,10 +96,8 @@ final class CockpitSystemSupervisorPortOwnershipInspector
       if (current.processId == workerProcessId) {
         return current.startIdentity == _workerStartIdentity;
       }
-      final parentProcessId = Platform.isWindows
-          ? await _readWindowsParentProcessId(current.processId, deadline)
-          : current.parentProcessId;
-      if (parentProcessId == null) return false;
+      final parentProcessId = current.parentProcessId;
+      if (parentProcessId <= 1) return false;
       final parent = await _readProcessSnapshot(parentProcessId, deadline);
       if (parent == null) return false;
       current = parent;
@@ -238,48 +236,33 @@ final class CockpitSystemSupervisorPortOwnershipInspector
     int processId,
     DateTime deadline,
   ) async {
-    final script =
-        '\$process = Get-Process -Id $processId -ErrorAction SilentlyContinue; '
-        'if (\$null -ne \$process) { '
-        '"\$(\$process.Id)|\$(\$process.StartTime.ToUniversalTime().Ticks)" }';
     final result = await _run(
       'powershell.exe',
-      <String>['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', script],
+      const <String>[
+        '-NoLogo',
+        '-NoProfile',
+        '-NonInteractive',
+        '-Command',
+        cockpitWindowsProcessSnapshotPowerShell,
+      ],
       deadline,
       allowFailure: true,
+      environment: <String, String>{'COCKPIT_PROCESS_ID': '$processId'},
     );
     if (result.exitCode != 0) return null;
-    final parts = '${result.stdout}'.trim().split('|');
-    if (parts.length != 2) return null;
-    final id = int.tryParse(parts[0]);
-    final startIdentity = parts[1].trim();
-    if (id == null || id <= 1 || startIdentity.isEmpty) return null;
+    final fields = '${result.stdout}'.trim().split('|');
+    if (fields.length != 3) return null;
+    final id = int.tryParse(fields[0]);
+    final parentId = int.tryParse(fields[1]);
+    final startIdentity = fields[2].trim();
+    if (id == null || id <= 1 || parentId == null || startIdentity.isEmpty) {
+      return null;
+    }
     return _ProcessSnapshot(
       processId: id,
-      parentProcessId: 0,
+      parentProcessId: parentId,
       startIdentity: startIdentity,
     );
-  }
-
-  static Future<int?> _readWindowsParentProcessId(
-    int processId,
-    DateTime deadline,
-  ) async {
-    final script =
-        '\$process = Get-WmiObject -Class Win32_Process '
-        '-Filter "ProcessId = $processId" -ErrorAction SilentlyContinue; '
-        'if (\$null -ne \$process) { "\$(\$process.ParentProcessId)" }';
-    final result = await _run(
-      'powershell.exe',
-      <String>['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', script],
-      deadline,
-      allowFailure: true,
-    );
-    if (result.exitCode != 0) return null;
-    final parentProcessId = int.tryParse('${result.stdout}'.trim());
-    return parentProcessId != null && parentProcessId > 1
-        ? parentProcessId
-        : null;
   }
 
   static Future<ProcessResult> _run(
@@ -287,23 +270,41 @@ final class CockpitSystemSupervisorPortOwnershipInspector
     List<String> arguments,
     DateTime deadline, {
     required bool allowFailure,
+    Map<String, String>? environment,
   }) async {
     final remaining = deadline.difference(DateTime.now().toUtc());
     if (remaining <= Duration.zero) {
       throw TimeoutException('OS ownership probe deadline expired.');
     }
-    final result = await Process.run(
+    final process = await Process.start(
       executable,
       arguments,
-      environment: _probeEnvironment(),
+      environment: <String, String>{..._probeEnvironment(), ...?environment},
       includeParentEnvironment: false,
-      stdoutEncoding: utf8,
-      stderrEncoding: utf8,
-    ).timeout(remaining);
-    if (!allowFailure && result.exitCode != 0) {
-      throw StateError('$executable process inspection failed.');
+    );
+    await process.stdin.close();
+    final stdout = process.stdout.transform(utf8.decoder).join();
+    final stderr = process.stderr.transform(utf8.decoder).join();
+    try {
+      final exitCode = await process.exitCode.timeout(remaining);
+      final result = ProcessResult(
+        process.pid,
+        exitCode,
+        await stdout,
+        await stderr,
+      );
+      if (!allowFailure && result.exitCode != 0) {
+        throw StateError('$executable process inspection failed.');
+      }
+      return result;
+    } on TimeoutException {
+      process.kill(ProcessSignal.sigkill);
+      await process.exitCode.timeout(
+        const Duration(seconds: 1),
+        onTimeout: () => -1,
+      );
+      rethrow;
     }
-    return result;
   }
 }
 
@@ -349,3 +350,152 @@ int? _windowsEndpointPort(String endpoint) {
   if (separator < 0 || separator == endpoint.length - 1) return null;
   return int.tryParse(endpoint.substring(separator + 1));
 }
+
+const cockpitWindowsProcessSnapshotPowerShell = r'''
+$ErrorActionPreference = 'Stop'
+if (-not ('Cockpit.NativeProcessSnapshot' -as [type])) {
+  Add-Type -TypeDefinition @'
+using System;
+using System.ComponentModel;
+using System.Globalization;
+using System.Runtime.InteropServices;
+
+namespace Cockpit {
+  [StructLayout(LayoutKind.Sequential)]
+  internal struct NativeFileTime {
+    public uint Low;
+    public uint High;
+  }
+
+  [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+  internal struct NativeProcessEntry {
+    public uint Size;
+    public uint Usage;
+    public uint ProcessId;
+    public IntPtr DefaultHeapId;
+    public uint ModuleId;
+    public uint ThreadCount;
+    public uint ParentProcessId;
+    public int BasePriority;
+    public uint Flags;
+
+    [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 260)]
+    public string ExecutableFile;
+  }
+
+  public static class NativeProcessSnapshot {
+    private const uint SnapshotProcesses = 0x00000002;
+    private const uint QueryLimitedInformation = 0x00001000;
+    private static readonly IntPtr InvalidHandle = new IntPtr(-1);
+
+    [DllImport("kernel32.dll", ExactSpelling = true, SetLastError = true)]
+    private static extern IntPtr CreateToolhelp32Snapshot(
+      uint flags,
+      uint processId
+    );
+
+    [DllImport(
+      "kernel32.dll",
+      CharSet = CharSet.Unicode,
+      ExactSpelling = true,
+      SetLastError = true
+    )]
+    private static extern bool Process32FirstW(
+      IntPtr snapshot,
+      ref NativeProcessEntry entry
+    );
+
+    [DllImport(
+      "kernel32.dll",
+      CharSet = CharSet.Unicode,
+      ExactSpelling = true,
+      SetLastError = true
+    )]
+    private static extern bool Process32NextW(
+      IntPtr snapshot,
+      ref NativeProcessEntry entry
+    );
+
+    [DllImport("kernel32.dll", ExactSpelling = true, SetLastError = true)]
+    private static extern IntPtr OpenProcess(
+      uint desiredAccess,
+      bool inheritHandle,
+      uint processId
+    );
+
+    [DllImport("kernel32.dll", ExactSpelling = true, SetLastError = true)]
+    private static extern bool GetProcessTimes(
+      IntPtr process,
+      out NativeFileTime creation,
+      out NativeFileTime exit,
+      out NativeFileTime kernel,
+      out NativeFileTime user
+    );
+
+    [DllImport("kernel32.dll", ExactSpelling = true, SetLastError = true)]
+    private static extern bool CloseHandle(IntPtr handle);
+
+    public static string Read(uint processId) {
+      uint parentProcessId = ReadParentProcessId(processId);
+      ulong creationTime = ReadCreationTime(processId);
+      return processId.ToString(CultureInfo.InvariantCulture) + "|" +
+        parentProcessId.ToString(CultureInfo.InvariantCulture) + "|" +
+        creationTime.ToString(CultureInfo.InvariantCulture);
+    }
+
+    private static uint ReadParentProcessId(uint processId) {
+      IntPtr snapshot = CreateToolhelp32Snapshot(SnapshotProcesses, 0);
+      if (snapshot == InvalidHandle) {
+        throw new Win32Exception(Marshal.GetLastWin32Error());
+      }
+      try {
+        NativeProcessEntry entry = new NativeProcessEntry();
+        entry.Size = (uint)Marshal.SizeOf(typeof(NativeProcessEntry));
+        if (!Process32FirstW(snapshot, ref entry)) {
+          throw new Win32Exception(Marshal.GetLastWin32Error());
+        }
+        do {
+          if (entry.ProcessId == processId) return entry.ParentProcessId;
+        } while (Process32NextW(snapshot, ref entry));
+        throw new ArgumentException("Process does not exist.", "processId");
+      } finally {
+        CloseHandle(snapshot);
+      }
+    }
+
+    private static ulong ReadCreationTime(uint processId) {
+      IntPtr process = OpenProcess(
+        QueryLimitedInformation,
+        false,
+        processId
+      );
+      if (process == IntPtr.Zero) {
+        throw new Win32Exception(Marshal.GetLastWin32Error());
+      }
+      try {
+        NativeFileTime creation;
+        NativeFileTime exit;
+        NativeFileTime kernel;
+        NativeFileTime user;
+        if (!GetProcessTimes(
+          process,
+          out creation,
+          out exit,
+          out kernel,
+          out user
+        )) {
+          throw new Win32Exception(Marshal.GetLastWin32Error());
+        }
+        return ((ulong)creation.High << 32) | creation.Low;
+      } finally {
+        CloseHandle(process);
+      }
+    }
+  }
+}
+'@
+}
+[Cockpit.NativeProcessSnapshot]::Read(
+  [uint32]$env:COCKPIT_PROCESS_ID
+)
+''';

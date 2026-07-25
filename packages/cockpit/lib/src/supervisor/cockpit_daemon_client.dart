@@ -227,7 +227,9 @@ final class CockpitDaemonLifecycleClient {
     if (discovery == null) return null;
     final identity = await const CockpitSystemProcessIdentityProbe()
         .readStartIdentity(discovery.processId);
-    final server = await _health(discovery);
+    final server = identity == discovery.processStartIdentity
+        ? await _healthUntilReady(discovery)
+        : await _health(discovery);
     if (identity == discovery.processStartIdentity) {
       if (server == null) {
         throw const CockpitDaemonException(
@@ -254,33 +256,53 @@ final class CockpitDaemonLifecycleClient {
   }
 
   Future<CockpitServerInfo?> _health(CockpitDaemonDiscovery discovery) async {
-    final client = HttpClient()..connectionTimeout = const Duration(seconds: 1);
+    final client = HttpClient()..connectionTimeout = const Duration(seconds: 2);
     try {
       final request = await client
           .getUrl(discovery.endpoint.resolve('/_cockpit/health'))
-          .timeout(const Duration(seconds: 1));
+          .timeout(const Duration(seconds: 2));
       request.headers.set(
         HttpHeaders.authorizationHeader,
         'Bearer ${discovery.bearerToken}',
       );
       final response = await request.close().timeout(
-        const Duration(seconds: 1),
+        const Duration(seconds: 2),
       );
       if (response.statusCode != HttpStatus.ok) {
         await response.drain<void>();
         return null;
       }
-      final bytes = await response.fold<List<int>>(<int>[], (all, chunk) {
-        if (all.length + chunk.length > 64 * 1024) {
-          throw const FormatException('Health response is too large.');
-        }
-        return all..addAll(chunk);
-      });
+      final bytes = await response
+          .fold<List<int>>(<int>[], (all, chunk) {
+            if (all.length + chunk.length > 64 * 1024) {
+              throw const FormatException('Health response is too large.');
+            }
+            return all..addAll(chunk);
+          })
+          .timeout(const Duration(seconds: 2));
       return CockpitServerInfo.fromJson(jsonDecode(utf8.decode(bytes)));
     } on Object {
       return null;
     } finally {
       client.close(force: true);
+    }
+  }
+
+  Future<CockpitServerInfo?> _healthUntilReady(
+    CockpitDaemonDiscovery discovery, {
+    Duration timeout = const Duration(seconds: 8),
+  }) async {
+    final deadline = DateTime.now().toUtc().add(timeout);
+    while (true) {
+      final server = await _health(discovery);
+      if (server != null) return server;
+      final remaining = deadline.difference(DateTime.now().toUtc());
+      if (remaining <= Duration.zero) return null;
+      await Future<void>.delayed(
+        remaining < const Duration(milliseconds: 200)
+            ? remaining
+            : const Duration(milliseconds: 200),
+      );
     }
   }
 
