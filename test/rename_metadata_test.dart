@@ -7,13 +7,13 @@ void main() {
     final rootPubspec = File('pubspec.yaml').readAsStringSync();
     final melosConfig = File('melos.yaml').readAsStringSync();
 
-    expect(rootPubspec, contains('name: flutter_cockpit_workspace'));
+    expect(rootPubspec, contains('name: cockpit_workspace'));
     expect(rootPubspec, contains('workspace:'));
     expect(rootPubspec, contains('- packages/cockpit_protocol'));
     expect(rootPubspec, contains('- packages/flutter_cockpit'));
     expect(rootPubspec, contains('- packages/cockpit'));
     expect(rootPubspec, contains('- examples/cockpit_demo'));
-    expect(melosConfig, contains('name: flutter_cockpit_workspace'));
+    expect(melosConfig, contains('name: cockpit_workspace'));
     expect(melosConfig, contains('packages:'));
     expect(melosConfig, contains('- packages/cockpit_protocol'));
     expect(melosConfig, contains('- packages/flutter_cockpit'));

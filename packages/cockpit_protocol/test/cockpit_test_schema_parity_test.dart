@@ -33,7 +33,7 @@ void main() {
     );
     expect(
       schemaJson[r'$id'],
-      'https://github.com/cockpit-dev/flutter_cockpit/packages/cockpit_protocol/schema/cockpit.test.v2.schema.json',
+      'https://github.com/cockpit-dev/cockpit/packages/cockpit_protocol/schema/cockpit.test.v2.schema.json',
     );
     expect(schema.schemaVersion, SchemaVersion.draft2020_12);
     expect(

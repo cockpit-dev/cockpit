@@ -1,9 +1,9 @@
 # cockpit
 
 [![pub package](https://img.shields.io/pub/v/cockpit?logo=dart&label=pub.dev)](https://pub.dev/packages/cockpit)
-[![License](https://img.shields.io/github/license/cockpit-dev/flutter_cockpit)](https://github.com/cockpit-dev/flutter_cockpit/blob/main/packages/cockpit/LICENSE)
+[![License](https://img.shields.io/github/license/cockpit-dev/cockpit)](https://github.com/cockpit-dev/cockpit/blob/main/packages/cockpit/LICENSE)
 
-[简体中文](https://github.com/cockpit-dev/flutter_cockpit/blob/main/packages/cockpit/README.zh-CN.md)
+[简体中文](https://github.com/cockpit-dev/cockpit/blob/main/packages/cockpit/README.zh-CN.md)
 
 `cockpit` is the authenticated host client and headless execution package for
 Cockpit 2.0. It contains the Supervisor daemon, isolated workspace worker,

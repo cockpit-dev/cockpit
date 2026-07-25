@@ -4,7 +4,7 @@
     "AGENTS.md"
   ],
   "mcp": {
-    "flutterCockpit": {
+    "cockpit": {
       "type": "local",
       "command": [
         "dart",

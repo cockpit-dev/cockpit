@@ -222,7 +222,7 @@ final class CockpitSystemControlParameterSets {
     CockpitSystemControlParameter(
       name: 'tag',
       valueType: CockpitSystemControlParameterType.string,
-      description: 'Stable notification tag; default is flutter-cockpit.',
+      description: 'Stable notification tag; default is cockpit.',
     ),
   ];
 

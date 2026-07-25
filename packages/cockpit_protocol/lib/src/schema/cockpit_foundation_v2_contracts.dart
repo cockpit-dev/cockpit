@@ -3,7 +3,7 @@
 const String cockpitFoundationV2SchemaJson = r'''
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/cockpit-dev/flutter_cockpit/packages/cockpit_protocol/schema/cockpit.foundation.v2.schema.json",
+  "$id": "https://github.com/cockpit-dev/cockpit/packages/cockpit_protocol/schema/cockpit.foundation.v2.schema.json",
   "title": "Cockpit 2.0 foundation API contracts",
   "description": "Strict platform-neutral contracts for Cockpit Supervisor clients, resources, operations, case and suite runs, events, artifacts, reports, and leases.",
   "oneOf": [

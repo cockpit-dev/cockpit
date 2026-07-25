@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-  <string name="flutter_cockpit_recording_channel_name">Flutter Cockpit Recording</string>
-  <string name="flutter_cockpit_recording_notification_title">Flutter Cockpit is recording</string>
+  <string name="flutter_cockpit_recording_channel_name">Cockpit Recording</string>
+  <string name="flutter_cockpit_recording_notification_title">Cockpit is recording</string>
   <string name="flutter_cockpit_recording_notification_text">Acceptance video capture is active.</string>
 </resources>

@@ -5,7 +5,7 @@ Pod::Spec.new do |s|
   s.description      = <<-DESC
 Native screenshot and recording support for flutter_cockpit development workflows.
                        DESC
-  s.homepage         = 'https://github.com/cockpit-dev/flutter_cockpit'
+  s.homepage         = 'https://github.com/cockpit-dev/cockpit'
   s.license          = { :file => '../LICENSE' }
   s.author           = { 'cockpit-dev' => 'dev@cockpit.dev' }
   s.source           = { :path => '.' }

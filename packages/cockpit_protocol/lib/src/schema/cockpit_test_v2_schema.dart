@@ -3,7 +3,7 @@
 const String cockpitTestV2SchemaJson = r'''
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/cockpit-dev/flutter_cockpit/packages/cockpit_protocol/schema/cockpit.test.v2.schema.json",
+  "$id": "https://github.com/cockpit-dev/cockpit/packages/cockpit_protocol/schema/cockpit.test.v2.schema.json",
   "title": "Cockpit E2E test document",
   "description": "Canonical authored cockpit.test/v2 project, suite, or case document.",
   "oneOf": [

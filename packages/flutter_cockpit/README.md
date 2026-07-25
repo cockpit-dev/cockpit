@@ -3,10 +3,10 @@
 [![pub package](https://img.shields.io/pub/v/flutter_cockpit?logo=dart&label=pub.dev)](https://pub.dev/packages/flutter_cockpit)
 [![pub points](https://img.shields.io/pub/points/flutter_cockpit?logo=dart)](https://pub.dev/packages/flutter_cockpit/score)
 [![likes](https://img.shields.io/pub/likes/flutter_cockpit?logo=dart)](https://pub.dev/packages/flutter_cockpit/score)
-[![E2E](https://github.com/cockpit-dev/flutter_cockpit/actions/workflows/example-e2e.yml/badge.svg)](https://github.com/cockpit-dev/flutter_cockpit/actions/workflows/example-e2e.yml)
-[![License](https://img.shields.io/github/license/cockpit-dev/flutter_cockpit)](https://github.com/cockpit-dev/flutter_cockpit/blob/main/packages/flutter_cockpit/LICENSE)
+[![E2E](https://github.com/cockpit-dev/cockpit/actions/workflows/example-e2e.yml/badge.svg)](https://github.com/cockpit-dev/cockpit/actions/workflows/example-e2e.yml)
+[![License](https://img.shields.io/github/license/cockpit-dev/cockpit)](https://github.com/cockpit-dev/cockpit/blob/main/packages/flutter_cockpit/LICENSE)
 
-[简体中文](https://github.com/cockpit-dev/flutter_cockpit/blob/main/packages/flutter_cockpit/README.zh-CN.md)
+[简体中文](https://github.com/cockpit-dev/cockpit/blob/main/packages/flutter_cockpit/README.zh-CN.md)
 
 `flutter_cockpit` is the optional in-app semantic bridge for Cockpit 2.0 E2E
 automation and AI-driven Flutter development.

@@ -241,7 +241,7 @@ void main() {
     final runtimeReadme = File(
       'packages/flutter_cockpit/README.md',
     ).readAsStringSync();
-    final skill = File('skills/flutter-cockpit/SKILL.md').readAsStringSync();
+    final skill = File('skills/cockpit/SKILL.md').readAsStringSync();
 
     for (final document in <String>[rootReadme, runtimeReadme]) {
       expect(
@@ -324,25 +324,25 @@ void main() {
     expect(
       runtimeReadme,
       contains(
-        'https://github.com/cockpit-dev/flutter_cockpit/blob/main/packages/flutter_cockpit/README.zh-CN.md',
+        'https://github.com/cockpit-dev/cockpit/blob/main/packages/flutter_cockpit/README.zh-CN.md',
       ),
     );
     expect(
       devtoolsReadme,
       contains(
-        'https://github.com/cockpit-dev/flutter_cockpit/blob/main/packages/cockpit/README.zh-CN.md',
+        'https://github.com/cockpit-dev/cockpit/blob/main/packages/cockpit/README.zh-CN.md',
       ),
     );
     expect(
       runtimeReadmeZh,
       contains(
-        'https://github.com/cockpit-dev/flutter_cockpit/blob/main/packages/flutter_cockpit/README.md',
+        'https://github.com/cockpit-dev/cockpit/blob/main/packages/flutter_cockpit/README.md',
       ),
     );
     expect(
       devtoolsReadmeZh,
       contains(
-        'https://github.com/cockpit-dev/flutter_cockpit/blob/main/packages/cockpit/README.md',
+        'https://github.com/cockpit-dev/cockpit/blob/main/packages/cockpit/README.md',
       ),
     );
   });
@@ -436,7 +436,7 @@ void main() {
           document,
           isNot(contains('dart run tool/verify_mcp_surface.dart')),
         );
-        expect(document, contains('github.com/cockpit-dev/flutter_cockpit'));
+        expect(document, contains('github.com/cockpit-dev/cockpit'));
       }
     },
   );
@@ -444,8 +444,8 @@ void main() {
   test('devtools package includes MCP contract fallback documents', () {
     final contractFiles = <String>[
       'ai-development-protocol.md',
-      'flutter-cockpit-protocol.md',
-      'flutter-cockpit-skill-contract.md',
+      'cockpit-protocol.md',
+      'cockpit-skill-contract.md',
     ];
 
     for (final fileName in contractFiles) {
@@ -474,10 +474,10 @@ void main() {
     }
   });
 
-  test('flutter-cockpit skill exposes a local protocol reference', () {
-    final skill = File('skills/flutter-cockpit/SKILL.md').readAsStringSync();
+  test('cockpit skill exposes a local protocol reference', () {
+    final skill = File('skills/cockpit/SKILL.md').readAsStringSync();
     final protocolReference = File(
-      'skills/flutter-cockpit/references/protocol.md',
+      'skills/cockpit/references/protocol.md',
     ).readAsStringSync();
 
     expect(skill, contains('references/protocol.md'));
@@ -485,10 +485,7 @@ void main() {
     expect(protocolReference, contains('cockpit.v2.openapi.json'));
     expect(protocolReference, contains('cockpit.foundation.v2.schema.json'));
     expect(protocolReference, contains('cockpit.test.v2.schema.json'));
-    expect(
-      protocolReference,
-      contains('docs/contracts/flutter-cockpit-protocol.md'),
-    );
+    expect(protocolReference, contains('docs/contracts/cockpit-protocol.md'));
     expect(protocolReference, contains('COCKPIT_HOME/authorization.json'));
     expect(protocolReference, contains('## Command Map'));
   });
@@ -521,7 +518,7 @@ void main() {
       example.readAsStringSync(),
       allOf(
         contains('"mcpServers"'),
-        contains('"flutter-cockpit"'),
+        contains('"cockpit"'),
         contains('"command": "dart"'),
         contains('"cockpit_mcp"'),
       ),

@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-labelledby="title description">
+  <title id="title">Cockpit</title>
+  <desc id="description">A control loop forming the letter C around a verified center point.</desc>
+  <rect width="1024" height="1024" rx="192" fill="#111418"/>
+  <path
+    d="M704 254A318 318 0 1 0 704 770"
+    fill="none"
+    stroke="#F4F7F9"
+    stroke-linecap="round"
+    stroke-width="104"
+  />
+  <rect x="512" y="480" width="276" height="64" rx="32" fill="#38D49B"/>
+  <circle cx="512" cy="512" r="76" fill="#38D49B"/>
+  <path
+    d="M473 512L501 540L556 480"
+    fill="none"
+    stroke="#111418"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    stroke-width="28"
+  />
+  <circle cx="788" cy="512" r="42" fill="#F6B94A"/>
+</svg>

@@ -1,8 +1,12 @@
-# Flutter Cockpit 2.0
+<p align="center">
+  <img src="assets/brand/cockpit-mark.svg" width="128" alt="Cockpit logo">
+</p>
+
+# Cockpit 2.0
 
 [English](README.md)
 
-Flutter Cockpit 是面向 AI、CI 和本地开发的生产级 E2E 自动化与验证框架。
+Cockpit 是面向 AI、CI 和本地开发的生产级 E2E 自动化与验证框架。
 Cockpit 2.0 可以把已安装的 Android/iOS 应用作为黑盒独立操控，也可以通过
 Flutter 语义桥获得更丰富的应用内能力；CLI、MCP 和未来独立客户端共享同一套
 类型化协议。

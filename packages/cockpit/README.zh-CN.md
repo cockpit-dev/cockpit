@@ -1,9 +1,9 @@
 # cockpit
 
 [![pub package](https://img.shields.io/pub/v/cockpit?logo=dart&label=pub.dev)](https://pub.dev/packages/cockpit)
-[![License](https://img.shields.io/github/license/cockpit-dev/flutter_cockpit)](https://github.com/cockpit-dev/flutter_cockpit/blob/main/packages/cockpit/LICENSE)
+[![License](https://img.shields.io/github/license/cockpit-dev/cockpit)](https://github.com/cockpit-dev/cockpit/blob/main/packages/cockpit/LICENSE)
 
-[English](https://github.com/cockpit-dev/flutter_cockpit/blob/main/packages/cockpit/README.md)
+[English](https://github.com/cockpit-dev/cockpit/blob/main/packages/cockpit/README.md)
 
 `cockpit` 是 Cockpit 2.0 的认证宿主客户端和无头执行包，包含 Supervisor daemon、
 隔离 workspace worker、resource-oriented CLI 和轻量 MCP server，不内置 GUI 或 Web

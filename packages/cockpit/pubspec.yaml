@@ -1,10 +1,10 @@
 name: cockpit
 description: Production E2E automation CLI, daemon, MCP, drivers, and reports for Flutter and black-box apps.
 version: 2.0.0
-homepage: https://github.com/cockpit-dev/flutter_cockpit
-repository: https://github.com/cockpit-dev/flutter_cockpit
-issue_tracker: https://github.com/cockpit-dev/flutter_cockpit/issues
-documentation: https://github.com/cockpit-dev/flutter_cockpit/tree/main/packages/cockpit
+homepage: https://github.com/cockpit-dev/cockpit
+repository: https://github.com/cockpit-dev/cockpit
+issue_tracker: https://github.com/cockpit-dev/cockpit/issues
+documentation: https://github.com/cockpit-dev/cockpit/tree/main/packages/cockpit
 topics:
   - flutter
   - cli

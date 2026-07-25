@@ -1,10 +1,10 @@
 name: flutter_cockpit
 description: Flutter semantic automation, observation, capture, and recording bridge for Cockpit E2E tests.
 version: 2.0.0
-homepage: https://github.com/cockpit-dev/flutter_cockpit
-repository: https://github.com/cockpit-dev/flutter_cockpit
-issue_tracker: https://github.com/cockpit-dev/flutter_cockpit/issues
-documentation: https://github.com/cockpit-dev/flutter_cockpit/tree/main/packages/flutter_cockpit
+homepage: https://github.com/cockpit-dev/cockpit
+repository: https://github.com/cockpit-dev/cockpit
+issue_tracker: https://github.com/cockpit-dev/cockpit/issues
+documentation: https://github.com/cockpit-dev/cockpit/tree/main/packages/flutter_cockpit
 topics:
   - flutter
   - automation

@@ -1,6 +1,6 @@
 {
   "mcpServers": {
-    "flutter-cockpit": {
+    "cockpit": {
       "command": "dart",
       "args": [
         "run",

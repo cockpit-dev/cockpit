@@ -35,7 +35,7 @@ void main() {
   }
 
   void expectSkillCopyMatchesCanonical(String path) {
-    final canonicalPath = 'skills/flutter-cockpit';
+    final canonicalPath = 'skills/cockpit';
     final canonicalFiles = listFiles(canonicalPath);
     final copyFiles = listFiles(path);
 
@@ -51,13 +51,13 @@ void main() {
 
   test('Codex plugin exposes the skill and MCP server', () {
     final marketplace = readJson('.agents/plugins/marketplace.json');
-    expect(marketplace['name'], 'flutter-cockpit');
+    expect(marketplace['name'], 'cockpit');
     final marketplacePlugins = marketplace['plugins']! as List<Object?>;
     final marketplaceEntry = marketplacePlugins.single as Map<String, Object?>;
-    expect(marketplaceEntry['name'], 'flutter-cockpit');
+    expect(marketplaceEntry['name'], 'cockpit');
     expect(marketplaceEntry['source'], <String, Object?>{
       'source': 'local',
-      'path': './plugins/codex/flutter-cockpit',
+      'path': './plugins/codex/cockpit',
     });
     expect(marketplaceEntry['policy'], <String, Object?>{
       'installation': 'AVAILABLE',
@@ -65,90 +65,78 @@ void main() {
     });
 
     final manifest = readJson(
-      'plugins/codex/flutter-cockpit/.codex-plugin/plugin.json',
+      'plugins/codex/cockpit/.codex-plugin/plugin.json',
     );
-    expect(manifest['name'], 'flutter-cockpit');
+    expect(manifest['name'], 'cockpit');
     expect(manifest['skills'], './skills/');
     expect(manifest['mcpServers'], './.mcp.json');
     expect(manifest['interface'], isA<Map<String, Object?>>());
 
-    final mcp = readJson('plugins/codex/flutter-cockpit/.mcp.json');
+    final mcp = readJson('plugins/codex/cockpit/.mcp.json');
     final servers = mcp['mcpServers']! as Map<String, Object?>;
-    final server = servers['flutterCockpit']! as Map<String, Object?>;
+    final server = servers['cockpit']! as Map<String, Object?>;
     expectStdioMcpServer(server);
 
-    final skill = read(
-      'plugins/codex/flutter-cockpit/skills/flutter-cockpit/SKILL.md',
-    );
-    expect(skill, contains('name: flutter-cockpit'));
+    final skill = read('plugins/codex/cockpit/skills/cockpit/SKILL.md');
+    expect(skill, contains('name: cockpit'));
     expect(skill, contains('dart run cockpit'));
   });
 
   test('Claude Code plugin exposes the skill and MCP server', () {
     final projectMcp = readJson('.mcp.json');
     final projectServers = projectMcp['mcpServers']! as Map<String, Object?>;
-    expectStdioMcpServer(
-      projectServers['flutter-cockpit']! as Map<String, Object?>,
-    );
+    expectStdioMcpServer(projectServers['cockpit']! as Map<String, Object?>);
 
     final manifest = readJson(
-      'plugins/claude-code/flutter-cockpit/.claude-plugin/plugin.json',
+      'plugins/claude-code/cockpit/.claude-plugin/plugin.json',
     );
-    expect(manifest['name'], 'flutter-cockpit');
-    expect(manifest['description'], contains('Flutter Cockpit'));
+    expect(manifest['name'], 'cockpit');
+    expect(manifest['description'], contains('Cockpit'));
 
-    final mcp = readJson('plugins/claude-code/flutter-cockpit/.mcp.json');
-    final server = mcp['flutter-cockpit']! as Map<String, Object?>;
+    final mcp = readJson('plugins/claude-code/cockpit/.mcp.json');
+    final server = mcp['cockpit']! as Map<String, Object?>;
     expectStdioMcpServer(server);
 
-    final skill = read(
-      'plugins/claude-code/flutter-cockpit/skills/flutter-cockpit/SKILL.md',
-    );
-    expect(skill, contains('name: flutter-cockpit'));
+    final skill = read('plugins/claude-code/cockpit/skills/cockpit/SKILL.md');
+    expect(skill, contains('name: cockpit'));
     expect(skill, contains('dart run cockpit'));
   });
 
   test('repo-local agent adapters point to the canonical skill', () {
-    final cursor = read('.cursor/rules/flutter-cockpit.mdc');
+    final cursor = read('.cursor/rules/cockpit.mdc');
     expect(cursor, contains('alwaysApply: false'));
-    expect(cursor, contains('skills/flutter-cockpit/SKILL.md'));
+    expect(cursor, contains('skills/cockpit/SKILL.md'));
     expect(cursor, contains('dart run cockpit'));
     final cursorMcp = readJson('.cursor/mcp.json');
     final cursorServers = cursorMcp['mcpServers']! as Map<String, Object?>;
-    expectStdioMcpServer(
-      cursorServers['flutter-cockpit']! as Map<String, Object?>,
-    );
+    expectStdioMcpServer(cursorServers['cockpit']! as Map<String, Object?>);
 
-    final kiro = read('.kiro/steering/flutter-cockpit.md');
-    expect(kiro, contains('skills/flutter-cockpit/SKILL.md'));
+    final kiro = read('.kiro/steering/cockpit.md');
+    expect(kiro, contains('skills/cockpit/SKILL.md'));
     expect(kiro, contains('dart run cockpit'));
     final kiroMcp = readJson('.kiro/settings/mcp.json');
     final kiroServers = kiroMcp['mcpServers']! as Map<String, Object?>;
-    expectStdioMcpServer(
-      kiroServers['flutter-cockpit']! as Map<String, Object?>,
-    );
-    final kiroPower = read('plugins/kiro/flutter-cockpit/POWER.md');
-    expect(kiroPower, contains('Flutter Cockpit'));
+    expectStdioMcpServer(kiroServers['cockpit']! as Map<String, Object?>);
+    final kiroPower = read('plugins/kiro/cockpit/POWER.md');
+    expect(kiroPower, contains('Cockpit'));
     expect(kiroPower, contains('dart run cockpit'));
-    final kiroPowerMcp = readJson('plugins/kiro/flutter-cockpit/mcp.json');
+    final kiroPowerMcp = readJson('plugins/kiro/cockpit/mcp.json');
     final kiroPowerServers =
         kiroPowerMcp['mcpServers']! as Map<String, Object?>;
-    expectStdioMcpServer(
-      kiroPowerServers['flutter-cockpit']! as Map<String, Object?>,
-    );
+    expectStdioMcpServer(kiroPowerServers['cockpit']! as Map<String, Object?>);
 
     final opencode = readJson('opencode.json');
     expect(opencode['instructions'], <Object?>['AGENTS.md']);
     final mcp = opencode['mcp']! as Map<String, Object?>;
-    final server = mcp['flutterCockpit']! as Map<String, Object?>;
+    final server = mcp['cockpit']! as Map<String, Object?>;
     expect(server['type'], 'local');
     expect(server['command'], <Object?>['dart', 'run', 'cockpit', 'serve-mcp']);
 
-    final ompSkill = read('.agents/skills/flutter-cockpit/SKILL.md');
-    expect(ompSkill, contains('name: flutter-cockpit'));
+    final ompSkill = read('.agents/skills/cockpit/SKILL.md');
+    expect(ompSkill, contains('name: cockpit'));
     expect(ompSkill, contains('dart run cockpit'));
-    final piSkill = read('.pi/skills/flutter-cockpit/SKILL.md');
-    expect(piSkill, contains('name: flutter-cockpit'));
+    final piSkill = read('.pi/skills/cockpit/SKILL.md');
+    expect(piSkill, contains('name: cockpit'));
     expect(piSkill, contains('dart run cockpit'));
   });
 
@@ -167,19 +155,19 @@ void main() {
     ]) {
       expect(docs, contains(host), reason: host);
     }
-    expect(docs, contains('plugins/codex/flutter-cockpit'));
-    expect(docs, contains('plugins/claude-code/flutter-cockpit'));
-    expect(docs, contains('.claude/skills/flutter-cockpit'));
+    expect(docs, contains('plugins/codex/cockpit'));
+    expect(docs, contains('plugins/claude-code/cockpit'));
+    expect(docs, contains('.claude/skills/cockpit'));
     expect(docs, contains('.mcp.json'));
-    expect(docs, contains('.cursor/rules/flutter-cockpit.mdc'));
+    expect(docs, contains('.cursor/rules/cockpit.mdc'));
     expect(docs, contains('.cursor/mcp.json'));
-    expect(docs, contains('.cursor/skills/flutter-cockpit'));
-    expect(docs, contains('.kiro/steering/flutter-cockpit.md'));
+    expect(docs, contains('.cursor/skills/cockpit'));
+    expect(docs, contains('.kiro/steering/cockpit.md'));
     expect(docs, contains('.kiro/settings/mcp.json'));
-    expect(docs, contains('plugins/kiro/flutter-cockpit'));
-    expect(docs, contains('.agents/skills/flutter-cockpit'));
-    expect(docs, contains('.opencode/skills/flutter-cockpit'));
-    expect(docs, contains('.pi/skills/flutter-cockpit'));
+    expect(docs, contains('plugins/kiro/cockpit'));
+    expect(docs, contains('.agents/skills/cockpit'));
+    expect(docs, contains('.opencode/skills/cockpit'));
+    expect(docs, contains('.pi/skills/cockpit'));
     expect(docs, contains('opencode.json'));
     expect(readme, contains('docs/agent-integrations.md'));
     expect(zhReadme, contains('docs/agent-integrations.md'));
@@ -188,22 +176,18 @@ void main() {
   });
 
   test('packaged skills are complete copies of the canonical skill', () {
-    final canonical = read('skills/flutter-cockpit/SKILL.md');
+    final canonical = read('skills/cockpit/SKILL.md');
 
     expect(canonical.split(RegExp(r'\s+')).length, greaterThan(500));
+    expectSkillCopyMatchesCanonical('plugins/codex/cockpit/skills/cockpit');
     expectSkillCopyMatchesCanonical(
-      'plugins/codex/flutter-cockpit/skills/flutter-cockpit',
+      'plugins/claude-code/cockpit/skills/cockpit',
     );
-    expectSkillCopyMatchesCanonical(
-      'plugins/claude-code/flutter-cockpit/skills/flutter-cockpit',
-    );
-    expectSkillCopyMatchesCanonical(
-      'plugins/kiro/flutter-cockpit/skills/flutter-cockpit',
-    );
-    expectSkillCopyMatchesCanonical('.agents/skills/flutter-cockpit');
-    expectSkillCopyMatchesCanonical('.claude/skills/flutter-cockpit');
-    expectSkillCopyMatchesCanonical('.cursor/skills/flutter-cockpit');
-    expectSkillCopyMatchesCanonical('.opencode/skills/flutter-cockpit');
-    expectSkillCopyMatchesCanonical('.pi/skills/flutter-cockpit');
+    expectSkillCopyMatchesCanonical('plugins/kiro/cockpit/skills/cockpit');
+    expectSkillCopyMatchesCanonical('.agents/skills/cockpit');
+    expectSkillCopyMatchesCanonical('.claude/skills/cockpit');
+    expectSkillCopyMatchesCanonical('.cursor/skills/cockpit');
+    expectSkillCopyMatchesCanonical('.opencode/skills/cockpit');
+    expectSkillCopyMatchesCanonical('.pi/skills/cockpit');
   });
 }

@@ -1539,7 +1539,7 @@ final class CockpitAndroidSystemControlAdapter
     }
     return factory(<String>[
       if (title.value != null) ...<String>['--title', title.value!],
-      tag.value ?? 'flutter-cockpit',
+      tag.value ?? 'cockpit',
       notificationBody,
     ]);
   }

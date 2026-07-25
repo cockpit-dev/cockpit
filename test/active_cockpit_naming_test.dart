@@ -7,7 +7,7 @@ void main() {
   final activeRoots = <String>[
     'packages',
     'examples',
-    'skills/flutter-cockpit',
+    'skills/cockpit',
     'docs/contracts',
     'README.md',
     'test',

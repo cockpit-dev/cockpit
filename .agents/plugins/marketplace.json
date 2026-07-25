@@ -1,14 +1,14 @@
 {
-  "name": "flutter-cockpit",
+  "name": "cockpit",
   "interface": {
-    "displayName": "Flutter Cockpit"
+    "displayName": "Cockpit"
   },
   "plugins": [
     {
-      "name": "flutter-cockpit",
+      "name": "cockpit",
       "source": {
         "source": "local",
-        "path": "./plugins/codex/flutter-cockpit"
+        "path": "./plugins/codex/cockpit"
       },
       "policy": {
         "installation": "AVAILABLE",

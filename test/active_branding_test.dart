@@ -5,32 +5,39 @@ import 'package:test/test.dart';
 void main() {
   final root = Directory.current.absolute.path;
 
-  test('root README uses flutter_cockpit branding', () {
+  test('root README uses Cockpit branding and the project logo', () {
     final readme = File('$root/README.md').readAsStringSync();
+    final logo = File('$root/assets/brand/cockpit-mark.svg');
+    final rasterLogo = File('$root/assets/brand/cockpit-mark.png');
 
-    expect(readme, contains('# Flutter Cockpit 2.0'));
+    expect(readme, contains('# Cockpit 2.0'));
+    expect(readme, contains('assets/brand/cockpit-mark.svg'));
     expect(readme, contains('packages/flutter_cockpit'));
     expect(readme, contains('docs/agent-integrations.md'));
     expect(readme, isNot(contains('packages/flutter_pilot`')));
     expect(readme, isNot(contains('skills/flutter-pilot')));
+    expect(logo.existsSync(), isTrue);
+    expect(rasterLogo.existsSync(), isTrue);
+    expect(
+      logo.readAsStringSync(),
+      contains('<title id="title">Cockpit</title>'),
+    );
   });
 
-  test('active skill assets use flutter_cockpit branding and paths', () {
-    final skillDir = Directory('$root/skills/flutter-cockpit');
+  test('active skill assets use Cockpit branding and paths', () {
+    final skillDir = Directory('$root/skills/cockpit');
     final legacySkillDir = Directory('$root/skills/flutter-pilot');
-    final skill = File(
-      '$root/skills/flutter-cockpit/SKILL.md',
-    ).readAsStringSync();
+    final skill = File('$root/skills/cockpit/SKILL.md').readAsStringSync();
     final contract = File(
-      '$root/docs/contracts/flutter-cockpit-skill-contract.md',
+      '$root/docs/contracts/cockpit-skill-contract.md',
     ).readAsStringSync();
 
     expect(skillDir.existsSync(), isTrue);
     expect(legacySkillDir.existsSync(), isFalse);
-    expect(skill, contains('name: flutter-cockpit'));
-    expect(skill, contains('# Flutter Cockpit'));
+    expect(skill, contains('name: cockpit'));
+    expect(skill, contains('# Cockpit'));
     expect(skill, isNot(contains('name: flutter-pilot')));
-    expect(contract, contains('# Flutter Cockpit 2.0 Skill Contract'));
+    expect(contract, contains('# Cockpit 2.0 Skill Contract'));
     expect(contract, isNot(contains('`flutter-pilot` skill')));
   });
 
@@ -40,7 +47,7 @@ void main() {
       'README.zh-CN.md',
       'packages/flutter_cockpit/README.md',
       'packages/flutter_cockpit/README.zh-CN.md',
-      'skills/flutter-cockpit/SKILL.md',
+      'skills/cockpit/SKILL.md',
       'packages/flutter_cockpit/lib/src/remote/cockpit_remote_session_configuration.dart',
       'packages/flutter_cockpit/lib/src/runtime/cockpit_runtime_environment.dart',
       'packages/cockpit/lib/src/development/cockpit_development_session_machine_launcher.dart',

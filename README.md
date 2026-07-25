@@ -1,11 +1,15 @@
-# Flutter Cockpit 2.0
+<p align="center">
+  <img src="assets/brand/cockpit-mark.svg" width="128" alt="Cockpit logo">
+</p>
 
-[![E2E](https://github.com/cockpit-dev/flutter_cockpit/actions/workflows/example-e2e.yml/badge.svg)](https://github.com/cockpit-dev/flutter_cockpit/actions/workflows/example-e2e.yml)
-[![License](https://img.shields.io/github/license/cockpit-dev/flutter_cockpit)](https://github.com/cockpit-dev/flutter_cockpit/blob/main/packages/flutter_cockpit/LICENSE)
+# Cockpit 2.0
+
+[![E2E](https://github.com/cockpit-dev/cockpit/actions/workflows/example-e2e.yml/badge.svg)](https://github.com/cockpit-dev/cockpit/actions/workflows/example-e2e.yml)
+[![License](https://img.shields.io/github/license/cockpit-dev/cockpit)](https://github.com/cockpit-dev/cockpit/blob/main/LICENSE)
 
 [简体中文](README.zh-CN.md)
 
-Flutter Cockpit is a production E2E automation and verification stack for AI,
+Cockpit is a production E2E automation and verification stack for AI,
 CI, and local development. Cockpit 2.0 controls installed Android and iOS
 applications as black boxes, drives Flutter applications through their richer
 semantic bridge, and exposes the same typed resources to CLI, MCP, and future

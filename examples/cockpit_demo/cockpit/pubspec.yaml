@@ -1,5 +1,5 @@
 name: cockpit_demo_dev
-description: Development shell for validating cockpit_demo with Flutter Cockpit.
+description: Development shell for validating cockpit_demo with Cockpit.
 publish_to: none
 version: 1.0.0
 

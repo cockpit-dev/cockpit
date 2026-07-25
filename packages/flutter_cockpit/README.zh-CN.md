@@ -3,10 +3,10 @@
 [![pub package](https://img.shields.io/pub/v/flutter_cockpit?logo=dart&label=pub.dev)](https://pub.dev/packages/flutter_cockpit)
 [![pub points](https://img.shields.io/pub/points/flutter_cockpit?logo=dart)](https://pub.dev/packages/flutter_cockpit/score)
 [![likes](https://img.shields.io/pub/likes/flutter_cockpit?logo=dart)](https://pub.dev/packages/flutter_cockpit/score)
-[![E2E](https://github.com/cockpit-dev/flutter_cockpit/actions/workflows/example-e2e.yml/badge.svg)](https://github.com/cockpit-dev/flutter_cockpit/actions/workflows/example-e2e.yml)
-[![License](https://img.shields.io/github/license/cockpit-dev/flutter_cockpit)](https://github.com/cockpit-dev/flutter_cockpit/blob/main/packages/flutter_cockpit/LICENSE)
+[![E2E](https://github.com/cockpit-dev/cockpit/actions/workflows/example-e2e.yml/badge.svg)](https://github.com/cockpit-dev/cockpit/actions/workflows/example-e2e.yml)
+[![License](https://img.shields.io/github/license/cockpit-dev/cockpit)](https://github.com/cockpit-dev/cockpit/blob/main/packages/flutter_cockpit/LICENSE)
 
-[English](https://github.com/cockpit-dev/flutter_cockpit/blob/main/packages/flutter_cockpit/README.md)
+[English](https://github.com/cockpit-dev/cockpit/blob/main/packages/flutter_cockpit/README.md)
 
 `flutter_cockpit` 是面向 AI 驱动 Flutter 开发的应用内运行时。
 
