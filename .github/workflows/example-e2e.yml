@@ -105,6 +105,17 @@ jobs:
           dart run cockpit daemon policy apply
           --file examples/cockpit_demo/cockpit/e2e/authorization.ci.json
 
+      - name: Prepare trusted Windows workspace
+        if: matrix.platform == 'windows'
+        shell: pwsh
+        run: |
+          $workspace = Join-Path $env:USERPROFILE 'cockpit-ci-workspace'
+          & robocopy $env:GITHUB_WORKSPACE $workspace /MIR /XD .git cockpit-ci-home cockpit-ci-acceptance /NFL /NDL /NJH /NJS /NP
+          if ($LASTEXITCODE -gt 7) { exit $LASTEXITCODE }
+          Set-Location $workspace
+          flutter pub get
+          "COCKPIT_WINDOWS_WORKSPACE=$workspace" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
       - name: Boot iOS simulator
         if: matrix.platform == 'ios'
         shell: bash
@@ -164,11 +175,10 @@ jobs:
 
       - name: Run Windows regression
         if: matrix.platform == 'windows'
-        working-directory: examples/cockpit_demo/cockpit
         shell: pwsh
-        run: >-
-          dart run tool/verify.dart --platform windows
-          --output-root "$env:ACCEPTANCE_OUTPUT" --stop-daemon
+        run: |
+          Set-Location (Join-Path $env:COCKPIT_WINDOWS_WORKSPACE 'examples\cockpit_demo\cockpit')
+          dart run tool/verify.dart --platform windows --output-root "$env:ACCEPTANCE_OUTPUT" --stop-daemon
 
       - name: Upload regression evidence
         if: always()

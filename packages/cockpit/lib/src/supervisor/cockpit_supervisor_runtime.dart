@@ -428,7 +428,7 @@ final class CockpitSupervisorRuntime {
           'document-index-${DateTime.now().microsecondsSinceEpoch}',
         ),
       ),
-      defaultTimeout: const Duration(minutes: 2),
+      defaultTimeout: const Duration(minutes: 5),
     );
     _throwIfWorkspaceOperationFailed(result);
     final raw = result.output?['documents'];
