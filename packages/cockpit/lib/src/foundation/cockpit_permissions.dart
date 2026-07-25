@@ -81,15 +81,20 @@ final class CockpitWindowsAclPermissionHardener
   Future<void> hardenFile(File file) => _apply(file.path, directory: false);
 
   Future<void> _apply(String path, {required bool directory}) async {
-    final result = await cockpitRunIsolatedProcess('powershell.exe', <String>[
-      '-NoLogo',
-      '-NoProfile',
-      '-NonInteractive',
-      '-Command',
-      _windowsAclScript,
-      path,
-      directory ? 'directory' : 'file',
-    ]);
+    final result = await cockpitRunIsolatedProcess(
+      'powershell.exe',
+      <String>[
+        '-NoLogo',
+        '-NoProfile',
+        '-NonInteractive',
+        '-Command',
+        _windowsAclScript,
+      ],
+      environment: <String, String>{
+        'COCKPIT_ACL_PATH': path,
+        'COCKPIT_ACL_KIND': directory ? 'directory' : 'file',
+      },
+    );
     if (result.exitCode != 0) {
       throw FileSystemException(
         'Could not install restricted Windows ACL: ${_bounded(result.stderr)}',
@@ -101,8 +106,8 @@ final class CockpitWindowsAclPermissionHardener
 
 const _windowsAclScript = r'''
 $ErrorActionPreference = 'Stop'
-$path = $args[0]
-$isDirectory = $args[1] -eq 'directory'
+$path = $env:COCKPIT_ACL_PATH
+$isDirectory = $env:COCKPIT_ACL_KIND -eq 'directory'
 $acl = Get-Acl -LiteralPath $path
 $acl.SetAccessRuleProtection($true, $false)
 foreach ($rule in @($acl.Access)) {

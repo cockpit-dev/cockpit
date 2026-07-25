@@ -13,6 +13,7 @@ import '../foundation/cockpit_home.dart';
 import '../foundation/cockpit_ids.dart';
 import '../foundation/cockpit_locked_json_store.dart';
 import '../foundation/cockpit_permissions.dart';
+import '../infrastructure/cockpit_process_manager.dart';
 import '../registry/cockpit_registry_models.dart';
 import '../registry/cockpit_workspace_registry.dart';
 import '../system_control/cockpit_system_control_service.dart';
@@ -155,14 +156,12 @@ final class CockpitSupervisorRuntime {
             ports: ports,
             portBridge: bridge,
           ),
-      environment: <String, String>{
-        'PATH': ?Platform.environment['PATH'],
-        'HOME': ?Platform.environment['HOME'],
-        'USERPROFILE': ?Platform.environment['USERPROFILE'],
-        'SystemRoot': ?Platform.environment['SystemRoot'],
-        for (final name in policy.allowedEnvironmentSecretNames)
-          name: ?Platform.environment[name],
-      },
+      environment: cockpitMinimumChildEnvironment(
+        environment: <String, String>{
+          for (final name in policy.allowedEnvironmentSecretNames)
+            name: ?Platform.environment[name],
+        },
+      ),
       allowedEnvironmentSecretNames: policy.allowedEnvironmentSecretNames,
     );
     return CockpitSupervisorRuntime._(
