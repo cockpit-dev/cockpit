@@ -165,7 +165,7 @@ final class CockpitSystemDirectoryAttestor
     }
     return CockpitDirectoryAuthoritySnapshot(
       identity: CockpitFilesystemIdentity(
-        value: 'posix:${metadata.device}:${metadata.inode}',
+        value: cockpitPosixFilesystemIdentityValue(metadata),
         quality: CockpitFilesystemIdentityQuality.deviceAndInode,
       ),
       security: CockpitDirectorySecurity(

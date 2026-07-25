@@ -353,8 +353,11 @@ void main() {
         result: _success(admission.operationId, submittedAt: now),
       );
     }
-    final records = await _recordFiles(fixture.path);
-    await records.first.writeAsString('{');
+    final corruptedHash = sha256.convert(utf8.encode('inactive-0')).toString();
+    final corruptedRecord = (await _recordFiles(
+      fixture.path,
+    )).singleWhere((record) => p.basename(record.parent.path) == corruptedHash);
+    await corruptedRecord.writeAsString('{');
 
     await fixture.open().recover(now: now.add(const Duration(seconds: 3)));
     final replay = await fixture.open().admit(

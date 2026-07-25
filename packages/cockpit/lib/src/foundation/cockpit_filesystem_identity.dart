@@ -34,12 +34,14 @@ final class CockpitPosixMetadata {
     required this.inode,
     required this.ownerUserId,
     required this.mode,
+    this.objectInstance,
   });
 
   final int device;
   final int inode;
   final int ownerUserId;
   final int mode;
+  final String? objectInstance;
 }
 
 abstract interface class CockpitPosixMetadataProvider {
@@ -60,14 +62,15 @@ final class CockpitSystemPosixMetadataProvider
       return null;
     }
     final arguments = platform == CockpitHostPlatform.macos
-        ? <String>['-f', '%d:%i:%u:%p', canonicalPath]
-        : <String>['-c', '%d:%i:%u:%a', canonicalPath];
+        ? <String>['-f', '%d|%i|%u|%p|%B|%v', canonicalPath]
+        : <String>['-c', '%d|%i|%u|%a|%w', canonicalPath];
     final result = await cockpitRunIsolatedProcess('stat', arguments);
     if (result.exitCode != 0) {
       return null;
     }
-    final fields = result.stdout.toString().trim().split(':');
-    if (fields.length != 4) {
+    final fields = result.stdout.toString().trim().split('|');
+    final expectedFields = platform == CockpitHostPlatform.macos ? 6 : 5;
+    if (fields.length != expectedFields) {
       return null;
     }
     final device = int.tryParse(fields[0]);
@@ -82,6 +85,7 @@ final class CockpitSystemPosixMetadataProvider
       inode: inode,
       ownerUserId: owner,
       mode: mode,
+      objectInstance: _posixObjectInstance(platform, fields),
     );
   }
 
@@ -160,7 +164,7 @@ final class CockpitBestEffortFilesystemIdentityProvider
     final metadata = await metadataProvider.read(canonicalPath);
     if (metadata != null) {
       return CockpitFilesystemIdentity(
-        value: 'posix:${metadata.device}:${metadata.inode}',
+        value: cockpitPosixFilesystemIdentityValue(metadata),
         quality: CockpitFilesystemIdentityQuality.deviceAndInode,
       );
     }
@@ -188,10 +192,32 @@ final class CockpitPosixFilesystemIdentityProvider
       );
     }
     return CockpitFilesystemIdentity(
-      value: 'posix:${metadata.device}:${metadata.inode}',
+      value: cockpitPosixFilesystemIdentityValue(metadata),
       quality: CockpitFilesystemIdentityQuality.deviceAndInode,
     );
   }
+}
+
+String cockpitPosixFilesystemIdentityValue(CockpitPosixMetadata metadata) {
+  final base = 'posix:${metadata.device}:${metadata.inode}';
+  final objectInstance = metadata.objectInstance;
+  if (objectInstance == null) return base;
+  final digest = sha256.convert(utf8.encode(objectInstance));
+  return '$base:$digest';
+}
+
+String? _posixObjectInstance(
+  CockpitHostPlatform platform,
+  List<String> fields,
+) {
+  if (platform == CockpitHostPlatform.macos) {
+    final birthTime = int.tryParse(fields[4]);
+    final generation = int.tryParse(fields[5]);
+    if (birthTime == null || birthTime <= 0 || generation == null) return null;
+    return 'birth=$birthTime;generation=$generation';
+  }
+  final birthTime = fields[4].trim();
+  return birthTime.isEmpty || birthTime == '-' ? null : 'birth=$birthTime';
 }
 
 final class CockpitDirectorySecurity {

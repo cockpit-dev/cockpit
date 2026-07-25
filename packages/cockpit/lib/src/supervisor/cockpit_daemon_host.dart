@@ -47,6 +47,7 @@ final class CockpitDaemonHost {
   RandomAccessFile? _daemonLock;
   CockpitDaemonDiscovery? _discovery;
   bool _stopping = false;
+  Future<void>? _stopOperation;
 
   CockpitDaemonDiscovery get discovery =>
       _discovery ?? (throw StateError('Daemon host has not started.'));
@@ -116,15 +117,24 @@ final class CockpitDaemonHost {
       _handle,
       onError: (_) {},
       onDone: () {
-        if (!_closed.isCompleted) _closed.complete();
+        if (!_stopping) {
+          unawaited(stop(CockpitDaemonShutdownMode.drain));
+        }
       },
       cancelOnError: false,
     );
     return discovery;
   }
 
-  Future<void> stop(CockpitDaemonShutdownMode mode) async {
-    if (_stopping) return closed;
+  Future<void> stop(CockpitDaemonShutdownMode mode) {
+    final existing = _stopOperation;
+    if (existing != null) return existing;
+    final operation = _stop(mode);
+    _stopOperation = operation;
+    return operation;
+  }
+
+  Future<void> _stop(CockpitDaemonShutdownMode mode) async {
     _stopping = true;
     try {
       await shutdownHandler(mode);
