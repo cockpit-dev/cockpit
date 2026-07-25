@@ -61,7 +61,7 @@ final class CockpitDaemonLifecycleClient {
     required this.permissionHardener,
     required this.directorySyncer,
     this.requiredApiMajor = 2,
-    this.startTimeout = const Duration(seconds: 15),
+    this.startTimeout = const Duration(minutes: 2),
   });
 
   final CockpitHomePaths paths;

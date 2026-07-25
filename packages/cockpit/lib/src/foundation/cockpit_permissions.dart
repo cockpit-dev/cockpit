@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import '../infrastructure/cockpit_process_manager.dart';
@@ -80,6 +81,28 @@ final class CockpitWindowsAclPermissionHardener
   @override
   Future<void> hardenFile(File file) => _apply(file.path, directory: false);
 
+  Future<void> hardenDirectories(Iterable<Directory> directories) async {
+    final paths = <String>[for (final directory in directories) directory.path];
+    if (paths.isEmpty) return;
+    final result = await cockpitRunIsolatedProcess(
+      'powershell.exe',
+      <String>[
+        '-NoLogo',
+        '-NoProfile',
+        '-NonInteractive',
+        '-Command',
+        _windowsDirectoryAclScript,
+      ],
+      environment: <String, String>{'COCKPIT_ACL_PATHS': jsonEncode(paths)},
+    );
+    if (result.exitCode != 0) {
+      throw FileSystemException(
+        'Could not install restricted Windows ACLs: ${_bounded(result.stderr)}',
+        paths.first,
+      );
+    }
+  }
+
   Future<void> _apply(String path, {required bool directory}) async {
     final result = await cockpitRunIsolatedProcess(
       'powershell.exe',
@@ -133,6 +156,34 @@ foreach ($sid in @($current, $system, $administrators)) {
 }
 $acl.SetOwner($current)
 Set-Acl -LiteralPath $path -AclObject $acl
+''';
+
+const _windowsDirectoryAclScript = r'''
+$ErrorActionPreference = 'Stop'
+$paths = ConvertFrom-Json -InputObject $env:COCKPIT_ACL_PATHS
+foreach ($path in @($paths)) {
+  $acl = Get-Acl -LiteralPath $path
+  $acl.SetAccessRuleProtection($true, $false)
+  foreach ($rule in @($acl.Access)) {
+    [void]$acl.RemoveAccessRuleSpecific($rule)
+  }
+  $current = [System.Security.Principal.WindowsIdentity]::GetCurrent().User
+  $system = [System.Security.Principal.SecurityIdentifier]::new('S-1-5-18')
+  $administrators = [System.Security.Principal.SecurityIdentifier]::new('S-1-5-32-544')
+  $inheritance = [System.Security.AccessControl.InheritanceFlags]'ContainerInherit, ObjectInherit'
+  foreach ($sid in @($current, $system, $administrators)) {
+    $rule = [System.Security.AccessControl.FileSystemAccessRule]::new(
+      $sid,
+      [System.Security.AccessControl.FileSystemRights]::FullControl,
+      $inheritance,
+      [System.Security.AccessControl.PropagationFlags]::None,
+      [System.Security.AccessControl.AccessControlType]::Allow
+    )
+    [void]$acl.AddAccessRule($rule)
+  }
+  $acl.SetOwner($current)
+  Set-Acl -LiteralPath $path -AclObject $acl
+}
 ''';
 
 String _bounded(Object? value) {

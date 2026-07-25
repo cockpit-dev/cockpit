@@ -1,8 +1,6 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:path/path.dart' as p;
-
 import '../foundation/cockpit_home.dart';
 import '../infrastructure/cockpit_process_manager.dart';
 import '../foundation/cockpit_ids.dart';
@@ -92,11 +90,6 @@ final class CockpitLocalWorkerLauncher
     final workerOwnerId = 'worker_${_tokenGenerator.nextToken(byteLength: 16)}';
     final processStartIdentity =
         'process_${_tokenGenerator.nextToken(byteLength: 16)}';
-    final workerTemporaryRoot = p.join(
-      spec.stateRoot,
-      'producer_artifacts',
-      'tmp',
-    );
     final events =
         _eventExchangeFactory?.call(spec) ??
         CockpitSupervisorRunProjection(
@@ -109,34 +102,49 @@ final class CockpitLocalWorkerLauncher
     if (events case final CockpitSupervisorRunProjection projection) {
       await projection.resumePendingRetentionReleases();
     }
-    final process = await _processManager.start(
-      dartExecutable,
-      <String>[
-        workerEntrypoint,
-        '--workspace-id=${spec.key.workspaceId}',
-        '--project-id=${spec.projectId}',
-        '--engine-version=${spec.key.engineVersion}',
-        '--workspace-root=${spec.workspaceRoot}',
-        '--state-root=${spec.stateRoot}',
-        '--worker-owner-id=$workerOwnerId',
-        '--process-start-identity=$processStartIdentity',
-        for (final feature in spec.supportedFeatures) '--feature=$feature',
-        for (final name in _allowedEnvironmentSecretNames)
-          '--allow-env-secret=$name',
-        for (final environment in spec.allowedTargetEnvironments)
-          '--allow-target-environment=${environment.name}',
-        for (final effect in spec.allowedSafetyEffects)
-          '--allow-safety-effect=${effect.name}',
-      ],
-      workingDirectory: spec.workspaceRoot,
-      environment: <String, String>{
-        ..._environment,
-        'TMPDIR': workerTemporaryRoot,
-        'TMP': workerTemporaryRoot,
-        'TEMP': workerTemporaryRoot,
-      },
-      includeParentEnvironment: false,
+    final workerTemporaryDirectory = await Directory.systemTemp.createTemp(
+      'cockpit-worker-',
     );
+    try {
+      await _permissionHardener.hardenDirectory(workerTemporaryDirectory);
+    } on Object {
+      await workerTemporaryDirectory.delete(recursive: true);
+      rethrow;
+    }
+    late final Process process;
+    try {
+      process = await _processManager.start(
+        dartExecutable,
+        <String>[
+          workerEntrypoint,
+          '--workspace-id=${spec.key.workspaceId}',
+          '--project-id=${spec.projectId}',
+          '--engine-version=${spec.key.engineVersion}',
+          '--workspace-root=${spec.workspaceRoot}',
+          '--state-root=${spec.stateRoot}',
+          '--worker-owner-id=$workerOwnerId',
+          '--process-start-identity=$processStartIdentity',
+          for (final feature in spec.supportedFeatures) '--feature=$feature',
+          for (final name in _allowedEnvironmentSecretNames)
+            '--allow-env-secret=$name',
+          for (final environment in spec.allowedTargetEnvironments)
+            '--allow-target-environment=${environment.name}',
+          for (final effect in spec.allowedSafetyEffects)
+            '--allow-safety-effect=${effect.name}',
+        ],
+        workingDirectory: spec.workspaceRoot,
+        environment: <String, String>{
+          ..._environment,
+          'TMPDIR': workerTemporaryDirectory.path,
+          'TMP': workerTemporaryDirectory.path,
+          'TEMP': workerTemporaryDirectory.path,
+        },
+        includeParentEnvironment: false,
+      );
+    } on Object {
+      await workerTemporaryDirectory.delete(recursive: true);
+      rethrow;
+    }
     late final CockpitSystemSupervisorPortOwnershipInspector ownershipInspector;
     try {
       ownershipInspector =
@@ -149,6 +157,7 @@ final class CockpitLocalWorkerLauncher
         const Duration(seconds: 2),
         onTimeout: () => -1,
       );
+      await workerTemporaryDirectory.delete(recursive: true);
       rethrow;
     }
     late final CockpitJsonRpcPeer peer;
@@ -233,6 +242,9 @@ final class CockpitLocalWorkerLauncher
       processManager: _processManager,
       peer: peer,
       stderrSubscription: stderrSubscription,
+      temporaryDirectory: workerTemporaryDirectory,
+      logger: _logger,
+      workspaceId: spec.key.workspaceId,
     );
   }
 }
@@ -243,15 +255,24 @@ final class _LocalWorkerConnection implements CockpitWorkspaceWorkerConnection {
     required CockpitProcessManager processManager,
     required CockpitJsonRpcPeer peer,
     required StreamSubscription<CockpitBoundedLogLine> stderrSubscription,
+    required Directory temporaryDirectory,
+    required CockpitWorkerLogger logger,
+    required String workspaceId,
   }) : _process = process,
        _processManager = processManager,
        _peer = peer,
-       _stderrSubscription = stderrSubscription;
+       _stderrSubscription = stderrSubscription,
+       _temporaryDirectory = temporaryDirectory,
+       _logger = logger,
+       _workspaceId = workspaceId;
 
   final Process _process;
   final CockpitProcessManager _processManager;
   final CockpitJsonRpcPeer _peer;
   final StreamSubscription<CockpitBoundedLogLine> _stderrSubscription;
+  final Directory _temporaryDirectory;
+  final CockpitWorkerLogger _logger;
+  final String _workspaceId;
   var _terminated = false;
   Future<void>? _termination;
 
@@ -295,6 +316,7 @@ final class _LocalWorkerConnection implements CockpitWorkspaceWorkerConnection {
       await _peer.close();
       if (await _waitForExit()) {
         await _stderrSubscription.cancel();
+        await _cleanupTemporaryDirectory();
         _terminated = true;
         return;
       }
@@ -314,7 +336,25 @@ final class _LocalWorkerConnection implements CockpitWorkspaceWorkerConnection {
     }
     await _peer.close(closeOutput: false);
     await _stderrSubscription.cancel();
+    await _cleanupTemporaryDirectory();
     _terminated = true;
+  }
+
+  Future<void> _cleanupTemporaryDirectory() async {
+    try {
+      if (await _temporaryDirectory.exists()) {
+        await _temporaryDirectory.delete(recursive: true);
+      }
+    } on Object catch (error) {
+      _logger.log(
+        'warning',
+        'Workspace worker temporary directory cleanup failed.',
+        fields: <String, Object?>{
+          'workspaceId': _workspaceId,
+          'error': '$error',
+        },
+      );
+    }
   }
 
   Future<bool> _waitForExit() => _process.exitCode

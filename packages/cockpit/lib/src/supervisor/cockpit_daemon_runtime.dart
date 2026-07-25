@@ -72,7 +72,23 @@ Future<int> runCockpitDaemon(List<String> arguments) async {
   host = CockpitDaemonHost(
     paths: paths,
     serverInfo: serverInfo,
-    requestHandler: api.handle,
+    requestHandler: (request) async {
+      try {
+        await api.handle(request);
+      } on Object catch (error, stackTrace) {
+        logger.log(
+          'error',
+          'Supervisor request failed.',
+          fields: <String, Object?>{
+            'method': request.method,
+            'path': request.uri.path,
+            'error': '$error',
+            'stackTrace': '$stackTrace',
+          },
+        );
+        rethrow;
+      }
+    },
     shutdownHandler: (mode) => runtime.shutdown(
       cancel: mode != CockpitDaemonShutdownMode.drain,
       emergency: mode == CockpitDaemonShutdownMode.emergency,

@@ -135,10 +135,18 @@ final class CockpitHome {
   final CockpitPermissionHardener permissionHardener;
 
   Future<CockpitHomePaths> initialize() async {
+    final directories = <Directory>[];
     for (final path in paths.directories) {
       final directory = Directory(path);
       await directory.create(recursive: true);
-      await permissionHardener.hardenDirectory(directory);
+      directories.add(directory);
+    }
+    if (permissionHardener case final CockpitWindowsAclPermissionHardener acl) {
+      await acl.hardenDirectories(directories);
+    } else {
+      for (final directory in directories) {
+        await permissionHardener.hardenDirectory(directory);
+      }
     }
     final canonicalHome = await Directory(paths.home).resolveSymbolicLinks();
     return CockpitHomePaths(canonicalHome);
