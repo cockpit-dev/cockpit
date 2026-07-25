@@ -547,6 +547,22 @@ void main() {
     expect(wasm.lengthSync(), greaterThan(512 * 1024));
     expect(wasmHeader, equals(<int>[0x00, 0x61, 0x73, 0x6d]));
   });
+
+  test('Windows acceptance workspace is owned by the current runner', () {
+    final workflow = File(
+      '.github/workflows/example-e2e.yml',
+    ).readAsStringSync();
+
+    expect(workflow, contains(r'$owner = "$env:USERDOMAIN\$env:USERNAME"'));
+    expect(
+      workflow,
+      contains(r'& icacls.exe $workspace /setowner $owner /T /C'),
+    );
+    expect(
+      workflow,
+      contains(r'if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }'),
+    );
+  });
 }
 
 String _readPackageVersion(String packageDir) {

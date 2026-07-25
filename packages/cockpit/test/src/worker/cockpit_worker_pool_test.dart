@@ -7,6 +7,40 @@ import 'package:cockpit_protocol/cockpit_protocol.dart';
 import 'package:test/test.dart';
 
 void main() {
+  test('allows two minutes for the default worker initialization', () async {
+    final now = DateTime.utc(2026, 7, 25, 12);
+    final launcher = _FakeLauncher();
+    final pool = CockpitWorkerPool(
+      launcher: launcher,
+      utcNow: () => now,
+      heartbeatInterval: const Duration(seconds: 30),
+    );
+    addTearDown(() => pool.close(grace: const Duration(milliseconds: 50)));
+
+    final connection =
+        await pool.connectionFor(_spec('workspaceA')) as _FakeConnection;
+
+    expect(
+      connection.initializationDeadline,
+      now.add(const Duration(minutes: 2)),
+    );
+  });
+
+  test('rejects invalid worker initialization timeouts', () {
+    for (final timeout in <Duration>[
+      Duration.zero,
+      const Duration(minutes: 10, microseconds: 1),
+    ]) {
+      expect(
+        () => CockpitWorkerPool(
+          launcher: _FakeLauncher(),
+          initializationTimeout: timeout,
+        ),
+        throwsArgumentError,
+      );
+    }
+  });
+
   test(
     'deduplicates each worker key and targets operation cancellation',
     () async {
@@ -243,6 +277,7 @@ final class _FakeConnection implements CockpitWorkspaceWorkerConnection {
   final Map<String, Completer<Object?>> _operations =
       <String, Completer<Object?>>{};
   final List<String> cancelledRequestIds = <String>[];
+  DateTime? initializationDeadline;
   var _closed = false;
 
   Future<void> get operationStarted => _operationStarted.future;
@@ -264,12 +299,7 @@ final class _FakeConnection implements CockpitWorkspaceWorkerConnection {
     String? requestId,
   }) async {
     return switch (method) {
-      'initialize' => CockpitWorkerInitializeResult(
-        protocolVersion: 'cockpit.worker/v2',
-        workspaceId: spec.key.workspaceId,
-        engineVersion: spec.key.engineVersion,
-        negotiatedFeatures: const <String>[],
-      ).toJson(),
+      'initialize' => _initialize(deadline),
       'operation' => await _operation(requestId!),
       'cancel' => _cancel(params['targetRequestId']! as String),
       'health' => CockpitWorkerHealthResult(
@@ -286,6 +316,16 @@ final class _FakeConnection implements CockpitWorkspaceWorkerConnection {
       'shutdown' => const CockpitWorkerShutdownResult(accepted: true).toJson(),
       _ => throw StateError('Unexpected fake worker method $method.'),
     };
+  }
+
+  Map<String, Object?> _initialize(DateTime deadline) {
+    initializationDeadline = deadline;
+    return CockpitWorkerInitializeResult(
+      protocolVersion: 'cockpit.worker/v2',
+      workspaceId: spec.key.workspaceId,
+      engineVersion: spec.key.engineVersion,
+      negotiatedFeatures: const <String>[],
+    ).toJson();
   }
 
   Future<Object?> _operation(String requestId) {

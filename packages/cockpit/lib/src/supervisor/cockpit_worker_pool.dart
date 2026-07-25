@@ -128,6 +128,7 @@ final class CockpitWorkerPool {
   CockpitWorkerPool({
     required CockpitWorkspaceWorkerLauncher launcher,
     DateTime Function()? utcNow,
+    Duration initializationTimeout = const Duration(minutes: 2),
     Duration heartbeatInterval = const Duration(seconds: 5),
     Duration heartbeatTimeout = const Duration(seconds: 2),
     Duration initialRestartBackoff = const Duration(milliseconds: 100),
@@ -135,11 +136,14 @@ final class CockpitWorkerPool {
     int heartbeatFailureThreshold = 3,
   }) : _launcher = launcher,
        _utcNow = utcNow ?? (() => DateTime.now().toUtc()),
+       _initializationTimeout = initializationTimeout,
        _heartbeatTimeout = heartbeatTimeout,
        _initialRestartBackoff = initialRestartBackoff,
        _maximumRestartBackoff = maximumRestartBackoff,
        _heartbeatFailureThreshold = heartbeatFailureThreshold {
-    if (heartbeatInterval <= Duration.zero ||
+    if (initializationTimeout <= Duration.zero ||
+        initializationTimeout > const Duration(minutes: 10) ||
+        heartbeatInterval <= Duration.zero ||
         heartbeatTimeout <= Duration.zero ||
         initialRestartBackoff < Duration.zero ||
         maximumRestartBackoff < initialRestartBackoff ||
@@ -155,6 +159,7 @@ final class CockpitWorkerPool {
 
   final CockpitWorkspaceWorkerLauncher _launcher;
   final DateTime Function() _utcNow;
+  final Duration _initializationTimeout;
   final Duration _heartbeatTimeout;
   final Duration _initialRestartBackoff;
   final Duration _maximumRestartBackoff;
@@ -360,7 +365,7 @@ final class CockpitWorkerPool {
   ) async {
     final connection = await _launcher.launch(spec);
     try {
-      final deadline = _utcNow().add(const Duration(seconds: 10));
+      final deadline = _utcNow().add(_initializationTimeout);
       final raw = await connection.call(
         method: 'initialize',
         params: _internalParams(
