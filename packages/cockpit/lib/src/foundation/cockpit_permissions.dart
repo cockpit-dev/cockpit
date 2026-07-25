@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:io';
 
 import '../infrastructure/cockpit_process_manager.dart';
@@ -70,6 +69,8 @@ final class CockpitWindowsAclPermissionHardener
     implements CockpitPermissionHardener {
   const CockpitWindowsAclPermissionHardener();
 
+  static Future<String>? _currentSid;
+
   @override
   CockpitPermissionPolicy get policy =>
       CockpitPermissionPolicy.windowsRestrictedAcl;
@@ -82,42 +83,56 @@ final class CockpitWindowsAclPermissionHardener
   Future<void> hardenFile(File file) => _apply(file.path, directory: false);
 
   Future<void> hardenDirectories(Iterable<Directory> directories) async {
-    final paths = <String>[for (final directory in directories) directory.path];
-    if (paths.isEmpty) return;
-    final result = await cockpitRunIsolatedProcess(
-      'powershell.exe',
-      <String>[
-        '-NoLogo',
-        '-NoProfile',
-        '-NonInteractive',
-        '-Command',
-        _windowsDirectoryAclScript,
-      ],
-      environment: <String, String>{'COCKPIT_ACL_PATHS': jsonEncode(paths)},
-    );
-    if (result.exitCode != 0) {
-      throw FileSystemException(
-        'Could not install restricted Windows ACLs: ${_bounded(result.stderr)}',
-        paths.first,
-      );
+    for (final directory in directories) {
+      await _apply(directory.path, directory: true);
     }
   }
 
   Future<void> _apply(String path, {required bool directory}) async {
-    final result = await cockpitRunIsolatedProcess(
-      'powershell.exe',
-      <String>[
-        '-NoLogo',
-        '-NoProfile',
-        '-NonInteractive',
-        '-Command',
-        _windowsAclScript,
-      ],
-      environment: <String, String>{
-        'COCKPIT_ACL_PATH': path,
-        'COCKPIT_ACL_KIND': directory ? 'directory' : 'file',
-      },
-    );
+    final sid = await (_currentSid ??= _readCurrentSid());
+    await _runIcacls(path, const <String>['/reset', '/Q', '/C']);
+    final inheritance = directory ? '(OI)(CI)' : '';
+    await _runIcacls(path, <String>[
+      '/inheritance:r',
+      '/grant:r',
+      '*$sid:$inheritance(F)',
+      '*S-1-5-18:$inheritance(F)',
+      '*S-1-5-32-544:$inheritance(F)',
+      '/Q',
+      '/C',
+    ]);
+    await _runIcacls(path, <String>['/setowner', '*$sid', '/Q', '/C']);
+  }
+
+  static Future<String> _readCurrentSid() async {
+    final result = await cockpitRunIsolatedProcess('whoami.exe', const <String>[
+      '/user',
+      '/fo',
+      'csv',
+      '/nh',
+    ]);
+    if (result.exitCode != 0) {
+      throw FileSystemException(
+        'Could not resolve the current Windows identity: ${_bounded(result.stderr)}',
+      );
+    }
+    final match = RegExp(
+      r'S-\d-(?:\d+-)+\d+',
+      caseSensitive: false,
+    ).firstMatch(result.stdout.toString());
+    if (match == null) {
+      throw const FileSystemException(
+        'Could not parse the current Windows identity.',
+      );
+    }
+    return match.group(0)!;
+  }
+
+  static Future<void> _runIcacls(String path, List<String> arguments) async {
+    final result = await cockpitRunIsolatedProcess('icacls.exe', <String>[
+      path,
+      ...arguments,
+    ]);
     if (result.exitCode != 0) {
       throw FileSystemException(
         'Could not install restricted Windows ACL: ${_bounded(result.stderr)}',
@@ -126,65 +141,6 @@ final class CockpitWindowsAclPermissionHardener
     }
   }
 }
-
-const _windowsAclScript = r'''
-$ErrorActionPreference = 'Stop'
-$path = $env:COCKPIT_ACL_PATH
-$isDirectory = $env:COCKPIT_ACL_KIND -eq 'directory'
-$acl = Get-Acl -LiteralPath $path
-$acl.SetAccessRuleProtection($true, $false)
-foreach ($rule in @($acl.Access)) {
-  [void]$acl.RemoveAccessRuleSpecific($rule)
-}
-$current = [System.Security.Principal.WindowsIdentity]::GetCurrent().User
-$system = [System.Security.Principal.SecurityIdentifier]::new('S-1-5-18')
-$administrators = [System.Security.Principal.SecurityIdentifier]::new('S-1-5-32-544')
-$inheritance = if ($isDirectory) {
-  [System.Security.AccessControl.InheritanceFlags]'ContainerInherit, ObjectInherit'
-} else {
-  [System.Security.AccessControl.InheritanceFlags]::None
-}
-foreach ($sid in @($current, $system, $administrators)) {
-  $rule = [System.Security.AccessControl.FileSystemAccessRule]::new(
-    $sid,
-    [System.Security.AccessControl.FileSystemRights]::FullControl,
-    $inheritance,
-    [System.Security.AccessControl.PropagationFlags]::None,
-    [System.Security.AccessControl.AccessControlType]::Allow
-  )
-  [void]$acl.AddAccessRule($rule)
-}
-$acl.SetOwner($current)
-Set-Acl -LiteralPath $path -AclObject $acl
-''';
-
-const _windowsDirectoryAclScript = r'''
-$ErrorActionPreference = 'Stop'
-$paths = ConvertFrom-Json -InputObject $env:COCKPIT_ACL_PATHS
-foreach ($path in @($paths)) {
-  $acl = Get-Acl -LiteralPath $path
-  $acl.SetAccessRuleProtection($true, $false)
-  foreach ($rule in @($acl.Access)) {
-    [void]$acl.RemoveAccessRuleSpecific($rule)
-  }
-  $current = [System.Security.Principal.WindowsIdentity]::GetCurrent().User
-  $system = [System.Security.Principal.SecurityIdentifier]::new('S-1-5-18')
-  $administrators = [System.Security.Principal.SecurityIdentifier]::new('S-1-5-32-544')
-  $inheritance = [System.Security.AccessControl.InheritanceFlags]'ContainerInherit, ObjectInherit'
-  foreach ($sid in @($current, $system, $administrators)) {
-    $rule = [System.Security.AccessControl.FileSystemAccessRule]::new(
-      $sid,
-      [System.Security.AccessControl.FileSystemRights]::FullControl,
-      $inheritance,
-      [System.Security.AccessControl.PropagationFlags]::None,
-      [System.Security.AccessControl.AccessControlType]::Allow
-    )
-    [void]$acl.AddAccessRule($rule)
-  }
-  $acl.SetOwner($current)
-  Set-Acl -LiteralPath $path -AclObject $acl
-}
-''';
 
 String _bounded(Object? value) {
   final text = value.toString().trim();

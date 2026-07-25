@@ -12,10 +12,14 @@ import 'cockpit_worker_pool.dart';
 
 const cockpitMaximumRequestBytes = 1024 * 1024;
 
+typedef CockpitSupervisorInternalErrorObserver =
+    void Function(HttpRequest request, Object error, StackTrace? stackTrace);
+
 final class CockpitSupervisorHttpSupport {
-  const CockpitSupervisorHttpSupport(this.serverInfo);
+  const CockpitSupervisorHttpSupport(this.serverInfo, {this.onInternalError});
 
   final CockpitServerInfo serverInfo;
+  final CockpitSupervisorInternalErrorObserver? onInternalError;
 
   void negotiate(HttpRequest request) {
     final rawVersion = request.headers.value('Cockpit-API-Version');
@@ -174,7 +178,11 @@ final class CockpitSupervisorHttpSupport {
     await request.response.close();
   }
 
-  Future<void> error(HttpRequest request, Object error) {
+  Future<void> error(
+    HttpRequest request,
+    Object error, {
+    StackTrace? stackTrace,
+  }) {
     final api = switch (error) {
       CockpitApiException() => error.error,
       CockpitRegistryException() => CockpitApiError(
@@ -252,6 +260,10 @@ final class CockpitSupervisorHttpSupport {
         responsibleLayer: CockpitResponsibleLayer.supervisor,
       ),
     };
+    if (api.code == CockpitErrorCode.internalError &&
+        error is! CockpitApiException) {
+      onInternalError?.call(request, error, stackTrace);
+    }
     return json(request, _status(api), <String, Object?>{
       'error': api.toJson(),
     });

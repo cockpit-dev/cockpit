@@ -67,6 +67,16 @@ Future<int> runCockpitDaemon(List<String> arguments) async {
   final api = CockpitSupervisorHttpApi(
     runtime: runtime,
     serverInfo: serverInfo,
+    onInternalError: (request, error, stackTrace) => logger.log(
+      'error',
+      'Supervisor request failed.',
+      fields: <String, Object?>{
+        'method': request.method,
+        'path': request.uri.path,
+        'error': '$error',
+        if (stackTrace != null) 'stackTrace': '$stackTrace',
+      },
+    ),
   );
   late final CockpitDaemonHost host;
   host = CockpitDaemonHost(

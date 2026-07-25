@@ -11,7 +11,11 @@ final class CockpitSupervisorHttpApi {
   CockpitSupervisorHttpApi({
     required this.runtime,
     required CockpitServerInfo serverInfo,
-  }) : support = CockpitSupervisorHttpSupport(serverInfo),
+    CockpitSupervisorInternalErrorObserver? onInternalError,
+  }) : support = CockpitSupervisorHttpSupport(
+         serverInfo,
+         onInternalError: onInternalError,
+       ),
        sse = CockpitSupervisorSse(runtime);
 
   final CockpitSupervisorRuntime runtime;
@@ -47,8 +51,8 @@ final class CockpitSupervisorHttpApi {
         return;
       }
       await _notFound(request);
-    } on Object catch (error) {
-      await support.error(request, error);
+    } on Object catch (error, stackTrace) {
+      await support.error(request, error, stackTrace: stackTrace);
     }
   }
 
