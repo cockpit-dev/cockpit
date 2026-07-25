@@ -235,6 +235,7 @@ final class CockpitWorkerRuntime {
       workerProcessId: _processId,
       processStartIdentity: configuration.processStartIdentity,
       peer: peer,
+      logger: _logger,
     );
     final eventStore = CockpitWorkerRunEventStore(
       projectId: configuration.projectId,

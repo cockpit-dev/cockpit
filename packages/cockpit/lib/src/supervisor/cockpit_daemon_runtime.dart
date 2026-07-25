@@ -9,6 +9,7 @@ import '../foundation/cockpit_home.dart';
 import '../foundation/cockpit_ids.dart';
 import '../foundation/cockpit_locked_json_store.dart';
 import '../foundation/cockpit_permissions.dart';
+import '../worker/cockpit_worker_logger.dart';
 import 'cockpit_daemon_host.dart';
 import 'cockpit_daemon_discovery.dart';
 import 'cockpit_supervisor_http_api.dart';
@@ -39,6 +40,11 @@ Future<int> runCockpitDaemon(List<String> arguments) async {
     paths: CockpitHomePaths(configuration.home),
     permissionHardener: hardener,
   ).initialize();
+  final logFile = File(paths.daemonLog);
+  await logFile.writeAsString('', mode: FileMode.append, flush: true);
+  await hardener.hardenFile(logFile);
+  final logSink = logFile.openWrite(mode: FileMode.append);
+  final logger = CockpitWorkerLogger(stderrSink: logSink);
   final workerEntrypoint = await _workerEntrypoint();
   final authorization = await CockpitSupervisorAuthorizationPolicyStore(
     path: paths.authorizationPolicy,
@@ -50,6 +56,7 @@ Future<int> runCockpitDaemon(List<String> arguments) async {
     dartExecutable: Platform.resolvedExecutable,
     workerEntrypoint: workerEntrypoint,
     authorization: authorization,
+    logger: logger,
   );
   final startedAt = DateTime.now().toUtc();
   final serverInfo = runtime.serverInfo(
@@ -76,7 +83,12 @@ Future<int> runCockpitDaemon(List<String> arguments) async {
   final signals = <StreamSubscription<ProcessSignal>>[];
   try {
     await host.start();
-    await _log(paths, hardener, 'daemon started pid=$pid');
+    logger.log(
+      'info',
+      'Daemon started.',
+      fields: <String, Object?>{'pid': pid},
+    );
+    await logSink.flush();
     if (!Platform.isWindows) {
       for (final signal in <ProcessSignal>[
         ProcessSignal.sigterm,
@@ -100,7 +112,14 @@ Future<int> runCockpitDaemon(List<String> arguments) async {
       await signal.cancel();
     }
     await host.stop(CockpitDaemonShutdownMode.drain);
-    await _log(paths, hardener, 'daemon stopped pid=$pid');
+    logger.log(
+      'info',
+      'Daemon stopped.',
+      fields: <String, Object?>{'pid': pid},
+    );
+    await logSink.flush();
+    await logSink.close();
+    await hardener.hardenFile(logFile);
   }
 }
 
@@ -219,20 +238,6 @@ Future<String> _workerEntrypoint() async {
     'bin',
     'cockpit_worker.dart',
   );
-}
-
-Future<void> _log(
-  CockpitHomePaths paths,
-  CockpitPermissionHardener hardener,
-  String message,
-) async {
-  final file = File(paths.daemonLog);
-  await file.writeAsString(
-    '${DateTime.now().toUtc().toIso8601String()} $message\n',
-    mode: FileMode.append,
-    flush: true,
-  );
-  await hardener.hardenFile(file);
 }
 
 final class _DaemonConfiguration {

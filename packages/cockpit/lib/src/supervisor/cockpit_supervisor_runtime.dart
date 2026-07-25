@@ -19,6 +19,7 @@ import '../registry/cockpit_workspace_registry.dart';
 import '../system_control/cockpit_system_control_service.dart';
 import '../worker/cockpit_worker_protocol_result.dart';
 import '../worker/cockpit_worker_protocol_request.dart';
+import '../worker/cockpit_worker_logger.dart';
 import '../worker/cockpit_worker_value_reader.dart';
 import 'cockpit_lease_support.dart';
 import 'cockpit_local_worker_launcher.dart';
@@ -100,6 +101,7 @@ final class CockpitSupervisorRuntime {
     required String dartExecutable,
     required String workerEntrypoint,
     CockpitSupervisorAuthorizationPolicy? authorization,
+    CockpitWorkerLogger? logger,
   }) async {
     final policy = authorization ?? CockpitSupervisorAuthorizationPolicy();
     final hardener = homeResolver.platform == CockpitHostPlatform.windows
@@ -129,6 +131,7 @@ final class CockpitSupervisorRuntime {
       ),
       permissionHardener: hardener,
       directorySyncer: syncer,
+      logger: logger,
       eventExchangeFactory: (spec) => projections.putIfAbsent(
         spec.key.workspaceId,
         () => CockpitSupervisorRunProjection(

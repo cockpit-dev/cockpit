@@ -5,6 +5,7 @@ import 'package:cockpit_protocol/cockpit_protocol.dart';
 import '../application/cockpit_application_service_exception.dart';
 import 'cockpit_json_rpc_peer.dart';
 import 'cockpit_worker_forwarded_port_handoff.dart';
+import 'cockpit_worker_logger.dart';
 import 'cockpit_worker_operation_router.dart';
 import 'cockpit_worker_protocol_result.dart';
 import 'cockpit_worker_resource_grant.dart';
@@ -20,8 +21,10 @@ final class CockpitRpcWorkerForwardedPortHandoff
     required this.workerProcessId,
     required this.processStartIdentity,
     required CockpitJsonRpcPeer peer,
+    CockpitWorkerLogger? logger,
     DateTime Function()? utcNow,
   }) : _peer = peer,
+       _logger = logger ?? CockpitWorkerLogger(),
        _utcNow = utcNow ?? (() => DateTime.now().toUtc()) {
     workerId(workspaceId, r'$.workspaceId');
     workerId(workerOwnerId, r'$.workerOwnerId');
@@ -38,6 +41,7 @@ final class CockpitRpcWorkerForwardedPortHandoff
   final int workerProcessId;
   final String processStartIdentity;
   final CockpitJsonRpcPeer _peer;
+  final CockpitWorkerLogger _logger;
   final DateTime Function() _utcNow;
   final Map<String, _PendingPortLaunch<Object?>> _pending =
       <String, _PendingPortLaunch<Object?>>{};
@@ -126,7 +130,17 @@ final class CockpitRpcWorkerForwardedPortHandoff
         finishedAt: finishedAt,
         output: output,
       );
-    } on Object {
+    } on Object catch (error, stackTrace) {
+      _logger.log(
+        'error',
+        'Forwarded-port launch failed.',
+        fields: <String, Object?>{
+          'workspaceId': workspaceId,
+          'operationKind': invocation.kind,
+          'error': '$error',
+          'stackTrace': '$stackTrace',
+        },
+      );
       final finishedAt = _utcNow();
       return CockpitOperationResult(
         operationId: requestId,
