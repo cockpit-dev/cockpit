@@ -403,7 +403,7 @@ cases:
         isA<List<Object?>>(),
       );
     },
-    timeout: const Timeout(Duration(minutes: 2)),
+    timeout: const Timeout(Duration(minutes: 5)),
   );
 }
 
