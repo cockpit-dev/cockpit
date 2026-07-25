@@ -93,7 +93,9 @@ final class CockpitWorkerDocumentIndex
       if (visited > maximumFiles) {
         throw const FormatException('Workspace document index exceeds bounds.');
       }
-      final relativePath = _paths.relative(entity.path, from: workspaceRoot);
+      final relativePath = p.posix.joinAll(
+        _paths.split(_paths.relative(entity.path, from: workspaceRoot)),
+      );
       if (!_isConfinedRelative(relativePath)) continue;
       final resolved = await _readConfinedDocument(relativePath);
       if (resolved == null) continue;
