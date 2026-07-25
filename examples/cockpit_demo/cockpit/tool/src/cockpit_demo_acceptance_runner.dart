@@ -219,15 +219,17 @@ final class CockpitDemoAcceptanceRunner {
 
       advance('target', 'Discovering and registering the Flutter target.');
       deviceId = await _resolveDevice(api, request);
+      final launchMode = cockpitDemoLaunchModeForPlatform(request.platform);
       target = await _resolveTarget(
         api: api,
         workspaceId: workspace.workspaceId,
         platform: request.platform,
         deviceId: deviceId,
+        mode: launchMode,
         entrypointDocument: entrypointDocument,
       );
 
-      advance('launch', 'Launching the target in automation mode.');
+      advance('launch', 'Launching the target in $launchMode mode.');
       final launch = await _operation(
         api,
         CockpitOperationInvocation(
@@ -239,7 +241,7 @@ final class CockpitDemoAcceptanceRunner {
           ),
           input: <String, Object?>{
             'targetId': target.targetId,
-            'mode': 'automation',
+            'mode': launchMode,
             'launchTimeoutMs': request.launchTimeout.inMilliseconds,
           },
         ),
@@ -426,6 +428,9 @@ bool _contains(String root, String candidate) =>
 
 String _protocolPath(String value) => p.normalize(value).replaceAll('\\', '/');
 
+String cockpitDemoLaunchModeForPlatform(String platform) =>
+    platform == 'web' ? 'development' : 'automation';
+
 CockpitDocumentFormat _documentFormat(String path) =>
     p.extension(path).toLowerCase() == '.json'
     ? CockpitDocumentFormat.json
@@ -550,15 +555,17 @@ Future<CockpitAutomationTargetResource> _resolveTarget({
   required String workspaceId,
   required String platform,
   required String deviceId,
+  required String mode,
   required CockpitDocumentResource entrypointDocument,
 }) async {
+  final targetMode = CockpitAutomationTargetMode.values.byName(mode);
   final matches = (await api.targets(workspaceId))
       .where(
         (target) =>
             target.platform == platform &&
             target.deviceId == deviceId &&
             target.targetKind == CockpitTargetKind.flutterApp &&
-            target.mode == CockpitAutomationTargetMode.automation &&
+            target.mode == targetMode &&
             target.environment == CockpitAutomationTargetEnvironment.test &&
             target.entrypoint == entrypointDocument.relativePath &&
             target.entrypointSha256 == entrypointDocument.sha256 &&
@@ -574,7 +581,7 @@ Future<CockpitAutomationTargetResource> _resolveTarget({
     'deviceId': deviceId,
     'entrypoint': entrypointDocument.relativePath,
     'sha256': entrypointDocument.sha256,
-    'mode': 'automation',
+    'mode': mode,
     'environment': 'test',
   });
   final digest = sha256.convert(utf8.encode(identity)).toString();
@@ -591,7 +598,7 @@ Future<CockpitAutomationTargetResource> _resolveTarget({
         'deviceId': deviceId,
         'entrypointDocumentId': entrypointDocument.documentId,
         'targetKind': 'flutterApp',
-        'mode': 'automation',
+        'mode': mode,
         'environment': 'test',
       },
     ),

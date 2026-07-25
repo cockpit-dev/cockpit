@@ -7,6 +7,51 @@ import 'package:process/process.dart';
 import 'package:test/test.dart';
 
 void main() {
+  test('isolated children retain required host runtime environment', () {
+    final environment = cockpitMinimumChildEnvironment(
+      parentEnvironment: const <String, String>{
+        'PATH': '/usr/bin',
+        'DISPLAY': ':99',
+        'XAUTHORITY': '/tmp/xauthority',
+        'DBUS_SESSION_BUS_ADDRESS': 'unix:path=/tmp/dbus',
+        'ProgramFiles': r'C:\Program Files',
+        'LOCALAPPDATA': r'C:\Users\runner\AppData\Local',
+        'COMSPEC': r'C:\Windows\System32\cmd.exe',
+        'SECRET_TOKEN': 'must-not-leak',
+      },
+    );
+
+    expect(environment, <String, String>{
+      'PATH': '/usr/bin',
+      'DISPLAY': ':99',
+      'XAUTHORITY': '/tmp/xauthority',
+      'DBUS_SESSION_BUS_ADDRESS': 'unix:path=/tmp/dbus',
+      'ProgramFiles': r'C:\Program Files',
+      'LOCALAPPDATA': r'C:\Users\runner\AppData\Local',
+      'COMSPEC': r'C:\Windows\System32\cmd.exe',
+    });
+  });
+
+  test('Windows isolated environment removes case-insensitive duplicates', () {
+    final environment = cockpitMinimumChildEnvironment(
+      parentEnvironment: const <String, String>{
+        'PATH': r'C:\tools',
+        'Path': r'C:\Windows\System32',
+        'SYSTEMROOT': r'C:\Windows',
+      },
+      windows: true,
+    );
+
+    expect(
+      environment.keys.where((name) => name.toLowerCase() == 'path'),
+      hasLength(1),
+    );
+    expect(
+      environment.keys.where((name) => name.toLowerCase() == 'systemroot'),
+      hasLength(1),
+    );
+  });
+
   group('LocalCockpitProcessManager', () {
     test('delegates run requests to the injected ProcessManager', () async {
       final delegate = _FakeProcessManager(

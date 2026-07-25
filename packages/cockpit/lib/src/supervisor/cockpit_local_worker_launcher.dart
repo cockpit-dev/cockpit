@@ -52,7 +52,7 @@ final class CockpitLocalWorkerLauncher
        _logger = logger ?? CockpitWorkerLogger(),
        _tokenGenerator = tokenGenerator ?? CockpitSecureTokenGenerator(),
        _environment = Map<String, String>.unmodifiable(
-         environment ?? _minimumWorkerEnvironment(),
+         environment ?? cockpitMinimumChildEnvironment(),
        ),
        _allowedEnvironmentSecretNames = List<String>.unmodifiable(
          allowedEnvironmentSecretNames,
@@ -320,25 +320,6 @@ final class _LocalWorkerConnection implements CockpitWorkspaceWorkerConnection {
   Future<bool> _waitForExit() => _process.exitCode
       .then((_) => true)
       .timeout(const Duration(seconds: 2), onTimeout: () => false);
-}
-
-Map<String, String> _minimumWorkerEnvironment() {
-  const allowed = <String>{
-    'PATH',
-    'HOME',
-    'USERPROFILE',
-    'TMPDIR',
-    'TMP',
-    'TEMP',
-    'SystemRoot',
-    'WINDIR',
-    'LANG',
-    'LC_ALL',
-  };
-  return <String, String>{
-    for (final entry in Platform.environment.entries)
-      if (allowed.contains(entry.key)) entry.key: entry.value,
-  };
 }
 
 CockpitPermissionHardener _systemPermissionHardener() => Platform.isWindows

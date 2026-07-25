@@ -17,19 +17,80 @@ const Set<String> _cockpitMinimumChildEnvironmentNames = <String>{
   'WINDIR',
   'LANG',
   'LC_ALL',
+  'DISPLAY',
+  'XAUTHORITY',
+  'DBUS_SESSION_BUS_ADDRESS',
+  'WAYLAND_DISPLAY',
+  'XDG_RUNTIME_DIR',
+  'XDG_SESSION_TYPE',
+  'XDG_CURRENT_DESKTOP',
+  'CHROME_EXECUTABLE',
+  'FLUTTER_ROOT',
+  'PUB_CACHE',
+  'ANDROID_HOME',
+  'ANDROID_SDK_ROOT',
+  'JAVA_HOME',
+  'DEVELOPER_DIR',
+  'Path',
+  'ProgramFiles',
+  'ProgramFiles(x86)',
+  'ProgramW6432',
+  'ProgramData',
+  'CommonProgramFiles',
+  'CommonProgramFiles(x86)',
+  'CommonProgramW6432',
+  'ALLUSERSPROFILE',
+  'APPDATA',
+  'LOCALAPPDATA',
+  'COMSPEC',
+  'PATHEXT',
+  'USERNAME',
+  'USERDOMAIN',
+  'HOMEDRIVE',
+  'HOMEPATH',
+  'PROCESSOR_ARCHITECTURE',
+  'OS',
+  'PUBLIC',
 };
 
 Map<String, String> cockpitMinimumChildEnvironment({
   Map<String, String>? environment,
   Map<String, String>? parentEnvironment,
+  bool? windows,
 }) {
   final parent = parentEnvironment ?? Platform.environment;
-  return <String, String>{
-    for (final entry in parent.entries)
-      if (_cockpitMinimumChildEnvironmentNames.contains(entry.key))
-        entry.key: entry.value,
-    ...?environment,
-  };
+  final useWindowsSemantics = windows ?? Platform.isWindows;
+  final allowedWindowsNames = useWindowsSemantics
+      ? _cockpitMinimumChildEnvironmentNames
+            .map((name) => name.toLowerCase())
+            .toSet()
+      : const <String>{};
+  final result = <String, String>{};
+
+  void add(String name, String value) {
+    if (useWindowsSemantics) {
+      String? duplicate;
+      for (final existing in result.keys) {
+        if (existing.toLowerCase() == name.toLowerCase()) {
+          duplicate = existing;
+          break;
+        }
+      }
+      if (duplicate != null) result.remove(duplicate);
+    }
+    result[name] = value;
+  }
+
+  for (final entry in parent.entries) {
+    final allowed = useWindowsSemantics
+        ? allowedWindowsNames.contains(entry.key.toLowerCase())
+        : _cockpitMinimumChildEnvironmentNames.contains(entry.key);
+    if (allowed) add(entry.key, entry.value);
+  }
+  for (final entry in environment?.entries ?? const Iterable.empty()) {
+    add(entry.key, entry.value);
+  }
+  return result;
 }
 
 Future<Process> cockpitStartIsolatedProcess(

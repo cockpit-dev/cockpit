@@ -419,7 +419,6 @@ final class CockpitSupervisorRuntime {
         idempotencyKey: CockpitIdempotencyKey(
           'document-index-${DateTime.now().microsecondsSinceEpoch}',
         ),
-        deadline: _deadline(),
       ),
     );
     _throwIfWorkspaceOperationFailed(result);
@@ -451,11 +450,7 @@ final class CockpitSupervisorRuntime {
   ) async {
     final result = await executeWorkspaceOperation(
       workspaceId,
-      CockpitOperationInvocation(
-        kind: 'target.list',
-        workspaceId: workspaceId,
-        deadline: _deadline(),
-      ),
+      CockpitOperationInvocation(kind: 'target.list', workspaceId: workspaceId),
     );
     _throwIfWorkspaceOperationFailed(result);
     final raw = result.output?['targets'];
@@ -480,7 +475,6 @@ final class CockpitSupervisorRuntime {
       CockpitOperationInvocation(
         kind: 'target.get',
         workspaceId: workspaceId,
-        deadline: _deadline(),
         input: <String, Object?>{'targetId': targetId},
       ),
     );
@@ -497,7 +491,6 @@ final class CockpitSupervisorRuntime {
       CockpitOperationInvocation(
         kind: 'case.validate',
         workspaceId: workspaceId,
-        deadline: _deadline(),
         input: request.toJson(),
       ),
     );
@@ -1095,7 +1088,7 @@ final class CockpitSupervisorRuntime {
           spec,
           method: 'initialize',
           idempotencyKey: 'initialize-$workspaceId',
-          deadline: _deadline(),
+          deadline: _workerInitializationDeadline(),
           params: <String, Object?>{
             'engineVersion': spec.key.engineVersion,
             'workspaceRoot': spec.workspaceRoot,
@@ -1258,6 +1251,9 @@ CockpitLeaseCleanupResult _quarantinedCleanupResult() =>
 CockpitRemovalPolicy _removalPolicy(bool force) =>
     force ? CockpitRemovalPolicy.force : CockpitRemovalPolicy.drain;
 DateTime _deadline() => DateTime.now().toUtc().add(const Duration(seconds: 30));
+
+DateTime _workerInitializationDeadline() =>
+    DateTime.now().toUtc().add(const Duration(minutes: 2));
 
 void _requireKeys(Map<String, Object?> input, Set<String> allowed) {
   final unknown = input.keys.where((key) => !allowed.contains(key)).toList();
