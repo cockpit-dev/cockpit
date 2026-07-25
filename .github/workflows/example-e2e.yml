@@ -51,8 +51,8 @@ jobs:
           - platform: windows
             os: windows-latest
     env:
-      COCKPIT_HOME: ${{ runner.temp }}/cockpit-home
-      ACCEPTANCE_OUTPUT: ${{ runner.temp }}/cockpit-acceptance
+      COCKPIT_HOME: ${{ github.workspace }}/.cockpit-ci-home
+      ACCEPTANCE_OUTPUT: ${{ github.workspace }}/.cockpit-ci-acceptance
       FLUTTER_VERSION: '3.32.0'
 
     steps:
