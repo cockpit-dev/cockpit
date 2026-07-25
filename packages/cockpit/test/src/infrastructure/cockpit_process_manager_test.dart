@@ -53,6 +53,34 @@ void main() {
     );
   });
 
+  test('Windows isolated environment retains compiler toolchain paths', () {
+    final environment = cockpitMinimumChildEnvironment(
+      parentEnvironment: const <String, String>{
+        'Path': r'C:\VisualStudio\VC\Tools\bin',
+        'INCLUDE': r'C:\VisualStudio\VC\Tools\include',
+        'LIB': r'C:\VisualStudio\VC\Tools\lib\x64',
+        'LIBPATH': r'C:\VisualStudio\VC\Tools\lib\x64',
+        'VCToolsInstallDir': r'C:\VisualStudio\VC\Tools\MSVC\14.44',
+        'VSINSTALLDIR': r'C:\VisualStudio\2022\Enterprise',
+        'WindowsSdkDir': r'C:\Program Files (x86)\Windows Kits\10',
+        'WindowsSDKVersion': r'10.0.26100.0\',
+        'SECRET_TOKEN': 'must-not-leak',
+      },
+      windows: true,
+    );
+
+    expect(environment, <String, String>{
+      'Path': r'C:\VisualStudio\VC\Tools\bin',
+      'INCLUDE': r'C:\VisualStudio\VC\Tools\include',
+      'LIB': r'C:\VisualStudio\VC\Tools\lib\x64',
+      'LIBPATH': r'C:\VisualStudio\VC\Tools\lib\x64',
+      'VCToolsInstallDir': r'C:\VisualStudio\VC\Tools\MSVC\14.44',
+      'VSINSTALLDIR': r'C:\VisualStudio\2022\Enterprise',
+      'WindowsSdkDir': r'C:\Program Files (x86)\Windows Kits\10',
+      'WindowsSDKVersion': r'10.0.26100.0\',
+    });
+  });
+
   group('LocalCockpitProcessManager', () {
     test('delegates run requests to the injected ProcessManager', () async {
       final delegate = _FakeProcessManager(

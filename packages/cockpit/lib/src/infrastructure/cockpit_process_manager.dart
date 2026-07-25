@@ -53,6 +53,45 @@ const Set<String> _cockpitMinimumChildEnvironmentNames = <String>{
   'PUBLIC',
 };
 
+const Set<String> _cockpitWindowsToolchainEnvironmentNames = <String>{
+  'CommandPromptType',
+  'DevEnvDir',
+  'ExtensionSdkDir',
+  'EXTERNAL_INCLUDE',
+  'Framework40Version',
+  'FrameworkDir',
+  'FrameworkDir64',
+  'FrameworkVersion',
+  'FrameworkVersion64',
+  'IFCPATH',
+  'INCLUDE',
+  'LIB',
+  'LIBPATH',
+  'NETFXSDKDir',
+  'Platform',
+  'UCRTVersion',
+  'UniversalCRTSdkDir',
+  'VCIDEInstallDir',
+  'VCINSTALLDIR',
+  'VCToolsInstallDir',
+  'VCToolsRedistDir',
+  'VCToolsVersion',
+  'VisualStudioVersion',
+  'VSCMD_ARG_app_plat',
+  'VSCMD_ARG_HOST_ARCH',
+  'VSCMD_ARG_TGT_ARCH',
+  'VSCMD_VER',
+  'VSINSTALLDIR',
+  'WindowsLibPath',
+  'WindowsSdkBinPath',
+  'WindowsSdkDir',
+  'WindowsSDKLibVersion',
+  'WindowsSdkVerBinPath',
+  'WindowsSDKVersion',
+  'WindowsSDK_ExecutablePath_x64',
+  'WindowsSDK_ExecutablePath_x86',
+};
+
 Map<String, String> cockpitMinimumChildEnvironment({
   Map<String, String>? environment,
   Map<String, String>? parentEnvironment,
@@ -61,9 +100,10 @@ Map<String, String> cockpitMinimumChildEnvironment({
   final parent = parentEnvironment ?? Platform.environment;
   final useWindowsSemantics = windows ?? Platform.isWindows;
   final allowedWindowsNames = useWindowsSemantics
-      ? _cockpitMinimumChildEnvironmentNames
-            .map((name) => name.toLowerCase())
-            .toSet()
+      ? <String>{
+          ..._cockpitMinimumChildEnvironmentNames,
+          ..._cockpitWindowsToolchainEnvironmentNames,
+        }.map((name) => name.toLowerCase()).toSet()
       : const <String>{};
   final result = <String, String>{};
 
