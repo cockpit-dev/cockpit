@@ -103,6 +103,11 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      - uses: ilammy/msvc-dev-cmd@v1
+        if: matrix.platform == 'windows'
+        with:
+          arch: x64
+
       - uses: actions/setup-java@v5
         if: matrix.platform == 'android'
         with:
