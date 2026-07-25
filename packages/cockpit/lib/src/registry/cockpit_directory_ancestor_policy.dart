@@ -39,7 +39,7 @@ final class CockpitSystemDirectoryAncestorPolicy
       if (!security.ownerTrusted) {
         _throwUntrustedOwner(ancestor);
       }
-      if (security.unsafeWritable) {
+      if (security.unsafeWritable && !_isWindowsDriveRoot(ancestor)) {
         _throwUnsafePermissions(ancestor);
       }
     }
@@ -112,6 +112,13 @@ final class CockpitSystemDirectoryAncestorPolicy
     }
     return left == right;
   }
+
+  bool _isWindowsDriveRoot(String path) =>
+      path.length == 3 &&
+      ((path.codeUnitAt(0) >= 0x41 && path.codeUnitAt(0) <= 0x5a) ||
+          (path.codeUnitAt(0) >= 0x61 && path.codeUnitAt(0) <= 0x7a)) &&
+      path.codeUnitAt(1) == 0x3a &&
+      path.codeUnitAt(2) == 0x5c;
 
   bool _isTrustedOwner(int ownerUserId, int currentUserId) =>
       ownerUserId == currentUserId || ownerUserId == 0;

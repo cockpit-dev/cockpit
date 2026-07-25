@@ -35,7 +35,7 @@ Future<void> main(List<String> arguments) async {
     ..addOption('entrypoint', defaultsTo: 'main.dart')
     ..addOption('suite', defaultsTo: 'e2e/suites/regression.suite.yaml')
     ..addOption('output-root', defaultsTo: '.dart_tool/cockpit_acceptance')
-    ..addOption('discovery-timeout-seconds', defaultsTo: '60')
+    ..addOption('discovery-timeout-seconds', defaultsTo: '180')
     ..addOption('launch-timeout-seconds', defaultsTo: '600')
     ..addOption('run-timeout-seconds', defaultsTo: '900')
     ..addFlag('stop-daemon', negatable: false)

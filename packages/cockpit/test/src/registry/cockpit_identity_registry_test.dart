@@ -186,6 +186,49 @@ void main() {
       ).verify(canonical.path);
     });
 
+    test(
+      'accepts a trusted Windows workspace below a writable drive root',
+      () async {
+        final security = _MappedWindowsSecurityProvider(
+          const <String, CockpitDirectorySecurity>{
+            r'C:\': CockpitDirectorySecurity(
+              posixApplicable: false,
+              ownerVerified: false,
+              ownerTrusted: true,
+              unsafeWritable: true,
+            ),
+            r'C:\Users': CockpitDirectorySecurity(
+              posixApplicable: false,
+              ownerVerified: false,
+              ownerTrusted: true,
+              unsafeWritable: false,
+            ),
+            r'C:\Users\runneradmin': CockpitDirectorySecurity(
+              posixApplicable: false,
+              ownerVerified: true,
+              ownerTrusted: true,
+              unsafeWritable: false,
+            ),
+          },
+        );
+
+        await CockpitSystemDirectoryAncestorPolicy(
+          platform: CockpitHostPlatform.windows,
+          metadataProvider: const _MappedMetadataProvider(
+            currentUserId: 1000,
+            values: <String, CockpitPosixMetadata>{},
+          ),
+          windowsSecurityProvider: security,
+        ).verify(r'C:\Users\runneradmin\workspace');
+
+        expect(security.paths, <String>[
+          r'C:\',
+          r'C:\Users',
+          r'C:\Users\runneradmin',
+        ]);
+      },
+    );
+
     test('rejects an ancestor owned by an untrusted user', () async {
       final metadata = _MappedMetadataProvider(
         currentUserId: 1000,
@@ -1404,6 +1447,20 @@ final class _MappedMetadataProvider implements CockpitPosixMetadataProvider {
   @override
   Future<CockpitPosixMetadata?> read(String canonicalPath) async =>
       values[canonicalPath];
+}
+
+final class _MappedWindowsSecurityProvider
+    implements CockpitWindowsSecurityProvider {
+  _MappedWindowsSecurityProvider(this.values);
+
+  final Map<String, CockpitDirectorySecurity> values;
+  final List<String> paths = <String>[];
+
+  @override
+  Future<CockpitDirectorySecurity> inspect(String canonicalPath) async {
+    paths.add(canonicalPath);
+    return values[canonicalPath]!;
+  }
 }
 
 final class _ControllableDirectoryAttestor
