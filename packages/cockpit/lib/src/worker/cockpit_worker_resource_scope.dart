@@ -24,6 +24,7 @@ final class CockpitWorkerResourceScope {
   final Set<Future<void>> _heartbeats = <Future<void>>{};
   final Set<String> _activeGrantIds = <String>{};
   final Completer<void> _failure = Completer<void>();
+  Future<void> _heartbeatTail = Future<void>.value();
   var _closed = false;
 
   Future<void> get failure => _failure.future;
@@ -120,8 +121,13 @@ final class CockpitWorkerResourceScope {
           return;
         }
         late final Future<void> heartbeat;
-        heartbeat = _authority
-            .heartbeat(grant)
+        heartbeat = _heartbeatTail
+            .then((_) {
+              if (_closed || _cancellation.isCancelled) {
+                return Future<void>.value();
+              }
+              return _authority.heartbeat(grant);
+            })
             .catchError((Object error, StackTrace stackTrace) {
               if (!_failure.isCompleted) {
                 _failure.completeError(error, stackTrace);
@@ -132,6 +138,7 @@ final class CockpitWorkerResourceScope {
               _heartbeats.remove(heartbeat);
               _activeGrantIds.remove(grant.grantId);
             });
+        _heartbeatTail = heartbeat;
         _heartbeats.add(heartbeat);
       }),
     );

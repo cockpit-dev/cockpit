@@ -707,6 +707,7 @@ final class _CockpitResourceHeartbeatGroup {
   final Set<Future<void>> _active = <Future<void>>{};
   final Set<String> _activeGrantIds = <String>{};
   final Completer<Object> _failure = Completer<Object>();
+  Future<void> _heartbeatTail = Future<void>.value();
   var _stopped = false;
 
   Future<Object> get failure => _failure.future;
@@ -727,8 +728,13 @@ final class _CockpitResourceHeartbeatGroup {
           return;
         }
         late final Future<void> heartbeat;
-        heartbeat = _authority
-            .heartbeat(grant)
+        heartbeat = _heartbeatTail
+            .then((_) {
+              if (_stopped || _cancellation.isCancelled) {
+                return Future<void>.value();
+              }
+              return _authority.heartbeat(grant);
+            })
             .catchError((Object _) {
               if (!_failure.isCompleted) {
                 _failure.complete(const _ResourceHeartbeatFailure());
@@ -739,6 +745,7 @@ final class _CockpitResourceHeartbeatGroup {
               _active.remove(heartbeat);
               _activeGrantIds.remove(grant.grantId);
             });
+        _heartbeatTail = heartbeat;
         _active.add(heartbeat);
       }),
     );

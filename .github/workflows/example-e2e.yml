@@ -233,6 +233,25 @@ jobs:
           Set-Location (Join-Path $env:COCKPIT_WINDOWS_WORKSPACE 'examples\cockpit_demo\cockpit')
           dart run tool/verify.dart --platform windows --output-root "$env:ACCEPTANCE_OUTPUT" --stop-daemon
 
+      - name: Collect Windows build diagnostics
+        if: always() && matrix.platform == 'windows'
+        shell: pwsh
+        run: |
+          $source = Join-Path $env:COCKPIT_WINDOWS_WORKSPACE 'examples\cockpit_demo\cockpit\build\windows\x64'
+          $destination = Join-Path $env:ACCEPTANCE_OUTPUT 'cmake'
+          New-Item -ItemType Directory -Path $destination -Force | Out-Null
+          @(
+            'CMakeCache.txt',
+            'CMakeFiles\CMakeConfigureLog.yaml',
+            'CMakeFiles\CMakeError.log',
+            'CMakeFiles\CMakeOutput.log'
+          ) | ForEach-Object {
+            $path = Join-Path $source $_
+            if (Test-Path -LiteralPath $path -PathType Leaf) {
+              Copy-Item -LiteralPath $path -Destination $destination
+            }
+          }
+
       - name: Upload regression evidence
         if: always()
         uses: actions/upload-artifact@v7
@@ -243,7 +262,3 @@ jobs:
           path: |
             ${{ env.ACCEPTANCE_OUTPUT }}
             ${{ env.COCKPIT_HOME }}/daemon.log
-            ${{ env.COCKPIT_WINDOWS_WORKSPACE }}/examples/cockpit_demo/cockpit/build/windows/x64/CMakeCache.txt
-            ${{ env.COCKPIT_WINDOWS_WORKSPACE }}/examples/cockpit_demo/cockpit/build/windows/x64/CMakeFiles/CMakeConfigureLog.yaml
-            ${{ env.COCKPIT_WINDOWS_WORKSPACE }}/examples/cockpit_demo/cockpit/build/windows/x64/CMakeFiles/CMakeError.log
-            ${{ env.COCKPIT_WINDOWS_WORKSPACE }}/examples/cockpit_demo/cockpit/build/windows/x64/CMakeFiles/CMakeOutput.log

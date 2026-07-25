@@ -1221,6 +1221,55 @@ void main() {
     },
   );
 
+  test('resource heartbeats are serialized within one operation', () async {
+    final authority = _SerialHeartbeatAuthority(expectedHeartbeats: 3);
+    final registry = CockpitWorkspaceOperationRegistry(
+      workspaceId: workspaceId,
+      workspaceRoot: workspaceRoot,
+      adapters: <CockpitWorkspaceOperationAdapter>[
+        _heartbeatOperationAdapter((_) async {
+          await authority.firstRound;
+          return const <String, Object?>{'completed': true};
+        }, resourceCount: 3),
+      ],
+      resourceAuthority: authority,
+      operationJournal: CockpitInMemoryWorkerOperationJournal(),
+      terminateUnsafeWorker: () async =>
+          fail('Serialized heartbeats must not terminate the worker.'),
+    );
+    final server = CockpitWorkerServer(
+      workspaceId: workspaceId,
+      engineVersion: engineVersion,
+      workspaceRoot: workspaceRoot,
+      supportedFeatures: const <String>[],
+      operations: registry,
+      events: CockpitWorkerMemoryEventExchange(),
+    );
+    final harness = _PeerHarness(server.handle);
+    server.bindPeer(harness.server);
+    harness.start();
+    addTearDown(harness.close);
+    await _initialize(
+      harness.client,
+      workspaceId: workspaceId,
+      engineVersion: engineVersion,
+      workspaceRoot: workspaceRoot,
+      supportedFeatures: const <String>[],
+    );
+
+    final deadline = _deadline();
+    final result = CockpitWorkerOperationResult.fromJson(
+      await harness.client.call(
+        method: 'operation',
+        params: _operationParams('serialized-heartbeats', deadline),
+        deadline: deadline,
+      ),
+    ).result;
+
+    expect(result.outcome, CockpitOperationOutcome.succeeded);
+    expect(authority.maxConcurrentHeartbeats, 1);
+  });
+
   test(
     'heartbeat failure waits for cooperative execution before lease release',
     () async {
@@ -1486,18 +1535,20 @@ CockpitWorkspaceOperationAdapter _heartbeatOperationAdapter(
   Future<Map<String, Object?>> Function(CockpitWorkspaceOperationContext)
   execute, {
   Duration? cancellationGrace,
+  int resourceCount = 1,
 }) => CockpitWorkspaceOperationAdapter(
   kind: 'mutate.test',
   mutationClass: CockpitMutationClass.mutating,
   resourceKinds: const <String>['device.mutation'],
   prepare: (context, _) => CockpitPreparedWorkspaceOperation(
-    resources: <CockpitWorkerResourceRequest>[
-      CockpitWorkerResourceRequest(
+    resources: List<CockpitWorkerResourceRequest>.generate(
+      resourceCount,
+      (index) => CockpitWorkerResourceRequest(
         resourceKind: CockpitLeaseResourceKind.device,
-        resourceId: 'deviceA',
+        resourceId: 'device$index',
         ttl: const Duration(seconds: 1),
       ),
-    ],
+    ),
     cancellationGrace: cancellationGrace,
     execute: (_) => execute(context),
   ),
@@ -2252,4 +2303,58 @@ final class _HeartbeatFailureAuthority
     releaseCount += 1;
     releasedBeforeExecutionStopped = !_executionStopped();
   }
+}
+
+final class _SerialHeartbeatAuthority
+    implements CockpitWorkerResourceAuthorityClient {
+  _SerialHeartbeatAuthority({required this.expectedHeartbeats});
+
+  final int expectedHeartbeats;
+  final Completer<void> _firstRound = Completer<void>();
+  var _sequence = 0;
+  var _heartbeatCount = 0;
+  var _concurrentHeartbeats = 0;
+  var maxConcurrentHeartbeats = 0;
+
+  Future<void> get firstRound => _firstRound.future;
+
+  @override
+  Future<CockpitWorkerResourceGrant> acquire(
+    CockpitWorkerResourceRequest request, {
+    required String workspaceId,
+    required String holderId,
+    required String idempotencyKey,
+    required DateTime deadline,
+  }) async {
+    _sequence += 1;
+    return CockpitWorkerResourceGrant(
+      grantId: 'serial_grant_$_sequence',
+      leaseId: 'serial_lease_$_sequence',
+      workspaceId: workspaceId,
+      holderId: holderId,
+      resourceKind: request.resourceKind,
+      resourceId: request.resourceId,
+      expiresAt: DateTime.now().toUtc().add(const Duration(seconds: 2)),
+    );
+  }
+
+  @override
+  Future<void> heartbeat(CockpitWorkerResourceGrant grant) async {
+    _concurrentHeartbeats += 1;
+    if (_concurrentHeartbeats > maxConcurrentHeartbeats) {
+      maxConcurrentHeartbeats = _concurrentHeartbeats;
+    }
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    _concurrentHeartbeats -= 1;
+    _heartbeatCount += 1;
+    if (_heartbeatCount >= expectedHeartbeats && !_firstRound.isCompleted) {
+      _firstRound.complete();
+    }
+  }
+
+  @override
+  Future<void> release(
+    CockpitWorkerResourceGrant grant, {
+    required bool cancel,
+  }) async {}
 }
