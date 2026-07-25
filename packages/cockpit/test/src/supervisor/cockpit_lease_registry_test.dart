@@ -468,6 +468,62 @@ void main() {
     );
 
     test(
+      'explicit force release recovers quarantined logical resources',
+      () async {
+        final clock = TestLeaseClock();
+        final fixture = await CockpitLeaseTestFixture.create(clock: clock);
+        addTearDown(fixture.dispose);
+        final lease = await fixture.registry.acquire(
+          leaseRequest(
+            key: 'force-recovery.first',
+            resourceId: 'force-recovery-device',
+            waitTimeoutMs: 0,
+            ttlMs: 1000,
+          ),
+        );
+        fixture.cleanup.enqueue(
+          Future<CockpitLeaseCleanupResult>.value(
+            CockpitLeaseCleanupResult.quarantined(
+              testLeaseFailure('forceRecoveryRequired'),
+            ),
+          ),
+        );
+        clock.advance(const Duration(milliseconds: 1001));
+        await fixture.registry.recover();
+
+        final released = await fixture.registry.forceReleaseQuarantined(
+          leaseId: lease.leaseId,
+          workspaceId: lease.workspaceId,
+          resourceKind: lease.resourceKind,
+          resourceId: lease.resourceId,
+          holderId: lease.holderId,
+        );
+        expect(released.before.state, CockpitLeaseState.quarantined);
+        expect(released.after.state, CockpitLeaseState.released);
+        expect(released.forceReleased, isTrue);
+
+        final replay = await fixture.registry.forceReleaseQuarantined(
+          leaseId: lease.leaseId,
+          workspaceId: lease.workspaceId,
+          resourceKind: lease.resourceKind,
+          resourceId: lease.resourceId,
+          holderId: lease.holderId,
+        );
+        expect(replay.forceReleased, isFalse);
+        await expectLater(
+          fixture.registry.forceReleaseQuarantined(
+            leaseId: lease.leaseId,
+            workspaceId: lease.workspaceId,
+            resourceKind: CockpitLeaseResourceKind.forwardedPort,
+            resourceId: lease.resourceId,
+            holderId: lease.holderId,
+          ),
+          throwsLease('leaseForceReleaseForbidden'),
+        );
+      },
+    );
+
+    test(
       'reclaims crash-expired resources and cleans different resources in parallel',
       () async {
         final clock = TestLeaseClock();

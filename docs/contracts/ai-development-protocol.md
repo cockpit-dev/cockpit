@@ -57,6 +57,13 @@ dart run cockpit operation run \
 
 Never guess operation parameters, target IDs, device IDs, or locators.
 
+If interrupted work leaves a quarantined resource, read it with the advertised
+Supervisor `lease.list` operation. Use `lease.recover` only after policy
+explicitly authorizes the operation and its `reset` effect, and send the exact
+lease, workspace, resource kind/id, and holder identities. Set
+`forceRelease: true` only to acknowledge unverified logical-resource cleanup;
+forwarded ports always require verified cleanup.
+
 ## Case And Suite Runs
 
 Author YAML or JSON with `schemaVersion: cockpit.test/v2`. Validate before
@@ -74,17 +81,21 @@ dart run cockpit suite run --suite-id <suiteId> --idempotency-key <uniqueKey>
 Observe and collect the terminal result:
 
 ```bash
-dart run cockpit run events --run-id <runId> --after-sequence 0
+dart run cockpit run events --run-id <runId> --after-sequence 0 \
+  --stdout-format jsonl
 dart run cockpit run get --run-id <runId>
 dart run cockpit suite report --run-id <runId>
 dart run cockpit artifact list --run-id <runId>
 dart run cockpit artifact read \
   --run-id <runId> --artifact-id <artifactId> \
-  --size <size> --sha256 <sha256>
+  --output /absolute/path/to/artifact
 ```
 
-Use `artifact list` as the authority for artifact IDs, media types, sizes, and
-SHA-256 values. Never infer download metadata from filenames or report text.
+Terminal output defaults to bounded semantic text for agent loops. Request
+`--stdout-format json` only for exact machine data, or use `--output <file>` to
+write the lossless JSON response and receive a path/size/SHA-256 receipt.
+`artifact read` always writes verified bytes to a file and never emits Base64.
+Use `artifact list` as the authority for artifact identity and metadata.
 
 Use a suite for dependency ordering, matrix coverage, fixtures, retries,
 parallel rows, durable resume, and regression reports. Use a case for a focused

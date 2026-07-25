@@ -72,6 +72,14 @@ dart run cockpit workspace register --root-id <rootId> --path /work/projects/app
 dart run cockpit workspace list
 ```
 
+## CLI 输出
+
+默认 `auto` 格式是面向 Agent 终端循环的紧凑语义文本。使用
+`--detail minimal|standard|full` 控制投影体积，使用
+`--stdout-format json` 获取完整协议 envelope，使用 `jsonl` 流式读取 run event。
+`--output <file>` 会原子写入完整 JSON，终端仅返回路径、字节数和 SHA-256。
+artifact 二进制始终下载到 `--output`，绝不以 Base64 输出。
+
 ## 生产授权
 
 危险操作和测试 safety effect 默认拒绝。授权文件固定为
@@ -88,6 +96,7 @@ dart run cockpit workspace list
     "command.batch",
     "command.run",
     "evidence.screenshot.capture",
+    "lease.recover",
     "recording.start",
     "recording.stop",
     "system.action",
@@ -124,6 +133,12 @@ dart run cockpit daemon policy validate --file authorization.json
 dart run cockpit daemon policy apply --file authorization.json --restart
 dart run cockpit daemon policy show
 ```
+
+quarantined lease 会持续阻塞资源，直到 cleanup 验证成功。Supervisor 提供
+`lease.list`，以及需要显式授权 `reset` effect 的 `lease.recover`；恢复请求必须精确
+匹配 lease、workspace、resource 和 holder 身份。只有逻辑资源可在明确传入
+`forceRelease: true` 后解除未验证隔离，forwarded port 永远必须通过真实 cleanup
+验证，不能强制释放。
 
 只有被点名的环境变量 secret 会传入 worker。`production` 和 `unknown` 可以显式
 授权，但默认策略不会放行。
@@ -201,8 +216,7 @@ dart run cockpitd \
   --foreground-submission=/workspace/run-submission.json
 ```
 
-发布顺序为 `cockpit_protocol`、`flutter_cockpit`、`cockpit`。三个包统一使用
-`2.0.0`，不包含 1.x 运行时兼容层。
+## 文档
 
 详细文档：
 

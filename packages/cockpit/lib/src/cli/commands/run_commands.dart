@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:args/args.dart';
@@ -7,12 +6,14 @@ import 'package:cockpit_protocol/cockpit_protocol.dart';
 import 'package:path/path.dart' as p;
 
 import '../../supervisor/cockpit_supervisor_api_client.dart';
+import '../cockpit_cli_output.dart';
 import '../cockpit_cli_runtime.dart';
 
 final class CockpitCaseCommand extends Command<int> {
   CockpitCaseCommand(this.runtime) {
     addSubcommand(
       CockpitLeafCommand(
+        runtime: runtime,
         name: 'list',
         description: 'List indexed cases for a workspace.',
         configure: (parser) => parser.addOption('workspace-id'),
@@ -20,7 +21,7 @@ final class CockpitCaseCommand extends Command<int> {
           final workspaceId = await runtime.workspaceId(
             arguments.option('workspace-id'),
           );
-          runtime.success(<String, Object?>{
+          await runtime.success(<String, Object?>{
             'items': (await (await runtime.client()).cases(
               workspaceId,
             )).map((testCase) => testCase.toJson()).toList(),
@@ -31,6 +32,7 @@ final class CockpitCaseCommand extends Command<int> {
     );
     addSubcommand(
       CockpitLeafCommand(
+        runtime: runtime,
         name: 'validate',
         description: 'Validate a case document.',
         configure: (parser) => parser
@@ -54,13 +56,14 @@ final class CockpitCaseCommand extends Command<int> {
               relativePath: p.basename(file.path),
             ),
           );
-          runtime.success(result.toJson());
+          await runtime.success(result.toJson());
           return result.valid ? cockpitSuccessExitCode : cockpitDataExitCode;
         },
       ),
     );
     addSubcommand(
       CockpitLeafCommand(
+        runtime: runtime,
         name: 'run',
         description: 'Run an indexed case with canonical source identity.',
         configure: (parser) => parser
@@ -115,7 +118,7 @@ final class CockpitCaseCommand extends Command<int> {
               targetId: arguments.option('target-id'),
             ),
           );
-          runtime.success(accepted.toJson());
+          await runtime.success(accepted.toJson());
           return cockpitSuccessExitCode;
         },
       ),
@@ -135,6 +138,7 @@ final class CockpitSuiteCommand extends Command<int> {
   CockpitSuiteCommand(this.runtime) {
     addSubcommand(
       CockpitLeafCommand(
+        runtime: runtime,
         name: 'list',
         description: 'List indexed suites for a workspace.',
         configure: (parser) => parser.addOption('workspace-id'),
@@ -148,13 +152,14 @@ final class CockpitSuiteCommand extends Command<int> {
               )
               .map((document) => document.toJson())
               .toList(growable: false);
-          runtime.success(<String, Object?>{'items': items});
+          await runtime.success(<String, Object?>{'items': items});
           return cockpitSuccessExitCode;
         },
       ),
     );
     addSubcommand(
       CockpitLeafCommand(
+        runtime: runtime,
         name: 'validate',
         description: 'Validate a suite document.',
         configure: (parser) => parser
@@ -177,13 +182,14 @@ final class CockpitSuiteCommand extends Command<int> {
               relativePath: p.basename(file.path),
             ),
           );
-          runtime.success(result.toJson());
+          await runtime.success(result.toJson());
           return result.valid ? cockpitSuccessExitCode : cockpitDataExitCode;
         },
       ),
     );
     addSubcommand(
       CockpitLeafCommand(
+        runtime: runtime,
         name: 'run',
         description: 'Run an indexed suite as one durable campaign.',
         configure: (parser) => parser
@@ -239,18 +245,19 @@ final class CockpitSuiteCommand extends Command<int> {
               targetId: arguments.option('target-id'),
             ),
           );
-          runtime.success(accepted.toJson());
+          await runtime.success(accepted.toJson());
           return cockpitSuccessExitCode;
         },
       ),
     );
     addSubcommand(
       CockpitLeafCommand(
+        runtime: runtime,
         name: 'report',
         description: 'Read the finalized canonical suite report.',
         configure: (parser) => parser.addOption('run-id', mandatory: true),
         action: (arguments) async {
-          runtime.success(
+          await runtime.success(
             (await (await runtime.client()).report(
               arguments.option('run-id')!,
             )).toJson(),
@@ -274,11 +281,12 @@ final class CockpitRunCommand extends Command<int> {
   CockpitRunCommand(this.runtime) {
     addSubcommand(
       CockpitLeafCommand(
+        runtime: runtime,
         name: 'get',
         description: 'Read a run resource.',
         configure: (parser) => parser.addOption('run-id', mandatory: true),
         action: (arguments) async {
-          runtime.success(
+          await runtime.success(
             (await (await runtime.client()).run(
               arguments.option('run-id')!,
             )).toJson(),
@@ -289,6 +297,7 @@ final class CockpitRunCommand extends Command<int> {
     );
     addSubcommand(
       CockpitLeafCommand(
+        runtime: runtime,
         name: 'cancel',
         description: 'Cancel a run.',
         configure: (parser) => parser
@@ -305,13 +314,14 @@ final class CockpitRunCommand extends Command<int> {
               reason: arguments.option('reason'),
             ),
           );
-          runtime.success(result.toJson());
+          await runtime.success(result.toJson());
           return cockpitSuccessExitCode;
         },
       ),
     );
     addSubcommand(
       CockpitLeafCommand(
+        runtime: runtime,
         name: 'events',
         description: 'Stream bounded run events until terminal or disconnect.',
         configure: (parser) => parser
@@ -327,16 +337,33 @@ final class CockpitRunCommand extends Command<int> {
             minimum: 1,
             maximum: 1000,
           );
+          final jsonLines =
+              runtime.outputSelection.stdoutFormat ==
+              CockpitCliStdoutFormat.jsonl;
+          if (jsonLines && runtime.outputSelection.outputPath != null) {
+            throw const FormatException(
+              '--output cannot be combined with streaming JSONL; redirect stdout instead.',
+            );
+          }
           final values = <Map<String, Object?>>[];
+          var emitted = 0;
           await for (final item in (await runtime.client()).events(
             arguments.option('run-id')!,
             afterSequence: after,
             lastEventId: arguments.option('last-event-id'),
           )) {
-            values.add(_streamItemJson(item));
-            if (values.length >= maximum) break;
+            final value = _streamItemJson(item);
+            emitted += 1;
+            if (jsonLines) {
+              runtime.jsonLine(value);
+            } else {
+              values.add(value);
+            }
+            if (emitted >= maximum) break;
           }
-          runtime.success(<String, Object?>{'items': values});
+          if (!jsonLines) {
+            await runtime.success(<String, Object?>{'items': values});
+          }
           return cockpitSuccessExitCode;
         },
       ),
@@ -356,11 +383,12 @@ final class CockpitArtifactCommand extends Command<int> {
   CockpitArtifactCommand(this.runtime) {
     addSubcommand(
       CockpitLeafCommand(
+        runtime: runtime,
         name: 'list',
         description: 'List immutable artifact metadata for a run.',
         configure: (parser) => parser.addOption('run-id', mandatory: true),
         action: (arguments) async {
-          runtime.success(<String, Object?>{
+          await runtime.success(<String, Object?>{
             'items': (await (await runtime.client()).artifacts(
               arguments.option('run-id')!,
             )).map((artifact) => artifact.toJson()).toList(),
@@ -371,31 +399,46 @@ final class CockpitArtifactCommand extends Command<int> {
     );
     addSubcommand(
       CockpitLeafCommand(
+        runtime: runtime,
         name: 'read',
-        description: 'Read a digest-checked bounded artifact.',
+        description: 'Download a verified artifact to --output.',
         configure: (parser) => parser
           ..addOption('run-id', mandatory: true)
-          ..addOption('artifact-id', mandatory: true)
-          ..addOption('size', mandatory: true)
-          ..addOption('sha256', mandatory: true),
+          ..addOption('artifact-id', mandatory: true),
         action: (arguments) async {
-          final artifact = await (await runtime.client()).readArtifact(
-            runId: arguments.option('run-id')!,
-            artifactId: arguments.option('artifact-id')!,
-            expectedSize: _integer(
-              arguments,
-              'size',
-              minimum: 0,
-              maximum: cockpitSupervisorMaximumResponseBytes,
-            ),
-            expectedSha256: arguments.option('sha256')!,
+          final requestedOutput = runtime.outputSelection.outputPath;
+          if (requestedOutput == null) {
+            throw const FormatException('artifact read requires --output.');
+          }
+          final runId = arguments.option('run-id')!;
+          final artifactId = arguments.option('artifact-id')!;
+          final client = await runtime.client();
+          final matches = (await client.artifacts(runId))
+              .where((artifact) => artifact.artifactId == artifactId)
+              .toList(growable: false);
+          if (matches.length != 1) {
+            throw CockpitSupervisorClientException(
+              code: 'artifactNotFound',
+              message: 'Artifact $artifactId was not found for run $runId.',
+            );
+          }
+          final resolved = p.normalize(
+            p.isAbsolute(requestedOutput)
+                ? requestedOutput
+                : p.join(runtime.workingDirectory, requestedOutput),
           );
-          runtime.success(<String, Object?>{
-            'mediaType': artifact.mediaType,
-            'sizeBytes': artifact.bytes.length,
-            'sha256': artifact.sha256,
-            'dataBase64': base64Encode(artifact.bytes),
-          });
+          final receipt = await client.downloadArtifactToFile(
+            artifact: matches.single,
+            destination: File(resolved),
+          );
+          runtime.fileReceipt(
+            CockpitCliFileReceipt(
+              path: receipt.file.path,
+              mediaType: receipt.mediaType,
+              sizeBytes: receipt.sizeBytes,
+              sha256: receipt.sha256,
+            ),
+          );
           return cockpitSuccessExitCode;
         },
       ),

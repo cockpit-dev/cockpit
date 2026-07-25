@@ -17,6 +17,12 @@ final class CockpitSupervisorOperationCatalog {
       Map<String, CockpitSupervisorOperationMetadata>.unmodifiable({
         for (final metadata in <CockpitSupervisorOperationMetadata>[
           _read('target.discover', CockpitOperationScope.supervisor),
+          _read('lease.list', CockpitOperationScope.supervisor),
+          _mutation(
+            'lease.recover',
+            CockpitOperationScope.supervisor,
+            effects: const <CockpitSafetyEffect>[CockpitSafetyEffect.reset],
+          ),
           _read('system.capabilities', CockpitOperationScope.supervisor),
           _read('system.diagnostics', CockpitOperationScope.supervisor),
           _mutation(

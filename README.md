@@ -80,6 +80,15 @@ dart run cockpit workspace register --root-id <rootId> --path /work/projects/app
 dart run cockpit workspace list
 ```
 
+## CLI Output
+
+The default `auto` format is compact semantic text designed for agent terminal
+loops. Use `--detail minimal|standard|full` to control projection size,
+`--stdout-format json` for an exact protocol envelope, and `jsonl` for live run
+events. `--output <file>` atomically writes the complete JSON response and
+prints only a path, byte count, and SHA-256 receipt. Artifact bytes are always
+downloaded to `--output`; Cockpit never emits them as Base64.
+
 ## Authorization
 
 Dangerous operations and test safety effects are denied unless explicitly
@@ -97,6 +106,7 @@ cannot change authority mid-run.
     "command.batch",
     "command.run",
     "evidence.screenshot.capture",
+    "lease.recover",
     "recording.start",
     "recording.stop",
     "system.action",
@@ -136,6 +146,11 @@ dart run cockpit daemon policy show
 
 Only named environment secrets are copied into workspace workers. A policy may
 explicitly authorize `production` or `unknown`; the default policy does not.
+Quarantined leases remain blocked until verified cleanup succeeds. The
+Supervisor advertises `lease.list` and the `reset`-authorized `lease.recover`
+operation for exact lease/workspace/resource/holder identities. An explicit
+`forceRelease: true` may release an unverified logical resource; forwarded
+ports always require verified cleanup and can never be force released.
 
 ## Black-Box Targets
 
@@ -218,11 +233,7 @@ dart run cockpitd \
   --foreground-submission=/workspace/run-submission.json
 ```
 
-## Release
-
-Publish in dependency order: `cockpit_protocol`, `flutter_cockpit`, then
-`cockpit`. All three packages use version `2.0.0`; no 1.x forwarding or runtime
-compatibility layer is included.
+## Documentation
 
 Detailed package and protocol documentation:
 

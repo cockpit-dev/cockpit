@@ -40,6 +40,14 @@ dart run cockpit workspace register --root-id <rootId> --path /work/projects/app
 dart run cockpit workspace list
 ```
 
+## CLI Output
+
+The default `auto` format is compact semantic text for agent loops. Select
+`--detail minimal|standard|full`, explicit lossless `--stdout-format json`, or
+streaming `jsonl` for `run events`. `--output <file>` atomically writes complete
+JSON and prints a bounded path/size/SHA-256 receipt. `artifact read` requires
+`--output` and never emits binary or Base64 data.
+
 Workspace commands accept `--workspace-id`. When it is omitted, Cockpit
 resolves the current directory against registered active workspaces and
 requires exactly one match. It never selects a global latest run, active
@@ -78,6 +86,12 @@ dart run cockpit daemon policy show
 Applying without `--restart` requires a stopped daemon. The default policy
 denies dangerous operations and sensitive test effects; it does not authorize
 production or unknown target environments.
+
+Quarantined leases remain blocked by default. Use the advertised `lease.list`
+operation to obtain the exact identity, then a `reset`-authorized
+`lease.recover` request to retry verified cleanup. `forceRelease: true` is
+limited to explicitly matched logical resources; forwarded ports can only be
+released after verified cleanup.
 
 ## Canonical Case Replay
 
@@ -226,7 +240,7 @@ MCP exposes bounded resources for server, capabilities, roots, workspaces,
 operations, targets, documents, cases, suites, runs, and artifacts. Its tools
 cover root/workspace lifecycle, advertised operations, target lifecycle,
 case/suite validation and execution, run get/cancel/events, artifact listing,
-and verified artifact reads.
+and verified artifact downloads to explicit files.
 Every tool crosses the authenticated Supervisor HTTP boundary; the MCP process
 does not construct application services.
 

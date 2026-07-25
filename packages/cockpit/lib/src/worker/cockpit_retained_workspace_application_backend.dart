@@ -59,6 +59,7 @@ final class CockpitRetainedWorkspaceApplicationBackend
         workspaceId: workspaceId,
         workspaceRoot: workspaceRoot,
         registry: registry,
+        developmentRuntime: developmentRuntime,
         documents: documents,
         producerRoot: producerRoot,
         targets: registry,

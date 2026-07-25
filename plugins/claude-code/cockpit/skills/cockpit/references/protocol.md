@@ -26,6 +26,7 @@ examples.
 | Validate/run suite | `cockpit suite validate`, `suite run` |
 | Observe/cancel | `cockpit run get`, `run events`, `run cancel` |
 | Report/artifact | `cockpit suite report`, `artifact list`, `artifact read` |
+| Lease recovery | `operation run --kind lease.list`, `operation run --kind lease.recover` |
 | MCP | `cockpit serve-mcp` or the `cockpit_mcp` executable |
 
 Run `cockpit help <command> <subcommand>` for current options.
@@ -48,11 +49,18 @@ Run `cockpit help <command> <subcommand>` for current options.
   session affinity across worker recovery.
 - A cancelled suite still runs eligible always-run teardown within bounded
   grace, then publishes terminal events and reports.
-- List run artifacts first; use the returned artifact ID, size, and SHA-256 for
-  every bounded artifact read.
+- List run artifacts first, then download by run/artifact identity to an
+  explicit `--output` file. Cockpit verifies media type, size, and SHA-256
+  before committing the file; binary bytes never belong in terminal output.
+- Quarantined resources remain blocked until cleanup is verified. The
+  `reset`-authorized `lease.recover` requires exact lease, workspace, resource,
+  and holder identities. Only logical resources allow explicit force release;
+  forwarded ports always require verified cleanup.
 
 ## Output Selection
 
-Use `minimal` target inspection for routine loops, `standard` for debugging,
-and `inspect`/`evidence` only when the additional state proves the claim. Prefer
-structured report and error data before opening large artifacts.
+CLI `auto` output is compact semantic text. Use `--detail minimal|standard|full`
+to control its projection, `--stdout-format json` for an exact response,
+`jsonl` for streaming run events, and `--output <file>` for lossless JSON plus
+a bounded receipt. Use `minimal` target inspection for routine loops and
+`inspect`/`evidence` only when the additional runtime state proves the claim.

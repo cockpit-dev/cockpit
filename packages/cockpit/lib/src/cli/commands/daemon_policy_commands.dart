@@ -8,18 +8,20 @@ final class CockpitDaemonPolicyCommand extends Command<int> {
   CockpitDaemonPolicyCommand(this.runtime) {
     addSubcommand(
       CockpitLeafCommand(
+        runtime: runtime,
         name: 'show',
         description: 'Read the persisted Supervisor authorization policy.',
         action: (_) async {
           final policy = await (await runtime.authorizationPolicyStore())
               .read();
-          runtime.success(policy.toJson());
+          await runtime.success(policy.toJson());
           return cockpitSuccessExitCode;
         },
       ),
     );
     addSubcommand(
       CockpitLeafCommand(
+        runtime: runtime,
         name: 'validate',
         description: 'Validate an authorization policy file.',
         configure: (parser) => parser.addOption('file', mandatory: true),
@@ -27,13 +29,14 @@ final class CockpitDaemonPolicyCommand extends Command<int> {
           final policy = runtime.authorizationPolicyFile(
             arguments.option('file')!,
           );
-          runtime.success(policy.toJson());
+          await runtime.success(policy.toJson());
           return cockpitSuccessExitCode;
         },
       ),
     );
     addSubcommand(
       CockpitLeafCommand(
+        runtime: runtime,
         name: 'apply',
         description: 'Atomically replace the Supervisor authorization policy.',
         configure: (parser) {
@@ -63,7 +66,7 @@ final class CockpitDaemonPolicyCommand extends Command<int> {
           }
           await (await runtime.authorizationPolicyStore()).replace(policy);
           if (restart) await lifecycle.start();
-          runtime.success(<String, Object?>{
+          await runtime.success(<String, Object?>{
             'policy': policy.toJson(),
             'daemon': (await lifecycle.status()).toJson(),
           });

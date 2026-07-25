@@ -6,10 +6,13 @@ import 'package:cockpit_protocol/cockpit_protocol.dart';
 import 'package:path/path.dart' as p;
 
 import '../../supervisor/cockpit_supervisor_api_client.dart';
+import '../cockpit_cli_output.dart';
 import '../cockpit_cli_runtime.dart';
 
 final class CockpitServerCommand extends Command<int> {
-  CockpitServerCommand(this.runtime);
+  CockpitServerCommand(this.runtime) {
+    cockpitAddCliOutputOptions(argParser);
+  }
 
   final CockpitCliRuntime runtime;
 
@@ -21,7 +24,11 @@ final class CockpitServerCommand extends Command<int> {
 
   @override
   Future<int> run() async {
-    runtime.success((await (await runtime.client()).server()).toJson());
+    runtime.configureOutput(
+      command: name,
+      selection: CockpitCliOutputSelection.fromArguments(argResults!),
+    );
+    await runtime.success((await (await runtime.client()).server()).toJson());
     return cockpitSuccessExitCode;
   }
 }
@@ -30,10 +37,11 @@ final class CockpitRootCommand extends Command<int> {
   CockpitRootCommand(this.runtime) {
     addSubcommand(
       CockpitLeafCommand(
+        runtime: runtime,
         name: 'list',
         description: 'List registered roots.',
         action: (_) async {
-          runtime.success(
+          await runtime.success(
             (await (await runtime.client()).roots())
                 .map((root) => root.toJson())
                 .toList(),
@@ -44,6 +52,7 @@ final class CockpitRootCommand extends Command<int> {
     );
     addSubcommand(
       CockpitLeafCommand(
+        runtime: runtime,
         name: 'add',
         description: 'Register a root.',
         configure: (parser) => parser
@@ -57,13 +66,14 @@ final class CockpitRootCommand extends Command<int> {
               label: arguments.option('label'),
             ),
           );
-          runtime.success(root.toJson());
+          await runtime.success(root.toJson());
           return cockpitSuccessExitCode;
         },
       ),
     );
     addSubcommand(
       CockpitLeafCommand(
+        runtime: runtime,
         name: 'remove',
         description: 'Unregister a root.',
         configure: (parser) => parser
@@ -79,7 +89,7 @@ final class CockpitRootCommand extends Command<int> {
               drainTimeoutMs: timeout,
             ),
           );
-          runtime.success(result.toJson());
+          await runtime.success(result.toJson());
           return cockpitSuccessExitCode;
         },
       ),
@@ -99,10 +109,11 @@ final class CockpitWorkspaceCommand extends Command<int> {
   CockpitWorkspaceCommand(this.runtime) {
     addSubcommand(
       CockpitLeafCommand(
+        runtime: runtime,
         name: 'list',
         description: 'List registered workspaces.',
         action: (_) async {
-          runtime.success(
+          await runtime.success(
             (await (await runtime.client()).workspaces())
                 .map((workspace) => workspace.toJson())
                 .toList(),
@@ -113,6 +124,7 @@ final class CockpitWorkspaceCommand extends Command<int> {
     );
     addSubcommand(
       CockpitLeafCommand(
+        runtime: runtime,
         name: 'register',
         description: 'Register a workspace checkout.',
         configure: (parser) => parser
@@ -130,13 +142,14 @@ final class CockpitWorkspaceCommand extends Command<int> {
               path: canonical,
             ),
           );
-          runtime.success(workspace.toJson());
+          await runtime.success(workspace.toJson());
           return cockpitSuccessExitCode;
         },
       ),
     );
     addSubcommand(
       CockpitLeafCommand(
+        runtime: runtime,
         name: 'rebind',
         description: 'Rebind a workspace to a checkout.',
         configure: (parser) => parser
@@ -154,13 +167,14 @@ final class CockpitWorkspaceCommand extends Command<int> {
               expectedCheckoutId: arguments.option('expected-checkout-id')!,
             ),
           );
-          runtime.success(workspace.toJson());
+          await runtime.success(workspace.toJson());
           return cockpitSuccessExitCode;
         },
       ),
     );
     addSubcommand(
       CockpitLeafCommand(
+        runtime: runtime,
         name: 'unregister',
         description: 'Unregister a workspace.',
         configure: (parser) => parser
@@ -175,7 +189,7 @@ final class CockpitWorkspaceCommand extends Command<int> {
               drainTimeoutMs: _integer(arguments, 'drain-timeout-ms'),
             ),
           );
-          runtime.success(result.toJson());
+          await runtime.success(result.toJson());
           return cockpitSuccessExitCode;
         },
       ),
@@ -195,6 +209,7 @@ final class CockpitOperationCommand extends Command<int> {
   CockpitOperationCommand(this.runtime) {
     addSubcommand(
       CockpitLeafCommand(
+        runtime: runtime,
         name: 'list',
         description: 'List advertised operations.',
         configure: (parser) => parser
@@ -211,7 +226,7 @@ final class CockpitOperationCommand extends Command<int> {
           final operations = await (await runtime.client()).operations(
             workspaceId: workspaceId,
           );
-          runtime.success(
+          await runtime.success(
             operations.map((operation) => operation.toJson()).toList(),
           );
           return cockpitSuccessExitCode;
@@ -220,6 +235,7 @@ final class CockpitOperationCommand extends Command<int> {
     );
     addSubcommand(
       CockpitLeafCommand(
+        runtime: runtime,
         name: 'run',
         description: 'Execute an advertised typed operation.',
         configure: (parser) => parser
@@ -283,8 +299,8 @@ final class CockpitOperationCommand extends Command<int> {
                   : DateTime.parse(arguments.option('deadline')!).toUtc(),
             ),
           );
-          runtime.success(result.toJson());
-          return cockpitSuccessExitCode;
+          await runtime.success(result.toJson());
+          return cockpitExitCodeForOperation(result);
         },
       ),
     );
@@ -303,6 +319,7 @@ final class CockpitTargetCommand extends Command<int> {
   CockpitTargetCommand(this.runtime) {
     addSubcommand(
       CockpitLeafCommand(
+        runtime: runtime,
         name: 'discover',
         description: 'Discover locally available launch targets.',
         configure: (parser) => parser.addOption('timeout-ms'),
@@ -314,13 +331,14 @@ final class CockpitTargetCommand extends Command<int> {
               input: <String, Object?>{'timeoutMs': ?timeoutMs},
             ),
           );
-          runtime.success(result.toJson());
-          return cockpitSuccessExitCode;
+          await runtime.success(result.toJson());
+          return cockpitExitCodeForOperation(result);
         },
       ),
     );
     addSubcommand(
       CockpitLeafCommand(
+        runtime: runtime,
         name: 'list',
         description: 'List registered workspace automation targets.',
         configure: (parser) => parser.addOption('workspace-id'),
@@ -328,7 +346,7 @@ final class CockpitTargetCommand extends Command<int> {
           final workspaceId = await runtime.workspaceId(
             arguments.option('workspace-id'),
           );
-          runtime.success(<String, Object?>{
+          await runtime.success(<String, Object?>{
             'items': (await (await runtime.client()).targets(
               workspaceId,
             )).map((target) => target.toJson()).toList(),
@@ -339,6 +357,7 @@ final class CockpitTargetCommand extends Command<int> {
     );
     addSubcommand(
       CockpitLeafCommand(
+        runtime: runtime,
         name: 'get',
         description: 'Read one registered workspace automation target.',
         configure: (parser) => parser
@@ -348,7 +367,7 @@ final class CockpitTargetCommand extends Command<int> {
           final workspaceId = await runtime.workspaceId(
             arguments.option('workspace-id'),
           );
-          runtime.success(
+          await runtime.success(
             (await (await runtime.client()).target(
               workspaceId,
               arguments.option('target-id')!,
@@ -360,6 +379,7 @@ final class CockpitTargetCommand extends Command<int> {
     );
     addSubcommand(
       CockpitLeafCommand(
+        runtime: runtime,
         name: 'register',
         description: 'Register a workspace-owned automation target.',
         configure: (parser) => parser
@@ -430,13 +450,14 @@ final class CockpitTargetCommand extends Command<int> {
               },
             ),
           );
-          runtime.success(result.toJson());
-          return cockpitSuccessExitCode;
+          await runtime.success(result.toJson());
+          return cockpitExitCodeForOperation(result);
         },
       ),
     );
     addSubcommand(
       CockpitLeafCommand(
+        runtime: runtime,
         name: 'launch',
         description: 'Launch or activate a registered automation target.',
         configure: (parser) => parser
@@ -446,13 +467,18 @@ final class CockpitTargetCommand extends Command<int> {
             'mode',
             allowed: const <String>['development', 'automation'],
           )
-          ..addOption('launch-timeout-ms')
+          ..addOption('launch-timeout-ms', defaultsTo: '600000')
           ..addOption('idempotency-key', mandatory: true),
         action: (arguments) async {
           final workspaceId = await runtime.workspaceId(
             arguments.option('workspace-id'),
           );
-          final timeoutMs = _optionalInteger(arguments, 'launch-timeout-ms');
+          final timeoutMs = _integer(arguments, 'launch-timeout-ms');
+          if (timeoutMs < 1000 || timeoutMs > 1800000) {
+            throw const FormatException(
+              '--launch-timeout-ms must be between 1000 and 1800000.',
+            );
+          }
           final result = await (await runtime.client()).executeOperation(
             CockpitOperationInvocation(
               kind: 'target.launch',
@@ -464,17 +490,21 @@ final class CockpitTargetCommand extends Command<int> {
                 'targetId': arguments.option('target-id'),
                 if (arguments.option('mode') != null)
                   'mode': arguments.option('mode'),
-                'launchTimeoutMs': ?timeoutMs,
+                'launchTimeoutMs': timeoutMs,
               },
+              deadline: DateTime.now().toUtc().add(
+                Duration(milliseconds: timeoutMs) + const Duration(seconds: 30),
+              ),
             ),
           );
-          runtime.success(result.toJson());
-          return cockpitSuccessExitCode;
+          await runtime.success(result.toJson());
+          return cockpitExitCodeForOperation(result);
         },
       ),
     );
     addSubcommand(
       CockpitLeafCommand(
+        runtime: runtime,
         name: 'inspect',
         description: 'Inspect the live state of a registered target.',
         configure: (parser) => parser
@@ -504,8 +534,8 @@ final class CockpitTargetCommand extends Command<int> {
               },
             ),
           );
-          runtime.success(result.toJson());
-          return cockpitSuccessExitCode;
+          await runtime.success(result.toJson());
+          return cockpitExitCodeForOperation(result);
         },
       ),
     );

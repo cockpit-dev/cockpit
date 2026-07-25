@@ -11,6 +11,7 @@ import '../foundation/cockpit_home.dart';
 import '../foundation/cockpit_locked_json_store.dart';
 import '../supervisor/cockpit_supervisor_authorization.dart';
 import '../supervisor/cockpit_supervisor_api_client.dart';
+import 'cockpit_cli_output.dart';
 
 const int cockpitSuccessExitCode = 0;
 const int cockpitUsageExitCode = 64;
@@ -29,13 +30,17 @@ typedef CockpitCliAction = Future<int> Function(ArgResults arguments);
 
 final class CockpitLeafCommand extends Command<int> {
   CockpitLeafCommand({
+    required this.runtime,
     required this.name,
     required this.description,
     required CockpitCliAction action,
     void Function(ArgParser parser)? configure,
   }) : _action = action {
+    cockpitAddCliOutputOptions(argParser);
     configure?.call(argParser);
   }
+
+  final CockpitCliRuntime runtime;
 
   @override
   final String name;
@@ -46,7 +51,25 @@ final class CockpitLeafCommand extends Command<int> {
   final CockpitCliAction _action;
 
   @override
-  Future<int> run() => _action(argResults!);
+  Future<int> run() {
+    runtime.configureOutput(
+      command: _commandPath(),
+      selection: CockpitCliOutputSelection.fromArguments(argResults!),
+    );
+    return _action(argResults!);
+  }
+
+  String _commandPath() {
+    final parts = <String>[name];
+    for (
+      Command<int>? command = parent;
+      command != null;
+      command = command.parent
+    ) {
+      parts.add(command.name);
+    }
+    return parts.reversed.join('.');
+  }
 }
 
 final class CockpitCliRuntime {
@@ -62,7 +85,12 @@ final class CockpitCliRuntime {
            authorizationPolicyStoreProvider ?? _systemAuthorizationPolicyStore,
        stdoutSink = stdoutSink ?? stdout,
        stderrSink = stderrSink ?? stderr,
-       workingDirectory = workingDirectory ?? Directory.current.path;
+       workingDirectory = workingDirectory ?? Directory.current.path {
+    _outputWriter = CockpitCliOutputWriter(
+      stdoutSink: this.stdoutSink,
+      workingDirectory: this.workingDirectory,
+    );
+  }
 
   final CockpitSupervisorClientProvider _clientProvider;
   final CockpitAuthorizationPolicyStoreProvider
@@ -71,9 +99,15 @@ final class CockpitCliRuntime {
   final StringSink stderrSink;
   final String workingDirectory;
   Future<CockpitSupervisorApiClient>? _client;
+  late final CockpitCliOutputWriter _outputWriter;
+  String _command = 'cockpit';
+  CockpitCliOutputSelection _outputSelection =
+      const CockpitCliOutputSelection();
   Future<CockpitSupervisorAuthorizationPolicyStore>? _authorizationPolicyStore;
 
   Future<CockpitSupervisorApiClient> client() => _client ??= _clientProvider();
+
+  CockpitCliOutputSelection get outputSelection => _outputSelection;
 
   Future<CockpitSupervisorAuthorizationPolicyStore>
   authorizationPolicyStore() =>
@@ -98,16 +132,28 @@ final class CockpitCliRuntime {
     );
   }
 
-  void success(Object? data) {
-    final value = <String, Object?>{'ok': true, 'data': data};
-    final text = cockpitCompactJsonText(value);
-    if (utf8.encode(text).length > cockpitSupervisorMaximumResponseBytes) {
-      throw const CockpitSupervisorClientException(
-        code: 'outputTooLarge',
-        message: 'CLI output exceeds 1 MiB.',
-      );
-    }
-    stdoutSink.writeln(text);
+  void configureOutput({
+    required String command,
+    required CockpitCliOutputSelection selection,
+  }) {
+    _command = command;
+    _outputSelection = selection;
+  }
+
+  Future<void> success(Object? data) async {
+    await _outputWriter.writeSuccess(
+      command: _command,
+      data: data,
+      selection: _outputSelection,
+    );
+  }
+
+  void fileReceipt(CockpitCliFileReceipt receipt) {
+    _outputWriter.writeReceipt(receipt: receipt, selection: _outputSelection);
+  }
+
+  void jsonLine(Object? value) {
+    stdoutSink.writeln(cockpitCompactJsonText(value));
   }
 
   void error({
@@ -118,20 +164,18 @@ final class CockpitCliRuntime {
     String? responsibleLayer,
     Map<String, Object?> details = const <String, Object?>{},
   }) {
-    stderrSink.writeln(
-      cockpitCompactJsonText(<String, Object?>{
-        'ok': false,
-        'error': <String, Object?>{
-          'code': code,
-          'message': message.length <= 4096
-              ? message
-              : '${message.substring(0, 4093)}...',
-          'retryable': retryable,
-          'category': ?category,
-          'responsibleLayer': ?responsibleLayer,
-          if (details.isNotEmpty) 'details': details,
-        },
-      }),
+    final boundedMessage = message.length <= 4096
+        ? message
+        : '${message.substring(0, 4093)}...';
+    _outputWriter.writeError(
+      code: code,
+      message: boundedMessage,
+      retryable: retryable,
+      category: category,
+      responsibleLayer: responsibleLayer,
+      details: details,
+      selection: _outputSelection,
+      stderrSink: stderrSink,
     );
   }
 
@@ -211,3 +255,17 @@ int cockpitExitCodeFor(CockpitApiError error) => switch (error.code) {
   _ when error.retryable => cockpitTemporaryExitCode,
   _ => cockpitDataExitCode,
 };
+
+int cockpitExitCodeForOperation(CockpitOperationResult result) {
+  if (result.lifecycle != CockpitOperationLifecycle.completed ||
+      result.outcome == null) {
+    return cockpitTemporaryExitCode;
+  }
+  return switch (result.outcome!) {
+    CockpitOperationOutcome.succeeded => cockpitSuccessExitCode,
+    CockpitOperationOutcome.cancelled ||
+    CockpitOperationOutcome.interrupted => cockpitTemporaryExitCode,
+    CockpitOperationOutcome.failed || CockpitOperationOutcome.blocked =>
+      cockpitExitCodeFor(result.failure!.primary),
+  };
+}

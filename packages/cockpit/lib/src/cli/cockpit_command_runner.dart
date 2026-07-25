@@ -4,6 +4,7 @@ import 'package:args/command_runner.dart';
 
 import '../supervisor/cockpit_daemon_client.dart';
 import '../supervisor/cockpit_supervisor_api_client.dart';
+import 'cockpit_cli_output.dart';
 import 'cockpit_cli_runtime.dart';
 import 'commands/daemon_commands.dart';
 import 'commands/resource_commands.dart';
@@ -49,6 +50,10 @@ final class CockpitCommandRunner {
   Map<String, Command<int>> get commands => _runner.commands;
 
   Future<int> run(List<String> arguments) async {
+    runtime.configureOutput(
+      command: _commandPath(arguments),
+      selection: CockpitCliOutputSelection.fromRawArguments(arguments),
+    );
     try {
       return await _runner.run(arguments) ?? cockpitSuccessExitCode;
     } on UsageException catch (error) {
@@ -94,6 +99,14 @@ final class CockpitCommandRunner {
       return cockpitUnavailableExitCode;
     }
   }
+}
+
+String _commandPath(List<String> arguments) {
+  final commands = arguments
+      .takeWhile((argument) => !argument.startsWith('-'))
+      .take(2)
+      .toList(growable: false);
+  return commands.isEmpty ? 'cockpit' : commands.join('.');
 }
 
 int _clientExitCode(String code) => switch (code) {

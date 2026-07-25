@@ -51,6 +51,87 @@ extension CockpitLeaseRecoveryOperations on CockpitLeaseRegistry {
     return list(resourceKind: resourceKind, resourceId: resourceId);
   }
 
+  Future<CockpitForcedLeaseRelease> forceReleaseQuarantined({
+    required String leaseId,
+    required String workspaceId,
+    required CockpitLeaseResourceKind resourceKind,
+    required String resourceId,
+    required String holderId,
+  }) async {
+    if (resourceKind == CockpitLeaseResourceKind.forwardedPort) {
+      throw const CockpitLeaseException(
+        code: 'leaseForceReleaseForbidden',
+        message:
+            'Forwarded ports require verified cleanup and cannot be force released.',
+      );
+    }
+    final result = await _database.transact<CockpitForcedLeaseRelease>((
+      state,
+    ) async {
+      final now = _now;
+      _pruneReleased(state, now);
+      _expireDue(state, now);
+      final record = state.byId(leaseId);
+      final before = _resource(state, record);
+      if (record.workspaceId != workspaceId ||
+          record.resourceKind != resourceKind ||
+          record.resourceId != resourceId ||
+          record.holderId != holderId) {
+        throw CockpitLeaseException(
+          code: 'leaseIdentityMismatch',
+          message: 'Lease identity does not match the quarantined resource.',
+          lease: before,
+        );
+      }
+      if (record.state == CockpitLeaseState.released) {
+        return CockpitLockedJsonUpdate.readOnly(
+          state,
+          CockpitForcedLeaseRelease(
+            before: before,
+            after: before,
+            forceReleased: false,
+          ),
+        );
+      }
+      if (record.state != CockpitLeaseState.quarantined) {
+        throw CockpitLeaseException(
+          code: 'leaseNotQuarantined',
+          message: 'Only a quarantined lease can be force released.',
+          lease: before,
+        );
+      }
+      if (record.cleanupClaimId != null) {
+        throw CockpitLeaseException(
+          code: 'leaseRecoveryInProgress',
+          message: 'Lease cleanup verification is still in progress.',
+          lease: before,
+        );
+      }
+      final released = record.copyWith(
+        state: CockpitLeaseState.released,
+        releasedAt: now,
+        cleanupClaimId: null,
+        cleanupClaimExpiresAt: null,
+        cleanupReason: null,
+        failure: null,
+      );
+      _replace(state, released);
+      _grantAvailable(state, now);
+      return CockpitLockedJsonUpdate.write(
+        state,
+        CockpitForcedLeaseRelease(
+          before: before,
+          after: released.toResource(),
+          forceReleased: true,
+        ),
+      );
+    });
+    if (result.after.state == CockpitLeaseState.released) {
+      _localCleanup.remove(leaseId);
+    }
+    return result;
+  }
+
   Future<void> _recoverResourceInternal(
     CockpitLeaseResourceKind resourceKind,
     String resourceId, {
@@ -206,6 +287,18 @@ extension CockpitLeaseRecoveryOperations on CockpitLeaseRegistry {
     }
     return CockpitLockedJsonUpdate.write(state, null);
   });
+}
+
+final class CockpitForcedLeaseRelease {
+  const CockpitForcedLeaseRelease({
+    required this.before,
+    required this.after,
+    required this.forceReleased,
+  });
+
+  final CockpitLeaseResource before;
+  final CockpitLeaseResource after;
+  final bool forceReleased;
 }
 
 final class _CockpitLeaseCleanupClaim {

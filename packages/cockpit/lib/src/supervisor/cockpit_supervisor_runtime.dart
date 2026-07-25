@@ -22,6 +22,7 @@ import '../worker/cockpit_worker_protocol_request.dart';
 import '../worker/cockpit_worker_logger.dart';
 import '../worker/cockpit_worker_value_reader.dart';
 import 'cockpit_lease_support.dart';
+import 'cockpit_lease_registry.dart';
 import 'cockpit_local_worker_launcher.dart';
 import 'cockpit_loopback_port_cleanup_probe.dart';
 import 'cockpit_supervisor_resource_registry.dart';
@@ -260,6 +261,8 @@ final class CockpitSupervisorRuntime {
     final submittedAt = DateTime.now().toUtc();
     final output = switch (invocation.kind) {
       'target.discover' => await _discoverTargets(invocation.input),
+      'lease.list' => await _listLeases(invocation.input),
+      'lease.recover' => await _recoverLease(invocation.input),
       'system.capabilities' => await _systemCapabilities(invocation.input),
       'system.diagnostics' => await _systemDiagnostics(invocation.input),
       'project.create' => await _createRootProject(invocation),
@@ -283,6 +286,98 @@ final class CockpitSupervisorRuntime {
       finishedAt: finishedAt,
       output: output,
     );
+  }
+
+  Future<Map<String, Object?>> _listLeases(Map<String, Object?> input) async {
+    _requireKeys(input, const <String>{
+      'workspaceId',
+      'resourceKind',
+      'resourceId',
+      'state',
+    });
+    final workspaceId = _optionalString(input, 'workspaceId');
+    final resourceKind = _optionalLeaseResourceKind(input, 'resourceKind');
+    final resourceId = _optionalString(input, 'resourceId');
+    final state = _optionalLeaseState(input, 'state');
+    final leases = await resources.leases.list(
+      workspaceId: workspaceId,
+      resourceKind: resourceKind,
+      resourceId: resourceId,
+    );
+    return <String, Object?>{
+      'items': <Object?>[
+        for (final lease in leases)
+          if (state == null || lease.state == state) lease.toJson(),
+      ],
+    };
+  }
+
+  Future<Map<String, Object?>> _recoverLease(Map<String, Object?> input) async {
+    _requireKeys(input, const <String>{
+      'leaseId',
+      'workspaceId',
+      'resourceKind',
+      'resourceId',
+      'holderId',
+      'forceRelease',
+    });
+    final leaseId = _requiredLeaseId(input, 'leaseId');
+    final workspaceId = _requiredLeaseId(input, 'workspaceId');
+    final resourceKind = _requiredLeaseResourceKind(input, 'resourceKind');
+    final resourceId = _requiredString(input, 'resourceId');
+    final holderId = _requiredLeaseId(input, 'holderId');
+    if (resourceId.length > 512) {
+      throw const FormatException('resourceId must not exceed 512 characters.');
+    }
+    final forceRelease = input['forceRelease'];
+    if (forceRelease is! bool) {
+      throw const FormatException('forceRelease must be a boolean.');
+    }
+    final before = await resources.leases.get(leaseId);
+    _requireLeaseIdentity(
+      before,
+      workspaceId: workspaceId,
+      resourceKind: resourceKind,
+      resourceId: resourceId,
+      holderId: holderId,
+    );
+    if (before.state != CockpitLeaseState.quarantined &&
+        before.state != CockpitLeaseState.released) {
+      throw CockpitLeaseException(
+        code: 'leaseNotQuarantined',
+        message: 'Only a quarantined lease can be recovered.',
+        lease: before,
+      );
+    }
+    if (before.state == CockpitLeaseState.quarantined) {
+      await resources.leases.recoverResource(resourceKind, resourceId);
+    }
+    var after = await resources.leases.get(leaseId);
+    final cleanupVerified = after.state == CockpitLeaseState.released;
+    var forceReleased = false;
+    if (!cleanupVerified && forceRelease) {
+      final release = await resources.leases.forceReleaseQuarantined(
+        leaseId: leaseId,
+        workspaceId: workspaceId,
+        resourceKind: resourceKind,
+        resourceId: resourceId,
+        holderId: holderId,
+      );
+      after = release.after;
+      forceReleased = release.forceReleased;
+    }
+    return <String, Object?>{
+      'leaseId': leaseId,
+      'workspaceId': workspaceId,
+      'resourceKind': resourceKind.name,
+      'resourceId': resourceId,
+      'holderId': holderId,
+      'beforeState': before.state.name,
+      'afterState': after.state.name,
+      'cleanupVerified': cleanupVerified,
+      'forceReleased': forceReleased,
+      'lease': after.toJson(),
+    };
   }
 
   Future<CockpitRootResource> registerRoot(CockpitRootRegistration request) {
@@ -1284,6 +1379,63 @@ String? _optionalString(Map<String, Object?> input, String key) {
     throw FormatException('$key must be a non-empty bounded string.');
   }
   return value;
+}
+
+String _requiredLeaseId(Map<String, Object?> input, String key) {
+  final value = _requiredString(input, key);
+  if (!cockpitIsValidSupervisorId(value)) {
+    throw FormatException('$key must be a valid Cockpit identifier.');
+  }
+  return value;
+}
+
+CockpitLeaseResourceKind _requiredLeaseResourceKind(
+  Map<String, Object?> input,
+  String key,
+) {
+  final value = _optionalLeaseResourceKind(input, key);
+  if (value == null) throw FormatException('$key is required.');
+  return value;
+}
+
+CockpitLeaseResourceKind? _optionalLeaseResourceKind(
+  Map<String, Object?> input,
+  String key,
+) {
+  final value = _optionalString(input, key);
+  if (value == null) return null;
+  return CockpitLeaseResourceKind.values
+          .where((candidate) => candidate.name == value)
+          .firstOrNull ??
+      (throw FormatException('$key contains an unknown resource kind.'));
+}
+
+CockpitLeaseState? _optionalLeaseState(Map<String, Object?> input, String key) {
+  final value = _optionalString(input, key);
+  if (value == null) return null;
+  return CockpitLeaseState.values
+          .where((candidate) => candidate.name == value)
+          .firstOrNull ??
+      (throw FormatException('$key contains an unknown lease state.'));
+}
+
+void _requireLeaseIdentity(
+  CockpitLeaseResource lease, {
+  required String workspaceId,
+  required CockpitLeaseResourceKind resourceKind,
+  required String resourceId,
+  required String holderId,
+}) {
+  if (lease.workspaceId != workspaceId ||
+      lease.resourceKind != resourceKind ||
+      lease.resourceId != resourceId ||
+      lease.holderId != holderId) {
+    throw CockpitLeaseException(
+      code: 'leaseIdentityMismatch',
+      message: 'Lease identity does not match the quarantined resource.',
+      lease: lease,
+    );
+  }
 }
 
 int? _optionalInteger(

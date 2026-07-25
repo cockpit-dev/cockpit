@@ -39,6 +39,14 @@ dart run cockpit workspace register --root-id <rootId> --path /work/projects/app
 dart run cockpit workspace list
 ```
 
+## CLI 输出
+
+默认 `auto` 格式是适合 Agent 循环的紧凑语义文本。可用
+`--detail minimal|standard|full` 控制投影，用显式 `--stdout-format json`
+取得无损数据，或让 `run events` 使用流式 `jsonl`。`--output <file>` 原子写入
+完整 JSON，终端只返回路径、大小和 SHA-256；`artifact read` 强制写文件，绝不输出
+二进制或 Base64。
+
 workspace 命令可以显式传 `--workspace-id`。省略时，Cockpit 会用当前目录匹配已注册且
 active 的 workspace，并要求结果唯一；不会回退到全局 latest run、active session 或
 其他 checkout。
@@ -74,6 +82,10 @@ dart run cockpit daemon policy show
 不带 `--restart` 时只能在 daemon 停止状态下应用。默认策略拒绝危险操作、敏感测试
 effect，以及 production/unknown target。
 
+quarantined lease 默认持续阻塞资源。先通过公开的 `lease.list` 获取精确身份，再使用
+已授权 `reset` effect 的 `lease.recover` 重试 cleanup。`forceRelease: true` 仅允许
+解除身份完全匹配的逻辑资源隔离；forwarded port 必须通过真实 cleanup 验证。
+
 ## 规范用例回放
 
 先校验文档，再用文档摘要标识的 indexed case 提交执行。回放必须显式提供 workspace、
@@ -96,8 +108,8 @@ dart run cockpit run events --run-id <runId> --after-sequence 0
 ```
 
 run events 使用认证 SSE，支持 `afterSequence` 与 `Last-Event-ID` 恢复，并显式返回
-gap、terminal 和 disconnect。artifact 读取必须给出预期大小与 SHA-256；响应元数据或
-实际字节不一致时直接拒绝。
+gap、terminal 和 disconnect。artifact 读取使用 `--output` 指定文件；Cockpit 根据
+服务端资源校验媒体类型、大小与 SHA-256，不一致时不会落盘。
 
 ## Suite 与黑盒 Target
 
@@ -210,7 +222,7 @@ dart run cockpit_mcp
 
 MCP 提供 server、capabilities、roots、workspaces、operations、targets、documents、
 cases、suites、runs 和 artifacts 的 bounded resources；tools 覆盖 target 生命周期、
-case/suite 验证执行、run get/cancel/events、artifact list 和校验式 artifact read。所有调用都经过认证
+case/suite 验证执行、run get/cancel/events、artifact list 和校验式 artifact 文件下载。所有调用都经过认证
 Supervisor HTTP boundary，MCP 进程不直接构造 application services。
 
 ## 客户端边界

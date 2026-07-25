@@ -415,7 +415,12 @@ Future<Map<String, Object?>> _cli(
 }) async {
   final result = await Process.run(
     Platform.resolvedExecutable,
-    <String>[p.join(packageRoot, 'bin', 'cockpit.dart'), ...arguments],
+    <String>[
+      p.join(packageRoot, 'bin', 'cockpit.dart'),
+      ...arguments,
+      '--stdout-format',
+      'json',
+    ],
     workingDirectory: packageRoot,
     environment: environment,
   ).timeout(const Duration(seconds: 45));

@@ -36,9 +36,11 @@ dart run cockpit workspace register --root-id <rootId> --path /absolute/checkout
 dart run cockpit target discover
 ```
 
-CLI output is structured JSON. Reuse returned identifiers. The workspace can
-be inferred only when the current directory belongs to exactly one active
-workspace.
+CLI output defaults to compact semantic text optimized for agents. Use
+`--stdout-format json` only when exact structured data is required, or
+`--output <file>` to preserve the complete JSON response while stdout returns a
+small path/size/SHA-256 receipt. The workspace can be inferred only when the
+current directory belongs to exactly one active workspace.
 
 ## Targets
 
@@ -93,13 +95,14 @@ dart run cockpit case validate --file case.yaml --format yaml
 dart run cockpit suite validate --file suite.yaml --format yaml
 dart run cockpit case run --case-id <caseId> --idempotency-key <uniqueKey>
 dart run cockpit suite run --suite-id <suiteId> --idempotency-key <uniqueKey>
-dart run cockpit run events --run-id <runId> --after-sequence 0
+dart run cockpit run events --run-id <runId> --after-sequence 0 \
+  --stdout-format jsonl
 dart run cockpit run get --run-id <runId>
 dart run cockpit suite report --run-id <runId>
 dart run cockpit artifact list --run-id <runId>
 dart run cockpit artifact read \
   --run-id <runId> --artifact-id <artifactId> \
-  --size <sizeBytes> --sha256 <sha256>
+  --output /absolute/path/to/artifact
 ```
 
 Use a case for focused validation. Use a suite for dependency DAGs, matrices,
@@ -113,6 +116,9 @@ target and operation bound to its workspace when several projects run in
 parallel. Production/unknown environments, dangerous operations, safety
 effects, and secret names require explicit policy. Inspect with
 `daemon policy show`; validate and atomically apply policy files before restart.
+Quarantined resources remain blocked. Read exact identities with `lease.list`
+and use the `reset`-authorized `lease.recover`; force release is limited to
+explicitly acknowledged logical resources and never applies to forwarded ports.
 
 ## Acceptance
 

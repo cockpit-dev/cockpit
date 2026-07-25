@@ -1,11 +1,10 @@
 import 'package:cockpit_protocol/cockpit_protocol.dart';
 import 'package:path/path.dart' as p;
 
+import '../application/cockpit_app_handle.dart';
 import '../application/cockpit_capture_screenshot_service.dart';
 import '../application/cockpit_execute_remote_command_batch_service.dart';
 import '../application/cockpit_execute_remote_command_service.dart';
-import '../application/cockpit_hot_reload_service.dart';
-import '../application/cockpit_hot_restart_service.dart';
 import '../application/cockpit_inspect_surface_service.dart';
 import '../application/cockpit_inspect_ui_service.dart';
 import '../application/cockpit_interactive_result_profile.dart';
@@ -23,9 +22,11 @@ import '../application/cockpit_session_registry.dart';
 import '../application/cockpit_start_recording_service.dart';
 import '../application/cockpit_stop_recording_service.dart';
 import '../application/cockpit_wait_idle_service.dart';
+import '../development/cockpit_development_session_status.dart';
 import '../system_control/cockpit_system_control_action_service.dart';
 import 'cockpit_worker_application_support.dart';
 import 'cockpit_worker_document_index.dart';
+import 'cockpit_worker_development_session_runtime.dart';
 import 'cockpit_worker_process_manager.dart';
 import 'cockpit_worker_resource_grant.dart';
 import 'cockpit_worker_resource_identity.dart';
@@ -42,6 +43,7 @@ final class CockpitWorkerInteractiveOperations {
     required String workspaceId,
     required String workspaceRoot,
     required CockpitWorkerRuntimeRegistry registry,
+    required CockpitWorkerDevelopmentSessionRuntime developmentRuntime,
     required CockpitWorkerDocumentIndex documents,
     required String producerRoot,
     required CockpitWorkerTargetResolver targets,
@@ -58,8 +60,6 @@ final class CockpitWorkerInteractiveOperations {
     CockpitRunBatchService? runBatchService,
     CockpitRunShellService? runShellService,
     CockpitSystemControlActionService? systemActionService,
-    CockpitHotReloadService? hotReloadService,
-    CockpitHotRestartService? hotRestartService,
     CockpitWaitIdleService? waitIdleService,
     CockpitStartRecordingService? startRecordingService,
     CockpitStopRecordingService? stopRecordingService,
@@ -89,6 +89,7 @@ final class CockpitWorkerInteractiveOperations {
       workspaceId: workspaceId,
       workspaceRoot: workspaceRoot,
       registry: registry,
+      developmentRuntime: developmentRuntime,
       systemActionParameters: CockpitWorkerSystemActionParameters(
         producerRoot: producerRoot,
         documents: documents,
@@ -121,8 +122,6 @@ final class CockpitWorkerInteractiveOperations {
           CockpitRunShellService(processManager: processManager),
       systemActionService:
           systemActionService ?? CockpitSystemControlActionService(),
-      hotReloadService: hotReloadService ?? CockpitHotReloadService(),
-      hotRestartService: hotRestartService ?? CockpitHotRestartService(),
       waitIdleService: waitIdleService ?? CockpitWaitIdleService(),
       startRecordingService:
           startRecordingService ?? CockpitStartRecordingService(),
@@ -137,6 +136,7 @@ final class CockpitWorkerInteractiveOperations {
     required this.workspaceId,
     required this.workspaceRoot,
     required CockpitWorkerRuntimeRegistry registry,
+    required CockpitWorkerDevelopmentSessionRuntime developmentRuntime,
     required CockpitWorkerSystemActionParameters systemActionParameters,
     required CockpitWorkerTargetResolver targets,
     required CockpitInspectUiService inspectUiService,
@@ -150,13 +150,12 @@ final class CockpitWorkerInteractiveOperations {
     required CockpitRunBatchService runBatchService,
     required CockpitRunShellService runShellService,
     required CockpitSystemControlActionService systemActionService,
-    required CockpitHotReloadService hotReloadService,
-    required CockpitHotRestartService hotRestartService,
     required CockpitWaitIdleService waitIdleService,
     required CockpitStartRecordingService startRecordingService,
     required CockpitStopRecordingService stopRecordingService,
     required CockpitQueryDevelopmentSessionService queryDevelopmentService,
   }) : _registry = registry,
+       _developmentRuntime = developmentRuntime,
        _systemActionParameters = systemActionParameters,
        _targets = targets,
        _inspectUi = inspectUiService,
@@ -170,8 +169,6 @@ final class CockpitWorkerInteractiveOperations {
        _runBatch = runBatchService,
        _runShell = runShellService,
        _systemAction = systemActionService,
-       _hotReload = hotReloadService,
-       _hotRestart = hotRestartService,
        _waitIdle = waitIdleService,
        _startRecording = startRecordingService,
        _stopRecording = stopRecordingService,
@@ -199,6 +196,7 @@ final class CockpitWorkerInteractiveOperations {
   final String workspaceId;
   final String workspaceRoot;
   final CockpitWorkerRuntimeRegistry _registry;
+  final CockpitWorkerDevelopmentSessionRuntime _developmentRuntime;
   final CockpitWorkerSystemActionParameters _systemActionParameters;
   final CockpitWorkerTargetResolver _targets;
   final CockpitInspectUiService _inspectUi;
@@ -212,8 +210,6 @@ final class CockpitWorkerInteractiveOperations {
   final CockpitRunBatchService _runBatch;
   final CockpitRunShellService _runShell;
   final CockpitSystemControlActionService _systemAction;
-  final CockpitHotReloadService _hotReload;
-  final CockpitHotRestartService _hotRestart;
   final CockpitWaitIdleService _waitIdle;
   final CockpitStartRecordingService _startRecording;
   final CockpitStopRecordingService _stopRecording;
@@ -809,28 +805,39 @@ final class CockpitWorkerInteractiveOperations {
     final pair = await _session(input);
     _requireSessionGrant(pair.binding, context, grants);
     final app = await _registry.requireApp(pair.binding.appId);
-    if (restart) {
-      final result = await runWorkerApplicationOperation(
-        context: context,
-        operation: () =>
-            _hotRestart.restart(CockpitHotRestartRequest(app: app.handle)),
+    final handle = pair.binding.developmentHandle;
+    if (handle == null) {
+      throw CockpitApplicationServiceException(
+        code: restart ? 'hotRestartUnavailable' : 'hotReloadUnavailable',
+        message: restart
+            ? 'Hot restart is only available for development apps.'
+            : 'Hot reload is only available for development apps.',
       );
-      await _registry.updateDevelopmentSession(
-        pair.binding.sessionId,
-        result.app.developmentSession!,
-      );
-      return _sanitize(result.toJson(), pair.binding, sanitizer);
     }
-    final result = await runWorkerApplicationOperation(
+    final snapshot = await runWorkerApplicationOperation(
       context: context,
-      operation: () =>
-          _hotReload.reload(CockpitHotReloadRequest(app: app.handle)),
+      operation: () => _developmentRuntime.reload(
+        handle,
+        restart
+            ? CockpitDevelopmentReloadMode.hotRestart
+            : CockpitDevelopmentReloadMode.hotReload,
+      ),
     );
     await _registry.updateDevelopmentSession(
       pair.binding.sessionId,
-      result.app.developmentSession!,
+      snapshot.handle,
     );
-    return _sanitize(result.toJson(), pair.binding, sanitizer);
+    return _sanitize(
+      <String, Object?>{
+        'app': CockpitAppHandle.fromDevelopmentSession(
+          snapshot.handle,
+          supervisorLogPath: app.handle.supervisorLogPath,
+        ).toJson(),
+        'status': snapshot.status.toJson(),
+      },
+      pair.binding,
+      sanitizer,
+    );
   }
 
   Future<Map<String, Object?>> _waitIdleOperation(

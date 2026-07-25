@@ -78,18 +78,6 @@ final class CockpitRunStreamDisconnected extends CockpitRunStreamItem {
   final int afterSequence;
 }
 
-final class CockpitArtifactDownload {
-  const CockpitArtifactDownload({
-    required this.bytes,
-    required this.mediaType,
-    required this.sha256,
-  });
-
-  final List<int> bytes;
-  final String mediaType;
-  final String sha256;
-}
-
 final class CockpitArtifactDownloadReceipt {
   const CockpitArtifactDownloadReceipt({
     required this.file,
@@ -522,70 +510,6 @@ final class CockpitSupervisorApiClient {
       throw CockpitSupervisorClientException(
         code: CockpitErrorCode.transportFailed,
         message: 'Supervisor event stream failed: $error',
-      );
-    } finally {
-      client.close(force: true);
-    }
-  }
-
-  Future<CockpitArtifactDownload> readArtifact({
-    required String runId,
-    required String artifactId,
-    required int expectedSize,
-    required String expectedSha256,
-    int maximumBytes = cockpitSupervisorMaximumResponseBytes,
-  }) async {
-    if (expectedSize < 0 || expectedSize > maximumBytes || maximumBytes < 1) {
-      throw ArgumentError.value(expectedSize, 'expectedSize');
-    }
-    if (!RegExp(r'^[0-9a-f]{64}$').hasMatch(expectedSha256)) {
-      throw ArgumentError.value(expectedSha256, 'expectedSha256');
-    }
-    final session = await _ensureSession();
-    final client = _httpClientFactory();
-    try {
-      final request = await client.getUrl(
-        session.discovery.endpoint.resolve(
-          '/api/v2/runs/${_segment(runId)}/artifacts/${_segment(artifactId)}',
-        ),
-      );
-      _authorize(request, session);
-      final response = await request.close();
-      if (response.statusCode < 200 || response.statusCode >= 300) {
-        final value = _decodeJson(await _boundedBytes(response, maximumBytes));
-        throw _decodeApiError(response.statusCode, value);
-      }
-      final contentLength = response.contentLength;
-      final digestHeader = response.headers.value('Digest');
-      if (contentLength != expectedSize ||
-          digestHeader != 'sha-256=$expectedSha256') {
-        await response.drain<void>();
-        throw const CockpitSupervisorClientException(
-          code: 'artifactMetadataMismatch',
-          message: 'Artifact response metadata does not match the manifest.',
-        );
-      }
-      final bytes = await _boundedBytes(response, maximumBytes);
-      final actualDigest = sha256.convert(bytes).toString();
-      if (bytes.length != expectedSize || actualDigest != expectedSha256) {
-        throw const CockpitSupervisorClientException(
-          code: 'artifactIntegrityMismatch',
-          message: 'Artifact bytes failed size or digest verification.',
-        );
-      }
-      return CockpitArtifactDownload(
-        bytes: List<int>.unmodifiable(bytes),
-        mediaType:
-            response.headers.contentType?.mimeType ??
-            ContentType.binary.mimeType,
-        sha256: actualDigest,
-      );
-    } on CockpitSupervisorClientException {
-      rethrow;
-    } on Object catch (error) {
-      throw CockpitSupervisorClientException(
-        code: CockpitErrorCode.transportFailed,
-        message: 'Artifact download failed: $error',
       );
     } finally {
       client.close(force: true);

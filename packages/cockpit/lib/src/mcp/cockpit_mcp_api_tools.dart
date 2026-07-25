@@ -1,6 +1,8 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:cockpit_protocol/cockpit_protocol.dart';
+import 'package:path/path.dart' as p;
 
 import '../supervisor/cockpit_supervisor_api_client.dart';
 import 'cockpit_mcp_api_resources.dart';
@@ -496,146 +498,149 @@ List<CockpitMcpTool> _executionTools(
   ),
 ];
 
-List<CockpitMcpTool> _runTools(
-  CockpitMcpClientProvider client,
-) => <CockpitMcpTool>[
-  _CockpitApiTool(
-    client: client,
-    name: 'run_get',
-    description: 'Read an explicitly identified run.',
-    inputSchema: _schema(
-      properties: <String, Object?>{'runId': _string()},
-      required: const <String>['runId'],
-    ),
-    action: (api, arguments) async {
-      _only(arguments, const <String>{'runId'});
-      return (await api.run(_requiredString(arguments, 'runId'))).toJson();
-    },
-  ),
-  _CockpitApiTool(
-    client: client,
-    name: 'run_cancel',
-    description: 'Cancel an explicitly identified run.',
-    inputSchema: _schema(
-      properties: <String, Object?>{
-        'runId': _string(),
-        'idempotencyKey': _string(),
-        'reason': _string(),
-      },
-      required: const <String>['runId', 'idempotencyKey'],
-    ),
-    action: (api, arguments) async {
-      _only(arguments, const <String>{'runId', 'idempotencyKey', 'reason'});
-      return (await api.cancelRun(
-        _requiredString(arguments, 'runId'),
-        CockpitRunCancellationRequest(
-          idempotencyKey: CockpitIdempotencyKey(
-            _requiredString(arguments, 'idempotencyKey'),
-          ),
-          reason: _optionalString(arguments, 'reason'),
+List<CockpitMcpTool> _runTools(CockpitMcpClientProvider client) =>
+    <CockpitMcpTool>[
+      _CockpitApiTool(
+        client: client,
+        name: 'run_get',
+        description: 'Read an explicitly identified run.',
+        inputSchema: _schema(
+          properties: <String, Object?>{'runId': _string()},
+          required: const <String>['runId'],
         ),
-      )).toJson();
-    },
-  ),
-  _CockpitApiTool(
-    client: client,
-    name: 'run_events',
-    description: 'Read bounded run events through the Supervisor SSE API.',
-    inputSchema: _schema(
-      properties: <String, Object?>{
-        'runId': _string(),
-        'afterSequence': _integer(minimum: 0),
-        'lastEventId': _string(),
-        'maxEvents': _integer(minimum: 1, maximum: 1000),
-      },
-      required: const <String>['runId'],
-    ),
-    action: (api, arguments) async {
-      _only(arguments, const <String>{
-        'runId',
-        'afterSequence',
-        'lastEventId',
-        'maxEvents',
-      });
-      final items = <Map<String, Object?>>[];
-      final maximum = _optionalInt(arguments, 'maxEvents') ?? 1000;
-      if (maximum < 1 || maximum > 1000) {
-        throw CockpitMcpError.invalidArguments(
-          'maxEvents must be between 1 and 1000.',
-        );
-      }
-      final afterSequence = _optionalInt(arguments, 'afterSequence') ?? 0;
-      if (afterSequence < 0) {
-        throw CockpitMcpError.invalidArguments(
-          'afterSequence cannot be negative.',
-        );
-      }
-      await for (final item in api.events(
-        _requiredString(arguments, 'runId'),
-        afterSequence: afterSequence,
-        lastEventId: _optionalString(arguments, 'lastEventId'),
-      )) {
-        items.add(_streamItem(item));
-        if (items.length >= maximum) break;
-      }
-      return <String, Object?>{'items': items};
-    },
-  ),
-  _CockpitApiTool(
-    client: client,
-    name: 'artifact_list',
-    description: 'List immutable artifact metadata for an explicit run.',
-    inputSchema: _schema(
-      properties: <String, Object?>{'runId': _string()},
-      required: const <String>['runId'],
-    ),
-    action: (api, arguments) async {
-      _only(arguments, const <String>{'runId'});
-      return <String, Object?>{
-        'items': (await api.artifacts(
-          _requiredString(arguments, 'runId'),
-        )).map((artifact) => artifact.toJson()).toList(),
-      };
-    },
-  ),
-  _CockpitApiTool(
-    client: client,
-    name: 'artifact_read',
-    description: 'Read a bounded artifact with digest and size checks.',
-    inputSchema: _schema(
-      properties: <String, Object?>{
-        'runId': _string(),
-        'artifactId': _string(),
-        'sizeBytes': _integer(
-          minimum: 0,
-          maximum: cockpitSupervisorMaximumResponseBytes,
+        action: (api, arguments) async {
+          _only(arguments, const <String>{'runId'});
+          return (await api.run(_requiredString(arguments, 'runId'))).toJson();
+        },
+      ),
+      _CockpitApiTool(
+        client: client,
+        name: 'run_cancel',
+        description: 'Cancel an explicitly identified run.',
+        inputSchema: _schema(
+          properties: <String, Object?>{
+            'runId': _string(),
+            'idempotencyKey': _string(),
+            'reason': _string(),
+          },
+          required: const <String>['runId', 'idempotencyKey'],
         ),
-        'sha256': _sha256Schema(),
-      },
-      required: const <String>['runId', 'artifactId', 'sizeBytes', 'sha256'],
-    ),
-    action: (api, arguments) async {
-      _only(arguments, const <String>{
-        'runId',
-        'artifactId',
-        'sizeBytes',
-        'sha256',
-      });
-      final artifact = await api.readArtifact(
-        runId: _requiredString(arguments, 'runId'),
-        artifactId: _requiredString(arguments, 'artifactId'),
-        expectedSize: _requiredInt(arguments, 'sizeBytes'),
-        expectedSha256: _requiredString(arguments, 'sha256'),
-      );
-      return <String, Object?>{
-        'mediaType': artifact.mediaType,
-        'sizeBytes': artifact.bytes.length,
-        'sha256': artifact.sha256,
-        'dataBase64': base64Encode(artifact.bytes),
-      };
-    },
-  ),
-];
+        action: (api, arguments) async {
+          _only(arguments, const <String>{'runId', 'idempotencyKey', 'reason'});
+          return (await api.cancelRun(
+            _requiredString(arguments, 'runId'),
+            CockpitRunCancellationRequest(
+              idempotencyKey: CockpitIdempotencyKey(
+                _requiredString(arguments, 'idempotencyKey'),
+              ),
+              reason: _optionalString(arguments, 'reason'),
+            ),
+          )).toJson();
+        },
+      ),
+      _CockpitApiTool(
+        client: client,
+        name: 'run_events',
+        description: 'Read bounded run events through the Supervisor SSE API.',
+        inputSchema: _schema(
+          properties: <String, Object?>{
+            'runId': _string(),
+            'afterSequence': _integer(minimum: 0),
+            'lastEventId': _string(),
+            'maxEvents': _integer(minimum: 1, maximum: 1000),
+          },
+          required: const <String>['runId'],
+        ),
+        action: (api, arguments) async {
+          _only(arguments, const <String>{
+            'runId',
+            'afterSequence',
+            'lastEventId',
+            'maxEvents',
+          });
+          final items = <Map<String, Object?>>[];
+          final maximum = _optionalInt(arguments, 'maxEvents') ?? 1000;
+          if (maximum < 1 || maximum > 1000) {
+            throw CockpitMcpError.invalidArguments(
+              'maxEvents must be between 1 and 1000.',
+            );
+          }
+          final afterSequence = _optionalInt(arguments, 'afterSequence') ?? 0;
+          if (afterSequence < 0) {
+            throw CockpitMcpError.invalidArguments(
+              'afterSequence cannot be negative.',
+            );
+          }
+          await for (final item in api.events(
+            _requiredString(arguments, 'runId'),
+            afterSequence: afterSequence,
+            lastEventId: _optionalString(arguments, 'lastEventId'),
+          )) {
+            items.add(_streamItem(item));
+            if (items.length >= maximum) break;
+          }
+          return <String, Object?>{'items': items};
+        },
+      ),
+      _CockpitApiTool(
+        client: client,
+        name: 'artifact_list',
+        description: 'List immutable artifact metadata for an explicit run.',
+        inputSchema: _schema(
+          properties: <String, Object?>{'runId': _string()},
+          required: const <String>['runId'],
+        ),
+        action: (api, arguments) async {
+          _only(arguments, const <String>{'runId'});
+          return <String, Object?>{
+            'items': (await api.artifacts(
+              _requiredString(arguments, 'runId'),
+            )).map((artifact) => artifact.toJson()).toList(),
+          };
+        },
+      ),
+      _CockpitApiTool(
+        client: client,
+        name: 'artifact_read',
+        description: 'Download a verified artifact to an explicit local file.',
+        inputSchema: _schema(
+          properties: <String, Object?>{
+            'runId': _string(),
+            'artifactId': _string(),
+            'outputPath': _string(),
+          },
+          required: const <String>['runId', 'artifactId', 'outputPath'],
+        ),
+        action: (api, arguments) async {
+          _only(arguments, const <String>{'runId', 'artifactId', 'outputPath'});
+          final runId = _requiredString(arguments, 'runId');
+          final artifactId = _requiredString(arguments, 'artifactId');
+          final outputPath = _requiredString(arguments, 'outputPath');
+          if (!p.isAbsolute(outputPath)) {
+            throw const FormatException('outputPath must be absolute.');
+          }
+          final matches = (await api.artifacts(runId))
+              .where((artifact) => artifact.artifactId == artifactId)
+              .toList(growable: false);
+          if (matches.length != 1) {
+            throw CockpitSupervisorClientException(
+              code: 'artifactNotFound',
+              message: 'Artifact $artifactId was not found for run $runId.',
+            );
+          }
+          final receipt = await api.downloadArtifactToFile(
+            artifact: matches.single,
+            destination: File(p.normalize(outputPath)),
+          );
+          return <String, Object?>{
+            'path': receipt.file.path,
+            'mediaType': receipt.mediaType,
+            'sizeBytes': receipt.sizeBytes,
+            'sha256': receipt.sha256,
+          };
+        },
+      ),
+    ];
 
 List<CockpitMcpTool> _suiteTools(
   CockpitMcpClientProvider client,

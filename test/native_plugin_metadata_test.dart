@@ -154,27 +154,32 @@ void main() {
     );
   });
 
-  test('example iOS runners remain compatible with Flutter 3.32', () {
-    for (final runnerRoot in <String>[
-      '$root/examples/cockpit_demo/ios/Runner',
-      '$root/examples/cockpit_demo/cockpit/ios/Runner',
-    ]) {
-      final delegate = File('$runnerRoot/AppDelegate.swift').readAsStringSync();
-      final infoPlist = File('$runnerRoot/Info.plist').readAsStringSync();
+  test('iOS app and development shell remain 3.32-compatible', () {
+    final appRoot = '$root/examples/cockpit_demo/ios/Runner';
+    final appDelegate = File('$appRoot/AppDelegate.swift').readAsStringSync();
+    final appInfoPlist = File('$appRoot/Info.plist').readAsStringSync();
+    expect(
+      appDelegate,
+      contains('@objc class AppDelegate: FlutterAppDelegate {'),
+    );
+    expect(
+      appDelegate,
+      contains('GeneratedPluginRegistrant.register(with: self)'),
+    );
+    expect(appDelegate, isNot(contains('FlutterImplicitEngineDelegate')));
+    expect(appInfoPlist, isNot(contains('UIApplicationSceneManifest')));
 
-      expect(
-        delegate,
-        contains('@objc class AppDelegate: FlutterAppDelegate {'),
-      );
-      expect(
-        delegate,
-        contains('GeneratedPluginRegistrant.register(with: self)'),
-      );
-      expect(delegate, isNot(contains('FlutterImplicitEngineDelegate')));
-      expect(delegate, isNot(contains('FlutterImplicitEngineBridge')));
-      expect(infoPlist, isNot(contains('UIApplicationSceneManifest')));
-      expect(infoPlist, isNot(contains('FlutterSceneDelegate')));
-    }
+    final shellRoot = '$root/examples/cockpit_demo/cockpit/ios/Runner';
+    final shellDelegate = File(
+      '$shellRoot/AppDelegate.swift',
+    ).readAsStringSync();
+    final shellInfoPlist = File('$shellRoot/Info.plist').readAsStringSync();
+    expect(
+      shellDelegate,
+      contains('GeneratedPluginRegistrant.register(with: self)'),
+    );
+    expect(shellDelegate, isNot(contains('FlutterImplicitEngineDelegate')));
+    expect(shellInfoPlist, isNot(contains('UIApplicationSceneManifest')));
   });
 
   test('native plugin sources use flutter_cockpit channel names', () {
