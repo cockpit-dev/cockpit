@@ -14,10 +14,53 @@ import 'package:cockpit/src/targets/cockpit_target_handle.dart';
 import 'package:cockpit/src/test/cockpit_test_safety_policy.dart';
 import 'package:cockpit/src/worker/cockpit_worker_runtime_registry.dart';
 import 'package:cockpit/src/worker/cockpit_worker_run_ownership_authority.dart';
+import 'package:cockpit_protocol/cockpit_protocol.dart';
 import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 
 void main() {
+  test('records a system target activation as an owned app session', () async {
+    final temporary = await Directory.systemTemp.createTemp(
+      'cockpit-worker-system-target-',
+    );
+    addTearDown(() => temporary.delete(recursive: true));
+    final canonicalRoot = await temporary.resolveSymbolicLinks();
+    final stateRoot = await Directory(p.join(canonicalRoot, 'state')).create();
+    final registry = CockpitWorkerRuntimeRegistry(
+      workspaceId: 'workspaceA',
+      workspaceRoot: canonicalRoot,
+      stateRoot: stateRoot.path,
+      stateStore: CockpitInMemoryWorkerRuntimeStateStore(),
+    );
+    final targetId = await registry.registerTarget(
+      const CockpitWorkerTargetRegistration(
+        workspaceId: 'workspaceA',
+        platform: 'android',
+        deviceId: 'emulator-5554',
+        appId: 'dev.cockpit.example',
+        targetKind: CockpitTargetKind.nativeApp,
+        mode: CockpitAppMode.automation,
+        environment: CockpitTestTargetEnvironment.test,
+      ),
+    );
+
+    final app = await registry.recordSystemTargetLaunch(
+      targetId: targetId,
+      launchedAt: DateTime.utc(2026, 7, 24),
+    );
+
+    expect(app.handle.platformAppId, 'dev.cockpit.example');
+    expect(app.handle.remoteSession?.baseUri.scheme, 'cockpit-system');
+    final sessionId = await registry.sessionIdForApp(app.appId);
+    final session = await registry.requireSession(sessionId);
+    expect(session.targetId, targetId);
+    final target = await registry.requireTarget(
+      workspaceId: 'workspaceA',
+      targetId: targetId,
+    );
+    expect(target.handle?.targetKind.name, 'nativeApp');
+  });
+
   test(
     'round trips registry state larger than the legacy 8 MiB limit',
     () async {

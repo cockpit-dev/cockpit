@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:cockpit/src/application/cockpit_application_service_exception.dart';
 import 'package:cockpit/src/foundation/cockpit_locked_json_store.dart';
 import 'package:cockpit/src/foundation/cockpit_permissions.dart';
 import 'package:cockpit/src/supervisor/cockpit_supervisor_worker_endpoint.dart';
@@ -901,6 +902,141 @@ void main() {
       ],
     );
     expect(authority.releaseCount, 2);
+  });
+
+  test('completed application failure releases leases normally', () async {
+    final authority = _RecordingResourceAuthority();
+    final registry = CockpitWorkspaceOperationRegistry(
+      workspaceId: workspaceId,
+      workspaceRoot: workspaceRoot,
+      adapters: <CockpitWorkspaceOperationAdapter>[
+        CockpitWorkspaceOperationAdapter(
+          kind: 'read.failure',
+          mutationClass: CockpitMutationClass.readOnly,
+          resourceKinds: const <String>['workspace.readFailure'],
+          prepare: (context, input) => CockpitPreparedWorkspaceOperation(
+            resources: <CockpitWorkerResourceRequest>[
+              CockpitWorkerResourceRequest(
+                resourceKind: CockpitLeaseResourceKind.device,
+                resourceId: 'device_resource_A',
+                ttl: Duration(seconds: 30),
+              ),
+            ],
+            execute: (_) => throw CockpitApplicationServiceException(
+              code: 'expectedFailure',
+              message: 'The read completed with an application failure.',
+            ),
+          ),
+        ),
+      ],
+      resourceAuthority: authority,
+      operationJournal: CockpitInMemoryWorkerOperationJournal(),
+      terminateUnsafeWorker: () async {},
+    );
+    final result = await registry.execute(
+      CockpitOperationInvocation(
+        kind: 'read.failure',
+        workspaceId: workspaceId,
+        deadline: _deadline(),
+      ),
+      requestId: 'request-read-failure',
+      cancellation: CockpitRpcCancellation.detached(),
+    );
+
+    expect(result.outcome, CockpitOperationOutcome.failed);
+    expect(result.failure?.primary.code, 'expectedFailure');
+    expect(authority.releaseCancellations, <bool>[false]);
+  });
+
+  test('internal failure cancels resource leases', () async {
+    final authority = _RecordingResourceAuthority();
+    final registry = CockpitWorkspaceOperationRegistry(
+      workspaceId: workspaceId,
+      workspaceRoot: workspaceRoot,
+      adapters: <CockpitWorkspaceOperationAdapter>[
+        CockpitWorkspaceOperationAdapter(
+          kind: 'read.internalFailure',
+          mutationClass: CockpitMutationClass.readOnly,
+          resourceKinds: const <String>['workspace.internalFailure'],
+          prepare: (context, input) => CockpitPreparedWorkspaceOperation(
+            resources: <CockpitWorkerResourceRequest>[
+              CockpitWorkerResourceRequest(
+                resourceKind: CockpitLeaseResourceKind.device,
+                resourceId: 'device_resource_A',
+                ttl: Duration(seconds: 30),
+              ),
+            ],
+            execute: (_) => throw StateError('unexpected internal failure'),
+          ),
+        ),
+      ],
+      resourceAuthority: authority,
+      operationJournal: CockpitInMemoryWorkerOperationJournal(),
+      terminateUnsafeWorker: () async {},
+    );
+
+    final result = await registry.execute(
+      CockpitOperationInvocation(
+        kind: 'read.internalFailure',
+        workspaceId: workspaceId,
+        deadline: _deadline(),
+      ),
+      requestId: 'request-internal-failure',
+      cancellation: CockpitRpcCancellation.detached(),
+    );
+
+    expect(result.failure?.primary.category, CockpitErrorCategory.internal);
+    expect(authority.releaseCancellations, <bool>[true]);
+  });
+
+  test('rollback cleanup failure cancels resource leases', () async {
+    final authority = _RecordingResourceAuthority();
+    final registry = CockpitWorkspaceOperationRegistry(
+      workspaceId: workspaceId,
+      workspaceRoot: workspaceRoot,
+      adapters: <CockpitWorkspaceOperationAdapter>[
+        CockpitWorkspaceOperationAdapter(
+          kind: 'mutation.rollbackFailure',
+          mutationClass: CockpitMutationClass.mutating,
+          resourceKinds: const <String>['workspace.rollbackFailure'],
+          prepare: (context, input) => CockpitPreparedWorkspaceOperation(
+            resources: <CockpitWorkerResourceRequest>[
+              CockpitWorkerResourceRequest(
+                resourceKind: CockpitLeaseResourceKind.device,
+                resourceId: 'device_resource_A',
+                ttl: Duration(seconds: 30),
+              ),
+            ],
+            execute: (_) => throw CockpitWorkerOperationRollbackException(
+              primary: CockpitApplicationServiceException(
+                code: 'commitFailed',
+                message: 'The operation could not be committed.',
+              ),
+              cleanupError: StateError('rollback failed'),
+              warningCode: 'rollbackFailed',
+              warningMessage: 'The rollback could not be completed.',
+            ),
+          ),
+        ),
+      ],
+      resourceAuthority: authority,
+      operationJournal: CockpitInMemoryWorkerOperationJournal(),
+      terminateUnsafeWorker: () async {},
+    );
+
+    final result = await registry.execute(
+      CockpitOperationInvocation(
+        kind: 'mutation.rollbackFailure',
+        workspaceId: workspaceId,
+        deadline: _deadline(),
+        idempotencyKey: CockpitIdempotencyKey('rollback-failure-key'),
+      ),
+      requestId: 'request-rollback-failure',
+      cancellation: CockpitRpcCancellation.detached(),
+    );
+
+    expect(result.failure?.warnings.single.error.code, 'rollbackFailed');
+    expect(authority.releaseCancellations, <bool>[true]);
   });
 
   test('recovered running probe collection is not recorded again', () async {
@@ -2040,6 +2176,7 @@ final class _RecordingResourceAuthority
     implements CockpitWorkerResourceAuthorityClient {
   final List<CockpitWorkerResourceRequest> requests =
       <CockpitWorkerResourceRequest>[];
+  final List<bool> releaseCancellations = <bool>[];
   int releaseCount = 0;
 
   @override
@@ -2072,6 +2209,7 @@ final class _RecordingResourceAuthority
     required bool cancel,
   }) async {
     releaseCount += 1;
+    releaseCancellations.add(cancel);
   }
 }
 

@@ -453,8 +453,18 @@ final class CockpitSystemTestAutomationAdapter
     }
     final absent = command.parameters['absent'] == true;
     final deadline = _deadline(command);
+    StateError? lastReadError;
     do {
-      final resolution = (await _readSnapshot(deadline)).resolve(locator);
+      CockpitNativeUiSnapshot snapshot;
+      try {
+        snapshot = await _readSnapshot(deadline);
+        lastReadError = null;
+      } on StateError catch (error) {
+        lastReadError = error;
+        await _delay(_boundedDelay(deadline, 150));
+        continue;
+      }
+      final resolution = snapshot.resolve(locator);
       if (resolution.ambiguous) {
         return _failure(command, stopwatch, _resolutionError(resolution)!);
       }
@@ -467,6 +477,7 @@ final class CockpitSystemTestAutomationAdapter
       }
       await _delay(_boundedDelay(deadline, 150));
     } while (_utcNow().isBefore(deadline));
+    if (lastReadError != null) throw lastReadError;
     return _failure(
       command,
       stopwatch,

@@ -416,7 +416,10 @@ final class CockpitWorkspaceOperationRegistry
         try {
           await _resourceAuthority.release(
             grant,
-            cancel: primaryFailure != null || cancellation.isCancelled,
+            cancel: _requiresCancelledRelease(
+              primaryFailure,
+              cancellation.isCancelled,
+            ),
           );
         } on Object {
           cleanupWarning = CockpitApiWarning(
@@ -531,6 +534,15 @@ void _validateResourceGrant(
       message: 'Supervisor grant does not match the requested resource.',
     );
   }
+}
+
+bool _requiresCancelledRelease(CockpitFailure? failure, bool cancelled) {
+  if (cancelled) return true;
+  if (failure == null) return false;
+  if (failure.primary.category != CockpitErrorCategory.application) return true;
+  return failure.warnings.any(
+    (warning) => warning.stage == CockpitWarningStage.cleanup,
+  );
 }
 
 CockpitFailure _operationFailure(

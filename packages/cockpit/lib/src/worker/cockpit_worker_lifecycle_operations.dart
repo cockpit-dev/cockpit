@@ -408,42 +408,49 @@ final class CockpitWorkerLifecycleOperations {
           'mode applies only to Flutter target launches.',
         );
       }
-      final result = await runWorkerApplicationOperation(
+      return runWorkerTransactionalApplicationLaunch<
+        CockpitSystemControlActionResult,
+        Map<String, Object?>
+      >(
         context: context,
-        operation: () => _systemAction.run(
-          CockpitSystemControlActionRequest(
-            platform: target.registration.platform,
-            deviceId: target.registration.deviceId,
-            appId: target.registration.appId,
-            metadata: <String, Object?>{
-              if (target.registration.wdaUrl != null)
-                'wdaUrl': target.registration.wdaUrl,
-            },
-            action: CockpitSystemControlAction.activateWindow,
-            timeout: _launchTimeout(
-              values,
-              context,
-              const Duration(seconds: 30),
+        launch: () async {
+          final result = await _systemAction.run(
+            CockpitSystemControlActionRequest(
+              platform: target.registration.platform,
+              deviceId: target.registration.deviceId,
+              appId: target.registration.appId,
+              metadata: <String, Object?>{
+                if (target.registration.wdaUrl != null)
+                  'wdaUrl': target.registration.wdaUrl,
+              },
+              action: CockpitSystemControlAction.activateWindow,
+              timeout: _launchTimeout(
+                values,
+                context,
+                const Duration(seconds: 30),
+              ),
             ),
-          ),
+          );
+          if (!result.success) {
+            throw CockpitApplicationServiceException(
+              code: result.errorCode ?? 'targetLaunchFailed',
+              message:
+                  result.errorMessage ?? 'System target activation failed.',
+              details: <String, Object?>{
+                'availability': result.availability.name,
+                'recommendedNextStep': result.recommendedNextStep,
+              },
+            );
+          }
+          return result;
+        },
+        commit: (result) => _recordLaunchedSystemTarget(
+          target: target,
+          activation: result,
+          sanitizer: sanitizer,
         ),
+        rollback: (result) => _rollbackLaunchedSystemTarget(target, result),
       );
-      if (!result.success) {
-        throw CockpitApplicationServiceException(
-          code: result.errorCode ?? 'targetLaunchFailed',
-          message: result.errorMessage ?? 'System target activation failed.',
-          details: <String, Object?>{
-            'availability': result.availability.name,
-            'recommendedNextStep': result.recommendedNextStep,
-          },
-        );
-      }
-      return sanitizer.sanitize(<String, Object?>{
-        'targetId': target.targetId,
-        'targetKind': target.registration.targetKind.name,
-        'platform': target.registration.platform,
-        'activation': result.toJson(),
-      }, targetId: target.targetId);
     }
     final mode = _appMode(values.optionalString('mode', maximum: 32), target);
     final timeout = _launchTimeout(values, context, const Duration(minutes: 2));
@@ -964,6 +971,49 @@ final class CockpitWorkerLifecycleOperations {
     }
   }
 
+  Future<Map<String, Object?>> _recordLaunchedSystemTarget({
+    required CockpitWorkerTargetBinding target,
+    required CockpitSystemControlActionResult activation,
+    required CockpitWorkerResultSanitizer sanitizer,
+  }) async {
+    final binding = await _registry.recordSystemTargetLaunch(
+      targetId: target.targetId,
+      launchedAt: DateTime.now().toUtc(),
+      processId: activation.processId,
+    );
+    try {
+      final sessionId = await _registry.sessionIdForApp(binding.appId);
+      final sanitized = await sanitizer.sanitize(
+        <String, Object?>{
+          'targetId': target.targetId,
+          'targetKind': target.registration.targetKind.name,
+          'platform': target.registration.platform,
+          'activation': activation.toJson(),
+        },
+        appId: binding.appId,
+        sessionId: sessionId,
+        targetId: target.targetId,
+      );
+      return sanitized
+        ..['appId'] = binding.appId
+        ..['sessionId'] = sessionId
+        ..['targetId'] = target.targetId;
+    } on Object catch (primary, primaryStackTrace) {
+      try {
+        await _registry.removeApp(binding.appId);
+      } on Object catch (cleanupError) {
+        throw CockpitWorkerOperationRollbackException(
+          primary: primary,
+          cleanupError: cleanupError,
+          warningCode: 'runtimeRegistrationRollbackFailed',
+          warningMessage:
+              'Failed to remove a partially registered system application.',
+        );
+      }
+      Error.throwWithStackTrace(primary, primaryStackTrace);
+    }
+  }
+
   Future<void> _rollbackLaunchedApp(CockpitAppHandle app) async {
     if (app.developmentSession case final development?) {
       try {
@@ -975,5 +1025,36 @@ final class CockpitWorkerLifecycleOperations {
       }
     }
     await _stopApp.stop(CockpitStopAppRequest(app: app));
+  }
+
+  Future<void> _rollbackLaunchedSystemTarget(
+    CockpitWorkerTargetBinding target,
+    CockpitSystemControlActionResult activation,
+  ) async {
+    final result = await _systemAction.run(
+      CockpitSystemControlActionRequest(
+        platform: target.registration.platform,
+        deviceId: target.registration.deviceId,
+        appId: target.registration.appId,
+        processId: activation.processId,
+        metadata: <String, Object?>{
+          if (target.registration.wdaUrl != null)
+            'wdaUrl': target.registration.wdaUrl,
+        },
+        action: CockpitSystemControlAction.terminateApp,
+      ),
+    );
+    if (!result.success) {
+      throw CockpitApplicationServiceException(
+        code: result.errorCode ?? 'targetLaunchRollbackFailed',
+        message:
+            result.errorMessage ??
+            'System target termination failed during launch rollback.',
+        details: <String, Object?>{
+          'availability': result.availability.name,
+          'recommendedNextStep': result.recommendedNextStep,
+        },
+      );
+    }
   }
 }

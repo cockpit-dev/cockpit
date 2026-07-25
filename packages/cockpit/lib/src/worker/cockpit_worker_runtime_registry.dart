@@ -423,6 +423,87 @@ final class CockpitWorkerRuntimeRegistry
     return binding;
   });
 
+  Future<CockpitWorkerAppBinding> recordSystemTargetLaunch({
+    required String targetId,
+    required DateTime launchedAt,
+    int? processId,
+  }) => _locked(() async {
+    await _ensureLoaded();
+    final target =
+        _targets[targetId] ?? (throw _unknownReference('target', targetId));
+    if (target.registration.targetKind == CockpitTargetKind.flutterApp) {
+      throw const FormatException(
+        'Flutter targets must be recorded from their launched app handle.',
+      );
+    }
+    final runtimeTarget =
+        target.registration.entrypoint ??
+        target.registration.appId ??
+        target.registration.targetKind.name;
+    final baseUrl = Uri(
+      scheme: 'cockpit-system',
+      path: '/$targetId',
+    ).toString();
+    final remote = CockpitRemoteSessionHandle(
+      platform: target.registration.platform,
+      deviceId: target.registration.deviceId,
+      projectDir: target.projectDir,
+      target: runtimeTarget,
+      appId: targetId,
+      platformAppId: target.registration.appId,
+      processId: processId,
+      host: 'system',
+      hostPort: 0,
+      devicePort: 0,
+      baseUrl: baseUrl,
+      launchedAt: launchedAt.toUtc(),
+    );
+    final app = CockpitAppHandle(
+      appId: targetId,
+      mode: CockpitAppMode.automation,
+      platform: target.registration.platform,
+      deviceId: target.registration.deviceId,
+      projectDir: target.projectDir,
+      target: runtimeTarget,
+      baseUrl: baseUrl,
+      launchedAt: launchedAt.toUtc(),
+      platformAppId: target.registration.appId,
+      processId: processId,
+      remoteSession: remote,
+    );
+    final targetHandle = CockpitTargetHandle(
+      targetId: targetId,
+      targetKind: target.registration.targetKind,
+      platform: target.registration.platform,
+      deviceId: target.registration.deviceId,
+      projectDir: target.projectDir,
+      target: runtimeTarget,
+      connection: CockpitTargetConnection(baseUrl: baseUrl),
+      launchedAt: launchedAt.toUtc(),
+      metadata: <String, Object?>{
+        'appId': targetId,
+        'appMode': CockpitAppMode.automation.jsonValue,
+        if (target.registration.appId != null)
+          'platformAppId': target.registration.appId,
+        'processId': ?processId,
+        'remoteSession': remote.toJson(),
+      },
+    );
+    await _handlePersistence.validateTarget(targetHandle);
+    await _handlePersistence.validateApp(app);
+    final updatedTarget = CockpitWorkerTargetBinding(
+      targetId: target.targetId,
+      deviceResourceId: target.deviceResourceId,
+      projectDir: target.projectDir,
+      registration: target.registration,
+      handle: targetHandle,
+    );
+    _targets[targetId] = updatedTarget;
+    final binding = _recordAppInMemory(target: updatedTarget, handle: app);
+    await _persist();
+    return binding;
+  });
+
   CockpitWorkerAppBinding _recordAppInMemory({
     required CockpitWorkerTargetBinding target,
     required CockpitAppHandle handle,

@@ -102,6 +102,52 @@ Future<T> runWorkerApplicationOperation<T>({
   return result;
 }
 
+Future<R> runWorkerTransactionalLaunch<T, R>({
+  required Future<T> Function() launch,
+  required Future<R> Function(T launched) commit,
+  required Future<void> Function(T launched) rollback,
+}) async {
+  final launched = await launch();
+  try {
+    return await commit(launched);
+  } on Object catch (primary, primaryStackTrace) {
+    try {
+      await rollback(launched);
+    } on Object catch (cleanupError) {
+      throw CockpitWorkerOperationRollbackException(
+        primary: primary,
+        cleanupError: cleanupError,
+        warningCode: 'launchRollbackFailed',
+        warningMessage: 'Failed to stop an application after launch failed.',
+      );
+    }
+    Error.throwWithStackTrace(primary, primaryStackTrace);
+  }
+}
+
+Future<R> runWorkerTransactionalApplicationLaunch<T, R>({
+  required CockpitWorkspaceOperationContext context,
+  required Future<T> Function() launch,
+  required Future<R> Function(T launched) commit,
+  required Future<void> Function(T launched) rollback,
+}) => runWorkerTransactionalLaunch<T, R>(
+  launch: () async {
+    context.cancellation.throwIfCancelled();
+    if (!DateTime.now().toUtc().isBefore(context.deadline)) {
+      throw TimeoutException('Workspace operation deadline expired.');
+    }
+    return launch();
+  },
+  commit: (launched) {
+    context.cancellation.throwIfCancelled();
+    if (!DateTime.now().toUtc().isBefore(context.deadline)) {
+      throw TimeoutException('Workspace operation deadline expired.');
+    }
+    return commit(launched);
+  },
+  rollback: rollback,
+);
+
 Future<R> runWorkerTransactionalPortLaunch<T, R>({
   required CockpitWorkerForwardedPortHandoff handoff,
   required CockpitWorkerResourceGrant grant,
