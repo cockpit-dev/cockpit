@@ -44,7 +44,6 @@ const Set<String> _cockpitMinimumChildEnvironmentNames = <String>{
   'LOCALAPPDATA',
   'COMSPEC',
   'PATHEXT',
-  'PSModulePath',
   'USERNAME',
   'USERDOMAIN',
   'HOMEDRIVE',
