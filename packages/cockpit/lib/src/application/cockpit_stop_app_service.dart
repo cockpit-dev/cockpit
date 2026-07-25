@@ -4,6 +4,7 @@ import 'package:path/path.dart' as p;
 
 import '../development/cockpit_development_session_status.dart';
 import '../platform/ios/cockpit_ios_device_connection.dart';
+import '../remote/cockpit_remote_session_client.dart';
 import 'cockpit_app_handle.dart';
 import 'cockpit_app_reference_resolver.dart';
 import 'cockpit_application_service_exception.dart';
@@ -22,19 +23,11 @@ typedef CockpitAppReachabilityProbe = Future<bool> Function(Uri baseUri);
 
 Future<bool> cockpitProbeAppReachability(Uri baseUri) async {
   try {
-    final client = HttpClient();
-    try {
-      final request = await client
-          .getUrl(baseUri.resolve('/status'))
-          .timeout(const Duration(seconds: 2));
-      final response = await request.close().timeout(
-        const Duration(seconds: 2),
-      );
-      await response.drain<void>();
-      return response.statusCode >= 200 && response.statusCode < 500;
-    } finally {
-      client.close(force: true);
-    }
+    await CockpitRemoteSessionClient(
+      baseUri: baseUri,
+      requestTimeout: const Duration(seconds: 2),
+    ).readStatus();
+    return true;
   } on Object {
     return false;
   }

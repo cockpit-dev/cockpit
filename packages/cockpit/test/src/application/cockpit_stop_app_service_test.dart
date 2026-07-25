@@ -1,7 +1,26 @@
+import 'dart:io';
+
 import 'package:cockpit/cockpit.dart';
 import 'package:test/test.dart';
 
 void main() {
+  test('app reachability requires the remote health endpoint', () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() => server.close(force: true));
+    server.listen((request) async {
+      request.response.statusCode = request.uri.path == '/status'
+          ? HttpStatus.ok
+          : HttpStatus.notFound;
+      await request.response.close();
+    });
+
+    final reachable = await cockpitProbeAppReachability(
+      Uri.parse('http://127.0.0.1:${server.port}'),
+    );
+
+    expect(reachable, isFalse);
+  });
+
   test(
     'stop app stops development apps through the development stop path',
     () async {

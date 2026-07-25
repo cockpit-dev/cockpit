@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import '../infrastructure/cockpit_process_manager.dart';
+
 final class CockpitSupervisorPortOwnershipEvidence {
   const CockpitSupervisorPortOwnershipEvidence({
     required this.listenerProcessId,
@@ -35,9 +37,9 @@ final class CockpitSystemSupervisorPortOwnershipInspector
     if (workerProcessId <= 1) {
       throw const FormatException('Worker process id is invalid.');
     }
-    final snapshot = await _readProcessSnapshot(
+    final snapshot = await _waitForProcessSnapshot(
       workerProcessId,
-      DateTime.now().toUtc().add(const Duration(seconds: 2)),
+      DateTime.now().toUtc().add(const Duration(seconds: 15)),
     );
     if (snapshot == null) {
       throw StateError('Unable to capture the worker process start identity.');
@@ -198,6 +200,24 @@ final class CockpitSystemSupervisorPortOwnershipInspector
         : _readPosixProcessSnapshot(processId, deadline);
   }
 
+  static Future<_ProcessSnapshot?> _waitForProcessSnapshot(
+    int processId,
+    DateTime deadline,
+  ) async {
+    while (deadline.isAfter(DateTime.now().toUtc())) {
+      final snapshot = await _readProcessSnapshot(processId, deadline);
+      if (snapshot != null) return snapshot;
+      final remaining = deadline.difference(DateTime.now().toUtc());
+      if (remaining <= Duration.zero) break;
+      await Future<void>.delayed(
+        remaining < const Duration(milliseconds: 100)
+            ? remaining
+            : const Duration(milliseconds: 100),
+      );
+    }
+    return null;
+  }
+
   static Future<_ProcessSnapshot?> _readPosixProcessSnapshot(
     int processId,
     DateTime deadline,
@@ -285,9 +305,5 @@ final class _ProcessSnapshot {
 }
 
 Map<String, String> _probeEnvironment() {
-  const names = <String>{'PATH', 'SystemRoot', 'WINDIR', 'LANG', 'LC_ALL'};
-  return <String, String>{
-    for (final entry in Platform.environment.entries)
-      if (names.contains(entry.key)) entry.key: entry.value,
-  };
+  return cockpitMinimumChildEnvironment();
 }
