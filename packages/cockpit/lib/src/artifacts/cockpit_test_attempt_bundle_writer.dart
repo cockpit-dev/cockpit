@@ -119,7 +119,7 @@ final class CockpitTestAttemptBundleWriter {
     }
     final parent = Directory(p.dirname(finalPath));
     await parent.create(recursive: true);
-    final staging = await parent.createTemp('.${context.attemptId}.staging-');
+    final staging = await parent.createTemp('.stage-');
     try {
       final entries = <CockpitTestArtifactEntry>[];
       for (final artifact in artifacts) {

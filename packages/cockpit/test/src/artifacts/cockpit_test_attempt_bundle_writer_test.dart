@@ -95,6 +95,8 @@ void main() {
     expect(validationCount, 1);
     expect(summary.path, expectedFinalPath);
     expect(await Directory(expectedFinalPath).exists(), isTrue);
+    expect(p.basename(observedStagingPath!), startsWith('.stage-'));
+    expect(observedStagingPath, isNot(contains(result.context.attemptId)));
     expect(await Directory(observedStagingPath!).exists(), isFalse);
   });
 
