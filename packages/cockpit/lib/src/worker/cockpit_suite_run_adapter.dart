@@ -42,6 +42,7 @@ final class CockpitSuiteRunAdapterFactory {
     required CockpitTestSecretResolver secretResolver,
     required CockpitTestSafetyPolicy safetyPolicy,
     required CockpitWorkerLogRedactor redactor,
+    required CockpitWorkerLogger logger,
     required CockpitWorkerRunEventStore eventStore,
     required CockpitWorkerSuiteRunStore runStore,
     CockpitWorkerArtifactPublisher? artifactPublisher,
@@ -52,6 +53,7 @@ final class CockpitSuiteRunAdapterFactory {
        _secretResolver = secretResolver,
        _safetyPolicy = safetyPolicy,
        _redactor = redactor,
+       _logger = logger,
        _eventStore = eventStore,
        _runStore = runStore,
        _artifactPublisher = artifactPublisher,
@@ -67,6 +69,7 @@ final class CockpitSuiteRunAdapterFactory {
   final CockpitTestSecretResolver _secretResolver;
   final CockpitTestSafetyPolicy _safetyPolicy;
   final CockpitWorkerLogRedactor _redactor;
+  final CockpitWorkerLogger _logger;
   final CockpitWorkerRunEventStore _eventStore;
   final CockpitWorkerSuiteRunStore _runStore;
   final CockpitWorkerArtifactPublisher? _artifactPublisher;
@@ -195,7 +198,17 @@ final class CockpitSuiteRunAdapterFactory {
             initialExecutions: reservation.executions,
             initialProgress: reservation.progress,
           );
-    } on Object {
+    } on Object catch (error, stackTrace) {
+      _logger.log(
+        'error',
+        'Suite execution failed.',
+        fields: <String, Object?>{
+          'runId': runId,
+          'errorType': error.runtimeType.toString(),
+          'error': error.toString(),
+          'stackTrace': stackTrace.toString(),
+        },
+      );
       executionFailure = _suiteExecutionFailure();
       schedule = await _finalizeFailedSchedule(
         plan: plan,

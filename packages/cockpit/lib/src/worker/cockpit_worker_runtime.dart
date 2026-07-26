@@ -333,6 +333,7 @@ final class CockpitWorkerRuntime {
         allowedEffects: configuration.allowedSafetyEffects,
       ),
       redactor: _logger.redactor,
+      logger: _logger,
       eventStore: eventStore,
       runStore: CockpitWorkerSuiteRunStore(
         workspaceId: configuration.workspaceId,
