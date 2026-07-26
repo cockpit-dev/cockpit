@@ -129,6 +129,24 @@ void main() {
     expect(restarted.unhealthy, isFalse);
   });
 
+  test('does not overlap heartbeat requests for one worker', () async {
+    final launcher = _FakeLauncher(
+      healthDelay: const Duration(milliseconds: 30),
+    );
+    final pool = CockpitWorkerPool(
+      launcher: launcher,
+      heartbeatInterval: const Duration(milliseconds: 5),
+      heartbeatTimeout: const Duration(milliseconds: 100),
+    );
+    addTearDown(() => pool.close(grace: const Duration(milliseconds: 50)));
+
+    final connection =
+        await pool.connectionFor(_spec('workspaceA')) as _FakeConnection;
+    await Future<void>.delayed(const Duration(milliseconds: 80));
+
+    expect(connection.maximumConcurrentHealthCalls, 1);
+  });
+
   test('force terminates and restarts a worker whose peer closes', () async {
     final launcher = _FakeLauncher();
     final pool = CockpitWorkerPool(
@@ -220,9 +238,13 @@ CockpitWorkspaceWorkerSpec _spec(
 DateTime _deadline() => DateTime.now().toUtc().add(const Duration(seconds: 5));
 
 final class _FakeLauncher implements CockpitWorkspaceWorkerLauncher {
-  _FakeLauncher({this.unhealthyFirstConnection = false});
+  _FakeLauncher({
+    this.unhealthyFirstConnection = false,
+    this.healthDelay = Duration.zero,
+  });
 
   final bool unhealthyFirstConnection;
+  final Duration healthDelay;
   final Map<String, List<_FakeConnection>> connections =
       <String, List<_FakeConnection>>{};
   final Map<String, List<_LaunchWaiter>> _waiters =
@@ -239,6 +261,7 @@ final class _FakeLauncher implements CockpitWorkspaceWorkerLauncher {
     final connection = _FakeConnection(
       spec,
       unhealthy: unhealthyFirstConnection && existing.isEmpty,
+      healthDelay: healthDelay,
     );
     final launched = existing..add(connection);
     final waiters = _waiters[spec.key.workspaceId] ?? const <_LaunchWaiter>[];
@@ -268,10 +291,15 @@ final class _LaunchWaiter {
 }
 
 final class _FakeConnection implements CockpitWorkspaceWorkerConnection {
-  _FakeConnection(this.spec, {this.unhealthy = false});
+  _FakeConnection(
+    this.spec, {
+    this.unhealthy = false,
+    this.healthDelay = Duration.zero,
+  });
 
   final CockpitWorkspaceWorkerSpec spec;
   final bool unhealthy;
+  final Duration healthDelay;
   final Completer<int> _exitCode = Completer<int>();
   final Completer<void> _operationStarted = Completer<void>();
   final Map<String, Completer<Object?>> _operations =
@@ -279,6 +307,8 @@ final class _FakeConnection implements CockpitWorkspaceWorkerConnection {
   final List<String> cancelledRequestIds = <String>[];
   DateTime? initializationDeadline;
   var _closed = false;
+  var _activeHealthCalls = 0;
+  var maximumConcurrentHealthCalls = 0;
 
   Future<void> get operationStarted => _operationStarted.future;
 
@@ -302,13 +332,7 @@ final class _FakeConnection implements CockpitWorkspaceWorkerConnection {
       'initialize' => _initialize(deadline),
       'operation' => await _operation(requestId!),
       'cancel' => _cancel(params['targetRequestId']! as String),
-      'health' => CockpitWorkerHealthResult(
-        workspaceId: spec.key.workspaceId,
-        healthy: !unhealthy,
-        draining: false,
-        activeRequestCount: 0,
-        checkedAt: DateTime.now().toUtc(),
-      ).toJson(),
+      'health' => await _health(),
       'drain' => CockpitWorkerDrainResult(
         draining: true,
         activeRequestCount: 0,
@@ -316,6 +340,25 @@ final class _FakeConnection implements CockpitWorkspaceWorkerConnection {
       'shutdown' => const CockpitWorkerShutdownResult(accepted: true).toJson(),
       _ => throw StateError('Unexpected fake worker method $method.'),
     };
+  }
+
+  Future<Map<String, Object?>> _health() async {
+    _activeHealthCalls += 1;
+    if (_activeHealthCalls > maximumConcurrentHealthCalls) {
+      maximumConcurrentHealthCalls = _activeHealthCalls;
+    }
+    try {
+      if (healthDelay > Duration.zero) await Future<void>.delayed(healthDelay);
+      return CockpitWorkerHealthResult(
+        workspaceId: spec.key.workspaceId,
+        healthy: !unhealthy,
+        draining: false,
+        activeRequestCount: 0,
+        checkedAt: DateTime.now().toUtc(),
+      ).toJson();
+    } finally {
+      _activeHealthCalls -= 1;
+    }
   }
 
   Map<String, Object?> _initialize(DateTime deadline) {

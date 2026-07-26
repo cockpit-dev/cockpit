@@ -130,7 +130,7 @@ final class CockpitWorkerPool {
     DateTime Function()? utcNow,
     Duration initializationTimeout = const Duration(minutes: 2),
     Duration heartbeatInterval = const Duration(seconds: 5),
-    Duration heartbeatTimeout = const Duration(seconds: 2),
+    Duration heartbeatTimeout = const Duration(seconds: 10),
     Duration initialRestartBackoff = const Duration(milliseconds: 100),
     Duration maximumRestartBackoff = const Duration(seconds: 10),
     int heartbeatFailureThreshold = 3,
@@ -432,12 +432,13 @@ final class CockpitWorkerPool {
 
   Future<void> _heartbeat(_WorkerSlot slot) async {
     final connection = slot.connection;
-    if (connection == null || !slot.desired) return;
-    if (connection.isClosed) {
-      await connection.terminate(force: true);
-      return;
-    }
+    if (connection == null || !slot.desired || slot.heartbeatInFlight) return;
+    slot.heartbeatInFlight = true;
     try {
+      if (connection.isClosed) {
+        await connection.terminate(force: true);
+        return;
+      }
       final deadline = _utcNow().add(_heartbeatTimeout);
       final raw = await connection.call(
         method: 'health',
@@ -458,6 +459,8 @@ final class CockpitWorkerPool {
       if (slot.heartbeatFailures >= _heartbeatFailureThreshold) {
         await connection.terminate(force: true);
       }
+    } finally {
+      slot.heartbeatInFlight = false;
     }
   }
 
@@ -486,6 +489,7 @@ final class _WorkerSlot {
   Timer? restartTimer;
   var generation = 0;
   var heartbeatFailures = 0;
+  var heartbeatInFlight = false;
   var restartFailures = 0;
   var desired = true;
 

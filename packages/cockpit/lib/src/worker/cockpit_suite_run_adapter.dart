@@ -172,6 +172,7 @@ final class CockpitSuiteRunAdapterFactory {
       secretResolver: _secretResolver,
       safetyPolicy: _safetyPolicy,
       redactor: _redactor,
+      logger: _logger,
       eventStore: _eventStore,
       runStore: _runStore,
       artifactPublisher: _artifactPublisher,
@@ -451,6 +452,7 @@ final class _SuiteAttemptExecution
     required CockpitTestSecretResolver secretResolver,
     required CockpitTestSafetyPolicy safetyPolicy,
     required CockpitWorkerLogRedactor redactor,
+    required CockpitWorkerLogger logger,
     required CockpitWorkerRunEventStore eventStore,
     required CockpitWorkerSuiteRunStore runStore,
     required CockpitWorkerArtifactPublisher? artifactPublisher,
@@ -461,6 +463,7 @@ final class _SuiteAttemptExecution
        _secretResolver = secretResolver,
        _safetyPolicy = safetyPolicy,
        _redactor = redactor,
+       _logger = logger,
        _eventStore = eventStore,
        _runStore = runStore,
        _artifactPublisher = artifactPublisher,
@@ -482,6 +485,7 @@ final class _SuiteAttemptExecution
   final CockpitTestSecretResolver _secretResolver;
   final CockpitTestSafetyPolicy _safetyPolicy;
   final CockpitWorkerLogRedactor _redactor;
+  final CockpitWorkerLogger _logger;
   final CockpitWorkerRunEventStore _eventStore;
   final CockpitWorkerSuiteRunStore _runStore;
   final CockpitWorkerArtifactPublisher? _artifactPublisher;
@@ -670,6 +674,7 @@ final class _SuiteAttemptExecution
       deadline: context.deadline,
     );
     void Function()? unregisterForceAbort;
+    var stage = 'attemptEvent';
     try {
       await _eventStore.append(
         runId,
@@ -682,6 +687,7 @@ final class _SuiteAttemptExecution
           requestedPlane: testCase.target.plane,
         ),
       );
+      stage = 'healthCheck';
       if (!await session.healthCheck()) {
         throw const FormatException(
           'Selected automation session is unhealthy.',
@@ -696,6 +702,7 @@ final class _SuiteAttemptExecution
         );
       }
       unawaited(cancellation.whenCancelled.then((_) => control.cancel()));
+      stage = 'attemptDirectory';
       final attemptRoot = p.join(
         runStateRoot,
         'runs',
@@ -722,6 +729,7 @@ final class _SuiteAttemptExecution
         safetyPolicy: _safetyPolicy,
         bundlePrePublicationValidator: scanner.validateForPublication,
       );
+      stage = 'caseRun';
       final run = scope.guard(
         runner.run(
           compiled: compiled,
@@ -743,10 +751,12 @@ final class _SuiteAttemptExecution
       final result = await (rowBoundary == null
           ? run
           : rowBoundary.scope.guard(run));
+      stage = 'redactionVerification';
       await scanner.verify(attemptRoot);
       var artifacts = const <CockpitArtifactResource>[];
       if (_artifactPublisher case final publisher?
           when result.bundlePath != null) {
+        stage = 'artifactPublication';
         artifacts = await publisher.publishAttemptBundle(
           runId: runId,
           caseId: testCase.id,
@@ -756,6 +766,7 @@ final class _SuiteAttemptExecution
           cancellation: operationCancellation,
         );
       }
+      stage = 'resultEvents';
       await _appendResultEvents(
         result,
         artifacts,
@@ -763,9 +774,45 @@ final class _SuiteAttemptExecution
             node.kind != CockpitSuitePlanNodeKind.testCase,
       );
       return _attemptReport(result, attemptNumber, artifacts);
+    } on Object catch (error, stackTrace) {
+      _logger.log(
+        'error',
+        'Suite attempt execution failed.',
+        fields: <String, Object?>{
+          'workspaceId': workspaceId,
+          'runId': runId,
+          'caseId': testCase.id,
+          'attemptId': attemptId,
+          'targetId': session.targetId,
+          'stage': stage,
+          'errorType': error.runtimeType.toString(),
+          'error': error.toString(),
+          'stackTrace': stackTrace.toString(),
+        },
+      );
+      rethrow;
     } finally {
       unregisterForceAbort?.call();
-      await scope.close(cancel: cancellation.isCancelled);
+      try {
+        await scope.close(cancel: cancellation.isCancelled);
+      } on Object catch (error, stackTrace) {
+        _logger.log(
+          'error',
+          'Suite attempt resource release failed.',
+          fields: <String, Object?>{
+            'workspaceId': workspaceId,
+            'runId': runId,
+            'caseId': testCase.id,
+            'attemptId': attemptId,
+            'targetId': session.targetId,
+            'stage': 'resourceRelease',
+            'errorType': error.runtimeType.toString(),
+            'error': error.toString(),
+            'stackTrace': stackTrace.toString(),
+          },
+        );
+        rethrow;
+      }
     }
   }
 
