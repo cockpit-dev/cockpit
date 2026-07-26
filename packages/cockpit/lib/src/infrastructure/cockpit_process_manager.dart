@@ -13,6 +13,7 @@ const Set<String> _cockpitMinimumChildEnvironmentNames = <String>{
   'TMPDIR',
   'TMP',
   'TEMP',
+  'SystemDrive',
   'SystemRoot',
   'WINDIR',
   'LANG',
