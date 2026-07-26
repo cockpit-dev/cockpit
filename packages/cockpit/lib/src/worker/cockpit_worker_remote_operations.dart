@@ -168,7 +168,11 @@ final class CockpitWorkerRemoteOperations {
   ) async {
     final values = CockpitWorkerApplicationInput(
       input,
-      allowed: const <String>{'targetId', 'launchTimeoutMs'},
+      allowed: const <String>{
+        'targetId',
+        'launchTimeoutMs',
+        'launchConfiguration',
+      },
       required: const <String>{'targetId'},
     );
     final targetId = values.id('targetId');
@@ -192,11 +196,17 @@ final class CockpitWorkerRemoteOperations {
       requestedMilliseconds: values.optionalInteger(
         'launchTimeoutMs',
         minimum: 1,
-        maximum: 600000,
+        maximum: 1800000,
       ),
       defaultValue: const Duration(minutes: 2),
-      maximum: const Duration(minutes: 10),
+      maximum: const Duration(minutes: 30),
     );
+    final launchConfigurationJson = values.optionalObject(
+      'launchConfiguration',
+    );
+    final launchConfiguration = launchConfigurationJson == null
+        ? CockpitFlutterLaunchConfiguration.empty
+        : CockpitFlutterLaunchConfiguration.fromJson(launchConfigurationJson);
     return runWorkerTransactionalPortLaunch<
       CockpitLaunchRemoteSessionResult,
       Map<String, Object?>
@@ -216,7 +226,7 @@ final class CockpitWorkerRemoteOperations {
             sessionPort: port,
             launchTimeout: timeout,
             allowSessionPortFallback: false,
-            launchConfiguration: CockpitFlutterLaunchConfiguration.empty,
+            launchConfiguration: launchConfiguration,
           ),
         ),
       ),

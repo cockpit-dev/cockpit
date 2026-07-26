@@ -34,21 +34,7 @@ void main() {
       createdAt: DateTime.utc(2026, 7, 20, 1),
     );
 
-    expect(
-      p.normalize(summary.path),
-      p.normalize(
-        p.join(
-          root.path,
-          'projectOne',
-          'workspaceOne',
-          'runOne',
-          'cases',
-          'bundleCase',
-          'attempts',
-          'attemptOne',
-        ),
-      ),
-    );
+    expect(p.normalize(summary.path), p.normalize(p.join(root.path, 'bundle')));
     final manifest = await reader.readAndVerify(
       path: summary.path,
       expectedManifestSha256: summary.manifestSha256,
@@ -76,7 +62,7 @@ void main() {
     );
     addTearDown(() => root.delete(recursive: true));
     final result = _result(evidence: const <String>['artifact000001']);
-    final expectedFinalPath = _bundlePath(root.path, result.context);
+    final expectedFinalPath = _bundlePath(root.path);
     var validationCount = 0;
     String? observedStagingPath;
 
@@ -130,7 +116,7 @@ void main() {
               )
             : null,
       );
-      final finalPath = _bundlePath(root.path, result.context);
+      final finalPath = _bundlePath(root.path);
       String? stagingPath;
       final validationError = CockpitTestError(
         code: CockpitTestErrorCode.bundlePublicationFailed,
@@ -216,10 +202,7 @@ void main() {
           ),
         ),
       );
-      expect(
-        await Directory(_bundlePath(root.path, result.context)).exists(),
-        isFalse,
-      );
+      expect(await Directory(_bundlePath(root.path)).exists(), isFalse);
       expect(await Directory(stagingPath!).exists(), isFalse);
     }
   });
@@ -409,16 +392,7 @@ CockpitTestAttemptResult _result({
   );
 }
 
-String _bundlePath(String rootPath, CockpitTestRunContext context) => p.join(
-  rootPath,
-  context.projectId,
-  context.workspaceId,
-  context.runId,
-  'cases',
-  context.caseId,
-  'attempts',
-  context.attemptId,
-);
+String _bundlePath(String rootPath) => p.join(rootPath, 'bundle');
 
 Future<bool> _treeContainsSensitiveBytes(String rootPath, String value) async {
   final scanner = CockpitSensitiveByteScanner(<String>[value]);

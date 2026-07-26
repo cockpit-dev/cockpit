@@ -16,7 +16,12 @@ final class CockpitSupervisorOperationCatalog {
   static final Map<String, CockpitSupervisorOperationMetadata> _operations =
       Map<String, CockpitSupervisorOperationMetadata>.unmodifiable({
         for (final metadata in <CockpitSupervisorOperationMetadata>[
-          _read('target.discover', CockpitOperationScope.supervisor),
+          _read(
+            'target.discover',
+            CockpitOperationScope.supervisor,
+            defaultTimeout: const Duration(minutes: 2),
+            maximumTimeout: const Duration(minutes: 10),
+          ),
           _read('lease.list', CockpitOperationScope.supervisor),
           _mutation(
             'lease.recover',
@@ -28,24 +33,68 @@ final class CockpitSupervisorOperationCatalog {
           _mutation(
             'project.create',
             CockpitOperationScope.root,
+            defaultTimeout: const Duration(minutes: 10),
+            maximumTimeout: const Duration(minutes: 30),
             effects: const <CockpitSafetyEffect>[
               CockpitSafetyEffect.shell,
               CockpitSafetyEffect.externalSideEffect,
             ],
           ),
           _read('package.search', CockpitOperationScope.root),
-          _read('document.index', CockpitOperationScope.workspace),
+          _read(
+            'document.index',
+            CockpitOperationScope.workspace,
+            defaultTimeout: const Duration(minutes: 5),
+            maximumTimeout: const Duration(minutes: 15),
+          ),
           _read('case.validate', CockpitOperationScope.workspace),
-          _job('case.run', CockpitOperationScope.workspace),
-          _job('suite.run', CockpitOperationScope.workspace),
-          _read('analyze.files', CockpitOperationScope.workspace),
-          _read('analyze.workspace', CockpitOperationScope.workspace),
-          _mutation('fix.workspace', CockpitOperationScope.workspace),
-          _mutation('format.workspace', CockpitOperationScope.workspace),
-          _mutation('test.workspace', CockpitOperationScope.workspace),
+          _job(
+            'case.run',
+            CockpitOperationScope.workspace,
+            defaultTimeout: const Duration(minutes: 30),
+            maximumTimeout: const Duration(hours: 6),
+          ),
+          _job(
+            'suite.run',
+            CockpitOperationScope.workspace,
+            defaultTimeout: const Duration(hours: 2),
+            maximumTimeout: const Duration(hours: 24),
+          ),
+          _read(
+            'analyze.files',
+            CockpitOperationScope.workspace,
+            defaultTimeout: const Duration(minutes: 5),
+            maximumTimeout: const Duration(minutes: 30),
+          ),
+          _read(
+            'analyze.workspace',
+            CockpitOperationScope.workspace,
+            defaultTimeout: const Duration(minutes: 10),
+            maximumTimeout: const Duration(hours: 1),
+          ),
+          _mutation(
+            'fix.workspace',
+            CockpitOperationScope.workspace,
+            defaultTimeout: const Duration(minutes: 10),
+            maximumTimeout: const Duration(minutes: 30),
+          ),
+          _mutation(
+            'format.workspace',
+            CockpitOperationScope.workspace,
+            defaultTimeout: const Duration(minutes: 10),
+            maximumTimeout: const Duration(minutes: 30),
+          ),
+          _mutation(
+            'test.workspace',
+            CockpitOperationScope.workspace,
+            defaultTimeout: const Duration(minutes: 30),
+            maximumTimeout: const Duration(hours: 4),
+          ),
           _mutation(
             'package.pub',
             CockpitOperationScope.workspace,
+            defaultTimeout: const Duration(minutes: 30),
+            maximumTimeout: const Duration(hours: 2),
             effects: const <CockpitSafetyEffect>[
               CockpitSafetyEffect.externalSideEffect,
             ],
@@ -58,10 +107,17 @@ final class CockpitSupervisorOperationCatalog {
           _read('target.list', CockpitOperationScope.workspace),
           _read('target.get', CockpitOperationScope.workspace),
           _read('target.inspect', CockpitOperationScope.workspace),
-          _mutation('target.register', CockpitOperationScope.workspace),
+          _mutation(
+            'target.register',
+            CockpitOperationScope.workspace,
+            defaultTimeout: const Duration(minutes: 5),
+            maximumTimeout: const Duration(minutes: 15),
+          ),
           _mutation(
             'app.launch',
             CockpitOperationScope.workspace,
+            defaultTimeout: const Duration(minutes: 10),
+            maximumTimeout: const Duration(minutes: 31),
             effects: const <CockpitSafetyEffect>[
               CockpitSafetyEffect.externalSideEffect,
             ],
@@ -69,6 +125,8 @@ final class CockpitSupervisorOperationCatalog {
           _mutation(
             'target.launch',
             CockpitOperationScope.workspace,
+            defaultTimeout: const Duration(minutes: 10),
+            maximumTimeout: const Duration(minutes: 31),
             effects: const <CockpitSafetyEffect>[
               CockpitSafetyEffect.externalSideEffect,
             ],
@@ -83,6 +141,8 @@ final class CockpitSupervisorOperationCatalog {
           _mutation(
             'session.remote.launch',
             CockpitOperationScope.workspace,
+            defaultTimeout: const Duration(minutes: 10),
+            maximumTimeout: const Duration(minutes: 31),
             effects: const <CockpitSafetyEffect>[
               CockpitSafetyEffect.externalSideEffect,
             ],
@@ -113,6 +173,8 @@ final class CockpitSupervisorOperationCatalog {
           _mutation(
             'session.development.launch',
             CockpitOperationScope.workspace,
+            defaultTimeout: const Duration(minutes: 10),
+            maximumTimeout: const Duration(minutes: 31),
             effects: const <CockpitSafetyEffect>[
               CockpitSafetyEffect.externalSideEffect,
             ],
@@ -152,6 +214,8 @@ final class CockpitSupervisorOperationCatalog {
           _mutation(
             'command.run',
             CockpitOperationScope.workspace,
+            defaultTimeout: const Duration(minutes: 5),
+            maximumTimeout: const Duration(minutes: 30),
             effects: const <CockpitSafetyEffect>[
               CockpitSafetyEffect.externalSideEffect,
             ],
@@ -159,6 +223,8 @@ final class CockpitSupervisorOperationCatalog {
           _mutation(
             'command.batch',
             CockpitOperationScope.workspace,
+            defaultTimeout: const Duration(minutes: 5),
+            maximumTimeout: const Duration(minutes: 30),
             effects: const <CockpitSafetyEffect>[
               CockpitSafetyEffect.externalSideEffect,
             ],
@@ -166,6 +232,8 @@ final class CockpitSupervisorOperationCatalog {
           _mutation(
             'shell.run',
             CockpitOperationScope.workspace,
+            defaultTimeout: const Duration(minutes: 5),
+            maximumTimeout: const Duration(minutes: 30),
             effects: const <CockpitSafetyEffect>[CockpitSafetyEffect.shell],
           ),
           _mutation(
@@ -249,20 +317,26 @@ final class CockpitSupervisorOperationCatalog {
 
 CockpitSupervisorOperationMetadata _read(
   String kind,
-  CockpitOperationScope scope,
-) => _metadata(
+  CockpitOperationScope scope, {
+  Duration defaultTimeout = const Duration(seconds: 30),
+  Duration maximumTimeout = const Duration(minutes: 5),
+}) => _metadata(
   kind,
   scope,
   CockpitMutationClass.readOnly,
   CockpitIdempotencyBehavior.optional,
   CockpitOperationExecutionMode.synchronous,
   const <CockpitSafetyEffect>[],
+  defaultTimeout,
+  maximumTimeout,
 );
 
 CockpitSupervisorOperationMetadata _mutation(
   String kind,
   CockpitOperationScope scope, {
   List<CockpitSafetyEffect> effects = const <CockpitSafetyEffect>[],
+  Duration defaultTimeout = const Duration(minutes: 2),
+  Duration maximumTimeout = const Duration(minutes: 10),
 }) => _metadata(
   kind,
   scope,
@@ -270,18 +344,24 @@ CockpitSupervisorOperationMetadata _mutation(
   CockpitIdempotencyBehavior.required,
   CockpitOperationExecutionMode.synchronous,
   effects,
+  defaultTimeout,
+  maximumTimeout,
 );
 
 CockpitSupervisorOperationMetadata _job(
   String kind,
-  CockpitOperationScope scope,
-) => _metadata(
+  CockpitOperationScope scope, {
+  required Duration defaultTimeout,
+  required Duration maximumTimeout,
+}) => _metadata(
   kind,
   scope,
   CockpitMutationClass.mutating,
   CockpitIdempotencyBehavior.required,
   CockpitOperationExecutionMode.job,
   const <CockpitSafetyEffect>[],
+  defaultTimeout,
+  maximumTimeout,
 );
 
 CockpitSupervisorOperationMetadata _metadata(
@@ -291,6 +371,8 @@ CockpitSupervisorOperationMetadata _metadata(
   CockpitIdempotencyBehavior idempotency,
   CockpitOperationExecutionMode executionMode,
   List<CockpitSafetyEffect> effects,
+  Duration defaultTimeout,
+  Duration maximumTimeout,
 ) => CockpitSupervisorOperationMetadata(
   descriptor: CockpitOperationDescriptor(
     kind: kind,
@@ -300,6 +382,8 @@ CockpitSupervisorOperationMetadata _metadata(
     mutationClass: mutationClass,
     idempotency: idempotency,
     executionMode: executionMode,
+    defaultTimeoutMs: defaultTimeout.inMilliseconds,
+    maximumTimeoutMs: maximumTimeout.inMilliseconds,
     requestSchemaRef: 'cockpit://operations/schema#/\$defs/$kind.request',
     responseSchemaRef: 'cockpit://operations/schema#/\$defs/$kind.response',
     safetyEffects: effects

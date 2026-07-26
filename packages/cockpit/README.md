@@ -178,6 +178,20 @@ dart run cockpit target register \
 Use `target list` and `target get` to recover registered resources, `target
 launch` to activate one, and `target inspect` to read its live capabilities.
 
+Flutter target launches accept repeatable `--dart-define`,
+`--dart-define-from-file`, `--flutter-arg`, and `--env KEY=VALUE` options plus a
+`--launch-timeout-ms` budget up to 1800000. MCP and generic operations use the
+same nested `launchConfiguration` fields: `dartDefines`,
+`dartDefineFromFiles`, `flutterArgs`, and `environment`. Cockpit-managed launch
+arguments cannot be overridden, and configuration values are not returned.
+
+Operation descriptors publish `executionMode`, `defaultTimeoutMs`, and
+`maximumTimeoutMs`. Synchronous operations block to a result and accept a
+relative `--timeout-ms` or absolute `--deadline`. Case and suite submissions
+are asynchronous durable jobs that return `runId`; their optional
+`--timeout-ms` controls the overall run budget (case: 30 minutes by default,
+6 hours maximum; suite: 2 hours by default, 24 hours maximum).
+
 Case `setup`, main steps, `finally`, and suite fixtures can use `type: system`
 with an advertised system action name and parameters. This keeps install,
 activation, permissions, device state, and cleanup inside the same safety,

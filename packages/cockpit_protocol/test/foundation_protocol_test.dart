@@ -186,6 +186,7 @@ void main() {
           idempotencyKey: CockpitIdempotencyKey('run:login:1'),
           inputs: const <String, Object?>{'username': 'tester@example.com'},
           targetId: 'deviceA',
+          timeoutMs: 1800000,
         );
         _expectRoundTrip(submission, CockpitRunSubmission.fromJson);
         _expectRoundTrip(
@@ -1073,6 +1074,8 @@ CockpitOperationDescriptor _runDescriptor() => CockpitOperationDescriptor(
   mutationClass: CockpitMutationClass.mutating,
   idempotency: CockpitIdempotencyBehavior.required,
   executionMode: CockpitOperationExecutionMode.job,
+  defaultTimeoutMs: 1800000,
+  maximumTimeoutMs: 21600000,
   safetyEffects: <CockpitEnumValue<CockpitSafetyEffect>>[
     CockpitEnumValue<CockpitSafetyEffect>.known(CockpitSafetyEffect.capture),
   ],
@@ -1098,6 +1101,8 @@ CockpitOperationDescriptor _documentValidationDescriptor() =>
       mutationClass: CockpitMutationClass.readOnly,
       idempotency: CockpitIdempotencyBehavior.prohibited,
       executionMode: CockpitOperationExecutionMode.synchronous,
+      defaultTimeoutMs: 30000,
+      maximumTimeoutMs: 300000,
       requestSchemaRef: r'#/$defs/DocumentValidationRequest',
       responseSchemaRef: r'#/$defs/DocumentValidationResult',
     );
@@ -1112,6 +1117,8 @@ CockpitOperationDescriptor _customDescriptor({
   mutationClass: CockpitMutationClass.readOnly,
   idempotency: CockpitIdempotencyBehavior.prohibited,
   executionMode: CockpitOperationExecutionMode.synchronous,
+  defaultTimeoutMs: 30000,
+  maximumTimeoutMs: 300000,
   requestSchemaRef: requestSchemaRef,
   responseSchemaRef: r'#/$defs/JsonObject',
 );

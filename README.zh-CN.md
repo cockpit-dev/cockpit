@@ -168,6 +168,33 @@ UI 操作使用可达的 WebDriverAgent；物理 iOS 设备在可用时通过 `d
 安装和生命周期。环境不具备某项能力时，Cockpit 会返回 unsupported/blocked，
 不会伪造成功。
 
+Flutter target 通过 CLI、MCP 和 `operation run` 共用结构化启动配置。入口、设备、
+模式、flavor 及远程控制参数由 Cockpit 管理；调用方可以传入多个 dart define、
+define 文件、安全的额外 Flutter 参数、进程环境变量，以及最长 30 分钟的启动预算：
+
+```bash
+dart run cockpit target launch \
+  --workspace-id <workspaceId> \
+  --target-id <flutterTargetId> \
+  --dart-define API_URL=https://api.example.test \
+  --dart-define-from-file config/staging.json \
+  --env LOG_LEVEL=debug \
+  --flutter-arg=--track-widget-creation \
+  --launch-timeout-ms 1800000 \
+  --idempotency-key flutter-launch-001
+```
+
+等价的 operation input 使用 `launchConfiguration` 对象，字段为 `dartDefines`、
+`dartDefineFromFiles`、`flutterArgs` 和 `environment`。启动配置值不会出现在操作
+输出中；已经安装的黑盒 target 不接受 Flutter 启动字段。
+
+每个已公开 operation 都包含 `executionMode`、`defaultTimeoutMs` 和
+`maximumTimeoutMs`。同步操作会阻塞到结果，可通过
+`operation run --timeout-ms <值>` 或绝对 `--deadline` 覆盖预算，两者不能同时传入。
+case/suite 是持久化异步 job：提交后立即返回 `runId`，客户端再消费事件并读取终态报告。
+`case run --timeout-ms` 默认 30 分钟、最长 6 小时；`suite run --timeout-ms` 默认
+2 小时、最长 24 小时。步骤和清理超时仍是互相独立的内部预算。
+
 ## Case 与 Suite
 
 case/suite 使用 `schemaVersion: cockpit.test/v2`。先验证文档，再使用稳定的
@@ -177,7 +204,8 @@ idempotency key 提交：
 dart run cockpit case validate --workspace-id <workspaceId> --file cases/login.yaml
 dart run cockpit case run --workspace-id <workspaceId> \
   --document-id <documentId> --case-id login \
-  --idempotency-key login-2026-07-24 --inputs-json '{}'
+  --idempotency-key login-2026-07-24 --inputs-json '{}' \
+  --timeout-ms 1800000
 
 dart run cockpit suite validate --workspace-id <workspaceId> --file suites/regression.yaml
 dart run cockpit suite run --workspace-id <workspaceId> \

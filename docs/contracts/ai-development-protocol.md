@@ -37,6 +37,21 @@ dart run cockpit target inspect --target-id <targetId> --profile minimal
 For Flutter development shells, register a `flutterApp` target with an indexed
 entrypoint document. Production Flutter code must not import
 `flutter_cockpit`; the bridge belongs to the development shell.
+Flutter launches accept repeatable `--dart-define`,
+`--dart-define-from-file`, `--flutter-arg`, and `--env KEY=VALUE` options and a
+`--launch-timeout-ms` value up to 1800000. Generic operations and third-party
+clients send the equivalent nested `launchConfiguration` object with
+`dartDefines`, `dartDefineFromFiles`, `flutterArgs`, and `environment`. Never
+send this object for a non-Flutter black-box target, and never assume launch
+configuration values will be echoed in a result.
+
+Operation descriptors are the timeout and execution authority. Read
+`executionMode`, `defaultTimeoutMs`, and `maximumTimeoutMs` before acting.
+Synchronous operations block to a terminal result and accept either relative
+`timeoutMs`/`--timeout-ms` or an absolute `deadline`/`--deadline`. Job
+operations return a durable `runId`; case submissions default to 30 minutes
+with a 6 hour maximum, while suites default to 2 hours with a 24 hour maximum.
+Do not combine relative and absolute deadlines.
 
 ## Fast Development Loop
 

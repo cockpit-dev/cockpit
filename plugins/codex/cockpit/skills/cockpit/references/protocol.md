@@ -43,6 +43,13 @@ Run `cockpit help <command> <subcommand>` for current options.
 
 ## Run Rules
 
+- Read `executionMode`, `defaultTimeoutMs`, and `maximumTimeoutMs` from the
+  advertised operation descriptor. Synchronous operations block to a result;
+  job operations return a durable `runId` for later observation.
+- A synchronous invocation may set one relative `timeoutMs` or absolute
+  `deadline`. Case and suite submissions use `timeoutMs` as their overall run
+  budget; step, command, cleanup, and launch budgets remain independent inner
+  limits.
 - Submission and mutation idempotency keys are stable per logical action.
 - SSE sequence numbers are monotonic and resumable.
 - Suite checkpoints preserve completed nodes, attempts, fixture state, and

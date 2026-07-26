@@ -73,7 +73,11 @@ final class CockpitCaseCommand extends Command<int> {
           ..addOption('idempotency-key', mandatory: true)
           ..addOption('inputs-json')
           ..addOption('inputs-file')
-          ..addOption('target-id'),
+          ..addOption('target-id')
+          ..addOption(
+            'timeout-ms',
+            help: 'Overall case deadline; defaults to the advertised policy.',
+          ),
         action: (arguments) async {
           final workspaceId = await runtime.workspaceId(
             arguments.option('workspace-id'),
@@ -116,6 +120,11 @@ final class CockpitCaseCommand extends Command<int> {
                 arguments.option('inputs-file'),
               ),
               targetId: arguments.option('target-id'),
+              timeoutMs: _optionalInteger(
+                arguments,
+                'timeout-ms',
+                maximum: 21600000,
+              ),
             ),
           );
           await runtime.success(accepted.toJson());
@@ -199,7 +208,11 @@ final class CockpitSuiteCommand extends Command<int> {
           ..addOption('idempotency-key', mandatory: true)
           ..addOption('inputs-json')
           ..addOption('inputs-file')
-          ..addOption('target-id'),
+          ..addOption('target-id')
+          ..addOption(
+            'timeout-ms',
+            help: 'Overall suite deadline; defaults to the advertised policy.',
+          ),
         action: (arguments) async {
           final workspaceId = await runtime.workspaceId(
             arguments.option('workspace-id'),
@@ -243,6 +256,11 @@ final class CockpitSuiteCommand extends Command<int> {
                 arguments.option('inputs-file'),
               ),
               targetId: arguments.option('target-id'),
+              timeoutMs: _optionalInteger(
+                arguments,
+                'timeout-ms',
+                maximum: 86400000,
+              ),
             ),
           );
           await runtime.success(accepted.toJson());
@@ -492,6 +510,21 @@ int _integer(
   int? maximum,
 }) {
   final value = int.tryParse(arguments.option(name)!);
+  if (value == null || value < minimum || maximum != null && value > maximum) {
+    throw FormatException('--$name is invalid.');
+  }
+  return value;
+}
+
+int? _optionalInteger(
+  ArgResults arguments,
+  String name, {
+  int minimum = 1,
+  int? maximum,
+}) {
+  final raw = arguments.option(name);
+  if (raw == null) return null;
+  final value = int.tryParse(raw);
   if (value == null || value < minimum || maximum != null && value > maximum) {
     throw FormatException('--$name is invalid.');
   }

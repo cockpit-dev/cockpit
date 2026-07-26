@@ -10,6 +10,28 @@ import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 
 void main() {
+  test('operation catalog publishes execution and timeout policies', () {
+    final launch = CockpitSupervisorOperationCatalog.require(
+      'target.launch',
+    ).descriptor;
+    final testCase = CockpitSupervisorOperationCatalog.require(
+      'case.run',
+    ).descriptor;
+    final suite = CockpitSupervisorOperationCatalog.require(
+      'suite.run',
+    ).descriptor;
+
+    expect(launch.executionMode, CockpitOperationExecutionMode.synchronous);
+    expect(launch.defaultTimeoutMs, 600000);
+    expect(launch.maximumTimeoutMs, 1860000);
+    expect(testCase.executionMode, CockpitOperationExecutionMode.job);
+    expect(testCase.defaultTimeoutMs, 1800000);
+    expect(testCase.maximumTimeoutMs, 21600000);
+    expect(suite.executionMode, CockpitOperationExecutionMode.job);
+    expect(suite.defaultTimeoutMs, 7200000);
+    expect(suite.maximumTimeoutMs, 86400000);
+  });
+
   test(
     'persisted policy explicitly authorizes production automation',
     () async {

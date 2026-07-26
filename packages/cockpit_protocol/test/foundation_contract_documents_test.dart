@@ -185,6 +185,8 @@ void main() {
             mutationClass: CockpitMutationClass.mutating,
             idempotency: CockpitIdempotencyBehavior.required,
             executionMode: CockpitOperationExecutionMode.job,
+            defaultTimeoutMs: 1800000,
+            maximumTimeoutMs: 21600000,
             requestSchemaRef: r'#/$defs/RunSubmission',
             responseSchemaRef: r'#/$defs/RunAccepted',
           ).toJson(),

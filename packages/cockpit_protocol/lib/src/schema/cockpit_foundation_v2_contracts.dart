@@ -2832,6 +2832,16 @@ const String cockpitFoundationV2SchemaJson = r'''
           ],
           "minLength": 1
         },
+        "defaultTimeoutMs": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 86400000
+        },
+        "maximumTimeoutMs": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 86400000
+        },
         "safetyEffects": {
           "type": "array",
           "items": {
@@ -2871,6 +2881,8 @@ const String cockpitFoundationV2SchemaJson = r'''
         "mutationClass",
         "idempotency",
         "executionMode",
+        "defaultTimeoutMs",
+        "maximumTimeoutMs",
         "safetyEffects",
         "requestSchemaRef",
         "responseSchemaRef",
@@ -3310,6 +3322,11 @@ const String cockpitFoundationV2SchemaJson = r'''
         },
         "targetId": {
           "$ref": "#/$defs/Identifier"
+        },
+        "timeoutMs": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 86400000
         },
         "requiredFeatures": {
           "type": "array",

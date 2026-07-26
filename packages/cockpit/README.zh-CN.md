@@ -166,6 +166,19 @@ dart run cockpit target register \
 使用 `target list` 和 `target get` 恢复已注册资源，使用 `target launch` 激活 target，
 使用 `target inspect` 读取实时能力。
 
+Flutter target 启动支持重复的 `--dart-define`、`--dart-define-from-file`、
+`--flutter-arg`、`--env KEY=VALUE`，以及最长 1800000 毫秒的
+`--launch-timeout-ms`。MCP 和通用 operation 使用相同的嵌套
+`launchConfiguration` 字段：`dartDefines`、`dartDefineFromFiles`、
+`flutterArgs`、`environment`。Cockpit 管理的启动参数不能被覆盖，配置值也不会在
+结果中返回。
+
+operation descriptor 会公开 `executionMode`、`defaultTimeoutMs` 和
+`maximumTimeoutMs`。同步操作阻塞到结果，并接受相对 `--timeout-ms` 或绝对
+`--deadline`。case/suite 提交是返回 `runId` 的持久化异步 job；可选
+`--timeout-ms` 控制整体运行预算（case 默认 30 分钟、最长 6 小时，suite 默认
+2 小时、最长 24 小时）。
+
 case 的 `setup`、主步骤、`finally` 及 suite fixture 都可以使用 `type: system` 与
 capability 已公开的 action/parameters，使安装、激活、权限、设备状态和清理共用同一套
 安全策略、超时、事件与报告链路。

@@ -7,6 +7,7 @@ import 'package:path/path.dart' as p;
 
 import '../../supervisor/cockpit_supervisor_api_client.dart';
 import '../cockpit_cli_output.dart';
+import '../cockpit_flutter_launch_configuration_cli.dart';
 import '../cockpit_cli_runtime.dart';
 
 final class CockpitServerCommand extends Command<int> {
@@ -245,6 +246,10 @@ final class CockpitOperationCommand extends Command<int> {
           ..addOption('input-json')
           ..addOption('input-file')
           ..addOption('idempotency-key')
+          ..addOption(
+            'timeout-ms',
+            help: 'Relative operation timeout; defaults to advertised policy.',
+          )
           ..addOption('deadline'),
         action: (arguments) async {
           final client = await runtime.client();
@@ -294,9 +299,7 @@ final class CockpitOperationCommand extends Command<int> {
               idempotencyKey: arguments.option('idempotency-key') == null
                   ? null
                   : CockpitIdempotencyKey(arguments.option('idempotency-key')!),
-              deadline: arguments.option('deadline') == null
-                  ? null
-                  : DateTime.parse(arguments.option('deadline')!).toUtc(),
+              deadline: _operationDeadline(arguments, descriptor),
             ),
           );
           await runtime.success(result.toJson());
@@ -322,13 +325,22 @@ final class CockpitTargetCommand extends Command<int> {
         runtime: runtime,
         name: 'discover',
         description: 'Discover locally available launch targets.',
-        configure: (parser) => parser.addOption('timeout-ms'),
+        configure: (parser) =>
+            parser.addOption('timeout-ms', defaultsTo: '120000'),
         action: (arguments) async {
-          final timeoutMs = _optionalInteger(arguments, 'timeout-ms');
+          final timeoutMs = _integer(arguments, 'timeout-ms');
+          if (timeoutMs < 1 || timeoutMs > 300000) {
+            throw const FormatException(
+              '--timeout-ms must be between 1 and 300000.',
+            );
+          }
           final result = await (await runtime.client()).executeOperation(
             CockpitOperationInvocation(
               kind: 'target.discover',
-              input: <String, Object?>{'timeoutMs': ?timeoutMs},
+              input: <String, Object?>{'timeoutMs': timeoutMs},
+              deadline: DateTime.now().toUtc().add(
+                Duration(milliseconds: timeoutMs) + const Duration(seconds: 30),
+              ),
             ),
           );
           await runtime.success(result.toJson());
@@ -419,11 +431,18 @@ final class CockpitTargetCommand extends Command<int> {
             'wda-url',
             help: 'WebDriverAgent endpoint assigned to this iOS target.',
           )
+          ..addOption('timeout-ms', defaultsTo: '300000')
           ..addOption('idempotency-key', mandatory: true),
         action: (arguments) async {
           final workspaceId = await runtime.workspaceId(
             arguments.option('workspace-id'),
           );
+          final timeoutMs = _integer(arguments, 'timeout-ms');
+          if (timeoutMs < 1000 || timeoutMs > 900000) {
+            throw const FormatException(
+              '--timeout-ms must be between 1000 and 900000.',
+            );
+          }
           final result = await (await runtime.client()).executeOperation(
             CockpitOperationInvocation(
               kind: 'target.register',
@@ -448,6 +467,9 @@ final class CockpitTargetCommand extends Command<int> {
                 if (arguments.option('wda-url') != null)
                   'wdaUrl': arguments.option('wda-url'),
               },
+              deadline: DateTime.now().toUtc().add(
+                Duration(milliseconds: timeoutMs),
+              ),
             ),
           );
           await runtime.success(result.toJson());
@@ -460,15 +482,18 @@ final class CockpitTargetCommand extends Command<int> {
         runtime: runtime,
         name: 'launch',
         description: 'Launch or activate a registered automation target.',
-        configure: (parser) => parser
-          ..addOption('workspace-id')
-          ..addOption('target-id', mandatory: true)
-          ..addOption(
-            'mode',
-            allowed: const <String>['development', 'automation'],
-          )
-          ..addOption('launch-timeout-ms', defaultsTo: '600000')
-          ..addOption('idempotency-key', mandatory: true),
+        configure: (parser) {
+          parser
+            ..addOption('workspace-id')
+            ..addOption('target-id', mandatory: true)
+            ..addOption(
+              'mode',
+              allowed: const <String>['development', 'automation'],
+            )
+            ..addOption('launch-timeout-ms', defaultsTo: '600000')
+            ..addOption('idempotency-key', mandatory: true);
+          cockpitAddFlutterLaunchConfigurationOptions(parser);
+        },
         action: (arguments) async {
           final workspaceId = await runtime.workspaceId(
             arguments.option('workspace-id'),
@@ -479,6 +504,9 @@ final class CockpitTargetCommand extends Command<int> {
               '--launch-timeout-ms must be between 1000 and 1800000.',
             );
           }
+          final launchConfiguration = cockpitReadFlutterLaunchConfiguration(
+            arguments,
+          );
           final result = await (await runtime.client()).executeOperation(
             CockpitOperationInvocation(
               kind: 'target.launch',
@@ -491,6 +519,7 @@ final class CockpitTargetCommand extends Command<int> {
                 if (arguments.option('mode') != null)
                   'mode': arguments.option('mode'),
                 'launchTimeoutMs': timeoutMs,
+                'launchConfiguration': ?launchConfiguration,
               },
               deadline: DateTime.now().toUtc().add(
                 Duration(milliseconds: timeoutMs) + const Duration(seconds: 30),
@@ -556,10 +585,27 @@ int _integer(ArgResults arguments, String name) {
   return value;
 }
 
-int? _optionalInteger(ArgResults arguments, String name) {
-  final source = arguments.option(name);
-  if (source == null) return null;
-  final value = int.tryParse(source);
-  if (value == null) throw FormatException('--$name is invalid.');
-  return value;
+DateTime? _operationDeadline(
+  ArgResults arguments,
+  CockpitOperationDescriptor descriptor,
+) {
+  final rawDeadline = arguments.option('deadline');
+  final rawTimeout = arguments.option('timeout-ms');
+  if (rawDeadline != null && rawTimeout != null) {
+    throw const FormatException(
+      '--deadline and --timeout-ms cannot be combined.',
+    );
+  }
+  if (rawDeadline != null) return DateTime.parse(rawDeadline).toUtc();
+  if (rawTimeout == null) return null;
+  final timeoutMs = int.tryParse(rawTimeout);
+  if (timeoutMs == null ||
+      timeoutMs < 1 ||
+      timeoutMs > descriptor.maximumTimeoutMs) {
+    throw FormatException(
+      '--timeout-ms must be between 1 and '
+      '${descriptor.maximumTimeoutMs} for ${descriptor.kind}.',
+    );
+  }
+  return DateTime.now().toUtc().add(Duration(milliseconds: timeoutMs));
 }

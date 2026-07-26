@@ -278,12 +278,21 @@ final class CockpitRunSubmission {
     required this.idempotencyKey,
     Map<String, Object?> inputs = const <String, Object?>{},
     this.targetId,
+    this.timeoutMs,
     Iterable<String> requiredFeatures = const <String>[],
   }) : inputs = CockpitFoundationValueReader.jsonObject(inputs, r'$.inputs'),
        requiredFeatures = List<String>.unmodifiable(requiredFeatures) {
     CockpitFoundationValueReader.id(workspaceId, r'$.workspaceId');
     if (targetId != null) {
       CockpitFoundationValueReader.id(targetId, r'$.targetId');
+    }
+    if (timeoutMs != null) {
+      CockpitFoundationValueReader.integer(
+        timeoutMs,
+        r'$.timeoutMs',
+        min: 1,
+        max: 86400000,
+      );
     }
     final features = <String>{};
     for (final feature in this.requiredFeatures) {
@@ -299,6 +308,7 @@ final class CockpitRunSubmission {
   final CockpitIdempotencyKey idempotencyKey;
   final Map<String, Object?> inputs;
   final String? targetId;
+  final int? timeoutMs;
   final List<String> requiredFeatures;
 
   Map<String, Object?> toJson() => <String, Object?>{
@@ -307,6 +317,7 @@ final class CockpitRunSubmission {
     'idempotencyKey': idempotencyKey.toJson(),
     'inputs': inputs,
     if (targetId != null) 'targetId': targetId,
+    if (timeoutMs != null) 'timeoutMs': timeoutMs,
     'requiredFeatures': requiredFeatures,
   };
 
@@ -320,6 +331,7 @@ final class CockpitRunSubmission {
         'idempotencyKey',
         'inputs',
         'targetId',
+        'timeoutMs',
         'requiredFeatures',
       },
       path,
@@ -351,6 +363,14 @@ final class CockpitRunSubmission {
       targetId: json['targetId'] == null
           ? null
           : CockpitFoundationValueReader.id(json['targetId'], '$path.targetId'),
+      timeoutMs: json['timeoutMs'] == null
+          ? null
+          : CockpitFoundationValueReader.integer(
+              json['timeoutMs'],
+              '$path.timeoutMs',
+              min: 1,
+              max: 86400000,
+            ),
       requiredFeatures: CockpitFoundationValueReader.ids(
         json['requiredFeatures'],
         '$path.requiredFeatures',

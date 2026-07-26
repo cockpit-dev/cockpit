@@ -227,6 +227,7 @@ final class CockpitDemoAcceptanceRunner {
         deviceId: deviceId,
         mode: launchMode,
         entrypointDocument: entrypointDocument,
+        registrationTimeout: request.discoveryTimeout,
       );
 
       advance('launch', 'Launching the target in $launchMode mode.');
@@ -262,6 +263,7 @@ final class CockpitDemoAcceptanceRunner {
             ),
           ),
           idempotencyKey: CockpitIdempotencyKey('$invocationId-run'),
+          timeoutMs: request.runTimeout.inMilliseconds,
           requiredFeatures: const <String>[
             'digestCheckedArtifacts',
             'durableRunEvents',
@@ -510,6 +512,9 @@ Future<String> _resolveDevice(
     api,
     CockpitOperationInvocation(
       kind: 'target.discover',
+      deadline: DateTime.now().toUtc().add(
+        request.discoveryTimeout + const Duration(seconds: 30),
+      ),
       input: <String, Object?>{
         'timeoutMs': request.discoveryTimeout.inMilliseconds,
       },
@@ -557,6 +562,7 @@ Future<CockpitAutomationTargetResource> _resolveTarget({
   required String deviceId,
   required String mode,
   required CockpitDocumentResource entrypointDocument,
+  required Duration registrationTimeout,
 }) async {
   final targetMode = CockpitAutomationTargetMode.values.byName(mode);
   final matches = (await api.targets(workspaceId))
@@ -593,6 +599,7 @@ Future<CockpitAutomationTargetResource> _resolveTarget({
       idempotencyKey: CockpitIdempotencyKey(
         'demo-target-${digest.substring(0, 32)}',
       ),
+      deadline: DateTime.now().toUtc().add(registrationTimeout),
       input: <String, Object?>{
         'platform': platform,
         'deviceId': deviceId,

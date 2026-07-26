@@ -249,30 +249,46 @@ final class CockpitSupervisorRuntime {
         invocation.idempotencyKey == null) {
       throw const FormatException('Operation requires an idempotency key.');
     }
-    if (invocation.deadline case final deadline?
-        when !deadline.isAfter(DateTime.now().toUtc())) {
+    final submittedAt = DateTime.now().toUtc();
+    final deadline = _resolveOperationDeadline(
+      metadata.descriptor,
+      submittedAt: submittedAt,
+      requestedDeadline: invocation.deadline,
+    );
+    final normalizedInvocation = CockpitOperationInvocation(
+      kind: invocation.kind,
+      input: invocation.input,
+      rootId: invocation.rootId,
+      workspaceId: invocation.workspaceId,
+      idempotencyKey: invocation.idempotencyKey,
+      deadline: deadline,
+      requiredFeatures: invocation.requiredFeatures,
+    );
+    authorization.authorizeOperation(metadata, normalizedInvocation);
+    final outputFuture = switch (normalizedInvocation.kind) {
+      'target.discover' => _discoverTargets(normalizedInvocation.input),
+      'lease.list' => _listLeases(normalizedInvocation.input),
+      'lease.recover' => _recoverLease(normalizedInvocation.input),
+      'system.capabilities' => _systemCapabilities(normalizedInvocation.input),
+      'system.diagnostics' => _systemDiagnostics(normalizedInvocation.input),
+      'project.create' => _createRootProject(normalizedInvocation),
+      'package.search' => _searchPackages(normalizedInvocation),
+      _ => throw _apiError(
+        CockpitErrorCode.unsupportedOperation,
+        CockpitErrorCategory.unsupported,
+        'Operation ${normalizedInvocation.kind} is not implemented.',
+      ),
+    };
+    late final Map<String, Object?> output;
+    try {
+      output = await outputFuture.timeout(deadline.difference(submittedAt));
+    } on TimeoutException {
       throw _apiError(
         'deadlineExceeded',
         CockpitErrorCategory.cancelled,
         'Operation deadline has expired.',
       );
     }
-    authorization.authorizeOperation(metadata, invocation);
-    final submittedAt = DateTime.now().toUtc();
-    final output = switch (invocation.kind) {
-      'target.discover' => await _discoverTargets(invocation.input),
-      'lease.list' => await _listLeases(invocation.input),
-      'lease.recover' => await _recoverLease(invocation.input),
-      'system.capabilities' => await _systemCapabilities(invocation.input),
-      'system.diagnostics' => await _systemDiagnostics(invocation.input),
-      'project.create' => await _createRootProject(invocation),
-      'package.search' => await _searchPackages(invocation),
-      _ => throw _apiError(
-        CockpitErrorCode.unsupportedOperation,
-        CockpitErrorCategory.unsupported,
-        'Operation ${invocation.kind} is not implemented.',
-      ),
-    };
     final finishedAt = DateTime.now().toUtc();
     return CockpitOperationResult(
       operationId:
@@ -463,7 +479,7 @@ final class CockpitSupervisorRuntime {
   Future<CockpitOperationResult> executeWorkspaceOperation(
     String workspaceId,
     CockpitOperationInvocation invocation, {
-    Duration defaultTimeout = const Duration(seconds: 30),
+    Duration? defaultTimeout,
   }) async {
     _requireAccepting();
     if (invocation.workspaceId != workspaceId || invocation.rootId != null) {
@@ -486,12 +502,13 @@ final class CockpitSupervisorRuntime {
     final key =
         invocation.idempotencyKey?.value ??
         'readonly-${CockpitSecureTokenGenerator().nextToken(byteLength: 16)}';
-    if (defaultTimeout <= Duration.zero ||
-        defaultTimeout > const Duration(minutes: 5)) {
-      throw ArgumentError.value(defaultTimeout, 'defaultTimeout');
-    }
-    final deadline =
-        invocation.deadline ?? DateTime.now().toUtc().add(defaultTimeout);
+    final submittedAt = DateTime.now().toUtc();
+    final deadline = _resolveOperationDeadline(
+      metadata.descriptor,
+      submittedAt: submittedAt,
+      requestedDeadline: invocation.deadline,
+      defaultTimeout: defaultTimeout,
+    );
     final workerInvocation = CockpitOperationInvocation(
       kind: invocation.kind,
       input: invocation.input,
@@ -615,6 +632,14 @@ final class CockpitSupervisorRuntime {
 
   Future<CockpitRunAccepted> submitRun(CockpitRunSubmission submission) async {
     _requireAccepting();
+    final runKind =
+        submission.source.documentKind == CockpitRunDocumentKind.testCase
+        ? 'case.run'
+        : 'suite.run';
+    final descriptor = CockpitSupervisorOperationCatalog.require(
+      runKind,
+    ).descriptor;
+    _runTimeout(submission, descriptor);
     final workspace = await _activeWorkspace(submission.workspaceId);
     final fingerprint = sha256
         .convert(utf8.encode(jsonEncode(submission.toJson())))
@@ -676,11 +701,17 @@ final class CockpitSupervisorRuntime {
       }
       final spec = await _workerSpec(run.workspaceId);
       await _initializeWorker(spec);
-      final deadline = DateTime.now().toUtc().add(const Duration(hours: 2));
+      final kind = run.documentKind == CockpitRunDocumentKind.testCase
+          ? 'case.run'
+          : 'suite.run';
+      final descriptor = CockpitSupervisorOperationCatalog.require(
+        kind,
+      ).descriptor;
+      final deadline = DateTime.now().toUtc().add(
+        _runTimeout(submission, descriptor),
+      );
       final invocation = CockpitOperationInvocation(
-        kind: run.documentKind == CockpitRunDocumentKind.testCase
-            ? 'case.run'
-            : 'suite.run',
+        kind: kind,
         workspaceId: run.workspaceId,
         idempotencyKey: submission.idempotencyKey,
         deadline: deadline,
@@ -1354,6 +1385,46 @@ CockpitLeaseCleanupResult _quarantinedCleanupResult() =>
 
 CockpitRemovalPolicy _removalPolicy(bool force) =>
     force ? CockpitRemovalPolicy.force : CockpitRemovalPolicy.drain;
+DateTime _resolveOperationDeadline(
+  CockpitOperationDescriptor descriptor, {
+  required DateTime submittedAt,
+  required DateTime? requestedDeadline,
+  Duration? defaultTimeout,
+}) {
+  final maximum = Duration(milliseconds: descriptor.maximumTimeoutMs);
+  final fallback =
+      defaultTimeout ?? Duration(milliseconds: descriptor.defaultTimeoutMs);
+  if (fallback <= Duration.zero || fallback > maximum) {
+    throw ArgumentError.value(defaultTimeout, 'defaultTimeout');
+  }
+  final deadline = requestedDeadline?.toUtc() ?? submittedAt.add(fallback);
+  final requested = deadline.difference(submittedAt);
+  if (requested <= Duration.zero) {
+    throw const FormatException('Operation deadline has expired.');
+  }
+  if (requested > maximum) {
+    throw FormatException(
+      'Operation timeout exceeds the ${descriptor.maximumTimeoutMs} ms '
+      'maximum for ${descriptor.kind}.',
+    );
+  }
+  return deadline;
+}
+
+Duration _runTimeout(
+  CockpitRunSubmission submission,
+  CockpitOperationDescriptor descriptor,
+) {
+  final timeoutMs = submission.timeoutMs ?? descriptor.defaultTimeoutMs;
+  if (timeoutMs > descriptor.maximumTimeoutMs) {
+    throw FormatException(
+      'Run timeout exceeds the ${descriptor.maximumTimeoutMs} ms maximum '
+      'for ${descriptor.kind}.',
+    );
+  }
+  return Duration(milliseconds: timeoutMs);
+}
+
 DateTime _deadline() => DateTime.now().toUtc().add(const Duration(seconds: 30));
 
 DateTime _workerInitializationDeadline() =>

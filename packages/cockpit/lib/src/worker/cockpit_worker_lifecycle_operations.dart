@@ -346,6 +346,7 @@ final class CockpitWorkerLifecycleOperations {
       context,
       const Duration(minutes: 10),
     );
+    final launchConfiguration = _launchConfiguration(values);
     final portGrant = requireForwardedPortGrant(
       workspaceId: workspaceId,
       grants: grants,
@@ -358,6 +359,7 @@ final class CockpitWorkerLifecycleOperations {
         portGrant: portGrant,
         timeout: timeout,
         sanitizer: sanitizer,
+        launchConfiguration: launchConfiguration,
       );
     }
     return runWorkerTransactionalPortLaunch<
@@ -380,7 +382,7 @@ final class CockpitWorkerLifecycleOperations {
             mode: mode,
             launchTimeout: timeout,
             allowSessionPortFallback: false,
-            launchConfiguration: CockpitFlutterLaunchConfiguration.empty,
+            launchConfiguration: launchConfiguration,
           ),
         ),
       ),
@@ -402,10 +404,16 @@ final class CockpitWorkerLifecycleOperations {
   ) async {
     final values = _launchInput(input);
     final target = await _launchTargetBinding(values, context, grants);
+    final launchConfiguration = _launchConfiguration(values);
     if (target.registration.targetKind != CockpitTargetKind.flutterApp) {
       if (values.optionalString('mode', maximum: 32) != null) {
         throw const FormatException(
           'mode applies only to Flutter target launches.',
+        );
+      }
+      if (!launchConfiguration.isEmpty) {
+        throw const FormatException(
+          'launchConfiguration applies only to Flutter target launches.',
         );
       }
       return runWorkerTransactionalApplicationLaunch<
@@ -468,6 +476,7 @@ final class CockpitWorkerLifecycleOperations {
         timeout: timeout,
         sanitizer: sanitizer,
         includeTarget: true,
+        launchConfiguration: launchConfiguration,
       );
     }
     return runWorkerTransactionalPortLaunch<
@@ -491,7 +500,7 @@ final class CockpitWorkerLifecycleOperations {
             mode: mode,
             launchTimeout: timeout,
             allowSessionPortFallback: false,
-            launchConfiguration: CockpitFlutterLaunchConfiguration.empty,
+            launchConfiguration: launchConfiguration,
           ),
         ),
       ),
@@ -580,6 +589,7 @@ final class CockpitWorkerLifecycleOperations {
     final values = _launchInput(input, allowMode: false);
     final target = await _launchTargetBinding(values, context, grants);
     final timeout = _launchTimeout(values, context, const Duration(minutes: 2));
+    final launchConfiguration = _launchConfiguration(values);
     final portGrant = requireForwardedPortGrant(
       workspaceId: workspaceId,
       grants: grants,
@@ -591,6 +601,7 @@ final class CockpitWorkerLifecycleOperations {
       portGrant: portGrant,
       timeout: timeout,
       sanitizer: sanitizer,
+      launchConfiguration: launchConfiguration,
     );
   }
 
@@ -786,9 +797,23 @@ final class CockpitWorkerLifecycleOperations {
     bool allowMode = true,
   }) => CockpitWorkerApplicationInput(
     input,
-    allowed: <String>{'targetId', 'launchTimeoutMs', if (allowMode) 'mode'},
+    allowed: <String>{
+      'targetId',
+      'launchTimeoutMs',
+      'launchConfiguration',
+      if (allowMode) 'mode',
+    },
     required: const <String>{'targetId'},
   );
+
+  CockpitFlutterLaunchConfiguration _launchConfiguration(
+    CockpitWorkerApplicationInput input,
+  ) {
+    final value = input.optionalObject('launchConfiguration');
+    return value == null
+        ? CockpitFlutterLaunchConfiguration.empty
+        : CockpitFlutterLaunchConfiguration.fromJson(value);
+  }
 
   CockpitWorkerApplicationInput _sessionInput(Map<String, Object?> input) =>
       CockpitWorkerApplicationInput(
@@ -832,10 +857,10 @@ final class CockpitWorkerLifecycleOperations {
     requestedMilliseconds: input.optionalInteger(
       'launchTimeoutMs',
       minimum: 1,
-      maximum: 600000,
+      maximum: 1800000,
     ),
     defaultValue: defaultValue,
-    maximum: const Duration(minutes: 10),
+    maximum: const Duration(minutes: 30),
   );
 
   CockpitDevelopmentReloadMode _reloadMode(String? value) => switch (value) {
@@ -874,6 +899,7 @@ final class CockpitWorkerLifecycleOperations {
     required CockpitWorkerResourceGrant portGrant,
     required Duration timeout,
     required CockpitWorkerResultSanitizer sanitizer,
+    required CockpitFlutterLaunchConfiguration launchConfiguration,
     bool includeTarget = false,
   }) =>
       runWorkerTransactionalPortLaunch<
@@ -895,7 +921,7 @@ final class CockpitWorkerLifecycleOperations {
               sessionPort: port,
               launchTimeout: timeout,
               allowSessionPortFallback: false,
-              launchConfiguration: CockpitFlutterLaunchConfiguration.empty,
+              launchConfiguration: launchConfiguration,
             ),
           ),
         ),

@@ -144,13 +144,14 @@ List<CockpitMcpTool> _executionTools(
     ),
     action: (api, arguments) async {
       _only(arguments, const <String>{'timeoutMs'});
+      final timeoutMs = _optionalInt(arguments, 'timeoutMs') ?? 120000;
       return (await api.executeOperation(
         CockpitOperationInvocation(
           kind: 'target.discover',
-          input: <String, Object?>{
-            if (_optionalInt(arguments, 'timeoutMs') != null)
-              'timeoutMs': _requiredInt(arguments, 'timeoutMs'),
-          },
+          input: <String, Object?>{'timeoutMs': timeoutMs},
+          deadline: DateTime.now().toUtc().add(
+            Duration(milliseconds: timeoutMs) + const Duration(seconds: 30),
+          ),
         ),
       )).toJson();
     },
@@ -245,6 +246,7 @@ List<CockpitMcpTool> _executionTools(
         'flavor': _string(),
         'appId': _nonBlankString(),
         'wdaUrl': _string(),
+        'timeoutMs': _integer(minimum: 1000, maximum: 900000),
         'idempotencyKey': _string(),
       },
       required: const <String>[
@@ -283,10 +285,12 @@ List<CockpitMcpTool> _executionTools(
         'flavor',
         'appId',
         'wdaUrl',
+        'timeoutMs',
         'idempotencyKey',
       });
       final targetKind = _requiredString(arguments, 'targetKind');
       final appId = _optionalString(arguments, 'appId');
+      final timeoutMs = _optionalInt(arguments, 'timeoutMs') ?? 300000;
       if (const <String>{
             'nativeApp',
             'desktopApp',
@@ -320,6 +324,9 @@ List<CockpitMcpTool> _executionTools(
             if (_optionalString(arguments, 'wdaUrl') != null)
               'wdaUrl': _requiredString(arguments, 'wdaUrl'),
           },
+          deadline: DateTime.now().toUtc().add(
+            Duration(milliseconds: timeoutMs),
+          ),
         ),
       )).toJson();
     },
@@ -336,7 +343,8 @@ List<CockpitMcpTool> _executionTools(
           'type': 'string',
           'enum': <String>['development', 'automation'],
         },
-        'launchTimeoutMs': _integer(minimum: 1, maximum: 600000),
+        'launchTimeoutMs': _integer(minimum: 1000, maximum: 1800000),
+        'launchConfiguration': _flutterLaunchConfigurationSchema(),
         'idempotencyKey': _string(),
       },
       required: const <String>['workspaceId', 'targetId', 'idempotencyKey'],
@@ -347,8 +355,14 @@ List<CockpitMcpTool> _executionTools(
         'targetId',
         'mode',
         'launchTimeoutMs',
+        'launchConfiguration',
         'idempotencyKey',
       });
+      final timeoutMs = _optionalInt(arguments, 'launchTimeoutMs') ?? 600000;
+      final launchConfiguration = _optionalObject(
+        arguments,
+        'launchConfiguration',
+      );
       return (await api.executeOperation(
         CockpitOperationInvocation(
           kind: 'target.launch',
@@ -360,9 +374,12 @@ List<CockpitMcpTool> _executionTools(
             'targetId': _requiredString(arguments, 'targetId'),
             if (_optionalString(arguments, 'mode') != null)
               'mode': _requiredString(arguments, 'mode'),
-            if (_optionalInt(arguments, 'launchTimeoutMs') != null)
-              'launchTimeoutMs': _requiredInt(arguments, 'launchTimeoutMs'),
+            'launchTimeoutMs': timeoutMs,
+            'launchConfiguration': ?launchConfiguration,
           },
+          deadline: DateTime.now().toUtc().add(
+            Duration(milliseconds: timeoutMs) + const Duration(seconds: 30),
+          ),
         ),
       )).toJson();
     },
@@ -378,6 +395,7 @@ List<CockpitMcpTool> _executionTools(
         'rootId': _string(),
         'workspaceId': _string(),
         'idempotencyKey': _string(),
+        'timeoutMs': _integer(minimum: 1, maximum: 86400000),
         'deadline': _string(),
       },
       required: const <String>['kind', 'input'],
@@ -389,8 +407,16 @@ List<CockpitMcpTool> _executionTools(
         'rootId',
         'workspaceId',
         'idempotencyKey',
+        'timeoutMs',
         'deadline',
       });
+      final timeoutMs = _optionalInt(arguments, 'timeoutMs');
+      final deadlineValue = _optionalString(arguments, 'deadline');
+      if (timeoutMs != null && deadlineValue != null) {
+        throw CockpitMcpError.invalidArguments(
+          'deadline and timeoutMs cannot be combined.',
+        );
+      }
       return (await api.executeOperation(
         CockpitOperationInvocation(
           kind: _requiredString(arguments, 'kind'),
@@ -402,9 +428,11 @@ List<CockpitMcpTool> _executionTools(
               : CockpitIdempotencyKey(
                   _requiredString(arguments, 'idempotencyKey'),
                 ),
-          deadline: _optionalString(arguments, 'deadline') == null
-              ? null
-              : DateTime.parse(_requiredString(arguments, 'deadline')).toUtc(),
+          deadline: timeoutMs == null
+              ? deadlineValue == null
+                    ? null
+                    : DateTime.parse(deadlineValue).toUtc()
+              : DateTime.now().toUtc().add(Duration(milliseconds: timeoutMs)),
         ),
       )).toJson();
     },
@@ -457,6 +485,7 @@ List<CockpitMcpTool> _executionTools(
         'idempotencyKey': _string(),
         'inputs': _object(),
         'targetId': _string(),
+        'timeoutMs': _integer(minimum: 1, maximum: 21600000),
       },
       required: const <String>[
         'workspaceId',
@@ -475,6 +504,7 @@ List<CockpitMcpTool> _executionTools(
         'idempotencyKey',
         'inputs',
         'targetId',
+        'timeoutMs',
       });
       return (await api.submitRun(
         CockpitRunSubmission(
@@ -492,6 +522,7 @@ List<CockpitMcpTool> _executionTools(
           inputs:
               _optionalObject(arguments, 'inputs') ?? const <String, Object?>{},
           targetId: _optionalString(arguments, 'targetId'),
+          timeoutMs: _optionalInt(arguments, 'timeoutMs'),
         ),
       )).toJson();
     },
@@ -693,6 +724,7 @@ List<CockpitMcpTool> _suiteTools(
         'idempotencyKey': _string(),
         'inputs': _object(),
         'targetId': _string(),
+        'timeoutMs': _integer(minimum: 1, maximum: 86400000),
       },
       required: const <String>[
         'workspaceId',
@@ -711,6 +743,7 @@ List<CockpitMcpTool> _suiteTools(
         'idempotencyKey',
         'inputs',
         'targetId',
+        'timeoutMs',
       });
       return (await api.submitRun(
         CockpitRunSubmission(
@@ -728,6 +761,7 @@ List<CockpitMcpTool> _suiteTools(
           inputs:
               _optionalObject(arguments, 'inputs') ?? const <String, Object?>{},
           targetId: _optionalString(arguments, 'targetId'),
+          timeoutMs: _optionalInt(arguments, 'timeoutMs'),
         ),
       )).toJson();
     },
@@ -855,6 +889,33 @@ Map<String, Object?> _integer({int? minimum, int? maximum}) =>
 Map<String, Object?> _object() => const <String, Object?>{
   'type': 'object',
   'additionalProperties': true,
+};
+
+Map<String, Object?> _flutterLaunchConfigurationSchema() => const {
+  'type': 'object',
+  'properties': <String, Object?>{
+    'dartDefines': <String, Object?>{
+      'type': 'array',
+      'items': <String, Object?>{'type': 'string', 'minLength': 1},
+      'maxItems': 1024,
+    },
+    'dartDefineFromFiles': <String, Object?>{
+      'type': 'array',
+      'items': <String, Object?>{'type': 'string', 'minLength': 1},
+      'maxItems': 1024,
+    },
+    'flutterArgs': <String, Object?>{
+      'type': 'array',
+      'items': <String, Object?>{'type': 'string', 'minLength': 1},
+      'maxItems': 1024,
+    },
+    'environment': <String, Object?>{
+      'type': 'object',
+      'additionalProperties': <String, Object?>{'type': 'string'},
+      'maxProperties': 1024,
+    },
+  },
+  'additionalProperties': false,
 };
 
 void _only(Map<String, Object?> arguments, Set<String> allowed) {

@@ -28,6 +28,8 @@ final class CockpitOperationDescriptor {
     required this.mutationClass,
     required this.idempotency,
     required this.executionMode,
+    required this.defaultTimeoutMs,
+    required this.maximumTimeoutMs,
     required this.requestSchemaRef,
     required this.responseSchemaRef,
     Iterable<CockpitEnumValue<CockpitSafetyEffect>> safetyEffects =
@@ -52,6 +54,23 @@ final class CockpitOperationDescriptor {
       responseSchemaRef,
       r'$.responseSchemaRef',
     );
+    CockpitFoundationValueReader.integer(
+      defaultTimeoutMs,
+      r'$.defaultTimeoutMs',
+      min: 1,
+      max: 86400000,
+    );
+    CockpitFoundationValueReader.integer(
+      maximumTimeoutMs,
+      r'$.maximumTimeoutMs',
+      min: 1,
+      max: 86400000,
+    );
+    if (defaultTimeoutMs > maximumTimeoutMs) {
+      throw const FormatException(
+        'Operation default timeout cannot exceed its maximum timeout.',
+      );
+    }
     if (mutationClass == CockpitMutationClass.readOnly &&
         this.safetyEffects.isNotEmpty) {
       throw const FormatException('Read-only operations cannot have effects.');
@@ -78,6 +97,8 @@ final class CockpitOperationDescriptor {
   final CockpitMutationClass mutationClass;
   final CockpitIdempotencyBehavior idempotency;
   final CockpitOperationExecutionMode executionMode;
+  final int defaultTimeoutMs;
+  final int maximumTimeoutMs;
   final List<CockpitEnumValue<CockpitSafetyEffect>> safetyEffects;
   final String requestSchemaRef;
   final String responseSchemaRef;
@@ -91,6 +112,8 @@ final class CockpitOperationDescriptor {
     'mutationClass': mutationClass.name,
     'idempotency': idempotency.name,
     'executionMode': executionMode.name,
+    'defaultTimeoutMs': defaultTimeoutMs,
+    'maximumTimeoutMs': maximumTimeoutMs,
     'safetyEffects': safetyEffects.map((effect) => effect.wireValue).toList(),
     'requestSchemaRef': requestSchemaRef,
     'responseSchemaRef': responseSchemaRef,
@@ -111,6 +134,8 @@ final class CockpitOperationDescriptor {
       'mutationClass',
       'idempotency',
       'executionMode',
+      'defaultTimeoutMs',
+      'maximumTimeoutMs',
       'safetyEffects',
       'requestSchemaRef',
       'responseSchemaRef',
@@ -154,6 +179,18 @@ final class CockpitOperationDescriptor {
         json['executionMode'],
         CockpitOperationExecutionMode.values,
         '$path.executionMode',
+      ),
+      defaultTimeoutMs: CockpitFoundationValueReader.integer(
+        json['defaultTimeoutMs'],
+        '$path.defaultTimeoutMs',
+        min: 1,
+        max: 86400000,
+      ),
+      maximumTimeoutMs: CockpitFoundationValueReader.integer(
+        json['maximumTimeoutMs'],
+        '$path.maximumTimeoutMs',
+        min: 1,
+        max: 86400000,
       ),
       safetyEffects: <CockpitEnumValue<CockpitSafetyEffect>>[
         for (var index = 0; index < rawEffects.length; index += 1)

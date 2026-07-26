@@ -67,6 +67,21 @@ dart run cockpit target launch \
 dart run cockpit target inspect --target-id <targetId> --profile minimal
 ```
 
+For Flutter targets, `target launch` accepts repeatable `--dart-define`,
+`--dart-define-from-file`, `--flutter-arg`, and `--env KEY=VALUE` options plus
+`--launch-timeout-ms` up to 1800000. MCP and `operation run` use the equivalent
+nested `launchConfiguration` object (`dartDefines`, `dartDefineFromFiles`,
+`flutterArgs`, `environment`). Cockpit owns target, device, flavor, mode, and
+remote-control arguments; do not try to override them through `flutterArgs`.
+Do not send Flutter launch configuration to an installed black-box target.
+
+Treat advertised `executionMode`, `defaultTimeoutMs`, and `maximumTimeoutMs`
+as authoritative. Synchronous operations block to a result; use either
+`operation run --timeout-ms` or `--deadline`, never both. Job operations return
+a durable `runId`. Case runs default to 30 minutes with a 6 hour maximum and
+suite runs default to 2 hours with a 24 hour maximum; override either with the
+run command's `--timeout-ms` when the workload requires it.
+
 Do not treat persisted target records as liveness proof. Inspect the target.
 Unsupported actions remain unavailable; never simulate success.
 
@@ -93,8 +108,10 @@ Author YAML or JSON against
 ```bash
 dart run cockpit case validate --file case.yaml --format yaml
 dart run cockpit suite validate --file suite.yaml --format yaml
-dart run cockpit case run --case-id <caseId> --idempotency-key <uniqueKey>
-dart run cockpit suite run --suite-id <suiteId> --idempotency-key <uniqueKey>
+dart run cockpit case run --case-id <caseId> --idempotency-key <uniqueKey> \
+  --timeout-ms <overallCaseBudget>
+dart run cockpit suite run --suite-id <suiteId> --idempotency-key <uniqueKey> \
+  --timeout-ms <overallSuiteBudget>
 dart run cockpit run events --run-id <runId> --after-sequence 0 \
   --stdout-format jsonl
 dart run cockpit run get --run-id <runId>

@@ -178,6 +178,38 @@ installation and lifecycle use `devicectl` where available. Cockpit reports
 unsupported or unavailable capabilities instead of claiming control it cannot
 prove.
 
+Flutter targets accept a structured launch configuration across CLI, MCP, and
+`operation run`. Cockpit owns the entrypoint, device, mode, flavor, and remote
+control flags; callers can supply repeatable dart defines, define files,
+additional safe Flutter arguments, process environment values, and a launch
+budget up to 30 minutes:
+
+```bash
+dart run cockpit target launch \
+  --workspace-id <workspaceId> \
+  --target-id <flutterTargetId> \
+  --dart-define API_URL=https://api.example.test \
+  --dart-define-from-file config/staging.json \
+  --env LOG_LEVEL=debug \
+  --flutter-arg=--track-widget-creation \
+  --launch-timeout-ms 1800000 \
+  --idempotency-key flutter-launch-001
+```
+
+The equivalent operation input uses a `launchConfiguration` object with
+`dartDefines`, `dartDefineFromFiles`, `flutterArgs`, and `environment`. Launch
+configuration values are not returned in operation output. Do not pass Flutter
+launch fields to installed black-box targets.
+
+Every advertised operation includes `executionMode`, `defaultTimeoutMs`, and
+`maximumTimeoutMs`. Synchronous operations block until their result and accept
+`operation run --timeout-ms <value>` or an absolute `--deadline` (not both).
+Case and suite runs are durable jobs: submission returns a `runId` immediately,
+then clients consume events and the terminal report. `case run --timeout-ms`
+defaults to 30 minutes and allows up to 6 hours; `suite run --timeout-ms`
+defaults to 2 hours and allows up to 24 hours. Step and cleanup timeouts remain
+independent inner budgets.
+
 ## Cases And Suites
 
 Cases and suites use `schemaVersion: cockpit.test/v2`. Validate documents before
@@ -187,7 +219,8 @@ submitting them, and use stable idempotency keys for replay:
 dart run cockpit case validate --workspace-id <workspaceId> --file cases/login.yaml
 dart run cockpit case run --workspace-id <workspaceId> \
   --document-id <documentId> --case-id login \
-  --idempotency-key login-2026-07-24 --inputs-json '{}'
+  --idempotency-key login-2026-07-24 --inputs-json '{}' \
+  --timeout-ms 1800000
 
 dart run cockpit suite validate --workspace-id <workspaceId> --file suites/regression.yaml
 dart run cockpit suite run --workspace-id <workspaceId> \

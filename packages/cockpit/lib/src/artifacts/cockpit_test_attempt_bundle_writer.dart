@@ -112,16 +112,7 @@ final class CockpitTestAttemptBundleWriter {
     required DateTime createdAt,
     CockpitTestBundlePrePublicationValidator? prePublicationValidator,
   }) async {
-    final finalPath = p.join(
-      rootPath,
-      context.projectId,
-      context.workspaceId,
-      context.runId,
-      'cases',
-      context.caseId,
-      'attempts',
-      context.attemptId,
-    );
+    final finalPath = p.join(rootPath, 'bundle');
     final finalDirectory = Directory(finalPath);
     if (await finalDirectory.exists()) {
       throw _publicationError('Attempt bundle already exists.');

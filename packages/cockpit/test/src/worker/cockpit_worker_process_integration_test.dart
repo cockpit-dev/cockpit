@@ -925,13 +925,7 @@ steps:
         rejectedRunId,
         'cases',
         rejectedAttemptId,
-        'projectA',
-        'workspaceA',
-        rejectedRunId,
-        'cases',
-        'caseA',
-        'attempts',
-        rejectedAttemptId,
+        'bundle',
       );
       expect(await Directory(rejectedBundlePath).exists(), isFalse);
       final rejectedBundleParent = Directory(p.dirname(rejectedBundlePath));

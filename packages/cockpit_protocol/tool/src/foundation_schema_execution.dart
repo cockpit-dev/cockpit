@@ -18,6 +18,8 @@ Map<String, Object?> foundationExecutionDefinitions() => <String, Object?>{
       'executionMode': stringSchema(
         values: const <String>['synchronous', 'job'],
       ),
+      'defaultTimeoutMs': integerSchema(minimum: 1, maximum: 86400000),
+      'maximumTimeoutMs': integerSchema(minimum: 1, maximum: 86400000),
       'safetyEffects': arraySchema(
         stringSchema(
           values: const <String>[
@@ -128,9 +130,10 @@ Map<String, Object?> foundationExecutionDefinitions() => <String, Object?>{
       'idempotencyKey': schemaRef('IdempotencyKey'),
       'inputs': schemaRef('JsonObject'),
       'targetId': schemaRef('Identifier'),
+      'timeoutMs': integerSchema(minimum: 1, maximum: 86400000),
       'requiredFeatures': arraySchema(schemaRef('Identifier'), unique: true),
     },
-    optional: const <String>{'targetId'},
+    optional: const <String>{'targetId', 'timeoutMs'},
   ),
   'RunAccepted': objectSchema(<String, Object?>{
     'workspaceId': schemaRef('Identifier'),

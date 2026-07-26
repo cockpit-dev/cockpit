@@ -32,6 +32,8 @@ void main() {
     mutationClass: CockpitMutationClass.readOnly,
     idempotency: CockpitIdempotencyBehavior.prohibited,
     executionMode: CockpitOperationExecutionMode.synchronous,
+    defaultTimeoutMs: 30000,
+    maximumTimeoutMs: 300000,
     requestSchemaRef: '#/\$defs/DocumentValidationRequest',
     responseSchemaRef: '#/\$defs/DocumentValidationResult',
   );
