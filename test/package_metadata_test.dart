@@ -141,6 +141,21 @@ void main() {
       expect(workspaceLockfile, isNot(contains('>=3.10.0-0')));
     }
     expect(acceptanceWorkflow, contains("FLUTTER_VERSION: '3.32.0'"));
+    for (final job in const <String>[
+      'static_analysis',
+      'dart_tests',
+      'flutter_tests',
+      'publication',
+      'regression',
+      'release_gate',
+    ]) {
+      expect(acceptanceWorkflow, contains('\n  $job:\n'));
+    }
+    expect(acceptanceWorkflow, isNot(contains('needs: quality')));
+    expect(
+      RegExp('--require-recording').allMatches(acceptanceWorkflow),
+      hasLength(2),
+    );
     expect(rootReadme, contains('Flutter 3.32.0'));
     expect(rootReadme, contains('Dart 3.8.0'));
     expect(rootReadmeZh, contains('Flutter 3.32.0'));
