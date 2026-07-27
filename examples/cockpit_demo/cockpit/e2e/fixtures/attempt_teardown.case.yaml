@@ -1,0 +1,20 @@
+schemaVersion: cockpit.test/v2
+kind: case
+id: demoAttemptTeardown
+name: Attempt baseline teardown
+target: {platform: flutter, targetKind: flutterApp, plane: semantic}
+defaults:
+  commandTimeoutMs: 12000
+  cleanupTimeoutMs: 10000
+  failFast: true
+  evidence: {screenshot: onFailure, snapshot: onFailure, failurePolicy: failStep}
+steps:
+  - stepId: waitForAttemptIdle
+    description: Wait for deterministic attempt cleanup
+    timeoutMs: 12000
+    action: {type: waitForUiIdle, quietMs: 150}
+  - stepId: verifyAttemptCleanup
+    timeoutMs: 12000
+    action:
+      type: assertVisible
+      locator: {text: New task}

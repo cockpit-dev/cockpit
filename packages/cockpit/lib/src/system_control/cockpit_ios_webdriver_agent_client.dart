@@ -285,19 +285,26 @@ final class CockpitIosWebDriverAgentClient {
         case CockpitIosWdaAction.pressKey:
           final key = _requiredString(command.parameters, 'key');
           final mapped = _mapKey(key);
+          final repeat =
+              _optionalPositiveInt(command.parameters, 'repeat') ?? 1;
+          if (repeat > 500) {
+            throw StateError('WebDriverAgent pressKey repeat exceeds 500.');
+          }
           await _postSession(client, session, 'actions', <String, Object?>{
             'actions': <Object?>[
               <String, Object?>{
                 'type': 'key',
                 'id': 'cockpit-keyboard',
                 'actions': <Object?>[
-                  <String, Object?>{'type': 'keyDown', 'value': mapped},
-                  <String, Object?>{'type': 'keyUp', 'value': mapped},
+                  for (var index = 0; index < repeat; index += 1) ...<Object?>[
+                    <String, Object?>{'type': 'keyDown', 'value': mapped},
+                    <String, Object?>{'type': 'keyUp', 'value': mapped},
+                  ],
                 ],
               },
             ],
           }, timeout: timeout);
-          return 'pressKey key=$key';
+          return 'pressKey key=$key repeat=$repeat';
         case CockpitIosWdaAction.dismissSystemDialog:
           final mode =
               _optionalString(command.parameters, 'mode') ??

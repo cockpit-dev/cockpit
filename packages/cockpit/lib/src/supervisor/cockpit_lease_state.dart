@@ -286,7 +286,12 @@ CockpitLeaseRecord _decodeRecord(Object? value, String path) {
       min: 0,
       max: 300000,
     ),
-    ttlMs: _integer(json['ttlMs'], '$path.ttlMs', min: 1000, max: 300000),
+    ttlMs: _integer(
+      json['ttlMs'],
+      '$path.ttlMs',
+      min: 1000,
+      max: cockpitMaximumLeaseTtlMs,
+    ),
     sequence: _integer(json['sequence'], '$path.sequence', min: 0),
     state: _enumByName(json['state'], CockpitLeaseState.values, '$path.state'),
     requestedAt: CockpitRegistryValueReader.timestamp(

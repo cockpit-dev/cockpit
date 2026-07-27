@@ -4,6 +4,7 @@ import 'package:cockpit/src/application/cockpit_app_handle.dart';
 import 'package:cockpit/src/session/cockpit_remote_session_handle.dart';
 import 'package:cockpit/src/worker/cockpit_worker_runtime_registry.dart';
 import 'package:cockpit/src/worker/cockpit_worker_resource_identity.dart';
+import 'package:cockpit_protocol/cockpit_protocol.dart';
 import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 
@@ -37,6 +38,16 @@ void main() {
           workspaceId: 'workspaceA',
           platform: 'android',
           deviceId: 'emulator-5554',
+        ),
+      );
+      final installedFlutterTarget = await registry.registerTarget(
+        const CockpitWorkerTargetRegistration(
+          workspaceId: 'workspaceA',
+          platform: 'android',
+          deviceId: 'emulator-5554',
+          targetKind: CockpitTargetKind.flutterApp,
+          mode: CockpitAppMode.automation,
+          appId: 'dev.cockpit.installed',
         ),
       );
       final first = await registry.recordApp(
@@ -81,6 +92,11 @@ void main() {
         kind: 'target.inspect',
         input: <String, Object?>{'targetId': targetA},
       );
+      final installedFlutterLaunchPlan = await registry
+          .resolveApplicationResourcePlan(
+            kind: 'target.launch',
+            input: <String, Object?>{'targetId': installedFlutterTarget},
+          );
 
       expect(firstSessionId, isNot(secondSessionId));
       expect(firstPlan.primaryResourceId, isNot(secondPlan.primaryResourceId));
@@ -102,6 +118,7 @@ void main() {
       expect(appReadPlan.deviceResourceId, firstPlan.deviceResourceId);
       expect(targetReadPlan.primaryResourceId, firstPlan.deviceResourceId);
       expect(targetReadPlan.deviceResourceId, isNull);
+      expect(installedFlutterLaunchPlan.requiresPort, isFalse);
       for (final kind in const <String>{
         'session.remote.get',
         'session.remote.status',

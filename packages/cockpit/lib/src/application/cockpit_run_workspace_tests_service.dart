@@ -8,11 +8,15 @@ final class CockpitRunWorkspaceTestsRequest {
   const CockpitRunWorkspaceTestsRequest({
     required this.workspaceRoot,
     this.allowedRoots = const <String>[],
+    this.paths = const <String>[],
+    this.name,
     this.timeout = const Duration(minutes: 5),
   });
 
   final String workspaceRoot;
   final List<String> allowedRoots;
+  final List<String> paths;
+  final String? name;
   final Duration timeout;
 }
 
@@ -32,6 +36,12 @@ final class CockpitRunWorkspaceTestsService {
   Future<CockpitWorkspaceCommandResult> run(
     CockpitRunWorkspaceTestsRequest request,
   ) {
+    final paths = _confinedArguments(request);
+    final arguments = <String>[
+      'test',
+      if (request.name != null) ...<String>['--name', request.name!],
+      ...paths,
+    ];
     return runWorkspaceCommand(
       fileSystem: _fileSystem,
       processManager: _processManager,
@@ -39,9 +49,31 @@ final class CockpitRunWorkspaceTestsService {
       workspaceRoot: request.workspaceRoot,
       allowedRoots: request.allowedRoots,
       toolchain: null,
-      dartArguments: const <String>['test'],
-      flutterArguments: const <String>['test'],
+      dartArguments: arguments,
+      flutterArguments: arguments,
       timeout: request.timeout,
     );
+  }
+
+  List<String> _confinedArguments(CockpitRunWorkspaceTestsRequest request) {
+    final context = _fileSystem.pathContext;
+    final root = assertWorkspaceRootAllowed(
+      request.workspaceRoot,
+      request.allowedRoots,
+      pathContext: context,
+    );
+    return <String>[
+      for (final path in request.paths)
+        context.relative(
+          assertWorkspaceRootAllowed(
+            context.normalize(
+              context.isAbsolute(path) ? path : context.join(root, path),
+            ),
+            <String>[root],
+            pathContext: context,
+          ),
+          from: root,
+        ),
+    ];
   }
 }

@@ -1,0 +1,23 @@
+schemaVersion: cockpit.test/v2
+kind: case
+id: demoSuiteSetup
+name: Suite baseline setup
+target: {platform: flutter, targetKind: flutterApp, plane: semantic}
+defaults:
+  commandTimeoutMs: 15000
+  cleanupTimeoutMs: 12000
+  failFast: true
+  evidence: {screenshot: onFailure, snapshot: onFailure, failurePolicy: failStep}
+steps:
+  - stepId: waitForSuiteInbox
+    description: Establish the suite-level UI baseline
+    timeoutMs: 15000
+    action:
+      type: waitFor
+      condition: {type: route, route: /inbox}
+  - stepId: captureSuiteBaseline
+    timeoutMs: 20000
+    action:
+      type: captureScreenshot
+      artifactName: suite-baseline
+      captureOptions: {reason: baseline, includeSnapshot: true, attachToStep: true, allowFallback: true}

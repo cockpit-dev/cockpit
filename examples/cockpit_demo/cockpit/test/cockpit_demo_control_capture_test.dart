@@ -8,6 +8,50 @@ import 'package:cockpit_demo/src/model/todo_filter.dart';
 import 'support/cockpit_demo_test_support.dart';
 
 void main() {
+  testWidgets('discovers command lab status text by stable test id', (
+    tester,
+  ) async {
+    final registry = CockpitTargetRegistry(routeName: '/command-lab');
+    final database = CockpitDemoDatabase.inMemory();
+    addCockpitDemoDatabaseTearDown(tester, database);
+
+    await tester.pumpWidget(
+      buildCockpitDemoApp(
+        configuration: FlutterCockpitConfiguration(
+          initialRouteName: '/command-lab',
+          registry: registry,
+        ),
+        database: database,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final resolution = registry.resolve(
+      const CockpitLocator(key: 'lab-gesture-status'),
+    );
+    expect(
+      resolution.isSuccess,
+      isTrue,
+      reason: registry.routeDiagnostics().toString(),
+    );
+    expect(resolution.target?.text, 'gesture:idle');
+
+    final result =
+        await InAppCockpitCommandExecutor(
+          registry: registry,
+          waitTickHandler: tester.pump,
+        ).execute(
+          CockpitCommand(
+            commandId: 'assert-command-lab-idle',
+            commandType: CockpitCommandType.assertText,
+            locator: const CockpitLocator(key: 'lab-gesture-status'),
+            parameters: const <String, Object?>{'text': 'gesture:idle'},
+            timeoutMs: 1000,
+          ),
+        );
+    expect(result.success, isTrue, reason: result.error?.toJson().toString());
+  });
+
   testWidgets(
     'reveals long settings ledger content through the in-app executor',
     (tester) async {
@@ -341,7 +385,11 @@ void main() {
       final revealTaskCommand = CockpitCommand(
         commandId: 'cmd-scroll-to-task',
         commandType: CockpitCommandType.scrollUntilVisible,
-        locator: CockpitLocator(text: createdTask.title, type: 'InkWell'),
+        locator: CockpitLocator(
+          text: createdTask.title,
+          type: 'InkWell',
+          matchMode: CockpitTextMatchMode.contains,
+        ),
         parameters: const <String, Object?>{
           'maxScrolls': 8,
           'viewportFraction': 0.72,
@@ -356,7 +404,11 @@ void main() {
       final assertTaskVisibleCommand = CockpitCommand(
         commandId: 'cmd-assert-task-visible',
         commandType: CockpitCommandType.assertVisible,
-        locator: CockpitLocator(text: createdTask.title, type: 'InkWell'),
+        locator: CockpitLocator(
+          text: createdTask.title,
+          type: 'InkWell',
+          matchMode: CockpitTextMatchMode.contains,
+        ),
       );
       controller.recordCommandResult(
         assertTaskVisibleCommand,
@@ -691,7 +743,11 @@ void main() {
       final openTaskCommand = CockpitCommand(
         commandId: 'cmd-open-source-task',
         commandType: CockpitCommandType.tap,
-        locator: CockpitLocator(text: sourceTask.title, type: 'InkWell'),
+        locator: CockpitLocator(
+          text: sourceTask.title,
+          type: 'InkWell',
+          matchMode: CockpitTextMatchMode.contains,
+        ),
       );
       final openTaskResult = await executorForCurrentRoute().execute(
         openTaskCommand,
@@ -838,7 +894,11 @@ void main() {
       final selectFirstCommand = CockpitCommand(
         commandId: 'cmd-select-first-task',
         commandType: CockpitCommandType.longPress,
-        locator: CockpitLocator(text: first.title, type: 'InkWell'),
+        locator: CockpitLocator(
+          text: first.title,
+          type: 'InkWell',
+          matchMode: CockpitTextMatchMode.contains,
+        ),
       );
       final selectFirstResult = await executorForCurrentRoute().execute(
         selectFirstCommand,
@@ -1006,7 +1066,11 @@ void main() {
       final selectFirstCommand = CockpitCommand(
         commandId: 'cmd-select-duplicate-first-task',
         commandType: CockpitCommandType.longPress,
-        locator: CockpitLocator(text: first.title, type: 'InkWell'),
+        locator: CockpitLocator(
+          text: first.title,
+          type: 'InkWell',
+          matchMode: CockpitTextMatchMode.contains,
+        ),
       );
       final selectFirstResult = await executorForCurrentRoute().execute(
         selectFirstCommand,

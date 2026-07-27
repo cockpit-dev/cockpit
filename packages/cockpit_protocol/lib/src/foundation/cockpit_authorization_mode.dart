@@ -1,0 +1,1 @@
+enum CockpitAuthorizationMode { restricted, yolo }

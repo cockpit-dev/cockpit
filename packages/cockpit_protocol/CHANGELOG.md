@@ -6,10 +6,21 @@
   OpenAPI contracts used by CLI, MCP, and independent clients.
 - Added the strict `cockpit.test/v2` case/suite DSL and aggregate report models
   shared by Flutter semantic and native black-box drivers.
+- Added the complete `cockpit.report.bundle/v2` fact graph and
+  `cockpit.report.manifest/v2` file integrity contracts for offline renderers,
+  GUI clients, and third-party consumers.
+- Added restricted/YOLO authorization provenance to attempt run contexts so
+  reports and independent clients can identify the authority used for a run.
 - Added project, suite, fixture, matrix, campaign policy, aggregate report, and
   report-case contracts to `cockpit.test/v2`.
-- Added native/test-id/role/coordinate locator strategies and a system action
-  contract for black-box setup, device control, and cleanup steps.
+- Added conjunctive semantic locators, ordered fallbacks, native state,
+  hierarchy and spatial constraints, coordinate/visual degraded modes, and a
+  system action contract for black-box setup, device control, and cleanup.
+- Added explicit exact/contains/fuzzy/regex locator matching with deterministic
+  unique-best selection, ambiguity failures, and 0-based list indexing.
+- Added step-level execution-plane overrides, visual locator thresholds,
+  screenshot baseline assertions, clipboard text actions, and bounded
+  location-travel routes to the shared case and report contracts.
 - Renamed the pure-Dart package from `flutter_cockpit_protocol` to
   `cockpit_protocol` as the sole owner of platform-neutral Cockpit models.
 - Renamed the public libraries to `cockpit_protocol.dart` and

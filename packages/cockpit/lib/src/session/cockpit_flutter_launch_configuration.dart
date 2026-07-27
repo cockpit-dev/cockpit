@@ -1,3 +1,7 @@
+import 'dart:io';
+
+import 'package:path/path.dart' as p;
+
 import '../application/cockpit_application_service_exception.dart';
 
 const String _reservedDartDefinePrefix = 'FLUTTER_COCKPIT_';
@@ -95,6 +99,69 @@ final class CockpitFlutterLaunchConfiguration {
   Map<String, String>? get processEnvironment => environment.isEmpty
       ? null
       : Map<String, String>.unmodifiable(environment);
+
+  Future<void> validateProjectFiles(String projectDir) async {
+    if (dartDefineFromFiles.isEmpty) return;
+    final requestedRoot = p.normalize(p.absolute(projectDir));
+    late final String canonicalRoot;
+    try {
+      canonicalRoot = p.normalize(
+        await Directory(requestedRoot).resolveSymbolicLinks(),
+      );
+    } on FileSystemException {
+      throw const CockpitApplicationServiceException(
+        code: 'invalidLaunchConfiguration',
+        message: 'The Flutter project directory is unavailable.',
+      );
+    }
+    for (final value in dartDefineFromFiles) {
+      final relative = p.normalize(value);
+      if (p.isAbsolute(value) ||
+          relative == '.' ||
+          relative == '..' ||
+          relative.startsWith('../') ||
+          relative.startsWith('..${p.separator}')) {
+        throw CockpitApplicationServiceException(
+          code: 'invalidLaunchConfiguration',
+          message: 'Dart define files must be project-relative files.',
+          details: <String, Object?>{'field': 'dartDefineFromFiles'},
+        );
+      }
+      final requestedPath = p.normalize(p.join(requestedRoot, relative));
+      final expectedCanonicalPath = p.normalize(
+        p.join(canonicalRoot, relative),
+      );
+      if (!p.isWithin(requestedRoot, requestedPath) ||
+          !p.isWithin(canonicalRoot, expectedCanonicalPath) ||
+          await FileSystemEntity.type(requestedPath, followLinks: false) !=
+              FileSystemEntityType.file) {
+        throw CockpitApplicationServiceException(
+          code: 'invalidLaunchConfiguration',
+          message: 'A Dart define file is missing or outside the project.',
+          details: <String, Object?>{'field': 'dartDefineFromFiles'},
+        );
+      }
+      late final String canonicalPath;
+      try {
+        canonicalPath = p.normalize(
+          await File(requestedPath).resolveSymbolicLinks(),
+        );
+      } on FileSystemException {
+        throw CockpitApplicationServiceException(
+          code: 'invalidLaunchConfiguration',
+          message: 'A Dart define file is unavailable.',
+          details: <String, Object?>{'field': 'dartDefineFromFiles'},
+        );
+      }
+      if (!p.equals(canonicalPath, expectedCanonicalPath)) {
+        throw CockpitApplicationServiceException(
+          code: 'invalidLaunchConfiguration',
+          message: 'Dart define files must not traverse symbolic links.',
+          details: <String, Object?>{'field': 'dartDefineFromFiles'},
+        );
+      }
+    }
+  }
 
   List<String> toFlutterArguments() => <String>[
     for (final define in dartDefines) '--dart-define=$define',

@@ -53,10 +53,9 @@ final class CockpitTestAttemptBundleReader {
       }
       final decoded = jsonDecode(utf8.decode(manifestBytes));
       final manifest = CockpitTestAttemptBundleManifest.fromJson(decoded);
-      final declaredPaths = <String>{'manifest.json'};
+      final declaredFiles = <String>[manifestFile.path];
       for (final artifact in manifest.artifacts) {
         final relativePath = _safeRelativePath(artifact.relativePath);
-        declaredPaths.add(relativePath);
         final file = File(_containedPath(path, relativePath));
         if (!await file.exists() ||
             await file.length() != artifact.sizeBytes ||
@@ -66,8 +65,9 @@ final class CockpitTestAttemptBundleReader {
             'Artifact ${artifact.artifactId} failed integrity validation.',
           );
         }
+        declaredFiles.add(file.path);
       }
-      final actualPaths = <String>{};
+      var actualFileCount = 0;
       await for (final entity in directory.list(
         recursive: true,
         followLinks: false,
@@ -80,13 +80,22 @@ final class CockpitTestAttemptBundleReader {
           throw _integrityError('Attempt bundle must not contain links.');
         }
         if (type == FileSystemEntityType.file) {
-          actualPaths.add(
-            p.relative(entity.path, from: path).replaceAll('\\', '/'),
-          );
+          actualFileCount += 1;
+          var declared = false;
+          for (final expectedPath in declaredFiles) {
+            if (await FileSystemEntity.identical(entity.path, expectedPath)) {
+              declared = true;
+              break;
+            }
+          }
+          if (!declared) {
+            throw _integrityError(
+              'Attempt bundle contains an undeclared file.',
+            );
+          }
         }
       }
-      if (actualPaths.length != declaredPaths.length ||
-          !actualPaths.containsAll(declaredPaths)) {
+      if (actualFileCount != declaredFiles.length) {
         throw _integrityError(
           'Attempt bundle contains missing or undeclared files.',
         );

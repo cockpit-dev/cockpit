@@ -652,6 +652,19 @@ void main() {
             ?.requires,
         contains('Accessibility permission'),
       );
+      final recoverToApp = withTarget.profile.capabilityFor(
+        CockpitSystemControlAction.recoverToApp,
+      );
+      expect(recoverToApp?.strategy, 'NSRunningApplication.activate');
+      expect(recoverToApp?.requires, contains('osascript'));
+      expect(
+        recoverToApp?.requires,
+        isNot(contains('Accessibility permission')),
+      );
+      expect(
+        recoverToApp?.requires,
+        isNot(contains('Automation permission for System Events')),
+      );
       expect(
         withTarget.profile
             .capabilityFor(CockpitSystemControlAction.captureScreenshot)

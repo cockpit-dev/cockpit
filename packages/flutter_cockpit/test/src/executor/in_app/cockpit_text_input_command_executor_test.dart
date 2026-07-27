@@ -9,6 +9,9 @@ void main() {
       final handled = <CockpitCommandType>[];
       final executor = CockpitTextInputCommandExecutor(
         enterText: _handlerFor(handled),
+        eraseText: _handlerFor(handled),
+        copyText: _handlerFor(handled),
+        pasteText: _handlerFor(handled),
         focusTextInput: _handlerFor(handled),
         setTextEditingValue: _handlerFor(handled),
         sendTextInputAction: _handlerFor(handled),

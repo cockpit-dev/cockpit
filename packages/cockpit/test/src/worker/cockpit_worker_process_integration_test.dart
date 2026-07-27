@@ -632,12 +632,18 @@ steps:
         state,
         'case-run-workerA',
       );
+      final caseRunId = successfulCaseRecord['runId']! as String;
+      final caseEvents = await _readRunEvents(state, caseRunId);
       expect(
         caseResult.outcome,
         CockpitOperationOutcome.succeeded,
         reason: <String, Object?>{
           'operation': caseResult.toJson(),
           'caseRecord': successfulCaseRecord,
+          'events': caseEvents.map((event) => event.toJson()).toList(),
+          'commands': remoteSession.commands
+              .map((command) => command.toJson())
+              .toList(),
           'acquiredKinds': authority.acquiredKinds
               .map((kind) => kind.name)
               .toList(),
@@ -826,12 +832,21 @@ steps:
       final reportArtifacts = (suiteOutput['reportArtifacts']! as List<Object?>)
           .map(CockpitArtifactResource.fromJson)
           .toList(growable: false);
-      expect(reportArtifacts.map((artifact) => artifact.kind).toSet(), <String>{
-        'report.json',
-        'report.junit',
-        'report.html',
-        'report.aiSummary',
-      });
+      expect(
+        reportArtifacts.map((artifact) => artifact.kind).toSet(),
+        containsAll(<String>{
+          'report.manifest',
+          'report.json',
+          'report.junit',
+          'report.index',
+          'report.summary',
+          'report.run',
+          'report.events',
+          'report.case',
+          'report.attempt',
+          'report.steps',
+        }),
+      );
       expect(
         reportArtifacts.every(
           (artifact) =>
@@ -856,11 +871,13 @@ steps:
       );
       expect(
         retainedReportFiles.map((resolved) => p.basename(resolved.file.path)),
-        unorderedEquals(const <String>[
+        containsAll(<String>[
           'report.json',
           'junit.xml',
-          'report.html',
-          'ai-summary.md',
+          'index.html',
+          'summary.md',
+          'manifest.json',
+          'events.jsonl',
         ]),
       );
       expect(

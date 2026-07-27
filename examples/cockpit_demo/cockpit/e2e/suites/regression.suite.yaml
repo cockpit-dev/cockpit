@@ -2,9 +2,10 @@ schemaVersion: cockpit.test/v2
 kind: suite
 id: cockpitDemoRegression
 name: Cockpit demo regression
+description: Full Cockpit 2.0 release acceptance across workflow and report capabilities.
 tags: [acceptance, regression]
 execution:
-  maxConcurrency: 1
+  maxConcurrency: 2
   failFast: true
   isolation: sharedSession
   retry:
@@ -12,17 +13,87 @@ execution:
     delayMs: 500
     retryOn: [blocked, interrupted, internalError]
 report:
-  formats: [json, junit, html, aiSummary]
+  formats: [json, junit, html, summary]
   includePassedAttempts: true
+matrix:
+  axes:
+    persona: [developer, quality]
+  maxCombinations: 4
+fixtures:
+  - id: suiteBaseline
+    scope: suite
+    setup:
+      kind: file
+      relativePath: e2e/fixtures/suite_setup.case.yaml
+      caseId: demoSuiteSetup
+    teardown:
+      kind: file
+      relativePath: e2e/fixtures/suite_teardown.case.yaml
+      caseId: demoSuiteTeardown
+  - id: attemptBaseline
+    scope: caseAttempt
+    dependsOn: [suiteBaseline]
+    setup:
+      kind: file
+      relativePath: e2e/fixtures/attempt_setup.case.yaml
+      caseId: demoAttemptSetup
+    teardown:
+      kind: file
+      relativePath: e2e/fixtures/attempt_teardown.case.yaml
+      caseId: demoAttemptTeardown
 cases:
   - id: taskEditorValidation
+    fixtures: [attemptBaseline]
+    inputs:
+      taskTitle: Cockpit acceptance task
     source:
       kind: file
       relativePath: e2e/cases/task_editor_validation.case.yaml
       caseId: demoTaskEditorValidation
   - id: settingsNavigation
     dependsOn: [taskEditorValidation]
+    fixtures: [suiteBaseline]
     source:
       kind: file
       relativePath: e2e/cases/settings_navigation.case.yaml
       caseId: demoSettingsNavigation
+  - id: commandGestureCoverage
+    dependsOn: [settingsNavigation]
+    fixtures: [attemptBaseline]
+    source:
+      kind: file
+      relativePath: e2e/cases/command_gesture_coverage.case.yaml
+      caseId: demoCommandGestureCoverage
+  - id: commandSemanticCoverage
+    dependsOn: [commandGestureCoverage]
+    fixtures: [suiteBaseline]
+    source:
+      kind: file
+      relativePath: e2e/cases/command_semantic_coverage.case.yaml
+      caseId: demoCommandSemanticCoverage
+  - id: mixedPlaneBlackBox
+    dependsOn: [commandSemanticCoverage]
+    fixtures: [suiteBaseline]
+    tags: [requires-system-control]
+    source:
+      kind: file
+      relativePath: e2e/cases/mixed_plane_black_box.case.yaml
+      caseId: demoMixedPlaneBlackBox
+  - id: matrixEvidence
+    dependsOn: [commandSemanticCoverage]
+    fixtures: [suiteBaseline]
+    matrixAxes: [persona]
+    inputs:
+      persona: {$matrix: persona}
+    source:
+      kind: file
+      relativePath: e2e/cases/matrix_evidence.case.yaml
+      caseId: demoMatrixEvidence
+  - id: recordingLifecycle
+    dependsOn: [matrixEvidence]
+    fixtures: [suiteBaseline]
+    tags: [requires-recording]
+    source:
+      kind: file
+      relativePath: e2e/cases/recording_lifecycle.case.yaml
+      caseId: demoRecordingLifecycle

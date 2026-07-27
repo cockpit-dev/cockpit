@@ -79,6 +79,11 @@ dart run cockpit daemon policy apply --file authorization.json --restart
 dart run cockpit daemon policy show
 ```
 
+本地需要显式全权 daemon 时，使用 `dart run cockpit daemon start --yolo`（或
+`daemon restart --yolo`）。该模式只对本次 daemon 进程生效；不带开关启动会回到
+持久化受限策略。daemon 状态、attempt 和 suite 报告都会记录实际
+`authorizationMode`。
+
 不带 `--restart` 时只能在 daemon 停止状态下应用。默认策略拒绝危险操作、敏感测试
 effect，以及 production/unknown target。
 
@@ -114,7 +119,7 @@ gap、terminal 和 disconnect。artifact 读取使用 `--output` 指定文件；
 ## Suite 与黑盒 Target
 
 suite 复用已索引 case，并提供依赖 DAG、作用域 fixture、matrix、并发、重试、
-fail-fast、恢复，以及 JSON/JUnit/HTML/AI summary 聚合报告。
+fail-fast、恢复，以及 JSON/JUnit/HTML/Markdown 聚合报告。
 
 恢复会持久化 node/attempt 检查点和精确 fixture/row session 绑定。worker 退出时
 正在运行的 attempt 会变为 `interrupted`，只有 suite retry 策略允许时才继续；绑定
@@ -123,6 +128,13 @@ session 丢失会明确返回环境失败，不会静默替换。
 默认的 `restartApp` 隔离会在每个 case 的 attempt fixture 之前执行。只有驱动明确
 支持时才使用 `resetAppData`；仅当 suite 设计本身需要共享状态时才显式选择
 `sharedSession`。
+
+同一个 locator 中的字段按交集匹配，`fallbacks` 是按顺序尝试的备选定位。原生黑盒
+target 在 accessibility 能力明确支持时还可以使用状态、层级和空间关系约束。运行时
+无法忠实执行某项约束时会明确拒绝，不会静默丢弃条件。
+`text` 和 `label` 默认使用 `matchMode: exact`；需要扩展匹配时必须显式选择
+`contains`、容忍拼写误差的 `fuzzy` 或 `regex`。多个候选会按当前 route 和匹配质量选择唯一最优项；最高分
+并列时返回 `ambiguousTarget`，可增加条件、关系约束或使用 0-based `index` 选择列表项。
 
 ```bash
 dart run cockpit suite validate --file example/suites/regression.yaml
@@ -139,6 +151,12 @@ dart run cockpit suite report --run-id <runId>
 Android 使用 ADB accessibility 与设备控制，iOS 使用 WebDriverAgent 完成
 accessibility 和交互。多设备或多 workspace 并发时，应为每个 target 分配独立 WDA
 endpoint。
+
+已安装 Flutter 应用或原生/Flutter 混合栈使用 `targetKind: flutterApp`、真实
+`appId`、不绑定 entrypoint，并让 case 运行在 `native` plane。Cockpit 通过 system
+accessibility 启动和操作它，同时启用 Flutter-aware 重复 semantics 归一化；原生页面和
+内嵌 platform view 仍在同一棵树中。绑定 entrypoint 的 target 只用于开发态可选 bridge，
+通过 semantic plane 提供 Widget、route 和 runtime 检查。
 
 ```bash
 dart run cockpit target register \
@@ -165,6 +183,9 @@ dart run cockpit target register \
 
 使用 `target list` 和 `target get` 恢复已注册资源，使用 `target launch` 激活 target，
 使用 `target inspect` 读取实时能力。
+已启动的 Flutter 或混合栈 target 以 `target.inspect` operation 结果中的
+`output.systemControl` 脱敏 profile 作为次级 native driver 的能力权威。不要从
+`app.get` 重建该 profile，其中的平台应用标识与进程标识会按设计隐藏。
 
 Flutter target 启动支持重复的 `--dart-define`、`--dart-define-from-file`、
 `--flutter-arg`、`--env KEY=VALUE`，以及最长 1800000 毫秒的
@@ -182,6 +203,18 @@ operation descriptor 会公开 `executionMode`、`defaultTimeoutMs` 和
 case 的 `setup`、主步骤、`finally` 及 suite fixture 都可以使用 `type: system` 与
 capability 已公开的 action/parameters，使安装、激活、权限、设备状态和清理共用同一套
 安全策略、超时、事件与报告链路。
+
+步骤级 `plane` 可以把 case 默认值覆盖为 `semantic`、`native`、`visual` 或
+`coordinate`；未指定时 runtime 根据 action 和 locator 自动选择。Flutter bridge
+session 会为同一 target 保留 system driver，使语义 Widget 步骤与 native、visual、
+coordinate 步骤可以出现在同一个 case。condition 以及 fragment/if/retry/loop 内的步骤
+继承有效 plane，除非自己显式覆盖。
+
+文本控制包含 `copyText`、`eraseText`、`pasteText`；`travel` 按有界的经纬度点序列
+执行，并支持 route 或单点延迟。visual locator 指向 workspace 内模板文件；
+`assertScreenshot` 指向 workspace 内 baseline，并将 actual、baseline、确定性 diff
+文件写入 attempt evidence。pre/post 取证应由 suite fixture、case `setup`/`finally`、
+step `evidence` 和显式录屏操作在实际拥有该生命周期的作用域组合表达。
 
 ## Foreground CI
 
@@ -201,8 +234,9 @@ foreground 模式负责填入注册后的 `workspaceId`。
 
 仓库发布门禁会先运行格式、分析、全部 package/示例测试和发布 dry-run，再启动
 Android、iOS、macOS、Linux、Web、Windows 真实回归。只有所有 job 都到达成功终态
-才允许发布。应等待完整矩阵结束后，再依据 report、event、artifact 和 daemon log
-统一定位失败，不在执行中反复猜测。
+才允许发布。每个平台回归都通过可见断言验证真实业务变更、完整 Flutter 手势/文本/键盘/
+语义命令面、suite 控制流、证据和离线报告 bundle。应等待完整矩阵结束后，再依据 report、
+event、artifact 和 daemon log 统一定位失败，不在执行中反复猜测。
 
 ## API Discovery
 
@@ -225,6 +259,7 @@ pagination、SSE resume、结构化 API error 和 artifact 完整性校验。
 ```bash
 dart run cockpit serve-mcp
 dart run cockpit_mcp
+dart run cockpit serve-mcp --profile dart
 ```
 
 ```json
@@ -243,14 +278,22 @@ cases、suites、runs 和 artifacts 的 bounded resources；tools 覆盖 target 
 case/suite 验证执行、run get/cancel/events、artifact list 和校验式 artifact 文件下载。所有调用都经过认证
 Supervisor HTTP boundary，MCP 进程不直接构造 application services。
 
+profile 用于控制注入的工具域：默认是 `core`，可选 `dart`、`flutter`、`app`、
+`e2e` 和 `all`；`flutter` 包含 `dart`，`e2e` 包含 `app`。可重复使用 `--enable`、
+`--disable` 精确覆盖 feature 或 category。Dart profile 提供 analyze、format、fix、
+test、LSP、pub、package URI/search 和项目创建能力，不嵌入也不转发官方 Dart MCP
+server。
+
 ## 客户端边界
 
 公开 `/api/v2` resources、SSE stream、foundation DTO 和 artifact 完整性契约是唯一的
 客户端边界。未来 Flutter GUI 或第三方 SDK 必须使用该协议，不能在进程内链接
 Supervisor application services。
 
-生成的 `report.html` 继续作为可携带 run artifact 保留；它不是 server UI，也不需要
-`cockpitd` 提供 HTML route。
+生成的 `cockpit-report/` 是完整离线 run artifact，而不是 server UI。`index.html`
+内嵌 CSS、JavaScript 和规范报告数据，媒体使用 bundle 相对路径；`report.json` 是稳定的
+单文件渲染输入，根 `manifest.json` 以归属、大小、媒体类型和 SHA-256 覆盖全部导出文件。
+客户端必须保持目录结构并校验 manifest，`cockpitd` 无需提供 HTML route。
 
 协议资料见 [`../../docs/contracts`](../../docs/contracts)，规范 YAML/JSON 用例见
 [`example/cases`](example/cases)。

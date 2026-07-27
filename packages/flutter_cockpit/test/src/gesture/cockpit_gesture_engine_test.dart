@@ -518,6 +518,44 @@ void main() {
     expect(latestRotation.abs(), greaterThan(0.12));
   });
 
+  testWidgets('rotate wins against an enclosing scroll gesture', (
+    tester,
+  ) async {
+    var latestRotation = 0.0;
+
+    await tester.pumpWidget(
+      Directionality(
+        textDirection: TextDirection.ltr,
+        child: SingleChildScrollView(
+          child: Column(
+            children: <Widget>[
+              GestureDetector(
+                key: const ValueKey<String>('scrollable-rotate-target'),
+                behavior: HitTestBehavior.opaque,
+                onScaleUpdate: (details) {
+                  latestRotation = details.rotation;
+                },
+                child: const SizedBox(width: 220, height: 220),
+              ),
+              const SizedBox(height: 800),
+            ],
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final target = _targetFor(tester, 'scrollable-rotate-target');
+    final engine = CockpitGestureEngine(delay: tester.pump);
+
+    await engine.perform(
+      CockpitGestureAction.rotate(target: target, rotation: 0.8, startSpan: 56),
+    );
+    await tester.pumpAndSettle();
+
+    expect(latestRotation.abs(), greaterThan(0.5));
+  });
+
   testWidgets('panZoom dispatches trackpad pan-zoom events', (tester) async {
     var updateCount = 0;
     double latestScale = 1.0;

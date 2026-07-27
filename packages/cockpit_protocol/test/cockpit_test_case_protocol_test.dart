@@ -2,6 +2,42 @@ import 'package:cockpit_protocol/cockpit_protocol.dart';
 import 'package:test/test.dart';
 
 void main() {
+  test('conjunctive locator round-trips every native relation', () {
+    final locator = CockpitTestLocator.fromJson(<String, Object?>{
+      'text': 'Save',
+      'matchMode': 'contains',
+      'role': 'button',
+      'enabled': true,
+      'ancestor': <String, Object?>{'label': 'Editor'},
+      'descendant': <String, Object?>{'text': 'Shortcut'},
+      'below': <String, Object?>{'testId': 'heading'},
+      'fallbacks': <Object?>[
+        <String, Object?>{'nativeId': 'save-button'},
+      ],
+    }, path: r'$.locator');
+
+    expect(
+      CockpitTestLocator.fromJson(locator.toJson(), path: r'$.locator'),
+      locator,
+    );
+    expect(locator.signalMap, <String, String>{
+      'text': 'Save',
+      'role': 'button',
+    });
+    expect(locator.matchMode, CockpitTextMatchMode.contains);
+  });
+
+  test('fuzzy text matching tolerates typos but rejects short guesses', () {
+    final locator = CockpitTestLocator.fromJson(<String, Object?>{
+      'text': 'Svae task',
+      'matchMode': 'fuzzy',
+    }, path: r'$.locator');
+
+    expect(locator.matchMode, CockpitTextMatchMode.fuzzy);
+    expect(cockpitFuzzyTextMatches('Save task', locator.text!), isTrue);
+    expect(cockpitFuzzyTextMatches('OK', 'KO'), isFalse);
+  });
+
   test('public diagnostics, results, bundles, and imports round-trip', () {
     final location = CockpitTestSourceLocation(
       line: 3,

@@ -1,7 +1,10 @@
+import 'dart:convert';
+
 import '../foundation/cockpit_api_error.dart';
 import '../foundation/cockpit_foundation_artifact.dart';
 import '../foundation/cockpit_run.dart';
 import 'cockpit_test_report_case.dart';
+import 'cockpit_test_suite.dart';
 import 'cockpit_test_suite_policy.dart';
 import 'cockpit_test_value_reader.dart';
 
@@ -69,6 +72,7 @@ final class CockpitTestSuiteReport {
     required this.workspaceId,
     required this.runId,
     required this.suiteId,
+    required this.definition,
     required this.sourceSha256,
     required this.outcome,
     required this.stability,
@@ -109,6 +113,13 @@ final class CockpitTestSuiteReport {
       CockpitTestValueReader.string(entry.value, '\$.${entry.key}', id: true);
     }
     CockpitTestValueReader.string(sourceSha256, r'$.sourceSha256');
+    if (definition.id != suiteId ||
+        !_jsonEquals(definition.execution.toJson(), execution.toJson()) ||
+        !_jsonEquals(definition.report.toJson(), reportPolicy.toJson())) {
+      throw const FormatException(
+        'Suite report definition does not match its execution policy.',
+      );
+    }
     if (!complete || durationMs < 0 || finishedAt.isBefore(startedAt)) {
       throw const FormatException(
         'Final suite report is incomplete or invalid.',
@@ -120,7 +131,7 @@ final class CockpitTestSuiteReport {
     final entryIds = <String>{};
     for (final item in this.cases) {
       if (!entryIds.add(
-        '${item.entryId}\u0000${item.targetId}\u0000${item.matrix}',
+        '${item.entryId}\u0000${item.targetId}\u0000${jsonEncode(item.matrix)}',
       )) {
         throw const FormatException(
           'Suite report contains a duplicate case row.',
@@ -140,6 +151,7 @@ final class CockpitTestSuiteReport {
   final String workspaceId;
   final String runId;
   final String suiteId;
+  final CockpitTestSuite definition;
   final String sourceSha256;
   final CockpitRunOutcome outcome;
   final CockpitRunStability stability;
@@ -164,6 +176,7 @@ final class CockpitTestSuiteReport {
     'workspaceId': workspaceId,
     'runId': runId,
     'suiteId': suiteId,
+    'definition': definition.toJson(),
     'sourceSha256': sourceSha256,
     'lifecycle': CockpitRunLifecycle.completed.name,
     'outcome': outcome.name,
@@ -193,6 +206,7 @@ final class CockpitTestSuiteReport {
         'workspaceId',
         'runId',
         'suiteId',
+        'definition',
         'sourceSha256',
         'lifecycle',
         'outcome',
@@ -217,6 +231,7 @@ final class CockpitTestSuiteReport {
         'workspaceId',
         'runId',
         'suiteId',
+        'definition',
         'sourceSha256',
         'lifecycle',
         'outcome',
@@ -278,6 +293,10 @@ final class CockpitTestSuiteReport {
         json['suiteId'],
         '$path.suiteId',
         id: true,
+      ),
+      definition: CockpitTestSuite.fromJson(
+        json['definition'],
+        path: '$path.definition',
       ),
       sourceSha256: CockpitTestValueReader.string(
         json['sourceSha256'],
@@ -383,6 +402,9 @@ final class CockpitTestSuiteReport {
     }
   }
 }
+
+bool _jsonEquals(Object? left, Object? right) =>
+    jsonEncode(left) == jsonEncode(right);
 
 int _outcomeSeverity(CockpitRunOutcome outcome) => switch (outcome) {
   CockpitRunOutcome.passed || CockpitRunOutcome.skipped => 0,

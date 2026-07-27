@@ -29,7 +29,7 @@ fragments:
     - stepId: enterUsername
       action:
         type: enterText
-        locator: {strategy: testId, value: usernameField}
+        locator: {testId: usernameField}
         text: {$var: username}
     - stepId: enterPassword
       safety:
@@ -37,12 +37,12 @@ fragments:
         reason: Authenticate the test account.
       action:
         type: enterText
-        locator: {strategy: testId, value: passwordField}
+        locator: {testId: passwordField}
         text: {$var: password}
     - stepId: submitLogin
       action:
         type: tap
-        locator: {strategy: testId, value: loginButton}
+        locator: {testId: loginButton}
 setup:
   - stepId: startAcceptanceRecording
     startRecording:
@@ -63,7 +63,7 @@ steps:
             type: waitFor
             condition:
               type: visible
-              locator: {strategy: text, value: Home}
+              locator: {text: Home}
 finally:
   - stepId: stopAcceptanceRecording
     stopRecording: {settleMs: 500}

@@ -1,14 +1,17 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:collection/collection.dart';
 import 'package:cockpit_protocol/cockpit_protocol.dart';
 import 'package:crypto/crypto.dart';
+import 'package:path/path.dart' as p;
 
 import '../adapters/cockpit_automation_adapter.dart';
 import 'cockpit_native_ui_snapshot.dart';
 import 'cockpit_system_control_action_service.dart';
 import 'cockpit_system_control_service.dart';
 import 'cockpit_system_test_target.dart';
+import 'cockpit_visual_matcher.dart';
 
 final class CockpitSystemTestAutomationAdapter
     implements CockpitAutomationAdapter {
@@ -16,19 +19,27 @@ final class CockpitSystemTestAutomationAdapter
     required CockpitSystemTestTarget target,
     required CockpitSystemControlService controlService,
     required CockpitSystemControlActionService actionService,
+    required String workspaceRoot,
     DateTime Function()? utcNow,
     Future<void> Function(Duration)? delay,
+    CockpitVisualMatcher? visualMatcher,
   }) : _target = target,
        _controlService = controlService,
        _actionService = actionService,
+       _visualMatcher =
+           visualMatcher ?? CockpitVisualMatcher(workspaceRoot: workspaceRoot),
        _utcNow = utcNow ?? (() => DateTime.now().toUtc()),
        _delay = delay ?? Future<void>.delayed;
 
   final CockpitSystemTestTarget _target;
   final CockpitSystemControlService _controlService;
   final CockpitSystemControlActionService _actionService;
+  final CockpitVisualMatcher _visualMatcher;
   final DateTime Function() _utcNow;
   final Future<void> Function(Duration) _delay;
+
+  bool get _flutterAwareNative =>
+      _target.targetKind == CockpitTargetKind.flutterApp;
 
   @override
   Future<CockpitCapabilities> describeCapabilities() async {
@@ -43,6 +54,9 @@ final class CockpitSystemTestAutomationAdapter
     );
     final available = describe.profile.availableActions.toSet();
     final hasTree = available.contains(CockpitSystemControlAction.readUiTree);
+    final hasScreenshot = available.contains(
+      CockpitSystemControlAction.captureScreenshot,
+    );
     final supportedCommands = <CockpitCommandType>{
       CockpitCommandType.system,
       if (available.contains(
@@ -61,7 +75,16 @@ final class CockpitSystemTestAutomationAdapter
       )) ...<CockpitCommandType>[
         CockpitCommandType.sendKeyEvent,
         CockpitCommandType.sendTextInputAction,
+        CockpitCommandType.eraseText,
       ],
+      if (hasTree &&
+          available.contains(CockpitSystemControlAction.setClipboard))
+        CockpitCommandType.copyText,
+      if (available.contains(CockpitSystemControlAction.getClipboard) &&
+          available.contains(CockpitSystemControlAction.typeText))
+        CockpitCommandType.pasteText,
+      if (available.contains(CockpitSystemControlAction.setLocation))
+        CockpitCommandType.travel,
       if (available.contains(
         CockpitSystemControlAction.drag,
       )) ...<CockpitCommandType>[
@@ -82,17 +105,17 @@ final class CockpitSystemTestAutomationAdapter
         if (available.contains(CockpitSystemControlAction.drag))
           CockpitCommandType.scrollUntilVisible,
       ],
-      if (available.contains(CockpitSystemControlAction.captureScreenshot))
+      if (hasScreenshot) ...<CockpitCommandType>[
         CockpitCommandType.captureScreenshot,
+        CockpitCommandType.assertScreenshot,
+      ],
     };
     return CockpitCapabilities(
       platform: describe.profile.platform,
       transportType: 'system-control',
       supportsInAppControl: false,
       supportsFlutterViewCapture: false,
-      supportsNativeScreenCapture: available.contains(
-        CockpitSystemControlAction.captureScreenshot,
-      ),
+      supportsNativeScreenCapture: hasScreenshot,
       supportsHostAutomation: true,
       supportedCommands: supportedCommands.toList(growable: false),
       supportedLocatorStrategies: <CockpitLocatorKind>[
@@ -105,10 +128,8 @@ final class CockpitSystemTestAutomationAdapter
           CockpitLocatorKind.type,
           CockpitLocatorKind.path,
         ],
-        if (hasTree &&
-            (available.contains(CockpitSystemControlAction.tap) ||
-                available.contains(CockpitSystemControlAction.drag)))
-          CockpitLocatorKind.coordinate,
+        if (hasTree) CockpitLocatorKind.coordinate,
+        if (hasScreenshot) CockpitLocatorKind.visual,
       ],
     );
   }
@@ -156,6 +177,9 @@ final class CockpitSystemTestAutomationAdapter
     CockpitCommandType.doubleTap => _doubleTap(command, stopwatch),
     CockpitCommandType.focusTextInput => _tap(command, stopwatch),
     CockpitCommandType.enterText => _enterText(command, stopwatch),
+    CockpitCommandType.eraseText => _eraseText(command, stopwatch),
+    CockpitCommandType.copyText => _copyText(command, stopwatch),
+    CockpitCommandType.pasteText => _pasteText(command, stopwatch),
     CockpitCommandType.sendKeyEvent ||
     CockpitCommandType.sendTextInputAction => _pressKey(command, stopwatch),
     CockpitCommandType.drag ||
@@ -178,6 +202,11 @@ final class CockpitSystemTestAutomationAdapter
     CockpitCommandType.waitFor ||
     CockpitCommandType.assertVisible => _waitFor(command, stopwatch),
     CockpitCommandType.assertText => _assertText(command, stopwatch),
+    CockpitCommandType.assertScreenshot => _assertScreenshot(
+      command,
+      stopwatch,
+    ),
+    CockpitCommandType.travel => _travel(command, stopwatch),
     CockpitCommandType.system => _systemAction(command, stopwatch),
     CockpitCommandType.waitForUiIdle => _waitForUiIdle(command, stopwatch),
     CockpitCommandType.collectSnapshot => _collectSnapshot(command, stopwatch),
@@ -242,13 +271,28 @@ final class CockpitSystemTestAutomationAdapter
   ) async {
     final deadline = _deadline(command);
     final point = await _resolvePoint(command, deadline);
-    if (point.error != null) return _failure(command, stopwatch, point.error!);
+    if (point.error != null) {
+      return _failure(
+        command,
+        stopwatch,
+        point.error!,
+        artifacts: point.artifacts,
+        artifactSourcePaths: point.artifactSourcePaths,
+      );
+    }
     final result = await _runAction(
       CockpitSystemControlAction.tap,
       <String, Object?>{'x': point.x, 'y': point.y},
       deadline,
     );
-    return _fromAction(command, stopwatch, result, point.resolution);
+    return _fromAction(
+      command,
+      stopwatch,
+      result,
+      point.resolution,
+      artifacts: point.artifacts,
+      artifactSourcePaths: point.artifactSourcePaths,
+    );
   }
 
   Future<CockpitCommandExecution> _longPress(
@@ -257,7 +301,15 @@ final class CockpitSystemTestAutomationAdapter
   ) async {
     final deadline = _deadline(command);
     final point = await _resolvePoint(command, deadline);
-    if (point.error != null) return _failure(command, stopwatch, point.error!);
+    if (point.error != null) {
+      return _failure(
+        command,
+        stopwatch,
+        point.error!,
+        artifacts: point.artifacts,
+        artifactSourcePaths: point.artifactSourcePaths,
+      );
+    }
     final result = await _runAction(
       CockpitSystemControlAction.longPress,
       <String, Object?>{
@@ -268,7 +320,14 @@ final class CockpitSystemTestAutomationAdapter
       },
       deadline,
     );
-    return _fromAction(command, stopwatch, result, point.resolution);
+    return _fromAction(
+      command,
+      stopwatch,
+      result,
+      point.resolution,
+      artifacts: point.artifacts,
+      artifactSourcePaths: point.artifactSourcePaths,
+    );
   }
 
   Future<CockpitCommandExecution> _doubleTap(
@@ -277,7 +336,15 @@ final class CockpitSystemTestAutomationAdapter
   ) async {
     final deadline = _deadline(command);
     final point = await _resolvePoint(command, deadline);
-    if (point.error != null) return _failure(command, stopwatch, point.error!);
+    if (point.error != null) {
+      return _failure(
+        command,
+        stopwatch,
+        point.error!,
+        artifacts: point.artifacts,
+        artifactSourcePaths: point.artifactSourcePaths,
+      );
+    }
     for (var index = 0; index < 2; index += 1) {
       final result = await _runAction(
         CockpitSystemControlAction.tap,
@@ -285,11 +352,24 @@ final class CockpitSystemTestAutomationAdapter
         deadline,
       );
       if (!result.success) {
-        return _fromAction(command, stopwatch, result, point.resolution);
+        return _fromAction(
+          command,
+          stopwatch,
+          result,
+          point.resolution,
+          artifacts: point.artifacts,
+          artifactSourcePaths: point.artifactSourcePaths,
+        );
       }
       if (index == 0) await _delay(_boundedDelay(deadline, 80));
     }
-    return _success(command, stopwatch, resolution: point.resolution);
+    return _success(
+      command,
+      stopwatch,
+      resolution: point.resolution,
+      artifacts: point.artifacts,
+      artifactSourcePaths: point.artifactSourcePaths,
+    );
   }
 
   Future<CockpitCommandExecution> _enterText(
@@ -299,10 +379,18 @@ final class CockpitSystemTestAutomationAdapter
     final deadline = _deadline(command);
     final locator = _locator(command);
     CockpitLocatorResolution? resolution;
+    List<CockpitArtifactRef> artifacts = const <CockpitArtifactRef>[];
+    Map<String, String> sourcePaths = const <String, String>{};
     if (locator != null) {
       final point = await _resolvePoint(command, deadline);
       if (point.error != null) {
-        return _failure(command, stopwatch, point.error!);
+        return _failure(
+          command,
+          stopwatch,
+          point.error!,
+          artifacts: point.artifacts,
+          artifactSourcePaths: point.artifactSourcePaths,
+        );
       }
       final focus = await _runAction(
         CockpitSystemControlAction.tap,
@@ -310,9 +398,18 @@ final class CockpitSystemTestAutomationAdapter
         deadline,
       );
       if (!focus.success) {
-        return _fromAction(command, stopwatch, focus, point.resolution);
+        return _fromAction(
+          command,
+          stopwatch,
+          focus,
+          point.resolution,
+          artifacts: point.artifacts,
+          artifactSourcePaths: point.artifactSourcePaths,
+        );
       }
       resolution = point.resolution;
+      artifacts = point.artifacts;
+      sourcePaths = point.artifactSourcePaths;
     }
     final text = command.parameters['text'];
     if (text is! String) {
@@ -323,7 +420,227 @@ final class CockpitSystemTestAutomationAdapter
       <String, Object?>{'text': text},
       deadline,
     );
-    return _fromAction(command, stopwatch, result, resolution);
+    return _fromAction(
+      command,
+      stopwatch,
+      result,
+      resolution,
+      artifacts: artifacts,
+      artifactSourcePaths: sourcePaths,
+    );
+  }
+
+  Future<CockpitCommandExecution> _eraseText(
+    CockpitCommand command,
+    Stopwatch stopwatch,
+  ) async {
+    final deadline = _deadline(command);
+    final locator = _locator(command);
+    CockpitLocatorResolution? resolution;
+    List<CockpitArtifactRef> artifacts = const <CockpitArtifactRef>[];
+    Map<String, String> sourcePaths = const <String, String>{};
+    int? inferredCharacters;
+    if (locator != null) {
+      final point = await _resolvePoint(command, deadline);
+      if (point.error != null) {
+        return _failure(
+          command,
+          stopwatch,
+          point.error!,
+          artifacts: point.artifacts,
+          artifactSourcePaths: point.artifactSourcePaths,
+        );
+      }
+      final focus = await _runAction(
+        CockpitSystemControlAction.tap,
+        <String, Object?>{'x': point.x, 'y': point.y},
+        deadline,
+      );
+      if (!focus.success) {
+        return _fromAction(
+          command,
+          stopwatch,
+          focus,
+          point.resolution,
+          artifacts: point.artifacts,
+          artifactSourcePaths: point.artifactSourcePaths,
+        );
+      }
+      resolution = point.resolution;
+      artifacts = point.artifacts;
+      sourcePaths = point.artifactSourcePaths;
+      inferredCharacters = point.textLength;
+    }
+    var remaining =
+        command.parameters['characters'] as int? ?? inferredCharacters ?? 1000;
+    while (remaining > 0) {
+      final repeat = remaining.clamp(1, 500);
+      final result = await _runAction(
+        CockpitSystemControlAction.pressKey,
+        <String, Object?>{'key': 'backspace', 'repeat': repeat},
+        deadline,
+      );
+      if (!result.success) {
+        return _fromAction(
+          command,
+          stopwatch,
+          result,
+          resolution,
+          artifacts: artifacts,
+          artifactSourcePaths: sourcePaths,
+        );
+      }
+      remaining -= repeat;
+    }
+    return _success(
+      command,
+      stopwatch,
+      resolution: resolution,
+      artifacts: artifacts,
+      artifactSourcePaths: sourcePaths,
+    );
+  }
+
+  Future<CockpitCommandExecution> _copyText(
+    CockpitCommand command,
+    Stopwatch stopwatch,
+  ) async {
+    final locator = _locator(command);
+    if (locator == null) {
+      throw const FormatException('copyText requires a locator.');
+    }
+    final deadline = _deadline(command);
+    final resolved = await _resolveNativeNode(locator, deadline);
+    final error = _resolutionError(resolved);
+    if (error != null) return _failure(command, stopwatch, error);
+    final node = resolved.node!;
+    final text = <String>['text', 'value', 'label', 'name']
+        .map((key) => node.attributes[key]?.trim())
+        .whereType<String>()
+        .where((value) => value.isNotEmpty)
+        .firstOrNull;
+    if (text == null) {
+      return _failure(
+        command,
+        stopwatch,
+        CockpitCommandError.assertionFailed(
+          message: 'Resolved target does not expose copyable text.',
+        ),
+      );
+    }
+    final result = await _runAction(
+      CockpitSystemControlAction.setClipboard,
+      <String, Object?>{'text': text},
+      deadline,
+    );
+    return _fromAction(
+      command,
+      stopwatch,
+      result,
+      _locatorResolution(resolved),
+    );
+  }
+
+  Future<CockpitCommandExecution> _pasteText(
+    CockpitCommand command,
+    Stopwatch stopwatch,
+  ) async {
+    final deadline = _deadline(command);
+    CockpitLocatorResolution? resolution;
+    List<CockpitArtifactRef> artifacts = const <CockpitArtifactRef>[];
+    Map<String, String> sourcePaths = const <String, String>{};
+    final locator = _locator(command);
+    if (locator != null) {
+      final point = await _resolvePoint(command, deadline);
+      if (point.error != null) {
+        return _failure(
+          command,
+          stopwatch,
+          point.error!,
+          artifacts: point.artifacts,
+          artifactSourcePaths: point.artifactSourcePaths,
+        );
+      }
+      final focus = await _runAction(
+        CockpitSystemControlAction.tap,
+        <String, Object?>{'x': point.x, 'y': point.y},
+        deadline,
+      );
+      if (!focus.success) {
+        return _fromAction(
+          command,
+          stopwatch,
+          focus,
+          point.resolution,
+          artifacts: point.artifacts,
+          artifactSourcePaths: point.artifactSourcePaths,
+        );
+      }
+      resolution = point.resolution;
+      artifacts = point.artifacts;
+      sourcePaths = point.artifactSourcePaths;
+    }
+    final clipboard = await _runAction(
+      CockpitSystemControlAction.getClipboard,
+      const <String, Object?>{},
+      deadline,
+    );
+    if (!clipboard.success) {
+      return _fromAction(
+        command,
+        stopwatch,
+        clipboard,
+        resolution,
+        artifacts: artifacts,
+        artifactSourcePaths: sourcePaths,
+      );
+    }
+    final result = await _runAction(
+      CockpitSystemControlAction.typeText,
+      <String, Object?>{'text': clipboard.stdout ?? ''},
+      deadline,
+    );
+    return _fromAction(
+      command,
+      stopwatch,
+      result,
+      resolution,
+      artifacts: artifacts,
+      artifactSourcePaths: sourcePaths,
+    );
+  }
+
+  Future<CockpitCommandExecution> _travel(
+    CockpitCommand command,
+    Stopwatch stopwatch,
+  ) async {
+    final rawRoute = command.parameters['route'];
+    if (rawRoute is! List<Object?>) {
+      throw const FormatException('travel requires a route array.');
+    }
+    final deadline = _deadline(command);
+    final intervalMs = command.parameters['intervalMs'] as int? ?? 0;
+    for (var index = 0; index < rawRoute.length; index += 1) {
+      final rawPoint = rawRoute[index];
+      if (rawPoint is! Map<Object?, Object?>) {
+        throw const FormatException('travel route points must be objects.');
+      }
+      final point = Map<String, Object?>.from(rawPoint);
+      final result = await _runAction(
+        CockpitSystemControlAction.setLocation,
+        <String, Object?>{
+          'latitude': point['latitude'],
+          'longitude': point['longitude'],
+        },
+        deadline,
+      );
+      if (!result.success) return _fromAction(command, stopwatch, result, null);
+      if (index < rawRoute.length - 1) {
+        final delayMs = point['delayMs'] as int? ?? intervalMs;
+        if (delayMs > 0) await _delay(_boundedDelay(deadline, delayMs));
+      }
+    }
+    return _success(command, stopwatch);
   }
 
   Future<CockpitCommandExecution> _pressKey(
@@ -349,25 +666,42 @@ final class CockpitSystemTestAutomationAdapter
     Stopwatch stopwatch,
   ) async {
     final deadline = _deadline(command);
-    final snapshot = await _readSnapshot(deadline);
     final locator = _locator(command);
-    CockpitNativeUiResolution? target;
+    CockpitLocatorResolution? resolution;
+    List<CockpitArtifactRef> artifacts = const <CockpitArtifactRef>[];
+    Map<String, String> sourcePaths = const <String, String>{};
+    int startX;
+    int startY;
+    int viewportWidth;
+    int viewportHeight;
     if (locator != null) {
-      target = snapshot.resolve(locator);
-      final error = _resolutionError(target);
-      if (error != null) return _failure(command, stopwatch, error);
+      final point = await _resolvePoint(command, deadline);
+      if (point.error != null) {
+        return _failure(
+          command,
+          stopwatch,
+          point.error!,
+          artifacts: point.artifacts,
+          artifactSourcePaths: point.artifactSourcePaths,
+        );
+      }
+      startX = point.x!;
+      startY = point.y!;
+      viewportWidth = point.viewportWidth!;
+      viewportHeight = point.viewportHeight!;
+      resolution = point.resolution;
+      artifacts = point.artifacts;
+      sourcePaths = point.artifactSourcePaths;
+    } else {
+      final snapshot = await _readSnapshot(deadline);
+      viewportWidth = snapshot.viewportWidth;
+      viewportHeight = snapshot.viewportHeight;
+      startX = (viewportWidth / 2).round();
+      startY = (viewportHeight / 2).round();
     }
-    final startX = target?.centerX ?? (snapshot.viewportWidth / 2).round();
-    final startY = target?.centerY ?? (snapshot.viewportHeight / 2).round();
-    final delta = _gestureDelta(command, snapshot);
-    final endX = (startX + delta.$1).round().clamp(
-      0,
-      snapshot.viewportWidth - 1,
-    );
-    final endY = (startY + delta.$2).round().clamp(
-      0,
-      snapshot.viewportHeight - 1,
-    );
+    final delta = _gestureDelta(command, viewportWidth, viewportHeight);
+    final endX = (startX + delta.$1).round().clamp(0, viewportWidth - 1);
+    final endY = (startY + delta.$2).round().clamp(0, viewportHeight - 1);
     final result =
         await _runAction(CockpitSystemControlAction.drag, <String, Object?>{
           'startX': startX,
@@ -382,7 +716,9 @@ final class CockpitSystemTestAutomationAdapter
       command,
       stopwatch,
       result,
-      target == null ? null : _locatorResolution(target),
+      resolution,
+      artifacts: artifacts,
+      artifactSourcePaths: sourcePaths,
     );
   }
 
@@ -396,24 +732,38 @@ final class CockpitSystemTestAutomationAdapter
     }
     final deadline = _deadline(command);
     final maxScrolls = command.parameters['maxScrolls'] as int? ?? 10;
+    List<CockpitArtifactRef> artifacts = const <CockpitArtifactRef>[];
+    Map<String, String> sourcePaths = const <String, String>{};
     for (var attempt = 0; attempt <= maxScrolls; attempt += 1) {
-      final snapshot = await _readSnapshot(deadline);
-      final resolution = snapshot.resolve(locator);
-      if (resolution.found) {
+      final point = await _resolvePoint(command, deadline);
+      artifacts = point.artifacts;
+      sourcePaths = point.artifactSourcePaths;
+      if (point.error == null) {
         return _success(
           command,
           stopwatch,
-          resolution: _locatorResolution(resolution),
+          resolution: point.resolution,
+          artifacts: artifacts,
+          artifactSourcePaths: sourcePaths,
         );
       }
-      if (resolution.ambiguous) {
-        return _failure(command, stopwatch, _resolutionError(resolution)!);
+      if (point.error!.code != CockpitCommandError.targetNotFoundCode) {
+        return _failure(
+          command,
+          stopwatch,
+          point.error!,
+          artifacts: artifacts,
+          artifactSourcePaths: sourcePaths,
+        );
       }
       if (attempt == maxScrolls) break;
+      final viewportWidth = point.viewportWidth;
+      final viewportHeight = point.viewportHeight;
+      if (viewportWidth == null || viewportHeight == null) break;
       final upward = command.parameters['reverse'] == true;
-      final x = (snapshot.viewportWidth * 0.5).round();
-      final startY = (snapshot.viewportHeight * (upward ? 0.3 : 0.75)).round();
-      final endY = (snapshot.viewportHeight * (upward ? 0.75 : 0.3)).round();
+      final x = (viewportWidth * 0.5).round();
+      final startY = (viewportHeight * (upward ? 0.3 : 0.75)).round();
+      final endY = (viewportHeight * (upward ? 0.75 : 0.3)).round();
       final result =
           await _runAction(CockpitSystemControlAction.drag, <String, Object?>{
             'startX': x,
@@ -422,7 +772,16 @@ final class CockpitSystemTestAutomationAdapter
             'endY': endY,
             'durationMs': command.parameters['durationMs'] as int? ?? 350,
           }, deadline);
-      if (!result.success) return _fromAction(command, stopwatch, result, null);
+      if (!result.success) {
+        return _fromAction(
+          command,
+          stopwatch,
+          result,
+          null,
+          artifacts: artifacts,
+          artifactSourcePaths: sourcePaths,
+        );
+      }
       await _delay(_boundedDelay(deadline, 150));
     }
     return _failure(
@@ -431,6 +790,8 @@ final class CockpitSystemTestAutomationAdapter
       CockpitCommandError.targetNotFound(
         message: 'Target was not visible after the bounded scroll search.',
       ),
+      artifacts: artifacts,
+      artifactSourcePaths: sourcePaths,
     );
   }
 
@@ -453,31 +814,54 @@ final class CockpitSystemTestAutomationAdapter
     }
     final absent = command.parameters['absent'] == true;
     final deadline = _deadline(command);
-    StateError? lastReadError;
+    _ResolvedPoint? lastPoint;
+    StateError? lastObservationError;
     do {
-      CockpitNativeUiSnapshot snapshot;
+      late final _ResolvedPoint point;
       try {
-        snapshot = await _readSnapshot(deadline);
-        lastReadError = null;
+        point = await _resolvePoint(command, deadline);
       } on StateError catch (error) {
-        lastReadError = error;
+        lastObservationError = error;
         await _delay(_boundedDelay(deadline, 150));
         continue;
       }
-      final resolution = snapshot.resolve(locator);
-      if (resolution.ambiguous) {
-        return _failure(command, stopwatch, _resolutionError(resolution)!);
+      lastPoint = point;
+      final found = point.error == null;
+      if (!found &&
+          point.error!.code != CockpitCommandError.targetNotFoundCode) {
+        return _failure(
+          command,
+          stopwatch,
+          point.error!,
+          artifacts: point.artifacts,
+          artifactSourcePaths: point.artifactSourcePaths,
+        );
       }
-      if (resolution.found != absent) {
+      if (found != absent) {
         return _success(
           command,
           stopwatch,
-          resolution: resolution.found ? _locatorResolution(resolution) : null,
+          resolution: found ? point.resolution : null,
+          artifacts: point.artifacts,
+          artifactSourcePaths: point.artifactSourcePaths,
         );
       }
       await _delay(_boundedDelay(deadline, 150));
     } while (_utcNow().isBefore(deadline));
-    if (lastReadError != null) throw lastReadError;
+    if (lastPoint == null) {
+      return _failure(
+        command,
+        stopwatch,
+        CockpitCommandError(
+          code: 'systemDriverFailed',
+          message: 'Native UI could not be observed before the deadline.',
+          details: <String, Object?>{
+            if (lastObservationError != null)
+              'lastError': '$lastObservationError',
+          },
+        ),
+      );
+    }
     return _failure(
       command,
       stopwatch,
@@ -486,6 +870,8 @@ final class CockpitSystemTestAutomationAdapter
             ? 'Target remained visible until the deadline.'
             : 'Target was not visible before the deadline.',
       ),
+      artifacts: lastPoint.artifacts,
+      artifactSourcePaths: lastPoint.artifactSourcePaths,
     );
   }
 
@@ -506,7 +892,7 @@ final class CockpitSystemTestAutomationAdapter
           .where((node) => node.visible)
           .expand((node) => node.textValues);
     } else {
-      resolution = snapshot.resolve(locator);
+      resolution = _resolve(snapshot, locator);
       final error = _resolutionError(resolution);
       if (error != null) return _failure(command, stopwatch, error);
       values = resolution.node?.textValues ?? const <String>[];
@@ -525,6 +911,87 @@ final class CockpitSystemTestAutomationAdapter
       command,
       stopwatch,
       resolution: resolution == null ? null : _locatorResolution(resolution),
+    );
+  }
+
+  Future<CockpitCommandExecution> _assertScreenshot(
+    CockpitCommand command,
+    Stopwatch stopwatch,
+  ) async {
+    final baseline = command.parameters['baseline'];
+    if (baseline is! String || baseline.trim().isEmpty) {
+      throw const FormatException(
+        'assertScreenshot requires a non-empty baseline path.',
+      );
+    }
+    final similarity =
+        (command.parameters['similarity'] as num?)?.toDouble() ?? 0.99;
+    final stem = _artifactStem(
+      command.parameters['name'] as String? ??
+          command.parameters['artifactName'] as String? ??
+          command.commandId,
+    );
+    final captured = await _captureScreenshot(
+      name: '$stem-actual',
+      deadline: _deadline(command),
+    );
+    if (captured.error != null) {
+      return _failure(command, stopwatch, captured.error!);
+    }
+    final comparison = await _visualMatcher.compareScreenshot(
+      screenshotPath: captured.sourcePath!,
+      baselineReference: baseline,
+      threshold: similarity,
+    );
+    final baselinePath =
+        'visual/$stem-baseline${p.extension(comparison.baselineSourcePath)}';
+    final diffPath = 'visual/$stem-diff.png';
+    final artifacts = <CockpitArtifactRef>[
+      captured.artifact!,
+      CockpitArtifactRef(
+        role: 'screenshotBaseline',
+        relativePath: baselinePath,
+      ),
+      CockpitArtifactRef(role: 'screenshotDiff', relativePath: diffPath),
+    ];
+    final sourcePaths = <String, String>{
+      captured.artifact!.relativePath: captured.sourcePath!,
+      baselinePath: comparison.baselineSourcePath,
+    };
+    final payloads = <String, List<int>>{diffPath: comparison.diffPng};
+    final snapshot = <String, Object?>{
+      'adapter': 'visual',
+      'similarity': comparison.similarity,
+      'requiredSimilarity': similarity,
+      'actualSize': <String, Object?>{
+        'width': comparison.width,
+        'height': comparison.height,
+      },
+      'baselineSize': <String, Object?>{
+        'width': comparison.baselineWidth,
+        'height': comparison.baselineHeight,
+      },
+      'dimensionMismatch': comparison.dimensionMismatch,
+    };
+    return CockpitCommandExecution(
+      result: CockpitCommandResult(
+        success: comparison.matched,
+        commandId: command.commandId,
+        commandType: command.commandType,
+        durationMs: stopwatch.elapsedMilliseconds,
+        artifacts: artifacts,
+        snapshot: snapshot,
+        error: comparison.matched
+            ? null
+            : CockpitCommandError.assertionFailed(
+                message: comparison.dimensionMismatch
+                    ? 'Screenshot dimensions do not match the baseline.'
+                    : 'Screenshot similarity is below the required threshold.',
+                details: snapshot,
+              ),
+      ),
+      artifactSourcePaths: sourcePaths,
+      artifactPayloads: payloads,
     );
   }
 
@@ -579,6 +1046,7 @@ final class CockpitSystemTestAutomationAdapter
         artifacts: <CockpitArtifactRef>[artifact],
         snapshot: <String, Object?>{
           'source': 'nativeAccessibilityTree',
+          'adapter': _flutterAwareNative ? 'flutterAwareNative' : 'native',
           'nodeCount': snapshot.nodes.length,
           'viewport': <String, Object?>{
             'width': snapshot.viewportWidth,
@@ -614,22 +1082,169 @@ final class CockpitSystemTestAutomationAdapter
         ),
       );
     }
-    final resolution = (await _readSnapshot(deadline)).resolve(locator);
-    final error = _resolutionError(resolution);
-    if (error != null) return _ResolvedPoint.error(error);
-    final x = resolution.centerX;
-    final y = resolution.centerY;
-    if (x == null || y == null) {
-      return _ResolvedPoint.error(
-        CockpitCommandError.targetNotHittable(
-          message: 'Resolved native target does not expose usable bounds.',
+    CockpitNativeUiSnapshot? snapshot;
+    _SystemScreenshot? screenshot;
+    double? bestVisualSimilarity;
+    int? visualViewportWidth;
+    int? visualViewportHeight;
+    final artifacts = <CockpitArtifactRef>[];
+    final sourcePaths = <String, String>{};
+    for (final candidate in locator.flattened) {
+      if (candidate.strategy == CockpitTestLocatorStrategy.visual) {
+        screenshot ??= await _captureScreenshot(
+          name: '${_artifactStem(command.commandId)}-locator',
+          deadline: deadline,
+        );
+        if (screenshot.error != null) continue;
+        _addArtifact(
+          artifacts,
+          sourcePaths,
+          screenshot.artifact!,
+          screenshot.sourcePath!,
+        );
+        final threshold = candidate.threshold ?? 0.9;
+        final match = await _visualMatcher.findTemplate(
+          screenshotPath: screenshot.sourcePath!,
+          templateReference: candidate.visual!,
+          threshold: threshold,
+        );
+        if (bestVisualSimilarity == null ||
+            match.similarity > bestVisualSimilarity) {
+          bestVisualSimilarity = match.similarity;
+        }
+        visualViewportWidth = match.screenshotWidth;
+        visualViewportHeight = match.screenshotHeight;
+        final templatePath =
+            'visual/${sha256.convert(utf8.encode(candidate.visual!)).toString().substring(0, 16)}-template${p.extension(match.templateSourcePath)}';
+        _addArtifact(
+          artifacts,
+          sourcePaths,
+          CockpitArtifactRef(
+            role: 'visualLocatorTemplate',
+            relativePath: templatePath,
+          ),
+          match.templateSourcePath,
+        );
+        if (!match.matched) continue;
+        return _ResolvedPoint(
+          x: match.x + match.width ~/ 2,
+          y: match.y + match.height ~/ 2,
+          viewportWidth: match.screenshotWidth,
+          viewportHeight: match.screenshotHeight,
+          resolution: CockpitLocatorResolution(
+            matchedKind: CockpitLocatorKind.visual,
+            matchedValue: candidate.visual!,
+            matchedSignals: <String, String>{
+              'adapter': 'visual',
+              'similarity': match.similarity.toStringAsFixed(6),
+              'threshold': threshold.toStringAsFixed(6),
+              'x': '${match.x}',
+              'y': '${match.y}',
+              'width': '${match.width}',
+              'height': '${match.height}',
+            },
+          ),
+          artifacts: artifacts,
+          artifactSourcePaths: sourcePaths,
+        );
+      }
+      snapshot ??= await _readSnapshot(deadline);
+      final resolution = snapshot.resolveSingle(
+        candidate,
+        flutterAware: _flutterAwareNative,
+      );
+      if (resolution.ambiguous) {
+        return _ResolvedPoint.error(
+          _resolutionError(resolution)!,
+          artifacts: artifacts,
+          artifactSourcePaths: sourcePaths,
+        );
+      }
+      if (!resolution.found) continue;
+      final x = resolution.centerX;
+      final y = resolution.centerY;
+      if (x == null || y == null) {
+        return _ResolvedPoint.error(
+          CockpitCommandError.targetNotHittable(
+            message: 'Resolved native target does not expose usable bounds.',
+          ),
+          artifacts: artifacts,
+          artifactSourcePaths: sourcePaths,
+        );
+      }
+      return _ResolvedPoint(
+        x: x,
+        y: y,
+        viewportWidth: snapshot.viewportWidth,
+        viewportHeight: snapshot.viewportHeight,
+        textLength: resolution.node?.textValues
+            .map((value) => value.length)
+            .maxOrNull,
+        resolution: _locatorResolution(resolution),
+        artifacts: artifacts,
+        artifactSourcePaths: sourcePaths,
+      );
+    }
+    return _ResolvedPoint.error(
+      CockpitCommandError.targetNotFound(
+        message: 'No locator candidate matched the current application UI.',
+        details: <String, Object?>{
+          'bestVisualSimilarity': ?bestVisualSimilarity,
+        },
+      ),
+      artifacts: artifacts,
+      artifactSourcePaths: sourcePaths,
+      viewportWidth: visualViewportWidth ?? snapshot?.viewportWidth,
+      viewportHeight: visualViewportHeight ?? snapshot?.viewportHeight,
+    );
+  }
+
+  Future<CockpitNativeUiResolution> _resolveNativeNode(
+    CockpitTestLocator locator,
+    DateTime deadline,
+  ) async {
+    final snapshot = await _readSnapshot(deadline);
+    for (final candidate in locator.flattened) {
+      if (candidate.strategy == CockpitTestLocatorStrategy.visual ||
+          candidate.strategy == CockpitTestLocatorStrategy.coordinate) {
+        continue;
+      }
+      final resolution = snapshot.resolveSingle(
+        candidate,
+        flutterAware: _flutterAwareNative,
+      );
+      if (resolution.found || resolution.ambiguous) return resolution;
+    }
+    return CockpitNativeUiResolution.notFound(
+      locator,
+      adapter: _flutterAwareNative ? 'flutterAwareNative' : 'native',
+    );
+  }
+
+  Future<_SystemScreenshot> _captureScreenshot({
+    required String name,
+    required DateTime deadline,
+  }) async {
+    final result = await _runAction(
+      CockpitSystemControlAction.captureScreenshot,
+      <String, Object?>{'name': name},
+      deadline,
+    );
+    final sourcePath = result.sourceFilePath;
+    final artifact = result.artifact;
+    if (!result.success || sourcePath == null || artifact == null) {
+      return _SystemScreenshot.error(
+        CockpitCommandError.captureFailed(
+          message: result.errorMessage ?? 'System screenshot capture failed.',
+          details: <String, Object?>{
+            if (result.errorCode != null) 'systemErrorCode': result.errorCode,
+          },
         ),
       );
     }
-    return _ResolvedPoint(
-      x: x,
-      y: y,
-      resolution: _locatorResolution(resolution),
+    return _SystemScreenshot(
+      sourcePath: sourcePath,
+      artifact: CockpitArtifactRef.fromJson(artifact),
     );
   }
 
@@ -639,6 +1254,11 @@ final class CockpitSystemTestAutomationAdapter
         ? null
         : CockpitTestLocator.fromJson(value, path: r'$.cockpitTestLocator');
   }
+
+  CockpitNativeUiResolution _resolve(
+    CockpitNativeUiSnapshot snapshot,
+    CockpitTestLocator locator,
+  ) => snapshot.resolve(locator, flutterAware: _flutterAwareNative);
 
   Future<CockpitNativeUiSnapshot> _readSnapshot(DateTime deadline) async {
     final result = await _runAction(
@@ -681,9 +1301,17 @@ final class CockpitSystemTestAutomationAdapter
     CockpitCommand command,
     Stopwatch stopwatch,
     CockpitSystemControlActionResult action,
-    CockpitLocatorResolution? resolution,
-  ) => action.success
-      ? _success(command, stopwatch, resolution: resolution)
+    CockpitLocatorResolution? resolution, {
+    List<CockpitArtifactRef> artifacts = const <CockpitArtifactRef>[],
+    Map<String, String> artifactSourcePaths = const <String, String>{},
+  }) => action.success
+      ? _success(
+          command,
+          stopwatch,
+          resolution: resolution,
+          artifacts: artifacts,
+          artifactSourcePaths: artifactSourcePaths,
+        )
       : _failure(
           command,
           stopwatch,
@@ -704,12 +1332,16 @@ final class CockpitSystemTestAutomationAdapter
                 'limitations': action.limitations,
             },
           ),
+          artifacts: artifacts,
+          artifactSourcePaths: artifactSourcePaths,
         );
 
   CockpitCommandExecution _success(
     CockpitCommand command,
     Stopwatch stopwatch, {
     CockpitLocatorResolution? resolution,
+    List<CockpitArtifactRef> artifacts = const <CockpitArtifactRef>[],
+    Map<String, String> artifactSourcePaths = const <String, String>{},
   }) => CockpitCommandExecution(
     result: CockpitCommandResult(
       success: true,
@@ -717,21 +1349,27 @@ final class CockpitSystemTestAutomationAdapter
       commandType: command.commandType,
       locatorResolution: resolution,
       durationMs: stopwatch.elapsedMilliseconds,
+      artifacts: artifacts,
     ),
+    artifactSourcePaths: artifactSourcePaths,
   );
 
   CockpitCommandExecution _failure(
     CockpitCommand command,
     Stopwatch stopwatch,
-    CockpitCommandError error,
-  ) => CockpitCommandExecution(
+    CockpitCommandError error, {
+    List<CockpitArtifactRef> artifacts = const <CockpitArtifactRef>[],
+    Map<String, String> artifactSourcePaths = const <String, String>{},
+  }) => CockpitCommandExecution(
     result: CockpitCommandResult(
       success: false,
       commandId: command.commandId,
       commandType: command.commandType,
       durationMs: stopwatch.elapsedMilliseconds,
+      artifacts: artifacts,
       error: error,
     ),
+    artifactSourcePaths: artifactSourcePaths,
   );
 
   DateTime _deadline(CockpitCommand command) => _utcNow().add(
@@ -747,21 +1385,79 @@ final class CockpitSystemTestAutomationAdapter
 }
 
 final class _ResolvedPoint {
-  const _ResolvedPoint({
+  _ResolvedPoint({
     required this.x,
     required this.y,
+    required this.viewportWidth,
+    required this.viewportHeight,
+    this.textLength,
     required this.resolution,
-  }) : error = null;
+    List<CockpitArtifactRef> artifacts = const <CockpitArtifactRef>[],
+    Map<String, String> artifactSourcePaths = const <String, String>{},
+  }) : artifacts = List<CockpitArtifactRef>.unmodifiable(artifacts),
+       artifactSourcePaths = Map<String, String>.unmodifiable(
+         artifactSourcePaths,
+       ),
+       error = null;
 
-  const _ResolvedPoint.error(this.error)
-    : x = null,
-      y = null,
-      resolution = null;
+  _ResolvedPoint.error(
+    this.error, {
+    this.viewportWidth,
+    this.viewportHeight,
+    List<CockpitArtifactRef> artifacts = const <CockpitArtifactRef>[],
+    Map<String, String> artifactSourcePaths = const <String, String>{},
+  }) : artifacts = List<CockpitArtifactRef>.unmodifiable(artifacts),
+       artifactSourcePaths = Map<String, String>.unmodifiable(
+         artifactSourcePaths,
+       ),
+       x = null,
+       y = null,
+       textLength = null,
+       resolution = null;
 
   final int? x;
   final int? y;
+  final int? viewportWidth;
+  final int? viewportHeight;
+  final int? textLength;
   final CockpitLocatorResolution? resolution;
+  final List<CockpitArtifactRef> artifacts;
+  final Map<String, String> artifactSourcePaths;
   final CockpitCommandError? error;
+}
+
+final class _SystemScreenshot {
+  const _SystemScreenshot({required this.sourcePath, required this.artifact})
+    : error = null;
+
+  const _SystemScreenshot.error(this.error)
+    : sourcePath = null,
+      artifact = null;
+
+  final String? sourcePath;
+  final CockpitArtifactRef? artifact;
+  final CockpitCommandError? error;
+}
+
+String _artifactStem(String value) {
+  final normalized = p
+      .basenameWithoutExtension(value)
+      .replaceAll(RegExp('[^A-Za-z0-9._-]+'), '-')
+      .replaceAll(RegExp(r'^-+|-+$'), '');
+  if (normalized.isNotEmpty) return normalized;
+  return sha256.convert(utf8.encode(value)).toString().substring(0, 16);
+}
+
+void _addArtifact(
+  List<CockpitArtifactRef> artifacts,
+  Map<String, String> sourcePaths,
+  CockpitArtifactRef artifact,
+  String sourcePath,
+) {
+  if (!sourcePaths.containsKey(artifact.relativePath)) {
+    artifacts.add(artifact);
+    sourcePaths[artifact.relativePath] = sourcePath;
+  }
 }
 
 CockpitCommandError? _resolutionError(CockpitNativeUiResolution resolution) {
@@ -769,7 +1465,10 @@ CockpitCommandError? _resolutionError(CockpitNativeUiResolution resolution) {
   if (resolution.ambiguous) {
     return CockpitCommandError.ambiguousTarget(
       message: 'Native locator matched ${resolution.matchCount} targets.',
-      details: <String, Object?>{'matchCount': resolution.matchCount},
+      details: <String, Object?>{
+        'adapter': resolution.adapter,
+        'matchCount': resolution.matchCount,
+      },
     );
   }
   return CockpitCommandError.targetNotFound(
@@ -795,26 +1494,46 @@ CockpitLocatorResolution _locatorResolution(
   final value =
       resolution.locator.value ??
       '${resolution.locator.x},${resolution.locator.y}';
+  final matchedSignals = <String, String>{
+    'adapter': resolution.adapter,
+    ...resolution.locator.signalMap,
+    if (resolution.locator.matchMode != CockpitTextMatchMode.exact)
+      'matchMode': resolution.locator.matchMode.name,
+    for (final state in resolution.locator.stateMap.entries)
+      state.key: state.value.toString(),
+    for (final relation in <String, CockpitTestLocator?>{
+      'ancestor': resolution.locator.ancestor,
+      'child': resolution.locator.child,
+      'descendant': resolution.locator.descendant,
+      'above': resolution.locator.above,
+      'below': resolution.locator.below,
+      'leftOf': resolution.locator.leftOf,
+      'rightOf': resolution.locator.rightOf,
+    }.entries)
+      if (relation.value != null)
+        relation.key: jsonEncode(relation.value!.toJson()),
+  };
   return CockpitLocatorResolution(
     matchedKind: kind,
     matchedValue: value,
-    matchedSignals: <String, String>{kind.name: value},
+    matchedSignals: matchedSignals,
   );
 }
 
 (double, double) _gestureDelta(
   CockpitCommand command,
-  CockpitNativeUiSnapshot snapshot,
+  int viewportWidth,
+  int viewportHeight,
 ) {
   if (command.commandType == CockpitCommandType.swipe) {
     final distance =
         (command.parameters['distanceFactor'] as num?)?.toDouble() ?? 0.5;
     final direction = command.parameters['direction'] as String? ?? 'up';
     return switch (direction) {
-      'up' => (0, -snapshot.viewportHeight * distance),
-      'down' => (0, snapshot.viewportHeight * distance),
-      'left' => (-snapshot.viewportWidth * distance, 0),
-      'right' => (snapshot.viewportWidth * distance, 0),
+      'up' => (0, -viewportHeight * distance),
+      'down' => (0, viewportHeight * distance),
+      'left' => (-viewportWidth * distance, 0),
+      'right' => (viewportWidth * distance, 0),
       _ => throw const FormatException('Unsupported swipe direction.'),
     };
   }

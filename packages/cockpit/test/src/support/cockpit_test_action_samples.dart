@@ -4,7 +4,7 @@ CockpitTestAction sampleBoundAction(CockpitTestActionKind kind) =>
     CockpitTestAction.fromJson(_sampleActionJson(kind), path: r'$.action');
 
 Map<String, Object?> _sampleActionJson(CockpitTestActionKind kind) {
-  final locator = <String, Object?>{'strategy': 'testId', 'value': 'target'};
+  final locator = <String, Object?>{'testId': 'target'};
   final base = <String, Object?>{'type': kind.name};
   return <String, Object?>{
     ...base,
@@ -26,6 +26,12 @@ Map<String, Object?> _sampleActionJson(CockpitTestActionKind kind) {
         'locator': locator,
         'text': 'value',
       },
+      CockpitTestActionKind.eraseText => <String, Object?>{
+        'locator': locator,
+        'characters': 4,
+      },
+      CockpitTestActionKind.copyText => <String, Object?>{'locator': locator},
+      CockpitTestActionKind.pasteText => <String, Object?>{'locator': locator},
       CockpitTestActionKind.setTextEditingValue => <String, Object?>{
         'locator': locator,
         'text': 'edited',
@@ -124,6 +130,18 @@ Map<String, Object?> _sampleActionJson(CockpitTestActionKind kind) {
         'locator': locator,
         'text': 'Ready',
         'matchMode': 'exact',
+      },
+      CockpitTestActionKind.assertScreenshot => <String, Object?>{
+        'baseline': 'baselines/home.png',
+        'similarity': 0.99,
+        'artifactName': 'home',
+      },
+      CockpitTestActionKind.travel => <String, Object?>{
+        'route': <Object?>[
+          <String, Object?>{'latitude': 31.2304, 'longitude': 121.4737},
+          <String, Object?>{'latitude': 31.231, 'longitude': 121.474},
+        ],
+        'intervalMs': 100,
       },
       CockpitTestActionKind.system => <String, Object?>{
         'name': 'activateWindow',

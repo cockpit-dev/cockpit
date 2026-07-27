@@ -1,0 +1,66 @@
+schemaVersion: cockpit.test/v2
+kind: case
+id: demoMatrixEvidence
+name: Matrix evidence
+description: Proves matrix input binding and concurrent read-only case execution.
+tags: [acceptance, matrix]
+target:
+  platform: flutter
+  targetKind: flutterApp
+  plane: semantic
+variables:
+  persona:
+    source: input
+    type: string
+defaults:
+  commandTimeoutMs: 15000
+  cleanupTimeoutMs: 12000
+  failFast: true
+  evidence:
+    screenshot: onFailure
+    snapshot: onFailure
+    failurePolicy: recordWarning
+fragments:
+  inspectInbox:
+    - stepId: waitForInbox
+      action:
+        type: waitFor
+        condition: {type: route, route: /inbox}
+    - stepId: assertInboxAction
+      action:
+        type: assertVisible
+        locator: {text: New task}
+setup:
+  - stepId: matrixSetup
+    description: Establish each matrix-row baseline
+    timeoutMs: 12000
+    call: {fragment: inspectInbox}
+steps:
+  - stepId: retryMatrixProbe
+    description: Read the shared UI through a bounded retry node
+    timeoutMs: 12000
+    retry:
+      maxAttempts: 2
+      delayMs: 100
+      steps:
+        - stepId: verifyInboxHeading
+          action:
+            type: assertVisible
+            locator: {text: Inbox}
+  - stepId: capturePersonaEvidence
+    description: Name evidence from the bound matrix input
+    timeoutMs: 20000
+    action:
+      type: captureScreenshot
+      artifactName: {$var: persona}
+      captureOptions:
+        reason: acceptance
+        includeSnapshot: true
+        attachToStep: true
+        profile: acceptance
+        allowFallback: true
+finally:
+  - stepId: matrixCleanup
+    description: Verify the matrix row left shared state unchanged
+    timeoutMs: 12000
+    call: {fragment: inspectInbox}

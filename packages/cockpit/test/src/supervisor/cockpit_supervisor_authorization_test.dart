@@ -107,6 +107,33 @@ void main() {
       ),
     );
   });
+
+  test('yolo mode grants every operation and test safety capability', () {
+    final policy = CockpitSupervisorAuthorizationPolicy(
+      mode: CockpitAuthorizationMode.yolo,
+    );
+
+    expect(
+      () => policy.authorizeOperation(
+        CockpitSupervisorOperationCatalog.require('system.action'),
+        CockpitOperationInvocation(
+          kind: 'system.action',
+          workspaceId: 'workspaceOne',
+          input: const <String, Object?>{'targetEnvironment': 'production'},
+        ),
+      ),
+      returnsNormally,
+    );
+    expect(
+      policy.effectiveAllowedTargetEnvironments,
+      CockpitTestTargetEnvironment.values.toSet(),
+    );
+    expect(
+      policy.effectiveAllowedSafetyEffects,
+      CockpitTestSafetyEffect.values.toSet(),
+    );
+    expect(policy.allowsEnvironmentSecretName('ANY_SECRET'), isTrue);
+  });
 }
 
 final class _NoopPermissionHardener implements CockpitPermissionHardener {

@@ -295,13 +295,18 @@ void main() {
     );
 
     const renderer = CockpitSuiteReportRenderer();
+    final bundle = CockpitTestReportBundle(
+      generatedAt: report.finishedAt.toUtc(),
+      report: report,
+      executions: const <CockpitTestReportExecution>[],
+    );
     expect(renderer.json(report), contains('"failure"'));
     expect(renderer.junit(report), contains('[suite cleanup]'));
     expect(
-      renderer.aiSummary(report),
+      renderer.summary(bundle),
       contains('Suite fixture teardown failed.'),
     );
-    expect(renderer.html(report), contains('Suite fixture teardown failed.'));
+    expect(renderer.html(bundle), contains('Suite fixture teardown failed.'));
 
     final missingFailure = <String, Object?>{...report.toJson()}
       ..remove('failure');

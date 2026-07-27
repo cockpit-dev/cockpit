@@ -193,7 +193,7 @@ Map<String, Object?> _documentFor(Map<String, Object?> action) =>
     };
 
 Map<String, Object?> _actionJson(CockpitTestActionKind kind) {
-  final locator = <String, Object?>{'strategy': 'testId', 'value': 'target'};
+  final locator = <String, Object?>{'testId': 'target'};
   return switch (kind) {
     CockpitTestActionKind.tap => <String, Object?>{
       'type': kind.name,
@@ -217,6 +217,19 @@ Map<String, Object?> _actionJson(CockpitTestActionKind kind) {
       'type': kind.name,
       'locator': locator,
       'text': '  preserved text  ',
+    },
+    CockpitTestActionKind.eraseText => <String, Object?>{
+      'type': kind.name,
+      'locator': locator,
+      'characters': 4,
+    },
+    CockpitTestActionKind.copyText => <String, Object?>{
+      'type': kind.name,
+      'locator': locator,
+    },
+    CockpitTestActionKind.pasteText => <String, Object?>{
+      'type': kind.name,
+      'locator': locator,
     },
     CockpitTestActionKind.setTextEditingValue => <String, Object?>{
       'type': kind.name,
@@ -336,6 +349,20 @@ Map<String, Object?> _actionJson(CockpitTestActionKind kind) {
       'locator': locator,
       'text': '^Ready',
       'matchMode': 'regex',
+    },
+    CockpitTestActionKind.assertScreenshot => <String, Object?>{
+      'type': kind.name,
+      'baseline': 'baselines/home.png',
+      'similarity': 0.99,
+      'artifactName': 'home',
+    },
+    CockpitTestActionKind.travel => <String, Object?>{
+      'type': kind.name,
+      'route': <Object?>[
+        <String, Object?>{'latitude': 31.2304, 'longitude': 121.4737},
+        <String, Object?>{'latitude': 31.231, 'longitude': 121.474},
+      ],
+      'intervalMs': 100,
     },
     CockpitTestActionKind.system => <String, Object?>{
       'type': kind.name,

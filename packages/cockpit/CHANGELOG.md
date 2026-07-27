@@ -4,13 +4,18 @@
 
 - Added durable suite campaigns with DAG dependencies, scoped fixtures,
   matrices, bounded concurrency, retries, fail-fast policy, recovery, and
-  JSON/JUnit/HTML/AI summary reports.
+  complete offline JSON/JUnit/HTML/Markdown report bundles.
+- Added semantic report directories, full suite/case definitions, detailed
+  step metadata, role-based offline HTML views, and a root SHA-256 manifest
+  covering every exported file.
 - Added restart-safe suite node and attempt checkpoints. Active attempts recover
   as `interrupted`, completed nodes are not replayed, and persisted fixture/row
   session bindings must resolve to the same healthy resource.
 - Added strict home-scoped Supervisor authorization policy persistence and
   `daemon policy show|validate|apply`, including explicit production/unknown
   target authority and allowlisted worker environment secrets.
+- Added process-scoped `daemon start|restart --yolo` authorization with
+  effective-mode status, worker propagation, and report provenance.
 - Enforced suite `sharedSession`, `restartApp`, and `resetAppData` isolation
   before case fixtures, preserved dependency teardown ordering, propagated
   setup failures into blocked case reports, and kept attempted teardown active
@@ -18,6 +23,19 @@
 - Added registered black-box targets for Android, iOS, desktop, browser, and
   system surfaces, with native accessibility locators, system setup/cleanup
   actions, screenshots, and capability-truthful failures.
+- Added per-step semantic/native/visual/coordinate routing, including a
+  secondary system driver for Flutter development sessions and plane-aware
+  conditions, fragments, retries, loops, capture, and recording.
+- Made the sanitized `target.inspect.output.systemControl` profile the
+  capability authority for that secondary driver without exposing private app
+  or process identities to clients.
+- Changed macOS app recovery and activation to use the native application API,
+  avoiding Automation and Accessibility permission requirements for focus
+  recovery while retaining those permissions for real UI-tree and input work.
+- Added deterministic workspace-confined visual template matching and
+  screenshot baseline assertions with portable actual/baseline/diff artifacts.
+- Added native and Flutter `copyText`, `eraseText`, and `pasteText` execution,
+  bounded location-route travel, and efficient repeated platform key events.
 - Added Android ADB execution and iOS simulator/physical-device WDA execution,
   including per-target WDA endpoints for concurrent workspaces and iOS
   physical-device install/uninstall through `devicectl`.
@@ -45,6 +63,9 @@
   recorder as internal implementation modules.
 - Aggregated independent structural compiler diagnostics through the published
   schema while retaining deterministic source paths and locations.
+- Expanded release acceptance to cover DAGs, matrices, fixtures, loops,
+  retries, semantic and gesture command families, recording lifecycles,
+  mixed Flutter/native execution, and verified offline report bundles.
 
 ## 1.1.4
 

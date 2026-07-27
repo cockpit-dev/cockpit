@@ -1,0 +1,58 @@
+schemaVersion: cockpit.test/v2
+kind: case
+id: demoRecordingLifecycle
+name: Recording lifecycle
+description: Captures a bounded recording around visible application assertions.
+tags: [acceptance, recording, requires-recording]
+target:
+  platform: flutter
+  targetKind: flutterApp
+  plane: semantic
+defaults:
+  commandTimeoutMs: 20000
+  cleanupTimeoutMs: 30000
+  failFast: true
+  evidence:
+    screenshot: onFailure
+    snapshot: onFailure
+    failurePolicy: recordWarning
+setup:
+  - stepId: verifyRecordingBaseline
+    timeoutMs: 12000
+    action:
+      type: waitFor
+      condition: {type: route, route: /inbox}
+  - stepId: startAcceptanceRecording
+    description: Start capability-approved acceptance recording
+    timeoutMs: 30000
+    startRecording:
+      name: cockpit-demo-regression
+      purpose: acceptance
+      mode: auto
+      allowFallback: true
+      attachToStep: true
+steps:
+  - stepId: verifyInboxDuringRecording
+    description: Assert live state while recording
+    timeoutMs: 12000
+    action:
+      type: assertVisible
+      locator: {text: New task}
+  - stepId: captureFrameDuringRecording
+    description: Capture a correlated screenshot during recording
+    timeoutMs: 20000
+    action:
+      type: captureScreenshot
+      artifactName: recording-lifecycle-frame
+      captureOptions:
+        reason: acceptance
+        includeSnapshot: true
+        attachToStep: true
+        profile: acceptance
+        allowFallback: true
+finally:
+  - stepId: stopAcceptanceRecording
+    description: Stop recording and attach the completed video
+    timeoutMs: 30000
+    stopRecording:
+      settleMs: 500

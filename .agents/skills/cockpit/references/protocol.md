@@ -50,6 +50,17 @@ Run `cockpit help <command> <subcommand>` for current options.
   `deadline`. Case and suite submissions use `timeoutMs` as their overall run
   budget; step, command, cleanup, and launch budgets remain independent inner
   limits.
+- A case step may override its target plane with `semantic`, `native`,
+  `visual`, or `coordinate`; otherwise routing follows the action/locator.
+  Flutter bridge targets may use semantic and secondary system drivers in the
+  same run. The sanitized `target.inspect.output.systemControl` profile is the
+  authority for the secondary driver; `app.get` identities are intentionally
+  redacted. Use clipboard text actions, travel, visual matching, and
+  screenshot assertions only when advertised.
+- Visual templates and screenshot baselines must resolve within the workspace.
+  Screenshot assertions retain actual, baseline, and diff artifact files.
+  Fixtures, `setup`/`finally`, step evidence, and explicit recording operations
+  provide scoped before/after behavior.
 - Submission and mutation idempotency keys are stable per logical action.
 - SSE sequence numbers are monotonic and resumable.
 - Suite checkpoints preserve completed nodes, attempts, fixture state, and

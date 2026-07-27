@@ -23,6 +23,97 @@ enum CockpitLocatorKind {
 
 typedef CockpitLocatorSignal = ({CockpitLocatorKind kind, String value});
 
+enum CockpitTextMatchMode {
+  exact,
+  contains,
+  fuzzy,
+  regex;
+
+  static CockpitTextMatchMode fromJson(Object? json) {
+    if (json is String) {
+      for (final mode in values) {
+        if (mode.name == json) return mode;
+      }
+    }
+    throw const FormatException(
+      'Text match mode must be exact, contains, fuzzy, or regex.',
+    );
+  }
+}
+
+const double cockpitFuzzyTextMatchThreshold = 0.72;
+
+bool cockpitFuzzyTextMatches(String actual, String expected) {
+  final normalizedExpected = _normalizeFuzzyText(expected);
+  if (normalizedExpected.isEmpty) return false;
+  if (normalizedExpected.runes.length < 3) {
+    return _normalizeFuzzyText(actual) == normalizedExpected;
+  }
+  return cockpitFuzzyTextSimilarity(actual, expected) >=
+      cockpitFuzzyTextMatchThreshold;
+}
+
+double cockpitFuzzyTextSimilarity(String actual, String expected) {
+  final normalizedActual = _normalizeFuzzyText(actual);
+  final normalizedExpected = _normalizeFuzzyText(expected);
+  if (normalizedActual == normalizedExpected) return 1;
+  if (normalizedActual.isEmpty || normalizedExpected.isEmpty) return 0;
+
+  final actualRunes = normalizedActual.runes.toList(growable: false);
+  final expectedRunes = normalizedExpected.runes.toList(growable: false);
+  final shorterLength = actualRunes.length < expectedRunes.length
+      ? actualRunes.length
+      : expectedRunes.length;
+  final longerLength = actualRunes.length > expectedRunes.length
+      ? actualRunes.length
+      : expectedRunes.length;
+  final contains =
+      normalizedActual.contains(normalizedExpected) ||
+      normalizedExpected.contains(normalizedActual);
+  if (contains) {
+    return 0.80 + (0.19 * shorterLength / longerLength);
+  }
+
+  final distance = _damerauLevenshteinDistance(actualRunes, expectedRunes);
+  return (1 - (distance / longerLength)).clamp(0, 1).toDouble();
+}
+
+String _normalizeFuzzyText(String value) =>
+    value.replaceAll(RegExp(r'\s+'), ' ').trim().toLowerCase();
+
+int _damerauLevenshteinDistance(List<int> left, List<int> right) {
+  final rows = List<List<int>>.generate(
+    left.length + 1,
+    (row) => List<int>.filled(right.length + 1, 0),
+    growable: false,
+  );
+  for (var row = 0; row <= left.length; row += 1) {
+    rows[row][0] = row;
+  }
+  for (var column = 0; column <= right.length; column += 1) {
+    rows[0][column] = column;
+  }
+  for (var row = 1; row <= left.length; row += 1) {
+    for (var column = 1; column <= right.length; column += 1) {
+      final substitutionCost = left[row - 1] == right[column - 1] ? 0 : 1;
+      var distance = <int>[
+        rows[row - 1][column] + 1,
+        rows[row][column - 1] + 1,
+        rows[row - 1][column - 1] + substitutionCost,
+      ].reduce((minimum, value) => value < minimum ? value : minimum);
+      if (row > 1 &&
+          column > 1 &&
+          left[row - 1] == right[column - 2] &&
+          left[row - 2] == right[column - 1]) {
+        final transposed = rows[row - 2][column - 2] + 1;
+        if (transposed < distance) distance = transposed;
+      }
+      rows[row][column] = distance;
+    }
+  }
+  return rows[left.length][right.length];
+}
+
 final class CockpitLocator {
   const CockpitLocator({
     this.cockpitId,
@@ -34,6 +125,7 @@ final class CockpitLocator {
     this.route,
     this.registrationId,
     this.path,
+    this.matchMode = CockpitTextMatchMode.exact,
     this.index,
     this.ancestor,
     this.fallbacks = const [],
@@ -48,6 +140,7 @@ final class CockpitLocator {
   final String? route;
   final String? registrationId;
   final String? path;
+  final CockpitTextMatchMode matchMode;
   final int? index;
   final CockpitLocator? ancestor;
   final List<CockpitLocator> fallbacks;
@@ -124,6 +217,7 @@ final class CockpitLocator {
       'route': ?signals[CockpitLocatorKind.route.name],
       'registrationId': ?signals[CockpitLocatorKind.registrationId.name],
       'path': ?signals[CockpitLocatorKind.path.name],
+      if (matchMode != CockpitTextMatchMode.exact) 'matchMode': matchMode.name,
       if (index != null) 'index': index,
       if (ancestor != null) 'ancestor': ancestor!.toJson(),
       'fallbacks': fallbacks.map((fallback) => fallback.toJson()).toList(),
@@ -141,17 +235,35 @@ final class CockpitLocator {
         .map((item) => CockpitLocator.fromJson(Map<String, Object?>.from(item)))
         .toList(growable: false);
     final ancestorJson = json['ancestor'] as Map<Object?, Object?>?;
+    final matchMode = json['matchMode'] == null
+        ? CockpitTextMatchMode.exact
+        : CockpitTextMatchMode.fromJson(json['matchMode']);
+    final text = json['text'] as String?;
+    final tooltip = json['tooltip'] as String?;
+    if (matchMode != CockpitTextMatchMode.exact &&
+        text == null &&
+        tooltip == null) {
+      throw const FormatException(
+        'Locator matchMode requires a text or tooltip signal.',
+      );
+    }
+    if (matchMode == CockpitTextMatchMode.regex) {
+      for (final pattern in <String?>[text, tooltip]) {
+        if (pattern != null) RegExp(pattern);
+      }
+    }
 
     return CockpitLocator(
       cockpitId: json['cockpitId'] as String?,
       semanticId: json['semanticId'] as String?,
       key: json['key'] as String?,
-      text: json['text'] as String?,
-      tooltip: json['tooltip'] as String?,
+      text: text,
+      tooltip: tooltip,
       type: json['type'] as String?,
       route: json['route'] as String?,
       registrationId: json['registrationId'] as String?,
       path: json['path'] as String?,
+      matchMode: matchMode,
       index: (json['index'] as num?)?.toInt(),
       ancestor: ancestorJson == null
           ? null
@@ -168,6 +280,7 @@ final class CockpitLocator {
               other.signalMap,
               signalMap,
             ) &&
+            other.matchMode == matchMode &&
             other.index == index &&
             other.ancestor == ancestor &&
             _fallbackListEquality.equals(other.fallbacks, fallbacks);
@@ -176,6 +289,7 @@ final class CockpitLocator {
   @override
   int get hashCode => Object.hash(
     const MapEquality<String, String>().hash(signalMap),
+    matchMode,
     index,
     ancestor,
     _fallbackListEquality.hash(fallbacks),

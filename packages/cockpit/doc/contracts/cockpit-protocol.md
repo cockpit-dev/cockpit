@@ -63,7 +63,40 @@ resources are resolved through Supervisor-owned indexes, never through global
 Case runs provide typed inputs, setup, steps, guaranteed cleanup, safety
 authorization, evidence, and immutable attempt bundles. Suite runs add DAGs,
 matrix expansion, fixtures, isolation, concurrency, retry, fail-fast,
-checkpoint recovery, and JSON/JUnit/HTML/AI reports.
+checkpoint recovery, and complete offline regression report bundles.
+
+The target declares a default execution plane and each step may override it as
+`semantic`, `native`, `visual`, or `coordinate`. Hosts derive an omitted step
+plane from its action and locator, propagate the effective plane through nested
+control flow, and record requested and actual planes. A Flutter development
+target may own both its semantic bridge driver and a secondary system driver
+for the same app/device so mixed Flutter/native stacks stay in one run.
+For a launched target, `target.inspect` computes the secondary driver profile
+inside the worker from its private app identity and returns only the sanitized
+profile as `output.systemControl`. Clients must treat that profile as
+authoritative instead of reconstructing it from redacted app resources.
+
+The shared actions include semantic and native gestures, text and clipboard
+editing, waits, assertions, evidence, explicit recording lifecycles, system
+control, bounded location travel, visual template location, and screenshot
+baseline comparison. Template and baseline paths are workspace-confined.
+Screenshot comparison publishes actual, baseline, and diff files rather than
+embedding binary data. Suite fixtures, case `setup`/`finally`, step evidence,
+and explicit recording boundaries are the lifecycle composition primitives;
+the protocol has no duplicate generic pre/post hook layer.
+
+## Report Bundle
+
+The immutable report fact graph is `run -> suite -> case -> attempt -> step ->
+assertion/evidence`. `report.json` is the canonical single-file rendering input
+and retains the effective suite and case definitions plus detailed execution
+results. Human views are projections of that graph, never separate facts:
+`index.html` provides offline Overview, Product, Quality, Engineering, and
+Machine lenses; `summary.md` and `junit.xml` provide portable summary and CI
+interchange; semantic case/attempt directories contain detailed steps and
+evidence. Root `manifest.json` declares every other file with its semantic kind,
+run/case/attempt/step ownership, byte size, media type, and SHA-256. The HTML
+contains no external dependency or network fetch.
 
 ## Target Families
 

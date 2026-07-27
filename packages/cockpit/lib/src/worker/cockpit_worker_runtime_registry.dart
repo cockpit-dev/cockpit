@@ -8,6 +8,9 @@ import 'package:path/path.dart' as p;
 import '../application/cockpit_app_handle.dart';
 import '../application/cockpit_application_service_exception.dart';
 import '../application/cockpit_stop_app_service.dart';
+import '../adapters/cockpit_automation_adapter.dart';
+import '../adapters/cockpit_capture_adapter.dart';
+import '../adapters/cockpit_recording_adapter.dart';
 import '../development/cockpit_development_probe.dart';
 import '../development/cockpit_development_session_handle.dart';
 import '../foundation/cockpit_ids.dart';
@@ -83,6 +86,10 @@ final class CockpitWorkerTargetRegistration {
   final CockpitTargetKind targetKind;
   final CockpitAppMode mode;
   final CockpitTestTargetEnvironment environment;
+
+  bool get usesSystemControl =>
+      targetKind != CockpitTargetKind.flutterApp ||
+      (entrypoint == null && appId != null);
 }
 
 final class CockpitWorkerTargetBinding {
@@ -318,8 +325,7 @@ final class CockpitWorkerRuntimeRegistry
       return CockpitWorkerApplicationResourcePlan(
         primaryResourceId: target.deviceResourceId,
         requiresPort:
-            kind != 'target.launch' ||
-            target.registration.targetKind == CockpitTargetKind.flutterApp,
+            kind != 'target.launch' || !target.registration.usesSystemControl,
       );
     }
     if (kind == 'app.stop' || kind == 'app.get') {
@@ -431,9 +437,9 @@ final class CockpitWorkerRuntimeRegistry
     await _ensureLoaded();
     final target =
         _targets[targetId] ?? (throw _unknownReference('target', targetId));
-    if (target.registration.targetKind == CockpitTargetKind.flutterApp) {
+    if (!target.registration.usesSystemControl) {
       throw const FormatException(
-        'Flutter targets must be recorded from their launched app handle.',
+        'Remote targets must be recorded from their launched app handle.',
       );
     }
     final runtimeTarget =
@@ -512,6 +518,13 @@ final class CockpitWorkerRuntimeRegistry
         .where((binding) => binding.handle.appId == handle.appId)
         .firstOrNull;
     final appId = existing?.appId ?? _newId('app');
+    if (existing != null &&
+        !_sameOptionalRemoteHandle(
+          existing.handle.remoteSession,
+          handle.remoteSession,
+        )) {
+      _removeAppSessionsInMemory(appId);
+    }
     final binding = CockpitWorkerAppBinding(
       appId: appId,
       targetId: target.targetId,
@@ -530,6 +543,31 @@ final class CockpitWorkerRuntimeRegistry
       );
     }
     return binding;
+  }
+
+  void _removeAppSessionsInMemory(String appId) {
+    final sessionIds = <String>{
+      for (final session in _sessions.values)
+        if (session.appId == appId) session.sessionId,
+    };
+    if (sessionIds.isEmpty) {
+      return;
+    }
+    final recordingIds = <String>{
+      for (final recording in _recordings.values)
+        if (recording.appId == appId ||
+            sessionIds.contains(recording.sessionId))
+          recording.recordingId,
+    };
+    _sessions.removeWhere(
+      (_, session) => sessionIds.contains(session.sessionId),
+    );
+    _recordings.removeWhere(
+      (_, recording) => recordingIds.contains(recording.recordingId),
+    );
+    _probes.removeWhere((_, probe) => sessionIds.contains(probe.sessionId));
+    _removeSnapshotsForSessions(sessionIds);
+    _removeOwnedArtifacts(sessionIds: sessionIds, recordingIds: recordingIds);
   }
 
   Future<CockpitWorkerAppBinding> requireApp(String appId) => _locked(() async {
@@ -1031,7 +1069,8 @@ final class CockpitWorkerRuntimeRegistry
     String? preferredResourceId,
   }) => _locked(() async {
     await _ensureLoaded();
-    if (requirements.targetKind != CockpitTargetKind.flutterApp.name) {
+    if (requirements.targetKind != CockpitTargetKind.flutterApp.name ||
+        requirements.plane != CockpitTestPlane.semantic) {
       return _selectHealthySystemSession(
         targetId: targetId,
         requirements: requirements,
@@ -1070,6 +1109,7 @@ final class CockpitWorkerRuntimeRegistry
         if (!available.containsAll(requirements.requiredCapabilities)) {
           continue;
         }
+        final systemDriver = await _secondarySystemDriver(candidate);
         return CockpitWorkerHealthySession(
           sessionId: candidate.sessionId,
           targetId: candidate.targetId,
@@ -1079,6 +1119,9 @@ final class CockpitWorkerRuntimeRegistry
           automationAdapter: CockpitRemoteAutomationAdapter(client: client),
           captureAdapter: CockpitRemoteCaptureAdapter(client: client),
           recordingAdapter: CockpitRemoteRecordingAdapter(client: client),
+          systemAutomationAdapter: systemDriver?.automation,
+          systemCaptureAdapter: systemDriver?.capture,
+          systemRecordingAdapter: systemDriver?.recording,
           healthCheck: () async => await client.ping() && await client.ready(),
           isolate: (isolation, deadline) =>
               _isolateFlutterSession(candidate.sessionId, isolation, deadline),
@@ -1093,6 +1136,69 @@ final class CockpitWorkerRuntimeRegistry
       message: 'No compatible healthy session is owned by this workspace.',
     );
   });
+
+  Future<
+    ({
+      CockpitAutomationAdapter automation,
+      CockpitCaptureAdapter? capture,
+      CockpitRecordingAdapter? recording,
+    })?
+  >
+  _secondarySystemDriver(CockpitWorkerSessionBinding session) async {
+    final binding = _targets[session.targetId];
+    final app = _apps[session.appId];
+    final appId = app?.handle.platformAppId ?? binding?.registration.appId;
+    if (binding == null || appId == null || appId.trim().isEmpty) return null;
+    final target = CockpitSystemTestTarget(
+      platform: binding.registration.platform,
+      deviceId: binding.registration.deviceId,
+      appId: appId,
+      targetKind: binding.registration.targetKind,
+      processId: app?.handle.processId,
+      metadata: <String, Object?>{
+        if (binding.registration.wdaUrl != null)
+          'wdaUrl': binding.registration.wdaUrl,
+      },
+    );
+    final automation = CockpitSystemTestAutomationAdapter(
+      target: target,
+      controlService: _systemControlService,
+      actionService: _systemActionService,
+      workspaceRoot: workspaceRoot,
+    );
+    try {
+      await automation.describeCapabilities();
+      final profile = (await _systemControlService.describe(
+        CockpitSystemControlDescribeRequest(
+          platform: target.platform,
+          deviceId: target.deviceId,
+          appId: target.appId,
+          processId: target.processId,
+          metadata: target.metadata,
+        ),
+      )).profile;
+      final actions = profile.availableActions.toSet();
+      return (
+        automation: automation,
+        capture: actions.contains(CockpitSystemControlAction.captureScreenshot)
+            ? CockpitSystemTestCaptureAdapter(
+                target: target,
+                actionService: _systemActionService,
+              )
+            : null,
+        recording:
+            actions.contains(CockpitSystemControlAction.startRecording) &&
+                actions.contains(CockpitSystemControlAction.stopRecording)
+            ? CockpitSystemTestRecordingAdapter(
+                target: target,
+                actionService: _systemActionService,
+              )
+            : null,
+      );
+    } on Object {
+      return null;
+    }
+  }
 
   Future<CockpitWorkerHealthySession> _selectHealthySystemSession({
     required String? targetId,
@@ -1131,6 +1237,7 @@ final class CockpitWorkerRuntimeRegistry
         platform: candidate.registration.platform,
         deviceId: candidate.registration.deviceId,
         appId: platformAppId,
+        targetKind: candidate.registration.targetKind,
         processId: app?.handle.processId,
         metadata: <String, Object?>{
           if (candidate.registration.wdaUrl != null)
@@ -1141,6 +1248,7 @@ final class CockpitWorkerRuntimeRegistry
         target: target,
         controlService: _systemControlService,
         actionService: _systemActionService,
+        workspaceRoot: workspaceRoot,
       );
       try {
         final capabilities = await automation.describeCapabilities();

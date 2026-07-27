@@ -347,7 +347,10 @@ final class CockpitDurableWorkerArtifactPublisher
       final sourceReportRoot = plan.sourcePath;
       final retainedReportRoot = plan.retainedPath;
       await _validateBundleRoot(sourceReportRoot, runRoot: runRoot);
-      await _verifySourceReport(report, sourceReportRoot);
+      final reportManifest = await _verifySourceReport(
+        report,
+        sourceReportRoot,
+      );
 
       final catalog = await _catalog(runId).read();
       final existing = _decodeCatalog(
@@ -363,10 +366,31 @@ final class CockpitDurableWorkerArtifactPublisher
           .toSet();
       final resources = <CockpitArtifactResource>[];
       var aggregateBytes = 0;
-      for (final format in report.reportPolicy.formats) {
+      final declaredFiles = <({String path, String kind, String mediaType})>[
+        (
+          path: 'manifest.json',
+          kind: 'report.manifest',
+          mediaType: 'application/json',
+        ),
+        for (final file in reportManifest.files)
+          (path: file.relativePath, kind: file.kind, mediaType: file.mediaType),
+      ];
+      if (declaredFiles.length > maximumArtifactsPerRun) {
+        throw const FormatException(
+          'Suite report artifact count bound was exceeded.',
+        );
+      }
+      for (final declared in declaredFiles) {
         _checkOperation(deadline, cancellation);
-        final name = _reportFileName(format);
-        final sourcePath = p.normalize(p.join(sourceReportRoot, name));
+        final relativePath = _safeRelativePath(declared.path);
+        if (p.posix.split(relativePath).length > maximumDepth) {
+          throw const FormatException(
+            'Suite report artifact depth bound was exceeded.',
+          );
+        }
+        final sourcePath = p.normalize(
+          p.joinAll(<String>[sourceReportRoot, ...p.posix.split(relativePath)]),
+        );
         await _validateImmutableFile(sourcePath, bundleRoot: sourceReportRoot);
         final size = await File(sourcePath).length();
         if (size > maximumArtifactBytes) {
@@ -380,7 +404,12 @@ final class CockpitDurableWorkerArtifactPublisher
         }
         final digest = (await sha256.bind(File(sourcePath).openRead()).first)
             .toString();
-        final retainedPath = p.normalize(p.join(retainedReportRoot, name));
+        final retainedPath = p.normalize(
+          p.joinAll(<String>[
+            retainedReportRoot,
+            ...p.posix.split(relativePath),
+          ]),
+        );
         final relativeToRun = p
             .relative(retainedPath, from: runRoot)
             .replaceAll('\\', '/');
@@ -398,9 +427,9 @@ final class CockpitDurableWorkerArtifactPublisher
             artifactId: artifactId,
             workspaceId: workspaceId,
             runId: runId,
-            kind: _reportArtifactKind(format),
+            kind: declared.kind,
             relativePath: relativeToRun,
-            mediaType: _reportMediaType(format),
+            mediaType: declared.mediaType,
             sizeBytes: size,
             sha256: digest,
             createdAt: report.finishedAt.toUtc(),
@@ -757,28 +786,55 @@ final class CockpitDurableWorkerArtifactPublisher
     }
   }
 
-  Future<void> _verifySourceReport(
+  Future<CockpitTestReportBundleManifest> _verifySourceReport(
     CockpitTestSuiteReport expected,
     String reportRoot,
   ) async {
-    final expectedNames = expected.reportPolicy.formats
-        .map(_reportFileName)
-        .toSet();
-    final actualNames = <String>{};
-    await for (final entity in Directory(reportRoot).list(followLinks: false)) {
-      if (await FileSystemEntity.type(entity.path, followLinks: false) !=
-          FileSystemEntityType.file) {
+    final manifest = await _readReportManifest(reportRoot);
+    if (manifest.runId != expected.runId) {
+      throw const FormatException(
+        'Suite report manifest ownership is invalid.',
+      );
+    }
+    final declared = <String, CockpitTestReportBundleFile>{
+      for (final file in manifest.files) file.relativePath: file,
+    };
+    final required = expected.reportPolicy.formats.map(_reportFileName).toSet();
+    if (!declared.keys.toSet().containsAll(required)) {
+      throw const FormatException(
+        'Suite report files do not match the declared report policy.',
+      );
+    }
+    var actualCount = 0;
+    await for (final entity in Directory(
+      reportRoot,
+    ).list(recursive: true, followLinks: false)) {
+      final type = await FileSystemEntity.type(entity.path, followLinks: false);
+      if (type == FileSystemEntityType.directory) continue;
+      if (type != FileSystemEntityType.file) {
         throw FileSystemException(
           'Suite report contains a non-file entry.',
           entity.path,
         );
       }
-      actualNames.add(p.basename(entity.path));
+      final relative = p
+          .relative(entity.path, from: reportRoot)
+          .replaceAll('\\', '/');
+      if (relative == 'manifest.json') continue;
+      actualCount += 1;
+      final file = declared[relative];
+      if (file == null ||
+          await File(entity.path).length() != file.sizeBytes ||
+          (await sha256.bind(File(entity.path).openRead()).first).toString() !=
+              file.sha256) {
+        throw const FormatException(
+          'Suite report manifest integrity verification failed.',
+        );
+      }
     }
-    if (actualNames.length != expectedNames.length ||
-        !actualNames.containsAll(expectedNames)) {
+    if (actualCount != declared.length) {
       throw const FormatException(
-        'Suite report files do not match the declared report policy.',
+        'Suite report manifest does not cover every file.',
       );
     }
     final parsed = await _readSuiteReport(reportRoot);
@@ -787,6 +843,7 @@ final class CockpitDurableWorkerArtifactPublisher
         'Canonical suite report does not match the executed report.',
       );
     }
+    return manifest;
   }
 
   Future<void> _verifyRetainedReport(
@@ -803,9 +860,9 @@ final class CockpitDurableWorkerArtifactPublisher
         'Persisted suite report ownership or content is invalid.',
       );
     }
-    final formatsByName = <String, CockpitTestReportFormat>{
-      for (final format in report.reportPolicy.formats)
-        _reportFileName(format): format,
+    final manifest = await _readReportManifest(bundleRoot);
+    final declared = <String, CockpitTestReportBundleFile>{
+      for (final file in manifest.files) file.relativePath: file,
     };
     final actualNames = <String>{};
     for (final resource in resources) {
@@ -828,11 +885,14 @@ final class CockpitDurableWorkerArtifactPublisher
       );
       await _validateImmutableFile(filePath, bundleRoot: bundleRoot);
       final name = p.relative(filePath, from: bundleRoot).replaceAll('\\', '/');
-      final format = formatsByName[name];
-      if (format == null ||
-          !actualNames.add(name) ||
-          resource.kind != _reportArtifactKind(format) ||
-          resource.mediaType != _reportMediaType(format) ||
+      final declaration = declared[name];
+      final isManifest = name == 'manifest.json';
+      if (!actualNames.add(name) ||
+          !isManifest && declaration == null ||
+          resource.kind !=
+              (isManifest ? 'report.manifest' : declaration!.kind) ||
+          resource.mediaType !=
+              (isManifest ? 'application/json' : declaration!.mediaType) ||
           resource.createdAt != report.finishedAt.toUtc()) {
         throw const FormatException(
           'Persisted report artifact metadata is invalid.',
@@ -846,9 +906,16 @@ final class CockpitDurableWorkerArtifactPublisher
           'Persisted report artifact byte integrity is invalid.',
         );
       }
+      if (!isManifest &&
+          (declaration!.sizeBytes != size || declaration.sha256 != digest)) {
+        throw const FormatException(
+          'Persisted report manifest integrity is invalid.',
+        );
+      }
     }
-    if (actualNames.length != formatsByName.length ||
-        !actualNames.containsAll(formatsByName.keys)) {
+    final expectedNames = <String>{'manifest.json', ...declared.keys};
+    if (actualNames.length != expectedNames.length ||
+        !actualNames.containsAll(expectedNames)) {
       throw const FormatException(
         'Persisted report artifact catalog is incomplete.',
       );
@@ -861,7 +928,20 @@ final class CockpitDurableWorkerArtifactPublisher
     if (await File(path).length() > maximumArtifactBytes) {
       throw const FormatException('Canonical suite report is too large.');
     }
-    return CockpitTestSuiteReport.fromJson(
+    return CockpitTestReportBundle.fromJson(
+      jsonDecode(await File(path).readAsString()),
+    ).report;
+  }
+
+  Future<CockpitTestReportBundleManifest> _readReportManifest(
+    String reportRoot,
+  ) async {
+    final path = p.join(reportRoot, 'manifest.json');
+    await _validateImmutableFile(path, bundleRoot: reportRoot);
+    if (await File(path).length() > maximumArtifactBytes) {
+      throw const FormatException('Report bundle manifest is too large.');
+    }
+    return CockpitTestReportBundleManifest.fromJson(
       jsonDecode(await File(path).readAsString()),
     );
   }
@@ -1261,20 +1341,6 @@ String _foundationArtifactKind(String value) {
 String _reportFileName(CockpitTestReportFormat format) => switch (format) {
   CockpitTestReportFormat.json => 'report.json',
   CockpitTestReportFormat.junit => 'junit.xml',
-  CockpitTestReportFormat.html => 'report.html',
-  CockpitTestReportFormat.aiSummary => 'ai-summary.md',
-};
-
-String _reportArtifactKind(CockpitTestReportFormat format) => switch (format) {
-  CockpitTestReportFormat.json => 'report.json',
-  CockpitTestReportFormat.junit => 'report.junit',
-  CockpitTestReportFormat.html => 'report.html',
-  CockpitTestReportFormat.aiSummary => 'report.aiSummary',
-};
-
-String _reportMediaType(CockpitTestReportFormat format) => switch (format) {
-  CockpitTestReportFormat.json => 'application/json',
-  CockpitTestReportFormat.junit => 'application/xml',
-  CockpitTestReportFormat.html => 'text/html',
-  CockpitTestReportFormat.aiSummary => 'text/markdown',
+  CockpitTestReportFormat.html => 'index.html',
+  CockpitTestReportFormat.summary => 'summary.md',
 };

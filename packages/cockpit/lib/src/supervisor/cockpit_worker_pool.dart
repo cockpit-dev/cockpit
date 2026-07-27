@@ -39,6 +39,7 @@ final class CockpitWorkspaceWorkerSpec {
     required this.workspaceRoot,
     required this.stateRoot,
     required Iterable<String> supportedFeatures,
+    this.authorizationMode = CockpitAuthorizationMode.restricted,
     Iterable<CockpitTestTargetEnvironment> allowedTargetEnvironments =
         const <CockpitTestTargetEnvironment>[],
     Iterable<CockpitTestSafetyEffect> allowedSafetyEffects =
@@ -69,6 +70,7 @@ final class CockpitWorkspaceWorkerSpec {
   final String workspaceRoot;
   final String stateRoot;
   final List<String> supportedFeatures;
+  final CockpitAuthorizationMode authorizationMode;
   final Set<CockpitTestTargetEnvironment> allowedTargetEnvironments;
   final Set<CockpitTestSafetyEffect> allowedSafetyEffects;
 }

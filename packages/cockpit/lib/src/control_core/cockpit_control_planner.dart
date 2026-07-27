@@ -118,6 +118,8 @@ final class CockpitControlPlanner {
     return switch (action) {
       CockpitIntentAction.tap ||
       CockpitIntentAction.enterText ||
+      CockpitIntentAction.eraseText ||
+      CockpitIntentAction.pasteText ||
       CockpitIntentAction.focusTextInput ||
       CockpitIntentAction.setTextEditingValue ||
       CockpitIntentAction.sendTextInputAction ||
@@ -146,6 +148,7 @@ final class CockpitControlPlanner {
       CockpitIntentAction.waitFor ||
       CockpitIntentAction.assertVisible ||
       CockpitIntentAction.assertText => true,
+      CockpitIntentAction.copyText ||
       CockpitIntentAction.captureScreenshot ||
       CockpitIntentAction.collectSnapshot ||
       CockpitIntentAction.runShell => false,
@@ -174,6 +177,9 @@ final class CockpitControlPlanner {
       CockpitIntentAction.assertVisible ||
       CockpitIntentAction.assertText => CockpitActionCapability.tap,
       CockpitIntentAction.enterText ||
+      CockpitIntentAction.eraseText ||
+      CockpitIntentAction.copyText ||
+      CockpitIntentAction.pasteText ||
       CockpitIntentAction.focusTextInput ||
       CockpitIntentAction.setTextEditingValue ||
       CockpitIntentAction.sendTextInputAction ||

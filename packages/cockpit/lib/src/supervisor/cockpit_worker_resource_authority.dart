@@ -104,7 +104,7 @@ final class CockpitLeaseWorkerResourceAuthority
       input['ttlMs'],
       r'$.input.ttlMs',
       minimum: 1000,
-      maximum: 300000,
+      maximum: cockpitMaximumLeaseTtlMs,
     );
     final requiresPort = workerBoolean(
       input['requiresPort'],
@@ -235,9 +235,8 @@ final class CockpitLeaseWorkerResourceAuthority
     if (remaining == null || remaining <= Duration.zero) {
       throw const FormatException('Port handoff deadline has expired.');
     }
-    final timeout = remaining > const Duration(minutes: 5)
-        ? const Duration(minutes: 5)
-        : remaining;
+    const maximum = Duration(milliseconds: cockpitMaximumLeaseTtlMs);
+    final timeout = remaining > maximum ? maximum : remaining;
     final verified = await reservation.handoff(
       binder: _portBridge.binderFor(grantId),
       ownerProbe: _portBridge.ownerProbeFor(grantId),

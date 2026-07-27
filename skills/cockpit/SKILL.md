@@ -125,6 +125,25 @@ dart run cockpit artifact read \
 Use a case for focused validation. Use a suite for dependency DAGs, matrices,
 fixtures, isolation, parallel rows, retry, durable recovery, and regression
 reports. AI may generate documents, but must validate them before submission.
+Locator signals are conjunctive. Text and label matching defaults to `exact`;
+use explicit `contains`, typo-tolerant `fuzzy`, or `regex`, ordered
+`fallbacks`, and 0-based `index` when a list remains ambiguous.
+
+A step `plane` may switch between semantic, native, visual, and coordinate
+execution. Flutter bridge targets can mix their semantic and secondary system
+drivers in one case. Read the secondary driver's sanitized capability profile
+from `target.inspect.output.systemControl`; do not rebuild it from redacted
+`app.get` data. Use copy/erase/paste, travel, visual locators, and
+screenshot assertions only when advertised. Visual templates and baselines
+must resolve inside the workspace; screenshot assertions publish actual,
+baseline, and diff files. Compose scoped before/after work with fixtures,
+`setup`/`finally`, step evidence, and explicit recording operations.
+
+Suite artifacts form one portable offline directory. Preserve relative paths,
+verify every file declared by root `manifest.json`, use `summary.md` for a
+bounded handoff, and use `report.json` as the complete rendering fact graph.
+Open `index.html` only for human role views. Keep screenshots, recordings, and
+other binary evidence in files; never print them as Base64.
 
 ## Authorization And Concurrency
 
@@ -133,6 +152,10 @@ target and operation bound to its workspace when several projects run in
 parallel. Production/unknown environments, dangerous operations, safety
 effects, and secret names require explicit policy. Inspect with
 `daemon policy show`; validate and atomically apply policy files before restart.
+Only when the user explicitly authorizes unrestricted local control, use
+`daemon start --yolo` or `daemon restart --yolo`. YOLO is scoped to that
+daemon process; a start without the flag returns to persisted policy authority.
+Confirm `authorizationMode` in daemon status and the resulting reports.
 Quarantined resources remain blocked. Read exact identities with `lease.list`
 and use the `reset`-authorized `lease.recover`; force release is limited to
 explicitly acknowledged logical resources and never applies to forwarded ports.
@@ -143,6 +166,11 @@ A pass requires terminal run state, required assertions, no disqualifying
 runtime errors, and readable required evidence. Artifact existence alone is
 not proof. Resume event streams by sequence and reuse idempotency keys; do not
 replay uncertain mutations blindly.
+
+A release regression must exercise at least one real business mutation and every
+applicable advertised gesture, text, keyboard, semantics, wait, and evidence
+action family. Verify each mutation through resulting UI state; successful
+command dispatch without an observable assertion is not E2E proof.
 
 For a repository release, require the complete quality job plus Android, iOS,
 macOS, Linux, web, and Windows regression jobs. The quality job must cover

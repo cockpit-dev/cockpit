@@ -60,7 +60,8 @@ final class CockpitSafePortAllocator {
     required CockpitIdempotencyKey idempotencyKey,
     Duration ttl = const Duration(seconds: 30),
   }) {
-    if (ttl < const Duration(seconds: 1) || ttl > const Duration(minutes: 5)) {
+    if (ttl < const Duration(seconds: 1) ||
+        ttl > const Duration(milliseconds: cockpitMaximumLeaseTtlMs)) {
       throw const CockpitLeaseException(
         code: 'invalidLeaseTtl',
         message: 'Port reservation TTL is outside the lease bounds.',

@@ -30,9 +30,11 @@ values:
   policies describe authored documents.
 - `CockpitTestRunContext` provides the full
   `projectId -> workspaceId -> runId -> caseId -> attemptId` identity chain.
-- `CockpitTestAttemptResult`, `CockpitTestSuiteReport`, `CockpitTestError`,
-  step occurrences, and immutable artifact manifests are the stable
-  client/report contract.
+- `CockpitTestAttemptResult`, `CockpitTestSuiteReport`,
+  `CockpitTestReportBundle`, `CockpitTestReportBundleManifest`,
+  `CockpitTestError`, step occurrences, and immutable artifact manifests are
+  the stable client/report contract. The canonical bundle retains authored
+  definitions, detailed step metadata, and a semantic evidence index.
 - Secrets are authored as provider references. Resolved values are not part of
   any protocol object, JSON representation, result, diagnostic, or report.
 
@@ -45,6 +47,47 @@ bundle contracts independently.
 `kind: case`. Execution remains a host responsibility: the Supervisor and
 isolated workspace workers schedule cases and suites while clients consume the
 same DTO, event, and artifact contracts.
+
+Locators are declarative intersections rather than a single strategy/value
+pair. Signals on one locator (`text`, `label`, `nativeId`, `testId`, `role`,
+`type`, and `path`) must all match. Optional state, hierarchy, and spatial
+constraints further narrow native accessibility matches; `index` resolves an
+otherwise ambiguous match in UI order. `fallbacks` are attempted in order as
+explicit alternatives. Coordinate and visual locators are separate degraded
+modes and cannot be mixed with semantic constraints. Runtimes reject any
+constraint they cannot execute faithfully instead of silently weakening it.
+`text` and `label` default to `matchMode: exact`; opt into `contains`,
+typo-tolerant `fuzzy`, or `regex` explicitly. When several candidates match, the runtime selects only a
+unique highest-quality candidate (current route, exact text, then path
+specificity). A tied best score returns `ambiguousTarget` instead of guessing.
+
+```yaml
+locator:
+  text: Save
+  matchMode: contains
+  role: button
+  enabled: true
+  ancestor: {label: Task editor}
+  below: {text: Notes}
+  fallbacks:
+    - {testId: save-task}
+```
+
+Every step can override the target default with `plane: semantic|native|visual|coordinate`.
+When omitted, the host derives the effective plane from the action and locator;
+nested fragment, condition, retry, and loop steps inherit it. This permits one
+Flutter development case to combine semantic bridge steps with a secondary
+system driver for native screens, platform views, system UI, visual templates,
+and coordinates while preserving the requested and actual plane in results.
+
+The portable action contract includes clipboard-backed `copyText` and
+`pasteText`, cursor-aware `eraseText`, bounded location `travel`, and
+`assertScreenshot`. Visual templates and screenshot baselines are file
+references, not encoded bytes. Hosts confine them to the workspace and publish
+actual, baseline, and diff images as digest-addressed bundle artifacts. Lifecycle
+work composes from suite fixtures, case `setup`/`finally`, per-step `evidence`,
+and explicit recording operations; control flow remains available inside each
+scope without a separate generic hook protocol.
 
 ## Supervisor foundation contract
 

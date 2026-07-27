@@ -3,6 +3,9 @@ import 'package:cockpit_protocol/cockpit_protocol.dart';
 enum CockpitIntentAction {
   tap,
   enterText,
+  eraseText,
+  copyText,
+  pasteText,
   focusTextInput,
   setTextEditingValue,
   sendTextInputAction,
@@ -39,6 +42,9 @@ enum CockpitIntentAction {
     return switch (commandType) {
       CockpitCommandType.tap => CockpitIntentAction.tap,
       CockpitCommandType.enterText => CockpitIntentAction.enterText,
+      CockpitCommandType.eraseText => CockpitIntentAction.eraseText,
+      CockpitCommandType.copyText => CockpitIntentAction.copyText,
+      CockpitCommandType.pasteText => CockpitIntentAction.pasteText,
       CockpitCommandType.focusTextInput => CockpitIntentAction.focusTextInput,
       CockpitCommandType.setTextEditingValue =>
         CockpitIntentAction.setTextEditingValue,
@@ -76,8 +82,10 @@ enum CockpitIntentAction {
       CockpitCommandType.waitFor => CockpitIntentAction.waitFor,
       CockpitCommandType.assertVisible => CockpitIntentAction.assertVisible,
       CockpitCommandType.assertText => CockpitIntentAction.assertText,
+      CockpitCommandType.assertScreenshot ||
+      CockpitCommandType.travel ||
       CockpitCommandType.system => throw UnsupportedError(
-        'System test actions are executed by the system test backend.',
+        '${commandType.name} is executed by the system test backend.',
       ),
     };
   }

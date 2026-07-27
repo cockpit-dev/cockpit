@@ -1,0 +1,292 @@
+schemaVersion: cockpit.test/v2
+kind: case
+id: demoCommandSemanticCoverage
+name: Command semantic coverage
+description: Verifies text input, keyboard, semantics, waits, snapshots, and scrolling through live UI effects.
+tags: [acceptance, command-coverage, semantic]
+target:
+  platform: flutter
+  targetKind: flutterApp
+  plane: semantic
+defaults:
+  commandTimeoutMs: 20000
+  cleanupTimeoutMs: 20000
+  failFast: true
+  evidence:
+    screenshot: onFailure
+    snapshot: onFailure
+    failurePolicy: recordWarning
+setup:
+  - stepId: openSettings
+    timeoutMs: 12000
+    action:
+      type: tap
+      locator: {label: Settings}
+      activation: semantic
+  - stepId: waitForSettings
+    timeoutMs: 12000
+    action:
+      type: waitFor
+      condition: {type: route, route: /settings}
+  - stepId: revealCommandLab
+    timeoutMs: 20000
+    action:
+      type: scrollUntilVisible
+      locator: {text: Open command lab}
+      direction: down
+      maxScrolls: 16
+      durationMs: 200
+      revealAlignment: center
+  - stepId: openCommandLab
+    timeoutMs: 12000
+    action:
+      type: tap
+      locator: {text: Open command lab}
+      activation: semantic
+  - stepId: waitForCommandLab
+    timeoutMs: 12000
+    action:
+      type: waitFor
+      condition: {type: route, route: /command-lab}
+  - stepId: clearNetworkBaseline
+    timeoutMs: 8000
+    action: {type: clearNetworkActivity}
+  - stepId: waitForNetworkBaseline
+    timeoutMs: 12000
+    action: {type: waitForNetworkIdle, quietMs: 150}
+steps:
+  - stepId: waitForInitialUiIdle
+    timeoutMs: 12000
+    action: {type: waitForUiIdle, quietMs: 150}
+  - stepId: revealSlider
+    timeoutMs: 12000
+    action:
+      type: showOnScreen
+      locator: {testId: lab-slider-semantics}
+      revealAlignment: center
+  - stepId: verifyInitialSlider
+    action:
+      type: assertText
+      locator: {testId: lab-slider-status}
+      text: slider:50
+      matchMode: exact
+  - stepId: increaseSlider
+    timeoutMs: 12000
+    action:
+      type: increase
+      locator: {testId: lab-slider-semantics}
+  - stepId: verifySliderIncrease
+    action:
+      type: assertText
+      locator: {testId: lab-slider-status}
+      text: slider:60
+      matchMode: exact
+  - stepId: decreaseSlider
+    timeoutMs: 12000
+    action:
+      type: decrease
+      locator: {testId: lab-slider-semantics}
+  - stepId: verifySliderDecrease
+    action:
+      type: assertText
+      locator: {testId: lab-slider-status}
+      text: slider:50
+      matchMode: exact
+  - stepId: revealDismissCard
+    timeoutMs: 12000
+    action:
+      type: showOnScreen
+      locator: {testId: lab-dismiss-card}
+      revealAlignment: center
+  - stepId: dismissCard
+    timeoutMs: 12000
+    action:
+      type: dismiss
+      locator: {testId: lab-dismiss-card}
+  - stepId: verifyDismissStatus
+    action:
+      type: assertText
+      locator: {testId: lab-dismiss-status}
+      text: dismiss:done
+      matchMode: exact
+  - stepId: verifyDismissedCardAbsent
+    action:
+      type: assertVisible
+      locator: {testId: lab-dismiss-card}
+      expected: false
+  - stepId: revealTextField
+    timeoutMs: 12000
+    action:
+      type: showOnScreen
+      locator: {testId: lab-text-field}
+      revealAlignment: center
+  - stepId: focusTextField
+    timeoutMs: 12000
+    action:
+      type: focusTextInput
+      locator: {testId: lab-text-field}
+  - stepId: verifyTextFocus
+    action:
+      type: assertText
+      locator: {testId: lab-focus-status}
+      text: focus:yes
+      matchMode: exact
+  - stepId: enterTextThroughActiveInput
+    timeoutMs: 12000
+    action:
+      type: enterText
+      text: Cockpit command coverage
+  - stepId: verifyEnteredText
+    action:
+      type: assertText
+      locator: {testId: lab-text-status}
+      text: text:Cockpit command coverage
+      matchMode: exact
+  - stepId: replaceEditingValue
+    timeoutMs: 12000
+    action:
+      type: setTextEditingValue
+      locator: {testId: lab-text-field}
+      text: Cockpit edited
+      selectionStart: 0
+      selectionEnd: 7
+  - stepId: verifyEditingValue
+    action:
+      type: assertText
+      locator: {testId: lab-text-status}
+      text: text:Cockpit edited
+      matchMode: exact
+  - stepId: copyEditingValue
+    timeoutMs: 12000
+    action:
+      type: copyText
+      locator: {testId: lab-text-field}
+  - stepId: eraseEditingValue
+    timeoutMs: 12000
+    action:
+      type: eraseText
+      locator: {testId: lab-text-field}
+  - stepId: verifyErasedValue
+    action:
+      type: assertText
+      locator: {testId: lab-text-status}
+      text: "text:"
+      matchMode: exact
+  - stepId: pasteEditingValue
+    timeoutMs: 12000
+    action:
+      type: pasteText
+      locator: {testId: lab-text-field}
+  - stepId: verifyPastedValue
+    action:
+      type: assertText
+      locator: {testId: lab-text-status}
+      text: text:Cockpit edited
+      matchMode: exact
+  - stepId: submitTextInput
+    timeoutMs: 12000
+    action: {type: sendTextInputAction, inputAction: done}
+  - stepId: verifySubmittedText
+    action:
+      type: assertText
+      locator: {testId: lab-submit-status}
+      text: submitted:Cockpit edited
+      matchMode: exact
+  - stepId: dismissKeyboard
+    timeoutMs: 12000
+    action: {type: dismissKeyboard}
+  - stepId: revealKeyPad
+    timeoutMs: 12000
+    action:
+      type: showOnScreen
+      locator: {testId: lab-key-pad-activator}
+      revealAlignment: center
+  - stepId: focusKeyPad
+    timeoutMs: 12000
+    action:
+      type: tap
+      locator: {testId: lab-key-pad-activator}
+      activation: gesture
+  - stepId: sendKeyDown
+    timeoutMs: 12000
+    action:
+      type: sendKeyDownEvent
+      keyRequest: {logicalKey: Arrow Right, physicalKey: Arrow Right}
+  - stepId: verifyKeyDown
+    action:
+      type: assertText
+      locator: {testId: lab-key-status}
+      text: key:ArrowRight-down
+      matchMode: exact
+  - stepId: sendKeyUp
+    timeoutMs: 12000
+    action:
+      type: sendKeyUpEvent
+      keyRequest: {logicalKey: Arrow Right, physicalKey: Arrow Right}
+  - stepId: verifyKeyUp
+    action:
+      type: assertText
+      locator: {testId: lab-key-status}
+      text: key:ArrowRight-up
+      matchMode: exact
+  - stepId: sendCompleteKeyEvent
+    timeoutMs: 12000
+    action:
+      type: sendKeyEvent
+      keyRequest: {logicalKey: Arrow Left, physicalKey: Arrow Left}
+  - stepId: verifyCompleteKeyEvent
+    action:
+      type: assertText
+      locator: {testId: lab-key-status}
+      text: key:ArrowLeft-up
+      matchMode: exact
+  - stepId: revealDeepTarget
+    description: Exercise iterative scrolling against a target below the fold.
+    timeoutMs: 30000
+    action:
+      type: scrollUntilVisible
+      locator: {testId: lab-deep-item}
+      direction: down
+      maxScrolls: 20
+      durationMs: 220
+      revealAlignment: center
+  - stepId: verifyDeepTarget
+    evidence: {screenshot: always, snapshot: always, failurePolicy: failStep}
+    action:
+      type: assertVisible
+      locator: {text: Deep lab target reached}
+  - stepId: collectSemanticSnapshot
+    timeoutMs: 12000
+    action: {type: collectSnapshot}
+  - stepId: captureSemanticCoverage
+    timeoutMs: 20000
+    action:
+      type: captureScreenshot
+      artifactName: command-semantic-coverage
+      captureOptions: {reason: acceptance, includeSnapshot: true, attachToStep: true, allowFallback: true}
+finally:
+  - stepId: leaveCommandLab
+    timeoutMs: 12000
+    if:
+      condition: {type: route, route: /command-lab}
+      then:
+        - stepId: backToSettings
+          action: {type: back}
+      else:
+        - stepId: retainCurrentRoute
+          action: {type: waitForUiIdle, quietMs: 100}
+  - stepId: leaveSettings
+    timeoutMs: 12000
+    if:
+      condition: {type: route, route: /settings}
+      then:
+        - stepId: backToInbox
+          action: {type: back}
+      else:
+        - stepId: retainCleanupRoute
+          action: {type: waitForUiIdle, quietMs: 100}
+  - stepId: verifySemanticCleanup
+    timeoutMs: 12000
+    action:
+      type: waitFor
+      condition: {type: route, route: /inbox}

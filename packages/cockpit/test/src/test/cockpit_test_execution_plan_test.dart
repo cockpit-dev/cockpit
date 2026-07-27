@@ -67,7 +67,7 @@ steps:
   - stepId: tapSecret
     action:
       type: tap
-      locator: {strategy: text, value: {\$var: password}}
+      locator: {text: {\$var: password}}
 ''');
 
     expect(result.isSuccess, isFalse);

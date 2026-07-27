@@ -4,6 +4,7 @@ import 'dart:collection';
 
 import '../control/cockpit_locator.dart';
 import '../control/cockpit_locator_resolution.dart';
+import '../control/cockpit_command_type.dart';
 import '../errors/cockpit_command_error.dart';
 import 'cockpit_snapshot.dart';
 import 'cockpit_target.dart';
@@ -125,14 +126,28 @@ final class CockpitTargetRegistry {
     _targets.remove(registrationId);
   }
 
-  CockpitTargetResolutionResult resolve(CockpitLocator locator) {
+  CockpitTargetResolutionResult resolve(
+    CockpitLocator locator, {
+    CockpitCommandType? requiredCommand,
+  }) {
     return _withDiscoveryCache(() {
       for (final candidate in _flatten(locator)) {
-        final matches = _preferCurrentRouteMatches(
+        final locatorMatches = _preferCurrentRouteMatches(
           visibleTargets
               .where((target) => _matches(target, candidate))
               .toList(growable: false),
         );
+        final commandMatches = requiredCommand == null
+            ? locatorMatches
+            : locatorMatches
+                  .where(
+                    (target) =>
+                        target.supportedCommands.contains(requiredCommand),
+                  )
+                  .toList(growable: false);
+        final matches = commandMatches.isEmpty
+            ? locatorMatches
+            : commandMatches;
 
         if (matches.isEmpty) {
           continue;
@@ -382,7 +397,12 @@ final class CockpitTargetRegistry {
       return false;
     }
     for (final signal in locator.signals) {
-      if (!_matchesSignal(target, signal.kind, signal.value)) {
+      if (!_matchesSignal(
+        target,
+        signal.kind,
+        signal.value,
+        locator.matchMode,
+      )) {
         return false;
       }
     }
@@ -397,13 +417,18 @@ final class CockpitTargetRegistry {
     CockpitTarget target,
     CockpitLocatorKind kind,
     String value,
+    CockpitTextMatchMode matchMode,
   ) {
     return switch (kind) {
       CockpitLocatorKind.cockpitId => target.cockpitId == value,
       CockpitLocatorKind.semanticId => target.semanticId == value,
       CockpitLocatorKind.key => target.keyValue == value,
-      CockpitLocatorKind.text => _matchesTextLocator(target, value),
-      CockpitLocatorKind.tooltip => target.tooltip == value,
+      CockpitLocatorKind.text => _matchesTextLocator(target, value, matchMode),
+      CockpitLocatorKind.tooltip => _matchesTextSignal(
+        target.tooltip,
+        value,
+        matchMode,
+      ),
       CockpitLocatorKind.type => _matchesTypeSignal(target.typeName, value),
       CockpitLocatorKind.route => target.routeName == value,
       CockpitLocatorKind.registrationId => target.registrationId == value,
@@ -416,24 +441,41 @@ final class CockpitTargetRegistry {
     };
   }
 
-  bool _matchesTextLocator(CockpitTarget target, String expected) {
+  bool _matchesTextLocator(
+    CockpitTarget target,
+    String expected,
+    CockpitTextMatchMode matchMode,
+  ) {
     return <String?>[
       target.text,
       target.displayLabel,
       target.tooltip,
-    ].any((candidate) => _matchesTextSignal(candidate, expected));
+    ].any((candidate) => _matchesTextSignal(candidate, expected, matchMode));
   }
 
-  bool _matchesTextSignal(String? candidate, String expected) {
+  bool _matchesTextSignal(
+    String? candidate,
+    String expected,
+    CockpitTextMatchMode matchMode,
+  ) {
     final normalizedCandidate = _normalizeText(candidate);
     final normalizedExpected = _normalizeText(expected);
-    if (normalizedCandidate == null || normalizedExpected == null) {
+    if (normalizedCandidate == null) {
       return false;
     }
-    if (normalizedCandidate == normalizedExpected) {
-      return true;
-    }
-    return normalizedCandidate.contains(normalizedExpected);
+    return switch (matchMode) {
+      CockpitTextMatchMode.exact =>
+        normalizedExpected != null && normalizedCandidate == normalizedExpected,
+      CockpitTextMatchMode.contains =>
+        normalizedExpected != null &&
+            normalizedCandidate.contains(normalizedExpected),
+      CockpitTextMatchMode.fuzzy =>
+        normalizedExpected != null &&
+            cockpitFuzzyTextMatches(normalizedCandidate, normalizedExpected),
+      CockpitTextMatchMode.regex => RegExp(
+        expected.trim(),
+      ).hasMatch(normalizedCandidate),
+    };
   }
 
   bool _matchesTypeSignal(String? candidate, String expected) {
@@ -723,7 +765,16 @@ final class CockpitTargetRegistry {
     var score = 0;
     final textSignal = locator.signalMap[CockpitLocatorKind.text.name];
     if (textSignal != null) {
-      score += _textMatchPriorityScore(target, textSignal);
+      score += _textMatchPriorityScore(target, textSignal, locator.matchMode);
+    }
+    final tooltipSignal = locator.signalMap[CockpitLocatorKind.tooltip.name];
+    if (tooltipSignal != null) {
+      score += _textSignalPriorityScore(
+        target.tooltip,
+        tooltipSignal,
+        locator.matchMode,
+        sourceScore: 20,
+      );
     }
     final pathSignal = locator.signalMap[CockpitLocatorKind.path.name];
     if (pathSignal != null) {
@@ -802,11 +853,20 @@ final class CockpitTargetRegistry {
           ancestor.keyValue == signal.value ||
               ancestor.cockpitId == signal.value,
         CockpitLocatorKind.text =>
-          _matchesTextSignal(ancestor.textPreview, signal.value) ||
-              _matchesTextSignal(ancestor.tooltip, signal.value),
+          _matchesTextSignal(
+                ancestor.textPreview,
+                signal.value,
+                locator.matchMode,
+              ) ||
+              _matchesTextSignal(
+                ancestor.tooltip,
+                signal.value,
+                locator.matchMode,
+              ),
         CockpitLocatorKind.tooltip => _matchesTextSignal(
           ancestor.tooltip,
           signal.value,
+          locator.matchMode,
         ),
         CockpitLocatorKind.type => _matchesTypeSignal(
           ancestor.typeName,
@@ -874,11 +934,14 @@ final class CockpitTargetRegistry {
   Map<String, String> _matchedSignals(CockpitLocator locator) {
     if (locator.signalMap.length <= 1 &&
         locator.ancestor == null &&
-        locator.index == null) {
+        locator.index == null &&
+        locator.matchMode == CockpitTextMatchMode.exact) {
       return const <String, String>{};
     }
     return <String, String>{
       ...locator.signalMap,
+      if (locator.matchMode != CockpitTextMatchMode.exact)
+        'matchMode': locator.matchMode.name,
       if (locator.index != null) 'index': '${locator.index}',
     };
   }
@@ -956,31 +1019,68 @@ final class CockpitTargetRegistry {
     'trailing',
   };
 
-  int _textMatchPriorityScore(CockpitTarget target, String expected) {
-    final normalizedExpected = _normalizeText(expected);
-    if (normalizedExpected == null) {
-      return 0;
-    }
-
+  int _textMatchPriorityScore(
+    CockpitTarget target,
+    String expected,
+    CockpitTextMatchMode matchMode,
+  ) {
     var bestScore = 0;
     for (final candidate in <(String?, int)>[
       (target.text, 30),
       (target.displayLabel, 20),
       (target.tooltip, 12),
     ]) {
-      final normalizedCandidate = _normalizeText(candidate.$1);
-      if (normalizedCandidate == null) {
-        continue;
-      }
-      if (normalizedCandidate == normalizedExpected) {
-        bestScore = bestScore < candidate.$2 ? candidate.$2 : bestScore;
-        continue;
-      }
-      if (normalizedCandidate.contains(normalizedExpected)) {
-        final partialScore = candidate.$2 ~/ 2;
-        bestScore = bestScore < partialScore ? partialScore : bestScore;
-      }
+      final score = _textSignalPriorityScore(
+        candidate.$1,
+        expected,
+        matchMode,
+        sourceScore: candidate.$2,
+      );
+      bestScore = bestScore < score ? score : bestScore;
     }
     return bestScore;
+  }
+
+  int _textSignalPriorityScore(
+    String? candidate,
+    String expected,
+    CockpitTextMatchMode matchMode, {
+    required int sourceScore,
+  }) {
+    final normalizedCandidate = _normalizeText(candidate);
+    if (normalizedCandidate == null ||
+        !_matchesTextSignal(candidate, expected, matchMode)) {
+      return 0;
+    }
+    final normalizedExpected = _normalizeText(expected);
+    if (normalizedExpected != null &&
+        normalizedCandidate == normalizedExpected) {
+      return 10000 + sourceScore;
+    }
+    if (matchMode == CockpitTextMatchMode.contains &&
+        normalizedExpected != null) {
+      return 5000 +
+          sourceScore +
+          (1000 - (normalizedCandidate.length - normalizedExpected.length))
+              .clamp(0, 1000)
+              .toInt();
+    }
+    if (matchMode == CockpitTextMatchMode.fuzzy && normalizedExpected != null) {
+      return (cockpitFuzzyTextSimilarity(
+                    normalizedCandidate,
+                    normalizedExpected,
+                  ) *
+                  10000)
+              .round() +
+          sourceScore;
+    }
+    final match = RegExp(expected.trim()).firstMatch(normalizedCandidate)!;
+    final fullMatch =
+        match.start == 0 && match.end == normalizedCandidate.length;
+    return (fullMatch ? 8000 : 6000) +
+        sourceScore +
+        (1000 - (normalizedCandidate.length - match.group(0)!.length))
+            .clamp(0, 1000)
+            .toInt();
   }
 }

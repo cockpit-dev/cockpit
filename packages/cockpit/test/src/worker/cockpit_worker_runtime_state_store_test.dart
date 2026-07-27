@@ -19,16 +19,16 @@ import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 
 void main() {
-  test('records a system target activation as an owned app session', () async {
+  test('replaces the stale session when the same app is relaunched', () async {
     final temporary = await Directory.systemTemp.createTemp(
-      'cockpit-worker-system-target-',
+      'cockpit-worker-app-relaunch-',
     );
     addTearDown(() => temporary.delete(recursive: true));
-    final canonicalRoot = await temporary.resolveSymbolicLinks();
-    final stateRoot = await Directory(p.join(canonicalRoot, 'state')).create();
+    final workspaceRoot = await temporary.resolveSymbolicLinks();
+    final stateRoot = await Directory(p.join(workspaceRoot, 'state')).create();
     final registry = CockpitWorkerRuntimeRegistry(
       workspaceId: 'workspaceA',
-      workspaceRoot: canonicalRoot,
+      workspaceRoot: workspaceRoot,
       stateRoot: stateRoot.path,
       stateStore: CockpitInMemoryWorkerRuntimeStateStore(),
     );
@@ -37,29 +37,89 @@ void main() {
         workspaceId: 'workspaceA',
         platform: 'android',
         deviceId: 'emulator-5554',
-        appId: 'dev.cockpit.example',
-        targetKind: CockpitTargetKind.nativeApp,
-        mode: CockpitAppMode.automation,
-        environment: CockpitTestTargetEnvironment.test,
       ),
     );
-
-    final app = await registry.recordSystemTargetLaunch(
+    final first = await registry.recordApp(
       targetId: targetId,
-      launchedAt: DateTime.utc(2026, 7, 24),
+      handle: CockpitAppHandle.fromRemoteSession(_remoteSession(workspaceRoot)),
+    );
+    final firstSessionId = await registry.sessionIdForApp(first.appId);
+    final relaunchedRemote = CockpitRemoteSessionHandle(
+      platform: 'android',
+      deviceId: 'emulator-5554',
+      projectDir: workspaceRoot,
+      target: 'android',
+      appId: 'internal-app-A',
+      platformAppIdKnown: false,
+      host: '127.0.0.1',
+      hostPort: 9102,
+      devicePort: 8102,
+      baseUrl: 'http://127.0.0.1:9102',
+      launchedAt: DateTime.utc(2026, 7, 23),
     );
 
-    expect(app.handle.platformAppId, 'dev.cockpit.example');
-    expect(app.handle.remoteSession?.baseUri.scheme, 'cockpit-system');
-    final sessionId = await registry.sessionIdForApp(app.appId);
-    final session = await registry.requireSession(sessionId);
-    expect(session.targetId, targetId);
-    final target = await registry.requireTarget(
-      workspaceId: 'workspaceA',
+    final relaunched = await registry.recordApp(
       targetId: targetId,
+      handle: CockpitAppHandle.fromRemoteSession(relaunchedRemote),
     );
-    expect(target.handle?.targetKind.name, 'nativeApp');
+    final relaunchedSessionId = await registry.sessionIdForApp(
+      relaunched.appId,
+    );
+
+    expect(relaunched.appId, first.appId);
+    expect(relaunchedSessionId, isNot(firstSessionId));
+    await expectLater(
+      registry.requireSession(firstSessionId),
+      throwsA(isA<CockpitApplicationServiceException>()),
+    );
   });
+
+  test(
+    'records an installed Flutter target as a system-owned app session',
+    () async {
+      final temporary = await Directory.systemTemp.createTemp(
+        'cockpit-worker-system-target-',
+      );
+      addTearDown(() => temporary.delete(recursive: true));
+      final canonicalRoot = await temporary.resolveSymbolicLinks();
+      final stateRoot = await Directory(
+        p.join(canonicalRoot, 'state'),
+      ).create();
+      final registry = CockpitWorkerRuntimeRegistry(
+        workspaceId: 'workspaceA',
+        workspaceRoot: canonicalRoot,
+        stateRoot: stateRoot.path,
+        stateStore: CockpitInMemoryWorkerRuntimeStateStore(),
+      );
+      final targetId = await registry.registerTarget(
+        const CockpitWorkerTargetRegistration(
+          workspaceId: 'workspaceA',
+          platform: 'android',
+          deviceId: 'emulator-5554',
+          appId: 'dev.cockpit.example',
+          targetKind: CockpitTargetKind.flutterApp,
+          mode: CockpitAppMode.automation,
+          environment: CockpitTestTargetEnvironment.test,
+        ),
+      );
+
+      final app = await registry.recordSystemTargetLaunch(
+        targetId: targetId,
+        launchedAt: DateTime.utc(2026, 7, 24),
+      );
+
+      expect(app.handle.platformAppId, 'dev.cockpit.example');
+      expect(app.handle.remoteSession?.baseUri.scheme, 'cockpit-system');
+      final sessionId = await registry.sessionIdForApp(app.appId);
+      final session = await registry.requireSession(sessionId);
+      expect(session.targetId, targetId);
+      final target = await registry.requireTarget(
+        workspaceId: 'workspaceA',
+        targetId: targetId,
+      );
+      expect(target.handle?.targetKind.name, 'flutterApp');
+    },
+  );
 
   test(
     'round trips registry state larger than the legacy 8 MiB limit',

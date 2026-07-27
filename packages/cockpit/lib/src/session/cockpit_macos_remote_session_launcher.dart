@@ -237,6 +237,13 @@ final class CockpitMacosRemoteSessionLauncher
       workingDirectory: workingDirectory,
       timeout: _capTimeout(_remaining(deadline), const Duration(minutes: 2)),
     );
+    await _runRequired(
+      flutterExecutable,
+      const <String>['pub', 'get'],
+      workingDirectory: workingDirectory,
+      environment: environment,
+      timeout: _capTimeout(_remaining(deadline), const Duration(minutes: 2)),
+    );
     final retryResult = await _runProcessResult(
       flutterExecutable,
       buildArguments,
@@ -304,7 +311,9 @@ final class CockpitMacosRemoteSessionLauncher
   bool _isRecoverableMacosBuildCacheFailure(String output) {
     return output.contains('has been modified since the module file') ||
         output.contains('SwiftExplicitPrecompiledModules') ||
-        output.contains('explicit-swift-module-map-file');
+        output.contains('explicit-swift-module-map-file') ||
+        output.contains('FlutterGeneratedPluginSwiftPackage') &&
+            output.contains("doesn't exist in file system");
   }
 
   Duration _remaining(DateTime deadline) {

@@ -13,22 +13,19 @@
       "action": {
         "type": "tap",
         "locator": {
-          "strategy": "coordinate",
           "x": 0.5,
           "y": 0.75,
           "fallbacks": [
             {
-              "strategy": "visual",
-              "value": "assets/continue.png",
+              "visual": "assets/continue.png",
               "threshold": 0.9
             },
             {
-              "strategy": "text",
-              "value": "Continue",
+              "text": "Continue",
+              "matchMode": "contains",
               "index": 0,
               "ancestor": {
-                "strategy": "role",
-                "value": "dialog"
+                "role": "dialog"
               }
             }
           ]

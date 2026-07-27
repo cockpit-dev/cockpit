@@ -1,0 +1,278 @@
+schemaVersion: cockpit.test/v2
+kind: case
+id: demoCommandGestureCoverage
+name: Command gesture coverage
+description: Verifies every Flutter gesture command through observable UI state.
+tags: [acceptance, command-coverage, gestures]
+target:
+  platform: flutter
+  targetKind: flutterApp
+  plane: semantic
+defaults:
+  commandTimeoutMs: 20000
+  cleanupTimeoutMs: 20000
+  failFast: true
+  evidence:
+    screenshot: onFailure
+    snapshot: onFailure
+    failurePolicy: recordWarning
+setup:
+  - stepId: openSettings
+    timeoutMs: 12000
+    action:
+      type: tap
+      locator: {label: Settings}
+  - stepId: waitForSettings
+    timeoutMs: 12000
+    action:
+      type: waitFor
+      condition: {type: route, route: /settings}
+  - stepId: revealCommandLab
+    timeoutMs: 20000
+    action:
+      type: scrollUntilVisible
+      locator: {text: Open command lab}
+      direction: down
+      maxScrolls: 16
+      durationMs: 200
+      revealAlignment: center
+  - stepId: openCommandLab
+    timeoutMs: 12000
+    action:
+      type: tap
+      locator: {text: Open command lab}
+      activation: gesture
+  - stepId: waitForCommandLab
+    timeoutMs: 12000
+    action:
+      type: waitFor
+      condition: {type: route, route: /command-lab}
+steps:
+  - stepId: waitForGestureStatus
+    description: Establish the observable loop condition after route startup.
+    timeoutMs: 10000
+    action:
+      type: assertText
+      locator: {testId: lab-gesture-status}
+      text: gesture:idle
+      matchMode: exact
+  - stepId: exerciseTapLoop
+    description: Exercise tap and bounded loop exit through visible state.
+    timeoutMs: 20000
+    loop:
+      maxIterations: 2
+      condition:
+        type: text
+        locator: {testId: lab-gesture-status}
+        text: gesture:idle
+        matchMode: exact
+      steps:
+        - stepId: tapGesturePad
+          action:
+            type: tap
+            locator: {testId: lab-gesture-detector}
+            activation: gesture
+  - stepId: verifyTap
+    timeoutMs: 10000
+    action:
+      type: assertText
+      locator: {testId: lab-gesture-status}
+      text: gesture:tap
+      matchMode: exact
+  - stepId: doubleTapGesturePad
+    timeoutMs: 12000
+    action:
+      type: doubleTap
+      locator: {testId: lab-gesture-detector}
+  - stepId: verifyDoubleTap
+    timeoutMs: 10000
+    action:
+      type: assertText
+      locator: {testId: lab-gesture-status}
+      text: gesture:doubleTap
+      matchMode: exact
+  - stepId: longPressGesturePad
+    timeoutMs: 12000
+    action:
+      type: longPress
+      locator: {testId: lab-gesture-detector}
+      durationMs: 700
+  - stepId: verifyLongPress
+    timeoutMs: 10000
+    evidence: {screenshot: always, snapshot: always, failurePolicy: failStep}
+    action:
+      type: assertText
+      locator: {testId: lab-gesture-status}
+      text: gesture:longPress
+      matchMode: exact
+  - stepId: revealPanPad
+    timeoutMs: 12000
+    action:
+      type: showOnScreen
+      locator: {testId: lab-pan-detector}
+      revealAlignment: center
+  - stepId: dragPanPad
+    timeoutMs: 12000
+    action:
+      type: drag
+      locator: {testId: lab-pan-detector}
+      dx: 90
+      dy: 0
+      durationMs: 350
+  - stepId: verifyDrag
+    timeoutMs: 10000
+    action:
+      type: assertText
+      locator: {testId: lab-pan-status}
+      text: pan:drag-right
+      matchMode: exact
+  - stepId: flingPanPad
+    timeoutMs: 12000
+    action:
+      type: fling
+      locator: {testId: lab-pan-detector}
+      dx: -110
+      dy: 0
+      velocity: 2400
+  - stepId: verifyFling
+    timeoutMs: 10000
+    action:
+      type: assertText
+      locator: {testId: lab-pan-status}
+      text: pan:fling-left
+      matchMode: exact
+  - stepId: revealSwipePad
+    timeoutMs: 12000
+    action:
+      type: showOnScreen
+      locator: {testId: lab-swipe-detector}
+      revealAlignment: center
+  - stepId: swipeUp
+    timeoutMs: 12000
+    action:
+      type: swipe
+      locator: {testId: lab-swipe-detector}
+      direction: up
+      distance: 0.65
+      durationMs: 220
+  - stepId: verifySwipe
+    timeoutMs: 10000
+    action:
+      type: assertText
+      locator: {testId: lab-swipe-status}
+      text: swipe:up
+      matchMode: exact
+  - stepId: revealTransformPad
+    timeoutMs: 12000
+    action:
+      type: showOnScreen
+      locator: {testId: lab-transform-detector}
+      revealAlignment: center
+  - stepId: pinchTransformPad
+    timeoutMs: 12000
+    action:
+      type: pinchZoom
+      locator: {testId: lab-transform-detector}
+      scale: 3.0
+  - stepId: verifyPinch
+    timeoutMs: 10000
+    action:
+      type: assertText
+      locator: {testId: lab-transform-status}
+      text: transform:scale-up
+      matchMode: exact
+  - stepId: resetAfterPinch
+    action:
+      type: tap
+      locator: {testId: lab-transform-reset}
+  - stepId: rotateTransformPad
+    timeoutMs: 12000
+    action:
+      type: rotate
+      locator: {testId: lab-transform-detector}
+      rotationRadians: 0.8
+  - stepId: verifyRotate
+    timeoutMs: 10000
+    action:
+      type: assertText
+      locator: {testId: lab-transform-status}
+      text: transform:rotated
+      matchMode: exact
+  - stepId: resetAfterRotate
+    action:
+      type: tap
+      locator: {testId: lab-transform-reset}
+  - stepId: panZoomTransformPad
+    timeoutMs: 12000
+    action:
+      type: panZoom
+      locator: {testId: lab-transform-detector}
+      panDx: 64
+      panDy: 0
+      scale: 1
+      rotationRadians: 0
+  - stepId: verifyPanZoom
+    timeoutMs: 10000
+    action:
+      type: assertText
+      locator: {testId: lab-transform-status}
+      text: transform:panned
+      matchMode: exact
+  - stepId: revealMultiTouchPad
+    timeoutMs: 12000
+    action:
+      type: showOnScreen
+      locator: {testId: lab-multitouch-listener}
+      revealAlignment: center
+  - stepId: multiTouchPad
+    timeoutMs: 12000
+    action:
+      type: multiTouch
+      locator: {testId: lab-multitouch-listener}
+      sequence:
+        steps:
+          - {pointer: 1, phase: down, atMs: 0, dx: -20, dy: 0}
+          - {pointer: 2, phase: down, atMs: 0, dx: 20, dy: 0}
+          - {pointer: 1, phase: move, atMs: 120, dx: -48, dy: 0}
+          - {pointer: 2, phase: move, atMs: 120, dx: 48, dy: 0}
+          - {pointer: 1, phase: up, atMs: 220, dx: -48, dy: 0}
+          - {pointer: 2, phase: up, atMs: 220, dx: 48, dy: 0}
+  - stepId: verifyMultiTouch
+    timeoutMs: 10000
+    action:
+      type: assertText
+      locator: {testId: lab-multitouch-status}
+      text: touch:2-pointers
+      matchMode: exact
+  - stepId: captureGestureCoverage
+    timeoutMs: 20000
+    action:
+      type: captureScreenshot
+      artifactName: command-gesture-coverage
+      captureOptions: {reason: acceptance, includeSnapshot: true, attachToStep: true, allowFallback: true}
+finally:
+  - stepId: leaveCommandLab
+    timeoutMs: 12000
+    if:
+      condition: {type: route, route: /command-lab}
+      then:
+        - stepId: backToSettings
+          action: {type: back}
+      else:
+        - stepId: retainCurrentRoute
+          action: {type: waitForUiIdle, quietMs: 100}
+  - stepId: leaveSettings
+    timeoutMs: 12000
+    if:
+      condition: {type: route, route: /settings}
+      then:
+        - stepId: backToInbox
+          action: {type: back}
+      else:
+        - stepId: retainCleanupRoute
+          action: {type: waitForUiIdle, quietMs: 100}
+  - stepId: verifyGestureCleanup
+    timeoutMs: 12000
+    action:
+      type: waitFor
+      condition: {type: route, route: /inbox}

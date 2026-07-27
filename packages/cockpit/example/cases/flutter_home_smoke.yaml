@@ -20,8 +20,8 @@ steps:
       type: waitFor
       condition:
         type: visible
-        locator: {strategy: text, value: Home}
+        locator: {text: Home}
   - stepId: verifyHome
     action:
       type: assertVisible
-      locator: {strategy: text, value: Home}
+      locator: {text: Home}

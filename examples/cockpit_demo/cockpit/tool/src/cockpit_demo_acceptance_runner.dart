@@ -73,6 +73,10 @@ final class CockpitDemoAcceptanceResult {
     this.outcome,
     this.stability,
     this.counts,
+    this.recordingSupported,
+    this.mixedPlaneSupported,
+    this.systemControlAdapter,
+    this.recordingLimitations = const <String>[],
     this.failure,
   });
 
@@ -90,6 +94,10 @@ final class CockpitDemoAcceptanceResult {
   final int eventCount;
   final int artifactCount;
   final Map<String, Object?>? counts;
+  final bool? recordingSupported;
+  final bool? mixedPlaneSupported;
+  final String? systemControlAdapter;
+  final List<String> recordingLimitations;
   final Map<String, Object?>? failure;
   final List<Map<String, Object?>> cleanupFailures;
 
@@ -109,6 +117,12 @@ final class CockpitDemoAcceptanceResult {
     'eventCount': eventCount,
     'artifactCount': artifactCount,
     if (counts != null) 'counts': counts,
+    if (recordingSupported != null) 'recordingSupported': recordingSupported,
+    if (mixedPlaneSupported != null) 'mixedPlaneSupported': mixedPlaneSupported,
+    if (systemControlAdapter != null)
+      'systemControlAdapter': systemControlAdapter,
+    if (recordingLimitations.isNotEmpty)
+      'recordingLimitations': recordingLimitations,
     if (failure != null) 'failure': failure,
     'cleanupFailures': cleanupFailures,
   };
@@ -148,6 +162,12 @@ final class CockpitDemoAcceptanceRunner {
     CockpitAutomationTargetResource? target;
     CockpitRunResource? run;
     CockpitTestSuiteReport? report;
+    CockpitTestSuite? validatedSuite;
+    CockpitTestSuite? effectiveSuite;
+    CockpitRecordingCapabilities? recordingCapabilities;
+    bool? unattendedRecordingSupported;
+    bool? mixedPlaneSupported;
+    String? systemControlAdapter;
     String? deviceId;
     String? appId;
     String? runId;
@@ -216,6 +236,7 @@ final class CockpitDemoAcceptanceRunner {
           '${validation.diagnostics.map((item) => item.message).join('; ')}',
         );
       }
+      validatedSuite = validation.document! as CockpitTestSuite;
 
       advance('target', 'Discovering and registering the Flutter target.');
       deviceId = await _resolveDevice(api, request);
@@ -244,23 +265,112 @@ final class CockpitDemoAcceptanceRunner {
             'targetId': target.targetId,
             'mode': launchMode,
             'launchTimeoutMs': request.launchTimeout.inMilliseconds,
+            'launchConfiguration': <String, Object?>{
+              'dartDefines': <String>[
+                'COCKPIT_DEMO_ACCEPTANCE=true',
+                'COCKPIT_DEMO_ACCEPTANCE_PLATFORM=${request.platform}',
+              ],
+              'dartDefineFromFiles': const <String>['e2e/launch.ci.json'],
+              'flutterArgs': const <String>['--no-pub'],
+              'environment': <String, String>{
+                'COCKPIT_ACCEPTANCE_PLATFORM': request.platform,
+                'COCKPIT_ACCEPTANCE_INVOCATION': invocationId,
+              },
+            },
           },
         ),
       );
       launched = true;
       appId = launch.output?['appId'] as String?;
+      final sessionId = launch.output?['sessionId'];
+      if (sessionId is! String || sessionId.isEmpty) {
+        throw const FormatException(
+          'Target launch returned no remote session identity.',
+        );
+      }
+      final status = await _operation(
+        api,
+        CockpitOperationInvocation(
+          kind: 'session.remote.status',
+          workspaceId: workspace.workspaceId,
+          deadline: DateTime.now().toUtc().add(const Duration(minutes: 1)),
+          input: <String, Object?>{
+            'sessionId': sessionId,
+            'profile': 'minimal',
+          },
+        ),
+      );
+      final statusOutput = status.output;
+      if (statusOutput == null) {
+        throw const FormatException('Remote session status is unavailable.');
+      }
+      final rawRecordingCapabilities = statusOutput['recordingCapabilities'];
+      if (rawRecordingCapabilities is! Map<Object?, Object?>) {
+        throw const FormatException(
+          'Remote session recording capabilities are unavailable.',
+        );
+      }
+      recordingCapabilities = CockpitRecordingCapabilities.fromJson(
+        Map<String, Object?>.from(rawRecordingCapabilities),
+      );
+      unattendedRecordingSupported = _supportsUnattendedRecording(
+        recordingCapabilities,
+      );
+      advance(
+        'capabilities',
+        'Inspecting the secondary black-box system control plane.',
+      );
+      final inspectedTarget = await _operation(
+        api,
+        CockpitOperationInvocation(
+          kind: 'target.inspect',
+          workspaceId: workspace.workspaceId,
+          deadline: DateTime.now().toUtc().add(const Duration(minutes: 1)),
+          input: <String, Object?>{
+            'targetId': target.targetId,
+            'profile': 'minimal',
+          },
+        ),
+      );
+      final rawSystemControl = inspectedTarget.output?['systemControl'];
+      final systemControlProfile = rawSystemControl is Map<Object?, Object?>
+          ? Map<String, Object?>.from(rawSystemControl)
+          : null;
+      final rawAvailableActions = systemControlProfile?['availableActions'];
+      if (systemControlProfile == null ||
+          rawAvailableActions is! List<Object?> ||
+          !rawAvailableActions.every((action) => action is String)) {
+        throw const FormatException(
+          'System control capabilities are unavailable.',
+        );
+      }
+      final availableSystemActions = rawAvailableActions.cast<String>();
+      systemControlAdapter = systemControlProfile['adapter'] as String?;
+      mixedPlaneSupported =
+          request.platform != 'web' &&
+          availableSystemActions.contains('recoverToApp');
+      if (request.platform != 'web' && !mixedPlaneSupported) {
+        throw FormatException(
+          'The ${request.platform} release target does not advertise '
+          'recoverToApp for mixed-plane black-box validation.',
+        );
+      }
+      effectiveSuite = _suiteForRuntime(
+        validatedSuite,
+        recordingCapabilities: recordingCapabilities,
+        systemControlProfile: systemControlProfile,
+        mixedPlaneSupported: mixedPlaneSupported,
+        taskTitle: 'Cockpit $invocationId',
+      );
 
       advance('run', 'Submitting the indexed regression suite.');
       final accepted = await api.submitRun(
         CockpitRunSubmission(
           workspaceId: workspace.workspaceId,
           targetId: target.targetId,
-          source: CockpitIndexedSuiteSource(
-            reference: CockpitIndexedSuiteReference(
-              documentId: suiteDocument.documentId,
-              suiteId: suiteDocument.authoredId!,
-              documentSha256: suiteDocument.sha256,
-            ),
+          source: CockpitInlineSuiteSource(
+            suite: effectiveSuite,
+            sourceSha256: _canonicalSha256(effectiveSuite.toJson()),
           ),
           idempotencyKey: CockpitIdempotencyKey('$invocationId-run'),
           timeoutMs: request.runTimeout.inMilliseconds,
@@ -309,6 +419,18 @@ final class CockpitDemoAcceptanceRunner {
       await _writeJson(
         File(p.join(outputDirectory, 'artifacts.json')),
         <String, Object?>{'items': downloadedArtifacts},
+      );
+      _verifyAcceptanceReport(
+        report,
+        effectiveSuite,
+        recordingSupported: unattendedRecordingSupported,
+        platform: request.platform,
+      );
+      await _verifyOfflineReportBundle(
+        outputDirectory: outputDirectory,
+        report: report,
+        recordingSupported: unattendedRecordingSupported,
+        platform: request.platform,
       );
       primaryPassed =
           run.outcome == CockpitRunOutcome.passed &&
@@ -371,6 +493,11 @@ final class CockpitDemoAcceptanceRunner {
       eventCount: eventCount,
       artifactCount: artifacts.length,
       counts: report?.counts.toJson(),
+      recordingSupported: unattendedRecordingSupported,
+      mixedPlaneSupported: mixedPlaneSupported,
+      systemControlAdapter: systemControlAdapter,
+      recordingLimitations:
+          recordingCapabilities?.recordingLimitations ?? const <String>[],
       failure: failure,
       cleanupFailures: List<Map<String, Object?>>.unmodifiable(cleanupFailures),
     );
@@ -386,6 +513,352 @@ final class CockpitDemoAcceptanceRunner {
     return result;
   }
 }
+
+CockpitTestSuite _suiteForRuntime(
+  CockpitTestSuite suite, {
+  required CockpitRecordingCapabilities recordingCapabilities,
+  required Map<String, Object?> systemControlProfile,
+  required bool mixedPlaneSupported,
+  required String taskTitle,
+}) {
+  final json = Map<String, Object?>.from(suite.toJson());
+  final rawCases = json['cases'];
+  if (rawCases is! List<Object?>) {
+    throw const FormatException('Acceptance suite cases are unavailable.');
+  }
+  var taskInputBound = false;
+  json['cases'] = <Object?>[
+    for (final rawCase in rawCases)
+      if (rawCase case final Map<Object?, Object?> values)
+        () {
+          final entry = <String, Object?>{
+            for (final value in values.entries)
+              if (value.key is String) value.key! as String: value.value,
+          };
+          if (entry['id'] == 'taskEditorValidation') {
+            final rawInputs = entry['inputs'];
+            entry['inputs'] = <String, Object?>{
+              if (rawInputs is Map<Object?, Object?>)
+                for (final input in rawInputs.entries)
+                  if (input.key is String) input.key! as String: input.value,
+              'taskTitle': taskTitle,
+              'taskOpenLabel': 'Open task $taskTitle',
+            };
+            taskInputBound = true;
+          }
+          return entry;
+        }()
+      else
+        throw const FormatException('Acceptance suite case is malformed.'),
+  ];
+  if (!taskInputBound) {
+    throw const FormatException(
+      'Acceptance suite does not declare taskEditorValidation.',
+    );
+  }
+  final excludedTags = <String>{...suite.excludeTags};
+  final recordingSupported = _supportsUnattendedRecording(
+    recordingCapabilities,
+  );
+  if (!recordingSupported) excludedTags.add('requires-recording');
+  if (!mixedPlaneSupported) excludedTags.add('requires-system-control');
+  if (excludedTags.isEmpty) {
+    json.remove('excludeTags');
+  } else {
+    json['excludeTags'] = excludedTags.toList(growable: false)..sort();
+  }
+  json['x-runtime-recording'] = <String, Object?>{
+    'executed': recordingSupported,
+    ...recordingCapabilities.toJson(),
+  };
+  json['x-runtime-system-control'] = <String, Object?>{
+    'executed': mixedPlaneSupported,
+    'platform': systemControlProfile['platform'],
+    'adapter': systemControlProfile['adapter'],
+    'availableActions': systemControlProfile['availableActions'],
+  };
+  return CockpitTestSuite.fromJson(json);
+}
+
+bool _supportsUnattendedRecording(CockpitRecordingCapabilities capabilities) {
+  if (!capabilities.supportsNativeRecording) return false;
+  return !capabilities.recordingLimitations.any((limitation) {
+    final normalized = limitation.toLowerCase();
+    return normalized.contains('consent') ||
+        normalized.contains('permission') ||
+        normalized.contains('unavailable');
+  });
+}
+
+void _verifyAcceptanceReport(
+  CockpitTestSuiteReport report,
+  CockpitTestSuite effectiveSuite, {
+  required bool recordingSupported,
+  required String platform,
+}) {
+  if (!report.complete ||
+      report.definition.id != effectiveSuite.id ||
+      _canonicalJson(report.definition.toJson()) !=
+          _canonicalJson(effectiveSuite.toJson()) ||
+      report.execution.maxConcurrency != 2 ||
+      report.definition.fixtures.length != 2 ||
+      report.matrixAxes['persona']?.length != 2) {
+    throw const FormatException(
+      'Acceptance report does not preserve the complex suite definition.',
+    );
+  }
+  final expected = <String, (int, CockpitRunOutcome)>{
+    'taskEditorValidation': (1, CockpitRunOutcome.passed),
+    'settingsNavigation': (1, CockpitRunOutcome.passed),
+    'commandGestureCoverage': (1, CockpitRunOutcome.passed),
+    'commandSemanticCoverage': (1, CockpitRunOutcome.passed),
+    'mixedPlaneBlackBox': (
+      1,
+      platform == 'web' ? CockpitRunOutcome.skipped : CockpitRunOutcome.passed,
+    ),
+    'matrixEvidence': (2, CockpitRunOutcome.passed),
+    'recordingLifecycle': (
+      1,
+      recordingSupported ? CockpitRunOutcome.passed : CockpitRunOutcome.skipped,
+    ),
+  };
+  for (final entry in expected.entries) {
+    final rows = report.cases
+        .where((testCase) => testCase.entryId == entry.key)
+        .toList(growable: false);
+    if (rows.length != entry.value.$1 ||
+        rows.any((row) => row.outcome != entry.value.$2)) {
+      throw FormatException(
+        'Acceptance case ${entry.key} did not produce its expected rows.',
+      );
+    }
+  }
+  final personas = report.cases
+      .where((testCase) => testCase.entryId == 'matrixEvidence')
+      .map((testCase) => testCase.matrix['persona'])
+      .toSet();
+  if (personas.length != 2 ||
+      !personas.containsAll(const <String>{'developer', 'quality'})) {
+    throw const FormatException('Acceptance matrix rows are incomplete.');
+  }
+}
+
+Future<void> _verifyOfflineReportBundle({
+  required String outputDirectory,
+  required CockpitTestSuiteReport report,
+  required bool recordingSupported,
+  required String platform,
+}) async {
+  final root = p.normalize(p.join(outputDirectory, 'cockpit-report'));
+  final manifestFile = File(p.join(root, 'manifest.json'));
+  if (await FileSystemEntity.type(manifestFile.path, followLinks: false) !=
+      FileSystemEntityType.file) {
+    throw const FormatException('Offline report manifest is missing.');
+  }
+  final manifest = CockpitTestReportBundleManifest.fromJson(
+    jsonDecode(await manifestFile.readAsString()),
+  );
+  if (manifest.runId != report.runId) {
+    throw const FormatException('Offline report manifest run is incorrect.');
+  }
+  const requiredPaths = <String>{
+    'report.json',
+    'junit.xml',
+    'index.html',
+    'summary.md',
+    'run/run.json',
+    'run/events.jsonl',
+  };
+  final declaredPaths = manifest.files
+      .map((entry) => entry.relativePath)
+      .toSet();
+  if (!declaredPaths.containsAll(requiredPaths)) {
+    throw const FormatException('Offline report exports are incomplete.');
+  }
+
+  final actualPaths = <String>{};
+  await for (final entity in Directory(
+    root,
+  ).list(recursive: true, followLinks: false)) {
+    final type = await FileSystemEntity.type(entity.path, followLinks: false);
+    if (type == FileSystemEntityType.directory) continue;
+    if (type != FileSystemEntityType.file) {
+      throw const FormatException(
+        'Offline report contains an unsupported filesystem entry.',
+      );
+    }
+    final relativePath = p
+        .relative(entity.path, from: root)
+        .replaceAll('\\', '/');
+    if (relativePath != 'manifest.json') actualPaths.add(relativePath);
+  }
+  if (actualPaths.length != declaredPaths.length ||
+      !actualPaths.containsAll(declaredPaths)) {
+    throw const FormatException(
+      'Offline report manifest does not cover every exported file.',
+    );
+  }
+  for (final declaration in manifest.files) {
+    final path = p.normalize(
+      p.joinAll(<String>[root, ...p.posix.split(declaration.relativePath)]),
+    );
+    if (!p.isWithin(root, path)) {
+      throw const FormatException('Offline report path escapes its bundle.');
+    }
+    final file = File(path);
+    if (await FileSystemEntity.type(path, followLinks: false) !=
+            FileSystemEntityType.file ||
+        await file.length() != declaration.sizeBytes ||
+        (await sha256.bind(file.openRead()).first).toString() !=
+            declaration.sha256) {
+      throw FormatException(
+        'Offline report file ${declaration.relativePath} failed integrity verification.',
+      );
+    }
+  }
+
+  final bundle = CockpitTestReportBundle.fromJson(
+    jsonDecode(await File(p.join(root, 'report.json')).readAsString()),
+  );
+  if (!bundle.complete ||
+      bundle.report.runId != report.runId ||
+      bundle.executions.isEmpty) {
+    throw const FormatException('Canonical offline report is incomplete.');
+  }
+  final steps = <CockpitTestStepResult>[
+    for (final execution in bundle.executions) ...execution.result.steps,
+  ];
+  final operations = steps.map((step) => step.operation).whereType<String>();
+  const requiredOperations = <String>{
+    'action.tap',
+    'action.longPress',
+    'action.doubleTap',
+    'action.enterText',
+    'action.focusTextInput',
+    'action.setTextEditingValue',
+    'action.sendTextInputAction',
+    'action.sendKeyEvent',
+    'action.sendKeyDownEvent',
+    'action.sendKeyUpEvent',
+    'action.drag',
+    'action.fling',
+    'action.swipe',
+    'action.pinchZoom',
+    'action.rotate',
+    'action.panZoom',
+    'action.multiTouch',
+    'action.scrollUntilVisible',
+    'action.back',
+    'action.showOnScreen',
+    'action.increase',
+    'action.decrease',
+    'action.dismiss',
+    'action.dismissKeyboard',
+    'action.clearNetworkActivity',
+    'action.waitForNetworkIdle',
+    'action.waitForUiIdle',
+    'action.waitFor',
+    'action.assertVisible',
+    'action.assertText',
+    'action.captureScreenshot',
+    'action.collectSnapshot',
+    'control.if',
+    'control.retry',
+    'control.loop',
+  };
+  final operationSet = operations.toSet();
+  final mixedPlaneExecutions = bundle.executions
+      .where((execution) => execution.entryId == 'mixedPlaneBlackBox')
+      .toList(growable: false);
+  final hasConjunctiveLocatorEvidence = steps.any((step) {
+    final signals = step.locatorResolution?.matchedSignals;
+    return signals?['text'] == 'Save task' &&
+        signals?['type'] == 'FilledButton';
+  });
+  if (!operationSet.containsAll(requiredOperations) ||
+      !bundle.executions.any(
+        (execution) => execution.role == CockpitTestReportExecutionRole.fixture,
+      ) ||
+      !steps.any((step) => step.section == 'setup') ||
+      !steps.any((step) => step.section == 'main') ||
+      !steps.any((step) => step.section == 'finally') ||
+      !steps.any((step) => step.occurrence.callPath.isNotEmpty) ||
+      !hasConjunctiveLocatorEvidence ||
+      !steps.any(
+        (step) =>
+            step.timeoutMs != null &&
+            step.description != null &&
+            step.definitionPath != null,
+      ) ||
+      !steps.any((step) => step.evidence.isNotEmpty)) {
+    throw const FormatException(
+      'Canonical report does not prove the required workflow capabilities.',
+    );
+  }
+  if (platform != 'web') {
+    final mixedPlaneSteps = <CockpitTestStepResult>[
+      for (final execution in mixedPlaneExecutions) ...execution.result.steps,
+    ];
+    if (mixedPlaneExecutions.length != 1 ||
+        !operationSet.contains('action.system') ||
+        !mixedPlaneSteps.any(
+          (step) =>
+              step.operation == 'action.system' &&
+              step.requestedPlane == CockpitTestPlane.native &&
+              step.actualPlane == CockpitTestPlane.native,
+        ) ||
+        !mixedPlaneSteps.any(
+          (step) =>
+              step.requestedPlane == CockpitTestPlane.semantic &&
+              step.actualPlane == CockpitTestPlane.semantic,
+        ) ||
+        !mixedPlaneSteps.any((step) => step.evidence.isNotEmpty)) {
+      throw const FormatException(
+        'Canonical report does not prove mixed-plane black-box execution.',
+      );
+    }
+  }
+  if (recordingSupported &&
+      (!operationSet.contains('recording.start') ||
+          !operationSet.contains('recording.stop') ||
+          !bundle.executions.any(
+            (execution) => execution.artifacts.any(
+              (artifact) => artifact.mediaType.startsWith('video/'),
+            ),
+          ))) {
+    throw const FormatException(
+      'Recording-capable runtime produced no verified recording evidence.',
+    );
+  }
+
+  final html = await File(p.join(root, 'index.html')).readAsString();
+  if (!const <String>[
+        '>Overview<',
+        '>Product<',
+        '>Quality<',
+        '>Engineering<',
+        '>Machine<',
+      ].every(html.contains) ||
+      html.contains('<script src=') ||
+      html.contains('<link rel="stylesheet"') ||
+      html.contains('fetch(')) {
+    throw const FormatException('HTML report is not complete and offline.');
+  }
+}
+
+String _canonicalSha256(Object? value) =>
+    sha256.convert(utf8.encode(_canonicalJson(value))).toString();
+
+String _canonicalJson(Object? value) => jsonEncode(_sortJson(value));
+
+Object? _sortJson(Object? value) => switch (value) {
+  Map<Object?, Object?> map => <String, Object?>{
+    for (final key in map.keys.cast<String>().toList()..sort())
+      key: _sortJson(map[key]),
+  },
+  List<Object?> list => list.map(_sortJson).toList(growable: false),
+  _ => value,
+};
 
 void _requireRelativePath(String value, String name) {
   final normalized = p.normalize(value);
@@ -721,15 +1194,34 @@ File _artifactDestination(
   String outputDirectory,
   CockpitArtifactResource artifact,
 ) {
-  final root = p.normalize(p.join(outputDirectory, 'artifacts'));
-  final relative = p.normalize(
-    artifact.relativePath.replaceAll('/', p.separator),
+  final components = p.posix.split(artifact.relativePath);
+  if (components.length < 3 || components.first != 'artifacts') {
+    throw const FormatException('Artifact path has no bundle authority.');
+  }
+  final insideBundle = components.skip(2).join(p.separator);
+  final root = p.normalize(
+    artifact.attemptId == null
+        ? p.join(outputDirectory, 'cockpit-report')
+        : p.join(
+            outputDirectory,
+            'source-artifacts',
+            _safePathComponent(artifact.attemptId!),
+          ),
   );
+  final relative = p.normalize(insideBundle);
   final destination = p.normalize(p.join(root, relative));
   if (p.isAbsolute(relative) || !p.isWithin(root, destination)) {
     throw const FormatException('Artifact path escapes the output directory.');
   }
   return File(destination);
+}
+
+String _safePathComponent(String value) {
+  final normalized = value
+      .replaceAll(RegExp(r'[^A-Za-z0-9._-]+'), '-')
+      .replaceAll(RegExp(r'^-+|-+$'), '');
+  if (normalized.isEmpty) return 'attempt';
+  return normalized.length <= 80 ? normalized : normalized.substring(0, 80);
 }
 
 Future<void> _cancelActiveRun(

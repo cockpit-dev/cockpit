@@ -1,11 +1,10 @@
+import '../control/cockpit_locator.dart';
 import 'cockpit_test_error.dart';
 import 'cockpit_test_locator.dart';
 import 'cockpit_test_value.dart';
 import 'cockpit_test_value_reader.dart';
 
 enum CockpitTestConditionKind { visible, text, route, uiIdle, networkIdle }
-
-enum CockpitTestTextMatchMode { exact, contains, regex }
 
 enum CockpitTestConditionState { matched, notMatched, error }
 
@@ -26,7 +25,7 @@ final class CockpitTestConditionTemplate {
   final CockpitTestLocatorTemplate? locator;
   final CockpitTestTemplateValue? expected;
   final CockpitTestTemplateValue? text;
-  final CockpitTestTextMatchMode? matchMode;
+  final CockpitTextMatchMode? matchMode;
   final CockpitTestTemplateValue? route;
   final CockpitTestTemplateValue? quietMs;
 
@@ -89,7 +88,7 @@ final class CockpitTestConditionTemplate {
           ? null
           : CockpitTestValueReader.enumeration(
               json['matchMode'],
-              CockpitTestTextMatchMode.values,
+              CockpitTextMatchMode.values,
               '$path.matchMode',
             ),
       route: json['route'] == null
@@ -155,7 +154,7 @@ final class CockpitTestConditionTemplate {
       throw const FormatException('Condition quietMs must be positive.');
     }
     if (kind == CockpitTestConditionKind.text &&
-        matchMode == CockpitTestTextMatchMode.regex &&
+        matchMode == CockpitTextMatchMode.regex &&
         text?.kind == CockpitTestTemplateValueKind.literal) {
       RegExp(text!.value! as String);
     }
@@ -210,7 +209,7 @@ final class CockpitTestCondition {
       throw const FormatException('Condition quietMs must be positive.');
     }
     if (kind == CockpitTestConditionKind.text &&
-        matchMode == CockpitTestTextMatchMode.regex) {
+        matchMode == CockpitTextMatchMode.regex) {
       RegExp(text!);
     }
   }
@@ -219,7 +218,7 @@ final class CockpitTestCondition {
   final CockpitTestLocator? locator;
   final bool? expected;
   final String? text;
-  final CockpitTestTextMatchMode? matchMode;
+  final CockpitTextMatchMode? matchMode;
   final String? route;
   final int? quietMs;
 

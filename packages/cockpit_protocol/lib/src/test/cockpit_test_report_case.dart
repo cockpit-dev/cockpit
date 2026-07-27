@@ -1,6 +1,7 @@
 import '../foundation/cockpit_api_error.dart';
 import '../foundation/cockpit_foundation_artifact.dart';
 import '../foundation/cockpit_run.dart';
+import 'cockpit_test_case.dart';
 import 'cockpit_test_value_reader.dart';
 
 final class CockpitTestAttemptReport {
@@ -137,6 +138,7 @@ final class CockpitTestCaseReport {
   CockpitTestCaseReport({
     required this.entryId,
     required this.caseId,
+    required this.definition,
     required this.sourceSha256,
     required this.outcome,
     required this.stability,
@@ -153,6 +155,11 @@ final class CockpitTestCaseReport {
        attempts = List<CockpitTestAttemptReport>.unmodifiable(attempts) {
     CockpitTestValueReader.string(entryId, r'$.entryId', id: true);
     CockpitTestValueReader.string(caseId, r'$.caseId', id: true);
+    if (definition.id != caseId) {
+      throw const FormatException(
+        'Case report definition identity does not match the result.',
+      );
+    }
     CockpitTestValueReader.string(sourceSha256, r'$.sourceSha256');
     CockpitTestValueReader.string(targetId, r'$.targetId', id: true);
     if (outcome == CockpitRunOutcome.passed && this.attempts.isEmpty) {
@@ -162,6 +169,7 @@ final class CockpitTestCaseReport {
 
   final String entryId;
   final String caseId;
+  final CockpitTestCase definition;
   final String sourceSha256;
   final CockpitRunOutcome outcome;
   final CockpitRunStability stability;
@@ -172,6 +180,7 @@ final class CockpitTestCaseReport {
   Map<String, Object?> toJson() => <String, Object?>{
     'entryId': entryId,
     'caseId': caseId,
+    'definition': definition.toJson(),
     'sourceSha256': sourceSha256,
     'outcome': outcome.name,
     'stability': stability.name,
@@ -190,6 +199,7 @@ final class CockpitTestCaseReport {
       const <String>{
         'entryId',
         'caseId',
+        'definition',
         'sourceSha256',
         'outcome',
         'stability',
@@ -201,6 +211,7 @@ final class CockpitTestCaseReport {
       required: const <String>{
         'entryId',
         'caseId',
+        'definition',
         'sourceSha256',
         'outcome',
         'stability',
@@ -222,6 +233,10 @@ final class CockpitTestCaseReport {
         json['caseId'],
         '$path.caseId',
         id: true,
+      ),
+      definition: CockpitTestCase.fromJson(
+        json['definition'],
+        path: '$path.definition',
       ),
       sourceSha256: CockpitTestValueReader.string(
         json['sourceSha256'],

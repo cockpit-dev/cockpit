@@ -11,7 +11,7 @@ execution:
     delayMs: 500
     retryOn: [blocked, interrupted, internalError]
 report:
-  formats: [json, junit, html, aiSummary]
+  formats: [json, junit, html, summary]
   includePassedAttempts: true
 cases:
   - id: login

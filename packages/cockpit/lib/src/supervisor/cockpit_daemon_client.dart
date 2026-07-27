@@ -29,6 +29,7 @@ final class CockpitDaemonStatus {
     this.engineVersion,
     this.apiVersion,
     this.startedAt,
+    this.authorizationMode,
     this.diagnostic,
   });
 
@@ -39,6 +40,7 @@ final class CockpitDaemonStatus {
   final String? engineVersion;
   final CockpitApiVersion? apiVersion;
   final DateTime? startedAt;
+  final CockpitAuthorizationMode? authorizationMode;
   final String? diagnostic;
 
   Map<String, Object?> toJson() => <String, Object?>{
@@ -49,6 +51,7 @@ final class CockpitDaemonStatus {
     if (engineVersion != null) 'engineVersion': engineVersion,
     if (apiVersion != null) 'apiVersion': apiVersion!.toJson(),
     if (startedAt != null) 'startedAt': startedAt!.toUtc().toIso8601String(),
+    if (authorizationMode != null) 'authorizationMode': authorizationMode!.name,
     if (diagnostic != null) 'diagnostic': diagnostic,
   };
 }
@@ -101,7 +104,16 @@ final class CockpitDaemonLifecycleClient {
         }
       });
 
-  Future<CockpitDaemonDiscovery> start() => ensure();
+  Future<CockpitDaemonDiscovery> start({
+    CockpitAuthorizationMode authorizationMode =
+        CockpitAuthorizationMode.restricted,
+  }) async {
+    final current = await status();
+    if (current.running && current.authorizationMode != authorizationMode) {
+      await stop(mode: CockpitDaemonShutdownMode.drain);
+    }
+    return _ensureStarted(authorizationMode);
+  }
 
   Future<CockpitDaemonStatus> status() async {
     CockpitDaemonDiscovery? discovery;
@@ -129,6 +141,7 @@ final class CockpitDaemonLifecycleClient {
       engineVersion: server?.engineVersion,
       apiVersion: server?.apiVersion,
       startedAt: server?.startedAt,
+      authorizationMode: running ? discovery.authorizationMode : null,
       diagnostic: !running
           ? 'staleDiscovery'
           : server == null
@@ -175,9 +188,12 @@ final class CockpitDaemonLifecycleClient {
     );
   }
 
-  Future<CockpitDaemonDiscovery> restart() async {
+  Future<CockpitDaemonDiscovery> restart({
+    CockpitAuthorizationMode authorizationMode =
+        CockpitAuthorizationMode.restricted,
+  }) async {
     await stop();
-    return ensure();
+    return _ensureStarted(authorizationMode);
   }
 
   Future<List<String>> logs({int maximumLines = 200}) async {
@@ -306,7 +322,32 @@ final class CockpitDaemonLifecycleClient {
     }
   }
 
-  Future<void> _startProcess() async {
+  Future<CockpitDaemonDiscovery> _ensureStarted(
+    CockpitAuthorizationMode authorizationMode,
+  ) => _EnsureLocks.run(paths.daemonEnsureLock, () async {
+    final existing = await _usableDiscovery();
+    if (existing != null) return existing;
+    final lock = await File(paths.daemonEnsureLock).open(mode: FileMode.append);
+    try {
+      await permissionHardener.hardenFile(File(paths.daemonEnsureLock));
+      await lock.lock(FileLock.blockingExclusive);
+      final rechecked = await _usableDiscovery();
+      if (rechecked != null) return rechecked;
+      await _startProcess(authorizationMode);
+      return _waitUntilReady();
+    } finally {
+      try {
+        await lock.unlock();
+      } finally {
+        await lock.close();
+      }
+    }
+  });
+
+  Future<void> _startProcess([
+    CockpitAuthorizationMode authorizationMode =
+        CockpitAuthorizationMode.restricted,
+  ]) async {
     if (dartExecutable.isEmpty || daemonEntrypoint.isEmpty) {
       throw const CockpitDaemonException(
         'daemonExecutableMissing',
@@ -315,7 +356,11 @@ final class CockpitDaemonLifecycleClient {
     }
     await Process.start(
       dartExecutable,
-      <String>[daemonEntrypoint, '--home=${paths.home}'],
+      <String>[
+        daemonEntrypoint,
+        '--home=${paths.home}',
+        '--authorization-mode=${authorizationMode.name}',
+      ],
       environment: <String, String>{
         ...Platform.environment,
         'COCKPIT_HOME': paths.home,

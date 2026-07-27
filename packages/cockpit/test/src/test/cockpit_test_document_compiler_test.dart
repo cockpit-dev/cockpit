@@ -53,7 +53,7 @@ steps:
   - stepId: duplicate
     action:
       type: tap
-      locator: {strategy: testId, value: {\$var: password}}
+      locator: {testId: {\$var: password}}
   - stepId: duplicate
     call: {fragment: absent}
 ''');
@@ -243,7 +243,7 @@ ${maxExpandedSteps == null ? '' : 'defaults:\n  limits: {maxExpandedSteps: $maxE
     - stepId: fragmentTap
       action:
         type: tap
-        locator: {strategy: testId, value: loginButton}
+        locator: {testId: loginButton}
 steps:
   - {stepId: firstCall, call: {fragment: auth.login}}
   - {stepId: secondCall, call: {fragment: auth.login}}
@@ -251,7 +251,7 @@ steps:
   - stepId: tapContinue
     action:
       type: tap
-      locator: {strategy: testId, value: continueButton}
+      locator: {testId: continueButton}
 '''}''';
 
 String _diagnostics(CockpitTestCompilationResult result) => result.diagnostics

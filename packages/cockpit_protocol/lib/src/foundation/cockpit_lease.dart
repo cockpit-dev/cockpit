@@ -67,7 +67,7 @@ final class CockpitLeaseRequest {
     if (waitTimeoutMs < 0 ||
         waitTimeoutMs > 300000 ||
         ttlMs < 1000 ||
-        ttlMs > 300000) {
+        ttlMs > cockpitMaximumLeaseTtlMs) {
       throw const FormatException('Lease timeout is invalid.');
     }
   }
@@ -135,7 +135,7 @@ final class CockpitLeaseRequest {
         json['ttlMs'],
         '$path.ttlMs',
         min: 1000,
-        max: 300000,
+        max: cockpitMaximumLeaseTtlMs,
       ),
     );
   }
@@ -331,3 +331,5 @@ T _enum<T extends Enum>(Object? value, List<T> values, String path) {
     policy: CockpitDecodePolicy.requests,
   ).requireKnown();
 }
+
+const int cockpitMaximumLeaseTtlMs = 1800000;

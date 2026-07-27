@@ -13,6 +13,10 @@ dart run cockpit workspace register --root-id <rootId> --path /absolute/checkout
 dart run cockpit target discover
 ```
 
+Use `daemon start --yolo` only when the user explicitly requests unrestricted
+local execution. It is scoped to that daemon process; read `daemon status` and
+preserve the reported `authorizationMode` in run evidence.
+
 Read the returned JSON and reuse its identifiers. When the current directory
 belongs to exactly one active workspace, `--workspace-id` may be omitted.
 
@@ -115,6 +119,31 @@ Use `artifact list` as the authority for artifact identity and metadata.
 Use a suite for dependency ordering, matrix coverage, fixtures, retries,
 parallel rows, durable resume, and regression reports. Use a case for a focused
 development proof.
+
+Select `plane` only when the step must override the case default. Otherwise let
+the runtime route screenshot assertions to visual control, system and `travel`
+actions to native control, and visual/coordinate/native-only locators to their
+faithful driver. A Flutter bridge target can switch between its semantic and
+secondary system drivers per step; inspect the reported capabilities before
+using `copyText`, `eraseText`, `pasteText`, `travel`, visual locators, or
+`assertScreenshot`.
+Read secondary native capabilities from the sanitized
+`target.inspect.output.systemControl` profile. Do not infer them from
+`app.get`; platform application and process identities are intentionally
+redacted outside the worker.
+
+Visual templates and screenshot baselines must resolve inside the registered
+workspace. Screenshot assertions produce actual, baseline, and diff files in
+the report bundle. Express before/after behavior with suite fixtures, case
+`setup`/`finally`, step `evidence`, and explicit `startRecording`/
+`stopRecording` boundaries. Do not invent a client-only hook model that cannot
+round-trip through `cockpit.test/v2` and the canonical report.
+
+For a suite, download the complete report artifact set into one directory and
+preserve its relative paths. Read `summary.md` for a bounded terminal handoff,
+`report.json` for complete structured facts, and `index.html` only when a human
+view is useful. Verify every declared size and SHA-256 in `manifest.json`
+before reading evidence. Do not print binary content or expand it as Base64.
 
 ## Acceptance Rule
 

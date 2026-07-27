@@ -100,6 +100,9 @@ final class CockpitLaunchDevelopmentSessionService {
     CockpitLaunchDevelopmentSessionRequest request,
   ) async {
     final normalizedProjectDir = cockpitNormalizeProjectDir(request.projectDir);
+    await request.launchConfiguration.validateProjectFiles(
+      normalizedProjectDir,
+    );
     final resolvedSessionPort = await cockpitResolveLocalSessionPort(
       platform: request.platform,
       deviceId: request.deviceId,

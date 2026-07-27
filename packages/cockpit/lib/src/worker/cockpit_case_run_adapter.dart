@@ -44,6 +44,9 @@ final class CockpitWorkerHealthySession {
     required this.healthCheck,
     this.captureAdapter,
     this.recordingAdapter,
+    this.systemAutomationAdapter,
+    this.systemCaptureAdapter,
+    this.systemRecordingAdapter,
     this.lowerer = const CockpitTestActionLowerer(),
     this.isolate,
     this.forceAbort,
@@ -57,6 +60,9 @@ final class CockpitWorkerHealthySession {
   final CockpitAutomationAdapter automationAdapter;
   final CockpitCaptureAdapter? captureAdapter;
   final CockpitRecordingAdapter? recordingAdapter;
+  final CockpitAutomationAdapter? systemAutomationAdapter;
+  final CockpitCaptureAdapter? systemCaptureAdapter;
+  final CockpitRecordingAdapter? systemRecordingAdapter;
   final CockpitTestActionLowerer lowerer;
   final Future<bool> Function() healthCheck;
   final Future<void> Function(
@@ -442,6 +448,7 @@ final class CockpitCaseRunAdapterFactory {
     required this.workspaceId,
     required this.projectId,
     required this.engineVersion,
+    this.authorizationMode = CockpitAuthorizationMode.restricted,
     required this.runStateRoot,
     required CockpitWorkerCaseIndex caseIndex,
     required CockpitWorkerSessionProvider sessions,
@@ -471,6 +478,7 @@ final class CockpitCaseRunAdapterFactory {
   final String workspaceId;
   final String projectId;
   final String engineVersion;
+  final CockpitAuthorizationMode authorizationMode;
   final String runStateRoot;
   final CockpitWorkerCaseIndex _caseIndex;
   final CockpitWorkerSessionProvider _sessions;
@@ -788,6 +796,9 @@ final class CockpitCaseRunAdapterFactory {
         automationAdapter: session.automationAdapter,
         captureAdapter: session.captureAdapter,
         recordingAdapter: session.recordingAdapter,
+        systemAutomationAdapter: session.systemAutomationAdapter,
+        systemCaptureAdapter: session.systemCaptureAdapter,
+        systemRecordingAdapter: session.systemRecordingAdapter,
         lowerer: session.lowerer,
         secretResolver: _secretResolver,
         safetyPolicy: _safetyPolicy,
@@ -805,6 +816,7 @@ final class CockpitCaseRunAdapterFactory {
             caseId: compiled.testCase.id,
             attemptId: attemptId,
             engineVersion: engineVersion,
+            authorizationMode: authorizationMode,
           ),
           targetId: session.targetId,
           targetEnvironment: session.environment,

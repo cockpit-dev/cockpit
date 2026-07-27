@@ -98,6 +98,8 @@ bool _isKeyOperation(CockpitCommandType commandType) {
   return switch (commandType) {
     CockpitCommandType.tap ||
     CockpitCommandType.enterText ||
+    CockpitCommandType.eraseText ||
+    CockpitCommandType.pasteText ||
     CockpitCommandType.focusTextInput ||
     CockpitCommandType.setTextEditingValue ||
     CockpitCommandType.sendTextInputAction ||
@@ -120,13 +122,16 @@ bool _isKeyOperation(CockpitCommandType commandType) {
     CockpitCommandType.decrease ||
     CockpitCommandType.dismiss ||
     CockpitCommandType.dismissKeyboard ||
-    CockpitCommandType.system => true,
+    CockpitCommandType.system ||
+    CockpitCommandType.travel => true,
+    CockpitCommandType.copyText ||
     CockpitCommandType.clearNetworkActivity ||
     CockpitCommandType.waitForNetworkIdle ||
     CockpitCommandType.waitForUiIdle ||
     CockpitCommandType.waitFor ||
     CockpitCommandType.assertVisible ||
     CockpitCommandType.assertText ||
+    CockpitCommandType.assertScreenshot ||
     CockpitCommandType.captureScreenshot ||
     CockpitCommandType.collectSnapshot => false,
   };

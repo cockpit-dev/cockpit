@@ -53,7 +53,7 @@ state. Worker process environments are minimized; only explicitly allowed
 environment secret names are forwarded.
 
 The old embedded DevTools dashboard and browser assets are deleted. There is no
-HTML route in `cockpitd`. Generated suite `report.html` files are immutable,
+HTML route in `cockpitd`. Generated suite `index.html` files are immutable,
 portable artifacts rather than a server UI.
 
 ## Execution Model
@@ -75,7 +75,7 @@ Suite execution adds:
 - suite and case-attempt fixtures;
 - `sharedSession`, `restartApp`, and `resetAppData` isolation;
 - bounded concurrency, retries, fail-fast, and always-run teardown;
-- JSON, JUnit, HTML, and AI summary reports;
+- JSON, JUnit, offline HTML, and Markdown summary reports;
 - durable node, attempt, session-affinity, event, and artifact state.
 
 On worker recovery, completed nodes are reused. An active attempt becomes an
@@ -110,6 +110,12 @@ allowing development, test, and staging target environments. Production and
 unknown environments can be authorized only by an explicit policy. Policy
 replacement is atomic and a running daemon must restart before the new policy
 takes effect.
+
+`daemon start --yolo` and `daemon restart --yolo` provide an explicit,
+process-scoped unrestricted mode for local automation. The mode is not written
+to the persistent policy; a start without the flag returns to policy authority.
+Discovery status, attempt manifests, and suite reports record the effective
+authorization mode.
 
 ## Deleted 1.x Surfaces
 

@@ -154,10 +154,12 @@ final class _BindingContext {
     required String executionBase,
     required String section,
     List<String> callPath = const <String>[],
+    CockpitTestPlane? inheritedPlane,
   }) {
     final result = <CockpitTestExecutionNode>[];
     for (var index = 0; index < steps.length; index += 1) {
       final step = steps[index];
+      final plane = step.plane ?? inheritedPlane;
       final sourcePath = '$sourceBase[$index]';
       final operation = step.operation;
       if (operation is CockpitTestCallOperationTemplate) {
@@ -173,6 +175,7 @@ final class _BindingContext {
                 '$executionBase/${step.stepId}@${operation.fragment}',
             section: section,
             callPath: <String>[...callPath, step.stepId],
+            inheritedPlane: plane,
           ),
         );
         continue;
@@ -184,6 +187,7 @@ final class _BindingContext {
           executionId: executionId,
           section: section,
           description: step.description,
+          plane: plane,
           timeoutMs:
               step.timeoutMs ?? compiled.testCase.defaults.commandTimeoutMs,
           evidence: step.evidence ?? compiled.testCase.defaults.evidence,
@@ -197,6 +201,7 @@ final class _BindingContext {
             executionBase: executionId,
             section: section,
             callPath: callPath,
+            inheritedPlane: plane,
           ),
         ),
       );
@@ -210,6 +215,7 @@ final class _BindingContext {
     required String executionBase,
     required String section,
     required List<String> callPath,
+    required CockpitTestPlane? inheritedPlane,
   }) => switch (operation) {
     CockpitTestActionOperationTemplate(:final action) =>
       CockpitTestActionPlanOperation(bindAction(action)),
@@ -244,6 +250,7 @@ final class _BindingContext {
           executionBase: '$executionBase/then',
           section: section,
           callPath: callPath,
+          inheritedPlane: inheritedPlane,
         ),
         elseSteps: bindSteps(
           elseSteps,
@@ -251,6 +258,7 @@ final class _BindingContext {
           executionBase: '$executionBase/else',
           section: section,
           callPath: callPath,
+          inheritedPlane: inheritedPlane,
         ),
       ),
     CockpitTestRetryOperationTemplate(
@@ -267,6 +275,7 @@ final class _BindingContext {
           executionBase: '$executionBase/retry',
           section: section,
           callPath: callPath,
+          inheritedPlane: inheritedPlane,
         ),
       ),
     CockpitTestLoopOperationTemplate(
@@ -283,6 +292,7 @@ final class _BindingContext {
           executionBase: '$executionBase/loop',
           section: section,
           callPath: callPath,
+          inheritedPlane: inheritedPlane,
         ),
       ),
     CockpitTestCallOperationTemplate() => throw StateError(
@@ -339,15 +349,39 @@ final class _BindingContext {
       final y = bindValue(template.y);
       final threshold = bindValue(template.threshold);
       return CockpitTestLocator(
-        strategy: template.strategy,
-        value: bindValue(template.value) as String?,
+        text: bindValue(template.text) as String?,
+        label: bindValue(template.label) as String?,
+        matchMode: template.matchMode == null
+            ? CockpitTextMatchMode.exact
+            : CockpitTextMatchMode.fromJson(bindValue(template.matchMode)),
+        nativeId: bindValue(template.nativeId) as String?,
+        testId: bindValue(template.testId) as String?,
+        role: bindValue(template.role) as String?,
+        type: bindValue(template.type) as String?,
+        path: bindValue(template.path) as String?,
+        visual: bindValue(template.visual) as String?,
         x: (x as num?)?.toDouble(),
         y: (y as num?)?.toDouble(),
         threshold: (threshold as num?)?.toDouble(),
         index: bindValue(template.index) as int?,
+        enabled: bindValue(template.enabled) as bool?,
+        selected: bindValue(template.selected) as bool?,
+        checked: bindValue(template.checked) as bool?,
+        focused: bindValue(template.focused) as bool?,
+        clickable: bindValue(template.clickable) as bool?,
         ancestor: template.ancestor == null
             ? null
             : bindLocator(template.ancestor!),
+        child: template.child == null ? null : bindLocator(template.child!),
+        descendant: template.descendant == null
+            ? null
+            : bindLocator(template.descendant!),
+        above: template.above == null ? null : bindLocator(template.above!),
+        below: template.below == null ? null : bindLocator(template.below!),
+        leftOf: template.leftOf == null ? null : bindLocator(template.leftOf!),
+        rightOf: template.rightOf == null
+            ? null
+            : bindLocator(template.rightOf!),
         fallbacks: template.fallbacks.map(bindLocator),
       );
     } on FormatException catch (error) {

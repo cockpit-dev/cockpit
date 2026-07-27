@@ -21,6 +21,31 @@ name: cockpit_client_smoke
 environment:
   sdk: '>=3.8.0 <4.0.0'
 ''');
+      final dartFile = await File(
+        p.join(workspace.path, 'lib', 'smoke.dart'),
+      ).create(recursive: true);
+      await dartFile.writeAsString('int smokeValue() => 2;\n');
+      final supportFile = await File(
+        p.join(workspace.path, 'test', 'support.dart'),
+      ).create(recursive: true);
+      await supportFile.writeAsString('''
+int expectedSmokeValue() => 2;
+
+void main() => throw StateError('support.dart is not a test suite');
+''');
+      await File(
+        p.join(workspace.path, 'test', 'smoke_test.dart'),
+      ).writeAsString('''
+import 'package:test/test.dart';
+
+import 'support.dart';
+
+void main() {
+  test('runs the selected test directory', () {
+    expect(expectedSmokeValue(), 2);
+  });
+}
+''');
       await File(p.join(workspace.path, 'smoke_case.yaml')).writeAsString('''
 schemaVersion: cockpit.test/v2
 kind: case
@@ -56,6 +81,16 @@ cases:
       );
       if (packageLibrary == null) throw StateError('Cannot resolve cockpit.');
       final packageRoot = p.dirname(p.dirname(packageLibrary.toFilePath()));
+      final packageConfig = await Isolate.packageConfig;
+      if (packageConfig == null) {
+        throw StateError('Cannot resolve the test package configuration.');
+      }
+      final workspaceDartTool = await Directory(
+        p.join(workspace.path, '.dart_tool'),
+      ).create();
+      await File.fromUri(
+        packageConfig,
+      ).copy(p.join(workspaceDartTool.path, 'package_config.json'));
       final environment = <String, String>{
         ...Platform.environment,
         'COCKPIT_HOME': await home.resolveSymbolicLinks(),
@@ -327,6 +362,10 @@ cases:
         workspaceId: workspaceId,
         targetId: registeredTargetId,
         suiteSource: suiteSource,
+        dartFilePath: await dartFile.resolveSymbolicLinks(),
+        testDirectoryPath: await Directory(
+          p.join(workspace.path, 'test'),
+        ).resolveSymbolicLinks(),
       );
       Map<String, Object?> response(int id) =>
           mcp.singleWhere((message) => message['id'] == id);
@@ -402,6 +441,22 @@ cases:
         (artifactTool['structuredContent']! as Map<String, Object?>)['items'],
         isA<List<Object?>>(),
       );
+      final toolsResult = response(11)['result']! as Map<String, Object?>;
+      final toolNames = (toolsResult['tools']! as List<Object?>)
+          .cast<Map<String, Object?>>()
+          .map((tool) => tool['name']);
+      expect(toolNames, contains('analyze_files'));
+      final analysisTool = response(12)['result']! as Map<String, Object?>;
+      expect(
+        (analysisTool['structuredContent']! as Map<String, Object?>)['outcome'],
+        'succeeded',
+      );
+      final testTool = response(13)['result']! as Map<String, Object?>;
+      expect(
+        (testTool['structuredContent']! as Map<String, Object?>)['outcome'],
+        'succeeded',
+        reason: '$testTool',
+      );
     },
     timeout: const Timeout(Duration(minutes: 5)),
   );
@@ -444,10 +499,17 @@ Future<List<Map<String, Object?>>> _mcp(
   required String workspaceId,
   required String targetId,
   required String suiteSource,
+  required String dartFilePath,
+  required String testDirectoryPath,
 }) async {
   final process = await Process.start(
     Platform.resolvedExecutable,
-    <String>[p.join(packageRoot, 'bin', 'cockpit.dart'), 'serve-mcp'],
+    <String>[
+      p.join(packageRoot, 'bin', 'cockpit.dart'),
+      'serve-mcp',
+      '--profile',
+      'dart',
+    ],
     workingDirectory: packageRoot,
     environment: environment,
   );
@@ -455,11 +517,12 @@ Future<List<Map<String, Object?>>> _mcp(
   final errors = StringBuffer();
   final initialized = Completer<void>();
   final responsesReceived = Completer<void>();
+  var responseLines = 0;
   final outputDone = process.stdout.listen((chunk) {
     output.addAll(chunk);
-    final count = _decodeFrames(output).length;
-    if (count >= 1 && !initialized.isCompleted) initialized.complete();
-    if (count >= 10 && !responsesReceived.isCompleted) {
+    responseLines += chunk.where((byte) => byte == 0x0a).length;
+    if (responseLines >= 1 && !initialized.isCompleted) initialized.complete();
+    if (responseLines >= 13 && !responsesReceived.isCompleted) {
       responsesReceived.complete();
     }
   }).asFuture<void>();
@@ -468,7 +531,7 @@ Future<List<Map<String, Object?>>> _mcp(
       .listen(errors.write)
       .asFuture<void>();
   process.stdin.add(
-    _frame(<String, Object?>{
+    _encodeLine(<String, Object?>{
       'jsonrpc': '2.0',
       'id': 1,
       'method': 'initialize',
@@ -565,58 +628,53 @@ Future<List<Map<String, Object?>>> _mcp(
         'arguments': <String, Object?>{'runId': runId},
       },
     },
+    <String, Object?>{'jsonrpc': '2.0', 'id': 11, 'method': 'tools/list'},
+    <String, Object?>{
+      'jsonrpc': '2.0',
+      'id': 12,
+      'method': 'tools/call',
+      'params': <String, Object?>{
+        'name': 'analyze_files',
+        'arguments': <String, Object?>{
+          'workspaceId': workspaceId,
+          'paths': <String>[dartFilePath],
+        },
+      },
+    },
+    <String, Object?>{
+      'jsonrpc': '2.0',
+      'id': 13,
+      'method': 'tools/call',
+      'params': <String, Object?>{
+        'name': 'run_tests',
+        'arguments': <String, Object?>{
+          'workspaceId': workspaceId,
+          'paths': <String>[testDirectoryPath],
+          'idempotencyKey': 'mcp-run-tests-directory',
+        },
+      },
+    },
   ]) {
-    process.stdin.add(_frame(message));
+    process.stdin.add(_encodeLine(message));
   }
   await responsesReceived.future.timeout(const Duration(seconds: 30));
   await process.stdin.close();
   final exitCode = await process.exitCode.timeout(const Duration(seconds: 30));
   await Future.wait(<Future<void>>[outputDone, errorDone]);
   expect(exitCode, 0, reason: errors.toString());
-  final responses = _decodeFrames(output);
-  expect(responses, hasLength(10), reason: errors.toString());
+  final responses = _decodeLines(output);
+  expect(responses, hasLength(13), reason: errors.toString());
   return responses;
 }
 
-List<int> _frame(Map<String, Object?> message) {
-  final body = utf8.encode(jsonEncode(message));
-  return <int>[
-    ...ascii.encode('Content-Length: ${body.length}\r\n\r\n'),
-    ...body,
-  ];
-}
+List<int> _encodeLine(Map<String, Object?> message) =>
+    utf8.encode('${jsonEncode(message)}\n');
 
-List<Map<String, Object?>> _decodeFrames(List<int> bytes) {
-  final messages = <Map<String, Object?>>[];
-  var offset = 0;
-  while (offset < bytes.length) {
-    int? headerEnd;
-    for (var index = offset; index <= bytes.length - 4; index++) {
-      if (bytes[index] == 13 &&
-          bytes[index + 1] == 10 &&
-          bytes[index + 2] == 13 &&
-          bytes[index + 3] == 10) {
-        headerEnd = index;
-        break;
-      }
-    }
-    if (headerEnd == null) break;
-    final header = ascii.decode(bytes.sublist(offset, headerEnd));
-    final match = RegExp(
-      r'Content-Length:\s*(\d+)',
-      caseSensitive: false,
-    ).firstMatch(header);
-    if (match == null) throw const FormatException('Missing content length.');
-    final start = headerEnd + 4;
-    final end = start + int.parse(match[1]!);
-    if (end > bytes.length) break;
-    messages.add(
-      Map<String, Object?>.from(
-        jsonDecode(utf8.decode(bytes.sublist(start, end)))
-            as Map<Object?, Object?>,
-      ),
-    );
-    offset = end;
-  }
-  return messages;
-}
+List<Map<String, Object?>> _decodeLines(List<int> bytes) => const LineSplitter()
+    .convert(utf8.decode(bytes))
+    .where((line) => line.trim().isNotEmpty)
+    .map(
+      (line) =>
+          Map<String, Object?>.from(jsonDecode(line) as Map<Object?, Object?>),
+    )
+    .toList(growable: false);

@@ -86,7 +86,7 @@ final class CockpitDesktopSystemControlAdapter
             'mobile-volume-key',
             'Desktop host volume keys are global and not safe for app-scoped automation.',
           ),
-          _targetedInputCapability(
+          _activationCapability(
             CockpitSystemControlAction.activateWindow,
             hasInputTarget: hasInputTarget,
           ),
@@ -245,9 +245,9 @@ final class CockpitDesktopSystemControlAdapter
             availability: hasInputTarget
                 ? CockpitSystemControlAvailability.available
                 : CockpitSystemControlAvailability.blocked,
-            strategy: inputStrategy,
+            strategy: _activationStrategy,
             requires: <String>[
-              ..._targetedInputRequires,
+              ..._activationRequires,
               if (!hasInputTarget) 'app id or process id',
             ],
             limitations: <String>[
@@ -709,6 +709,16 @@ final class CockpitDesktopSystemControlAdapter
     };
   }
 
+  String get _activationStrategy => switch (platform) {
+    'macos' => 'NSRunningApplication.activate',
+    _ => inputStrategy,
+  };
+
+  List<String> get _activationRequires => switch (platform) {
+    'macos' => const <String>['osascript', 'interactive desktop session'],
+    _ => _targetedInputRequires,
+  };
+
   List<String> get _screenshotRequires {
     return switch (platform) {
       'macos' => const <String>[
@@ -800,19 +810,24 @@ final class CockpitDesktopSystemControlAdapter
       CockpitSystemControlAction.pressKey => cockpitTextCommand(
         request,
         'key',
-        (key) => _macosAppleScriptWithTarget(
-          request,
-          _macosPressKeyScript,
-          <String>[key],
-        ),
+        (key) {
+          final repeat = _pressKeyRepeat(request);
+          if (repeat == null) return _invalidPressKeyRepeat;
+          return _macosAppleScriptWithTarget(
+            request,
+            _macosPressKeyScript,
+            <String>[key, '$repeat'],
+          );
+        },
       ),
       CockpitSystemControlAction.pressBack => _macosAppleScriptWithTarget(
         request,
         _macosPressBackScript,
       ),
-      CockpitSystemControlAction.activateWindow => _macosAppleScriptWithTarget(
+      CockpitSystemControlAction.activateWindow => _macosJxaWithTarget(
         request,
         _macosActivateTargetScript,
+        const <String>[],
       ),
       CockpitSystemControlAction.terminateApp => _macosAppleScriptWithTarget(
         request,
@@ -887,9 +902,10 @@ final class CockpitDesktopSystemControlAdapter
             <String>['-e', _macosPostNotificationScript, title, body],
           ),
         ),
-      CockpitSystemControlAction.recoverToApp => _macosAppleScriptWithTarget(
+      CockpitSystemControlAction.recoverToApp => _macosJxaWithTarget(
         request,
         _macosActivateTargetScript,
+        const <String>[],
       ),
       CockpitSystemControlAction.pushFile ||
       CockpitSystemControlAction.pullFile => _posixHostFileCommand(request),
@@ -963,12 +979,17 @@ final class CockpitDesktopSystemControlAdapter
       CockpitSystemControlAction.pressKey => cockpitTextCommand(
         request,
         'key',
-        (key) => _windowsInput(<String>[
-          'pressKey',
-          request.appId ?? '',
-          request.processId?.toString() ?? '',
-          key,
-        ]),
+        (key) {
+          final repeat = _pressKeyRepeat(request);
+          if (repeat == null) return _invalidPressKeyRepeat;
+          return _windowsInput(<String>[
+            'pressKey',
+            request.appId ?? '',
+            request.processId?.toString() ?? '',
+            key,
+            '$repeat',
+          ]);
+        },
       ),
       CockpitSystemControlAction.pressBack => _windowsInput(<String>[
         'pressBack',
@@ -1149,10 +1170,18 @@ final class CockpitDesktopSystemControlAdapter
       CockpitSystemControlAction.pressKey => cockpitTextCommand(
         request,
         'key',
-        (key) => _linuxTargetedXdotool(request, <String>[
-          'key',
-          _normalizeDesktopKeyForXdotool(key),
-        ]),
+        (key) {
+          final repeat = _pressKeyRepeat(request);
+          if (repeat == null) return _invalidPressKeyRepeat;
+          return _linuxTargetedXdotool(request, <String>[
+            'key',
+            '--repeat',
+            '$repeat',
+            '--delay',
+            '0',
+            _normalizeDesktopKeyForXdotool(key),
+          ]);
+        },
       ),
       CockpitSystemControlAction.pressBack => _linuxTargetedXdotool(
         request,
@@ -1881,6 +1910,25 @@ final class CockpitDesktopSystemControlAdapter
     );
   }
 
+  CockpitSystemControlCapability _activationCapability(
+    CockpitSystemControlAction action, {
+    required bool hasInputTarget,
+  }) {
+    return CockpitSystemControlCapability(
+      action: action,
+      plane: CockpitPlaneKind.nativeUiPlane,
+      availability: hasInputTarget
+          ? CockpitSystemControlAvailability.available
+          : CockpitSystemControlAvailability.blocked,
+      strategy: _activationStrategy,
+      requires: <String>[
+        ..._activationRequires,
+        if (!hasInputTarget) 'app id or process id',
+      ],
+      limitations: limitations,
+    );
+  }
+
   CockpitSystemControlCapability _hostBlocked(
     CockpitSystemControlAction action,
     String strategy, {
@@ -2014,17 +2062,23 @@ function run(argv) {
 ''';
 
   static const String _macosActivateTargetScript = r'''
-on run argv
-  set targetKind to item 1 of argv
-  set targetValue to item 2 of argv
-  if targetKind is "appId" then
-    tell application id targetValue to activate
-  else
-    tell application "System Events"
-      set frontmost of first application process whose unix id is (targetValue as integer) to true
-    end tell
-  end if
-end run
+ObjC.import('AppKit')
+
+function run(argv) {
+  const targetKind = argv[0]
+  const targetValue = argv[1]
+  let app = null
+  if (targetKind === 'processId') {
+    app = $.NSRunningApplication.runningApplicationWithProcessIdentifier(Number(targetValue))
+  } else {
+    const apps = $.NSRunningApplication.runningApplicationsWithBundleIdentifier(targetValue)
+    if (apps.count > 0) app = apps.objectAtIndex(0)
+  }
+  if (!app) throw new Error(`No running macOS application found for ${targetKind}:${targetValue}`)
+  if (!app.activateWithOptions($.NSApplicationActivateIgnoringOtherApps)) {
+    throw new Error(`Unable to activate macOS application ${targetKind}:${targetValue}`)
+  }
+}
 ''';
 
   static const String _macosTypeTextScript = r'''
@@ -2048,6 +2102,7 @@ on run argv
   set targetKind to item 1 of argv
   set targetValue to item 2 of argv
   set keyValue to item 3 of argv
+  set repeatValue to (item 4 of argv) as integer
   if targetKind is "appId" then
     tell application id targetValue to activate
   else
@@ -2057,19 +2112,21 @@ on run argv
   end if
   set normalizedKey to do shell script "printf %s " & quoted form of keyValue & " | tr '[:upper:]' '[:lower:]'"
   tell application "System Events"
-    if normalizedKey is "enter" or normalizedKey is "return" then
-      key code 36
-    else if normalizedKey is "escape" or normalizedKey is "esc" then
-      key code 53
-    else if normalizedKey is "tab" then
-      key code 48
-    else if normalizedKey is "backspace" or normalizedKey is "delete" then
-      key code 51
-    else if normalizedKey is "space" then
-      key code 49
-    else
-      keystroke keyValue
-    end if
+    repeat repeatValue times
+      if normalizedKey is "enter" or normalizedKey is "return" then
+        key code 36
+      else if normalizedKey is "escape" or normalizedKey is "esc" then
+        key code 53
+      else if normalizedKey is "tab" then
+        key code 48
+      else if normalizedKey is "backspace" or normalizedKey is "delete" then
+        key code 51
+      else if normalizedKey is "space" then
+        key code 49
+      else
+        keystroke keyValue
+      end if
+    end repeat
   end tell
 end run
 ''';
@@ -2337,7 +2394,10 @@ switch ($action) {
   }
   'pressKey' {
     Activate-Target
-    [System.Windows.Forms.SendKeys]::SendWait((Convert-Key $args[3]))
+    $repeat = [int]$args[4]
+    for ($index = 0; $index -lt $repeat; $index++) {
+      [System.Windows.Forms.SendKeys]::SendWait((Convert-Key $args[3]))
+    }
   }
   'pressBack' {
     Activate-Target
@@ -3121,3 +3181,19 @@ final class _UiTreeReadLimits {
   final List<String> values;
   final CockpitResolvedSystemControlCommand? error;
 }
+
+int? _pressKeyRepeat(CockpitSystemControlActionRequest request) {
+  final repeat = cockpitReadSystemControlIntParameter(
+    request.parameters,
+    'repeat',
+    minimum: 1,
+    maximum: 500,
+  );
+  return repeat.isInvalid ? null : repeat.value ?? 1;
+}
+
+const CockpitResolvedSystemControlCommand _invalidPressKeyRepeat =
+    CockpitResolvedSystemControlCommand.error(
+      code: 'invalidSystemActionParameter',
+      message: 'pressKey repeat must be between 1 and 500.',
+    );

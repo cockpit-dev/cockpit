@@ -37,6 +37,7 @@ final class CockpitSuiteReportAssembler {
         CockpitTestCaseReport(
           entryId: node.entryId,
           caseId: node.compiledCase.testCase.id,
+          definition: node.compiledCase.testCase,
           sourceSha256: node.compiledCase.sourceSha256,
           outcome: execution.outcome,
           stability: execution.stability,
@@ -59,6 +60,7 @@ final class CockpitSuiteReportAssembler {
       workspaceId: workspaceId,
       runId: runId,
       suiteId: plan.suite.id,
+      definition: plan.suite,
       sourceSha256: plan.sourceSha256,
       outcome: outcome,
       stability: stability,

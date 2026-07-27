@@ -1,5 +1,4 @@
 import 'package:cockpit_protocol/cockpit_protocol.dart';
-import 'package:collection/collection.dart';
 import 'package:xml/xml.dart';
 
 final class CockpitNativeUiSnapshot {
@@ -37,9 +36,13 @@ final class CockpitNativeUiSnapshot {
           attribute.name.local.toLowerCase(): attribute.value,
       };
       final bounds = _readBounds(attributes);
+      final parentPath = ancestorPaths.isEmpty
+          ? null
+          : '/${ancestorPaths.join('/')}';
       nodes.add(
         CockpitNativeUiNode(
           path: '/$path',
+          parentPath: parentPath,
           ancestorPaths: List<String>.unmodifiable(<String>[
             for (var index = 0; index < ancestorPaths.length; index += 1)
               '/${ancestorPaths.take(index + 1).join('/')}',
@@ -79,83 +82,457 @@ final class CockpitNativeUiSnapshot {
     );
   }
 
-  CockpitNativeUiResolution resolve(CockpitTestLocator locator) {
+  CockpitNativeUiResolution resolve(
+    CockpitTestLocator locator, {
+    bool flutterAware = false,
+  }) {
+    final adapter = flutterAware ? 'flutterAwareNative' : 'native';
     for (final candidate in locator.flattened) {
-      if (candidate.strategy == CockpitTestLocatorStrategy.coordinate) {
-        return CockpitNativeUiResolution.coordinate(
-          locator: candidate,
-          x: (candidate.x! * viewportWidth).round().clamp(0, viewportWidth - 1),
-          y: (candidate.y! * viewportHeight).round().clamp(
-            0,
-            viewportHeight - 1,
-          ),
+      if (candidate.strategy == CockpitTestLocatorStrategy.visual) continue;
+      final resolution = resolveSingle(candidate, flutterAware: flutterAware);
+      if (resolution.found || resolution.ambiguous) return resolution;
+    }
+    return CockpitNativeUiResolution.notFound(locator, adapter: adapter);
+  }
+
+  CockpitNativeUiResolution resolveSingle(
+    CockpitTestLocator locator, {
+    bool flutterAware = false,
+  }) {
+    final adapter = flutterAware ? 'flutterAwareNative' : 'native';
+    if (locator.strategy == CockpitTestLocatorStrategy.coordinate) {
+      return CockpitNativeUiResolution.coordinate(
+        locator: locator,
+        adapter: adapter,
+        x: (locator.x! * viewportWidth).round().clamp(0, viewportWidth - 1),
+        y: (locator.y! * viewportHeight).round().clamp(0, viewportHeight - 1),
+      );
+    }
+    if (locator.strategy == CockpitTestLocatorStrategy.visual) {
+      return CockpitNativeUiResolution.notFound(locator, adapter: adapter);
+    }
+    final matches = _matchingNodes(locator, flutterAware: flutterAware);
+    final index = locator.index;
+    if (index != null) {
+      return index < matches.length
+          ? CockpitNativeUiResolution.node(
+              locator: locator,
+              node: matches[index],
+              adapter: adapter,
+            )
+          : CockpitNativeUiResolution.notFound(locator, adapter: adapter);
+    }
+    if (matches.length == 1) {
+      return CockpitNativeUiResolution.node(
+        locator: locator,
+        node: matches.single,
+        adapter: adapter,
+      );
+    }
+    if (matches.length > 1) {
+      final preferred = _selectPreferredMatch(
+        matches,
+        locator,
+        flutterAware: flutterAware,
+      );
+      if (preferred != null) {
+        return CockpitNativeUiResolution.node(
+          locator: locator,
+          node: preferred,
+          adapter: adapter,
         );
       }
-      if (candidate.strategy == CockpitTestLocatorStrategy.visual) continue;
-      final matches = nodes
-          .where((node) => node.visible && _matches(node, candidate))
-          .where((node) => _matchesAncestor(node, candidate.ancestor))
-          .toList(growable: false);
+      return CockpitNativeUiResolution.ambiguous(
+        locator: locator,
+        matchCount: matches.length,
+        adapter: adapter,
+      );
+    }
+    return CockpitNativeUiResolution.notFound(locator, adapter: adapter);
+  }
+
+  List<CockpitNativeUiNode> _matchingNodes(
+    CockpitTestLocator locator, {
+    required bool flutterAware,
+  }) {
+    final matches = nodes
+        .where(
+          (node) =>
+              node.visible &&
+              _matchesLocator(node, locator, flutterAware: flutterAware),
+        )
+        .toList(growable: false);
+    return flutterAware
+        ? _collapseFlutterSemanticDuplicates(matches, locator)
+        : matches;
+  }
+
+  List<CockpitNativeUiNode> _collapseFlutterSemanticDuplicates(
+    List<CockpitNativeUiNode> matches,
+    CockpitTestLocator locator,
+  ) {
+    if (matches.length < 2) return matches;
+    final redundantPaths = <String>{};
+    for (var leftIndex = 0; leftIndex < matches.length; leftIndex += 1) {
+      final left = matches[leftIndex];
+      for (
+        var rightIndex = leftIndex + 1;
+        rightIndex < matches.length;
+        rightIndex += 1
+      ) {
+        final right = matches[rightIndex];
+        if (!_sharesFlutterSemanticBounds(left, right) ||
+            !_isAncestorOrDescendant(left, right)) {
+          continue;
+        }
+        final preferred = _preferredFlutterSemanticNode(left, right, locator);
+        redundantPaths.add(identical(preferred, left) ? right.path : left.path);
+      }
+    }
+    return matches
+        .where((candidate) => !redundantPaths.contains(candidate.path))
+        .toList(growable: false);
+  }
+
+  bool _sharesFlutterSemanticBounds(
+    CockpitNativeUiNode left,
+    CockpitNativeUiNode right,
+  ) {
+    final leftBounds = left.bounds;
+    final rightBounds = right.bounds;
+    return leftBounds != null &&
+        rightBounds != null &&
+        leftBounds.left == rightBounds.left &&
+        leftBounds.top == rightBounds.top &&
+        leftBounds.right == rightBounds.right &&
+        leftBounds.bottom == rightBounds.bottom;
+  }
+
+  bool _isAncestorOrDescendant(
+    CockpitNativeUiNode left,
+    CockpitNativeUiNode right,
+  ) =>
+      left.ancestorPaths.contains(right.path) ||
+      right.ancestorPaths.contains(left.path);
+
+  CockpitNativeUiNode _preferredFlutterSemanticNode(
+    CockpitNativeUiNode left,
+    CockpitNativeUiNode right,
+    CockpitTestLocator locator,
+  ) {
+    final leftScore = _matchPriorityScore(left, locator, flutterAware: true);
+    final rightScore = _matchPriorityScore(right, locator, flutterAware: true);
+    if (leftScore != rightScore) return leftScore > rightScore ? left : right;
+    if (left.ancestorPaths.length != right.ancestorPaths.length) {
+      return left.ancestorPaths.length > right.ancestorPaths.length
+          ? left
+          : right;
+    }
+    return left.path.compareTo(right.path) <= 0 ? left : right;
+  }
+
+  List<CockpitNativeUiNode> _resolvedRelationNodes(
+    CockpitTestLocator locator, {
+    required bool flutterAware,
+  }) {
+    for (final candidate in locator.flattened) {
+      if (candidate.degraded) continue;
+      final matches = _matchingNodes(candidate, flutterAware: flutterAware);
       final index = candidate.index;
       if (index != null) {
         if (index < matches.length) {
-          return CockpitNativeUiResolution.node(
-            locator: candidate,
-            node: matches[index],
-          );
+          return <CockpitNativeUiNode>[matches[index]];
         }
         continue;
       }
-      if (matches.length == 1) {
-        return CockpitNativeUiResolution.node(
-          locator: candidate,
-          node: matches.single,
-        );
-      }
-      if (matches.length > 1) {
-        return CockpitNativeUiResolution.ambiguous(
-          locator: candidate,
-          matchCount: matches.length,
-        );
-      }
+      if (matches.isNotEmpty) return matches;
     }
-    return CockpitNativeUiResolution.notFound(locator);
+    return const <CockpitNativeUiNode>[];
   }
 
-  bool _matchesAncestor(CockpitNativeUiNode node, CockpitTestLocator? locator) {
-    if (locator == null) return true;
-    for (final ancestorPath in node.ancestorPaths.reversed) {
-      final ancestor = nodes
-          .where((candidate) => candidate.path == ancestorPath)
-          .firstOrNull;
-      if (ancestor != null && _matches(ancestor, locator)) return true;
+  bool _matchesLocator(
+    CockpitNativeUiNode node,
+    CockpitTestLocator locator, {
+    required bool flutterAware,
+  }) {
+    for (final signal in locator.signals) {
+      if (!_matchesSignal(
+        node,
+        signal.strategy,
+        signal.value,
+        locator.matchMode,
+      )) {
+        return false;
+      }
     }
-    return false;
+    for (final state in locator.stateMap.entries) {
+      if (node.state(state.key) != state.value) return false;
+    }
+    if (locator.ancestor case final ancestor?) {
+      final paths = _resolvedRelationNodes(
+        ancestor,
+        flutterAware: flutterAware,
+      ).map((candidate) => candidate.path).toSet();
+      if (!node.ancestorPaths.any(paths.contains)) return false;
+    }
+    if (locator.child case final child?) {
+      if (!_resolvedRelationNodes(
+        child,
+        flutterAware: flutterAware,
+      ).any((candidate) => candidate.parentPath == node.path)) {
+        return false;
+      }
+    }
+    if (locator.descendant case final descendant?) {
+      if (!_resolvedRelationNodes(
+        descendant,
+        flutterAware: flutterAware,
+      ).any((candidate) => candidate.ancestorPaths.contains(node.path))) {
+        return false;
+      }
+    }
+    for (final relation
+        in <
+          ({
+            CockpitTestLocator? locator,
+            bool Function(CockpitNativeUiBounds, CockpitNativeUiBounds) matches,
+          })
+        >[
+          (
+            locator: locator.above,
+            matches: (subject, reference) => subject.bottom <= reference.top,
+          ),
+          (
+            locator: locator.below,
+            matches: (subject, reference) => subject.top >= reference.bottom,
+          ),
+          (
+            locator: locator.leftOf,
+            matches: (subject, reference) => subject.right <= reference.left,
+          ),
+          (
+            locator: locator.rightOf,
+            matches: (subject, reference) => subject.left >= reference.right,
+          ),
+        ]) {
+      final reference = relation.locator;
+      if (reference == null) continue;
+      final bounds = node.bounds;
+      if (bounds == null ||
+          !_resolvedRelationNodes(reference, flutterAware: flutterAware).any(
+            (candidate) =>
+                candidate.path != node.path &&
+                candidate.bounds != null &&
+                relation.matches(bounds, candidate.bounds!),
+          )) {
+        return false;
+      }
+    }
+    return true;
   }
 
-  bool _matches(CockpitNativeUiNode node, CockpitTestLocator locator) {
-    final expected = locator.value ?? '';
-    return switch (locator.strategy) {
-      CockpitTestLocatorStrategy.text => node.textValues.contains(expected),
-      CockpitTestLocatorStrategy.label => node.labelValues.contains(expected),
-      CockpitTestLocatorStrategy.nativeId => node.nativeIds.contains(expected),
-      CockpitTestLocatorStrategy.testId => node.testIds.contains(expected),
-      CockpitTestLocatorStrategy.role => node.roles.any(
-        (role) => _typeMatches(role, expected),
+  bool _matchesSignal(
+    CockpitNativeUiNode node,
+    CockpitTestLocatorStrategy strategy,
+    String expected,
+    CockpitTextMatchMode matchMode,
+  ) => switch (strategy) {
+    CockpitTestLocatorStrategy.text => _matchesTextValues(
+      node.textValues,
+      expected,
+      matchMode,
+    ),
+    CockpitTestLocatorStrategy.label => _matchesTextValues(
+      node.labelValues,
+      expected,
+      matchMode,
+    ),
+    CockpitTestLocatorStrategy.nativeId => node.nativeIds.contains(expected),
+    CockpitTestLocatorStrategy.testId => node.testIds.contains(expected),
+    CockpitTestLocatorStrategy.role => node.roles.any(
+      (role) => _typeMatches(role, expected),
+    ),
+    CockpitTestLocatorStrategy.type => node.types.any(
+      (type) => _typeMatches(type, expected),
+    ),
+    CockpitTestLocatorStrategy.path => node.path == expected,
+    CockpitTestLocatorStrategy.coordinate ||
+    CockpitTestLocatorStrategy.visual => false,
+  };
+
+  CockpitNativeUiNode? _selectPreferredMatch(
+    List<CockpitNativeUiNode> matches,
+    CockpitTestLocator locator, {
+    required bool flutterAware,
+  }) {
+    final ordered = matches.toList(growable: false)
+      ..sort((left, right) {
+        final scoreCompare =
+            _matchPriorityScore(
+              right,
+              locator,
+              flutterAware: flutterAware,
+            ).compareTo(
+              _matchPriorityScore(left, locator, flutterAware: flutterAware),
+            );
+        if (scoreCompare != 0) return scoreCompare;
+        return left.path.compareTo(right.path);
+      });
+    final bestScore = _matchPriorityScore(
+      ordered.first,
+      locator,
+      flutterAware: flutterAware,
+    );
+    if (ordered
+        .skip(1)
+        .any(
+          (candidate) =>
+              _matchPriorityScore(
+                candidate,
+                locator,
+                flutterAware: flutterAware,
+              ) ==
+              bestScore,
+        )) {
+      return null;
+    }
+    return ordered.first;
+  }
+
+  int _matchPriorityScore(
+    CockpitNativeUiNode node,
+    CockpitTestLocator locator, {
+    required bool flutterAware,
+  }) {
+    var score = 0;
+    if (locator.text case final expected?) {
+      score += _textValuesPriorityScore(
+        node.textValues,
+        expected,
+        locator.matchMode,
+      );
+    }
+    if (locator.label case final expected?) {
+      score += _textValuesPriorityScore(
+        node.labelValues,
+        expected,
+        locator.matchMode,
+      );
+    }
+    if (flutterAware) score += _flutterSemanticActionabilityScore(node);
+    return score;
+  }
+
+  int _flutterSemanticActionabilityScore(CockpitNativeUiNode node) {
+    var score = 0;
+    if (node.state('enabled') == true) score += 16;
+    if (node.state('clickable') == true || node.state('hittable') == true) {
+      score += 256;
+    }
+    if (node.state('long-clickable') == true) score += 64;
+    if (node.state('focusable') == true || node.state('focused') == true) {
+      score += 64;
+    }
+    if (node.state('checkable') == true || node.state('scrollable') == true) {
+      score += 32;
+    }
+    if (node.types.followedBy(node.roles).any(_isInteractiveSemanticType)) {
+      score += 128;
+    }
+    return score;
+  }
+
+  bool _isInteractiveSemanticType(String value) {
+    final normalized = value.toLowerCase();
+    return const <String>[
+      'button',
+      'checkbox',
+      'textfield',
+      'textinput',
+      'switch',
+      'radio',
+      'slider',
+      'link',
+      'menuitem',
+    ].any(normalized.contains);
+  }
+
+  bool _matchesTextValues(
+    Iterable<String> values,
+    String expected,
+    CockpitTextMatchMode matchMode,
+  ) => values.any((value) => _textMatches(value, expected, matchMode));
+
+  bool _textMatches(
+    String actual,
+    String expected,
+    CockpitTextMatchMode matchMode,
+  ) {
+    final normalizedActual = _normalizeText(actual);
+    final normalizedExpected = _normalizeText(expected);
+    return switch (matchMode) {
+      CockpitTextMatchMode.exact => normalizedActual == normalizedExpected,
+      CockpitTextMatchMode.contains => normalizedActual.contains(
+        normalizedExpected,
       ),
-      CockpitTestLocatorStrategy.type => node.types.any(
-        (type) => _typeMatches(type, expected),
+      CockpitTextMatchMode.fuzzy => cockpitFuzzyTextMatches(
+        normalizedActual,
+        normalizedExpected,
       ),
-      CockpitTestLocatorStrategy.path => node.path == expected,
-      CockpitTestLocatorStrategy.coordinate ||
-      CockpitTestLocatorStrategy.visual => false,
+      CockpitTextMatchMode.regex => RegExp(
+        expected.trim(),
+      ).hasMatch(normalizedActual),
     };
+  }
+
+  int _textValuesPriorityScore(
+    Iterable<String> values,
+    String expected,
+    CockpitTextMatchMode matchMode,
+  ) {
+    var bestScore = 0;
+    for (final value in values) {
+      if (!_textMatches(value, expected, matchMode)) continue;
+      final normalizedActual = _normalizeText(value);
+      final normalizedExpected = _normalizeText(expected);
+      int score;
+      if (normalizedActual == normalizedExpected) {
+        score = 10000;
+      } else if (matchMode == CockpitTextMatchMode.contains) {
+        score =
+            5000 +
+            (1000 - (normalizedActual.length - normalizedExpected.length))
+                .clamp(0, 1000)
+                .toInt();
+      } else if (matchMode == CockpitTextMatchMode.fuzzy) {
+        score =
+            (cockpitFuzzyTextSimilarity(normalizedActual, normalizedExpected) *
+                    10000)
+                .round();
+      } else {
+        final match = RegExp(expected.trim()).firstMatch(normalizedActual)!;
+        final fullMatch =
+            match.start == 0 && match.end == normalizedActual.length;
+        score =
+            (fullMatch ? 8000 : 6000) +
+            (1000 - (normalizedActual.length - match.group(0)!.length))
+                .clamp(0, 1000)
+                .toInt();
+      }
+      if (score > bestScore) bestScore = score;
+    }
+    return bestScore;
+  }
+
+  String _normalizeText(String value) {
+    return value.replaceAll(RegExp(r'\s+'), ' ').trim();
   }
 }
 
 final class CockpitNativeUiNode {
   const CockpitNativeUiNode({
     required this.path,
+    required this.parentPath,
     required this.ancestorPaths,
     required this.elementName,
     required this.attributes,
@@ -163,6 +540,7 @@ final class CockpitNativeUiNode {
   });
 
   final String path;
+  final String? parentPath;
   final List<String> ancestorPaths;
   final String elementName;
   final Map<String, String> attributes;
@@ -192,6 +570,15 @@ final class CockpitNativeUiNode {
     ..._values(<String>['type', 'class']),
   };
 
+  bool? state(String name) {
+    final raw = attributes[name]?.trim().toLowerCase();
+    return switch (raw) {
+      'true' || '1' || 'yes' => true,
+      'false' || '0' || 'no' => false,
+      _ => null,
+    };
+  }
+
   Set<String> _values(List<String> keys) => keys
       .map((key) => attributes[key]?.trim())
       .whereType<String>()
@@ -220,6 +607,7 @@ final class CockpitNativeUiBounds {
 final class CockpitNativeUiResolution {
   const CockpitNativeUiResolution._({
     required this.locator,
+    required this.adapter,
     this.node,
     this.x,
     this.y,
@@ -229,23 +617,29 @@ final class CockpitNativeUiResolution {
   const CockpitNativeUiResolution.node({
     required CockpitTestLocator locator,
     required CockpitNativeUiNode node,
-  }) : this._(locator: locator, node: node, matchCount: 1);
+    required String adapter,
+  }) : this._(locator: locator, adapter: adapter, node: node, matchCount: 1);
 
   const CockpitNativeUiResolution.coordinate({
     required CockpitTestLocator locator,
+    required String adapter,
     required int x,
     required int y,
-  }) : this._(locator: locator, x: x, y: y, matchCount: 1);
+  }) : this._(locator: locator, adapter: adapter, x: x, y: y, matchCount: 1);
 
   const CockpitNativeUiResolution.ambiguous({
     required CockpitTestLocator locator,
     required int matchCount,
-  }) : this._(locator: locator, matchCount: matchCount);
+    required String adapter,
+  }) : this._(locator: locator, adapter: adapter, matchCount: matchCount);
 
-  const CockpitNativeUiResolution.notFound(CockpitTestLocator locator)
-    : this._(locator: locator);
+  const CockpitNativeUiResolution.notFound(
+    CockpitTestLocator locator, {
+    required String adapter,
+  }) : this._(locator: locator, adapter: adapter);
 
   final CockpitTestLocator locator;
+  final String adapter;
   final CockpitNativeUiNode? node;
   final int? x;
   final int? y;

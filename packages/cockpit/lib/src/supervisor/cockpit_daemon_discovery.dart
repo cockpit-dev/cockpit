@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:cockpit_protocol/cockpit_protocol.dart';
+
 import '../foundation/cockpit_home.dart';
 import '../foundation/cockpit_locked_json_store.dart';
 import '../foundation/cockpit_permissions.dart';
@@ -19,6 +21,7 @@ final class CockpitDaemonDiscovery {
     required this.apiMinor,
     required this.engineVersion,
     required this.startedAt,
+    this.authorizationMode = CockpitAuthorizationMode.restricted,
   }) {
     if (schemaVersion != cockpitDaemonDiscoverySchema ||
         !_identifier.hasMatch(instanceId) ||
@@ -54,6 +57,7 @@ final class CockpitDaemonDiscovery {
   final int apiMinor;
   final String engineVersion;
   final DateTime startedAt;
+  final CockpitAuthorizationMode authorizationMode;
 
   Map<String, Object?> toJson() => <String, Object?>{
     'schemaVersion': schemaVersion,
@@ -65,6 +69,7 @@ final class CockpitDaemonDiscovery {
     'apiVersion': <String, int>{'major': apiMajor, 'minor': apiMinor},
     'engineVersion': engineVersion,
     'startedAt': startedAt.toUtc().toIso8601String(),
+    'authorizationMode': authorizationMode.name,
   };
 
   factory CockpitDaemonDiscovery.fromJson(Object? value) {
@@ -83,6 +88,7 @@ final class CockpitDaemonDiscovery {
       'apiVersion',
       'engineVersion',
       'startedAt',
+      'authorizationMode',
     };
     if (json.keys.toSet().difference(fields).isNotEmpty ||
         fields.difference(json.keys.toSet()).isNotEmpty ||
@@ -105,7 +111,15 @@ final class CockpitDaemonDiscovery {
     }
     final endpoint = Uri.tryParse(json['endpoint']! as String);
     final startedAt = DateTime.tryParse(json['startedAt']! as String);
-    if (endpoint == null || startedAt == null || !startedAt.isUtc) {
+    final authorizationMode = json['authorizationMode'] is String
+        ? CockpitAuthorizationMode.values
+              .where((value) => value.name == json['authorizationMode'])
+              .firstOrNull
+        : null;
+    if (endpoint == null ||
+        startedAt == null ||
+        !startedAt.isUtc ||
+        authorizationMode == null) {
       throw const FormatException('Daemon discovery values are invalid.');
     }
     return CockpitDaemonDiscovery(
@@ -119,6 +133,7 @@ final class CockpitDaemonDiscovery {
       apiMinor: api['minor']! as int,
       engineVersion: json['engineVersion']! as String,
       startedAt: startedAt,
+      authorizationMode: authorizationMode,
     );
   }
 

@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:cockpit_protocol/cockpit_protocol.dart';
@@ -6,13 +5,14 @@ import 'package:path/path.dart' as p;
 
 import '../supervisor/cockpit_supervisor_api_client.dart';
 import 'cockpit_mcp_api_resources.dart';
+import 'cockpit_mcp_api_tool.dart';
 import 'cockpit_mcp_error.dart';
 import 'cockpit_mcp_tool.dart';
 
 List<CockpitMcpTool> cockpitMcpApiTools(
   CockpitMcpClientProvider client,
 ) => <CockpitMcpTool>[
-  _CockpitApiTool(
+  CockpitMcpApiTool(
     client: client,
     name: 'root_register',
     description: 'Register an absolute project root with Supervisor.',
@@ -30,7 +30,7 @@ List<CockpitMcpTool> cockpitMcpApiTools(
       )).toJson();
     },
   ),
-  _CockpitApiTool(
+  CockpitMcpApiTool(
     client: client,
     name: 'root_remove',
     description: 'Unregister an explicit project root.',
@@ -53,7 +53,7 @@ List<CockpitMcpTool> cockpitMcpApiTools(
       )).toJson();
     },
   ),
-  _CockpitApiTool(
+  CockpitMcpApiTool(
     client: client,
     name: 'workspace_register',
     description: 'Register an explicit workspace checkout.',
@@ -71,7 +71,7 @@ List<CockpitMcpTool> cockpitMcpApiTools(
       )).toJson();
     },
   ),
-  _CockpitApiTool(
+  CockpitMcpApiTool(
     client: client,
     name: 'workspace_rebind',
     description: 'Rebind an explicit workspace to a checkout identity.',
@@ -98,7 +98,7 @@ List<CockpitMcpTool> cockpitMcpApiTools(
       )).toJson();
     },
   ),
-  _CockpitApiTool(
+  CockpitMcpApiTool(
     client: client,
     name: 'workspace_unregister',
     description: 'Unregister an explicit workspace.',
@@ -133,7 +133,7 @@ List<CockpitMcpTool> cockpitMcpApiTools(
 List<CockpitMcpTool> _executionTools(
   CockpitMcpClientProvider client,
 ) => <CockpitMcpTool>[
-  _CockpitApiTool(
+  CockpitMcpApiTool(
     client: client,
     name: 'target_discover',
     description: 'Discover locally available launch targets.',
@@ -156,7 +156,7 @@ List<CockpitMcpTool> _executionTools(
       )).toJson();
     },
   ),
-  _CockpitApiTool(
+  CockpitMcpApiTool(
     client: client,
     name: 'target_list',
     description: 'List registered targets for an explicit workspace.',
@@ -173,7 +173,7 @@ List<CockpitMcpTool> _executionTools(
       };
     },
   ),
-  _CockpitApiTool(
+  CockpitMcpApiTool(
     client: client,
     name: 'target_get',
     description: 'Read one registered workspace automation target.',
@@ -192,7 +192,7 @@ List<CockpitMcpTool> _executionTools(
       )).toJson();
     },
   ),
-  _CockpitApiTool(
+  CockpitMcpApiTool(
     client: client,
     name: 'target_inspect',
     description: 'Inspect live capabilities and state for a target.',
@@ -222,7 +222,7 @@ List<CockpitMcpTool> _executionTools(
       )).toJson();
     },
   ),
-  _CockpitApiTool(
+  CockpitMcpApiTool(
     client: client,
     name: 'target_register',
     description: 'Register a workspace-owned native or host automation target.',
@@ -331,7 +331,7 @@ List<CockpitMcpTool> _executionTools(
       )).toJson();
     },
   ),
-  _CockpitApiTool(
+  CockpitMcpApiTool(
     client: client,
     name: 'target_launch',
     description: 'Launch or activate one registered automation target.',
@@ -384,7 +384,7 @@ List<CockpitMcpTool> _executionTools(
       )).toJson();
     },
   ),
-  _CockpitApiTool(
+  CockpitMcpApiTool(
     client: client,
     name: 'operation_execute',
     description: 'Execute an advertised typed Supervisor operation.',
@@ -437,7 +437,7 @@ List<CockpitMcpTool> _executionTools(
       )).toJson();
     },
   ),
-  _CockpitApiTool(
+  CockpitMcpApiTool(
     client: client,
     name: 'case_validate',
     description: 'Validate a bounded case document in a workspace.',
@@ -472,7 +472,7 @@ List<CockpitMcpTool> _executionTools(
       )).toJson();
     },
   ),
-  _CockpitApiTool(
+  CockpitMcpApiTool(
     client: client,
     name: 'case_run',
     description: 'Run an explicitly identified canonical indexed case.',
@@ -531,7 +531,7 @@ List<CockpitMcpTool> _executionTools(
 
 List<CockpitMcpTool> _runTools(CockpitMcpClientProvider client) =>
     <CockpitMcpTool>[
-      _CockpitApiTool(
+      CockpitMcpApiTool(
         client: client,
         name: 'run_get',
         description: 'Read an explicitly identified run.',
@@ -544,7 +544,7 @@ List<CockpitMcpTool> _runTools(CockpitMcpClientProvider client) =>
           return (await api.run(_requiredString(arguments, 'runId'))).toJson();
         },
       ),
-      _CockpitApiTool(
+      CockpitMcpApiTool(
         client: client,
         name: 'run_cancel',
         description: 'Cancel an explicitly identified run.',
@@ -569,7 +569,7 @@ List<CockpitMcpTool> _runTools(CockpitMcpClientProvider client) =>
           )).toJson();
         },
       ),
-      _CockpitApiTool(
+      CockpitMcpApiTool(
         client: client,
         name: 'run_events',
         description: 'Read bounded run events through the Supervisor SSE API.',
@@ -613,7 +613,7 @@ List<CockpitMcpTool> _runTools(CockpitMcpClientProvider client) =>
           return <String, Object?>{'items': items};
         },
       ),
-      _CockpitApiTool(
+      CockpitMcpApiTool(
         client: client,
         name: 'artifact_list',
         description: 'List immutable artifact metadata for an explicit run.',
@@ -630,7 +630,7 @@ List<CockpitMcpTool> _runTools(CockpitMcpClientProvider client) =>
           };
         },
       ),
-      _CockpitApiTool(
+      CockpitMcpApiTool(
         client: client,
         name: 'artifact_read',
         description: 'Download a verified artifact to an explicit local file.',
@@ -676,7 +676,7 @@ List<CockpitMcpTool> _runTools(CockpitMcpClientProvider client) =>
 List<CockpitMcpTool> _suiteTools(
   CockpitMcpClientProvider client,
 ) => <CockpitMcpTool>[
-  _CockpitApiTool(
+  CockpitMcpApiTool(
     client: client,
     name: 'suite_validate',
     description: 'Validate a bounded suite document in a workspace.',
@@ -711,7 +711,7 @@ List<CockpitMcpTool> _suiteTools(
       )).toJson();
     },
   ),
-  _CockpitApiTool(
+  CockpitMcpApiTool(
     client: client,
     name: 'suite_run',
     description: 'Run an explicitly identified canonical indexed suite.',
@@ -766,7 +766,7 @@ List<CockpitMcpTool> _suiteTools(
       )).toJson();
     },
   ),
-  _CockpitApiTool(
+  CockpitMcpApiTool(
     client: client,
     name: 'suite_report',
     description: 'Read the finalized canonical suite report for a run.',
@@ -780,68 +780,6 @@ List<CockpitMcpTool> _suiteTools(
     },
   ),
 ];
-
-typedef _ToolAction =
-    Future<Map<String, Object?>> Function(
-      CockpitSupervisorApiClient api,
-      Map<String, Object?> arguments,
-    );
-
-final class _CockpitApiTool extends CockpitMcpTool {
-  _CockpitApiTool({
-    required this.client,
-    required this.name,
-    required this.description,
-    required this.inputSchema,
-    required _ToolAction action,
-  }) : _action = action;
-
-  final CockpitMcpClientProvider client;
-
-  @override
-  final String name;
-
-  @override
-  final String description;
-
-  @override
-  final Map<String, Object?> inputSchema;
-
-  final _ToolAction _action;
-
-  @override
-  Future<Map<String, Object?>> call(Map<String, Object?> arguments) async {
-    try {
-      final value = await _action(await client(), arguments);
-      final text = jsonEncode(value);
-      if (utf8.encode(text).length > cockpitSupervisorMaximumResponseBytes) {
-        throw const CockpitMcpError(
-          code: -32000,
-          message: 'MCP tool output exceeds 1 MiB.',
-        );
-      }
-      return <String, Object?>{
-        'content': <Object?>[
-          <String, Object?>{'type': 'text', 'text': text},
-        ],
-        'structuredContent': value,
-      };
-    } on CockpitMcpError {
-      rethrow;
-    } on CockpitSupervisorClientException catch (error) {
-      throw CockpitMcpError(
-        code: -32000,
-        message: error.message,
-        data: <String, Object?>{
-          'apiCode': error.code,
-          if (error.apiError != null) 'apiError': error.apiError!.toJson(),
-        },
-      );
-    } on FormatException catch (error) {
-      throw CockpitMcpError.invalidArguments(error.message);
-    }
-  }
-}
 
 Map<String, Object?> _schema({
   required Map<String, Object?> properties,

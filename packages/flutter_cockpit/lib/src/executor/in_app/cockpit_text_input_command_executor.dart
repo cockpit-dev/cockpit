@@ -6,6 +6,9 @@ import 'cockpit_command_router.dart';
 final class CockpitTextInputCommandExecutor {
   const CockpitTextInputCommandExecutor({
     required this.enterText,
+    required this.eraseText,
+    required this.copyText,
+    required this.pasteText,
     required this.focusTextInput,
     required this.setTextEditingValue,
     required this.sendTextInputAction,
@@ -15,6 +18,9 @@ final class CockpitTextInputCommandExecutor {
   });
 
   final CockpitInAppCommandHandler enterText;
+  final CockpitInAppCommandHandler eraseText;
+  final CockpitInAppCommandHandler copyText;
+  final CockpitInAppCommandHandler pasteText;
   final CockpitInAppCommandHandler focusTextInput;
   final CockpitInAppCommandHandler setTextEditingValue;
   final CockpitInAppCommandHandler sendTextInputAction;
@@ -28,6 +34,9 @@ final class CockpitTextInputCommandExecutor {
   ) {
     return switch (command.commandType) {
       CockpitCommandType.enterText => enterText(command, stopwatch),
+      CockpitCommandType.eraseText => eraseText(command, stopwatch),
+      CockpitCommandType.copyText => copyText(command, stopwatch),
+      CockpitCommandType.pasteText => pasteText(command, stopwatch),
       CockpitCommandType.focusTextInput => focusTextInput(command, stopwatch),
       CockpitCommandType.setTextEditingValue => setTextEditingValue(
         command,

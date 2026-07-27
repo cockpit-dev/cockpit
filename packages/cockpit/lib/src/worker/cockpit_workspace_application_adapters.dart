@@ -286,9 +286,7 @@ final class CockpitWorkspaceApplicationAdapters {
         prepare: (context, input) async {
           rejectCockpitWorkerHostPathInputs(
             input,
-            allowedKeys: spec.kind == 'system.action'
-                ? _remoteSystemActionPathKeys
-                : const <String>{},
+            allowedKeys: _allowedWorkerPathKeys(spec.kind),
           );
           if (spec.idField != null) {
             workerId(input[spec.idField], '\$.input.${spec.idField}');
@@ -309,7 +307,7 @@ final class CockpitWorkspaceApplicationAdapters {
                         resourceId:
                             '${resourcePlan.primaryResourceId}:${spec.kind}',
                         requiresPort: true,
-                        ttl: _grantTtl(context),
+                        ttl: _portGrantTtl(context),
                       ),
                     if (resourcePlan.deviceResourceId != null)
                       CockpitWorkerResourceRequest(
@@ -341,6 +339,15 @@ final class CockpitWorkspaceApplicationAdapters {
     return remaining > const Duration(minutes: 5)
         ? const Duration(minutes: 5)
         : remaining;
+  }
+
+  Duration _portGrantTtl(CockpitWorkspaceOperationContext context) {
+    final remaining = context.deadline.difference(DateTime.now().toUtc());
+    if (remaining < const Duration(seconds: 1)) {
+      return const Duration(seconds: 1);
+    }
+    const maximum = Duration(milliseconds: cockpitMaximumLeaseTtlMs);
+    return remaining > maximum ? maximum : remaining;
   }
 }
 
@@ -406,6 +413,18 @@ const Set<String> _remoteSystemActionPathKeys = <String>{
   'containerSourcePath',
   'containerDestinationPath',
 };
+
+const Set<String> _flutterLaunchPathKeys = <String>{'dartDefineFromFiles'};
+
+Set<String> _allowedWorkerPathKeys(String operationKind) =>
+    switch (operationKind) {
+      'system.action' => _remoteSystemActionPathKeys,
+      'app.launch' ||
+      'target.launch' ||
+      'session.remote.launch' ||
+      'session.development.launch' => _flutterLaunchPathKeys,
+      _ => const <String>{},
+    };
 
 void rejectCockpitWorkerHostPathInputs(
   Object? value, {

@@ -612,7 +612,7 @@ final class CockpitCaseExecutionKernel {
     (lease) => _delegate.evaluateCondition(
       node: node,
       condition: condition,
-      timeout: deadline.remaining,
+      timeout: _controlConditionTimeout(deadline.remaining),
       cleanup: cleanupControl != null,
       lease: lease,
     ),
@@ -620,6 +620,11 @@ final class CockpitCaseExecutionKernel {
     cleanupControl: cleanupControl,
     deadline: deadline,
   );
+
+  Duration _controlConditionTimeout(Duration remaining) {
+    const maximum = Duration(milliseconds: 500);
+    return remaining < maximum ? remaining : maximum;
+  }
 
   Future<T> _controlled<T>(
     Future<T> Function(CockpitCaseOperationLease lease) start, {
@@ -705,7 +710,10 @@ final class CockpitCaseExecutionKernel {
   ) => switch (node.operation) {
     CockpitTestActionPlanOperation() ||
     CockpitTestIfPlanOperation() ||
-    CockpitTestLoopPlanOperation() => plan.target.plane,
+    CockpitTestLoopPlanOperation() => cockpitRequestedPlane(
+      node,
+      plan.target.plane,
+    ),
     _ => null,
   };
 }

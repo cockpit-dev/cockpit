@@ -1,0 +1,17 @@
+schemaVersion: cockpit.test/v2
+kind: case
+id: demoAttemptSetup
+name: Attempt baseline setup
+target: {platform: flutter, targetKind: flutterApp, plane: semantic}
+defaults:
+  commandTimeoutMs: 12000
+  cleanupTimeoutMs: 10000
+  failFast: true
+  evidence: {screenshot: onFailure, snapshot: onFailure, failurePolicy: failStep}
+steps:
+  - stepId: verifyAttemptInbox
+    description: Verify case-attempt preconditions
+    timeoutMs: 12000
+    action:
+      type: assertVisible
+      locator: {text: New task}

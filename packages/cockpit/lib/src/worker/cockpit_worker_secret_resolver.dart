@@ -82,6 +82,7 @@ final class CockpitEnvironmentSecretProvider
     implements CockpitWorkerSecretProvider {
   CockpitEnvironmentSecretProvider({
     required Iterable<String> allowedNames,
+    this.allowAllNames = false,
     required Map<String, String> environment,
   }) : _allowedNames = Set<String>.unmodifiable(allowedNames),
        _environment = Map<String, String>.unmodifiable(environment) {
@@ -102,11 +103,13 @@ final class CockpitEnvironmentSecretProvider
   String get providerId => 'env';
 
   final Set<String> _allowedNames;
+  final bool allowAllNames;
   final Map<String, String> _environment;
 
   @override
   Future<String> resolve(String providerReference) async {
-    if (!_allowedNames.contains(providerReference)) {
+    if (!_environmentName.hasMatch(providerReference) ||
+        !allowAllNames && !_allowedNames.contains(providerReference)) {
       throw CockpitTestSecretResolutionException(
         CockpitTestError(
           code: CockpitTestErrorCode.secretResolutionFailed,

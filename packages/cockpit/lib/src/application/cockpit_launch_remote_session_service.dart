@@ -83,6 +83,9 @@ final class CockpitLaunchRemoteSessionService {
     CockpitLaunchRemoteSessionRequest request,
   ) async {
     final normalizedProjectDir = cockpitNormalizeProjectDir(request.projectDir);
+    await request.launchConfiguration.validateProjectFiles(
+      normalizedProjectDir,
+    );
     final resolvedTarget = _entrypointResolver.resolve(
       projectDir: normalizedProjectDir,
       target: request.target,

@@ -92,9 +92,16 @@ void main() {
           ).run(
             const CockpitRunWorkspaceTestsRequest(
               workspaceRoot: '/workspace/pkg',
+              paths: <String>['test/unit'],
+              name: 'directory selector',
             ),
           );
-      expect(testResult.command.arguments, <String>['test']);
+      expect(testResult.command.arguments, <String>[
+        'test',
+        '--name',
+        'directory selector',
+        'test/unit',
+      ]);
 
       final fixResult =
           await CockpitApplyWorkspaceFixesService(

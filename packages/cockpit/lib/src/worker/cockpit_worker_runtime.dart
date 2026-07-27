@@ -47,8 +47,10 @@ final class CockpitWorkerRuntimeConfiguration {
     required this.stateRoot,
     required this.workerOwnerId,
     required this.processStartIdentity,
+    required this.authorizationMode,
     required Iterable<String> supportedFeatures,
     required Iterable<String> allowedEnvironmentSecretNames,
+    this.allowAllEnvironmentSecrets = false,
     Iterable<CockpitTestTargetEnvironment> allowedTargetEnvironments =
         const <CockpitTestTargetEnvironment>[],
     Iterable<CockpitTestSafetyEffect> allowedSafetyEffects =
@@ -73,6 +75,23 @@ final class CockpitWorkerRuntimeConfiguration {
     _validateAbsolutePath(stateRoot, 'stateRoot');
     _validateUniqueIds(this.supportedFeatures, 'supportedFeatures');
     _validateEnvironmentNames(this.allowedEnvironmentSecretNames);
+    final yolo = authorizationMode == CockpitAuthorizationMode.yolo;
+    if (allowAllEnvironmentSecrets != yolo ||
+        yolo &&
+            (this.allowedTargetEnvironments.length !=
+                    CockpitTestTargetEnvironment.values.length ||
+                !this.allowedTargetEnvironments.containsAll(
+                  CockpitTestTargetEnvironment.values,
+                ) ||
+                this.allowedSafetyEffects.length !=
+                    CockpitTestSafetyEffect.values.length ||
+                !this.allowedSafetyEffects.containsAll(
+                  CockpitTestSafetyEffect.values,
+                ))) {
+      throw const FormatException(
+        'Worker authorization capabilities do not match its mode.',
+      );
+    }
   }
 
   factory CockpitWorkerRuntimeConfiguration.parse(List<String> arguments) {
@@ -84,8 +103,14 @@ final class CockpitWorkerRuntimeConfiguration {
       ..addOption('state-root', mandatory: true)
       ..addOption('worker-owner-id', mandatory: true)
       ..addOption('process-start-identity', mandatory: true)
+      ..addOption(
+        'authorization-mode',
+        mandatory: true,
+        allowed: CockpitAuthorizationMode.values.map((value) => value.name),
+      )
       ..addMultiOption('feature')
       ..addMultiOption('allow-env-secret')
+      ..addFlag('allow-all-env-secrets', negatable: false)
       ..addMultiOption('allow-target-environment')
       ..addMultiOption('allow-safety-effect');
     final parsed = parser.parse(arguments);
@@ -97,8 +122,12 @@ final class CockpitWorkerRuntimeConfiguration {
       stateRoot: parsed.option('state-root')!,
       workerOwnerId: parsed.option('worker-owner-id')!,
       processStartIdentity: parsed.option('process-start-identity')!,
+      authorizationMode: CockpitAuthorizationMode.values.byName(
+        parsed.option('authorization-mode')!,
+      ),
       supportedFeatures: parsed.multiOption('feature'),
       allowedEnvironmentSecretNames: parsed.multiOption('allow-env-secret'),
+      allowAllEnvironmentSecrets: parsed.flag('allow-all-env-secrets'),
       allowedTargetEnvironments: _parseEnumAllowlist(
         parsed.multiOption('allow-target-environment'),
         CockpitTestTargetEnvironment.values,
@@ -119,8 +148,10 @@ final class CockpitWorkerRuntimeConfiguration {
   final String stateRoot;
   final String workerOwnerId;
   final String processStartIdentity;
+  final CockpitAuthorizationMode authorizationMode;
   final List<String> supportedFeatures;
   final List<String> allowedEnvironmentSecretNames;
+  final bool allowAllEnvironmentSecrets;
   final Set<CockpitTestTargetEnvironment> allowedTargetEnvironments;
   final Set<CockpitTestSafetyEffect> allowedSafetyEffects;
 }
@@ -299,6 +330,7 @@ final class CockpitWorkerRuntime {
       workspaceId: configuration.workspaceId,
       projectId: configuration.projectId,
       engineVersion: configuration.engineVersion,
+      authorizationMode: configuration.authorizationMode,
       runStateRoot: roots.stateRoot,
       caseIndex: documents,
       sessions: registry,
@@ -323,6 +355,7 @@ final class CockpitWorkerRuntime {
       workspaceId: configuration.workspaceId,
       projectId: configuration.projectId,
       engineVersion: configuration.engineVersion,
+      authorizationMode: configuration.authorizationMode,
       runStateRoot: roots.stateRoot,
       documents: documents,
       sessions: registry,
@@ -377,6 +410,7 @@ final class CockpitWorkerRuntime {
       operationJournal: operationJournal,
       terminateUnsafeWorker: peer.close,
       redactor: _logger.redactor,
+      logger: _logger,
     );
     final router = CockpitWorkerOperationRouter(
       workspaceOperations: operations,
@@ -432,15 +466,17 @@ final class CockpitWorkerRuntime {
     CockpitWorkerLogRedactor redactor,
   ) {
     final allowedNames = configuration.allowedEnvironmentSecretNames;
+    final allowAll = configuration.allowAllEnvironmentSecrets;
     return CockpitAllowedWorkerSecretResolver(
       providers: <CockpitWorkerSecretProvider>[
-        if (allowedNames.isNotEmpty)
+        if (allowAll || allowedNames.isNotEmpty)
           CockpitEnvironmentSecretProvider(
             allowedNames: allowedNames,
+            allowAllNames: allowAll,
             environment: _environment,
           ),
       ],
-      allowedProviderIds: allowedNames.isEmpty
+      allowedProviderIds: !allowAll && allowedNames.isEmpty
           ? const <String>[]
           : const <String>['env'],
       redactor: redactor,

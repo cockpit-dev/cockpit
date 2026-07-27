@@ -1,4 +1,5 @@
 import 'package:args/command_runner.dart';
+import 'package:cockpit_protocol/cockpit_protocol.dart';
 
 import '../../supervisor/cockpit_daemon_host.dart';
 import '../cockpit_cli_runtime.dart';
@@ -12,9 +13,18 @@ final class CockpitDaemonCommand extends Command<int> {
         runtime: runtime,
         name: 'start',
         description: 'Start the Cockpit Supervisor daemon.',
-        action: (_) async {
+        configure: (parser) => parser.addFlag(
+          'yolo',
+          negatable: false,
+          help: 'Start this daemon process with unrestricted authorization.',
+        ),
+        action: (arguments) async {
           final client = await runtime.client();
-          await client.lifecycle.start();
+          await client.lifecycle.start(
+            authorizationMode: arguments.flag('yolo')
+                ? CockpitAuthorizationMode.yolo
+                : CockpitAuthorizationMode.restricted,
+          );
           await runtime.success((await client.lifecycle.status()).toJson());
           return cockpitSuccessExitCode;
         },
@@ -61,9 +71,18 @@ final class CockpitDaemonCommand extends Command<int> {
         runtime: runtime,
         name: 'restart',
         description: 'Restart the Supervisor daemon.',
-        action: (_) async {
+        configure: (parser) => parser.addFlag(
+          'yolo',
+          negatable: false,
+          help: 'Restart this daemon process with unrestricted authorization.',
+        ),
+        action: (arguments) async {
           final client = await runtime.client();
-          await client.lifecycle.restart();
+          await client.lifecycle.restart(
+            authorizationMode: arguments.flag('yolo')
+                ? CockpitAuthorizationMode.yolo
+                : CockpitAuthorizationMode.restricted,
+          );
           await runtime.success((await client.lifecycle.status()).toJson());
           return cockpitSuccessExitCode;
         },

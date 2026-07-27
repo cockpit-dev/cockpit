@@ -165,6 +165,9 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
     );
     _textInputCommandExecutor = CockpitTextInputCommandExecutor(
       enterText: _executeEnterText,
+      eraseText: _executeEraseText,
+      copyText: _executeCopyText,
+      pasteText: _executePasteText,
       focusTextInput: _executeFocusTextInput,
       setTextEditingValue: _executeSetTextEditingValue,
       sendTextInputAction: _executeSendTextInputAction,
@@ -246,6 +249,9 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
     final supportedCommands = <CockpitCommandType>{
       CockpitCommandType.tap,
       CockpitCommandType.enterText,
+      CockpitCommandType.eraseText,
+      CockpitCommandType.copyText,
+      CockpitCommandType.pasteText,
       CockpitCommandType.focusTextInput,
       CockpitCommandType.setTextEditingValue,
       CockpitCommandType.sendTextInputAction,
@@ -377,6 +383,9 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
     return <CockpitCommandType, CockpitInAppCommandHandler>{
       CockpitCommandType.tap: _semanticCommandExecutor.execute,
       CockpitCommandType.enterText: _textInputCommandExecutor.execute,
+      CockpitCommandType.eraseText: _textInputCommandExecutor.execute,
+      CockpitCommandType.copyText: _textInputCommandExecutor.execute,
+      CockpitCommandType.pasteText: _textInputCommandExecutor.execute,
       CockpitCommandType.focusTextInput: _textInputCommandExecutor.execute,
       CockpitCommandType.setTextEditingValue: _textInputCommandExecutor.execute,
       CockpitCommandType.sendTextInputAction: _textInputCommandExecutor.execute,
@@ -1774,12 +1783,24 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
     Stopwatch stopwatch,
   ) async {
     final previousRouteName = _currentRouteName();
-    final resolution = await _resolveWithRetry(command);
-    final target = _preferredTextInputTarget(
-      resolution: resolution,
-      requiredCommand: CockpitCommandType.enterText,
-    );
-    if (!resolution.isSuccess && target == null) {
+    final request = _textInputRequest(command);
+    if (request == null) {
+      return _failureExecution(
+        command: command,
+        durationMs: stopwatch.elapsedMilliseconds,
+        error: CockpitCommandError.assertionFailed(
+          message: 'enterText requires a text parameter.',
+        ),
+      );
+    }
+
+    final resolution = command.locator == null
+        ? _resolveActiveTextInput(requiredCommand: CockpitCommandType.enterText)
+        : await _resolveWithRetry(
+            command,
+            requiredCommand: CockpitCommandType.enterText,
+          );
+    if (!resolution.isSuccess) {
       return _failureExecution(
         command: command,
         durationMs: stopwatch.elapsedMilliseconds,
@@ -1788,10 +1809,8 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
       );
     }
 
-    final resolvedTarget = target!;
-    final request = _textInputRequest(command);
-    if (request == null ||
-        !resolvedTarget.supportedCommands.contains(
+    final resolvedTarget = resolution.target!;
+    if (!resolvedTarget.supportedCommands.contains(
           CockpitCommandType.enterText,
         ) ||
         (resolvedTarget.onSemanticTextInput == null &&
@@ -1875,6 +1894,394 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
     );
   }
 
+  Future<CockpitCommandExecution> _executeEraseText(
+    CockpitCommand command,
+    Stopwatch stopwatch,
+  ) async {
+    final resolution = await _resolveTextMutationTarget(command);
+    if (!resolution.isSuccess) {
+      return _failureExecution(
+        command: command,
+        durationMs: stopwatch.elapsedMilliseconds,
+        snapshot: _liveSnapshot().toJson(),
+        error: resolution.error!,
+      );
+    }
+    final target = resolution.target!;
+    final editable = _editableTextState(target);
+    final current = editable?.widget.controller.value;
+    final requested = _intParameter(command, 'characters');
+    String nextText;
+    int selectionOffset;
+    if (requested == null) {
+      nextText = '';
+      selectionOffset = 0;
+    } else if (current != null && current.selection.isValid) {
+      final selection = current.selection;
+      if (!selection.isCollapsed) {
+        nextText = current.text.replaceRange(
+          selection.start,
+          selection.end,
+          '',
+        );
+        selectionOffset = selection.start;
+      } else {
+        final end = selection.extentOffset.clamp(0, current.text.length);
+        final start = (end - requested).clamp(0, end);
+        nextText = current.text.replaceRange(start, end, '');
+        selectionOffset = start;
+      }
+    } else {
+      final currentText = current?.text ?? target.text ?? '';
+      final end = currentText.length;
+      final start = (end - requested).clamp(0, end);
+      nextText = currentText.replaceRange(start, end, '');
+      selectionOffset = start;
+    }
+    return _executeResolvedTextMutation(
+      command: command,
+      stopwatch: stopwatch,
+      resolution: resolution,
+      request: CockpitTextInputRequest(
+        text: nextText,
+        selectionBase: selectionOffset,
+        selectionExtent: selectionOffset,
+        clearExisting: true,
+      ),
+    );
+  }
+
+  Future<CockpitCommandExecution> _executeCopyText(
+    CockpitCommand command,
+    Stopwatch stopwatch,
+  ) async {
+    final resolution = command.locator == null
+        ? _resolveActiveTextInput(requiredCommand: CockpitCommandType.enterText)
+        : await _resolveWithRetry(command);
+    if (!resolution.isSuccess) {
+      return _failureExecution(
+        command: command,
+        durationMs: stopwatch.elapsedMilliseconds,
+        snapshot: _liveSnapshot().toJson(),
+        error: resolution.error!,
+      );
+    }
+    final target = resolution.target!;
+    final text =
+        _editableTextState(target)?.widget.controller.text ?? target.text;
+    if (text == null) {
+      return _failureExecution(
+        command: command,
+        durationMs: stopwatch.elapsedMilliseconds,
+        locatorResolution: resolution.locatorResolution,
+        error: CockpitCommandError.assertionFailed(
+          message: 'Resolved target does not expose copyable text.',
+        ),
+      );
+    }
+    try {
+      await Clipboard.setData(ClipboardData(text: text));
+    } on Object catch (error) {
+      return _failureExecution(
+        command: command,
+        durationMs: stopwatch.elapsedMilliseconds,
+        locatorResolution: resolution.locatorResolution,
+        error: CockpitCommandError(
+          code: 'clipboardFailed',
+          message: 'Could not write the platform clipboard: $error',
+        ),
+      );
+    }
+    return _successExecution(
+      command: command,
+      durationMs: stopwatch.elapsedMilliseconds,
+      locatorResolution: resolution.locatorResolution,
+    );
+  }
+
+  Future<CockpitCommandExecution> _executePasteText(
+    CockpitCommand command,
+    Stopwatch stopwatch,
+  ) async {
+    String clipboardText;
+    try {
+      clipboardText =
+          (await Clipboard.getData(Clipboard.kTextPlain))?.text ?? '';
+    } on Object catch (error) {
+      return _failureExecution(
+        command: command,
+        durationMs: stopwatch.elapsedMilliseconds,
+        error: CockpitCommandError(
+          code: 'clipboardFailed',
+          message: 'Could not read the platform clipboard: $error',
+        ),
+      );
+    }
+    final resolution = await _resolveTextMutationTarget(command);
+    if (!resolution.isSuccess) {
+      return _failureExecution(
+        command: command,
+        durationMs: stopwatch.elapsedMilliseconds,
+        snapshot: _liveSnapshot().toJson(),
+        error: resolution.error!,
+      );
+    }
+    final target = resolution.target!;
+    final current = _editableTextState(target)?.widget.controller.value;
+    String nextText;
+    int selectionOffset;
+    if (current != null && current.selection.isValid) {
+      final selection = current.selection;
+      nextText = current.text.replaceRange(
+        selection.start,
+        selection.end,
+        clipboardText,
+      );
+      selectionOffset = selection.start + clipboardText.length;
+    } else {
+      nextText = clipboardText;
+      selectionOffset = clipboardText.length;
+    }
+    return _executeResolvedTextMutation(
+      command: command,
+      stopwatch: stopwatch,
+      resolution: resolution,
+      request: CockpitTextInputRequest(
+        text: nextText,
+        selectionBase: selectionOffset,
+        selectionExtent: selectionOffset,
+        clearExisting: true,
+      ),
+    );
+  }
+
+  Future<CockpitTargetResolutionResult> _resolveTextMutationTarget(
+    CockpitCommand command,
+  ) async => command.locator == null
+      ? _resolveActiveTextInput(requiredCommand: CockpitCommandType.enterText)
+      : _resolveWithRetry(
+          command,
+          requiredCommand: CockpitCommandType.enterText,
+        );
+
+  Future<CockpitCommandExecution> _executeResolvedTextMutation({
+    required CockpitCommand command,
+    required Stopwatch stopwatch,
+    required CockpitTargetResolutionResult resolution,
+    required CockpitTextInputRequest request,
+  }) async {
+    final target = resolution.target!;
+    if (!target.supportedCommands.contains(CockpitCommandType.enterText) ||
+        target.onTextInput == null) {
+      return _unsupportedExecution(
+        command: command,
+        durationMs: stopwatch.elapsedMilliseconds,
+        target: target,
+      );
+    }
+    final previousRouteName = _currentRouteName();
+    await _prepareForAction(command, commandType: command.commandType);
+    final commit = await _invokeActionAndAwaitCommit(
+      command: command,
+      action: () => target.onTextInput!.call(request),
+      previousRouteName: previousRouteName,
+      commandType: command.commandType,
+      stopwatch: stopwatch,
+      resolution: resolution,
+      activationPath: _ActionActivationPath.directTextInput,
+    );
+    if (commit.failure != null) return commit.failure!;
+    await _stabilizeAfterAction(
+      previousRouteName,
+      commandType: command.commandType,
+      routeAlreadyCommitted: commit.routeCommitted,
+    );
+    return _buildSuccessWithOptionalCapture(
+      command: command,
+      resolution: resolution,
+      durationMs: stopwatch.elapsedMilliseconds,
+      warnings: commit.warnings,
+    );
+  }
+
+  EditableTextState? _editableTextState(CockpitTarget target) {
+    final node = target.diagnosticNodeProvider?.call();
+    if (node is! Element || !node.mounted) return null;
+    EditableTextState? result;
+    void visit(Element candidate) {
+      if (result != null || !candidate.mounted) return;
+      if (candidate is StatefulElement &&
+          candidate.state is EditableTextState) {
+        result = candidate.state as EditableTextState;
+        return;
+      }
+      candidate.visitChildElements(visit);
+    }
+
+    visit(node);
+    return result;
+  }
+
+  CockpitTargetResolutionResult _resolveActiveTextInput({
+    required CockpitCommandType requiredCommand,
+  }) {
+    final focusNode = FocusManager.instance.primaryFocus;
+    final focusContext = focusNode?.context;
+    if (focusNode == null || focusContext is! Element) {
+      return CockpitTargetResolutionResult.failure(
+        error: CockpitCommandError.targetNotFound(
+          message: 'No active text input is focused.',
+          details: <String, Object?>{
+            'hasPrimaryFocus': focusNode != null,
+            'isTextInputFocus': false,
+          },
+        ),
+      );
+    }
+
+    final focusSnapshot = cockpitBuildFocusSnapshot();
+    if (!focusSnapshot.isTextInputFocus) {
+      return CockpitTargetResolutionResult.failure(
+        error: CockpitCommandError.targetNotFound(
+          message: 'The primary focus is not a text input.',
+          details: <String, Object?>{
+            'hasPrimaryFocus': focusSnapshot.hasPrimaryFocus,
+            'isTextInputFocus': false,
+            'primaryFocusLabel': ?focusSnapshot.primaryFocusLabel,
+            'primaryFocusWidgetType': ?focusSnapshot.primaryFocusWidgetType,
+          },
+        ),
+      );
+    }
+
+    final candidates = <({CockpitTarget target, int distance})>[];
+    for (final target in _registry.visibleTargets) {
+      if (!target.supportedCommands.contains(requiredCommand) ||
+          (requiredCommand == CockpitCommandType.enterText
+              ? target.onTextInput == null &&
+                    target.onEnterText == null &&
+                    target.onSemanticTextInput == null &&
+                    target.onSemanticEnterText == null
+              : target.onTextInput == null)) {
+        continue;
+      }
+      final targetElement = target.diagnosticNodeProvider?.call();
+      if (targetElement is! Element) {
+        continue;
+      }
+      final distance = _elementDistance(focusContext, targetElement);
+      if (distance != null) {
+        candidates.add((target: target, distance: distance));
+      }
+    }
+
+    if (candidates.isEmpty) {
+      return CockpitTargetResolutionResult.failure(
+        error: CockpitCommandError.targetNotFound(
+          message:
+              'No visible target is associated with the active text input.',
+          details: <String, Object?>{
+            'primaryFocusLabel': ?focusSnapshot.primaryFocusLabel,
+            'primaryFocusWidgetType': ?focusSnapshot.primaryFocusWidgetType,
+            'visibleTargetCount': _registry.visibleTargets.length,
+          },
+        ),
+      );
+    }
+
+    candidates.sort((left, right) {
+      final distanceCompare = left.distance.compareTo(right.distance);
+      if (distanceCompare != 0) {
+        return distanceCompare;
+      }
+      final leftDirect = left.target.onTextInput != null ? 1 : 0;
+      final rightDirect = right.target.onTextInput != null ? 1 : 0;
+      final directCompare = rightDirect.compareTo(leftDirect);
+      if (directCompare != 0) {
+        return directCompare;
+      }
+      return left.target.registrationId.compareTo(right.target.registrationId);
+    });
+
+    final best = candidates.first;
+    final tied = candidates
+        .skip(1)
+        .where(
+          (candidate) =>
+              candidate.distance == best.distance &&
+              (candidate.target.onTextInput != null) ==
+                  (best.target.onTextInput != null),
+        )
+        .toList(growable: false);
+    if (tied.isNotEmpty) {
+      final matches = <CockpitTarget>[
+        best.target,
+        ...tied.map((candidate) => candidate.target),
+      ];
+      return CockpitTargetResolutionResult.failure(
+        error: CockpitCommandError.ambiguousTarget(
+          message:
+              'Multiple visible targets are associated with the active text input.',
+          details: <String, Object?>{
+            'candidateCount': matches.length,
+            'candidates': matches
+                .map((target) => target.registrationId)
+                .toList(growable: false),
+            'primaryFocusLabel': ?focusSnapshot.primaryFocusLabel,
+          },
+        ),
+        matches: matches,
+      );
+    }
+
+    return CockpitTargetResolutionResult.success(
+      target: best.target,
+      locatorResolution: CockpitLocatorResolution(
+        matchedKind: CockpitLocatorKind.registrationId,
+        matchedValue: best.target.registrationId,
+        matchedSignals: const <String, String>{'focus': 'primary'},
+      ),
+      matches: candidates
+          .map((candidate) => candidate.target)
+          .toList(growable: false),
+    );
+  }
+
+  int? _elementDistance(Element focused, Element candidate) {
+    if (identical(focused, candidate)) {
+      return 0;
+    }
+
+    var distance = 0;
+    var found = false;
+    focused.visitAncestorElements((ancestor) {
+      distance += 1;
+      if (identical(ancestor, candidate)) {
+        found = true;
+        return false;
+      }
+      return true;
+    });
+    if (found) {
+      return distance;
+    }
+
+    distance = 0;
+    found = false;
+    candidate.visitAncestorElements((ancestor) {
+      distance += 1;
+      if (identical(ancestor, focused)) {
+        found = true;
+        return false;
+      }
+      return true;
+    });
+    if (found) {
+      return distance;
+    }
+    return null;
+  }
+
   Future<CockpitCommandExecution> _executeFocusTextInput(
     CockpitCommand command,
     Stopwatch stopwatch,
@@ -1948,12 +2355,10 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
     }
 
     final previousRouteName = _currentRouteName();
-    final resolution = await _resolveWithRetry(command);
-    final target = _preferredTextInputTarget(
-      resolution: resolution,
-      requiredCommand: requiredCommand,
-    );
-    if (!resolution.isSuccess && target == null) {
+    final resolution = command.locator == null
+        ? _resolveActiveTextInput(requiredCommand: requiredCommand)
+        : await _resolveWithRetry(command, requiredCommand: requiredCommand);
+    if (!resolution.isSuccess) {
       return _failureExecution(
         command: command,
         durationMs: stopwatch.elapsedMilliseconds,
@@ -1962,7 +2367,7 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
       );
     }
 
-    final resolvedTarget = target!;
+    final resolvedTarget = resolution.target!;
     if (!resolvedTarget.supportedCommands.contains(requiredCommand) ||
         resolvedTarget.onTextInput == null) {
       return _unsupportedExecution(
@@ -2039,7 +2444,29 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
     semanticAction,
   }) async {
     final previousRouteName = _currentRouteName();
-    final resolution = await _resolveWithRetry(command);
+    final locator = command.locator;
+    final revealedWithEnsureVisible =
+        requiredCommand == CockpitCommandType.showOnScreen &&
+        locator != null &&
+        await _attemptEnsureVisible(
+          locator,
+          const Duration(milliseconds: 220),
+          alignment:
+              _revealAlignmentParameter(command) ??
+              CockpitRevealAlignment.nearest,
+          padding: 0,
+        );
+    late CockpitTargetResolutionResult resolution;
+    if (revealedWithEnsureVisible) {
+      await _postActionSettler();
+      await _settleBeforeObservation();
+      resolution = await _resolveWithRetry(command, attempts: 2);
+    } else {
+      resolution = await _resolveWithRetry(
+        command,
+        requiredCommand: requiredCommand,
+      );
+    }
     if (!resolution.isSuccess) {
       return _failureExecution(
         command: command,
@@ -2052,6 +2479,14 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
     final target = resolution.target!;
     final action = semanticAction(target);
     if (!target.supportedCommands.contains(requiredCommand) || action == null) {
+      if (revealedWithEnsureVisible &&
+          requiredCommand == CockpitCommandType.showOnScreen) {
+        return _buildSuccessWithOptionalCapture(
+          command: command,
+          resolution: resolution,
+          durationMs: stopwatch.elapsedMilliseconds,
+        );
+      }
       return _unsupportedExecution(
         command: command,
         durationMs: stopwatch.elapsedMilliseconds,
@@ -2093,10 +2528,10 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
     final timeoutMs = command.timeoutMs ?? _defaultAssertSettleTimeoutMs;
     CockpitTargetResolutionResult? lastResolution;
 
-    while (stopwatch.elapsedMilliseconds <= timeoutMs) {
+    while (true) {
       final snapshot = _liveSnapshot();
       if (locator != null) {
-        if (locator.kind == CockpitLocatorKind.route &&
+        if (_isSimpleLocatorFor(locator, CockpitLocatorKind.route) &&
             snapshot.routeName == locator.value) {
           return _successExecution(
             command: command,
@@ -2108,10 +2543,11 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
             snapshot: snapshot.toJson(),
           );
         }
-        if (locator.kind == CockpitLocatorKind.text &&
+        if (_isSimpleLocatorFor(locator, CockpitLocatorKind.text) &&
             _visibleTargetsContainText(
               _registry.visibleTargets,
               locator.value,
+              matchMode: locator.matchMode,
             )) {
           return _successExecution(
             command: command,
@@ -2119,6 +2555,12 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
             locatorResolution: CockpitLocatorResolution(
               matchedKind: CockpitLocatorKind.text,
               matchedValue: locator.value,
+              matchedSignals: locator.matchMode == CockpitTextMatchMode.exact
+                  ? const <String, String>{}
+                  : <String, String>{
+                      'text': locator.value,
+                      'matchMode': locator.matchMode.name,
+                    },
             ),
             snapshot: snapshot.toJson(),
           );
@@ -2143,12 +2585,15 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
         );
       }
       lastResolution = resolution;
+      if (stopwatch.elapsedMilliseconds >= timeoutMs) {
+        break;
+      }
       await _postActionSettler();
       await _waitTickHandler(_assertPollInterval);
     }
 
     final failureSnapshot = _liveSnapshot();
-    if (lastResolution != null && !lastResolution.isSuccess) {
+    if (!lastResolution.isSuccess) {
       return _failureExecution(
         command: command,
         durationMs: stopwatch.elapsedMilliseconds,
@@ -2195,14 +2640,51 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
 
     await _settleBeforeObservation();
     final timeoutMs = command.timeoutMs ?? _defaultAssertSettleTimeoutMs;
-    while (stopwatch.elapsedMilliseconds <= timeoutMs) {
+    final locator = command.locator;
+    final useGlobalTextObservation =
+        locator == null ||
+        _isSimpleLocatorFor(locator, CockpitLocatorKind.text);
+    final textMatchMode = _textMatchModeParameter(command);
+    while (true) {
       final snapshot = _liveSnapshot();
-      if (_visibleTargetsContainText(_registry.visibleTargets, expectedText)) {
+      if (useGlobalTextObservation &&
+          _visibleTargetsContainText(
+            _registry.visibleTargets,
+            expectedText,
+            matchMode: textMatchMode,
+          )) {
         return _successExecution(
           command: command,
           durationMs: stopwatch.elapsedMilliseconds,
           snapshot: snapshot.toJson(),
         );
+      }
+      if (!useGlobalTextObservation) {
+        final resolution = _resolve(command);
+        if (resolution.isSuccess &&
+            _targetContainsText(
+              resolution.target!,
+              expectedText,
+              matchMode: textMatchMode,
+            )) {
+          return _successExecution(
+            command: command,
+            durationMs: stopwatch.elapsedMilliseconds,
+            locatorResolution: resolution.locatorResolution,
+            snapshot: snapshot.toJson(),
+          );
+        }
+        if (resolution.error?.code == CockpitCommandError.ambiguousTargetCode) {
+          return _failureExecution(
+            command: command,
+            durationMs: stopwatch.elapsedMilliseconds,
+            snapshot: snapshot.toJson(),
+            error: resolution.error!,
+          );
+        }
+      }
+      if (stopwatch.elapsedMilliseconds >= timeoutMs) {
+        break;
       }
       await _postActionSettler();
       await _waitTickHandler(_assertPollInterval);
@@ -2287,9 +2769,16 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
         );
       }
 
+      final locator = command.locator;
       final expectedText = _expectedText(command);
       if (expectedText != null &&
-          _visibleTargetsContainText(_registry.visibleTargets, expectedText)) {
+          (locator == null ||
+              _isSimpleLocatorFor(locator, CockpitLocatorKind.text)) &&
+          _visibleTargetsContainText(
+            _registry.visibleTargets,
+            expectedText,
+            matchMode: locator?.matchMode ?? _textMatchModeParameter(command),
+          )) {
         return _successExecution(
           command: command,
           durationMs: stopwatch.elapsedMilliseconds,
@@ -2301,10 +2790,9 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
         );
       }
 
-      final locator = command.locator;
       if (locator != null &&
-          locator.kind != CockpitLocatorKind.route &&
-          locator.kind != CockpitLocatorKind.text) {
+          !_isSimpleLocatorFor(locator, CockpitLocatorKind.route) &&
+          !_isSimpleLocatorFor(locator, CockpitLocatorKind.text)) {
         final resolution = _resolve(command);
         if (resolution.isSuccess) {
           return _successExecution(
@@ -2438,14 +2926,21 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
 
     final expectedText = _expectedText(command);
     if (expectedText != null &&
-        _visibleTargetsContainText(_registry.visibleTargets, expectedText)) {
+        (command.locator == null ||
+            _isSimpleLocatorFor(command.locator!, CockpitLocatorKind.text)) &&
+        _visibleTargetsContainText(
+          _registry.visibleTargets,
+          expectedText,
+          matchMode:
+              command.locator?.matchMode ?? _textMatchModeParameter(command),
+        )) {
       return false;
     }
 
     final locator = command.locator;
     if (locator != null &&
-        locator.kind != CockpitLocatorKind.route &&
-        locator.kind != CockpitLocatorKind.text) {
+        !_isSimpleLocatorFor(locator, CockpitLocatorKind.route) &&
+        !_isSimpleLocatorFor(locator, CockpitLocatorKind.text)) {
       final resolution = _resolve(command);
       if (resolution.isSuccess ||
           resolution.error?.code == CockpitCommandError.ambiguousTargetCode) {
@@ -2991,7 +3486,10 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
     return Offset(resolved.dx, resolved.dy);
   }
 
-  CockpitTargetResolutionResult _resolve(CockpitCommand command) {
+  CockpitTargetResolutionResult _resolve(
+    CockpitCommand command, {
+    CockpitCommandType? requiredCommand,
+  }) {
     final locator = command.locator;
     if (locator == null) {
       return CockpitTargetResolutionResult.failure(
@@ -3000,14 +3498,15 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
         ),
       );
     }
-    return _registry.resolve(locator);
+    return _registry.resolve(locator, requiredCommand: requiredCommand);
   }
 
   Future<CockpitTargetResolutionResult> _resolveWithRetry(
     CockpitCommand command, {
     int attempts = 3,
+    CockpitCommandType? requiredCommand,
   }) async {
-    var resolution = _resolve(command);
+    var resolution = _resolve(command, requiredCommand: requiredCommand);
     if (_shouldStopResolutionRetry(resolution) || attempts <= 1) {
       return _enrichResolutionFailure(command, resolution);
     }
@@ -3032,7 +3531,7 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
         await _waitTickHandler(resolvePollInterval);
       }
       await _settleBeforeObservation();
-      resolution = _resolve(command);
+      resolution = _resolve(command, requiredCommand: requiredCommand);
       if (_shouldStopResolutionRetry(resolution)) {
         return _enrichResolutionFailure(command, resolution);
       }
@@ -3044,43 +3543,6 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
   bool _shouldStopResolutionRetry(CockpitTargetResolutionResult resolution) {
     return resolution.isSuccess ||
         resolution.error?.code != CockpitCommandError.targetNotFoundCode;
-  }
-
-  CockpitTarget? _preferredTextInputTarget({
-    required CockpitTargetResolutionResult resolution,
-    required CockpitCommandType requiredCommand,
-  }) {
-    final resolved = resolution.target;
-    if (resolved != null &&
-        _supportsTextInputCommand(resolved, requiredCommand)) {
-      return resolved;
-    }
-    for (final candidate in resolution.matches) {
-      if (_supportsTextInputCommand(candidate, requiredCommand)) {
-        return candidate;
-      }
-    }
-    return resolved;
-  }
-
-  bool _supportsTextInputCommand(
-    CockpitTarget target,
-    CockpitCommandType requiredCommand,
-  ) {
-    if (!target.supportedCommands.contains(requiredCommand)) {
-      return false;
-    }
-    return switch (requiredCommand) {
-      CockpitCommandType.enterText =>
-        target.onSemanticTextInput != null ||
-            target.onTextInput != null ||
-            target.onSemanticEnterText != null ||
-            target.onEnterText != null,
-      CockpitCommandType.focusTextInput ||
-      CockpitCommandType.setTextEditingValue ||
-      CockpitCommandType.sendTextInputAction => target.onTextInput != null,
-      _ => false,
-    };
   }
 
   CockpitTargetResolutionResult _enrichResolutionFailure(
@@ -3421,7 +3883,7 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
         timeStamp: Duration.zero,
         character:
             request.character ?? _fallbackCharacterFor(request.logicalKey),
-        synthesized: false,
+        synthesized: true,
       ),
       CockpitCommandType.sendKeyUpEvent => ui.KeyData(
         type: ui.KeyEventType.up,
@@ -3429,7 +3891,7 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
         logical: request.logicalKey.keyId,
         timeStamp: Duration.zero,
         character: null,
-        synthesized: false,
+        synthesized: true,
       ),
       _ => throw ArgumentError.value(
         type,
@@ -3448,7 +3910,7 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
         logical: request.logicalKey.keyId,
         timeStamp: Duration.zero,
         character: null,
-        synthesized: false,
+        synthesized: true,
       ),
     );
     return handled || releaseHandled;
@@ -3982,6 +4444,25 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
     return null;
   }
 
+  bool _isSimpleLocatorFor(CockpitLocator locator, CockpitLocatorKind kind) {
+    return locator.kind == kind &&
+        locator.signalMap.length == 1 &&
+        locator.ancestor == null &&
+        locator.index == null &&
+        locator.fallbacks.isEmpty;
+  }
+
+  CockpitTextMatchMode _textMatchModeParameter(CockpitCommand command) {
+    final value = command.parameters['matchMode'];
+    if (value == null) return CockpitTextMatchMode.exact;
+    if (value is CockpitTextMatchMode) return value;
+    try {
+      return CockpitTextMatchMode.fromJson(value);
+    } on FormatException catch (error) {
+      throw ArgumentError(error.message);
+    }
+  }
+
   Future<void> _prepareForAction(
     CockpitCommand command, {
     required CockpitCommandType commandType,
@@ -3998,17 +4479,24 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
     }
 
     final snapshot = _liveSnapshot();
-    if (locator.kind == CockpitLocatorKind.text &&
+    if (_isSimpleLocatorFor(locator, CockpitLocatorKind.text) &&
         _visibleTargetsContainMeaningfullyVisibleText(
           _registry.visibleTargets,
           locator.value,
+          matchMode: locator.matchMode,
         )) {
       return CockpitLocatorResolution(
         matchedKind: CockpitLocatorKind.text,
         matchedValue: locator.value,
+        matchedSignals: locator.matchMode == CockpitTextMatchMode.exact
+            ? const <String, String>{}
+            : <String, String>{
+                'text': locator.value,
+                'matchMode': locator.matchMode.name,
+              },
       );
     }
-    if (locator.kind == CockpitLocatorKind.route &&
+    if (_isSimpleLocatorFor(locator, CockpitLocatorKind.route) &&
         snapshot.routeName == locator.value) {
       return CockpitLocatorResolution(
         matchedKind: CockpitLocatorKind.route,
@@ -4031,18 +4519,20 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
   }
 
   bool _allowsGenericScrollResolution(CockpitLocator locator) {
-    return switch (locator.kind) {
-      CockpitLocatorKind.text || CockpitLocatorKind.route => false,
-      _ => true,
-    };
+    return !_isSimpleLocatorFor(locator, CockpitLocatorKind.text) &&
+        !_isSimpleLocatorFor(locator, CockpitLocatorKind.route);
   }
 
   bool _visibleTargetsContainMeaningfullyVisibleText(
     Iterable<CockpitTarget> visibleTargets,
-    String expectedText,
-  ) {
+    String expectedText, {
+    CockpitTextMatchMode matchMode = CockpitTextMatchMode.exact,
+  }) {
     final matches = visibleTargets
-        .where((target) => _targetContainsText(target, expectedText))
+        .where(
+          (target) =>
+              _targetContainsText(target, expectedText, matchMode: matchMode),
+        )
         .toList(growable: false);
     if (matches.isEmpty) {
       return false;
@@ -4510,10 +5000,12 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
 
   bool _visibleTargetsContainText(
     Iterable<CockpitTarget> visibleTargets,
-    String expectedText,
-  ) {
+    String expectedText, {
+    CockpitTextMatchMode matchMode = CockpitTextMatchMode.contains,
+  }) {
     return visibleTargets.any(
-      (target) => _targetContainsText(target, expectedText),
+      (target) =>
+          _targetContainsText(target, expectedText, matchMode: matchMode),
     );
   }
 
@@ -4533,24 +5025,39 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
     return candidates.toList(growable: false);
   }
 
-  bool _targetContainsText(CockpitTarget target, String expectedText) {
-    return <String?>[
-      target.text,
-      target.tooltip,
-      target.displayLabel,
-    ].any((candidate) => _textSignalMatches(candidate, expectedText));
+  bool _targetContainsText(
+    CockpitTarget target,
+    String expectedText, {
+    CockpitTextMatchMode matchMode = CockpitTextMatchMode.contains,
+  }) {
+    return <String?>[target.text, target.tooltip, target.displayLabel].any(
+      (candidate) => _textSignalMatches(candidate, expectedText, matchMode),
+    );
   }
 
-  bool _textSignalMatches(String? candidate, String expectedText) {
+  bool _textSignalMatches(
+    String? candidate,
+    String expectedText,
+    CockpitTextMatchMode matchMode,
+  ) {
     final normalizedCandidate = _normalizeText(candidate);
     final normalizedExpected = _normalizeText(expectedText);
-    if (normalizedCandidate == null || normalizedExpected == null) {
+    if (normalizedCandidate == null) {
       return false;
     }
-    if (normalizedCandidate == normalizedExpected) {
-      return true;
-    }
-    return normalizedCandidate.contains(normalizedExpected);
+    return switch (matchMode) {
+      CockpitTextMatchMode.exact =>
+        normalizedExpected != null && normalizedCandidate == normalizedExpected,
+      CockpitTextMatchMode.contains =>
+        normalizedExpected != null &&
+            normalizedCandidate.contains(normalizedExpected),
+      CockpitTextMatchMode.fuzzy =>
+        normalizedExpected != null &&
+            cockpitFuzzyTextMatches(normalizedCandidate, normalizedExpected),
+      CockpitTextMatchMode.regex => RegExp(
+        expectedText.trim(),
+      ).hasMatch(normalizedCandidate),
+    };
   }
 
   String? _normalizeText(String? value) {

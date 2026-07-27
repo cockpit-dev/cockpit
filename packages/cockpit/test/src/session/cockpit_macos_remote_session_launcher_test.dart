@@ -241,6 +241,7 @@ void main() {
 
       expect(buildCount, 2);
       expect(invocations, contains('flutter clean'));
+      expect(invocations, contains('flutter pub get'));
     },
   );
 

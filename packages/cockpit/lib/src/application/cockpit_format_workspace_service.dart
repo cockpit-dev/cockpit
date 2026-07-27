@@ -8,11 +8,13 @@ final class CockpitFormatWorkspaceRequest {
   const CockpitFormatWorkspaceRequest({
     required this.workspaceRoot,
     this.allowedRoots = const <String>[],
+    this.paths = const <String>[],
     this.timeout = const Duration(seconds: 90),
   });
 
   final String workspaceRoot;
   final List<String> allowedRoots;
+  final List<String> paths;
   final Duration timeout;
 }
 
@@ -32,6 +34,7 @@ final class CockpitFormatWorkspaceService {
   Future<CockpitWorkspaceCommandResult> format(
     CockpitFormatWorkspaceRequest request,
   ) {
+    final paths = _confinedArguments(request);
     return runWorkspaceCommand(
       fileSystem: _fileSystem,
       processManager: _processManager,
@@ -39,8 +42,30 @@ final class CockpitFormatWorkspaceService {
       workspaceRoot: request.workspaceRoot,
       allowedRoots: request.allowedRoots,
       toolchain: CockpitWorkspaceToolchain.dart,
-      dartArguments: const <String>['format', '.'],
+      dartArguments: <String>['format', if (paths.isEmpty) '.' else ...paths],
       timeout: request.timeout,
     );
+  }
+
+  List<String> _confinedArguments(CockpitFormatWorkspaceRequest request) {
+    final context = _fileSystem.pathContext;
+    final root = assertWorkspaceRootAllowed(
+      request.workspaceRoot,
+      request.allowedRoots,
+      pathContext: context,
+    );
+    return <String>[
+      for (final path in request.paths)
+        context.relative(
+          assertWorkspaceRootAllowed(
+            context.normalize(
+              context.isAbsolute(path) ? path : context.join(root, path),
+            ),
+            <String>[root],
+            pathContext: context,
+          ),
+          from: root,
+        ),
+    ];
   }
 }

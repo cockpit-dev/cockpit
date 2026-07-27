@@ -186,7 +186,7 @@ final class CockpitTestActionLowerer {
     if (backend == CockpitTestActionBackend.flutter &&
         condition.kind == CockpitTestConditionKind.text &&
         condition.matchMode != null &&
-        condition.matchMode != CockpitTestTextMatchMode.exact) {
+        condition.matchMode != CockpitTextMatchMode.exact) {
       return _failure(
         CockpitTestErrorCode.unsupportedAction,
         'The Flutter backend currently supports exact text conditions.',
@@ -255,34 +255,46 @@ _LocatorLoweringResult _lowerFlutterLocator(
   if (locator == null) {
     return const _LocatorLoweringResult.success(null);
   }
-  final kind = switch (locator.strategy) {
-    CockpitTestLocatorStrategy.text => CockpitLocatorKind.text,
-    CockpitTestLocatorStrategy.label => CockpitLocatorKind.tooltip,
-    CockpitTestLocatorStrategy.testId => CockpitLocatorKind.cockpitId,
-    CockpitTestLocatorStrategy.type => CockpitLocatorKind.type,
-    CockpitTestLocatorStrategy.path => CockpitLocatorKind.path,
-    CockpitTestLocatorStrategy.nativeId ||
-    CockpitTestLocatorStrategy.role ||
-    CockpitTestLocatorStrategy.coordinate ||
-    CockpitTestLocatorStrategy.visual => null,
-  };
-  if (kind == null) {
+  if (locator.degraded || locator.hasNativeOnlyConstraints) {
     return _LocatorLoweringResult.failure(
       CockpitTestError(
         code: CockpitTestErrorCode.unsupportedLocator,
         message:
-            'The Flutter backend cannot faithfully lower locator strategy '
-            '${locator.strategy.name}.',
+            'The Flutter backend cannot faithfully lower coordinate, visual, '
+            'state, child, descendant, or spatial locator constraints.',
       ),
     );
   }
-  if (!capabilities.supportedLocatorStrategies.contains(kind)) {
-    return _LocatorLoweringResult.failure(
-      CockpitTestError(
-        code: CockpitTestErrorCode.unsupportedLocator,
-        message: 'Target does not support locator strategy ${kind.name}.',
-      ),
-    );
+  for (final signal in locator.signals) {
+    final kind = switch (signal.strategy) {
+      CockpitTestLocatorStrategy.text => CockpitLocatorKind.text,
+      CockpitTestLocatorStrategy.label => CockpitLocatorKind.tooltip,
+      CockpitTestLocatorStrategy.testId => CockpitLocatorKind.key,
+      CockpitTestLocatorStrategy.type => CockpitLocatorKind.type,
+      CockpitTestLocatorStrategy.path => CockpitLocatorKind.path,
+      CockpitTestLocatorStrategy.nativeId ||
+      CockpitTestLocatorStrategy.role ||
+      CockpitTestLocatorStrategy.coordinate ||
+      CockpitTestLocatorStrategy.visual => null,
+    };
+    if (kind == null) {
+      return _LocatorLoweringResult.failure(
+        CockpitTestError(
+          code: CockpitTestErrorCode.unsupportedLocator,
+          message:
+              'The Flutter backend cannot faithfully lower locator signal '
+              '${signal.strategy.name}.',
+        ),
+      );
+    }
+    if (!capabilities.supportedLocatorStrategies.contains(kind)) {
+      return _LocatorLoweringResult.failure(
+        CockpitTestError(
+          code: CockpitTestErrorCode.unsupportedLocator,
+          message: 'Target does not support locator strategy ${kind.name}.',
+        ),
+      );
+    }
   }
   CockpitLocator? ancestor;
   if (locator.ancestor != null) {
@@ -300,14 +312,14 @@ _LocatorLoweringResult _lowerFlutterLocator(
     }
     fallbacks.add(lowered.locator!);
   }
-  final value = locator.value!;
   return _LocatorLoweringResult.success(
     CockpitLocator(
-      cockpitId: kind == CockpitLocatorKind.cockpitId ? value : null,
-      text: kind == CockpitLocatorKind.text ? value : null,
-      tooltip: kind == CockpitLocatorKind.tooltip ? value : null,
-      type: kind == CockpitLocatorKind.type ? value : null,
-      path: kind == CockpitLocatorKind.path ? value : null,
+      key: locator.testId,
+      text: locator.text,
+      tooltip: locator.label,
+      matchMode: locator.matchMode,
+      type: locator.type,
+      path: locator.path,
       index: locator.index,
       ancestor: ancestor,
       fallbacks: fallbacks,
@@ -322,27 +334,35 @@ _LocatorLoweringResult _lowerSystemLocator(
   if (locator == null) {
     return const _LocatorLoweringResult.success(null);
   }
-  for (final candidate in locator.flattened) {
-    final kind = switch (candidate.strategy) {
-      CockpitTestLocatorStrategy.text => CockpitLocatorKind.text,
-      CockpitTestLocatorStrategy.label => CockpitLocatorKind.tooltip,
-      CockpitTestLocatorStrategy.nativeId => CockpitLocatorKind.nativeId,
-      CockpitTestLocatorStrategy.testId => CockpitLocatorKind.testId,
-      CockpitTestLocatorStrategy.role => CockpitLocatorKind.role,
-      CockpitTestLocatorStrategy.type => CockpitLocatorKind.type,
-      CockpitTestLocatorStrategy.path => CockpitLocatorKind.path,
-      CockpitTestLocatorStrategy.coordinate => CockpitLocatorKind.coordinate,
-      CockpitTestLocatorStrategy.visual => CockpitLocatorKind.visual,
-    };
-    if (!capabilities.supportedLocatorStrategies.contains(kind)) {
-      return _LocatorLoweringResult.failure(
-        CockpitTestError(
-          code: CockpitTestErrorCode.unsupportedLocator,
-          message:
-              'System target does not support locator strategy '
-              '${candidate.strategy.name}.',
-        ),
-      );
+  for (final candidate in locator.tree) {
+    final strategies = <CockpitTestLocatorStrategy>[
+      ...candidate.signals.map((signal) => signal.strategy),
+      if (candidate.x != null || candidate.y != null)
+        CockpitTestLocatorStrategy.coordinate,
+      if (candidate.visual != null) CockpitTestLocatorStrategy.visual,
+    ];
+    for (final strategy in strategies) {
+      final kind = switch (strategy) {
+        CockpitTestLocatorStrategy.text => CockpitLocatorKind.text,
+        CockpitTestLocatorStrategy.label => CockpitLocatorKind.tooltip,
+        CockpitTestLocatorStrategy.nativeId => CockpitLocatorKind.nativeId,
+        CockpitTestLocatorStrategy.testId => CockpitLocatorKind.testId,
+        CockpitTestLocatorStrategy.role => CockpitLocatorKind.role,
+        CockpitTestLocatorStrategy.type => CockpitLocatorKind.type,
+        CockpitTestLocatorStrategy.path => CockpitLocatorKind.path,
+        CockpitTestLocatorStrategy.coordinate => CockpitLocatorKind.coordinate,
+        CockpitTestLocatorStrategy.visual => CockpitLocatorKind.visual,
+      };
+      if (!capabilities.supportedLocatorStrategies.contains(kind)) {
+        return _LocatorLoweringResult.failure(
+          CockpitTestError(
+            code: CockpitTestErrorCode.unsupportedLocator,
+            message:
+                'System target does not support locator strategy '
+                '${strategy.name}.',
+          ),
+        );
+      }
     }
   }
   return const _LocatorLoweringResult.success(null);
@@ -355,6 +375,9 @@ CockpitCommandType _commandType(
   CockpitTestActionKind.longPress => CockpitCommandType.longPress,
   CockpitTestActionKind.doubleTap => CockpitCommandType.doubleTap,
   CockpitTestActionKind.enterText => CockpitCommandType.enterText,
+  CockpitTestActionKind.eraseText => CockpitCommandType.eraseText,
+  CockpitTestActionKind.copyText => CockpitCommandType.copyText,
+  CockpitTestActionKind.pasteText => CockpitCommandType.pasteText,
   CockpitTestActionKind.focusTextInput => CockpitCommandType.focusTextInput,
   CockpitTestActionKind.setTextEditingValue =>
     CockpitCommandType.setTextEditingValue,
@@ -388,6 +411,8 @@ CockpitCommandType _commandType(
         ? CockpitCommandType.waitFor
         : CockpitCommandType.assertVisible,
   CockpitTestActionKind.assertText => CockpitCommandType.assertText,
+  CockpitTestActionKind.assertScreenshot => CockpitCommandType.assertScreenshot,
+  CockpitTestActionKind.travel => CockpitCommandType.travel,
   CockpitTestActionKind.system => CockpitCommandType.system,
   CockpitTestActionKind.captureScreenshot =>
     CockpitCommandType.captureScreenshot,

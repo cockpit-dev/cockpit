@@ -171,7 +171,7 @@ final class CockpitDurablePortReservation {
     if (lease.resourceKind != CockpitLeaseResourceKind.forwardedPort ||
         !cockpitIsValidPortHandoffToken(handoffToken) ||
         ttlMs < 1000 ||
-        ttlMs > 300000 ||
+        ttlMs > cockpitMaximumLeaseTtlMs ||
         (phase == CockpitDurablePortPhase.reserved) !=
             (expectedOwner == null)) {
       throw const FormatException('Durable port reservation is invalid.');

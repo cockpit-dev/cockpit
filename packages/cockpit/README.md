@@ -83,6 +83,12 @@ dart run cockpit daemon policy apply --file authorization.json --restart
 dart run cockpit daemon policy show
 ```
 
+Use `dart run cockpit daemon start --yolo` (or `daemon restart --yolo`) for an
+explicitly unrestricted local daemon. The mode lasts only for that daemon
+process; starting without the flag returns to the persisted restricted policy.
+The effective `authorizationMode` is exposed by daemon status and recorded in
+attempt and suite reports.
+
 Applying without `--restart` requires a stopped daemon. The default policy
 denies dangerous operations and sensitive test effects; it does not authorize
 production or unknown target environments.
@@ -124,7 +130,7 @@ metadata or bytes differ.
 
 Suites reuse indexed cases and add dependency DAGs, scoped fixtures, matrix
 rows, concurrency, retries, fail-fast behavior, recovery, and aggregate
-JSON/JUnit/HTML/AI summary reports.
+JSON/JUnit/HTML/Markdown reports.
 
 Recovery persists node and attempt checkpoints plus exact fixture/row session
 bindings. An attempt active at worker termination becomes `interrupted` and is
@@ -134,6 +140,15 @@ explicit environment failure, never a silent replacement.
 The default `restartApp` isolation runs before each case's attempt fixtures.
 Use `resetAppData` only when the selected driver advertises it, and choose
 `sharedSession` explicitly only when state sharing is part of the suite design.
+
+Fields in one locator are an intersection; `fallbacks` are ordered
+alternatives. Native black-box targets additionally support state, hierarchy,
+and spatial constraints when their inspected accessibility capability reports
+them. A runtime rejects unsupported constraints instead of dropping them.
+Text and label matching defaults to `exact`; use an explicit `matchMode` of
+`contains`, typo-tolerant `fuzzy`, or `regex` for broader matching. A unique best candidate is selected
+by route and match quality. Equal best candidates fail as `ambiguousTarget`;
+use more signals, a relation, or 0-based `index` to select a list item.
 
 ```bash
 dart run cockpit suite validate --file example/suites/regression.yaml
@@ -151,6 +166,13 @@ a case may override it in its target requirements when necessary. Android uses
 ADB accessibility and device controls. iOS uses WebDriverAgent for
 accessibility and interaction; assign a distinct WDA endpoint when multiple
 devices or workspaces run concurrently.
+
+An installed Flutter app or native/Flutter mixed stack uses `targetKind:
+flutterApp`, a real `appId`, no entrypoint, and a `native`-plane case. It is
+launched and driven through system accessibility with Flutter-aware duplicate
+semantics normalization. Native screens and embedded platform views remain in
+the same tree. Entrypoint-backed targets use the optional bridge and semantic
+plane for development-only Widget, route, and runtime inspection.
 
 ```bash
 dart run cockpit target register \
@@ -177,6 +199,10 @@ dart run cockpit target register \
 
 Use `target list` and `target get` to recover registered resources, `target
 launch` to activate one, and `target inspect` to read its live capabilities.
+For a launched Flutter or mixed-stack target, the sanitized
+`output.systemControl` profile in the `target.inspect` operation result is the
+authority for its secondary native driver. Do not reconstruct it from
+`app.get`, which intentionally redacts platform app and process identities.
 
 Flutter target launches accept repeatable `--dart-define`,
 `--dart-define-from-file`, `--flutter-arg`, and `--env KEY=VALUE` options plus a
@@ -196,6 +222,21 @@ Case `setup`, main steps, `finally`, and suite fixtures can use `type: system`
 with an advertised system action name and parameters. This keeps install,
 activation, permissions, device state, and cleanup inside the same safety,
 timeout, event, and report pipeline as UI actions.
+
+A step-level `plane` may override the case default with `semantic`, `native`,
+`visual`, or `coordinate`. The runtime otherwise derives the plane from the
+action and locator. Flutter bridge sessions retain a system driver for the same
+target, allowing semantic Widget steps and native, visual, or coordinate steps
+to run in one case. Conditions and nested fragment/if/retry/loop steps inherit
+the effective plane unless they override it.
+
+Text control includes `copyText`, `eraseText`, and `pasteText`. `travel` applies
+a bounded sequence of latitude/longitude points with per-route or per-point
+delays. A visual locator names a workspace-confined template file; an
+`assertScreenshot` names a workspace-confined baseline and emits the actual,
+baseline, and deterministic diff files into the attempt evidence. Use suite
+fixtures, case `setup`/`finally`, step `evidence`, and explicit recording
+operations to express pre/post capture at the scope that owns it.
 
 ## Foreground CI
 
@@ -217,8 +258,11 @@ and required features. Foreground mode fills the registered `workspaceId`.
 The repository release gate runs formatting, analysis, every package and
 example test suite, and publication dry-runs before starting real Android,
 iOS, macOS, Linux, web, and Windows regressions. Publication requires every
-job to reach a successful terminal state. Wait for the complete matrix, then
-diagnose from its reports, events, artifacts, and daemon logs in one pass.
+job to reach a successful terminal state. Each platform regression proves a
+business mutation, the complete Flutter gesture/text/keyboard/semantics command
+surface, suite control flow, evidence, and the offline report bundle through
+observable assertions. Wait for the complete matrix, then diagnose from its
+reports, events, artifacts, and daemon logs in one pass.
 
 ## API Discovery
 
@@ -243,6 +287,7 @@ Run the CLI command or the dedicated executable:
 ```bash
 dart run cockpit serve-mcp
 dart run cockpit_mcp
+dart run cockpit serve-mcp --profile dart
 ```
 
 ```json
@@ -264,6 +309,13 @@ and verified artifact downloads to explicit files.
 Every tool crosses the authenticated Supervisor HTTP boundary; the MCP process
 does not construct application services.
 
+Profiles keep tool injection intentional: `core` is the default, while `dart`,
+`flutter`, `app`, `e2e`, and `all` add their capability domains. `flutter`
+includes `dart`; `e2e` includes `app`. Use repeatable `--enable` and `--disable`
+overrides for exact feature names or categories. The Dart profile provides
+analyze, format, fix, test, LSP, pub, package URI/search, and project creation
+without embedding or forwarding the official Dart MCP server.
+
 ## Client Boundary
 
 The public `/api/v2` resources, SSE stream, foundation DTOs, and artifact
@@ -271,8 +323,13 @@ integrity contract are the only client boundary. A future Flutter GUI or
 third-party SDK must use that protocol and must not link Supervisor application
 services in-process.
 
-Generated `report.html` files remain portable run artifacts. They are not a
-server UI and do not require an HTML route in `cockpitd`.
+Generated `cockpit-report/` directories are complete offline run artifacts,
+not server UI. `index.html` embeds its CSS, JavaScript, and canonical report
+data while media uses bundle-relative paths. `report.json` is the stable
+single-file rendering input, and root `manifest.json` covers every exported
+file with ownership, size, media type, and SHA-256. Clients must preserve the
+directory structure and verify the manifest; no HTML route in `cockpitd` is
+required.
 
 See [`../../docs/contracts`](../../docs/contracts) for protocol material and
 [`example/cases`](example/cases) for canonical YAML and JSON cases.

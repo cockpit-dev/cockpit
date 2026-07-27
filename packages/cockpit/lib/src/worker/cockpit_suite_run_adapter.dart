@@ -35,6 +35,7 @@ final class CockpitSuiteRunAdapterFactory {
     required this.workspaceId,
     required this.projectId,
     required this.engineVersion,
+    this.authorizationMode = CockpitAuthorizationMode.restricted,
     required this.runStateRoot,
     required CockpitWorkerDocumentIndex documents,
     required CockpitWorkerSessionProvider sessions,
@@ -62,6 +63,7 @@ final class CockpitSuiteRunAdapterFactory {
   final String workspaceId;
   final String projectId;
   final String engineVersion;
+  final CockpitAuthorizationMode authorizationMode;
   final String runStateRoot;
   final CockpitWorkerDocumentIndex _documents;
   final CockpitWorkerSessionProvider _sessions;
@@ -163,6 +165,7 @@ final class CockpitSuiteRunAdapterFactory {
       workspaceId: workspaceId,
       projectId: projectId,
       engineVersion: engineVersion,
+      authorizationMode: authorizationMode,
       runStateRoot: runStateRoot,
       context: context,
       runId: runId,
@@ -231,8 +234,12 @@ final class CockpitSuiteRunAdapterFactory {
       failure: executionFailure,
       environment: <String, Object?>{
         'engineVersion': engineVersion,
+        'authorizationMode': authorizationMode.name,
         'requiredFeatures': submission.requiredFeatures,
       },
+      artifacts: execution.publishedArtifacts.map(
+        (artifact) => artifact.reference,
+      ),
     );
     await execution.publishCaseCompletions(plan, report);
     final reportRoot = p.join(runStateRoot, 'runs', runId, 'report');
@@ -243,6 +250,8 @@ final class CockpitSuiteRunAdapterFactory {
       files = await const CockpitSuiteReportWriter().write(
         report: report,
         runRoot: reportRoot,
+        sourceRunRoot: p.join(runStateRoot, 'runs', runId),
+        artifactResources: execution.publishedArtifacts,
       );
       if (_artifactPublisher case final publisher?) {
         reportArtifacts = await publisher.publishSuiteReport(
@@ -252,7 +261,18 @@ final class CockpitSuiteRunAdapterFactory {
           cancellation: CockpitRpcCancellation.detached(),
         );
       }
-    } on Object {
+    } on Object catch (error, stackTrace) {
+      _logger.log(
+        'error',
+        'Suite report finalization or publication failed.',
+        fields: <String, Object?>{
+          'workspaceId': workspaceId,
+          'runId': runId,
+          'errorType': error.runtimeType.toString(),
+          'error': error.toString(),
+          'stackTrace': stackTrace.toString(),
+        },
+      );
       finalizationFailure = _suiteFinalizationFailure();
     }
     final terminalOutcome = finalizationFailure == null
@@ -443,6 +463,7 @@ final class _SuiteAttemptExecution
     required this.workspaceId,
     required this.projectId,
     required this.engineVersion,
+    required this.authorizationMode,
     required this.runStateRoot,
     required this.context,
     required this.runId,
@@ -476,6 +497,7 @@ final class _SuiteAttemptExecution
   final String workspaceId;
   final String projectId;
   final String engineVersion;
+  final CockpitAuthorizationMode authorizationMode;
   final String runStateRoot;
   final CockpitWorkspaceOperationContext context;
   final String runId;
@@ -493,6 +515,14 @@ final class _SuiteAttemptExecution
   final CockpitSuiteRowSessionAffinity _rowSessionAffinity;
   final Map<String, Map<String, Future<_SuiteRowResourceBoundary>>>
   _rowBoundaries = <String, Map<String, Future<_SuiteRowResourceBoundary>>>{};
+  final Map<String, CockpitArtifactResource> _publishedArtifacts =
+      <String, CockpitArtifactResource>{};
+
+  List<CockpitArtifactResource> get publishedArtifacts =>
+      List<CockpitArtifactResource>.unmodifiable(
+        _publishedArtifacts.values.toList(growable: false)
+          ..sort((left, right) => left.artifactId.compareTo(right.artifactId)),
+      );
 
   @override
   bool get isCancelled => context.cancellation.isCancelled;
@@ -724,6 +754,9 @@ final class _SuiteAttemptExecution
         automationAdapter: session.automationAdapter,
         captureAdapter: session.captureAdapter,
         recordingAdapter: session.recordingAdapter,
+        systemAutomationAdapter: session.systemAutomationAdapter,
+        systemCaptureAdapter: session.systemCaptureAdapter,
+        systemRecordingAdapter: session.systemRecordingAdapter,
         lowerer: session.lowerer,
         secretResolver: _secretResolver,
         safetyPolicy: _safetyPolicy,
@@ -741,6 +774,7 @@ final class _SuiteAttemptExecution
             caseId: testCase.id,
             attemptId: attemptId,
             engineVersion: engineVersion,
+            authorizationMode: authorizationMode,
           ),
           targetId: session.targetId,
           targetEnvironment: session.environment,
@@ -765,6 +799,16 @@ final class _SuiteAttemptExecution
           deadline: context.deadline,
           cancellation: operationCancellation,
         );
+        for (final artifact in artifacts) {
+          final existing = _publishedArtifacts[artifact.artifactId];
+          if (existing != null &&
+              jsonEncode(existing.toJson()) != jsonEncode(artifact.toJson())) {
+            throw const FormatException(
+              'Published attempt artifact identity changed during the suite.',
+            );
+          }
+          _publishedArtifacts[artifact.artifactId] = artifact;
+        }
       }
       stage = 'resultEvents';
       await _appendResultEvents(

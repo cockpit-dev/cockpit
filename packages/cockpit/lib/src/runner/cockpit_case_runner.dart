@@ -21,6 +21,9 @@ final class CockpitCaseRunner {
     required CockpitAutomationAdapter automationAdapter,
     CockpitCaptureAdapter? captureAdapter,
     CockpitRecordingAdapter? recordingAdapter,
+    CockpitAutomationAdapter? systemAutomationAdapter,
+    CockpitCaptureAdapter? systemCaptureAdapter,
+    CockpitRecordingAdapter? systemRecordingAdapter,
     required CockpitTestSecretResolver secretResolver,
     required CockpitTestSafetyPolicy safetyPolicy,
     CockpitTestBundlePrePublicationValidator? bundlePrePublicationValidator,
@@ -29,6 +32,9 @@ final class CockpitCaseRunner {
   }) : _automationAdapter = automationAdapter,
        _captureAdapter = captureAdapter,
        _recordingAdapter = recordingAdapter,
+       _systemAutomationAdapter = systemAutomationAdapter,
+       _systemCaptureAdapter = systemCaptureAdapter,
+       _systemRecordingAdapter = systemRecordingAdapter,
        _secretResolver = secretResolver,
        _safetyPolicy = safetyPolicy,
        _bundlePrePublicationValidator = bundlePrePublicationValidator,
@@ -38,6 +44,9 @@ final class CockpitCaseRunner {
   final CockpitAutomationAdapter _automationAdapter;
   final CockpitCaptureAdapter? _captureAdapter;
   final CockpitRecordingAdapter? _recordingAdapter;
+  final CockpitAutomationAdapter? _systemAutomationAdapter;
+  final CockpitCaptureAdapter? _systemCaptureAdapter;
+  final CockpitRecordingAdapter? _systemRecordingAdapter;
   final CockpitTestSecretResolver _secretResolver;
   final CockpitTestSafetyPolicy _safetyPolicy;
   final CockpitTestBundlePrePublicationValidator?
@@ -115,8 +124,17 @@ final class CockpitCaseRunner {
     }
 
     CockpitCapabilities capabilities;
+    CockpitCapabilities? systemCapabilities;
     try {
       capabilities = await _automationAdapter.describeCapabilities();
+      if (_systemAutomationAdapter != null) {
+        try {
+          systemCapabilities = await _systemAutomationAdapter
+              .describeCapabilities();
+        } on Object {
+          systemCapabilities = null;
+        }
+      }
     } catch (_) {
       return _publishPreparationFailure(
         compiled: compiled,
@@ -135,6 +153,7 @@ final class CockpitCaseRunner {
       plan: plan,
       context: context,
       capabilities: capabilities,
+      systemCapabilities: systemCapabilities,
       targetEnvironment: targetEnvironment,
     );
     if (preflightError != null) {
@@ -161,6 +180,10 @@ final class CockpitCaseRunner {
       runContext: context,
       plan: plan,
       capabilities: capabilities,
+      systemAutomationAdapter: _systemAutomationAdapter,
+      systemCaptureAdapter: _systemCaptureAdapter,
+      systemRecordingAdapter: _systemRecordingAdapter,
+      systemCapabilities: systemCapabilities,
       targetEnvironment: targetEnvironment,
     );
     final kernel = CockpitCaseExecutionKernel(
@@ -193,19 +216,26 @@ final class CockpitCaseRunner {
     required CockpitTestExecutionPlan plan,
     required CockpitTestRunContext context,
     required CockpitCapabilities capabilities,
+    required CockpitCapabilities? systemCapabilities,
     required CockpitTestTargetEnvironment targetEnvironment,
   }) async {
     final target = plan.target;
     final acceptsTargetKind = switch (_lowerer.backend) {
-      CockpitTestActionBackend.flutter => target.targetKind == 'flutterApp',
-      CockpitTestActionBackend.system => target.targetKind != 'flutterApp',
+      CockpitTestActionBackend.flutter =>
+        target.targetKind == CockpitTargetKind.flutterApp.name &&
+            target.plane == CockpitTestPlane.semantic,
+      CockpitTestActionBackend.system =>
+        target.targetKind != CockpitTargetKind.flutterApp.name ||
+            target.plane != CockpitTestPlane.semantic,
     };
     if (!acceptsTargetKind) {
       return CockpitTestError(
         code: CockpitTestErrorCode.targetMismatch,
         message: _lowerer.backend == CockpitTestActionBackend.flutter
-            ? 'Flutter case runner requires targetKind flutterApp.'
-            : 'System case runner requires a non-Flutter targetKind.',
+            ? 'Flutter case runner requires targetKind flutterApp on the '
+                  'semantic plane.'
+            : 'System case runner cannot execute a Flutter semantic-plane '
+                  'case.',
       );
     }
     if (target.platform != 'flutter' &&
@@ -217,9 +247,10 @@ final class CockpitCaseRunner {
             'driver platform ${capabilities.platform}.',
       );
     }
-    final available = capabilities.supportedCommands
-        .map((command) => command.name)
-        .toSet();
+    final available = <String>{
+      ...capabilities.supportedCommands.map((command) => command.name),
+      ...?systemCapabilities?.supportedCommands.map((command) => command.name),
+    };
     final missing = target.requiredCapabilities.difference(available);
     if (missing.isNotEmpty) {
       return CockpitTestError(
@@ -231,12 +262,25 @@ final class CockpitCaseRunner {
     for (final node in plan.allNodes) {
       final operation = node.operation;
       if (operation is CockpitTestActionPlanOperation) {
-        final lowered = _lowerer.lower(
+        final plane = cockpitRequestedPlane(node, target.plane);
+        final driver = _preflightDriver(
+          plane,
+          capabilities,
+          systemCapabilities,
+        );
+        if (driver == null) {
+          return CockpitTestError(
+            code: CockpitTestErrorCode.unsupportedAction,
+            message: 'No driver is available for ${plane.name} plane.',
+            stepId: node.stepId,
+          );
+        }
+        final lowered = driver.lowerer.lower(
           action: operation.action,
           commandId: node.executionId,
           timeoutMs: node.timeoutMs,
-          requestedPlane: target.plane,
-          capabilities: capabilities,
+          requestedPlane: plane,
+          capabilities: driver.capabilities,
         );
         if (!lowered.isSuccess) {
           return _withStep(lowered.error!, node.stepId);
@@ -259,24 +303,28 @@ final class CockpitCaseRunner {
           return safetyError;
         }
       } else if (operation is CockpitTestIfPlanOperation) {
+        final plane = cockpitRequestedPlane(node, target.plane);
         final error = _preflightCondition(
           operation.condition,
           node,
-          target.plane,
+          plane,
           capabilities,
+          systemCapabilities,
         );
         if (error != null) return error;
       } else if (operation is CockpitTestLoopPlanOperation) {
+        final plane = cockpitRequestedPlane(node, target.plane);
         final error = _preflightCondition(
           operation.condition,
           node,
-          target.plane,
+          plane,
           capabilities,
+          systemCapabilities,
         );
         if (error != null) return error;
       } else if ((operation is CockpitTestStartRecordingPlanOperation ||
               operation is CockpitTestStopRecordingPlanOperation) &&
-          _recordingAdapter == null) {
+          !_hasRecordingAdapter(cockpitRequestedPlane(node, target.plane))) {
         return CockpitTestError(
           code: CockpitTestErrorCode.unsupportedAction,
           message:
@@ -293,17 +341,55 @@ final class CockpitCaseRunner {
     CockpitTestExecutionNode node,
     CockpitTestPlane plane,
     CockpitCapabilities capabilities,
+    CockpitCapabilities? systemCapabilities,
   ) {
-    final lowered = _lowerer.lowerCondition(
+    final driver = _preflightDriver(plane, capabilities, systemCapabilities);
+    if (driver == null) {
+      return CockpitTestError(
+        code: CockpitTestErrorCode.unsupportedAction,
+        message: 'No driver is available for ${plane.name} plane.',
+        stepId: node.stepId,
+      );
+    }
+    final lowered = driver.lowerer.lowerCondition(
       condition: condition,
       commandId: '${node.executionId}/condition',
       timeoutMs: node.timeoutMs,
       requestedPlane: plane,
-      capabilities: capabilities,
+      capabilities: driver.capabilities,
     );
     return lowered.error == null
         ? null
         : _withStep(lowered.error!, node.stepId);
+  }
+
+  _CockpitPreflightDriver? _preflightDriver(
+    CockpitTestPlane plane,
+    CockpitCapabilities capabilities,
+    CockpitCapabilities? systemCapabilities,
+  ) {
+    if (_lowerer.backend == CockpitTestActionBackend.system) {
+      return plane == CockpitTestPlane.semantic
+          ? null
+          : _CockpitPreflightDriver(_lowerer, capabilities);
+    }
+    if (plane == CockpitTestPlane.semantic) {
+      return _CockpitPreflightDriver(_lowerer, capabilities);
+    }
+    return systemCapabilities == null
+        ? null
+        : _CockpitPreflightDriver(
+            const CockpitTestActionLowerer.system(),
+            systemCapabilities,
+          );
+  }
+
+  bool _hasRecordingAdapter(CockpitTestPlane plane) {
+    if (_lowerer.backend == CockpitTestActionBackend.system ||
+        plane == CockpitTestPlane.semantic) {
+      return _recordingAdapter != null;
+    }
+    return _systemRecordingAdapter != null;
   }
 
   Future<CockpitTestAttemptResult> _publishPreparationFailure({
@@ -430,6 +516,13 @@ final class CockpitCaseRunner {
       );
     }
   }
+}
+
+final class _CockpitPreflightDriver {
+  const _CockpitPreflightDriver(this.lowerer, this.capabilities);
+
+  final CockpitTestActionLowerer lowerer;
+  final CockpitCapabilities capabilities;
 }
 
 CockpitTestError _withStep(CockpitTestError error, String stepId) =>

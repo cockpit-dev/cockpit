@@ -24,6 +24,10 @@ final class CockpitCaseDriverDelegate implements CockpitCaseExecutionDelegate {
     required CockpitTestRunContext runContext,
     required CockpitTestExecutionPlan plan,
     required CockpitCapabilities capabilities,
+    CockpitAutomationAdapter? systemAutomationAdapter,
+    CockpitCaptureAdapter? systemCaptureAdapter,
+    CockpitRecordingAdapter? systemRecordingAdapter,
+    CockpitCapabilities? systemCapabilities,
     required CockpitTestTargetEnvironment targetEnvironment,
   }) : _automationAdapter = automationAdapter,
        _captureAdapter = captureAdapter,
@@ -35,6 +39,10 @@ final class CockpitCaseDriverDelegate implements CockpitCaseExecutionDelegate {
        _runContext = runContext,
        _plan = plan,
        _capabilities = capabilities,
+       _systemAutomationAdapter = systemAutomationAdapter,
+       _systemCaptureAdapter = systemCaptureAdapter,
+       _systemRecordingAdapter = systemRecordingAdapter,
+       _systemCapabilities = systemCapabilities,
        _targetEnvironment = targetEnvironment;
 
   final CockpitAutomationAdapter _automationAdapter;
@@ -47,8 +55,13 @@ final class CockpitCaseDriverDelegate implements CockpitCaseExecutionDelegate {
   final CockpitTestRunContext _runContext;
   final CockpitTestExecutionPlan _plan;
   final CockpitCapabilities _capabilities;
+  final CockpitAutomationAdapter? _systemAutomationAdapter;
+  final CockpitCaptureAdapter? _systemCaptureAdapter;
+  final CockpitRecordingAdapter? _systemRecordingAdapter;
+  final CockpitCapabilities? _systemCapabilities;
   final CockpitTestTargetEnvironment _targetEnvironment;
   CockpitRecordingSession? _recordingSession;
+  CockpitRecordingAdapter? _activeRecordingAdapter;
 
   @override
   Future<CockpitTestKernelOperationResult> executeAction({
@@ -94,14 +107,25 @@ final class CockpitCaseDriverDelegate implements CockpitCaseExecutionDelegate {
     if (!operationLease.isActive) {
       return _abortedOperation(node);
     }
+    final requestedPlane = cockpitRequestedPlane(node, _plan.target.plane);
+    final driver = _driverFor(requestedPlane);
+    if (driver == null) {
+      return CockpitTestKernelOperationResult.failure(
+        CockpitTestError(
+          code: CockpitTestErrorCode.unsupportedAction,
+          message: 'No driver is available for ${requestedPlane.name} plane.',
+          stepId: node.stepId,
+        ),
+      );
+    }
     CockpitTestLoweringResult lowering;
     try {
-      lowering = _lowerer.lower(
+      lowering = driver.lowerer.lower(
         action: resolved,
         commandId: node.executionId,
         timeoutMs: timeout.inMilliseconds,
-        requestedPlane: _plan.target.plane,
-        capabilities: _capabilities,
+        requestedPlane: requestedPlane,
+        capabilities: driver.capabilities,
       );
     } on FormatException {
       return CockpitTestKernelOperationResult.failure(
@@ -123,8 +147,8 @@ final class CockpitCaseDriverDelegate implements CockpitCaseExecutionDelegate {
       if (!operationLease.isActive) {
         return _abortedOperation(node);
       }
-      _registerAbort(operationLease, _adapterFor(lowered.command));
-      execution = await _execute(lowered.command);
+      _registerAbort(operationLease, _adapterFor(lowered.command, driver));
+      execution = await _execute(lowered.command, driver);
     } catch (_) {
       operationLease.clearAbort();
       if (!operationLease.isActive) {
@@ -157,6 +181,7 @@ final class CockpitCaseDriverDelegate implements CockpitCaseExecutionDelegate {
       commandSucceeded: commandError == null,
       timeout: timeout,
       lease: operationLease,
+      captureAdapter: driver.captureAdapter,
     );
     if (!operationLease.isActive) {
       return _abortedOperation(node);
@@ -187,12 +212,25 @@ final class CockpitCaseDriverDelegate implements CockpitCaseExecutionDelegate {
     required bool cleanup,
     required CockpitCaseOperationLease lease,
   }) async {
-    final lowering = _lowerer.lowerCondition(
+    final requestedPlane = cockpitRequestedPlane(node, _plan.target.plane);
+    final driver = _driverFor(requestedPlane);
+    if (driver == null) {
+      return CockpitTestKernelConditionResult(
+        evaluation: CockpitTestConditionEvaluation.error(
+          CockpitTestError(
+            code: CockpitTestErrorCode.unsupportedAction,
+            message: 'No driver is available for ${requestedPlane.name} plane.',
+            stepId: node.stepId,
+          ),
+        ),
+      );
+    }
+    final lowering = driver.lowerer.lowerCondition(
       condition: condition,
       commandId: '${node.executionId}/condition',
       timeoutMs: timeout.inMilliseconds,
-      requestedPlane: _plan.target.plane,
-      capabilities: _capabilities,
+      requestedPlane: requestedPlane,
+      capabilities: driver.capabilities,
     );
     if (!lowering.isSuccess) {
       return CockpitTestKernelConditionResult(
@@ -206,8 +244,8 @@ final class CockpitCaseDriverDelegate implements CockpitCaseExecutionDelegate {
       if (!lease.isActive) {
         return _abortedCondition(node);
       }
-      _registerAbort(lease, _automationAdapter);
-      final execution = await _automationAdapter.execute(lowered.command);
+      _registerAbort(lease, driver.automationAdapter);
+      final execution = await driver.automationAdapter.execute(lowered.command);
       lease.clearAbort();
       var evidence = const <String>[];
       if (!lease.tryCommit(() {
@@ -230,7 +268,8 @@ final class CockpitCaseDriverDelegate implements CockpitCaseExecutionDelegate {
       final commandError = execution.result.error;
       if (commandError != null &&
           (commandError.code == CockpitCommandError.targetNotFoundCode ||
-              commandError.code == CockpitCommandError.assertionFailedCode)) {
+              commandError.code == CockpitCommandError.assertionFailedCode ||
+              commandError.code == CockpitCommandError.timeoutCode)) {
         return CockpitTestKernelConditionResult(
           evaluation: const CockpitTestConditionEvaluation.notMatched(),
           actualPlane: lowered.actualPlane,
@@ -274,7 +313,8 @@ final class CockpitCaseDriverDelegate implements CockpitCaseExecutionDelegate {
     required bool cleanup,
     required CockpitCaseOperationLease lease,
   }) async {
-    final adapter = _recordingAdapter;
+    final requestedPlane = cockpitRequestedPlane(node, _plan.target.plane);
+    final adapter = _driverFor(requestedPlane)?.recordingAdapter;
     if (adapter == null) {
       return CockpitTestKernelOperationResult.failure(
         _recordingError(node, 'Recording adapter is unavailable.'),
@@ -306,7 +346,10 @@ final class CockpitCaseDriverDelegate implements CockpitCaseExecutionDelegate {
         ),
       );
       lease.clearAbort();
-      if (!lease.tryCommit(() => _recordingSession = session)) {
+      if (!lease.tryCommit(() {
+        _recordingSession = session;
+        _activeRecordingAdapter = adapter;
+      })) {
         await _stopUnownedRecording(adapter);
         return _abortedOperation(node);
       }
@@ -368,7 +411,7 @@ final class CockpitCaseDriverDelegate implements CockpitCaseExecutionDelegate {
     CockpitTestExecutionNode node,
     CockpitCaseOperationLease lease,
   ) async {
-    final adapter = _recordingAdapter;
+    final adapter = _activeRecordingAdapter;
     if (adapter == null) {
       return CockpitTestKernelOperationResult.failure(
         _recordingError(node, 'Recording adapter is unavailable.'),
@@ -413,6 +456,7 @@ final class CockpitCaseDriverDelegate implements CockpitCaseExecutionDelegate {
       if (!lease.tryCommit(() {
         if (identical(_recordingSession, session)) {
           _recordingSession = null;
+          _activeRecordingAdapter = null;
           released = true;
         }
       })) {
@@ -436,21 +480,55 @@ final class CockpitCaseDriverDelegate implements CockpitCaseExecutionDelegate {
     }
   }
 
-  Future<CockpitCommandExecution> _execute(CockpitCommand command) {
+  Future<CockpitCommandExecution> _execute(
+    CockpitCommand command,
+    _CockpitCaseDriver driver,
+  ) {
     if (command.commandType == CockpitCommandType.captureScreenshot) {
-      final adapter = _captureAdapter;
+      final adapter = driver.captureAdapter;
       if (adapter == null) {
         throw StateError('Screenshot capture adapter is unavailable.');
       }
       return adapter.capture(command);
     }
-    return _automationAdapter.execute(command);
+    return driver.automationAdapter.execute(command);
   }
 
-  Object _adapterFor(CockpitCommand command) =>
+  Object _adapterFor(CockpitCommand command, _CockpitCaseDriver driver) =>
       command.commandType == CockpitCommandType.captureScreenshot
-      ? _captureAdapter ?? _automationAdapter
-      : _automationAdapter;
+      ? driver.captureAdapter ?? driver.automationAdapter
+      : driver.automationAdapter;
+
+  _CockpitCaseDriver? _driverFor(CockpitTestPlane plane) {
+    if (_lowerer.backend == CockpitTestActionBackend.system) {
+      return _CockpitCaseDriver(
+        automationAdapter: _automationAdapter,
+        captureAdapter: _captureAdapter,
+        recordingAdapter: _recordingAdapter,
+        lowerer: _lowerer,
+        capabilities: _capabilities,
+      );
+    }
+    if (plane == CockpitTestPlane.semantic) {
+      return _CockpitCaseDriver(
+        automationAdapter: _automationAdapter,
+        captureAdapter: _captureAdapter,
+        recordingAdapter: _recordingAdapter,
+        lowerer: _lowerer,
+        capabilities: _capabilities,
+      );
+    }
+    final automation = _systemAutomationAdapter;
+    final capabilities = _systemCapabilities;
+    if (automation == null || capabilities == null) return null;
+    return _CockpitCaseDriver(
+      automationAdapter: automation,
+      captureAdapter: _systemCaptureAdapter,
+      recordingAdapter: _systemRecordingAdapter,
+      lowerer: const CockpitTestActionLowerer.system(),
+      capabilities: capabilities,
+    );
+  }
 
   void _registerAbort(CockpitCaseOperationLease lease, Object adapter) {
     if (adapter case CockpitActiveOperationAborter aborter) {
@@ -473,6 +551,7 @@ final class CockpitCaseDriverDelegate implements CockpitCaseExecutionDelegate {
     required bool commandSucceeded,
     required Duration timeout,
     required CockpitCaseOperationLease lease,
+    required CockpitCaptureAdapter? captureAdapter,
   }) async {
     final policy = node.evidence;
     final artifactIds = <String>[];
@@ -483,7 +562,7 @@ final class CockpitCaseDriverDelegate implements CockpitCaseExecutionDelegate {
       if (!lease.isActive) {
         return const _EvidenceCollection(artifactIds: <String>[]);
       }
-      final adapter = _captureAdapter;
+      final adapter = captureAdapter;
       if (adapter == null) {
         firstError = _evidenceError(node, 'Screenshot adapter is unavailable.');
       } else {
@@ -610,7 +689,8 @@ bool _shouldCollect(CockpitTestEvidenceMode mode, bool succeeded) =>
     };
 
 CockpitTestError _commandError(CockpitCommandResult result, String stepId) {
-  final code = switch (result.error?.code) {
+  final commandError = result.error;
+  final code = switch (commandError?.code) {
     CockpitCommandError.timeoutCode => CockpitTestErrorCode.timeout,
     CockpitCommandError.assertionFailedCode ||
     CockpitCommandError.targetNotFoundCode ||
@@ -624,8 +704,14 @@ CockpitTestError _commandError(CockpitCommandResult result, String stepId) {
   };
   return CockpitTestError(
     code: code,
-    message: 'Driver command ${result.commandType.name} failed.',
+    message:
+        commandError?.message ??
+        'Driver command ${result.commandType.name} failed.',
     stepId: stepId,
+    details: <String, Object?>{
+      'commandType': result.commandType.name,
+      if (commandError != null) 'driverError': commandError.toJson(),
+    },
   );
 }
 
@@ -662,4 +748,20 @@ final class _EvidenceCollection {
 
   final List<String> artifactIds;
   final CockpitTestError? error;
+}
+
+final class _CockpitCaseDriver {
+  const _CockpitCaseDriver({
+    required this.automationAdapter,
+    required this.captureAdapter,
+    required this.recordingAdapter,
+    required this.lowerer,
+    required this.capabilities,
+  });
+
+  final CockpitAutomationAdapter automationAdapter;
+  final CockpitCaptureAdapter? captureAdapter;
+  final CockpitRecordingAdapter? recordingAdapter;
+  final CockpitTestActionLowerer lowerer;
+  final CockpitCapabilities capabilities;
 }

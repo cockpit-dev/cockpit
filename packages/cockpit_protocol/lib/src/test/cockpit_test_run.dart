@@ -1,3 +1,4 @@
+import '../foundation/cockpit_authorization_mode.dart';
 import '../control/cockpit_locator_resolution.dart';
 import 'cockpit_test_error.dart';
 import 'cockpit_test_diagnostic.dart';
@@ -36,6 +37,7 @@ final class CockpitTestRunContext {
     required this.caseId,
     required this.attemptId,
     required this.engineVersion,
+    this.authorizationMode = CockpitAuthorizationMode.restricted,
   }) {
     for (final entry in <String, String>{
       'projectId': projectId,
@@ -55,6 +57,7 @@ final class CockpitTestRunContext {
   final String caseId;
   final String attemptId;
   final String engineVersion;
+  final CockpitAuthorizationMode authorizationMode;
 
   Map<String, Object?> toJson() => <String, Object?>{
     'projectId': projectId,
@@ -63,6 +66,7 @@ final class CockpitTestRunContext {
     'caseId': caseId,
     'attemptId': attemptId,
     'engineVersion': engineVersion,
+    'authorizationMode': authorizationMode.name,
   };
 
   factory CockpitTestRunContext.fromJson(Object? value, {String path = r'$'}) {
@@ -74,6 +78,7 @@ final class CockpitTestRunContext {
       'caseId',
       'attemptId',
       'engineVersion',
+      'authorizationMode',
     };
     CockpitTestValueReader.keys(json, fields, path, required: fields);
     String id(String key) =>
@@ -87,6 +92,11 @@ final class CockpitTestRunContext {
       engineVersion: CockpitTestValueReader.string(
         json['engineVersion'],
         '$path.engineVersion',
+      ),
+      authorizationMode: CockpitTestValueReader.enumeration(
+        json['authorizationMode'],
+        CockpitAuthorizationMode.values,
+        '$path.authorizationMode',
       ),
     );
   }
@@ -164,6 +174,10 @@ final class CockpitTestStepResult {
     required this.stepId,
     required this.executionId,
     required this.section,
+    this.description,
+    this.operation,
+    this.timeoutMs,
+    this.definitionPath,
     required this.status,
     required this.startedAt,
     required this.durationMs,
@@ -180,6 +194,18 @@ final class CockpitTestStepResult {
        evidence = List<String>.unmodifiable(evidence) {
     CockpitTestValueReader.string(stepId, r'$.stepId', id: true);
     CockpitTestValueReader.string(executionId, r'$.executionId');
+    if (description != null) {
+      CockpitTestValueReader.string(description, r'$.description');
+    }
+    if (operation != null) {
+      CockpitTestValueReader.string(operation, r'$.operation');
+    }
+    if (timeoutMs != null && timeoutMs! <= 0) {
+      throw const FormatException('Step result timeoutMs must be positive.');
+    }
+    if (definitionPath != null) {
+      CockpitTestValueReader.string(definitionPath, r'$.definitionPath');
+    }
     if (!const <String>{'setup', 'main', 'finally'}.contains(section)) {
       throw const FormatException(
         'Step section must be setup, main, or finally.',
@@ -224,6 +250,10 @@ final class CockpitTestStepResult {
   final String stepId;
   final String executionId;
   final String section;
+  final String? description;
+  final String? operation;
+  final int? timeoutMs;
+  final String? definitionPath;
   final CockpitTestStepStatus status;
   final DateTime startedAt;
   final int durationMs;
@@ -241,6 +271,10 @@ final class CockpitTestStepResult {
     'stepId': stepId,
     'executionId': executionId,
     'section': section,
+    if (description != null) 'description': description,
+    if (operation != null) 'operation': operation,
+    if (timeoutMs != null) 'timeoutMs': timeoutMs,
+    if (definitionPath != null) 'definitionPath': definitionPath,
     'status': status.name,
     'startedAt': startedAt.toUtc().toIso8601String(),
     'durationMs': durationMs,
@@ -264,6 +298,10 @@ final class CockpitTestStepResult {
         'stepId',
         'executionId',
         'section',
+        'description',
+        'operation',
+        'timeoutMs',
+        'definitionPath',
         'status',
         'startedAt',
         'durationMs',
@@ -299,6 +337,25 @@ final class CockpitTestStepResult {
         '$path.executionId',
       ),
       section: CockpitTestValueReader.string(json['section'], '$path.section'),
+      description: CockpitTestValueReader.optionalString(
+        json['description'],
+        '$path.description',
+      ),
+      operation: CockpitTestValueReader.optionalString(
+        json['operation'],
+        '$path.operation',
+      ),
+      timeoutMs: json['timeoutMs'] == null
+          ? null
+          : CockpitTestValueReader.integer(
+              json['timeoutMs'],
+              '$path.timeoutMs',
+              minimum: 1,
+            ),
+      definitionPath: CockpitTestValueReader.optionalString(
+        json['definitionPath'],
+        '$path.definitionPath',
+      ),
       status: CockpitTestValueReader.enumeration(
         json['status'],
         CockpitTestStepStatus.values,

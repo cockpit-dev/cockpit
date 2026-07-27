@@ -716,11 +716,24 @@ void _validateLocatorReferences(
   _AddDiagnostic add,
 ) {
   for (final entry in <String, CockpitTestTemplateValue?>{
-    'value': locator.value,
+    'text': locator.text,
+    'label': locator.label,
+    'matchMode': locator.matchMode,
+    'nativeId': locator.nativeId,
+    'testId': locator.testId,
+    'role': locator.role,
+    'type': locator.type,
+    'path': locator.path,
+    'visual': locator.visual,
     'x': locator.x,
     'y': locator.y,
     'threshold': locator.threshold,
     'index': locator.index,
+    'enabled': locator.enabled,
+    'selected': locator.selected,
+    'checked': locator.checked,
+    'focused': locator.focused,
+    'clickable': locator.clickable,
   }.entries) {
     final value = entry.value;
     if (value != null) {
@@ -734,6 +747,23 @@ void _validateLocatorReferences(
       variables,
       add,
     );
+  }
+  for (final entry in <String, CockpitTestLocatorTemplate?>{
+    'child': locator.child,
+    'descendant': locator.descendant,
+    'above': locator.above,
+    'below': locator.below,
+    'leftOf': locator.leftOf,
+    'rightOf': locator.rightOf,
+  }.entries) {
+    if (entry.value != null) {
+      _validateLocatorReferences(
+        entry.value!,
+        '$path.${entry.key}',
+        variables,
+        add,
+      );
+    }
   }
   for (var index = 0; index < locator.fallbacks.length; index += 1) {
     _validateLocatorReferences(

@@ -1,11 +1,46 @@
 import 'cockpit_mcp_feature_category.dart';
 import 'cockpit_mcp_feature_descriptor.dart';
 
+enum CockpitMcpProfile {
+  core,
+  dart,
+  flutter,
+  app,
+  e2e,
+  all;
+
+  static CockpitMcpProfile parse(String value) {
+    for (final profile in values) {
+      if (profile.name == value) return profile;
+    }
+    throw FormatException('Unknown MCP profile $value.');
+  }
+}
+
 final class CockpitMcpFeatureConfiguration {
   const CockpitMcpFeatureConfiguration({
     this.enabledNames = const <String>{},
     this.disabledNames = const <String>{},
   });
+
+  factory CockpitMcpFeatureConfiguration.forProfile(
+    CockpitMcpProfile profile, {
+    Set<String> enabledNames = const <String>{},
+    Set<String> disabledNames = const <String>{},
+  }) {
+    final profileNames = switch (profile) {
+      CockpitMcpProfile.core => const <String>{},
+      CockpitMcpProfile.dart => const <String>{'dart'},
+      CockpitMcpProfile.flutter => const <String>{'dart', 'flutter'},
+      CockpitMcpProfile.app => const <String>{'app'},
+      CockpitMcpProfile.e2e => const <String>{'app', 'e2e'},
+      CockpitMcpProfile.all => const <String>{'all'},
+    };
+    return CockpitMcpFeatureConfiguration(
+      enabledNames: <String>{...profileNames, ...enabledNames},
+      disabledNames: disabledNames,
+    );
+  }
 
   final Set<String> enabledNames;
   final Set<String> disabledNames;

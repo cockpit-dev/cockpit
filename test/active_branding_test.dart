@@ -162,7 +162,7 @@ void main() {
     for (final content in <String>[readme, readmeZh]) {
       expect(content, contains('/api/v2'));
       expect(content, contains('cockpit_mcp'));
-      expect(content, contains('report.html'));
+      expect(content, contains('index.html'));
       expect(content, isNot(contains('run-script --script')));
       expect(content, isNot(contains('control-workflow')));
     }

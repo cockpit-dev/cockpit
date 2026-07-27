@@ -169,6 +169,13 @@ final class CockpitSystemControlParameterSets {
       description:
           'Platform key token, for example enter, escape, tab, or KEYCODE_ENTER.',
     ),
+    CockpitSystemControlParameter(
+      name: 'repeat',
+      valueType: CockpitSystemControlParameterType.integer,
+      minimum: 1,
+      maximum: 500,
+      description: 'Number of key presses in the same platform operation.',
+    ),
   ];
 
   static const systemDialogDecision = <CockpitSystemControlParameter>[

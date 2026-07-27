@@ -5,6 +5,9 @@ enum CockpitTestActionKind {
   longPress,
   doubleTap,
   enterText,
+  eraseText,
+  copyText,
+  pasteText,
   focusTextInput,
   setTextEditingValue,
   sendTextInputAction,
@@ -31,6 +34,8 @@ enum CockpitTestActionKind {
   waitFor,
   assertVisible,
   assertText,
+  assertScreenshot,
+  travel,
   system,
   captureScreenshot,
   collectSnapshot,
@@ -39,6 +44,8 @@ enum CockpitTestActionKind {
 enum CockpitTestActionField {
   activation('activation', CockpitTestValueType.string),
   durationMs('durationMs', CockpitTestValueType.integer),
+  characters('characters', CockpitTestValueType.integer),
+  intervalMs('intervalMs', CockpitTestValueType.integer),
   text('text', CockpitTestValueType.string),
   selectionStart('selectionStart', CockpitTestValueType.integer),
   selectionEnd('selectionEnd', CockpitTestValueType.integer),
@@ -61,6 +68,9 @@ enum CockpitTestActionField {
   quietMs('quietMs', CockpitTestValueType.integer),
   expected('expected', CockpitTestValueType.boolean),
   matchMode('matchMode', CockpitTestValueType.string),
+  baseline('baseline', CockpitTestValueType.string),
+  similarity('similarity', CockpitTestValueType.number),
+  route('route', CockpitTestValueType.json),
   artifactName('artifactName', CockpitTestValueType.string),
   captureOptions('captureOptions', CockpitTestValueType.json),
   systemName('name', CockpitTestValueType.string),
@@ -119,6 +129,21 @@ cockpitTestActionSpecs = <CockpitTestActionKind, CockpitTestActionSpec>{
     allowedFields: <CockpitTestActionField>{CockpitTestActionField.text},
     requiredFields: <CockpitTestActionField>{CockpitTestActionField.text},
     secretFields: <CockpitTestActionField>{CockpitTestActionField.text},
+    settlement: CockpitTestSettlement.uiIdle,
+  ),
+  CockpitTestActionKind.eraseText: CockpitTestActionSpec(
+    locator: CockpitTestLocatorRequirement.optional,
+    allowedFields: <CockpitTestActionField>{CockpitTestActionField.characters},
+    settlement: CockpitTestSettlement.uiIdle,
+  ),
+  CockpitTestActionKind.copyText: CockpitTestActionSpec(
+    locator: CockpitTestLocatorRequirement.required,
+    allowedFields: _none,
+    settlement: CockpitTestSettlement.none,
+  ),
+  CockpitTestActionKind.pasteText: CockpitTestActionSpec(
+    locator: CockpitTestLocatorRequirement.optional,
+    allowedFields: _none,
     settlement: CockpitTestSettlement.uiIdle,
   ),
   CockpitTestActionKind.focusTextInput: CockpitTestActionSpec(
@@ -314,15 +339,32 @@ cockpitTestActionSpecs = <CockpitTestActionKind, CockpitTestActionSpec>{
     requiredFields: <CockpitTestActionField>{CockpitTestActionField.text},
     settlement: CockpitTestSettlement.none,
   ),
+  CockpitTestActionKind.assertScreenshot: CockpitTestActionSpec(
+    locator: CockpitTestLocatorRequirement.forbidden,
+    allowedFields: <CockpitTestActionField>{
+      CockpitTestActionField.baseline,
+      CockpitTestActionField.similarity,
+      CockpitTestActionField.artifactName,
+    },
+    requiredFields: <CockpitTestActionField>{CockpitTestActionField.baseline},
+    settlement: CockpitTestSettlement.none,
+  ),
+  CockpitTestActionKind.travel: CockpitTestActionSpec(
+    locator: CockpitTestLocatorRequirement.forbidden,
+    allowedFields: <CockpitTestActionField>{
+      CockpitTestActionField.route,
+      CockpitTestActionField.intervalMs,
+    },
+    requiredFields: <CockpitTestActionField>{CockpitTestActionField.route},
+    settlement: CockpitTestSettlement.none,
+  ),
   CockpitTestActionKind.system: CockpitTestActionSpec(
     locator: CockpitTestLocatorRequirement.forbidden,
     allowedFields: <CockpitTestActionField>{
       CockpitTestActionField.systemName,
       CockpitTestActionField.systemParameters,
     },
-    requiredFields: <CockpitTestActionField>{
-      CockpitTestActionField.systemName,
-    },
+    requiredFields: <CockpitTestActionField>{CockpitTestActionField.systemName},
     settlement: CockpitTestSettlement.uiIdle,
   ),
   CockpitTestActionKind.captureScreenshot: CockpitTestActionSpec(

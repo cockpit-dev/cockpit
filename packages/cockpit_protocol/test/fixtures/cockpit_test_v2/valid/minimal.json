@@ -13,8 +13,7 @@
       "action": {
         "type": "tap",
         "locator": {
-          "strategy": "testId",
-          "value": "continueButton"
+          "testId": "continueButton"
         }
       }
     }

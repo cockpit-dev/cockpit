@@ -23,7 +23,7 @@ It provides:
 - dependency DAGs, fixtures, matrices, retries, bounded concurrency, and
   fail-fast suites;
 - durable run events, restart-safe suite checkpoints, exact session affinity,
-  cancellation, artifacts, and JSON/JUnit/HTML/AI reports;
+  cancellation, artifacts, and complete offline regression report bundles;
 - a per-user authenticated Supervisor with isolated per-workspace workers;
 - resource-oriented CLI, HTTP/SSE API, and MCP clients without a bundled GUI.
 
@@ -144,6 +144,12 @@ dart run cockpit daemon policy apply --file authorization.json --restart
 dart run cockpit daemon policy show
 ```
 
+For an explicitly unrestricted local session, start the Supervisor with
+`dart run cockpit daemon start --yolo` (or `daemon restart --yolo`). YOLO
+applies only to that daemon process; a start or restart without the flag uses
+the persisted restricted policy. `daemon status`, attempt manifests, and suite
+`report.json` record the effective `authorizationMode`.
+
 Only named environment secrets are copied into workspace workers. A policy may
 explicitly authorize `production` or `unknown`; the default policy does not.
 Quarantined leases remain blocked until verified cleanup succeeds. The
@@ -178,6 +184,15 @@ installation and lifecycle use `devicectl` where available. Cockpit reports
 unsupported or unavailable capabilities instead of claiming control it cannot
 prove.
 
+For an installed Flutter app or a native app embedding Flutter, register
+`targetKind: flutterApp` with an `appId` and no entrypoint, then author the case
+on the `native` plane. Cockpit launches it through system control and drives the
+complete native accessibility tree without an application dependency. The
+Flutter-aware resolver locally collapses duplicate ancestor semantics and
+prefers actionable matches while leaving native screens, platform views,
+WebViews, and distinct list rows intact. Use an entrypoint-backed Flutter target
+and the `semantic` plane only when the optional development bridge is required.
+
 Flutter targets accept a structured launch configuration across CLI, MCP, and
 `operation run`. Cockpit owns the entrypoint, device, mode, flavor, and remote
 control flags; callers can supply repeatable dart defines, define files,
@@ -210,6 +225,28 @@ defaults to 30 minutes and allows up to 6 hours; `suite run --timeout-ms`
 defaults to 2 hours and allows up to 24 hours. Step and cleanup timeouts remain
 independent inner budgets.
 
+Each step may explicitly select `semantic`, `native`, `visual`, or `coordinate`
+with `plane`. Without an override, Cockpit routes screenshot assertions to the
+visual plane, system and location-travel actions to native control, visual and
+coordinate locators to their matching planes, and native-only constraints to
+native accessibility. Other steps inherit the case plane. An entrypoint-backed
+Flutter session keeps the semantic driver and a secondary system driver for the
+same app/device, so one case can inspect Widgets and then cross a native screen,
+platform view, permission dialog, or visual-only surface without changing the
+application under test.
+The authoritative secondary capability profile is the sanitized
+`target.inspect` operation result at `output.systemControl`; clients must not
+reconstruct it from `app.get`, whose platform app and process identities are
+intentionally redacted.
+
+The shared action vocabulary includes `copyText`, `eraseText`, `pasteText`, and
+bounded `travel` routes in addition to gestures, editing, keyboard, wait,
+assertion, capture, recording, and system actions. Visual locators use a
+workspace-confined image file and an optional similarity threshold.
+`assertScreenshot` compares a live capture with a workspace-confined baseline
+and records actual, baseline, and diff images as offline artifacts; image bytes
+never enter terminal output.
+
 ## Cases And Suites
 
 Cases and suites use `schemaVersion: cockpit.test/v2`. Validate documents before
@@ -234,6 +271,23 @@ becomes `interrupted`, and the suite continues only when its retry policy allows
 it. Persisted fixture and row bindings must resolve to the same healthy session;
 Cockpit fails explicitly when that session can no longer be proven.
 
+Lifecycle composition uses the smallest existing scope: suite fixtures for
+campaign or attempt setup/teardown, case `setup`/`finally` for case ownership,
+step `evidence` for before/after/failure capture policy, and explicit
+`startRecording`/`stopRecording` steps around the exact interval that needs
+video. `if`, bounded `retry`/`loop`, and fragments compose normally inside
+these scopes, so a second generic pre/post hook model is unnecessary.
+
+Every finalized suite exports one portable `cockpit-report/` directory. Open
+`index.html` offline for Overview, Product, Quality, Engineering, and Machine
+views. `report.json` is the canonical single-file fact graph containing suite
+and case definitions, attempts, detailed steps, assertions, and evidence
+references. `manifest.json` declares every other file with semantic ownership,
+size, media type, and SHA-256. `summary.md`, `junit.xml`, `run/events.jsonl`,
+semantic case directories, screenshots, recordings, logs, and snapshots are
+derived portable views of the same facts. Clients must preserve relative paths
+and verify the manifest before trusting any file.
+
 ## MCP And Clients
 
 Start the MCP stdio client with either command:
@@ -241,6 +295,7 @@ Start the MCP stdio client with either command:
 ```bash
 dart run cockpit serve-mcp
 dart run cockpit_mcp
+dart run cockpit serve-mcp --profile dart
 ```
 
 MCP is a thin authenticated Supervisor client. It does not construct drivers or
@@ -250,6 +305,14 @@ and third-party GUI clients should use `/api/v2`, authenticated SSE run events,
 public foundation DTOs, and digest-checked artifact downloads. Cockpit 2.0
 intentionally ships no Flutter GUI and no embedded HTML dashboard; generated
 HTML reports are portable run artifacts.
+
+The default `core` profile keeps the control plane small. Optional profiles are
+`dart`, `flutter` (`dart` plus Flutter), `app`, `e2e` (`app` plus E2E), and
+`all`; `--enable <name>` and `--disable <name>` provide exact overrides. The
+Dart profile supplies analyze, format, fix, test, LSP, pub, package URI/search,
+and project creation tools through the same workspace-isolated Supervisor. It
+is a complete Cockpit-side alternative when the official Dart MCP server is not
+installed; Cockpit neither embeds nor proxies that server.
 
 Agent host setup, including the OpenCode/OMP skill, is documented in the
 [agent integration guide](docs/agent-integrations.md).
@@ -272,10 +335,16 @@ dart run cockpitd \
 gate. Its quality job verifies formatting, static analysis, repository
 contracts, every package and example test suite, and dry-run publication for
 all three public packages. Only then does it run real Android, iOS, macOS,
-Linux, web, and Windows regression jobs. A release is eligible only when the
-quality job and every platform job complete successfully with terminal reports
-and verified artifacts. Wait for the whole matrix before diagnosing failures;
-use the uploaded report, event stream, artifacts, and daemon log as authority.
+Linux, web, and Windows regression jobs. Each platform runs a complex suite
+covering fixtures, setup/finally, fragment calls, branches, bounded retry and
+loop control, per-step timeouts, matrix rows, bounded concurrency, a complete
+create/read/delete business flow, every Flutter gesture/text/keyboard/semantics
+command, screenshots, capability-aware recording, and offline bundle integrity.
+Each command is accepted only when its visible UI effect is asserted in the
+canonical report. A release is eligible only when the quality job and every
+platform job complete successfully with terminal reports and verified
+artifacts. Wait for the whole matrix before diagnosing failures; use the
+uploaded report, event stream, artifacts, and daemon log as authority.
 
 ## Documentation
 

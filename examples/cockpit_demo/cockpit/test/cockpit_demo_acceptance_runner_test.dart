@@ -1,6 +1,9 @@
 import 'dart:io';
 
+import 'package:cockpit/cockpit.dart';
+import 'package:cockpit_protocol/cockpit_protocol.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:path/path.dart' as p;
 
 import '../tool/src/cockpit_demo_acceptance_runner.dart';
 
@@ -24,4 +27,133 @@ void main() {
       contains('--discovery-timeout-seconds    (defaults to "180")'),
     );
   });
+
+  test(
+    'release acceptance compiles the complete Flutter command surface',
+    () async {
+      final root = Directory.current.absolute.path;
+      final suiteFile = File(
+        p.join(root, 'e2e', 'suites', 'regression.suite.yaml'),
+      );
+      final compiler = const CockpitTestDocumentCompiler();
+      final compiledSuite = compiler
+          .compile(await suiteFile.readAsString())
+          .requireSuite();
+      final suite = compiledSuite.suite;
+
+      expect(suite.fixtures, hasLength(2));
+      expect(suite.matrix.axes['persona'], <Object?>['developer', 'quality']);
+      expect(
+        suite.cases.map((entry) => entry.id),
+        containsAll(const <String>{
+          'taskEditorValidation',
+          'settingsNavigation',
+          'commandGestureCoverage',
+          'commandSemanticCoverage',
+          'mixedPlaneBlackBox',
+          'matrixEvidence',
+          'recordingLifecycle',
+        }),
+      );
+
+      final referencedSources = <CockpitTestSuiteFileCaseSource>[
+        for (final entry in suite.cases)
+          if (entry.source case final CockpitTestSuiteFileCaseSource source)
+            source,
+        for (final fixture
+            in suite.fixtures) ...<CockpitTestSuiteFileCaseSource>[
+          if (fixture.setup case final CockpitTestSuiteFileCaseSource source)
+            source,
+          if (fixture.teardown case final CockpitTestSuiteFileCaseSource source)
+            source,
+        ],
+      ];
+      for (final source in referencedSources) {
+        final file = File(p.normalize(p.join(root, source.relativePath)));
+        expect(p.isWithin(root, file.path), isTrue);
+        final compiled = compiler
+            .compile(await file.readAsString())
+            .requireCase();
+        expect(compiled.testCase.id, source.caseId);
+      }
+
+      final actionTypes = <String>{};
+      await for (final entity in Directory(
+        p.join(root, 'e2e'),
+      ).list(recursive: true, followLinks: false)) {
+        if (entity is! File ||
+            !const <String>{
+              '.yaml',
+              '.yml',
+            }.contains(p.extension(entity.path))) {
+          continue;
+        }
+        final compiled = compiler.compile(await entity.readAsString());
+        expect(
+          compiled.isSuccess,
+          isTrue,
+          reason:
+              '${p.relative(entity.path, from: root)}: '
+              '${compiled.diagnostics.map((item) => item.message).join('; ')}',
+        );
+        _collectActionTypes(
+          compiled.requireCompiled().document.toJson(),
+          actionTypes,
+        );
+      }
+      expect(actionTypes, containsAll(_requiredFlutterActionTypes));
+    },
+  );
+}
+
+const _requiredFlutterActionTypes = <String>{
+  'tap',
+  'longPress',
+  'doubleTap',
+  'enterText',
+  'focusTextInput',
+  'setTextEditingValue',
+  'sendTextInputAction',
+  'sendKeyEvent',
+  'sendKeyDownEvent',
+  'sendKeyUpEvent',
+  'drag',
+  'fling',
+  'swipe',
+  'pinchZoom',
+  'rotate',
+  'panZoom',
+  'multiTouch',
+  'scrollUntilVisible',
+  'back',
+  'showOnScreen',
+  'increase',
+  'decrease',
+  'dismiss',
+  'dismissKeyboard',
+  'clearNetworkActivity',
+  'waitForNetworkIdle',
+  'waitForUiIdle',
+  'waitFor',
+  'assertVisible',
+  'assertText',
+  'captureScreenshot',
+  'collectSnapshot',
+  'system',
+};
+
+void _collectActionTypes(Object? value, Set<String> actionTypes) {
+  if (value is Map<Object?, Object?>) {
+    final action = value['action'];
+    if (action is Map<Object?, Object?> && action['type'] is String) {
+      actionTypes.add(action['type']! as String);
+    }
+    for (final child in value.values) {
+      _collectActionTypes(child, actionTypes);
+    }
+  } else if (value is List<Object?>) {
+    for (final child in value) {
+      _collectActionTypes(child, actionTypes);
+    }
+  }
 }

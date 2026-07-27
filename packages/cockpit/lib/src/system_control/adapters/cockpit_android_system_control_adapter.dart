@@ -713,10 +713,31 @@ final class CockpitAndroidSystemControlAdapter
       CockpitSystemControlAction.pressKey => cockpitTextCommand(
         request,
         'key',
-        (key) => CockpitResolvedSystemControlCommand(
-          'adb',
-          adbShell(<String>['input', 'keyevent', _normalizeAndroidKey(key)]),
-        ),
+        (key) {
+          final repeat = cockpitReadSystemControlIntParameter(
+            request.parameters,
+            'repeat',
+            minimum: 1,
+            maximum: 500,
+          );
+          if (repeat.isInvalid) {
+            return const CockpitResolvedSystemControlCommand.error(
+              code: 'invalidSystemActionParameter',
+              message: 'pressKey repeat must be between 1 and 500.',
+            );
+          }
+          return CockpitResolvedSystemControlCommand(
+            'adb',
+            adbShell(<String>[
+              'input',
+              'keyevent',
+              ...List<String>.filled(
+                repeat.value ?? 1,
+                _normalizeAndroidKey(key),
+              ),
+            ]),
+          );
+        },
       ),
       CockpitSystemControlAction.pressBack =>
         CockpitResolvedSystemControlCommand(

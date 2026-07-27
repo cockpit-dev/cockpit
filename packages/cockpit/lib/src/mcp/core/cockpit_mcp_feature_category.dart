@@ -1,5 +1,10 @@
 enum CockpitMcpFeatureCategory {
   all(null),
+  core(all),
+  dart(all),
+  flutter(dart),
+  application(all, 'app'),
+  e2e(all),
   workspace(all),
   closedLoop(all, 'closed_loop'),
   sessionManagement(all, 'session_management'),

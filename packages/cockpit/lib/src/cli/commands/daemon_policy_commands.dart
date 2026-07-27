@@ -2,6 +2,7 @@ import 'package:args/command_runner.dart';
 
 import '../../supervisor/cockpit_daemon_client.dart';
 import '../../supervisor/cockpit_daemon_host.dart';
+import '../../supervisor/cockpit_supervisor_authorization.dart';
 import '../cockpit_cli_runtime.dart';
 
 final class CockpitDaemonPolicyCommand extends Command<int> {
@@ -52,24 +53,11 @@ final class CockpitDaemonPolicyCommand extends Command<int> {
           final policy = runtime.authorizationPolicyFile(
             arguments.option('file')!,
           );
-          final restart = arguments.flag('restart');
-          final lifecycle = (await runtime.client()).lifecycle;
-          final before = await lifecycle.status();
-          if (before.running && !restart) {
-            throw const CockpitDaemonException(
-              'daemonRunning',
-              'Stop the daemon or pass --restart before replacing its authorization policy.',
-            );
-          }
-          if (before.running) {
-            await lifecycle.stop(mode: CockpitDaemonShutdownMode.drain);
-          }
-          await (await runtime.authorizationPolicyStore()).replace(policy);
-          if (restart) await lifecycle.start();
-          await runtime.success(<String, Object?>{
-            'policy': policy.toJson(),
-            'daemon': (await lifecycle.status()).toJson(),
-          });
+          await _replacePolicy(
+            runtime: runtime,
+            policy: policy,
+            restart: arguments.flag('restart'),
+          );
           return cockpitSuccessExitCode;
         },
       ),
@@ -83,4 +71,28 @@ final class CockpitDaemonPolicyCommand extends Command<int> {
 
   @override
   String get description => 'Manage Supervisor authorization policy.';
+}
+
+Future<void> _replacePolicy({
+  required CockpitCliRuntime runtime,
+  required CockpitSupervisorAuthorizationPolicy policy,
+  required bool restart,
+}) async {
+  final lifecycle = (await runtime.client()).lifecycle;
+  final before = await lifecycle.status();
+  if (before.running && !restart) {
+    throw const CockpitDaemonException(
+      'daemonRunning',
+      'Stop the daemon or pass --restart before replacing its authorization policy.',
+    );
+  }
+  if (before.running) {
+    await lifecycle.stop(mode: CockpitDaemonShutdownMode.drain);
+  }
+  await (await runtime.authorizationPolicyStore()).replace(policy);
+  if (restart) await lifecycle.start();
+  await runtime.success(<String, Object?>{
+    'policy': policy.toJson(),
+    'daemon': (await lifecycle.status()).toJson(),
+  });
 }

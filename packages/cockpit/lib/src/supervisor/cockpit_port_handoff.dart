@@ -14,7 +14,7 @@ extension CockpitPortReservationOperations on CockpitPortReservation {
     if ((_state != CockpitPortReservationState.reserved &&
             _state != CockpitPortReservationState.recoveryPending) ||
         timeout <= Duration.zero ||
-        timeout > const Duration(minutes: 5)) {
+        timeout > const Duration(milliseconds: cockpitMaximumLeaseTtlMs)) {
       throw const CockpitLeaseException(
         code: 'portHandoffStateInvalid',
         message: 'Port reservation cannot begin this handoff.',

@@ -59,6 +59,7 @@ final class CockpitTestExecutionNode {
     required this.executionId,
     required this.section,
     this.description,
+    this.plane,
     required this.timeoutMs,
     required this.evidence,
     required this.safety,
@@ -72,6 +73,7 @@ final class CockpitTestExecutionNode {
   final String executionId;
   final String section;
   final String? description;
+  final CockpitTestPlane? plane;
   final int timeoutMs;
   final CockpitTestEvidencePolicy evidence;
   final CockpitTestSafetyDeclaration safety;
@@ -79,6 +81,55 @@ final class CockpitTestExecutionNode {
   final CockpitTestSourceLocation? sourceLocation;
   final List<String> callPath;
   final CockpitTestPlanOperation operation;
+}
+
+CockpitTestPlane cockpitRequestedPlane(
+  CockpitTestExecutionNode node,
+  CockpitTestPlane defaultPlane,
+) {
+  if (node.plane != null) return node.plane!;
+  final operation = node.operation;
+  if (operation is CockpitTestActionPlanOperation) {
+    final action = operation.action;
+    if (action.kind == CockpitTestActionKind.assertScreenshot) {
+      return CockpitTestPlane.visual;
+    }
+    if (action.kind == CockpitTestActionKind.system ||
+        action.kind == CockpitTestActionKind.travel) {
+      return CockpitTestPlane.native;
+    }
+    return _locatorPlane(action.locator) ?? defaultPlane;
+  }
+  if (operation is CockpitTestIfPlanOperation) {
+    return _locatorPlane(operation.condition.locator) ?? defaultPlane;
+  }
+  if (operation is CockpitTestLoopPlanOperation) {
+    return _locatorPlane(operation.condition.locator) ?? defaultPlane;
+  }
+  return defaultPlane;
+}
+
+CockpitTestPlane? _locatorPlane(CockpitTestLocator? locator) {
+  if (locator == null) return null;
+  if (locator.tree.any(
+    (candidate) => candidate.strategy == CockpitTestLocatorStrategy.visual,
+  )) {
+    return CockpitTestPlane.visual;
+  }
+  if (locator.tree.any(
+    (candidate) => candidate.strategy == CockpitTestLocatorStrategy.coordinate,
+  )) {
+    return CockpitTestPlane.coordinate;
+  }
+  if (locator.tree.any(
+    (candidate) =>
+        candidate.hasNativeOnlyConstraints ||
+        candidate.nativeId != null ||
+        candidate.role != null,
+  )) {
+    return CockpitTestPlane.native;
+  }
+  return null;
 }
 
 sealed class CockpitTestPlanOperation {

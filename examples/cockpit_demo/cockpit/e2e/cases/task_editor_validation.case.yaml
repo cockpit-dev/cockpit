@@ -2,6 +2,7 @@ schemaVersion: cockpit.test/v2
 kind: case
 id: demoTaskEditorValidation
 name: Task editor validation
+description: Exercises visible workflow control and deterministic cleanup.
 tags: [acceptance, task-editor]
 target:
   platform: flutter
@@ -15,34 +16,268 @@ defaults:
     screenshot: onFailure
     snapshot: onFailure
     failurePolicy: recordWarning
+variables:
+  taskTitle:
+    source: input
+    type: string
+  taskOpenLabel:
+    source: input
+    type: string
+fragments:
+  assertInbox:
+    - stepId: waitForInboxRoute
+      description: Wait for the inbox route
+      timeoutMs: 12000
+      action:
+        type: waitFor
+        condition: {type: route, route: /inbox}
+    - stepId: assertNewTaskAction
+      description: Verify the primary inbox action
+      timeoutMs: 8000
+      action:
+        type: assertVisible
+        locator: {text: New task}
+  openEditor:
+    - stepId: tapNewTask
+      description: Open the task editor
+      timeoutMs: 12000
+      action:
+        type: tap
+        locator: {text: New task}
+        activation: gesture
+    - stepId: waitForEditorRoute
+      description: Wait for the editor route
+      timeoutMs: 12000
+      action:
+        type: waitFor
+        condition: {type: route, route: /editor}
+setup:
+  - stepId: establishInboxBaseline
+    description: Establish the case baseline
+    timeoutMs: 15000
+    call: {fragment: assertInbox}
 steps:
-  - stepId: waitForInbox
-    action:
-      type: waitFor
-      condition: {type: route, route: /inbox}
   - stepId: openTaskEditor
-    action:
-      type: tap
-      locator: {strategy: text, value: New task}
-      activation: gesture
-  - stepId: waitForTaskEditor
-    action:
-      type: waitFor
+    description: Reuse the editor navigation fragment
+    timeoutMs: 20000
+    call: {fragment: openEditor}
+  - stepId: editorRouteBranch
+    description: Exercise the matching conditional branch
+    timeoutMs: 12000
+    if:
       condition: {type: route, route: /editor}
+      then:
+        - stepId: assertEditorTitle
+          action:
+            type: assertVisible
+            locator: {text: Task title}
+      else:
+        - stepId: assertUnexpectedInbox
+          action:
+            type: assertVisible
+            locator: {text: New task}
+  - stepId: retryEditorReadiness
+    description: Exercise bounded retry execution
+    timeoutMs: 15000
+    retry:
+      maxAttempts: 3
+      delayMs: 150
+      steps:
+        - stepId: assertEditorReady
+          action:
+            type: assertVisible
+            locator: {text: Save task, type: FilledButton}
   - stepId: submitEmptyTask
+    description: Submit an invalid task
+    timeoutMs: 12000
     action:
       type: tap
-      locator: {strategy: text, value: Save task}
+      locator: {text: Save task}
       activation: gesture
   - stepId: verifyRequiredTitle
+    description: Verify validation and retain post-action evidence
+    timeoutMs: 12000
+    evidence:
+      screenshot: always
+      snapshot: always
+      failurePolicy: failStep
     action:
       type: assertVisible
-      locator: {strategy: text, value: Task title is required.}
-  - stepId: captureValidationState
-    action: {type: captureScreenshot, artifactName: task-editor-validation}
-  - stepId: returnToInbox
-    action: {type: back}
+      locator: {text: Task title is required., matchMode: contains}
+  - stepId: leaveEditorWhileValidationVisible
+    description: Exercise a bounded loop that exits after one mutation
+    timeoutMs: 20000
+    loop:
+      maxIterations: 2
+      condition:
+        type: visible
+        locator: {text: Task title is required., matchMode: contains}
+      steps:
+        - stepId: returnToInbox
+          timeoutMs: 10000
+          action: {type: back}
   - stepId: verifyInboxRestored
+    description: Reuse the inbox assertion fragment
+    timeoutMs: 15000
+    call: {fragment: assertInbox}
+  - stepId: reopenTaskEditor
+    description: Begin a complete create-read-delete business workflow
+    timeoutMs: 20000
+    call: {fragment: openEditor}
+  - stepId: enterTaskTitle
+    timeoutMs: 12000
+    action:
+      type: enterText
+      locator: {text: Task title, matchMode: contains}
+      text: {$var: taskTitle}
+  - stepId: revealTaskNotes
+    description: Reveal the notes input across compact and desktop viewports
+    timeoutMs: 20000
+    action:
+      type: scrollUntilVisible
+      locator: {text: Notes, type: TextField}
+      direction: down
+      maxScrolls: 12
+      durationMs: 200
+      revealAlignment: center
+  - stepId: enterTaskNotes
+    timeoutMs: 12000
+    action:
+      type: enterText
+      locator: {text: Notes, type: TextField}
+      text: Created and removed by the Cockpit release acceptance suite.
+  - stepId: saveValidTask
+    timeoutMs: 15000
+    action:
+      type: tap
+      locator: {text: Save task}
+      activation: gesture
+  - stepId: revealCreatedTask
+    description: Reveal the actionable task row without relying on app hooks
+    timeoutMs: 25000
+    action:
+      type: scrollUntilVisible
+      locator: {text: {$var: taskOpenLabel}}
+      direction: down
+      maxScrolls: 20
+      durationMs: 200
+      revealAlignment: center
+  - stepId: openCreatedTask
+    timeoutMs: 12000
+    action:
+      type: tap
+      locator: {text: {$var: taskOpenLabel}}
+  - stepId: waitForTaskDetail
+    timeoutMs: 12000
+    action:
+      type: waitFor
+      condition: {type: route, route: /detail}
+  - stepId: verifyPersistedNotes
+    timeoutMs: 12000
+    evidence: {screenshot: always, snapshot: always, failurePolicy: failStep}
+    action:
+      type: assertVisible
+      locator:
+        text: Created and removed by the Cockpit release acceptance suite.
+  - stepId: deleteCreatedTask
+    timeoutMs: 15000
+    action:
+      type: tap
+      locator: {label: Delete task}
+      activation: semantic
+  - stepId: verifyTaskDeleted
+    timeoutMs: 15000
+    action:
+      type: assertVisible
+      locator: {text: {$var: taskOpenLabel}}
+      expected: false
+  - stepId: nonMatchingRouteBranch
+    description: Exercise the conditional else branch
+    timeoutMs: 10000
+    if:
+      condition: {type: route, route: /settings}
+      then:
+        - stepId: assertUnexpectedSettings
+          action:
+            type: assertVisible
+            locator: {text: Tune the workspace.}
+      else:
+        - stepId: assertInboxFromElse
+          action:
+            type: assertVisible
+            locator: {text: New task}
+  - stepId: captureValidationState
+    description: Capture the final business state
+    timeoutMs: 20000
+    action:
+      type: captureScreenshot
+      artifactName: task-editor-validation
+      captureOptions:
+        reason: acceptance
+        includeSnapshot: true
+        attachToStep: true
+        profile: acceptance
+        allowFallback: true
+finally:
+  - stepId: deleteTaskFromDetailDuringCleanup
+    description: Remove created data if the main flow stopped on task detail
+    timeoutMs: 15000
+    if:
+      condition: {type: route, route: /detail}
+      then:
+        - stepId: deleteTaskFromDetail
+          action:
+            type: tap
+            locator: {label: Delete task}
+            activation: semantic
+      else:
+        - stepId: retainNonDetailRoute
+          action: {type: waitForUiIdle, quietMs: 100}
+  - stepId: leaveEditorDuringCleanup
+    description: Restore the inbox when validation stopped in the editor
+    timeoutMs: 15000
+    if:
+      condition: {type: route, route: /editor}
+      then:
+        - stepId: backFromEditorDuringCleanup
+          action: {type: back}
+      else:
+        - stepId: retainNonEditorRoute
+          action: {type: waitForUiIdle, quietMs: 100}
+  - stepId: deleteTaskFromInboxDuringCleanup
+    description: Remove created data if the main flow stopped after save
+    timeoutMs: 30000
+    if:
+      condition:
+        type: visible
+        locator: {text: {$var: taskOpenLabel}}
+      then:
+        - stepId: revealTaskDuringCleanup
+          action:
+            type: scrollUntilVisible
+            locator: {text: {$var: taskOpenLabel}}
+            direction: down
+            maxScrolls: 20
+            durationMs: 200
+            revealAlignment: center
+        - stepId: openTaskDuringCleanup
+          action:
+            type: tap
+            locator: {text: {$var: taskOpenLabel}}
+        - stepId: waitForCleanupDetail
+          action:
+            type: waitFor
+            condition: {type: route, route: /detail}
+        - stepId: deleteTaskDuringCleanup
+          action:
+            type: tap
+            locator: {label: Delete task}
+            activation: semantic
+      else:
+        - stepId: retainCleanInbox
+          action: {type: waitForUiIdle, quietMs: 100}
+  - stepId: verifyCleanupInbox
+    timeoutMs: 15000
     action:
       type: waitFor
       condition: {type: route, route: /inbox}

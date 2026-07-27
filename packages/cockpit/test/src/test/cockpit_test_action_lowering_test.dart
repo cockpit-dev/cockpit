@@ -113,7 +113,7 @@ void main() {
 
     final swipe = CockpitTestAction.fromJson(<String, Object?>{
       'type': 'swipe',
-      'locator': <String, Object?>{'strategy': 'testId', 'value': 'target'},
+      'locator': <String, Object?>{'testId': 'target'},
       'direction': 'up',
       'distance': 0.1,
     }, path: r'$.action');
@@ -131,13 +131,9 @@ void main() {
     final action = CockpitTestAction(
       kind: CockpitTestActionKind.tap,
       locator: CockpitTestLocator(
-        strategy: CockpitTestLocatorStrategy.testId,
-        value: 'primary',
+        testId: 'primary',
         fallbacks: <CockpitTestLocator>[
-          CockpitTestLocator(
-            strategy: CockpitTestLocatorStrategy.visual,
-            value: 'template.png',
-          ),
+          CockpitTestLocator(visual: 'template.png'),
         ],
       ),
     );
@@ -149,6 +145,31 @@ void main() {
       capabilities: capabilities,
     );
     expect(result.error?.code, CockpitTestErrorCode.unsupportedLocator);
+  });
+
+  test('Flutter lowers supported locator signals as one intersection', () {
+    final result = flutterLowerer.lower(
+      action: CockpitTestAction(
+        kind: CockpitTestActionKind.tap,
+        locator: CockpitTestLocator(
+          text: 'Save',
+          label: 'Save task',
+          testId: 'save-button',
+          type: 'FilledButton',
+        ),
+      ),
+      commandId: 'conjunctive-locator',
+      timeoutMs: 1000,
+      requestedPlane: CockpitTestPlane.semantic,
+      capabilities: capabilities,
+    );
+
+    expect(result.value?.command.locator?.signalMap, <String, String>{
+      'key': 'save-button',
+      'text': 'Save',
+      'tooltip': 'Save task',
+      'type': 'FilledButton',
+    });
   });
 }
 
@@ -163,17 +184,19 @@ CockpitCapabilities _capabilities() => CockpitCapabilities(
   supportedLocatorStrategies: CockpitLocatorKind.values,
 );
 
-CockpitTestLocator _locator(CockpitTestLocatorStrategy strategy) =>
-    switch (strategy) {
-      CockpitTestLocatorStrategy.coordinate => CockpitTestLocator(
-        strategy: strategy,
-        x: 0.5,
-        y: 0.5,
-      ),
-      CockpitTestLocatorStrategy.visual => CockpitTestLocator(
-        strategy: strategy,
-        value: 'template.png',
-        threshold: 0.9,
-      ),
-      _ => CockpitTestLocator(strategy: strategy, value: 'target'),
-    };
+CockpitTestLocator _locator(
+  CockpitTestLocatorStrategy strategy,
+) => switch (strategy) {
+  CockpitTestLocatorStrategy.coordinate => CockpitTestLocator(x: 0.5, y: 0.5),
+  CockpitTestLocatorStrategy.visual => CockpitTestLocator(
+    visual: 'template.png',
+    threshold: 0.9,
+  ),
+  CockpitTestLocatorStrategy.text => CockpitTestLocator(text: 'target'),
+  CockpitTestLocatorStrategy.label => CockpitTestLocator(label: 'target'),
+  CockpitTestLocatorStrategy.nativeId => CockpitTestLocator(nativeId: 'target'),
+  CockpitTestLocatorStrategy.testId => CockpitTestLocator(testId: 'target'),
+  CockpitTestLocatorStrategy.role => CockpitTestLocator(role: 'target'),
+  CockpitTestLocatorStrategy.type => CockpitTestLocator(type: 'target'),
+  CockpitTestLocatorStrategy.path => CockpitTestLocator(path: 'target'),
+};

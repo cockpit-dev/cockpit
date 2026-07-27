@@ -530,9 +530,9 @@ final class CockpitSupervisorRunProjection
     if (await file.length() > _maximumCanonicalReportBytes) {
       throw const FormatException('Suite report is too large.');
     }
-    return CockpitTestSuiteReport.fromJson(
+    return CockpitTestReportBundle.fromJson(
       jsonDecode(await file.readAsString()),
-    );
+    ).report;
   }
 
   Future<({CockpitArtifactResource resource, File file})> requireArtifactFile(
@@ -936,14 +936,15 @@ final class CockpitSupervisorRunProjection
     required String bundleRoot,
     required String relativeToBundle,
   }) async {
-    if (artifact.stepExecutionId != null ||
-        p.posix.split(relativeToBundle).length != 1) {
-      return false;
-    }
+    if (artifact.stepExecutionId != null) return false;
     final reportFile = File(p.join(bundleRoot, 'report.json'));
+    final manifestFile = File(p.join(bundleRoot, 'manifest.json'));
     if (await FileSystemEntity.type(reportFile.path, followLinks: false) !=
             FileSystemEntityType.file ||
-        await reportFile.length() > _maximumCanonicalReportBytes) {
+        await FileSystemEntity.type(manifestFile.path, followLinks: false) !=
+            FileSystemEntityType.file ||
+        await reportFile.length() > _maximumCanonicalReportBytes ||
+        await manifestFile.length() > _maximumCanonicalReportBytes) {
       throw const FormatException(
         'Canonical suite report is unavailable or too large.',
       );
@@ -953,19 +954,31 @@ final class CockpitSupervisorRunProjection
         !p.isWithin(bundleRoot, canonical)) {
       throw const FormatException('Canonical suite report is not confined.');
     }
-    final report = CockpitTestSuiteReport.fromJson(
+    final report = CockpitTestReportBundle.fromJson(
       jsonDecode(await reportFile.readAsString()),
-    );
+    ).report;
     if (report.projectId != owner.projectId ||
         report.workspaceId != workspaceId ||
         report.runId != artifact.runId) {
       throw const FormatException('Report artifact ownership is invalid.');
     }
-    final format = _reportFormatForName(relativeToBundle);
-    return format != null &&
-        report.reportPolicy.formats.contains(format) &&
-        artifact.kind == _reportArtifactKind(format) &&
-        artifact.mediaType == _reportMediaType(format) &&
+    if (relativeToBundle == 'manifest.json') {
+      return artifact.kind == 'report.manifest' &&
+          artifact.mediaType == 'application/json' &&
+          artifact.createdAt == report.finishedAt.toUtc();
+    }
+    final manifest = CockpitTestReportBundleManifest.fromJson(
+      jsonDecode(await manifestFile.readAsString()),
+    );
+    if (manifest.runId != report.runId) return false;
+    final declaration = manifest.files
+        .where((file) => file.relativePath == relativeToBundle)
+        .firstOrNull;
+    return declaration != null &&
+        declaration.sizeBytes == artifact.sizeBytes &&
+        declaration.sha256 == artifact.sha256 &&
+        declaration.kind == artifact.kind &&
+        declaration.mediaType == artifact.mediaType &&
         artifact.createdAt == report.finishedAt.toUtc();
   }
 
@@ -1459,25 +1472,3 @@ String _artifactKind(String value) {
   return 'attempt.'
       '${normalized.substring(0, 1).toLowerCase()}${normalized.substring(1)}';
 }
-
-CockpitTestReportFormat? _reportFormatForName(String name) => switch (name) {
-  'report.json' => CockpitTestReportFormat.json,
-  'junit.xml' => CockpitTestReportFormat.junit,
-  'report.html' => CockpitTestReportFormat.html,
-  'ai-summary.md' => CockpitTestReportFormat.aiSummary,
-  _ => null,
-};
-
-String _reportArtifactKind(CockpitTestReportFormat format) => switch (format) {
-  CockpitTestReportFormat.json => 'report.json',
-  CockpitTestReportFormat.junit => 'report.junit',
-  CockpitTestReportFormat.html => 'report.html',
-  CockpitTestReportFormat.aiSummary => 'report.aiSummary',
-};
-
-String _reportMediaType(CockpitTestReportFormat format) => switch (format) {
-  CockpitTestReportFormat.json => 'application/json',
-  CockpitTestReportFormat.junit => 'application/xml',
-  CockpitTestReportFormat.html => 'text/html',
-  CockpitTestReportFormat.aiSummary => 'text/markdown',
-};

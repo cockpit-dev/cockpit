@@ -22,10 +22,11 @@ extension CockpitLeaseLifecycleOperations on CockpitLeaseRegistry {
     required String holderId,
     required Duration ttl,
   }) async {
-    if (ttl < const Duration(seconds: 1) || ttl > const Duration(minutes: 5)) {
+    if (ttl < const Duration(seconds: 1) ||
+        ttl > const Duration(milliseconds: cockpitMaximumLeaseTtlMs)) {
       throw const CockpitLeaseException(
         code: 'invalidLeaseTtl',
-        message: 'Lease TTL must be between one second and five minutes.',
+        message: 'Lease TTL must be between one second and thirty minutes.',
       );
     }
     final current = await _renewInternal(leaseId, holderId, ttl: ttl);

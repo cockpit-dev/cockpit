@@ -18,7 +18,7 @@ Flutter 语义桥获得更丰富的应用内能力；CLI、MCP 和未来独立�
 - target 发现、注册、启动、检查与真实能力声明；
 - 依赖 DAG、fixture、matrix、retry、有界并发和 fail-fast；
 - 持久事件、可恢复 suite 检查点、精确 session 亲和、取消、artifact，以及
-  JSON/JUnit/HTML/AI 报告；
+  完整离线回归报告 bundle；
 - 每用户一个认证 Supervisor，每 workspace 一个隔离 worker；
 - 资源化 CLI、HTTP/SSE API 和 MCP，不内置 GUI。
 
@@ -134,6 +134,11 @@ dart run cockpit daemon policy apply --file authorization.json --restart
 dart run cockpit daemon policy show
 ```
 
+本地需要显式全权运行时，使用 `dart run cockpit daemon start --yolo`（或
+`daemon restart --yolo`）。YOLO 只对本次 daemon 进程生效；不带该开关的启动或
+重启会使用持久化的受限策略。`daemon status`、attempt manifest 和 suite
+`report.json` 都会记录实际 `authorizationMode`。
+
 quarantined lease 会持续阻塞资源，直到 cleanup 验证成功。Supervisor 提供
 `lease.list`，以及需要显式授权 `reset` effect 的 `lease.recover`；恢复请求必须精确
 匹配 lease、workspace、resource 和 holder 身份。只有逻辑资源可在明确传入
@@ -168,6 +173,13 @@ UI 操作使用可达的 WebDriverAgent；物理 iOS 设备在可用时通过 `d
 安装和生命周期。环境不具备某项能力时，Cockpit 会返回 unsupported/blocked，
 不会伪造成功。
 
+已经安装的 Flutter 应用或原生壳内嵌 Flutter 的混合应用，应使用
+`targetKind: flutterApp`、真实 `appId` 且不绑定 entrypoint，并让 case 使用
+`native` plane。Cockpit 会通过 system control 启动应用并无侵入操作完整原生
+accessibility tree；Flutter-aware resolver 只在局部折叠同 bounds 的祖先/后代重复
+semantics 并优先可操作节点，不会屏蔽原生页面、platform view、WebView 或真实列表项。
+只有需要开发态 bridge 时才使用绑定 entrypoint 的 Flutter target 和 `semantic` plane。
+
 Flutter target 通过 CLI、MCP 和 `operation run` 共用结构化启动配置。入口、设备、
 模式、flavor 及远程控制参数由 Cockpit 管理；调用方可以传入多个 dart define、
 define 文件、安全的额外 Flutter 参数、进程环境变量，以及最长 30 分钟的启动预算：
@@ -195,6 +207,22 @@ case/suite 是持久化异步 job：提交后立即返回 `runId`，客户端再
 `case run --timeout-ms` 默认 30 分钟、最长 6 小时；`suite run --timeout-ms` 默认
 2 小时、最长 24 小时。步骤和清理超时仍是互相独立的内部预算。
 
+每个步骤都可以用 `plane` 显式选择 `semantic`、`native`、`visual` 或
+`coordinate`。没有覆盖时，截图断言自动走 visual，system 与位置轨迹动作走 native，
+视觉/坐标 locator 走对应 plane，包含原生专用约束的 locator 走 native，其余步骤继承
+case plane。绑定 entrypoint 的 Flutter session 会同时保留语义 driver 和同一应用/设备的
+次级 system driver，因此一个 case 可以先检查 Widget，再跨越原生页面、platform view、
+权限弹窗或只能视觉识别的区域，无需修改被测业务应用。
+次级执行面的权威能力来自 `target.inspect` operation 结果中的
+`output.systemControl`；该 profile 已脱敏，客户端不得尝试从 `app.get` 重建，因为平台
+应用标识与进程标识会按设计隐藏。
+
+统一动作集合除手势、编辑、键盘、等待、断言、取证、录屏和 system action 外，还包括
+`copyText`、`eraseText`、`pasteText` 与有界 `travel` 轨迹。visual locator 使用
+workspace 内的图片文件和可选相似度阈值；`assertScreenshot` 将实时截图与 workspace
+内 baseline 对比，并把 actual、baseline、diff 图片作为离线 artifact 记录，图片字节
+不会进入终端输出。
+
 ## Case 与 Suite
 
 case/suite 使用 `schemaVersion: cockpit.test/v2`。先验证文档，再使用稳定的
@@ -218,12 +246,26 @@ worker 意外退出后，已完成节点不会重跑，执行中的 attempt 会�
 只有 suite retry 策略允许时才继续。持久化的 fixture/row session 必须恢复为同一
 健康资源；无法证明时会明确失败，不会假装 fixture 状态仍有效。
 
+生命周期按已有最小作用域组合：suite fixture 负责 campaign/attempt 级 setup 与
+teardown，case `setup`/`finally` 负责 case 生命周期，step `evidence` 负责动作前后或
+失败取证，显式 `startRecording`/`stopRecording` 包围真正需要录屏的步骤区间。
+`if`、有界 `retry`/`loop` 和 fragment 可以在这些作用域内正常组合，因此无需再引入
+一套重复的通用 pre/post hook。
+
+每个完成的 suite 都会导出一个可携带的 `cockpit-report/` 目录。离线打开
+`index.html` 即可查看 Overview、Product、Quality、Engineering 和 Machine 五种视图。
+`report.json` 是唯一规范事实图，包含 suite/case 定义、attempt、详细步骤、断言和证据引用；
+`manifest.json` 记录其余每个文件的语义归属、大小、媒体类型和 SHA-256。
+`summary.md`、`junit.xml`、`run/events.jsonl`、语义化 case 目录以及截图、录屏、日志和
+snapshot 都是同一事实图的可携带视图。客户端必须保持相对路径并先校验 manifest。
+
 ## MCP、客户端与 CI
 
 ```bash
 dart run cockpit serve-mcp
 # 或
 dart run cockpit_mcp
+dart run cockpit serve-mcp --profile dart
 ```
 
 MCP 只是认证 Supervisor 客户端，不会在进程内构造 driver 或应用服务。它提供有界的
@@ -231,6 +273,13 @@ roots、workspaces、operations、targets、documents、cases、suites、runs �
 资源。官方或第三方 GUI 应使用 `/api/v2`、认证 SSE、公开 DTO 和带 digest 校验的
 artifact 下载。2.0 暂不提供 Flutter GUI，也不内置 HTML dashboard；HTML 只作为
 可移植回归报告 artifact 生成。
+
+默认 `core` profile 保持控制面精简；可选 profile 为 `dart`、`flutter`（包含
+`dart`）、`app`、`e2e`（包含 `app`）和 `all`，并可用 `--enable <name>`、
+`--disable <name>` 精确覆盖。`dart` profile 通过同一个 workspace 隔离 Supervisor
+提供 analyze、format、fix、test、LSP、pub、package URI/search 和项目创建工具。
+用户未安装官方 Dart MCP server 时它可以完整替代常用开发能力，但 Cockpit 不嵌入、
+不代理官方 server。
 
 包括 OpenCode/OMP skill 在内的各类 Agent 宿主接入方式见
 [Agent 接入指南](docs/agent-integrations.md)。
@@ -250,8 +299,12 @@ dart run cockpitd \
 quality job 会统一验证格式、静态分析、仓库契约、所有 package 与示例测试，并对三个
 公开包执行发布 dry-run；通过后才会运行 Android、iOS、macOS、Linux、Web 和
 Windows 真实回归。只有 quality 与全部平台 job 都成功终止，并产出可校验的终态报告
-和 artifact，版本才允许发布。排查失败时先等待整个矩阵结束，再统一以上传的 report、
-event stream、artifact 和 daemon log 为准，避免边运行边反复猜测。
+和 artifact，版本才允许发布。每个平台都会运行一条复杂 suite，覆盖 fixture、
+setup/finally、fragment、分支、有限 retry/loop、逐步 timeout、matrix、有限并发、截图、
+完整的创建/读取/删除业务流程、全部 Flutter 手势/文本/键盘/语义命令、按能力执行的录屏
+和离线 bundle 完整性。每条命令都必须通过可见 UI 结果断言并进入规范报告，不能只凭命令
+返回成功。排查失败时先等待整个矩阵结束，再统一以上传的 report、event stream、artifact
+和 daemon log 为准，避免边运行边反复猜测。
 
 ## 文档
 

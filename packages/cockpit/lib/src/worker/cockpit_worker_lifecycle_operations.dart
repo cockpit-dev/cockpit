@@ -262,8 +262,7 @@ final class CockpitWorkerLifecycleOperations {
       resourceId: binding.deviceResourceId,
     );
     final handle = binding.handle;
-    if (handle == null &&
-        binding.registration.targetKind != CockpitTargetKind.flutterApp) {
+    if (handle == null && binding.registration.usesSystemControl) {
       final result = await runWorkerApplicationOperation(
         context: context,
         operation: () => _systemControl.describe(
@@ -307,6 +306,29 @@ final class CockpitWorkerLifecycleOperations {
     final sessionId = latestApp == null
         ? null
         : await _registry.sessionIdForApp(latestApp.appId);
+    Map<String, Object?>? systemControl;
+    if (latestApp != null) {
+      final described = await runWorkerApplicationOperation(
+        context: context,
+        operation: () => _systemControl.describe(
+          CockpitSystemControlDescribeRequest(
+            platform: binding.registration.platform,
+            deviceId: binding.registration.deviceId,
+            appId: latestApp.handle.platformAppId ?? binding.registration.appId,
+            processId: latestApp.handle.processId,
+            metadata: <String, Object?>{
+              if (binding.registration.wdaUrl != null)
+                'wdaUrl': binding.registration.wdaUrl,
+            },
+          ),
+        ),
+      );
+      systemControl = await sanitizer.sanitize(
+        described.profile.toJson(),
+        sessionId: sessionId,
+        targetId: binding.targetId,
+      );
+    }
     return <String, Object?>{
       'targetId': binding.targetId,
       'platform': binding.registration.platform,
@@ -318,6 +340,7 @@ final class CockpitWorkerLifecycleOperations {
           .map((plane) => plane.name)
           .toList(growable: false),
       'recommendedNextStep': result.recommendedNextStep,
+      'systemControl': ?systemControl,
       if (result.whatMatters != null) 'whatMatters': result.whatMatters,
       if (result.currentRouteName != null)
         'currentRouteName': result.currentRouteName,
@@ -405,15 +428,16 @@ final class CockpitWorkerLifecycleOperations {
     final values = _launchInput(input);
     final target = await _launchTargetBinding(values, context, grants);
     final launchConfiguration = _launchConfiguration(values);
-    if (target.registration.targetKind != CockpitTargetKind.flutterApp) {
+    if (target.registration.usesSystemControl) {
       if (values.optionalString('mode', maximum: 32) != null) {
         throw const FormatException(
-          'mode applies only to Flutter target launches.',
+          'mode applies only to entrypoint-backed Flutter target launches.',
         );
       }
       if (!launchConfiguration.isEmpty) {
         throw const FormatException(
-          'launchConfiguration applies only to Flutter target launches.',
+          'launchConfiguration applies only to entrypoint-backed Flutter '
+          'target launches.',
         );
       }
       return runWorkerTransactionalApplicationLaunch<

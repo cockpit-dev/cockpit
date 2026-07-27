@@ -242,10 +242,7 @@ Future<void> _pump() async {
 
 CockpitTestCondition _visibleCondition() => CockpitTestCondition(
   kind: CockpitTestConditionKind.visible,
-  locator: CockpitTestLocator(
-    strategy: CockpitTestLocatorStrategy.testId,
-    value: 'target',
-  ),
+  locator: CockpitTestLocator(testId: 'target'),
 );
 
 CockpitTestExecutionNode _ifNode(String id, String thenId, String elseId) =>

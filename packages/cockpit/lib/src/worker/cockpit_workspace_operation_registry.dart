@@ -123,6 +123,7 @@ final class CockpitWorkspaceOperationRegistry
     required CockpitWorkerOperationJournal operationJournal,
     required Future<void> Function() terminateUnsafeWorker,
     CockpitWorkerLogRedactor? redactor,
+    CockpitWorkerLogger? logger,
     CockpitTokenGenerator? tokenGenerator,
     DateTime Function()? utcNow,
     Duration cancellationGrace = const Duration(milliseconds: 250),
@@ -131,6 +132,7 @@ final class CockpitWorkspaceOperationRegistry
        _operationJournal = operationJournal,
        _terminateUnsafeWorker = terminateUnsafeWorker,
        _redactor = redactor ?? CockpitWorkerLogRedactor(),
+       _logger = logger ?? CockpitWorkerLogger(redactor: redactor),
        _tokenGenerator = tokenGenerator ?? CockpitSecureTokenGenerator(),
        _utcNow = utcNow ?? (() => DateTime.now().toUtc()),
        _cancellationGrace = cancellationGrace,
@@ -170,6 +172,7 @@ final class CockpitWorkspaceOperationRegistry
   final CockpitWorkerOperationJournal _operationJournal;
   final Future<void> Function() _terminateUnsafeWorker;
   final CockpitWorkerLogRedactor _redactor;
+  final CockpitWorkerLogger _logger;
   final CockpitTokenGenerator _tokenGenerator;
   final DateTime Function() _utcNow;
   final Duration _cancellationGrace;
@@ -372,12 +375,26 @@ final class CockpitWorkspaceOperationRegistry
       );
       workerValidateJsonValue(output, r'$.output');
       _assertNoPlaintextSecrets(output);
-    } on Object catch (error) {
+    } on Object catch (error, stackTrace) {
       primaryFailure = _operationFailure(
         error,
         cancellation.isCancelled,
         _redactor,
       );
+      if (primaryFailure.primary.category == CockpitErrorCategory.internal) {
+        _logger.log(
+          'error',
+          'Workspace operation failed internally.',
+          fields: <String, Object?>{
+            'workspaceId': workspaceId,
+            'operationId': operationId,
+            'operationKind': invocation.kind,
+            'errorType': error.runtimeType.toString(),
+            'error': '$error',
+            'stackTrace': '$stackTrace',
+          },
+        );
+      }
     }
     operationDeadlineTimer?.cancel();
 

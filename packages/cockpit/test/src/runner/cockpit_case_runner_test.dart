@@ -109,6 +109,32 @@ void main() {
     expect(adapter.commands, isEmpty);
   });
 
+  test('system runner accepts a Flutter app on the native plane', () async {
+    final root = await Directory.systemTemp.createTemp(
+      'cockpit-v2-flutter-native-',
+    );
+    addTearDown(() => root.delete(recursive: true));
+    final adapter = RecordingAutomationAdapter();
+    final result =
+        await _runner(
+          adapter,
+          RecordingSecretResolver('unused'),
+          RecordingSafetyPolicy(),
+          lowerer: const CockpitTestActionLowerer.system(),
+        ).run(
+          compiled: compiler
+              .compile(_simpleCase(targetKind: 'flutterApp', plane: 'native'))
+              .requireCase(),
+          context: _context('simpleCase'),
+          targetId: 'emulatorOne',
+          targetEnvironment: CockpitTestTargetEnvironment.test,
+          reportRoot: root.path,
+        );
+
+    expect(result.outcome, CockpitTestOutcome.passed);
+    expect(adapter.commands, hasLength(1));
+  });
+
   test('preparation failure publication preserves validator error', () async {
     final root = await Directory.systemTemp.createTemp(
       'cockpit-v2-preparation-guard-',
@@ -376,10 +402,12 @@ CockpitCaseRunner _runner(
   RecordingSecretResolver resolver,
   RecordingSafetyPolicy safety, {
   CockpitTestBundlePrePublicationValidator? bundlePrePublicationValidator,
+  CockpitTestActionLowerer lowerer = const CockpitTestActionLowerer(),
 }) => CockpitCaseRunner(
   automationAdapter: adapter,
   secretResolver: resolver,
   safetyPolicy: safety,
+  lowerer: lowerer,
   bundlePrePublicationValidator: bundlePrePublicationValidator,
   clock: ManualCockpitClock(),
 );
@@ -408,12 +436,12 @@ steps:
     action: {type: enterText, text: {\$var: password}}
 ''';
 
-String _simpleCase({required String targetKind}) =>
+String _simpleCase({required String targetKind, String plane = 'semantic'}) =>
     '''
 schemaVersion: cockpit.test/v2
 kind: case
 id: simpleCase
-target: {platform: android, targetKind: $targetKind, plane: semantic}
+target: {platform: android, targetKind: $targetKind, plane: $plane}
 steps:
   - {stepId: goBack, action: {type: back}}
 ''';

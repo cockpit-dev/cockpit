@@ -2,6 +2,7 @@ schemaVersion: cockpit.test/v2
 kind: case
 id: demoSettingsNavigation
 name: Settings navigation
+description: Verifies route navigation, assertions, and portable visual evidence.
 tags: [acceptance, navigation]
 target:
   platform: flutter
@@ -23,16 +24,20 @@ steps:
   - stepId: openSettings
     action:
       type: tap
-      locator: {strategy: label, value: Settings}
-      activation: gesture
+      locator: {label: Settings}
   - stepId: waitForSettings
     action:
       type: waitFor
       condition: {type: route, route: /settings}
   - stepId: verifySettingsContent
+    timeoutMs: 10000
+    evidence:
+      screenshot: always
+      snapshot: always
+      failurePolicy: failStep
     action:
       type: assertVisible
-      locator: {strategy: text, value: Tune the workspace.}
+      locator: {text: Tune the workspace.}
   - stepId: captureSettings
     action: {type: captureScreenshot, artifactName: settings-navigation}
   - stepId: returnToInbox

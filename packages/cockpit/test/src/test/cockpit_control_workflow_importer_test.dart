@@ -230,7 +230,7 @@ steps:
     }
   });
 
-  test('multi-signal locators require manual migration', () {
+  test('multi-signal locators migrate as conjunctive V2 signals', () {
     final source = _legacyScript()
       ..remove('recording')
       ..['steps'] = <Object?>[
@@ -250,16 +250,17 @@ steps:
         },
       ];
 
-    expect(
-      () => importer.import(_request(jsonEncode(source))),
-      throwsA(
-        isA<CockpitControlWorkflowImportException>().having(
-          (error) => error.error.message,
-          'message',
-          contains('multiple conjunctive signals'),
-        ),
-      ),
-    );
+    final result = importer.import(_request(jsonEncode(source)));
+    final operation =
+        result.testCase.steps.single.operation
+            as CockpitTestActionOperationTemplate;
+    final locator = operation.action.locator!;
+
+    expect(locator.testId!.value, 'paymentButton');
+    expect(locator.text!.value, 'Pay now');
+    expect(locator.fallbacks, isEmpty);
+    final compiled = compiler.compile(jsonEncode(result.testCase.toJson()));
+    expect(compiled.isSuccess, isTrue, reason: _diagnostics(compiled));
   });
 
   test('waitFor minVisibleTargets is rejected instead of discarded', () {

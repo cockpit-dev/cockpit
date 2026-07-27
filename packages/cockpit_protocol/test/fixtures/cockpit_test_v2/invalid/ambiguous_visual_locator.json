@@ -13,8 +13,7 @@
       "action": {
         "type": "tap",
         "locator": {
-          "strategy": "visual",
-          "value": "button.png",
+          "visual": "button.png",
           "x": 0.5,
           "y": 0.5
         }

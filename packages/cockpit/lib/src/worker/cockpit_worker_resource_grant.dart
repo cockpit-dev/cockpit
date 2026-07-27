@@ -10,7 +10,8 @@ final class CockpitWorkerResourceRequest {
     this.ttl = const Duration(seconds: 30),
   }) {
     workerString(resourceId, r'$.resourceId', maximum: 512);
-    if (ttl < const Duration(seconds: 1) || ttl > const Duration(minutes: 5)) {
+    if (ttl < const Duration(seconds: 1) ||
+        ttl > const Duration(milliseconds: cockpitMaximumLeaseTtlMs)) {
       throw const FormatException('Worker resource TTL is invalid.');
     }
     if (requiresPort &&

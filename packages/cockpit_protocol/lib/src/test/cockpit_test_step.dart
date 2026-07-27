@@ -7,6 +7,7 @@ final class CockpitTestStepTemplate {
   CockpitTestStepTemplate({
     required this.stepId,
     this.description,
+    this.plane,
     this.timeoutMs,
     this.evidence,
     this.safety,
@@ -27,6 +28,7 @@ final class CockpitTestStepTemplate {
 
   final String stepId;
   final String? description;
+  final CockpitTestPlane? plane;
   final int? timeoutMs;
   final CockpitTestEvidencePolicy? evidence;
   final CockpitTestSafetyDeclaration? safety;
@@ -36,6 +38,7 @@ final class CockpitTestStepTemplate {
   Map<String, Object?> toJson() => <String, Object?>{
     'stepId': stepId,
     if (description != null) 'description': description,
+    if (plane != null) 'plane': plane!.name,
     if (timeoutMs != null) 'timeoutMs': timeoutMs,
     if (evidence != null) 'evidence': evidence!.toJson(),
     if (safety != null) 'safety': safety!.toJson(),
@@ -62,6 +65,7 @@ final class CockpitTestStepTemplate {
       const <String>{
         'stepId',
         'description',
+        'plane',
         'timeoutMs',
         'evidence',
         'safety',
@@ -119,6 +123,13 @@ final class CockpitTestStepTemplate {
         json['description'],
         '$path.description',
       ),
+      plane: json['plane'] == null
+          ? null
+          : CockpitTestValueReader.enumeration(
+              json['plane'],
+              CockpitTestPlane.values,
+              '$path.plane',
+            ),
       timeoutMs: json['timeoutMs'] == null
           ? null
           : CockpitTestValueReader.integer(

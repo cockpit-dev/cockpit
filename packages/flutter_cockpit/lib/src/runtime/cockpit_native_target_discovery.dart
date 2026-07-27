@@ -387,6 +387,12 @@ final class CockpitNativeTargetDiscovery {
     CockpitTarget existing,
     CockpitTarget candidate,
   ) {
+    final existingHasKey = _hasStableKey(existing);
+    final candidateHasKey = _hasStableKey(candidate);
+    if (existingHasKey != candidateHasKey) {
+      return existingHasKey ? existing : candidate;
+    }
+
     final existingElement = existing.diagnosticNodeProvider?.call();
     final candidateElement = candidate.diagnosticNodeProvider?.call();
     final existingType = existing.typeName;
@@ -427,6 +433,9 @@ final class CockpitNativeTargetDiscovery {
         ? existing
         : candidate;
   }
+
+  bool _hasStableKey(CockpitTarget target) =>
+      target.keyValue != null && target.keyValue!.isNotEmpty;
 
   bool _isAncestorOf(Element ancestor, Element descendant) {
     var isAncestor = false;
@@ -559,6 +568,10 @@ final class CockpitNativeTargetDiscovery {
               ? _inputLabelForElement(element) ?? metadata.displayLabel
               : metadata.displayLabel,
         ),
+        cockpitId: _firstNonEmpty(<String?>[
+          metadata.semanticId,
+          metadata.keyValue,
+        ]),
         semanticId: metadata.semanticId,
         keyValue: metadata.keyValue,
         text: metadata.text,
@@ -630,6 +643,10 @@ final class CockpitNativeTargetDiscovery {
         typeName: typeName,
         bestLabel: metadata.displayLabel,
       ),
+      cockpitId: _firstNonEmpty(<String?>[
+        metadata.semanticId,
+        metadata.keyValue,
+      ]),
       semanticId: metadata.semanticId,
       keyValue: metadata.keyValue,
       text: metadata.text,
@@ -998,8 +1015,10 @@ final class CockpitNativeTargetDiscovery {
     if (typeName.startsWith('_')) {
       return true;
     }
-    if (widget is Semantics ||
-        widget is Dismissible ||
+    if (widget is Semantics && _keyValueForElement(element) == null) {
+      return true;
+    }
+    if (widget is Dismissible ||
         widget is Listener ||
         widget is MouseRegion ||
         widget is IgnorePointer ||

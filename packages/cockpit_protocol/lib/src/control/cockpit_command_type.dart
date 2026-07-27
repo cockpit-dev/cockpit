@@ -1,6 +1,9 @@
 enum CockpitCommandType {
   tap,
   enterText,
+  eraseText,
+  copyText,
+  pasteText,
   focusTextInput,
   setTextEditingValue,
   sendTextInputAction,
@@ -29,6 +32,8 @@ enum CockpitCommandType {
   waitFor,
   assertVisible,
   assertText,
+  assertScreenshot,
+  travel,
   system,
   captureScreenshot,
   collectSnapshot;

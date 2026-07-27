@@ -59,8 +59,7 @@
         "action": {
           "type": "enterText",
           "locator": {
-            "strategy": "testId",
-            "value": "username"
+            "testId": "username"
           },
           "text": {
             "$var": "username"
@@ -76,8 +75,7 @@
         "action": {
           "type": "enterText",
           "locator": {
-            "strategy": "testId",
-            "value": "password"
+            "testId": "password"
           },
           "text": {
             "$var": "password"
@@ -116,8 +114,7 @@
               "condition": {
                 "type": "visible",
                 "locator": {
-                  "strategy": "text",
-                  "value": "Home"
+                  "text": "Home"
                 }
               }
             }

@@ -6,6 +6,7 @@ import 'package:stream_channel/stream_channel.dart';
 import '../supervisor/cockpit_supervisor_api_client.dart';
 import 'cockpit_mcp_api_resources.dart';
 import 'cockpit_mcp_api_tools.dart';
+import 'cockpit_mcp_development_tools.dart';
 import 'cockpit_mcp_tool.dart';
 import 'core/cockpit_mcp_protocol_server.dart';
 import 'core/cockpit_mcp_resource.dart';
@@ -35,7 +36,10 @@ final class CockpitMcpServer {
     Future<CockpitSupervisorApiClient>? cached;
     Future<CockpitSupervisorApiClient> client() => cached ??= create();
     return CockpitMcpServer(
-      tools: cockpitMcpApiTools(client),
+      tools: <CockpitMcpTool>[
+        ...cockpitMcpApiTools(client),
+        ...cockpitMcpDevelopmentTools(client),
+      ],
       resources: cockpitMcpApiResources(client),
       featureConfiguration: featureConfiguration,
       serverName: serverName,

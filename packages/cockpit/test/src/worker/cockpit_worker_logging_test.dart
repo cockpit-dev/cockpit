@@ -75,4 +75,18 @@ void main() {
       throwsA(isA<CockpitTestSecretResolutionException>()),
     );
   });
+
+  test('yolo environment provider resolves any valid explicit name', () async {
+    final provider = CockpitEnvironmentSecretProvider(
+      allowedNames: const <String>[],
+      allowAllNames: true,
+      environment: const <String, String>{'DYNAMIC_SECRET': 'value'},
+    );
+
+    expect(await provider.resolve('DYNAMIC_SECRET'), 'value');
+    await expectLater(
+      provider.resolve('../invalid'),
+      throwsA(isA<CockpitTestSecretResolutionException>()),
+    );
+  });
 }

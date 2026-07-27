@@ -472,4 +472,73 @@ void main() {
       ),
     );
   });
+
+  test('uses explicit text modes and selects only a unique best match', () {
+    final registry = CockpitTargetRegistry(routeName: '/editor');
+    registry.register(
+      const CockpitTarget(
+        registrationId: 'save-exact',
+        text: 'Save task',
+        routeName: '/editor',
+      ),
+    );
+    registry.register(
+      const CockpitTarget(
+        registrationId: 'save-longer',
+        text: 'Save task permanently',
+        routeName: '/editor',
+      ),
+    );
+
+    expect(
+      registry.resolve(const CockpitLocator(text: 'Save')).isSuccess,
+      isFalse,
+    );
+
+    final resolution = registry.resolve(
+      const CockpitLocator(
+        text: 'Save task',
+        matchMode: CockpitTextMatchMode.contains,
+      ),
+    );
+
+    expect(resolution.target?.registrationId, 'save-exact');
+    expect(resolution.locatorResolution?.matchedSignals, <String, String>{
+      'text': 'Save task',
+      'matchMode': 'contains',
+    });
+
+    final fuzzyResolution = registry.resolve(
+      const CockpitLocator(
+        text: 'Svae task',
+        matchMode: CockpitTextMatchMode.fuzzy,
+      ),
+    );
+    expect(fuzzyResolution.target?.registrationId, 'save-exact');
+  });
+
+  test('returns ambiguity when regex candidates share the best score', () {
+    final registry = CockpitTargetRegistry(routeName: '/tasks');
+    for (final entry in const <(String, String)>[
+      ('task-one', 'Task 1'),
+      ('task-two', 'Task 2'),
+    ]) {
+      registry.register(
+        CockpitTarget(
+          registrationId: entry.$1,
+          text: entry.$2,
+          routeName: '/tasks',
+        ),
+      );
+    }
+
+    final resolution = registry.resolve(
+      const CockpitLocator(
+        text: r'^Task \d$',
+        matchMode: CockpitTextMatchMode.regex,
+      ),
+    );
+
+    expect(resolution.error?.code, CockpitCommandError.ambiguousTargetCode);
+  });
 }

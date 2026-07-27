@@ -508,73 +508,114 @@ const String cockpitTestV2SchemaJson = r'''
     "semanticLocator": {
       "type": "object",
       "properties": {
-        "strategy": {
-          "enum": ["text", "label", "nativeId", "testId", "role", "type", "path"]
+        "text": {
+          "$ref": "#/$defs/stringTemplate"
         },
-        "value": {
+        "label": {
+          "$ref": "#/$defs/stringTemplate"
+        },
+        "matchMode": {
+          "$ref": "#/$defs/matchModeTemplate"
+        },
+        "nativeId": {
+          "$ref": "#/$defs/stringTemplate"
+        },
+        "testId": {
+          "$ref": "#/$defs/stringTemplate"
+        },
+        "role": {
+          "$ref": "#/$defs/stringTemplate"
+        },
+        "type": {
+          "$ref": "#/$defs/stringTemplate"
+        },
+        "path": {
           "$ref": "#/$defs/stringTemplate"
         },
         "index": {
           "$ref": "#/$defs/nonNegativeIntegerTemplate"
         },
+        "enabled": {
+          "$ref": "#/$defs/booleanTemplate"
+        },
+        "selected": {
+          "$ref": "#/$defs/booleanTemplate"
+        },
+        "checked": {
+          "$ref": "#/$defs/booleanTemplate"
+        },
+        "focused": {
+          "$ref": "#/$defs/booleanTemplate"
+        },
+        "clickable": {
+          "$ref": "#/$defs/booleanTemplate"
+        },
         "ancestor": {
+          "$ref": "#/$defs/locator"
+        },
+        "child": {
+          "$ref": "#/$defs/locator"
+        },
+        "descendant": {
+          "$ref": "#/$defs/locator"
+        },
+        "above": {
+          "$ref": "#/$defs/locator"
+        },
+        "below": {
+          "$ref": "#/$defs/locator"
+        },
+        "leftOf": {
+          "$ref": "#/$defs/locator"
+        },
+        "rightOf": {
           "$ref": "#/$defs/locator"
         },
         "fallbacks": {
           "$ref": "#/$defs/locatorList"
         }
       },
-      "required": ["strategy", "value"],
+      "anyOf": [
+        {"required": ["text"]},
+        {"required": ["label"]},
+        {"required": ["nativeId"]},
+        {"required": ["testId"]},
+        {"required": ["role"]},
+        {"required": ["type"]},
+        {"required": ["path"]}
+      ],
       "additionalProperties": false
     },
     "coordinateLocator": {
       "type": "object",
       "properties": {
-        "strategy": {
-          "const": "coordinate"
-        },
         "x": {
           "$ref": "#/$defs/normalizedNumberTemplate"
         },
         "y": {
           "$ref": "#/$defs/normalizedNumberTemplate"
         },
-        "index": {
-          "$ref": "#/$defs/nonNegativeIntegerTemplate"
-        },
-        "ancestor": {
-          "$ref": "#/$defs/locator"
-        },
         "fallbacks": {
           "$ref": "#/$defs/locatorList"
         }
       },
-      "required": ["strategy", "x", "y"],
+      "required": ["x", "y"],
       "additionalProperties": false
     },
     "visualLocator": {
       "type": "object",
       "properties": {
-        "strategy": {
-          "const": "visual"
-        },
-        "value": {
+        "visual": {
           "$ref": "#/$defs/stringTemplate"
         },
         "threshold": {
           "$ref": "#/$defs/positiveNormalizedNumberTemplate"
         },
-        "index": {
-          "$ref": "#/$defs/nonNegativeIntegerTemplate"
-        },
-        "ancestor": {
-          "$ref": "#/$defs/locator"
-        },
         "fallbacks": {
           "$ref": "#/$defs/locatorList"
         }
       },
-      "required": ["strategy", "value"],
+      "required": ["visual"],
       "additionalProperties": false
     },
     "locatorList": {
@@ -628,7 +669,7 @@ const String cockpitTestV2SchemaJson = r'''
           "$ref": "#/$defs/stringTemplate"
         },
         "matchMode": {
-          "enum": ["exact", "contains", "regex"]
+          "enum": ["exact", "contains", "fuzzy", "regex"]
         }
       },
       "required": ["type", "locator", "text"],
@@ -715,7 +756,7 @@ const String cockpitTestV2SchemaJson = r'''
     "matchModeTemplate": {
       "oneOf": [
         {
-          "enum": ["exact", "contains", "regex"]
+          "enum": ["exact", "contains", "fuzzy", "regex"]
         },
         {
           "$ref": "#/$defs/variableReference"
@@ -962,6 +1003,15 @@ const String cockpitTestV2SchemaJson = r'''
           "$ref": "#/$defs/enterTextAction"
         },
         {
+          "$ref": "#/$defs/eraseTextAction"
+        },
+        {
+          "$ref": "#/$defs/copyTextAction"
+        },
+        {
+          "$ref": "#/$defs/pasteTextAction"
+        },
+        {
           "$ref": "#/$defs/setTextEditingValueAction"
         },
         {
@@ -1011,6 +1061,12 @@ const String cockpitTestV2SchemaJson = r'''
         },
         {
           "$ref": "#/$defs/assertTextAction"
+        },
+        {
+          "$ref": "#/$defs/assertScreenshotAction"
+        },
+        {
+          "$ref": "#/$defs/travelAction"
         },
         {
           "$ref": "#/$defs/systemAction"
@@ -1094,6 +1150,57 @@ const String cockpitTestV2SchemaJson = r'''
         "^x-[A-Za-z0-9][A-Za-z0-9._-]*$": true
       },
       "required": ["type", "text"],
+      "additionalProperties": false
+    },
+    "eraseTextAction": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "eraseText"
+        },
+        "locator": {
+          "$ref": "#/$defs/locator"
+        },
+        "characters": {
+          "$ref": "#/$defs/positiveIntegerTemplate"
+        }
+      },
+      "patternProperties": {
+        "^x-[A-Za-z0-9][A-Za-z0-9._-]*$": true
+      },
+      "required": ["type"],
+      "additionalProperties": false
+    },
+    "copyTextAction": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "copyText"
+        },
+        "locator": {
+          "$ref": "#/$defs/locator"
+        }
+      },
+      "patternProperties": {
+        "^x-[A-Za-z0-9][A-Za-z0-9._-]*$": true
+      },
+      "required": ["type", "locator"],
+      "additionalProperties": false
+    },
+    "pasteTextAction": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "pasteText"
+        },
+        "locator": {
+          "$ref": "#/$defs/locator"
+        }
+      },
+      "patternProperties": {
+        "^x-[A-Za-z0-9][A-Za-z0-9._-]*$": true
+      },
+      "required": ["type"],
       "additionalProperties": false
     },
     "setTextEditingValueAction": {
@@ -1537,6 +1644,81 @@ const String cockpitTestV2SchemaJson = r'''
       "required": ["type", "text"],
       "additionalProperties": false
     },
+    "assertScreenshotAction": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "assertScreenshot"
+        },
+        "baseline": {
+          "$ref": "#/$defs/stringTemplate"
+        },
+        "similarity": {
+          "$ref": "#/$defs/positiveNormalizedNumberTemplate"
+        },
+        "artifactName": {
+          "$ref": "#/$defs/stringTemplate"
+        }
+      },
+      "patternProperties": {
+        "^x-[A-Za-z0-9][A-Za-z0-9._-]*$": true
+      },
+      "required": ["type", "baseline"],
+      "additionalProperties": false
+    },
+    "travelAction": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "travel"
+        },
+        "route": {
+          "$ref": "#/$defs/travelRouteTemplate"
+        },
+        "intervalMs": {
+          "$ref": "#/$defs/positiveIntegerTemplate"
+        }
+      },
+      "patternProperties": {
+        "^x-[A-Za-z0-9][A-Za-z0-9._-]*$": true
+      },
+      "required": ["type", "route"],
+      "additionalProperties": false
+    },
+    "travelRouteTemplate": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/variableReference"
+        },
+        {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 10000,
+          "items": {
+            "type": "object",
+            "properties": {
+              "latitude": {
+                "type": "number",
+                "minimum": -90,
+                "maximum": 90
+              },
+              "longitude": {
+                "type": "number",
+                "minimum": -180,
+                "maximum": 180
+              },
+              "delayMs": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 3600000
+              }
+            },
+            "required": ["latitude", "longitude"],
+            "additionalProperties": false
+          }
+        }
+      ]
+    },
     "captureScreenshotAction": {
       "type": "object",
       "properties": {
@@ -1599,6 +1781,9 @@ const String cockpitTestV2SchemaJson = r'''
         },
         "description": {
           "$ref": "#/$defs/nonEmptyString"
+        },
+        "plane": {
+          "enum": ["semantic", "native", "visual", "coordinate"]
         },
         "timeoutMs": {
           "type": "integer",
@@ -1821,7 +2006,7 @@ const String cockpitTestV2SchemaJson = r'''
       "properties": {
         "formats": {
           "type": "array",
-          "items": { "enum": ["json", "junit", "html", "aiSummary"] },
+          "items": { "enum": ["json", "junit", "html", "summary"] },
           "contains": { "const": "json" },
           "minContains": 1,
           "uniqueItems": true
@@ -2173,6 +2358,7 @@ const String cockpitTestV2SchemaJson = r'''
       "properties": {
         "entryId": { "$ref": "#/$defs/id" },
         "caseId": { "$ref": "#/$defs/id" },
+        "definition": { "$ref": "#/$defs/case" },
         "sourceSha256": { "$ref": "#/$defs/reportSha256" },
         "outcome": { "$ref": "#/$defs/runOutcome" },
         "stability": { "$ref": "#/$defs/runStability" },
@@ -2186,6 +2372,7 @@ const String cockpitTestV2SchemaJson = r'''
       "required": [
         "entryId",
         "caseId",
+        "definition",
         "sourceSha256",
         "outcome",
         "stability",
@@ -2228,6 +2415,7 @@ const String cockpitTestV2SchemaJson = r'''
         "workspaceId": { "$ref": "#/$defs/id" },
         "runId": { "$ref": "#/$defs/id" },
         "suiteId": { "$ref": "#/$defs/id" },
+        "definition": { "$ref": "#/$defs/suite" },
         "sourceSha256": { "$ref": "#/$defs/reportSha256" },
         "lifecycle": { "const": "completed" },
         "outcome": { "$ref": "#/$defs/runOutcome" },
@@ -2271,6 +2459,7 @@ const String cockpitTestV2SchemaJson = r'''
         "workspaceId",
         "runId",
         "suiteId",
+        "definition",
         "sourceSha256",
         "lifecycle",
         "outcome",

@@ -51,6 +51,34 @@ void main() {
     ]);
   });
 
+  test('android pressKey batches repeated keys in one process', () async {
+    final processManager = _FakeProcessManager();
+    final service = CockpitSystemControlActionService(
+      processManager: processManager,
+    );
+
+    final result = await service.run(
+      const CockpitSystemControlActionRequest(
+        platform: 'android',
+        deviceId: 'emulator-5554',
+        action: CockpitSystemControlAction.pressKey,
+        parameters: <String, Object?>{'key': 'backspace', 'repeat': 3},
+      ),
+    );
+
+    expect(result.success, isTrue);
+    expect(processManager.starts.single.arguments, <String>[
+      '-s',
+      'emulator-5554',
+      'shell',
+      'input',
+      'keyevent',
+      'KEYCODE_DEL',
+      'KEYCODE_DEL',
+      'KEYCODE_DEL',
+    ]);
+  });
+
   test(
     'blocked ios physical action returns guidance without spawning process',
     () async {
@@ -2076,13 +2104,17 @@ void main() {
       const CockpitSystemControlActionRequest(
         platform: 'macos',
         appId: 'dev.cockpit.example',
+        processId: 4242,
         action: CockpitSystemControlAction.recoverToApp,
       ),
     );
 
     expect(result.success, isTrue);
     expect(result.command.first, 'osascript');
-    expect(result.command, contains('dev.cockpit.example'));
+    expect(result.command, containsAllInOrder(<String>['processId', '4242']));
+    expect(result.command, contains('JavaScript'));
+    expect(result.command.join('\n'), contains('NSRunningApplication'));
+    expect(result.command.join('\n'), isNot(contains('System Events')));
   });
 
   test('desktop dismissKeyboard reports unsupported truthfully', () async {
@@ -3341,7 +3373,7 @@ void main() {
     );
 
     expect(result.success, isTrue);
-    expect(result.command, hasLength(8));
+    expect(result.command, hasLength(12));
     expect(result.command[0], 'sh');
     expect(result.command[1], '-c');
     expect(
@@ -3353,6 +3385,10 @@ void main() {
       'appId',
       'dev.cockpit.example',
       'key',
+      '--repeat',
+      '1',
+      '--delay',
+      '0',
       'Escape',
     ]);
   });

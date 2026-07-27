@@ -8,6 +8,7 @@ import 'package:cockpit/src/foundation/cockpit_permissions.dart';
 import 'package:cockpit/src/supervisor/cockpit_daemon_client.dart';
 import 'package:cockpit/src/supervisor/cockpit_daemon_discovery.dart';
 import 'package:cockpit/src/supervisor/cockpit_daemon_host.dart';
+import 'package:cockpit_protocol/cockpit_protocol.dart';
 import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 
@@ -38,6 +39,7 @@ void main() {
       });
       final paths = CockpitHomePaths(await temporary.resolveSymbolicLinks());
       final discovery = await _waitForDiscovery(paths);
+      expect(discovery.authorizationMode, CockpitAuthorizationMode.restricted);
       final policy = Platform.isWindows
           ? const CockpitWindowsAclPermissionHardener()
           : const CockpitPosixPermissionHardener();
@@ -118,6 +120,15 @@ void main() {
       await lifecycle.stop(mode: CockpitDaemonShutdownMode.emergency);
       expect(await process.exitCode, 0);
       expect(await File(paths.daemonDiscovery).exists(), isFalse);
+      final yolo = await lifecycle.start(
+        authorizationMode: CockpitAuthorizationMode.yolo,
+      );
+      expect(yolo.authorizationMode, CockpitAuthorizationMode.yolo);
+      expect(
+        (await lifecycle.status()).authorizationMode,
+        CockpitAuthorizationMode.yolo,
+      );
+      await lifecycle.stop(mode: CockpitDaemonShutdownMode.emergency);
       final log = await File(paths.daemonLog).readAsString();
       expect(log, isNot(contains(discovery.bearerToken)));
     },

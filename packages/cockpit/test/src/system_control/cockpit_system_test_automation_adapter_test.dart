@@ -25,6 +25,7 @@ void main() {
         processManager: processes,
         systemControlService: controls,
       ),
+      workspaceRoot: Directory.current.path,
       delay: (_) async {},
     );
 
@@ -33,10 +34,7 @@ void main() {
         commandId: 'wait-for-ready',
         commandType: CockpitCommandType.waitFor,
         parameters: <String, Object?>{
-          'cockpitTestLocator': <String, Object?>{
-            'strategy': 'label',
-            'value': 'Ready',
-          },
+          'cockpitTestLocator': <String, Object?>{'label': 'Ready'},
         },
         timeoutMs: 1000,
       ),
@@ -44,10 +42,61 @@ void main() {
 
     expect(execution.result.success, isTrue);
     expect(processes.uiTreeReads, 2);
+    expect(
+      execution.result.locatorResolution?.matchedSignals['adapter'],
+      'native',
+    );
+  });
+
+  test('Flutter black-box resolution records its optimized adapter', () async {
+    final processes = _TransientUiTreeProcessManager(
+      uiTree: _flutterUiTree,
+      failFirst: false,
+    );
+    final controls = CockpitSystemControlService(processManager: processes);
+    final adapter = CockpitSystemTestAutomationAdapter(
+      target: CockpitSystemTestTarget(
+        platform: 'android',
+        deviceId: 'emulator-5554',
+        appId: 'dev.cockpit.demo',
+        targetKind: CockpitTargetKind.flutterApp,
+      ),
+      controlService: controls,
+      actionService: CockpitSystemControlActionService(
+        processManager: processes,
+        systemControlService: controls,
+      ),
+      workspaceRoot: Directory.current.path,
+      delay: (_) async {},
+    );
+
+    final execution = await adapter.execute(
+      CockpitCommand(
+        commandId: 'wait-for-save',
+        commandType: CockpitCommandType.waitFor,
+        parameters: <String, Object?>{
+          'cockpitTestLocator': <String, Object?>{'text': 'Save'},
+        },
+        timeoutMs: 1000,
+      ),
+    );
+
+    expect(execution.result.success, isTrue);
+    expect(
+      execution.result.locatorResolution?.matchedSignals['adapter'],
+      'flutterAwareNative',
+    );
   });
 }
 
 final class _TransientUiTreeProcessManager implements CockpitProcessManager {
+  _TransientUiTreeProcessManager({
+    this.uiTree = _uiTree,
+    this.failFirst = true,
+  });
+
+  final String uiTree;
+  final bool failFirst;
   int uiTreeReads = 0;
 
   @override
@@ -80,12 +129,12 @@ final class _TransientUiTreeProcessManager implements CockpitProcessManager {
     ProcessStartMode mode = ProcessStartMode.normal,
   }) async {
     uiTreeReads += 1;
-    return uiTreeReads == 1
+    return failFirst && uiTreeReads == 1
         ? _CompletedProcess(
             exitCodeValue: 1,
             stderrText: 'UI hierarchy unavailable',
           )
-        : _CompletedProcess(stdoutText: _uiTree);
+        : _CompletedProcess(stdoutText: uiTree);
   }
 }
 
@@ -128,4 +177,11 @@ final class _CompletedProcess implements Process {
 const _uiTree = '''<?xml version="1.0" encoding="UTF-8"?>
 <hierarchy bounds="[0,0][100,100]">
   <node content-desc="Ready" bounds="[10,10][90,90]" />
+</hierarchy>''';
+
+const _flutterUiTree = '''<?xml version="1.0" encoding="UTF-8"?>
+<hierarchy bounds="[0,0][400,800]">
+  <node text="Save" class="android.view.View" enabled="true" clickable="true" bounds="[40,100][360,180]">
+    <node text="Save" class="android.view.View" enabled="true" clickable="false" bounds="[40,100][360,180]" />
+  </node>
 </hierarchy>''';

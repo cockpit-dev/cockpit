@@ -428,18 +428,26 @@ final class CockpitGestureEngine {
   }) async {
     final span = _resolveGestureSpan(geometry, startSpan);
     final radius = span / 2;
+    // A mathematically pure rotation changes neither span nor focal point, so
+    // Flutter's scale recognizer cannot win against an enclosing scrollable.
+    // Cross scale slop first, then rotate from the recognizer's new baseline.
+    final recognitionRadius = radius + kScaleSlop + 4;
     final endLeft = Offset(
-      -radius * math.cos(rotation),
-      -radius * math.sin(rotation),
+      -recognitionRadius * math.cos(rotation),
+      -recognitionRadius * math.sin(rotation),
     );
     final endRight = Offset(
-      radius * math.cos(rotation),
-      radius * math.sin(rotation),
+      recognitionRadius * math.cos(rotation),
+      recognitionRadius * math.sin(rotation),
     );
     await _performInterpolatedMultiPointerGesture(
       geometry: geometry,
       origin: origin,
       startOffsets: <int, Offset>{1: Offset(-radius, 0), 2: Offset(radius, 0)},
+      recognitionOffsets: <int, Offset>{
+        1: Offset(-recognitionRadius, 0),
+        2: Offset(recognitionRadius, 0),
+      },
       endOffsets: <int, Offset>{1: endLeft, 2: endRight},
       duration: duration,
       moveEventCount: moveEventCount,
@@ -667,6 +675,7 @@ final class CockpitGestureEngine {
     required CockpitTargetGeometry geometry,
     required Offset origin,
     required Map<int, Offset> startOffsets,
+    Map<int, Offset>? recognitionOffsets,
     required Map<int, Offset> endOffsets,
     required Duration duration,
     required int moveEventCount,
@@ -707,33 +716,72 @@ final class CockpitGestureEngine {
       await _delay(initialHoldDuration);
     }
     var previousUs = 0;
-    for (var step = 1; step <= stepCount; step += 1) {
-      final t = step / stepCount;
-      final nextUs = (duration.inMicroseconds * t).round();
-      for (final pointer in pointerIds) {
-        final start = startOffsets[pointer]!;
-        final end = endOffsets[pointer]!;
-        final previousOffset = previousPositions[pointer]!;
-        final nextOffset = Offset.lerp(start, end, t)!;
-        _dispatchMove(
-          pointer: pointer,
-          geometry: geometry,
-          previousPosition: Offset(
-            origin.dx + previousOffset.dx,
-            origin.dy + previousOffset.dy,
-          ),
-          nextPosition: Offset(
-            origin.dx + nextOffset.dx,
-            origin.dy + nextOffset.dy,
-          ),
-          pointerDeviceKind: PointerDeviceKind.touch,
-          buttons: kPrimaryButton,
-          timeStamp: initialHoldDuration + Duration(microseconds: nextUs),
-        );
-        previousPositions[pointer] = nextOffset;
+    Future<void> dispatchPhase({
+      required Map<int, Offset> phaseStart,
+      required Map<int, Offset> phaseEnd,
+      required int eventCount,
+      required int durationUs,
+    }) async {
+      final phaseStartUs = previousUs;
+      for (var step = 1; step <= eventCount; step += 1) {
+        final t = step / eventCount;
+        final nextUs = phaseStartUs + (durationUs * t).round();
+        for (final pointer in pointerIds) {
+          final start = phaseStart[pointer];
+          final end = phaseEnd[pointer];
+          if (start == null || end == null) {
+            throw ArgumentError(
+              'Multi-pointer gesture phases require matching pointer offsets.',
+            );
+          }
+          final previousOffset = previousPositions[pointer]!;
+          final nextOffset = Offset.lerp(start, end, t)!;
+          _dispatchMove(
+            pointer: pointer,
+            geometry: geometry,
+            previousPosition: Offset(
+              origin.dx + previousOffset.dx,
+              origin.dy + previousOffset.dy,
+            ),
+            nextPosition: Offset(
+              origin.dx + nextOffset.dx,
+              origin.dy + nextOffset.dy,
+            ),
+            pointerDeviceKind: PointerDeviceKind.touch,
+            buttons: kPrimaryButton,
+            timeStamp: initialHoldDuration + Duration(microseconds: nextUs),
+          );
+          previousPositions[pointer] = nextOffset;
+        }
+        await _delay(Duration(microseconds: nextUs - previousUs));
+        previousUs = nextUs;
       }
-      await _delay(Duration(microseconds: nextUs - previousUs));
-      previousUs = nextUs;
+    }
+
+    if (recognitionOffsets == null) {
+      await dispatchPhase(
+        phaseStart: startOffsets,
+        phaseEnd: endOffsets,
+        eventCount: stepCount,
+        durationUs: duration.inMicroseconds,
+      );
+    } else {
+      final recognitionStepCount = math.max(2, (stepCount * 0.35).round());
+      final actionStepCount = math.max(2, stepCount - recognitionStepCount);
+      final recognitionDurationUs = (duration.inMicroseconds * 0.35).round();
+      await dispatchPhase(
+        phaseStart: startOffsets,
+        phaseEnd: recognitionOffsets,
+        eventCount: recognitionStepCount,
+        durationUs: recognitionDurationUs,
+      );
+      await _delay(Duration.zero);
+      await dispatchPhase(
+        phaseStart: recognitionOffsets,
+        phaseEnd: endOffsets,
+        eventCount: actionStepCount,
+        durationUs: duration.inMicroseconds - recognitionDurationUs,
+      );
     }
 
     for (final pointer in pointerIds.reversed) {

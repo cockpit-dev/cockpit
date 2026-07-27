@@ -7,6 +7,7 @@ import 'cockpit_supervisor_operation_catalog.dart';
 
 final class CockpitSupervisorAuthorizationPolicy {
   CockpitSupervisorAuthorizationPolicy({
+    this.mode = CockpitAuthorizationMode.restricted,
     Iterable<String> allowedDangerousOperations = const <String>[],
     Iterable<CockpitSafetyEffect> allowedOperationSafetyEffects = const {},
     Iterable<CockpitTestTargetEnvironment> allowedTargetEnvironments = const {
@@ -46,10 +47,40 @@ final class CockpitSupervisorAuthorizationPolicy {
   }
 
   final Set<String> allowedDangerousOperations;
+  final CockpitAuthorizationMode mode;
   final Set<CockpitSafetyEffect> allowedOperationSafetyEffects;
   final Set<CockpitTestTargetEnvironment> allowedTargetEnvironments;
   final Set<CockpitTestSafetyEffect> allowedSafetyEffects;
   final Set<String> allowedEnvironmentSecretNames;
+
+  bool get isYolo => mode == CockpitAuthorizationMode.yolo;
+
+  Set<CockpitTestTargetEnvironment> get effectiveAllowedTargetEnvironments =>
+      isYolo
+      ? Set<CockpitTestTargetEnvironment>.unmodifiable(
+          CockpitTestTargetEnvironment.values,
+        )
+      : allowedTargetEnvironments;
+
+  Set<CockpitTestSafetyEffect> get effectiveAllowedSafetyEffects => isYolo
+      ? Set<CockpitTestSafetyEffect>.unmodifiable(
+          CockpitTestSafetyEffect.values,
+        )
+      : allowedSafetyEffects;
+
+  bool allowsEnvironmentSecretName(String name) =>
+      isYolo || allowedEnvironmentSecretNames.contains(name);
+
+  CockpitSupervisorAuthorizationPolicy withMode(
+    CockpitAuthorizationMode value,
+  ) => CockpitSupervisorAuthorizationPolicy(
+    mode: value,
+    allowedDangerousOperations: allowedDangerousOperations,
+    allowedOperationSafetyEffects: allowedOperationSafetyEffects,
+    allowedTargetEnvironments: allowedTargetEnvironments,
+    allowedSafetyEffects: allowedSafetyEffects,
+    allowedEnvironmentSecretNames: allowedEnvironmentSecretNames,
+  );
 
   Map<String, Object?> toJson() => <String, Object?>{
     'schemaVersion': 'cockpit.supervisor.authorization/v2',
@@ -120,6 +151,7 @@ final class CockpitSupervisorAuthorizationPolicy {
     CockpitSupervisorOperationMetadata metadata,
     CockpitOperationInvocation invocation,
   ) {
+    if (isYolo) return;
     final descriptor = metadata.descriptor;
     if (metadata.requiresExplicitAuthorization &&
         !allowedDangerousOperations.contains(descriptor.kind)) {

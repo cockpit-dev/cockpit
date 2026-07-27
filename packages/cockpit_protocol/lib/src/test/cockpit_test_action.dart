@@ -1,5 +1,6 @@
 import 'package:collection/collection.dart';
 
+import '../control/cockpit_locator.dart';
 import 'cockpit_test_action_contract.dart';
 import 'cockpit_test_condition.dart';
 import 'cockpit_test_locator.dart';
@@ -356,6 +357,8 @@ void _validateActionValues(
     CockpitTestActionField.distance,
     CockpitTestActionField.maxScrolls,
     CockpitTestActionField.quietMs,
+    CockpitTestActionField.characters,
+    CockpitTestActionField.intervalMs,
   }) {
     final value = number(field);
     if (value != null && value <= 0) {
@@ -406,8 +409,12 @@ void _validateActionValues(
   }
   final matchMode = string(CockpitTestActionField.matchMode);
   if (matchMode != null &&
-      !CockpitTestTextMatchMode.values.any((mode) => mode.name == matchMode)) {
+      !CockpitTextMatchMode.values.any((mode) => mode.name == matchMode)) {
     throw const FormatException('Unsupported text matchMode.');
+  }
+  final similarity = number(CockpitTestActionField.similarity);
+  if (similarity != null && (similarity <= 0 || similarity > 1)) {
+    throw const FormatException('similarity must be normalized in (0, 1].');
   }
   final inputAction = string(CockpitTestActionField.inputAction);
   if (inputAction != null &&
@@ -495,11 +502,16 @@ void _validateActionValues(
         _validateKeyRequest(request);
       }
     case CockpitTestActionKind.assertText:
-      if (matchMode == CockpitTestTextMatchMode.regex.name) {
+      if (matchMode == CockpitTextMatchMode.regex.name) {
         final pattern = string(CockpitTestActionField.text);
         if (pattern != null) {
           RegExp(pattern);
         }
+      }
+    case CockpitTestActionKind.travel:
+      final route = values[CockpitTestActionField.route];
+      if (route != null || !partial) {
+        _validateTravelRoute(route);
       }
     case CockpitTestActionKind.captureScreenshot:
       _validateCaptureOptions(values[CockpitTestActionField.captureOptions]);
@@ -515,6 +527,47 @@ void _validateActionValues(
       );
     default:
       break;
+  }
+}
+
+void _validateTravelRoute(Object? value) {
+  final points = CockpitTestValueReader.list(value, r'$.route');
+  if (points.length < 2 || points.length > 10000) {
+    throw const FormatException(
+      'travel route requires 2 through 10000 points.',
+    );
+  }
+  for (var index = 0; index < points.length; index += 1) {
+    final path = '\$.route[$index]';
+    final point = CockpitTestValueReader.object(points[index], path);
+    CockpitTestValueReader.keys(
+      point,
+      const <String>{'latitude', 'longitude', 'delayMs'},
+      path,
+      required: const <String>{'latitude', 'longitude'},
+    );
+    final latitude = CockpitTestValueReader.number(
+      point['latitude'],
+      '$path.latitude',
+    );
+    final longitude = CockpitTestValueReader.number(
+      point['longitude'],
+      '$path.longitude',
+    );
+    if (latitude < -90 ||
+        latitude > 90 ||
+        longitude < -180 ||
+        longitude > 180) {
+      throw FormatException('Invalid geographic coordinate at $path.');
+    }
+    if (point.containsKey('delayMs')) {
+      CockpitTestValueReader.integer(
+        point['delayMs'],
+        '$path.delayMs',
+        minimum: 0,
+        maximum: 3600000,
+      );
+    }
   }
 }
 

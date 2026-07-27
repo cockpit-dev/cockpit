@@ -596,6 +596,10 @@ CockpitTestActionTemplate _action(
       break;
     case CockpitTestActionKind.enterText:
       take(CockpitTestActionField.text);
+    case CockpitTestActionKind.eraseText:
+      take(CockpitTestActionField.characters);
+    case CockpitTestActionKind.copyText || CockpitTestActionKind.pasteText:
+      break;
     case CockpitTestActionKind.setTextEditingValue:
       take(CockpitTestActionField.text);
       take(CockpitTestActionField.selectionStart, 'selectionBase');
@@ -698,6 +702,13 @@ CockpitTestActionTemplate _action(
           );
     case CockpitTestActionKind.assertText:
       take(CockpitTestActionField.text);
+    case CockpitTestActionKind.assertScreenshot:
+      take(CockpitTestActionField.baseline);
+      take(CockpitTestActionField.similarity);
+      take(CockpitTestActionField.artifactName);
+    case CockpitTestActionKind.travel:
+      take(CockpitTestActionField.route);
+      take(CockpitTestActionField.intervalMs);
     case CockpitTestActionKind.system:
       take(CockpitTestActionField.systemName, 'action');
       take(CockpitTestActionField.systemParameters, 'parameters');
@@ -943,8 +954,7 @@ CockpitTestConditionTemplate _condition(
         kind: CockpitTestConditionKind.text,
         locator: command.locator == null
             ? CockpitTestLocatorTemplate(
-                strategy: CockpitTestLocatorStrategy.text,
-                value: CockpitTestTemplateValue.literal(
+                text: CockpitTestTemplateValue.literal(
                   expected,
                   expectedType: CockpitTestValueType.string,
                 ),
@@ -954,7 +964,7 @@ CockpitTestConditionTemplate _condition(
           expected,
           expectedType: CockpitTestValueType.string,
         ),
-        matchMode: CockpitTestTextMatchMode.exact,
+        matchMode: CockpitTextMatchMode.exact,
       );
     case CockpitCommandType.waitFor:
       final absent = parameters.remove('absent') == true;
@@ -990,7 +1000,7 @@ CockpitTestConditionTemplate _condition(
             text,
             expectedType: CockpitTestValueType.string,
           ),
-          matchMode: CockpitTestTextMatchMode.exact,
+          matchMode: CockpitTextMatchMode.exact,
         );
       }
       return CockpitTestConditionTemplate(
@@ -1049,16 +1059,10 @@ CockpitTestLocatorTemplate _locator(
   CockpitLocator source, {
   required String path,
 }) {
-  if (source.signals.length > 1) {
-    throw _migrationError(
-      'Locator at $path contains multiple conjunctive signals and requires '
-      'manual migration.',
-    );
-  }
   final ancestor = source.ancestor == null
       ? null
       : _locator(source.ancestor!, path: '$path.ancestor');
-  final candidates = <CockpitTestLocatorTemplate>[];
+  final signals = <CockpitTestLocatorStrategy, CockpitTestTemplateValue>{};
   for (final signal in source.signals) {
     final strategy = switch (signal.kind) {
       CockpitLocatorKind.cockpitId => CockpitTestLocatorStrategy.testId,
@@ -1078,43 +1082,41 @@ CockpitTestLocatorTemplate _locator(
         'Locator ${signal.kind.name} at $path requires manual migration.',
       ),
     };
-    candidates.add(
-      CockpitTestLocatorTemplate(
-        strategy: strategy,
-        value: CockpitTestTemplateValue.literal(
-          signal.value,
-          expectedType: CockpitTestValueType.string,
-        ),
-        index: source.index == null
-            ? null
-            : CockpitTestTemplateValue.literal(
-                source.index,
-                expectedType: CockpitTestValueType.integer,
-              ),
-        ancestor: ancestor,
-      ),
+    signals[strategy] = CockpitTestTemplateValue.literal(
+      signal.value,
+      expectedType: CockpitTestValueType.string,
     );
   }
+  if (signals.isEmpty) {
+    throw _migrationError('Locator has no supported signal at $path.');
+  }
+  final fallbacks = <CockpitTestLocatorTemplate>[];
   for (var index = 0; index < source.fallbacks.length; index++) {
-    candidates.add(
+    fallbacks.add(
       _locator(source.fallbacks[index], path: '$path.fallbacks[$index]'),
     );
   }
-  if (candidates.isEmpty) {
-    throw _migrationError('Locator has no supported signal at $path.');
-  }
-  final primary = candidates.first;
   return CockpitTestLocatorTemplate(
-    strategy: primary.strategy,
-    value: primary.value,
-    x: primary.x,
-    y: primary.y,
-    threshold: primary.threshold,
-    index: primary.index,
-    ancestor: primary.ancestor,
-    fallbacks: <CockpitTestLocatorTemplate>[
-      ...primary.fallbacks,
-      ...candidates.skip(1),
-    ],
+    text: signals[CockpitTestLocatorStrategy.text],
+    label: signals[CockpitTestLocatorStrategy.label],
+    matchMode: source.matchMode == CockpitTextMatchMode.exact
+        ? null
+        : CockpitTestTemplateValue.literal(
+            source.matchMode.name,
+            expectedType: CockpitTestValueType.string,
+          ),
+    nativeId: signals[CockpitTestLocatorStrategy.nativeId],
+    testId: signals[CockpitTestLocatorStrategy.testId],
+    role: signals[CockpitTestLocatorStrategy.role],
+    type: signals[CockpitTestLocatorStrategy.type],
+    path: signals[CockpitTestLocatorStrategy.path],
+    index: source.index == null
+        ? null
+        : CockpitTestTemplateValue.literal(
+            source.index,
+            expectedType: CockpitTestValueType.integer,
+          ),
+    ancestor: ancestor,
+    fallbacks: fallbacks,
   );
 }

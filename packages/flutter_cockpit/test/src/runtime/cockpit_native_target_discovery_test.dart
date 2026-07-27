@@ -659,6 +659,33 @@ void main() {
     },
   );
 
+  testWidgets('preserves a passive Text key while deduplicating RichText', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      CockpitSurface(
+        routeName: '/command-lab',
+        child: const MaterialApp(
+          home: Scaffold(
+            body: Text('gesture:idle', key: Key('lab-gesture-status')),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final surfaceState = tester.state<CockpitSurfaceState>(
+      find.byType(CockpitSurface),
+    );
+    final resolution = surfaceState.registry.resolve(
+      const CockpitLocator(key: 'lab-gesture-status'),
+    );
+
+    expect(resolution.isSuccess, isTrue);
+    expect(resolution.target?.text, 'gesture:idle');
+    expect(resolution.target?.typeName, 'Text');
+  });
+
   testWidgets(
     'tristate checkbox direct handler follows the false, true, null cycle',
     (tester) async {
@@ -814,9 +841,14 @@ Future<CockpitTarget> _resolveKeyedInputTarget(
   final resolution = surfaceState.registry.resolve(
     const CockpitLocator(key: 'task-input'),
   );
+  final testIdResolution = surfaceState.registry.resolve(
+    const CockpitLocator(cockpitId: 'task-input'),
+  );
 
   expect(resolution.isSuccess, isTrue);
+  expect(testIdResolution.isSuccess, isTrue);
   final target = resolution.target;
   expect(target, isNotNull);
+  expect(testIdResolution.target?.registrationId, target?.registrationId);
   return target!;
 }

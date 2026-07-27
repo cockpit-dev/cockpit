@@ -161,12 +161,15 @@ final class CockpitSupervisorRuntime {
             portBridge: bridge,
           ),
       environment: cockpitMinimumChildEnvironment(
-        environment: <String, String>{
-          for (final name in policy.allowedEnvironmentSecretNames)
-            name: ?Platform.environment[name],
-        },
+        environment: policy.isYolo
+            ? Platform.environment
+            : <String, String>{
+                for (final name in policy.allowedEnvironmentSecretNames)
+                  name: ?Platform.environment[name],
+              },
       ),
       allowedEnvironmentSecretNames: policy.allowedEnvironmentSecretNames,
+      allowAllEnvironmentSecrets: policy.isYolo,
     );
     return CockpitSupervisorRuntime._(
       resources: resources,
@@ -1210,8 +1213,10 @@ final class CockpitSupervisorRuntime {
         workspaceId,
       ),
       supportedFeatures: cockpitSupervisorFeatures.map((item) => item.id),
-      allowedTargetEnvironments: authorization.allowedTargetEnvironments,
-      allowedSafetyEffects: authorization.allowedSafetyEffects,
+      authorizationMode: authorization.mode,
+      allowedTargetEnvironments:
+          authorization.effectiveAllowedTargetEnvironments,
+      allowedSafetyEffects: authorization.effectiveAllowedSafetyEffects,
     );
   }
 

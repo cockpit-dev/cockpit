@@ -242,12 +242,18 @@ final class CockpitWorkspaceToolingAdapters {
     CockpitWorkspaceOperationContext context,
     Map<String, Object?> input,
   ) async {
-    _empty(input);
+    workerKeys(input, const <String>{'documentIds'}, r'$.input');
+    final paths = input['documentIds'] == null
+        ? const <String>[]
+        : await _documents.resolvePaths(
+            _documentIds(input['documentIds'], r'$.input.documentIds'),
+          );
     final result = await _raceCancellation(
       () => _formatWorkspace.format(
         CockpitFormatWorkspaceRequest(
           workspaceRoot: workspaceRoot,
           allowedRoots: <String>[workspaceRoot],
+          paths: paths,
           timeout: _timeout(context),
         ),
       ),
@@ -260,12 +266,23 @@ final class CockpitWorkspaceToolingAdapters {
     CockpitWorkspaceOperationContext context,
     Map<String, Object?> input,
   ) async {
-    _empty(input);
+    workerKeys(input, const <String>{'paths', 'name'}, r'$.input');
+    final rawPaths = input['paths'] == null
+        ? const <Object?>[]
+        : workerList(input['paths'], r'$.input.paths', maximum: 512);
+    final paths = <String>[
+      for (var index = 0; index < rawPaths.length; index += 1)
+        workerString(rawPaths[index], '\$.input.paths[$index]', maximum: 32768),
+    ];
     final result = await _raceCancellation(
       () => _runTests.run(
         CockpitRunWorkspaceTestsRequest(
           workspaceRoot: workspaceRoot,
           allowedRoots: <String>[workspaceRoot],
+          paths: paths,
+          name: input['name'] == null
+              ? null
+              : workerString(input['name'], r'$.input.name', maximum: 1024),
           timeout: _timeout(context),
         ),
       ),
@@ -539,6 +556,14 @@ final class CockpitWorkspaceToolingAdapters {
 
   void _empty(Map<String, Object?> input) =>
       workerKeys(input, const <String>{}, r'$.input');
+
+  List<String> _documentIds(Object? value, String path) {
+    final raw = workerList(value, path, maximum: 512);
+    return <String>[
+      for (var index = 0; index < raw.length; index += 1)
+        workerId(raw[index], '$path[$index]'),
+    ];
+  }
 
   int _optionalInteger(
     Map<String, Object?> input,

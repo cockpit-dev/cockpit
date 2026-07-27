@@ -4,7 +4,7 @@ enum CockpitTestSuiteRetryReason { blocked, interrupted, internalError }
 
 enum CockpitTestSuiteIsolation { sharedSession, restartApp, resetAppData }
 
-enum CockpitTestReportFormat { json, junit, html, aiSummary }
+enum CockpitTestReportFormat { json, junit, html, summary }
 
 final class CockpitTestSuiteRetryPolicy {
   CockpitTestSuiteRetryPolicy({
@@ -167,7 +167,7 @@ final class CockpitTestSuiteReportPolicy {
       CockpitTestReportFormat.json,
       CockpitTestReportFormat.junit,
       CockpitTestReportFormat.html,
-      CockpitTestReportFormat.aiSummary,
+      CockpitTestReportFormat.summary,
     ],
     this.includePassedAttempts = true,
   }) : formats = Set<CockpitTestReportFormat>.unmodifiable(formats) {
@@ -217,7 +217,7 @@ final class CockpitTestSuiteReportPolicy {
               CockpitTestReportFormat.json,
               CockpitTestReportFormat.junit,
               CockpitTestReportFormat.html,
-              CockpitTestReportFormat.aiSummary,
+              CockpitTestReportFormat.summary,
             ]
           : formats,
       includePassedAttempts: json['includePassedAttempts'] == null

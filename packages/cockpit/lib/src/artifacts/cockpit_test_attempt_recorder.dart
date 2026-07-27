@@ -91,6 +91,10 @@ final class CockpitTestAttemptRecorder {
       stepId: handle.node.stepId,
       executionId: handle.node.executionId,
       section: handle.node.section,
+      description: handle.node.description,
+      operation: _operationName(handle.node.operation),
+      timeoutMs: handle.node.timeoutMs,
+      definitionPath: handle.node.sourcePath,
       status: status,
       startedAt: handle.startedAt,
       durationMs: (_clock.elapsed - handle.startedElapsed).inMilliseconds,
@@ -202,6 +206,17 @@ final class CockpitTestAttemptRecorder {
     }
   }
 }
+
+String _operationName(CockpitTestPlanOperation operation) =>
+    switch (operation) {
+      CockpitTestActionPlanOperation(:final action) =>
+        'action.${action.kind.name}',
+      CockpitTestStartRecordingPlanOperation() => 'recording.start',
+      CockpitTestStopRecordingPlanOperation() => 'recording.stop',
+      CockpitTestIfPlanOperation() => 'control.if',
+      CockpitTestRetryPlanOperation() => 'control.retry',
+      CockpitTestLoopPlanOperation() => 'control.loop',
+    };
 
 String _mediaType(String path) {
   final lower = path.toLowerCase();

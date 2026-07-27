@@ -4,6 +4,7 @@ import 'dart:io';
 import 'dart:isolate';
 
 import 'package:path/path.dart' as p;
+import 'package:cockpit_protocol/cockpit_protocol.dart';
 
 import '../foundation/cockpit_home.dart';
 import '../foundation/cockpit_ids.dart';
@@ -55,7 +56,7 @@ Future<int> runCockpitDaemon(List<String> arguments) async {
     homeResolver: resolver,
     dartExecutable: Platform.resolvedExecutable,
     workerEntrypoint: workerEntrypoint,
-    authorization: authorization,
+    authorization: authorization.withMode(configuration.authorizationMode),
     logger: logger,
   );
   final startedAt = DateTime.now().toUtc();
@@ -105,6 +106,7 @@ Future<int> runCockpitDaemon(List<String> arguments) async {
     ),
     permissionHardener: hardener,
     directorySyncer: syncer,
+    authorizationMode: configuration.authorizationMode,
   );
   final signals = <StreamSubscription<ProcessSignal>>[];
   try {
@@ -271,11 +273,13 @@ final class _DaemonConfiguration {
     required this.home,
     this.foregroundWorkspace,
     this.foregroundSubmission,
+    this.authorizationMode = CockpitAuthorizationMode.restricted,
   });
 
   final String home;
   final String? foregroundWorkspace;
   final String? foregroundSubmission;
+  final CockpitAuthorizationMode authorizationMode;
 
   static _DaemonConfiguration parse(List<String> arguments) {
     final values = <String, String>{};
@@ -290,6 +294,7 @@ final class _DaemonConfiguration {
             'home',
             'foreground-workspace',
             'foreground-submission',
+            'authorization-mode',
           }.contains(name) ||
           value.isEmpty ||
           values.containsKey(name)) {
@@ -314,6 +319,15 @@ final class _DaemonConfiguration {
       home: p.normalize(home),
       foregroundWorkspace: workspace == null ? null : p.normalize(workspace),
       foregroundSubmission: submission == null ? null : p.normalize(submission),
+      authorizationMode: _authorizationMode(values['authorization-mode']),
     );
+  }
+
+  static CockpitAuthorizationMode _authorizationMode(String? value) {
+    if (value == null) return CockpitAuthorizationMode.restricted;
+    return CockpitAuthorizationMode.values
+            .where((candidate) => candidate.name == value)
+            .firstOrNull ??
+        (throw FormatException('Invalid authorization mode $value.'));
   }
 }

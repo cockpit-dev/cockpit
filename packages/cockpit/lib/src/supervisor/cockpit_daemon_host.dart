@@ -32,6 +32,7 @@ final class CockpitDaemonHost {
     required this.shutdownHandler,
     required this.permissionHardener,
     required this.directorySyncer,
+    this.authorizationMode = CockpitAuthorizationMode.restricted,
     CockpitTokenGenerator? tokenGenerator,
   }) : _tokenGenerator = tokenGenerator ?? CockpitSecureTokenGenerator();
 
@@ -41,6 +42,7 @@ final class CockpitDaemonHost {
   final CockpitDaemonShutdownHandler shutdownHandler;
   final CockpitPermissionHardener permissionHardener;
   final CockpitDirectorySyncer directorySyncer;
+  final CockpitAuthorizationMode authorizationMode;
   final CockpitTokenGenerator _tokenGenerator;
   final Completer<void> _closed = Completer<void>();
   HttpServer? _server;
@@ -97,6 +99,7 @@ final class CockpitDaemonHost {
       apiMinor: serverInfo.apiVersion.minor,
       engineVersion: serverInfo.engineVersion,
       startedAt: serverInfo.startedAt,
+      authorizationMode: authorizationMode,
     );
     _server = server;
     _discovery = discovery;

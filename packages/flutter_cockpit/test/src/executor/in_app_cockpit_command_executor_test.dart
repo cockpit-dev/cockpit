@@ -466,6 +466,57 @@ void main() {
     expect(requests.first.physicalKey, PhysicalKeyboardKey.tab);
   });
 
+  testWidgets('default key dispatch reaches the focused widget immediately', (
+    tester,
+  ) async {
+    final focusNode = FocusNode();
+    addTearDown(focusNode.dispose);
+    final events = <KeyEvent>[];
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Focus(
+          focusNode: focusNode,
+          onKeyEvent: (_, event) {
+            events.add(event);
+            return KeyEventResult.handled;
+          },
+          child: const SizedBox(),
+        ),
+      ),
+    );
+    focusNode.requestFocus();
+    await tester.pump();
+    final executor = InAppCockpitCommandExecutor(
+      registry: CockpitTargetRegistry(routeName: '/keyboard'),
+    );
+
+    await executor.execute(
+      CockpitCommand(
+        commandId: 'key-down',
+        commandType: CockpitCommandType.sendKeyDownEvent,
+        parameters: const <String, Object?>{
+          'logicalKey': 'Arrow Right',
+          'physicalKey': 'Arrow Right',
+        },
+      ),
+    );
+    await executor.execute(
+      CockpitCommand(
+        commandId: 'key-up',
+        commandType: CockpitCommandType.sendKeyUpEvent,
+        parameters: const <String, Object?>{
+          'logicalKey': 'Arrow Right',
+          'physicalKey': 'Arrow Right',
+        },
+      ),
+    );
+
+    expect(events, hasLength(2));
+    expect(events.first, isA<KeyDownEvent>());
+    expect(events.last, isA<KeyUpEvent>());
+    expect(events.first.logicalKey, LogicalKeyboardKey.arrowRight);
+  });
+
   test('runs semantics-only actions when the target supports them', () async {
     final registry = CockpitTargetRegistry(routeName: '/slider');
     var increased = 0;
@@ -879,6 +930,33 @@ void main() {
     },
   );
 
+  test('assertVisible resolves every signal in a compound locator', () async {
+    final registry = CockpitTargetRegistry(routeName: '/editor');
+    registry.register(
+      const CockpitTarget(
+        registrationId: 'save-task',
+        text: 'Save task',
+        typeName: 'FilledButton',
+        routeName: '/editor',
+      ),
+    );
+    final executor = InAppCockpitCommandExecutor(registry: registry);
+
+    final result = await executor.execute(
+      CockpitCommand(
+        commandId: 'assert-compound-save',
+        commandType: CockpitCommandType.assertVisible,
+        locator: const CockpitLocator(text: 'Save task', type: 'FilledButton'),
+      ),
+    );
+
+    expect(result.success, isTrue);
+    expect(result.locatorResolution?.matchedSignals, <String, String>{
+      'text': 'Save task',
+      'type': 'FilledButton',
+    });
+  });
+
   test(
     'waits for pre-action pacing before invoking a resolved tap handler',
     () async {
@@ -1173,6 +1251,42 @@ void main() {
 
       expect(result.success, isTrue);
       expect(capturedText, 'Investigate Android notes input');
+    },
+  );
+
+  test(
+    'enterText rejects tied input-capable matches without an index',
+    () async {
+      final registry = CockpitTargetRegistry(routeName: '/editor');
+      for (final registrationId in const <String>[
+        'first-notes',
+        'second-notes',
+      ]) {
+        registry.register(
+          CockpitTarget(
+            registrationId: registrationId,
+            text: 'Notes',
+            routeName: '/editor',
+            supportedCommands: const <CockpitCommandType>{
+              CockpitCommandType.enterText,
+            },
+            onEnterText: (_) {},
+          ),
+        );
+      }
+
+      final executor = InAppCockpitCommandExecutor(registry: registry);
+      final result = await executor.execute(
+        CockpitCommand(
+          commandId: 'cmd-ambiguous-notes',
+          commandType: CockpitCommandType.enterText,
+          locator: const CockpitLocator(text: 'Notes'),
+          parameters: const <String, Object?>{'text': 'Do not guess'},
+        ),
+      );
+
+      expect(result.success, isFalse);
+      expect(result.error?.code, CockpitCommandError.ambiguousTargetCode);
     },
   );
 
@@ -2238,6 +2352,36 @@ void main() {
 
     expect(result.success, isTrue);
     expect(result.snapshot?['routeName'], '/success');
+  });
+
+  test('assertText observes once after settling consumes its budget', () async {
+    final registry = CockpitTargetRegistry(routeName: '/command-lab');
+    registry.register(
+      const CockpitTarget(
+        registrationId: 'gesture-status',
+        keyValue: 'lab-gesture-status',
+        text: 'gesture:idle',
+        routeName: '/command-lab',
+      ),
+    );
+    final executor = InAppCockpitCommandExecutor(
+      registry: registry,
+      postActionSettler: () =>
+          Future<void>.delayed(const Duration(milliseconds: 40)),
+    );
+
+    final result = await executor.execute(
+      CockpitCommand(
+        commandId: 'cmd-short-condition-observation',
+        commandType: CockpitCommandType.assertText,
+        locator: const CockpitLocator(key: 'lab-gesture-status'),
+        parameters: const <String, Object?>{'text': 'gesture:idle'},
+        timeoutMs: 10,
+      ),
+    );
+
+    expect(result.success, isTrue);
+    expect(result.locatorResolution?.matchedValue, 'lab-gesture-status');
   });
 
   test(
@@ -4848,6 +4992,100 @@ void main() {
   });
 
   test(
+    'showOnScreen reveals an offscreen target before semantic resolution',
+    () async {
+      final registry = CockpitTargetRegistry(routeName: '/lab');
+      var revealCount = 0;
+      var semanticActionCount = 0;
+      CockpitRevealAlignment? capturedAlignment;
+
+      final executor = InAppCockpitCommandExecutor(
+        registry: registry,
+        postActionSettler: () async {},
+        waitTickHandler: (_) async {},
+        ensureVisibleHandler:
+            ({
+              required locator,
+              required duration,
+              required alignment,
+              required padding,
+            }) async {
+              revealCount += 1;
+              capturedAlignment = alignment;
+              registry.register(
+                CockpitTarget(
+                  registrationId: 'pan-pad',
+                  keyValue: 'pan-pad',
+                  routeName: '/lab',
+                  supportedCommands: const <CockpitCommandType>{
+                    CockpitCommandType.showOnScreen,
+                  },
+                  onSemanticShowOnScreen: () {
+                    semanticActionCount += 1;
+                  },
+                ),
+              );
+              return true;
+            },
+      );
+
+      final result = await executor.execute(
+        CockpitCommand(
+          commandId: 'reveal-pan-pad',
+          commandType: CockpitCommandType.showOnScreen,
+          locator: const CockpitLocator(key: 'pan-pad'),
+          parameters: const <String, Object?>{'revealAlignment': 'center'},
+          timeoutMs: 2000,
+        ),
+      );
+
+      expect(result.success, isTrue);
+      expect(revealCount, 1);
+      expect(semanticActionCount, 1);
+      expect(capturedAlignment, CockpitRevealAlignment.center);
+    },
+  );
+
+  test('showOnScreen can reveal a target without a semantic action', () async {
+    final registry = CockpitTargetRegistry(routeName: '/lab')
+      ..register(
+        const CockpitTarget(
+          registrationId: 'generic-pan-pad',
+          keyValue: 'generic-pan-pad',
+          routeName: '/lab',
+        ),
+      );
+    var revealCount = 0;
+    final executor = InAppCockpitCommandExecutor(
+      registry: registry,
+      postActionSettler: () async {},
+      ensureVisibleHandler:
+          ({
+            required locator,
+            required duration,
+            required alignment,
+            required padding,
+          }) async {
+            revealCount += 1;
+            return true;
+          },
+    );
+
+    final result = await executor.execute(
+      CockpitCommand(
+        commandId: 'reveal-generic-pan-pad',
+        commandType: CockpitCommandType.showOnScreen,
+        locator: const CockpitLocator(key: 'generic-pan-pad'),
+        timeoutMs: 2000,
+      ),
+    );
+
+    expect(result.success, isTrue);
+    expect(revealCount, 1);
+    expect(result.locatorResolution?.matchedValue, 'generic-pan-pad');
+  });
+
+  test(
     'scrollUntilVisible forwards reveal alignment parameters to ensureVisible',
     () async {
       final registry = CockpitTargetRegistry(routeName: '/list');
@@ -5488,6 +5726,89 @@ void main() {
       expect(find.text('Alpha'), findsOneWidget);
     },
   );
+
+  testWidgets('copy, erase, and paste operate on a live Flutter text field', (
+    tester,
+  ) async {
+    final registry = CockpitTargetRegistry(routeName: '/editor');
+    final controller = TextEditingController(text: 'Cockpit edited');
+    addTearDown(controller.dispose);
+    var clipboard = '';
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (call) async {
+        if (call.method == 'Clipboard.setData') {
+          clipboard =
+              (call.arguments as Map<Object?, Object?>)['text']! as String;
+          return null;
+        }
+        if (call.method == 'Clipboard.getData') {
+          return <String, Object?>{'text': clipboard};
+        }
+        return null;
+      },
+    );
+    addTearDown(
+      () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        null,
+      ),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: CockpitSurface(
+          routeName: '/editor',
+          registry: registry,
+          child: Scaffold(
+            body: TextField(
+              key: const ValueKey<String>('editor'),
+              controller: controller,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final executor = InAppCockpitCommandExecutor(
+      registry: registry,
+      snapshotProvider: tester
+          .state<CockpitSurfaceState>(find.byType(CockpitSurface))
+          .snapshot,
+      postActionSettler: () async => tester.pump(),
+    );
+    const locator = CockpitLocator(key: 'editor');
+
+    final copied = await executor.execute(
+      CockpitCommand(
+        commandId: 'copy-editor',
+        commandType: CockpitCommandType.copyText,
+        locator: locator,
+      ),
+    );
+    final erased = await executor.execute(
+      CockpitCommand(
+        commandId: 'erase-editor',
+        commandType: CockpitCommandType.eraseText,
+        locator: locator,
+      ),
+    );
+    final erasedText = controller.text;
+    final pasted = await executor.execute(
+      CockpitCommand(
+        commandId: 'paste-editor',
+        commandType: CockpitCommandType.pasteText,
+        locator: locator,
+      ),
+    );
+
+    expect(copied.success, isTrue);
+    expect(erased.success, isTrue);
+    expect(pasted.success, isTrue);
+    expect(clipboard, 'Cockpit edited');
+    expect(erasedText, isEmpty);
+    expect(controller.text, 'Cockpit edited');
+  });
 
   test(
     'captureScreenshot waits for post-action settling before capturing',

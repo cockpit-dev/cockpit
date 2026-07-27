@@ -532,8 +532,8 @@ void main() {
 
   test('cockpit demo web database assets match resolved dependencies', () {
     final lockfile = File('pubspec.lock').readAsStringSync();
-    final depsFile = File(
-      'examples/cockpit_demo/web/drift_worker.js.deps',
+    final sourceMap = File(
+      'examples/cockpit_demo/web/drift_worker.js.map',
     ).readAsStringSync();
     final wasm = File('examples/cockpit_demo/web/sqlite3.wasm');
     final wasmHeader = wasm.readAsBytesSync().take(4).toList();
@@ -541,8 +541,8 @@ void main() {
     final driftVersion = _readLockfilePackageVersion(lockfile, 'drift');
     final sqliteVersion = _readLockfilePackageVersion(lockfile, 'sqlite3');
 
-    expect(depsFile, contains('/drift-$driftVersion/'));
-    expect(depsFile, contains('/sqlite3-$sqliteVersion/'));
+    expect(sourceMap, contains('/drift-$driftVersion/'));
+    expect(sourceMap, contains('/sqlite3-$sqliteVersion/'));
     expect(wasm.existsSync(), isTrue);
     expect(wasm.lengthSync(), greaterThan(512 * 1024));
     expect(wasmHeader, equals(<int>[0x00, 0x61, 0x73, 0x6d]));

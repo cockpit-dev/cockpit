@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:cockpit_protocol/cockpit_protocol.dart';
+
 import '../foundation/cockpit_home.dart';
 import '../infrastructure/cockpit_process_manager.dart';
 import '../foundation/cockpit_ids.dart';
@@ -41,6 +43,7 @@ final class CockpitLocalWorkerLauncher
     CockpitTokenGenerator? tokenGenerator,
     Map<String, String>? environment,
     Iterable<String> allowedEnvironmentSecretNames = const <String>[],
+    this.allowAllEnvironmentSecrets = false,
   }) : _eventExchangeFactory = eventExchangeFactory,
        _resourceAuthorityFactory = resourceAuthorityFactory,
        _retentionIndex = retentionIndex,
@@ -82,11 +85,18 @@ final class CockpitLocalWorkerLauncher
   final CockpitTokenGenerator _tokenGenerator;
   final Map<String, String> _environment;
   final List<String> _allowedEnvironmentSecretNames;
+  final bool allowAllEnvironmentSecrets;
 
   @override
   Future<CockpitWorkspaceWorkerConnection> launch(
     CockpitWorkspaceWorkerSpec spec,
   ) async {
+    if (allowAllEnvironmentSecrets !=
+        (spec.authorizationMode == CockpitAuthorizationMode.yolo)) {
+      throw const FormatException(
+        'Worker secret authority does not match its authorization mode.',
+      );
+    }
     final workerOwnerId = 'worker_${_tokenGenerator.nextToken(byteLength: 16)}';
     final processStartIdentity =
         'process_${_tokenGenerator.nextToken(byteLength: 16)}';
@@ -124,8 +134,13 @@ final class CockpitLocalWorkerLauncher
           '--state-root=${spec.stateRoot}',
           '--worker-owner-id=$workerOwnerId',
           '--process-start-identity=$processStartIdentity',
+          '--authorization-mode=${spec.authorizationMode.name}',
           for (final feature in spec.supportedFeatures) '--feature=$feature',
-          for (final name in _allowedEnvironmentSecretNames)
+          if (allowAllEnvironmentSecrets) '--allow-all-env-secrets',
+          for (final name
+              in allowAllEnvironmentSecrets
+                  ? const <String>[]
+                  : _allowedEnvironmentSecretNames)
             '--allow-env-secret=$name',
           for (final environment in spec.allowedTargetEnvironments)
             '--allow-target-environment=${environment.name}',
