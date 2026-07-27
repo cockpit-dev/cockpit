@@ -119,6 +119,14 @@ jobs:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: stable
 
+      - name: Configure short Windows runtime paths
+        if: matrix.platform == 'windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path 'C:\ch', 'C:\ca' -Force | Out-Null
+          'COCKPIT_HOME=C:\ch' | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          'ACCEPTANCE_OUTPUT=C:\ca' | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
       - name: Enable KVM
         if: matrix.platform == 'android'
         shell: bash

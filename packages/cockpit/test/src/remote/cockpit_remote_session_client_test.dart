@@ -839,6 +839,48 @@ void main() {
   );
 
   test(
+    'command execution derives its transport timeout from the command budget',
+    () async {
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() async {
+        await server.close(force: true);
+      });
+      server.listen((request) async {
+        await Future<void>.delayed(const Duration(milliseconds: 60));
+        request.response
+          ..headers.contentType = ContentType.json
+          ..write(
+            jsonEncode(
+              CockpitRemoteCommandResponse(
+                result: CockpitCommandResult(
+                  success: true,
+                  commandId: 'long-command',
+                  commandType: CockpitCommandType.scrollUntilVisible,
+                  durationMs: 60,
+                ),
+              ).toJson(),
+            ),
+          );
+        await request.response.close();
+      });
+
+      final client = CockpitRemoteSessionClient(
+        baseUri: Uri.parse('http://127.0.0.1:${server.port}'),
+        requestTimeout: const Duration(milliseconds: 20),
+      );
+      final execution = await client.executeDetailed(
+        CockpitCommand(
+          commandId: 'long-command',
+          commandType: CockpitCommandType.scrollUntilVisible,
+          timeoutMs: 200,
+        ),
+      );
+
+      expect(execution.result.success, isTrue);
+    },
+  );
+
+  test(
     'remote session client preserves structured HTTP error payloads',
     () async {
       final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);

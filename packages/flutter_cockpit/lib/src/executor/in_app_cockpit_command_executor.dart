@@ -3854,7 +3854,13 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
     }
     await Future<void>.microtask(() {});
     if (schedulerBinding.schedulerPhase != SchedulerPhase.idle) {
-      await widgetsBinding.endOfFrame;
+      try {
+        await widgetsBinding.endOfFrame.timeout(
+          const Duration(milliseconds: 250),
+        );
+      } on TimeoutException {
+        // The following idle/route probes provide the authoritative wait.
+      }
       await Future<void>.microtask(() {});
     }
   }

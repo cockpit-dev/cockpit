@@ -2518,10 +2518,15 @@ fi
 if [ -z "$window_id" ]; then
   exit 65
 fi
-if [ "$#" -eq 0 ]; then
-  exec xdotool windowactivate --sync "$window_id"
+if ! xdotool windowactivate --sync "$window_id" 2>/dev/null; then
+  xdotool windowmap --sync "$window_id"
+  xdotool windowraise "$window_id"
+  xdotool windowfocus --sync "$window_id"
 fi
-exec xdotool windowactivate --sync "$window_id" "$@"
+if [ "$#" -eq 0 ]; then
+  exit 0
+fi
+exec xdotool "$@"
 ''';
 
   static const String _linuxTerminateScript = r'''

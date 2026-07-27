@@ -7,6 +7,7 @@ import 'package:cockpit_protocol/cockpit_protocol.dart';
 import 'package:path/path.dart' as p;
 
 import '../application/cockpit_application_service_exception.dart';
+import 'cockpit_remote_command_timeout_budget.dart';
 
 typedef CockpitRemoteArtifactTempFileFactory =
     Future<File> Function(String basename);
@@ -186,7 +187,12 @@ final class CockpitRemoteSessionClient {
       method: 'POST',
       path: '/commands/execute',
       body: command.toJson(),
-      requestTimeout: requestTimeout,
+      requestTimeout:
+          requestTimeout ??
+          cockpitRemoteCommandTransportTimeoutForCommand(
+            command,
+            minimumTimeout: _requestTimeout,
+          ),
     );
     if (payload.containsKey('result')) {
       final response = CockpitRemoteCommandResponse.fromJson(payload);

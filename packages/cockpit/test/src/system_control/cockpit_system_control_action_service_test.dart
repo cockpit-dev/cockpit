@@ -3378,8 +3378,13 @@ void main() {
     expect(result.command[1], '-c');
     expect(
       result.command[2],
-      contains(r'exec xdotool windowactivate --sync "$window_id" "$@"'),
+      contains(r'xdotool windowactivate --sync "$window_id"'),
     );
+    expect(
+      result.command[2],
+      contains(r'xdotool windowfocus --sync "$window_id"'),
+    );
+    expect(result.command[2], contains(r'exec xdotool "$@"'));
     expect(result.command.sublist(3), <String>[
       'flutter_cockpit_linux_input',
       'appId',
