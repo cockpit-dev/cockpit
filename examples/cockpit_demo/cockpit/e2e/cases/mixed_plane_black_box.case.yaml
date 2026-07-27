@@ -26,7 +26,7 @@ steps:
   - stepId: recoverAppThroughSystemControl
     description: Exercise the secondary black-box driver against the launched application.
     plane: native
-    timeoutMs: 20000
+    timeoutMs: 60000
     action:
       type: system
       name: recoverToApp

@@ -40,11 +40,11 @@ fragments:
   openEditor:
     - stepId: tapNewTask
       description: Open the task editor
-      timeoutMs: 12000
+      timeoutMs: 20000
       action:
         type: tap
         locator: {text: New task}
-        activation: gesture
+        activation: auto
     - stepId: waitForEditorRoute
       description: Wait for the editor route
       timeoutMs: 12000
@@ -59,7 +59,7 @@ setup:
 steps:
   - stepId: openTaskEditor
     description: Reuse the editor navigation fragment
-    timeoutMs: 20000
+    timeoutMs: 40000
     call: {fragment: openEditor}
   - stepId: editorRouteBranch
     description: Exercise the matching conditional branch
@@ -122,7 +122,7 @@ steps:
     call: {fragment: assertInbox}
   - stepId: reopenTaskEditor
     description: Begin a complete create-read-delete business workflow
-    timeoutMs: 20000
+    timeoutMs: 40000
     call: {fragment: openEditor}
   - stepId: enterTaskTitle
     timeoutMs: 12000

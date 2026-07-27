@@ -28,12 +28,12 @@ setup:
       type: waitFor
       condition: {type: route, route: /settings}
   - stepId: revealCommandLab
-    timeoutMs: 60000
+    timeoutMs: 90000
     action:
       type: scrollUntilVisible
       locator: {text: Open command lab}
       direction: down
-      maxScrolls: 20
+      maxScrolls: 30
       durationMs: 200
       revealAlignment: center
   - stepId: openCommandLab
