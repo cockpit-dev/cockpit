@@ -147,6 +147,40 @@ void main() {
     expect(connection.maximumConcurrentHealthCalls, 1);
   });
 
+  test('does not evict a worker during a deadline-bound call', () async {
+    final launcher = _FakeLauncher(unhealthyFirstConnection: true);
+    final pool = CockpitWorkerPool(
+      launcher: launcher,
+      heartbeatInterval: const Duration(milliseconds: 5),
+      heartbeatTimeout: const Duration(milliseconds: 20),
+      heartbeatFailureThreshold: 1,
+      initialRestartBackoff: const Duration(milliseconds: 1),
+      maximumRestartBackoff: const Duration(milliseconds: 1),
+    );
+    final spec = _spec('workspaceA');
+    addTearDown(() => pool.close(grace: const Duration(milliseconds: 50)));
+    final connection = await pool.connectionFor(spec) as _FakeConnection;
+    final operation = pool.startCall(
+      spec,
+      method: 'operation',
+      idempotencyKey: 'long-operation',
+      deadline: _deadline(),
+      params: const <String, Object?>{'invocation': <String, Object?>{}},
+    );
+    await connection.operationStarted;
+
+    await Future<void>.delayed(const Duration(milliseconds: 40));
+
+    expect(launcher.launchCount('workspaceA'), 1);
+    expect(connection.maximumConcurrentHealthCalls, 0);
+    await pool.cancel(
+      spec,
+      targetRequestId: operation.requestId,
+      deadline: _deadline(),
+    );
+    await operation.result;
+  });
+
   test('force terminates and restarts a worker whose peer closes', () async {
     final launcher = _FakeLauncher();
     final pool = CockpitWorkerPool(

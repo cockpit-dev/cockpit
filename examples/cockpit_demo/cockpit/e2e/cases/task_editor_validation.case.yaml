@@ -152,6 +152,11 @@ steps:
       type: tap
       locator: {text: Save task}
       activation: gesture
+  - stepId: waitForInboxAfterSave
+    timeoutMs: 15000
+    action:
+      type: waitFor
+      condition: {type: route, route: /inbox}
   - stepId: revealCreatedTask
     description: Reveal the actionable task row without relying on app hooks
     timeoutMs: 25000

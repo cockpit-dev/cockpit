@@ -242,19 +242,24 @@ final class CockpitWorkerPool {
     final effectiveRequestId =
         requestId ?? 'supervisor-call-${++_internalRequestSequence}';
     workerId(effectiveRequestId, r'$.requestId');
-    final result = connectionFor(spec).then(
-      (connection) => connection.call(
-        method: method,
-        params: <String, Object?>{
-          ...params,
-          'protocolVersion': cockpitWorkerProtocolVersion,
-          'workspaceId': spec.key.workspaceId,
-          'idempotencyKey': idempotencyKey,
-        },
-        deadline: deadline,
-        requestId: effectiveRequestId,
-      ),
-    );
+    final connection = connectionFor(spec);
+    final slot = _slots[spec.key]!;
+    slot.activeCalls += 1;
+    final result = connection
+        .then(
+          (connection) => connection.call(
+            method: method,
+            params: <String, Object?>{
+              ...params,
+              'protocolVersion': cockpitWorkerProtocolVersion,
+              'workspaceId': spec.key.workspaceId,
+              'idempotencyKey': idempotencyKey,
+            },
+            deadline: deadline,
+            requestId: effectiveRequestId,
+          ),
+        )
+        .whenComplete(() => slot.activeCalls -= 1);
     return CockpitWorkspaceWorkerCall(
       requestId: effectiveRequestId,
       result: result,
@@ -435,6 +440,10 @@ final class CockpitWorkerPool {
   Future<void> _heartbeat(_WorkerSlot slot) async {
     final connection = slot.connection;
     if (connection == null || !slot.desired || slot.heartbeatInFlight) return;
+    if (slot.activeCalls > 0) {
+      slot.heartbeatFailures = 0;
+      return;
+    }
     slot.heartbeatInFlight = true;
     try {
       if (connection.isClosed) {
@@ -493,6 +502,7 @@ final class _WorkerSlot {
   var heartbeatFailures = 0;
   var heartbeatInFlight = false;
   var restartFailures = 0;
+  var activeCalls = 0;
   var desired = true;
 
   Future<CockpitWorkspaceWorkerConnection> get ready =>
