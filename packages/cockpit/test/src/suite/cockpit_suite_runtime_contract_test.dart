@@ -197,6 +197,31 @@ void main() {
     );
   });
 
+  test('excluded case does not activate fail fast', () async {
+    final plan = await _compilePlan(_selectionSuite());
+    final executor = _RecordingExecutor();
+
+    final result = await _run(
+      runId: 'run_selection',
+      plan: plan,
+      executor: executor,
+    );
+
+    expect(executor.calls, <String>['isolation:beta', 'testCase:betaCase']);
+    expect(
+      result.executions
+          .singleWhere((execution) => execution.entryId == 'alpha')
+          .outcome,
+      CockpitRunOutcome.skipped,
+    );
+    expect(
+      result.executions
+          .singleWhere((execution) => execution.entryId == 'beta')
+          .outcome,
+      CockpitRunOutcome.passed,
+    );
+  });
+
   test(
     'case-attempt teardown failure is included in case and suite reports',
     () async {
@@ -522,6 +547,28 @@ CockpitTestSuite _singleCaseSuite({
         'attemptFixture',
         if (secondaryFixtureTargetId != null) 'secondaryFixture',
       ],
+    ),
+  ],
+);
+
+CockpitTestSuite _selectionSuite() => CockpitTestSuite(
+  id: 'selectionSuite',
+  includeTags: const <String>['selected'],
+  execution: CockpitTestSuiteExecutionPolicy(
+    maxConcurrency: 1,
+    isolation: CockpitTestSuiteIsolation.sharedSession,
+    failFast: true,
+  ),
+  cases: <CockpitTestSuiteEntry>[
+    CockpitTestSuiteEntry(
+      id: 'alpha',
+      source: _source('alphaCase'),
+      tags: const <String>['excluded'],
+    ),
+    CockpitTestSuiteEntry(
+      id: 'beta',
+      source: _source('betaCase'),
+      tags: const <String>['selected'],
     ),
   ],
 );

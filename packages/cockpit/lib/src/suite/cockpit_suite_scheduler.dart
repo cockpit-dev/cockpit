@@ -391,7 +391,7 @@ final class CockpitSuiteScheduler {
         completed.values.any(
           (execution) =>
               execution.kind == CockpitSuitePlanNodeKind.testCase &&
-              execution.outcome != CockpitRunOutcome.passed,
+              _triggersFailFast(execution.outcome),
         );
 
     while (pending.isNotEmpty || running.isNotEmpty) {
@@ -434,7 +434,7 @@ final class CockpitSuiteScheduler {
           completed[node.nodeId] = skipped;
           if (plan.suite.execution.failFast &&
               node.kind == CockpitSuitePlanNodeKind.testCase &&
-              skipped.outcome != CockpitRunOutcome.passed) {
+              _triggersFailFast(skipped.outcome)) {
             failFast = true;
           }
           completedWithoutRunning = true;
@@ -462,7 +462,7 @@ final class CockpitSuiteScheduler {
       completed[execution.nodeId] = execution;
       if (plan.suite.execution.failFast &&
           execution.kind == CockpitSuitePlanNodeKind.testCase &&
-          execution.outcome != CockpitRunOutcome.passed) {
+          _triggersFailFast(execution.outcome)) {
         failFast = true;
       }
     }
@@ -729,6 +729,11 @@ final class CockpitSuiteScheduler {
     return execution;
   }
 }
+
+bool _triggersFailFast(CockpitRunOutcome outcome) => switch (outcome) {
+  CockpitRunOutcome.passed || CockpitRunOutcome.skipped => false,
+  _ => true,
+};
 
 final class _NeverCancelled implements CockpitSuiteCancellation {
   const _NeverCancelled();

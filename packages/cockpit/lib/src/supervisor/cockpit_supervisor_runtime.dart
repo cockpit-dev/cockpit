@@ -13,6 +13,7 @@ import '../foundation/cockpit_home.dart';
 import '../foundation/cockpit_ids.dart';
 import '../foundation/cockpit_locked_json_store.dart';
 import '../foundation/cockpit_permissions.dart';
+import '../foundation/cockpit_storage_key.dart';
 import '../infrastructure/cockpit_process_manager.dart';
 import '../registry/cockpit_registry_models.dart';
 import '../registry/cockpit_workspace_registry.dart';
@@ -1207,11 +1208,7 @@ final class CockpitSupervisorRuntime {
       ),
       projectId: workspace.projectId,
       workspaceRoot: workspace.canonicalPath,
-      stateRoot: p.join(
-        resources.identity.homePaths.home,
-        'workspaces',
-        workspaceId,
-      ),
+      stateRoot: _workspaceStateRoot(workspaceId),
       supportedFeatures: cockpitSupervisorFeatures.map((item) => item.id),
       authorizationMode: authorization.mode,
       allowedTargetEnvironments:
@@ -1257,11 +1254,7 @@ final class CockpitSupervisorRuntime {
         workspaceId,
         () => CockpitSupervisorRunProjection(
           workspaceId: workspaceId,
-          stateRoot: p.join(
-            resources.identity.homePaths.home,
-            'workspaces',
-            workspaceId,
-          ),
+          stateRoot: _workspaceStateRoot(workspaceId),
           permissionHardener: permissionHardener,
           directorySyncer: directorySyncer,
           retentionIndex: CockpitScopedSupervisorRunRetentionIndex(
@@ -1277,6 +1270,12 @@ final class CockpitSupervisorRuntime {
                   ),
         ),
       );
+
+  String _workspaceStateRoot(String workspaceId) => p.join(
+    resources.identity.homePaths.home,
+    'w',
+    cockpitStorageKey(workspaceId),
+  );
 
   Future<String> _findRunOwner(String runId) async {
     final admission = await runAdmissions.findRun(runId);

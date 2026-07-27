@@ -203,6 +203,7 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
   late final CockpitTextInputCommandExecutor _textInputCommandExecutor;
   late final CockpitGestureCommandExecutor _gestureCommandExecutor;
   late final CockpitWaitAndAssertExecutor _waitAndAssertExecutor;
+  String _inAppClipboardText = '';
 
   CockpitTargetRegistry get _registry => _context.registry;
   CockpitCaptureHandler? get _captureHandler => _context.captureHandler;
@@ -1979,18 +1980,21 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
         ),
       );
     }
-    try {
-      await Clipboard.setData(ClipboardData(text: text));
-    } on Object catch (error) {
-      return _failureExecution(
-        command: command,
-        durationMs: stopwatch.elapsedMilliseconds,
-        locatorResolution: resolution.locatorResolution,
-        error: CockpitCommandError(
-          code: 'clipboardFailed',
-          message: 'Could not write the platform clipboard: $error',
-        ),
-      );
+    _inAppClipboardText = text;
+    if (!kIsWeb) {
+      try {
+        await Clipboard.setData(ClipboardData(text: text));
+      } on Object catch (error) {
+        return _failureExecution(
+          command: command,
+          durationMs: stopwatch.elapsedMilliseconds,
+          locatorResolution: resolution.locatorResolution,
+          error: CockpitCommandError(
+            code: 'clipboardFailed',
+            message: 'Could not write the platform clipboard: $error',
+          ),
+        );
+      }
     }
     return _successExecution(
       command: command,
@@ -2004,18 +2008,24 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
     Stopwatch stopwatch,
   ) async {
     String clipboardText;
-    try {
-      clipboardText =
-          (await Clipboard.getData(Clipboard.kTextPlain))?.text ?? '';
-    } on Object catch (error) {
-      return _failureExecution(
-        command: command,
-        durationMs: stopwatch.elapsedMilliseconds,
-        error: CockpitCommandError(
-          code: 'clipboardFailed',
-          message: 'Could not read the platform clipboard: $error',
-        ),
-      );
+    if (kIsWeb) {
+      // Browser clipboard APIs require transient user activation, which a
+      // remote semantic command cannot provide deterministically.
+      clipboardText = _inAppClipboardText;
+    } else {
+      try {
+        clipboardText =
+            (await Clipboard.getData(Clipboard.kTextPlain))?.text ?? '';
+      } on Object catch (error) {
+        return _failureExecution(
+          command: command,
+          durationMs: stopwatch.elapsedMilliseconds,
+          error: CockpitCommandError(
+            code: 'clipboardFailed',
+            message: 'Could not read the platform clipboard: $error',
+          ),
+        );
+      }
     }
     final resolution = await _resolveTextMutationTarget(command);
     if (!resolution.isSuccess) {

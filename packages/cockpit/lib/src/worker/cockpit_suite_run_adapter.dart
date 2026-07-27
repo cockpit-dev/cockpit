@@ -7,6 +7,7 @@ import 'package:crypto/crypto.dart';
 import 'package:path/path.dart' as p;
 
 import '../application/cockpit_application_service_exception.dart';
+import '../foundation/cockpit_storage_key.dart';
 import '../runner/cockpit_case_execution_control.dart';
 import '../runner/cockpit_case_runner.dart';
 import '../suite/cockpit_suite_compiler.dart';
@@ -738,9 +739,7 @@ final class _SuiteAttemptExecution
         'runs',
         runId,
         'cases',
-        testCase.id,
-        'attempts',
-        attemptId,
+        cockpitStorageKey(attemptId),
       );
       await Directory(attemptRoot).create(recursive: true);
       final scanner = CockpitCaseAttemptRedactionScanner(

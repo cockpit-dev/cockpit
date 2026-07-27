@@ -7,6 +7,7 @@ import 'package:crypto/crypto.dart';
 import 'package:path/path.dart' as p;
 
 import '../foundation/cockpit_ids.dart';
+import '../foundation/cockpit_storage_key.dart';
 import '../application/cockpit_application_service_exception.dart';
 import '../adapters/cockpit_automation_adapter.dart';
 import '../adapters/cockpit_capture_adapter.dart';
@@ -1228,8 +1229,13 @@ final class CockpitCaseRunAdapterFactory {
     await temporary.rename(target.path);
   }
 
-  String _attemptRoot(String runId, String attemptId) =>
-      '$runStateRoot/runs/$runId/cases/$attemptId';
+  String _attemptRoot(String runId, String attemptId) => p.join(
+    runStateRoot,
+    'runs',
+    runId,
+    'cases',
+    cockpitStorageKey(attemptId),
+  );
 
   String _requestFingerprint(
     CockpitRunSubmission submission,

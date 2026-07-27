@@ -6,6 +6,7 @@ import 'dart:isolate';
 import 'package:cockpit/src/application/cockpit_app_handle.dart';
 import 'package:cockpit/src/foundation/cockpit_locked_json_store.dart';
 import 'package:cockpit/src/foundation/cockpit_permissions.dart';
+import 'package:cockpit/src/foundation/cockpit_storage_key.dart';
 import 'package:cockpit/src/session/cockpit_remote_session_handle.dart';
 import 'package:cockpit/src/supervisor/cockpit_local_worker_launcher.dart';
 import 'package:cockpit/src/supervisor/cockpit_supervisor_run_projection.dart';
@@ -943,7 +944,7 @@ steps:
         'runs',
         rejectedRunId,
         'cases',
-        rejectedAttemptId,
+        cockpitStorageKey(rejectedAttemptId),
         'bundle',
       );
       expect(await Directory(rejectedBundlePath).exists(), isFalse);
@@ -954,9 +955,7 @@ steps:
             .where(
               (entity) =>
                   entity is Directory &&
-                  p
-                      .basename(entity.path)
-                      .startsWith('.$rejectedAttemptId.staging-'),
+                  p.basename(entity.path).startsWith('.stage-'),
             )
             .isEmpty,
         isTrue,
