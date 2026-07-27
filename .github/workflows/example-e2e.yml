@@ -17,10 +17,10 @@ env:
   FLUTTER_VERSION: '3.32.0'
 
 jobs:
-  quality:
-    name: complete quality gate
+  static_analysis:
+    name: formatting and analysis
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v6
 
@@ -40,44 +40,101 @@ jobs:
       - name: Analyze workspace
         run: dart analyze
 
-      - name: Verify repository contracts
-        run: dart test test
+  dart_tests:
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: repository contracts
+            directory: .
+            command: dart test test
+          - name: protocol tests
+            directory: packages/cockpit_protocol
+            command: dart test
+          - name: cockpit runtime tests
+            directory: packages/cockpit
+            command: dart test
+    steps:
+      - uses: actions/checkout@v6
 
-      - name: Verify protocol package
-        working-directory: packages/cockpit_protocol
-        run: dart test
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
 
-      - name: Verify Cockpit runtime
-        working-directory: packages/cockpit
-        run: dart test
+      - name: Bootstrap workspace
+        run: flutter pub get
 
-      - name: Verify Flutter bridge
-        working-directory: packages/flutter_cockpit
+      - name: Run ${{ matrix.name }}
+        working-directory: ${{ matrix.directory }}
+        run: ${{ matrix.command }}
+
+  flutter_tests:
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Flutter bridge tests
+            directory: packages/flutter_cockpit
+          - name: production example tests
+            directory: examples/cockpit_demo
+          - name: development shell tests
+            directory: examples/cockpit_demo/cockpit
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+
+      - name: Bootstrap workspace
+        run: flutter pub get
+
+      - name: Run ${{ matrix.name }}
+        working-directory: ${{ matrix.directory }}
         run: flutter test
 
-      - name: Verify production example
-        working-directory: examples/cockpit_demo
-        run: flutter test
+  publication:
+    name: publish ${{ matrix.package }} dry-run
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - package: cockpit_protocol
+            directory: packages/cockpit_protocol
+            command: dart pub publish --dry-run
+          - package: flutter_cockpit
+            directory: packages/flutter_cockpit
+            command: flutter pub publish --dry-run
+          - package: cockpit
+            directory: packages/cockpit
+            command: dart pub publish --dry-run
+    steps:
+      - uses: actions/checkout@v6
 
-      - name: Verify development shell
-        working-directory: examples/cockpit_demo/cockpit
-        run: flutter test
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
 
-      - name: Validate cockpit_protocol publication
-        working-directory: packages/cockpit_protocol
-        run: dart pub publish --dry-run
+      - name: Bootstrap workspace
+        run: flutter pub get
 
-      - name: Validate flutter_cockpit publication
-        working-directory: packages/flutter_cockpit
-        run: flutter pub publish --dry-run
-
-      - name: Validate cockpit publication
-        working-directory: packages/cockpit
-        run: dart pub publish --dry-run
+      - name: Validate ${{ matrix.package }} publication
+        working-directory: ${{ matrix.directory }}
+        run: ${{ matrix.command }}
 
   regression:
     name: ${{ matrix.platform }} regression
-    needs: quality
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     strategy:
@@ -279,3 +336,34 @@ jobs:
           path: |
             ${{ env.ACCEPTANCE_OUTPUT }}
             ${{ env.COCKPIT_HOME }}/daemon.log
+
+  release_gate:
+    name: Cockpit 2.0 release gate
+    if: always()
+    needs:
+      - static_analysis
+      - dart_tests
+      - flutter_tests
+      - publication
+      - regression
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every parallel gate
+        env:
+          STATIC_ANALYSIS: ${{ needs.static_analysis.result }}
+          DART_TESTS: ${{ needs.dart_tests.result }}
+          FLUTTER_TESTS: ${{ needs.flutter_tests.result }}
+          PUBLICATION: ${{ needs.publication.result }}
+          REGRESSION: ${{ needs.regression.result }}
+        run: |
+          for result in \
+            "$STATIC_ANALYSIS" \
+            "$DART_TESTS" \
+            "$FLUTTER_TESTS" \
+            "$PUBLICATION" \
+            "$REGRESSION"; do
+            if [[ "$result" != "success" ]]; then
+              echo "Required gate finished with: $result"
+              exit 1
+            fi
+          done
