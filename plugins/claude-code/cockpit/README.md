@@ -13,13 +13,15 @@ Then reload plugins in Claude Code:
 /reload-plugins
 ```
 
-The MCP server starts with:
+Install the published CLI once and keep Dart's global executable directory on
+`PATH`:
 
 ```bash
-dart run cockpit serve-mcp
+dart pub global activate cockpit ^2.0.0
 ```
 
-Install the Dart packages first so `cockpit` resolves in the target workspace.
+The plugin starts MCP through the dedicated `cockpit_mcp` executable, so the
+target workspace does not need to declare a `cockpit` dependency.
 
 ## Source Of Truth
 

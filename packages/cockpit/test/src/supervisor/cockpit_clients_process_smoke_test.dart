@@ -452,11 +452,12 @@ cases:
         'succeeded',
       );
       final testTool = response(13)['result']! as Map<String, Object?>;
-      expect(
-        (testTool['structuredContent']! as Map<String, Object?>)['outcome'],
-        'succeeded',
-        reason: '$testTool',
-      );
+      final testStructured =
+          testTool['structuredContent']! as Map<String, Object?>;
+      expect(testStructured['outcome'], 'succeeded', reason: '$testTool');
+      final testOutput = testStructured['output']! as Map<String, Object?>;
+      final testCommand = testOutput['command']! as Map<String, Object?>;
+      expect(testCommand['arguments'], <Object?>['test', 'test']);
     },
     timeout: const Timeout(Duration(minutes: 5)),
   );

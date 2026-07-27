@@ -79,6 +79,21 @@ void main() {
     }
   });
 
+  test('published contracts avoid IDE-incompatible union type arrays', () {
+    for (final document in <Map<String, Object?>>[
+      foundationSchemaJson,
+      openApiJson,
+      testSchemaJson,
+    ]) {
+      for (final schemaObject in _allMaps(document)) {
+        final type = schemaObject['type'];
+        if (type != null) {
+          expect(type, isNot(isA<List<Object?>>()));
+        }
+      }
+    }
+  });
+
   test('automation target contracts require valid app identity by kind', () {
     final valid = <String, Object?>{
       'targetId': 'targetA',

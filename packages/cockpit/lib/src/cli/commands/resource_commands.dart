@@ -126,6 +126,47 @@ final class CockpitWorkspaceCommand extends Command<int> {
     addSubcommand(
       CockpitLeafCommand(
         runtime: runtime,
+        name: 'documents',
+        description: 'List indexed documents for a workspace.',
+        configure: (parser) => parser
+          ..addOption('workspace-id')
+          ..addOption(
+            'kind',
+            allowed: const <String>['source', 'case', 'suite', 'project'],
+          )
+          ..addOption(
+            'relative-path',
+            help: 'Return only the exact workspace-relative path.',
+          ),
+        action: (arguments) async {
+          final workspaceId = await runtime.workspaceId(
+            arguments.option('workspace-id'),
+          );
+          final requestedKind = switch (arguments.option('kind')) {
+            'source' => CockpitIndexedDocumentKind.source,
+            'case' => CockpitIndexedDocumentKind.testCase,
+            'suite' => CockpitIndexedDocumentKind.suite,
+            'project' => CockpitIndexedDocumentKind.project,
+            _ => null,
+          };
+          final requestedPath = arguments.option('relative-path');
+          final documents = await (await runtime.client()).documents(
+            workspaceId,
+            kind: requestedKind,
+            relativePath: requestedPath,
+          );
+          await runtime.success(<String, Object?>{
+            'items': documents
+                .map((document) => document.toJson())
+                .toList(growable: false),
+          });
+          return cockpitSuccessExitCode;
+        },
+      ),
+    );
+    addSubcommand(
+      CockpitLeafCommand(
+        runtime: runtime,
         name: 'register',
         description: 'Register a workspace checkout.',
         configure: (parser) => parser

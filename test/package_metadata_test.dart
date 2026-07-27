@@ -479,15 +479,49 @@ void main() {
     final protocolReference = File(
       'skills/cockpit/references/protocol.md',
     ).readAsStringSync();
+    final testSchema = File(
+      'skills/cockpit/references/cockpit.test.v2.schema.json',
+    );
 
     expect(skill, contains('references/protocol.md'));
-    expect(protocolReference, contains('## Authorities'));
-    expect(protocolReference, contains('cockpit.v2.openapi.json'));
-    expect(protocolReference, contains('cockpit.foundation.v2.schema.json'));
+    expect(protocolReference, contains('## Runtime Authorities'));
     expect(protocolReference, contains('cockpit.test.v2.schema.json'));
-    expect(protocolReference, contains('docs/contracts/cockpit-protocol.md'));
-    expect(protocolReference, contains('COCKPIT_HOME/authorization.json'));
     expect(protocolReference, contains('## Command Map'));
+    expect(protocolReference, isNot(contains('packages/cockpit')));
+    expect(protocolReference, isNot(contains('docs/contracts/')));
+    expect(testSchema.existsSync(), isTrue);
+  });
+
+  test('agent integrations use installed executables and bundled skills', () {
+    for (final path in <String>[
+      '.mcp.json',
+      '.cursor/mcp.json',
+      '.kiro/settings/mcp.json',
+      'opencode.json',
+      'plugins/codex/cockpit/.mcp.json',
+      'plugins/claude-code/cockpit/.mcp.json',
+      'plugins/kiro/cockpit/mcp.json',
+    ]) {
+      final config = File(path).readAsStringSync();
+      expect(config, contains('cockpit_mcp'), reason: path);
+      expect(config, isNot(contains('dart run cockpit')), reason: path);
+    }
+
+    final cursorRule = File('.cursor/rules/cockpit.mdc').readAsStringSync();
+    final kiroSteering = File('.kiro/steering/cockpit.md').readAsStringSync();
+    expect(cursorRule, contains('.cursor/skills/cockpit/SKILL.md'));
+    expect(cursorRule, isNot(contains('dart run cockpit')));
+    expect(kiroSteering, contains('bundled self-contained `cockpit` skill'));
+    expect(kiroSteering, isNot(contains('dart run cockpit')));
+
+    for (final path in <String>[
+      'plugins/codex/cockpit/README.md',
+      'plugins/claude-code/cockpit/README.md',
+    ]) {
+      final readme = File(path).readAsStringSync();
+      expect(readme, contains('dart pub global activate cockpit ^2.0.0'));
+      expect(readme, contains('cockpit_mcp'));
+    }
   });
 
   test('cockpit package readmes expose the 2.0 client contract', () {

@@ -93,9 +93,13 @@ final class CockpitSupervisorHttpSupport {
     }
   }
 
-  CockpitPageRequest pageRequest(HttpRequest request, String scope) {
+  CockpitPageRequest pageRequest(
+    HttpRequest request,
+    String scope, {
+    Set<String> additionalQueryParameters = const <String>{},
+  }) {
     final unknown = request.uri.queryParameters.keys.toSet().difference(
-      const <String>{'limit', 'cursor'},
+      <String>{'limit', 'cursor', ...additionalQueryParameters},
     );
     if (unknown.isNotEmpty) {
       throw _apiError(

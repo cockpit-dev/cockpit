@@ -38,6 +38,11 @@ Future<void> main(List<String> arguments) async {
     ..addOption('discovery-timeout-seconds', defaultsTo: '180')
     ..addOption('launch-timeout-seconds', defaultsTo: '600')
     ..addOption('run-timeout-seconds', defaultsTo: '900')
+    ..addFlag(
+      'require-recording',
+      negatable: false,
+      help: 'Fail when unattended native recording is unavailable.',
+    )
     ..addFlag('stop-daemon', negatable: false)
     ..addFlag('help', abbr: 'h', negatable: false);
 
@@ -62,6 +67,7 @@ Future<void> main(List<String> arguments) async {
       launchTimeout: _seconds(parsed, 'launch-timeout-seconds'),
       runTimeout: _seconds(parsed, 'run-timeout-seconds'),
       stopDaemon: parsed.flag('stop-daemon'),
+      requireRecording: parsed.flag('require-recording'),
     );
     final result = await CockpitDemoAcceptanceRunner(
       progress: (event) => stderr.writeln(jsonEncode(event)),

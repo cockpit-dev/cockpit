@@ -1,11 +1,7 @@
 {
   "cockpit": {
     "type": "stdio",
-    "command": "dart",
-    "args": [
-      "run",
-      "cockpit",
-      "serve-mcp"
-    ]
+    "command": "cockpit_mcp",
+    "args": []
   }
 }

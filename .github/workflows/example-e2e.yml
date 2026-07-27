@@ -213,7 +213,8 @@ jobs:
           script: >-
             cd "$GITHUB_WORKSPACE/examples/cockpit_demo/cockpit" &&
             dart run tool/verify.dart --platform android
-            --output-root "$ACCEPTANCE_OUTPUT" --stop-daemon
+            --output-root "$ACCEPTANCE_OUTPUT" --require-recording
+            --stop-daemon
 
       - name: Run iOS regression
         if: matrix.platform == 'ios'
@@ -222,7 +223,8 @@ jobs:
         run: >-
           dart run tool/verify.dart --platform ios
           --device-id "$IOS_DEVICE_ID"
-          --output-root "$ACCEPTANCE_OUTPUT" --stop-daemon
+          --output-root "$ACCEPTANCE_OUTPUT" --require-recording
+          --stop-daemon
 
       - name: Run macOS regression
         if: matrix.platform == 'macos'

@@ -789,10 +789,12 @@ void _assertNoPlaintextSecrets(Object? value, {String? key}) {
   if (key != null &&
       _plaintextSecretKey.hasMatch(key) &&
       key != 'idempotencyKey' &&
-      key != 'handoffToken') {
-    throw const CockpitApplicationServiceException(
+      key != 'handoffToken' &&
+      !_isSecretVariableDeclaration(value)) {
+    throw CockpitApplicationServiceException(
       code: 'plaintextSecretRejected',
       message: 'Plaintext secrets cannot cross the worker boundary.',
+      details: <String, Object?>{'field': key},
     );
   }
   if (value is Map<Object?, Object?>) {
@@ -804,4 +806,14 @@ void _assertNoPlaintextSecrets(Object? value, {String? key}) {
       _assertNoPlaintextSecrets(item);
     }
   }
+}
+
+bool _isSecretVariableDeclaration(Object? value) {
+  if (value is! Map ||
+      value['source'] != 'secret' ||
+      value['type'] != 'string' ||
+      value['reference'] is! String) {
+    return false;
+  }
+  return !value.containsKey('value') && !value.containsKey('default');
 }

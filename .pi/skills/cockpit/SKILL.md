@@ -1,6 +1,6 @@
 ---
 name: cockpit
-description: Use when application development or black-box application E2E work must prove live UI, interaction, route, runtime, system control, screenshots, recordings, cases, suites, or regression state across mobile, desktop, web, or Flutter targets through Cockpit 2.0.
+description: Use when application development or black-box application E2E work must inspect, control, or prove live mobile, desktop, web, native, Flutter, or mixed-stack behavior with Cockpit 2.0.
 ---
 
 # Cockpit 2.0
@@ -9,172 +9,220 @@ Use the authenticated Supervisor as the single control plane. Resolve explicit
 workspace, target, and run identities; inspect capabilities before acting; and
 judge results from terminal state plus evidence rather than command success.
 
-Read [`references/protocol.md`](references/protocol.md) when exact contract or
-command selection is uncertain.
+This skill is self-contained. Resolve every linked resource relative to this
+`SKILL.md`; never search for Cockpit's source repository. The installed
+`cockpit` CLI/MCP, its `help` output, and live capability descriptors are the
+runtime authorities.
 
-## Workflow
+All examples use the globally installed `cockpit` executable. Install it with
+`dart pub global activate cockpit ^2.0.0` when absent. Inside a Dart/Flutter
+project that declares `cockpit` as a development dependency, `dart run cockpit`
+is equivalent. Never assume the Cockpit source repository is available.
 
-1. **Bootstrap**: run `dart run cockpit daemon status`; start the daemon when
-   unavailable. Register the project root and checkout once.
-2. **Resolve**: read workspace IDs, run `target discover`, then register or
-   reuse a workspace-owned target. Never guess IDs.
-3. **Inspect**: run `target inspect --profile minimal` and `operation list`.
-   Choose only reported capabilities and operation parameters.
-4. **Act**: use `operation run` for a focused development action. Use a
-   `cockpit.test/v2` case or suite for reusable E2E.
-5. **Observe**: re-inspect state and errors after mutation. For a run, consume
-   events until terminal and then read its report.
-6. **Prove**: read only report-referenced, digest-checked artifacts. Capture a
-   screenshot for visible claims and a recording for motion or reproduction.
+## Select The Smallest Workflow
 
-## Bootstrap Commands
+| Goal | Workflow | Read |
+| --- | --- | --- |
+| Implement or debug quickly | inspect -> edit -> focused operation -> inspect | [development.md](references/development.md) |
+| Add the optional Flutter semantic bridge | create a development-only shell, register its indexed entrypoint | [flutter.md](references/flutter.md) |
+| Validate one user journey | author and run one `cockpit.test/v2` case | [e2e.md](references/e2e.md) |
+| Regression, CI, or release | run a suite, verify the offline bundle | [e2e.md](references/e2e.md), [reporting.md](references/reporting.md) |
+| Exact command or contract is uncertain | inspect live help, then local protocol map | [protocol.md](references/protocol.md) |
+
+Do not pay suite/report cost during every edit. Do not use a focused development
+probe as release proof.
+
+## Use YOLO For Local Development
+
+When the user asks Cockpit to develop or validate a local `development` or
+`test` target, use the YOLO daemon path by default unless the user requests a
+restricted policy. This removes authorization round-trips from reloads, UI
+control, screenshots, recordings, environment injection, and system actions.
 
 ```bash
-dart run cockpit daemon start
-dart run cockpit root add --path /absolute/project/root
-dart run cockpit workspace register --root-id <rootId> --path /absolute/checkout
-dart run cockpit target discover
+cockpit daemon status
+cockpit daemon start --yolo
+# If a daemon is already running without YOLO:
+cockpit daemon restart --yolo
 ```
 
-CLI output defaults to compact semantic text optimized for agents. Use
-`--stdout-format json` only when exact structured data is required, or
-`--output <file>` to preserve the complete JSON response while stdout returns a
-small path/size/SHA-256 receipt. The workspace can be inferred only when the
-current directory belongs to exactly one active workspace.
+Confirm `authorizationMode` from `daemon status`. YOLO belongs to that daemon
+process only. Never silently extend it to a production/unknown target, shared
+device, financial/destructive flow, communication with real users, or other
+external side effect.
 
-## Targets
-
-For installed black-box applications, register the real device and platform
-app identifier. Cockpit supports capability-driven Android, iOS, macOS,
-Windows, Linux, browser, and Flutter targets. Use a target-scoped `--wda-url`
-for iOS automation when needed.
-For Flutter, keep bridge wiring in a development shell and index its entrypoint
-document; production Flutter code must not import the bridge package.
+## Bootstrap Once Per Workspace
 
 ```bash
-dart run cockpit target register \
+cockpit daemon status
+cockpit root add --path /absolute/project/root
+cockpit workspace register --root-id <rootId> --path /absolute/checkout
+cockpit target discover
+```
+
+Read and reuse returned IDs. The current directory may infer a workspace only
+when it belongs to exactly one active workspace. Each checkout has its own
+workspace and worker state, so unrelated projects can run concurrently.
+
+For installed black-box applications, register the discovered device and real
+platform app identifier. Black-box control is non-invasive; it does not require
+application source changes or a Cockpit SDK in the production app.
+
+```bash
+cockpit target register \
   --workspace-id <workspaceId> \
-  --platform <platform> \
-  --device-id <deviceId> \
-  --target-kind <targetKind> \
+  --platform <discoveredPlatform> \
+  --device-id <discoveredDeviceId> \
+  --target-kind nativeApp \
   --environment test \
-  --app-id <appId> \
+  --app-id <bundleOrApplicationId> \
   --idempotency-key <uniqueKey>
-dart run cockpit target launch \
+cockpit target launch \
   --workspace-id <workspaceId> \
   --target-id <targetId> \
   --idempotency-key <uniqueKey>
-dart run cockpit target inspect --target-id <targetId> --profile minimal
+cockpit target inspect --target-id <targetId> --profile minimal
 ```
 
-For Flutter targets, `target launch` accepts repeatable `--dart-define`,
-`--dart-define-from-file`, `--flutter-arg`, and `--env KEY=VALUE` options plus
-`--launch-timeout-ms` up to 1800000. MCP and `operation run` use the equivalent
-nested `launchConfiguration` object (`dartDefines`, `dartDefineFromFiles`,
-`flutterArgs`, `environment`). Cockpit owns target, device, flavor, mode, and
-remote-control arguments; do not try to override them through `flutterArgs`.
-Do not send Flutter launch configuration to an installed black-box target.
+For Flutter, prefer the optional development shell when semantic inspection,
+hot reload, runtime errors, routes, or network evidence matter. Keep bridge
+wiring outside production `lib/`; production Flutter code must not import the bridge package.
+A shell target is registered from its indexed entrypoint: resolve it with
+`workspace documents`, then pass the returned ID to
+`target register --entrypoint-document-id`. Follow [flutter.md](references/flutter.md)
+for the complete setup.
+A Flutter target may combine its semantic bridge and native
+system driver in the same run. An installed Flutter app remains controllable as
+a fully black-box `nativeApp` when no bridge is present.
 
-Treat advertised `executionMode`, `defaultTimeoutMs`, and `maximumTimeoutMs`
-as authoritative. Synchronous operations block to a result; use either
-`operation run --timeout-ms` or `--deadline`, never both. Job operations return
-a durable `runId`. Case runs default to 30 minutes with a 6 hour maximum and
-suite runs default to 2 hours with a 24 hour maximum; override either with the
-run command's `--timeout-ms` when the workload requires it.
+## Rapid Development Validation
 
-Do not treat persisted target records as liveness proof. Inspect the target.
-Unsupported actions remain unavailable; never simulate success.
+Use this loop for active implementation:
 
-## Development Operations
+`resolve -> baseline -> edit -> execute -> observe -> judge -> repeat`
+
+1. Resolve the workspace, target, and advertised operations once.
+2. Inspect a minimal baseline before the first mutation.
+3. Make one coherent code change.
+4. Run the smallest analysis, reload, action, or assertion that exercises it.
+5. Inspect resulting UI/state and bounded runtime errors.
+6. Capture a screenshot only for a visible claim and record only for motion or
+   reproduction.
+7. Keep the daemon and target alive and repeat without relaunching unless the
+   target is unhealthy or the change requires a clean start.
+
+Each cycle should answer one missing fact. Do not run a suite, generate a full
+report, or open large artifacts during every edit. Follow
+[development.md](references/development.md) for common UI, route, network,
+black-box, mixed-stack, locator, timeout, and recovery workflows.
+
+## Inspect Before Acting
 
 ```bash
-dart run cockpit operation list --workspace-id <workspaceId>
-dart run cockpit operation run \
+cockpit operation list --workspace-id <workspaceId>
+cockpit target inspect --target-id <targetId> --profile minimal
+```
+
+Treat each advertised operation's input contract, `executionMode`,
+`defaultTimeoutMs`, and `maximumTimeoutMs` as authoritative. Synchronous
+operations block to a result. Job operations return a durable `runId`.
+Use either `--timeout-ms` or `--deadline` for a synchronous operation, never
+both. Give each authored step its own `timeoutMs` when its cost differs from
+the case default.
+
+Run focused development actions with typed file input:
+
+```bash
+cockpit operation run \
   --workspace-id <workspaceId> \
   --kind <advertisedKind> \
-  --input-file /tmp/operation.json \
+  --input-file /absolute/path/to/input.json \
   --idempotency-key <uniqueKey>
 ```
 
-Prefer a small read-act-read loop. Use hot reload/restart only when advertised.
-After timeout or transport loss, read state before retrying non-idempotent work.
+After a mutation, inspect the resulting UI/state/errors. After timeout or
+transport loss, read state before retrying non-idempotent work.
 
-## E2E Cases And Suites
+## Author And Run E2E
 
-Author YAML or JSON against
-`packages/cockpit_protocol/schema/cockpit.test.v2.schema.json`. Start from
-`packages/cockpit/example/cases/` or `packages/cockpit/example/suites/`.
+Copy and adapt a local template; do not execute a template unchanged:
+
+- [black-box-login.case.yaml](assets/templates/e2e/cases/black-box-login.case.yaml)
+- [black-box-settings.case.yaml](assets/templates/e2e/cases/black-box-settings.case.yaml)
+- [flutter-mixed-stack.case.yaml](assets/templates/e2e/cases/flutter-mixed-stack.case.yaml)
+- [regression.suite.yaml](assets/templates/e2e/suites/regression.suite.yaml)
+
+Use the bundled [cockpit.test.v2.schema.json](references/cockpit.test.v2.schema.json)
+for exact fields. Keep case and suite files inside the registered workspace,
+validate them, list them to refresh the document index, and then run by the
+reported authored identity.
 
 ```bash
-dart run cockpit case validate --file case.yaml --format yaml
-dart run cockpit suite validate --file suite.yaml --format yaml
-dart run cockpit case run --case-id <caseId> --idempotency-key <uniqueKey> \
+cockpit case validate --file cockpit/e2e/cases/login.case.yaml --format yaml
+cockpit suite validate --file cockpit/e2e/suites/regression.suite.yaml --format yaml
+cockpit case list --workspace-id <workspaceId>
+cockpit suite list --workspace-id <workspaceId>
+cockpit case run \
+  --workspace-id <workspaceId> \
+  --case-id <caseId> \
+  --target-id <targetId> \
+  --idempotency-key <uniqueKey> \
   --timeout-ms <overallCaseBudget>
-dart run cockpit suite run --suite-id <suiteId> --idempotency-key <uniqueKey> \
+cockpit suite run \
+  --workspace-id <workspaceId> \
+  --suite-id <suiteId> \
+  --target-id <targetId> \
+  --idempotency-key <uniqueKey> \
   --timeout-ms <overallSuiteBudget>
-dart run cockpit run events --run-id <runId> --after-sequence 0 \
-  --stdout-format jsonl
-dart run cockpit run get --run-id <runId>
-dart run cockpit suite report --run-id <runId>
-dart run cockpit artifact list --run-id <runId>
-dart run cockpit artifact read \
-  --run-id <runId> --artifact-id <artifactId> \
-  --output /absolute/path/to/artifact
+cockpit run events --run-id <runId> --after-sequence 0
+cockpit run get --run-id <runId>
+cockpit suite report --run-id <runId>
 ```
 
-Use a case for focused validation. Use a suite for dependency DAGs, matrices,
-fixtures, isolation, parallel rows, retry, durable recovery, and regression
-reports. AI may generate documents, but must validate them before submission.
-Locator signals are conjunctive. Text and label matching defaults to `exact`;
-use explicit `contains`, typo-tolerant `fuzzy`, or `regex`, ordered
-`fallbacks`, and 0-based `index` when a list remains ambiguous.
+Use semantic/native/visual/coordinate planes only when advertised. Locator
+signals in one locator are conjunctive. Prefer stable IDs or labels, add
+ordered `fallbacks` for alternate representations, and use 0-based `index`
+only after stronger signals still match a list. Exact text is the default;
+select `contains`, `fuzzy`, or `regex` deliberately.
 
-A step `plane` may switch between semantic, native, visual, and coordinate
-execution. Flutter bridge targets can mix their semantic and secondary system
-drivers in one case. Read the secondary driver's sanitized capability profile
-from `target.inspect.output.systemControl`; do not rebuild it from redacted
-`app.get` data. Use copy/erase/paste, travel, visual locators, and
-screenshot assertions only when advertised. Visual templates and baselines
-must resolve inside the workspace; screenshot assertions publish actual,
-baseline, and diff files. Compose scoped before/after work with fixtures,
-`setup`/`finally`, step evidence, and explicit recording operations.
+Compose lifecycle behavior with suite fixtures, case `setup`/`finally`, step
+`evidence`, and explicit recording boundaries. Use `if`, bounded `retry`,
+bounded `loop`, and `call` fragments for flow control. Do not invent client-only
+pre/post hooks that cannot appear in the canonical report.
 
-Suite artifacts form one portable offline directory. Preserve relative paths,
-verify every file declared by root `manifest.json`, use `summary.md` for a
-bounded handoff, and use `report.json` as the complete rendering fact graph.
-Open `index.html` only for human role views. Keep screenshots, recordings, and
-other binary evidence in files; never print them as Base64.
+## Output And Evidence
 
-## Authorization And Concurrency
-
-The Supervisor isolates workers by workspace and engine version. Keep every
-target and operation bound to its workspace when several projects run in
-parallel. Production/unknown environments, dangerous operations, safety
-effects, and secret names require explicit policy. Inspect with
-`daemon policy show`; validate and atomically apply policy files before restart.
-Only when the user explicitly authorizes unrestricted local control, use
-`daemon start --yolo` or `daemon restart --yolo`. YOLO is scoped to that
-daemon process; a start without the flag returns to persisted policy authority.
-Confirm `authorizationMode` in daemon status and the resulting reports.
-Quarantined resources remain blocked. Read exact identities with `lease.list`
-and use the `reset`-authorized `lease.recover`; force release is limited to
-explicitly acknowledged logical resources and never applies to forwarded ports.
-
-## Acceptance
+CLI stdout defaults to compact semantic text. Keep that default for agent
+loops. Use `--detail minimal|standard|full` to change projection,
+`--stdout-format json` only for exact structured processing, and
+`--output <file>` when the complete response must stay on disk. Binary
+artifacts are always downloaded to files; never print or expand Base64.
 
 A pass requires terminal run state, required assertions, no disqualifying
-runtime errors, and readable required evidence. Artifact existence alone is
-not proof. Resume event streams by sequence and reuse idempotency keys; do not
-replay uncertain mutations blindly.
+runtime errors, and readable required evidence. For suites, preserve the whole
+offline directory and verify `manifest.json`. Use `summary.md` for a bounded
+handoff, `report.json` as the complete rendering fact graph, `index.html` for
+offline role views, and `junit.xml` for CI interchange.
 
-A release regression must exercise at least one real business mutation and every
-applicable advertised gesture, text, keyboard, semantics, wait, and evidence
-action family. Verify each mutation through resulting UI state; successful
-command dispatch without an observable assertion is not E2E proof.
+## Authorization And Recovery
 
-For a repository release, require the complete quality job plus Android, iOS,
-macOS, Linux, web, and Windows regression jobs. The quality job must cover
-formatting, analysis, all package/example tests, and publication dry-runs.
-Wait for the entire matrix to finish before diagnosing it; then use terminal
-reports, events, verified artifacts, and daemon logs rather than partial job
-state. Never declare a release from one local run or one passing platform.
+Inspect policy with `daemon policy show`. Production/unknown targets,
+dangerous operations, safety effects, and secret names require policy
+authority. Use the local development YOLO rule above only within its stated
+boundary. Confirm `authorizationMode` in daemon status and the report.
+
+Resume run events by sequence and reuse the original idempotency key. For
+quarantined resources, read exact identities with the advertised `lease.list`
+operation and use policy-authorized `lease.recover`; never guess or blindly
+force release resources.
+
+## Completion Rules
+
+- A visible claim needs a current screenshot; motion or reproduction needs a
+  recording when that capability is available and required.
+- A business flow needs an observable assertion after its mutation.
+- Unsupported capability is blocked/unavailable, never a simulated pass.
+- A release requires the complete quality gate and every supported platform
+  regression, not one local run or one passing device.
+- Wait for an entire CI matrix before triage; diagnose terminal reports,
+  events, artifacts, and logs together.

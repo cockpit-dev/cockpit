@@ -127,12 +127,16 @@ const String cockpitFoundationV2SchemaJson = r'''
     "JsonValue0": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -147,12 +151,16 @@ const String cockpitFoundationV2SchemaJson = r'''
     "JsonValue1": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -171,12 +179,16 @@ const String cockpitFoundationV2SchemaJson = r'''
     "JsonValue2": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -195,12 +207,16 @@ const String cockpitFoundationV2SchemaJson = r'''
     "JsonValue3": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -219,12 +235,16 @@ const String cockpitFoundationV2SchemaJson = r'''
     "JsonValue4": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -243,12 +263,16 @@ const String cockpitFoundationV2SchemaJson = r'''
     "JsonValue5": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -267,12 +291,16 @@ const String cockpitFoundationV2SchemaJson = r'''
     "JsonValue6": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -291,12 +319,16 @@ const String cockpitFoundationV2SchemaJson = r'''
     "JsonValue7": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -315,12 +347,16 @@ const String cockpitFoundationV2SchemaJson = r'''
     "JsonValue8": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -339,12 +375,16 @@ const String cockpitFoundationV2SchemaJson = r'''
     "JsonValue9": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -363,12 +403,16 @@ const String cockpitFoundationV2SchemaJson = r'''
     "JsonValue10": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -387,12 +431,16 @@ const String cockpitFoundationV2SchemaJson = r'''
     "JsonValue11": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -411,12 +459,16 @@ const String cockpitFoundationV2SchemaJson = r'''
     "JsonValue12": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -435,12 +487,16 @@ const String cockpitFoundationV2SchemaJson = r'''
     "JsonValue13": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -459,12 +515,16 @@ const String cockpitFoundationV2SchemaJson = r'''
     "JsonValue14": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -483,12 +543,16 @@ const String cockpitFoundationV2SchemaJson = r'''
     "JsonValue15": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -507,12 +571,16 @@ const String cockpitFoundationV2SchemaJson = r'''
     "JsonValue16": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -531,12 +599,16 @@ const String cockpitFoundationV2SchemaJson = r'''
     "JsonValue17": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -555,12 +627,16 @@ const String cockpitFoundationV2SchemaJson = r'''
     "JsonValue18": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -579,12 +655,16 @@ const String cockpitFoundationV2SchemaJson = r'''
     "JsonValue19": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -603,12 +683,16 @@ const String cockpitFoundationV2SchemaJson = r'''
     "JsonValue20": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -627,12 +711,16 @@ const String cockpitFoundationV2SchemaJson = r'''
     "JsonValue21": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -651,12 +739,16 @@ const String cockpitFoundationV2SchemaJson = r'''
     "JsonValue22": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -675,12 +767,16 @@ const String cockpitFoundationV2SchemaJson = r'''
     "JsonValue23": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -699,12 +795,16 @@ const String cockpitFoundationV2SchemaJson = r'''
     "JsonValue24": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -723,12 +823,16 @@ const String cockpitFoundationV2SchemaJson = r'''
     "JsonValue25": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -747,12 +851,16 @@ const String cockpitFoundationV2SchemaJson = r'''
     "JsonValue26": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -771,12 +879,16 @@ const String cockpitFoundationV2SchemaJson = r'''
     "JsonValue27": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -795,12 +907,16 @@ const String cockpitFoundationV2SchemaJson = r'''
     "JsonValue28": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -819,12 +935,16 @@ const String cockpitFoundationV2SchemaJson = r'''
     "JsonValue29": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -843,12 +963,16 @@ const String cockpitFoundationV2SchemaJson = r'''
     "JsonValue30": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -867,12 +991,16 @@ const String cockpitFoundationV2SchemaJson = r'''
     "JsonValue31": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -891,12 +1019,16 @@ const String cockpitFoundationV2SchemaJson = r'''
     "JsonValue32": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -915,12 +1047,16 @@ const String cockpitFoundationV2SchemaJson = r'''
     "JsonValue33": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -939,12 +1075,16 @@ const String cockpitFoundationV2SchemaJson = r'''
     "JsonValue34": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -963,12 +1103,16 @@ const String cockpitFoundationV2SchemaJson = r'''
     "JsonValue35": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -987,12 +1131,16 @@ const String cockpitFoundationV2SchemaJson = r'''
     "JsonValue36": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -1011,12 +1159,16 @@ const String cockpitFoundationV2SchemaJson = r'''
     "JsonValue37": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -1035,12 +1187,16 @@ const String cockpitFoundationV2SchemaJson = r'''
     "JsonValue38": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -1059,12 +1215,16 @@ const String cockpitFoundationV2SchemaJson = r'''
     "JsonValue39": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -1083,12 +1243,16 @@ const String cockpitFoundationV2SchemaJson = r'''
     "JsonValue40": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -1107,12 +1271,16 @@ const String cockpitFoundationV2SchemaJson = r'''
     "JsonValue41": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -1131,12 +1299,16 @@ const String cockpitFoundationV2SchemaJson = r'''
     "JsonValue42": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -1155,12 +1327,16 @@ const String cockpitFoundationV2SchemaJson = r'''
     "JsonValue43": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -1179,12 +1355,16 @@ const String cockpitFoundationV2SchemaJson = r'''
     "JsonValue44": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -1203,12 +1383,16 @@ const String cockpitFoundationV2SchemaJson = r'''
     "JsonValue45": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -1227,12 +1411,16 @@ const String cockpitFoundationV2SchemaJson = r'''
     "JsonValue46": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -1251,12 +1439,16 @@ const String cockpitFoundationV2SchemaJson = r'''
     "JsonValue47": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -1275,12 +1467,16 @@ const String cockpitFoundationV2SchemaJson = r'''
     "JsonValue48": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -1299,12 +1495,16 @@ const String cockpitFoundationV2SchemaJson = r'''
     "JsonValue49": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -1323,12 +1523,16 @@ const String cockpitFoundationV2SchemaJson = r'''
     "JsonValue50": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -1347,12 +1551,16 @@ const String cockpitFoundationV2SchemaJson = r'''
     "JsonValue51": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -1371,12 +1579,16 @@ const String cockpitFoundationV2SchemaJson = r'''
     "JsonValue52": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -1395,12 +1607,16 @@ const String cockpitFoundationV2SchemaJson = r'''
     "JsonValue53": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -1419,12 +1635,16 @@ const String cockpitFoundationV2SchemaJson = r'''
     "JsonValue54": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -1443,12 +1663,16 @@ const String cockpitFoundationV2SchemaJson = r'''
     "JsonValue55": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -1467,12 +1691,16 @@ const String cockpitFoundationV2SchemaJson = r'''
     "JsonValue56": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -1491,12 +1719,16 @@ const String cockpitFoundationV2SchemaJson = r'''
     "JsonValue57": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -1515,12 +1747,16 @@ const String cockpitFoundationV2SchemaJson = r'''
     "JsonValue58": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -1539,12 +1775,16 @@ const String cockpitFoundationV2SchemaJson = r'''
     "JsonValue59": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -1563,12 +1803,16 @@ const String cockpitFoundationV2SchemaJson = r'''
     "JsonValue60": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -1587,12 +1831,16 @@ const String cockpitFoundationV2SchemaJson = r'''
     "JsonValue61": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -1611,12 +1859,16 @@ const String cockpitFoundationV2SchemaJson = r'''
     "JsonValue62": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -1635,12 +1887,16 @@ const String cockpitFoundationV2SchemaJson = r'''
     "JsonValue63": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -5512,7 +5768,7 @@ const String cockpitV2OpenApiJson = r'''
       ],
       "get": {
         "operationId": "listDocuments",
-        "summary": "List indexed case, suite, and project documents",
+        "summary": "List indexed source, case, suite, and project documents",
         "parameters": [
           {
             "$ref": "#/components/parameters/ApiVersion"
@@ -5525,6 +5781,31 @@ const String cockpitV2OpenApiJson = r'''
           },
           {
             "$ref": "#/components/parameters/Cursor"
+          },
+          {
+            "name": "kind",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "source",
+                "case",
+                "suite",
+                "project"
+              ]
+            }
+          },
+          {
+            "name": "relativePath",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^(?!/)(?![A-Za-z]:)(?!.*\\\\)(?!.*(?:^|/)\\.\\.?(?:/|$))[^/]+(?:/[^/]+)*$",
+              "minLength": 1,
+              "maxLength": 4096
+            }
           }
         ],
         "responses": {

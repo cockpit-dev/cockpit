@@ -447,7 +447,8 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
       axisDirection: position.axisDirection,
       forward: nextPixels > position.pixels,
     );
-    final hadSemanticAction = semanticScrollAction != null;
+    final hadSemanticAction =
+        !preferProgrammatic && semanticScrollAction != null;
     final scrollableTarget = _registryTargetForScrollableCandidate(scrollable);
     final scrollGeometry = scrollableTarget == null
         ? CockpitTargetGeometryResolver.maybeFromElement(scrollable.element)
@@ -500,7 +501,7 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
         // Fall through to semantics or direct position adjustment.
       }
     }
-    if (semanticScrollAction != null) {
+    if (!preferProgrammatic && semanticScrollAction != null) {
       final initialPixels = position.pixels;
       final semanticAction = scrollable.semanticScrollActionHandler(
         semanticScrollAction,

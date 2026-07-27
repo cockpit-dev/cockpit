@@ -225,8 +225,30 @@ final class CockpitSupervisorHttpApi {
       if (request.method != 'GET') {
         return _methodNotAllowed(request, const <String>['GET']);
       }
-      final page = support.pageRequest(request, 'documents:$workspaceId');
-      final documents = await runtime.documents(workspaceId);
+      final query = request.uri.queryParameters;
+      final kind = switch (query['kind']) {
+        null => null,
+        'source' => CockpitIndexedDocumentKind.source,
+        'case' => CockpitIndexedDocumentKind.testCase,
+        'suite' => CockpitIndexedDocumentKind.suite,
+        'project' => CockpitIndexedDocumentKind.project,
+        _ => throw const FormatException(
+          'Indexed document kind query is invalid.',
+        ),
+      };
+      final relativePath = query['relativePath'];
+      final pageScope =
+          'documents:$workspaceId:${kind?.name ?? ''}:${relativePath ?? ''}';
+      final page = support.pageRequest(
+        request,
+        pageScope,
+        additionalQueryParameters: const <String>{'kind', 'relativePath'},
+      );
+      final documents = await runtime.documents(
+        workspaceId,
+        kind: kind,
+        relativePath: relativePath,
+      );
       documents.sort(
         (left, right) => left.documentId.compareTo(right.documentId),
       );
@@ -236,7 +258,7 @@ final class CockpitSupervisorHttpApi {
         support.page(
           documents,
           page,
-          'documents:$workspaceId',
+          pageScope,
           (document) => document.toJson(),
         ),
       );

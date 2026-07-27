@@ -1,0 +1,70 @@
+schemaVersion: cockpit.test/v2
+kind: case
+id: flutterMixedStack
+name: Flutter mixed-stack validation
+description: Combines Flutter semantics with the target's secondary native driver.
+tags: [acceptance, flutter, mixed-stack]
+target:
+  platform: android
+  targetKind: flutterApp
+  plane: semantic
+defaults:
+  commandTimeoutMs: 20000
+  cleanupTimeoutMs: 20000
+  failFast: true
+  evidence:
+    screenshot: onFailure
+    snapshot: onFailure
+    failurePolicy: failStep
+setup:
+  - stepId: verifyFlutterBaseline
+    action:
+      type: waitFor
+      condition: {type: route, route: /home}
+steps:
+  - stepId: openPermissionFlow
+    action:
+      type: tap
+      locator:
+        testId: request-permission
+        fallbacks:
+          - {label: Enable notifications}
+          - {text: Enable notifications}
+  - stepId: acceptNativePermission
+    plane: native
+    safety:
+      effects: [permissionChange]
+      reason: Grant the requested permission on the test target.
+    action:
+      type: system
+      name: dismissSystemDialog
+      parameters: {decision: accept}
+  - stepId: verifyFlutterPermissionState
+    plane: semantic
+    retry:
+      maxAttempts: 3
+      delayMs: 500
+      steps:
+        - stepId: assertPermissionEnabled
+          action:
+            type: assertText
+            locator: {testId: permission-status}
+            text: enabled
+            matchMode: contains
+  - stepId: captureMixedStackProof
+    action:
+      type: captureScreenshot
+      artifactName: flutter-mixed-stack
+      captureOptions:
+        reason: acceptance
+        includeSnapshot: true
+        attachToStep: true
+        profile: flutterPreferred
+        allowFallback: true
+finally:
+  - stepId: recoverApplicationFocus
+    plane: native
+    timeoutMs: 60000
+    action:
+      type: system
+      name: recoverToApp

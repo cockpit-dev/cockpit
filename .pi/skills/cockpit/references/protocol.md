@@ -1,93 +1,122 @@
-# Cockpit 2.0 Reference
+# Cockpit 2.0 Protocol Map
 
-## Authorities
+This is the skill-local authority map. Do not resolve any contract through a
+Cockpit source checkout.
 
-| Need | Source |
+## Contents
+
+- [Runtime authorities](#runtime-authorities)
+- [Command map](#command-map)
+- [Resource model](#resource-model)
+- [Execution rules](#execution-rules)
+- [Output rules](#output-rules)
+- [MCP and third-party clients](#mcp-and-third-party-clients)
+
+## Runtime Authorities
+
+| Need | Authority |
 | --- | --- |
-| HTTP and SSE | `packages/cockpit_protocol/openapi/cockpit.v2.openapi.json` |
-| Foundation DTOs | `packages/cockpit_protocol/schema/cockpit.foundation.v2.schema.json` |
-| Case/suite/project documents | `packages/cockpit_protocol/schema/cockpit.test.v2.schema.json` |
-| Architecture and ownership | `docs/contracts/cockpit-protocol.md` |
-| AI execution policy | `docs/contracts/ai-development-protocol.md` |
-| Authorization policy | `COCKPIT_HOME/authorization.json` |
+| Current CLI flags | `cockpit help <command> <subcommand>` |
+| Available operation and input | `operation list`, then the returned descriptor |
+| Live target capability | `target inspect --profile minimal|inspect` |
+| Case/suite/project syntax | [`cockpit.test.v2.schema.json`](cockpit.test.v2.schema.json) |
+| Authorization | `daemon policy show` and `daemon status` |
+| Run truth | `run events`, `run get`, canonical report, verified artifacts |
 
-Use schemas or tool metadata for exact fields. Do not infer payload keys from
-examples.
+Static prose explains decisions; live descriptors decide what the installed
+version and current target can actually do.
 
 ## Command Map
 
 | Need | Command |
 | --- | --- |
-| Daemon health | `cockpit daemon status`, `cockpit daemon doctor` |
-| Roots/workspaces | `cockpit root ...`, `cockpit workspace ...` |
-| Target discovery/liveness | `cockpit target discover`, `target inspect` |
-| Typed development action | `cockpit operation list`, `operation run` |
-| Validate/run case | `cockpit case validate`, `case run` |
-| Validate/run suite | `cockpit suite validate`, `suite run` |
-| Observe/cancel | `cockpit run get`, `run events`, `run cancel` |
-| Report/artifact | `cockpit suite report`, `artifact list`, `artifact read` |
-| Lease recovery | `operation run --kind lease.list`, `operation run --kind lease.recover` |
-| MCP | `cockpit serve-mcp` or the `cockpit_mcp` executable |
+| Supervisor | `daemon start|status|doctor|logs|restart|stop`, `server` |
+| Authorization | `daemon policy show|validate|apply` |
+| Roots/workspaces | `root add|list|remove`, `workspace register|list|documents|rebind|unregister` |
+| Targets | `target discover|register|list|get|launch|inspect` |
+| Operations | `operation list|run` |
+| Cases | `case validate|list|run` |
+| Suites | `suite validate|list|run|report` |
+| Runs | `run get|events|cancel` |
+| Artifacts | `artifact list|read` |
+| MCP | `serve-mcp` or the installed `cockpit_mcp` executable |
 
-Run `cockpit help <command> <subcommand>` for current options.
+Run `cockpit help` when a command is absent or an option is unclear.
+Never infer flags from an older Cockpit release.
 
-## Target Rules
+## Resource Model
 
-- `nativeApp`, `desktopApp`, and `browserPage` require a nonblank `appId`.
-- A Flutter target uses an indexed entrypoint document and never requires
-  production code to depend on the bridge.
-- System/native capabilities are target and platform specific. Trust only
-  operations advertised as available.
-- Use one WDA URL per iOS target when multiple devices or workspaces run.
-- Persisted `registered`/`launched` metadata is not live state; inspect it.
+```text
+Supervisor
+  root
+    workspace
+      document
+      target
+      operation
+      case / suite
+  run
+    case attempt
+      step
+      artifact
+    event stream
+    report
+```
 
-## Run Rules
+Every workspace-owned resource carries a workspace identity. Run and artifact
+lookups use explicit IDs, never implicit "latest" global state. The Supervisor
+isolates workers by workspace and engine version, allowing multiple projects
+and checkouts to execute without sharing state or blocking unrelated work.
 
-- Read `executionMode`, `defaultTimeoutMs`, and `maximumTimeoutMs` from the
-  advertised operation descriptor. Synchronous operations block to a result;
-  job operations return a durable `runId` for later observation.
-- A synchronous invocation may set one relative `timeoutMs` or absolute
-  `deadline`. Case and suite submissions use `timeoutMs` as their overall run
-  budget; step, command, cleanup, and launch budgets remain independent inner
-  limits.
-- A case step may override its target plane with `semantic`, `native`,
-  `visual`, or `coordinate`; otherwise routing follows the action/locator.
-  Flutter bridge targets may use semantic and secondary system drivers in the
-  same run. The sanitized `target.inspect.output.systemControl` profile is the
-  authority for the secondary driver; `app.get` identities are intentionally
-  redacted. Use clipboard text actions, travel, visual matching, and
-  screenshot assertions only when advertised.
-- Visual templates and screenshot baselines must resolve within the workspace.
-  Screenshot assertions retain actual, baseline, and diff artifact files.
-  Fixtures, `setup`/`finally`, step evidence, and explicit recording operations
-  provide scoped before/after behavior.
+Targets cover Flutter apps, installed native/mobile apps, desktop apps,
+browser pages, system surfaces, devices, and host workspaces. App-like
+black-box targets use their real platform app identifier. An iOS WDA endpoint
+is target-scoped so concurrent devices do not overwrite each other.
+
+## Execution Rules
+
+- Inspect the target and operation catalog before choosing an action.
+- Trust advertised `executionMode`, `defaultTimeoutMs`, and
+  `maximumTimeoutMs`.
+- Synchronous operations block. Job operations return a durable `runId`.
+- A synchronous invocation uses one relative `timeoutMs` or absolute
+  `deadline`, never both.
+- Case and suite `--timeout-ms` values are overall run budgets. Step, command,
+  cleanup, launch, and operation budgets remain independent inner limits.
 - Submission and mutation idempotency keys are stable per logical action.
 - SSE sequence numbers are monotonic and resumable.
-- Suite checkpoints preserve completed nodes, attempts, fixture state, and
-  session affinity across worker recovery.
-- A cancelled suite still runs eligible always-run teardown within bounded
-  grace, then publishes terminal events and reports.
-- List run artifacts first, then download by run/artifact identity to an
-  explicit `--output` file. Cockpit verifies media type, size, and SHA-256
-  before committing the file; binary bytes never belong in terminal output.
-- Quarantined resources remain blocked until cleanup is verified. The
-  `reset`-authorized `lease.recover` requires exact lease, workspace, resource,
-  and holder identities. Only logical resources allow explicit force release;
-  forwarded ports always require verified cleanup.
+- Suite checkpoints retain completed nodes, attempts, and fixtures.
+- Suite checkpoints preserve session affinity across worker recovery.
+- Cancellation still permits eligible always-run teardown within its bounded
+  grace period, then publishes terminal events and reports.
 
-## Output Selection
+The target has a default execution plane; a case step can select `semantic`,
+`native`, `visual`, or `coordinate`. A Flutter target may combine semantic and
+secondary native drivers. Read the sanitized secondary driver profile from
+`target inspect` output; never reconstruct redacted app/process identities.
 
-CLI `auto` output is compact semantic text. Use `--detail minimal|standard|full`
-to control its projection, `--stdout-format json` for an exact response,
-`jsonl` for streaming run events, and `--output <file>` for lossless JSON plus
-a bounded receipt. Use `minimal` target inspection for routine loops and
-`inspect`/`evidence` only when the additional runtime state proves the claim.
+## Output Rules
 
-## Release Gate
+`auto`/`ai` stdout is the normal low-token format. Use `--detail minimal` for
+routine loops. Use `--stdout-format json` or `jsonl` only when a program needs
+exact data. For a complete non-binary response, `--output <path>` writes JSON
+atomically and stdout becomes a bounded path/size/SHA-256 receipt.
 
-Repository publication requires formatting, analysis, every package and
-example test, publication dry-runs, and successful Android, iOS, macOS, Linux,
-web, and Windows regressions. Wait for the whole matrix to reach terminal state
-before triage, then inspect its reports, event streams, verified artifacts, and
-daemon logs together. One local run or one passing platform is not release
-evidence.
+`artifact read` requires `--output`; it verifies media type, byte size, and
+SHA-256 before committing the file. Never place binary data or Base64 in
+terminal output.
+
+## MCP And Third-Party Clients
+
+CLI and MCP are clients of the same authenticated Supervisor API. MCP tools
+should be selected from their live schemas exactly as CLI operations are
+selected from descriptors. Start stdio MCP with:
+
+```bash
+cockpit serve-mcp
+```
+
+When building another client, use the installed `cockpit_protocol` package for
+OpenAPI/schema/Dart contracts. The skill is operational guidance, not a
+replacement transport specification. Preserve resource IDs, authentication,
+timeouts, idempotency, SSE resume, artifact digest checks, and canonical report
+semantics across every client.

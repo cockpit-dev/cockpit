@@ -14,13 +14,10 @@ void main() {
     return jsonDecode(read(path)) as Map<String, Object?>;
   }
 
-  void expectStdioMcpServer(
-    Map<String, Object?> server, {
-    Object? command = 'dart',
-  }) {
+  void expectStdioMcpServer(Map<String, Object?> server) {
     expect(server['type'], anyOf('stdio', 'local'));
-    expect(server['command'], command);
-    expect(server['args'], <Object?>['run', 'cockpit', 'serve-mcp']);
+    expect(server['command'], 'cockpit_mcp');
+    expect(server['args'], <Object?>[]);
   }
 
   List<String> listFiles(String path) {
@@ -79,7 +76,7 @@ void main() {
 
     final skill = read('plugins/codex/cockpit/skills/cockpit/SKILL.md');
     expect(skill, contains('name: cockpit'));
-    expect(skill, contains('dart run cockpit'));
+    expect(skill, contains('globally installed `cockpit` executable'));
   });
 
   test('Claude Code plugin exposes the skill and MCP server', () {
@@ -99,27 +96,27 @@ void main() {
 
     final skill = read('plugins/claude-code/cockpit/skills/cockpit/SKILL.md');
     expect(skill, contains('name: cockpit'));
-    expect(skill, contains('dart run cockpit'));
+    expect(skill, contains('globally installed `cockpit` executable'));
   });
 
   test('repo-local agent adapters point to the canonical skill', () {
     final cursor = read('.cursor/rules/cockpit.mdc');
     expect(cursor, contains('alwaysApply: false'));
-    expect(cursor, contains('skills/cockpit/SKILL.md'));
-    expect(cursor, contains('dart run cockpit'));
+    expect(cursor, contains('.cursor/skills/cockpit/SKILL.md'));
+    expect(cursor, isNot(contains('dart run cockpit')));
     final cursorMcp = readJson('.cursor/mcp.json');
     final cursorServers = cursorMcp['mcpServers']! as Map<String, Object?>;
     expectStdioMcpServer(cursorServers['cockpit']! as Map<String, Object?>);
 
     final kiro = read('.kiro/steering/cockpit.md');
-    expect(kiro, contains('skills/cockpit/SKILL.md'));
-    expect(kiro, contains('dart run cockpit'));
+    expect(kiro, contains('bundled self-contained `cockpit` skill'));
+    expect(kiro, isNot(contains('dart run cockpit')));
     final kiroMcp = readJson('.kiro/settings/mcp.json');
     final kiroServers = kiroMcp['mcpServers']! as Map<String, Object?>;
     expectStdioMcpServer(kiroServers['cockpit']! as Map<String, Object?>);
     final kiroPower = read('plugins/kiro/cockpit/POWER.md');
     expect(kiroPower, contains('Cockpit'));
-    expect(kiroPower, contains('dart run cockpit'));
+    expect(kiroPower, contains('globally installed `cockpit_mcp` server'));
     final kiroPowerMcp = readJson('plugins/kiro/cockpit/mcp.json');
     final kiroPowerServers =
         kiroPowerMcp['mcpServers']! as Map<String, Object?>;
@@ -130,14 +127,15 @@ void main() {
     final mcp = opencode['mcp']! as Map<String, Object?>;
     final server = mcp['cockpit']! as Map<String, Object?>;
     expect(server['type'], 'local');
-    expect(server['command'], <Object?>['dart', 'run', 'cockpit', 'serve-mcp']);
+    expect(server['command'], <Object?>['cockpit_mcp']);
+    expect(server['enabled'], isTrue);
 
     final ompSkill = read('.agents/skills/cockpit/SKILL.md');
     expect(ompSkill, contains('name: cockpit'));
-    expect(ompSkill, contains('dart run cockpit'));
+    expect(ompSkill, contains('globally installed `cockpit` executable'));
     final piSkill = read('.pi/skills/cockpit/SKILL.md');
     expect(piSkill, contains('name: cockpit'));
-    expect(piSkill, contains('dart run cockpit'));
+    expect(piSkill, contains('globally installed `cockpit` executable'));
   });
 
   test('agent integration docs cover every supported host', () {

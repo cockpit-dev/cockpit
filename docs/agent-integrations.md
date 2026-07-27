@@ -2,6 +2,13 @@
 
 Cockpit ships one canonical AI workflow at `skills/cockpit/SKILL.md` and host-native adapters for common coding agents. Keep the canonical skill as the source of truth; native skill directories and packaged plugins carry synced copies so installed or repo-local adapters work outside this repository.
 
+Install the runtime once before enabling any MCP adapter, and ensure Dart's
+global executable directory is on `PATH`:
+
+```bash
+dart pub global activate cockpit ^2.0.0
+```
+
 ## Codex
 
 Codex supports installable plugins with `.codex-plugin/plugin.json`.
@@ -16,12 +23,13 @@ plugins/codex/cockpit
 The marketplace entry points Codex at the local plugin. The plugin exposes:
 
 - `skills/cockpit` as a complete Codex skill.
-- `.mcp.json` with `cockpit -> dart run cockpit serve-mcp`.
+- `.mcp.json` with the globally installed `cockpit_mcp` executable.
 
 For direct MCP setup without installing the plugin:
 
 ```bash
-codex mcp add cockpit -- dart run cockpit serve-mcp
+dart pub global activate cockpit ^2.0.0
+codex mcp add cockpit -- cockpit_mcp
 ```
 
 ## Claude Code
@@ -39,12 +47,13 @@ plugins/claude-code/cockpit
 Repo-local Claude Code can discover `.claude/skills/cockpit` and the project `.mcp.json`. The plugin exposes:
 
 - `skills/cockpit` as a complete Claude Code skill.
-- `.mcp.json` with `cockpit -> dart run cockpit serve-mcp`.
+- `.mcp.json` with the globally installed `cockpit_mcp` executable.
 
 For direct MCP setup without installing the plugin:
 
 ```bash
-claude mcp add --transport stdio cockpit -- dart run cockpit serve-mcp
+dart pub global activate cockpit ^2.0.0
+claude mcp add --transport stdio cockpit -- cockpit_mcp
 ```
 
 ## Cursor
@@ -66,8 +75,8 @@ The rule gives Cursor the trigger, `.cursor/skills/cockpit` gives it the full on
   "mcpServers": {
     "cockpit": {
       "type": "stdio",
-      "command": "dart",
-      "args": ["run", "cockpit", "serve-mcp"]
+      "command": "cockpit_mcp",
+      "args": []
     }
   }
 }
@@ -108,7 +117,7 @@ The repo-local config loads normal project instructions and the local MCP server
   "mcp": {
     "cockpit": {
       "type": "local",
-      "command": ["dart", "run", "cockpit", "serve-mcp"],
+      "command": ["cockpit_mcp"],
       "enabled": true
     }
   }
@@ -126,16 +135,17 @@ OMP / Pi discovers project skills from `.pi/skills/<name>/SKILL.md` and shared A
 .agents/skills/cockpit
 ```
 
-If OMP is configured to import MCP servers from repo config, use the same `dart run cockpit serve-mcp` server. Otherwise run Cockpit through the CLI commands in the skill.
+If OMP is configured to import MCP servers from repo config, use the same
+globally installed `cockpit_mcp` server. Otherwise run Cockpit through the CLI
+commands in the skill.
 
 ## Verification
 
 After installing any adapter:
 
 1. Restart or reload the host so it rescans plugins, skills, rules, or steering files.
-2. Ask the host to load the `cockpit` skill, or read `skills/cockpit/SKILL.md` for repo-local rule/steering adapters.
-3. Run `dart run cockpit daemon status`, then
-   `dart run cockpit target discover`.
+2. Ask the host to load the bundled self-contained `cockpit` skill.
+3. Run `cockpit daemon status`, then `cockpit target discover`.
 4. If MCP is configured, verify the host can see the Cockpit 2.0 workspace,
    target, operation, case, suite, run, and artifact resources.
 5. Keep app proof proportional: inspect, act through an advertised operation

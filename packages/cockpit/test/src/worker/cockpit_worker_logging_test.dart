@@ -76,6 +76,29 @@ void main() {
     );
   });
 
+  test('structured secret references survive document redaction', () {
+    final redactor = CockpitWorkerLogRedactor();
+
+    expect(
+      redactor.redact(const <String, Object?>{
+        'password': <String, Object?>{
+          'source': 'secret',
+          'type': 'string',
+          'reference': 'env:COCKPIT_TEST_PASSWORD',
+        },
+        'token': 'plaintext-value',
+      }),
+      <String, Object?>{
+        'password': <String, Object?>{
+          'source': 'secret',
+          'type': 'string',
+          'reference': 'env:COCKPIT_TEST_PASSWORD',
+        },
+        'token': CockpitWorkerLogRedactor.redacted,
+      },
+    );
+  });
+
   test('yolo environment provider resolves any valid explicit name', () async {
     final provider = CockpitEnvironmentSecretProvider(
       allowedNames: const <String>[],

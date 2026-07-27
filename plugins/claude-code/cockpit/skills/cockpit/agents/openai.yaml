@@ -1,0 +1,4 @@
+interface:
+  display_name: "Cockpit 2.0"
+  short_description: "Develop and validate live applications with Cockpit"
+  default_prompt: "Use $cockpit to inspect, control, and verify this application with live evidence."

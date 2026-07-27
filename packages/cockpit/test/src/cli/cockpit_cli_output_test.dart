@@ -82,6 +82,24 @@ void main() {
     expect((envelope['error']! as Map<String, Object?>)['code'], 'usage');
   });
 
+  test('workspace exposes indexed documents to CLI-only clients', () {
+    final runner = CockpitCommandRunner(
+      runtime: CockpitCliRuntime(
+        stdoutSink: StringBuffer(),
+        stderrSink: StringBuffer(),
+      ),
+    );
+
+    final workspace = runner.commands['workspace'];
+    expect(workspace, isNotNull);
+    expect(workspace!.subcommands, contains('documents'));
+    final documents = workspace.subcommands['documents'];
+    expect(documents, isNotNull);
+    expect(documents!.argParser.options, contains('workspace-id'));
+    expect(documents.argParser.options, contains('kind'));
+    expect(documents.argParser.options, contains('relative-path'));
+  });
+
   group('CockpitCliOutputRenderer', () {
     test('renders default AI output as compact semantic text', () {
       const renderer = CockpitCliOutputRenderer();

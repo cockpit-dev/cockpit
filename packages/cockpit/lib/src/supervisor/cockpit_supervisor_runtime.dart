@@ -534,12 +534,23 @@ final class CockpitSupervisorRuntime {
     return result.result;
   }
 
-  Future<List<CockpitDocumentResource>> documents(String workspaceId) async {
+  Future<List<CockpitDocumentResource>> documents(
+    String workspaceId, {
+    CockpitIndexedDocumentKind? kind,
+    String? relativePath,
+  }) async {
     final result = await executeWorkspaceOperation(
       workspaceId,
       CockpitOperationInvocation(
         kind: 'document.index',
         workspaceId: workspaceId,
+        input: <String, Object?>{
+          if (kind != null)
+            'kind': kind == CockpitIndexedDocumentKind.testCase
+                ? 'case'
+                : kind.name,
+          'relativePath': ?relativePath,
+        },
         idempotencyKey: CockpitIdempotencyKey(
           'document-index-${DateTime.now().microsecondsSinceEpoch}',
         ),

@@ -23,6 +23,7 @@ final class CockpitDemoAcceptanceRequest {
     this.rootDirectory,
     this.deviceId,
     this.stopDaemon = false,
+    this.requireRecording = false,
   }) {
     if (!const <String>{
       'android',
@@ -54,6 +55,7 @@ final class CockpitDemoAcceptanceRequest {
   final Duration launchTimeout;
   final Duration runTimeout;
   final bool stopDaemon;
+  final bool requireRecording;
 }
 
 final class CockpitDemoAcceptanceResult {
@@ -316,6 +318,13 @@ final class CockpitDemoAcceptanceRunner {
       unattendedRecordingSupported = _supportsUnattendedRecording(
         recordingCapabilities,
       );
+      if (request.requireRecording && !unattendedRecordingSupported) {
+        throw FormatException(
+          'The ${request.platform} release target does not support '
+          'unattended recording: '
+          '${recordingCapabilities.recordingLimitations.join('; ')}',
+        );
+      }
       advance(
         'capabilities',
         'Inspecting the secondary black-box system control plane.',
@@ -806,6 +815,13 @@ Future<void> _verifyOfflineReportBundle({
               step.operation == 'action.system' &&
               step.requestedPlane == CockpitTestPlane.native &&
               step.actualPlane == CockpitTestPlane.native,
+        ) ||
+        !mixedPlaneSteps.any(
+          (step) =>
+              step.operation == 'action.tap' &&
+              step.requestedPlane == CockpitTestPlane.native &&
+              step.actualPlane == CockpitTestPlane.native &&
+              step.locatorResolution != null,
         ) ||
         !mixedPlaneSteps.any(
           (step) =>

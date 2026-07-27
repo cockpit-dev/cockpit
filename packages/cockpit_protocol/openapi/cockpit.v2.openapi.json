@@ -923,7 +923,7 @@
       ],
       "get": {
         "operationId": "listDocuments",
-        "summary": "List indexed case, suite, and project documents",
+        "summary": "List indexed source, case, suite, and project documents",
         "parameters": [
           {
             "$ref": "#/components/parameters/ApiVersion"
@@ -936,6 +936,31 @@
           },
           {
             "$ref": "#/components/parameters/Cursor"
+          },
+          {
+            "name": "kind",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "source",
+                "case",
+                "suite",
+                "project"
+              ]
+            }
+          },
+          {
+            "name": "relativePath",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^(?!/)(?![A-Za-z]:)(?!.*\\\\)(?!.*(?:^|/)\\.\\.?(?:/|$))[^/]+(?:/[^/]+)*$",
+              "minLength": 1,
+              "maxLength": 4096
+            }
           }
         ],
         "responses": {

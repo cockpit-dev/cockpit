@@ -286,15 +286,28 @@ final class CockpitSupervisorApiClient {
     );
   }
 
-  Future<List<CockpitDocumentResource>> documents(String workspaceId) =>
-      _allPages(
-        '/api/v2/workspaces/${_segment(workspaceId)}/documents',
-        (value, path, policy) => CockpitDocumentResource.fromJson(
-          value,
-          path: path,
-          decodePolicy: policy,
-        ),
-      );
+  Future<List<CockpitDocumentResource>> documents(
+    String workspaceId, {
+    CockpitIndexedDocumentKind? kind,
+    String? relativePath,
+  }) => _allPages(
+    Uri.parse('/api/v2/workspaces/${_segment(workspaceId)}/documents')
+        .replace(
+          queryParameters: <String, String>{
+            if (kind != null)
+              'kind': kind == CockpitIndexedDocumentKind.testCase
+                  ? 'case'
+                  : kind.name,
+            'relativePath': ?relativePath,
+          },
+        )
+        .toString(),
+    (value, path, policy) => CockpitDocumentResource.fromJson(
+      value,
+      path: path,
+      decodePolicy: policy,
+    ),
+  );
 
   Future<List<CockpitCaseIndexEntry>> cases(String workspaceId) => _allPages(
     '/api/v2/workspaces/${_segment(workspaceId)}/cases',
@@ -393,8 +406,13 @@ final class CockpitSupervisorApiClient {
     String? cursor;
     final cursors = <String>{};
     do {
-      final uri = Uri.parse(path).replace(
-        queryParameters: <String, String>{'limit': '100', 'cursor': ?cursor},
+      final baseUri = Uri.parse(path);
+      final uri = baseUri.replace(
+        queryParameters: <String, String>{
+          ...baseUri.queryParameters,
+          'limit': '100',
+          'cursor': ?cursor,
+        },
       );
       final page = CockpitPage.fromJson<T>(
         await _jsonRequest(session, 'GET', uri.toString()),

@@ -12,14 +12,23 @@ final class CockpitRpcResourceAuthorityClient
     required this.workspaceId,
     required CockpitJsonRpcPeer peer,
     DateTime Function()? utcNow,
+    Duration heartbeatTimeout = const Duration(minutes: 1),
+    Duration releaseTimeout = const Duration(minutes: 1),
   }) : _peer = peer,
-       _utcNow = utcNow ?? (() => DateTime.now().toUtc()) {
+       _utcNow = utcNow ?? (() => DateTime.now().toUtc()),
+       _heartbeatTimeout = heartbeatTimeout,
+       _releaseTimeout = releaseTimeout {
     workerId(workspaceId, r'$.workspaceId');
+    if (heartbeatTimeout <= Duration.zero || releaseTimeout <= Duration.zero) {
+      throw ArgumentError('Resource authority RPC timeouts must be positive.');
+    }
   }
 
   final String workspaceId;
   final CockpitJsonRpcPeer _peer;
   final DateTime Function() _utcNow;
+  final Duration _heartbeatTimeout;
+  final Duration _releaseTimeout;
   var _heartbeatSequence = 0;
 
   @override
@@ -52,7 +61,7 @@ final class CockpitRpcResourceAuthorityClient
       kind: 'resource.heartbeat',
       input: <String, Object?>{'grantId': grant.grantId},
       idempotencyKey: '${grant.grantId}-heartbeat-${++_heartbeatSequence}',
-      deadline: _utcNow().add(const Duration(seconds: 10)),
+      deadline: _utcNow().add(_heartbeatTimeout),
     );
   }
 
@@ -66,7 +75,7 @@ final class CockpitRpcResourceAuthorityClient
       kind: 'resource.release',
       input: <String, Object?>{'grantId': grant.grantId, 'cancel': cancel},
       idempotencyKey: '${grant.grantId}-release',
-      deadline: _utcNow().add(const Duration(seconds: 10)),
+      deadline: _utcNow().add(_releaseTimeout),
     );
   }
 

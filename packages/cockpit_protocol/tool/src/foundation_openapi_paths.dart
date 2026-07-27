@@ -147,8 +147,31 @@ Map<String, Object?> buildFoundationApiPaths() => <String, Object?>{
     'parameters': <Object?>[_pathParameter('workspaceId')],
     'get': negotiatedOperation(
       operationId: 'listDocuments',
-      summary: 'List indexed case, suite, and project documents',
-      parameters: _pageParameters(),
+      summary: 'List indexed source, case, suite, and project documents',
+      parameters: <Map<String, Object?>>[
+        ..._pageParameters(),
+        <String, Object?>{
+          'name': 'kind',
+          'in': 'query',
+          'required': false,
+          'schema': <String, Object?>{
+            'type': 'string',
+            'enum': <String>['source', 'case', 'suite', 'project'],
+          },
+        },
+        <String, Object?>{
+          'name': 'relativePath',
+          'in': 'query',
+          'required': false,
+          'schema': <String, Object?>{
+            'type': 'string',
+            'pattern':
+                r'^(?!/)(?![A-Za-z]:)(?!.*\\)(?!.*(?:^|/)\.\.?(?:/|$))[^/]+(?:/[^/]+)*$',
+            'minLength': 1,
+            'maxLength': 4096,
+          },
+        },
+      ],
       responses: <String, Object?>{
         '200': jsonResponse('Indexed documents.', 'DocumentPage'),
       },

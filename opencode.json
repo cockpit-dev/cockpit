@@ -7,10 +7,7 @@
     "cockpit": {
       "type": "local",
       "command": [
-        "dart",
-        "run",
-        "cockpit",
-        "serve-mcp"
+        "cockpit_mcp"
       ],
       "enabled": true
     }

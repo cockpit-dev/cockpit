@@ -61,7 +61,27 @@ final class CockpitWorkerDocumentIndex
         mutationClass: CockpitMutationClass.mutating,
         resourceKinds: const <String>['workspace.documents'],
         prepare: (context, input) {
-          workerKeys(input, const <String>{}, r'$.input');
+          workerKeys(input, const <String>{'kind', 'relativePath'}, r'$.input');
+          final kind = input['kind'] == null
+              ? null
+              : workerString(input['kind'], r'$.input.kind', maximum: 16);
+          if (kind != null &&
+              !const <String>{
+                'source',
+                'case',
+                'suite',
+                'project',
+              }.contains(kind)) {
+            throw const FormatException('Invalid indexed document kind.');
+          }
+          final relativePath = input['relativePath'] == null
+              ? null
+              : workerString(input['relativePath'], r'$.input.relativePath');
+          if (relativePath != null && !_isConfinedRelative(relativePath)) {
+            throw const FormatException(
+              'Indexed document path must be workspace-relative and confined.',
+            );
+          }
           return CockpitPreparedWorkspaceOperation(
             resources: <CockpitWorkerResourceRequest>[
               CockpitWorkerResourceRequest(
@@ -69,8 +89,17 @@ final class CockpitWorkerDocumentIndex
                 resourceId: context.workspaceId,
               ),
             ],
-            execute: (_) async => <String, Object?>{
-              'documents': await refresh(),
+            execute: (_) async {
+              final documents = await refresh();
+              return <String, Object?>{
+                'documents': <Map<String, Object?>>[
+                  for (final document in documents)
+                    if ((kind == null || document['kind'] == kind) &&
+                        (relativePath == null ||
+                            document['relativePath'] == relativePath))
+                      document,
+                ],
+              };
             },
           );
         },

@@ -43,9 +43,10 @@ Map<String, Object?> jsonObjectSchema() => <String, Object?>{
 
 Map<String, Object?> jsonValueSchema(int remainingDepth) =>
     oneOfSchema(<Map<String, Object?>>[
-      <String, Object?>{
-        'type': <String>['null', 'boolean', 'number', 'string'],
-      },
+      <String, Object?>{'type': 'null'},
+      booleanSchema(),
+      <String, Object?>{'type': 'number'},
+      <String, Object?>{'type': 'string'},
       if (remainingDepth == 0)
         <String, Object?>{'type': 'array', 'maxItems': 0}
       else

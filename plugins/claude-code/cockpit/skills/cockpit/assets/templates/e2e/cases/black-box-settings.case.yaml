@@ -1,0 +1,92 @@
+schemaVersion: cockpit.test/v2
+kind: case
+id: blackBoxSettings
+name: Black-box settings validation
+description: Exercises list targeting, flow control, and screenshot comparison.
+tags: [acceptance, black-box, settings, visual]
+target:
+  platform: android
+  targetKind: nativeApp
+  plane: native
+  appId: com.example.app
+defaults:
+  commandTimeoutMs: 20000
+  cleanupTimeoutMs: 15000
+  failFast: true
+  evidence:
+    screenshot: onFailure
+    snapshot: onFailure
+    failurePolicy: recordWarning
+variables:
+  accountTier:
+    source: input
+    type: string
+    required: true
+setup:
+  - stepId: openSettings
+    action:
+      type: tap
+      locator:
+        nativeId: settings
+        fallbacks:
+          - {label: Settings}
+          - {text: Settings}
+  - stepId: waitForSettings
+    action:
+      type: waitFor
+      condition:
+        type: visible
+        locator: {text: Preferences, matchMode: contains}
+steps:
+  - stepId: revealNotificationPreference
+    timeoutMs: 45000
+    action:
+      type: scrollUntilVisible
+      locator:
+        text: Notifications
+        matchMode: contains
+        role: switch
+        fallbacks:
+          - {nativeId: notifications_toggle}
+      direction: down
+      maxScrolls: 20
+      durationMs: 250
+      revealAlignment: center
+  - stepId: selectFirstNotificationControl
+    action:
+      type: tap
+      locator:
+        text: Notifications
+        matchMode: contains
+        role: switch
+        index: 0
+        fallbacks:
+          - {nativeId: notifications_toggle}
+  - stepId: verifyNotificationControl
+    if:
+      condition:
+        type: visible
+        locator: {text: Notifications enabled, matchMode: fuzzy}
+      then:
+        - stepId: assertEnabledMessage
+          action:
+            type: assertText
+            locator: {text: Notifications enabled, matchMode: fuzzy}
+            text: Notifications enabled
+            matchMode: fuzzy
+      else:
+        - stepId: assertDisabledMessage
+          action:
+            type: assertVisible
+            locator: {text: Notifications disabled, matchMode: fuzzy}
+  - stepId: compareSettingsScreenshot
+    plane: visual
+    timeoutMs: 30000
+    action:
+      type: assertScreenshot
+      baseline: cockpit/e2e/baselines/settings.png
+      similarity: 0.98
+      artifactName: settings-comparison
+finally:
+  - stepId: returnFromSettings
+    action: {type: back}

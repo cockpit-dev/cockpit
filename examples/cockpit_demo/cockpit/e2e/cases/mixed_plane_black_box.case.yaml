@@ -30,6 +30,24 @@ steps:
     action:
       type: system
       name: recoverToApp
+  - stepId: openEditorThroughNativeLocator
+    description: Prove non-invasive native locator resolution and interaction against Flutter UI.
+    plane: native
+    timeoutMs: 30000
+    action:
+      type: tap
+      locator:
+        label: New task
+        fallbacks:
+          - text: New task
+  - stepId: verifyEditorAfterNativeAction
+    timeoutMs: 12000
+    action:
+      type: waitFor
+      condition: {type: route, route: /editor}
+  - stepId: returnFromNativeOpenedEditor
+    timeoutMs: 12000
+    action: {type: back}
   - stepId: verifyRouteAfterBlackBoxControl
     timeoutMs: 12000
     action:

@@ -9,16 +9,16 @@ alwaysApply: false
 
 Load the `cockpit` skill from
 `.cursor/skills/cockpit` before controlling an application or
-claiming runtime validation. If skill discovery is unavailable, read
-`skills/cockpit/SKILL.md`.
+claiming runtime validation. If skill discovery is unavailable, read the
+self-contained `.cursor/skills/cockpit/SKILL.md` directly.
 
 Use the authenticated Supervisor and resolve explicit identities:
 
 ```bash
-dart run cockpit daemon status
-dart run cockpit target discover
-dart run cockpit target inspect --target-id <targetId> --profile minimal
-dart run cockpit operation list --workspace-id <workspaceId>
+cockpit daemon status
+cockpit target discover
+cockpit target inspect --target-id <targetId> --profile minimal
+cockpit operation list --workspace-id <workspaceId>
 ```
 
 Use a validated `cockpit.test/v2` case or suite for reusable E2E. Prefer

@@ -26,6 +26,7 @@ void main() {
       result.stdout,
       contains('--discovery-timeout-seconds    (defaults to "180")'),
     );
+    expect(result.stdout, contains('--require-recording'));
   });
 
   test(

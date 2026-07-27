@@ -103,7 +103,11 @@ final class CockpitWorkerLogRedactor {
       CockpitSensitiveByteScanner(_sensitiveValues);
 
   Object? redact(Object? value, {String? key}) {
-    if (key != null && _sensitiveKey.hasMatch(key)) return redacted;
+    if (key != null &&
+        _sensitiveKey.hasMatch(key) &&
+        !_isSecretReferenceDeclaration(value)) {
+      return redacted;
+    }
     return switch (value) {
       String() => _redactString(value),
       Map<Object?, Object?>() => <String, Object?>{
@@ -128,6 +132,14 @@ final class CockpitWorkerLogRedactor {
     return result;
   }
 }
+
+bool _isSecretReferenceDeclaration(Object? value) =>
+    value is Map &&
+    value['source'] == 'secret' &&
+    value['type'] == 'string' &&
+    value['reference'] is String &&
+    !value.containsKey('value') &&
+    !value.containsKey('default');
 
 final class CockpitSensitiveByteScanner {
   CockpitSensitiveByteScanner(Iterable<String> sensitiveValues) {

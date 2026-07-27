@@ -21,23 +21,23 @@ void main() {
   String read(String path) => File('$repositoryRoot/$path').readAsStringSync();
 
   test('all distributed skills are exact minimal mirrors', () {
-    final canonicalSkill = read('${_skillRoots.first}/SKILL.md');
-    final canonicalProtocol = read(
-      '${_skillRoots.first}/references/protocol.md',
-    );
+    final canonicalFiles = _relativeFiles(repositoryRoot, _skillRoots.first);
 
     for (final root in _skillRoots) {
       expect(
         _relativeFiles(repositoryRoot, root),
-        <String>['SKILL.md', 'references/protocol.md'],
-        reason: '$root must contain only the deployable 2.0 skill assets.',
+        canonicalFiles,
+        reason: '$root must contain the complete deployable 2.0 skill.',
       );
-      expect(read('$root/SKILL.md'), canonicalSkill, reason: root);
-      expect(
-        read('$root/references/protocol.md'),
-        canonicalProtocol,
-        reason: root,
-      );
+      for (final relativePath in canonicalFiles) {
+        expect(
+          File('$repositoryRoot/$root/$relativePath').readAsBytesSync(),
+          File(
+            '$repositoryRoot/${_skillRoots.first}/$relativePath',
+          ).readAsBytesSync(),
+          reason: '$root/$relativePath',
+        );
+      }
     }
   });
 
@@ -61,10 +61,12 @@ void main() {
 
     for (final contract in <String>[
       'authenticated Supervisor',
+      'daemon start --yolo',
       'workspace',
       'target discover',
       'target register',
       'target inspect --target-id',
+      'workspace documents',
       'operation list',
       'operation run',
       'cockpit.test/v2',
@@ -78,7 +80,11 @@ void main() {
       'daemon policy show',
       'idempotency',
       'terminal run state',
-      'digest-checked artifacts',
+      'cockpit.test.v2.schema.json',
+      'Binary',
+      'Rapid Development Validation',
+      'resolve -> baseline -> edit -> execute -> observe -> judge -> repeat',
+      'references/flutter.md',
     ]) {
       expect(skill, contains(contract), reason: contract);
     }
@@ -111,22 +117,93 @@ void main() {
     }
   });
 
-  test('skill protocol points clients at the authoritative 2.0 contracts', () {
+  test('skill is self-contained after isolated installation', () {
+    final canonicalRoot = '$repositoryRoot/${_skillRoots.first}';
+    final textFiles = _relativeFiles(
+      repositoryRoot,
+      _skillRoots.first,
+    ).where((path) => path.endsWith('.md') || path.endsWith('.yaml'));
+
+    for (final relativePath in textFiles) {
+      final source = read('${_skillRoots.first}/$relativePath');
+      for (final forbidden in <String>[
+        'packages/cockpit',
+        'packages/flutter_cockpit',
+        'docs/contracts/',
+        'examples/cockpit_demo',
+      ]) {
+        expect(
+          source,
+          isNot(contains(forbidden)),
+          reason: '$relativePath depends on repository-only path $forbidden',
+        );
+      }
+      for (final match in RegExp(r'\[[^\]]+\]\(([^)]+)\)').allMatches(source)) {
+        final target = match.group(1)!;
+        if (target.startsWith('#') || Uri.tryParse(target)?.hasScheme == true) {
+          continue;
+        }
+        final path = target.split('#').first;
+        final resolved = File(
+          '${File('$canonicalRoot/$relativePath').parent.path}/$path',
+        ).absolute.uri.normalizePath().toFilePath();
+        expect(
+          FileSystemEntity.typeSync(resolved),
+          isNot(FileSystemEntityType.notFound),
+          reason: '$relativePath links to missing skill-local file $target',
+        );
+        expect(
+          Uri.file(resolved).path.startsWith(Uri.file(canonicalRoot).path),
+          isTrue,
+          reason: '$relativePath links outside the installed skill: $target',
+        );
+      }
+    }
+  });
+
+  test('skill bundles the authoritative 2.0 authoring schema', () {
     final protocol = read('${_skillRoots.first}/references/protocol.md');
 
     for (final authority in <String>[
-      'cockpit.v2.openapi.json',
-      'cockpit.foundation.v2.schema.json',
       'cockpit.test.v2.schema.json',
-      'cockpit-protocol.md',
-      'ai-development-protocol.md',
-      'COCKPIT_HOME/authorization.json',
+      'cockpit help',
+      'operation list',
+      'target inspect',
       'SSE sequence numbers are monotonic and resumable',
       'session affinity',
-      'always-run teardown',
       'SHA-256',
     ]) {
       expect(protocol, contains(authority), reason: authority);
+    }
+
+    expect(
+      File(
+        '$repositoryRoot/${_skillRoots.first}/references/'
+        'cockpit.test.v2.schema.json',
+      ).readAsBytesSync(),
+      File(
+        '$repositoryRoot/packages/cockpit_protocol/schema/'
+        'cockpit.test.v2.schema.json',
+      ).readAsBytesSync(),
+    );
+  });
+
+  test('skill includes an executable Flutter development-shell workflow', () {
+    final flutter = read('${_skillRoots.first}/references/flutter.md');
+
+    for (final requirement in <String>[
+      'flutter_cockpit: ^2.0.0',
+      'cockpit/main.dart',
+      'FlutterCockpitApp',
+      'CockpitRemoteSessionConfiguration.resolveFromEnvironment',
+      'FlutterCockpit.createNavigatorObserver()',
+      'workspace documents',
+      '--entrypoint-document-id',
+      'target launch',
+      'bindRouteInformationProvider',
+      'setCurrentRouteName',
+    ]) {
+      expect(flutter, contains(requirement), reason: requirement);
     }
   });
 

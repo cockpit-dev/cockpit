@@ -216,6 +216,35 @@ cases:
         (document) => document['kind'] == 'suite',
         orElse: () => throw StateError('Indexed suite was not found.'),
       );
+      final secretReferenceValidation = await _callOperation(
+        pool,
+        spec,
+        kind: 'case.validate',
+        idempotencyKey: 'validate-secret-reference-workerA',
+        input: CockpitDocumentValidationRequest(
+          format: CockpitDocumentFormat.yaml,
+          relativePath: 'secret_reference.yaml',
+          sourceText: '''
+schemaVersion: cockpit.test/v2
+kind: case
+id: secretReference
+target: {platform: flutter, targetKind: flutterApp, plane: semantic}
+variables:
+  password:
+    source: secret
+    type: string
+    reference: env:COCKPIT_TEST_PASSWORD
+steps:
+  - stepId: enterPassword
+    action: {type: enterText, text: {\$var: password}}
+''',
+        ).toJson(),
+      );
+      expect(
+        secretReferenceValidation.outcome,
+        CockpitOperationOutcome.succeeded,
+      );
+      expect(secretReferenceValidation.output!['valid'], isTrue);
       final registered = await _callOperation(
         pool,
         spec,

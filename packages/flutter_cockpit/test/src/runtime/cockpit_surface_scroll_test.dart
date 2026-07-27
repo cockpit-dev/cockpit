@@ -376,6 +376,7 @@ void main() {
 
       expect(didScroll.didScroll, isTrue);
       expect(didScroll.strategy, 'jumpTo_probe');
+      expect(didScroll.hadSemanticAction, isFalse);
       expect(controller.offset, greaterThan(0));
     },
   );

@@ -123,7 +123,7 @@ List<CockpitMcpTool> _qualityTools(
     client: client,
     name: 'run_tests',
     description:
-        'Run Dart or Flutter tests for the workspace or selected indexed paths.',
+        'Run Dart or Flutter tests for the workspace or selected paths.',
     kind: 'test.workspace',
     scope: _OperationScope.workspace,
     mutating: true,
@@ -134,11 +134,11 @@ List<CockpitMcpTool> _qualityTools(
     inputKeys: const <String>{'paths', 'name'},
     operationInput: (api, arguments) async => <String, Object?>{
       if (_optionalStrings(arguments, 'paths') case final paths?)
-        'paths': (await _documentSelection(
+        'paths': await _workspacePaths(
           api,
           _requiredString(arguments, 'workspaceId'),
           paths,
-        )).paths,
+        ),
       'name': ?_optionalString(arguments, 'name'),
     },
     categories: const <CockpitMcpFeatureCategory>[
@@ -566,21 +566,7 @@ Future<({List<String> paths, List<String> documentIds})> _documentSelection(
   List<String> paths, {
   bool requireSingle = false,
 }) async {
-  String? workspacePath;
-  if (paths.any(_isAbsolutePath)) {
-    for (final workspace in await api.workspaces()) {
-      if (workspace.workspaceId == workspaceId) {
-        workspacePath = workspace.canonicalPath;
-        break;
-      }
-    }
-    if (workspacePath == null) {
-      throw FormatException('Unknown workspace $workspaceId.');
-    }
-  }
-  final requested = <String>[
-    for (final path in paths) _workspaceRelativePosixPath(path, workspacePath),
-  ];
+  final requested = await _workspacePaths(api, workspaceId, paths);
   final documents = await api.documents(workspaceId);
   final matches = <String>[];
   for (final path in requested) {
@@ -605,6 +591,28 @@ Future<({List<String> paths, List<String> documentIds})> _documentSelection(
     throw const FormatException('path must identify exactly one Dart file.');
   }
   return (paths: requested, documentIds: matches);
+}
+
+Future<List<String>> _workspacePaths(
+  CockpitSupervisorApiClient api,
+  String workspaceId,
+  List<String> paths,
+) async {
+  String? workspacePath;
+  if (paths.any(_isAbsolutePath)) {
+    for (final workspace in await api.workspaces()) {
+      if (workspace.workspaceId == workspaceId) {
+        workspacePath = workspace.canonicalPath;
+        break;
+      }
+    }
+    if (workspacePath == null) {
+      throw FormatException('Unknown workspace $workspaceId.');
+    }
+  }
+  return <String>[
+    for (final path in paths) _workspaceRelativePosixPath(path, workspacePath),
+  ];
 }
 
 bool _isAbsolutePath(String value) =>

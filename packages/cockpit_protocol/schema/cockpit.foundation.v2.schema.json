@@ -124,12 +124,16 @@
     "JsonValue0": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -144,12 +148,16 @@
     "JsonValue1": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -168,12 +176,16 @@
     "JsonValue2": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -192,12 +204,16 @@
     "JsonValue3": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -216,12 +232,16 @@
     "JsonValue4": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -240,12 +260,16 @@
     "JsonValue5": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -264,12 +288,16 @@
     "JsonValue6": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -288,12 +316,16 @@
     "JsonValue7": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -312,12 +344,16 @@
     "JsonValue8": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -336,12 +372,16 @@
     "JsonValue9": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -360,12 +400,16 @@
     "JsonValue10": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -384,12 +428,16 @@
     "JsonValue11": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -408,12 +456,16 @@
     "JsonValue12": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -432,12 +484,16 @@
     "JsonValue13": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -456,12 +512,16 @@
     "JsonValue14": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -480,12 +540,16 @@
     "JsonValue15": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -504,12 +568,16 @@
     "JsonValue16": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -528,12 +596,16 @@
     "JsonValue17": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -552,12 +624,16 @@
     "JsonValue18": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -576,12 +652,16 @@
     "JsonValue19": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -600,12 +680,16 @@
     "JsonValue20": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -624,12 +708,16 @@
     "JsonValue21": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -648,12 +736,16 @@
     "JsonValue22": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -672,12 +764,16 @@
     "JsonValue23": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -696,12 +792,16 @@
     "JsonValue24": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -720,12 +820,16 @@
     "JsonValue25": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -744,12 +848,16 @@
     "JsonValue26": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -768,12 +876,16 @@
     "JsonValue27": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -792,12 +904,16 @@
     "JsonValue28": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -816,12 +932,16 @@
     "JsonValue29": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -840,12 +960,16 @@
     "JsonValue30": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -864,12 +988,16 @@
     "JsonValue31": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -888,12 +1016,16 @@
     "JsonValue32": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -912,12 +1044,16 @@
     "JsonValue33": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -936,12 +1072,16 @@
     "JsonValue34": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -960,12 +1100,16 @@
     "JsonValue35": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -984,12 +1128,16 @@
     "JsonValue36": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -1008,12 +1156,16 @@
     "JsonValue37": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -1032,12 +1184,16 @@
     "JsonValue38": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -1056,12 +1212,16 @@
     "JsonValue39": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -1080,12 +1240,16 @@
     "JsonValue40": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -1104,12 +1268,16 @@
     "JsonValue41": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -1128,12 +1296,16 @@
     "JsonValue42": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -1152,12 +1324,16 @@
     "JsonValue43": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -1176,12 +1352,16 @@
     "JsonValue44": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -1200,12 +1380,16 @@
     "JsonValue45": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -1224,12 +1408,16 @@
     "JsonValue46": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -1248,12 +1436,16 @@
     "JsonValue47": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -1272,12 +1464,16 @@
     "JsonValue48": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -1296,12 +1492,16 @@
     "JsonValue49": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -1320,12 +1520,16 @@
     "JsonValue50": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -1344,12 +1548,16 @@
     "JsonValue51": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -1368,12 +1576,16 @@
     "JsonValue52": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -1392,12 +1604,16 @@
     "JsonValue53": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -1416,12 +1632,16 @@
     "JsonValue54": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -1440,12 +1660,16 @@
     "JsonValue55": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -1464,12 +1688,16 @@
     "JsonValue56": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -1488,12 +1716,16 @@
     "JsonValue57": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -1512,12 +1744,16 @@
     "JsonValue58": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -1536,12 +1772,16 @@
     "JsonValue59": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -1560,12 +1800,16 @@
     "JsonValue60": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -1584,12 +1828,16 @@
     "JsonValue61": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -1608,12 +1856,16 @@
     "JsonValue62": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
@@ -1632,12 +1884,16 @@
     "JsonValue63": {
       "oneOf": [
         {
-          "type": [
-            "null",
-            "boolean",
-            "number",
-            "string"
-          ]
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
         },
         {
           "type": "array",
