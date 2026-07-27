@@ -430,6 +430,10 @@ Object? _projectForCommand(
   _Projection projection,
   String path,
 ) {
+  if ((command == 'case.validate' || command == 'suite.validate') &&
+      data is Map<Object?, Object?>) {
+    return projection.value(_compactValidationResult(data), path);
+  }
   if (command == 'suite.report' && data is Map<Object?, Object?>) {
     final report = Map<String, Object?>.from(data);
     final rawCases = report['cases'];
@@ -446,6 +450,64 @@ Object? _projectForCommand(
     return projection.value(report, path);
   }
   return projection.value(data, path);
+}
+
+Map<String, Object?> _compactValidationResult(Map<Object?, Object?> value) {
+  final document = value['document'];
+  final sourceMap = value['sourceMap'];
+  return <String, Object?>{
+    for (final key in const <String>['valid', 'sourceSha256'])
+      if (value[key] != null) key: value[key],
+    if (document is Map<Object?, Object?>)
+      'document': _compactValidatedDocument(document),
+    if (value['diagnostics'] != null) 'diagnostics': value['diagnostics'],
+    if (sourceMap is List<Object?>) 'sourceMapEntries': sourceMap.length,
+  };
+}
+
+Map<String, Object?> _compactValidatedDocument(Map<Object?, Object?> value) {
+  int lengthOf(String key) => switch (value[key]) {
+    List<Object?> items => items.length,
+    Map<Object?, Object?> items => items.length,
+    _ => 0,
+  };
+
+  final kind = value['kind'];
+  return <String, Object?>{
+    for (final key in const <String>[
+      'schemaVersion',
+      'kind',
+      'id',
+      'name',
+      'description',
+      'tags',
+      'target',
+      'defaults',
+      'execution',
+      'report',
+      'matrix',
+    ])
+      if (value[key] != null) key: value[key],
+    'counts': kind == 'suite'
+        ? <String, Object?>{
+            'cases': lengthOf('cases'),
+            'fixtures': lengthOf('fixtures'),
+            'matrixAxes': switch (value['matrix']) {
+              Map<Object?, Object?> matrix => switch (matrix['axes']) {
+                Map<Object?, Object?> axes => axes.length,
+                _ => 0,
+              },
+              _ => 0,
+            },
+          }
+        : <String, Object?>{
+            'setupSteps': lengthOf('setup'),
+            'mainSteps': lengthOf('steps'),
+            'finallySteps': lengthOf('finally'),
+            'fragments': lengthOf('fragments'),
+            'variables': lengthOf('variables'),
+          },
+  };
 }
 
 Object? _compactReportCase(Object? value) {

@@ -198,13 +198,15 @@ final class CockpitLocalWorkerLauncher
       output: process.stdin,
       requestHandler: endpoint.handle,
       cancellationGrace: const Duration(minutes: 5),
-      onProtocolError: (error, _) {
+      onProtocolError: (error, stackTrace) {
         _logger.log(
           'error',
           'Worker protocol error.',
           fields: <String, Object?>{
             'workspaceId': spec.key.workspaceId,
+            'errorType': error.runtimeType.toString(),
             'error': '$error',
+            'stackTrace': '$stackTrace',
           },
         );
       },

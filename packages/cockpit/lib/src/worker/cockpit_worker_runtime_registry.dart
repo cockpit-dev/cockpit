@@ -1103,13 +1103,18 @@ final class CockpitWorkerRuntimeRegistry
       try {
         if (!await client.ping() || !await client.ready()) continue;
         final status = await client.readStatus();
-        final available = status.capabilities.supportedCommands
-            .map((command) => command.name)
-            .toSet();
+        final systemDriver = await _secondarySystemDriver(candidate);
+        final available = <String>{
+          ...status.capabilities.supportedCommands.map(
+            (command) => command.name,
+          ),
+          ...?systemDriver?.capabilities.supportedCommands.map(
+            (command) => command.name,
+          ),
+        };
         if (!available.containsAll(requirements.requiredCapabilities)) {
           continue;
         }
-        final systemDriver = await _secondarySystemDriver(candidate);
         return CockpitWorkerHealthySession(
           sessionId: candidate.sessionId,
           targetId: candidate.targetId,
@@ -1142,6 +1147,7 @@ final class CockpitWorkerRuntimeRegistry
       CockpitAutomationAdapter automation,
       CockpitCaptureAdapter? capture,
       CockpitRecordingAdapter? recording,
+      CockpitCapabilities capabilities,
     })?
   >
   _secondarySystemDriver(CockpitWorkerSessionBinding session) async {
@@ -1167,7 +1173,7 @@ final class CockpitWorkerRuntimeRegistry
       workspaceRoot: workspaceRoot,
     );
     try {
-      await automation.describeCapabilities();
+      final capabilities = await automation.describeCapabilities();
       final profile = (await _systemControlService.describe(
         CockpitSystemControlDescribeRequest(
           platform: target.platform,
@@ -1180,6 +1186,7 @@ final class CockpitWorkerRuntimeRegistry
       final actions = profile.availableActions.toSet();
       return (
         automation: automation,
+        capabilities: capabilities,
         capture: actions.contains(CockpitSystemControlAction.captureScreenshot)
             ? CockpitSystemTestCaptureAdapter(
                 target: target,

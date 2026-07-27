@@ -910,40 +910,50 @@ final class _TodoCollectionScreenState extends State<TodoCollectionScreen> {
                                     child: Row(
                                       mainAxisSize: MainAxisSize.min,
                                       children: <Widget>[
-                                        TextButton(
-                                          onPressed: () {
-                                            widget.onOpenTask(focusedTask);
-                                          },
-                                          style: TextButton.styleFrom(
-                                            foregroundColor:
-                                                colorScheme.onPrimaryContainer,
-                                            padding: const EdgeInsets.symmetric(
-                                              horizontal: 4,
-                                              vertical: 6,
+                                        Semantics(
+                                          label:
+                                              'Open task ${focusedTask.title}',
+                                          button: true,
+                                          child: TextButton(
+                                            key: const ValueKey<String>(
+                                              'latest-task-open-action',
                                             ),
-                                            minimumSize: Size.zero,
-                                            tapTargetSize: MaterialTapTargetSize
-                                                .shrinkWrap,
-                                            textStyle: theme
-                                                .textTheme
-                                                .labelMedium
-                                                ?.copyWith(
-                                                  fontWeight: FontWeight.w700,
-                                                  letterSpacing: 0.12,
+                                            onPressed: () {
+                                              widget.onOpenTask(focusedTask);
+                                            },
+                                            style: TextButton.styleFrom(
+                                              foregroundColor: colorScheme
+                                                  .onPrimaryContainer,
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: 4,
+                                                    vertical: 6,
+                                                  ),
+                                              minimumSize: Size.zero,
+                                              tapTargetSize:
+                                                  MaterialTapTargetSize
+                                                      .shrinkWrap,
+                                              textStyle: theme
+                                                  .textTheme
+                                                  .labelMedium
+                                                  ?.copyWith(
+                                                    fontWeight: FontWeight.w700,
+                                                    letterSpacing: 0.12,
+                                                  ),
+                                            ),
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: <Widget>[
+                                                const Text('Open'),
+                                                const SizedBox(width: 4),
+                                                Icon(
+                                                  Icons.arrow_outward_rounded,
+                                                  size: 15,
+                                                  color: colorScheme
+                                                      .onPrimaryContainer,
                                                 ),
-                                          ),
-                                          child: Row(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: <Widget>[
-                                              const Text('Open'),
-                                              const SizedBox(width: 4),
-                                              Icon(
-                                                Icons.arrow_outward_rounded,
-                                                size: 15,
-                                                color: colorScheme
-                                                    .onPrimaryContainer,
-                                              ),
-                                            ],
+                                              ],
+                                            ),
                                           ),
                                         ),
                                         const SizedBox(width: 4),

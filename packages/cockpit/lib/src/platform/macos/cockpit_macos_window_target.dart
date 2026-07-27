@@ -33,6 +33,8 @@ Future<CockpitMacosWindowTarget> cockpitResolveMacosWindowTarget({
   required Duration activationSettleDelay,
 }) async {
   final result = await processRunner(osascriptExecutable, <String>[
+    '-l',
+    'JavaScript',
     '-e',
     _windowTargetScript,
     appId,
@@ -76,24 +78,63 @@ Future<CockpitMacosWindowTarget> cockpitResolveMacosWindowTarget({
 }
 
 const String _windowTargetScript = r'''
-on run argv
-  set appId to item 1 of argv
-  set settleMs to item 2 of argv as integer
-  set appName to name of application id appId
-  tell application id appId to activate
-  if settleMs > 0 then
-    delay (settleMs / 1000.0)
-  end if
-  tell application "System Events"
-    set targetProcess to first application process whose name is appName
-    if (count of windows of targetProcess) is 0 then
-      error "No visible macOS window was found for " & appId
-    end if
-    tell front window of targetProcess
-      set {xPos, yPos} to position
-      set {windowWidth, windowHeight} to size
-    end tell
-  end tell
-  return (xPos as string) & "," & (yPos as string) & "," & (windowWidth as string) & "," & (windowHeight as string)
-end run
+ObjC.import('AppKit')
+ObjC.import('CoreGraphics')
+ObjC.import('IOKit')
+ObjC.bindFunction('CGWindowListCopyWindowInfo', ['id', ['uint32', 'uint32']])
+ObjC.bindFunction('IOPMAssertionDeclareUserActivity', ['int', ['id', 'uint32', 'uint32*']])
+
+function run(argv) {
+  const appId = argv[0]
+  const settleMs = Math.max(0, Number(argv[1] || '0'))
+  const assertionId = Ref()
+  const wakeResult = $.IOPMAssertionDeclareUserActivity(
+    $('Cockpit application capture'),
+    0,
+    assertionId,
+  )
+  if (Number(wakeResult) !== 0) {
+    throw new Error(`Unable to wake the macOS display for ${appId}: ${wakeResult}`)
+  }
+  const apps = $.NSRunningApplication.runningApplicationsWithBundleIdentifier(appId)
+  if (apps.count === 0) {
+    throw new Error(`No running macOS application was found for ${appId}`)
+  }
+
+  const app = apps.objectAtIndex(0)
+  if (!app.activateWithOptions($.NSApplicationActivateIgnoringOtherApps)) {
+    throw new Error(`Unable to activate macOS application ${appId}`)
+  }
+  if (settleMs > 0) delay(settleMs / 1000.0)
+
+  const pid = Number(app.processIdentifier)
+  const windows = $.CGWindowListCopyWindowInfo(17, 0)
+  let best = null
+  for (let index = 0; index < Number(windows.count); index += 1) {
+    const window = ObjC.deepUnwrap(windows.objectAtIndex(index))
+    const bounds = window.kCGWindowBounds || {}
+    const width = Number(bounds.Width)
+    const height = Number(bounds.Height)
+    if (Number(window.kCGWindowOwnerPID) !== pid ||
+        Number(window.kCGWindowLayer) !== 0 ||
+        window.kCGWindowIsOnscreen !== true ||
+        width <= 0 || height <= 0) {
+      continue
+    }
+    const area = width * height
+    if (best === null || area > best.area) {
+      best = {
+        left: Math.round(Number(bounds.X)),
+        top: Math.round(Number(bounds.Y)),
+        width: Math.round(width),
+        height: Math.round(height),
+        area: area,
+      }
+    }
+  }
+  if (best === null) {
+    throw new Error(`No visible macOS window was found for ${appId}`)
+  }
+  return [best.left, best.top, best.width, best.height].join(',')
+}
 ''';

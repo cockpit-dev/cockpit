@@ -492,8 +492,11 @@ final class CockpitMacosRecordingAdapter
 
   Future<void> _activateApp() async {
     final result = await _runProcess(_osascriptExecutable, <String>[
+      '-l',
+      'JavaScript',
       '-e',
-      'tell application id "$_appId" to activate',
+      _activateAppScript,
+      _appId,
     ], timeout: _commandTimeout);
     if (result.exitCode != 0) {
       throw StateError(
@@ -501,6 +504,32 @@ final class CockpitMacosRecordingAdapter
       );
     }
   }
+
+  static const String _activateAppScript = r'''
+ObjC.import('AppKit')
+ObjC.import('IOKit')
+ObjC.bindFunction('IOPMAssertionDeclareUserActivity', ['int', ['id', 'uint32', 'uint32*']])
+
+function run(argv) {
+  const appId = argv[0]
+  const assertionId = Ref()
+  const wakeResult = $.IOPMAssertionDeclareUserActivity(
+    $('Cockpit application recording'),
+    0,
+    assertionId,
+  )
+  if (Number(wakeResult) !== 0) {
+    throw new Error(`Unable to wake the macOS display for ${appId}: ${wakeResult}`)
+  }
+  const apps = $.NSRunningApplication.runningApplicationsWithBundleIdentifier(appId)
+  if (apps.count === 0) {
+    throw new Error(`No running macOS application was found for ${appId}`)
+  }
+  if (!apps.objectAtIndex(0).activateWithOptions($.NSApplicationActivateIgnoringOtherApps)) {
+    throw new Error(`Unable to activate macOS application ${appId}`)
+  }
+}
+''';
 
   Future<String> _resolveScreenInputSpecifier() async {
     final result = await _runProcess(_ffmpegExecutable, <String>[

@@ -21,9 +21,14 @@ void main() {
         activationSettleDelay: const Duration(milliseconds: 250),
       );
 
-      expect(invocation[0], '-e');
-      expect(invocation[2], 'dev.cockpit.cockpitDemo');
-      expect(invocation[3], '250');
+      expect(invocation[0], '-l');
+      expect(invocation[1], 'JavaScript');
+      expect(invocation[2], '-e');
+      expect(invocation[4], 'dev.cockpit.cockpitDemo');
+      expect(invocation[5], '250');
+      expect(invocation[3], isNot(contains('System Events')));
+      expect(invocation[3], contains('CGWindowListCopyWindowInfo'));
+      expect(invocation[3], contains('IOPMAssertionDeclareUserActivity'));
       expect(target.left, 48);
       expect(target.top, 64);
       expect(target.width, 960);

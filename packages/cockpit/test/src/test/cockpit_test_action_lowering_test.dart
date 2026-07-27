@@ -77,6 +77,29 @@ void main() {
     });
   });
 
+  test('idle actions normalize the authored quiet window', () {
+    for (final lowerer in <CockpitTestActionLowerer>[
+      flutterLowerer,
+      systemLowerer,
+    ]) {
+      final command = lowerer
+          .lower(
+            action: sampleBoundAction(CockpitTestActionKind.waitForUiIdle),
+            commandId: 'wait-for-idle',
+            timeoutMs: 5000,
+            requestedPlane: lowerer.backend == CockpitTestActionBackend.flutter
+                ? CockpitTestPlane.semantic
+                : CockpitTestPlane.native,
+            capabilities: capabilities,
+          )
+          .value!
+          .command;
+
+      expect(command.parameters['quietWindowMs'], 400);
+      expect(command.parameters, isNot(contains('quietMs')));
+    }
+  });
+
   test('unsupported planes, locators, and lossy gestures fail explicitly', () {
     final nativePlane = flutterLowerer.lower(
       action: sampleBoundAction(CockpitTestActionKind.back),

@@ -194,6 +194,25 @@ void main() {
       expect(recoveredArtifacts.requests.single.caseId, 'caseA');
     },
   );
+
+  test(
+    'resume skips artifacts already acknowledged by the Supervisor',
+    () async {
+      final fixture = await _Fixture.create();
+      addTearDown(fixture.dispose);
+      final artifacts = _ArtifactPeer();
+      addTearDown(artifacts.close);
+      final publisher = fixture.publisher(artifacts.peer);
+      final operations = _PublisherPeer(publisher);
+      addTearDown(operations.close);
+
+      await operations.publish(await fixture.bundle('attemptA'));
+      await fixture.publisher(artifacts.peer).resume();
+
+      expect(await fixture.catalogLength(), 2);
+      expect(artifacts.calls, 1);
+    },
+  );
 }
 
 typedef _Bundle = ({

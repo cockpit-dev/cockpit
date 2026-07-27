@@ -43,6 +43,21 @@ final class CockpitWorkerDocumentIndex
     '.yml',
     '.json',
   };
+  static const Set<String> _excludedDirectoryNames = <String>{
+    '.dart_tool',
+    '.git',
+    '.gradle',
+    '.idea',
+    '.pub-cache',
+    '.symlinks',
+    '.vscode',
+    'build',
+    'coverage',
+    'deriveddata',
+    'ephemeral',
+    'node_modules',
+    'pods',
+  };
 
   final String workspaceId;
   final String workspaceRoot;
@@ -113,41 +128,56 @@ final class CockpitWorkerDocumentIndex
     }
     final next = <String, _IndexedDocument>{};
     var visited = 0;
-    await for (final entity in root.list(recursive: true, followLinks: false)) {
-      if (entity is! File ||
-          !_extensions.contains(_paths.extension(entity.path))) {
-        continue;
-      }
-      visited += 1;
-      if (visited > maximumFiles) {
-        throw const FormatException('Workspace document index exceeds bounds.');
-      }
-      final relativePath = p.posix.joinAll(
-        _paths.split(_paths.relative(entity.path, from: workspaceRoot)),
-      );
-      if (!_isConfinedRelative(relativePath)) continue;
-      final resolved = await _readConfinedDocument(relativePath);
-      if (resolved == null) continue;
-      final bytes = resolved.bytes;
-      final sourceSha256 = resolved.sourceSha256;
-      final documentId = previous[relativePath]?.documentId ?? _newDocumentId();
-      CockpitCompiledTestDocument? compiled;
-      if (_paths.extension(entity.path) != '.dart') {
-        try {
-          final candidate = const CockpitTestDocumentCompiler()
-              .compile(utf8.decode(bytes, allowMalformed: false))
-              .compiled;
-          compiled = candidate;
-        } on Object {
-          compiled = null;
+    final pendingDirectories = <Directory>[root];
+    while (pendingDirectories.isNotEmpty) {
+      final directory = pendingDirectories.removeLast();
+      await for (final entity in directory.list(followLinks: false)) {
+        final relativePath = p.posix.joinAll(
+          _paths.split(_paths.relative(entity.path, from: workspaceRoot)),
+        );
+        if (!_isConfinedRelative(relativePath)) continue;
+        if (entity is Directory) {
+          if (!_excludedDirectoryNames.contains(
+            _paths.basename(entity.path).toLowerCase(),
+          )) {
+            pendingDirectories.add(entity);
+          }
+          continue;
         }
+        if (entity is! File ||
+            !_extensions.contains(_paths.extension(entity.path))) {
+          continue;
+        }
+        visited += 1;
+        if (visited > maximumFiles) {
+          throw const FormatException(
+            'Workspace document index exceeds bounds.',
+          );
+        }
+        final resolved = await _readConfinedDocument(relativePath);
+        if (resolved == null) continue;
+        final bytes = resolved.bytes;
+        final sourceSha256 = resolved.sourceSha256;
+        final documentId =
+            previous[relativePath]?.documentId ?? _newDocumentId();
+        CockpitCompiledTestDocument? compiled;
+        if (_paths.extension(entity.path) != '.dart') {
+          try {
+            final candidate = const CockpitTestDocumentCompiler()
+                .compile(utf8.decode(bytes, allowMalformed: false))
+                .compiled;
+            compiled = candidate;
+          } on Object {
+            compiled = null;
+          }
+        }
+        next[documentId] = _IndexedDocument(
+          documentId: documentId,
+          relativePath: relativePath,
+          sourceSha256: sourceSha256,
+          compiled: compiled,
+        );
       }
-      next[documentId] = _IndexedDocument(
-        documentId: documentId,
-        relativePath: relativePath,
-        sourceSha256: sourceSha256,
-        compiled: compiled,
-      );
     }
     final previousById = Map<String, _IndexedDocument>.from(_byId);
     final wasLoaded = _loaded;

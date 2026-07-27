@@ -55,7 +55,7 @@ final class CockpitDurableWorkerArtifactPublisher
     this.maximumDepth = 64,
     this.maximumArtifactBytes = 16 * 1024 * 1024 * 1024,
     this.maximumAggregateBytes = 64 * 1024 * 1024 * 1024,
-    this.recoveryTimeout = const Duration(seconds: 30),
+    this.recoveryTimeout = const Duration(minutes: 5),
   }) : stateRoot = p.normalize(stateRoot),
        _peer = peer,
        _events = events,
@@ -143,11 +143,12 @@ final class CockpitDurableWorkerArtifactPublisher
         );
       }
       final catalog = await _catalog(runId).read();
-      final existing = _decodeCatalog(
+      final existingState = _decodeCatalogState(
         catalog,
         expectedRunId: runId,
         maximumArtifacts: maximumArtifactsPerRun,
       );
+      final existing = existingState.artifacts;
       final existingByPath = <String, CockpitArtifactResource>{
         for (final resource in existing) resource.relativePath: resource,
       };
@@ -282,18 +283,22 @@ final class CockpitDurableWorkerArtifactPublisher
         deadline: deadline,
       );
       await _catalog(runId).transact<void>((currentJson) {
-        final current = _decodeCatalog(
+        final current = _decodeCatalogState(
           currentJson,
           expectedRunId: runId,
           maximumArtifacts: maximumArtifactsPerRun,
         );
-        if (!_sameArtifactCatalog(current, existing)) {
+        if (!_sameArtifactCatalog(current.artifacts, existing)) {
           throw const FormatException(
             'Worker artifact catalog changed after publication preflight.',
           );
         }
         return CockpitLockedJsonUpdate.write(
-          _encodeCatalog(runId, merged),
+          _encodeCatalog(
+            runId,
+            merged,
+            publishedArtifactIds: current.publishedArtifactIds,
+          ),
           null,
         );
       });
@@ -320,6 +325,7 @@ final class CockpitDurableWorkerArtifactPublisher
         resources: resources,
         deadline: deadline,
       );
+      await _markPublished(runId, resources);
       await _events.resume();
       return List<CockpitArtifactResource>.unmodifiable(resources);
     });
@@ -353,11 +359,12 @@ final class CockpitDurableWorkerArtifactPublisher
       );
 
       final catalog = await _catalog(runId).read();
-      final existing = _decodeCatalog(
+      final existingState = _decodeCatalogState(
         catalog,
         expectedRunId: runId,
         maximumArtifacts: maximumArtifactsPerRun,
       );
+      final existing = existingState.artifacts;
       final existingByPath = <String, CockpitArtifactResource>{
         for (final resource in existing) resource.relativePath: resource,
       };
@@ -465,18 +472,22 @@ final class CockpitDurableWorkerArtifactPublisher
         deadline: deadline,
       );
       await _catalog(runId).transact<void>((currentJson) {
-        final current = _decodeCatalog(
+        final current = _decodeCatalogState(
           currentJson,
           expectedRunId: runId,
           maximumArtifacts: maximumArtifactsPerRun,
         );
-        if (!_sameArtifactCatalog(current, existing)) {
+        if (!_sameArtifactCatalog(current.artifacts, existing)) {
           throw const FormatException(
             'Worker artifact catalog changed after report preflight.',
           );
         }
         return CockpitLockedJsonUpdate.write(
-          _encodeCatalog(runId, merged),
+          _encodeCatalog(
+            runId,
+            merged,
+            publishedArtifactIds: current.publishedArtifactIds,
+          ),
           null,
         );
       });
@@ -501,6 +512,7 @@ final class CockpitDurableWorkerArtifactPublisher
         resources: resources,
         deadline: deadline,
       );
+      await _markPublished(runId, resources);
       await _events.resume();
       return List<CockpitArtifactResource>.unmodifiable(resources);
     });
@@ -529,61 +541,88 @@ final class CockpitDurableWorkerArtifactPublisher
       }
       final runId = p.basename(entity.path);
       workerId(runId, r'$.runId');
-      await _validateCanonicalDirectory(entity.path, authority: runsRoot.path);
-      final path = p.join(entity.path, 'artifacts.json');
-      final catalogType = await FileSystemEntity.type(path, followLinks: false);
-      final List<CockpitArtifactResource> resources;
-      if (catalogType == FileSystemEntityType.notFound) {
-        resources = const <CockpitArtifactResource>[];
-      } else {
-        if (catalogType != FileSystemEntityType.file) {
-          throw FileSystemException(
-            'Worker artifact catalog is not a regular file.',
-            path,
-          );
-        }
-        await cockpitValidateCanonicalRegularFile(
-          path,
-          diagnostic: 'Worker artifact catalog is not canonical.',
-        );
-        resources = _decodeCatalog(
-          await _catalog(runId).read(),
-          expectedRunId: runId,
-          maximumArtifacts: maximumArtifactsPerRun,
-        );
-      }
-      await _recoverRetainedBundles(
+      await _locked(
         runId,
-        resources,
-        deadline: recoveryDeadline,
-      );
-      if (resources.isEmpty) continue;
-      final contexts = await _ensureArtifactEvents(runId, resources);
-      final resourcesByOwner =
-          <
-            ({String projectId, String? caseId}),
-            List<CockpitArtifactResource>
-          >{};
-      for (final resource in resources) {
-        final attemptId = resource.attemptId;
-        final context = attemptId == null ? null : contexts[attemptId];
-        final owner = context == null
-            ? await _reportOwner(runId, resource)
-            : (projectId: context.projectId, caseId: context.caseId);
-        resourcesByOwner
-            .putIfAbsent(owner, () => <CockpitArtifactResource>[])
-            .add(resource);
-      }
-      for (final entry in resourcesByOwner.entries) {
-        await _publish(
-          projectId: entry.key.projectId,
+        () => _resumeRun(
           runId: runId,
-          caseId: entry.key.caseId,
-          resources: entry.value,
-          deadline: _utcNow().add(const Duration(seconds: 10)),
+          runRoot: entity.path,
+          runsRoot: runsRoot.path,
+          deadline: recoveryDeadline,
+        ),
+      );
+    }
+  }
+
+  Future<void> _resumeRun({
+    required String runId,
+    required String runRoot,
+    required String runsRoot,
+    required DateTime deadline,
+  }) async {
+    await _validateCanonicalDirectory(runRoot, authority: runsRoot);
+    final path = p.join(runRoot, 'artifacts.json');
+    final catalogType = await FileSystemEntity.type(path, followLinks: false);
+    late final _ArtifactCatalogState state;
+    if (catalogType == FileSystemEntityType.notFound) {
+      state = const _ArtifactCatalogState(
+        artifacts: <CockpitArtifactResource>[],
+        publishedArtifactIds: <String>{},
+      );
+    } else {
+      if (catalogType != FileSystemEntityType.file) {
+        throw FileSystemException(
+          'Worker artifact catalog is not a regular file.',
+          path,
         );
       }
+      await cockpitValidateCanonicalRegularFile(
+        path,
+        diagnostic: 'Worker artifact catalog is not canonical.',
+      );
+      state = _decodeCatalogState(
+        await _catalog(runId).read(),
+        expectedRunId: runId,
+        maximumArtifacts: maximumArtifactsPerRun,
+      );
     }
+    final resources = state.artifacts;
+    if (resources.isEmpty) {
+      await _recoverRetainedBundles(runId, resources, deadline: deadline);
+      return;
+    }
+    final pending = resources
+        .where(
+          (resource) =>
+              !state.publishedArtifactIds.contains(resource.artifactId),
+        )
+        .toList(growable: false);
+    if (pending.isEmpty) return;
+
+    await _recoverRetainedBundles(runId, resources, deadline: deadline);
+    final contexts = await _ensureArtifactEvents(runId, resources);
+    final resourcesByOwner =
+        <({String projectId, String? caseId}), List<CockpitArtifactResource>>{};
+    for (final resource in pending) {
+      final attemptId = resource.attemptId;
+      final context = attemptId == null ? null : contexts[attemptId];
+      final owner = context == null
+          ? await _reportOwner(runId, resource)
+          : (projectId: context.projectId, caseId: context.caseId);
+      resourcesByOwner
+          .putIfAbsent(owner, () => <CockpitArtifactResource>[])
+          .add(resource);
+    }
+    for (final entry in resourcesByOwner.entries) {
+      await _publish(
+        projectId: entry.key.projectId,
+        runId: runId,
+        caseId: entry.key.caseId,
+        resources: entry.value,
+        deadline: _utcNow().add(const Duration(seconds: 10)),
+      );
+    }
+    await _markPublished(runId, pending);
+    await _events.resume();
   }
 
   Future<void> _recoverRetainedBundles(
@@ -1202,6 +1241,40 @@ final class CockpitDurableWorkerArtifactPublisher
         maximumBytes: 64 * 1024 * 1024,
       );
 
+  Future<void> _markPublished(
+    String runId,
+    Iterable<CockpitArtifactResource> resources,
+  ) async {
+    final published = resources.map((resource) => resource.artifactId).toSet();
+    if (published.isEmpty) return;
+    await _catalog(runId).transact<void>((currentJson) {
+      final current = _decodeCatalogState(
+        currentJson,
+        expectedRunId: runId,
+        maximumArtifacts: maximumArtifactsPerRun,
+      );
+      final catalogIds = current.artifacts
+          .map((resource) => resource.artifactId)
+          .toSet();
+      if (!catalogIds.containsAll(published)) {
+        throw const FormatException(
+          'Published artifact acknowledgement is absent from its catalog.',
+        );
+      }
+      return CockpitLockedJsonUpdate.write(
+        _encodeCatalog(
+          runId,
+          current.artifacts,
+          publishedArtifactIds: <String>{
+            ...current.publishedArtifactIds,
+            ...published,
+          },
+        ),
+        null,
+      );
+    });
+  }
+
   void _checkOperation(DateTime deadline, CockpitRpcCancellation cancellation) {
     cancellation.throwIfCancelled();
     if (!_utcNow().toUtc().isBefore(deadline.toUtc())) {
@@ -1242,16 +1315,28 @@ final class _ArtifactCatalogCodec
   Object? encode(Map<String, Object?> value) => value;
 }
 
+final class _ArtifactCatalogState {
+  const _ArtifactCatalogState({
+    required this.artifacts,
+    required this.publishedArtifactIds,
+  });
+
+  final List<CockpitArtifactResource> artifacts;
+  final Set<String> publishedArtifactIds;
+}
+
 Map<String, Object?> _encodeCatalog(
   String runId,
-  Iterable<CockpitArtifactResource> artifacts,
-) => <String, Object?>{
-  'schemaVersion': 'cockpit.worker.artifacts/v1',
+  Iterable<CockpitArtifactResource> artifacts, {
+  Iterable<String> publishedArtifactIds = const <String>[],
+}) => <String, Object?>{
+  'schemaVersion': 'cockpit.worker.artifacts/v2',
   'runId': runId,
   'artifacts': artifacts.map((artifact) => artifact.toJson()).toList(),
+  'publishedArtifactIds': publishedArtifactIds.toList(growable: false)..sort(),
 };
 
-List<CockpitArtifactResource> _decodeCatalog(
+_ArtifactCatalogState _decodeCatalogState(
   Map<String, Object?> value, {
   required String expectedRunId,
   required int maximumArtifacts,
@@ -1259,11 +1344,22 @@ List<CockpitArtifactResource> _decodeCatalog(
   final json = workerObject(value, r'$');
   workerKeys(
     json,
-    const <String>{'schemaVersion', 'runId', 'artifacts'},
+    const <String>{
+      'schemaVersion',
+      'runId',
+      'artifacts',
+      'publishedArtifactIds',
+    },
     r'$',
     required: const <String>{'schemaVersion', 'runId', 'artifacts'},
   );
-  if (json['schemaVersion'] != 'cockpit.worker.artifacts/v1' ||
+  final schemaVersion = json['schemaVersion'];
+  final supportedSchema =
+      schemaVersion == 'cockpit.worker.artifacts/v1' ||
+      schemaVersion == 'cockpit.worker.artifacts/v2';
+  if (!supportedSchema ||
+      schemaVersion == 'cockpit.worker.artifacts/v2' &&
+          !json.containsKey('publishedArtifactIds') ||
       json['runId'] != expectedRunId) {
     throw const FormatException('Worker artifact catalog identity is invalid.');
   }
@@ -1274,7 +1370,7 @@ List<CockpitArtifactResource> _decodeCatalog(
   );
   final ids = <String>{};
   final paths = <String>{};
-  return <CockpitArtifactResource>[
+  final artifacts = <CockpitArtifactResource>[
     for (var index = 0; index < raw.length; index += 1)
       () {
         final resource = CockpitArtifactResource.fromJson(
@@ -1289,6 +1385,29 @@ List<CockpitArtifactResource> _decodeCatalog(
         return resource;
       }(),
   ];
+  final publishedArtifactIds = <String>{};
+  if (schemaVersion == 'cockpit.worker.artifacts/v2') {
+    final rawPublished = workerList(
+      json['publishedArtifactIds'],
+      r'$.publishedArtifactIds',
+      maximum: maximumArtifacts,
+    );
+    for (var index = 0; index < rawPublished.length; index += 1) {
+      final artifactId = workerId(
+        rawPublished[index],
+        '\$.publishedArtifactIds[$index]',
+      );
+      if (!ids.contains(artifactId) || !publishedArtifactIds.add(artifactId)) {
+        throw const FormatException(
+          'Worker artifact publication checkpoint is corrupt.',
+        );
+      }
+    }
+  }
+  return _ArtifactCatalogState(
+    artifacts: List<CockpitArtifactResource>.unmodifiable(artifacts),
+    publishedArtifactIds: Set<String>.unmodifiable(publishedArtifactIds),
+  );
 }
 
 bool _sameArtifactResource(

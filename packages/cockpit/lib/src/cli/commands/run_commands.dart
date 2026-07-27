@@ -84,6 +84,7 @@ final class CockpitCaseCommand extends Command<int> {
           );
           final documents = await (await runtime.client()).documents(
             workspaceId,
+            kind: CockpitIndexedDocumentKind.testCase,
           );
           final requestedDocument = arguments.option('document-id');
           final caseId = arguments.option('case-id')!;
@@ -220,7 +221,10 @@ final class CockpitSuiteCommand extends Command<int> {
           final suiteId = arguments.option('suite-id')!;
           final requestedDocument = arguments.option('document-id');
           final documents =
-              (await (await runtime.client()).documents(workspaceId))
+              (await (await runtime.client()).documents(
+                    workspaceId,
+                    kind: CockpitIndexedDocumentKind.suite,
+                  ))
                   .where(
                     (document) =>
                         document.kind == CockpitIndexedDocumentKind.suite &&

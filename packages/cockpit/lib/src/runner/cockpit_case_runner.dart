@@ -324,7 +324,7 @@ final class CockpitCaseRunner {
         if (error != null) return error;
       } else if ((operation is CockpitTestStartRecordingPlanOperation ||
               operation is CockpitTestStopRecordingPlanOperation) &&
-          !_hasRecordingAdapter(cockpitRequestedPlane(node, target.plane))) {
+          !_hasRecordingAdapter()) {
         return CockpitTestError(
           code: CockpitTestErrorCode.unsupportedAction,
           message:
@@ -384,12 +384,8 @@ final class CockpitCaseRunner {
           );
   }
 
-  bool _hasRecordingAdapter(CockpitTestPlane plane) {
-    if (_lowerer.backend == CockpitTestActionBackend.system ||
-        plane == CockpitTestPlane.semantic) {
-      return _recordingAdapter != null;
-    }
-    return _systemRecordingAdapter != null;
+  bool _hasRecordingAdapter() {
+    return _recordingAdapter != null || _systemRecordingAdapter != null;
   }
 
   Future<CockpitTestAttemptResult> _publishPreparationFailure({

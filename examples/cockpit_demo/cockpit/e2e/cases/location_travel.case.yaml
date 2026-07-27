@@ -1,0 +1,45 @@
+schemaVersion: cockpit.test/v2
+kind: case
+id: demoLocationTravel
+name: Location travel coverage
+description: Exercises a bounded multi-point location route on targets that advertise location injection.
+tags: [acceptance, location, requires-location-travel]
+target:
+  platform: flutter
+  targetKind: flutterApp
+  plane: semantic
+  requiredCapabilities: [travel]
+defaults:
+  commandTimeoutMs: 30000
+  cleanupTimeoutMs: 12000
+  failFast: true
+  evidence:
+    screenshot: onFailure
+    snapshot: onFailure
+    failurePolicy: failStep
+setup:
+  - stepId: verifyLocationBaseline
+    action:
+      type: waitFor
+      condition: {type: route, route: /inbox}
+steps:
+  - stepId: travelDeterministicRoute
+    description: Inject two nearby route points through the native system driver.
+    plane: native
+    timeoutMs: 30000
+    action:
+      type: travel
+      intervalMs: 100
+      route:
+        - {latitude: 31.2304, longitude: 121.4737}
+        - {latitude: 31.2310, longitude: 121.4740}
+  - stepId: verifyAppAfterTravel
+    evidence: {screenshot: always, snapshot: always, failurePolicy: failStep}
+    action:
+      type: assertVisible
+      locator: {text: New task}
+finally:
+  - stepId: verifyLocationCleanup
+    action:
+      type: waitFor
+      condition: {type: route, route: /inbox}

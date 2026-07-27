@@ -71,12 +71,17 @@ final class CockpitDemoAcceptanceResult {
     this.rootId,
     this.workspaceId,
     this.targetId,
+    this.nativeTargetId,
     this.runId,
     this.outcome,
     this.stability,
     this.counts,
     this.recordingSupported,
     this.mixedPlaneSupported,
+    this.visualRegressionSupported,
+    this.locationTravelSupported,
+    this.nativeBlackBoxSupported,
+    this.nativeLocatorSupported,
     this.systemControlAdapter,
     this.recordingLimitations = const <String>[],
     this.failure,
@@ -90,6 +95,7 @@ final class CockpitDemoAcceptanceResult {
   final String? rootId;
   final String? workspaceId;
   final String? targetId;
+  final String? nativeTargetId;
   final String? runId;
   final String? outcome;
   final String? stability;
@@ -98,6 +104,10 @@ final class CockpitDemoAcceptanceResult {
   final Map<String, Object?>? counts;
   final bool? recordingSupported;
   final bool? mixedPlaneSupported;
+  final bool? visualRegressionSupported;
+  final bool? locationTravelSupported;
+  final bool? nativeBlackBoxSupported;
+  final bool? nativeLocatorSupported;
   final String? systemControlAdapter;
   final List<String> recordingLimitations;
   final Map<String, Object?>? failure;
@@ -113,6 +123,7 @@ final class CockpitDemoAcceptanceResult {
     if (rootId != null) 'rootId': rootId,
     if (workspaceId != null) 'workspaceId': workspaceId,
     if (targetId != null) 'targetId': targetId,
+    if (nativeTargetId != null) 'nativeTargetId': nativeTargetId,
     if (runId != null) 'runId': runId,
     if (outcome != null) 'outcome': outcome,
     if (stability != null) 'stability': stability,
@@ -121,6 +132,14 @@ final class CockpitDemoAcceptanceResult {
     if (counts != null) 'counts': counts,
     if (recordingSupported != null) 'recordingSupported': recordingSupported,
     if (mixedPlaneSupported != null) 'mixedPlaneSupported': mixedPlaneSupported,
+    if (visualRegressionSupported != null)
+      'visualRegressionSupported': visualRegressionSupported,
+    if (locationTravelSupported != null)
+      'locationTravelSupported': locationTravelSupported,
+    if (nativeBlackBoxSupported != null)
+      'nativeBlackBoxSupported': nativeBlackBoxSupported,
+    if (nativeLocatorSupported != null)
+      'nativeLocatorSupported': nativeLocatorSupported,
     if (systemControlAdapter != null)
       'systemControlAdapter': systemControlAdapter,
     if (recordingLimitations.isNotEmpty)
@@ -162,6 +181,7 @@ final class CockpitDemoAcceptanceRunner {
     CockpitRootResource? root;
     CockpitWorkspaceResource? workspace;
     CockpitAutomationTargetResource? target;
+    CockpitAutomationTargetResource? nativeTarget;
     CockpitRunResource? run;
     CockpitTestSuiteReport? report;
     CockpitTestSuite? validatedSuite;
@@ -169,9 +189,15 @@ final class CockpitDemoAcceptanceRunner {
     CockpitRecordingCapabilities? recordingCapabilities;
     bool? unattendedRecordingSupported;
     bool? mixedPlaneSupported;
+    bool? visualRegressionSupported;
+    bool? locationTravelSupported;
+    bool? nativeBlackBoxSupported;
+    bool? nativeLocatorSupported;
+    String? visualBaseline;
     String? systemControlAdapter;
     String? deviceId;
     String? appId;
+    String? platformAppId;
     String? runId;
     IOSink? eventSink;
     var launched = false;
@@ -239,9 +265,30 @@ final class CockpitDemoAcceptanceRunner {
         );
       }
       validatedSuite = validation.document! as CockpitTestSuite;
+      final nativeBlackBoxTemplate = await _loadAcceptanceCase(
+        projectDirectory,
+        'e2e/cases/native_black_box.case.yaml',
+        'demoNativeBlackBox',
+      );
+      final mixedPlaneEvidenceTemplate = await _loadAcceptanceCase(
+        projectDirectory,
+        'e2e/cases/mixed_plane_black_box_evidence.case.yaml',
+        'demoMixedPlaneBlackBox',
+      );
+      final nativeBlackBoxEvidenceTemplate = await _loadAcceptanceCase(
+        projectDirectory,
+        'e2e/cases/native_black_box_evidence.case.yaml',
+        'demoNativeBlackBoxEvidence',
+      );
+      final recordingLifecycleTemplate = await _loadAcceptanceCase(
+        projectDirectory,
+        'e2e/cases/recording_lifecycle.case.yaml',
+        'demoRecordingLifecycle',
+      );
 
       advance('target', 'Discovering and registering the Flutter target.');
-      deviceId = await _resolveDevice(api, request);
+      final discoveredDevice = await _resolveDevice(api, request);
+      deviceId = discoveredDevice.id;
       final launchMode = cockpitDemoLaunchModeForPlatform(request.platform);
       target = await _resolveTarget(
         api: api,
@@ -284,6 +331,7 @@ final class CockpitDemoAcceptanceRunner {
       );
       launched = true;
       appId = launch.output?['appId'] as String?;
+      platformAppId = launch.output?['platformAppId'] as String?;
       final sessionId = launch.output?['sessionId'];
       if (sessionId is! String || sessionId.isEmpty) {
         throw const FormatException(
@@ -315,16 +363,6 @@ final class CockpitDemoAcceptanceRunner {
       recordingCapabilities = CockpitRecordingCapabilities.fromJson(
         Map<String, Object?>.from(rawRecordingCapabilities),
       );
-      unattendedRecordingSupported = _supportsUnattendedRecording(
-        recordingCapabilities,
-      );
-      if (request.requireRecording && !unattendedRecordingSupported) {
-        throw FormatException(
-          'The ${request.platform} release target does not support '
-          'unattended recording: '
-          '${recordingCapabilities.recordingLimitations.join('; ')}',
-        );
-      }
       advance(
         'capabilities',
         'Inspecting the secondary black-box system control plane.',
@@ -354,14 +392,66 @@ final class CockpitDemoAcceptanceRunner {
         );
       }
       final availableSystemActions = rawAvailableActions.cast<String>();
+      final recordingSupport = _recordingSupport(
+        recordingCapabilities: recordingCapabilities,
+        availableSystemActions: availableSystemActions,
+      );
+      unattendedRecordingSupported = recordingSupport.supported;
+      if (request.requireRecording && !unattendedRecordingSupported) {
+        throw FormatException(
+          'The ${request.platform} test target does not support unattended '
+          'recording through either its application or system driver. '
+          'Application limitations: '
+          '${recordingCapabilities.recordingLimitations.join('; ')}; '
+          'system actions: $availableSystemActions',
+        );
+      }
       systemControlAdapter = systemControlProfile['adapter'] as String?;
       mixedPlaneSupported =
           request.platform != 'web' &&
           availableSystemActions.contains('recoverToApp');
+      visualBaseline = _visualBaselineForTarget(
+        platform: request.platform,
+        device: discoveredDevice,
+      );
+      visualRegressionSupported =
+          visualBaseline != null &&
+          availableSystemActions.contains('captureScreenshot');
+      locationTravelSupported = availableSystemActions.contains('setLocation');
+      nativeLocatorSupported = const <String>{
+        'readUiTree',
+        'tap',
+        'pressBack',
+      }.every(availableSystemActions.contains);
+      nativeBlackBoxSupported =
+          request.platform != 'web' &&
+          platformAppId != null &&
+          platformAppId.isNotEmpty &&
+          const <String>{
+            'recoverToApp',
+            'captureScreenshot',
+          }.every(availableSystemActions.contains);
       if (request.platform != 'web' && !mixedPlaneSupported) {
         throw FormatException(
           'The ${request.platform} release target does not advertise '
           'recoverToApp for mixed-plane black-box validation.',
+        );
+      }
+      if (request.platform != 'web' && !nativeBlackBoxSupported) {
+        throw FormatException(
+          'The ${request.platform} release target cannot run independent '
+          'native black-box validation. platformAppId=$platformAppId; '
+          'availableActions=$availableSystemActions',
+        );
+      }
+      if (nativeBlackBoxSupported) {
+        nativeTarget = await _resolveNativeTarget(
+          api: api,
+          workspaceId: workspace.workspaceId,
+          platform: request.platform,
+          deviceId: deviceId,
+          appId: platformAppId,
+          registrationTimeout: request.discoveryTimeout,
         );
       }
       effectiveSuite = _suiteForRuntime(
@@ -369,7 +459,15 @@ final class CockpitDemoAcceptanceRunner {
         recordingCapabilities: recordingCapabilities,
         systemControlProfile: systemControlProfile,
         mixedPlaneSupported: mixedPlaneSupported,
+        visualBaseline: visualBaseline,
         taskTitle: 'Cockpit $invocationId',
+        mixedPlaneEvidenceTemplate: mixedPlaneEvidenceTemplate,
+        nativeBlackBoxTemplate: nativeBlackBoxTemplate,
+        nativeBlackBoxEvidenceTemplate: nativeBlackBoxEvidenceTemplate,
+        recordingLifecycleTemplate: recordingLifecycleTemplate,
+        nativeTargetId: nativeTarget?.targetId,
+        platformAppId: platformAppId,
+        nativeLocatorSupported: nativeLocatorSupported,
       );
 
       advance('run', 'Submitting the indexed regression suite.');
@@ -433,12 +531,20 @@ final class CockpitDemoAcceptanceRunner {
         report,
         effectiveSuite,
         recordingSupported: unattendedRecordingSupported,
+        visualRegressionSupported: visualRegressionSupported,
+        locationTravelSupported: locationTravelSupported,
+        nativeBlackBoxSupported: nativeBlackBoxSupported,
         platform: request.platform,
       );
       await _verifyOfflineReportBundle(
         outputDirectory: outputDirectory,
         report: report,
         recordingSupported: unattendedRecordingSupported,
+        visualRegressionSupported: visualRegressionSupported,
+        locationTravelSupported: locationTravelSupported,
+        nativeBlackBoxSupported: nativeBlackBoxSupported,
+        nativeLocatorSupported: nativeLocatorSupported,
+        nativeTargetId: nativeTarget?.targetId,
         platform: request.platform,
       );
       primaryPassed =
@@ -496,6 +602,7 @@ final class CockpitDemoAcceptanceRunner {
       rootId: root?.rootId,
       workspaceId: workspace?.workspaceId,
       targetId: target?.targetId,
+      nativeTargetId: nativeTarget?.targetId,
       runId: runId,
       outcome: run?.outcome?.name,
       stability: run?.stability?.name,
@@ -504,6 +611,10 @@ final class CockpitDemoAcceptanceRunner {
       counts: report?.counts.toJson(),
       recordingSupported: unattendedRecordingSupported,
       mixedPlaneSupported: mixedPlaneSupported,
+      visualRegressionSupported: visualRegressionSupported,
+      locationTravelSupported: locationTravelSupported,
+      nativeBlackBoxSupported: nativeBlackBoxSupported,
+      nativeLocatorSupported: nativeLocatorSupported,
       systemControlAdapter: systemControlAdapter,
       recordingLimitations:
           recordingCapabilities?.recordingLimitations ?? const <String>[],
@@ -528,14 +639,41 @@ CockpitTestSuite _suiteForRuntime(
   required CockpitRecordingCapabilities recordingCapabilities,
   required Map<String, Object?> systemControlProfile,
   required bool mixedPlaneSupported,
+  required String? visualBaseline,
   required String taskTitle,
+  required CockpitTestCase mixedPlaneEvidenceTemplate,
+  required CockpitTestCase nativeBlackBoxTemplate,
+  required CockpitTestCase nativeBlackBoxEvidenceTemplate,
+  required CockpitTestCase recordingLifecycleTemplate,
+  required String? nativeTargetId,
+  required String? platformAppId,
+  required bool nativeLocatorSupported,
 }) {
   final json = Map<String, Object?>.from(suite.toJson());
   final rawCases = json['cases'];
   if (rawCases is! List<Object?>) {
     throw const FormatException('Acceptance suite cases are unavailable.');
   }
+  final platform = systemControlProfile['platform'] as String;
+  final availableSystemActions =
+      (systemControlProfile['availableActions']! as List<Object?>)
+          .cast<String>();
+  final visualRegressionSupported =
+      visualBaseline != null &&
+      availableSystemActions.contains('captureScreenshot');
+  final locationTravelSupported = availableSystemActions.contains(
+    'setLocation',
+  );
+  final nativeBlackBoxSupported =
+      nativeTargetId != null && platformAppId != null;
+  final recordingSupport = _recordingSupport(
+    recordingCapabilities: recordingCapabilities,
+    availableSystemActions: availableSystemActions,
+  );
   var taskInputBound = false;
+  var visualInputBound = false;
+  var nativeBlackBoxBound = false;
+  var recordingLifecycleBound = false;
   json['cases'] = <Object?>[
     for (final rawCase in rawCases)
       if (rawCase case final Map<Object?, Object?> values)
@@ -551,9 +689,70 @@ CockpitTestSuite _suiteForRuntime(
                 for (final input in rawInputs.entries)
                   if (input.key is String) input.key! as String: input.value,
               'taskTitle': taskTitle,
-              'taskOpenLabel': 'Open task $taskTitle',
             };
             taskInputBound = true;
+          }
+          if (entry['id'] == 'visualRegression' && visualBaseline != null) {
+            final rawInputs = entry['inputs'];
+            entry['inputs'] = <String, Object?>{
+              if (rawInputs is Map<Object?, Object?>)
+                for (final input in rawInputs.entries)
+                  if (input.key is String) input.key! as String: input.value,
+              'visualBaseline': visualBaseline,
+            };
+            visualInputBound = true;
+          }
+          if (entry['id'] == 'visualRegression' && !visualRegressionSupported) {
+            entry['source'] = <String, Object?>{
+              'kind': 'file',
+              'relativePath': 'e2e/cases/visual_capture_fallback.case.yaml',
+              'caseId': 'demoVisualCaptureFallback',
+            };
+          }
+          if (entry['id'] == 'mixedPlaneBlackBox' &&
+              mixedPlaneSupported &&
+              !nativeLocatorSupported) {
+            entry['source'] = <String, Object?>{
+              'kind': 'inline',
+              'case': mixedPlaneEvidenceTemplate.toJson(),
+            };
+          }
+          if (entry['id'] == 'nativeBlackBox' && nativeBlackBoxSupported) {
+            final template = nativeLocatorSupported
+                ? nativeBlackBoxTemplate
+                : nativeBlackBoxEvidenceTemplate;
+            final caseJson = Map<String, Object?>.from(template.toJson());
+            final rawTarget = caseJson['target'];
+            if (rawTarget is! Map<Object?, Object?>) {
+              throw const FormatException(
+                'Native black-box case target is unavailable.',
+              );
+            }
+            caseJson['target'] = <String, Object?>{
+              for (final value in rawTarget.entries)
+                if (value.key is String) value.key! as String: value.value,
+              'platform': platform,
+              'targetKind': 'nativeApp',
+              'plane': 'native',
+              'appId': platformAppId,
+            };
+            entry['source'] = <String, Object?>{
+              'kind': 'inline',
+              'case': caseJson,
+            };
+            entry['targetIds'] = <String>[nativeTargetId];
+            nativeBlackBoxBound = true;
+          }
+          if (entry['id'] == 'recordingLifecycle' &&
+              recordingSupport.supported) {
+            entry['source'] = <String, Object?>{
+              'kind': 'inline',
+              'case': _recordingCaseForRuntime(
+                recordingLifecycleTemplate,
+                useSystemDriver: recordingSupport.system,
+              ).toJson(),
+            };
+            recordingLifecycleBound = true;
           }
           return entry;
         }()
@@ -565,12 +764,31 @@ CockpitTestSuite _suiteForRuntime(
       'Acceptance suite does not declare taskEditorValidation.',
     );
   }
+  if (visualRegressionSupported && !visualInputBound) {
+    throw const FormatException(
+      'Acceptance suite does not declare visualRegression.',
+    );
+  }
+  if (nativeBlackBoxSupported && !nativeBlackBoxBound) {
+    throw const FormatException(
+      'Acceptance suite does not declare nativeBlackBox.',
+    );
+  }
+  if (recordingSupport.supported && !recordingLifecycleBound) {
+    throw const FormatException(
+      'Acceptance suite does not declare recordingLifecycle.',
+    );
+  }
   final excludedTags = <String>{...suite.excludeTags};
-  final recordingSupported = _supportsUnattendedRecording(
-    recordingCapabilities,
-  );
+  final recordingSupported = recordingSupport.supported;
   if (!recordingSupported) excludedTags.add('requires-recording');
   if (!mixedPlaneSupported) excludedTags.add('requires-system-control');
+  if (!nativeBlackBoxSupported) {
+    excludedTags.add('requires-native-black-box');
+  }
+  if (!locationTravelSupported) {
+    excludedTags.add('requires-location-travel');
+  }
   if (excludedTags.isEmpty) {
     json.remove('excludeTags');
   } else {
@@ -578,6 +796,14 @@ CockpitTestSuite _suiteForRuntime(
   }
   json['x-runtime-recording'] = <String, Object?>{
     'executed': recordingSupported,
+    'implementation': !recordingSupported
+        ? 'unavailable'
+        : recordingSupport.system
+        ? 'system'
+        : 'application',
+    'stepPlane': recordingSupport.plane.name,
+    'applicationSupported': recordingSupport.remote,
+    'systemSupported': recordingSupport.system,
     ...recordingCapabilities.toJson(),
   };
   json['x-runtime-system-control'] = <String, Object?>{
@@ -586,7 +812,118 @@ CockpitTestSuite _suiteForRuntime(
     'adapter': systemControlProfile['adapter'],
     'availableActions': systemControlProfile['availableActions'],
   };
+  json['x-runtime-capability-coverage'] = <String, Object?>{
+    'visualRegression': <String, Object?>{
+      'supported': visualRegressionSupported,
+      'execution': visualRegressionSupported
+          ? 'baselineAssertion'
+          : 'semanticCaptureFallback',
+      'baseline': ?visualBaseline,
+    },
+    'locationTravel': <String, Object?>{'supported': locationTravelSupported},
+    'mixedPlane': <String, Object?>{
+      'supported': mixedPlaneSupported,
+      'locatorValidation': nativeLocatorSupported,
+      'execution': nativeLocatorSupported
+          ? 'nativeLocatorActionAssertionEvidence'
+          : 'nativeControlEvidenceFallback',
+    },
+    'nativeBlackBox': <String, Object?>{
+      'supported': nativeBlackBoxSupported,
+      'targetId': ?nativeTargetId,
+      'locatorValidation': nativeLocatorSupported,
+      'execution': nativeLocatorSupported
+          ? 'nativeLocatorActionAssertionEvidence'
+          : 'nativeControlEvidenceFallback',
+    },
+    'recording': <String, Object?>{
+      'supported': recordingSupported,
+      'implementation': !recordingSupported
+          ? 'unavailable'
+          : recordingSupport.system
+          ? 'system'
+          : 'application',
+      'stepPlane': recordingSupport.plane.name,
+    },
+  };
   return CockpitTestSuite.fromJson(json);
+}
+
+String? _visualBaselineForTarget({
+  required String platform,
+  required _CockpitDemoDiscoveredTarget device,
+}) {
+  return switch (platform) {
+    'android' when device.sdk?.contains('(API 34)') ?? false =>
+      'e2e/baselines/android/settings.png',
+    'ios' when device.name == 'iPhone 16 Pro' =>
+      'e2e/baselines/ios/settings.png',
+    'linux' => 'e2e/baselines/linux/settings.png',
+    'macos' => 'e2e/baselines/macos/settings.png',
+    'windows' => 'e2e/baselines/windows/settings.png',
+    _ => null,
+  };
+}
+
+typedef _CockpitDemoRecordingSupport = ({
+  bool supported,
+  bool system,
+  bool remote,
+  CockpitTestPlane plane,
+});
+
+_CockpitDemoRecordingSupport _recordingSupport({
+  required CockpitRecordingCapabilities recordingCapabilities,
+  required List<String> availableSystemActions,
+}) {
+  final remote = _supportsUnattendedRecording(recordingCapabilities);
+  final system = const <String>{
+    'startRecording',
+    'stopRecording',
+  }.every(availableSystemActions.contains);
+  return (
+    supported: system || remote,
+    system: system,
+    remote: remote,
+    plane: system ? CockpitTestPlane.native : CockpitTestPlane.semantic,
+  );
+}
+
+CockpitTestCase _recordingCaseForRuntime(
+  CockpitTestCase template, {
+  required bool useSystemDriver,
+}) {
+  Object? bind(Object? value) {
+    if (value is List<Object?>) {
+      return value.map(bind).toList(growable: false);
+    }
+    if (value is! Map<Object?, Object?>) return value;
+    final result = <String, Object?>{
+      for (final entry in value.entries)
+        if (entry.key is String) entry.key! as String: bind(entry.value),
+    };
+    if (result.containsKey('startRecording') ||
+        result.containsKey('stopRecording')) {
+      result['plane'] = useSystemDriver ? 'native' : 'semantic';
+    }
+    final rawStart = result['startRecording'];
+    if (rawStart is Map<Object?, Object?>) {
+      final start = Map<String, Object?>.from(rawStart);
+      if (useSystemDriver) {
+        start['layer'] = 'system';
+      } else {
+        start.remove('layer');
+      }
+      result['startRecording'] = start;
+    }
+    return result;
+  }
+
+  return CockpitTestCase.fromJson(
+    Map<String, Object?>.from(
+      bind(template.toJson())! as Map<Object?, Object?>,
+    ),
+  );
 }
 
 bool _supportsUnattendedRecording(CockpitRecordingCapabilities capabilities) {
@@ -603,13 +940,17 @@ void _verifyAcceptanceReport(
   CockpitTestSuiteReport report,
   CockpitTestSuite effectiveSuite, {
   required bool recordingSupported,
+  required bool visualRegressionSupported,
+  required bool locationTravelSupported,
+  required bool nativeBlackBoxSupported,
   required String platform,
 }) {
   if (!report.complete ||
       report.definition.id != effectiveSuite.id ||
       _canonicalJson(report.definition.toJson()) !=
           _canonicalJson(effectiveSuite.toJson()) ||
-      report.execution.maxConcurrency != 2 ||
+      report.execution.maxConcurrency != 1 ||
+      report.execution.failFast ||
       report.definition.fixtures.length != 2 ||
       report.matrixAxes['persona']?.length != 2) {
     throw const FormatException(
@@ -619,13 +960,26 @@ void _verifyAcceptanceReport(
   final expected = <String, (int, CockpitRunOutcome)>{
     'taskEditorValidation': (1, CockpitRunOutcome.passed),
     'settingsNavigation': (1, CockpitRunOutcome.passed),
+    'visualRegression': (1, CockpitRunOutcome.passed),
     'commandGestureCoverage': (1, CockpitRunOutcome.passed),
     'commandSemanticCoverage': (1, CockpitRunOutcome.passed),
     'mixedPlaneBlackBox': (
       1,
       platform == 'web' ? CockpitRunOutcome.skipped : CockpitRunOutcome.passed,
     ),
+    'locationTravel': (
+      1,
+      locationTravelSupported
+          ? CockpitRunOutcome.passed
+          : CockpitRunOutcome.skipped,
+    ),
     'matrixEvidence': (2, CockpitRunOutcome.passed),
+    'nativeBlackBox': (
+      1,
+      nativeBlackBoxSupported
+          ? CockpitRunOutcome.passed
+          : CockpitRunOutcome.skipped,
+    ),
     'recordingLifecycle': (
       1,
       recordingSupported ? CockpitRunOutcome.passed : CockpitRunOutcome.skipped,
@@ -656,6 +1010,11 @@ Future<void> _verifyOfflineReportBundle({
   required String outputDirectory,
   required CockpitTestSuiteReport report,
   required bool recordingSupported,
+  required bool visualRegressionSupported,
+  required bool locationTravelSupported,
+  required bool nativeBlackBoxSupported,
+  required bool nativeLocatorSupported,
+  required String? nativeTargetId,
   required String platform,
 }) async {
   final root = p.normalize(p.join(outputDirectory, 'cockpit-report'));
@@ -738,39 +1097,14 @@ Future<void> _verifyOfflineReportBundle({
     for (final execution in bundle.executions) ...execution.result.steps,
   ];
   final operations = steps.map((step) => step.operation).whereType<String>();
-  const requiredOperations = <String>{
-    'action.tap',
-    'action.longPress',
-    'action.doubleTap',
-    'action.enterText',
-    'action.focusTextInput',
-    'action.setTextEditingValue',
-    'action.sendTextInputAction',
-    'action.sendKeyEvent',
-    'action.sendKeyDownEvent',
-    'action.sendKeyUpEvent',
-    'action.drag',
-    'action.fling',
-    'action.swipe',
-    'action.pinchZoom',
-    'action.rotate',
-    'action.panZoom',
-    'action.multiTouch',
-    'action.scrollUntilVisible',
-    'action.back',
-    'action.showOnScreen',
-    'action.increase',
-    'action.decrease',
-    'action.dismiss',
-    'action.dismissKeyboard',
-    'action.clearNetworkActivity',
-    'action.waitForNetworkIdle',
-    'action.waitForUiIdle',
-    'action.waitFor',
-    'action.assertVisible',
-    'action.assertText',
-    'action.captureScreenshot',
-    'action.collectSnapshot',
+  const capabilityDependentActions = <CockpitTestActionKind>{
+    CockpitTestActionKind.assertScreenshot,
+    CockpitTestActionKind.travel,
+    CockpitTestActionKind.system,
+  };
+  final requiredOperations = <String>{
+    for (final action in CockpitTestActionKind.values)
+      if (!capabilityDependentActions.contains(action)) 'action.${action.name}',
     'control.if',
     'control.retry',
     'control.loop',
@@ -808,6 +1142,20 @@ Future<void> _verifyOfflineReportBundle({
     final mixedPlaneSteps = <CockpitTestStepResult>[
       for (final execution in mixedPlaneExecutions) ...execution.result.steps,
     ];
+    final nativeLocatorProof = mixedPlaneSteps.any(
+      (step) =>
+          step.operation == 'action.tap' &&
+          step.requestedPlane == CockpitTestPlane.native &&
+          step.actualPlane == CockpitTestPlane.native &&
+          step.locatorResolution != null,
+    );
+    final nativeCaptureProof = mixedPlaneSteps.any(
+      (step) =>
+          step.operation == 'action.captureScreenshot' &&
+          step.requestedPlane == CockpitTestPlane.native &&
+          step.actualPlane == CockpitTestPlane.native &&
+          step.evidence.isNotEmpty,
+    );
     if (mixedPlaneExecutions.length != 1 ||
         !operationSet.contains('action.system') ||
         !mixedPlaneSteps.any(
@@ -816,13 +1164,7 @@ Future<void> _verifyOfflineReportBundle({
               step.requestedPlane == CockpitTestPlane.native &&
               step.actualPlane == CockpitTestPlane.native,
         ) ||
-        !mixedPlaneSteps.any(
-          (step) =>
-              step.operation == 'action.tap' &&
-              step.requestedPlane == CockpitTestPlane.native &&
-              step.actualPlane == CockpitTestPlane.native &&
-              step.locatorResolution != null,
-        ) ||
+        (nativeLocatorSupported ? !nativeLocatorProof : !nativeCaptureProof) ||
         !mixedPlaneSteps.any(
           (step) =>
               step.requestedPlane == CockpitTestPlane.semantic &&
@@ -833,6 +1175,104 @@ Future<void> _verifyOfflineReportBundle({
         'Canonical report does not prove mixed-plane black-box execution.',
       );
     }
+  }
+  final nativeBlackBoxExecutions = bundle.executions
+      .where((execution) => execution.entryId == 'nativeBlackBox')
+      .toList(growable: false);
+  if (nativeBlackBoxSupported) {
+    final nativeSteps = <CockpitTestStepResult>[
+      for (final execution in nativeBlackBoxExecutions)
+        ...execution.result.steps,
+    ];
+    final nativeArtifacts = <CockpitTestReportArtifact>[
+      for (final execution in nativeBlackBoxExecutions) ...execution.artifacts,
+    ];
+    if (nativeTargetId == null ||
+        nativeBlackBoxExecutions.length != 1 ||
+        nativeBlackBoxExecutions.single.result.targetId != nativeTargetId ||
+        nativeBlackBoxExecutions.single.result.platform != platform ||
+        nativeBlackBoxExecutions.single.result.requestedPlane !=
+            CockpitTestPlane.native ||
+        !nativeSteps.any(
+          (step) =>
+              step.operation == 'action.system' &&
+              step.requestedPlane == CockpitTestPlane.native &&
+              step.actualPlane == CockpitTestPlane.native,
+        ) ||
+        !nativeSteps.any(
+          (step) => step.operation == 'action.captureScreenshot',
+        ) ||
+        !nativeArtifacts.any(
+          (artifact) => artifact.mediaType.startsWith('image/'),
+        )) {
+      throw const FormatException(
+        'Canonical report does not prove independent native black-box execution.',
+      );
+    }
+    if (nativeLocatorSupported &&
+        (!nativeSteps.any(
+              (step) =>
+                  step.operation == 'action.tap' &&
+                  step.requestedPlane == CockpitTestPlane.native &&
+                  step.actualPlane == CockpitTestPlane.native &&
+                  step.locatorResolution != null,
+            ) ||
+            !nativeSteps.any(
+              (step) =>
+                  step.operation == 'action.assertVisible' &&
+                  step.requestedPlane == CockpitTestPlane.native &&
+                  step.actualPlane == CockpitTestPlane.native &&
+                  step.locatorResolution != null,
+            ))) {
+      throw const FormatException(
+        'Native-tree runtime did not preserve black-box locator and assertion proof.',
+      );
+    }
+  } else if (nativeBlackBoxExecutions.isNotEmpty) {
+    throw const FormatException(
+      'Unsupported runtime unexpectedly executed native black-box coverage.',
+    );
+  }
+  if (visualRegressionSupported) {
+    final visualExecutions = bundle.executions
+        .where((execution) => execution.entryId == 'visualRegression')
+        .toList(growable: false);
+    final visualArtifacts = <CockpitTestReportArtifact>[
+      for (final execution in visualExecutions) ...execution.artifacts,
+    ];
+    final visualArtifactKinds = visualArtifacts
+        .map((artifact) => artifact.kind)
+        .toSet();
+    if (!operationSet.contains('action.assertScreenshot') ||
+        visualExecutions.length != 1 ||
+        !visualArtifactKinds.containsAll(const <String>{
+          'screenshot',
+          'screenshotbaseline',
+          'screenshotdiff',
+        })) {
+      throw const FormatException(
+        'Visual regression did not preserve actual, baseline, and diff evidence.',
+      );
+    }
+  } else {
+    final fallbackSteps = <CockpitTestStepResult>[
+      for (final execution in bundle.executions.where(
+        (execution) => execution.entryId == 'visualRegression',
+      ))
+        ...execution.result.steps,
+    ];
+    if (!fallbackSteps.any(
+      (step) => step.operation == 'action.captureScreenshot',
+    )) {
+      throw const FormatException(
+        'Runtime without visual assertions produced no screenshot fallback.',
+      );
+    }
+  }
+  if (locationTravelSupported && !operationSet.contains('action.travel')) {
+    throw const FormatException(
+      'Location-capable runtime did not execute the travel action.',
+    );
   }
   if (recordingSupported &&
       (!operationSet.contains('recording.start') ||
@@ -914,6 +1354,24 @@ Future<File> _workspaceFile(String workspace, String relativePath) async {
   return File(canonical);
 }
 
+Future<CockpitTestCase> _loadAcceptanceCase(
+  String workspace,
+  String relativePath,
+  String expectedId,
+) async {
+  final file = await _workspaceFile(workspace, relativePath);
+  final compiled = const CockpitTestDocumentCompiler()
+      .compile(await file.readAsString())
+      .requireCase();
+  if (compiled.testCase.id != expectedId) {
+    throw FormatException(
+      'Acceptance case $relativePath has id ${compiled.testCase.id}; '
+      'expected $expectedId.',
+    );
+  }
+  return compiled.testCase;
+}
+
 bool _contains(String root, String candidate) =>
     p.equals(root, candidate) || p.isWithin(root, candidate);
 
@@ -993,7 +1451,15 @@ CockpitDocumentResource _requireDocument(
   return matches.single;
 }
 
-Future<String> _resolveDevice(
+typedef _CockpitDemoDiscoveredTarget = ({String id, String? name, String? sdk});
+
+_CockpitDemoDiscoveredTarget _discoveredTarget(Map<String, Object?> target) => (
+  id: target['id']! as String,
+  name: target['name'] as String?,
+  sdk: target['sdk'] as String?,
+);
+
+Future<_CockpitDemoDiscoveredTarget> _resolveDevice(
   CockpitSupervisorApiClient api,
   CockpitDemoAcceptanceRequest request,
 ) async {
@@ -1027,13 +1493,13 @@ Future<String> _resolveDevice(
         'Device $requested is not an available ${request.platform} target.',
       );
     }
-    return requested;
+    return _discoveredTarget(matches.single);
   }
-  if (candidates.length == 1) return candidates.single['id']! as String;
+  if (candidates.length == 1) return _discoveredTarget(candidates.single);
   final stable = candidates
       .where((value) => value['ephemeral'] == false)
       .toList(growable: false);
-  if (stable.length == 1) return stable.single['id']! as String;
+  if (stable.length == 1) return _discoveredTarget(stable.single);
   if (candidates.isEmpty) {
     throw FormatException(
       'No connected Flutter target is available for ${request.platform}.',
@@ -1102,6 +1568,65 @@ Future<CockpitAutomationTargetResource> _resolveTarget({
   final targetId = registration.output?['targetId'];
   if (targetId is! String) {
     throw const FormatException('Target registration returned no target id.');
+  }
+  return api.target(workspaceId, targetId);
+}
+
+Future<CockpitAutomationTargetResource> _resolveNativeTarget({
+  required CockpitSupervisorApiClient api,
+  required String workspaceId,
+  required String platform,
+  required String deviceId,
+  required String appId,
+  required Duration registrationTimeout,
+}) async {
+  final matches = (await api.targets(workspaceId))
+      .where(
+        (target) =>
+            target.platform == platform &&
+            target.deviceId == deviceId &&
+            target.targetKind == CockpitTargetKind.nativeApp &&
+            target.mode == CockpitAutomationTargetMode.automation &&
+            target.environment == CockpitAutomationTargetEnvironment.test &&
+            target.appId == appId,
+      )
+      .toList(growable: false);
+  if (matches.isNotEmpty) return matches.last;
+
+  final identity = jsonEncode(<String, Object?>{
+    'workspaceId': workspaceId,
+    'platform': platform,
+    'deviceId': deviceId,
+    'appId': appId,
+    'targetKind': 'nativeApp',
+    'mode': 'automation',
+    'environment': 'test',
+  });
+  final digest = sha256.convert(utf8.encode(identity)).toString();
+  final registration = await _operation(
+    api,
+    CockpitOperationInvocation(
+      kind: 'target.register',
+      workspaceId: workspaceId,
+      idempotencyKey: CockpitIdempotencyKey(
+        'demo-native-target-${digest.substring(0, 32)}',
+      ),
+      deadline: DateTime.now().toUtc().add(registrationTimeout),
+      input: <String, Object?>{
+        'platform': platform,
+        'deviceId': deviceId,
+        'appId': appId,
+        'targetKind': 'nativeApp',
+        'mode': 'automation',
+        'environment': 'test',
+      },
+    ),
+  );
+  final targetId = registration.output?['targetId'];
+  if (targetId is! String) {
+    throw const FormatException(
+      'Native target registration returned no target id.',
+    );
   }
   return api.target(workspaceId, targetId);
 }

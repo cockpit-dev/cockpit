@@ -114,6 +114,7 @@ bool cockpitTestActionIsMutation(CockpitTestActionKind kind) => switch (kind) {
   CockpitTestActionKind.waitFor ||
   CockpitTestActionKind.assertVisible ||
   CockpitTestActionKind.assertText ||
+  CockpitTestActionKind.assertScreenshot ||
   CockpitTestActionKind.captureScreenshot ||
   CockpitTestActionKind.collectSnapshot => false,
   _ => true,

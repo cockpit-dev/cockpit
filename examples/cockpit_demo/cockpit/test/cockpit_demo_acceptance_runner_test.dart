@@ -49,10 +49,13 @@ void main() {
         containsAll(const <String>{
           'taskEditorValidation',
           'settingsNavigation',
+          'visualRegression',
           'commandGestureCoverage',
           'commandSemanticCoverage',
           'mixedPlaneBlackBox',
+          'locationTravel',
           'matrixEvidence',
+          'nativeBlackBox',
           'recordingLifecycle',
         }),
       );
@@ -102,46 +105,13 @@ void main() {
           actionTypes,
         );
       }
-      expect(actionTypes, containsAll(_requiredFlutterActionTypes));
+      expect(
+        actionTypes,
+        containsAll(CockpitTestActionKind.values.map((action) => action.name)),
+      );
     },
   );
 }
-
-const _requiredFlutterActionTypes = <String>{
-  'tap',
-  'longPress',
-  'doubleTap',
-  'enterText',
-  'focusTextInput',
-  'setTextEditingValue',
-  'sendTextInputAction',
-  'sendKeyEvent',
-  'sendKeyDownEvent',
-  'sendKeyUpEvent',
-  'drag',
-  'fling',
-  'swipe',
-  'pinchZoom',
-  'rotate',
-  'panZoom',
-  'multiTouch',
-  'scrollUntilVisible',
-  'back',
-  'showOnScreen',
-  'increase',
-  'decrease',
-  'dismiss',
-  'dismissKeyboard',
-  'clearNetworkActivity',
-  'waitForNetworkIdle',
-  'waitForUiIdle',
-  'waitFor',
-  'assertVisible',
-  'assertText',
-  'captureScreenshot',
-  'collectSnapshot',
-  'system',
-};
 
 void _collectActionTypes(Object? value, Set<String> actionTypes) {
   if (value is Map<Object?, Object?>) {

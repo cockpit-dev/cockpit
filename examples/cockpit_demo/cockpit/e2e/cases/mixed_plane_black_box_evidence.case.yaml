@@ -1,0 +1,52 @@
+schemaVersion: cockpit.test/v2
+kind: case
+id: demoMixedPlaneBlackBox
+name: Mixed-plane black-box evidence
+description: Uses system control and native capture without a native UI tree, then verifies observable Flutter UI state.
+tags: [acceptance, black-box, mixed-plane, capability-fallback]
+target:
+  platform: flutter
+  targetKind: flutterApp
+  plane: semantic
+defaults:
+  commandTimeoutMs: 30000
+  cleanupTimeoutMs: 12000
+  failFast: true
+  evidence:
+    screenshot: onFailure
+    snapshot: onFailure
+    failurePolicy: failStep
+setup:
+  - stepId: verifyMixedPlaneBaseline
+    timeoutMs: 12000
+    action:
+      type: waitFor
+      condition: {type: route, route: /inbox}
+steps:
+  - stepId: recoverAppThroughSystemControl
+    description: Exercise the secondary black-box driver against the launched application.
+    plane: native
+    timeoutMs: 60000
+    action:
+      type: system
+      name: recoverToApp
+  - stepId: captureThroughSystemControl
+    description: Preserve native black-box proof when the platform exposes no native UI tree.
+    plane: native
+    timeoutMs: 30000
+    action:
+      type: captureScreenshot
+      artifactName: mixed-plane-native-evidence
+      captureOptions: {reason: acceptance, includeSnapshot: false, attachToStep: true, allowFallback: false}
+  - stepId: verifySemanticUiAfterSystemControl
+    timeoutMs: 12000
+    evidence: {screenshot: always, snapshot: always, failurePolicy: failStep}
+    action:
+      type: assertVisible
+      locator: {text: New task}
+finally:
+  - stepId: verifyMixedPlaneCleanup
+    timeoutMs: 12000
+    action:
+      type: waitFor
+      condition: {type: route, route: /inbox}

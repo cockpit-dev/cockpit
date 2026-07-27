@@ -247,12 +247,14 @@ final class CockpitWorkerRuntime {
       requestHandler: (request, cancellation) =>
           server.handle(request, cancellation),
       cancellationGrace: const Duration(minutes: 5),
-      onProtocolError: (error, _) => _logger.log(
+      onProtocolError: (error, stackTrace) => _logger.log(
         'error',
         'Worker protocol error.',
         fields: <String, Object?>{
           'workspaceId': configuration.workspaceId,
+          'errorType': error.runtimeType.toString(),
           'error': '$error',
+          'stackTrace': '$stackTrace',
         },
       ),
     );
@@ -434,8 +436,23 @@ final class CockpitWorkerRuntime {
       operations: router,
       events: eventStore,
       onInitialized: () async {
-        await artifactPublisher.resume();
         await eventStore.resume();
+        unawaited(
+          Future<void>.delayed(Duration.zero)
+              .then((_) => artifactPublisher.resume())
+              .catchError((Object error, StackTrace stackTrace) {
+                _logger.log(
+                  'error',
+                  'Worker artifact recovery failed.',
+                  fields: <String, Object?>{
+                    'workspaceId': configuration.workspaceId,
+                    'errorType': error.runtimeType.toString(),
+                    'error': '$error',
+                    'stackTrace': '$stackTrace',
+                  },
+                );
+              }),
+        );
       },
       onShutdown: shutdownRuntime,
     );

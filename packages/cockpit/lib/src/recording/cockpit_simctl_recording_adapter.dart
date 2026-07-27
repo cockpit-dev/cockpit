@@ -171,8 +171,15 @@ final class CockpitSimctlRecordingAdapter
     }
 
     try {
+      final durationMs = DateTime.now()
+          .difference(persistedSession.startedAt)
+          .inMilliseconds;
       final exited = await _requestGracefulStop(persistedSession);
-      if (!exited) {
+      final result = await _finalizeStoppedRecordingWithRecovery(
+        session: persistedSession,
+        durationMs: durationMs,
+      );
+      if (!exited && result.state == CockpitRecordingState.failed) {
         return CockpitRecordingResult(
           state: CockpitRecordingState.failed,
           purpose: persistedSession.request.purpose,
@@ -180,13 +187,7 @@ final class CockpitSimctlRecordingAdapter
           failureReason: _stopTimeoutFailureReason,
         );
       }
-      final durationMs = DateTime.now()
-          .difference(persistedSession.startedAt)
-          .inMilliseconds;
-      return await _finalizeStoppedRecordingWithRecovery(
-        session: persistedSession,
-        durationMs: durationMs,
-      );
+      return result;
     } on TimeoutException {
       _pidSignalSender(persistedSession.pid, ProcessSignal.sigkill);
       return CockpitRecordingResult(
@@ -218,10 +219,7 @@ final class CockpitSimctlRecordingAdapter
         failureReason: _missingOutputFailureReasonFor(outputFile),
       );
     }
-    final finalized = await _waitForFinalizedOutput(
-      outputFile,
-      expectedDurationMs: durationMs,
-    );
+    final finalized = await _waitForFinalizedOutput(outputFile);
     if (!finalized) {
       return CockpitRecordingResult(
         state: CockpitRecordingState.failed,
@@ -232,12 +230,13 @@ final class CockpitSimctlRecordingAdapter
       );
     }
 
+    final timeline = await _probeRecordingTimeline(outputFile.path);
     return CockpitRecordingResult(
       state: CockpitRecordingState.completed,
       purpose: request.purpose,
       recordingKind: CockpitRecordingKind.nativeScreen,
       artifact: cockpitRecordingArtifactForName(request.name),
-      durationMs: durationMs,
+      durationMs: timeline?.durationMs ?? durationMs,
       sourceFilePath: outputFile.path,
     );
   }
@@ -403,7 +402,11 @@ final class CockpitSimctlRecordingAdapter
     }
 
     _sendSignalToPids(livePids, ProcessSignal.sigint);
-    if (await _waitForPidsExit(livePids, timeout: _stopTimeout)) {
+    if (await _waitForPidsExit(
+      livePids,
+      timeout: _stopTimeout,
+      finalizedOutputPath: outputFilePath,
+    )) {
       return true;
     }
 
@@ -415,6 +418,7 @@ final class CockpitSimctlRecordingAdapter
       if (await _waitForPidsExit(
         livePids,
         timeout: _stopStageTimeout(const Duration(seconds: 3)),
+        finalizedOutputPath: outputFilePath,
       )) {
         return true;
       }
@@ -445,15 +449,30 @@ final class CockpitSimctlRecordingAdapter
   Future<bool> _waitForPidsExit(
     Set<int> pids, {
     required Duration timeout,
+    String? finalizedOutputPath,
   }) async {
     final deadline = DateTime.now().add(timeout);
     while (DateTime.now().isBefore(deadline)) {
       if ((await _livePids(pids)).isEmpty) {
         return true;
       }
+      if (finalizedOutputPath != null &&
+          await _hasFinalizedRecordingOutput(finalizedOutputPath)) {
+        return true;
+      }
       await Future<void>.delayed(_finalizationPollInterval);
     }
-    return (await _livePids(pids)).isEmpty;
+    return (await _livePids(pids)).isEmpty ||
+        (finalizedOutputPath != null &&
+            await _hasFinalizedRecordingOutput(finalizedOutputPath));
+  }
+
+  Future<bool> _hasFinalizedRecordingOutput(String outputFilePath) async {
+    final outputFile = File(outputFilePath);
+    if (!await outputFile.exists() || await outputFile.length() == 0) {
+      return false;
+    }
+    return await _probeRecordingTimeline(outputFilePath) != null;
   }
 
   Future<Set<int>> _livePids(Iterable<int> pids) async {
@@ -515,10 +534,7 @@ final class CockpitSimctlRecordingAdapter
     return _pidLivenessChecker(pid);
   }
 
-  Future<bool> _waitForFinalizedOutput(
-    File outputFile, {
-    required int expectedDurationMs,
-  }) async {
+  Future<bool> _waitForFinalizedOutput(File outputFile) async {
     final stableFile = await cockpitWaitForStableFile(
       outputFile,
       timeout: _stopTimeout,
@@ -528,19 +544,13 @@ final class CockpitSimctlRecordingAdapter
       return false;
     }
 
-    final minimumExpectedDurationMs = expectedDurationMs <= 0
-        ? 800
-        : expectedDurationMs < 800
-        ? expectedDurationMs
-        : (expectedDurationMs * 0.7).round().clamp(800, expectedDurationMs);
     final deadline = DateTime.now().add(_stopTimeout);
     while (DateTime.now().isBefore(deadline)) {
       final probe = await _probeRecordingTimeline(outputFile.path);
       if (probe == null) {
         return true;
       }
-      if (probe.durationMs >= minimumExpectedDurationMs ||
-          _looksUsableForSimulatorAcceptance(probe)) {
+      if (_looksUsableForSimulatorAcceptance(probe)) {
         return true;
       }
       await Future<void>.delayed(_finalizationPollInterval);
@@ -550,16 +560,14 @@ final class CockpitSimctlRecordingAdapter
     if (finalProbe == null) {
       return true;
     }
-    return finalProbe.durationMs >= minimumExpectedDurationMs ||
-        _looksUsableForSimulatorAcceptance(finalProbe);
+    return _looksUsableForSimulatorAcceptance(finalProbe);
   }
 
   bool _looksUsableForSimulatorAcceptance(
     _CockpitRecordingTimelineProbe probe,
   ) {
-    final hasEnoughDuration = probe.durationMs >= 1200;
-    final hasEnoughFrames = (probe.frameCount ?? 0) >= 20;
-    return hasEnoughDuration && hasEnoughFrames;
+    return probe.durationMs > 0 &&
+        (probe.frameCount == null || probe.frameCount! > 0);
   }
 
   Future<_CockpitRecordingTimelineProbe?> _probeRecordingTimeline(

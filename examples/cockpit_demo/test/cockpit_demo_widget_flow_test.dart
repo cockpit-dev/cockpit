@@ -50,6 +50,10 @@ void main() {
       final createdTasks = await database.select(database.tasks).get();
       expect(createdTasks.length, 1);
       expect(find.text('New task'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey<String>('latest-task-open-action')),
+        findsOneWidget,
+      );
       final task = createdTasks.single;
       final taskOpenFinder = taskRowByTitle(task.title);
       await scrollTodoCollectionUntilVisible(tester, taskOpenFinder);
