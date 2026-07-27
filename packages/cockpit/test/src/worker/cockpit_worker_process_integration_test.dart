@@ -127,6 +127,8 @@ cases:
       final pool = CockpitWorkerPool(
         launcher: launcher,
         heartbeatInterval: const Duration(seconds: 30),
+        initialRestartBackoff: const Duration(milliseconds: 10),
+        maximumRestartBackoff: const Duration(milliseconds: 10),
       );
       final spec = CockpitWorkspaceWorkerSpec(
         key: CockpitWorkspaceWorkerKey(
