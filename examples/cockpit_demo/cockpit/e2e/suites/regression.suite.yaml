@@ -5,8 +5,8 @@ name: Cockpit demo regression
 description: Full Cockpit 2.0 release acceptance across workflow and report capabilities.
 tags: [acceptance, regression]
 execution:
-  maxConcurrency: 2
-  failFast: true
+  maxConcurrency: 1
+  failFast: false
   isolation: sharedSession
   retry:
     maxAttempts: 2
@@ -51,36 +51,45 @@ cases:
       relativePath: e2e/cases/task_editor_validation.case.yaml
       caseId: demoTaskEditorValidation
   - id: settingsNavigation
-    dependsOn: [taskEditorValidation]
     fixtures: [suiteBaseline]
     source:
       kind: file
       relativePath: e2e/cases/settings_navigation.case.yaml
       caseId: demoSettingsNavigation
+  - id: visualRegression
+    fixtures: [suiteBaseline]
+    tags: [requires-visual-regression]
+    source:
+      kind: file
+      relativePath: e2e/cases/visual_regression.case.yaml
+      caseId: demoVisualRegression
   - id: commandGestureCoverage
-    dependsOn: [settingsNavigation]
     fixtures: [attemptBaseline]
     source:
       kind: file
       relativePath: e2e/cases/command_gesture_coverage.case.yaml
       caseId: demoCommandGestureCoverage
   - id: commandSemanticCoverage
-    dependsOn: [commandGestureCoverage]
     fixtures: [suiteBaseline]
     source:
       kind: file
       relativePath: e2e/cases/command_semantic_coverage.case.yaml
       caseId: demoCommandSemanticCoverage
   - id: mixedPlaneBlackBox
-    dependsOn: [commandSemanticCoverage]
     fixtures: [suiteBaseline]
     tags: [requires-system-control]
     source:
       kind: file
       relativePath: e2e/cases/mixed_plane_black_box.case.yaml
       caseId: demoMixedPlaneBlackBox
+  - id: locationTravel
+    fixtures: [suiteBaseline]
+    tags: [requires-location-travel]
+    source:
+      kind: file
+      relativePath: e2e/cases/location_travel.case.yaml
+      caseId: demoLocationTravel
   - id: matrixEvidence
-    dependsOn: [commandSemanticCoverage]
     fixtures: [suiteBaseline]
     matrixAxes: [persona]
     inputs:
@@ -89,8 +98,13 @@ cases:
       kind: file
       relativePath: e2e/cases/matrix_evidence.case.yaml
       caseId: demoMatrixEvidence
+  - id: nativeBlackBox
+    tags: [requires-native-black-box]
+    source:
+      kind: file
+      relativePath: e2e/cases/native_black_box.case.yaml
+      caseId: demoNativeBlackBox
   - id: recordingLifecycle
-    dependsOn: [matrixEvidence]
     fixtures: [suiteBaseline]
     tags: [requires-recording]
     source:

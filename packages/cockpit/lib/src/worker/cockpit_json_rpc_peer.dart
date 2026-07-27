@@ -474,7 +474,8 @@ final class CockpitJsonRpcPeer {
           message: 'Worker request parameters are invalid.',
         ),
       );
-    } on Object {
+    } on Object catch (error, stackTrace) {
+      _reportProtocolError(error, stackTrace);
       _finishInbound(
         request.id,
         inbound,

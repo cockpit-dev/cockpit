@@ -1,0 +1,86 @@
+schemaVersion: cockpit.test/v2
+kind: case
+id: demoNativeBlackBox
+name: Independent native black-box validation
+description: Controls and validates the installed app through a separately registered native target without the Flutter bridge.
+tags: [acceptance, black-box, native, requires-native-tree]
+target:
+  platform: android
+  targetKind: nativeApp
+  plane: native
+  appId: dev.cockpit.placeholder
+  requiredCapabilities: [tap, back, waitFor, assertVisible, captureScreenshot]
+defaults:
+  commandTimeoutMs: 30000
+  cleanupTimeoutMs: 30000
+  failFast: true
+  evidence:
+    screenshot: onFailure
+    snapshot: onFailure
+    failurePolicy: failStep
+setup:
+  - stepId: recoverIndependentNativeTarget
+    timeoutMs: 60000
+    action:
+      type: system
+      name: recoverToApp
+  - stepId: waitForNativeInbox
+    timeoutMs: 30000
+    action:
+      type: waitFor
+      condition:
+        type: visible
+        locator:
+          label: New task
+          fallbacks:
+            - {text: New task}
+steps:
+  - stepId: assertInboxThroughNativeTree
+    timeoutMs: 20000
+    action:
+      type: assertVisible
+      locator:
+        label: New task
+        fallbacks:
+          - {text: New task}
+  - stepId: openEditorThroughIndependentTarget
+    timeoutMs: 30000
+    action:
+      type: tap
+      locator:
+        label: New task
+        fallbacks:
+          - {text: New task}
+  - stepId: assertEditorThroughNativeTree
+    timeoutMs: 30000
+    evidence: {screenshot: always, snapshot: always, failurePolicy: failStep}
+    action:
+      type: assertVisible
+      locator:
+        text: Task title
+        matchMode: contains
+        fallbacks:
+          - {label: Task title, matchMode: contains}
+  - stepId: returnThroughNativeDriver
+    timeoutMs: 20000
+    action: {type: back}
+  - stepId: assertNativeInboxRestored
+    timeoutMs: 30000
+    action:
+      type: assertVisible
+      locator:
+        label: New task
+        fallbacks:
+          - {text: New task}
+  - stepId: captureIndependentNativeEvidence
+    timeoutMs: 30000
+    action:
+      type: captureScreenshot
+      artifactName: independent-native-black-box
+      captureOptions: {reason: acceptance, includeSnapshot: true, attachToStep: true, allowFallback: false}
+finally:
+  - stepId: recoverNativeTargetAfterCase
+    timeoutMs: 60000
+    action:
+      type: system
+      name: recoverToApp

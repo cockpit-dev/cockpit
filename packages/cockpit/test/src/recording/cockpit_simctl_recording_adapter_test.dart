@@ -180,15 +180,70 @@ void main() {
     },
   );
 
+  test('simctl adapter accepts a single finalized simulator frame', () async {
+    const deviceId = 'simulator-321';
+    await _deletePersistedSession(deviceId);
+    addTearDown(() => _deletePersistedSession(deviceId));
+
+    final tempDir = await Directory.systemTemp.createTemp(
+      'cockpit_simctl_recording_sparse_timeline',
+    );
+    addTearDown(() async {
+      if (tempDir.existsSync()) {
+        await tempDir.delete(recursive: true);
+      }
+    });
+
+    final runtime = _FakeSimctlRuntime(
+      pid: 4301,
+      startupLine: 'Recording started',
+      onStop: (outputPath) async {
+        File(outputPath).writeAsStringSync('simctl-video');
+      },
+    );
+
+    final adapter = CockpitSimctlRecordingAdapter(
+      deviceId: deviceId,
+      processStarter: runtime.start,
+      pidSignalSender: runtime.sendSignal,
+      pidLivenessChecker: runtime.isRunning,
+      tempFileFactory: (basename) async => File(p.join(tempDir.path, basename)),
+      processRunner: (executable, arguments) async {
+        if (executable == 'ffprobe') {
+          return ProcessResult(0, 0, '''
+{"format":{"duration":"0.067"},"streams":[{"codec_type":"video","nb_frames":"1"}]}
+''', '');
+        }
+        throw ProcessException(executable, arguments, 'unexpected command');
+      },
+      finalizationPollInterval: const Duration(milliseconds: 10),
+    );
+
+    await adapter.startRecording(
+      const CockpitRecordingRequest(
+        purpose: CockpitRecordingPurpose.acceptance,
+        name: 'host-simctl-sparse',
+        attachToStep: true,
+      ),
+    );
+    final result = await adapter.stopRecording();
+
+    expect(
+      result.state,
+      CockpitRecordingState.completed,
+      reason: result.failureReason,
+    );
+  });
+
   test(
-    'simctl adapter accepts sparse simulator recordings when ffprobe reports a usable timeline',
+    'simctl adapter accepts finalized video when process liveness lags',
     () async {
-      const deviceId = 'simulator-321';
+      const deviceId = 'simulator-lingering-wrapper';
       await _deletePersistedSession(deviceId);
       addTearDown(() => _deletePersistedSession(deviceId));
 
       final tempDir = await Directory.systemTemp.createTemp(
-        'cockpit_simctl_recording_sparse_timeline',
+        'cockpit_simctl_recording_lingering_wrapper',
       );
       addTearDown(() async {
         if (tempDir.existsSync()) {
@@ -197,13 +252,13 @@ void main() {
       });
 
       final runtime = _FakeSimctlRuntime(
-        pid: 4301,
+        pid: 4351,
         startupLine: 'Recording started',
+        lingerAfterOutput: true,
         onStop: (outputPath) async {
-          File(outputPath).writeAsStringSync('simctl-video');
+          File(outputPath).writeAsStringSync('simctl-finalized-video');
         },
       );
-
       final adapter = CockpitSimctlRecordingAdapter(
         deviceId: deviceId,
         processStarter: runtime.start,
@@ -214,18 +269,19 @@ void main() {
         processRunner: (executable, arguments) async {
           if (executable == 'ffprobe') {
             return ProcessResult(0, 0, '''
-{"format":{"duration":"2.706"},"streams":[{"codec_type":"video","nb_frames":"44"}]}
+{"format":{"duration":"1.500"},"streams":[{"codec_type":"video","nb_frames":"30"}]}
 ''', '');
           }
           throw ProcessException(executable, arguments, 'unexpected command');
         },
+        stopTimeout: const Duration(milliseconds: 300),
         finalizationPollInterval: const Duration(milliseconds: 10),
       );
 
       await adapter.startRecording(
         const CockpitRecordingRequest(
           purpose: CockpitRecordingPurpose.acceptance,
-          name: 'host-simctl-sparse',
+          name: 'host-simctl-lingering-wrapper',
           attachToStep: true,
         ),
       );
@@ -436,6 +492,7 @@ final class _FakeSimctlRuntime {
     this.onChildStop,
     this.ignoreSigint = false,
     this.parentStopsBeforeChild = false,
+    this.lingerAfterOutput = false,
   }) : _process = _FakeSimctlProcess(pid: pid, startupLine: startupLine);
 
   final int pid;
@@ -445,6 +502,7 @@ final class _FakeSimctlRuntime {
   final Future<void> Function(String outputPath)? onChildStop;
   final bool ignoreSigint;
   final bool parentStopsBeforeChild;
+  final bool lingerAfterOutput;
   final _FakeSimctlProcess _process;
   final List<ProcessSignal> receivedSignals = <ProcessSignal>[];
   final Map<int, List<ProcessSignal>> receivedSignalsByPid =
@@ -491,7 +549,13 @@ final class _FakeSimctlRuntime {
     if (signal == ProcessSignal.sigint &&
         _outputPath != null &&
         onStop != null) {
-      unawaited(onStop!(_outputPath!).then((_) => _stop()));
+      unawaited(
+        onStop!(_outputPath!).then((_) async {
+          if (!lingerAfterOutput) {
+            await _stop();
+          }
+        }),
+      );
       return true;
     }
     unawaited(_stop());

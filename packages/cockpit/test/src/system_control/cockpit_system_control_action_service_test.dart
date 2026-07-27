@@ -3583,6 +3583,32 @@ void main() {
     expect(result.errorCode, 'systemCaptureFailed');
     expect(result.recommendedNextStep, 'inspectCaptureFailure');
     expect(result.errorMessage, contains('capture permission denied'));
+    expect(result.errorDetails, isEmpty);
+  });
+
+  test('captureScreenshot preserves adapter failure diagnostics', () async {
+    final service = _actionServiceWithReachableAndroid(
+      captureAdapterFactory: (_) => const _DetailedFailingCaptureAdapter(),
+    );
+
+    final result = await service.run(
+      const CockpitSystemControlActionRequest(
+        platform: 'android',
+        deviceId: 'emulator-5554',
+        action: CockpitSystemControlAction.captureScreenshot,
+      ),
+    );
+
+    expect(result.success, isFalse);
+    expect(result.errorDetails['driverError'], <String, Object?>{
+      'code': 'captureFailed',
+      'message': 'capture permission denied',
+      'details': <String, Object?>{
+        'permission': 'screenRecording',
+        'stderr': 'could not create image from display',
+      },
+    });
+    expect(result.toJson()['errorDetails'], result.errorDetails);
   });
 
   test(
@@ -3958,6 +3984,29 @@ final class _FailingCaptureAdapter implements CockpitCaptureAdapter {
   @override
   Future<CockpitCommandExecution> capture(CockpitCommand command) {
     throw StateError('capture permission denied');
+  }
+}
+
+final class _DetailedFailingCaptureAdapter implements CockpitCaptureAdapter {
+  const _DetailedFailingCaptureAdapter();
+
+  @override
+  Future<CockpitCommandExecution> capture(CockpitCommand command) async {
+    return CockpitCommandExecution(
+      result: CockpitCommandResult(
+        success: false,
+        commandId: command.commandId,
+        commandType: command.commandType,
+        durationMs: 1,
+        error: CockpitCommandError.captureFailed(
+          message: 'capture permission denied',
+          details: const <String, Object?>{
+            'permission': 'screenRecording',
+            'stderr': 'could not create image from display',
+          },
+        ),
+      ),
+    );
   }
 }
 

@@ -20,9 +20,6 @@ variables:
   taskTitle:
     source: input
     type: string
-  taskOpenLabel:
-    source: input
-    type: string
 fragments:
   assertInbox:
     - stepId: waitForInboxRoute
@@ -157,21 +154,19 @@ steps:
     action:
       type: waitFor
       condition: {type: route, route: /inbox}
-  - stepId: revealCreatedTask
-    description: Reveal the actionable task row without relying on app hooks
-    timeoutMs: 25000
+  - stepId: waitForCreatedTask
+    description: Wait for the saved task to reach the observable inbox model
+    timeoutMs: 15000
     action:
-      type: scrollUntilVisible
-      locator: {text: {$var: taskOpenLabel}}
-      direction: down
-      maxScrolls: 20
-      durationMs: 200
-      revealAlignment: center
+      type: waitFor
+      condition:
+        type: visible
+        locator: {testId: latest-task-open-action}
   - stepId: openCreatedTask
     timeoutMs: 12000
     action:
       type: tap
-      locator: {text: {$var: taskOpenLabel}}
+      locator: {testId: latest-task-open-action}
   - stepId: waitForTaskDetail
     timeoutMs: 12000
     action:
@@ -194,7 +189,7 @@ steps:
     timeoutMs: 15000
     action:
       type: assertVisible
-      locator: {text: {$var: taskOpenLabel}}
+      locator: {testId: latest-task-open-action}
       expected: false
   - stepId: nonMatchingRouteBranch
     description: Exercise the conditional else branch
@@ -255,20 +250,12 @@ finally:
     if:
       condition:
         type: visible
-        locator: {text: {$var: taskOpenLabel}}
+        locator: {testId: latest-task-open-action}
       then:
-        - stepId: revealTaskDuringCleanup
-          action:
-            type: scrollUntilVisible
-            locator: {text: {$var: taskOpenLabel}}
-            direction: down
-            maxScrolls: 20
-            durationMs: 200
-            revealAlignment: center
         - stepId: openTaskDuringCleanup
           action:
             type: tap
-            locator: {text: {$var: taskOpenLabel}}
+            locator: {testId: latest-task-open-action}
         - stepId: waitForCleanupDetail
           action:
             type: waitFor

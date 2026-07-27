@@ -1,0 +1,32 @@
+schemaVersion: cockpit.test/v2
+kind: case
+id: demoNativeBlackBoxEvidence
+name: Independent native black-box evidence
+description: Proves independent native target control and evidence when the platform exposes no native UI tree.
+tags: [acceptance, black-box, native, capability-fallback]
+target:
+  platform: linux
+  targetKind: nativeApp
+  plane: native
+  appId: dev.cockpit.placeholder
+  requiredCapabilities: [captureScreenshot]
+defaults:
+  commandTimeoutMs: 30000
+  cleanupTimeoutMs: 30000
+  failFast: true
+  evidence:
+    screenshot: onFailure
+    snapshot: none
+    failurePolicy: failStep
+steps:
+  - stepId: recoverIndependentNativeTarget
+    timeoutMs: 60000
+    action:
+      type: system
+      name: recoverToApp
+  - stepId: captureIndependentNativeEvidence
+    timeoutMs: 30000
+    action:
+      type: captureScreenshot
+      artifactName: independent-native-black-box
+      captureOptions: {reason: acceptance, includeSnapshot: false, attachToStep: true, allowFallback: false}

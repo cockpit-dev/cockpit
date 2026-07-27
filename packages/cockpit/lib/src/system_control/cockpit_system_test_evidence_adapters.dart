@@ -48,6 +48,8 @@ final class CockpitSystemTestCaptureAdapter implements CockpitCaptureAdapter {
         message: result.errorMessage ?? 'System screenshot capture failed.',
         details: <String, Object?>{
           if (result.errorCode != null) 'systemErrorCode': result.errorCode,
+          if (result.errorDetails.isNotEmpty)
+            'systemErrorDetails': result.errorDetails,
         },
       );
     }

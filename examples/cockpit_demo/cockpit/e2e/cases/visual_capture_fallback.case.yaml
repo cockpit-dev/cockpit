@@ -1,0 +1,54 @@
+schemaVersion: cockpit.test/v2
+kind: case
+id: demoVisualCaptureFallback
+name: Visual capture fallback
+description: Preserves semantic screenshot evidence when the target advertises no native visual assertion plane.
+tags: [acceptance, visual-capture, unsupported-visual-regression]
+target:
+  platform: flutter
+  targetKind: flutterApp
+  plane: semantic
+  requiredCapabilities: [captureScreenshot]
+defaults:
+  commandTimeoutMs: 20000
+  cleanupTimeoutMs: 15000
+  failFast: true
+  evidence:
+    screenshot: onFailure
+    snapshot: onFailure
+    failurePolicy: failStep
+setup:
+  - stepId: waitForFallbackInbox
+    action:
+      type: waitFor
+      condition: {type: route, route: /inbox}
+  - stepId: openFallbackSettings
+    action:
+      type: tap
+      locator: {label: Settings}
+  - stepId: waitForFallbackSettings
+    action:
+      type: waitFor
+      condition: {type: route, route: /settings}
+steps:
+  - stepId: captureUnsupportedVisualPlane
+    description: Capture reviewable evidence while the capability report records native visual assertion as unsupported.
+    action:
+      type: captureScreenshot
+      artifactName: settings-visual-fallback
+      captureOptions: {reason: acceptance, includeSnapshot: true, attachToStep: true, allowFallback: true}
+finally:
+  - stepId: leaveFallbackSettings
+    timeoutMs: 15000
+    if:
+      condition: {type: route, route: /settings}
+      then:
+        - stepId: backFromFallbackSettings
+          action: {type: back}
+      else:
+        - stepId: retainFallbackRoute
+          action: {type: waitForUiIdle, quietMs: 100}
+  - stepId: verifyFallbackCleanup
+    action:
+      type: waitFor
+      condition: {type: route, route: /inbox}

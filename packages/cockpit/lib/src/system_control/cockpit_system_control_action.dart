@@ -38,6 +38,7 @@ final class CockpitSystemControlActionResult {
     this.stderr,
     this.errorCode,
     this.errorMessage,
+    this.errorDetails = const <String, Object?>{},
     this.strategy,
     this.requires = const <String>[],
     this.limitations = const <String>[],
@@ -60,6 +61,7 @@ final class CockpitSystemControlActionResult {
   final String? stderr;
   final String? errorCode;
   final String? errorMessage;
+  final Map<String, Object?> errorDetails;
   final String recommendedNextStep;
   final String? strategy;
   final List<String> requires;
@@ -84,6 +86,7 @@ final class CockpitSystemControlActionResult {
     if (stderr != null && stderr!.isNotEmpty) 'stderr': stderr,
     if (errorCode != null) 'errorCode': errorCode,
     if (errorMessage != null) 'errorMessage': errorMessage,
+    if (errorDetails.isNotEmpty) 'errorDetails': errorDetails,
     if (strategy != null) 'strategy': strategy,
     if (requires.isNotEmpty) 'requires': requires,
     if (limitations.isNotEmpty) 'limitations': limitations,

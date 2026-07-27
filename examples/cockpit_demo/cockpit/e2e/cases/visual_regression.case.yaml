@@ -1,0 +1,62 @@
+schemaVersion: cockpit.test/v2
+kind: case
+id: demoVisualRegression
+name: Visual regression coverage
+description: Compares the stable Settings surface with the committed platform baseline and preserves actual, baseline, and diff evidence.
+tags: [acceptance, visual-regression, requires-visual-regression]
+target:
+  platform: flutter
+  targetKind: flutterApp
+  plane: semantic
+  requiredCapabilities: [assertScreenshot]
+defaults:
+  commandTimeoutMs: 30000
+  cleanupTimeoutMs: 15000
+  failFast: true
+  evidence:
+    screenshot: onFailure
+    snapshot: onFailure
+    failurePolicy: failStep
+variables:
+  visualBaseline:
+    source: input
+    type: string
+setup:
+  - stepId: waitForVisualInbox
+    action:
+      type: waitFor
+      condition: {type: route, route: /inbox}
+  - stepId: openVisualSettings
+    action:
+      type: tap
+      locator: {label: Settings}
+  - stepId: waitForVisualSettings
+    action:
+      type: waitFor
+      condition: {type: route, route: /settings}
+steps:
+  - stepId: settleVisualSurface
+    action: {type: waitForUiIdle, quietMs: 300}
+  - stepId: assertSettingsScreenshot
+    description: Compare a deterministic native capture with a committed platform baseline.
+    timeoutMs: 30000
+    action:
+      type: assertScreenshot
+      baseline: {$var: visualBaseline}
+      similarity: 0.97
+      artifactName: settings-visual-regression
+finally:
+  - stepId: leaveVisualSettings
+    timeoutMs: 15000
+    if:
+      condition: {type: route, route: /settings}
+      then:
+        - stepId: backFromVisualSettings
+          action: {type: back}
+      else:
+        - stepId: retainVisualRoute
+          action: {type: waitForUiIdle, quietMs: 100}
+  - stepId: verifyVisualCleanup
+    action:
+      type: waitFor
+      condition: {type: route, route: /inbox}

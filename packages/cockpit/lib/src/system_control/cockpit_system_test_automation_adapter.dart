@@ -1000,7 +1000,10 @@ final class CockpitSystemTestAutomationAdapter
     Stopwatch stopwatch,
   ) async {
     final deadline = _deadline(command);
-    final quietMs = command.parameters['quietMs'] as int? ?? 500;
+    final quietMs =
+        command.parameters['quietWindowMs'] as int? ??
+        command.parameters['quietMs'] as int? ??
+        500;
     String? previousDigest;
     DateTime? stableSince;
     do {
@@ -1238,6 +1241,8 @@ final class CockpitSystemTestAutomationAdapter
           message: result.errorMessage ?? 'System screenshot capture failed.',
           details: <String, Object?>{
             if (result.errorCode != null) 'systemErrorCode': result.errorCode,
+            if (result.errorDetails.isNotEmpty)
+              'systemErrorDetails': result.errorDetails,
           },
         ),
       );

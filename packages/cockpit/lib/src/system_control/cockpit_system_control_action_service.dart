@@ -634,6 +634,9 @@ final class CockpitSystemControlActionService {
             : 'inspectCaptureFailure',
         errorCode: result.success ? null : 'systemCaptureFailed',
         errorMessage: result.error?.message,
+        errorDetails: <String, Object?>{
+          if (result.error case final error?) 'driverError': error.toJson(),
+        },
         strategy: capability.strategy,
         requires: capability.requires,
         limitations: capability.limitations,

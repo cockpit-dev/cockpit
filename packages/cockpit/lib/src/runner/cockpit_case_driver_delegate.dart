@@ -62,6 +62,9 @@ final class CockpitCaseDriverDelegate implements CockpitCaseExecutionDelegate {
   final CockpitTestTargetEnvironment _targetEnvironment;
   CockpitRecordingSession? _recordingSession;
   CockpitRecordingAdapter? _activeRecordingAdapter;
+  CockpitTestPlane? _activeRecordingPlane;
+  String? _activeRecordingDriverId;
+  String? _activeRecordingDegradationReason;
 
   @override
   Future<CockpitTestKernelOperationResult> executeAction({
@@ -314,8 +317,12 @@ final class CockpitCaseDriverDelegate implements CockpitCaseExecutionDelegate {
     required CockpitCaseOperationLease lease,
   }) async {
     final requestedPlane = cockpitRequestedPlane(node, _plan.target.plane);
-    final adapter = _driverFor(requestedPlane)?.recordingAdapter;
-    if (adapter == null) {
+    final candidates = _recordingCandidates(
+      node: node,
+      operation: operation,
+      requestedPlane: requestedPlane,
+    );
+    if (candidates.isEmpty) {
       return CockpitTestKernelOperationResult.failure(
         _recordingError(node, 'Recording adapter is unavailable.'),
       );
@@ -328,41 +335,62 @@ final class CockpitCaseDriverDelegate implements CockpitCaseExecutionDelegate {
     if (!lease.isActive) {
       return _abortedOperation(node);
     }
-    try {
+    final request = CockpitRecordingRequest(
+      purpose: CockpitRecordingPurpose.fromJson(operation.purpose),
+      name: operation.name,
+      mode: CockpitRecordingMode.fromJson(operation.mode),
+      layer: operation.layer == null
+          ? null
+          : CockpitRecordingLayer.fromJson(operation.layer),
+      allowFallback: operation.allowFallback,
+      attachToStep: operation.attachToStep,
+    );
+    final failures = <Map<String, Object?>>[];
+    for (final candidate in candidates) {
       if (!lease.isActive) {
         return _abortedOperation(node);
       }
-      _registerAbort(lease, adapter);
-      final session = await adapter.startRecording(
-        CockpitRecordingRequest(
-          purpose: CockpitRecordingPurpose.fromJson(operation.purpose),
-          name: operation.name,
-          mode: CockpitRecordingMode.fromJson(operation.mode),
-          layer: operation.layer == null
-              ? null
-              : CockpitRecordingLayer.fromJson(operation.layer),
-          allowFallback: operation.allowFallback,
-          attachToStep: operation.attachToStep,
-        ),
-      );
-      lease.clearAbort();
-      if (!lease.tryCommit(() {
-        _recordingSession = session;
-        _activeRecordingAdapter = adapter;
-      })) {
-        await _stopUnownedRecording(adapter);
-        return _abortedOperation(node);
+      try {
+        _registerAbort(lease, candidate.adapter);
+        final session = await candidate.adapter.startRecording(request);
+        lease.clearAbort();
+        final degradationReason = failures.isEmpty
+            ? null
+            : 'Preferred recording adapter failed; using '
+                  '${candidate.driverId} fallback.';
+        if (!lease.tryCommit(() {
+          _recordingSession = session;
+          _activeRecordingAdapter = candidate.adapter;
+          _activeRecordingPlane = candidate.plane;
+          _activeRecordingDriverId = candidate.driverId;
+          _activeRecordingDegradationReason = degradationReason;
+        })) {
+          await _stopUnownedRecording(candidate.adapter);
+          return _abortedOperation(node);
+        }
+        return CockpitTestKernelOperationResult.success(
+          actualPlane: candidate.plane,
+          driverId: candidate.driverId,
+          degradationReason: degradationReason,
+        );
+      } on Object catch (error) {
+        lease.clearAbort();
+        failures.add(<String, Object?>{
+          'driverId': candidate.driverId,
+          ..._recordingExceptionDetails(error),
+        });
       }
-      return const CockpitTestKernelOperationResult.success();
-    } catch (_) {
-      lease.clearAbort();
-      if (!lease.isActive) {
-        return _abortedOperation(node);
-      }
-      return CockpitTestKernelOperationResult.failure(
-        _recordingError(node, 'Recording failed to start.'),
-      );
     }
+    if (!lease.isActive) {
+      return _abortedOperation(node);
+    }
+    return CockpitTestKernelOperationResult.failure(
+      _recordingError(
+        node,
+        'Recording failed to start.',
+        details: <String, Object?>{'attempts': failures},
+      ),
+    );
   }
 
   @override
@@ -418,6 +446,9 @@ final class CockpitCaseDriverDelegate implements CockpitCaseExecutionDelegate {
       );
     }
     final session = _recordingSession;
+    final actualPlane = _activeRecordingPlane;
+    final driverId = _activeRecordingDriverId;
+    final degradationReason = _activeRecordingDegradationReason;
     if (session == null || !lease.isActive) {
       return _abortedOperation(node);
     }
@@ -448,7 +479,18 @@ final class CockpitCaseDriverDelegate implements CockpitCaseExecutionDelegate {
       }
       if (result.state != CockpitRecordingState.completed) {
         return CockpitTestKernelOperationResult.failure(
-          _recordingError(node, 'Recording did not complete successfully.'),
+          _recordingError(
+            node,
+            'Recording did not complete successfully.',
+            details: <String, Object?>{
+              'state': result.state.name,
+              if (result.failureReason != null)
+                'failureReason': result.failureReason,
+            },
+          ),
+          actualPlane: actualPlane,
+          driverId: driverId,
+          degradationReason: degradationReason,
           evidence: evidence,
         );
       }
@@ -457,6 +499,9 @@ final class CockpitCaseDriverDelegate implements CockpitCaseExecutionDelegate {
         if (identical(_recordingSession, session)) {
           _recordingSession = null;
           _activeRecordingAdapter = null;
+          _activeRecordingPlane = null;
+          _activeRecordingDriverId = null;
+          _activeRecordingDegradationReason = null;
           released = true;
         }
       })) {
@@ -468,14 +513,26 @@ final class CockpitCaseDriverDelegate implements CockpitCaseExecutionDelegate {
           evidence: evidence,
         );
       }
-      return CockpitTestKernelOperationResult.success(evidence: evidence);
-    } catch (_) {
+      return CockpitTestKernelOperationResult.success(
+        actualPlane: actualPlane,
+        driverId: driverId,
+        degradationReason: degradationReason,
+        evidence: evidence,
+      );
+    } on Object catch (error) {
       lease.clearAbort();
       if (!lease.isActive) {
         return _abortedOperation(node);
       }
       return CockpitTestKernelOperationResult.failure(
-        _recordingError(node, 'Recording failed to stop.'),
+        _recordingError(
+          node,
+          'Recording failed to stop.',
+          details: _recordingExceptionDetails(error),
+        ),
+        actualPlane: actualPlane,
+        driverId: driverId,
+        degradationReason: degradationReason,
       );
     }
   }
@@ -528,6 +585,71 @@ final class CockpitCaseDriverDelegate implements CockpitCaseExecutionDelegate {
       lowerer: const CockpitTestActionLowerer.system(),
       capabilities: capabilities,
     );
+  }
+
+  List<_CockpitRecordingCandidate> _recordingCandidates({
+    required CockpitTestExecutionNode node,
+    required CockpitTestStartRecordingPlanOperation operation,
+    required CockpitTestPlane requestedPlane,
+  }) {
+    if (_lowerer.backend == CockpitTestActionBackend.system) {
+      final adapter = _recordingAdapter;
+      return adapter == null
+          ? const <_CockpitRecordingCandidate>[]
+          : <_CockpitRecordingCandidate>[
+              _CockpitRecordingCandidate(
+                adapter: adapter,
+                plane: requestedPlane,
+                driverId: 'systemRecording',
+              ),
+            ];
+    }
+
+    final semantic = _recordingAdapter == null
+        ? null
+        : _CockpitRecordingCandidate(
+            adapter: _recordingAdapter,
+            plane: CockpitTestPlane.semantic,
+            driverId: 'flutterRecording',
+          );
+    final system = _systemRecordingAdapter == null
+        ? null
+        : _CockpitRecordingCandidate(
+            adapter: _systemRecordingAdapter,
+            plane: CockpitTestPlane.native,
+            driverId: 'systemRecording',
+          );
+    final explicitPlane = node.plane;
+    final requestedLayer = operation.layer == null
+        ? null
+        : CockpitRecordingLayer.fromJson(operation.layer);
+    final mode = CockpitRecordingMode.fromJson(operation.mode);
+    final preferSystem = switch (explicitPlane) {
+      CockpitTestPlane.semantic => false,
+      CockpitTestPlane.native ||
+      CockpitTestPlane.visual ||
+      CockpitTestPlane.coordinate => true,
+      null => switch (requestedLayer) {
+        CockpitRecordingLayer.flutter ||
+        CockpitRecordingLayer.appWindow => false,
+        CockpitRecordingLayer.system ||
+        CockpitRecordingLayer.hostScreen => true,
+        null =>
+          mode == CockpitRecordingMode.auto ||
+              mode == CockpitRecordingMode.full,
+      },
+    };
+    final preferred = preferSystem ? system : semantic;
+    final fallback = preferSystem ? semantic : system;
+    return <_CockpitRecordingCandidate>[
+      ?preferred,
+      if (fallback != null &&
+          (operation.allowFallback == true ||
+              (preferred == null &&
+                  explicitPlane == null &&
+                  requestedLayer == null)))
+        fallback,
+    ];
   }
 
   void _registerAbort(CockpitCaseOperationLease lease, Object adapter) {
@@ -717,12 +839,20 @@ CockpitTestError _commandError(CockpitCommandResult result, String stepId) {
 
 CockpitTestError _recordingError(
   CockpitTestExecutionNode node,
-  String message,
-) => CockpitTestError(
+  String message, {
+  Map<String, Object?> details = const <String, Object?>{},
+}) => CockpitTestError(
   code: CockpitTestErrorCode.recordingFailed,
   message: message,
   stepId: node.stepId,
+  details: details,
 );
+
+Map<String, Object?> _recordingExceptionDetails(Object error) =>
+    <String, Object?>{
+      'errorType': error.runtimeType.toString(),
+      'reason': '$error',
+    };
 
 CockpitTestError _evidenceError(
   CockpitTestExecutionNode node,
@@ -748,6 +878,18 @@ final class _EvidenceCollection {
 
   final List<String> artifactIds;
   final CockpitTestError? error;
+}
+
+final class _CockpitRecordingCandidate {
+  const _CockpitRecordingCandidate({
+    required this.adapter,
+    required this.plane,
+    required this.driverId,
+  });
+
+  final CockpitRecordingAdapter adapter;
+  final CockpitTestPlane plane;
+  final String driverId;
 }
 
 final class _CockpitCaseDriver {

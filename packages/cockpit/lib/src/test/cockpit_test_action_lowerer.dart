@@ -455,6 +455,10 @@ Map<String, Object?> _parameters(CockpitTestAction action) {
         parameters['action'] = entry.value;
       case CockpitTestActionField.systemParameters:
         parameters['parameters'] = entry.value;
+      case CockpitTestActionField.quietMs
+          when action.kind == CockpitTestActionKind.waitForUiIdle ||
+              action.kind == CockpitTestActionKind.waitForNetworkIdle:
+        parameters['quietWindowMs'] = entry.value;
       case CockpitTestActionField.captureOptions ||
           CockpitTestActionField.snapshotOptions ||
           CockpitTestActionField.expected ||

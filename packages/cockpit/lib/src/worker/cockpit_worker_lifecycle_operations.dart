@@ -1001,8 +1001,11 @@ final class CockpitWorkerLifecycleOperations {
         sessionId: sessionId,
         targetId: targetId,
       );
+      final platformAppId =
+          app.platformAppId ?? app.remoteSession?.effectivePlatformAppId;
       return sanitized
         ..['appId'] = binding.appId
+        ..addAll(<String, Object?>{'platformAppId': ?platformAppId})
         ..['sessionId'] = sessionId
         ..['targetId'] = targetId;
     } on Object catch (primary, primaryStackTrace) {

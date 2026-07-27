@@ -395,6 +395,61 @@ void main() {
     expect(recording.stopCount, 2);
     expect(delegate.residualCleanupNode, isNull);
   });
+
+  test('auto recording prefers the available system driver', () async {
+    final clock = ManualCockpitClock();
+    final automation = RecordingAutomationAdapter();
+    final flutterRecording = _RecordingStartAdapter(failStart: true);
+    final systemRecording = _RecordingStartAdapter();
+    final plan = testExecutionPlan(
+      steps: <CockpitTestExecutionNode>[actionNode('unused', 'main')],
+    );
+    final capabilities = await automation.describeCapabilities();
+    final delegate = CockpitCaseDriverDelegate(
+      automationAdapter: automation,
+      recordingAdapter: flutterRecording,
+      systemRecordingAdapter: systemRecording,
+      systemCapabilities: capabilities,
+      secretResolver: RecordingSecretResolver('unused'),
+      safetyPolicy: RecordingSafetyPolicy(),
+      lowerer: const CockpitTestActionLowerer(),
+      recorder: CockpitTestAttemptRecorder(clock: clock),
+      runContext: _context('runtimeCase'),
+      plan: plan,
+      capabilities: capabilities,
+      targetEnvironment: CockpitTestTargetEnvironment.test,
+    );
+    final node = CockpitTestExecutionNode(
+      stepId: 'startRecording',
+      executionId: 'setup/startRecording',
+      section: 'setup',
+      timeoutMs: 1000,
+      evidence: const CockpitTestEvidencePolicy(),
+      safety: CockpitTestSafetyDeclaration(),
+      sourcePath: r'$.setup[0]',
+      operation: const CockpitTestStartRecordingPlanOperation(
+        name: 'acceptance',
+        purpose: 'acceptance',
+        mode: 'auto',
+        allowFallback: true,
+        attachToStep: true,
+      ),
+    );
+
+    final result = await delegate.startRecording(
+      node: node,
+      operation: node.operation as CockpitTestStartRecordingPlanOperation,
+      timeout: const Duration(seconds: 1),
+      cleanup: false,
+      lease: CockpitCaseOperationLease(),
+    );
+
+    expect(result.isSuccess, isTrue);
+    expect(result.actualPlane, CockpitTestPlane.native);
+    expect(result.driverId, 'systemRecording');
+    expect(systemRecording.startCount, 1);
+    expect(flutterRecording.startCount, 0);
+  });
 }
 
 CockpitCaseRunner _runner(
@@ -573,4 +628,29 @@ final class _FailOnceRecordingAdapter implements CockpitRecordingAdapter {
     }
     return CockpitRecordingResult(state: CockpitRecordingState.completed);
   }
+}
+
+final class _RecordingStartAdapter implements CockpitRecordingAdapter {
+  _RecordingStartAdapter({this.failStart = false});
+
+  final bool failStart;
+  int startCount = 0;
+
+  @override
+  Future<CockpitRecordingSession> startRecording(
+    CockpitRecordingRequest request,
+  ) async {
+    startCount += 1;
+    if (failStart) {
+      throw StateError('Recording start failed.');
+    }
+    return CockpitRecordingSession(
+      request: request,
+      state: CockpitRecordingState.recording,
+    );
+  }
+
+  @override
+  Future<CockpitRecordingResult> stopRecording() async =>
+      CockpitRecordingResult(state: CockpitRecordingState.completed);
 }

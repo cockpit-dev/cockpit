@@ -238,6 +238,33 @@ steps:
     );
   });
 
+  test('does not index generated or dependency directories', () async {
+    final fixture = await _DocumentFixture.create();
+    addTearDown(fixture.dispose);
+    await File(
+      p.join(fixture.workspace.path, 'lib', 'app.dart'),
+    ).create(recursive: true);
+    await File(
+      p.join(fixture.workspace.path, 'lib', 'app.dart'),
+    ).writeAsString('void main() {}\n');
+    for (final directory in <String>[
+      '.dart_tool',
+      'build',
+      'ios/Pods',
+      'node_modules',
+    ]) {
+      final generated = await File(
+        p.join(fixture.workspace.path, directory, 'generated.json'),
+      ).create(recursive: true);
+      await generated.writeAsString('{"generated":true}\n');
+    }
+
+    final summaries = await fixture.index().refresh();
+
+    expect(summaries, hasLength(1));
+    expect(summaries.single['relativePath'], 'lib/app.dart');
+  });
+
   test('restores the in-memory index when atomic publication fails', () async {
     final fixture = await _DocumentFixture.create();
     addTearDown(fixture.dispose);
