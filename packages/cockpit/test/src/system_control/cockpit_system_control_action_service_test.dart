@@ -3491,9 +3491,10 @@ void main() {
       await sourceFile.writeAsBytes(<int>[137, 80, 78, 71]);
       final outputFile = File('${tempDir.path}/copied.png');
       final processManager = _FakeProcessManager();
+      final captureAdapter = _FakeCaptureAdapter(sourceFile);
       final service = _actionServiceWithReachableAndroid(
         processManager: processManager,
-        captureAdapterFactory: (_) => _FakeCaptureAdapter(sourceFile),
+        captureAdapterFactory: (_) => captureAdapter,
       );
 
       final result = await service.run(
@@ -3505,6 +3506,7 @@ void main() {
             'name': 'acceptance',
             'outputPath': outputFile.path,
           },
+          timeout: const Duration(seconds: 37),
         ),
       );
 
@@ -3512,6 +3514,7 @@ void main() {
       expect(result.sourceFilePath, outputFile.path);
       expect(result.artifact?['relativePath'], 'screenshots/acceptance.png');
       expect(await outputFile.readAsBytes(), <int>[137, 80, 78, 71]);
+      expect(captureAdapter.command?.timeoutMs, 37000);
       expect(processManager.starts, isEmpty);
     },
   );
@@ -3952,12 +3955,14 @@ final class _CountingCaptureAdapter implements CockpitCaptureAdapter {
 }
 
 final class _FakeCaptureAdapter implements CockpitCaptureAdapter {
-  const _FakeCaptureAdapter(this.sourceFile);
+  _FakeCaptureAdapter(this.sourceFile);
 
   final File sourceFile;
+  CockpitCommand? command;
 
   @override
   Future<CockpitCommandExecution> capture(CockpitCommand command) async {
+    this.command = command;
     final request = command.screenshotRequest!;
     final artifact = CockpitArtifactRef(
       role: 'screenshot',

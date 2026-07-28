@@ -3,7 +3,7 @@
 Use this reference when Flutter semantic inspection, hot reload, route/runtime
 errors, network evidence, or mixed Flutter/native control is required. Installed
 Flutter applications can still be tested without this bridge through the native
-black-box path in [development.md](development.md).
+black-box path in [dev.md](dev.md).
 
 ## Contents
 
