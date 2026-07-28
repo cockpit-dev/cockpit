@@ -16,56 +16,60 @@ void main() {
     await workspace.delete(recursive: true);
   });
 
-  test('finds a transparent template across supported image scales', () async {
-    final template = img.Image(width: 20, height: 16, numChannels: 4);
-    for (var y = 2; y < 14; y += 1) {
-      for (var x = 2; x < 18; x += 1) {
-        template.setPixelRgba(
-          x,
-          y,
-          (x * 13) % 256,
-          (y * 19) % 256,
-          ((x + y) * 11) % 256,
-          255,
-        );
+  test(
+    'finds a 16-bit transparent template in an 8-bit screenshot across scales',
+    () async {
+      final sourceTemplate = img.Image(width: 20, height: 16, numChannels: 4);
+      for (var y = 2; y < 14; y += 1) {
+        for (var x = 2; x < 18; x += 1) {
+          sourceTemplate.setPixelRgba(
+            x,
+            y,
+            (x * 13) % 256,
+            (y * 19) % 256,
+            ((x + y) * 11) % 256,
+            255,
+          );
+        }
       }
-    }
-    final scaled = img.copyResize(
-      template,
-      width: 23,
-      height: 18,
-      interpolation: img.Interpolation.linear,
-    );
-    final screenshot = img.Image(width: 120, height: 80, numChannels: 4);
-    img.fill(screenshot, color: img.ColorRgba8(22, 28, 35, 255));
-    _copyImage(scaled, screenshot, x: 41, y: 27);
-    await _writePng(workspace, 'assets/template.png', template);
-    final screenshotFile = await _writePng(
-      workspace,
-      'actual/screenshot.png',
-      screenshot,
-    );
+      final template = sourceTemplate.convert(format: img.Format.uint16);
+      final scaled = img.copyResize(
+        template,
+        width: 23,
+        height: 18,
+        interpolation: img.Interpolation.linear,
+      );
+      final screenshot = img.Image(width: 120, height: 80, numChannels: 4);
+      img.fill(screenshot, color: img.ColorRgba8(22, 28, 35, 255));
+      _copyImage(scaled, screenshot, x: 41, y: 27);
+      await _writePng(workspace, 'assets/template.png', template);
+      final screenshotFile = await _writePng(
+        workspace,
+        'actual/screenshot.png',
+        screenshot,
+      );
 
-    final result = await CockpitVisualMatcher(workspaceRoot: workspace.path)
-        .findTemplate(
-          screenshotPath: screenshotFile.path,
-          templateReference: 'assets/template.png',
-          threshold: 0.98,
-        );
+      final result = await CockpitVisualMatcher(workspaceRoot: workspace.path)
+          .findTemplate(
+            screenshotPath: screenshotFile.path,
+            templateReference: 'assets/template.png',
+            threshold: 0.98,
+          );
 
-    expect(
-      result.matched,
-      isTrue,
-      reason:
-          'similarity=${result.similarity}, '
-          'bounds=${result.x},${result.y},${result.width},${result.height}',
-    );
-    expect(result.similarity, greaterThanOrEqualTo(0.98));
-    expect(result.x, 41);
-    expect(result.y, 27);
-    expect(result.width, 23);
-    expect(result.height, 18);
-  });
+      expect(
+        result.matched,
+        isTrue,
+        reason:
+            'similarity=${result.similarity}, '
+            'bounds=${result.x},${result.y},${result.width},${result.height}',
+      );
+      expect(result.similarity, greaterThanOrEqualTo(0.98));
+      expect(result.x, 41);
+      expect(result.y, 27);
+      expect(result.width, 23);
+      expect(result.height, 18);
+    },
+  );
 
   test('compares complete screenshots and emits an offline diff', () async {
     final baseline = img.Image(width: 32, height: 24, numChannels: 4);
@@ -83,11 +87,14 @@ void main() {
         .compareScreenshot(
           screenshotPath: actualFile.path,
           baselineReference: 'baselines/home.png',
-          threshold: 0.99,
+          pixelTolerance: 0.05,
+          maxDifferingPixelRatio: 0.1,
         );
 
     expect(result.matched, isFalse);
-    expect(result.similarity, lessThan(0.99));
+    expect(result.differingPixelRatio, greaterThan(0.1));
+    expect(result.differingPixelCount, 96);
+    expect(result.totalPixelCount, 768);
     expect(img.decodePng(result.diffPng), isNotNull);
     expect(
       result.baselineSourcePath,
@@ -95,6 +102,74 @@ void main() {
         p.join(workspace.path, 'baselines/home.png'),
       ).resolveSymbolicLinks(),
     );
+  });
+
+  test('compares a locator-scoped screenshot crop without resizing', () async {
+    final screenshot = img.Image(width: 100, height: 80, numChannels: 4);
+    img.fill(screenshot, color: img.ColorRgba8(12, 18, 24, 255));
+    for (var y = 20; y < 60; y += 1) {
+      for (var x = 25; x < 75; x += 1) {
+        screenshot.setPixelRgba(x, y, 40, 90, 160, 255);
+      }
+    }
+    final baseline = img.copyCrop(
+      screenshot,
+      x: 25,
+      y: 20,
+      width: 50,
+      height: 40,
+    );
+    final screenshotFile = await _writePng(
+      workspace,
+      'actual/cropped.png',
+      screenshot,
+    );
+    await _writePng(workspace, 'baselines/cropped.png', baseline);
+
+    final result = await CockpitVisualMatcher(workspaceRoot: workspace.path)
+        .compareScreenshot(
+          screenshotPath: screenshotFile.path,
+          baselineReference: 'baselines/cropped.png',
+          pixelTolerance: 0,
+          maxDifferingPixelRatio: 0,
+          crop: const CockpitVisualCrop(
+            left: 0.25,
+            top: 0.25,
+            right: 0.75,
+            bottom: 0.75,
+          ),
+        );
+
+    expect(result.matched, isTrue);
+    expect(result.width, 50);
+    expect(result.height, 40);
+    expect(result.differingPixelCount, 0);
+  });
+
+  test('compares equivalent mixed-bit-depth screenshots', () async {
+    final actual = img.Image(width: 2, height: 1, numChannels: 4);
+    actual
+      ..setPixelRgba(0, 0, 40, 90, 160, 255)
+      ..setPixelRgba(1, 0, 220, 30, 50, 255);
+    final baseline = actual.convert(format: img.Format.uint16);
+    final actualFile = await _writePng(
+      workspace,
+      'actual/mixed-depth.png',
+      actual,
+    );
+    await _writePng(workspace, 'baselines/mixed-depth.png', baseline);
+
+    final result = await CockpitVisualMatcher(workspaceRoot: workspace.path)
+        .compareScreenshot(
+          screenshotPath: actualFile.path,
+          baselineReference: 'baselines/mixed-depth.png',
+          pixelTolerance: 0,
+          maxDifferingPixelRatio: 0,
+        );
+
+    expect(result.matched, isTrue);
+    expect(result.differingPixelCount, 0);
+    expect(result.matchingPixelRatio, 1);
   });
 }
 
@@ -111,10 +186,10 @@ void _copyImage(
       destination.setPixelRgba(
         x + sourceX,
         y + sourceY,
-        pixel.r,
-        pixel.g,
-        pixel.b,
-        pixel.a,
+        pixel.rNormalized * destination.maxChannelValue,
+        pixel.gNormalized * destination.maxChannelValue,
+        pixel.bNormalized * destination.maxChannelValue,
+        pixel.aNormalized * destination.maxChannelValue,
       );
     }
   }

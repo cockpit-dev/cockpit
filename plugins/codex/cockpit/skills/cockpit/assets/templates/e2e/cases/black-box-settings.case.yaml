@@ -85,7 +85,8 @@ steps:
     action:
       type: assertScreenshot
       baseline: cockpit/e2e/baselines/settings.png
-      similarity: 0.98
+      pixelTolerance: 0.1
+      maxDifferingPixelRatio: 0.02
       artifactName: settings-comparison
 finally:
   - stepId: returnFromSettings

@@ -24,7 +24,7 @@ steps:
   - stepId: openSettings
     action:
       type: tap
-      locator: {label: Settings}
+      locator: {testId: open-settings-action}
   - stepId: waitForSettings
     action:
       type: waitFor

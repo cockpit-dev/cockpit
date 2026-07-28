@@ -132,9 +132,15 @@ Map<String, Object?> _sampleActionJson(CockpitTestActionKind kind) {
         'matchMode': 'exact',
       },
       CockpitTestActionKind.assertScreenshot => <String, Object?>{
+        'locator': locator,
         'baseline': 'baselines/home.png',
-        'similarity': 0.99,
+        'pixelTolerance': 0.1,
+        'maxDifferingPixelRatio': 0.01,
         'artifactName': 'home',
+        'captureOptions': <String, Object?>{
+          'profile': 'flutterPreferred',
+          'allowFallback': false,
+        },
       },
       CockpitTestActionKind.travel => <String, Object?>{
         'route': <Object?>[

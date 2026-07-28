@@ -209,7 +209,8 @@ void main() {
         commandType: CockpitCommandType.assertScreenshot,
         parameters: const <String, Object?>{
           'baseline': 'baselines/settings.png',
-          'similarity': 0.99,
+          'pixelTolerance': 0.1,
+          'maxDifferingPixelRatio': 0.01,
           'artifactName': 'settings',
         },
       ),
@@ -224,7 +225,7 @@ void main() {
     expect(
       execution.result.artifacts.map((artifact) => artifact.role),
       containsAll(<String>[
-        'screenshot',
+        'screenshotActual',
         'screenshotBaseline',
         'screenshotDiff',
       ]),

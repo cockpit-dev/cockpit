@@ -51,7 +51,10 @@ Semantic/native locators support `text`, `label`, `nativeId`, `testId`, `role`,
 `type`, `path`, state predicates, relationships (`ancestor`, `child`,
 `descendant`, `above`, `below`, `leftOf`, `rightOf`), ordered `fallbacks`, and
 0-based `index`. Coordinate locators use normalized `x`/`y`; visual locators
-use a workspace-relative template and similarity threshold.
+use a workspace-relative template and similarity threshold. Screenshot
+assertions use a per-pixel RGB `pixelTolerance` plus a bounded
+`maxDifferingPixelRatio`; an optional locator crops the comparison to the
+resolved element.
 
 Signals in the same locator are conjunctive. Start with one stable identity,
 add relationships/state to disambiguate, then use `index` only for a genuine
@@ -93,6 +96,11 @@ capture layers and record fallback/degradation in the report.
 Screenshot baseline and visual-template paths must remain workspace-confined.
 Screenshot assertions publish actual, baseline, and diff artifacts; do not
 embed image bytes in YAML/JSON or terminal output.
+
+Use `captureOptions.profile: nativePreferred` for device/application baselines
+and `flutterPreferred` for Flutter-view or locator-cropped baselines. Keep
+fallback disabled for visual assertions so the actual capture scope cannot
+silently differ from the baseline scope.
 
 ## Flow Control And Lifecycle
 

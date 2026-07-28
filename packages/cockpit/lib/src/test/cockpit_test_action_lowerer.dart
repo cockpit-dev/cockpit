@@ -150,7 +150,7 @@ final class CockpitTestActionLowerer {
       capturePolicy: CockpitCapturePolicy.none,
       timeoutMs: timeoutMs,
       snapshotOptions: _snapshotOptions(action),
-      screenshotRequest: _screenshotRequest(action),
+      screenshotRequest: _screenshotRequest(action, locatorResult.locator),
     );
     return CockpitTestLoweringResult.success(
       CockpitTestLoweredAction(
@@ -508,20 +508,31 @@ CockpitSnapshotOptions? _snapshotOptions(CockpitTestAction action) {
       : null;
 }
 
-CockpitScreenshotRequest? _screenshotRequest(CockpitTestAction action) {
-  if (action.kind != CockpitTestActionKind.captureScreenshot) {
+CockpitScreenshotRequest? _screenshotRequest(
+  CockpitTestAction action,
+  CockpitLocator? loweredLocator,
+) {
+  if (action.kind != CockpitTestActionKind.captureScreenshot &&
+      action.kind != CockpitTestActionKind.assertScreenshot) {
     return null;
   }
+  final assertion = action.kind == CockpitTestActionKind.assertScreenshot;
   final options = action.values[CockpitTestActionField.captureOptions];
   final json = options is Map<Object?, Object?>
       ? Map<String, Object?>.from(options)
       : <String, Object?>{};
   return CockpitScreenshotRequest(
     reason: json['reason'] == null
-        ? CockpitScreenshotReason.acceptance
+        ? assertion
+              ? CockpitScreenshotReason.baseline
+              : CockpitScreenshotReason.acceptance
         : CockpitScreenshotReason.fromJson(json['reason']),
-    name: action.value<String>(CockpitTestActionField.artifactName)!,
-    includeSnapshot: json['includeSnapshot'] as bool? ?? false,
+    name:
+        action.value<String>(CockpitTestActionField.artifactName) ??
+        (assertion ? 'screenshot-assertion' : 'screenshot'),
+    includeSnapshot:
+        json['includeSnapshot'] as bool? ??
+        (assertion && action.locator != null),
     attachToStep: json['attachToStep'] as bool? ?? true,
     snapshotOptions: json['snapshotOptions'] is Map<Object?, Object?>
         ? CockpitSnapshotOptions.fromJson(
@@ -534,5 +545,6 @@ CockpitScreenshotRequest? _screenshotRequest(CockpitTestAction action) {
         ? null
         : CockpitCaptureProfile.fromJson(json['profile']),
     allowFallback: json['allowFallback'] as bool?,
+    cropLocator: assertion ? loweredLocator : null,
   );
 }

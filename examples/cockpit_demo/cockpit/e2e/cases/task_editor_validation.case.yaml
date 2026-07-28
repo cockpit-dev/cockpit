@@ -57,7 +57,9 @@ setup:
     timeoutMs: 12000
     action:
       type: assertVisible
-      locator: {label: {$var: launchConfigurationLabel}}
+      locator:
+        testId: cockpit-launch-configuration
+        label: {$var: launchConfigurationLabel}
   - stepId: establishInboxBaseline
     description: Establish the case baseline
     timeoutMs: 15000
@@ -134,14 +136,14 @@ steps:
     timeoutMs: 12000
     action:
       type: enterText
-      locator: {text: Task title, matchMode: contains}
+      locator: {testId: task-title-field, text: Task title, matchMode: contains}
       text: {$var: taskTitle}
   - stepId: revealTaskNotes
     description: Reveal the notes input across compact and desktop viewports
     timeoutMs: 20000
     action:
       type: scrollUntilVisible
-      locator: {text: Notes, type: TextField}
+      locator: {testId: task-notes-field, text: Notes}
       direction: down
       maxScrolls: 12
       durationMs: 200
@@ -150,7 +152,7 @@ steps:
     timeoutMs: 12000
     action:
       type: enterText
-      locator: {text: Notes, type: TextField}
+      locator: {testId: task-notes-field, text: Notes}
       text: Created and removed by the Cockpit release acceptance suite.
   - stepId: saveValidTask
     timeoutMs: 15000
@@ -194,6 +196,11 @@ steps:
       type: tap
       locator: {label: Delete task}
       activation: semantic
+  - stepId: waitForInboxAfterDelete
+    timeoutMs: 15000
+    action:
+      type: waitFor
+      condition: {type: route, route: /inbox}
   - stepId: verifyTaskDeleted
     timeoutMs: 15000
     action:

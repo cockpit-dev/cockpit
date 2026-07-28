@@ -1,5 +1,6 @@
 import 'package:cockpit_protocol/cockpit_protocol.dart';
 
+import '../application/cockpit_application_service_exception.dart';
 import '../adapters/cockpit_automation_adapter.dart';
 import '../adapters/cockpit_active_operation_aborter.dart';
 import '../adapters/cockpit_capture_adapter.dart';
@@ -152,7 +153,7 @@ final class CockpitCaseDriverDelegate implements CockpitCaseExecutionDelegate {
       }
       _registerAbort(operationLease, _adapterFor(lowered.command, driver));
       execution = await _execute(lowered.command, driver);
-    } catch (_) {
+    } on Object catch (error) {
       operationLease.clearAbort();
       if (!operationLease.isActive) {
         return _abortedOperation(node);
@@ -162,6 +163,7 @@ final class CockpitCaseDriverDelegate implements CockpitCaseExecutionDelegate {
           code: CockpitTestErrorCode.driverFailed,
           message: 'Driver failed while executing ${action.kind.name}.',
           stepId: node.stepId,
+          details: _driverExceptionDetails(error),
         ),
         actualPlane: lowered.actualPlane,
       );
@@ -290,7 +292,7 @@ final class CockpitCaseDriverDelegate implements CockpitCaseExecutionDelegate {
         degradationReason: execution.result.degradationReason,
         evidence: evidence,
       );
-    } catch (_) {
+    } on Object catch (error) {
       lease.clearAbort();
       if (!lease.isActive) {
         return _abortedCondition(node);
@@ -301,6 +303,7 @@ final class CockpitCaseDriverDelegate implements CockpitCaseExecutionDelegate {
             code: CockpitTestErrorCode.conditionError,
             message: 'Driver failed while evaluating a condition.',
             stepId: node.stepId,
+            details: _driverExceptionDetails(error),
           ),
         ),
         actualPlane: lowered.actualPlane,
@@ -809,6 +812,16 @@ bool _shouldCollect(CockpitTestEvidenceMode mode, bool succeeded) =>
       CockpitTestEvidenceMode.always => true,
       CockpitTestEvidenceMode.onFailure => !succeeded,
     };
+
+Map<String, Object?> _driverExceptionDetails(Object error) =>
+    error is CockpitApplicationServiceException
+    ? <String, Object?>{
+        'driverExceptionType': error.runtimeType.toString(),
+        'driverCode': error.code,
+        'driverMessage': error.message,
+        if (error.details.isNotEmpty) 'driverDetails': error.details,
+      }
+    : <String, Object?>{'driverExceptionType': error.runtimeType.toString()};
 
 CockpitTestError _commandError(CockpitCommandResult result, String stepId) {
   final commandError = result.error;

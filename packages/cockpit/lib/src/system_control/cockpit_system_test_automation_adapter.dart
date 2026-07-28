@@ -924,13 +924,43 @@ final class CockpitSystemTestAutomationAdapter
         'assertScreenshot requires a non-empty baseline path.',
       );
     }
-    final similarity =
-        (command.parameters['similarity'] as num?)?.toDouble() ?? 0.99;
+    final pixelTolerance =
+        (command.parameters['pixelTolerance'] as num?)?.toDouble() ?? 0.1;
+    final maxDifferingPixelRatio =
+        (command.parameters['maxDifferingPixelRatio'] as num?)?.toDouble() ??
+        0.01;
     final stem = _artifactStem(
       command.parameters['name'] as String? ??
           command.parameters['artifactName'] as String? ??
           command.commandId,
     );
+    CockpitNativeUiResolution? cropResolution;
+    CockpitVisualCrop? crop;
+    final cropLocator = _locator(command);
+    if (cropLocator != null) {
+      final ui = await _readSnapshot(_deadline(command));
+      cropResolution = _resolve(ui, cropLocator);
+      final resolutionError = _resolutionError(cropResolution);
+      if (resolutionError != null) {
+        return _failure(command, stopwatch, resolutionError);
+      }
+      final bounds = cropResolution.node?.bounds;
+      if (bounds == null || !bounds.hasArea) {
+        return _failure(
+          command,
+          stopwatch,
+          CockpitCommandError.targetNotHittable(
+            message: 'Screenshot crop target does not expose usable bounds.',
+          ),
+        );
+      }
+      crop = CockpitVisualCrop(
+        left: bounds.left / ui.viewportWidth,
+        top: bounds.top / ui.viewportHeight,
+        right: bounds.right / ui.viewportWidth,
+        bottom: bounds.bottom / ui.viewportHeight,
+      );
+    }
     final captured = await _captureScreenshot(
       name: '$stem-actual',
       deadline: _deadline(command),
@@ -941,13 +971,16 @@ final class CockpitSystemTestAutomationAdapter
     final comparison = await _visualMatcher.compareScreenshot(
       screenshotPath: captured.sourcePath!,
       baselineReference: baseline,
-      threshold: similarity,
+      pixelTolerance: pixelTolerance,
+      maxDifferingPixelRatio: maxDifferingPixelRatio,
+      crop: crop,
     );
     final baselinePath =
         'visual/$stem-baseline${p.extension(comparison.baselineSourcePath)}';
+    final actualPath = 'visual/$stem-actual.png';
     final diffPath = 'visual/$stem-diff.png';
     final artifacts = <CockpitArtifactRef>[
-      captured.artifact!,
+      CockpitArtifactRef(role: 'screenshotActual', relativePath: actualPath),
       CockpitArtifactRef(
         role: 'screenshotBaseline',
         relativePath: baselinePath,
@@ -955,14 +988,22 @@ final class CockpitSystemTestAutomationAdapter
       CockpitArtifactRef(role: 'screenshotDiff', relativePath: diffPath),
     ];
     final sourcePaths = <String, String>{
-      captured.artifact!.relativePath: captured.sourcePath!,
       baselinePath: comparison.baselineSourcePath,
     };
-    final payloads = <String, List<int>>{diffPath: comparison.diffPng};
+    final payloads = <String, List<int>>{
+      actualPath: comparison.actualPng,
+      diffPath: comparison.diffPng,
+    };
     final snapshot = <String, Object?>{
       'adapter': 'visual',
-      'similarity': comparison.similarity,
-      'requiredSimilarity': similarity,
+      'matchingPixelRatio': comparison.matchingPixelRatio,
+      'differingPixelRatio': comparison.differingPixelRatio,
+      'differingPixelCount': comparison.differingPixelCount,
+      'totalPixelCount': comparison.totalPixelCount,
+      'pixelTolerance': comparison.pixelTolerance,
+      'maxDifferingPixelRatio': comparison.maxDifferingPixelRatio,
+      'captureScope': crop == null ? 'screen' : 'element',
+      if (crop != null) 'crop': crop.toJson(),
       'actualSize': <String, Object?>{
         'width': comparison.width,
         'height': comparison.height,
@@ -978,6 +1019,9 @@ final class CockpitSystemTestAutomationAdapter
         success: comparison.matched,
         commandId: command.commandId,
         commandType: command.commandType,
+        locatorResolution: cropResolution == null
+            ? null
+            : _locatorResolution(cropResolution),
         durationMs: stopwatch.elapsedMilliseconds,
         artifacts: artifacts,
         snapshot: snapshot,
@@ -986,7 +1030,7 @@ final class CockpitSystemTestAutomationAdapter
             : CockpitCommandError.assertionFailed(
                 message: comparison.dimensionMismatch
                     ? 'Screenshot dimensions do not match the baseline.'
-                    : 'Screenshot similarity is below the required threshold.',
+                    : 'Too many screenshot pixels differ from the baseline.',
                 details: snapshot,
               ),
       ),

@@ -188,6 +188,25 @@ final class FlutterCockpitRootState extends State<FlutterCockpitRoot> {
       isWeb: kIsWeb,
     );
     if (prefersNativeCapture) {
+      if (effectiveRequest.cropLocator != null) {
+        if (!effectiveAllowFallback) {
+          throw PlatformException(
+            code: 'nativeElementCropUnavailable',
+            message:
+                'Element-scoped capture requires the Flutter view capture profile.',
+          );
+        }
+        final screenshot = await surfaceState.captureScreenshot(
+          effectiveRequest,
+        );
+        return CockpitCaptureResult(
+          screenshot: screenshot,
+          requestedProfile: effectiveProfile,
+          resolvedCaptureKind: CockpitCaptureKind.flutterView,
+          usedFallback: true,
+          degradationReason: 'nativeElementCropUnavailable',
+        );
+      }
       final nativeCaptureAvailable = await FlutterCockpit.binding
           .queryNativeCaptureAvailability();
       if (!nativeCaptureAvailable) {

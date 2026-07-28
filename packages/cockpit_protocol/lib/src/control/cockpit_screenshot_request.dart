@@ -1,5 +1,6 @@
 import '../runtime/cockpit_snapshot_options.dart';
 import '../capture/cockpit_capture_profile.dart';
+import 'cockpit_locator.dart';
 
 enum CockpitScreenshotReason {
   baseline('baseline'),
@@ -33,6 +34,7 @@ final class CockpitScreenshotRequest {
     this.snapshotOptions,
     this.profile,
     this.allowFallback,
+    this.cropLocator,
   });
 
   final CockpitScreenshotReason reason;
@@ -42,6 +44,7 @@ final class CockpitScreenshotRequest {
   final CockpitSnapshotOptions? snapshotOptions;
   final CockpitCaptureProfile? profile;
   final bool? allowFallback;
+  final CockpitLocator? cropLocator;
 
   bool get allowsFallback => allowFallback ?? true;
 
@@ -53,11 +56,13 @@ final class CockpitScreenshotRequest {
     if (snapshotOptions != null) 'snapshotOptions': snapshotOptions!.toJson(),
     if (profile != null) 'profile': profile!.name,
     if (allowFallback != null) 'allowFallback': allowFallback,
+    if (cropLocator != null) 'cropLocator': cropLocator!.toJson(),
   };
 
   factory CockpitScreenshotRequest.fromJson(Map<String, Object?> json) {
     final snapshotOptionsJson =
         json['snapshotOptions'] as Map<Object?, Object?>?;
+    final cropLocatorJson = json['cropLocator'] as Map<Object?, Object?>?;
     return CockpitScreenshotRequest(
       reason: CockpitScreenshotReason.fromJson(json['reason']),
       name: json['name']! as String,
@@ -72,6 +77,9 @@ final class CockpitScreenshotRequest {
           ? null
           : CockpitCaptureProfile.fromJson(json['profile']),
       allowFallback: json['allowFallback'] as bool?,
+      cropLocator: cropLocatorJson == null
+          ? null
+          : CockpitLocator.fromJson(Map<String, Object?>.from(cropLocatorJson)),
     );
   }
 
@@ -85,7 +93,8 @@ final class CockpitScreenshotRequest {
             other.attachToStep == attachToStep &&
             other.snapshotOptions == snapshotOptions &&
             other.profile == profile &&
-            other.allowFallback == allowFallback;
+            other.allowFallback == allowFallback &&
+            other.cropLocator == cropLocator;
   }
 
   @override
@@ -97,6 +106,7 @@ final class CockpitScreenshotRequest {
     snapshotOptions,
     profile,
     allowFallback,
+    cropLocator,
   );
 
   CockpitScreenshotRequest copyWith({
@@ -107,6 +117,7 @@ final class CockpitScreenshotRequest {
     CockpitSnapshotOptions? snapshotOptions,
     Object? profile = _unsetField,
     Object? allowFallback = _unsetField,
+    Object? cropLocator = _unsetField,
   }) {
     return CockpitScreenshotRequest(
       reason: reason ?? this.reason,
@@ -120,6 +131,9 @@ final class CockpitScreenshotRequest {
       allowFallback: identical(allowFallback, _unsetField)
           ? this.allowFallback
           : allowFallback as bool?,
+      cropLocator: identical(cropLocator, _unsetField)
+          ? this.cropLocator
+          : cropLocator as CockpitLocator?,
     );
   }
 }

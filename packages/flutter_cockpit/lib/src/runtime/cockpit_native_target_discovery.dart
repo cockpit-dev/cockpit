@@ -26,10 +26,7 @@ final class CockpitNativeTargetDiscovery {
   }) {
     final rootElement = rootContext as Element;
     final rootViewport = _viewportBoundsFor(rootElement);
-    final explicitElements = explicitTargets
-        .map((target) => target.diagnosticNodeProvider?.call())
-        .whereType<Element>()
-        .toList(growable: false);
+    final explicitTargetsByElement = _explicitTargetsByElement(explicitTargets);
     final discoveredTargets = <CockpitTarget>[];
     final session = _DiscoverySession();
     // Route scope, offstage state, and viewport clipping are inherited values.
@@ -39,7 +36,7 @@ final class CockpitNativeTargetDiscovery {
     final rootScope = _seedInheritedScope(
       rootElement,
       rootViewport: rootViewport,
-      explicitElements: explicitElements,
+      explicitTargetsByElement: explicitTargetsByElement,
     );
 
     void visit(
@@ -48,12 +45,13 @@ final class CockpitNativeTargetDiscovery {
       bool insideActionableTarget,
       _InheritedDiscoveryScope scope,
     ) {
+      final explicitTarget = explicitTargetsByElement[element];
       if (!element.mounted ||
           policy.ignoresSubtree(element) ||
           scope.ancestorHidden ||
           (!allowInactiveRouteFallback &&
               scope.routeScope?.isCurrent == false) ||
-          _isExplicitTargetElement(element, explicitElements)) {
+          explicitTarget?.supportedCommands.isNotEmpty == true) {
         return;
       }
 
@@ -67,7 +65,9 @@ final class CockpitNativeTargetDiscovery {
         fallbackRouteName: routeName,
       );
       final candidate =
-          isRenderable && _overlapsClippedViewport(element, effectiveViewport)
+          explicitTarget == null &&
+              isRenderable &&
+              _overlapsClippedViewport(element, effectiveViewport)
           ? _buildTarget(
               element,
               routeName: targetRouteName,
@@ -122,16 +122,13 @@ final class CockpitNativeTargetDiscovery {
   }) {
     final rootElement = rootContext as Element;
     final rootViewport = _viewportBoundsFor(rootElement);
-    final explicitElements = explicitTargets
-        .map((target) => target.diagnosticNodeProvider?.call())
-        .whereType<Element>()
-        .toList(growable: false);
+    final explicitTargetsByElement = _explicitTargetsByElement(explicitTargets);
     var found = false;
     final session = _DiscoverySession();
     final rootScope = _seedInheritedScope(
       rootElement,
       rootViewport: rootViewport,
-      explicitElements: explicitElements,
+      explicitTargetsByElement: explicitTargetsByElement,
     );
 
     void visit(
@@ -140,13 +137,14 @@ final class CockpitNativeTargetDiscovery {
       bool insideActionableTarget,
       _InheritedDiscoveryScope scope,
     ) {
+      final explicitTarget = explicitTargetsByElement[element];
       if (found ||
           !element.mounted ||
           policy.ignoresSubtree(element) ||
           scope.ancestorHidden ||
           (!allowInactiveRouteFallback &&
               scope.routeScope?.isCurrent == false) ||
-          _isExplicitTargetElement(element, explicitElements)) {
+          explicitTarget?.supportedCommands.isNotEmpty == true) {
         return;
       }
 
@@ -164,7 +162,8 @@ final class CockpitNativeTargetDiscovery {
           ? _intersectViewports(scope.effectiveViewport, element)
           : scope.effectiveViewport;
       final candidate =
-          candidateRouteMatches &&
+          explicitTarget == null &&
+              candidateRouteMatches &&
               isRenderable &&
               _overlapsClippedViewport(element, effectiveViewport)
           ? _buildTarget(
@@ -462,7 +461,8 @@ final class CockpitNativeTargetDiscovery {
   _InheritedDiscoveryScope _seedInheritedScope(
     Element rootElement, {
     required Rect? rootViewport,
-    List<Element> explicitElements = const <Element>[],
+    Map<Element, CockpitTarget> explicitTargetsByElement =
+        const <Element, CockpitTarget>{},
   }) {
     var ancestorHidden = false;
     _CockpitRouteScope? routeScope;
@@ -477,7 +477,8 @@ final class CockpitNativeTargetDiscovery {
         // A registered explicit target above the discovery root covers the
         // whole discovered subtree, matching the previous per-element
         // ancestor-coverage check.
-        if (_isExplicitTargetElement(ancestor, explicitElements)) {
+        if (explicitTargetsByElement[ancestor]?.supportedCommands.isNotEmpty ==
+            true) {
           ancestorHidden = true;
         }
         routeScope ??= _cockpitRouteScopeForWidget(widget);
@@ -993,16 +994,17 @@ final class CockpitNativeTargetDiscovery {
         policy.marksScrollableBoundary(element);
   }
 
-  bool _isExplicitTargetElement(
-    Element element,
-    List<Element> explicitElements,
+  Map<Element, CockpitTarget> _explicitTargetsByElement(
+    List<CockpitTarget> explicitTargets,
   ) {
-    for (final explicitElement in explicitElements) {
-      if (identical(element, explicitElement)) {
-        return true;
+    final targetsByElement = Map<Element, CockpitTarget>.identity();
+    for (final target in explicitTargets) {
+      final element = target.diagnosticNodeProvider?.call();
+      if (element is Element) {
+        targetsByElement[element] = target;
       }
     }
-    return false;
+    return targetsByElement;
   }
 
   bool _shouldDeferSemanticsOnlyCandidate(

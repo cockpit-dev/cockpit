@@ -192,6 +192,7 @@ final class _TaskEditorScreenState extends State<TaskEditorScreen> {
                       ),
                       const SizedBox(height: 18),
                       TextField(
+                        key: const ValueKey<String>('task-title-field'),
                         controller: _titleController,
                         decoration: InputDecoration(
                           labelText: 'Task title',
@@ -204,6 +205,7 @@ final class _TaskEditorScreenState extends State<TaskEditorScreen> {
                       ),
                       const SizedBox(height: 18),
                       TextField(
+                        key: const ValueKey<String>('task-notes-field'),
                         controller: _notesController,
                         minLines: 4,
                         maxLines: 6,

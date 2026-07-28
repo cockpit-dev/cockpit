@@ -50,6 +50,7 @@ void main() {
       attachToStep: true,
       profile: CockpitCaptureProfile.nativePreferred,
       allowFallback: false,
+      cropLocator: CockpitLocator(text: 'Settings'),
     );
 
     expect(CockpitScreenshotRequest.fromJson(request.toJson()), request);
@@ -58,6 +59,7 @@ void main() {
     final automatic = request.copyWith(profile: null, allowFallback: null);
     expect(automatic.profile, isNull);
     expect(automatic.allowFallback, isNull);
+    expect(automatic.cropLocator?.text, 'Settings');
   });
 
   test('CockpitScreenshotRequest keeps routing fields optional by default', () {
