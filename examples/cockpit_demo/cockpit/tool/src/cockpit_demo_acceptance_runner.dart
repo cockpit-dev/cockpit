@@ -1327,9 +1327,9 @@ Future<void> _verifyOfflineReportBundle({
     if (!operationSet.contains('action.assertScreenshot') ||
         visualExecutions.length != 1 ||
         !visualArtifactKinds.containsAll(const <String>{
-          'screenshot',
-          'screenshotbaseline',
-          'screenshotdiff',
+          'screenshotActual',
+          'screenshotBaseline',
+          'screenshotDiff',
         })) {
       throw const FormatException(
         'Visual regression did not preserve actual, baseline, and diff evidence.',

@@ -140,6 +140,60 @@ void main() {
     },
   );
 
+  test('windows capture adapter honors the command timeout budget', () async {
+    final tempDir = await Directory.systemTemp.createTemp(
+      'cockpit_windows_capture_command_timeout',
+    );
+    addTearDown(() async {
+      if (tempDir.existsSync()) {
+        await tempDir.delete(recursive: true);
+      }
+    });
+
+    final outputFile = File(p.join(tempDir.path, 'command-budget.png'));
+    final adapter = CockpitWindowsCaptureAdapter(
+      appId: 'cockpit_demo',
+      timeout: const Duration(milliseconds: 50),
+      windowResolver:
+          ({
+            required appId,
+            required processId,
+            required powershellExecutable,
+            required processRunner,
+            required timeout,
+            required activationSettleDelay,
+          }) async => const CockpitWindowsWindowTarget(
+            title: 'Cockpit Demo',
+            handle: 4242,
+            left: 20,
+            top: 12,
+            width: 300,
+            height: 240,
+          ),
+      tempFileFactory: (_) async => outputFile,
+      processRunner: (executable, arguments) async {
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+        outputFile.writeAsBytesSync(_opaquePng);
+        return ProcessResult(0, 0, '', '');
+      },
+    );
+
+    final execution = await adapter.capture(
+      CockpitCommand(
+        commandId: 'capture-command-budget',
+        commandType: CockpitCommandType.captureScreenshot,
+        timeoutMs: 500,
+        screenshotRequest: const CockpitScreenshotRequest(
+          reason: CockpitScreenshotReason.acceptance,
+          name: 'windows-command-budget',
+        ),
+      ),
+    );
+
+    expect(execution.result.success, isTrue);
+    expect(outputFile.readAsBytesSync(), _opaquePng);
+  });
+
   test('windows capture adapter reports window resolution failure', () async {
     final adapter = CockpitWindowsCaptureAdapter(
       appId: 'cockpit_demo',

@@ -50,6 +50,23 @@ final class CockpitWindowsCaptureAdapter implements CockpitHostCaptureAdapter {
     }
 
     final stopwatch = Stopwatch()..start();
+    final commandTimeout = command.timeoutMs;
+    final captureTimeout = commandTimeout == null || commandTimeout <= 0
+        ? _timeout
+        : Duration(milliseconds: commandTimeout);
+    Duration remainingTimeout() {
+      final remaining = captureTimeout - stopwatch.elapsed;
+      if (remaining <= Duration.zero) {
+        throw TimeoutException('Windows host screenshot deadline expired.');
+      }
+      return remaining;
+    }
+
+    Future<ProcessResult> runProcess(
+      String executable,
+      List<String> arguments,
+    ) => _runProcess(executable, arguments, timeout: remainingTimeout());
+
     final artifact = cockpitCaptureArtifactForRequest(request);
     final outputFile = await _tempFileFactory(
       cockpitCaptureFileName(request.name),
@@ -64,11 +81,11 @@ final class CockpitWindowsCaptureAdapter implements CockpitHostCaptureAdapter {
         appId: _appId,
         processId: _processId,
         powershellExecutable: _powershellExecutable,
-        processRunner: _runProcess,
-        timeout: _timeout,
+        processRunner: runProcess,
+        timeout: remainingTimeout(),
         activationSettleDelay: _activationSettleDelay,
-      );
-      final result = await _runProcess(
+      ).timeout(remainingTimeout());
+      final result = await runProcess(
         _powershellExecutable,
         cockpitWindowsPowerShellCommand(
           _captureScript,
@@ -172,15 +189,19 @@ $graphics.Dispose()
 $bitmap.Dispose()
 ''';
 
-  Future<ProcessResult> _runProcess(String executable, List<String> arguments) {
+  Future<ProcessResult> _runProcess(
+    String executable,
+    List<String> arguments, {
+    required Duration timeout,
+  }) {
     final injected = _processRunner;
     if (injected != null) {
-      return injected(executable, arguments).timeout(_timeout);
+      return injected(executable, arguments).timeout(timeout);
     }
     return cockpitRunProcessWithTimeout(
       executable,
       arguments,
-      timeout: _timeout,
+      timeout: timeout,
     );
   }
 }
