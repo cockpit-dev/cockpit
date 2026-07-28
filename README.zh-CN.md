@@ -221,7 +221,9 @@ case plane。绑定 entrypoint 的 Flutter session 会同时保留语义 driver 
 `copyText`、`eraseText`、`pasteText` 与有界 `travel` 轨迹。visual locator 使用
 workspace 内的图片文件和可选相似度阈值；`assertScreenshot` 将实时截图与 workspace
 内 baseline 对比，并把 actual、baseline、diff 图片作为离线 artifact 记录，图片字节
-不会进入终端输出。
+不会进入终端输出。baseline 必须按平台、设备或 viewport、像素比和方向等稳定 visual
+profile 选择。尺寸不一致代表 profile 不匹配或布局回归，Cockpit 不会缩放图片来制造
+可比较结果。
 
 ## Case 与 Suite
 

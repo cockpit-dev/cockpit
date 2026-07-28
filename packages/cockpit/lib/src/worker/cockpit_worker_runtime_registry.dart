@@ -1121,7 +1121,10 @@ final class CockpitWorkerRuntimeRegistry
           deviceResourceId: candidate.deviceResourceId,
           resourceId: candidate.resourceId,
           environment: candidate.environment,
-          automationAdapter: CockpitRemoteAutomationAdapter(client: client),
+          automationAdapter: CockpitRemoteAutomationAdapter(
+            client: client,
+            workspaceRoot: workspaceRoot,
+          ),
           captureAdapter: CockpitRemoteCaptureAdapter(client: client),
           recordingAdapter: CockpitRemoteRecordingAdapter(client: client),
           systemAutomationAdapter: systemDriver?.automation,

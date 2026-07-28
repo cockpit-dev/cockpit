@@ -245,7 +245,10 @@ assertion, capture, recording, and system actions. Visual locators use a
 workspace-confined image file and an optional similarity threshold.
 `assertScreenshot` compares a live capture with a workspace-confined baseline
 and records actual, baseline, and diff images as offline artifacts; image bytes
-never enter terminal output.
+never enter terminal output. Baselines must be selected by a stable visual
+profile such as platform, device or viewport, pixel ratio, and orientation.
+A dimension mismatch is a profile mismatch or layout regression; Cockpit does
+not resize either image to manufacture a comparison.
 
 ## Cases And Suites
 

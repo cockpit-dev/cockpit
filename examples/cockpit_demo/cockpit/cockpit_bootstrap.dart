@@ -3,7 +3,14 @@ import 'package:flutter_cockpit/flutter_cockpit_flutter.dart';
 
 import 'package:cockpit_demo/src/cockpit_demo_app.dart';
 
+import 'cockpit_launch_environment.dart';
+
 Widget buildCockpitDemoDevelopmentApp() {
+  const acceptance = bool.fromEnvironment('COCKPIT_DEMO_ACCEPTANCE');
+  const acceptancePlatform = String.fromEnvironment(
+    'COCKPIT_DEMO_ACCEPTANCE_PLATFORM',
+  );
+  const defineFileValue = String.fromEnvironment('COCKPIT_DEMO_DEFINE_FILE');
   const enableDebugDiagnostics = bool.fromEnvironment(
     'FLUTTER_COCKPIT_ENABLE_DEBUG_DIAGNOSTICS',
   );
@@ -40,7 +47,7 @@ Widget buildCockpitDemoDevelopmentApp() {
     ),
   );
 
-  return FlutterCockpitApp(
+  final app = FlutterCockpitApp(
     config: FlutterCockpitConfig.fromRuntimeConfiguration(configuration),
     child: CockpitDemoApp(
       initialRouteName: configuration.initialRouteName,
@@ -48,5 +55,32 @@ Widget buildCockpitDemoDevelopmentApp() {
         FlutterCockpit.createNavigatorObserver(),
       ],
     ),
+  );
+  if (!acceptance) return app;
+
+  final exposesRuntimeEnvironment = const <String>{
+    'linux',
+    'macos',
+    'windows',
+  }.contains(acceptancePlatform);
+  final environmentPlatform = exposesRuntimeEnvironment
+      ? cockpitLaunchEnvironment('COCKPIT_ACCEPTANCE_PLATFORM')
+      : null;
+  final environmentInvocation = exposesRuntimeEnvironment
+      ? cockpitLaunchEnvironment('COCKPIT_ACCEPTANCE_INVOCATION')
+      : null;
+  final launchConfigurationLabel = <String>[
+    'Cockpit launch configuration',
+    'platform=$acceptancePlatform',
+    'defineFile=$defineFileValue',
+    if (environmentPlatform != null) 'environmentPlatform=$environmentPlatform',
+    if (environmentInvocation != null)
+      'environmentInvocation=$environmentInvocation',
+  ].join(' ');
+  return Semantics(
+    container: true,
+    explicitChildNodes: true,
+    label: launchConfigurationLabel,
+    child: app,
   );
 }

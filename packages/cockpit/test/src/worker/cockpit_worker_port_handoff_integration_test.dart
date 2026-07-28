@@ -71,9 +71,6 @@ void main() {
       );
       final handoff = CockpitRpcWorkerForwardedPortHandoff(
         workspaceId: 'workspaceA',
-        workerOwnerId: 'workerA',
-        workerProcessId: 4242,
-        processStartIdentity: 'processA',
         peer: workerPeer,
       );
       final workspaceOperations = CockpitWorkspaceOperationRegistry(

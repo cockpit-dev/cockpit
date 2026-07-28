@@ -234,7 +234,10 @@ Text control includes `copyText`, `eraseText`, and `pasteText`. `travel` applies
 a bounded sequence of latitude/longitude points with per-route or per-point
 delays. A visual locator names a workspace-confined template file; an
 `assertScreenshot` names a workspace-confined baseline and emits the actual,
-baseline, and deterministic diff files into the attempt evidence. Use suite
+baseline, and deterministic diff files into the attempt evidence. Select each
+baseline by a stable platform/device/viewport, pixel-ratio, and orientation
+profile. Dimension mismatches are not auto-resized because they indicate a
+wrong profile or a layout regression. Use suite
 fixtures, case `setup`/`finally`, step `evidence`, and explicit recording
 operations to express pre/post capture at the scope that owns it.
 

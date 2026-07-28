@@ -17,6 +17,9 @@ defaults:
     snapshot: onFailure
     failurePolicy: recordWarning
 variables:
+  launchConfigurationLabel:
+    source: input
+    type: string
   taskTitle:
     source: input
     type: string
@@ -49,6 +52,12 @@ fragments:
         type: waitFor
         condition: {type: route, route: /editor}
 setup:
+  - stepId: verifyLaunchConfiguration
+    description: Prove direct defines, define-file values, and supported runtime environment injection
+    timeoutMs: 12000
+    action:
+      type: assertVisible
+      locator: {label: {$var: launchConfigurationLabel}}
   - stepId: establishInboxBaseline
     description: Establish the case baseline
     timeoutMs: 15000

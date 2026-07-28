@@ -54,16 +54,20 @@ final class CockpitSupervisorWorkerPortBridge {
     return _WorkerPeerPortOwnerProbe(this, grantId);
   }
 
-  void validateExpectedOwner(String grantId, CockpitExpectedPortOwner owner) {
-    if (owner.ownerId != workerOwnerId ||
-        owner.processId != workerProcessId ||
-        owner.processStartIdentity != processStartIdentity) {
-      throw const CockpitLeaseException(
-        code: 'portWorkerOwnerMismatch',
-        message: 'Worker supplied an inconsistent port owner identity.',
-      );
-    }
+  CockpitExpectedPortOwner expectedOwnerFor(
+    String grantId, {
+    required String sessionId,
+  }) {
+    workerId(grantId, r'$.grantId');
+    workerId(sessionId, r'$.sessionId');
+    final owner = CockpitExpectedPortOwner(
+      ownerId: workerOwnerId,
+      processId: workerProcessId,
+      processStartIdentity: processStartIdentity,
+      sessionId: sessionId,
+    );
     _expectedOwners[grantId] = owner;
+    return owner;
   }
 
   Future<void> _bind(String grantId, CockpitPortBindRequest request) async {
