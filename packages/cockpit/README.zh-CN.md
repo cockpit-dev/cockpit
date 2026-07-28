@@ -234,8 +234,9 @@ dart run cockpitd \
 submission 包含规范 case source、idempotency key、inputs 和 required features；
 foreground 模式负责填入注册后的 `workspaceId`。
 
-仓库发布门禁会先运行格式、分析、全部 package/示例测试和发布 dry-run，再启动
-Android、iOS、macOS、Linux、Web、Windows 真实回归。只有所有 job 都到达成功终态
+仓库发布门禁并行运行格式、分析、全部 package/示例测试、发布 dry-run，以及 Android、
+iOS、macOS、Linux、Web、Windows 真实回归。Android 与 iOS 必须证明原生
+locator/action/assertion 控制，截图回退不能通过核心平台门禁。只有所有 job 都到达成功终态
 才允许发布。每个平台回归都通过可见断言验证真实业务变更、完整 Flutter 手势/文本/键盘/
 语义命令面、suite 控制流、证据和离线报告 bundle。应等待完整矩阵结束后，再依据 report、
 event、artifact 和 daemon log 统一定位失败，不在执行中反复猜测。

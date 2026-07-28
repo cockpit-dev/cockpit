@@ -23,6 +23,10 @@ Future<void> main(List<String> arguments) async {
     )
     ..addOption('device-id', help: 'Connected Flutter device id.')
     ..addOption(
+      'wda-url',
+      help: 'WebDriverAgent endpoint assigned to the iOS target.',
+    )
+    ..addOption(
       'visual-profile',
       help: 'Named platform, viewport, and DPR profile for visual baselines.',
     )
@@ -47,6 +51,11 @@ Future<void> main(List<String> arguments) async {
       negatable: false,
       help: 'Fail when unattended native recording is unavailable.',
     )
+    ..addFlag(
+      'require-native-locator',
+      negatable: false,
+      help: 'Fail when native locator control cannot be proven.',
+    )
     ..addFlag('stop-daemon', negatable: false)
     ..addFlag('help', abbr: 'h', negatable: false);
 
@@ -64,6 +73,7 @@ Future<void> main(List<String> arguments) async {
       rootDirectory: parsed.option('root-dir'),
       platform: parsed.option('platform')!,
       deviceId: parsed.option('device-id'),
+      wdaUrl: parsed.option('wda-url'),
       visualProfile: parsed.option('visual-profile'),
       entrypoint: parsed.option('entrypoint')!,
       suitePath: parsed.option('suite')!,
@@ -73,6 +83,7 @@ Future<void> main(List<String> arguments) async {
       runTimeout: _seconds(parsed, 'run-timeout-seconds'),
       stopDaemon: parsed.flag('stop-daemon'),
       requireRecording: parsed.flag('require-recording'),
+      requireNativeLocator: parsed.flag('require-native-locator'),
     );
     final result = await CockpitDemoAcceptanceRunner(
       progress: (event) => stderr.writeln(jsonEncode(event)),

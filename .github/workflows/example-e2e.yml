@@ -271,11 +271,12 @@ jobs:
         shell: bash
         run: dart test ${{ matrix.platform_tests }}
 
-      - name: Apply isolated CI authorization
+      - name: Configure isolated CI authorization
         shell: bash
-        run: >-
-          dart run cockpit daemon policy apply
-          --file examples/cockpit_demo/cockpit/e2e/authorization.ci.json
+        run: |
+          dart run cockpit daemon policy apply \
+            --file examples/cockpit_demo/cockpit/e2e/authorization.ci.json
+          dart run cockpit daemon start --yolo
 
       - name: Prepare trusted Windows workspace
         if: matrix.platform == 'windows'
@@ -325,6 +326,51 @@ jobs:
           xcrun simctl bootstatus "$IOS_DEVICE_ID" -b
           echo "IOS_DEVICE_ID=$IOS_DEVICE_ID" >> "$GITHUB_ENV"
 
+      - name: Start iOS WebDriverAgent
+        if: matrix.platform == 'ios'
+        shell: bash
+        run: |
+          set -euo pipefail
+          WDA_VERSION='16.0.2'
+          WDA_SHA512='a8fpGsoU0e2DIu/n9G7Z8MlOIWylsydincSFzqon8LF3hCkLmhWJsJ+vOKqC/NkG3v5yDie9Ak4xSjBCEvKCJA=='
+          WDA_ARCHIVE="$RUNNER_TEMP/appium-webdriveragent.tgz"
+          WDA_ROOT="$RUNNER_TEMP/appium-webdriveragent"
+          WDA_DERIVED_DATA="$RUNNER_TEMP/cockpit-wda-derived-data"
+          WDA_LOG="$ACCEPTANCE_OUTPUT/webdriveragent.log"
+          mkdir -p "$WDA_ROOT" "$ACCEPTANCE_OUTPUT"
+          curl --fail --location --retry 3 \
+            "https://registry.npmjs.org/appium-webdriveragent/-/appium-webdriveragent-${WDA_VERSION}.tgz" \
+            --output "$WDA_ARCHIVE"
+          ACTUAL_SHA512="$(openssl dgst -sha512 -binary "$WDA_ARCHIVE" | openssl base64 -A)"
+          if [[ "$ACTUAL_SHA512" != "$WDA_SHA512" ]]; then
+            echo 'WebDriverAgent archive digest mismatch.' >&2
+            exit 1
+          fi
+          tar -xzf "$WDA_ARCHIVE" -C "$WDA_ROOT" --strip-components=1
+          nohup env USE_PORT=8100 MJPEG_SERVER_PORT=9100 xcodebuild \
+            -project "$WDA_ROOT/WebDriverAgent.xcodeproj" \
+            -scheme WebDriverAgentRunner \
+            -destination "platform=iOS Simulator,id=$IOS_DEVICE_ID" \
+            -derivedDataPath "$WDA_DERIVED_DATA" \
+            CODE_SIGNING_ALLOWED=NO \
+            test >"$WDA_LOG" 2>&1 &
+          WDA_PID=$!
+          echo "WDA_PID=$WDA_PID" >> "$GITHUB_ENV"
+          echo 'IOS_WDA_URL=http://127.0.0.1:8100' >> "$GITHUB_ENV"
+          for _ in $(seq 1 240); do
+            if curl --silent --show-error --fail \
+              http://127.0.0.1:8100/status >/dev/null; then
+              exit 0
+            fi
+            if ! kill -0 "$WDA_PID" 2>/dev/null; then
+              tail -200 "$WDA_LOG" >&2
+              exit 1
+            fi
+            sleep 1
+          done
+          tail -200 "$WDA_LOG" >&2
+          exit 1
+
       - name: Run Android regression
         if: matrix.platform == 'android'
         uses: reactivecircus/android-emulator-runner@v2
@@ -341,6 +387,7 @@ jobs:
             dart run tool/verify.dart --platform android
             ${{ matrix.visual_args }}
             --output-root "$ACCEPTANCE_OUTPUT" --require-recording
+            --require-native-locator
             --stop-daemon
 
       - name: Run iOS regression
@@ -350,8 +397,10 @@ jobs:
         run: >-
           dart run tool/verify.dart --platform ios
           --device-id "$IOS_DEVICE_ID"
+          --wda-url "$IOS_WDA_URL"
           ${{ matrix.visual_args }}
           --output-root "$ACCEPTANCE_OUTPUT" --require-recording
+          --require-native-locator
           --stop-daemon
 
       - name: Run macOS regression
@@ -399,6 +448,18 @@ jobs:
               Copy-Item -LiteralPath $path -Destination $destination
             }
           }
+
+      - name: Stop iOS WebDriverAgent
+        if: always() && matrix.platform == 'ios'
+        shell: bash
+        run: |
+          if [[ -n "${WDA_PID:-}" ]]; then
+            kill "$WDA_PID" 2>/dev/null || true
+          fi
+          if [[ -n "${IOS_DEVICE_ID:-}" ]]; then
+            xcrun simctl terminate "$IOS_DEVICE_ID" \
+              com.facebook.WebDriverAgentRunner.xctrunner 2>/dev/null || true
+          fi
 
       - name: Upload regression evidence
         if: always()

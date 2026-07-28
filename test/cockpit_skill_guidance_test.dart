@@ -85,6 +85,7 @@ void main() {
       'Rapid Development Validation',
       'resolve -> baseline -> edit -> execute -> observe -> judge -> repeat',
       'references/flutter.md',
+      'references/environments.md',
     ]) {
       expect(skill, contains(contract), reason: contract);
     }
@@ -204,6 +205,26 @@ void main() {
       'setCurrentRouteName',
     ]) {
       expect(flutter, contains(requirement), reason: requirement);
+    }
+  });
+
+  test('skill includes platform environment recovery guidance', () {
+    final environments = read(
+      '${_skillRoots.first}/references/environments.md',
+    );
+
+    for (final requirement in <String>[
+      '## Android',
+      'adb devices -l',
+      '## iOS And iPadOS',
+      'WebDriverAgent',
+      'curl --fail http://127.0.0.1:8100/status',
+      '## macOS',
+      'Accessibility',
+      '## Parallel Projects And Devices',
+      'authorizationMode: yolo',
+    ]) {
+      expect(environments, contains(requirement), reason: requirement);
     }
   });
 

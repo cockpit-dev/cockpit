@@ -7,7 +7,7 @@ a CI/release handoff.
 
 - [Truth hierarchy](#truth-hierarchy)
 - [Offline bundle](#offline-bundle)
-- [Role views](#role-views)
+- [Report sections](#report-sections)
 - [Artifact download](#artifact-download)
 - [Failure triage](#failure-triage)
 - [Release acceptance](#release-acceptance)
@@ -59,20 +59,22 @@ assertions, errors, locator/plane/driver results, and evidence index.
 `run/events.jsonl` is the chronological machine trace. Per-attempt
 `steps.json` is the detailed local step record.
 
-## Role Views
+## Report Sections
 
-- Product: outcome, covered journeys, visible evidence, user-facing failures.
-- Quality/test: cases, matrices, retries, skipped/blocked reasons, assertions,
-  evidence chain, stability.
-- Engineering: operation, timeout, requested/actual plane, driver, locator
-  signals, diagnostics, runtime errors.
-- Project/release: duration, coverage, trend input, platform matrix, gate
-  status, complete/incomplete state.
-- Machine/AI: `report.json`, `manifest.json`, `events.jsonl`, `junit.xml`.
+- Summary answers whether the run is acceptable and what needs attention.
+- Coverage shows selected journeys, matrix rows, targets, tags, and outcomes.
+- Executions exposes every attempt and ordered step, including setup, finally,
+  retries, loops, calls, assertions, and step evidence.
+- Evidence provides a visual gallery and complete digest-indexed artifact list.
+- Diagnostics shows failures, cleanup errors, timeouts, requested/actual
+  planes, drivers, locator resolution, degradation, and source locations.
+- Environment/files records run identity, authorization, effective suite and
+  report policy, platforms, targets, and portable machine exports.
 
-`index.html` exposes offline role lenses over the same facts. `summary.md` is a
-bounded neutral handoff, not an AI-authored summary. Do not rename it based on
-whether AI participated.
+`index.html` exposes these question-oriented sections over the same facts, so
+different readers can enter at the information they need without losing the
+shared evidence chain. `summary.md` is a bounded neutral handoff, not an
+AI-authored summary. Do not rename it based on whether AI participated.
 
 ## Artifact Download
 

@@ -182,7 +182,10 @@ void main() {
   });
 
   test('ios physical profile reports WDA and devicectl capabilities', () async {
-    final service = CockpitSystemControlService();
+    final service = CockpitSystemControlService(
+      iosWdaEndpointProbe: (_, {required timeout}) async => false,
+      environment: const <String, String>{},
+    );
 
     final result = await service.describe(
       const CockpitSystemControlDescribeRequest(
@@ -214,7 +217,10 @@ void main() {
   });
 
   test('ios simulator profile exposes real simctl system controls', () async {
-    final service = CockpitSystemControlService();
+    final service = CockpitSystemControlService(
+      iosWdaEndpointProbe: (_, {required timeout}) async => false,
+      environment: const <String, String>{},
+    );
 
     final result = await service.describe(
       const CockpitSystemControlDescribeRequest(

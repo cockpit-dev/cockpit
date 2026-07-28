@@ -6,8 +6,12 @@
   matrices, bounded concurrency, retries, fail-fast policy, recovery, and
   complete offline JSON/JUnit/HTML/Markdown report bundles.
 - Added semantic report directories, full suite/case definitions, detailed
-  step metadata, role-based offline HTML views, and a root SHA-256 manifest
-  covering every exported file.
+  step metadata, responsive task-focused offline HTML sections, search,
+  filters, deep links, evidence galleries, diagnostics, and a root SHA-256
+  manifest covering every exported file.
+- Added a self-contained platform environment and recovery guide to every
+  supported agent skill distribution, including Android SDK/ADB, iOS
+  Simulator/WebDriverAgent, host permissions, and parallel target isolation.
 - Added restart-safe suite node and attempt checkpoints. Active attempts recover
   as `interrupted`, completed nodes are not replayed, and persisted fixture/row
   session bindings must resolve to the same healthy resource.
@@ -66,6 +70,9 @@
 - Expanded release acceptance to cover DAGs, matrices, fixtures, loops,
   retries, semantic and gesture command families, recording lifecycles,
   mixed Flutter/native execution, and verified offline report bundles.
+- Made Android and iOS release regressions require real native locator,
+  action, and assertion proof under an isolated YOLO test daemon; iOS CI now
+  boots and health-checks a digest-pinned WebDriverAgent runner.
 
 ## 1.1.4
 

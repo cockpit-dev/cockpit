@@ -91,8 +91,9 @@ The immutable report fact graph is `run -> suite -> case -> attempt -> step ->
 assertion/evidence`. `report.json` is the canonical single-file rendering input
 and retains the effective suite and case definitions plus detailed execution
 results. Human views are projections of that graph, never separate facts:
-`index.html` provides offline Overview, Product, Quality, Engineering, and
-Machine lenses; `summary.md` and `junit.xml` provide portable summary and CI
+`index.html` provides offline Summary, Coverage, Executions, Evidence,
+Diagnostics, and Environment/files sections; `summary.md` and `junit.xml`
+provide portable summary and CI
 interchange; semantic case/attempt directories contain detailed steps and
 evidence. Root `manifest.json` declares every other file with its semantic kind,
 run/case/attempt/step ownership, byte size, media type, and SHA-256. The HTML

@@ -22,9 +22,11 @@ final class CockpitDemoAcceptanceRequest {
     required this.runTimeout,
     this.rootDirectory,
     this.deviceId,
+    this.wdaUrl,
     this.visualProfile,
     this.stopDaemon = false,
     this.requireRecording = false,
+    this.requireNativeLocator = false,
   }) {
     if (!const <String>{
       'android',
@@ -49,6 +51,7 @@ final class CockpitDemoAcceptanceRequest {
   final String? rootDirectory;
   final String platform;
   final String? deviceId;
+  final String? wdaUrl;
   final String? visualProfile;
   final String entrypoint;
   final String suitePath;
@@ -58,6 +61,7 @@ final class CockpitDemoAcceptanceRequest {
   final Duration runTimeout;
   final bool stopDaemon;
   final bool requireRecording;
+  final bool requireNativeLocator;
 }
 
 final class CockpitDemoAcceptanceResult {
@@ -299,6 +303,7 @@ final class CockpitDemoAcceptanceRunner {
         deviceId: deviceId,
         mode: launchMode,
         entrypointDocument: entrypointDocument,
+        wdaUrl: request.wdaUrl,
         registrationTimeout: request.discoveryTimeout,
       );
 
@@ -422,7 +427,6 @@ final class CockpitDemoAcceptanceRunner {
       final nativeLocatorAdvertised = const <String>{
         'readUiTree',
         'tap',
-        'pressBack',
       }.every(availableSystemActions.contains);
       nativeBlackBoxSupported =
           request.platform != 'web' &&
@@ -452,6 +456,7 @@ final class CockpitDemoAcceptanceRunner {
           platform: request.platform,
           deviceId: deviceId,
           appId: platformAppId,
+          wdaUrl: request.wdaUrl,
           registrationTimeout: request.discoveryTimeout,
         );
       }
@@ -470,6 +475,13 @@ final class CockpitDemoAcceptanceRunner {
             targetId: target.targetId,
             probeId: invocationId,
           );
+      if (request.requireNativeLocator && !nativeLocatorSupported) {
+        throw FormatException(
+          'The ${request.platform} release target did not prove native '
+          'locator control. Inspect the target systemControl profile and '
+          'platform driver environment before retrying.',
+        );
+      }
       effectiveSuite = _suiteForRuntime(
         validatedSuite,
         recordingCapabilities: recordingCapabilities,
@@ -1371,15 +1383,22 @@ Future<void> _verifyOfflineReportBundle({
 
   final html = await File(p.join(root, 'index.html')).readAsString();
   if (!const <String>[
-        '>Overview<',
-        '>Product<',
-        '>Quality<',
-        '>Engineering<',
-        '>Machine<',
+        'data-lens="summary"',
+        'data-lens="coverage"',
+        'data-lens="executions"',
+        'data-lens="evidence"',
+        'data-lens="diagnostics"',
+        'data-lens="environment"',
+        'id="cockpit-report-data"',
+        'data-filter-input',
+        'Effective configuration',
       ].every(html.contains) ||
       html.contains('<script src=') ||
       html.contains('<link rel="stylesheet"') ||
-      html.contains('fetch(')) {
+      html.contains('fetch(') ||
+      html.contains('src="http') ||
+      html.contains('href="http') ||
+      html.contains('@import')) {
     throw const FormatException('HTML report is not complete and offline.');
   }
 }
@@ -1599,6 +1618,7 @@ Future<CockpitAutomationTargetResource> _resolveTarget({
   required String deviceId,
   required String mode,
   required CockpitDocumentResource entrypointDocument,
+  required String? wdaUrl,
   required Duration registrationTimeout,
 }) async {
   final targetMode = CockpitAutomationTargetMode.values.byName(mode);
@@ -1616,7 +1636,7 @@ Future<CockpitAutomationTargetResource> _resolveTarget({
             target.appId == null,
       )
       .toList(growable: false);
-  if (matches.isNotEmpty) return matches.last;
+  if (wdaUrl == null && matches.isNotEmpty) return matches.last;
 
   final identity = jsonEncode(<String, Object?>{
     'workspaceId': workspaceId,
@@ -1626,6 +1646,7 @@ Future<CockpitAutomationTargetResource> _resolveTarget({
     'sha256': entrypointDocument.sha256,
     'mode': mode,
     'environment': 'test',
+    'wdaUrl': ?wdaUrl,
   });
   final digest = sha256.convert(utf8.encode(identity)).toString();
   final registration = await _operation(
@@ -1644,6 +1665,7 @@ Future<CockpitAutomationTargetResource> _resolveTarget({
         'targetKind': 'flutterApp',
         'mode': mode,
         'environment': 'test',
+        'wdaUrl': ?wdaUrl,
       },
     ),
   );
@@ -1660,6 +1682,7 @@ Future<CockpitAutomationTargetResource> _resolveNativeTarget({
   required String platform,
   required String deviceId,
   required String appId,
+  required String? wdaUrl,
   required Duration registrationTimeout,
 }) async {
   final matches = (await api.targets(workspaceId))
@@ -1673,7 +1696,7 @@ Future<CockpitAutomationTargetResource> _resolveNativeTarget({
             target.appId == appId,
       )
       .toList(growable: false);
-  if (matches.isNotEmpty) return matches.last;
+  if (wdaUrl == null && matches.isNotEmpty) return matches.last;
 
   final identity = jsonEncode(<String, Object?>{
     'workspaceId': workspaceId,
@@ -1683,6 +1706,7 @@ Future<CockpitAutomationTargetResource> _resolveNativeTarget({
     'targetKind': 'nativeApp',
     'mode': 'automation',
     'environment': 'test',
+    'wdaUrl': ?wdaUrl,
   });
   final digest = sha256.convert(utf8.encode(identity)).toString();
   final registration = await _operation(
@@ -1701,6 +1725,7 @@ Future<CockpitAutomationTargetResource> _resolveNativeTarget({
         'targetKind': 'nativeApp',
         'mode': 'automation',
         'environment': 'test',
+        'wdaUrl': ?wdaUrl,
       },
     ),
   );
