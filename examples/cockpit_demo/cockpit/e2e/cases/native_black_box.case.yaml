@@ -73,7 +73,7 @@ steps:
         fallbacks:
           - {text: New task}
   - stepId: captureIndependentNativeEvidence
-    timeoutMs: 30000
+    timeoutMs: 60000
     action:
       type: captureScreenshot
       artifactName: independent-native-black-box

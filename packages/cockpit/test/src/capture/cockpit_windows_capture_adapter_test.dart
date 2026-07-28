@@ -3,7 +3,6 @@ import 'dart:io';
 
 import 'package:cockpit_protocol/cockpit_protocol.dart';
 import 'package:cockpit/src/capture/cockpit_windows_capture_adapter.dart';
-import 'package:cockpit/src/platform/windows/cockpit_windows_window_target.dart';
 import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 
@@ -25,26 +24,6 @@ void main() {
       final adapter = CockpitWindowsCaptureAdapter(
         appId: 'cockpit_demo',
         processId: 4101,
-        windowResolver:
-            ({
-              required appId,
-              required processId,
-              required powershellExecutable,
-              required processRunner,
-              required timeout,
-              required activationSettleDelay,
-            }) async {
-              expect(appId, 'cockpit_demo');
-              expect(processId, 4101);
-              return const CockpitWindowsWindowTarget(
-                title: 'Cockpit Demo',
-                handle: 4242,
-                left: 120,
-                top: 48,
-                width: 900,
-                height: 640,
-              );
-            },
         tempFileFactory: (_) async => outputFile,
         processRunner: (executable, arguments) async {
           expect(executable, 'powershell');
@@ -84,10 +63,13 @@ void main() {
         invocations.single[3],
       );
       expect(script, isNot(contains('PrimaryScreen.Bounds')));
-      expect(script, contains('PrintWindow'));
+      expect(script, isNot(contains('PrintWindow')));
+      expect(script, contains('CopyFromScreen'));
+      expect(script, contains('GetWindowRect'));
       expect(script, contains(r'$outputPath = $args[0]'));
+      expect(script, contains(r'$appId = $args[1]'));
       expect(script, contains("} '${outputFile.path.replaceAll("'", "''")}'"));
-      expect(script, contains("'4242' '120' '48' '900' '640'"));
+      expect(script, contains("'cockpit_demo' '4101' '250'"));
     },
   );
 
@@ -96,22 +78,6 @@ void main() {
     () async {
       final adapter = CockpitWindowsCaptureAdapter(
         appId: 'cockpit_demo',
-        windowResolver:
-            ({
-              required appId,
-              required processId,
-              required powershellExecutable,
-              required processRunner,
-              required timeout,
-              required activationSettleDelay,
-            }) async => const CockpitWindowsWindowTarget(
-              title: 'Cockpit Demo',
-              handle: 4242,
-              left: 20,
-              top: 12,
-              width: 300,
-              height: 240,
-            ),
         timeout: const Duration(milliseconds: 50),
         processRunner: (executable, arguments) {
           return Future<ProcessResult>.delayed(
@@ -154,22 +120,6 @@ void main() {
     final adapter = CockpitWindowsCaptureAdapter(
       appId: 'cockpit_demo',
       timeout: const Duration(milliseconds: 50),
-      windowResolver:
-          ({
-            required appId,
-            required processId,
-            required powershellExecutable,
-            required processRunner,
-            required timeout,
-            required activationSettleDelay,
-          }) async => const CockpitWindowsWindowTarget(
-            title: 'Cockpit Demo',
-            handle: 4242,
-            left: 20,
-            top: 12,
-            width: 300,
-            height: 240,
-          ),
       tempFileFactory: (_) async => outputFile,
       processRunner: (executable, arguments) async {
         await Future<void>.delayed(const Duration(milliseconds: 100));
@@ -194,20 +144,11 @@ void main() {
     expect(outputFile.readAsBytesSync(), _opaquePng);
   });
 
-  test('windows capture adapter reports window resolution failure', () async {
+  test('windows capture adapter reports capture process failure', () async {
     final adapter = CockpitWindowsCaptureAdapter(
       appId: 'cockpit_demo',
-      windowResolver:
-          ({
-            required appId,
-            required processId,
-            required powershellExecutable,
-            required processRunner,
-            required timeout,
-            required activationSettleDelay,
-          }) async {
-            throw StateError('No visible Windows window was found.');
-          },
+      processRunner: (executable, arguments) async =>
+          ProcessResult(0, 1, '', 'No visible Windows window was found.'),
     );
 
     final execution = await adapter.capture(
@@ -228,7 +169,7 @@ void main() {
       containsPair('appId', 'cockpit_demo'),
     );
     expect(
-      execution.result.error?.details['error'],
+      execution.result.error?.details['stderr'],
       contains('No visible Windows window was found.'),
     );
   });

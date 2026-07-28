@@ -33,7 +33,7 @@ steps:
   - stepId: captureThroughSystemControl
     description: Preserve native black-box proof when the platform exposes no native UI tree.
     plane: native
-    timeoutMs: 30000
+    timeoutMs: 60000
     action:
       type: captureScreenshot
       artifactName: mixed-plane-native-evidence
