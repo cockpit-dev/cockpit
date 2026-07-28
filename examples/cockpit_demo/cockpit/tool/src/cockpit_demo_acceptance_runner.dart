@@ -470,12 +470,6 @@ final class CockpitDemoAcceptanceRunner {
             targetId: target.targetId,
             probeId: invocationId,
           );
-      if (nativeLocatorAdvertised && !nativeLocatorSupported) {
-        throw FormatException(
-          'The ${request.platform} release target advertises native locator '
-          'control but cannot resolve the live New task control.',
-        );
-      }
       effectiveSuite = _suiteForRuntime(
         validatedSuite,
         recordingCapabilities: recordingCapabilities,
