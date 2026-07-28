@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:cockpit/src/infrastructure/cockpit_process_manager.dart';
+import 'package:cockpit/src/system_control/cockpit_android_ui_automation_client.dart';
 import 'package:cockpit/src/system_control/cockpit_system_control_action_service.dart';
 import 'package:cockpit/src/system_control/cockpit_system_control_service.dart';
 import 'package:cockpit/src/system_control/cockpit_system_test_automation_adapter.dart';
@@ -24,6 +25,7 @@ void main() {
       actionService: CockpitSystemControlActionService(
         processManager: processes,
         systemControlService: controls,
+        androidUiAutomation: processes,
       ),
       workspaceRoot: Directory.current.path,
       delay: (_) async {},
@@ -65,6 +67,7 @@ void main() {
       actionService: CockpitSystemControlActionService(
         processManager: processes,
         systemControlService: controls,
+        androidUiAutomation: processes,
       ),
       workspaceRoot: Directory.current.path,
       delay: (_) async {},
@@ -89,7 +92,8 @@ void main() {
   });
 }
 
-final class _TransientUiTreeProcessManager implements CockpitProcessManager {
+final class _TransientUiTreeProcessManager
+    implements CockpitProcessManager, CockpitAndroidUiAutomation {
   _TransientUiTreeProcessManager({
     this.uiTree = _uiTree,
     this.failFirst = true,
@@ -98,6 +102,34 @@ final class _TransientUiTreeProcessManager implements CockpitProcessManager {
   final String uiTree;
   final bool failFirst;
   int uiTreeReads = 0;
+
+  @override
+  Future<String> readUiTree({
+    required String deviceId,
+    required int maxDepth,
+    required int maxNodes,
+    required Duration timeout,
+  }) async {
+    uiTreeReads += 1;
+    if (failFirst && uiTreeReads == 1) {
+      throw StateError('UI hierarchy unavailable');
+    }
+    return uiTree;
+  }
+
+  @override
+  Future<String> dismissSystemDialog({
+    required String deviceId,
+    required String decision,
+    required Duration timeout,
+  }) => throw UnsupportedError('Not used by this test.');
+
+  @override
+  Future<String> tapNotification({
+    required String deviceId,
+    required String text,
+    required Duration timeout,
+  }) => throw UnsupportedError('Not used by this test.');
 
   @override
   Future<ProcessResult> run(
@@ -128,49 +160,7 @@ final class _TransientUiTreeProcessManager implements CockpitProcessManager {
     bool runInShell = false,
     ProcessStartMode mode = ProcessStartMode.normal,
   }) async {
-    uiTreeReads += 1;
-    return failFirst && uiTreeReads == 1
-        ? _CompletedProcess(
-            exitCodeValue: 1,
-            stderrText: 'UI hierarchy unavailable',
-          )
-        : _CompletedProcess(stdoutText: uiTree);
-  }
-}
-
-final class _CompletedProcess implements Process {
-  _CompletedProcess({
-    this.exitCodeValue = 0,
-    this.stdoutText = '',
-    this.stderrText = '',
-  });
-
-  final int exitCodeValue;
-  final String stdoutText;
-  final String stderrText;
-  final StreamController<List<int>> _stdin = StreamController<List<int>>();
-
-  @override
-  Future<int> get exitCode async => exitCodeValue;
-
-  @override
-  int get pid => 1234;
-
-  @override
-  Stream<List<int>> get stdout =>
-      Stream<List<int>>.value(utf8.encode(stdoutText));
-
-  @override
-  Stream<List<int>> get stderr =>
-      Stream<List<int>>.value(utf8.encode(stderrText));
-
-  @override
-  IOSink get stdin => IOSink(_stdin.sink);
-
-  @override
-  bool kill([ProcessSignal signal = ProcessSignal.sigterm]) {
-    unawaited(_stdin.close());
-    return true;
+    throw StateError('Unexpected process: $executable ${arguments.join(' ')}');
   }
 }
 

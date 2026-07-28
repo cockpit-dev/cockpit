@@ -468,7 +468,14 @@ final class CockpitDemoAcceptanceRunner {
             api: api,
             workspaceId: workspace.workspaceId,
             targetId: target.targetId,
+            probeId: invocationId,
           );
+      if (nativeLocatorAdvertised && !nativeLocatorSupported) {
+        throw FormatException(
+          'The ${request.platform} release target advertises native locator '
+          'control but cannot resolve the live New task control.',
+        );
+      }
       effectiveSuite = _suiteForRuntime(
         validatedSuite,
         recordingCapabilities: recordingCapabilities,
@@ -1733,40 +1740,57 @@ Future<bool> _probeNativeLocator({
   required CockpitSupervisorApiClient api,
   required String workspaceId,
   required String targetId,
+  required String probeId,
 }) async {
-  try {
-    final result = await _operation(
-      api,
-      CockpitOperationInvocation(
-        kind: 'system.action',
-        workspaceId: workspaceId,
-        idempotencyKey: CockpitIdempotencyKey(
-          'demo-native-probe-${_stableIdSuffix(targetId)}',
+  for (var attempt = 1; attempt <= 3; attempt += 1) {
+    try {
+      final result = await _operation(
+        api,
+        CockpitOperationInvocation(
+          kind: 'system.action',
+          workspaceId: workspaceId,
+          idempotencyKey: CockpitIdempotencyKey(
+            'demo-native-probe-${_stableIdSuffix(targetId)}-'
+            '${_stableIdSuffix(probeId)}-$attempt',
+          ),
+          deadline: DateTime.now().toUtc().add(const Duration(seconds: 25)),
+          input: <String, Object?>{
+            'targetId': targetId,
+            'action': 'readUiTree',
+            'parameters': <String, Object?>{'maxDepth': 16, 'maxNodes': 2000},
+            'timeoutMs': 20000,
+          },
         ),
-        deadline: DateTime.now().toUtc().add(const Duration(seconds: 25)),
-        input: <String, Object?>{
-          'targetId': targetId,
-          'action': 'readUiTree',
-          'parameters': <String, Object?>{'maxDepth': 8, 'maxNodes': 600},
-          'timeoutMs': 20000,
-        },
-      ),
-    );
-    final output = result.output;
-    final raw = output?['stdout'];
-    if (output?['success'] != true || raw is! String || raw.trim().isEmpty) {
-      return false;
+      );
+      final output = result.output;
+      final raw = output?['stdout'];
+      if (output?['success'] == true &&
+          raw is String &&
+          raw.trim().isNotEmpty) {
+        final snapshot = CockpitNativeUiSnapshot.parse(raw);
+        if (snapshot
+                .resolve(
+                  CockpitTestLocator(label: 'New task'),
+                  flutterAware: true,
+                )
+                .found ||
+            snapshot
+                .resolve(
+                  CockpitTestLocator(text: 'New task'),
+                  flutterAware: true,
+                )
+                .found) {
+          return true;
+        }
+      }
+    } on Object {
+      if (attempt == 3) return false;
     }
-    final snapshot = CockpitNativeUiSnapshot.parse(raw);
-    return snapshot
-            .resolve(CockpitTestLocator(label: 'New task'), flutterAware: true)
-            .found ||
-        snapshot
-            .resolve(CockpitTestLocator(text: 'New task'), flutterAware: true)
-            .found;
-  } on Object {
-    return false;
+    if (attempt < 3) {
+      await Future<void>.delayed(const Duration(milliseconds: 500));
+    }
   }
+  return false;
 }
 
 Future<void> _dismissDevelopmentSystemDialogs({

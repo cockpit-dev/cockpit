@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:cockpit/src/infrastructure/cockpit_process_manager.dart';
+import 'package:cockpit/src/system_control/cockpit_android_ui_automation_client.dart';
 import 'package:cockpit_protocol/cockpit_protocol.dart';
 import 'package:cockpit/src/adapters/cockpit_capture_adapter.dart';
 import 'package:cockpit/src/adapters/cockpit_recording_adapter.dart';
@@ -959,33 +960,45 @@ void main() {
     expect(processManager.starts, isEmpty);
   });
 
-  test('android readUiTree cats a dumped XML tree', () async {
-    final processManager = _FakeProcessManager();
-    final service = CockpitSystemControlActionService(
-      processManager: processManager,
-    );
+  test(
+    'android readUiTree executes the bundled UI Automation driver',
+    () async {
+      final processManager = _FakeProcessManager();
+      final androidUiAutomation = _FakeAndroidUiAutomation();
+      final service = CockpitSystemControlActionService(
+        processManager: processManager,
+        androidUiAutomation: androidUiAutomation,
+      );
 
-    final result = await service.run(
-      const CockpitSystemControlActionRequest(
-        platform: 'android',
-        deviceId: 'emulator-5554',
-        action: CockpitSystemControlAction.readUiTree,
-      ),
-    );
+      final result = await service.run(
+        const CockpitSystemControlActionRequest(
+          platform: 'android',
+          deviceId: 'emulator-5554',
+          action: CockpitSystemControlAction.readUiTree,
+        ),
+      );
 
-    expect(result.success, isTrue);
-    expect(result.command, <String>[
-      'adb',
-      '-s',
-      'emulator-5554',
-      'shell',
-      'sh',
-      '-c',
-      // The script travels as one pre-quoted word so the adb shell join
-      // cannot split it.
-      "'uiautomator dump /sdcard/window.xml >/dev/null && cat /sdcard/window.xml && rm /sdcard/window.xml'",
-    ]);
-  });
+      expect(result.success, isTrue);
+      expect(result.stdout, '<?xml version="1.0"?><hierarchy />');
+      expect(result.command, <String>[
+        'adb',
+        '-s',
+        'emulator-5554',
+        'shell',
+        'am',
+        'instrument',
+        '-e',
+        'class',
+        'dev.cockpit.driver.CockpitDriverTest#dumpUiTree',
+        'dev.cockpit.driver.test/androidx.test.runner.AndroidJUnitRunner',
+      ]);
+      expect(androidUiAutomation.lastAction, 'readUiTree');
+      expect(androidUiAutomation.deviceId, 'emulator-5554');
+      expect(androidUiAutomation.maxDepth, 16);
+      expect(androidUiAutomation.maxNodes, 2000);
+      expect(processManager.starts, isEmpty);
+    },
+  );
 
   test('android activateWindow launches package through adb monkey', () async {
     final processManager = _FakeProcessManager();
@@ -1294,8 +1307,10 @@ void main() {
     'android dismissSystemDialog accepts common system permission buttons',
     () async {
       final processManager = _FakeProcessManager();
+      final androidUiAutomation = _FakeAndroidUiAutomation();
       final service = CockpitSystemControlActionService(
         processManager: processManager,
+        androidUiAutomation: androidUiAutomation,
       );
 
       final result = await service.run(
@@ -1308,20 +1323,21 @@ void main() {
       );
 
       expect(result.success, isTrue);
-      expect(result.command.take(5), <String>[
+      expect(result.command, <String>[
         'adb',
         '-s',
         'emulator-5554',
         'shell',
-        'sh',
+        'am',
+        'instrument',
+        '-e',
+        'class',
+        'dev.cockpit.driver.CockpitDriverTest#tapSystemDialog',
+        'dev.cockpit.driver.test/androidx.test.runner.AndroidJUnitRunner',
       ]);
-      final script = result.command.last;
-      expect(script, contains('uiautomator dump'));
-      expect(
-        script,
-        contains('com.android.permissioncontroller:id/permission_allow_button'),
-      );
-      expect(script, contains(r'input tap "$x" "$y"'));
+      expect(androidUiAutomation.lastAction, 'dismissSystemDialog');
+      expect(androidUiAutomation.decision, 'accept');
+      expect(processManager.starts, isEmpty);
     },
   );
 
@@ -1329,8 +1345,10 @@ void main() {
     'android dismissSystemDialog dismisses or backs out of dialogs',
     () async {
       final processManager = _FakeProcessManager();
+      final androidUiAutomation = _FakeAndroidUiAutomation();
       final service = CockpitSystemControlActionService(
         processManager: processManager,
+        androidUiAutomation: androidUiAutomation,
       );
 
       final result = await service.run(
@@ -1343,12 +1361,9 @@ void main() {
       );
 
       expect(result.success, isTrue);
-      final script = result.command.last;
-      expect(
-        script,
-        contains('com.android.permissioncontroller:id/permission_deny_button'),
-      );
-      expect(script, contains('input keyevent KEYCODE_BACK'));
+      expect(androidUiAutomation.lastAction, 'dismissSystemDialog');
+      expect(androidUiAutomation.decision, 'dismiss');
+      expect(processManager.starts, isEmpty);
     },
   );
 
@@ -1456,8 +1471,10 @@ void main() {
     'android tapNotification expands notifications and taps matching text',
     () async {
       final processManager = _FakeProcessManager();
+      final androidUiAutomation = _FakeAndroidUiAutomation();
       final service = CockpitSystemControlActionService(
         processManager: processManager,
+        androidUiAutomation: androidUiAutomation,
       );
 
       final result = await service.run(
@@ -1470,15 +1487,9 @@ void main() {
       );
 
       expect(result.success, isTrue);
-      expect(result.command.take(5), <String>[
-        'adb',
-        '-s',
-        'emulator-5554',
-        'shell',
-        'sh',
-      ]);
-      expect(result.command[5], '-c');
-      expect(result.command[6], contains('cmd statusbar expand-notifications'));
+      expect(androidUiAutomation.lastAction, 'tapNotification');
+      expect(androidUiAutomation.text, 'Download complete');
+      expect(processManager.starts, isEmpty);
     },
   );
 
@@ -1516,8 +1527,12 @@ void main() {
     'android resolveBlockers accepts dialogs and restores app focus',
     () async {
       final processManager = _FakeProcessManager();
+      final androidUiAutomation = _FakeAndroidUiAutomation(
+        dialogError: StateError('No matching system dialog'),
+      );
       final service = CockpitSystemControlActionService(
         processManager: processManager,
+        androidUiAutomation: androidUiAutomation,
       );
 
       final result = await service.run(
@@ -1530,23 +1545,15 @@ void main() {
       );
 
       expect(result.success, isTrue);
-      expect(result.command.take(5), <String>[
-        'adb',
-        '-s',
-        'emulator-5554',
-        'shell',
-        'sh',
-      ]);
-      expect(result.command[5], '-c');
+      expect(androidUiAutomation.lastAction, 'dismissSystemDialog');
+      expect(processManager.starts, hasLength(3));
       expect(
-        result.command[6],
-        allOf(
-          contains('uiautomator dump'),
-          contains('cmd statusbar collapse'),
-          contains('monkey -p'),
-          contains('dev.cockpit.example'),
-        ),
+        processManager.starts.last.arguments.last,
+        contains('dev.cockpit.example'),
       );
+      expect(result.stdout, contains('dismissSystemDialog'));
+      expect(result.stdout, contains('systemActionProcessFailed'));
+      expect(result.stdout, contains('recoverToApp'));
     },
   );
 
@@ -4080,6 +4087,58 @@ final class _FailingRecordingAdapter implements CockpitRecordingAdapter {
   @override
   Future<CockpitRecordingResult> stopRecording() {
     throw StateError('No active recording session exists.');
+  }
+}
+
+final class _FakeAndroidUiAutomation implements CockpitAndroidUiAutomation {
+  _FakeAndroidUiAutomation({this.dialogError});
+
+  final Object? dialogError;
+  String? lastAction;
+  String? deviceId;
+  String? decision;
+  String? text;
+  int? maxDepth;
+  int? maxNodes;
+
+  @override
+  Future<String> dismissSystemDialog({
+    required String deviceId,
+    required String decision,
+    required Duration timeout,
+  }) async {
+    lastAction = 'dismissSystemDialog';
+    this.deviceId = deviceId;
+    this.decision = decision;
+    final error = dialogError;
+    if (error != null) throw error;
+    return 'dismissSystemDialog decision=$decision handled=true';
+  }
+
+  @override
+  Future<String> readUiTree({
+    required String deviceId,
+    required int maxDepth,
+    required int maxNodes,
+    required Duration timeout,
+  }) async {
+    lastAction = 'readUiTree';
+    this.deviceId = deviceId;
+    this.maxDepth = maxDepth;
+    this.maxNodes = maxNodes;
+    return '<?xml version="1.0"?><hierarchy />';
+  }
+
+  @override
+  Future<String> tapNotification({
+    required String deviceId,
+    required String text,
+    required Duration timeout,
+  }) async {
+    lastAction = 'tapNotification';
+    this.deviceId = deviceId;
+    this.text = text;
+    return 'tapNotification text=$text handled=true';
   }
 }
 

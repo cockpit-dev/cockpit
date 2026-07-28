@@ -56,6 +56,33 @@ void main() {
     expect(result.found, isFalse);
   });
 
+  test('preserves Android secure nodes as password state', () {
+    final secureSnapshot = CockpitNativeUiSnapshot.parse('''
+<hierarchy>
+  <node text="Password" secure="true" bounds="[0,0][200,60]" />
+</hierarchy>
+''');
+
+    final result = secureSnapshot.resolve(CockpitTestLocator(text: 'Password'));
+
+    expect(result.node?.state('password'), isTrue);
+  });
+
+  test('resolves Android hintText through text and label locators', () {
+    final snapshot = CockpitNativeUiSnapshot.parse(
+      '''<?xml version="1.0"?><hierarchy><node class="android.widget.EditText" hintText="Task title" visible-to-user="true" bounds="[10,20][210,80]" /></hierarchy>''',
+    );
+
+    expect(
+      snapshot.resolve(CockpitTestLocator(text: 'Task title')).found,
+      isTrue,
+    );
+    expect(
+      snapshot.resolve(CockpitTestLocator(label: 'Task title')).found,
+      isTrue,
+    );
+  });
+
   test('uses explicit broad matching and prefers an exact candidate', () {
     expect(snapshot.resolve(CockpitTestLocator(text: 'Sav')).found, isFalse);
 
