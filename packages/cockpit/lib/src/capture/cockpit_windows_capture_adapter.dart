@@ -74,6 +74,7 @@ final class CockpitWindowsCaptureAdapter implements CockpitHostCaptureAdapter {
           _captureScript,
           arguments: <String>[
             outputFile.path,
+            windowTarget.handle.toString(),
             windowTarget.left.toString(),
             windowTarget.top.toString(),
             windowTarget.width.toString(),
@@ -138,21 +139,34 @@ using System.Runtime.InteropServices;
 public static class CockpitDpiInterop {
   [DllImport("user32.dll")]
   public static extern bool SetProcessDPIAware();
+
+  [DllImport("user32.dll")]
+  public static extern bool PrintWindow(IntPtr hWnd, IntPtr hdcBlt, uint flags);
 }
 "@
 [void][CockpitDpiInterop]::SetProcessDPIAware()
 $outputPath = $args[0]
-$left = [int]$args[1]
-$top = [int]$args[2]
-$width = [int]$args[3]
-$height = [int]$args[4]
+$windowHandle = [IntPtr][long]$args[1]
+$left = [int]$args[2]
+$top = [int]$args[3]
+$width = [int]$args[4]
+$height = [int]$args[5]
 $bitmap = New-Object System.Drawing.Bitmap $width, $height
 $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
-$graphics.CopyFromScreen(
-  [System.Drawing.Point]::new($left, $top),
-  [System.Drawing.Point]::Empty,
-  [System.Drawing.Size]::new($width, $height)
-)
+$captured = $false
+$deviceContext = $graphics.GetHdc()
+try {
+  $captured = [CockpitDpiInterop]::PrintWindow($windowHandle, $deviceContext, 2)
+} finally {
+  $graphics.ReleaseHdc($deviceContext)
+}
+if (-not $captured) {
+  $graphics.CopyFromScreen(
+    [System.Drawing.Point]::new($left, $top),
+    [System.Drawing.Point]::Empty,
+    [System.Drawing.Size]::new($width, $height)
+  )
+}
 $bitmap.Save($outputPath, [System.Drawing.Imaging.ImageFormat]::Png)
 $graphics.Dispose()
 $bitmap.Dispose()

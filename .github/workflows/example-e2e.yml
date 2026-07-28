@@ -14,7 +14,8 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  FLUTTER_VERSION: '3.32.0'
+  MINIMUM_FLUTTER_VERSION: '3.32.0'
+  REGRESSION_FLUTTER_VERSION: '3.44.0'
 
 jobs:
   static_analysis:
@@ -26,7 +27,7 @@ jobs:
 
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: ${{ env.FLUTTER_VERSION }}
+          flutter-version: ${{ env.MINIMUM_FLUTTER_VERSION }}
           channel: stable
 
       - name: Bootstrap workspace
@@ -62,7 +63,7 @@ jobs:
 
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: ${{ env.FLUTTER_VERSION }}
+          flutter-version: ${{ env.MINIMUM_FLUTTER_VERSION }}
           channel: stable
 
       - name: Bootstrap workspace
@@ -91,7 +92,7 @@ jobs:
 
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: ${{ env.FLUTTER_VERSION }}
+          flutter-version: ${{ env.MINIMUM_FLUTTER_VERSION }}
           channel: stable
 
       - name: Bootstrap workspace
@@ -123,7 +124,7 @@ jobs:
 
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: ${{ env.FLUTTER_VERSION }}
+          flutter-version: ${{ env.MINIMUM_FLUTTER_VERSION }}
           channel: stable
 
       - name: Bootstrap workspace
@@ -173,7 +174,7 @@ jobs:
 
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: ${{ env.FLUTTER_VERSION }}
+          flutter-version: ${{ env.REGRESSION_FLUTTER_VERSION }}
           channel: stable
 
       - name: Configure short Windows runtime paths
@@ -198,7 +199,7 @@ jobs:
         shell: bash
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends xvfb xdotool clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev
+          sudo apt-get install -y --no-install-recommends xvfb xdotool imagemagick ffmpeg clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev
 
       - name: Enable desktop target
         if: matrix.platform == 'linux' || matrix.platform == 'macos' || matrix.platform == 'windows'
@@ -248,8 +249,9 @@ jobs:
           IOS_DEVICE_ID="$(xcrun simctl list devices available -j | python3 -c '
           import json, sys
           data = json.load(sys.stdin)["devices"]
-          devices = [d for runtime, entries in data.items() if "iOS" in runtime for d in entries if d.get("isAvailable") and d.get("name") == "iPhone 16 Pro"]
-          if not devices: raise SystemExit("The iPhone 16 Pro visual-baseline simulator is unavailable")
+          devices = [d for runtime, entries in data.items() if "iOS" in runtime for d in entries if d.get("isAvailable") and d.get("name", "").startswith("iPhone")]
+          if not devices: raise SystemExit("No available iPhone simulator was found")
+          devices.sort(key=lambda d: (d.get("name") != "iPhone 16 Pro", d.get("name", ""), d.get("udid", "")))
           print(devices[0]["udid"])
           ')"
           xcrun simctl boot "$IOS_DEVICE_ID" || true

@@ -72,6 +72,7 @@ export 'src/application/cockpit_run_batch_service.dart';
 export 'src/application/cockpit_run_command_service.dart';
 export 'src/application/cockpit_run_shell_service.dart';
 export 'src/system_control/cockpit_system_control_action_service.dart';
+export 'src/system_control/cockpit_native_ui_snapshot.dart';
 export 'src/system_control/cockpit_system_control_profile.dart';
 export 'src/system_control/cockpit_system_control_service.dart';
 export 'src/application/cockpit_start_remote_recording_service.dart';

@@ -144,4 +144,30 @@ void main() {
     expect(result.ambiguous, isTrue);
     expect(result.matchCount, 2);
   });
+
+  test('parses macOS accessibility JSON trees', () {
+    final macos = CockpitNativeUiSnapshot.parse('''
+{"platform":"macos","windows":[{"role":"AXWindow","title":"Cockpit","frame":{"x":20,"y":40,"width":800,"height":600},"children":[{"role":"AXButton","title":"New task","description":"Create task","frame":{"x":650,"y":70,"width":110,"height":44}}]}]}
+''');
+
+    final result = macos.resolve(CockpitTestLocator(label: 'New task'));
+
+    expect(result.found, isTrue);
+    expect(result.centerX, 705);
+    expect(result.node?.roles, contains('AXButton'));
+  });
+
+  test('parses Windows UI Automation JSON trees', () {
+    final windows = CockpitNativeUiSnapshot.parse('''
+{"platform":"windows","tree":{"controlType":"Window","name":"Cockpit","frame":{"x":0,"y":0,"width":1024,"height":768},"children":[{"controlType":"Button","name":"Save","automationId":"save-button","className":"FlutterView","frame":{"x":700,"y":680,"width":180,"height":48}}]}}
+''');
+
+    final result = windows.resolve(
+      CockpitTestLocator(text: 'Save', testId: 'save-button', role: 'Button'),
+    );
+
+    expect(result.found, isTrue);
+    expect(result.node?.nativeIds, contains('save-button'));
+    expect(result.node?.types, contains('Button'));
+  });
 }

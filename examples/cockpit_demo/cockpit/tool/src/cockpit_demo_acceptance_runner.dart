@@ -418,7 +418,7 @@ final class CockpitDemoAcceptanceRunner {
           visualBaseline != null &&
           availableSystemActions.contains('captureScreenshot');
       locationTravelSupported = availableSystemActions.contains('setLocation');
-      nativeLocatorSupported = const <String>{
+      final nativeLocatorAdvertised = const <String>{
         'readUiTree',
         'tap',
         'pressBack',
@@ -454,6 +454,20 @@ final class CockpitDemoAcceptanceRunner {
           registrationTimeout: request.discoveryTimeout,
         );
       }
+      if (request.platform == 'macos') {
+        await _dismissDevelopmentSystemDialogs(
+          api: api,
+          workspaceId: workspace.workspaceId,
+          targetId: target.targetId,
+        );
+      }
+      nativeLocatorSupported =
+          nativeLocatorAdvertised &&
+          await _probeNativeLocator(
+            api: api,
+            workspaceId: workspace.workspaceId,
+            targetId: target.targetId,
+          );
       effectiveSuite = _suiteForRuntime(
         validatedSuite,
         recordingCapabilities: recordingCapabilities,
@@ -1647,6 +1661,79 @@ Future<CockpitOperationResult> _operation(
   }
   return result;
 }
+
+Future<bool> _probeNativeLocator({
+  required CockpitSupervisorApiClient api,
+  required String workspaceId,
+  required String targetId,
+}) async {
+  try {
+    final result = await _operation(
+      api,
+      CockpitOperationInvocation(
+        kind: 'system.action',
+        workspaceId: workspaceId,
+        idempotencyKey: CockpitIdempotencyKey(
+          'demo-native-probe-${_stableIdSuffix(targetId)}',
+        ),
+        deadline: DateTime.now().toUtc().add(const Duration(seconds: 25)),
+        input: <String, Object?>{
+          'targetId': targetId,
+          'action': 'readUiTree',
+          'parameters': <String, Object?>{'maxDepth': 8, 'maxNodes': 600},
+          'timeoutMs': 20000,
+        },
+      ),
+    );
+    final output = result.output;
+    final raw = output?['stdout'];
+    if (output?['success'] != true || raw is! String || raw.trim().isEmpty) {
+      return false;
+    }
+    final snapshot = CockpitNativeUiSnapshot.parse(raw);
+    return snapshot
+            .resolve(CockpitTestLocator(label: 'New task'), flutterAware: true)
+            .found ||
+        snapshot
+            .resolve(CockpitTestLocator(text: 'New task'), flutterAware: true)
+            .found;
+  } on Object {
+    return false;
+  }
+}
+
+Future<void> _dismissDevelopmentSystemDialogs({
+  required CockpitSupervisorApiClient api,
+  required String workspaceId,
+  required String targetId,
+}) async {
+  for (var attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      await _operation(
+        api,
+        CockpitOperationInvocation(
+          kind: 'system.action',
+          workspaceId: workspaceId,
+          idempotencyKey: CockpitIdempotencyKey(
+            'demo-dismiss-dialog-$attempt-${_stableIdSuffix(targetId)}',
+          ),
+          deadline: DateTime.now().toUtc().add(const Duration(seconds: 15)),
+          input: <String, Object?>{
+            'targetId': targetId,
+            'action': 'dismissSystemDialog',
+            'timeoutMs': 10000,
+          },
+        ),
+      );
+    } on Object {
+      return;
+    }
+    await Future<void>.delayed(const Duration(milliseconds: 250));
+  }
+}
+
+String _stableIdSuffix(String value) =>
+    sha256.convert(utf8.encode(value)).toString().substring(0, 20);
 
 Future<int> _consumeEvents({
   required CockpitSupervisorApiClient api,
