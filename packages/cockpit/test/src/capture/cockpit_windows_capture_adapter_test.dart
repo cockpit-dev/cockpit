@@ -84,9 +84,10 @@ void main() {
         invocations.single[3],
       );
       expect(script, isNot(contains('PrimaryScreen.Bounds')));
+      expect(script, contains('PrintWindow'));
       expect(script, contains(r'$outputPath = $args[0]'));
       expect(script, contains("} '${outputFile.path.replaceAll("'", "''")}'"));
-      expect(script, contains("'120' '48' '900' '640'"));
+      expect(script, contains("'4242' '120' '48' '900' '640'"));
     },
   );
 

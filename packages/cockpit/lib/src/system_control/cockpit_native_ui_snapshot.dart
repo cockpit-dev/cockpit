@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:cockpit_protocol/cockpit_protocol.dart';
 import 'package:xml/xml.dart';
 
@@ -15,6 +17,9 @@ final class CockpitNativeUiSnapshot {
   final int viewportHeight;
 
   factory CockpitNativeUiSnapshot.parse(String raw) {
+    if (raw.trimLeft().startsWith('{')) {
+      return _parseJson(raw);
+    }
     final document = XmlDocument.parse(raw);
     final nodes = <CockpitNativeUiNode>[];
 
@@ -61,6 +66,135 @@ final class CockpitNativeUiSnapshot {
     }
 
     visit(document.rootElement, const <String>[]);
+    var width = 0;
+    var height = 0;
+    for (final node in nodes) {
+      final bounds = node.bounds;
+      if (bounds == null) continue;
+      if (bounds.right > width) width = bounds.right;
+      if (bounds.bottom > height) height = bounds.bottom;
+    }
+    if (width <= 0 || height <= 0) {
+      throw const FormatException(
+        'Native UI tree does not contain a usable viewport.',
+      );
+    }
+    return CockpitNativeUiSnapshot._(
+      raw: raw,
+      nodes: List<CockpitNativeUiNode>.unmodifiable(nodes),
+      viewportWidth: width,
+      viewportHeight: height,
+    );
+  }
+
+  static CockpitNativeUiSnapshot _parseJson(String raw) {
+    final decoded = jsonDecode(raw);
+    if (decoded is! Map<Object?, Object?>) {
+      throw const FormatException('Native UI JSON root must be an object.');
+    }
+    final roots = <Map<Object?, Object?>>[];
+    final windows = decoded['windows'];
+    if (windows is List<Object?>) {
+      roots.addAll(windows.whereType<Map<Object?, Object?>>());
+    }
+    final tree = decoded['tree'];
+    if (tree is Map<Object?, Object?>) roots.add(tree);
+    if (roots.isEmpty) {
+      throw const FormatException('Native UI JSON contains no root nodes.');
+    }
+
+    final nodes = <CockpitNativeUiNode>[];
+
+    void visit(
+      Map<Object?, Object?> value,
+      List<String> ancestorPaths,
+      Map<String, int> siblingCounts,
+    ) {
+      final controlType = _jsonText(value['controlType']);
+      final role = _jsonText(value['role']);
+      final subrole = _jsonText(value['subrole']);
+      final elementName = _jsonElementName(
+        controlType ?? role ?? subrole ?? 'node',
+      );
+      final elementIndex = siblingCounts.update(
+        elementName,
+        (count) => count + 1,
+        ifAbsent: () => 0,
+      );
+      final component = '$elementName[$elementIndex]';
+      final pathParts = <String>[...ancestorPaths, component];
+      final path = '/${pathParts.join('/')}';
+      final attributes = <String, String>{};
+      for (final entry in value.entries) {
+        final key = entry.key;
+        final scalar = _jsonScalar(entry.value);
+        if (key is String && scalar != null) {
+          attributes[key.toLowerCase()] = scalar;
+        }
+      }
+
+      final title = _jsonText(value['title']);
+      final name = _jsonText(value['name']);
+      final description = _jsonText(value['description']);
+      final automationId = _jsonText(value['automationId']);
+      final className = _jsonText(value['className']);
+      if (title != null) {
+        attributes.putIfAbsent('text', () => title);
+        attributes.putIfAbsent('label', () => title);
+      }
+      if (name != null) attributes.putIfAbsent('name', () => name);
+      if (description != null) {
+        attributes.putIfAbsent('hint', () => description);
+      }
+      if (role != null) attributes.putIfAbsent('role', () => role);
+      if (controlType != null) {
+        attributes.putIfAbsent('role', () => controlType);
+        attributes.putIfAbsent('type', () => controlType);
+      }
+      if (subrole != null) attributes.putIfAbsent('type', () => subrole);
+      if (automationId != null) {
+        attributes.putIfAbsent('identifier', () => automationId);
+        attributes.putIfAbsent('testid', () => automationId);
+      }
+      if (className != null) attributes.putIfAbsent('class', () => className);
+
+      final frame = value['frame'];
+      if (frame is Map<Object?, Object?>) {
+        for (final key in const <String>['x', 'y', 'width', 'height']) {
+          final scalar = _jsonScalar(frame[key]);
+          if (scalar != null) attributes[key] = scalar;
+        }
+      }
+      final parentPath = ancestorPaths.isEmpty
+          ? null
+          : '/${ancestorPaths.join('/')}';
+      nodes.add(
+        CockpitNativeUiNode(
+          path: path,
+          parentPath: parentPath,
+          ancestorPaths: List<String>.unmodifiable(<String>[
+            for (var index = 0; index < ancestorPaths.length; index += 1)
+              '/${ancestorPaths.take(index + 1).join('/')}',
+          ]),
+          elementName: elementName,
+          attributes: Map<String, String>.unmodifiable(attributes),
+          bounds: _readBounds(attributes),
+        ),
+      );
+
+      final children = value['children'];
+      if (children is List<Object?>) {
+        final childCounts = <String, int>{};
+        for (final child in children.whereType<Map<Object?, Object?>>()) {
+          visit(child, pathParts, childCounts);
+        }
+      }
+    }
+
+    final rootCounts = <String, int>{};
+    for (final root in roots) {
+      visit(root, const <String>[], rootCounts);
+    }
     var width = 0;
     var height = 0;
     for (final node in nodes) {
@@ -680,6 +814,23 @@ CockpitNativeUiBounds? _readBounds(Map<String, String> attributes) {
 }
 
 double? _number(String? value) => value == null ? null : double.tryParse(value);
+
+String? _jsonText(Object? value) {
+  final text = _jsonScalar(value)?.trim();
+  return text == null || text.isEmpty ? null : text;
+}
+
+String? _jsonScalar(Object? value) => switch (value) {
+  String value => value,
+  num value => '$value',
+  bool value => '$value',
+  _ => null,
+};
+
+String _jsonElementName(String value) {
+  final normalized = value.replaceAll(RegExp(r'[^A-Za-z0-9_.-]'), '_');
+  return normalized.isEmpty ? 'node' : normalized;
+}
 
 bool _typeMatches(String actual, String expected) {
   final normalizedActual = actual.toLowerCase();
