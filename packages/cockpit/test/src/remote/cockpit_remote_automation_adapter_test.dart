@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:cockpit_protocol/cockpit_protocol.dart';
 import 'package:cockpit/cockpit.dart';
+import 'package:image/image.dart' as img;
 import 'package:test/test.dart';
 
 void main() {
@@ -81,7 +82,10 @@ void main() {
       final client = CockpitRemoteSessionClient(
         baseUri: Uri.parse('http://127.0.0.1:${server.port}'),
       );
-      final adapter = CockpitRemoteAutomationAdapter(client: client);
+      final adapter = CockpitRemoteAutomationAdapter(
+        client: client,
+        workspaceRoot: Directory.current.path,
+      );
 
       final capabilities = await adapter.describeCapabilities();
       final execution = await adapter.execute(
@@ -101,4 +105,129 @@ void main() {
       );
     },
   );
+
+  test('remote adapter compares Flutter-view screenshots locally', () async {
+    final workspace = await Directory.systemTemp.createTemp(
+      'cockpit-remote-visual-',
+    );
+    final baseline = File('${workspace.path}/baselines/settings.png');
+    await baseline.parent.create(recursive: true);
+    final image = img.Image(width: 2, height: 2);
+    img.fill(image, color: img.ColorRgb8(20, 80, 120));
+    final png = img.encodePng(image);
+    await baseline.writeAsBytes(png);
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() async {
+      await server.close(force: true);
+      await workspace.delete(recursive: true);
+    });
+
+    server.listen((request) async {
+      request.response.headers.contentType = ContentType.json;
+      if (request.method == 'GET' && request.uri.path == '/health') {
+        request.response.write(
+          jsonEncode(
+            CockpitRemoteSessionStatus(
+              sessionId: 'visual-demo',
+              platform: 'macos',
+              transportType: 'remoteHttp',
+              currentRouteName: '/settings',
+              capabilities: CockpitCapabilities(
+                platform: 'macos',
+                transportType: 'remoteHttp',
+                supportsInAppControl: true,
+                supportsFlutterViewCapture: true,
+                supportsNativeScreenCapture: false,
+                supportsHostAutomation: false,
+                supportedCommands: <CockpitCommandType>[
+                  CockpitCommandType.captureScreenshot,
+                ],
+              ),
+              recordingCapabilities: CockpitRecordingCapabilities(
+                supportsNativeRecording: false,
+              ),
+              snapshot: CockpitSnapshot(routeName: '/settings'),
+            ).toJson(),
+          ),
+        );
+      } else if (request.method == 'POST' &&
+          request.uri.path == '/commands/execute') {
+        final body = jsonDecode(await utf8.decoder.bind(request).join());
+        final command = CockpitCommand.fromJson(
+          Map<String, Object?>.from(body as Map<Object?, Object?>),
+        );
+        expect(command.commandType, CockpitCommandType.captureScreenshot);
+        expect(
+          command.screenshotRequest?.profile,
+          CockpitCaptureProfile.flutterPreferred,
+        );
+        request.response.write(
+          jsonEncode(
+            CockpitRemoteCommandResponse(
+              result: CockpitCommandResult(
+                success: true,
+                commandId: command.commandId,
+                commandType: command.commandType,
+                durationMs: 3,
+                artifacts: const <CockpitArtifactRef>[
+                  CockpitArtifactRef(
+                    role: 'screenshot',
+                    relativePath: 'screenshots/settings.png',
+                  ),
+                ],
+                requestedCaptureProfile: CockpitCaptureProfile.flutterPreferred,
+                resolvedCaptureKind: CockpitCaptureKind.flutterView,
+              ),
+              artifactPayloads: <CockpitRemoteArtifactPayload>[
+                CockpitRemoteArtifactPayload(
+                  artifact: const CockpitArtifactRef(
+                    role: 'screenshot',
+                    relativePath: 'screenshots/settings.png',
+                  ),
+                  bytes: png,
+                ),
+              ],
+            ).toJson(),
+          ),
+        );
+      } else {
+        request.response.statusCode = HttpStatus.notFound;
+      }
+      await request.response.close();
+    });
+
+    final adapter = CockpitRemoteAutomationAdapter(
+      client: CockpitRemoteSessionClient(
+        baseUri: Uri.parse('http://127.0.0.1:${server.port}'),
+      ),
+      workspaceRoot: workspace.path,
+    );
+    final capabilities = await adapter.describeCapabilities();
+    final execution = await adapter.execute(
+      CockpitCommand(
+        commandId: 'settings-visual',
+        commandType: CockpitCommandType.assertScreenshot,
+        parameters: const <String, Object?>{
+          'baseline': 'baselines/settings.png',
+          'similarity': 0.99,
+          'artifactName': 'settings',
+        },
+      ),
+    );
+
+    expect(
+      capabilities.supportedCommands,
+      contains(CockpitCommandType.assertScreenshot),
+    );
+    expect(execution.result.success, isTrue);
+    expect(execution.result.snapshot?['adapter'], 'flutterViewVisual');
+    expect(
+      execution.result.artifacts.map((artifact) => artifact.role),
+      containsAll(<String>[
+        'screenshot',
+        'screenshotBaseline',
+        'screenshotDiff',
+      ]),
+    );
+  });
 }

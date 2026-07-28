@@ -22,6 +22,7 @@ final class CockpitDemoAcceptanceRequest {
     required this.runTimeout,
     this.rootDirectory,
     this.deviceId,
+    this.visualProfile,
     this.stopDaemon = false,
     this.requireRecording = false,
   }) {
@@ -48,6 +49,7 @@ final class CockpitDemoAcceptanceRequest {
   final String? rootDirectory;
   final String platform;
   final String? deviceId;
+  final String? visualProfile;
   final String entrypoint;
   final String suitePath;
   final String outputRoot;
@@ -193,7 +195,7 @@ final class CockpitDemoAcceptanceRunner {
     bool? locationTravelSupported;
     bool? nativeBlackBoxSupported;
     bool? nativeLocatorSupported;
-    String? visualBaseline;
+    _CockpitDemoVisualBaseline? visualBaseline;
     String? systemControlAdapter;
     String? deviceId;
     String? appId;
@@ -413,10 +415,9 @@ final class CockpitDemoAcceptanceRunner {
       visualBaseline = _visualBaselineForTarget(
         platform: request.platform,
         device: discoveredDevice,
+        profile: request.visualProfile,
       );
-      visualRegressionSupported =
-          visualBaseline != null &&
-          availableSystemActions.contains('captureScreenshot');
+      visualRegressionSupported = visualBaseline != null;
       locationTravelSupported = availableSystemActions.contains('setLocation');
       final nativeLocatorAdvertised = const <String>{
         'readUiTree',
@@ -473,8 +474,15 @@ final class CockpitDemoAcceptanceRunner {
         recordingCapabilities: recordingCapabilities,
         systemControlProfile: systemControlProfile,
         mixedPlaneSupported: mixedPlaneSupported,
-        visualBaseline: visualBaseline,
+        visualBaseline: visualBaseline?.path,
+        visualProfile: visualBaseline?.profile,
+        visualExpectedWidth: visualBaseline?.width,
+        visualExpectedHeight: visualBaseline?.height,
         taskTitle: 'Cockpit $invocationId',
+        launchConfigurationLabel: _launchConfigurationLabel(
+          platform: request.platform,
+          invocationId: invocationId,
+        ),
         mixedPlaneEvidenceTemplate: mixedPlaneEvidenceTemplate,
         nativeBlackBoxTemplate: nativeBlackBoxTemplate,
         nativeBlackBoxEvidenceTemplate: nativeBlackBoxEvidenceTemplate,
@@ -654,7 +662,11 @@ CockpitTestSuite _suiteForRuntime(
   required Map<String, Object?> systemControlProfile,
   required bool mixedPlaneSupported,
   required String? visualBaseline,
+  required String? visualProfile,
+  required int? visualExpectedWidth,
+  required int? visualExpectedHeight,
   required String taskTitle,
+  required String launchConfigurationLabel,
   required CockpitTestCase mixedPlaneEvidenceTemplate,
   required CockpitTestCase nativeBlackBoxTemplate,
   required CockpitTestCase nativeBlackBoxEvidenceTemplate,
@@ -672,9 +684,7 @@ CockpitTestSuite _suiteForRuntime(
   final availableSystemActions =
       (systemControlProfile['availableActions']! as List<Object?>)
           .cast<String>();
-  final visualRegressionSupported =
-      visualBaseline != null &&
-      availableSystemActions.contains('captureScreenshot');
+  final visualRegressionSupported = visualBaseline != null;
   final locationTravelSupported = availableSystemActions.contains(
     'setLocation',
   );
@@ -703,6 +713,7 @@ CockpitTestSuite _suiteForRuntime(
                 for (final input in rawInputs.entries)
                   if (input.key is String) input.key! as String: input.value,
               'taskTitle': taskTitle,
+              'launchConfigurationLabel': launchConfigurationLabel,
             };
             taskInputBound = true;
           }
@@ -833,6 +844,12 @@ CockpitTestSuite _suiteForRuntime(
           ? 'baselineAssertion'
           : 'semanticCaptureFallback',
       'baseline': ?visualBaseline,
+      'profile': ?visualProfile,
+      if (visualExpectedWidth != null && visualExpectedHeight != null)
+        'expectedSize': <String, Object?>{
+          'width': visualExpectedWidth,
+          'height': visualExpectedHeight,
+        },
     },
     'locationTravel': <String, Object?>{'supported': locationTravelSupported},
     'mixedPlane': <String, Object?>{
@@ -863,21 +880,79 @@ CockpitTestSuite _suiteForRuntime(
   return CockpitTestSuite.fromJson(json);
 }
 
-String? _visualBaselineForTarget({
+typedef _CockpitDemoVisualBaseline = ({
+  String profile,
+  String path,
+  int width,
+  int height,
+});
+
+_CockpitDemoVisualBaseline? _visualBaselineForTarget({
   required String platform,
   required _CockpitDemoDiscoveredTarget device,
+  required String? profile,
 }) {
-  return switch (platform) {
-    'android' when device.sdk?.contains('(API 34)') ?? false =>
-      'e2e/baselines/android/settings.png',
-    'ios' when device.name == 'iPhone 16 Pro' =>
-      'e2e/baselines/ios/settings.png',
-    'linux' => 'e2e/baselines/linux/settings.png',
-    'macos' => 'e2e/baselines/macos/settings.png',
-    'windows' => 'e2e/baselines/windows/settings.png',
+  if (profile == null) return null;
+  final baseline = switch ((platform, profile)) {
+    ('android', 'pixel-7-api-34-1080x2400')
+        when device.sdk?.contains('(API 34)') ?? false =>
+      (
+        profile: profile,
+        path: 'e2e/baselines/android/settings.png',
+        width: 1080,
+        height: 2400,
+      ),
+    ('ios', 'iphone-16-pro-1206x2622') when device.name == 'iPhone 16 Pro' => (
+      profile: profile,
+      path: 'e2e/baselines/ios/settings.png',
+      width: 1206,
+      height: 2622,
+    ),
+    ('linux', 'linux-1280x720') => (
+      profile: profile,
+      path: 'e2e/baselines/linux/settings.png',
+      width: 1280,
+      height: 720,
+    ),
+    ('macos', 'macos-800x600') => (
+      profile: profile,
+      path: 'e2e/baselines/macos/settings.png',
+      width: 800,
+      height: 600,
+    ),
+    ('windows', 'windows-1028x681') => (
+      profile: profile,
+      path: 'e2e/baselines/windows/settings.png',
+      width: 1028,
+      height: 681,
+    ),
     _ => null,
   };
+  if (baseline == null) {
+    throw FormatException(
+      'Visual profile $profile does not match the discovered $platform '
+      'target ${device.name} (${device.sdk ?? 'unknown SDK'}).',
+    );
+  }
+  return baseline;
 }
+
+String _launchConfigurationLabel({
+  required String platform,
+  required String invocationId,
+}) => <String>[
+  'Cockpit launch configuration',
+  'platform=$platform',
+  'defineFile=ci',
+  if (const <String>{
+    'linux',
+    'macos',
+    'windows',
+  }.contains(platform)) ...<String>[
+    'environmentPlatform=$platform',
+    'environmentInvocation=$invocationId',
+  ],
+].join(' ');
 
 typedef _CockpitDemoRecordingSupport = ({
   bool supported,

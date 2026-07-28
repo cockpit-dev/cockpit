@@ -45,6 +45,7 @@ cases:
   - id: taskEditorValidation
     fixtures: [attemptBaseline]
     inputs:
+      launchConfigurationLabel: Cockpit launch configuration
       taskTitle: Cockpit acceptance task
     source:
       kind: file

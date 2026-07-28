@@ -213,8 +213,10 @@ coordinate 步骤可以出现在同一个 case。condition 以及 fragment/if/re
 文本控制包含 `copyText`、`eraseText`、`pasteText`；`travel` 按有界的经纬度点序列
 执行，并支持 route 或单点延迟。visual locator 指向 workspace 内模板文件；
 `assertScreenshot` 指向 workspace 内 baseline，并将 actual、baseline、确定性 diff
-文件写入 attempt evidence。pre/post 取证应由 suite fixture、case `setup`/`finally`、
-step `evidence` 和显式录屏操作在实际拥有该生命周期的作用域组合表达。
+文件写入 attempt evidence。baseline 必须按平台、设备或 viewport、像素比和方向等稳定
+profile 选择；尺寸不一致代表 profile 错误或布局回归，不会自动缩放。pre/post 取证应由
+suite fixture、case `setup`/`finally`、step `evidence` 和显式录屏操作在实际拥有该
+生命周期的作用域组合表达。
 
 ## Foreground CI
 

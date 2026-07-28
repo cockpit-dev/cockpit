@@ -144,16 +144,50 @@ jobs:
         include:
           - platform: android
             os: ubuntu-latest
+            visual_args: --visual-profile pixel-7-api-34-1080x2400
+            platform_tests: >-
+              test/src/platform/android
+              test/src/capture/cockpit_adb_capture_adapter_test.dart
+              test/src/recording/cockpit_adb_recording_adapter_test.dart
+              test/src/session/cockpit_remote_session_launcher_test.dart
           - platform: ios
             os: macos-latest
+            visual_args: --visual-profile iphone-16-pro-1206x2622
+            platform_tests: >-
+              test/src/platform/ios
+              test/src/capture/cockpit_simctl_capture_adapter_test.dart
+              test/src/recording/cockpit_simctl_recording_adapter_test.dart
+              test/src/session/cockpit_remote_session_launcher_test.dart
           - platform: macos
             os: macos-latest
+            visual_args: --visual-profile macos-800x600
+            platform_tests: >-
+              test/src/platform/macos
+              test/src/capture/cockpit_macos_capture_adapter_test.dart
+              test/src/recording/cockpit_macos_recording_adapter_test.dart
+              test/src/session/cockpit_macos_remote_session_launcher_test.dart
           - platform: linux
             os: ubuntu-latest
+            visual_args: --visual-profile linux-1280x720
+            platform_tests: >-
+              test/src/platform/linux
+              test/src/capture/cockpit_linux_capture_adapter_test.dart
+              test/src/recording/cockpit_linux_recording_adapter_test.dart
+              test/src/session/cockpit_linux_remote_session_launcher_test.dart
           - platform: web
             os: ubuntu-latest
+            visual_args: ''
+            platform_tests: >-
+              test/src/platform/web
+              test/src/bridge/cockpit_web_remote_session_bridge_server_test.dart
           - platform: windows
             os: windows-2022
+            visual_args: --visual-profile windows-1028x681
+            platform_tests: >-
+              test/src/platform/windows
+              test/src/capture/cockpit_windows_capture_adapter_test.dart
+              test/src/recording/cockpit_windows_recording_adapter_test.dart
+              test/src/session/cockpit_windows_remote_session_launcher_test.dart
     env:
       COCKPIT_HOME: ${{ github.workspace }}/cockpit-ci-home
       ACCEPTANCE_OUTPUT: ${{ github.workspace }}/cockpit-ci-acceptance
@@ -199,7 +233,7 @@ jobs:
         shell: bash
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends xvfb xdotool imagemagick ffmpeg clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev
+          sudo apt-get install -y --no-install-recommends xvfb x11-utils xdotool imagemagick ffmpeg clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev
 
       - name: Enable desktop target
         if: matrix.platform == 'linux' || matrix.platform == 'macos' || matrix.platform == 'windows'
@@ -219,6 +253,11 @@ jobs:
         working-directory: examples/cockpit_demo/cockpit
         shell: bash
         run: flutter pub get
+
+      - name: Run ${{ matrix.platform }} platform tests
+        working-directory: packages/cockpit
+        shell: bash
+        run: dart test ${{ matrix.platform_tests }}
 
       - name: Apply isolated CI authorization
         shell: bash
@@ -272,6 +311,7 @@ jobs:
           script: >-
             cd "$GITHUB_WORKSPACE/examples/cockpit_demo/cockpit" &&
             dart run tool/verify.dart --platform android
+            ${{ matrix.visual_args }}
             --output-root "$ACCEPTANCE_OUTPUT" --require-recording
             --stop-daemon
 
@@ -282,6 +322,7 @@ jobs:
         run: >-
           dart run tool/verify.dart --platform ios
           --device-id "$IOS_DEVICE_ID"
+          ${{ matrix.visual_args }}
           --output-root "$ACCEPTANCE_OUTPUT" --require-recording
           --stop-daemon
 
@@ -291,6 +332,7 @@ jobs:
         shell: bash
         run: >-
           dart run tool/verify.dart --platform macos
+          ${{ matrix.visual_args }}
           --output-root "$ACCEPTANCE_OUTPUT" --stop-daemon
 
       - name: Run headless regression
@@ -298,8 +340,10 @@ jobs:
         working-directory: examples/cockpit_demo/cockpit
         shell: bash
         run: >-
-          xvfb-run -a dart run tool/verify.dart
+          xvfb-run -a --server-args="-screen 0 1280x720x24"
+          dart run tool/verify.dart
           --platform ${{ matrix.platform }}
+          ${{ matrix.visual_args }}
           --output-root "$ACCEPTANCE_OUTPUT" --stop-daemon
 
       - name: Run Windows regression
@@ -307,7 +351,7 @@ jobs:
         shell: pwsh
         run: |
           Set-Location (Join-Path $env:COCKPIT_WINDOWS_WORKSPACE 'examples\cockpit_demo\cockpit')
-          dart run tool/verify.dart --platform windows --output-root "$env:ACCEPTANCE_OUTPUT" --stop-daemon
+          dart run tool/verify.dart --platform windows ${{ matrix.visual_args }} --output-root "$env:ACCEPTANCE_OUTPUT" --stop-daemon
 
       - name: Collect Windows build diagnostics
         if: always() && matrix.platform == 'windows'

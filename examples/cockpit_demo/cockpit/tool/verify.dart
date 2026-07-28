@@ -23,6 +23,10 @@ Future<void> main(List<String> arguments) async {
     )
     ..addOption('device-id', help: 'Connected Flutter device id.')
     ..addOption(
+      'visual-profile',
+      help: 'Named platform, viewport, and DPR profile for visual baselines.',
+    )
+    ..addOption(
       'project-dir',
       defaultsTo: _defaultProjectDirectory(),
       help: 'Absolute cockpit_demo development-shell directory.',
@@ -60,6 +64,7 @@ Future<void> main(List<String> arguments) async {
       rootDirectory: parsed.option('root-dir'),
       platform: parsed.option('platform')!,
       deviceId: parsed.option('device-id'),
+      visualProfile: parsed.option('visual-profile'),
       entrypoint: parsed.option('entrypoint')!,
       suitePath: parsed.option('suite')!,
       outputRoot: parsed.option('output-root')!,

@@ -17,9 +17,6 @@ final class CockpitRpcWorkerForwardedPortHandoff
         CockpitWorkerInternalOperationDispatcher {
   CockpitRpcWorkerForwardedPortHandoff({
     required this.workspaceId,
-    required this.workerOwnerId,
-    required this.workerProcessId,
-    required this.processStartIdentity,
     required CockpitJsonRpcPeer peer,
     CockpitWorkerLogger? logger,
     DateTime Function()? utcNow,
@@ -27,19 +24,11 @@ final class CockpitRpcWorkerForwardedPortHandoff
        _logger = logger ?? CockpitWorkerLogger(),
        _utcNow = utcNow ?? (() => DateTime.now().toUtc()) {
     workerId(workspaceId, r'$.workspaceId');
-    workerId(workerOwnerId, r'$.workerOwnerId');
-    workerString(processStartIdentity, r'$.processStartIdentity', maximum: 512);
-    if (workerProcessId <= 0) {
-      throw const FormatException('Worker process id is invalid.');
-    }
   }
 
   static const String bindKind = 'worker.port.bind';
 
   final String workspaceId;
-  final String workerOwnerId;
-  final int workerProcessId;
-  final String processStartIdentity;
   final CockpitJsonRpcPeer _peer;
   final CockpitWorkerLogger _logger;
   final DateTime Function() _utcNow;
@@ -81,9 +70,6 @@ final class CockpitRpcWorkerForwardedPortHandoff
             deadline: deadline,
             input: <String, Object?>{
               'grantId': grant.grantId,
-              'ownerId': workerOwnerId,
-              'processId': workerProcessId,
-              'processStartIdentity': processStartIdentity,
               'sessionId': grant.holderId,
             },
           ).toJson(),

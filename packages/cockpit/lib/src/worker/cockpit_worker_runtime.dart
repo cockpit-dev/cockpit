@@ -162,7 +162,6 @@ final class CockpitWorkerRuntime {
     Stream<List<int>>? input,
     StreamSink<List<int>>? output,
     Map<String, String>? environment,
-    int? processId,
     CockpitPermissionHardener? permissionHardener,
     CockpitDirectorySyncer? directorySyncer,
     CockpitWorkerLogger? logger,
@@ -172,7 +171,6 @@ final class CockpitWorkerRuntime {
        _environment = Map<String, String>.unmodifiable(
          environment ?? Platform.environment,
        ),
-       _processId = processId ?? pid,
        _permissionHardener = permissionHardener ?? _systemPermissionHardener(),
        _directorySyncer = directorySyncer ?? _systemDirectorySyncer(),
        _logger = logger ?? CockpitWorkerLogger(),
@@ -182,7 +180,6 @@ final class CockpitWorkerRuntime {
   final Stream<List<int>> _input;
   final StreamSink<List<int>> _output;
   final Map<String, String> _environment;
-  final int _processId;
   final CockpitPermissionHardener _permissionHardener;
   final CockpitDirectorySyncer _directorySyncer;
   final CockpitWorkerLogger _logger;
@@ -264,9 +261,6 @@ final class CockpitWorkerRuntime {
     );
     final portHandoff = CockpitRpcWorkerForwardedPortHandoff(
       workspaceId: configuration.workspaceId,
-      workerOwnerId: configuration.workerOwnerId,
-      workerProcessId: _processId,
-      processStartIdentity: configuration.processStartIdentity,
       peer: peer,
       logger: _logger,
     );
@@ -556,7 +550,6 @@ Future<int> runCockpitWorker(
   Stream<List<int>>? input,
   StreamSink<List<int>>? output,
   Map<String, String>? environment,
-  int? processId,
   CockpitPermissionHardener? permissionHardener,
   CockpitDirectorySyncer? directorySyncer,
   CockpitWorkerLogger? logger,
@@ -570,7 +563,6 @@ Future<int> runCockpitWorker(
       input: input,
       output: output,
       environment: environment,
-      processId: processId,
       permissionHardener: permissionHardener,
       directorySyncer: directorySyncer,
       logger: effectiveLogger,

@@ -38,7 +38,8 @@ steps:
   - stepId: settleVisualSurface
     action: {type: waitForUiIdle, quietMs: 300}
   - stepId: assertSettingsScreenshot
-    description: Compare a deterministic native capture with a committed platform baseline.
+    description: Compare a deterministic Flutter-view capture with the selected visual profile baseline.
+    plane: semantic
     timeoutMs: 30000
     action:
       type: assertScreenshot

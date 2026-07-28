@@ -6,7 +6,6 @@ import '../foundation/cockpit_ids.dart';
 import '../worker/cockpit_worker_resource_grant.dart';
 import '../worker/cockpit_worker_value_reader.dart';
 import 'cockpit_lease_registry.dart';
-import 'cockpit_port_models.dart';
 import 'cockpit_safe_port_allocator.dart';
 import 'cockpit_supervisor_worker_port_bridge.dart';
 
@@ -189,21 +188,9 @@ final class CockpitLeaseWorkerResourceAuthority
     final input = workerObject(invocation.input, r'$.input');
     workerKeys(
       input,
-      const <String>{
-        'grantId',
-        'ownerId',
-        'processId',
-        'processStartIdentity',
-        'sessionId',
-      },
+      const <String>{'grantId', 'sessionId'},
       r'$.input',
-      required: const <String>{
-        'grantId',
-        'ownerId',
-        'processId',
-        'processStartIdentity',
-        'sessionId',
-      },
+      required: const <String>{'grantId', 'sessionId'},
     );
     final grantId = workerId(input['grantId'], r'$.input.grantId');
     final active = _grants[grantId];
@@ -213,24 +200,14 @@ final class CockpitLeaseWorkerResourceAuthority
         'Forwarded-port handoff grant is stale or invalid.',
       );
     }
-    final expectedOwner = CockpitExpectedPortOwner(
-      ownerId: workerId(input['ownerId'], r'$.input.ownerId'),
-      processId: workerInteger(
-        input['processId'],
-        r'$.input.processId',
-        minimum: 1,
-      ),
-      processStartIdentity: workerString(
-        input['processStartIdentity'],
-        r'$.input.processStartIdentity',
-        maximum: 512,
-      ),
-      sessionId: workerId(input['sessionId'], r'$.input.sessionId'),
-    );
-    if (expectedOwner.sessionId != active.grant.holderId) {
+    final sessionId = workerId(input['sessionId'], r'$.input.sessionId');
+    if (sessionId != active.grant.holderId) {
       throw const FormatException('Port handoff session owner is invalid.');
     }
-    _portBridge.validateExpectedOwner(grantId, expectedOwner);
+    final expectedOwner = _portBridge.expectedOwnerFor(
+      grantId,
+      sessionId: sessionId,
+    );
     final remaining = invocation.deadline?.difference(_utcNow());
     if (remaining == null || remaining <= Duration.zero) {
       throw const FormatException('Port handoff deadline has expired.');
