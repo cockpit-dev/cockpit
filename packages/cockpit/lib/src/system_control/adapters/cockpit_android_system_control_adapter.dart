@@ -1,5 +1,6 @@
 import 'package:cockpit_protocol/cockpit_protocol.dart';
 
+import '../cockpit_android_ui_automation_client.dart';
 import '../cockpit_system_control_action.dart';
 import '../cockpit_system_control_adapter.dart';
 import '../cockpit_system_control_parameters.dart';
@@ -169,8 +170,11 @@ final class CockpitAndroidSystemControlAdapter
           action: CockpitSystemControlAction.dismissSystemDialog,
           plane: CockpitPlaneKind.deviceSystemPlane,
           availability: availability,
-          strategy: 'adb.uiautomator.permission-button',
-          requires: deviceRequires,
+          strategy: 'cockpit.androidx.uiautomator.system-dialog',
+          requires: <String>[
+            ...deviceRequires,
+            'bundled Cockpit Android driver',
+          ],
           limitations: <String>[
             'Matches common Android permission and system dialog button ids/text; custom OEM dialogs may still require coordinate or semantic fallback.',
           ],
@@ -399,8 +403,12 @@ final class CockpitAndroidSystemControlAdapter
           action: CockpitSystemControlAction.tapNotification,
           plane: CockpitPlaneKind.deviceSystemPlane,
           availability: availability,
-          strategy: 'adb.statusbar.expand+uiautomator.notification-tap',
-          requires: <String>[...deviceRequires, 'visible notification text'],
+          strategy: 'cockpit.androidx.uiautomator.notification-tap',
+          requires: <String>[
+            ...deviceRequires,
+            'visible notification text',
+            'bundled Cockpit Android driver',
+          ],
           limitations: <String>[
             'Matches visible notification text after expanding the shade; OEM notification layouts may require coordinate fallback.',
           ],
@@ -425,8 +433,12 @@ final class CockpitAndroidSystemControlAdapter
           action: CockpitSystemControlAction.resolveBlockers,
           plane: CockpitPlaneKind.deviceSystemPlane,
           availability: availability,
-          strategy: 'adb.dismiss-dialog+keyboard+statusbar+recover-app',
-          requires: <String>[...deviceRequires, 'package id'],
+          strategy: 'macro.androidx-dialog+adb-recover-app',
+          requires: <String>[
+            ...deviceRequires,
+            'package id',
+            'bundled Cockpit Android driver',
+          ],
           limitations: <String>[
             'Handles common permission dialogs, IME focus, and notification shade blockers before restoring the app.',
           ],
@@ -534,8 +546,12 @@ final class CockpitAndroidSystemControlAdapter
           action: CockpitSystemControlAction.readUiTree,
           plane: CockpitPlaneKind.nativeUiPlane,
           availability: availability,
-          strategy: 'adb.shell.uiautomator.dump',
-          requires: deviceRequires,
+          strategy: 'cockpit.androidx.uiautomator.instrumentation',
+          requires: <String>[
+            ...deviceRequires,
+            'bundled Cockpit Android driver',
+          ],
+          parameters: CockpitSystemControlParameterSets.readUiTree,
         ),
         CockpitSystemControlCapability(
           action: CockpitSystemControlAction.readProcessList,
@@ -940,13 +956,7 @@ final class CockpitAndroidSystemControlAdapter
           adbShell(const <String>['cmd', 'statusbar', 'collapse']),
         ),
       CockpitSystemControlAction.tapNotification =>
-        _androidTapNotificationCommand(
-          request,
-          (script) => CockpitResolvedSystemControlCommand(
-            'adb',
-            adbShellScript(script),
-          ),
-        ),
+        _androidTapNotificationCommand(request, deviceId),
       CockpitSystemControlAction.recoverToApp => _packageCommand(
         request,
         (packageId) => CockpitResolvedSystemControlCommand(
@@ -955,12 +965,9 @@ final class CockpitAndroidSystemControlAdapter
         ),
       ),
       CockpitSystemControlAction.resolveBlockers =>
-        _androidResolveBlockersCommand(
-          request,
-          (script) => CockpitResolvedSystemControlCommand(
-            'adb',
-            adbShellScript(script),
-          ),
+        const CockpitResolvedSystemControlCommand.error(
+          code: 'systemMacroAction',
+          message: 'Macro actions are executed through the action service.',
         ),
       CockpitSystemControlAction.preparePermissions ||
       CockpitSystemControlAction.stabilizeForScreenshot =>
@@ -1029,13 +1036,7 @@ final class CockpitAndroidSystemControlAdapter
           ),
         ),
       CockpitSystemControlAction.dismissSystemDialog =>
-        _androidDismissSystemDialogCommand(
-          request,
-          (script) => CockpitResolvedSystemControlCommand(
-            'adb',
-            adbShellScript(script),
-          ),
-        ),
+        _androidDismissSystemDialogCommand(request, deviceId),
       CockpitSystemControlAction.dismissKeyboard =>
         CockpitResolvedSystemControlCommand(
           'adb',
@@ -1055,13 +1056,10 @@ final class CockpitAndroidSystemControlAdapter
           code: 'systemEvidenceAction',
           message: 'Recording actions are executed through recording adapters.',
         ),
-      CockpitSystemControlAction.readUiTree =>
-        CockpitResolvedSystemControlCommand(
-          'adb',
-          adbShellScript(
-            'uiautomator dump /sdcard/window.xml >/dev/null && cat /sdcard/window.xml && rm /sdcard/window.xml',
-          ),
-        ),
+      CockpitSystemControlAction.readUiTree => _androidReadUiTreeCommand(
+        request,
+        deviceId,
+      ),
       CockpitSystemControlAction.readProcessList =>
         CockpitResolvedSystemControlCommand(
           'adb',
@@ -1567,7 +1565,7 @@ final class CockpitAndroidSystemControlAdapter
 
   CockpitResolvedSystemControlCommand _androidDismissSystemDialogCommand(
     CockpitSystemControlActionRequest request,
-    CockpitResolvedSystemControlCommand Function(String script) factory,
+    String deviceId,
   ) {
     final decision = cockpitReadSystemControlStringParameter(
       request.parameters,
@@ -1582,12 +1580,49 @@ final class CockpitAndroidSystemControlAdapter
       );
     }
     final mode = decision.value ?? 'accept';
-    return factory(_androidDismissSystemDialogScript(mode));
+    return CockpitResolvedSystemControlCommand(
+      cockpitAndroidUiAutomationCommandExecutable,
+      <String>[deviceId, 'dismissSystemDialog', mode],
+    );
+  }
+
+  CockpitResolvedSystemControlCommand _androidReadUiTreeCommand(
+    CockpitSystemControlActionRequest request,
+    String deviceId,
+  ) {
+    final maxDepth = cockpitReadSystemControlIntParameter(
+      request.parameters,
+      'maxDepth',
+      minimum: 1,
+      maximum: 64,
+    );
+    final maxNodes = cockpitReadSystemControlIntParameter(
+      request.parameters,
+      'maxNodes',
+      minimum: 1,
+      maximum: 10000,
+    );
+    if (maxDepth.isInvalid || maxNodes.isInvalid) {
+      return const CockpitResolvedSystemControlCommand.error(
+        code: 'invalidSystemActionParameter',
+        message:
+            'readUiTree requires maxDepth from 1 to 64 and maxNodes from 1 to 10000.',
+      );
+    }
+    return CockpitResolvedSystemControlCommand(
+      cockpitAndroidUiAutomationCommandExecutable,
+      <String>[
+        deviceId,
+        'readUiTree',
+        '${maxDepth.value ?? 16}',
+        '${maxNodes.value ?? 2000}',
+      ],
+    );
   }
 
   CockpitResolvedSystemControlCommand _androidTapNotificationCommand(
     CockpitSystemControlActionRequest request,
-    CockpitResolvedSystemControlCommand Function(String script) factory,
+    String deviceId,
   ) {
     final title = cockpitReadSystemControlStringParameter(
       request.parameters,
@@ -1620,44 +1655,9 @@ final class CockpitAndroidSystemControlAdapter
             'tapNotification requires title, body, tag, or text to match the delivered notification.',
       );
     }
-    return factory(_androidTapNotificationScript(matchText));
-  }
-
-  CockpitResolvedSystemControlCommand _androidResolveBlockersCommand(
-    CockpitSystemControlActionRequest request,
-    CockpitResolvedSystemControlCommand Function(String script) factory,
-  ) {
-    final packageId = _readPackageId(request);
-    final decision = cockpitReadSystemControlStringParameter(
-      request.parameters,
-      'decision',
-      allowedValues: const <String>['accept', 'dismiss'],
-    );
-    final dismissKeyboard = cockpitReadSystemControlBoolParameter(
-      request.parameters,
-      'dismissKeyboard',
-    );
-    if (packageId.isInvalid ||
-        decision.isInvalid ||
-        dismissKeyboard.isInvalid) {
-      return const CockpitResolvedSystemControlCommand.error(
-        code: 'invalidSystemActionParameter',
-        message:
-            'resolveBlockers requires string packageId/appId plus optional decision and dismissKeyboard parameters.',
-      );
-    }
-    if (!packageId.isValid) {
-      return const CockpitResolvedSystemControlCommand.error(
-        code: 'missingSystemActionParameter',
-        message: 'resolveBlockers requires --app-id or packageId.',
-      );
-    }
-    return factory(
-      _androidResolveBlockersScript(
-        packageId.value!,
-        decision.value ?? 'accept',
-        dismissKeyboard: dismissKeyboard.value ?? true,
-      ),
+    return CockpitResolvedSystemControlCommand(
+      cockpitAndroidUiAutomationCommandExecutable,
+      <String>[deviceId, 'tapNotification', matchText],
     );
   }
 
@@ -1778,108 +1778,12 @@ exec logcat -d -v time -t $lineCount
     return factory('set -e\n${commands.join('\n')}');
   }
 
-  String _androidDismissSystemDialogScript(String decision) {
-    final buttonSpecs = decision == 'dismiss'
-        ? const <String>[
-            'resource-id="com.android.permissioncontroller:id/permission_deny_button"',
-            'resource-id="com.android.packageinstaller:id/permission_deny_button"',
-            'text="Deny"',
-            'text="DENY"',
-            'text="Don’t allow"',
-            'text="Cancel"',
-            'text="CANCEL"',
-          ]
-        : const <String>[
-            'resource-id="com.android.permissioncontroller:id/permission_allow_button"',
-            'resource-id="com.android.permissioncontroller:id/permission_allow_foreground_only_button"',
-            'resource-id="com.android.permissioncontroller:id/permission_allow_one_time_button"',
-            'resource-id="com.android.packageinstaller:id/permission_allow_button"',
-            'text="Allow"',
-            'text="ALLOW"',
-            'text="While using the app"',
-            'text="Only this time"',
-            'text="OK"',
-          ];
-    final patterns = buttonSpecs.map((spec) => "  -e '$spec'").join(' ');
-    final notFoundFallback = decision == 'dismiss'
-        ? 'input keyevent KEYCODE_BACK'
-        : 'echo "flutter_cockpit: no matching Android system dialog accept button" >&2; exit 2';
-    return '''
-set -e
-dump="/sdcard/flutter_cockpit_window.xml"
-uiautomator dump "\$dump" >/dev/null
-match=\$(grep -E $patterns "\$dump" | head -n 1 || true)
-rm -f "\$dump"
-if [ -z "\$match" ]; then
-  $notFoundFallback
-  exit \$?
-fi
-bounds=\$(printf "%s" "\$match" | sed -n 's/.*bounds="\\[\\([0-9][0-9]*\\),\\([0-9][0-9]*\\)\\]\\[\\([0-9][0-9]*\\),\\([0-9][0-9]*\\)\\]".*/\\1 \\2 \\3 \\4/p')
-if [ -z "\$bounds" ]; then
-  echo "flutter_cockpit: Android system dialog button had no bounds" >&2
-  exit 2
-fi
-set -- \$bounds
-x=\$(( (\$1 + \$3) / 2 ))
-y=\$(( (\$2 + \$4) / 2 ))
-input tap "\$x" "\$y"
-''';
-  }
-
-  String _androidTapNotificationScript(String matchText) {
-    final quotedMatch = _shellSingleQuoted(matchText);
-    return '''
-set -e
-cmd statusbar expand-notifications >/dev/null 2>&1 || true
-sleep 0.4
-dump="/sdcard/flutter_cockpit_notification.xml"
-uiautomator dump "\$dump" >/dev/null
-match=\$(grep -F $quotedMatch "\$dump" | head -n 1 || true)
-if [ -z "\$match" ]; then
-  rm -f "\$dump"
-  echo "flutter_cockpit: no notification text matched $quotedMatch" >&2
-  exit 2
-fi
-bounds=\$(printf "%s" "\$match" | sed -n 's/.*bounds="\\[\\([0-9][0-9]*\\),\\([0-9][0-9]*\\)\\]\\[\\([0-9][0-9]*\\),\\([0-9][0-9]*\\)\\]".*/\\1 \\2 \\3 \\4/p')
-rm -f "\$dump"
-if [ -z "\$bounds" ]; then
-  echo "flutter_cockpit: matched notification node had no bounds" >&2
-  exit 2
-fi
-set -- \$bounds
-x=\$(( (\$1 + \$3) / 2 ))
-y=\$(( (\$2 + \$4) / 2 ))
-input tap "\$x" "\$y"
-''';
-  }
-
   String _androidRecoverToAppScript(String packageId) {
     final quotedPackage = _shellSingleQuoted(packageId);
     return '''
 set -e
 cmd statusbar collapse >/dev/null 2>&1 || true
 monkey -p $quotedPackage -c android.intent.category.LAUNCHER 1 >/dev/null
-''';
-  }
-
-  String _androidResolveBlockersScript(
-    String packageId,
-    String decision, {
-    required bool dismissKeyboard,
-  }) {
-    final quotedPackage = _shellSingleQuoted(packageId);
-    final dialogScript = _androidDismissSystemDialogScript(decision);
-    return '''
-set +e
-(
-$dialogScript
-) >/dev/null 2>&1
-if [ "$dismissKeyboard" = "true" ]; then
-  input keyevent KEYCODE_BACK >/dev/null 2>&1 || true
-fi
-cmd statusbar collapse >/dev/null 2>&1 || true
-monkey -p $quotedPackage -c android.intent.category.LAUNCHER 1 >/dev/null
-exit 0
 ''';
   }
 

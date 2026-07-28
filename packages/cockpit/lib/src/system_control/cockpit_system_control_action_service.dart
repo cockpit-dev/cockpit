@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -17,6 +18,7 @@ import '../recording/cockpit_linux_recording_adapter.dart';
 import '../recording/cockpit_macos_recording_adapter.dart';
 import '../recording/cockpit_simctl_recording_adapter.dart';
 import '../recording/cockpit_windows_recording_adapter.dart';
+import 'cockpit_android_ui_automation_client.dart';
 import 'cockpit_system_control_adapter.dart';
 import 'cockpit_ios_webdriver_agent_client.dart';
 import 'cockpit_system_control_parameters.dart';
@@ -24,6 +26,9 @@ import 'cockpit_system_control_service.dart';
 
 export 'cockpit_system_control_action.dart';
 export 'cockpit_system_control_profile.dart';
+
+const String _cockpitAndroidInstrumentationTarget =
+    'dev.cockpit.driver.test/androidx.test.runner.AndroidJUnitRunner';
 
 typedef CockpitSystemControlRunActionFunction =
     Future<CockpitSystemControlActionResult> Function(
@@ -49,6 +54,7 @@ final class CockpitSystemControlActionService {
     CockpitSystemControlService? systemControlService,
     CockpitSystemControlCaptureAdapterFactory? captureAdapterFactory,
     CockpitSystemControlRecordingAdapterFactory? recordingAdapterFactory,
+    CockpitAndroidUiAutomation? androidUiAutomation,
     CockpitIosWdaRunner? iosWdaRunner,
   }) : _processManager = processManager ?? const LocalCockpitProcessManager(),
        _registry = registry,
@@ -63,6 +69,12 @@ final class CockpitSystemControlActionService {
            captureAdapterFactory ?? _defaultCaptureAdapterFor,
        _recordingAdapterFactory =
            recordingAdapterFactory ?? _defaultRecordingAdapterFor,
+       _androidUiAutomation =
+           androidUiAutomation ??
+           CockpitAndroidUiAutomationClient(
+             processManager:
+                 processManager ?? const LocalCockpitProcessManager(),
+           ),
        _iosWdaRunner = iosWdaRunner ?? CockpitIosWebDriverAgentClient().run;
 
   final CockpitProcessManager _processManager;
@@ -70,6 +82,7 @@ final class CockpitSystemControlActionService {
   final CockpitSystemControlService _systemControlService;
   final CockpitSystemControlCaptureAdapterFactory _captureAdapterFactory;
   final CockpitSystemControlRecordingAdapterFactory _recordingAdapterFactory;
+  final CockpitAndroidUiAutomation _androidUiAutomation;
   final CockpitIosWdaRunner _iosWdaRunner;
 
   Future<CockpitSystemControlActionResult> run(
@@ -139,6 +152,10 @@ final class CockpitSystemControlActionService {
     if (request.action == CockpitSystemControlAction.preparePermissions) {
       return _preparePermissions(effectiveRequest, profile, capability);
     }
+    if (request.platform.trim().toLowerCase() == 'android' &&
+        request.action == CockpitSystemControlAction.resolveBlockers) {
+      return _resolveAndroidBlockers(effectiveRequest, profile, capability);
+    }
     if (request.action == CockpitSystemControlAction.stabilizeForScreenshot) {
       return _stabilizeForScreenshot(effectiveRequest, profile, capability);
     }
@@ -161,6 +178,9 @@ final class CockpitSystemControlActionService {
 
     if (command.executable == cockpitIosWdaCommandExecutable) {
       return _runIosWebDriverAgentCommand(request, capability, command);
+    }
+    if (command.executable == cockpitAndroidUiAutomationCommandExecutable) {
+      return _runAndroidUiAutomationCommand(request, capability, command);
     }
 
     return _runProcessCommand(request, capability, command);
@@ -265,6 +285,73 @@ final class CockpitSystemControlActionService {
       profile,
       capability,
       steps: steps,
+      recommendedNextStepOnSuccess: 'readPostActionState',
+    );
+  }
+
+  Future<CockpitSystemControlActionResult> _resolveAndroidBlockers(
+    CockpitSystemControlActionRequest request,
+    CockpitSystemControlProfile profile,
+    CockpitSystemControlCapability capability,
+  ) {
+    final decision = cockpitReadSystemControlStringParameter(
+      request.parameters,
+      'decision',
+      allowedValues: const <String>['accept', 'dismiss'],
+    );
+    final dismissKeyboard = cockpitReadSystemControlBoolParameter(
+      request.parameters,
+      'dismissKeyboard',
+    );
+    final requestAppId = request.appId?.trim();
+    final target = requestAppId != null && requestAppId.isNotEmpty
+        ? CockpitSystemControlStringParameter.valid(requestAppId)
+        : cockpitReadFirstSystemControlStringParameter(
+            request.parameters,
+            const <String>['packageId', 'appId'],
+          );
+    if (!target.isValid) {
+      return Future<CockpitSystemControlActionResult>.value(
+        _notExecutable(
+          request,
+          availability: capability.availability,
+          recommendedNextStep: 'fixActionPayload',
+          errorCode: target.isInvalid
+              ? 'invalidSystemActionParameter'
+              : 'missingSystemActionParameter',
+          errorMessage: target.isInvalid
+              ? 'resolveBlockers requires a string packageId or appId.'
+              : 'resolveBlockers requires --app-id, packageId, or appId.',
+          strategy: capability.strategy,
+          requires: capability.requires,
+          limitations: capability.limitations,
+        ),
+      );
+    }
+    return _runMacroSteps(
+      request,
+      profile,
+      capability,
+      steps: <_SystemMacroStep>[
+        _SystemMacroStep(
+          action: CockpitSystemControlAction.dismissSystemDialog,
+          parameters: <String, Object?>{'decision': decision.value ?? 'accept'},
+          optional: true,
+        ),
+        if (dismissKeyboard.value ?? true)
+          const _SystemMacroStep(
+            action: CockpitSystemControlAction.dismissKeyboard,
+            optional: true,
+          ),
+        const _SystemMacroStep(
+          action: CockpitSystemControlAction.collapseSystemUi,
+          optional: true,
+        ),
+        _SystemMacroStep(
+          action: CockpitSystemControlAction.recoverToApp,
+          parameters: <String, Object?>{'packageId': target.value!},
+        ),
+      ],
       recommendedNextStepOnSuccess: 'readPostActionState',
     );
   }
@@ -415,6 +502,109 @@ final class CockpitSystemControlActionService {
       steps: steps,
       recommendedNextStepOnSuccess: 'captureScreenshot',
     );
+  }
+
+  Future<CockpitSystemControlActionResult> _runAndroidUiAutomationCommand(
+    CockpitSystemControlActionRequest request,
+    CockpitSystemControlCapability capability,
+    CockpitResolvedSystemControlCommand command,
+  ) async {
+    final arguments = command.arguments;
+    final deviceId = arguments.first;
+    final action = arguments[1];
+    final testMethod = switch (action) {
+      'readUiTree' => 'dumpUiTree',
+      'dismissSystemDialog' => 'tapSystemDialog',
+      'tapNotification' => 'tapNotification',
+      _ => action,
+    };
+    final visibleCommand = <String>[
+      'adb',
+      '-s',
+      deviceId,
+      'shell',
+      'am',
+      'instrument',
+      '-e',
+      'class',
+      'dev.cockpit.driver.CockpitDriverTest#$testMethod',
+      _cockpitAndroidInstrumentationTarget,
+    ];
+    try {
+      final stdout = switch (action) {
+        'readUiTree' => await _androidUiAutomation.readUiTree(
+          deviceId: deviceId,
+          maxDepth: int.parse(arguments[2]),
+          maxNodes: int.parse(arguments[3]),
+          timeout: request.timeout,
+        ),
+        'dismissSystemDialog' => await _androidUiAutomation.dismissSystemDialog(
+          deviceId: deviceId,
+          decision: arguments[2],
+          timeout: request.timeout,
+        ),
+        'tapNotification' => await _androidUiAutomation.tapNotification(
+          deviceId: deviceId,
+          text: arguments[2],
+          timeout: request.timeout,
+        ),
+        _ => throw StateError(
+          'Unsupported Android UI Automation action $action.',
+        ),
+      };
+      return CockpitSystemControlActionResult(
+        platform: request.platform,
+        deviceId: request.deviceId,
+        appId: request.appId,
+        processId: request.processId,
+        action: request.action,
+        availability: capability.availability,
+        success: true,
+        command: visibleCommand,
+        stdout: stdout,
+        recommendedNextStep: action == 'readUiTree'
+            ? 'resolveNativeLocator'
+            : 'readPostActionState',
+        strategy: capability.strategy,
+        requires: capability.requires,
+        limitations: capability.limitations,
+      );
+    } on TimeoutException {
+      return CockpitSystemControlActionResult(
+        platform: request.platform,
+        deviceId: request.deviceId,
+        appId: request.appId,
+        processId: request.processId,
+        action: request.action,
+        availability: capability.availability,
+        success: false,
+        command: visibleCommand,
+        recommendedNextStep: 'inspectAndroidDriverFailure',
+        strategy: capability.strategy,
+        requires: capability.requires,
+        limitations: capability.limitations,
+        errorCode: 'systemActionTimedOut',
+        errorMessage:
+            'Android UI Automation timed out after ${request.timeout.inMilliseconds}ms.',
+      );
+    } on Object catch (error) {
+      return CockpitSystemControlActionResult(
+        platform: request.platform,
+        deviceId: request.deviceId,
+        appId: request.appId,
+        processId: request.processId,
+        action: request.action,
+        availability: capability.availability,
+        success: false,
+        command: visibleCommand,
+        recommendedNextStep: 'inspectAndroidDriverFailure',
+        strategy: capability.strategy,
+        requires: capability.requires,
+        limitations: capability.limitations,
+        errorCode: 'systemActionProcessFailed',
+        errorMessage: _describeSystemControlError(error),
+      );
+    }
   }
 
   Future<CockpitSystemControlActionResult> _runIosWebDriverAgentCommand(
@@ -1013,6 +1203,9 @@ final class CockpitSystemControlActionService {
   ) async {
     if (command.executable == cockpitIosWdaCommandExecutable) {
       return _runIosWebDriverAgentCommand(request, capability, command);
+    }
+    if (command.executable == cockpitAndroidUiAutomationCommandExecutable) {
+      return _runAndroidUiAutomationCommand(request, capability, command);
     }
     return _runProcessCommand(request, capability, command);
   }

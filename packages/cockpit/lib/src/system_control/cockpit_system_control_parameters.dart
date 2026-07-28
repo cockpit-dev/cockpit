@@ -1033,13 +1033,15 @@ final class CockpitSystemControlParameterSets {
       name: 'maxDepth',
       valueType: CockpitSystemControlParameterType.integer,
       minimum: 1,
-      description: 'Maximum accessibility tree depth; default is 4.',
+      maximum: 64,
+      description: 'Maximum accessibility tree depth; default is 16.',
     ),
     CockpitSystemControlParameter(
       name: 'maxNodes',
       valueType: CockpitSystemControlParameterType.integer,
       minimum: 1,
-      description: 'Maximum accessibility nodes; default is 120.',
+      maximum: 10000,
+      description: 'Maximum accessibility nodes; default is 2000.',
     ),
   ];
 

@@ -8,6 +8,7 @@
 **/.metadata
 .packages
 .pub/
+**/.gradle/
 pubspec_overrides.yaml
 **/pubspec_overrides.yaml
 /packages/**/pubspec.lock

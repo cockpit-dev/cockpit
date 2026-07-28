@@ -40,6 +40,10 @@ final class CockpitNativeUiSnapshot {
         for (final attribute in element.attributes)
           attribute.name.local.toLowerCase(): attribute.value,
       };
+      final secure = attributes['secure'];
+      if (secure != null) attributes.putIfAbsent('password', () => secure);
+      final hintText = attributes['hinttext'];
+      if (hintText != null) attributes.putIfAbsent('hint', () => hintText);
       final bounds = _readBounds(attributes);
       final parentPath = ancestorPaths.isEmpty
           ? null
@@ -686,7 +690,7 @@ final class CockpitNativeUiNode {
   }
 
   Set<String> get textValues =>
-      _values(<String>['text', 'value', 'label', 'name']);
+      _values(<String>['text', 'value', 'label', 'name', 'hint']);
 
   Set<String> get labelValues =>
       _values(<String>['content-desc', 'label', 'name', 'hint']);

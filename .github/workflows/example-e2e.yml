@@ -254,6 +254,14 @@ jobs:
         shell: bash
         run: flutter pub get
 
+      - name: Build Android black-box driver
+        if: matrix.platform == 'android'
+        shell: bash
+        run: >-
+          ./examples/cockpit_demo/android/gradlew
+          -p packages/cockpit/tool/android_driver
+          publishDriver
+
       - name: Run ${{ matrix.platform }} platform tests
         working-directory: packages/cockpit
         shell: bash

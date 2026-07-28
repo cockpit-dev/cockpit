@@ -900,9 +900,23 @@ void main() {
     );
     expect(
       android.capabilityFor(CockpitSystemControlAction.readUiTree)?.parameters,
-      isEmpty,
-      reason:
-          'Android uiautomator dump does not consume maxDepth/maxNodes; do not advertise inert parameters.',
+      hasLength(2),
+    );
+    expect(
+      _parameter(
+        android,
+        CockpitSystemControlAction.readUiTree,
+        'maxDepth',
+      )?.maximum,
+      64,
+    );
+    expect(
+      _parameter(
+        android,
+        CockpitSystemControlAction.readUiTree,
+        'maxNodes',
+      )?.maximum,
+      10000,
     );
 
     final ios = registry
@@ -1090,6 +1104,7 @@ bool _isEvidenceAction(CockpitSystemControlAction action) {
 bool _isServiceLevelAction(CockpitSystemControlAction action) {
   return switch (action) {
     CockpitSystemControlAction.preparePermissions ||
+    CockpitSystemControlAction.resolveBlockers ||
     CockpitSystemControlAction.stabilizeForScreenshot => true,
     _ => _isEvidenceAction(action),
   };
