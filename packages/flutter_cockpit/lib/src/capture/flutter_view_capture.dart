@@ -18,6 +18,7 @@ final class FlutterViewCapture {
     required CockpitScreenshotRequest request,
     CockpitSnapshot? snapshot,
     double pixelRatio = 1.0,
+    ui.Rect? cropRect,
   }) async {
     if (SchedulerBinding.instance.schedulerPhase != SchedulerPhase.idle) {
       await WidgetsBinding.instance.endOfFrame;
@@ -35,7 +36,41 @@ final class FlutterViewCapture {
       );
     }
 
-    final image = await boundary.toImage(pixelRatio: pixelRatio);
+    var image = await boundary.toImage(pixelRatio: pixelRatio);
+    if (cropRect != null) {
+      final left = (cropRect.left * pixelRatio).floor().clamp(0, image.width);
+      final top = (cropRect.top * pixelRatio).floor().clamp(0, image.height);
+      final right = (cropRect.right * pixelRatio).ceil().clamp(
+        left,
+        image.width,
+      );
+      final bottom = (cropRect.bottom * pixelRatio).ceil().clamp(
+        top,
+        image.height,
+      );
+      final width = right - left;
+      final height = bottom - top;
+      if (width == 0 || height == 0) {
+        image.dispose();
+        throw StateError('Screenshot crop region is empty.');
+      }
+      final recorder = ui.PictureRecorder();
+      final canvas = ui.Canvas(recorder);
+      canvas.drawImageRect(
+        image,
+        ui.Rect.fromLTWH(
+          left.toDouble(),
+          top.toDouble(),
+          width.toDouble(),
+          height.toDouble(),
+        ),
+        ui.Rect.fromLTWH(0, 0, width.toDouble(), height.toDouble()),
+        ui.Paint(),
+      );
+      final cropped = await recorder.endRecording().toImage(width, height);
+      image.dispose();
+      image = cropped;
+    }
     final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
     image.dispose();
 

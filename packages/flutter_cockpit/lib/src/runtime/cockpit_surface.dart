@@ -137,6 +137,37 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
     CockpitScreenshotRequest request, {
     double pixelRatio = 1.0,
   }) {
+    Rect? cropRect;
+    final cropLocator = request.cropLocator;
+    if (cropLocator != null) {
+      final resolution = _registry.resolve(cropLocator);
+      final geometry = resolution.target == null
+          ? null
+          : CockpitTargetGeometryResolver.maybeFromTarget(resolution.target!);
+      final viewport = _viewportGeometry();
+      if (!resolution.isSuccess || geometry == null || viewport == null) {
+        throw StateError('Screenshot crop locator has no visible geometry.');
+      }
+      final target = Rect.fromLTWH(
+        geometry.left,
+        geometry.top,
+        geometry.width,
+        geometry.height,
+      );
+      final viewportRect = Rect.fromLTWH(
+        viewport.left,
+        viewport.top,
+        viewport.width,
+        viewport.height,
+      );
+      final visible = target.intersect(viewportRect);
+      if (visible.isEmpty) {
+        throw StateError(
+          'Screenshot crop locator is outside the Flutter view.',
+        );
+      }
+      cropRect = visible.shift(Offset(-viewport.left, -viewport.top));
+    }
     return _capture.capture(
       repaintBoundaryKey: _boundaryKey,
       request: request,
@@ -148,6 +179,7 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
             )
           : null,
       pixelRatio: pixelRatio,
+      cropRect: cropRect,
     );
   }
 
@@ -2200,6 +2232,7 @@ final class CockpitTargetNode extends StatefulWidget {
     super.key,
     this.cockpitId,
     this.semanticId,
+    this.keyValue,
     this.text,
     this.tooltip,
     this.typeName,
@@ -2211,6 +2244,7 @@ final class CockpitTargetNode extends StatefulWidget {
   final String registrationId;
   final String? cockpitId;
   final String? semanticId;
+  final String? keyValue;
   final String? text;
   final String? tooltip;
   final String? typeName;
@@ -2272,6 +2306,7 @@ final class _CockpitTargetNodeState extends State<CockpitTargetNode> {
         registrationId: widget.registrationId,
         cockpitId: widget.cockpitId,
         semanticId: widget.semanticId,
+        keyValue: widget.keyValue,
         text: widget.text,
         tooltip: widget.tooltip,
         typeName: widget.typeName,

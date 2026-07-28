@@ -15,7 +15,7 @@ void main() {
         processRunner: (executable, arguments) async {
           expect(executable, 'osascript');
           invocation = List<String>.from(arguments);
-          return ProcessResult(0, 0, '48,64,960,720', '');
+          return ProcessResult(0, 0, '1234,48,64,960,720', '');
         },
         timeout: const Duration(seconds: 1),
         activationSettleDelay: const Duration(milliseconds: 250),
@@ -29,12 +29,27 @@ void main() {
       expect(invocation[3], isNot(contains('System Events')));
       expect(invocation[3], contains('CGWindowListCopyWindowInfo'));
       expect(invocation[3], contains('IOPMAssertionDeclareUserActivity'));
+      expect(target.windowId, 1234);
       expect(target.left, 48);
       expect(target.top, 64);
       expect(target.width, 960);
       expect(target.height, 720);
     },
   );
+
+  test('accepts legacy bounds-only payloads for injected resolvers', () async {
+    final target = await cockpitResolveMacosWindowTarget(
+      appId: 'dev.cockpit.cockpitDemo',
+      osascriptExecutable: 'osascript',
+      processRunner: (_, _) async => ProcessResult(0, 0, '48,64,960,720', ''),
+      timeout: const Duration(seconds: 1),
+      activationSettleDelay: Duration.zero,
+    );
+
+    expect(target.windowId, isNull);
+    expect(target.left, 48);
+    expect(target.top, 64);
+  });
 
   test('rejects invalid macOS window bounds payloads', () async {
     expect(

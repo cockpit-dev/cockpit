@@ -66,13 +66,21 @@ final class CockpitMacosCaptureAdapter implements CockpitHostCaptureAdapter {
         timeout: _timeout,
         activationSettleDelay: _activationSettleDelay,
       );
-      final result = await _runProcess(_screencaptureExecutable, <String>[
-        '-x',
-        '-o',
-        '-R',
-        '${windowTarget.left},${windowTarget.top},${windowTarget.width},${windowTarget.height}',
-        outputFile.path,
-      ]);
+      final captureArguments = <String>['-x', '-o'];
+      final windowId = windowTarget.windowId;
+      if (windowId != null) {
+        captureArguments.addAll(<String>['-l', '$windowId']);
+      } else {
+        captureArguments.addAll(<String>[
+          '-R',
+          '${windowTarget.left},${windowTarget.top},${windowTarget.width},${windowTarget.height}',
+        ]);
+      }
+      captureArguments.add(outputFile.path);
+      final result = await _runProcess(
+        _screencaptureExecutable,
+        captureArguments,
+      );
       stopwatch.stop();
 
       if (result.exitCode != 0) {

@@ -1653,11 +1653,20 @@ const String cockpitTestV2SchemaJson = r'''
         "baseline": {
           "$ref": "#/$defs/stringTemplate"
         },
-        "similarity": {
-          "$ref": "#/$defs/positiveNormalizedNumberTemplate"
+        "pixelTolerance": {
+          "$ref": "#/$defs/normalizedNumberTemplate"
+        },
+        "maxDifferingPixelRatio": {
+          "$ref": "#/$defs/normalizedNumberTemplate"
         },
         "artifactName": {
           "$ref": "#/$defs/stringTemplate"
+        },
+        "locator": {
+          "$ref": "#/$defs/locator"
+        },
+        "captureOptions": {
+          "$ref": "#/$defs/captureOptionsTemplate"
         }
       },
       "patternProperties": {

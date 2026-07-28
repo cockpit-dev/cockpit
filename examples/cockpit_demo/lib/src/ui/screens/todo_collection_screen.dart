@@ -657,6 +657,7 @@ final class _TodoCollectionScreenState extends State<TodoCollectionScreen> {
                 ),
               ),
               IconButton(
+                key: const ValueKey<String>('open-settings-action'),
                 tooltip: 'Settings',
                 onPressed: _openSettings,
                 icon: const Icon(Icons.tune_rounded),

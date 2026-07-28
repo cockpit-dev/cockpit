@@ -476,8 +476,7 @@ final class CockpitDemoAcceptanceRunner {
         mixedPlaneSupported: mixedPlaneSupported,
         visualBaseline: visualBaseline?.path,
         visualProfile: visualBaseline?.profile,
-        visualExpectedWidth: visualBaseline?.width,
-        visualExpectedHeight: visualBaseline?.height,
+        visualCaptureProfile: visualBaseline?.captureProfile,
         taskTitle: 'Cockpit $invocationId',
         launchConfigurationLabel: _launchConfigurationLabel(
           platform: request.platform,
@@ -663,8 +662,7 @@ CockpitTestSuite _suiteForRuntime(
   required bool mixedPlaneSupported,
   required String? visualBaseline,
   required String? visualProfile,
-  required int? visualExpectedWidth,
-  required int? visualExpectedHeight,
+  required String? visualCaptureProfile,
   required String taskTitle,
   required String launchConfigurationLabel,
   required CockpitTestCase mixedPlaneEvidenceTemplate,
@@ -724,6 +722,10 @@ CockpitTestSuite _suiteForRuntime(
                 for (final input in rawInputs.entries)
                   if (input.key is String) input.key! as String: input.value,
               'visualBaseline': visualBaseline,
+              'visualCaptureOptions': <String, Object?>{
+                'profile': visualCaptureProfile,
+                'allowFallback': false,
+              },
             };
             visualInputBound = true;
           }
@@ -845,11 +847,7 @@ CockpitTestSuite _suiteForRuntime(
           : 'semanticCaptureFallback',
       'baseline': ?visualBaseline,
       'profile': ?visualProfile,
-      if (visualExpectedWidth != null && visualExpectedHeight != null)
-        'expectedSize': <String, Object?>{
-          'width': visualExpectedWidth,
-          'height': visualExpectedHeight,
-        },
+      'captureProfile': ?visualCaptureProfile,
     },
     'locationTravel': <String, Object?>{'supported': locationTravelSupported},
     'mixedPlane': <String, Object?>{
@@ -883,8 +881,7 @@ CockpitTestSuite _suiteForRuntime(
 typedef _CockpitDemoVisualBaseline = ({
   String profile,
   String path,
-  int width,
-  int height,
+  String captureProfile,
 });
 
 _CockpitDemoVisualBaseline? _visualBaselineForTarget({
@@ -899,32 +896,27 @@ _CockpitDemoVisualBaseline? _visualBaselineForTarget({
       (
         profile: profile,
         path: 'e2e/baselines/android/settings.png',
-        width: 1080,
-        height: 2400,
+        captureProfile: 'nativePreferred',
       ),
     ('ios', 'iphone-16-pro-1206x2622') when device.name == 'iPhone 16 Pro' => (
       profile: profile,
       path: 'e2e/baselines/ios/settings.png',
-      width: 1206,
-      height: 2622,
+      captureProfile: 'nativePreferred',
     ),
     ('linux', 'linux-1280x720') => (
       profile: profile,
       path: 'e2e/baselines/linux/settings.png',
-      width: 1280,
-      height: 720,
+      captureProfile: 'flutterPreferred',
     ),
     ('macos', 'macos-800x600') => (
       profile: profile,
       path: 'e2e/baselines/macos/settings.png',
-      width: 800,
-      height: 600,
+      captureProfile: 'flutterPreferred',
     ),
     ('windows', 'windows-1028x681') => (
       profile: profile,
       path: 'e2e/baselines/windows/settings.png',
-      width: 1028,
-      height: 681,
+      captureProfile: 'flutterPreferred',
     ),
     _ => null,
   };

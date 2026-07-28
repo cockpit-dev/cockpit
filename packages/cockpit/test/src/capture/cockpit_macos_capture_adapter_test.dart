@@ -55,6 +55,7 @@ cp "$script_dir/opaque.png" "$last_arg"
               expect(appId, 'dev.cockpit.cockpitDemo');
               expect(osascriptExecutable, executable.path);
               return const CockpitMacosWindowTarget(
+                windowId: 1234,
                 left: 48,
                 top: 64,
                 width: 960,
@@ -92,8 +93,8 @@ cp "$script_dir/opaque.png" "$last_arg"
         p.join(tempDir.path, 'macos-capture.log'),
       ).readAsStringSync();
       expect(log, contains('-x'));
-      expect(log, contains('-R'));
-      expect(log, contains('48,64,960,720'));
+      expect(log, contains('-l'));
+      expect(log, contains('1234'));
     },
   );
 

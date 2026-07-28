@@ -288,11 +288,27 @@ jobs:
           IOS_DEVICE_ID="$(xcrun simctl list devices available -j | python3 -c '
           import json, sys
           data = json.load(sys.stdin)["devices"]
-          devices = [d for runtime, entries in data.items() if "iOS" in runtime for d in entries if d.get("isAvailable") and d.get("name", "").startswith("iPhone")]
-          if not devices: raise SystemExit("No available iPhone simulator was found")
-          devices.sort(key=lambda d: (d.get("name") != "iPhone 16 Pro", d.get("name", ""), d.get("udid", "")))
-          print(devices[0]["udid"])
+          devices = [d for runtime, entries in data.items() if "iOS" in runtime for d in entries if d.get("isAvailable") and d.get("name") == "iPhone 16 Pro"]
+          print(devices[0]["udid"] if devices else "")
           ')"
+          if [[ -z "$IOS_DEVICE_ID" ]]; then
+            IOS_RUNTIME_ID="$(xcrun simctl list runtimes available -j | python3 -c '
+          import json, sys
+          runtimes = [r for r in json.load(sys.stdin)["runtimes"] if r.get("isAvailable") and "iOS" in r.get("identifier", "")]
+          runtimes.sort(key=lambda r: tuple(int(p) for p in r.get("version", "0").split(".")))
+          print(runtimes[-1]["identifier"] if runtimes else "")
+          ')"
+            IOS_DEVICE_TYPE_ID="$(xcrun simctl list devicetypes -j | python3 -c '
+          import json, sys
+          types = [d for d in json.load(sys.stdin)["devicetypes"] if d.get("name") == "iPhone 16 Pro"]
+          print(types[0]["identifier"] if types else "")
+          ')"
+            if [[ -z "$IOS_RUNTIME_ID" || -z "$IOS_DEVICE_TYPE_ID" ]]; then
+              echo "The exact iPhone 16 Pro visual profile is unavailable." >&2
+              exit 1
+            fi
+            IOS_DEVICE_ID="$(xcrun simctl create "iPhone 16 Pro" "$IOS_DEVICE_TYPE_ID" "$IOS_RUNTIME_ID")"
+          fi
           xcrun simctl boot "$IOS_DEVICE_ID" || true
           xcrun simctl bootstatus "$IOS_DEVICE_ID" -b
           echo "IOS_DEVICE_ID=$IOS_DEVICE_ID" >> "$GITHUB_ENV"

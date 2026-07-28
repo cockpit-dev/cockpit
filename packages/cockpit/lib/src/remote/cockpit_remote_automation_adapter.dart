@@ -67,13 +67,17 @@ final class CockpitRemoteAutomationAdapter implements CockpitAutomationAdapter {
         ),
       );
     }
-    final threshold =
-        (command.parameters['similarity'] as num?)?.toDouble() ?? 0.99;
+    final pixelTolerance =
+        (command.parameters['pixelTolerance'] as num?)?.toDouble() ?? 0.1;
+    final maxDifferingPixelRatio =
+        (command.parameters['maxDifferingPixelRatio'] as num?)?.toDouble() ??
+        0.01;
     final stem = _artifactStem(
       command.parameters['name'] as String? ??
           command.parameters['artifactName'] as String? ??
           command.commandId,
     );
+    final configuredCapture = command.screenshotRequest;
     final capture = await _client.executeDetailed(
       command.copyWith(
         commandType: CockpitCommandType.captureScreenshot,
@@ -81,8 +85,15 @@ final class CockpitRemoteAutomationAdapter implements CockpitAutomationAdapter {
         screenshotRequest: CockpitScreenshotRequest(
           reason: CockpitScreenshotReason.baseline,
           name: '$stem-actual',
-          profile: CockpitCaptureProfile.flutterPreferred,
-          allowFallback: false,
+          includeSnapshot:
+              configuredCapture?.includeSnapshot ?? command.locator != null,
+          attachToStep: configuredCapture?.attachToStep ?? true,
+          snapshotOptions: configuredCapture?.snapshotOptions,
+          profile:
+              configuredCapture?.profile ??
+              CockpitCaptureProfile.flutterPreferred,
+          allowFallback: configuredCapture?.allowFallback ?? false,
+          cropLocator: configuredCapture?.cropLocator ?? command.locator,
         ),
       ),
     );
@@ -151,15 +162,24 @@ final class CockpitRemoteAutomationAdapter implements CockpitAutomationAdapter {
       final comparison = await _visualMatcher.compareScreenshot(
         screenshotPath: actualSourcePath,
         baselineReference: baseline,
-        threshold: threshold,
+        pixelTolerance: pixelTolerance,
+        maxDifferingPixelRatio: maxDifferingPixelRatio,
       );
       final baselinePath =
           'visual/$stem-baseline${p.extension(comparison.baselineSourcePath)}';
+      final actualPath = 'visual/$stem-actual.png';
       final diffPath = 'visual/$stem-diff.png';
       final snapshot = <String, Object?>{
         'adapter': 'flutterViewVisual',
-        'similarity': comparison.similarity,
-        'requiredSimilarity': threshold,
+        'matchingPixelRatio': comparison.matchingPixelRatio,
+        'differingPixelRatio': comparison.differingPixelRatio,
+        'differingPixelCount': comparison.differingPixelCount,
+        'totalPixelCount': comparison.totalPixelCount,
+        'pixelTolerance': comparison.pixelTolerance,
+        'maxDifferingPixelRatio': comparison.maxDifferingPixelRatio,
+        'captureScope': command.locator == null
+            ? capture.result.resolvedCaptureKind?.name ?? 'unknown'
+            : 'element',
         'actualSize': <String, Object?>{
           'width': comparison.width,
           'height': comparison.height,
@@ -177,7 +197,14 @@ final class CockpitRemoteAutomationAdapter implements CockpitAutomationAdapter {
           commandType: command.commandType,
           durationMs: stopwatch.elapsedMilliseconds,
           artifacts: <CockpitArtifactRef>[
-            ...capture.result.artifacts,
+            ...capture.result.artifacts.where(
+              (artifact) =>
+                  artifact.relativePath != actualArtifact!.relativePath,
+            ),
+            CockpitArtifactRef(
+              role: 'screenshotActual',
+              relativePath: actualPath,
+            ),
             CockpitArtifactRef(
               role: 'screenshotBaseline',
               relativePath: baselinePath,
@@ -194,16 +221,21 @@ final class CockpitRemoteAutomationAdapter implements CockpitAutomationAdapter {
               : CockpitCommandError.assertionFailed(
                   message: comparison.dimensionMismatch
                       ? 'Screenshot dimensions do not match the baseline profile.'
-                      : 'Screenshot similarity is below the required threshold.',
+                      : 'Too many screenshot pixels differ from the baseline.',
                   details: snapshot,
                 ),
         ),
         artifactPayloads: <String, List<int>>{
-          ...capture.artifactPayloads,
+          for (final entry in capture.artifactPayloads.entries)
+            if (entry.key != actualArtifact.relativePath)
+              entry.key: entry.value,
+          actualPath: comparison.actualPng,
           diffPath: comparison.diffPng,
         },
         artifactSourcePaths: <String, String>{
-          ...capture.artifactSourcePaths,
+          for (final entry in capture.artifactSourcePaths.entries)
+            if (entry.key != actualArtifact.relativePath)
+              entry.key: entry.value,
           baselinePath: comparison.baselineSourcePath,
         },
         runtimeSteps: capture.runtimeSteps,

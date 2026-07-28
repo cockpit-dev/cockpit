@@ -21,7 +21,7 @@ setup:
     timeoutMs: 12000
     action:
       type: tap
-      locator: {label: Settings}
+      locator: {testId: open-settings-action}
       activation: semantic
   - stepId: waitForSettings
     timeoutMs: 12000

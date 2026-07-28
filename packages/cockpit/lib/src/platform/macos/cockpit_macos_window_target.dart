@@ -13,12 +13,17 @@ typedef CockpitMacosWindowTargetResolver =
 
 final class CockpitMacosWindowTarget {
   const CockpitMacosWindowTarget({
+    this.windowId,
     required this.left,
     required this.top,
     required this.width,
     required this.height,
   });
 
+  /// The CoreGraphics window number. Window capture is preferred over a
+  /// screen-coordinate rectangle because it is independent of display origin,
+  /// scaling, and multi-monitor layout.
+  final int? windowId;
   final int left;
   final int top;
   final int width;
@@ -49,15 +54,17 @@ Future<CockpitMacosWindowTarget> cockpitResolveMacosWindowTarget({
 
   final stdout = '${result.stdout}'.trim();
   final parts = stdout.split(',');
-  if (parts.length != 4) {
+  if (parts.length != 4 && parts.length != 5) {
     throw StateError(
       'Unable to resolve the active macOS window for $appId: invalid payload.',
     );
   }
-  final left = int.tryParse(parts[0].trim());
-  final top = int.tryParse(parts[1].trim());
-  final width = int.tryParse(parts[2].trim());
-  final height = int.tryParse(parts[3].trim());
+  final windowId = parts.length == 5 ? int.tryParse(parts[0].trim()) : null;
+  final offset = parts.length == 5 ? 1 : 0;
+  final left = int.tryParse(parts[offset].trim());
+  final top = int.tryParse(parts[offset + 1].trim());
+  final width = int.tryParse(parts[offset + 2].trim());
+  final height = int.tryParse(parts[offset + 3].trim());
   if (left == null ||
       top == null ||
       width == null ||
@@ -70,6 +77,7 @@ Future<CockpitMacosWindowTarget> cockpitResolveMacosWindowTarget({
   }
 
   return CockpitMacosWindowTarget(
+    windowId: windowId,
     left: left,
     top: top,
     width: width,
@@ -124,6 +132,7 @@ function run(argv) {
     const area = width * height
     if (best === null || area > best.area) {
       best = {
+        windowId: Number(window.kCGWindowNumber),
         left: Math.round(Number(bounds.X)),
         top: Math.round(Number(bounds.Y)),
         width: Math.round(width),
@@ -135,6 +144,6 @@ function run(argv) {
   if (best === null) {
     throw new Error(`No visible macOS window was found for ${appId}`)
   }
-  return [best.left, best.top, best.width, best.height].join(',')
+  return [best.windowId, best.left, best.top, best.width, best.height].join(',')
 }
 ''';

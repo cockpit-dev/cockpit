@@ -21,6 +21,9 @@ variables:
   visualBaseline:
     source: input
     type: string
+  visualCaptureOptions:
+    source: input
+    type: json
 setup:
   - stepId: waitForVisualInbox
     action:
@@ -29,7 +32,7 @@ setup:
   - stepId: openVisualSettings
     action:
       type: tap
-      locator: {label: Settings}
+      locator: {testId: open-settings-action}
   - stepId: waitForVisualSettings
     action:
       type: waitFor
@@ -38,14 +41,16 @@ steps:
   - stepId: settleVisualSurface
     action: {type: waitForUiIdle, quietMs: 300}
   - stepId: assertSettingsScreenshot
-    description: Compare a deterministic Flutter-view capture with the selected visual profile baseline.
+    description: Compare a deterministic capture with the matching visual environment and capture profile baseline.
     plane: semantic
     timeoutMs: 30000
     action:
       type: assertScreenshot
       baseline: {$var: visualBaseline}
-      similarity: 0.97
+      pixelTolerance: 0.1
+      maxDifferingPixelRatio: 0.03
       artifactName: settings-visual-regression
+      captureOptions: {$var: visualCaptureOptions}
 finally:
   - stepId: leaveVisualSettings
     timeoutMs: 15000

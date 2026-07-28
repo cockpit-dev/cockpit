@@ -318,10 +318,15 @@ void main() {
           textDirection: TextDirection.ltr,
           child: ValueListenableBuilder<String>(
             valueListenable: routeName,
-            child: const CockpitTargetNode(
+            child: CockpitTargetNode(
               registrationId: 'stable-title-target',
+              keyValue: 'stable-title',
               text: 'Task title',
-              child: Text('Task title'),
+              child: ElevatedButton(
+                key: const ValueKey<String>('stable-child-action'),
+                onPressed: () {},
+                child: const Text('Task title'),
+              ),
             ),
             builder: (context, route, child) {
               return CockpitSurface(
@@ -336,19 +341,33 @@ void main() {
       await tester.pump();
 
       expect(surfaceKey.currentState!.snapshot().routeName, '/inbox');
-      expect(
-        surfaceKey.currentState!.snapshot().visibleTargets.single.routeName,
-        '/inbox',
-      );
+      final initialTarget = surfaceKey.currentState!
+          .snapshot()
+          .visibleTargets
+          .firstWhere(
+            (target) => target.registrationId == 'stable-title-target',
+          );
+      expect(initialTarget.routeName, '/inbox');
 
       routeName.value = '/editor';
       await tester.pump();
 
       final snapshot = surfaceKey.currentState!.snapshot();
       expect(snapshot.routeName, '/editor');
-      expect(snapshot.visibleTargets, hasLength(1));
-      expect(snapshot.visibleTargets.single.text, 'Task title');
-      expect(snapshot.visibleTargets.single.routeName, '/editor');
+      final explicitTarget = snapshot.visibleTargets.firstWhere(
+        (target) => target.registrationId == 'stable-title-target',
+      );
+      expect(explicitTarget.keyValue, 'stable-title');
+      expect(explicitTarget.text, 'Task title');
+      expect(explicitTarget.routeName, '/editor');
+      expect(
+        snapshot.visibleTargets.any(
+          (target) =>
+              target.keyValue == 'stable-child-action' &&
+              target.supportedCommands.contains(CockpitCommandType.tap),
+        ),
+        isTrue,
+      );
     },
   );
 

@@ -412,9 +412,14 @@ void _validateActionValues(
       !CockpitTextMatchMode.values.any((mode) => mode.name == matchMode)) {
     throw const FormatException('Unsupported text matchMode.');
   }
-  final similarity = number(CockpitTestActionField.similarity);
-  if (similarity != null && (similarity <= 0 || similarity > 1)) {
-    throw const FormatException('similarity must be normalized in (0, 1].');
+  for (final field in const <CockpitTestActionField>{
+    CockpitTestActionField.pixelTolerance,
+    CockpitTestActionField.maxDifferingPixelRatio,
+  }) {
+    final value = number(field);
+    if (value != null && (value < 0 || value > 1)) {
+      throw FormatException('${field.wireName} must be normalized in [0, 1].');
+    }
   }
   final inputAction = string(CockpitTestActionField.inputAction);
   if (inputAction != null &&
@@ -513,7 +518,8 @@ void _validateActionValues(
       if (route != null || !partial) {
         _validateTravelRoute(route);
       }
-    case CockpitTestActionKind.captureScreenshot:
+    case CockpitTestActionKind.assertScreenshot ||
+        CockpitTestActionKind.captureScreenshot:
       _validateCaptureOptions(values[CockpitTestActionField.captureOptions]);
     case CockpitTestActionKind.system:
       final parameters = values[CockpitTestActionField.systemParameters];

@@ -92,7 +92,9 @@ CockpitTestPlane cockpitRequestedPlane(
   if (operation is CockpitTestActionPlanOperation) {
     final action = operation.action;
     if (action.kind == CockpitTestActionKind.assertScreenshot) {
-      return CockpitTestPlane.visual;
+      return action.locator == null
+          ? CockpitTestPlane.visual
+          : _locatorPlane(action.locator) ?? defaultPlane;
     }
     if (action.kind == CockpitTestActionKind.system ||
         action.kind == CockpitTestActionKind.travel) {

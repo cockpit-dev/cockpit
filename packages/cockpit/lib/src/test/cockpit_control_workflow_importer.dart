@@ -704,7 +704,8 @@ CockpitTestActionTemplate _action(
       take(CockpitTestActionField.text);
     case CockpitTestActionKind.assertScreenshot:
       take(CockpitTestActionField.baseline);
-      take(CockpitTestActionField.similarity);
+      take(CockpitTestActionField.pixelTolerance);
+      take(CockpitTestActionField.maxDifferingPixelRatio);
       take(CockpitTestActionField.artifactName);
     case CockpitTestActionKind.travel:
       take(CockpitTestActionField.route);

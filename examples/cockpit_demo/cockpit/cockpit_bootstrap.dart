@@ -47,40 +47,50 @@ Widget buildCockpitDemoDevelopmentApp() {
     ),
   );
 
-  final app = FlutterCockpitApp(
-    config: FlutterCockpitConfig.fromRuntimeConfiguration(configuration),
-    child: CockpitDemoApp(
-      initialRouteName: configuration.initialRouteName,
-      navigatorObservers: <NavigatorObserver>[
-        FlutterCockpit.createNavigatorObserver(),
-      ],
-    ),
+  Widget child = CockpitDemoApp(
+    initialRouteName: configuration.initialRouteName,
+    navigatorObservers: <NavigatorObserver>[
+      FlutterCockpit.createNavigatorObserver(),
+    ],
   );
-  if (!acceptance) return app;
-
-  final exposesRuntimeEnvironment = const <String>{
-    'linux',
-    'macos',
-    'windows',
-  }.contains(acceptancePlatform);
-  final environmentPlatform = exposesRuntimeEnvironment
-      ? cockpitLaunchEnvironment('COCKPIT_ACCEPTANCE_PLATFORM')
-      : null;
-  final environmentInvocation = exposesRuntimeEnvironment
-      ? cockpitLaunchEnvironment('COCKPIT_ACCEPTANCE_INVOCATION')
-      : null;
-  final launchConfigurationLabel = <String>[
-    'Cockpit launch configuration',
-    'platform=$acceptancePlatform',
-    'defineFile=$defineFileValue',
-    if (environmentPlatform != null) 'environmentPlatform=$environmentPlatform',
-    if (environmentInvocation != null)
-      'environmentInvocation=$environmentInvocation',
-  ].join(' ');
-  return Semantics(
-    container: true,
-    explicitChildNodes: true,
-    label: launchConfigurationLabel,
-    child: app,
+  if (acceptance) {
+    final exposesRuntimeEnvironment = const <String>{
+      'linux',
+      'macos',
+      'windows',
+    }.contains(acceptancePlatform);
+    final environmentPlatform = exposesRuntimeEnvironment
+        ? cockpitLaunchEnvironment('COCKPIT_ACCEPTANCE_PLATFORM')
+        : null;
+    final environmentInvocation = exposesRuntimeEnvironment
+        ? cockpitLaunchEnvironment('COCKPIT_ACCEPTANCE_INVOCATION')
+        : null;
+    final launchConfigurationLabel = <String>[
+      'Cockpit launch configuration',
+      'platform=$acceptancePlatform',
+      'defineFile=$defineFileValue',
+      if (environmentPlatform != null)
+        'environmentPlatform=$environmentPlatform',
+      if (environmentInvocation != null)
+        'environmentInvocation=$environmentInvocation',
+    ].join(' ');
+    child = CockpitTargetNode(
+      registrationId: 'cockpit-launch-configuration',
+      keyValue: 'cockpit-launch-configuration',
+      tooltip: launchConfigurationLabel,
+      typeName: 'LaunchConfiguration',
+      child: Semantics(
+        key: const ValueKey<String>('cockpit-launch-configuration'),
+        container: true,
+        explicitChildNodes: true,
+        label: launchConfigurationLabel,
+        textDirection: TextDirection.ltr,
+        child: child,
+      ),
+    );
+  }
+  return FlutterCockpitApp(
+    config: FlutterCockpitConfig.fromRuntimeConfiguration(configuration),
+    child: child,
   );
 }

@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:flutter/widgets.dart';
 import 'package:flutter_cockpit/flutter_cockpit_flutter.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -73,4 +75,49 @@ void main() {
       expect(bundle.steps.single.captureRefs.single, screenshot.artifact);
     },
   );
+
+  testWidgets('crops Flutter-view screenshots to a resolved locator', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      Directionality(
+        textDirection: TextDirection.ltr,
+        child: CockpitSurface(
+          routeName: '/home',
+          child: Center(
+            child: Semantics(
+              key: ValueKey<String>('crop-target'),
+              label: 'Crop target',
+              child: SizedBox(
+                width: 120,
+                height: 60,
+                child: ColoredBox(color: Color(0xff245f9e)),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final surfaceState = tester.state<CockpitSurfaceState>(
+      find.byType(CockpitSurface),
+    );
+    final screenshot = await tester.runAsync(
+      () => surfaceState.captureScreenshot(
+        const CockpitScreenshotRequest(
+          reason: CockpitScreenshotReason.baseline,
+          name: 'crop-target',
+          cropLocator: CockpitLocator(key: 'crop-target'),
+        ),
+      ),
+    );
+
+    expect(_pngSize(screenshot!.bytes), (120, 60));
+  });
+}
+
+(int, int) _pngSize(Uint8List bytes) {
+  final data = ByteData.sublistView(bytes);
+  return (data.getUint32(16), data.getUint32(20));
 }

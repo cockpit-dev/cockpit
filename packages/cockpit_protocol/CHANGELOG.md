@@ -19,7 +19,8 @@
 - Added explicit exact/contains/fuzzy/regex locator matching with deterministic
   unique-best selection, ambiguity failures, and 0-based list indexing.
 - Added step-level execution-plane overrides, visual locator thresholds,
-  screenshot baseline assertions, clipboard text actions, and bounded
+  screenshot baseline assertions with explicit pixel tolerance, differing-pixel
+  budgets and locator-scoped crops, clipboard text actions, and bounded
   location-travel routes to the shared case and report contracts.
 - Renamed the pure-Dart package from `flutter_cockpit_protocol` to
   `cockpit_protocol` as the sole owner of platform-neutral Cockpit models.

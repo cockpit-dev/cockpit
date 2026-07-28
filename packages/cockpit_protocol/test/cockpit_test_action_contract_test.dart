@@ -352,9 +352,15 @@ Map<String, Object?> _actionJson(CockpitTestActionKind kind) {
     },
     CockpitTestActionKind.assertScreenshot => <String, Object?>{
       'type': kind.name,
+      'locator': locator,
       'baseline': 'baselines/home.png',
-      'similarity': 0.99,
+      'pixelTolerance': 0.1,
+      'maxDifferingPixelRatio': 0.01,
       'artifactName': 'home',
+      'captureOptions': <String, Object?>{
+        'profile': 'flutterPreferred',
+        'allowFallback': false,
+      },
     },
     CockpitTestActionKind.travel => <String, Object?>{
       'type': kind.name,

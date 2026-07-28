@@ -32,25 +32,58 @@ final class CockpitVisualTemplateMatch {
 final class CockpitVisualComparison {
   const CockpitVisualComparison({
     required this.matched,
-    required this.similarity,
+    required this.matchingPixelRatio,
+    required this.differingPixelRatio,
+    required this.differingPixelCount,
+    required this.totalPixelCount,
+    required this.pixelTolerance,
+    required this.maxDifferingPixelRatio,
     required this.width,
     required this.height,
     required this.baselineWidth,
     required this.baselineHeight,
     required this.dimensionMismatch,
+    required this.actualPng,
     required this.diffPng,
     required this.baselineSourcePath,
   });
 
   final bool matched;
-  final double similarity;
+  final double matchingPixelRatio;
+  final double differingPixelRatio;
+  final int differingPixelCount;
+  final int totalPixelCount;
+  final double pixelTolerance;
+  final double maxDifferingPixelRatio;
   final int width;
   final int height;
   final int baselineWidth;
   final int baselineHeight;
   final bool dimensionMismatch;
+  final Uint8List actualPng;
   final Uint8List diffPng;
   final String baselineSourcePath;
+}
+
+final class CockpitVisualCrop {
+  const CockpitVisualCrop({
+    required this.left,
+    required this.top,
+    required this.right,
+    required this.bottom,
+  });
+
+  final double left;
+  final double top;
+  final double right;
+  final double bottom;
+
+  Map<String, Object?> toJson() => <String, Object?>{
+    'left': left,
+    'top': top,
+    'right': right,
+    'bottom': bottom,
+  };
 }
 
 final class CockpitVisualMatcher {
@@ -122,12 +155,15 @@ final class CockpitVisualMatcher {
   Future<CockpitVisualComparison> compareScreenshot({
     required String screenshotPath,
     required String baselineReference,
-    required double threshold,
+    double pixelTolerance = 0.1,
+    double maxDifferingPixelRatio = 0.01,
+    CockpitVisualCrop? crop,
   }) async {
-    final actual = await _decodeFile(
+    final captured = await _decodeFile(
       await _resolveFile(screenshotPath, workspaceRelative: false),
       'screenshot',
     );
+    final actual = crop == null ? captured : _crop(captured, crop);
     final baselineFile = await _resolveFile(
       baselineReference,
       workspaceRelative: true,
@@ -138,48 +174,86 @@ final class CockpitVisualMatcher {
       img.fill(diff, color: img.ColorRgb8(255, 0, 255));
       return CockpitVisualComparison(
         matched: false,
-        similarity: 0,
+        matchingPixelRatio: 0,
+        differingPixelRatio: 1,
+        differingPixelCount: actual.width * actual.height,
+        totalPixelCount: actual.width * actual.height,
+        pixelTolerance: pixelTolerance,
+        maxDifferingPixelRatio: maxDifferingPixelRatio,
         width: actual.width,
         height: actual.height,
         baselineWidth: baseline.width,
         baselineHeight: baseline.height,
         dimensionMismatch: true,
+        actualPng: img.encodePng(actual),
         diffPng: img.encodePng(diff),
         baselineSourcePath: baselineFile.path,
       );
     }
     final diff = img.Image(width: actual.width, height: actual.height);
-    var total = 0.0;
+    final toleratedDistanceSquared = pixelTolerance * pixelTolerance * 3;
+    var differingPixelCount = 0;
     for (var y = 0; y < actual.height; y += 1) {
       for (var x = 0; x < actual.width; x += 1) {
         final left = actual.getPixel(x, y);
         final right = baseline.getPixel(x, y);
-        final red = (left.r - right.r).abs().round();
-        final green = (left.g - right.g).abs().round();
-        final blue = (left.b - right.b).abs().round();
-        final alpha = (left.a - right.a).abs().round();
-        total += 1 - (red + green + blue + alpha) / 1020;
-        diff.setPixelRgba(
-          x,
-          y,
-          math.min(255, red * 4),
-          math.min(255, green * 4),
-          math.min(255, blue * 4),
-          255,
-        );
+        final red = left.rNormalized - right.rNormalized;
+        final green = left.gNormalized - right.gNormalized;
+        final blue = left.bNormalized - right.bNormalized;
+        final distanceSquared = red * red + green * green + blue * blue;
+        if (distanceSquared > toleratedDistanceSquared) {
+          differingPixelCount += 1;
+          diff.setPixelRgba(x, y, 255, 32, 32, 255);
+        } else {
+          final luminance =
+              ((right.rNormalized * 0.2126 +
+                          right.gNormalized * 0.7152 +
+                          right.bNormalized * 0.0722) *
+                      255 *
+                      0.28)
+                  .round();
+          diff.setPixelRgba(x, y, luminance, luminance, luminance, 255);
+        }
       }
     }
-    final similarity = total / (actual.width * actual.height);
+    final totalPixelCount = actual.width * actual.height;
+    final differingPixelRatio = differingPixelCount / totalPixelCount;
     return CockpitVisualComparison(
-      matched: similarity >= threshold,
-      similarity: similarity,
+      matched: differingPixelRatio <= maxDifferingPixelRatio,
+      matchingPixelRatio: 1 - differingPixelRatio,
+      differingPixelRatio: differingPixelRatio,
+      differingPixelCount: differingPixelCount,
+      totalPixelCount: totalPixelCount,
+      pixelTolerance: pixelTolerance,
+      maxDifferingPixelRatio: maxDifferingPixelRatio,
       width: actual.width,
       height: actual.height,
       baselineWidth: baseline.width,
       baselineHeight: baseline.height,
       dimensionMismatch: false,
+      actualPng: img.encodePng(actual),
       diffPng: img.encodePng(diff),
       baselineSourcePath: baselineFile.path,
+    );
+  }
+
+  img.Image _crop(img.Image source, CockpitVisualCrop crop) {
+    final left = (crop.left * source.width).floor().clamp(0, source.width);
+    final top = (crop.top * source.height).floor().clamp(0, source.height);
+    final right = (crop.right * source.width).ceil().clamp(left, source.width);
+    final bottom = (crop.bottom * source.height).ceil().clamp(
+      top,
+      source.height,
+    );
+    if (right == left || bottom == top) {
+      throw const FormatException('Screenshot crop region is empty.');
+    }
+    return img.copyCrop(
+      source,
+      x: left,
+      y: top,
+      width: right - left,
+      height: bottom - top,
     );
   }
 
@@ -247,7 +321,7 @@ final class CockpitVisualMatcher {
     var visibleCount = 0;
     for (var y = 0; y < image.height; y += 1) {
       for (var x = 0; x < image.width; x += 1) {
-        if (image.getPixel(x, y).a == 0) continue;
+        if (image.hasAlpha && image.getPixel(x, y).a == 0) continue;
         visibleCount += 1;
         if (samples.length < maximum) {
           samples.add((x, y));
@@ -273,13 +347,13 @@ final class CockpitVisualMatcher {
     for (final (x, y) in samples) {
       final expected = template.getPixel(x, y);
       final actual = source.getPixel(offsetX + x, offsetY + y);
-      final weight = expected.a / 255;
+      final weight = template.hasAlpha ? expected.aNormalized.toDouble() : 1.0;
       total +=
           (1 -
-              ((expected.r - actual.r).abs() +
-                      (expected.g - actual.g).abs() +
-                      (expected.b - actual.b).abs()) /
-                  765) *
+              ((expected.rNormalized - actual.rNormalized).abs() +
+                      (expected.gNormalized - actual.gNormalized).abs() +
+                      (expected.bNormalized - actual.bNormalized).abs()) /
+                  3) *
           weight;
       totalWeight += weight;
     }
