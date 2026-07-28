@@ -255,7 +255,8 @@ teardown，case `setup`/`finally` 负责 case 生命周期，step `evidence` 负
 一套重复的通用 pre/post hook。
 
 每个完成的 suite 都会导出一个可携带的 `cockpit-report/` 目录。离线打开
-`index.html` 即可查看 Overview、Product、Quality、Engineering 和 Machine 五种视图。
+`index.html` 即可按发布摘要、覆盖范围、执行过程、证据、诊断和环境/文件逐层查看；
+搜索、筛选、深链接、响应式布局和打印布局均不依赖服务或网络。
 `report.json` 是唯一规范事实图，包含 suite/case 定义、attempt、详细步骤、断言和证据引用；
 `manifest.json` 记录其余每个文件的语义归属、大小、媒体类型和 SHA-256。
 `summary.md`、`junit.xml`、`run/events.jsonl`、语义化 case 目录以及截图、录屏、日志和
@@ -297,10 +298,11 @@ dart run cockpitd \
 
 ## 发布门禁
 
-`.github/workflows/example-e2e.yml` 是 Cockpit 2.0 发布前的强制门禁。
-quality job 会统一验证格式、静态分析、仓库契约、所有 package 与示例测试，并对三个
-公开包执行发布 dry-run；通过后才会运行 Android、iOS、macOS、Linux、Web 和
-Windows 真实回归。只有 quality 与全部平台 job 都成功终止，并产出可校验的终态报告
+`.github/workflows/example-e2e.yml` 是 Cockpit 2.0 发布前的强制门禁。各个并行 job
+会验证格式、静态分析、仓库契约、所有 package 与示例测试、三个公开包的发布 dry-run，
+以及 Android、iOS、macOS、Linux、Web、Windows 真实回归。Android 与 iOS 必须证明
+原生 locator/action/assertion 控制，只有截图回退不能通过核心平台门禁。只有全部 job
+都成功终止，并产出可校验的终态报告
 和 artifact，版本才允许发布。每个平台都会运行一条复杂 suite，覆盖 fixture、
 setup/finally、fragment、分支、有限 retry/loop、逐步 timeout、matrix、有限并发、截图、
 完整的创建/读取/删除业务流程、全部 Flutter 手势/文本/键盘/语义命令、按能力执行的录屏
@@ -316,4 +318,5 @@ setup/finally、fragment、分支、有限 retry/loop、逐步 timeout、matrix�
 - [`packages/flutter_cockpit/README.md`](packages/flutter_cockpit/README.md)
 - [`packages/cockpit_protocol/README.md`](packages/cockpit_protocol/README.md)
 - [`docs/agent-integrations.md`](docs/agent-integrations.md)
+- [`skills/cockpit/references/environments.md`](skills/cockpit/references/environments.md)
 - [`docs/architecture/cockpit-2.0-foundation-migration-inventory.md`](docs/architecture/cockpit-2.0-foundation-migration-inventory.md)

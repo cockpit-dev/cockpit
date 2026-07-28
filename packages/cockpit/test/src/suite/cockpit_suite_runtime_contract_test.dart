@@ -331,7 +331,29 @@ void main() {
       renderer.summary(bundle),
       contains('Suite fixture teardown failed.'),
     );
-    expect(renderer.html(bundle), contains('Suite fixture teardown failed.'));
+    final html = renderer.html(bundle);
+    expect(html, contains('Suite fixture teardown failed.'));
+    expect(html, contains('id="cockpit-report-data"'));
+    expect(html, contains('data-lens="summary"'));
+    expect(html, contains('data-lens="coverage"'));
+    expect(html, contains('data-lens="executions"'));
+    expect(html, contains('data-lens="evidence"'));
+    expect(html, contains('data-lens="diagnostics"'));
+    expect(html, contains('data-lens="environment"'));
+    expect(html, contains('data-filter-input'));
+    expect(html, contains('.lens-tab{width:auto;min-height:44px'));
+    expect(
+      html,
+      contains('input[type="search"],select,.quiet-button{min-height:44px}'),
+    );
+    expect(html, contains('Effective configuration'));
+    expect(html, isNot(contains('border-left:4px')));
+    expect(html, isNot(contains('class="eyebrow"')));
+    expect(html, isNot(contains('>Product<')));
+    expect(html, isNot(contains('>Quality<')));
+    expect(html, isNot(contains('>Engineering<')));
+    expect(html, isNot(contains('src="http')));
+    expect(html, isNot(contains('href="http')));
 
     final missingFailure = <String, Object?>{...report.toJson()}
       ..remove('failure');

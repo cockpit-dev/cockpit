@@ -86,6 +86,10 @@ void main() {
       final processManager = _FakeProcessManager();
       final service = CockpitSystemControlActionService(
         processManager: processManager,
+        systemControlService: CockpitSystemControlService(
+          iosWdaEndpointProbe: (_, {required timeout}) async => false,
+          environment: const <String, String>{},
+        ),
       );
 
       final result = await service.run(

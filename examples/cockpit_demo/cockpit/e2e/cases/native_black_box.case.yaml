@@ -9,7 +9,7 @@ target:
   targetKind: nativeApp
   plane: native
   appId: dev.cockpit.placeholder
-  requiredCapabilities: [tap, back, waitFor, assertVisible, captureScreenshot]
+  requiredCapabilities: [tap, waitFor, assertVisible, captureScreenshot]
 defaults:
   commandTimeoutMs: 30000
   cleanupTimeoutMs: 30000
@@ -57,13 +57,17 @@ steps:
     action:
       type: assertVisible
       locator:
-        text: Task title
-        matchMode: contains
+        label: Back
         fallbacks:
-          - {label: Task title, matchMode: contains}
+          - {text: Create task}
   - stepId: returnThroughNativeDriver
     timeoutMs: 20000
-    action: {type: back}
+    action:
+      type: tap
+      locator:
+        label: Back
+        fallbacks:
+          - {text: Back}
   - stepId: assertNativeInboxRestored
     timeoutMs: 30000
     action:

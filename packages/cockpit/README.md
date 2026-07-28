@@ -259,8 +259,9 @@ The submission contains the canonical case source, idempotency key, inputs,
 and required features. Foreground mode fills the registered `workspaceId`.
 
 The repository release gate runs formatting, analysis, every package and
-example test suite, and publication dry-runs before starting real Android,
-iOS, macOS, Linux, web, and Windows regressions. Publication requires every
+example test suite, publication dry-runs, and real Android, iOS, macOS, Linux,
+web, and Windows regressions in parallel. Android and iOS must prove native
+locator/action/assertion control rather than screenshot fallback. Publication requires every
 job to reach a successful terminal state. Each platform regression proves a
 business mutation, the complete Flutter gesture/text/keyboard/semantics command
 surface, suite control flow, evidence, and the offline report bundle through

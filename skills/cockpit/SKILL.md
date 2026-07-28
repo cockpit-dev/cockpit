@@ -27,6 +27,7 @@ is equivalent. Never assume the Cockpit source repository is available.
 | Add the optional Flutter semantic bridge | create a development-only shell, register its indexed entrypoint | [flutter.md](references/flutter.md) |
 | Validate one user journey | author and run one `cockpit.test/v2` case | [e2e.md](references/e2e.md) |
 | Regression, CI, or release | run a suite, verify the offline bundle | [e2e.md](references/e2e.md), [reporting.md](references/reporting.md) |
+| A platform, driver, permission, or tool is unavailable | diagnose and repair the host before retrying | [environments.md](references/environments.md) |
 | Exact command or contract is uncertain | inspect live help, then local protocol map | [protocol.md](references/protocol.md) |
 
 Do not pay suite/report cost during every edit. Do not use a focused development
@@ -202,7 +203,7 @@ A pass requires terminal run state, required assertions, no disqualifying
 runtime errors, and readable required evidence. For suites, preserve the whole
 offline directory and verify `manifest.json`. Use `summary.md` for a bounded
 handoff, `report.json` as the complete rendering fact graph, `index.html` for
-offline role views, and `junit.xml` for CI interchange.
+offline task-focused exploration, and `junit.xml` for CI interchange.
 
 ## Authorization And Recovery
 

@@ -27,6 +27,8 @@ void main() {
       contains('--discovery-timeout-seconds    (defaults to "180")'),
     );
     expect(result.stdout, contains('--require-recording'));
+    expect(result.stdout, contains('--require-native-locator'));
+    expect(result.stdout, contains('--wda-url'));
   });
 
   test(

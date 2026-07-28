@@ -29,8 +29,8 @@ or reproduction, and suite reports for release/regression decisions. Artifact
 existence alone is not proof.
 
 Suite handoff uses neutral artifacts: `summary.md` for a bounded overview,
-`report.json` for the complete fact graph, `index.html` for offline role views,
-and `manifest.json` for directory integrity. Binary evidence stays in files and
+`report.json` for the complete fact graph, `index.html` for offline task-focused
+sections, and `manifest.json` for directory integrity. Binary evidence stays in files and
 is read only when a claim requires it.
 
 Screenshot assertions retain actual, baseline, and diff files. Compose scoped

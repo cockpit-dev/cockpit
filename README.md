@@ -282,8 +282,10 @@ video. `if`, bounded `retry`/`loop`, and fragments compose normally inside
 these scopes, so a second generic pre/post hook model is unnecessary.
 
 Every finalized suite exports one portable `cockpit-report/` directory. Open
-`index.html` offline for Overview, Product, Quality, Engineering, and Machine
-views. `report.json` is the canonical single-file fact graph containing suite
+`index.html` offline to move from release summary and coverage through
+executions, evidence, diagnostics, and environment/files. Search, filters,
+deep links, and responsive/print layouts work without a server or network.
+`report.json` is the canonical single-file fact graph containing suite
 and case definitions, attempts, detailed steps, assertions, and evidence
 references. `manifest.json` declares every other file with semantic ownership,
 size, media type, and SHA-256. `summary.md`, `junit.xml`, `run/events.jsonl`,
@@ -335,10 +337,11 @@ dart run cockpitd \
 ## Release Gate
 
 `.github/workflows/example-e2e.yml` is the required Cockpit 2.0 publication
-gate. Its quality job verifies formatting, static analysis, repository
-contracts, every package and example test suite, and dry-run publication for
-all three public packages. Only then does it run real Android, iOS, macOS,
-Linux, web, and Windows regression jobs. Each platform runs a complex suite
+gate. Parallel jobs verify formatting, static analysis, repository contracts,
+every package and example test suite, dry-run publication for all three public
+packages, and real Android, iOS, macOS, Linux, web, and Windows regressions.
+Android and iOS must prove native locator/action/assertion control; screenshot
+fallback is not sufficient for either core platform. Each platform runs a complex suite
 covering fixtures, setup/finally, fragment calls, branches, bounded retry and
 loop control, per-step timeouts, matrix rows, bounded concurrency, a complete
 create/read/delete business flow, every Flutter gesture/text/keyboard/semantics
@@ -357,4 +360,5 @@ Detailed package and protocol documentation:
 - [`packages/flutter_cockpit/README.md`](packages/flutter_cockpit/README.md)
 - [`packages/cockpit_protocol/README.md`](packages/cockpit_protocol/README.md)
 - [`docs/agent-integrations.md`](docs/agent-integrations.md)
+- [`skills/cockpit/references/environments.md`](skills/cockpit/references/environments.md)
 - [`docs/architecture/cockpit-2.0-foundation-migration-inventory.md`](docs/architecture/cockpit-2.0-foundation-migration-inventory.md)
