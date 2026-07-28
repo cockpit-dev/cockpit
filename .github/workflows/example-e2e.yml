@@ -206,6 +206,11 @@ jobs:
           distribution: temurin
           java-version: '17'
 
+      - uses: gradle/actions/setup-gradle@v5
+        if: matrix.platform == 'android'
+        with:
+          gradle-version: '8.14'
+
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: ${{ env.REGRESSION_FLUTTER_VERSION }}
@@ -258,8 +263,7 @@ jobs:
         if: matrix.platform == 'android'
         shell: bash
         run: >-
-          ./examples/cockpit_demo/android/gradlew
-          -p packages/cockpit/tool/android_driver
+          gradle -p packages/cockpit/tool/android_driver
           publishDriver
 
       - name: Run ${{ matrix.platform }} platform tests
