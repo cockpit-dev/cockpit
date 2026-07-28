@@ -10,7 +10,7 @@ target:
   plane: semantic
 defaults:
   commandTimeoutMs: 20000
-  cleanupTimeoutMs: 15000
+  cleanupTimeoutMs: 90000
   failFast: true
   evidence:
     screenshot: onFailure

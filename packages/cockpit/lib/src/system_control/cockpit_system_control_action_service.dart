@@ -583,6 +583,7 @@ final class CockpitSystemControlActionService {
         CockpitCommand(
           commandId: 'system-capture-screenshot',
           commandType: CockpitCommandType.captureScreenshot,
+          timeoutMs: request.timeout.inMilliseconds,
           screenshotRequest: CockpitScreenshotRequest(
             reason: CockpitScreenshotReason.acceptance,
             name: name.value ?? 'system-screenshot',

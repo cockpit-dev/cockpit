@@ -23,7 +23,7 @@ is equivalent. Never assume the Cockpit source repository is available.
 
 | Goal | Workflow | Read |
 | --- | --- | --- |
-| Implement or debug quickly | inspect -> edit -> focused operation -> inspect | [development.md](references/development.md) |
+| Implement or debug quickly | inspect -> edit -> focused operation -> inspect | [dev.md](references/dev.md) |
 | Add the optional Flutter semantic bridge | create a development-only shell, register its indexed entrypoint | [flutter.md](references/flutter.md) |
 | Validate one user journey | author and run one `cockpit.test/v2` case | [e2e.md](references/e2e.md) |
 | Regression, CI, or release | run a suite, verify the offline bundle | [e2e.md](references/e2e.md), [reporting.md](references/reporting.md) |
@@ -113,7 +113,7 @@ Use this loop for active implementation:
 
 Each cycle should answer one missing fact. Do not run a suite, generate a full
 report, or open large artifacts during every edit. Follow
-[development.md](references/development.md) for common UI, route, network,
+[dev.md](references/dev.md) for common UI, route, network,
 black-box, mixed-stack, locator, timeout, and recovery workflows.
 
 ## Inspect Before Acting
