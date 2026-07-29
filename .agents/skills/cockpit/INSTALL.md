@@ -1,131 +1,221 @@
-# Install `cockpit`
+# Install Cockpit For An AI Host
 
-This directory is the complete, self-contained `cockpit` skill. Install the
-whole directory, not only `SKILL.md`; the skill also needs its bundled
-`agents/`, `assets/`, and `references/` files.
+This directory is the complete, self-contained `cockpit` Skill. A complete AI
+host integration has four parts:
+
+1. the globally installed `cockpit` CLI and `cockpit_mcp` executable;
+2. the whole Skill directory, including `SKILL.md`, `INSTALL.md`, `agents/`,
+   `assets/`, and `references/`;
+3. the host-native plugin, rule, steering, or MCP configuration it supports;
+4. a host reload followed by CLI, Skill, and MCP verification.
+
+Do not report a complete installation after copying only `SKILL.md`. Configure
+MCP by default when the host supports it; use the CLI as the complete fallback
+when it does not or when the user explicitly declines MCP.
 
 ## Preferred AI Prompt
 
-Ask the current AI host to install the skill:
+Ask the current AI host to install every supported integration surface:
 
 ```text
-Install the cockpit skill for the current AI host by following https://github.com/cockpit-dev/cockpit/blob/main/skills/cockpit/INSTALL.md
+Install Cockpit for the current AI host, including the CLI, complete cockpit Skill, native adapter, and cockpit_mcp when supported, by following https://github.com/cockpit-dev/cockpit/blob/main/skills/cockpit/INSTALL.md
 ```
 
-Use the manual guidance below only when the host cannot install it directly.
+Use the manual guidance below only when the host cannot complete the request.
 
-## Host-First Rule
+## Common Runtime
 
-Identify the active AI host and use its native plugin, skill, rule, steering,
-or MCP mechanism when available. Do not assume the host is Codex or Claude
-Code. After installation, every file needed by the skill must live inside the
-installed skill directory; do not leave links to a temporary clone or depend
-on paths elsewhere in the Cockpit source repository.
+Install the latest compatible release without embedding the current package
+version in host configuration:
 
-## Repository Adapters
+```bash
+dart pub global activate cockpit any
+```
 
-The Cockpit repository includes native adapters for common hosts:
+Ensure Dart's global executable directory is on `PATH`, run `cockpit help`,
+and confirm the host can resolve `cockpit_mcp`. Do not invoke `cockpit_mcp`
+outside an MCP stdio handshake.
 
-- Codex marketplace and plugin: `.agents/plugins/marketplace.json`,
-  `plugins/codex/cockpit`
-- Claude Code skill and plugin: `.claude/skills/cockpit`,
-  `.claude-plugin/marketplace.json`, `plugins/claude-code/cockpit`
-- Cursor rule, skill, and MCP: `.cursor/rules/cockpit.mdc`,
-  `.cursor/skills/cockpit`, `.cursor/mcp.json`
-- Kiro steering, Power, and MCP: `.kiro/steering/cockpit.md`,
-  `plugins/kiro/cockpit`, `.kiro/settings/mcp.json`
-- Gemini CLI shared skill and MCP: `.agents/skills/cockpit`,
-  `.gemini/settings.json`
-- OpenCode skill and config: `.opencode/skills/cockpit`, `opencode.json`
-- Pi skill and shared Agent Skill: `.pi/skills/cockpit`,
-  `.agents/skills/cockpit`
-- Oh My Pi skill and MCP: `.omp/skills/cockpit`, `.omp/mcp.json`
-- Cline skill: `.cline/skills/cockpit`
-- GitHub Copilot skill and MCP: `.agents/skills/cockpit`, `.mcp.json`
-- Windsurf and Roo Code shared skill: `.agents/skills/cockpit`
+```bash
+cockpit help
+```
 
-Use the native adapter when the host supports it. Otherwise install this
-portable skill directory and configure the `cockpit_mcp` stdio executable if
-the host supports MCP.
+Every stdio MCP adapter launches `cockpit_mcp` with no arguments. It uses the
+same per-user Supervisor, authorization, workspace isolation, and artifacts as
+the CLI.
 
-## Native Installers
+## Installation Rules
 
-For Codex, add the repository marketplace, install Cockpit, then start a new
-session so the bundled Skill and MCP server are loaded:
+1. Identify the active host and install only its adapter below.
+2. Prefer a native plugin or installer when one exists.
+3. Otherwise copy this whole directory into the host's Skill directory and
+   merge the MCP configuration without removing existing servers.
+4. Copy real files. Do not leave a symlink to a temporary clone or any path
+   outside the installed Skill directory. The source checkout may be deleted
+   after installation.
+5. Use project scope for repository adapters unless the host documents a
+   stable user-scope location.
+
+## Codex
+
+The Cockpit Codex plugin bundles the complete Skill and MCP adapter. Install
+the runtime first, then:
 
 ```bash
 codex plugin marketplace add cockpit-dev/cockpit
 codex plugin add cockpit@cockpit
 ```
 
-For Claude Code, install the repository marketplace and plugin:
+Start a new Codex session. For direct MCP setup without the plugin:
+
+```bash
+codex mcp add cockpit -- cockpit_mcp
+```
+
+## Claude Code
+
+The Claude Code plugin bundles the complete Skill and `.mcp.json` adapter:
 
 ```bash
 claude plugin marketplace add cockpit-dev/cockpit
 claude plugin install cockpit@cockpit --scope user
 ```
 
-For Gemini CLI, install the complete skill and MCP server at user scope:
+Run `/reload-plugins`. For direct MCP setup without the plugin:
+
+```bash
+claude mcp add --transport stdio cockpit -- cockpit_mcp
+```
+
+## Gemini CLI
+
+Install the complete Skill and MCP server at user scope:
 
 ```bash
 gemini skills install https://github.com/cockpit-dev/cockpit.git \
   --path skills/cockpit --scope user --consent
 gemini mcp add --scope user cockpit cockpit_mcp
+gemini skills list --all
+gemini mcp list
 ```
 
-## Typical Skill Directories
+## Cursor
 
-These are common locations; the host's current documentation is authoritative:
+Copy the whole Skill to `.cursor/skills/cockpit`. When installing from the
+Cockpit repository, also copy `.cursor/rules/cockpit.mdc`; it provides the
+project trigger without duplicating the Skill body. Merge this server into
+`.cursor/mcp.json`:
 
-- Codex and shared Agent Skills: `~/.agents/skills/cockpit`
-- Codex legacy/personal fallback: `~/.codex/skills/cockpit`
-- Claude Code: `~/.claude/skills/cockpit`
-- Cursor project skill: `.cursor/skills/cockpit`
-- Gemini CLI: `~/.gemini/skills/cockpit` or project `.agents/skills/cockpit`
-- OpenCode project skill: `.opencode/skills/cockpit`
-- Pi: `~/.pi/agent/skills/cockpit` or project `.pi/skills/cockpit`
-- Oh My Pi: `~/.omp/agent/skills/cockpit` or project `.omp/skills/cockpit`
-- Cline: `~/.cline/skills/cockpit` or project `.cline/skills/cockpit`
-- GitHub Copilot, Windsurf, and Roo Code: project `.agents/skills/cockpit`
+```json
+{
+  "mcpServers": {
+    "cockpit": {
+      "type": "stdio",
+      "command": "cockpit_mcp",
+      "args": []
+    }
+  }
+}
+```
 
-Copy the complete `skills/cockpit` directory to the selected destination. The
-installed directory must contain real copies of every bundled file and no
-symbolic link that resolves outside it. A host may delete its downloaded source
-checkout after installation without breaking the skill.
+Reload the Cursor window after changing Skills, rules, or MCP configuration.
 
-## Host Runtime Notes
+## Kiro
 
-- Pi has no built-in MCP client. Run Cockpit through Pi's shell tool, use
-  `/reload` after installation, and load the workflow with `/skill:cockpit`.
-- Oh My Pi supports `.omp/mcp.json`. Reload with `/reload-plugins`, then verify
-  with `/skill:cockpit`, `/mcp reload`, and `/mcp test cockpit`.
-- GitHub Copilot CLI uses `.agents/skills/cockpit` and `.mcp.json`; verify both
-  with `copilot plugins list --kind mcp --kind skill`.
-- Windsurf and Roo Code use the shared `.agents/skills/cockpit` directory.
-- Cline uses `.cline/skills/cockpit`; add `cockpit_mcp` through Cline's MCP UI
-  only when native MCP tools are needed.
+For a project adapter, copy the complete Skill to
+`.agents/skills/cockpit`, install `.kiro/steering/cockpit.md`, and merge the
+same stdio server shape above into `.kiro/settings/mcp.json`. The distributable
+Kiro Power at `plugins/kiro/cockpit` contains `POWER.md`, `mcp.json`, and the
+same complete Skill for hosts that install Powers through Kiro.
 
-## Install Runtime And MCP
+Reload Kiro and confirm the steering file can load
+`.agents/skills/cockpit/SKILL.md` before testing MCP.
 
-Install the latest compatible CLI without embedding the current release number
-in host configuration:
+## OpenCode
+
+Copy the complete Skill to `.opencode/skills/cockpit`, then merge this entry
+into the project's `opencode.json`:
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "cockpit": {
+      "type": "local",
+      "command": ["cockpit_mcp"],
+      "enabled": true
+    }
+  }
+}
+```
+
+Restart OpenCode so it reloads both surfaces.
+
+## Pi
+
+Copy the complete Skill to `~/.pi/agent/skills/cockpit` or the project-local
+`.pi/skills/cockpit`. Pi has no built-in MCP client, so use the installed
+`cockpit` CLI through its shell tool. Run `/reload`, then load the workflow
+with `/skill:cockpit`. When automatic discovery is unavailable, start Pi with:
 
 ```bash
-dart pub global activate cockpit any
+pi --skill /absolute/path/to/cockpit
 ```
 
-Ensure Dart's global executable directory is on `PATH`. Configure the host's
-stdio MCP server with executable `cockpit_mcp` and no arguments. Hosts without
-MCP can use the same capabilities through the `cockpit` CLI.
+## Oh My Pi (OMP)
+
+Copy the complete Skill to `~/.omp/agent/skills/cockpit` or
+`.omp/skills/cockpit`, then merge the stdio server shown for Cursor into
+`.omp/mcp.json`. Run `/reload-plugins`, `/skill:cockpit`, `/mcp reload`, and
+`/mcp test cockpit` to verify both surfaces.
+
+## Cline
+
+Copy the complete Skill to `~/.cline/skills/cockpit` or
+`.cline/skills/cockpit`. Add a stdio MCP server named `cockpit`, executable
+`cockpit_mcp`, and no arguments through Cline's MCP UI. Cline owns its
+user-specific MCP settings, so do not commit a machine-specific settings file.
+Reload Cline after installing the Skill or changing MCP.
+
+## GitHub Copilot CLI
+
+Copy the complete Skill to `.agents/skills/cockpit` and merge the stdio server
+shown for Cursor into the project `.mcp.json`. Confirm both integrations:
+
+```bash
+copilot plugins list --kind mcp --kind skill
+```
+
+## Windsurf
+
+Copy the complete Skill to `.agents/skills/cockpit`. Add a stdio MCP server
+named `cockpit`, executable `cockpit_mcp`, and no arguments through Windsurf's
+current MCP settings, then reload the workspace.
+
+## Roo Code
+
+Copy the complete Skill to `.agents/skills/cockpit`. Add a stdio MCP server
+named `cockpit`, executable `cockpit_mcp`, and no arguments through Roo Code's
+MCP settings, then reload the extension.
+
+## Other Hosts
+
+For any host that supports the Agent Skills convention, install the complete
+directory at `.agents/skills/cockpit`. If it also supports stdio MCP, configure
+`cockpit_mcp` with no arguments. A host without either extension surface can
+still use the full Cockpit control and reporting API through the installed
+`cockpit` CLI; do not claim native Skill or MCP integration when the host does
+not expose it.
 
 ## Verification
 
-1. Reload or restart the AI host so it rescans skills and plugins.
-2. Confirm the host discovers the `cockpit` skill and can open this
-   `INSTALL.md` plus `agents/`, `assets/`, and `references/` inside the same
-   installed directory.
+1. Reload or restart the host so it rescans plugins, Skills, rules, steering,
+   and MCP configuration.
+2. Confirm the host discovers `cockpit` and can open `INSTALL.md`, `agents/`,
+   `assets/`, and `references/` from inside the installed Skill directory.
 3. Run `cockpit help`, `cockpit daemon status`, and `cockpit target discover`.
-4. When MCP is configured, confirm the host can start `cockpit_mcp` and list
-   Cockpit resources or tools.
-5. Report the installed skill path, MCP configuration, and any host capability
-   that is unavailable.
+4. When MCP is supported, confirm the host starts `cockpit_mcp` and can list
+   Cockpit roots, workspaces, operations, targets, documents, cases, suites,
+   runs, and artifacts.
+5. Report the installed Skill path, CLI path, native adapter, MCP status, and
+   any host capability that is unavailable.

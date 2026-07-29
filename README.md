@@ -5,7 +5,7 @@
   <h1>Cockpit 2.0</h1>
   <p><strong>One control plane for Flutter development and black-box application E2E.</strong></p>
   <p>
-    <a href="https://github.com/cockpit-dev/cockpit/actions/workflows/example-e2e.yml"><img src="https://github.com/cockpit-dev/cockpit/actions/workflows/example-e2e.yml/badge.svg?branch=main" alt="Cockpit 2.0 release gate"></a>
+    <a href="https://github.com/cockpit-dev/cockpit/actions/workflows/example-e2e.yml"><img src="https://github.com/cockpit-dev/cockpit/actions/workflows/example-e2e.yml/badge.svg?branch=main" alt="CI"></a>
     <a href="https://github.com/cockpit-dev/cockpit/blob/main/LICENSE"><img src="https://img.shields.io/github/license/cockpit-dev/cockpit" alt="BSD 3-Clause license"></a>
   </p>
   <p>
@@ -61,17 +61,19 @@ Keep Cockpit development-only. Native black-box testing does not require an
 application source dependency or a Flutter integration.
 Do not add `flutter_cockpit` imports to production `lib/` code.
 
-## Install Skill
+## Install For AI Agents
 
-The repository-owned skill lives at [`skills/cockpit`](skills/cockpit).
+The repository-owned Skill and complete host integration guide live at
+[`skills/cockpit`](skills/cockpit).
 
-Preferred: ask the current AI host to install it for you. Copy this prompt:
+Preferred: ask the current AI host to install the CLI, Skill, native adapter,
+and MCP surface for you. Copy this prompt:
 
 ```text
-Install the cockpit skill for the current AI host by following https://github.com/cockpit-dev/cockpit/blob/main/skills/cockpit/INSTALL.md
+Install Cockpit for the current AI host, including the CLI, complete cockpit Skill, native adapter, and cockpit_mcp when supported, by following https://github.com/cockpit-dev/cockpit/blob/main/skills/cockpit/INSTALL.md
 ```
 
-Full host-specific instructions live in
+Complete host-specific installation and verification instructions live in
 [`skills/cockpit/INSTALL.md`](skills/cockpit/INSTALL.md). Native adapter and MCP
 details are documented in the [agent integration guide](docs/agent-integrations.md).
 

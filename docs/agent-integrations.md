@@ -11,13 +11,14 @@ dart pub global activate cockpit any
 
 ## Install With The Agent
 
-Ask the current AI host to follow the self-contained installation guide:
+Ask the current AI host to install the runtime and every integration surface
+it supports by following the self-contained guide:
 
 ```text
-Install the cockpit skill for the current AI host by following https://github.com/cockpit-dev/cockpit/blob/main/skills/cockpit/INSTALL.md
+Install Cockpit for the current AI host, including the CLI, complete cockpit Skill, native adapter, and cockpit_mcp when supported, by following https://github.com/cockpit-dev/cockpit/blob/main/skills/cockpit/INSTALL.md
 ```
 
-The portable host-selection, copy, runtime, MCP, and verification instructions
+The portable host-selection, CLI, Skill/plugin, MCP, and verification instructions
 live in [`skills/cockpit/INSTALL.md`](../skills/cockpit/INSTALL.md). This page
 documents the repository's native adapter assets without duplicating that
 installation workflow.

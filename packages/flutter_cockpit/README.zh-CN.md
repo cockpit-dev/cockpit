@@ -11,7 +11,7 @@
     <a href="https://pub.dev/packages/flutter_cockpit/score"><img src="https://img.shields.io/pub/popularity/flutter_cockpit?logo=flutter" alt="flutter_cockpit 在 pub.dev 上的流行度"></a>
   </p>
   <p>
-    <a href="https://github.com/cockpit-dev/cockpit/actions/workflows/example-e2e.yml"><img src="https://github.com/cockpit-dev/cockpit/actions/workflows/example-e2e.yml/badge.svg?branch=main" alt="Cockpit 2.0 发布门禁"></a>
+    <a href="https://github.com/cockpit-dev/cockpit/actions/workflows/example-e2e.yml"><img src="https://github.com/cockpit-dev/cockpit/actions/workflows/example-e2e.yml/badge.svg?branch=main" alt="CI"></a>
     <a href="https://flutter.dev"><img src="https://img.shields.io/badge/Flutter-%E2%89%A53.32.0-02569B?logo=flutter&amp;logoColor=white" alt="Flutter 3.32.0 或更高版本"></a>
     <a href="https://github.com/cockpit-dev/cockpit#black-box-targets"><img src="https://img.shields.io/badge/platforms-6%20supported-2E7D32" alt="支持 Android、iOS、macOS、Linux、Windows 和 Web"></a>
     <a href="https://github.com/cockpit-dev/cockpit/blob/main/packages/flutter_cockpit/LICENSE"><img src="https://img.shields.io/github/license/cockpit-dev/cockpit" alt="BSD 3-Clause 许可证"></a>
@@ -51,6 +51,17 @@ runtime 包会为 Android、iOS、macOS、Linux、Windows 和 web 声明原生�
 截图、语义控制、网络信号、运行时诊断和远程会话都在 runtime 内完成。系统弹窗、通知、
 宿主截图、宿主录屏等系统级证据仍应通过 `cockpit` 的 system action 驱动，这样能力发现
 和平台降级路径才保持真实。
+
+### 接入 AI Agent
+
+让当前 AI 宿主安装 CLI、完整 Skill、原生适配器和 MCP：
+
+```text
+Install Cockpit for the current AI host, including the CLI, complete cockpit Skill, native adapter, and cockpit_mcp when supported, by following https://github.com/cockpit-dev/cockpit/blob/main/skills/cockpit/INSTALL.md
+```
+
+指南覆盖 Codex、Claude Code、Cursor、Gemini CLI、Kiro、OpenCode、Pi、
+Oh My Pi、Cline、GitHub Copilot、Windsurf、Roo Code 和可移植 fallback 安装。
 
 ## 推荐接入方式
 
