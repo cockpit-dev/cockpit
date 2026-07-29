@@ -62,6 +62,8 @@ assertions, errors, locator/plane/driver results, and evidence index.
 ## Report Sections
 
 - Summary answers whether the run is acceptable and what needs attention.
+- Summary includes the release gate, outcome distribution, and exact failure
+  codes before longer messages.
 - Coverage shows selected journeys, matrix rows, targets, tags, and outcomes.
 - Executions exposes every attempt and ordered step, including setup, finally,
   retries, loops, calls, assertions, and step evidence.
@@ -73,7 +75,9 @@ assertions, errors, locator/plane/driver results, and evidence index.
 
 `index.html` exposes these question-oriented sections over the same facts, so
 different readers can enter at the information they need without losing the
-shared evidence chain. `summary.md` is a bounded neutral handoff, not an
+shared evidence chain. These are task views, not persona tabs: developers,
+testers, product owners, and release leads never receive different or hidden
+facts. `summary.md` is a bounded neutral handoff, not an
 AI-authored summary. Do not rename it based on whether AI participated.
 
 ## Artifact Download

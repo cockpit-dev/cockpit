@@ -136,6 +136,71 @@ cp "$script_dir/opaque.png" "$last_arg"
       contains('No visible macOS window was found.'),
     );
   });
+
+  test(
+    'macos capture adapter retries failed window capture by bounds',
+    () async {
+      final tempDir = await Directory.systemTemp.createTemp(
+        'cockpit_macos_capture_bounds_fallback',
+      );
+      addTearDown(() async {
+        if (tempDir.existsSync()) await tempDir.delete(recursive: true);
+      });
+      final output = File(p.join(tempDir.path, 'capture.png'));
+      final invocations = <List<String>>[];
+      final adapter = CockpitMacosCaptureAdapter(
+        appId: 'dev.cockpit.cockpitDemo',
+        tempFileFactory: (_) async => output,
+        processRunner: (_, arguments) async {
+          invocations.add(List<String>.from(arguments));
+          if (arguments.contains('-l')) {
+            return ProcessResult(
+              0,
+              1,
+              '',
+              'could not create image from window',
+            );
+          }
+          await output.writeAsBytes(_opaquePng);
+          return ProcessResult(0, 0, '', '');
+        },
+        windowTargetResolver:
+            ({
+              required appId,
+              required osascriptExecutable,
+              required processRunner,
+              required timeout,
+              required activationSettleDelay,
+            }) async => const CockpitMacosWindowTarget(
+              windowId: 1234,
+              left: 48,
+              top: 64,
+              width: 960,
+              height: 720,
+            ),
+        activationSettleDelay: Duration.zero,
+      );
+
+      final execution = await adapter.capture(
+        CockpitCommand(
+          commandId: 'capture-fallback',
+          commandType: CockpitCommandType.captureScreenshot,
+          screenshotRequest: const CockpitScreenshotRequest(
+            reason: CockpitScreenshotReason.acceptance,
+            name: 'macos-bounds-fallback',
+          ),
+        ),
+      );
+
+      expect(execution.result.success, isTrue);
+      expect(invocations, hasLength(2));
+      expect(invocations.first, containsAllInOrder(<String>['-l', '1234']));
+      expect(
+        invocations.last,
+        containsAllInOrder(<String>['-R', '48,64,960,720']),
+      );
+    },
+  );
 }
 
 Future<File> _writeExecutable({

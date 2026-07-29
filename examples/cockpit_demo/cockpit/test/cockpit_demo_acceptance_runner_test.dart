@@ -45,7 +45,7 @@ void main() {
       final suite = compiledSuite.suite;
 
       expect(suite.fixtures, hasLength(2));
-      expect(suite.matrix.axes['persona'], <Object?>['developer', 'quality']);
+      expect(suite.matrix.axes['variant'], <Object?>['primary', 'alternate']);
       expect(
         suite.cases.map((entry) => entry.id),
         containsAll(const <String>{

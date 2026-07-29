@@ -240,6 +240,22 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends xvfb x11-utils xdotool imagemagick ffmpeg clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev
 
+      - name: Start Linux display server
+        if: matrix.platform == 'linux' || matrix.platform == 'web'
+        shell: bash
+        run: |
+          Xvfb :99 -screen 0 1280x720x24 -nolisten tcp >"$RUNNER_TEMP/xvfb.log" 2>&1 &
+          echo "XVFB_PID=$!" >> "$GITHUB_ENV"
+          echo 'DISPLAY=:99' >> "$GITHUB_ENV"
+          for _ in $(seq 1 30); do
+            if DISPLAY=:99 xdpyinfo >/dev/null 2>&1; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat "$RUNNER_TEMP/xvfb.log" >&2
+          exit 1
+
       - name: Enable desktop target
         if: matrix.platform == 'linux' || matrix.platform == 'macos' || matrix.platform == 'windows'
         shell: bash
@@ -357,8 +373,8 @@ jobs:
           WDA_PID=$!
           echo "WDA_PID=$WDA_PID" >> "$GITHUB_ENV"
           echo 'IOS_WDA_URL=http://127.0.0.1:8100' >> "$GITHUB_ENV"
-          for _ in $(seq 1 240); do
-            if curl --silent --show-error --fail \
+          for _ in $(seq 1 600); do
+            if curl --silent --fail \
               http://127.0.0.1:8100/status >/dev/null; then
               exit 0
             fi
@@ -417,7 +433,6 @@ jobs:
         working-directory: examples/cockpit_demo/cockpit
         shell: bash
         run: >-
-          xvfb-run -a --server-args="-screen 0 1280x720x24"
           dart run tool/verify.dart
           --platform ${{ matrix.platform }}
           ${{ matrix.visual_args }}
@@ -459,6 +474,14 @@ jobs:
           if [[ -n "${IOS_DEVICE_ID:-}" ]]; then
             xcrun simctl terminate "$IOS_DEVICE_ID" \
               com.facebook.WebDriverAgentRunner.xctrunner 2>/dev/null || true
+          fi
+
+      - name: Stop Linux display server
+        if: always() && (matrix.platform == 'linux' || matrix.platform == 'web')
+        shell: bash
+        run: |
+          if [[ -n "${XVFB_PID:-}" ]]; then
+            kill "$XVFB_PID" 2>/dev/null || true
           fi
 
       - name: Upload regression evidence

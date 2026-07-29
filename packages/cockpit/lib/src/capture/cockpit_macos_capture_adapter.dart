@@ -66,21 +66,32 @@ final class CockpitMacosCaptureAdapter implements CockpitHostCaptureAdapter {
         timeout: _timeout,
         activationSettleDelay: _activationSettleDelay,
       );
-      final captureArguments = <String>['-x', '-o'];
       final windowId = windowTarget.windowId;
-      if (windowId != null) {
-        captureArguments.addAll(<String>['-l', '$windowId']);
-      } else {
-        captureArguments.addAll(<String>[
+      final bounds =
+          '${windowTarget.left},${windowTarget.top},${windowTarget.width},${windowTarget.height}';
+      var strategy = windowId == null ? 'bounds' : 'window';
+      var result = await _runProcess(_screencaptureExecutable, <String>[
+        '-x',
+        '-o',
+        if (windowId != null) ...<String>['-l', '$windowId'] else ...<String>[
           '-R',
-          '${windowTarget.left},${windowTarget.top},${windowTarget.width},${windowTarget.height}',
+          bounds,
+        ],
+        outputFile.path,
+      ]);
+      ProcessResult? windowFailure;
+      if (result.exitCode != 0 && windowId != null) {
+        windowFailure = result;
+        if (outputFile.existsSync()) outputFile.deleteSync();
+        strategy = 'boundsFallback';
+        result = await _runProcess(_screencaptureExecutable, <String>[
+          '-x',
+          '-o',
+          '-R',
+          bounds,
+          outputFile.path,
         ]);
       }
-      captureArguments.add(outputFile.path);
-      final result = await _runProcess(
-        _screencaptureExecutable,
-        captureArguments,
-      );
       stopwatch.stop();
 
       if (result.exitCode != 0) {
@@ -90,8 +101,15 @@ final class CockpitMacosCaptureAdapter implements CockpitHostCaptureAdapter {
           message: 'macOS screencapture failed.',
           details: <String, Object?>{
             'appId': _appId,
+            'strategy': strategy,
             'exitCode': result.exitCode,
             'stderr': '${result.stderr}'.trim(),
+            if (windowFailure != null)
+              'windowAttempt': <String, Object?>{
+                'windowId': windowId,
+                'exitCode': windowFailure.exitCode,
+                'stderr': '${windowFailure.stderr}'.trim(),
+              },
           },
         );
       }
@@ -101,7 +119,11 @@ final class CockpitMacosCaptureAdapter implements CockpitHostCaptureAdapter {
         durationMs: stopwatch.elapsedMilliseconds,
         outputFile: outputFile,
         captureDescription: 'macOS screencapture',
-        details: <String, Object?>{'appId': _appId},
+        details: <String, Object?>{
+          'appId': _appId,
+          'strategy': strategy,
+          if (windowFailure != null) 'windowId': windowId,
+        },
       );
     } on TimeoutException {
       stopwatch.stop();

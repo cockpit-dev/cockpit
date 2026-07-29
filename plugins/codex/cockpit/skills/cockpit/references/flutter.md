@@ -135,6 +135,9 @@ cockpit target inspect \
 Add repeatable `--dart-define`, `--dart-define-from-file`, `--env`,
 `--flutter-arg`, and `--flavor` values only when the application needs them.
 Cockpit owns the entrypoint, device, mode, machine, and remote-control flags.
+On Android/iOS, `--env` configures the Flutter build process; it is not an
+arbitrary mobile application runtime environment. Use Dart defines or an
+application-owned configuration channel for values the mobile app must read.
 
 ## Router Integration
 

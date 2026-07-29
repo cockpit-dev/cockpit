@@ -199,6 +199,8 @@ dart run cockpit target launch \
 等价的 operation input 使用 `launchConfiguration` 对象，字段为 `dartDefines`、
 `dartDefineFromFiles`、`flutterArgs` 和 `environment`。启动配置值不会出现在操作
 输出中；已经安装的黑盒 target 不接受 Flutter 启动字段。
+Android 和 iOS 上的 `environment` 只配置 Flutter 构建进程，移动应用进程不会继承
+任意宿主机环境变量；应用自身需要读取的值应使用 Dart define 或应用自己的配置通道。
 
 每个已公开 operation 都包含 `executionMode`、`defaultTimeoutMs` 和
 `maximumTimeoutMs`。同步操作会阻塞到结果，可通过
@@ -257,6 +259,8 @@ teardown，case `setup`/`finally` 负责 case 生命周期，step `evidence` 负
 每个完成的 suite 都会导出一个可携带的 `cockpit-report/` 目录。离线打开
 `index.html` 即可按发布摘要、覆盖范围、执行过程、证据、诊断和环境/文件逐层查看；
 搜索、筛选、深链接、响应式布局和打印布局均不依赖服务或网络。
+这些入口按任务组织，而不是按角色复制或隐藏内容；开发、测试、产品和发布负责人查看的是
+同一份事实与证据链，只是从各自当前需要解决的问题进入。
 `report.json` 是唯一规范事实图，包含 suite/case 定义、attempt、详细步骤、断言和证据引用；
 `manifest.json` 记录其余每个文件的语义归属、大小、媒体类型和 SHA-256。
 `summary.md`、`junit.xml`、`run/events.jsonl`、语义化 case 目录以及截图、录屏、日志和

@@ -16,6 +16,17 @@ cockpit operation list --workspace-id <workspaceId>
 cockpit target inspect --target-id <targetId> --profile inspect
 ```
 
+An executable on `PATH` proves only that a probe can start. For release work,
+run the cheapest real operation required by the suite: read one native UI tree,
+resolve one stable locator, capture one screenshot, and start/stop recording when
+recording is required. Keep the capability unavailable when that probe fails;
+the exact environment failure belongs in the run and report.
+
+If a tool is found but exits before printing its version because a dynamic
+library, runtime, or plugin cannot load, repair or reinstall that toolchain.
+Changing `PATH` cannot fix a broken executable. Run its version command again
+before repeating Cockpit discovery.
+
 Read `available`, `limitations`, driver/adapter identity, quality flags, and the
 exact failure reason. Then verify the named platform tool directly. After a
 repair, restart the daemon if its process environment or macOS permissions
@@ -29,6 +40,7 @@ package executable directory is on `PATH`:
 ```bash
 dart --version
 flutter --version
+flutter doctor -v
 dart pub global activate cockpit ^2.0.0
 cockpit --version
 ```
@@ -65,6 +77,14 @@ licenses with the SDK manager. Match the platform and build-tools versions to
 the application build; JDK 17 is the reliable baseline for current Android
 Gradle builds.
 
+When Flutter or Gradle reports a missing SDK component, install the exact
+reported platform/build-tools pair and accept licenses before retrying:
+
+```bash
+sdkmanager --licenses
+sdkmanager "platform-tools" "emulator" "platforms;android-<api>" "build-tools;<version>"
+```
+
 An emulator must finish booting before discovery:
 
 ```bash
@@ -99,6 +119,7 @@ locator/input/assertion work.
 ```bash
 xcode-select -p
 xcodebuild -version
+xcodebuild -checkFirstLaunchStatus
 xcrun simctl list devices available
 xcrun simctl list runtimes available
 ```
@@ -107,8 +128,14 @@ Repair Xcode selection and first-launch setup when needed:
 
 ```bash
 sudo xcode-select --switch /Applications/Xcode.app/Contents/Developer
+sudo xcodebuild -license accept
 sudo xcodebuild -runFirstLaunch
 ```
+
+Flutter iOS builds may additionally require CocoaPods. Confirm `pod --version`
+and repair the CocoaPods/Ruby installation reported by `flutter doctor -v`;
+WDA-only black-box control of an already installed app does not require the
+target application's Pods.
 
 Boot a Simulator explicitly and wait for readiness:
 
@@ -116,6 +143,11 @@ Boot a Simulator explicitly and wait for readiness:
 xcrun simctl boot <simulatorUdid>
 xcrun simctl bootstatus <simulatorUdid> -b
 ```
+
+If the requested runtime is absent, install it in Xcode Settings > Platforms or
+with the Xcode-supported platform download command, then rerun `simctl list
+runtimes available`. Do not silently switch the suite to a different device,
+runtime, viewport, or visual profile.
 
 Use a maintained WDA distribution such as Appium's
 `appium-webdriveragent`. For a Simulator, run its XCTest runner without code
@@ -162,6 +194,13 @@ screens, and mixed-stack transitions. The optional development shell adds
 Flutter semantics and runtime diagnostics; it is not required for installed
 black-box control and never belongs in the production app.
 
+Flutter launch `dartDefines` and `dartDefineFromFiles` are compiled into the
+application on every supported platform. Launch `environment` values belong to
+the Flutter build/host process. Desktop apps can inherit them at runtime;
+Android/iOS application processes do not inherit arbitrary host variables, so
+use Dart defines or the application's own configuration channel for values the
+mobile app itself must read. Installed black-box targets accept neither form.
+
 ## macOS
 
 Native tree/input may require Accessibility; screenshots and recording may
@@ -169,6 +208,12 @@ require Screen Recording; scripted cross-application behavior may require
 Automation. Grant only the permissions advertised by the chosen operation in
 System Settings > Privacy & Security. Grant them to the terminal, CI runner, or
 executable that actually hosts Cockpit, then restart that host and the daemon.
+
+macOS has no supported CLI that silently grants these privacy permissions.
+`tccutil reset` only removes a decision; it does not approve access. When
+Cockpit is launched by an IDE or desktop agent, grant that application rather
+than an unrelated shell. Prove the repaired permission with a real capture or
+Accessibility action before rerunning a suite.
 
 Keep a logged-in foreground desktop session. Headless SSH sessions cannot
 provide reliable WindowServer UI automation. Re-inspect the target after every
@@ -183,8 +228,20 @@ capture, so use an advertised portal/driver or an isolated X11/Xvfb CI session.
 Typical Debian/Ubuntu dependencies include `xvfb`, `x11-utils`, `xdotool`,
 `ffmpeg`, GTK development/runtime libraries, `clang`, `cmake`, `ninja-build`,
 and `pkg-config`. Verify `DISPLAY`, `xdotool`, and `ffmpeg` before discovery.
-Launch the entire test command inside one `xvfb-run` process so display state
-is not split across shells.
+For a persistent Cockpit daemon, start one Xvfb server before the daemon and
+export the same `DISPLAY` to the daemon, workspace worker, browser, app, and
+test process. Wrapping only the final suite command in `xvfb-run` leaves the
+already-running daemon without a display.
+
+```bash
+Xvfb :99 -screen 0 1280x720x24 -nolisten tcp &
+export DISPLAY=:99
+until xdpyinfo >/dev/null 2>&1; do sleep 1; done
+cockpit daemon start --yolo
+```
+
+Give each parallel CI job a different display number and stop only the Xvfb
+process started by that job.
 
 ## Windows
 

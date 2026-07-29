@@ -39,10 +39,20 @@ steps:
       type: assertVisible
       locator: {text: Tune the workspace.}
   - stepId: captureSettings
-    action: {type: captureScreenshot, artifactName: settings-navigation}
+    timeoutMs: 60000
+    action:
+      type: captureScreenshot
+      artifactName: settings-navigation
+      captureOptions:
+        reason: acceptance
+        profile: flutterPreferred
+        allowFallback: false
+finally:
   - stepId: returnToInbox
+    timeoutMs: 20000
     action: {type: back}
   - stepId: verifyInboxRestored
+    timeoutMs: 20000
     action:
       type: waitFor
       condition: {type: route, route: /inbox}
