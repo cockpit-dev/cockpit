@@ -297,13 +297,48 @@ cases:
         '--idempotency-key',
         'smoke-suite-run',
       ]);
-      final suiteRun = await _cli(packageRoot, environment, <String>[
-        'run',
-        'get',
-        '--run-id',
-        acceptedSuite['runId']! as String,
-      ]);
+      final suiteRunId = acceptedSuite['runId']! as String;
+      final suiteRun = await _waitForCompletedRun(
+        packageRoot,
+        environment,
+        suiteRunId,
+      );
       expect(suiteRun['documentKind'], 'suite');
+      final reportDirectory = p.join(temporary.path, 'cockpit-report');
+      final reportReceipt = await _cli(packageRoot, environment, <String>[
+        'suite',
+        'report',
+        '--run-id',
+        suiteRunId,
+        '--output-dir',
+        reportDirectory,
+      ]);
+      expect(reportReceipt['path'], reportDirectory);
+      expect(
+        reportReceipt['mediaType'],
+        'application/vnd.cockpit.report-bundle',
+      );
+      final reportManifest =
+          jsonDecode(
+                await File(
+                  p.join(reportDirectory, 'manifest.json'),
+                ).readAsString(),
+              )
+              as Map<String, Object?>;
+      expect(reportManifest['runId'], suiteRunId);
+      final reportFiles = (reportManifest['files']! as List<Object?>)
+          .cast<Map<String, Object?>>()
+          .map((file) => file['relativePath']);
+      expect(
+        reportFiles,
+        containsAll(<String>[
+          'report.json',
+          'index.html',
+          'summary.md',
+          'junit.xml',
+          'run/events.jsonl',
+        ]),
+      );
 
       final accepted = await _cli(packageRoot, environment, <String>[
         'case',
@@ -461,6 +496,25 @@ cases:
     },
     timeout: const Timeout(Duration(minutes: 5)),
   );
+}
+
+Future<Map<String, Object?>> _waitForCompletedRun(
+  String packageRoot,
+  Map<String, String> environment,
+  String runId,
+) async {
+  final deadline = DateTime.now().add(const Duration(seconds: 60));
+  while (DateTime.now().isBefore(deadline)) {
+    final run = await _cli(packageRoot, environment, <String>[
+      'run',
+      'get',
+      '--run-id',
+      runId,
+    ]);
+    if (run['lifecycle'] == 'completed') return run;
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+  }
+  throw TimeoutException('Suite run $runId did not complete.');
 }
 
 Future<Map<String, Object?>> _cli(

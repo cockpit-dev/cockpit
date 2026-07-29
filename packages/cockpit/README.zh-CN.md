@@ -20,7 +20,7 @@ dashboard。
 
 ```yaml
 dev_dependencies:
-  cockpit: ^2.0.0
+  cockpit: ^2.1.0
 ```
 
 包发布四个 executable：
@@ -147,7 +147,8 @@ dart run cockpit suite run \
   --document-id <documentId> \
   --suite-id regression \
   --idempotency-key ci-regression-001
-dart run cockpit suite report --run-id <runId>
+dart run cockpit suite report --run-id <runId> \
+  --output-dir cockpit-report
 ```
 
 已安装原生应用和其他 system-controlled surface 通过 workspace target 注册；稳定的
@@ -299,7 +300,10 @@ server。
 客户端边界。未来 Flutter GUI 或第三方 SDK 必须使用该协议，不能在进程内链接
 Supervisor application services。
 
-生成的 `cockpit-report/` 是完整离线 run artifact，而不是 server UI。`index.html`
+导出的 `cockpit-report/` 是完整离线 run artifact，而不是 server UI。
+`suite report --output-dir cockpit-report` 会下载 manifest 及其声明的全部报告文件，
+逐项校验大小和 SHA-256，并在 bundle 完整后才提交目录；目标目录不能预先存在。
+`index.html`
 内嵌 CSS、JavaScript 和规范报告数据，媒体使用 bundle 相对路径；`report.json` 是稳定的
 单文件渲染输入，根 `manifest.json` 以归属、大小、媒体类型和 SHA-256 覆盖全部导出文件。
 客户端必须保持目录结构并校验 manifest，`cockpitd` 无需提供 HTML route。Summary、

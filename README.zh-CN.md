@@ -35,8 +35,8 @@ Flutter 语义桥获得更丰富的应用内能力；CLI、MCP 和未来独立�
 
 ```yaml
 dev_dependencies:
-  cockpit: ^2.0.0
-  flutter_cockpit: ^2.0.0 # 仅 Flutter 语义桥需要
+  cockpit: ^2.1.0
+  flutter_cockpit: ^2.0.1 # 仅 Flutter 语义桥需要
 ```
 
 Cockpit 应保持为开发依赖。黑盒原生应用测试不要求修改被测应用源码，也不要求
@@ -243,7 +243,8 @@ dart run cockpit suite validate --workspace-id <workspaceId> --file suites/regre
 dart run cockpit suite run --workspace-id <workspaceId> \
   --document-id <documentId> --suite-id regression \
   --idempotency-key regression-2026-07-24
-dart run cockpit suite report --run-id <runId>
+dart run cockpit suite report --run-id <runId> \
+  --output-dir cockpit-report
 ```
 
 worker 意外退出后，已完成节点不会重跑，执行中的 attempt 会变为 `interrupted`，
@@ -256,7 +257,10 @@ teardown，case `setup`/`finally` 负责 case 生命周期，step `evidence` 负
 `if`、有界 `retry`/`loop` 和 fragment 可以在这些作用域内正常组合，因此无需再引入
 一套重复的通用 pre/post hook。
 
-每个完成的 suite 都会导出一个可携带的 `cockpit-report/` 目录。离线打开
+每个完成的 suite 都会发布一个可携带的报告 bundle。使用
+`suite report --output-dir cockpit-report` 导出；CLI 只下载 run manifest 声明的
+文件，下载时校验元数据和 SHA-256，并在 bundle 完整后才提交目录，目标目录不能预先
+存在。离线打开
 `index.html` 即可按发布摘要、覆盖范围、执行过程、证据、诊断和环境/文件逐层查看；
 搜索、筛选、深链接、响应式布局和打印布局均不依赖服务或网络。
 这些入口按任务组织，而不是按角色复制或隐藏内容；开发、测试、产品和发布负责人查看的是

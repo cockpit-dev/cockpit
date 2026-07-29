@@ -177,7 +177,7 @@ cockpit suite run \
   --timeout-ms <overallSuiteBudget>
 cockpit run events --run-id <runId> --after-sequence 0
 cockpit run get --run-id <runId>
-cockpit suite report --run-id <runId>
+cockpit suite report --run-id <runId> --output-dir cockpit-report
 ```
 
 Use semantic/native/visual/coordinate planes only when advertised. Locator
@@ -200,8 +200,10 @@ loops. Use `--detail minimal|standard|full` to change projection,
 artifacts are always downloaded to files; never print or expand Base64.
 
 A pass requires terminal run state, required assertions, no disqualifying
-runtime errors, and readable required evidence. For suites, preserve the whole
-offline directory and verify `manifest.json`. Use `summary.md` for a bounded
+runtime errors, and readable required evidence. For suites, export the whole
+offline directory with `suite report --output-dir <newDirectory>`; the CLI
+downloads manifest-declared files, verifies their size and SHA-256, and leaves
+no partial destination on failure. Use `summary.md` for a bounded
 handoff, `report.json` as the complete rendering fact graph, `index.html` for
 offline task-focused exploration, and `junit.xml` for CI interchange.
 

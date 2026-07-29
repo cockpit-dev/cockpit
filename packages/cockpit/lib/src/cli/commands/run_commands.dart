@@ -8,6 +8,7 @@ import 'package:path/path.dart' as p;
 import '../../supervisor/cockpit_supervisor_api_client.dart';
 import '../cockpit_cli_output.dart';
 import '../cockpit_cli_runtime.dart';
+import '../cockpit_suite_report_exporter.dart';
 
 final class CockpitCaseCommand extends Command<int> {
   CockpitCaseCommand(this.runtime) {
@@ -276,13 +277,45 @@ final class CockpitSuiteCommand extends Command<int> {
       CockpitLeafCommand(
         runtime: runtime,
         name: 'report',
-        description: 'Read the finalized canonical suite report.',
-        configure: (parser) => parser.addOption('run-id', mandatory: true),
+        description: 'Read or export the finalized canonical suite report.',
+        configure: (parser) => parser
+          ..addOption('run-id', mandatory: true)
+          ..addOption(
+            'output-dir',
+            help: 'Export the verified complete offline report bundle.',
+          ),
         action: (arguments) async {
-          await runtime.success(
-            (await (await runtime.client()).report(
-              arguments.option('run-id')!,
-            )).toJson(),
+          final runId = arguments.option('run-id')!;
+          final client = await runtime.client();
+          final report = await client.report(runId);
+          final requestedOutputDirectory = arguments.option('output-dir');
+          if (requestedOutputDirectory == null) {
+            await runtime.success(report.toJson());
+            return cockpitSuccessExitCode;
+          }
+          if (runtime.outputSelection.outputPath != null) {
+            throw const FormatException(
+              'Use --output-dir for the bundle without --output.',
+            );
+          }
+          final outputDirectory = p.normalize(
+            p.isAbsolute(requestedOutputDirectory)
+                ? requestedOutputDirectory
+                : p.join(runtime.workingDirectory, requestedOutputDirectory),
+          );
+          final receipt = await const CockpitSuiteReportExporter().export(
+            runId: runId,
+            outputDirectory: outputDirectory,
+            artifacts: await client.artifacts(runId),
+            download: client.downloadArtifactToFile,
+          );
+          runtime.fileReceipt(
+            CockpitCliFileReceipt(
+              path: receipt.path,
+              mediaType: 'application/vnd.cockpit.report-bundle',
+              sizeBytes: receipt.sizeBytes,
+              sha256: receipt.manifestSha256,
+            ),
           );
           return cockpitSuccessExitCode;
         },

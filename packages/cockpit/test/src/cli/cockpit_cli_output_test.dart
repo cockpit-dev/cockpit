@@ -100,6 +100,22 @@ void main() {
     expect(documents.argParser.options, contains('relative-path'));
   });
 
+  test('suite report exposes complete offline bundle export', () {
+    final runner = CockpitCommandRunner(
+      runtime: CockpitCliRuntime(
+        stdoutSink: StringBuffer(),
+        stderrSink: StringBuffer(),
+      ),
+    );
+
+    final suite = runner.commands['suite'];
+    expect(suite, isNotNull);
+    final report = suite!.subcommands['report'];
+    expect(report, isNotNull);
+    expect(report!.argParser.options, contains('run-id'));
+    expect(report.argParser.options, contains('output-dir'));
+  });
+
   group('CockpitCliOutputRenderer', () {
     test('renders default AI output as compact semantic text', () {
       const renderer = CockpitCliOutputRenderer();

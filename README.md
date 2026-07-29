@@ -41,8 +41,8 @@ uses:
 
 ```yaml
 dev_dependencies:
-  cockpit: ^2.0.0
-  flutter_cockpit: ^2.0.0 # Optional Flutter semantic bridge.
+  cockpit: ^2.1.0
+  flutter_cockpit: ^2.0.1 # Optional Flutter semantic bridge.
 ```
 
 Keep Cockpit development-only. Native black-box testing does not require an
@@ -269,7 +269,8 @@ dart run cockpit suite validate --workspace-id <workspaceId> --file suites/regre
 dart run cockpit suite run --workspace-id <workspaceId> \
   --document-id <documentId> --suite-id regression \
   --idempotency-key regression-2026-07-24
-dart run cockpit suite report --run-id <runId>
+dart run cockpit suite report --run-id <runId> \
+  --output-dir cockpit-report
 ```
 
 After worker termination, completed nodes stay complete, an active attempt
@@ -284,7 +285,11 @@ step `evidence` for before/after/failure capture policy, and explicit
 video. `if`, bounded `retry`/`loop`, and fragments compose normally inside
 these scopes, so a second generic pre/post hook model is unnecessary.
 
-Every finalized suite exports one portable `cockpit-report/` directory. Open
+Every finalized suite publishes one portable report bundle. Export it with
+`suite report --output-dir cockpit-report`; the CLI downloads only the files
+declared by the run manifest, verifies their metadata and SHA-256 while
+downloading, and commits the directory only after the bundle is complete. The
+destination must not already exist. Open
 `index.html` offline to move from release summary and coverage through
 executions, evidence, diagnostics, and environment/files. Search, filters,
 deep links, and responsive/print layouts work without a server or network.
