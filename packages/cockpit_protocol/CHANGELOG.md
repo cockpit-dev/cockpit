@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.0.1
+
+- Added the Cockpit logo to the published package documentation.
+
 ## 2.0.0
 
 - Added the public automation target DTOs plus foundation JSON Schema and
