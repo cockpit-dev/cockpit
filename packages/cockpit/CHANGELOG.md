@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.0.1
+
+- Added the Cockpit logo to the published package documentation.
+
 ## 2.0.0
 
 - Added durable suite campaigns with DAG dependencies, scoped fixtures,
