@@ -60,7 +60,6 @@ steps:
                 - {text: New task}
         - stepId: assertEditorThroughNativeTree
           timeoutMs: 8000
-          evidence: {screenshot: always, snapshot: always, failurePolicy: failStep}
           action:
             type: assertVisible
             locator:
