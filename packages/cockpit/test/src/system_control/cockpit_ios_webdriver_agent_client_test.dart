@@ -75,6 +75,10 @@ void main() {
         .cast<Map<Object?, Object?>>();
     expect(steps.first['x'], 120);
     expect(steps.first['y'], 240);
+    expect(
+      steps[2],
+      equals(<String, Object?>{'type': 'pause', 'duration': 100}),
+    );
   });
 
   test('creates a session when status has no session id', () async {

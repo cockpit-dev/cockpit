@@ -202,6 +202,7 @@ final class CockpitIosWebDriverAgentClient {
                     'y': y,
                   },
                   <String, Object?>{'type': 'pointerDown', 'button': 0},
+                  <String, Object?>{'type': 'pause', 'duration': 100},
                   <String, Object?>{'type': 'pointerUp', 'button': 0},
                 ],
               },
