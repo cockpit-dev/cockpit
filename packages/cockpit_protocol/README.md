@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="https://raw.githubusercontent.com/cockpit-dev/cockpit/main/assets/brand/cockpit-mark.svg" width="128" alt="Cockpit logo">
+</p>
+
 # cockpit_protocol
 
 Platform-neutral Dart protocol models shared by Cockpit clients, runtimes,

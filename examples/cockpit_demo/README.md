@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="../../assets/brand/cockpit-mark.svg" width="128" alt="Cockpit logo">
+</p>
+
 # cockpit_demo
 
 `cockpit_demo` is the repository's production Flutter acceptance target. The
