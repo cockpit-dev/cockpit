@@ -344,6 +344,18 @@ void main() {
     expect(html, contains('Outcome distribution'));
     expect(html, contains('Release gate'));
     expect(html, contains("compact.matches?'horizontal':'vertical'"));
+    expect(
+      html,
+      contains(
+        'h1,h2,h3,p,dd,td,code,a,strong,time,.tag,.case-meta span{overflow-wrap:anywhere}',
+      ),
+    );
+    expect(
+      html,
+      contains(
+        '.title-row>*,.meta>*,.section-head>*,.filter-bar>*,.case-row-head>*,.execution>summary>*,.step>*{min-width:0}',
+      ),
+    );
     expect(html, contains('.lens-tab{width:auto;min-height:44px'));
     expect(
       html,
