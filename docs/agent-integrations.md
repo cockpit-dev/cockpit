@@ -6,8 +6,24 @@ Install the runtime once before enabling any MCP adapter, and ensure Dart's
 global executable directory is on `PATH`:
 
 ```bash
-dart pub global activate cockpit ^2.0.0
+dart pub global activate cockpit ^2.1.0
 ```
+
+## Install With The Agent
+
+This prompt gives any capable coding agent enough information to choose its
+native integration without assuming that the source repository remains
+available after installation:
+
+```text
+Install Cockpit 2.1 for this coding agent from https://github.com/cockpit-dev/cockpit. Read docs/agent-integrations.md from that repository, detect the current agent host, and use its native adapter or project configuration when available. Otherwise install the complete skills/cockpit directory, including agents, assets, and references, into the host's user-level skill directory. Do not install only SKILL.md and do not leave links to a temporary clone or source checkout. Install the runtime with `dart pub global activate cockpit ^2.1.0`, ensure Dart's global executable directory is on PATH, and register the `cockpit_mcp` stdio server when the host supports MCP. Reload the host, verify that it discovers the cockpit skill, then run `cockpit help`, `cockpit daemon status`, and `cockpit target discover`. Report the exact installed paths, MCP configuration, and any unsupported host capability.
+```
+
+Host-native assets are included for Codex, Claude Code, Cursor, Kiro,
+OpenCode, and OMP/Pi. A host outside that list is supported when it can load a
+complete Agent Skill directory, launch a stdio MCP server, or execute the
+installed CLI. Cockpit does not claim compatibility with a host that exposes
+none of those extension surfaces.
 
 ## Codex
 
@@ -28,7 +44,7 @@ The marketplace entry points Codex at the local plugin. The plugin exposes:
 For direct MCP setup without installing the plugin:
 
 ```bash
-dart pub global activate cockpit ^2.0.0
+dart pub global activate cockpit ^2.1.0
 codex mcp add cockpit -- cockpit_mcp
 ```
 
@@ -52,7 +68,7 @@ Repo-local Claude Code can discover `.claude/skills/cockpit` and the project `.m
 For direct MCP setup without installing the plugin:
 
 ```bash
-dart pub global activate cockpit ^2.0.0
+dart pub global activate cockpit ^2.1.0
 claude mcp add --transport stdio cockpit -- cockpit_mcp
 ```
 

@@ -30,6 +30,17 @@ dev_dependencies:
 - `cockpitd`：Supervisor daemon 与 foreground CI runner
 - `cockpit_worker`：私有 workspace worker 进程
 
+### AI Agent 接入
+
+把下面这段提示词直接交给需要使用 Cockpit 的编码 Agent：
+
+```text
+请为当前编码 Agent 安装 Cockpit 2.1，官方仓库是 https://github.com/cockpit-dev/cockpit。先读取仓库内的 docs/agent-integrations.md，识别当前 Agent 宿主；存在原生适配器或项目配置时优先使用，否则把完整的 skills/cockpit 目录（包括 agents、assets 和 references）安装到该宿主的用户级 skill 目录。禁止只安装 SKILL.md，也不要留下指向临时 clone 或源码仓库的外部引用。执行 `dart pub global activate cockpit ^2.1.0` 安装运行时，确保 Dart 全局 executable 目录已加入 PATH；宿主支持 MCP 时注册 `cockpit_mcp` stdio server。重新加载宿主并确认它能发现 cockpit skill，然后运行 `cockpit help`、`cockpit daemon status` 和 `cockpit target discover`。最后报告实际安装路径、MCP 配置和宿主不支持的能力。
+```
+
+仓库同时提供宿主原生接入资源和通用 Agent Skill；支持范围和验收步骤见
+[Agent 接入指南](https://github.com/cockpit-dev/cockpit/blob/main/docs/agent-integrations.md)。
+
 ## 多项目交互
 
 交互式 API 命令会按需启动当前用户的 Supervisor。每个项目根目录和 checkout 都要

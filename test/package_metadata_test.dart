@@ -534,7 +534,7 @@ void main() {
       'plugins/claude-code/cockpit/README.md',
     ]) {
       final readme = File(path).readAsStringSync();
-      expect(readme, contains('dart pub global activate cockpit ^2.0.0'));
+      expect(readme, contains('dart pub global activate cockpit ^2.1.0'));
       expect(readme, contains('cockpit_mcp'));
     }
   });

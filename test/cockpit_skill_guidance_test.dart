@@ -193,7 +193,7 @@ void main() {
     final flutter = read('${_skillRoots.first}/references/flutter.md');
 
     for (final requirement in <String>[
-      'flutter_cockpit: ^2.0.0',
+      'flutter_cockpit: ^2.1.0',
       'cockpit/main.dart',
       'FlutterCockpitApp',
       'CockpitRemoteSessionConfiguration.resolveFromEnvironment',

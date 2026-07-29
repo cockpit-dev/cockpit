@@ -8,7 +8,7 @@ Install the runtime once and ensure Dart's global executable directory is on
 `PATH`:
 
 ```bash
-dart pub global activate cockpit ^2.0.0
+dart pub global activate cockpit ^2.1.0
 ```
 
 ## Bundled Assets

@@ -34,7 +34,7 @@ Add the bridge only as a development dependency, then resolve packages:
 
 ```yaml
 dev_dependencies:
-  flutter_cockpit: ^2.0.0
+  flutter_cockpit: ^2.1.0
 ```
 
 ```bash
