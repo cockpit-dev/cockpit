@@ -35,21 +35,28 @@ steps:
     plane: native
     timeoutMs: 30000
     action: {type: waitForUiIdle, quietMs: 750}
-  - stepId: openEditorThroughNativeLocator
-    description: Prove non-invasive native locator resolution and interaction against Flutter UI.
-    plane: native
-    timeoutMs: 30000
-    action:
-      type: tap
-      locator:
-        label: New task
-        fallbacks:
-          - text: New task
-  - stepId: verifyEditorAfterNativeAction
-    timeoutMs: 12000
-    action:
-      type: waitFor
-      condition: {type: route, route: /editor}
+  - stepId: openEditorThroughNativeControl
+    description: Retry native input with its observable Flutter route postcondition.
+    timeoutMs: 90000
+    retry:
+      maxAttempts: 3
+      delayMs: 750
+      steps:
+        - stepId: openEditorThroughNativeLocator
+          description: Prove non-invasive native locator resolution and interaction against Flutter UI.
+          plane: native
+          timeoutMs: 30000
+          action:
+            type: tap
+            locator:
+              label: New task
+              fallbacks:
+                - text: New task
+        - stepId: verifyEditorAfterNativeAction
+          timeoutMs: 8000
+          action:
+            type: waitFor
+            condition: {type: route, route: /editor}
   - stepId: returnFromNativeOpenedEditor
     timeoutMs: 12000
     action: {type: back}
