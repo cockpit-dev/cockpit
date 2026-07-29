@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.1.0
+
+- Synchronized the Flutter bridge release with Cockpit 2.1.0 and its
+  `cockpit_protocol` 2.1 contract baseline.
+
 ## 2.0.1
 
 - Added the Cockpit logo to the published package documentation.

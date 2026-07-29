@@ -42,7 +42,7 @@ uses:
 ```yaml
 dev_dependencies:
   cockpit: ^2.1.0
-  flutter_cockpit: ^2.0.1 # Optional Flutter semantic bridge.
+  flutter_cockpit: ^2.1.0 # Optional Flutter semantic bridge.
 ```
 
 Keep Cockpit development-only. Native black-box testing does not require an
