@@ -80,6 +80,10 @@ testers, product owners, and release leads never receive different or hidden
 facts. `summary.md` is a bounded neutral handoff, not an
 AI-authored summary. Do not rename it based on whether AI participated.
 
+Render complete case names, step IDs, matrix values, artifact paths, digests,
+and failure text. Allow long machine tokens to wrap, keep comparison tables
+horizontally scrollable, and never use ellipsis to hide evidence identities.
+
 ## Artifact Download
 
 ```bash
