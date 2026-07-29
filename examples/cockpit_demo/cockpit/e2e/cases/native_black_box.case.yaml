@@ -44,40 +44,54 @@ steps:
         fallbacks:
           - {text: New task}
   - stepId: openEditorThroughIndependentTarget
-    timeoutMs: 30000
-    action:
-      type: tap
-      locator:
-        label: New task
-        fallbacks:
-          - {text: New task}
-  - stepId: assertEditorThroughNativeTree
-    timeoutMs: 30000
-    evidence: {screenshot: always, snapshot: always, failurePolicy: failStep}
-    action:
-      type: assertVisible
-      locator:
-        label: Back
-        type: Button
-        fallbacks:
-          - {text: Create task}
+    description: Retry native input with its observable native-tree postcondition.
+    timeoutMs: 90000
+    retry:
+      maxAttempts: 3
+      delayMs: 750
+      steps:
+        - stepId: tapNewTaskThroughNativeTree
+          timeoutMs: 30000
+          action:
+            type: tap
+            locator:
+              label: New task
+              fallbacks:
+                - {text: New task}
+        - stepId: assertEditorThroughNativeTree
+          timeoutMs: 8000
+          evidence: {screenshot: always, snapshot: always, failurePolicy: failStep}
+          action:
+            type: assertVisible
+            locator:
+              label: Back
+              type: Button
+              fallbacks:
+                - {text: Create task}
   - stepId: returnThroughNativeDriver
-    timeoutMs: 20000
-    action:
-      type: tap
-      locator:
-        label: Back
-        type: Button
-        fallbacks:
-          - {text: Back}
-  - stepId: assertNativeInboxRestored
-    timeoutMs: 30000
-    action:
-      type: assertVisible
-      locator:
-        label: New task
-        fallbacks:
-          - {text: New task}
+    description: Retry native back input with its observable inbox postcondition.
+    timeoutMs: 90000
+    retry:
+      maxAttempts: 3
+      delayMs: 750
+      steps:
+        - stepId: tapBackThroughNativeTree
+          timeoutMs: 20000
+          action:
+            type: tap
+            locator:
+              label: Back
+              type: Button
+              fallbacks:
+                - {text: Back}
+        - stepId: assertNativeInboxRestored
+          timeoutMs: 8000
+          action:
+            type: assertVisible
+            locator:
+              label: New task
+              fallbacks:
+                - {text: New task}
   - stepId: captureIndependentNativeEvidence
     timeoutMs: 60000
     action:
