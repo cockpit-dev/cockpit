@@ -30,6 +30,11 @@ steps:
     action:
       type: system
       name: recoverToApp
+  - stepId: waitForNativeUiAfterRecovery
+    description: Wait for the recovered application to become stable before native interaction.
+    plane: native
+    timeoutMs: 30000
+    action: {type: waitForUiIdle, quietMs: 750}
   - stepId: openEditorThroughNativeLocator
     description: Prove non-invasive native locator resolution and interaction against Flutter UI.
     plane: native
