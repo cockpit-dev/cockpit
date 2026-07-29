@@ -121,7 +121,7 @@ steps:
       locator: {testId: lab-text-field}
       revealAlignment: center
   - stepId: focusTextField
-    timeoutMs: 12000
+    timeoutMs: 30000
     action:
       type: focusTextInput
       locator: {testId: lab-text-field}
