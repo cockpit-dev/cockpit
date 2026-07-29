@@ -209,8 +209,6 @@ void main() {
   });
 
   test('package readmes teach flutter_cockpit installation and usage', () {
-    final runtimeVersion = _readPackageVersion('packages/flutter_cockpit');
-    final devtoolsVersion = _readPackageVersion('packages/cockpit');
     final runtimeReadme = File(
       'packages/flutter_cockpit/README.md',
     ).readAsStringSync();
@@ -225,7 +223,7 @@ void main() {
     ).readAsStringSync();
 
     expect(runtimeReadme, contains('# flutter_cockpit'));
-    expect(runtimeReadme, contains('flutter_cockpit: ^$runtimeVersion'));
+    expect(runtimeReadme, contains('flutter_cockpit: any'));
     expect(
       runtimeReadme,
       contains("package:flutter_cockpit/flutter_cockpit_flutter.dart"),
@@ -236,7 +234,7 @@ void main() {
     expect(runtimeReadme, isNot(contains('flutter_pilot')));
 
     expect(devtoolsReadme, contains('# cockpit'));
-    expect(devtoolsReadme, contains('cockpit: ^$devtoolsVersion'));
+    expect(devtoolsReadme, contains('cockpit: any'));
     expect(devtoolsReadme, contains('dart run cockpit'));
     expect(devtoolsReadme, contains('serve-mcp'));
     expect(devtoolsReadme, contains('dart run cockpit_mcp'));
@@ -246,9 +244,9 @@ void main() {
     expect(devtoolsReadme, isNot(contains('flutter_pilot_devtools')));
     expect(devtoolsReadme, isNot(contains('flutter_pilot')));
 
-    expect(runtimeReadmeZh, contains('flutter_cockpit: ^$runtimeVersion'));
+    expect(runtimeReadmeZh, contains('flutter_cockpit: any'));
     expect(runtimeReadmeZh, contains('https://pub.dev/packages/cockpit'));
-    expect(devtoolsReadmeZh, contains('cockpit: ^$devtoolsVersion'));
+    expect(devtoolsReadmeZh, contains('cockpit: any'));
   });
 
   test('setup docs keep cockpit wiring outside production lib code', () {
@@ -534,7 +532,7 @@ void main() {
       'plugins/claude-code/cockpit/README.md',
     ]) {
       final readme = File(path).readAsStringSync();
-      expect(readme, contains('dart pub global activate cockpit ^2.1.0'));
+      expect(readme, contains('dart pub global activate cockpit any'));
       expect(readme, contains('cockpit_mcp'));
     }
   });

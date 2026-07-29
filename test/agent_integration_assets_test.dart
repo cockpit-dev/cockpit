@@ -65,7 +65,7 @@ void main() {
       'plugins/codex/cockpit/.codex-plugin/plugin.json',
     );
     expect(manifest['name'], 'cockpit');
-    expect(manifest['version'], '2.1.0');
+    expect(manifest['version'], matches(RegExp(r'^\d+\.\d+\.\d+$')));
     expect(manifest['skills'], './skills/');
     expect(manifest['mcpServers'], './.mcp.json');
     expect(manifest['interface'], isA<Map<String, Object?>>());
@@ -141,8 +141,13 @@ void main() {
 
   test('agent integration docs cover every supported host', () {
     final docs = read('docs/agent-integrations.md');
+    final install = read('skills/cockpit/INSTALL.md');
     final readme = read('README.md');
     final zhReadme = read('README.zh-CN.md');
+    const prompt =
+        'Install the cockpit skill for the current AI host by following '
+        'https://github.com/cockpit-dev/cockpit/blob/main/skills/cockpit/'
+        'INSTALL.md';
     for (final host in <String>[
       'Codex',
       'Claude Code',
@@ -168,18 +173,26 @@ void main() {
     expect(docs, contains('.opencode/skills/cockpit'));
     expect(docs, contains('.pi/skills/cockpit'));
     expect(docs, contains('opencode.json'));
-    expect(readme, contains('docs/agent-integrations.md'));
-    expect(zhReadme, contains('docs/agent-integrations.md'));
+    expect(docs, contains('dart pub global activate cockpit any'));
+    expect(docs, contains(prompt));
+    expect(install, contains('whole directory'));
+    expect(install, contains('dart pub global activate cockpit any'));
+    expect(install, contains('cockpit_mcp'));
+    expect(install, contains('cockpit target discover'));
+    for (final bundledDirectory in <String>[
+      'agents/',
+      'assets/',
+      'references/',
+    ]) {
+      expect(install, contains(bundledDirectory));
+    }
+
+    expect(readme, contains('skills/cockpit/INSTALL.md'));
+    expect(zhReadme, contains('skills/cockpit/INSTALL.md'));
     expect(readme, contains('OpenCode/OMP skill'));
     expect(zhReadme, contains('OpenCode/OMP skill'));
-    for (final document in <String>[docs, readme, zhReadme]) {
-      expect(document, contains('https://github.com/cockpit-dev/cockpit'));
-      expect(document, contains('skills/cockpit'));
-      expect(document, contains('agents'));
-      expect(document, contains('assets'));
-      expect(document, contains('references'));
-      expect(document, contains('cockpit_mcp'));
-      expect(document, contains('cockpit target discover'));
+    for (final document in <String>[readme, zhReadme]) {
+      expect(document, contains(prompt));
     }
 
     for (final path in <String>[
@@ -187,10 +200,8 @@ void main() {
       'packages/cockpit/README.zh-CN.md',
     ]) {
       final packageReadme = read(path);
-      expect(packageReadme, contains('https://github.com/cockpit-dev/cockpit'));
-      expect(packageReadme, contains('skills/cockpit'));
-      expect(packageReadme, contains('cockpit_mcp'));
-      expect(packageReadme, contains('cockpit target discover'));
+      expect(packageReadme, contains(prompt));
+      expect(packageReadme, contains('skills/cockpit/INSTALL.md'));
     }
   });
 

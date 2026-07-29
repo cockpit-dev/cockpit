@@ -41,7 +41,7 @@ package executable directory is on `PATH`:
 dart --version
 flutter --version
 flutter doctor -v
-dart pub global activate cockpit ^2.1.0
+dart pub global activate cockpit any
 cockpit --version
 ```
 

@@ -35,24 +35,26 @@ Flutter 语义桥获得更丰富的应用内能力；CLI、MCP 和未来独立�
 
 ```yaml
 dev_dependencies:
-  cockpit: ^2.1.0
-  flutter_cockpit: ^2.1.0 # 仅 Flutter 语义桥需要
+  cockpit: any
+  flutter_cockpit: any # 仅 Flutter 语义桥需要
 ```
 
 Cockpit 应保持为开发依赖。黑盒原生应用测试不要求修改被测应用源码，也不要求
 接入 Flutter 包。
 
-## 为 AI Agent 安装
+## 安装 Skill
 
-把下面这段提示词直接交给需要使用 Cockpit 的编码 Agent：
+仓库维护的 skill 位于 [`skills/cockpit`](skills/cockpit)。
+
+推荐让当前 AI 宿主直接完成安装，复制下面的提示词：
 
 ```text
-请为当前编码 Agent 安装 Cockpit 2.1，官方仓库是 https://github.com/cockpit-dev/cockpit。先读取仓库内的 docs/agent-integrations.md，识别当前 Agent 宿主；存在原生适配器或项目配置时优先使用，否则把完整的 skills/cockpit 目录（包括 agents、assets 和 references）安装到该宿主的用户级 skill 目录。禁止只安装 SKILL.md，也不要留下指向临时 clone 或源码仓库的外部引用。执行 `dart pub global activate cockpit ^2.1.0` 安装运行时，确保 Dart 全局 executable 目录已加入 PATH；宿主支持 MCP 时注册 `cockpit_mcp` stdio server。重新加载宿主并确认它能发现 cockpit skill，然后运行 `cockpit help`、`cockpit daemon status` 和 `cockpit target discover`。最后报告实际安装路径、MCP 配置和宿主不支持的能力。
+Install the cockpit skill for the current AI host by following https://github.com/cockpit-dev/cockpit/blob/main/skills/cockpit/INSTALL.md
 ```
 
-仓库已经提供 Codex、Claude Code、Cursor、Kiro、OpenCode 和 OMP/Pi
-接入资源；其他宿主可使用通用 Agent Skill 和任意 stdio MCP 客户端。具体文件和
-验收步骤见 [Agent 接入指南](docs/agent-integrations.md)。
+完整的宿主安装说明见
+[`skills/cockpit/INSTALL.md`](skills/cockpit/INSTALL.md)，原生适配器和 MCP
+配置见 [Agent 接入指南](docs/agent-integrations.md)。
 
 ## 运行架构
 
