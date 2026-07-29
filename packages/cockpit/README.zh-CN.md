@@ -1,13 +1,23 @@
-<p align="center">
-  <img src="https://raw.githubusercontent.com/cockpit-dev/cockpit/main/assets/brand/cockpit-mark.svg" width="128" alt="Cockpit logo">
-</p>
-
-# cockpit
-
-[![pub package](https://img.shields.io/pub/v/cockpit?logo=dart&label=pub.dev)](https://pub.dev/packages/cockpit)
-[![License](https://img.shields.io/github/license/cockpit-dev/cockpit)](https://github.com/cockpit-dev/cockpit/blob/main/packages/cockpit/LICENSE)
-
-[English](https://github.com/cockpit-dev/cockpit/blob/main/packages/cockpit/README.md)
+<div align="center">
+  <a href="https://github.com/cockpit-dev/cockpit">
+    <img src="https://raw.githubusercontent.com/cockpit-dev/cockpit/main/assets/brand/cockpit-mark.svg" width="128" alt="Cockpit logo">
+  </a>
+  <h1>cockpit</h1>
+  <p><strong>面向应用 E2E 的无头执行器、Supervisor、CLI、MCP、原生驱动与离线报告。</strong></p>
+  <p>
+    <a href="https://pub.dev/packages/cockpit"><img src="https://img.shields.io/pub/v/cockpit?logo=dart&amp;label=pub.dev" alt="pub.dev 上的 cockpit 版本"></a>
+    <a href="https://pub.dev/packages/cockpit/score"><img src="https://img.shields.io/pub/points/cockpit?logo=dart" alt="cockpit pub points"></a>
+    <a href="https://pub.dev/packages/cockpit/score"><img src="https://img.shields.io/pub/likes/cockpit?logo=dart" alt="cockpit 在 pub.dev 上的点赞数"></a>
+    <a href="https://pub.dev/packages/cockpit/score"><img src="https://img.shields.io/pub/popularity/cockpit?logo=dart" alt="cockpit 在 pub.dev 上的流行度"></a>
+  </p>
+  <p>
+    <a href="https://github.com/cockpit-dev/cockpit/actions/workflows/example-e2e.yml"><img src="https://github.com/cockpit-dev/cockpit/actions/workflows/example-e2e.yml/badge.svg?branch=main" alt="Cockpit 2.0 发布门禁"></a>
+    <a href="https://dart.dev"><img src="https://img.shields.io/badge/Dart-%E2%89%A53.8.0-0175C2?logo=dart&amp;logoColor=white" alt="Dart 3.8.0 或更高版本"></a>
+    <a href="https://github.com/cockpit-dev/cockpit#black-box-targets"><img src="https://img.shields.io/badge/platforms-6%20supported-2E7D32" alt="支持 Android、iOS、macOS、Linux、Windows 和 Web"></a>
+    <a href="https://github.com/cockpit-dev/cockpit/blob/main/packages/cockpit/LICENSE"><img src="https://img.shields.io/github/license/cockpit-dev/cockpit" alt="BSD 3-Clause 许可证"></a>
+  </p>
+  <p><a href="https://github.com/cockpit-dev/cockpit/blob/main/packages/cockpit/README.md">English</a> · <a href="https://github.com/cockpit-dev/cockpit/blob/main/packages/cockpit/README.zh-CN.md">简体中文</a></p>
+</div>
 
 `cockpit` 是 Cockpit 2.0 的认证宿主客户端和无头执行包，包含 Supervisor daemon、
 隔离 workspace worker、resource-oriented CLI 和轻量 MCP server，不内置 GUI 或 Web

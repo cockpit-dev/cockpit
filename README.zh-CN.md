@@ -1,10 +1,25 @@
-<p align="center">
-  <img src="assets/brand/cockpit-mark.svg" width="128" alt="Cockpit logo">
-</p>
-
-# Cockpit 2.0
-
-[English](README.md)
+<div align="center">
+  <a href="https://github.com/cockpit-dev/cockpit">
+    <img src="assets/brand/cockpit-mark.svg" width="128" alt="Cockpit logo">
+  </a>
+  <h1>Cockpit 2.0</h1>
+  <p><strong>统一完成 Flutter 快速开发验证与任意应用黑盒 E2E。</strong></p>
+  <p>
+    <a href="https://github.com/cockpit-dev/cockpit/actions/workflows/example-e2e.yml"><img src="https://github.com/cockpit-dev/cockpit/actions/workflows/example-e2e.yml/badge.svg?branch=main" alt="Cockpit 2.0 发布门禁"></a>
+    <a href="https://github.com/cockpit-dev/cockpit/blob/main/LICENSE"><img src="https://img.shields.io/github/license/cockpit-dev/cockpit" alt="BSD 3-Clause 许可证"></a>
+  </p>
+  <p>
+    <a href="https://pub.dev/packages/cockpit"><img src="https://img.shields.io/pub/v/cockpit?logo=dart&amp;label=cockpit" alt="pub.dev 上的 cockpit 包"></a>
+    <a href="https://pub.dev/packages/flutter_cockpit"><img src="https://img.shields.io/pub/v/flutter_cockpit?logo=flutter&amp;label=flutter_cockpit" alt="pub.dev 上的 flutter_cockpit 包"></a>
+    <a href="https://pub.dev/packages/cockpit_protocol"><img src="https://img.shields.io/pub/v/cockpit_protocol?logo=dart&amp;label=cockpit_protocol" alt="pub.dev 上的 cockpit_protocol 包"></a>
+  </p>
+  <p>
+    <a href="https://dart.dev"><img src="https://img.shields.io/badge/Dart-%E2%89%A53.8.0-0175C2?logo=dart&amp;logoColor=white" alt="Dart 3.8.0 或更高版本"></a>
+    <a href="https://flutter.dev"><img src="https://img.shields.io/badge/Flutter-%E2%89%A53.32.0-02569B?logo=flutter&amp;logoColor=white" alt="Flutter 3.32.0 或更高版本"></a>
+    <a href="https://github.com/cockpit-dev/cockpit#black-box-targets"><img src="https://img.shields.io/badge/platforms-6%20supported-2E7D32" alt="支持 Android、iOS、macOS、Linux、Windows 和 Web"></a>
+  </p>
+  <p><a href="README.md">English</a> · <a href="README.zh-CN.md">简体中文</a></p>
+</div>
 
 Cockpit 是面向 AI、CI 和本地开发的生产级 E2E 自动化与验证框架。
 Cockpit 2.0 可以把已安装的 Android/iOS 应用作为黑盒独立操控，也可以通过

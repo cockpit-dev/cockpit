@@ -222,7 +222,7 @@ void main() {
       'packages/cockpit/README.zh-CN.md',
     ).readAsStringSync();
 
-    expect(runtimeReadme, contains('# flutter_cockpit'));
+    expect(runtimeReadme, contains('<h1>flutter_cockpit</h1>'));
     expect(runtimeReadme, contains('flutter_cockpit: any'));
     expect(
       runtimeReadme,
@@ -233,7 +233,7 @@ void main() {
     expect(runtimeReadme, contains('https://pub.dev/packages/cockpit'));
     expect(runtimeReadme, isNot(contains('flutter_pilot')));
 
-    expect(devtoolsReadme, contains('# cockpit'));
+    expect(devtoolsReadme, contains('<h1>cockpit</h1>'));
     expect(devtoolsReadme, contains('cockpit: any'));
     expect(devtoolsReadme, contains('dart run cockpit'));
     expect(devtoolsReadme, contains('serve-mcp'));
