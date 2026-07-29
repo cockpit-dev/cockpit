@@ -15,7 +15,7 @@ This skill is self-contained. Resolve every linked resource relative to this
 runtime authorities.
 
 All examples use the globally installed `cockpit` executable. Install it with
-`dart pub global activate cockpit ^2.1.0` when absent. Inside a Dart/Flutter
+`dart pub global activate cockpit any` when absent. Inside a Dart/Flutter
 project that declares `cockpit` as a development dependency, `dart run cockpit`
 is equivalent. Never assume the Cockpit source repository is available.
 

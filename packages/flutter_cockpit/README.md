@@ -29,7 +29,7 @@ Requires Flutter 3.32.0 or newer.
 
 ```yaml
 dev_dependencies:
-  flutter_cockpit: ^2.1.0
+  flutter_cockpit: any
 ```
 
 Keep the runtime development-only. Put every `flutter_cockpit` import and all

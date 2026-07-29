@@ -193,7 +193,7 @@ void main() {
     final flutter = read('${_skillRoots.first}/references/flutter.md');
 
     for (final requirement in <String>[
-      'flutter_cockpit: ^2.1.0',
+      'flutter_cockpit: any',
       'cockpit/main.dart',
       'FlutterCockpitApp',
       'CockpitRemoteSessionConfiguration.resolveFromEnvironment',
@@ -205,6 +205,22 @@ void main() {
       'setCurrentRouteName',
     ]) {
       expect(flutter, contains(requirement), reason: requirement);
+    }
+  });
+
+  test('skill bundles version-independent installation guidance', () {
+    final install = read('${_skillRoots.first}/INSTALL.md');
+
+    for (final requirement in <String>[
+      'Install the cockpit skill for the current AI host',
+      'whole directory',
+      'dart pub global activate cockpit any',
+      'cockpit_mcp',
+      'agents/',
+      'assets/',
+      'references/',
+    ]) {
+      expect(install, contains(requirement), reason: requirement);
     }
   });
 
