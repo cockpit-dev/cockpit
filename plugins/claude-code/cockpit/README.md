@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="https://raw.githubusercontent.com/cockpit-dev/cockpit/main/assets/brand/cockpit-mark.svg" width="128" alt="Cockpit logo">
+</p>
+
 # Cockpit 2.0 Claude Code Plugin
 
 This plugin exposes the Cockpit 2.0 skill and authenticated MCP control plane
