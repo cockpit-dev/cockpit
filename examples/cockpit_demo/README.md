@@ -1,8 +1,16 @@
-<p align="center">
-  <img src="../../assets/brand/cockpit-mark.svg" width="128" alt="Cockpit logo">
-</p>
-
-# cockpit_demo
+<div align="center">
+  <a href="https://github.com/cockpit-dev/cockpit">
+    <img src="../../assets/brand/cockpit-mark.svg" width="128" alt="Cockpit logo">
+  </a>
+  <h1>cockpit_demo</h1>
+  <p><strong>Cross-platform acceptance target for Cockpit development and release validation.</strong></p>
+  <p>
+    <a href="https://github.com/cockpit-dev/cockpit/actions/workflows/example-e2e.yml"><img src="https://github.com/cockpit-dev/cockpit/actions/workflows/example-e2e.yml/badge.svg?branch=main" alt="Cockpit 2.0 release gate"></a>
+    <a href="https://flutter.dev"><img src="https://img.shields.io/badge/Flutter-%E2%89%A53.32.0-02569B?logo=flutter&amp;logoColor=white" alt="Flutter 3.32.0 or newer"></a>
+    <a href="https://github.com/cockpit-dev/cockpit#black-box-targets"><img src="https://img.shields.io/badge/platforms-6%20validated-2E7D32" alt="Validated on Android, iOS, macOS, Linux, Windows, and web"></a>
+    <a href="https://github.com/cockpit-dev/cockpit/blob/main/LICENSE"><img src="https://img.shields.io/github/license/cockpit-dev/cockpit" alt="BSD 3-Clause license"></a>
+  </p>
+</div>
 
 `cockpit_demo` is the repository's production Flutter acceptance target. The
 application package remains free of Cockpit dependencies; the sibling

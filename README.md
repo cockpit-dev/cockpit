@@ -1,13 +1,25 @@
-<p align="center">
-  <img src="assets/brand/cockpit-mark.svg" width="128" alt="Cockpit logo">
-</p>
-
-# Cockpit 2.0
-
-[![E2E](https://github.com/cockpit-dev/cockpit/actions/workflows/example-e2e.yml/badge.svg)](https://github.com/cockpit-dev/cockpit/actions/workflows/example-e2e.yml)
-[![License](https://img.shields.io/github/license/cockpit-dev/cockpit)](https://github.com/cockpit-dev/cockpit/blob/main/LICENSE)
-
-[简体中文](README.zh-CN.md)
+<div align="center">
+  <a href="https://github.com/cockpit-dev/cockpit">
+    <img src="assets/brand/cockpit-mark.svg" width="128" alt="Cockpit logo">
+  </a>
+  <h1>Cockpit 2.0</h1>
+  <p><strong>One control plane for Flutter development and black-box application E2E.</strong></p>
+  <p>
+    <a href="https://github.com/cockpit-dev/cockpit/actions/workflows/example-e2e.yml"><img src="https://github.com/cockpit-dev/cockpit/actions/workflows/example-e2e.yml/badge.svg?branch=main" alt="Cockpit 2.0 release gate"></a>
+    <a href="https://github.com/cockpit-dev/cockpit/blob/main/LICENSE"><img src="https://img.shields.io/github/license/cockpit-dev/cockpit" alt="BSD 3-Clause license"></a>
+  </p>
+  <p>
+    <a href="https://pub.dev/packages/cockpit"><img src="https://img.shields.io/pub/v/cockpit?logo=dart&amp;label=cockpit" alt="cockpit package on pub.dev"></a>
+    <a href="https://pub.dev/packages/flutter_cockpit"><img src="https://img.shields.io/pub/v/flutter_cockpit?logo=flutter&amp;label=flutter_cockpit" alt="flutter_cockpit package on pub.dev"></a>
+    <a href="https://pub.dev/packages/cockpit_protocol"><img src="https://img.shields.io/pub/v/cockpit_protocol?logo=dart&amp;label=cockpit_protocol" alt="cockpit_protocol package on pub.dev"></a>
+  </p>
+  <p>
+    <a href="https://dart.dev"><img src="https://img.shields.io/badge/Dart-%E2%89%A53.8.0-0175C2?logo=dart&amp;logoColor=white" alt="Dart 3.8.0 or newer"></a>
+    <a href="https://flutter.dev"><img src="https://img.shields.io/badge/Flutter-%E2%89%A53.32.0-02569B?logo=flutter&amp;logoColor=white" alt="Flutter 3.32.0 or newer"></a>
+    <a href="https://github.com/cockpit-dev/cockpit#black-box-targets"><img src="https://img.shields.io/badge/platforms-6%20supported-2E7D32" alt="Android, iOS, macOS, Linux, Windows, and web"></a>
+  </p>
+  <p><a href="README.md">English</a> · <a href="README.zh-CN.md">简体中文</a></p>
+</div>
 
 Cockpit is a production E2E automation and verification stack for AI,
 CI, and local development. Cockpit 2.0 controls installed Android and iOS

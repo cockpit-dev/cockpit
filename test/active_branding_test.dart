@@ -10,7 +10,7 @@ void main() {
     final logo = File('$root/assets/brand/cockpit-mark.svg');
     final rasterLogo = File('$root/assets/brand/cockpit-mark.png');
 
-    expect(readme, contains('# Cockpit 2.0'));
+    expect(readme, contains('<h1>Cockpit 2.0</h1>'));
     expect(readme, contains('assets/brand/cockpit-mark.svg'));
     expect(readme, contains('packages/flutter_cockpit'));
     expect(readme, contains('docs/agent-integrations.md'));
