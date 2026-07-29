@@ -5,7 +5,7 @@
   <h1>Cockpit 2.0</h1>
   <p><strong>统一完成 Flutter 快速开发验证与任意应用黑盒 E2E。</strong></p>
   <p>
-    <a href="https://github.com/cockpit-dev/cockpit/actions/workflows/example-e2e.yml"><img src="https://github.com/cockpit-dev/cockpit/actions/workflows/example-e2e.yml/badge.svg?branch=main" alt="Cockpit 2.0 发布门禁"></a>
+    <a href="https://github.com/cockpit-dev/cockpit/actions/workflows/example-e2e.yml"><img src="https://github.com/cockpit-dev/cockpit/actions/workflows/example-e2e.yml/badge.svg?branch=main" alt="CI"></a>
     <a href="https://github.com/cockpit-dev/cockpit/blob/main/LICENSE"><img src="https://img.shields.io/github/license/cockpit-dev/cockpit" alt="BSD 3-Clause 许可证"></a>
   </p>
   <p>
@@ -57,17 +57,18 @@ dev_dependencies:
 Cockpit 应保持为开发依赖。黑盒原生应用测试不要求修改被测应用源码，也不要求
 接入 Flutter 包。
 
-## 安装 Skill
+## 接入 AI Agent
 
-仓库维护的 skill 位于 [`skills/cockpit`](skills/cockpit)。
+仓库维护的完整 Skill 与宿主接入指南位于
+[`skills/cockpit`](skills/cockpit)。
 
-推荐让当前 AI 宿主直接完成安装，复制下面的提示词：
+推荐让当前 AI 宿主直接安装 CLI、完整 Skill、原生适配器和 MCP，复制下面的提示词：
 
 ```text
-Install the cockpit skill for the current AI host by following https://github.com/cockpit-dev/cockpit/blob/main/skills/cockpit/INSTALL.md
+Install Cockpit for the current AI host, including the CLI, complete cockpit Skill, native adapter, and cockpit_mcp when supported, by following https://github.com/cockpit-dev/cockpit/blob/main/skills/cockpit/INSTALL.md
 ```
 
-完整的宿主安装说明见
+完整的宿主安装与验收说明见
 [`skills/cockpit/INSTALL.md`](skills/cockpit/INSTALL.md)，原生适配器和 MCP
 配置见 [Agent 接入指南](docs/agent-integrations.md)。
 

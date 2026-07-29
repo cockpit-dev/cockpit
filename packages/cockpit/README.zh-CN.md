@@ -11,7 +11,7 @@
     <a href="https://pub.dev/packages/cockpit/score"><img src="https://img.shields.io/pub/popularity/cockpit?logo=dart" alt="cockpit 在 pub.dev 上的流行度"></a>
   </p>
   <p>
-    <a href="https://github.com/cockpit-dev/cockpit/actions/workflows/example-e2e.yml"><img src="https://github.com/cockpit-dev/cockpit/actions/workflows/example-e2e.yml/badge.svg?branch=main" alt="Cockpit 2.0 发布门禁"></a>
+    <a href="https://github.com/cockpit-dev/cockpit/actions/workflows/example-e2e.yml"><img src="https://github.com/cockpit-dev/cockpit/actions/workflows/example-e2e.yml/badge.svg?branch=main" alt="CI"></a>
     <a href="https://dart.dev"><img src="https://img.shields.io/badge/Dart-%E2%89%A53.8.0-0175C2?logo=dart&amp;logoColor=white" alt="Dart 3.8.0 或更高版本"></a>
     <a href="https://github.com/cockpit-dev/cockpit#black-box-targets"><img src="https://img.shields.io/badge/platforms-6%20supported-2E7D32" alt="支持 Android、iOS、macOS、Linux、Windows 和 Web"></a>
     <a href="https://github.com/cockpit-dev/cockpit/blob/main/packages/cockpit/LICENSE"><img src="https://img.shields.io/github/license/cockpit-dev/cockpit" alt="BSD 3-Clause 许可证"></a>
@@ -40,15 +40,15 @@ dev_dependencies:
 - `cockpitd`：Supervisor daemon 与 foreground CI runner
 - `cockpit_worker`：私有 workspace worker 进程
 
-### 安装 Skill
+### 接入 AI Agent
 
-推荐让当前 AI 宿主直接完成安装，复制下面的提示词：
+推荐让当前 AI 宿主直接安装 CLI、完整 Skill、原生适配器和 MCP，复制下面的提示词：
 
 ```text
-Install the cockpit skill for the current AI host by following https://github.com/cockpit-dev/cockpit/blob/main/skills/cockpit/INSTALL.md
+Install Cockpit for the current AI host, including the CLI, complete cockpit Skill, native adapter, and cockpit_mcp when supported, by following https://github.com/cockpit-dev/cockpit/blob/main/skills/cockpit/INSTALL.md
 ```
 
-完整的宿主安装说明见
+完整的宿主安装与验收说明见
 [`skills/cockpit/INSTALL.md`](https://github.com/cockpit-dev/cockpit/blob/main/skills/cockpit/INSTALL.md)，
 原生适配器和 MCP 配置见
 [Agent 接入指南](https://github.com/cockpit-dev/cockpit/blob/main/docs/agent-integrations.md)。

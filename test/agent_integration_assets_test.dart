@@ -177,7 +177,8 @@ void main() {
     final readme = read('README.md');
     final zhReadme = read('README.zh-CN.md');
     const prompt =
-        'Install the cockpit skill for the current AI host by following '
+        'Install Cockpit for the current AI host, including the CLI, complete '
+        'cockpit Skill, native adapter, and cockpit_mcp when supported, by following '
         'https://github.com/cockpit-dev/cockpit/blob/main/skills/cockpit/'
         'INSTALL.md';
     for (final host in <String>[
@@ -196,6 +197,7 @@ void main() {
       'Oh My Pi',
     ]) {
       expect(docs, contains(host), reason: host);
+      expect(install, contains(host), reason: 'INSTALL.md: $host');
     }
     expect(docs, contains('plugins/codex/cockpit'));
     expect(docs, contains('plugins/claude-code/cockpit'));
@@ -274,6 +276,8 @@ void main() {
     for (final path in <String>[
       'packages/cockpit/README.md',
       'packages/cockpit/README.zh-CN.md',
+      'packages/flutter_cockpit/README.md',
+      'packages/flutter_cockpit/README.zh-CN.md',
     ]) {
       final packageReadme = read(path);
       expect(packageReadme, contains(prompt));

@@ -222,10 +222,18 @@ void main() {
     final install = read('${_skillRoots.first}/INSTALL.md');
 
     for (final requirement in <String>[
-      'Install the cockpit skill for the current AI host',
+      'Install Cockpit for the current AI host',
+      'including the CLI, complete cockpit Skill, native adapter, and '
+          'cockpit_mcp when supported',
       'whole directory',
       'dart pub global activate cockpit any',
       'cockpit_mcp',
+      'Cursor',
+      'Kiro',
+      'OpenCode',
+      'GitHub Copilot CLI',
+      'Windsurf',
+      'Roo Code',
       'Pi has no built-in MCP client',
       '.omp/mcp.json',
       '.cline/skills/cockpit',

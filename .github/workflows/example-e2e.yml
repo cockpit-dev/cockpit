@@ -1,4 +1,4 @@
-name: cockpit-2-release-gate
+name: CI
 
 on:
   push:
@@ -496,7 +496,7 @@ jobs:
             ${{ env.COCKPIT_HOME }}/daemon.log
 
   release_gate:
-    name: Cockpit 2.0 release gate
+    name: release gate
     if: always()
     needs:
       - static_analysis

@@ -11,7 +11,7 @@
     <a href="https://pub.dev/packages/flutter_cockpit/score"><img src="https://img.shields.io/pub/popularity/flutter_cockpit?logo=flutter" alt="flutter_cockpit popularity on pub.dev"></a>
   </p>
   <p>
-    <a href="https://github.com/cockpit-dev/cockpit/actions/workflows/example-e2e.yml"><img src="https://github.com/cockpit-dev/cockpit/actions/workflows/example-e2e.yml/badge.svg?branch=main" alt="Cockpit 2.0 release gate"></a>
+    <a href="https://github.com/cockpit-dev/cockpit/actions/workflows/example-e2e.yml"><img src="https://github.com/cockpit-dev/cockpit/actions/workflows/example-e2e.yml/badge.svg?branch=main" alt="CI"></a>
     <a href="https://flutter.dev"><img src="https://img.shields.io/badge/Flutter-%E2%89%A53.32.0-02569B?logo=flutter&amp;logoColor=white" alt="Flutter 3.32.0 or newer"></a>
     <a href="https://github.com/cockpit-dev/cockpit#black-box-targets"><img src="https://img.shields.io/badge/platforms-6%20supported-2E7D32" alt="Android, iOS, macOS, Linux, Windows, and web"></a>
     <a href="https://github.com/cockpit-dev/cockpit/blob/main/packages/flutter_cockpit/LICENSE"><img src="https://img.shields.io/github/license/cockpit-dev/cockpit" alt="BSD 3-Clause license"></a>
@@ -58,6 +58,19 @@ runtime diagnostics, and remote sessions work in-app. System dialogs,
 notifications, host screenshots, and host recordings should still be driven by
 `cockpit` system actions so capability discovery and platform fallbacks remain
 truthful.
+
+### Install For AI Agents
+
+Ask the current AI host to install the CLI, complete Skill, native adapter, and
+MCP surface:
+
+```text
+Install Cockpit for the current AI host, including the CLI, complete cockpit Skill, native adapter, and cockpit_mcp when supported, by following https://github.com/cockpit-dev/cockpit/blob/main/skills/cockpit/INSTALL.md
+```
+
+The guide covers Codex, Claude Code, Cursor, Gemini CLI, Kiro, OpenCode, Pi,
+Oh My Pi, Cline, GitHub Copilot, Windsurf, Roo Code, and portable fallback
+installation.
 
 ## Recommended Integration
 

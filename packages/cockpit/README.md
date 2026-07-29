@@ -11,7 +11,7 @@
     <a href="https://pub.dev/packages/cockpit/score"><img src="https://img.shields.io/pub/popularity/cockpit?logo=dart" alt="cockpit popularity on pub.dev"></a>
   </p>
   <p>
-    <a href="https://github.com/cockpit-dev/cockpit/actions/workflows/example-e2e.yml"><img src="https://github.com/cockpit-dev/cockpit/actions/workflows/example-e2e.yml/badge.svg?branch=main" alt="Cockpit 2.0 release gate"></a>
+    <a href="https://github.com/cockpit-dev/cockpit/actions/workflows/example-e2e.yml"><img src="https://github.com/cockpit-dev/cockpit/actions/workflows/example-e2e.yml/badge.svg?branch=main" alt="CI"></a>
     <a href="https://dart.dev"><img src="https://img.shields.io/badge/Dart-%E2%89%A53.8.0-0175C2?logo=dart&amp;logoColor=white" alt="Dart 3.8.0 or newer"></a>
     <a href="https://github.com/cockpit-dev/cockpit#black-box-targets"><img src="https://img.shields.io/badge/platforms-6%20supported-2E7D32" alt="Android, iOS, macOS, Linux, Windows, and web"></a>
     <a href="https://github.com/cockpit-dev/cockpit/blob/main/packages/cockpit/LICENSE"><img src="https://img.shields.io/github/license/cockpit-dev/cockpit" alt="BSD 3-Clause license"></a>
@@ -41,15 +41,16 @@ The package publishes four executables:
 - `cockpitd`: Supervisor daemon and foreground CI runner
 - `cockpit_worker`: private workspace worker process
 
-### Install Skill
+### Install For AI Agents
 
-Preferred: ask the current AI host to install it for you. Copy this prompt:
+Preferred: ask the current AI host to install the CLI, complete Skill, native
+adapter, and MCP surface. Copy this prompt:
 
 ```text
-Install the cockpit skill for the current AI host by following https://github.com/cockpit-dev/cockpit/blob/main/skills/cockpit/INSTALL.md
+Install Cockpit for the current AI host, including the CLI, complete cockpit Skill, native adapter, and cockpit_mcp when supported, by following https://github.com/cockpit-dev/cockpit/blob/main/skills/cockpit/INSTALL.md
 ```
 
-Full host-specific instructions live in
+Complete host-specific installation and verification instructions live in
 [`skills/cockpit/INSTALL.md`](https://github.com/cockpit-dev/cockpit/blob/main/skills/cockpit/INSTALL.md).
 Native adapter and MCP details are documented in the
 [agent integration guide](https://github.com/cockpit-dev/cockpit/blob/main/docs/agent-integrations.md).
