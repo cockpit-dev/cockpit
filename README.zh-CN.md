@@ -42,6 +42,18 @@ dev_dependencies:
 Cockpit 应保持为开发依赖。黑盒原生应用测试不要求修改被测应用源码，也不要求
 接入 Flutter 包。
 
+## 为 AI Agent 安装
+
+把下面这段提示词直接交给需要使用 Cockpit 的编码 Agent：
+
+```text
+请为当前编码 Agent 安装 Cockpit 2.1，官方仓库是 https://github.com/cockpit-dev/cockpit。先读取仓库内的 docs/agent-integrations.md，识别当前 Agent 宿主；存在原生适配器或项目配置时优先使用，否则把完整的 skills/cockpit 目录（包括 agents、assets 和 references）安装到该宿主的用户级 skill 目录。禁止只安装 SKILL.md，也不要留下指向临时 clone 或源码仓库的外部引用。执行 `dart pub global activate cockpit ^2.1.0` 安装运行时，确保 Dart 全局 executable 目录已加入 PATH；宿主支持 MCP 时注册 `cockpit_mcp` stdio server。重新加载宿主并确认它能发现 cockpit skill，然后运行 `cockpit help`、`cockpit daemon status` 和 `cockpit target discover`。最后报告实际安装路径、MCP 配置和宿主不支持的能力。
+```
+
+仓库已经提供 Codex、Claude Code、Cursor、Kiro、OpenCode 和 OMP/Pi
+接入资源；其他宿主可使用通用 Agent Skill 和任意 stdio MCP 客户端。具体文件和
+验收步骤见 [Agent 接入指南](docs/agent-integrations.md)。
+
 ## 运行架构
 
 `cockpit` 命令会发现或启动 `COCKPIT_HOME` 下的常驻 daemon。daemon 负责认证、

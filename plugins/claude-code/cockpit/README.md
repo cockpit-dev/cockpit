@@ -21,7 +21,7 @@ Install the published CLI once and keep Dart's global executable directory on
 `PATH`:
 
 ```bash
-dart pub global activate cockpit ^2.0.0
+dart pub global activate cockpit ^2.1.0
 ```
 
 The plugin starts MCP through the dedicated `cockpit_mcp` executable, so the

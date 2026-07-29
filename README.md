@@ -49,6 +49,19 @@ Keep Cockpit development-only. Native black-box testing does not require an
 application source dependency or a Flutter integration.
 Do not add `flutter_cockpit` imports to production `lib/` code.
 
+## Install For An AI Agent
+
+Paste this prompt into the coding agent that should use Cockpit:
+
+```text
+Install Cockpit 2.1 for this coding agent from https://github.com/cockpit-dev/cockpit. Read docs/agent-integrations.md from that repository, detect the current agent host, and use its native adapter or project configuration when available. Otherwise install the complete skills/cockpit directory, including agents, assets, and references, into the host's user-level skill directory. Do not install only SKILL.md and do not leave links to a temporary clone or source checkout. Install the runtime with `dart pub global activate cockpit ^2.1.0`, ensure Dart's global executable directory is on PATH, and register the `cockpit_mcp` stdio server when the host supports MCP. Reload the host, verify that it discovers the cockpit skill, then run `cockpit help`, `cockpit daemon status`, and `cockpit target discover`. Report the exact installed paths, MCP configuration, and any unsupported host capability.
+```
+
+Cockpit includes native assets for Codex, Claude Code, Cursor, Kiro,
+OpenCode, and OMP/Pi. Other hosts can use the portable Agent Skill and any
+stdio MCP client. See the [agent integration guide](docs/agent-integrations.md)
+for the exact files and verification steps.
+
 ## Runtime Model
 
 `cockpit` commands discover or start one daemon under `COCKPIT_HOME`. The daemon

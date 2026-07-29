@@ -65,6 +65,7 @@ void main() {
       'plugins/codex/cockpit/.codex-plugin/plugin.json',
     );
     expect(manifest['name'], 'cockpit');
+    expect(manifest['version'], '2.1.0');
     expect(manifest['skills'], './skills/');
     expect(manifest['mcpServers'], './.mcp.json');
     expect(manifest['interface'], isA<Map<String, Object?>>());
@@ -171,6 +172,26 @@ void main() {
     expect(zhReadme, contains('docs/agent-integrations.md'));
     expect(readme, contains('OpenCode/OMP skill'));
     expect(zhReadme, contains('OpenCode/OMP skill'));
+    for (final document in <String>[docs, readme, zhReadme]) {
+      expect(document, contains('https://github.com/cockpit-dev/cockpit'));
+      expect(document, contains('skills/cockpit'));
+      expect(document, contains('agents'));
+      expect(document, contains('assets'));
+      expect(document, contains('references'));
+      expect(document, contains('cockpit_mcp'));
+      expect(document, contains('cockpit target discover'));
+    }
+
+    for (final path in <String>[
+      'packages/cockpit/README.md',
+      'packages/cockpit/README.zh-CN.md',
+    ]) {
+      final packageReadme = read(path);
+      expect(packageReadme, contains('https://github.com/cockpit-dev/cockpit'));
+      expect(packageReadme, contains('skills/cockpit'));
+      expect(packageReadme, contains('cockpit_mcp'));
+      expect(packageReadme, contains('cockpit target discover'));
+    }
   });
 
   test('packaged skills are complete copies of the canonical skill', () {

@@ -1,6 +1,6 @@
 {
   "name": "cockpit",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "AI-first cross-platform application development, E2E execution, and regression evidence through Cockpit 2.0.",
   "author": {
     "name": "Cockpit Dev"

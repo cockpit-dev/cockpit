@@ -31,6 +31,18 @@ The package publishes four executables:
 - `cockpitd`: Supervisor daemon and foreground CI runner
 - `cockpit_worker`: private workspace worker process
 
+### AI agent setup
+
+Paste this prompt into the coding agent that should use Cockpit:
+
+```text
+Install Cockpit 2.1 for this coding agent from https://github.com/cockpit-dev/cockpit. Read docs/agent-integrations.md from that repository, detect the current agent host, and use its native adapter or project configuration when available. Otherwise install the complete skills/cockpit directory, including agents, assets, and references, into the host's user-level skill directory. Do not install only SKILL.md and do not leave links to a temporary clone or source checkout. Install the runtime with `dart pub global activate cockpit ^2.1.0`, ensure Dart's global executable directory is on PATH, and register the `cockpit_mcp` stdio server when the host supports MCP. Reload the host, verify that it discovers the cockpit skill, then run `cockpit help`, `cockpit daemon status`, and `cockpit target discover`. Report the exact installed paths, MCP configuration, and any unsupported host capability.
+```
+
+The repository includes host-native assets and a portable Agent Skill. See the
+[agent integration guide](https://github.com/cockpit-dev/cockpit/blob/main/docs/agent-integrations.md)
+for supported hosts and verification.
+
 ## Interactive Workspaces
 
 The CLI starts the per-user Supervisor when an interactive API command needs
