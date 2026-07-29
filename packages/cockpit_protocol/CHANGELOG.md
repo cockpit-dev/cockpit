@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.1.0
+
+- Synchronized the public protocol release with Cockpit 2.1.0 so clients can
+  pin one version across the CLI, protocol, and Flutter bridge packages.
+
 ## 2.0.1
 
 - Added the Cockpit logo to the published package documentation.

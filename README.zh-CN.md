@@ -36,7 +36,7 @@ Flutter 语义桥获得更丰富的应用内能力；CLI、MCP 和未来独立�
 ```yaml
 dev_dependencies:
   cockpit: ^2.1.0
-  flutter_cockpit: ^2.0.1 # 仅 Flutter 语义桥需要
+  flutter_cockpit: ^2.1.0 # 仅 Flutter 语义桥需要
 ```
 
 Cockpit 应保持为开发依赖。黑盒原生应用测试不要求修改被测应用源码，也不要求
