@@ -38,6 +38,10 @@ final class CockpitSimctlCaptureAdapter implements CockpitHostCaptureAdapter {
     }
 
     final stopwatch = Stopwatch()..start();
+    final commandTimeout = command.timeoutMs;
+    final captureTimeout = commandTimeout == null || commandTimeout <= 0
+        ? _timeout
+        : Duration(milliseconds: commandTimeout);
     final artifact = cockpitCaptureArtifactForRequest(request);
     final outputFile = await _tempFileFactory(
       cockpitCaptureFileName(request.name),
@@ -54,7 +58,7 @@ final class CockpitSimctlCaptureAdapter implements CockpitHostCaptureAdapter {
         _deviceId,
         'screenshot',
         outputFile.path,
-      ]);
+      ], timeout: captureTimeout);
       stopwatch.stop();
 
       if (result.exitCode != 0) {
@@ -99,15 +103,19 @@ final class CockpitSimctlCaptureAdapter implements CockpitHostCaptureAdapter {
     }
   }
 
-  Future<ProcessResult> _runProcess(String executable, List<String> arguments) {
+  Future<ProcessResult> _runProcess(
+    String executable,
+    List<String> arguments, {
+    required Duration timeout,
+  }) {
     final injected = _processRunner;
     if (injected != null) {
-      return injected(executable, arguments).timeout(_timeout);
+      return injected(executable, arguments).timeout(timeout);
     }
     return cockpitRunProcessWithTimeout(
       executable,
       arguments,
-      timeout: _timeout,
+      timeout: timeout,
     );
   }
 }

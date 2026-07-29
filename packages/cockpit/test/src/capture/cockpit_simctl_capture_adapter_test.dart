@@ -9,10 +9,12 @@ import 'package:test/test.dart';
 void main() {
   CockpitCommand captureCommand({
     CockpitScreenshotReason reason = CockpitScreenshotReason.acceptance,
+    int? timeoutMs,
   }) {
     return CockpitCommand(
       commandId: 'simctl-capture',
       commandType: CockpitCommandType.captureScreenshot,
+      timeoutMs: timeoutMs,
       screenshotRequest: CockpitScreenshotRequest(
         reason: reason,
         name: 'simctl-home',
@@ -173,6 +175,32 @@ void main() {
       execution.result.error?.details['stderr'],
       contains('Invalid device'),
     );
+  });
+
+  test('simctl capture honors the command timeout budget', () async {
+    final tempDir = await Directory.systemTemp.createTemp(
+      'cockpit_simctl_command_timeout_test',
+    );
+    addTearDown(() async {
+      if (tempDir.existsSync()) {
+        await tempDir.delete(recursive: true);
+      }
+    });
+
+    final adapter = CockpitSimctlCaptureAdapter(
+      deviceId: 'SIM-UDID',
+      timeout: const Duration(milliseconds: 1),
+      processRunner: (executable, arguments) async {
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+        File(arguments.last).writeAsBytesSync(_opaqueBlackPng);
+        return ProcessResult(0, 0, '', '');
+      },
+      tempFileFactory: (fileName) async => File('${tempDir.path}/$fileName'),
+    );
+
+    final execution = await adapter.capture(captureCommand(timeoutMs: 250));
+
+    expect(execution.result.success, isTrue);
   });
 }
 

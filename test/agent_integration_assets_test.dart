@@ -81,6 +81,17 @@ void main() {
   });
 
   test('Claude Code plugin exposes the skill and MCP server', () {
+    final marketplace = readJson('.claude-plugin/marketplace.json');
+    expect(marketplace['name'], 'cockpit');
+    expect(marketplace['owner'], isA<Map<String, Object?>>());
+    final plugins = marketplace['plugins']! as List<Object?>;
+    expect(plugins, hasLength(1));
+    expect(plugins.single, containsPair('name', 'cockpit'));
+    expect(
+      plugins.single,
+      containsPair('source', './plugins/claude-code/cockpit'),
+    );
+
     final projectMcp = readJson('.mcp.json');
     final projectServers = projectMcp['mcpServers']! as Map<String, Object?>;
     expectStdioMcpServer(projectServers['cockpit']! as Map<String, Object?>);
@@ -103,6 +114,7 @@ void main() {
   test('repo-local agent adapters point to the canonical skill', () {
     final cursor = read('.cursor/rules/cockpit.mdc');
     expect(cursor, contains('alwaysApply: false'));
+    expect(cursor, isNot(contains('globs:')));
     expect(cursor, contains('.cursor/skills/cockpit/SKILL.md'));
     expect(cursor, isNot(contains('dart run cockpit')));
     final cursorMcp = readJson('.cursor/mcp.json');
@@ -110,11 +122,19 @@ void main() {
     expectStdioMcpServer(cursorServers['cockpit']! as Map<String, Object?>);
 
     final kiro = read('.kiro/steering/cockpit.md');
-    expect(kiro, contains('bundled self-contained `cockpit` skill'));
+    expect(kiro, startsWith('---\ninclusion: auto\nname: cockpit\n'));
+    expect(kiro, contains('.agents/skills/cockpit/SKILL.md'));
+    expect(kiro, contains('Cockpit Power'));
     expect(kiro, isNot(contains('dart run cockpit')));
     final kiroMcp = readJson('.kiro/settings/mcp.json');
     final kiroServers = kiroMcp['mcpServers']! as Map<String, Object?>;
     expectStdioMcpServer(kiroServers['cockpit']! as Map<String, Object?>);
+
+    final gemini = readJson('.gemini/settings.json');
+    final geminiServers = gemini['mcpServers']! as Map<String, Object?>;
+    final geminiCockpit = geminiServers['cockpit']! as Map<String, Object?>;
+    expect(geminiCockpit['command'], 'cockpit_mcp');
+    expect(geminiCockpit['args'], <Object?>[]);
     final kiroPower = read('plugins/kiro/cockpit/POWER.md');
     expect(kiroPower, contains('Cockpit'));
     expect(kiroPower, contains('globally installed `cockpit_mcp` server'));
@@ -124,19 +144,31 @@ void main() {
     expectStdioMcpServer(kiroPowerServers['cockpit']! as Map<String, Object?>);
 
     final opencode = readJson('opencode.json');
-    expect(opencode['instructions'], <Object?>['AGENTS.md']);
+    expect(opencode, isNot(contains('instructions')));
     final mcp = opencode['mcp']! as Map<String, Object?>;
     final server = mcp['cockpit']! as Map<String, Object?>;
     expect(server['type'], 'local');
     expect(server['command'], <Object?>['cockpit_mcp']);
     expect(server['enabled'], isTrue);
 
-    final ompSkill = read('.agents/skills/cockpit/SKILL.md');
-    expect(ompSkill, contains('name: cockpit'));
-    expect(ompSkill, contains('globally installed `cockpit` executable'));
+    final sharedSkill = read('.agents/skills/cockpit/SKILL.md');
+    expect(sharedSkill, contains('name: cockpit'));
+    expect(sharedSkill, contains('globally installed `cockpit` executable'));
     final piSkill = read('.pi/skills/cockpit/SKILL.md');
     expect(piSkill, contains('name: cockpit'));
     expect(piSkill, contains('globally installed `cockpit` executable'));
+
+    final ompSkill = read('.omp/skills/cockpit/SKILL.md');
+    expect(ompSkill, contains('name: cockpit'));
+    expect(ompSkill, contains('globally installed `cockpit` executable'));
+    final ompMcp = readJson('.omp/mcp.json');
+    expect(ompMcp[r'$schema'], contains('can1357/oh-my-pi'));
+    final ompServers = ompMcp['mcpServers']! as Map<String, Object?>;
+    expectStdioMcpServer(ompServers['cockpit']! as Map<String, Object?>);
+
+    final clineSkill = read('.cline/skills/cockpit/SKILL.md');
+    expect(clineSkill, contains('name: cockpit'));
+    expect(clineSkill, contains('globally installed `cockpit` executable'));
   });
 
   test('agent integration docs cover every supported host', () {
@@ -152,8 +184,14 @@ void main() {
       'Codex',
       'Claude Code',
       'Cursor',
+      'Gemini CLI',
       'Kiro',
       'OpenCode',
+      'GitHub Copilot',
+      'Windsurf',
+      'Cline',
+      'Roo Code',
+      'Pi',
       'OMP',
       'Oh My Pi',
     ]) {
@@ -161,23 +199,52 @@ void main() {
     }
     expect(docs, contains('plugins/codex/cockpit'));
     expect(docs, contains('plugins/claude-code/cockpit'));
+    expect(docs, contains('.claude-plugin/marketplace.json'));
     expect(docs, contains('.claude/skills/cockpit'));
     expect(docs, contains('.mcp.json'));
     expect(docs, contains('.cursor/rules/cockpit.mdc'));
     expect(docs, contains('.cursor/mcp.json'));
     expect(docs, contains('.cursor/skills/cockpit'));
+    expect(docs, contains('.gemini/settings.json'));
     expect(docs, contains('.kiro/steering/cockpit.md'));
     expect(docs, contains('.kiro/settings/mcp.json'));
     expect(docs, contains('plugins/kiro/cockpit'));
     expect(docs, contains('.agents/skills/cockpit'));
     expect(docs, contains('.opencode/skills/cockpit'));
     expect(docs, contains('.pi/skills/cockpit'));
+    expect(docs, contains('.omp/skills/cockpit'));
+    expect(docs, contains('.omp/mcp.json'));
+    expect(docs, contains('.cline/skills/cockpit'));
     expect(docs, contains('opencode.json'));
+    expect(docs, contains('codex plugin marketplace add cockpit-dev/cockpit'));
+    expect(docs, contains('codex plugin add cockpit@cockpit'));
+    expect(
+      docs,
+      contains(
+        'gemini skills install https://github.com/cockpit-dev/cockpit.git',
+      ),
+    );
+    expect(docs, contains('gemini mcp add --scope user cockpit cockpit_mcp'));
+    expect(docs, contains('claude plugin marketplace add cockpit-dev/cockpit'));
     expect(docs, contains('dart pub global activate cockpit any'));
     expect(docs, contains(prompt));
     expect(install, contains('whole directory'));
     expect(install, contains('dart pub global activate cockpit any'));
+    expect(
+      install,
+      contains('codex plugin marketplace add cockpit-dev/cockpit'),
+    );
+    expect(install, contains('codex plugin add cockpit@cockpit'));
+    expect(
+      install,
+      contains(
+        'gemini skills install https://github.com/cockpit-dev/cockpit.git',
+      ),
+    );
     expect(install, contains('cockpit_mcp'));
+    expect(install, contains('Pi has no built-in MCP client'));
+    expect(install, contains('.omp/mcp.json'));
+    expect(install, contains('.cline/skills/cockpit'));
     expect(install, contains('cockpit target discover'));
     for (final bundledDirectory in <String>[
       'agents/',
@@ -189,8 +256,17 @@ void main() {
 
     expect(readme, contains('skills/cockpit/INSTALL.md'));
     expect(zhReadme, contains('skills/cockpit/INSTALL.md'));
-    expect(readme, contains('OpenCode/OMP skill'));
-    expect(zhReadme, contains('OpenCode/OMP skill'));
+    for (final host in <String>[
+      'GitHub Copilot',
+      'Windsurf',
+      'Cline',
+      'Roo Code',
+      'Pi',
+      'Oh My Pi',
+    ]) {
+      expect(readme, contains(host), reason: host);
+      expect(zhReadme, contains(host), reason: host);
+    }
     for (final document in <String>[readme, zhReadme]) {
       expect(document, contains(prompt));
     }
@@ -203,6 +279,14 @@ void main() {
       expect(packageReadme, contains(prompt));
       expect(packageReadme, contains('skills/cockpit/INSTALL.md'));
     }
+
+    expect(
+      read('plugins/codex/cockpit/README.md'),
+      allOf(
+        contains('codex plugin marketplace add cockpit-dev/cockpit'),
+        contains('codex plugin add cockpit@cockpit'),
+      ),
+    );
   });
 
   test('packaged skills are complete copies of the canonical skill', () {
@@ -219,5 +303,7 @@ void main() {
     expectSkillCopyMatchesCanonical('.cursor/skills/cockpit');
     expectSkillCopyMatchesCanonical('.opencode/skills/cockpit');
     expectSkillCopyMatchesCanonical('.pi/skills/cockpit');
+    expectSkillCopyMatchesCanonical('.omp/skills/cockpit');
+    expectSkillCopyMatchesCanonical('.cline/skills/cockpit');
   });
 }

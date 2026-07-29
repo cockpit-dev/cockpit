@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "cockpit": {
+      "command": "cockpit_mcp",
+      "args": []
+    }
+  }
+}

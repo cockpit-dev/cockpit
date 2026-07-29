@@ -1,0 +1,38 @@
+schemaVersion: cockpit.test/v2
+kind: suite
+id: applicationRegression
+name: Application regression
+description: Parallel, retryable black-box regression with a portable offline report.
+tags: [acceptance, regression, black-box]
+execution:
+  maxConcurrency: 2
+  failFast: true
+  isolation: restartApp
+  retry:
+    maxAttempts: 2
+    delayMs: 1000
+    retryOn: [blocked, interrupted, internalError]
+report:
+  formats: [json, junit, html, summary]
+  includePassedAttempts: true
+matrix:
+  axes:
+    accountTier: [standard, premium]
+  maxCombinations: 2
+cases:
+  - id: login
+    source:
+      kind: file
+      relativePath: cockpit/e2e/cases/black-box-login.case.yaml
+      caseId: blackBoxLogin
+    inputs:
+      username: regression@example.test
+  - id: settings
+    dependsOn: [login]
+    matrixAxes: [accountTier]
+    inputs:
+      accountTier: {$matrix: accountTier}
+    source:
+      kind: file
+      relativePath: cockpit/e2e/cases/black-box-settings.case.yaml
+      caseId: blackBoxSettings

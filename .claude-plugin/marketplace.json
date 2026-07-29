@@ -1,0 +1,15 @@
+{
+  "name": "cockpit",
+  "owner": {
+    "name": "Cockpit Dev",
+    "url": "https://github.com/cockpit-dev"
+  },
+  "description": "Cockpit skills and MCP integration for application development and black-box E2E.",
+  "plugins": [
+    {
+      "name": "cockpit",
+      "source": "./plugins/claude-code/cockpit",
+      "description": "Develop and verify Flutter, native, web, desktop, and mixed-stack applications with Cockpit."
+    }
+  ]
+}

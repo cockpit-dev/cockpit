@@ -91,7 +91,7 @@ cockpit target launch \
   --dart-define API_URL=https://example.test \
   --dart-define-from-file config/development.json \
   --env API_TOKEN=secret \
-  --flutter-arg --track-widget-creation \
+  --flutter-arg=--track-widget-creation \
   --launch-timeout-ms 900000 \
   --idempotency-key <uniqueKey>
 ```

@@ -1,10 +1,18 @@
+---
+inclusion: auto
+name: cockpit
+description: Use when Flutter development or black-box application testing needs live control, E2E execution, reports, or evidence.
+---
+
 # Cockpit 2.0
 
 Use this steering note when Flutter development or black-box application
 testing needs live control, E2E execution, reports, or evidence.
 
-Use the Cockpit Power and its bundled self-contained `cockpit` skill before
-controlling an application or claiming validation.
+Load the self-contained Cockpit workflow from
+`.agents/skills/cockpit/SKILL.md` before controlling an application or
+claiming validation. When the Cockpit Power is installed, its bundled
+`skills/cockpit` directory provides the same workflow.
 
 ```bash
 cockpit daemon status

@@ -344,8 +344,9 @@ and project creation tools through the same workspace-isolated Supervisor. It
 is a complete Cockpit-side alternative when the official Dart MCP server is not
 installed; Cockpit neither embeds nor proxies that server.
 
-Agent host setup, including the OpenCode/OMP skill, is documented in the
-[agent integration guide](docs/agent-integrations.md).
+Agent host setup for Codex, Claude Code, Cursor, Gemini CLI, Kiro, OpenCode,
+GitHub Copilot, Windsurf, Cline, Roo Code, Pi, and Oh My Pi is documented in
+the [agent integration guide](docs/agent-integrations.md).
 
 ## Foreground CI
 

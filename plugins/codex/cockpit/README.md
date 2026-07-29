@@ -9,7 +9,13 @@ for cross-platform development and black-box application E2E.
 
 ## Install
 
-Use it as a local plugin or add it to a Codex marketplace that points at `plugins/codex/cockpit`.
+Add the repository marketplace, install Cockpit, then start a new Codex
+session so the bundled Skill and MCP server are loaded:
+
+```bash
+codex plugin marketplace add cockpit-dev/cockpit
+codex plugin add cockpit@cockpit
+```
 
 Install the published CLI once and keep Dart's global executable directory on
 `PATH`:
