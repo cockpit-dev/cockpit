@@ -8,7 +8,9 @@ const _skillRoots = <String>[
   '.agents/skills/cockpit',
   '.claude/skills/cockpit',
   '.cursor/skills/cockpit',
+  '.cline/skills/cockpit',
   '.opencode/skills/cockpit',
+  '.omp/skills/cockpit',
   '.pi/skills/cockpit',
   'plugins/claude-code/cockpit/skills/cockpit',
   'plugins/codex/cockpit/skills/cockpit',
@@ -160,6 +162,14 @@ void main() {
         );
       }
     }
+
+    expect(
+      Directory(
+        canonicalRoot,
+      ).listSync(recursive: true, followLinks: false).whereType<Link>(),
+      isEmpty,
+      reason: 'The installed skill must not depend on external symlinks.',
+    );
   });
 
   test('skill bundles the authoritative 2.0 authoring schema', () {
@@ -216,12 +226,28 @@ void main() {
       'whole directory',
       'dart pub global activate cockpit any',
       'cockpit_mcp',
+      'Pi has no built-in MCP client',
+      '.omp/mcp.json',
+      '.cline/skills/cockpit',
       'agents/',
       'assets/',
       'references/',
     ]) {
       expect(install, contains(requirement), reason: requirement);
     }
+  });
+
+  test('skill command examples match the current CLI parser', () {
+    final development = read('${_skillRoots.first}/references/dev.md');
+    final environments = read(
+      '${_skillRoots.first}/references/environments.md',
+    );
+
+    expect(development, contains('--flutter-arg=--track-widget-creation'));
+    expect(development, isNot(contains('--flutter-arg --')));
+    expect(environments, contains('## Contents'));
+    expect(environments, contains('cockpit help'));
+    expect(environments, isNot(contains('cockpit --version')));
   });
 
   test('skill includes platform environment recovery guidance', () {

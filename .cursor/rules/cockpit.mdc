@@ -1,9 +1,5 @@
 ---
 description: Use Cockpit 2.0 when Flutter or black-box application work needs live control, E2E execution, reports, or evidence.
-globs:
-  - "**/*.dart"
-  - "pubspec.yaml"
-  - "cockpit/**"
 alwaysApply: false
 ---
 

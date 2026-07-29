@@ -306,7 +306,8 @@ artifact 下载。2.0 暂不提供 Flutter GUI，也不内置 HTML dashboard；H
 用户未安装官方 Dart MCP server 时它可以完整替代常用开发能力，但 Cockpit 不嵌入、
 不代理官方 server。
 
-包括 OpenCode/OMP skill 在内的各类 Agent 宿主接入方式见
+Codex、Claude Code、Cursor、Gemini CLI、Kiro、OpenCode、GitHub Copilot、
+Windsurf、Cline、Roo Code、Pi 和 Oh My Pi 的接入方式见
 [Agent 接入指南](docs/agent-integrations.md)。
 
 CI 可以让前台 daemon 独占生命周期：

@@ -509,7 +509,9 @@ void main() {
     for (final path in <String>[
       '.mcp.json',
       '.cursor/mcp.json',
+      '.gemini/settings.json',
       '.kiro/settings/mcp.json',
+      '.omp/mcp.json',
       'opencode.json',
       'plugins/codex/cockpit/.mcp.json',
       'plugins/claude-code/cockpit/.mcp.json',
@@ -524,7 +526,7 @@ void main() {
     final kiroSteering = File('.kiro/steering/cockpit.md').readAsStringSync();
     expect(cursorRule, contains('.cursor/skills/cockpit/SKILL.md'));
     expect(cursorRule, isNot(contains('dart run cockpit')));
-    expect(kiroSteering, contains('bundled self-contained `cockpit` skill'));
+    expect(kiroSteering, contains('.agents/skills/cockpit/SKILL.md'));
     expect(kiroSteering, isNot(contains('dart run cockpit')));
 
     for (final path in <String>[

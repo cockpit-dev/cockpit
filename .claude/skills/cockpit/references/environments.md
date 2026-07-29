@@ -4,6 +4,18 @@ Use this reference when discovery, launch, native control, capture, recording,
 or a platform tool is unavailable. Repair the host first; do not turn a missing
 capability into a passing fallback for a release gate.
 
+## Contents
+
+- [Diagnose from the outside in](#diagnose-from-the-outside-in)
+- [Android](#android)
+- [iOS and iPadOS](#ios-and-ipados)
+- [macOS](#macos)
+- [Linux](#linux)
+- [Windows](#windows)
+- [Web](#web)
+- [Parallel projects and devices](#parallel-projects-and-devices)
+- [Common failure mapping](#common-failure-mapping)
+
 ## Diagnose From The Outside In
 
 Run the cheapest checks in this order:
@@ -42,7 +54,7 @@ dart --version
 flutter --version
 flutter doctor -v
 dart pub global activate cockpit any
-cockpit --version
+cockpit help
 ```
 
 For local development and test targets, start authorization at daemon creation:

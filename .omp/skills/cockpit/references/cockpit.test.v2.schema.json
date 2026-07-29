@@ -1,0 +1,2576 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/cockpit-dev/cockpit/packages/cockpit_protocol/schema/cockpit.test.v2.schema.json",
+  "title": "Cockpit E2E test document",
+  "description": "Canonical authored cockpit.test/v2 project, suite, or case document.",
+  "oneOf": [
+    { "$ref": "#/$defs/project" },
+    { "$ref": "#/$defs/suite" },
+    { "$ref": "#/$defs/case" }
+  ],
+  "$defs": {
+    "nonEmptyString": {
+      "type": "string",
+      "pattern": "\\S"
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[A-Za-z][A-Za-z0-9._-]{0,127}$"
+    },
+    "variableReference": {
+      "type": "object",
+      "properties": {
+        "$var": {
+          "$ref": "#/$defs/id"
+        }
+      },
+      "required": ["$var"],
+      "additionalProperties": false
+    },
+    "stringTemplate": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        {
+          "$ref": "#/$defs/variableReference"
+        }
+      ]
+    },
+    "integerTemplate": {
+      "oneOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "$ref": "#/$defs/variableReference"
+        }
+      ]
+    },
+    "nonNegativeIntegerTemplate": {
+      "oneOf": [
+        {
+          "type": "integer",
+          "minimum": 0
+        },
+        {
+          "$ref": "#/$defs/variableReference"
+        }
+      ]
+    },
+    "positiveIntegerTemplate": {
+      "oneOf": [
+        {
+          "type": "integer",
+          "minimum": 1
+        },
+        {
+          "$ref": "#/$defs/variableReference"
+        }
+      ]
+    },
+    "numberTemplate": {
+      "oneOf": [
+        {
+          "type": "number"
+        },
+        {
+          "$ref": "#/$defs/variableReference"
+        }
+      ]
+    },
+    "normalizedNumberTemplate": {
+      "oneOf": [
+        {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        {
+          "$ref": "#/$defs/variableReference"
+        }
+      ]
+    },
+    "positiveNormalizedNumberTemplate": {
+      "oneOf": [
+        {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 1
+        },
+        {
+          "$ref": "#/$defs/variableReference"
+        }
+      ]
+    },
+    "booleanTemplate": {
+      "oneOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "$ref": "#/$defs/variableReference"
+        }
+      ]
+    },
+    "jsonTemplate": {
+      "oneOf": [
+        {
+          "not": {
+            "$ref": "#/$defs/variableReference"
+          }
+        },
+        {
+          "$ref": "#/$defs/variableReference"
+        }
+      ]
+    },
+    "evidencePolicy": {
+      "type": "object",
+      "properties": {
+        "screenshot": {
+          "enum": ["none", "onFailure", "always"]
+        },
+        "snapshot": {
+          "enum": ["none", "onFailure", "always"]
+        },
+        "failurePolicy": {
+          "enum": ["failStep", "recordWarning"]
+        }
+      },
+      "additionalProperties": false
+    },
+    "safetyDeclaration": {
+      "type": "object",
+      "properties": {
+        "effects": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "externalNavigation",
+              "communication",
+              "financial",
+              "destructive",
+              "permissionChange",
+              "credentialSensitive"
+            ]
+          },
+          "uniqueItems": true
+        },
+        "reason": {
+          "$ref": "#/$defs/nonEmptyString"
+        }
+      },
+      "required": ["effects"],
+      "additionalProperties": false
+    },
+    "compilerLimits": {
+      "type": "object",
+      "properties": {
+        "maxDocumentBytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 16777216
+        },
+        "maxNesting": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 64
+        },
+        "maxExpandedSteps": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100000
+        },
+        "maxLoopIterations": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10000
+        },
+        "maxRetryAttempts": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100
+        }
+      },
+      "additionalProperties": false
+    },
+    "caseDefaults": {
+      "type": "object",
+      "properties": {
+        "commandTimeoutMs": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 3600000
+        },
+        "cleanupTimeoutMs": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 3600000
+        },
+        "failFast": {
+          "type": "boolean"
+        },
+        "evidence": {
+          "$ref": "#/$defs/evidencePolicy"
+        },
+        "limits": {
+          "$ref": "#/$defs/compilerLimits"
+        }
+      },
+      "additionalProperties": false
+    },
+    "targetRequirements": {
+      "type": "object",
+      "properties": {
+        "platform": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "targetKind": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "plane": {
+          "enum": ["semantic", "native", "visual", "coordinate"]
+        },
+        "appId": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "requiredCapabilities": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/nonEmptyString"
+          },
+          "uniqueItems": true
+        }
+      },
+      "required": ["platform", "targetKind", "plane"],
+      "additionalProperties": false
+    },
+    "variable": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/stringConstant"
+        },
+        {
+          "$ref": "#/$defs/integerConstant"
+        },
+        {
+          "$ref": "#/$defs/numberConstant"
+        },
+        {
+          "$ref": "#/$defs/booleanConstant"
+        },
+        {
+          "$ref": "#/$defs/jsonConstant"
+        },
+        {
+          "$ref": "#/$defs/stringInput"
+        },
+        {
+          "$ref": "#/$defs/integerInput"
+        },
+        {
+          "$ref": "#/$defs/numberInput"
+        },
+        {
+          "$ref": "#/$defs/booleanInput"
+        },
+        {
+          "$ref": "#/$defs/jsonInput"
+        },
+        {
+          "$ref": "#/$defs/secretVariable"
+        }
+      ]
+    },
+    "stringConstant": {
+      "$ref": "#/$defs/constantVariableBase",
+      "unevaluatedProperties": false,
+      "properties": {
+        "source": {
+          "const": "constant"
+        },
+        "type": {
+          "const": "string"
+        },
+        "value": {
+          "$ref": "#/$defs/nonEmptyString"
+        }
+      }
+    },
+    "integerConstant": {
+      "$ref": "#/$defs/constantVariableBase",
+      "unevaluatedProperties": false,
+      "properties": {
+        "source": {
+          "const": "constant"
+        },
+        "type": {
+          "const": "integer"
+        },
+        "value": {
+          "type": "integer"
+        }
+      }
+    },
+    "numberConstant": {
+      "$ref": "#/$defs/constantVariableBase",
+      "unevaluatedProperties": false,
+      "properties": {
+        "source": {
+          "const": "constant"
+        },
+        "type": {
+          "const": "number"
+        },
+        "value": {
+          "type": "number"
+        }
+      }
+    },
+    "booleanConstant": {
+      "$ref": "#/$defs/constantVariableBase",
+      "unevaluatedProperties": false,
+      "properties": {
+        "source": {
+          "const": "constant"
+        },
+        "type": {
+          "const": "boolean"
+        },
+        "value": {
+          "type": "boolean"
+        }
+      }
+    },
+    "jsonConstant": {
+      "$ref": "#/$defs/constantVariableBase",
+      "unevaluatedProperties": false,
+      "properties": {
+        "source": {
+          "const": "constant"
+        },
+        "type": {
+          "const": "json"
+        },
+        "value": true
+      }
+    },
+    "constantVariableBase": {
+      "type": "object",
+      "properties": {
+        "source": {
+          "const": "constant"
+        },
+        "type": {
+          "enum": ["string", "integer", "number", "boolean", "json"]
+        },
+        "value": true
+      },
+      "required": ["source", "type", "value"]
+    },
+    "stringInput": {
+      "$ref": "#/$defs/inputVariableBase",
+      "unevaluatedProperties": false,
+      "properties": {
+        "source": {
+          "const": "input"
+        },
+        "type": {
+          "const": "string"
+        },
+        "default": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "required": {
+          "type": "boolean"
+        }
+      }
+    },
+    "integerInput": {
+      "$ref": "#/$defs/inputVariableBase",
+      "unevaluatedProperties": false,
+      "properties": {
+        "source": {
+          "const": "input"
+        },
+        "type": {
+          "const": "integer"
+        },
+        "default": {
+          "type": "integer"
+        },
+        "required": {
+          "type": "boolean"
+        }
+      }
+    },
+    "numberInput": {
+      "$ref": "#/$defs/inputVariableBase",
+      "unevaluatedProperties": false,
+      "properties": {
+        "source": {
+          "const": "input"
+        },
+        "type": {
+          "const": "number"
+        },
+        "default": {
+          "type": "number"
+        },
+        "required": {
+          "type": "boolean"
+        }
+      }
+    },
+    "booleanInput": {
+      "$ref": "#/$defs/inputVariableBase",
+      "unevaluatedProperties": false,
+      "properties": {
+        "source": {
+          "const": "input"
+        },
+        "type": {
+          "const": "boolean"
+        },
+        "default": {
+          "type": "boolean"
+        },
+        "required": {
+          "type": "boolean"
+        }
+      }
+    },
+    "jsonInput": {
+      "$ref": "#/$defs/inputVariableBase",
+      "unevaluatedProperties": false,
+      "properties": {
+        "source": {
+          "const": "input"
+        },
+        "type": {
+          "const": "json"
+        },
+        "default": true,
+        "required": {
+          "type": "boolean"
+        }
+      }
+    },
+    "inputVariableBase": {
+      "type": "object",
+      "properties": {
+        "source": {
+          "const": "input"
+        },
+        "type": {
+          "enum": ["string", "integer", "number", "boolean", "json"]
+        },
+        "default": true,
+        "required": {
+          "type": "boolean"
+        }
+      },
+      "required": ["source", "type"]
+    },
+    "secretVariable": {
+      "type": "object",
+      "properties": {
+        "source": {
+          "const": "secret"
+        },
+        "type": {
+          "const": "string"
+        },
+        "reference": {
+          "$ref": "#/$defs/nonEmptyString"
+        }
+      },
+      "required": ["source", "type", "reference"],
+      "additionalProperties": false
+    },
+    "locator": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/semanticLocator"
+        },
+        {
+          "$ref": "#/$defs/coordinateLocator"
+        },
+        {
+          "$ref": "#/$defs/visualLocator"
+        }
+      ]
+    },
+    "semanticLocator": {
+      "type": "object",
+      "properties": {
+        "text": {
+          "$ref": "#/$defs/stringTemplate"
+        },
+        "label": {
+          "$ref": "#/$defs/stringTemplate"
+        },
+        "matchMode": {
+          "$ref": "#/$defs/matchModeTemplate"
+        },
+        "nativeId": {
+          "$ref": "#/$defs/stringTemplate"
+        },
+        "testId": {
+          "$ref": "#/$defs/stringTemplate"
+        },
+        "role": {
+          "$ref": "#/$defs/stringTemplate"
+        },
+        "type": {
+          "$ref": "#/$defs/stringTemplate"
+        },
+        "path": {
+          "$ref": "#/$defs/stringTemplate"
+        },
+        "index": {
+          "$ref": "#/$defs/nonNegativeIntegerTemplate"
+        },
+        "enabled": {
+          "$ref": "#/$defs/booleanTemplate"
+        },
+        "selected": {
+          "$ref": "#/$defs/booleanTemplate"
+        },
+        "checked": {
+          "$ref": "#/$defs/booleanTemplate"
+        },
+        "focused": {
+          "$ref": "#/$defs/booleanTemplate"
+        },
+        "clickable": {
+          "$ref": "#/$defs/booleanTemplate"
+        },
+        "ancestor": {
+          "$ref": "#/$defs/locator"
+        },
+        "child": {
+          "$ref": "#/$defs/locator"
+        },
+        "descendant": {
+          "$ref": "#/$defs/locator"
+        },
+        "above": {
+          "$ref": "#/$defs/locator"
+        },
+        "below": {
+          "$ref": "#/$defs/locator"
+        },
+        "leftOf": {
+          "$ref": "#/$defs/locator"
+        },
+        "rightOf": {
+          "$ref": "#/$defs/locator"
+        },
+        "fallbacks": {
+          "$ref": "#/$defs/locatorList"
+        }
+      },
+      "anyOf": [
+        {"required": ["text"]},
+        {"required": ["label"]},
+        {"required": ["nativeId"]},
+        {"required": ["testId"]},
+        {"required": ["role"]},
+        {"required": ["type"]},
+        {"required": ["path"]}
+      ],
+      "additionalProperties": false
+    },
+    "coordinateLocator": {
+      "type": "object",
+      "properties": {
+        "x": {
+          "$ref": "#/$defs/normalizedNumberTemplate"
+        },
+        "y": {
+          "$ref": "#/$defs/normalizedNumberTemplate"
+        },
+        "fallbacks": {
+          "$ref": "#/$defs/locatorList"
+        }
+      },
+      "required": ["x", "y"],
+      "additionalProperties": false
+    },
+    "visualLocator": {
+      "type": "object",
+      "properties": {
+        "visual": {
+          "$ref": "#/$defs/stringTemplate"
+        },
+        "threshold": {
+          "$ref": "#/$defs/positiveNormalizedNumberTemplate"
+        },
+        "fallbacks": {
+          "$ref": "#/$defs/locatorList"
+        }
+      },
+      "required": ["visual"],
+      "additionalProperties": false
+    },
+    "locatorList": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/locator"
+      }
+    },
+    "condition": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/visibleCondition"
+        },
+        {
+          "$ref": "#/$defs/textCondition"
+        },
+        {
+          "$ref": "#/$defs/routeCondition"
+        },
+        {
+          "$ref": "#/$defs/idleCondition"
+        }
+      ]
+    },
+    "visibleCondition": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "visible"
+        },
+        "locator": {
+          "$ref": "#/$defs/locator"
+        },
+        "expected": {
+          "$ref": "#/$defs/booleanTemplate"
+        }
+      },
+      "required": ["type", "locator"],
+      "additionalProperties": false
+    },
+    "textCondition": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "text"
+        },
+        "locator": {
+          "$ref": "#/$defs/locator"
+        },
+        "text": {
+          "$ref": "#/$defs/stringTemplate"
+        },
+        "matchMode": {
+          "enum": ["exact", "contains", "fuzzy", "regex"]
+        }
+      },
+      "required": ["type", "locator", "text"],
+      "additionalProperties": false
+    },
+    "routeCondition": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "route"
+        },
+        "route": {
+          "$ref": "#/$defs/stringTemplate"
+        }
+      },
+      "required": ["type", "route"],
+      "additionalProperties": false
+    },
+    "idleCondition": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "enum": ["uiIdle", "networkIdle"]
+        },
+        "quietMs": {
+          "$ref": "#/$defs/positiveIntegerTemplate"
+        }
+      },
+      "required": ["type"],
+      "additionalProperties": false
+    },
+    "positiveNumberTemplate": {
+      "oneOf": [
+        {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        {
+          "$ref": "#/$defs/variableReference"
+        }
+      ]
+    },
+    "selectionIndexTemplate": {
+      "oneOf": [
+        {
+          "type": "integer",
+          "minimum": -1
+        },
+        {
+          "$ref": "#/$defs/variableReference"
+        }
+      ]
+    },
+    "activationTemplate": {
+      "oneOf": [
+        {
+          "enum": ["auto", "semantic", "direct", "gesture"]
+        },
+        {
+          "$ref": "#/$defs/variableReference"
+        }
+      ]
+    },
+    "directionTemplate": {
+      "oneOf": [
+        {
+          "enum": ["up", "down", "left", "right"]
+        },
+        {
+          "$ref": "#/$defs/variableReference"
+        }
+      ]
+    },
+    "revealAlignmentTemplate": {
+      "oneOf": [
+        {
+          "enum": ["nearest", "start", "center", "end"]
+        },
+        {
+          "$ref": "#/$defs/variableReference"
+        }
+      ]
+    },
+    "matchModeTemplate": {
+      "oneOf": [
+        {
+          "enum": ["exact", "contains", "fuzzy", "regex"]
+        },
+        {
+          "$ref": "#/$defs/variableReference"
+        }
+      ]
+    },
+    "inputActionTemplate": {
+      "oneOf": [
+        {
+          "enum": [
+            "none",
+            "unspecified",
+            "done",
+            "go",
+            "search",
+            "send",
+            "next",
+            "previous",
+            "continueAction",
+            "join",
+            "route",
+            "emergencyCall",
+            "newline"
+          ]
+        },
+        {
+          "$ref": "#/$defs/variableReference"
+        }
+      ]
+    },
+    "keyRequestTemplate": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/variableReference"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "logicalKey": {
+              "oneOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "$ref": "#/$defs/nonEmptyString"
+                }
+              ]
+            },
+            "physicalKey": {
+              "oneOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "$ref": "#/$defs/nonEmptyString"
+                }
+              ]
+            },
+            "character": {
+              "type": "string"
+            }
+          },
+          "required": ["logicalKey"],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "multiTouchTemplate": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/variableReference"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "steps": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 32,
+              "items": {
+                "type": "object",
+                "properties": {
+                  "pointer": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "phase": {
+                    "enum": ["down", "move", "up"]
+                  },
+                  "atMs": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "dx": {
+                    "type": "number"
+                  },
+                  "dy": {
+                    "type": "number"
+                  }
+                },
+                "required": ["pointer", "phase", "atMs", "dx", "dy"],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": ["steps"],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "captureOptionsTemplate": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/variableReference"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "reason": {
+              "enum": [
+                "baseline",
+                "before_action",
+                "after_action",
+                "assertion_failure",
+                "acceptance"
+              ]
+            },
+            "includeSnapshot": {
+              "type": "boolean"
+            },
+            "attachToStep": {
+              "type": "boolean"
+            },
+            "profile": {
+              "enum": [
+                "diagnostic",
+                "acceptance",
+                "flutterPreferred",
+                "nativePreferred"
+              ]
+            },
+            "allowFallback": {
+              "type": "boolean"
+            },
+            "snapshotOptions": {
+              "$ref": "#/$defs/snapshotOptions"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "snapshotOptions": {
+      "type": "object",
+      "properties": {
+        "profile": {
+          "enum": ["live", "baseline", "investigate", "forensic"]
+        },
+        "maxTargets": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10000
+        },
+        "maxAncestorsPerTarget": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10000
+        },
+        "maxPropertiesPerTarget": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10000
+        },
+        "includeStyleDetails": {"type": "boolean"},
+        "includeDiagnosticProperties": {"type": "boolean"},
+        "emitArtifactWhenLarge": {"type": "boolean"},
+        "includeRebuildActivity": {"type": "boolean"},
+        "maxRebuildEntries": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10000
+        },
+        "includeNetworkActivity": {"type": "boolean"},
+        "maxNetworkEntries": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10000
+        },
+        "networkQuery": {
+          "type": "object",
+          "properties": {
+            "method": {"$ref": "#/$defs/nonEmptyString"},
+            "uriContains": {"$ref": "#/$defs/nonEmptyString"},
+            "onlyFailures": {"type": "boolean"},
+            "statusCodeAtLeast": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 999
+            }
+          },
+          "additionalProperties": false
+        },
+        "includeRuntimeActivity": {"type": "boolean"},
+        "maxRuntimeEntries": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10000
+        },
+        "runtimeQuery": {
+          "type": "object",
+          "properties": {
+            "onlyErrors": {"type": "boolean"},
+            "messageContains": {"$ref": "#/$defs/nonEmptyString"}
+          },
+          "additionalProperties": false
+        },
+        "includeAccessibilitySummary": {"type": "boolean"},
+        "maxAccessibilityEntries": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10000
+        }
+      },
+      "additionalProperties": false
+    },
+    "snapshotOptionsTemplate": {
+      "oneOf": [
+        {"$ref": "#/$defs/variableReference"},
+        {"$ref": "#/$defs/snapshotOptions"}
+      ]
+    },
+    "action": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/tapAction"
+        },
+        {
+          "$ref": "#/$defs/longPressAction"
+        },
+        {
+          "$ref": "#/$defs/locatorOnlyAction"
+        },
+        {
+          "$ref": "#/$defs/enterTextAction"
+        },
+        {
+          "$ref": "#/$defs/eraseTextAction"
+        },
+        {
+          "$ref": "#/$defs/copyTextAction"
+        },
+        {
+          "$ref": "#/$defs/pasteTextAction"
+        },
+        {
+          "$ref": "#/$defs/setTextEditingValueAction"
+        },
+        {
+          "$ref": "#/$defs/sendTextInputActionAction"
+        },
+        {
+          "$ref": "#/$defs/keyEventAction"
+        },
+        {
+          "$ref": "#/$defs/dragAction"
+        },
+        {
+          "$ref": "#/$defs/flingAction"
+        },
+        {
+          "$ref": "#/$defs/swipeAction"
+        },
+        {
+          "$ref": "#/$defs/pinchZoomAction"
+        },
+        {
+          "$ref": "#/$defs/rotateAction"
+        },
+        {
+          "$ref": "#/$defs/panZoomAction"
+        },
+        {
+          "$ref": "#/$defs/multiTouchAction"
+        },
+        {
+          "$ref": "#/$defs/scrollUntilVisibleAction"
+        },
+        {
+          "$ref": "#/$defs/noPayloadAction"
+        },
+        {
+          "$ref": "#/$defs/showOnScreenAction"
+        },
+        {
+          "$ref": "#/$defs/idleAction"
+        },
+        {
+          "$ref": "#/$defs/waitForAction"
+        },
+        {
+          "$ref": "#/$defs/assertVisibleAction"
+        },
+        {
+          "$ref": "#/$defs/assertTextAction"
+        },
+        {
+          "$ref": "#/$defs/assertScreenshotAction"
+        },
+        {
+          "$ref": "#/$defs/travelAction"
+        },
+        {
+          "$ref": "#/$defs/systemAction"
+        },
+        {
+          "$ref": "#/$defs/captureScreenshotAction"
+        },
+        {
+          "$ref": "#/$defs/collectSnapshotAction"
+        }
+      ]
+    },
+    "tapAction": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "tap"
+        },
+        "locator": {
+          "$ref": "#/$defs/locator"
+        },
+        "activation": {
+          "$ref": "#/$defs/activationTemplate"
+        }
+      },
+      "patternProperties": {
+        "^x-[A-Za-z0-9][A-Za-z0-9._-]*$": true
+      },
+      "required": ["type", "locator"],
+      "additionalProperties": false
+    },
+    "longPressAction": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "longPress"
+        },
+        "locator": {
+          "$ref": "#/$defs/locator"
+        },
+        "durationMs": {
+          "$ref": "#/$defs/positiveIntegerTemplate"
+        }
+      },
+      "patternProperties": {
+        "^x-[A-Za-z0-9][A-Za-z0-9._-]*$": true
+      },
+      "required": ["type", "locator"],
+      "additionalProperties": false
+    },
+    "locatorOnlyAction": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "enum": ["doubleTap", "focusTextInput", "increase", "decrease", "dismiss"]
+        },
+        "locator": {
+          "$ref": "#/$defs/locator"
+        }
+      },
+      "patternProperties": {
+        "^x-[A-Za-z0-9][A-Za-z0-9._-]*$": true
+      },
+      "required": ["type", "locator"],
+      "additionalProperties": false
+    },
+    "enterTextAction": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "enterText"
+        },
+        "locator": {
+          "$ref": "#/$defs/locator"
+        },
+        "text": {
+          "$ref": "#/$defs/stringTemplate"
+        }
+      },
+      "patternProperties": {
+        "^x-[A-Za-z0-9][A-Za-z0-9._-]*$": true
+      },
+      "required": ["type", "text"],
+      "additionalProperties": false
+    },
+    "eraseTextAction": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "eraseText"
+        },
+        "locator": {
+          "$ref": "#/$defs/locator"
+        },
+        "characters": {
+          "$ref": "#/$defs/positiveIntegerTemplate"
+        }
+      },
+      "patternProperties": {
+        "^x-[A-Za-z0-9][A-Za-z0-9._-]*$": true
+      },
+      "required": ["type"],
+      "additionalProperties": false
+    },
+    "copyTextAction": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "copyText"
+        },
+        "locator": {
+          "$ref": "#/$defs/locator"
+        }
+      },
+      "patternProperties": {
+        "^x-[A-Za-z0-9][A-Za-z0-9._-]*$": true
+      },
+      "required": ["type", "locator"],
+      "additionalProperties": false
+    },
+    "pasteTextAction": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "pasteText"
+        },
+        "locator": {
+          "$ref": "#/$defs/locator"
+        }
+      },
+      "patternProperties": {
+        "^x-[A-Za-z0-9][A-Za-z0-9._-]*$": true
+      },
+      "required": ["type"],
+      "additionalProperties": false
+    },
+    "setTextEditingValueAction": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "setTextEditingValue"
+        },
+        "locator": {
+          "$ref": "#/$defs/locator"
+        },
+        "text": {
+          "$ref": "#/$defs/stringTemplate"
+        },
+        "selectionStart": {
+          "$ref": "#/$defs/selectionIndexTemplate"
+        },
+        "selectionEnd": {
+          "$ref": "#/$defs/selectionIndexTemplate"
+        },
+        "composingStart": {
+          "$ref": "#/$defs/selectionIndexTemplate"
+        },
+        "composingEnd": {
+          "$ref": "#/$defs/selectionIndexTemplate"
+        }
+      },
+      "patternProperties": {
+        "^x-[A-Za-z0-9][A-Za-z0-9._-]*$": true
+      },
+      "required": ["type"],
+      "anyOf": [
+        {
+          "required": ["text"]
+        },
+        {
+          "required": ["selectionStart"]
+        },
+        {
+          "required": ["composingStart"]
+        }
+      ],
+      "dependentRequired": {
+        "selectionStart": ["selectionEnd"],
+        "selectionEnd": ["selectionStart"],
+        "composingStart": ["composingEnd"],
+        "composingEnd": ["composingStart"]
+      },
+      "additionalProperties": false
+    },
+    "sendTextInputActionAction": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "sendTextInputAction"
+        },
+        "inputAction": {
+          "$ref": "#/$defs/inputActionTemplate"
+        }
+      },
+      "patternProperties": {
+        "^x-[A-Za-z0-9][A-Za-z0-9._-]*$": true
+      },
+      "required": ["type", "inputAction"],
+      "additionalProperties": false
+    },
+    "keyEventAction": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "enum": ["sendKeyEvent", "sendKeyDownEvent", "sendKeyUpEvent"]
+        },
+        "keyRequest": {
+          "$ref": "#/$defs/keyRequestTemplate"
+        }
+      },
+      "patternProperties": {
+        "^x-[A-Za-z0-9][A-Za-z0-9._-]*$": true
+      },
+      "required": ["type", "keyRequest"],
+      "additionalProperties": false
+    },
+    "dragAction": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "drag"
+        },
+        "locator": {
+          "$ref": "#/$defs/locator"
+        },
+        "dx": {
+          "$ref": "#/$defs/numberTemplate"
+        },
+        "dy": {
+          "$ref": "#/$defs/numberTemplate"
+        },
+        "durationMs": {
+          "$ref": "#/$defs/positiveIntegerTemplate"
+        }
+      },
+      "patternProperties": {
+        "^x-[A-Za-z0-9][A-Za-z0-9._-]*$": true
+      },
+      "required": ["type", "dx", "dy"],
+      "not": {
+        "properties": {
+          "dx": {
+            "const": 0
+          },
+          "dy": {
+            "const": 0
+          }
+        },
+        "required": ["dx", "dy"]
+      },
+      "additionalProperties": false
+    },
+    "flingAction": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "fling"
+        },
+        "locator": {
+          "$ref": "#/$defs/locator"
+        },
+        "dx": {
+          "$ref": "#/$defs/numberTemplate"
+        },
+        "dy": {
+          "$ref": "#/$defs/numberTemplate"
+        },
+        "velocity": {
+          "$ref": "#/$defs/positiveNumberTemplate"
+        }
+      },
+      "patternProperties": {
+        "^x-[A-Za-z0-9][A-Za-z0-9._-]*$": true
+      },
+      "required": ["type", "dx", "dy", "velocity"],
+      "not": {
+        "properties": {
+          "dx": {
+            "const": 0
+          },
+          "dy": {
+            "const": 0
+          }
+        },
+        "required": ["dx", "dy"]
+      },
+      "additionalProperties": false
+    },
+    "swipeAction": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "swipe"
+        },
+        "locator": {
+          "$ref": "#/$defs/locator"
+        },
+        "direction": {
+          "$ref": "#/$defs/directionTemplate"
+        },
+        "distance": {
+          "$ref": "#/$defs/positiveNormalizedNumberTemplate"
+        },
+        "durationMs": {
+          "$ref": "#/$defs/positiveIntegerTemplate"
+        }
+      },
+      "patternProperties": {
+        "^x-[A-Za-z0-9][A-Za-z0-9._-]*$": true
+      },
+      "required": ["type", "direction", "distance"],
+      "additionalProperties": false
+    },
+    "pinchZoomAction": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "pinchZoom"
+        },
+        "locator": {
+          "$ref": "#/$defs/locator"
+        },
+        "scale": {
+          "$ref": "#/$defs/positiveNumberTemplate"
+        }
+      },
+      "patternProperties": {
+        "^x-[A-Za-z0-9][A-Za-z0-9._-]*$": true
+      },
+      "required": ["type", "scale"],
+      "not": {
+        "properties": {
+          "scale": {
+            "const": 1
+          }
+        },
+        "required": ["scale"]
+      },
+      "additionalProperties": false
+    },
+    "rotateAction": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "rotate"
+        },
+        "locator": {
+          "$ref": "#/$defs/locator"
+        },
+        "rotationRadians": {
+          "$ref": "#/$defs/numberTemplate"
+        }
+      },
+      "patternProperties": {
+        "^x-[A-Za-z0-9][A-Za-z0-9._-]*$": true
+      },
+      "required": ["type", "rotationRadians"],
+      "not": {
+        "properties": {
+          "rotationRadians": {
+            "const": 0
+          }
+        },
+        "required": ["rotationRadians"]
+      },
+      "additionalProperties": false
+    },
+    "panZoomAction": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "panZoom"
+        },
+        "locator": {
+          "$ref": "#/$defs/locator"
+        },
+        "panDx": {
+          "$ref": "#/$defs/numberTemplate"
+        },
+        "panDy": {
+          "$ref": "#/$defs/numberTemplate"
+        },
+        "scale": {
+          "$ref": "#/$defs/positiveNumberTemplate"
+        },
+        "rotationRadians": {
+          "$ref": "#/$defs/numberTemplate"
+        }
+      },
+      "patternProperties": {
+        "^x-[A-Za-z0-9][A-Za-z0-9._-]*$": true
+      },
+      "required": ["type"],
+      "anyOf": [
+        {
+          "required": ["panDx"]
+        },
+        {
+          "required": ["panDy"]
+        },
+        {
+          "required": ["scale"]
+        },
+        {
+          "required": ["rotationRadians"]
+        }
+      ],
+      "not": {
+        "properties": {
+          "panDx": {
+            "const": 0
+          },
+          "panDy": {
+            "const": 0
+          },
+          "scale": {
+            "const": 1
+          },
+          "rotationRadians": {
+            "const": 0
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "multiTouchAction": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "multiTouch"
+        },
+        "locator": {
+          "$ref": "#/$defs/locator"
+        },
+        "sequence": {
+          "$ref": "#/$defs/multiTouchTemplate"
+        }
+      },
+      "patternProperties": {
+        "^x-[A-Za-z0-9][A-Za-z0-9._-]*$": true
+      },
+      "required": ["type", "sequence"],
+      "additionalProperties": false
+    },
+    "scrollUntilVisibleAction": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "scrollUntilVisible"
+        },
+        "locator": {
+          "$ref": "#/$defs/locator"
+        },
+        "direction": {
+          "$ref": "#/$defs/directionTemplate"
+        },
+        "maxScrolls": {
+          "$ref": "#/$defs/positiveIntegerTemplate"
+        },
+        "durationMs": {
+          "$ref": "#/$defs/positiveIntegerTemplate"
+        },
+        "revealAlignment": {
+          "$ref": "#/$defs/revealAlignmentTemplate"
+        }
+      },
+      "patternProperties": {
+        "^x-[A-Za-z0-9][A-Za-z0-9._-]*$": true
+      },
+      "required": ["type", "locator", "direction"],
+      "additionalProperties": false
+    },
+    "noPayloadAction": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "enum": ["back", "dismissKeyboard", "clearNetworkActivity"]
+        }
+      },
+      "patternProperties": {
+        "^x-[A-Za-z0-9][A-Za-z0-9._-]*$": true
+      },
+      "required": ["type"],
+      "additionalProperties": false
+    },
+    "showOnScreenAction": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "showOnScreen"
+        },
+        "locator": {
+          "$ref": "#/$defs/locator"
+        },
+        "revealAlignment": {
+          "$ref": "#/$defs/revealAlignmentTemplate"
+        }
+      },
+      "patternProperties": {
+        "^x-[A-Za-z0-9][A-Za-z0-9._-]*$": true
+      },
+      "required": ["type", "locator"],
+      "additionalProperties": false
+    },
+    "idleAction": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "enum": ["waitForNetworkIdle", "waitForUiIdle"]
+        },
+        "quietMs": {
+          "$ref": "#/$defs/positiveIntegerTemplate"
+        }
+      },
+      "patternProperties": {
+        "^x-[A-Za-z0-9][A-Za-z0-9._-]*$": true
+      },
+      "required": ["type"],
+      "additionalProperties": false
+    },
+    "waitForAction": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "waitFor"
+        },
+        "condition": {
+          "$ref": "#/$defs/condition"
+        }
+      },
+      "patternProperties": {
+        "^x-[A-Za-z0-9][A-Za-z0-9._-]*$": true
+      },
+      "required": ["type", "condition"],
+      "additionalProperties": false
+    },
+    "assertVisibleAction": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "assertVisible"
+        },
+        "locator": {
+          "$ref": "#/$defs/locator"
+        },
+        "expected": {
+          "$ref": "#/$defs/booleanTemplate"
+        }
+      },
+      "patternProperties": {
+        "^x-[A-Za-z0-9][A-Za-z0-9._-]*$": true
+      },
+      "required": ["type", "locator"],
+      "additionalProperties": false
+    },
+    "assertTextAction": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "assertText"
+        },
+        "locator": {
+          "$ref": "#/$defs/locator"
+        },
+        "text": {
+          "$ref": "#/$defs/stringTemplate"
+        },
+        "matchMode": {
+          "$ref": "#/$defs/matchModeTemplate"
+        }
+      },
+      "patternProperties": {
+        "^x-[A-Za-z0-9][A-Za-z0-9._-]*$": true
+      },
+      "required": ["type", "text"],
+      "additionalProperties": false
+    },
+    "assertScreenshotAction": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "assertScreenshot"
+        },
+        "baseline": {
+          "$ref": "#/$defs/stringTemplate"
+        },
+        "pixelTolerance": {
+          "$ref": "#/$defs/normalizedNumberTemplate"
+        },
+        "maxDifferingPixelRatio": {
+          "$ref": "#/$defs/normalizedNumberTemplate"
+        },
+        "artifactName": {
+          "$ref": "#/$defs/stringTemplate"
+        },
+        "locator": {
+          "$ref": "#/$defs/locator"
+        },
+        "captureOptions": {
+          "$ref": "#/$defs/captureOptionsTemplate"
+        }
+      },
+      "patternProperties": {
+        "^x-[A-Za-z0-9][A-Za-z0-9._-]*$": true
+      },
+      "required": ["type", "baseline"],
+      "additionalProperties": false
+    },
+    "travelAction": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "travel"
+        },
+        "route": {
+          "$ref": "#/$defs/travelRouteTemplate"
+        },
+        "intervalMs": {
+          "$ref": "#/$defs/positiveIntegerTemplate"
+        }
+      },
+      "patternProperties": {
+        "^x-[A-Za-z0-9][A-Za-z0-9._-]*$": true
+      },
+      "required": ["type", "route"],
+      "additionalProperties": false
+    },
+    "travelRouteTemplate": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/variableReference"
+        },
+        {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 10000,
+          "items": {
+            "type": "object",
+            "properties": {
+              "latitude": {
+                "type": "number",
+                "minimum": -90,
+                "maximum": 90
+              },
+              "longitude": {
+                "type": "number",
+                "minimum": -180,
+                "maximum": 180
+              },
+              "delayMs": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 3600000
+              }
+            },
+            "required": ["latitude", "longitude"],
+            "additionalProperties": false
+          }
+        }
+      ]
+    },
+    "captureScreenshotAction": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "captureScreenshot"
+        },
+        "artifactName": {
+          "$ref": "#/$defs/stringTemplate"
+        },
+        "captureOptions": {
+          "$ref": "#/$defs/captureOptionsTemplate"
+        }
+      },
+      "patternProperties": {
+        "^x-[A-Za-z0-9][A-Za-z0-9._-]*$": true
+      },
+      "required": ["type", "artifactName"],
+      "additionalProperties": false
+    },
+    "systemAction": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "system"
+        },
+        "name": {
+          "$ref": "#/$defs/stringTemplate"
+        },
+        "parameters": {
+          "$ref": "#/$defs/jsonTemplate"
+        }
+      },
+      "patternProperties": {
+        "^x-[A-Za-z0-9][A-Za-z0-9._-]*$": true
+      },
+      "required": ["type", "name"],
+      "additionalProperties": false
+    },
+    "collectSnapshotAction": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "collectSnapshot"
+        },
+        "snapshotOptions": {
+          "$ref": "#/$defs/snapshotOptionsTemplate"
+        }
+      },
+      "patternProperties": {
+        "^x-[A-Za-z0-9][A-Za-z0-9._-]*$": true
+      },
+      "required": ["type"],
+      "additionalProperties": false
+    },
+    "step": {
+      "type": "object",
+      "properties": {
+        "stepId": {
+          "$ref": "#/$defs/id"
+        },
+        "description": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "plane": {
+          "enum": ["semantic", "native", "visual", "coordinate"]
+        },
+        "timeoutMs": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 3600000
+        },
+        "evidence": {
+          "$ref": "#/$defs/evidencePolicy"
+        },
+        "safety": {
+          "$ref": "#/$defs/safetyDeclaration"
+        },
+        "action": {
+          "$ref": "#/$defs/action"
+        },
+        "startRecording": {
+          "$ref": "#/$defs/startRecordingOperation"
+        },
+        "stopRecording": {
+          "$ref": "#/$defs/stopRecordingOperation"
+        },
+        "if": {
+          "$ref": "#/$defs/ifOperation"
+        },
+        "retry": {
+          "$ref": "#/$defs/retryOperation"
+        },
+        "loop": {
+          "$ref": "#/$defs/loopOperation"
+        },
+        "call": {
+          "$ref": "#/$defs/callOperation"
+        }
+      },
+      "patternProperties": {
+        "^x-[A-Za-z0-9][A-Za-z0-9._-]*$": true
+      },
+      "required": ["stepId"],
+      "oneOf": [
+        {
+          "required": ["action"]
+        },
+        {
+          "required": ["startRecording"]
+        },
+        {
+          "required": ["stopRecording"]
+        },
+        {
+          "required": ["if"]
+        },
+        {
+          "required": ["retry"]
+        },
+        {
+          "required": ["loop"]
+        },
+        {
+          "required": ["call"]
+        }
+      ],
+      "additionalProperties": false
+    },
+    "startRecordingOperation": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "$ref": "#/$defs/id"
+        },
+        "purpose": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "mode": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "layer": {
+          "enum": ["flutter", "app-window", "host-screen", "system"]
+        },
+        "allowFallback": {
+          "type": "boolean"
+        },
+        "attachToStep": {
+          "type": "boolean"
+        }
+      },
+      "required": ["name"],
+      "additionalProperties": false
+    },
+    "stopRecordingOperation": {
+      "type": "object",
+      "properties": {
+        "settleMs": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 60000
+        }
+      },
+      "additionalProperties": false
+    },
+    "ifOperation": {
+      "type": "object",
+      "properties": {
+        "condition": {
+          "$ref": "#/$defs/condition"
+        },
+        "then": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/step"
+          }
+        },
+        "else": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/step"
+          }
+        }
+      },
+      "required": ["condition", "then"],
+      "anyOf": [
+        {
+          "properties": {
+            "then": {
+              "minItems": 1
+            }
+          }
+        },
+        {
+          "required": ["else"],
+          "properties": {
+            "else": {
+              "minItems": 1
+            }
+          }
+        }
+      ],
+      "additionalProperties": false
+    },
+    "retryOperation": {
+      "type": "object",
+      "properties": {
+        "maxAttempts": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100
+        },
+        "delayMs": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 3600000
+        },
+        "steps": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/step"
+          }
+        }
+      },
+      "required": ["maxAttempts", "steps"],
+      "additionalProperties": false
+    },
+    "loopOperation": {
+      "type": "object",
+      "properties": {
+        "maxIterations": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10000
+        },
+        "condition": {
+          "$ref": "#/$defs/condition"
+        },
+        "steps": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/step"
+          }
+        }
+      },
+      "required": ["maxIterations", "condition", "steps"],
+      "additionalProperties": false
+    },
+    "callOperation": {
+      "type": "object",
+      "properties": {
+        "fragment": {
+          "$ref": "#/$defs/id"
+        }
+      },
+      "required": ["fragment"],
+      "additionalProperties": false
+    },
+    "suiteRetryPolicy": {
+      "type": "object",
+      "properties": {
+        "maxAttempts": { "type": "integer", "minimum": 1, "maximum": 10 },
+        "delayMs": { "type": "integer", "minimum": 0, "maximum": 3600000 },
+        "retryOn": {
+          "type": "array",
+          "items": { "enum": ["blocked", "interrupted", "internalError"] },
+          "uniqueItems": true
+        }
+      },
+      "additionalProperties": false
+    },
+    "suiteExecutionPolicy": {
+      "type": "object",
+      "properties": {
+        "maxConcurrency": { "type": "integer", "minimum": 1, "maximum": 64 },
+        "failFast": { "type": "boolean" },
+        "isolation": { "enum": ["sharedSession", "restartApp", "resetAppData"] },
+        "retry": { "$ref": "#/$defs/suiteRetryPolicy" }
+      },
+      "additionalProperties": false
+    },
+    "suiteReportPolicy": {
+      "type": "object",
+      "properties": {
+        "formats": {
+          "type": "array",
+          "items": { "enum": ["json", "junit", "html", "summary"] },
+          "contains": { "const": "json" },
+          "minContains": 1,
+          "uniqueItems": true
+        },
+        "includePassedAttempts": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    },
+    "suiteInlineCaseSource": {
+      "type": "object",
+      "properties": {
+        "kind": { "const": "inline" },
+        "case": { "$ref": "#/$defs/case" }
+      },
+      "required": ["kind", "case"],
+      "additionalProperties": false
+    },
+    "suiteFileCaseSource": {
+      "type": "object",
+      "properties": {
+        "kind": { "const": "file" },
+        "relativePath": { "$ref": "#/$defs/nonEmptyString" },
+        "caseId": { "$ref": "#/$defs/id" }
+      },
+      "required": ["kind", "relativePath", "caseId"],
+      "additionalProperties": false
+    },
+    "suiteCaseSource": {
+      "oneOf": [
+        { "$ref": "#/$defs/suiteInlineCaseSource" },
+        { "$ref": "#/$defs/suiteFileCaseSource" }
+      ]
+    },
+    "suiteCaseEntry": {
+      "type": "object",
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "source": { "$ref": "#/$defs/suiteCaseSource" },
+        "dependsOn": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/id" },
+          "uniqueItems": true
+        },
+        "fixtures": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/id" },
+          "uniqueItems": true
+        },
+        "matrixAxes": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/id" },
+          "uniqueItems": true
+        },
+        "targetIds": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/id" },
+          "uniqueItems": true
+        },
+        "inputs": { "type": "object" },
+        "retry": { "$ref": "#/$defs/suiteRetryPolicy" },
+        "tags": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/nonEmptyString" },
+          "uniqueItems": true
+        }
+      },
+      "required": ["id", "source"],
+      "additionalProperties": false
+    },
+    "fixture": {
+      "type": "object",
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "setup": { "$ref": "#/$defs/suiteCaseSource" },
+        "teardown": { "$ref": "#/$defs/suiteCaseSource" },
+        "scope": { "enum": ["suite", "caseAttempt"] },
+        "targetId": { "$ref": "#/$defs/id" },
+        "inputs": { "type": "object" },
+        "dependsOn": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/id" },
+          "uniqueItems": true
+        }
+      },
+      "required": ["id", "setup"],
+      "additionalProperties": false
+    },
+    "matrix": {
+      "type": "object",
+      "properties": {
+        "axes": {
+          "type": "object",
+          "propertyNames": { "$ref": "#/$defs/id" },
+          "additionalProperties": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 128,
+            "uniqueItems": true
+          }
+        },
+        "include": {
+          "type": "array",
+          "items": { "type": "object" },
+          "uniqueItems": true
+        },
+        "exclude": {
+          "type": "array",
+          "items": { "type": "object" },
+          "uniqueItems": true
+        },
+        "maxCombinations": { "type": "integer", "minimum": 1, "maximum": 4096 }
+      },
+      "additionalProperties": false
+    },
+    "suite": {
+      "type": "object",
+      "properties": {
+        "schemaVersion": { "const": "cockpit.test/v2" },
+        "kind": { "const": "suite" },
+        "id": { "$ref": "#/$defs/id" },
+        "name": { "$ref": "#/$defs/nonEmptyString" },
+        "description": { "$ref": "#/$defs/nonEmptyString" },
+        "tags": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/nonEmptyString" },
+          "uniqueItems": true
+        },
+        "cases": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 10000,
+          "items": { "$ref": "#/$defs/suiteCaseEntry" }
+        },
+        "fixtures": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/fixture" }
+        },
+        "matrix": { "$ref": "#/$defs/matrix" },
+        "execution": { "$ref": "#/$defs/suiteExecutionPolicy" },
+        "report": { "$ref": "#/$defs/suiteReportPolicy" },
+        "includeTags": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/nonEmptyString" },
+          "uniqueItems": true
+        },
+        "excludeTags": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/nonEmptyString" },
+          "uniqueItems": true
+        }
+      },
+      "patternProperties": {
+        "^x-[A-Za-z0-9][A-Za-z0-9._-]*$": true
+      },
+      "required": ["schemaVersion", "kind", "id", "cases"],
+      "additionalProperties": false
+    },
+    "projectTarget": {
+      "type": "object",
+      "properties": {
+        "requirements": { "$ref": "#/$defs/targetRequirements" },
+        "deviceIds": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/nonEmptyString" },
+          "uniqueItems": true
+        },
+        "labels": {
+          "type": "object",
+          "propertyNames": { "$ref": "#/$defs/id" },
+          "additionalProperties": { "$ref": "#/$defs/nonEmptyString" }
+        }
+      },
+      "required": ["requirements"],
+      "additionalProperties": false
+    },
+    "project": {
+      "type": "object",
+      "properties": {
+        "schemaVersion": { "const": "cockpit.test/v2" },
+        "kind": { "const": "project" },
+        "id": { "$ref": "#/$defs/id" },
+        "name": { "$ref": "#/$defs/nonEmptyString" },
+        "description": { "$ref": "#/$defs/nonEmptyString" },
+        "suiteSources": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 10000,
+          "items": { "$ref": "#/$defs/nonEmptyString" },
+          "uniqueItems": true
+        },
+        "targets": {
+          "type": "object",
+          "propertyNames": { "$ref": "#/$defs/id" },
+          "additionalProperties": { "$ref": "#/$defs/projectTarget" }
+        },
+        "allowedSecretProviders": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/id" },
+          "uniqueItems": true
+        },
+        "executionDefaults": { "$ref": "#/$defs/suiteExecutionPolicy" },
+        "reportDefaults": { "$ref": "#/$defs/suiteReportPolicy" }
+      },
+      "patternProperties": {
+        "^x-[A-Za-z0-9][A-Za-z0-9._-]*$": true
+      },
+      "required": ["schemaVersion", "kind", "id", "suiteSources"],
+      "additionalProperties": false
+    },
+    "reportSha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "reportTimestamp": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "Z$"
+    },
+    "runOutcome": {
+      "enum": [
+        "passed",
+        "failed",
+        "blocked",
+        "skipped",
+        "cancelled",
+        "interrupted",
+        "internalError"
+      ]
+    },
+    "runStability": {
+      "enum": ["stable", "flaky", "unknown"]
+    },
+    "artifactReference": {
+      "type": "object",
+      "properties": {
+        "artifactId": { "$ref": "#/$defs/id" },
+        "runId": { "$ref": "#/$defs/id" },
+        "sha256": { "$ref": "#/$defs/reportSha256" }
+      },
+      "required": ["artifactId", "runId"],
+      "additionalProperties": false
+    },
+    "reportApiError": {
+      "type": "object",
+      "properties": {
+        "code": { "$ref": "#/$defs/id" },
+        "category": {
+          "enum": [
+            "invalidInput",
+            "unsupported",
+            "environment",
+            "resource",
+            "driver",
+            "locator",
+            "assertion",
+            "application",
+            "evidence",
+            "cancelled",
+            "interrupted",
+            "internal"
+          ]
+        },
+        "message": { "type": "string", "minLength": 1, "maxLength": 4096 },
+        "retryable": { "type": "boolean" },
+        "responsibleLayer": {
+          "enum": [
+            "client",
+            "supervisor",
+            "worker",
+            "provider",
+            "driver",
+            "application"
+          ]
+        },
+        "redactedDetails": { "type": "object" },
+        "artifacts": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/artifactReference" },
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "code",
+        "category",
+        "message",
+        "retryable",
+        "responsibleLayer"
+      ],
+      "additionalProperties": false
+    },
+    "reportApiWarning": {
+      "type": "object",
+      "properties": {
+        "stage": { "enum": ["cleanup", "evidence"] },
+        "error": { "$ref": "#/$defs/reportApiError" }
+      },
+      "required": ["stage", "error"],
+      "additionalProperties": false
+    },
+    "reportFailure": {
+      "type": "object",
+      "properties": {
+        "primary": { "$ref": "#/$defs/reportApiError" },
+        "warnings": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/reportApiWarning" }
+        }
+      },
+      "required": ["primary"],
+      "additionalProperties": false
+    },
+    "attemptReport": {
+      "type": "object",
+      "properties": {
+        "attemptId": { "$ref": "#/$defs/id" },
+        "number": { "type": "integer", "minimum": 1 },
+        "outcome": { "$ref": "#/$defs/runOutcome" },
+        "startedAt": { "$ref": "#/$defs/reportTimestamp" },
+        "finishedAt": { "$ref": "#/$defs/reportTimestamp" },
+        "durationMs": { "type": "integer", "minimum": 0 },
+        "targetId": { "$ref": "#/$defs/id" },
+        "failure": { "$ref": "#/$defs/reportFailure" },
+        "artifacts": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/artifactReference" },
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "attemptId",
+        "number",
+        "outcome",
+        "startedAt",
+        "finishedAt",
+        "durationMs",
+        "targetId"
+      ],
+      "allOf": [
+        {
+          "if": { "properties": { "outcome": { "const": "passed" } } },
+          "then": { "not": { "required": ["failure"] } },
+          "else": { "required": ["failure"] }
+        }
+      ],
+      "additionalProperties": false
+    },
+    "caseReport": {
+      "type": "object",
+      "properties": {
+        "entryId": { "$ref": "#/$defs/id" },
+        "caseId": { "$ref": "#/$defs/id" },
+        "definition": { "$ref": "#/$defs/case" },
+        "sourceSha256": { "$ref": "#/$defs/reportSha256" },
+        "outcome": { "$ref": "#/$defs/runOutcome" },
+        "stability": { "$ref": "#/$defs/runStability" },
+        "targetId": { "$ref": "#/$defs/id" },
+        "matrix": { "type": "object" },
+        "attempts": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/attemptReport" }
+        }
+      },
+      "required": [
+        "entryId",
+        "caseId",
+        "definition",
+        "sourceSha256",
+        "outcome",
+        "stability",
+        "targetId",
+        "attempts"
+      ],
+      "additionalProperties": false
+    },
+    "reportCounts": {
+      "type": "object",
+      "properties": {
+        "total": { "type": "integer", "minimum": 0 },
+        "passed": { "type": "integer", "minimum": 0 },
+        "failed": { "type": "integer", "minimum": 0 },
+        "blocked": { "type": "integer", "minimum": 0 },
+        "skipped": { "type": "integer", "minimum": 0 },
+        "cancelled": { "type": "integer", "minimum": 0 },
+        "interrupted": { "type": "integer", "minimum": 0 },
+        "internalError": { "type": "integer", "minimum": 0 },
+        "flaky": { "type": "integer", "minimum": 0 }
+      },
+      "required": [
+        "total",
+        "passed",
+        "failed",
+        "blocked",
+        "skipped",
+        "cancelled",
+        "interrupted",
+        "internalError",
+        "flaky"
+      ],
+      "additionalProperties": false
+    },
+    "suiteReport": {
+      "type": "object",
+      "properties": {
+        "schemaVersion": { "const": "cockpit.report/v2" },
+        "projectId": { "$ref": "#/$defs/id" },
+        "workspaceId": { "$ref": "#/$defs/id" },
+        "runId": { "$ref": "#/$defs/id" },
+        "suiteId": { "$ref": "#/$defs/id" },
+        "definition": { "$ref": "#/$defs/suite" },
+        "sourceSha256": { "$ref": "#/$defs/reportSha256" },
+        "lifecycle": { "const": "completed" },
+        "outcome": { "$ref": "#/$defs/runOutcome" },
+        "stability": { "$ref": "#/$defs/runStability" },
+        "startedAt": { "$ref": "#/$defs/reportTimestamp" },
+        "finishedAt": { "$ref": "#/$defs/reportTimestamp" },
+        "durationMs": { "type": "integer", "minimum": 0 },
+        "execution": { "$ref": "#/$defs/suiteExecutionPolicy" },
+        "reportPolicy": { "$ref": "#/$defs/suiteReportPolicy" },
+        "failure": { "$ref": "#/$defs/reportFailure" },
+        "environment": { "type": "object" },
+        "matrix": {
+          "type": "object",
+          "properties": {
+            "axes": {
+              "type": "object",
+              "propertyNames": { "$ref": "#/$defs/id" },
+              "additionalProperties": { "type": "array" }
+            }
+          },
+          "required": ["axes"],
+          "additionalProperties": false
+        },
+        "counts": { "$ref": "#/$defs/reportCounts" },
+        "cases": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 10000,
+          "items": { "$ref": "#/$defs/caseReport" }
+        },
+        "artifacts": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/artifactReference" },
+          "uniqueItems": true
+        },
+        "complete": { "const": true }
+      },
+      "required": [
+        "schemaVersion",
+        "projectId",
+        "workspaceId",
+        "runId",
+        "suiteId",
+        "definition",
+        "sourceSha256",
+        "lifecycle",
+        "outcome",
+        "stability",
+        "startedAt",
+        "finishedAt",
+        "durationMs",
+        "execution",
+        "reportPolicy",
+        "environment",
+        "matrix",
+        "counts",
+        "cases",
+        "complete"
+      ],
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "outcome": { "enum": ["passed", "skipped"] }
+            }
+          },
+          "then": { "not": { "required": ["failure"] } }
+        }
+      ],
+      "additionalProperties": false
+    },
+    "case": {
+      "type": "object",
+      "properties": {
+        "schemaVersion": {
+          "const": "cockpit.test/v2"
+        },
+        "kind": {
+          "const": "case"
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "name": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "description": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/nonEmptyString"
+          },
+          "uniqueItems": true
+        },
+        "target": {
+          "$ref": "#/$defs/targetRequirements"
+        },
+        "defaults": {
+          "$ref": "#/$defs/caseDefaults"
+        },
+        "variables": {
+          "type": "object",
+          "propertyNames": {
+            "$ref": "#/$defs/id"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/variable"
+          }
+        },
+        "fragments": {
+          "type": "object",
+          "propertyNames": {
+            "$ref": "#/$defs/id"
+          },
+          "additionalProperties": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "$ref": "#/$defs/step"
+            }
+          }
+        },
+        "setup": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/step"
+          }
+        },
+        "steps": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/step"
+          }
+        },
+        "finally": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/step"
+          }
+        }
+      },
+      "patternProperties": {
+        "^x-[A-Za-z0-9][A-Za-z0-9._-]*$": true
+      },
+      "required": ["schemaVersion", "kind", "id", "target", "steps"],
+      "additionalProperties": false
+    }
+  }
+}

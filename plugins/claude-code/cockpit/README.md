@@ -9,7 +9,12 @@ for cross-platform development and black-box application E2E.
 
 ## Install
 
-Install from a local Claude Code plugin marketplace or copy this plugin directory into a marketplace under `plugins/cockpit`.
+Add the repository marketplace and install the plugin:
+
+```bash
+claude plugin marketplace add cockpit-dev/cockpit
+claude plugin install cockpit@cockpit --scope user
+```
 
 Then reload plugins in Claude Code:
 

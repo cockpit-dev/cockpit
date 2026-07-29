@@ -29,18 +29,49 @@ The Cockpit repository includes native adapters for common hosts:
 - Codex marketplace and plugin: `.agents/plugins/marketplace.json`,
   `plugins/codex/cockpit`
 - Claude Code skill and plugin: `.claude/skills/cockpit`,
-  `plugins/claude-code/cockpit`
+  `.claude-plugin/marketplace.json`, `plugins/claude-code/cockpit`
 - Cursor rule, skill, and MCP: `.cursor/rules/cockpit.mdc`,
   `.cursor/skills/cockpit`, `.cursor/mcp.json`
 - Kiro steering, Power, and MCP: `.kiro/steering/cockpit.md`,
   `plugins/kiro/cockpit`, `.kiro/settings/mcp.json`
+- Gemini CLI shared skill and MCP: `.agents/skills/cockpit`,
+  `.gemini/settings.json`
 - OpenCode skill and config: `.opencode/skills/cockpit`, `opencode.json`
-- Shared Agent Skill and Pi/OMP skill: `.agents/skills/cockpit`,
-  `.pi/skills/cockpit`
+- Pi skill and shared Agent Skill: `.pi/skills/cockpit`,
+  `.agents/skills/cockpit`
+- Oh My Pi skill and MCP: `.omp/skills/cockpit`, `.omp/mcp.json`
+- Cline skill: `.cline/skills/cockpit`
+- GitHub Copilot skill and MCP: `.agents/skills/cockpit`, `.mcp.json`
+- Windsurf and Roo Code shared skill: `.agents/skills/cockpit`
 
 Use the native adapter when the host supports it. Otherwise install this
 portable skill directory and configure the `cockpit_mcp` stdio executable if
 the host supports MCP.
+
+## Native Installers
+
+For Codex, add the repository marketplace, install Cockpit, then start a new
+session so the bundled Skill and MCP server are loaded:
+
+```bash
+codex plugin marketplace add cockpit-dev/cockpit
+codex plugin add cockpit@cockpit
+```
+
+For Claude Code, install the repository marketplace and plugin:
+
+```bash
+claude plugin marketplace add cockpit-dev/cockpit
+claude plugin install cockpit@cockpit --scope user
+```
+
+For Gemini CLI, install the complete skill and MCP server at user scope:
+
+```bash
+gemini skills install https://github.com/cockpit-dev/cockpit.git \
+  --path skills/cockpit --scope user --consent
+gemini mcp add --scope user cockpit cockpit_mcp
+```
 
 ## Typical Skill Directories
 
@@ -50,12 +81,29 @@ These are common locations; the host's current documentation is authoritative:
 - Codex legacy/personal fallback: `~/.codex/skills/cockpit`
 - Claude Code: `~/.claude/skills/cockpit`
 - Cursor project skill: `.cursor/skills/cockpit`
+- Gemini CLI: `~/.gemini/skills/cockpit` or project `.agents/skills/cockpit`
 - OpenCode project skill: `.opencode/skills/cockpit`
-- Pi/OMP project skill: `.pi/skills/cockpit`
+- Pi: `~/.pi/agent/skills/cockpit` or project `.pi/skills/cockpit`
+- Oh My Pi: `~/.omp/agent/skills/cockpit` or project `.omp/skills/cockpit`
+- Cline: `~/.cline/skills/cockpit` or project `.cline/skills/cockpit`
+- GitHub Copilot, Windsurf, and Roo Code: project `.agents/skills/cockpit`
 
-Copy the complete `skills/cockpit` directory to the selected destination. A
-stable symlink is acceptable only when its source will remain available. Never
-link an installed skill to a temporary checkout.
+Copy the complete `skills/cockpit` directory to the selected destination. The
+installed directory must contain real copies of every bundled file and no
+symbolic link that resolves outside it. A host may delete its downloaded source
+checkout after installation without breaking the skill.
+
+## Host Runtime Notes
+
+- Pi has no built-in MCP client. Run Cockpit through Pi's shell tool, use
+  `/reload` after installation, and load the workflow with `/skill:cockpit`.
+- Oh My Pi supports `.omp/mcp.json`. Reload with `/reload-plugins`, then verify
+  with `/skill:cockpit`, `/mcp reload`, and `/mcp test cockpit`.
+- GitHub Copilot CLI uses `.agents/skills/cockpit` and `.mcp.json`; verify both
+  with `copilot plugins list --kind mcp --kind skill`.
+- Windsurf and Roo Code use the shared `.agents/skills/cockpit` directory.
+- Cline uses `.cline/skills/cockpit`; add `cockpit_mcp` through Cline's MCP UI
+  only when native MCP tools are needed.
 
 ## Install Runtime And MCP
 

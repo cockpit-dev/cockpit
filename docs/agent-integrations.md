@@ -22,11 +22,12 @@ live in [`skills/cockpit/INSTALL.md`](../skills/cockpit/INSTALL.md). This page
 documents the repository's native adapter assets without duplicating that
 installation workflow.
 
-Host-native assets are included for Codex, Claude Code, Cursor, Kiro,
-OpenCode, and OMP/Pi. A host outside that list is supported when it can load a
-complete Agent Skill directory, launch a stdio MCP server, or execute the
-installed CLI. Cockpit does not claim compatibility with a host that exposes
-none of those extension surfaces.
+Host-native assets are included for Codex, Claude Code, Cursor, Gemini CLI,
+Kiro, OpenCode, Pi, Oh My Pi, and Cline. GitHub Copilot, Windsurf, and Roo Code
+use the shared Agent Skills convention. A host outside that list is supported
+when it can load a complete Agent Skill directory, launch a stdio MCP server,
+or execute the installed CLI. Cockpit does not claim compatibility with a host
+that exposes none of those extension surfaces.
 
 ## Codex
 
@@ -44,6 +45,14 @@ The marketplace entry points Codex at the local plugin. The plugin exposes:
 - `skills/cockpit` as a complete Codex skill.
 - `.mcp.json` with the globally installed `cockpit_mcp` executable.
 
+Add the repository marketplace, install Cockpit, then start a new Codex
+session so the bundled Skill and MCP server are loaded:
+
+```bash
+codex plugin marketplace add cockpit-dev/cockpit
+codex plugin add cockpit@cockpit
+```
+
 For direct MCP setup without installing the plugin:
 
 ```bash
@@ -58,6 +67,7 @@ Claude Code supports plugins with `.claude-plugin/plugin.json`, skills, and `.mc
 Repository asset:
 
 ```text
+.claude-plugin/marketplace.json
 .claude/skills/cockpit
 .mcp.json
 plugins/claude-code/cockpit
@@ -67,6 +77,14 @@ Repo-local Claude Code can discover `.claude/skills/cockpit` and the project `.m
 
 - `skills/cockpit` as a complete Claude Code skill.
 - `.mcp.json` with the globally installed `cockpit_mcp` executable.
+
+Install the repository marketplace and plugin without embedding a package
+release number:
+
+```bash
+claude plugin marketplace add cockpit-dev/cockpit
+claude plugin install cockpit@cockpit --scope user
+```
 
 For direct MCP setup without installing the plugin:
 
@@ -101,6 +119,31 @@ The rule gives Cursor the trigger, `.cursor/skills/cockpit` gives it the full on
 }
 ```
 
+## Gemini CLI
+
+Gemini CLI discovers the shared Agent Skill convention and project MCP
+configuration directly.
+
+Repository asset:
+
+```text
+.agents/skills/cockpit
+.gemini/settings.json
+```
+
+The repo-local skill is available without another copy. For direct user-level
+installation, use Gemini's native installer so the complete skill directory is
+retained. The project config starts the globally installed `cockpit_mcp`;
+equivalent user-level setup is:
+
+```bash
+gemini skills install https://github.com/cockpit-dev/cockpit.git \
+  --path skills/cockpit --scope user --consent
+gemini mcp add --scope user cockpit cockpit_mcp
+gemini skills list --all
+gemini mcp list
+```
+
 ## Kiro
 
 Kiro uses steering documents for project guidance, workspace MCP config for tools, and Powers for a distributable native bundle.
@@ -113,7 +156,10 @@ Repository asset:
 plugins/kiro/cockpit
 ```
 
-The workspace steering file is the repo-local trigger. `.kiro/settings/mcp.json` exposes the local MCP server. `plugins/kiro/cockpit` is the Kiro Power bundle with `POWER.md`, `mcp.json`, and the full skill copy.
+The auto-included-on-demand workspace steering file is the repo-local trigger.
+`.kiro/settings/mcp.json` exposes the local MCP server.
+`plugins/kiro/cockpit` is the Kiro Power bundle with `POWER.md`, `mcp.json`,
+and the full skill copy.
 
 ## OpenCode
 
@@ -127,12 +173,13 @@ opencode.json
 .agents/skills/cockpit
 ```
 
-The repo-local config loads normal project instructions and the local MCP server:
+The repo-local config exposes the local MCP server. OpenCode discovers
+`AGENTS.md` independently when a project tracks one, so this portable config
+does not depend on a repository-external instruction file:
 
 ```json
 {
   "$schema": "https://opencode.ai/config.json",
-  "instructions": ["AGENTS.md"],
   "mcp": {
     "cockpit": {
       "type": "local",
@@ -145,18 +192,79 @@ The repo-local config loads normal project instructions and the local MCP server
 
 The skill body stays out of always-on instructions so OpenCode can load it only when a Cockpit task needs it.
 
-## OMP / Oh My Pi
+## Pi
 
-OMP / Pi discovers project skills from `.pi/skills/<name>/SKILL.md` and shared Agent Skills from `.agents/skills/<name>/SKILL.md`. The repository includes both so Pi-native and shared-agent discovery work without extra copying:
+Pi discovers project skills from `.pi/skills/<name>/SKILL.md` and
+`.agents/skills/<name>/SKILL.md`. The repository includes both forms:
 
 ```text
 .pi/skills/cockpit
 .agents/skills/cockpit
 ```
 
-If OMP is configured to import MCP servers from repo config, use the same
-globally installed `cockpit_mcp` server. Otherwise run Cockpit through the CLI
-commands in the skill.
+Pi does not provide a built-in MCP client. Use Cockpit through Pi's shell tool
+and the installed `cockpit` CLI. Start Pi with an explicit Skill when automatic
+discovery is unavailable:
+
+```bash
+pi --skill /absolute/path/to/cockpit
+```
+
+Use `/reload` after changing the installed files and `/skill:cockpit` to load
+the workflow explicitly.
+
+## Oh My Pi
+
+Oh My Pi (OMP) gives its native `.omp/skills` directory the highest Skill
+priority and supports project MCP configuration at `.omp/mcp.json`.
+
+Repository asset:
+
+```text
+.omp/skills/cockpit
+.omp/mcp.json
+```
+
+The MCP config launches the globally installed `cockpit_mcp` stdio server.
+After installation or changes, use `/reload-plugins`, `/skill:cockpit`,
+`/mcp reload`, and `/mcp test cockpit` to verify both surfaces.
+
+## GitHub Copilot
+
+GitHub Copilot CLI discovers shared project Skills and the project MCP config
+already included by Cockpit:
+
+```text
+.agents/skills/cockpit
+.mcp.json
+```
+
+Run `copilot plugins list --kind mcp --kind skill` to confirm discovery. No
+Copilot-only Skill copy is needed.
+
+## Windsurf
+
+Windsurf discovers `.agents/skills/cockpit` directly. Use the installed
+`cockpit` CLI from the agent shell; configure `cockpit_mcp` through Windsurf's
+current MCP settings only when MCP tools are desired.
+
+## Cline
+
+Cline's native project Skill is included at:
+
+```text
+.cline/skills/cockpit
+```
+
+Use the installed `cockpit` CLI from Cline's terminal tools. Cline MCP settings
+are user-managed, so add the `cockpit_mcp` stdio executable through Cline's MCP
+UI when required instead of committing a machine-specific settings file.
+
+## Roo Code
+
+Roo Code discovers `.agents/skills/cockpit` directly. Use the installed
+`cockpit` CLI from the agent shell; add `cockpit_mcp` through Roo Code's MCP
+settings when native tools are required. No duplicate Roo-only Skill is needed.
 
 ## Verification
 
