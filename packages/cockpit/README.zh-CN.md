@@ -193,6 +193,8 @@ Flutter target 启动支持重复的 `--dart-define`、`--dart-define-from-file`
 `launchConfiguration` 字段：`dartDefines`、`dartDefineFromFiles`、
 `flutterArgs`、`environment`。Cockpit 管理的启动参数不能被覆盖，配置值也不会在
 结果中返回。
+Android 和 iOS 上的 `environment` 只配置 Flutter 构建进程，移动应用进程不会继承
+任意宿主机环境变量；应用自身需要读取的值应使用 Dart define 或应用自己的配置通道。
 
 operation descriptor 会公开 `executionMode`、`defaultTimeoutMs` 和
 `maximumTimeoutMs`。同步操作阻塞到结果，并接受相对 `--timeout-ms` 或绝对
@@ -296,7 +298,9 @@ Supervisor application services。
 生成的 `cockpit-report/` 是完整离线 run artifact，而不是 server UI。`index.html`
 内嵌 CSS、JavaScript 和规范报告数据，媒体使用 bundle 相对路径；`report.json` 是稳定的
 单文件渲染输入，根 `manifest.json` 以归属、大小、媒体类型和 SHA-256 覆盖全部导出文件。
-客户端必须保持目录结构并校验 manifest，`cockpitd` 无需提供 HTML route。
+客户端必须保持目录结构并校验 manifest，`cockpitd` 无需提供 HTML route。Summary、
+Coverage、Executions、Evidence、Diagnostics 和 Environment/files 是同一事实图的
+任务视图，不是按人员角色复制出的报告。
 
 协议资料见 [`../../docs/contracts`](../../docs/contracts)，规范 YAML/JSON 用例见
 [`example/cases`](example/cases)。

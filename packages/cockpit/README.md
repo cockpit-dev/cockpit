@@ -210,6 +210,9 @@ Flutter target launches accept repeatable `--dart-define`,
 same nested `launchConfiguration` fields: `dartDefines`,
 `dartDefineFromFiles`, `flutterArgs`, and `environment`. Cockpit-managed launch
 arguments cannot be overridden, and configuration values are not returned.
+On Android and iOS, `environment` configures the Flutter build process; mobile
+application processes do not inherit arbitrary host variables. Use Dart defines
+or an application-owned configuration channel for values the app must read.
 
 Operation descriptors publish `executionMode`, `defaultTimeoutMs`, and
 `maximumTimeoutMs`. Synchronous operations block to a result and accept a
@@ -333,7 +336,9 @@ data while media uses bundle-relative paths. `report.json` is the stable
 single-file rendering input, and root `manifest.json` covers every exported
 file with ownership, size, media type, and SHA-256. Clients must preserve the
 directory structure and verify the manifest; no HTML route in `cockpitd` is
-required.
+required. Summary, Coverage, Executions, Evidence, Diagnostics, and
+Environment/files are task views over one fact graph, not persona-specific
+copies.
 
 See [`../../docs/contracts`](../../docs/contracts) for protocol material and
 [`example/cases`](example/cases) for canonical YAML and JSON cases.

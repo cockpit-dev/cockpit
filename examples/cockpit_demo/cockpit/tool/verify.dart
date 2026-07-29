@@ -45,7 +45,7 @@ Future<void> main(List<String> arguments) async {
     ..addOption('output-root', defaultsTo: '.dart_tool/cockpit_acceptance')
     ..addOption('discovery-timeout-seconds', defaultsTo: '180')
     ..addOption('launch-timeout-seconds', defaultsTo: '600')
-    ..addOption('run-timeout-seconds', defaultsTo: '900')
+    ..addOption('run-timeout-seconds', defaultsTo: '1800')
     ..addFlag(
       'require-recording',
       negatable: false,

@@ -58,6 +58,7 @@ steps:
       type: assertVisible
       locator:
         label: Back
+        type: Button
         fallbacks:
           - {text: Create task}
   - stepId: returnThroughNativeDriver
@@ -66,6 +67,7 @@ steps:
       type: tap
       locator:
         label: Back
+        type: Button
         fallbacks:
           - {text: Back}
   - stepId: assertNativeInboxRestored

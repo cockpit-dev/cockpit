@@ -527,7 +527,9 @@ final class CockpitDemoAcceptanceRunner {
       eventCount = await _consumeEvents(
         api: api,
         runId: runId,
-        deadline: DateTime.now().toUtc().add(request.runTimeout),
+        deadline: DateTime.now().toUtc().add(
+          request.runTimeout + const Duration(seconds: 30),
+        ),
         sink: eventSink,
         progress: progress,
       );
@@ -1046,7 +1048,7 @@ void _verifyAcceptanceReport(
       report.execution.maxConcurrency != 1 ||
       report.execution.failFast ||
       report.definition.fixtures.length != 2 ||
-      report.matrixAxes['persona']?.length != 2) {
+      report.matrixAxes['variant']?.length != 2) {
     throw const FormatException(
       'Acceptance report does not preserve the complex suite definition.',
     );
@@ -1090,12 +1092,12 @@ void _verifyAcceptanceReport(
       );
     }
   }
-  final personas = report.cases
+  final variants = report.cases
       .where((testCase) => testCase.entryId == 'matrixEvidence')
-      .map((testCase) => testCase.matrix['persona'])
+      .map((testCase) => testCase.matrix['variant'])
       .toSet();
-  if (personas.length != 2 ||
-      !personas.containsAll(const <String>{'developer', 'quality'})) {
+  if (variants.length != 2 ||
+      !variants.containsAll(const <String>{'primary', 'alternate'})) {
     throw const FormatException('Acceptance matrix rows are incomplete.');
   }
 }

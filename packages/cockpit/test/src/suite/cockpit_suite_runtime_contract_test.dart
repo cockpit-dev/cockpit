@@ -341,6 +341,9 @@ void main() {
     expect(html, contains('data-lens="diagnostics"'));
     expect(html, contains('data-lens="environment"'));
     expect(html, contains('data-filter-input'));
+    expect(html, contains('Outcome distribution'));
+    expect(html, contains('Release gate'));
+    expect(html, contains("compact.matches?'horizontal':'vertical'"));
     expect(html, contains('.lens-tab{width:auto;min-height:44px'));
     expect(
       html,

@@ -215,6 +215,9 @@ The equivalent operation input uses a `launchConfiguration` object with
 `dartDefines`, `dartDefineFromFiles`, `flutterArgs`, and `environment`. Launch
 configuration values are not returned in operation output. Do not pass Flutter
 launch fields to installed black-box targets.
+On Android and iOS, `environment` configures the Flutter build process; mobile
+application processes do not inherit arbitrary host variables. Use Dart defines
+or an application-owned configuration channel for values the app must read.
 
 Every advertised operation includes `executionMode`, `defaultTimeoutMs`, and
 `maximumTimeoutMs`. Synchronous operations block until their result and accept
@@ -285,6 +288,9 @@ Every finalized suite exports one portable `cockpit-report/` directory. Open
 `index.html` offline to move from release summary and coverage through
 executions, evidence, diagnostics, and environment/files. Search, filters,
 deep links, and responsive/print layouts work without a server or network.
+The sections are task-oriented rather than persona-specific: developers,
+testers, product owners, and release leads inspect the same facts and evidence
+chain without role tabs hiding or duplicating information.
 `report.json` is the canonical single-file fact graph containing suite
 and case definitions, attempts, detailed steps, assertions, and evidence
 references. `manifest.json` declares every other file with semantic ownership,

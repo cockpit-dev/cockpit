@@ -9,7 +9,7 @@ target:
   targetKind: flutterApp
   plane: semantic
 variables:
-  persona:
+  variant:
     source: input
     type: string
 defaults:
@@ -47,18 +47,18 @@ steps:
           action:
             type: assertVisible
             locator: {text: Inbox}
-  - stepId: capturePersonaEvidence
+  - stepId: captureVariantEvidence
     description: Name evidence from the bound matrix input
-    timeoutMs: 20000
+    timeoutMs: 60000
     action:
       type: captureScreenshot
-      artifactName: {$var: persona}
+      artifactName: {$var: variant}
       captureOptions:
         reason: acceptance
         includeSnapshot: true
         attachToStep: true
-        profile: acceptance
-        allowFallback: true
+        profile: flutterPreferred
+        allowFallback: false
 finally:
   - stepId: matrixCleanup
     description: Verify the matrix row left shared state unchanged

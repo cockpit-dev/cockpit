@@ -17,7 +17,7 @@ report:
   includePassedAttempts: true
 matrix:
   axes:
-    persona: [developer, quality]
+    variant: [primary, alternate]
   maxCombinations: 4
 fixtures:
   - id: suiteBaseline
@@ -92,9 +92,9 @@ cases:
       caseId: demoLocationTravel
   - id: matrixEvidence
     fixtures: [suiteBaseline]
-    matrixAxes: [persona]
+    matrixAxes: [variant]
     inputs:
-      persona: {$matrix: persona}
+      variant: {$matrix: variant}
     source:
       kind: file
       relativePath: e2e/cases/matrix_evidence.case.yaml
