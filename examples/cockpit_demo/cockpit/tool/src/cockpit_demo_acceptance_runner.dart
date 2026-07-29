@@ -467,19 +467,22 @@ final class CockpitDemoAcceptanceRunner {
           targetId: target.targetId,
         );
       }
-      nativeLocatorSupported =
-          nativeLocatorAdvertised &&
-          await _probeNativeLocator(
-            api: api,
-            workspaceId: workspace.workspaceId,
-            targetId: target.targetId,
-            probeId: invocationId,
-          );
+      final nativeLocatorProbe = nativeLocatorAdvertised
+          ? await _probeNativeLocator(
+              api: api,
+              workspaceId: workspace.workspaceId,
+              targetId: nativeTarget?.targetId ?? target.targetId,
+              probeId: invocationId,
+            )
+          : const _CockpitNativeLocatorProbeResult(
+              supported: false,
+              detail: 'readUiTree and tap are not both advertised.',
+            );
+      nativeLocatorSupported = nativeLocatorProbe.supported;
       if (request.requireNativeLocator && !nativeLocatorSupported) {
         throw FormatException(
           'The ${request.platform} release target did not prove native '
-          'locator control. Inspect the target systemControl profile and '
-          'platform driver environment before retrying.',
+          'locator control. ${nativeLocatorProbe.detail}',
         );
       }
       effectiveSuite = _suiteForRuntime(
@@ -1757,14 +1760,52 @@ Future<CockpitOperationResult> _operation(
   return result;
 }
 
-Future<bool> _probeNativeLocator({
+final class _CockpitNativeLocatorProbeResult {
+  const _CockpitNativeLocatorProbeResult({
+    required this.supported,
+    required this.detail,
+  });
+
+  final bool supported;
+  final String detail;
+}
+
+Future<_CockpitNativeLocatorProbeResult> _probeNativeLocator({
   required CockpitSupervisorApiClient api,
   required String workspaceId,
   required String targetId,
   required String probeId,
 }) async {
+  var detail = 'Native locator probe did not return a usable UI tree.';
   for (var attempt = 1; attempt <= 3; attempt += 1) {
     try {
+      final recovery = await _operation(
+        api,
+        CockpitOperationInvocation(
+          kind: 'system.action',
+          workspaceId: workspaceId,
+          idempotencyKey: CockpitIdempotencyKey(
+            'demo-native-recover-${_stableIdSuffix(targetId)}-'
+            '${_stableIdSuffix(probeId)}-$attempt',
+          ),
+          deadline: DateTime.now().toUtc().add(const Duration(seconds: 25)),
+          input: <String, Object?>{
+            'targetId': targetId,
+            'action': 'recoverToApp',
+            'timeoutMs': 20000,
+          },
+        ),
+      );
+      if (recovery.output?['success'] != true) {
+        detail = _systemActionFailureDetail(
+          recovery.output,
+          action: 'recoverToApp',
+        );
+        if (attempt < 3) {
+          await Future<void>.delayed(const Duration(seconds: 1));
+        }
+        continue;
+      }
       final result = await _operation(
         api,
         CockpitOperationInvocation(
@@ -1774,20 +1815,20 @@ Future<bool> _probeNativeLocator({
             'demo-native-probe-${_stableIdSuffix(targetId)}-'
             '${_stableIdSuffix(probeId)}-$attempt',
           ),
-          deadline: DateTime.now().toUtc().add(const Duration(seconds: 25)),
+          deadline: DateTime.now().toUtc().add(const Duration(seconds: 50)),
           input: <String, Object?>{
             'targetId': targetId,
             'action': 'readUiTree',
             'parameters': <String, Object?>{'maxDepth': 16, 'maxNodes': 2000},
-            'timeoutMs': 20000,
+            'timeoutMs': 45000,
           },
         ),
       );
       final output = result.output;
       final raw = output?['stdout'];
-      if (output?['success'] == true &&
-          raw is String &&
-          raw.trim().isNotEmpty) {
+      if (output?['success'] != true) {
+        detail = _systemActionFailureDetail(output, action: 'readUiTree');
+      } else if (raw is String && raw.trim().isNotEmpty) {
         final snapshot = CockpitNativeUiSnapshot.parse(raw);
         if (snapshot
                 .resolve(
@@ -1801,17 +1842,39 @@ Future<bool> _probeNativeLocator({
                   flutterAware: true,
                 )
                 .found) {
-          return true;
+          return const _CockpitNativeLocatorProbeResult(
+            supported: true,
+            detail: 'Native UI tree resolved the New task control.',
+          );
         }
+        detail =
+            'readUiTree succeeded but did not contain the New task control.';
+      } else {
+        detail = 'readUiTree succeeded without a UI tree payload.';
       }
-    } on Object {
-      if (attempt == 3) return false;
+    } on Object catch (error) {
+      detail = 'Native locator probe failed: $error';
     }
     if (attempt < 3) {
-      await Future<void>.delayed(const Duration(milliseconds: 500));
+      await Future<void>.delayed(const Duration(seconds: 1));
     }
   }
-  return false;
+  return _CockpitNativeLocatorProbeResult(supported: false, detail: detail);
+}
+
+String _systemActionFailureDetail(
+  Map<String, Object?>? output, {
+  required String action,
+}) {
+  final code = output?['errorCode'];
+  final message = output?['errorMessage'];
+  final parts = <String>[
+    if (code is String && code.isNotEmpty) code,
+    if (message is String && message.isNotEmpty) message,
+  ];
+  return parts.isEmpty
+      ? '$action did not complete successfully.'
+      : '$action failed: ${parts.join(': ')}';
 }
 
 Future<void> _dismissDevelopmentSystemDialogs({
