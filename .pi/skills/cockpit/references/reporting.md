@@ -87,7 +87,19 @@ horizontally scrollable, and never use ellipsis to hide evidence identities.
 ## Artifact Download
 
 ```bash
-cockpit suite report --run-id <runId>
+cockpit suite report \
+  --run-id <runId> \
+  --output-dir /absolute/cockpit-report
+```
+
+The destination must not already exist. The command downloads the root
+manifest first, matches every declared path to immutable run artifact metadata,
+downloads files with bounded concurrency and byte verification, and atomically
+commits the directory only when complete. Its default terminal output is a
+compact directory receipt. Use the lower-level commands only when one specific
+artifact is needed:
+
+```bash
 cockpit artifact list \
   --run-id <runId> \
   --stdout-format json \

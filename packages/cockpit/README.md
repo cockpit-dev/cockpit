@@ -21,7 +21,7 @@ or newer.
 
 ```yaml
 dev_dependencies:
-  cockpit: ^2.0.0
+  cockpit: ^2.1.0
 ```
 
 The package publishes four executables:
@@ -161,7 +161,8 @@ dart run cockpit suite run \
   --document-id <documentId> \
   --suite-id regression \
   --idempotency-key ci-regression-001
-dart run cockpit suite report --run-id <runId>
+dart run cockpit suite report --run-id <runId> \
+  --output-dir cockpit-report
 ```
 
 Register installed native applications and other system-controlled surfaces as
@@ -334,8 +335,11 @@ integrity contract are the only client boundary. A future Flutter GUI or
 third-party SDK must use that protocol and must not link Supervisor application
 services in-process.
 
-Generated `cockpit-report/` directories are complete offline run artifacts,
-not server UI. `index.html` embeds its CSS, JavaScript, and canonical report
+Exported `cockpit-report/` directories are complete offline run artifacts, not
+server UI. `suite report --output-dir cockpit-report` downloads the manifest
+and every declared report artifact with verified size and SHA-256, then commits
+the directory only after it is complete; the destination must not already
+exist. `index.html` embeds its CSS, JavaScript, and canonical report
 data while media uses bundle-relative paths. `report.json` is the stable
 single-file rendering input, and root `manifest.json` covers every exported
 file with ownership, size, media type, and SHA-256. Clients must preserve the

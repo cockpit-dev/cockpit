@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.1.0
+
+- Added `suite report --output-dir` to export a complete offline report bundle
+  in one command with bounded parallel downloads, manifest metadata checks,
+  verified artifact bytes, cleanup on failure, and atomic directory commit.
+
 ## 2.0.1
 
 - Added the Cockpit logo to the published package documentation.
