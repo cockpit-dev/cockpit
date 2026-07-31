@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.2.1
+
+- Synchronized the Flutter bridge patch release with Cockpit 2.2.1; Flutter
+  runtime behavior remains unchanged from 2.2.0.
+
 ## 2.2.0
 
 - Updated the Android plugin to the modern Gradle plugins DSL while preserving

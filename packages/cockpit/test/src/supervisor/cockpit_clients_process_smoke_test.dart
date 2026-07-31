@@ -493,6 +493,28 @@ cases:
       final testOutput = testStructured['output']! as Map<String, Object?>;
       final testCommand = testOutput['command']! as Map<String, Object?>;
       expect(testCommand['arguments'], <Object?>['test', 'test']);
+
+      final workspaceRetirement = await _cli(packageRoot, environment, <String>[
+        'workspace',
+        'unregister',
+        '--workspace-id',
+        workspaceId,
+        '--force',
+      ]);
+      expect(workspaceRetirement['id'], workspaceId);
+      expect(
+        workspaceRetirement['referenceCounts'],
+        isA<Map<String, Object?>>(),
+      );
+      final rootRetirement = await _cli(packageRoot, environment, <String>[
+        'root',
+        'remove',
+        '--root-id',
+        rootId,
+        '--force',
+      ]);
+      expect(rootRetirement['id'], rootId);
+      expect(rootRetirement['referenceCounts'], isA<Map<String, Object?>>());
     },
     timeout: const Timeout(Duration(minutes: 5)),
   );
