@@ -934,7 +934,8 @@ CockpitRetirementResponse _decodeRetirement(Object? value) {
   }
   final json = value.cast<String, Object?>();
   const keys = <String>{'id', 'tombstoneRetained', 'referenceCounts'};
-  if (json.keys.toSet() != keys ||
+  if (json.length != keys.length ||
+      !json.keys.every(keys.contains) ||
       json['id'] is! String ||
       json['tombstoneRetained'] is! bool ||
       json['referenceCounts'] is! Map<Object?, Object?>) {

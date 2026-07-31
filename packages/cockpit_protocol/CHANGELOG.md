@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.2.1
+
+- Synchronized the public protocol patch release with Cockpit 2.2.1; protocol
+  contracts remain unchanged from 2.2.0.
+
 ## 2.2.0
 
 - Synchronized the public protocol release with Cockpit 2.2.0 so the CLI,

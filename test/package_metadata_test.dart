@@ -21,11 +21,11 @@ void main() {
     expect(runtimePubspec, isNot(contains('name: flutter_pilot')));
     expect(protocolPubspec, contains('name: cockpit_protocol'));
     expect(devtoolsPubspec, contains('name: cockpit'));
-    expect(runtimeVersion, '2.2.0');
-    expect(protocolVersion, '2.2.0');
-    expect(devtoolsVersion, '2.2.0');
-    expect(runtimePubspec, contains('cockpit_protocol: ^2.2.0'));
-    expect(devtoolsPubspec, contains('cockpit_protocol: ^2.2.0'));
+    expect(runtimeVersion, '2.2.1');
+    expect(protocolVersion, '2.2.1');
+    expect(devtoolsVersion, '2.2.1');
+    expect(runtimePubspec, contains('cockpit_protocol: ^2.2.1'));
+    expect(devtoolsPubspec, contains('cockpit_protocol: ^2.2.1'));
     expect(runtimePubspec, isNot(contains('flutter_cockpit_protocol:')));
     expect(devtoolsPubspec, isNot(contains('flutter_cockpit_protocol:')));
     expect(

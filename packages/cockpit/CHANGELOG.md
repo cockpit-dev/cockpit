@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.2.1
+
+- Fixed valid retirement responses being rejected after `workspace unregister`
+  and `root remove`, including cleanup after a workspace worker has run.
+
 ## 2.2.0
 
 - Added dedicated minimal, standard, and full AI-first presenters for text and
