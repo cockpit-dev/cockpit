@@ -244,24 +244,32 @@ final class CockpitSupervisorHttpApi {
         pageScope,
         additionalQueryParameters: const <String>{'kind', 'relativePath'},
       );
-      final documents = await runtime.documents(
+      final offset = page.cursor == null
+          ? 0
+          : support.decodeCursor(page.cursor!, pageScope);
+      final documentPage = await runtime.documentPage(
         workspaceId,
         kind: kind,
         relativePath: relativePath,
+        offset: offset,
+        limit: page.limit,
+        refreshIndex: page.cursor == null,
       );
-      documents.sort(
-        (left, right) => left.documentId.compareTo(right.documentId),
-      );
-      await support.json(
-        request,
-        HttpStatus.ok,
-        support.page(
-          documents,
-          page,
-          pageScope,
-          (document) => document.toJson(),
-        ),
-      );
+      if (offset > documentPage.totalCount) {
+        throw const FormatException('Pagination cursor is stale.');
+      }
+      final nextOffset = offset + documentPage.items.length;
+      if (nextOffset < documentPage.totalCount && documentPage.items.isEmpty) {
+        throw const FormatException('Document page made no progress.');
+      }
+      await support.json(request, HttpStatus.ok, <String, Object?>{
+        'items': documentPage.items
+            .map((document) => document.toJson())
+            .toList(growable: false),
+        if (nextOffset < documentPage.totalCount)
+          'nextCursor': support.encodeCursor(pageScope, nextOffset),
+        'totalCount': documentPage.totalCount,
+      });
       return;
     }
     if (path.length == 6 && path[4] == 'documents' && path[5] == 'validate') {

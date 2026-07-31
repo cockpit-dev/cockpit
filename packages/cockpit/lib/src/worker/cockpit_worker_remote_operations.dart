@@ -219,7 +219,7 @@ final class CockpitWorkerRemoteOperations {
         operation: () => _launch.launch(
           CockpitLaunchRemoteSessionRequest(
             projectDir: target.projectDir,
-            target: target.registration.entrypoint,
+            target: target.launchEntrypoint,
             flavor: target.registration.flavor,
             platform: target.registration.platform,
             deviceId: target.registration.deviceId,

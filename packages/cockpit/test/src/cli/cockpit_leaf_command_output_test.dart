@@ -30,10 +30,6 @@ void main() {
     ]);
 
     expect(exitCode, cockpitSuccessExitCode);
-    final envelope = jsonDecode(stdout.toString()) as Map<String, Object?>;
-    expect(envelope, <String, Object?>{
-      'ok': true,
-      'data': <String, Object?>{'value': 1},
-    });
+    expect(jsonDecode(stdout.toString()), <String, Object?>{'value': 1});
   });
 }

@@ -10,6 +10,7 @@ import '../worker/cockpit_worker_protocol_schema.dart';
 import '../worker/cockpit_worker_value_reader.dart';
 import '../worker/cockpit_worker_server.dart';
 import 'cockpit_supervisor_run_projection.dart';
+import 'cockpit_lease_support.dart';
 import 'cockpit_worker_resource_authority.dart';
 
 typedef CockpitSupervisorWorkerReplayClient =
@@ -116,7 +117,7 @@ final class CockpitSupervisorWorkerEndpoint {
                 .publishArtifacts(decoded))
             .toJson(),
       CockpitWorkerOperationRequest() => CockpitWorkerOperationResult(
-        await _resourceAuthority.execute(decoded.invocation),
+        await _executeOperation(decoded.invocation),
       ).toJson(),
       _ => throw _endpointError(
         'methodUnavailable',
@@ -125,6 +126,25 @@ final class CockpitSupervisorWorkerEndpoint {
     };
     CockpitWorkerProtocolSchema.validateResult(decoded.method, result);
     return result;
+  }
+
+  Future<CockpitOperationResult> _executeOperation(
+    CockpitOperationInvocation invocation,
+  ) async {
+    try {
+      return await _resourceAuthority.execute(invocation);
+    } on CockpitLeaseException catch (error) {
+      throw CockpitJsonRpcRemoteException(
+        CockpitJsonRpcError(
+          code: -32000,
+          message: error.message,
+          workerCode: error.code,
+          details: <String, Object?>{
+            if (error.lease != null) 'lease': error.lease!.toJson(),
+          },
+        ),
+      );
+    }
   }
 
   Future<CockpitWorkerPublishEventBatchResult> _publishEvents(

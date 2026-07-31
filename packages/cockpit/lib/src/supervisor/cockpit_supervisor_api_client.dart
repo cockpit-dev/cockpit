@@ -847,11 +847,15 @@ Future<CockpitSupervisorApiClient> createCockpitSupervisorApiClient({
     'bin',
     'cockpitd.dart',
   );
+  final packageConfig = await Isolate.packageConfig;
   return CockpitSupervisorApiClient(
     lifecycle: CockpitDaemonLifecycleClient(
       paths: paths,
       dartExecutable: Platform.resolvedExecutable,
       daemonEntrypoint: daemonEntrypoint,
+      packageConfigPath: packageConfig?.scheme == 'file'
+          ? packageConfig!.toFilePath()
+          : null,
       permissionHardener: home.permissionHardener,
       directorySyncer: CockpitSystemDirectorySyncer(resolver.platform),
     ),

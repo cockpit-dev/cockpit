@@ -9,7 +9,9 @@ void main() {
 
     final source = buildFile.readAsStringSync();
     expect(source, contains('src/main/kotlin'));
-    expect(source, contains('apply plugin: "org.jetbrains.kotlin.android"'));
+    expect(source, contains('id "org.jetbrains.kotlin.android"'));
+    expect(source, contains('id "com.android.library"'));
+    expect(source, isNot(contains('apply plugin:')));
     expect(source, contains('org.jetbrains.kotlin:kotlin-gradle-plugin'));
     expect(source, contains('tasks.withType'));
     expect(source, contains('KotlinCompile'));

@@ -47,6 +47,7 @@ final class CockpitSupervisorOperationCatalog {
             defaultTimeout: const Duration(minutes: 5),
             maximumTimeout: const Duration(minutes: 15),
           ),
+          _read('document.list', CockpitOperationScope.workspace),
           _read('case.validate', CockpitOperationScope.workspace),
           _job(
             'case.run',

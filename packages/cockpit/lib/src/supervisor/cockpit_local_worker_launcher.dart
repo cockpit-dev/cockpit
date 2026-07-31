@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:cockpit_protocol/cockpit_protocol.dart';
+import 'package:path/path.dart' as p;
 
 import '../foundation/cockpit_home.dart';
 import '../infrastructure/cockpit_process_manager.dart';
@@ -33,6 +34,7 @@ final class CockpitLocalWorkerLauncher
   CockpitLocalWorkerLauncher({
     required this.dartExecutable,
     required this.workerEntrypoint,
+    this.packageConfigPath,
     required CockpitSupervisorRunRetentionIndex retentionIndex,
     required CockpitSupervisorResourceAuthorityFactory resourceAuthorityFactory,
     CockpitSupervisorEventExchangeFactory? eventExchangeFactory,
@@ -75,6 +77,7 @@ final class CockpitLocalWorkerLauncher
 
   final String dartExecutable;
   final String workerEntrypoint;
+  final String? packageConfigPath;
   final CockpitSupervisorEventExchangeFactory? _eventExchangeFactory;
   final CockpitSupervisorResourceAuthorityFactory _resourceAuthorityFactory;
   final CockpitSupervisorRunRetentionIndex _retentionIndex;
@@ -112,9 +115,9 @@ final class CockpitLocalWorkerLauncher
     if (events case final CockpitSupervisorRunProjection projection) {
       await projection.resumePendingRetentionReleases();
     }
-    final workerTemporaryDirectory = await Directory.systemTemp.createTemp(
-      'cockpit-worker-',
-    );
+    final workerTemporaryDirectory = await Directory(
+      p.join(spec.stateRoot, 'producer_artifacts', 'tmp', workerOwnerId),
+    ).create(recursive: true);
     try {
       await _permissionHardener.hardenDirectory(workerTemporaryDirectory);
     } on Object {
@@ -126,6 +129,7 @@ final class CockpitLocalWorkerLauncher
       process = await _processManager.start(
         dartExecutable,
         <String>[
+          if (packageConfigPath != null) '--packages=$packageConfigPath',
           workerEntrypoint,
           '--workspace-id=${spec.key.workspaceId}',
           '--project-id=${spec.projectId}',

@@ -37,6 +37,14 @@ void main() {
       ).create();
       final state = await Directory(p.join(temporary.path, 'state')).create();
       final remoteSession = await _RemoteSessionServer.start();
+      await File(p.join(workspace.path, 'pubspec.yaml')).writeAsString('''
+name: cockpit_worker_process_fixture
+environment:
+  sdk: '>=3.8.0 <4.0.0'
+dependencies:
+  flutter:
+    sdk: flutter
+''');
       final mainEntrypoint = await File(
         p.join(workspace.path, 'main.dart'),
       ).writeAsString('void main() {}\n');
@@ -185,6 +193,7 @@ cases:
           'case.run',
           'case.validate',
           'document.index',
+          'document.list',
           'suite.run',
           'target.get',
           'target.inspect',
@@ -202,9 +211,20 @@ cases:
         idempotencyKey: 'document-index-workerA',
       );
       expect(indexed.outcome, CockpitOperationOutcome.succeeded);
-      final documents = indexed.output!['documents']! as List<Object?>;
+      expect(indexed.output!['documentCount'], greaterThanOrEqualTo(5));
+      final listedDocuments = await _callOperation(
+        pool,
+        spec,
+        kind: 'document.list',
+        idempotencyKey: 'document-list-workerA',
+        input: const <String, Object?>{'offset': 0, 'limit': 100},
+      );
+      expect(listedDocuments.outcome, CockpitOperationOutcome.succeeded);
+      final documents = listedDocuments.output!['documents']! as List<Object?>;
       final mainDocument = documents.cast<Map<Object?, Object?>>().singleWhere(
-        (document) => document['kind'] == 'source',
+        (document) =>
+            document['kind'] == 'source' &&
+            document['relativePath'] == 'main.dart',
       );
       final caseDocument = documents.cast<Map<Object?, Object?>>().singleWhere(
         (document) =>

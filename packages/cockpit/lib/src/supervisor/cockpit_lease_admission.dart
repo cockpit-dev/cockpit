@@ -91,6 +91,21 @@ extension CockpitLeaseAdmissionOperations on CockpitLeaseRegistry {
       }
       record = matches.single;
     } else {
+      final quarantined = state.leases
+          .where(
+            (candidate) =>
+                candidate.resourceKind == request.resourceKind &&
+                candidate.resourceId == request.resourceId &&
+                candidate.state == CockpitLeaseState.quarantined,
+          )
+          .firstOrNull;
+      if (quarantined != null) {
+        throw CockpitLeaseException(
+          code: 'resourceQuarantined',
+          message: 'Lease resource is quarantined.',
+          lease: _resource(state, quarantined),
+        );
+      }
       record = CockpitLeaseRecord(
         leaseId: _newId(state, CockpitIdKind.lease),
         workspaceId: request.workspaceId,

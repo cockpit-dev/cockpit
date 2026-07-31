@@ -107,13 +107,78 @@ final class CockpitWorkerDocumentIndex
             execute: (_) async {
               final documents = await refresh();
               return <String, Object?>{
-                'documents': <Map<String, Object?>>[
-                  for (final document in documents)
-                    if ((kind == null || document['kind'] == kind) &&
-                        (relativePath == null ||
-                            document['relativePath'] == relativePath))
-                      document,
-                ],
+                'documentCount': documents.length,
+                if (kind != null || relativePath != null)
+                  'matchedCount': documents
+                      .where(
+                        (document) =>
+                            (kind == null || document['kind'] == kind) &&
+                            (relativePath == null ||
+                                document['relativePath'] == relativePath),
+                      )
+                      .length,
+              };
+            },
+          );
+        },
+      );
+
+  CockpitWorkspaceOperationAdapter listOperationAdapter() =>
+      CockpitWorkspaceOperationAdapter(
+        kind: 'document.list',
+        mutationClass: CockpitMutationClass.readOnly,
+        resourceKinds: const <String>['workspace.documents'],
+        prepare: (context, input) {
+          workerKeys(
+            input,
+            const <String>{'kind', 'relativePath', 'offset', 'limit'},
+            r'$.input',
+            required: const <String>{'offset', 'limit'},
+          );
+          final kind = input['kind'] == null
+              ? null
+              : workerString(input['kind'], r'$.input.kind', maximum: 16);
+          if (kind != null &&
+              !const <String>{
+                'source',
+                'case',
+                'suite',
+                'project',
+              }.contains(kind)) {
+            throw const FormatException('Invalid indexed document kind.');
+          }
+          final relativePath = input['relativePath'] == null
+              ? null
+              : workerString(input['relativePath'], r'$.input.relativePath');
+          if (relativePath != null && !_isConfinedRelative(relativePath)) {
+            throw const FormatException(
+              'Indexed document path must be workspace-relative and confined.',
+            );
+          }
+          final offset = workerInteger(
+            input['offset'],
+            r'$.input.offset',
+            minimum: 0,
+            maximum: maximumFiles,
+          );
+          final limit = workerInteger(
+            input['limit'],
+            r'$.input.limit',
+            minimum: 1,
+            maximum: 100,
+          );
+          return CockpitPreparedWorkspaceOperation(
+            resources: const <CockpitWorkerResourceRequest>[],
+            execute: (_) async {
+              final page = await list(
+                kind: kind,
+                relativePath: relativePath,
+                offset: offset,
+                limit: limit,
+              );
+              return <String, Object?>{
+                'documents': page.documents,
+                'totalCount': page.totalCount,
               };
             },
           );
@@ -215,6 +280,46 @@ final class CockpitWorkerDocumentIndex
       ),
     );
     return summaries;
+  }
+
+  Future<({List<Map<String, Object?>> documents, int totalCount})> list({
+    String? kind,
+    String? relativePath,
+    int offset = 0,
+    int limit = 100,
+  }) async {
+    await _ensureLoaded();
+    final matches =
+        _byId.values
+            .where(
+              (document) =>
+                  (kind == null ||
+                      _documentSummary(document)['kind'] == kind) &&
+                  (relativePath == null ||
+                      document.relativePath == relativePath),
+            )
+            .toList(growable: false)
+          ..sort((left, right) => left.documentId.compareTo(right.documentId));
+    if (offset > matches.length) {
+      throw const FormatException('Document page offset is stale.');
+    }
+    final end = (offset + limit).clamp(0, matches.length);
+    final documents = <Map<String, Object?>>[];
+    for (final document in matches.sublist(offset, end)) {
+      final stat = await File(
+        _paths.join(workspaceRoot, document.relativePath),
+      ).stat();
+      documents.add(<String, Object?>{
+        'documentId': document.documentId,
+        'workspaceId': workspaceId,
+        'relativePath': document.relativePath,
+        'sha256': document.sourceSha256,
+        'sourceSha256': document.sourceSha256,
+        'modifiedAt': stat.modified.toUtc().toIso8601String(),
+        ..._documentSummary(document),
+      });
+    }
+    return (documents: documents, totalCount: matches.length);
   }
 
   Future<List<String>> resolvePaths(Iterable<String> documentIds) async {

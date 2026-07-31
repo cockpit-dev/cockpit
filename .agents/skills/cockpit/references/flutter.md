@@ -1,9 +1,9 @@
 # Flutter Development Shell
 
-Use this reference when Flutter semantic inspection, hot reload, route/runtime
-errors, network evidence, or mixed Flutter/native control is required. Installed
-Flutter applications can still be tested without this bridge through the native
-black-box path in [dev.md](dev.md).
+Use this reference for Flutter source development. The managed Flutter session
+is independent from black-box E2E and exposes structured application state and
+typed control. Installed production applications can still be tested without
+the adapter through the native black-box path in [dev.md](dev.md).
 
 ## Contents
 
@@ -11,6 +11,8 @@ black-box path in [dev.md](dev.md).
 - [Add the development dependency](#add-the-development-dependency)
 - [Create the development entrypoint](#create-the-development-entrypoint)
 - [Register and launch the target](#register-and-launch-the-target)
+- [Use the Flutter control plane](#use-the-flutter-control-plane)
+- [Dart and Flutter tooling](#dart-and-flutter-tooling)
 - [Router integration](#router-integration)
 
 ## Keep Production Untouched
@@ -103,14 +105,18 @@ with the application's real public API. Each Navigator needs its own
 
 ## Register And Launch The Target
 
-Register the workspace first. Document indexing is refreshed by
-`workspace documents`; select the exact source path and reuse its `documentId`:
+Register the checkout or monorepo root once. Document indexing is refreshed by
+`workspace documents`; select the exact workspace-relative source path and
+reuse its `documentId`. Cockpit walks upward from that entrypoint to the nearest
+`pubspec.yaml`, launches from that Flutter project directory, and rewrites the
+entrypoint relative to it. Do not register every monorepo package as another
+workspace.
 
 ```bash
 cockpit workspace documents \
   --workspace-id <workspaceId> \
   --kind source \
-  --relative-path cockpit/main.dart
+  --relative-path apps/mobile/cockpit/main.dart
 cockpit target register \
   --workspace-id <workspaceId> \
   --platform <platformFromDiscovery> \
@@ -138,6 +144,58 @@ Cockpit owns the entrypoint, device, mode, machine, and remote-control flags.
 On Android/iOS, `--env` configures the Flutter build process; it is not an
 arbitrary mobile application runtime environment. Use Dart defines or an
 application-owned configuration channel for values the mobile app must read.
+
+## Use The Flutter Control Plane
+
+The adapter is the source of truth for app-internal development state. It
+provides widget/semantics targets and relationships, visible text, route and
+focus state, framework/runtime errors, app logs, HTTP activity and failures,
+rebuild signals, screenshots, recording requests, and command results with
+locator resolution, selected plane, fallback trail, UI delta, and artifact
+references. `target.inspect` summarizes target readiness; use the focused
+session reads for current application state:
+
+```bash
+cockpit operation run --workspace-id <workspaceId> --kind ui.inspect \
+  --input-json '{"sessionId":"<sessionId>","profile":"minimal"}'
+cockpit operation run --workspace-id <workspaceId> --kind logs.read \
+  --input-json '{"sessionId":"<sessionId>","maxLines":40}'
+cockpit operation run --workspace-id <workspaceId> --kind errors.read \
+  --input-json '{"sessionId":"<sessionId>","maxErrors":8}'
+cockpit operation run --workspace-id <workspaceId> --kind network.read \
+  --input-json '{"sessionId":"<sessionId>","onlyFailures":true}'
+cockpit operation run --workspace-id <workspaceId> --kind app.reload \
+  --input-json '{"sessionId":"<sessionId>"}' \
+  --idempotency-key <uniqueKey>
+```
+
+Use `command.run` for one typed action/assertion and `command.batch` for an
+ordered local development interaction. Use `development.probe.collect` before
+and after a change only when a durable UI/runtime/network comparison is useful.
+The secondary native/system driver is for system dialogs, permissions,
+notifications, platform views, WebViews, and native-shell screens; it is not a
+replacement for Flutter state inspection.
+
+## Dart And Flutter Tooling
+
+Cockpit provides the Dart/Flutter development surface even when a separate Dart
+MCP server is not installed:
+
+| Need | Advertised operation |
+| --- | --- |
+| Analyze selected indexed files or the workspace | `analyze.files`, `analyze.workspace` |
+| Apply fixes, format, or run focused tests | `fix.workspace`, `format.workspace`, `test.workspace` |
+| Hover, definition, signature, document/workspace symbols | `lsp.request` |
+| Search pub.dev or run pub dependency commands | `package.search`, `package.pub` |
+| Read or search dependency source | `package.uris.read`, `package.uris.grep` |
+| Discover, launch, list, inspect, reload, restart, stop | target/app/session operations |
+| Inspect widgets, routes, logs, errors, network, and rebuild state | Flutter session operations above |
+
+Resolve file paths through `workspace documents` and pass opaque document IDs
+to worker operations. Use the descriptor's timeout and execution mode. The
+Supervisor owns process, workspace, session, device, port, authorization, and
+artifact isolation, so these capabilities work consistently from CLI, MCP, and
+future protocol clients.
 
 ## Router Integration
 

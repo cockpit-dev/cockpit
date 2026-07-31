@@ -3,7 +3,7 @@
     <img src="https://raw.githubusercontent.com/cockpit-dev/cockpit/main/assets/brand/cockpit-mark.svg" width="128" alt="Cockpit logo">
   </a>
   <h1>cockpit</h1>
-  <p><strong>面向应用 E2E 的无头执行器、Supervisor、CLI、MCP、原生驱动与离线报告。</strong></p>
+  <p><strong>Flutter 开发控制面与无头黑盒 E2E 执行器。</strong></p>
   <p>
     <a href="https://pub.dev/packages/cockpit"><img src="https://img.shields.io/pub/v/cockpit?logo=dart&amp;label=pub.dev" alt="pub.dev 上的 cockpit 版本"></a>
     <a href="https://pub.dev/packages/cockpit/score"><img src="https://img.shields.io/pub/points/cockpit?logo=dart" alt="cockpit pub points"></a>
@@ -19,9 +19,9 @@
   <p><a href="https://github.com/cockpit-dev/cockpit/blob/main/packages/cockpit/README.md">English</a> · <a href="https://github.com/cockpit-dev/cockpit/blob/main/packages/cockpit/README.zh-CN.md">简体中文</a></p>
 </div>
 
-`cockpit` 是 Cockpit 2.0 的认证宿主客户端和无头执行包，包含 Supervisor daemon、
-隔离 workspace worker、resource-oriented CLI 和轻量 MCP server，不内置 GUI 或 Web
-dashboard。
+`cockpit` 是 Cockpit 2.0 面向 Flutter/Dart 开发与无头黑盒 E2E 的认证宿主控制面，
+包含 Supervisor daemon、隔离 workspace worker、resource-oriented CLI 和轻量 MCP
+server，不内置 GUI 或 Web dashboard。
 
 ## 安装
 
@@ -68,11 +68,10 @@ dart run cockpit workspace list
 
 ## CLI 输出
 
-默认 `auto` 格式是适合 Agent 循环的紧凑语义文本。可用
-`--detail minimal|standard|full` 控制投影，用显式 `--stdout-format json`
-取得无损数据，或让 `run events` 使用流式 `jsonl`。`--output <file>` 原子写入
-完整 JSON，终端只返回路径、大小和 SHA-256；`artifact read` 强制写文件，绝不输出
-二进制或 Base64。
+默认 `auto` 格式是 `--detail minimal` 的命令专用 AI 语义文本。文本和 JSON
+都遵循 `--detail minimal|standard|full`；需要完整对象时使用
+`--detail full --stdout-format json --output <file>`。`--output` 只返回路径、
+大小和 SHA-256；`artifact read` 强制写文件，绝不输出二进制或 Base64。
 
 workspace 命令可以显式传 `--workspace-id`。省略时，Cockpit 会用当前目录匹配已注册且
 active 的 workspace，并要求结果唯一；不会回退到全局 latest run、active session 或

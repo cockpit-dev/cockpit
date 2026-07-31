@@ -95,7 +95,7 @@ final class CockpitDaemonCommand extends Command<int> {
         description: 'Read bounded Supervisor daemon logs.',
         configure: (parser) => parser.addOption(
           'lines',
-          defaultsTo: '200',
+          defaultsTo: '50',
           help: 'Maximum number of trailing log lines (1-2000).',
         ),
         action: (arguments) async {

@@ -150,15 +150,31 @@ final class CockpitWorkspaceCommand extends Command<int> {
             _ => null,
           };
           final requestedPath = arguments.option('relative-path');
-          final documents = await (await runtime.client()).documents(
+          final client = await runtime.client();
+          final documents = await client.documents(
             workspaceId,
             kind: requestedKind,
             relativePath: requestedPath,
           );
+          String? workspaceRoot;
+          if (documents.isEmpty && requestedPath != null) {
+            for (final workspace in await client.workspaces()) {
+              if (workspace.workspaceId == workspaceId) {
+                workspaceRoot = workspace.canonicalPath;
+                break;
+              }
+            }
+          }
           await runtime.success(<String, Object?>{
             'items': documents
                 .map((document) => document.toJson())
                 .toList(growable: false),
+            if (documents.isEmpty &&
+                requestedPath != null) ...<String, Object?>{
+              'requestedRelativePath': requestedPath,
+              'workspaceRoot': ?workspaceRoot,
+              'hint': 'No exact document match under the registered workspace.',
+            },
           });
           return cockpitSuccessExitCode;
         },
@@ -260,14 +276,27 @@ final class CockpitOperationCommand extends Command<int> {
             allowed: const <String>['supervisor', 'workspace'],
             defaultsTo: 'workspace',
           )
-          ..addOption('workspace-id'),
+          ..addOption('workspace-id')
+          ..addOption('kind', help: 'Return one exact operation descriptor.'),
         action: (arguments) async {
           final workspaceId = arguments.option('scope') == 'workspace'
               ? await runtime.workspaceId(arguments.option('workspace-id'))
               : null;
-          final operations = await (await runtime.client()).operations(
+          var operations = await (await runtime.client()).operations(
             workspaceId: workspaceId,
           );
+          final kind = arguments.option('kind');
+          if (kind != null) {
+            operations = operations
+                .where((operation) => operation.kind == kind)
+                .toList(growable: false);
+            if (operations.isEmpty) {
+              throw CockpitSupervisorClientException(
+                code: CockpitErrorCode.unsupportedOperation,
+                message: 'Operation $kind is not advertised.',
+              );
+            }
+          }
           await runtime.success(
             operations.map((operation) => operation.toJson()).toList(),
           );

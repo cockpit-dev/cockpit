@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.2.0
+
+- Synchronized the public protocol release with Cockpit 2.2.0 so the CLI,
+  Flutter bridge, and independent clients can use one release baseline.
+
 ## 2.1.0
 
 - Synchronized the public protocol release with Cockpit 2.1.0 so clients can

@@ -56,6 +56,11 @@ Future<void> main(List<String> arguments) async {
       negatable: false,
       help: 'Fail when native locator control cannot be proven.',
     )
+    ..addFlag(
+      'verbose-events',
+      negatable: false,
+      help: 'Print every run event; events.jsonl is always complete.',
+    )
     ..addFlag('stop-daemon', negatable: false)
     ..addFlag('help', abbr: 'h', negatable: false);
 
@@ -84,6 +89,7 @@ Future<void> main(List<String> arguments) async {
       stopDaemon: parsed.flag('stop-daemon'),
       requireRecording: parsed.flag('require-recording'),
       requireNativeLocator: parsed.flag('require-native-locator'),
+      verboseEvents: parsed.flag('verbose-events'),
     );
     final result = await CockpitDemoAcceptanceRunner(
       progress: (event) => stderr.writeln(jsonEncode(event)),

@@ -24,6 +24,7 @@ import 'cockpit_worker_development_session_runtime.dart';
 import 'cockpit_worker_forwarded_port_handoff.dart';
 import 'cockpit_worker_resource_grant.dart';
 import 'cockpit_worker_runtime_registry.dart';
+import 'cockpit_worker_system_action_parameters.dart';
 import 'cockpit_workspace_operation_registry.dart';
 
 final class CockpitWorkerLifecycleOperations {
@@ -255,12 +256,6 @@ final class CockpitWorkerLifecycleOperations {
       workspaceId: workspaceId,
       targetId: values.id('targetId'),
     );
-    requireWorkerResourceGrant(
-      context: context,
-      grants: grants,
-      kind: CockpitLeaseResourceKind.device,
-      resourceId: binding.deviceResourceId,
-    );
     final handle = binding.handle;
     if (handle == null && binding.registration.usesSystemControl) {
       final result = await runWorkerApplicationOperation(
@@ -280,7 +275,7 @@ final class CockpitWorkerLifecycleOperations {
       return <String, Object?>{
         'targetId': binding.targetId,
         'targetKind': binding.registration.targetKind.name,
-        ...result.profile.toJson(),
+        ...cockpitWorkerSystemControlProfile(result.profile).toJson(),
         'recommendedNextStep': result.recommendedNextStep,
       };
     }
@@ -324,7 +319,7 @@ final class CockpitWorkerLifecycleOperations {
         ),
       );
       systemControl = await sanitizer.sanitize(
-        described.profile.toJson(),
+        cockpitWorkerSystemControlProfile(described.profile).toJson(),
         sessionId: sessionId,
         targetId: binding.targetId,
       );
@@ -397,7 +392,7 @@ final class CockpitWorkerLifecycleOperations {
         operation: () => _launchApp.launch(
           CockpitLaunchAppRequest(
             projectDir: target.projectDir,
-            target: target.registration.entrypoint,
+            target: target.launchEntrypoint,
             flavor: target.registration.flavor,
             platform: target.registration.platform,
             deviceId: target.registration.deviceId,
@@ -515,7 +510,7 @@ final class CockpitWorkerLifecycleOperations {
         operation: () => _launchTarget.launch(
           CockpitLaunchTargetRequest(
             projectDir: target.projectDir,
-            target: target.registration.entrypoint,
+            target: target.launchEntrypoint,
             flavor: target.registration.flavor,
             platform: target.registration.platform,
             deviceId: target.registration.deviceId,
@@ -938,7 +933,7 @@ final class CockpitWorkerLifecycleOperations {
           operation: () => _developmentRuntime.launch(
             CockpitLaunchDevelopmentSessionRequest(
               projectDir: target.projectDir,
-              target: target.registration.entrypoint,
+              target: target.launchEntrypoint,
               flavor: target.registration.flavor,
               platform: target.registration.platform,
               deviceId: target.registration.deviceId,

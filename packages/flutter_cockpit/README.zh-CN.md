@@ -3,7 +3,7 @@
     <img src="https://raw.githubusercontent.com/cockpit-dev/cockpit/main/assets/brand/cockpit-mark.svg" width="128" alt="Cockpit logo">
   </a>
   <h1>flutter_cockpit</h1>
-  <p><strong>为 Cockpit 自动化提供更丰富能力的可选 Flutter 语义桥。</strong></p>
+  <p><strong>Cockpit 的一等 Flutter 开发适配器。</strong></p>
   <p>
     <a href="https://pub.dev/packages/flutter_cockpit"><img src="https://img.shields.io/pub/v/flutter_cockpit?logo=flutter&amp;label=pub.dev" alt="pub.dev 上的 flutter_cockpit 版本"></a>
     <a href="https://pub.dev/packages/flutter_cockpit/score"><img src="https://img.shields.io/pub/points/flutter_cockpit?logo=flutter" alt="flutter_cockpit pub points"></a>
@@ -19,13 +19,15 @@
   <p><a href="https://github.com/cockpit-dev/cockpit/blob/main/packages/flutter_cockpit/README.md">English</a> · <a href="https://github.com/cockpit-dev/cockpit/blob/main/packages/flutter_cockpit/README.zh-CN.md">简体中文</a></p>
 </div>
 
-`flutter_cockpit` 是面向 AI 驱动 Flutter 开发的应用内运行时。
+`flutter_cockpit` 是 Cockpit 面向 AI 驱动 Flutter 源码开发与语义验证的一等应用内
+适配器，独立于已安装生产应用使用的黑盒路径。
 
 它提供：
 
 - 通过 `FlutterCockpit.runApp` 或 `FlutterCockpitApp` 做运行时 bootstrap
 - 点击、输入、手势、等待、断言、截图、快照等命令执行能力
 - 基于 HTTP 的远程会话服务
+- 结构化 widget/semantics、route、focus、log、runtime error、network 与 rebuild 状态
 - snapshot、artifact、recording 和 bundle 模型
 - 面向 AI 摘要的 target / plane / surface / fallback 运行时模型
 

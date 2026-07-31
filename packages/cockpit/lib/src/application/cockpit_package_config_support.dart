@@ -80,10 +80,22 @@ Map<String, CockpitResolvedPackageConfigEntry> cockpitReadPackageConfig({
   required CockpitFileSystem fileSystem,
   required String workspaceRoot,
 }) {
-  final configFile = fileSystem.file(
-    p.join(workspaceRoot, '.dart_tool', 'package_config.json'),
-  );
-  if (!configFile.existsSync()) {
+  final pathContext = fileSystem.pathContext;
+  var directory = pathContext.normalize(workspaceRoot);
+  String? configPath;
+  while (true) {
+    final candidate = fileSystem.file(
+      pathContext.join(directory, '.dart_tool', 'package_config.json'),
+    );
+    if (candidate.existsSync()) {
+      configPath = candidate.path;
+      break;
+    }
+    final parent = pathContext.dirname(directory);
+    if (parent == directory) break;
+    directory = parent;
+  }
+  if (configPath == null) {
     throw CockpitApplicationServiceException(
       code: 'packageConfigNotFound',
       message:
@@ -91,6 +103,7 @@ Map<String, CockpitResolvedPackageConfigEntry> cockpitReadPackageConfig({
       details: <String, Object?>{'workspaceRoot': workspaceRoot},
     );
   }
+  final configFile = fileSystem.file(configPath);
   final decoded =
       jsonDecode(configFile.readAsStringSync()) as Map<Object?, Object?>;
   final packages = ((decoded['packages'] as List?) ?? const <Object?>[])

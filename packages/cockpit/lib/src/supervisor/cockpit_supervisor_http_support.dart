@@ -220,9 +220,11 @@ final class CockpitSupervisorHttpSupport {
       ),
       CockpitJsonRpcRemoteException() => CockpitApiError(
         code: error.error.workerCode,
-        category: CockpitErrorCategory.application,
+        category: _isLockedCode(error.error.workerCode)
+            ? CockpitErrorCategory.resource
+            : CockpitErrorCategory.application,
         message: _boundedMessage(error.error.message),
-        retryable: false,
+        retryable: _isLockedCode(error.error.workerCode),
         responsibleLayer: CockpitResponsibleLayer.worker,
         redactedDetails: _boundedDetails(error.error.details),
       ),

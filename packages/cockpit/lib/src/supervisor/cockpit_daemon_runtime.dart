@@ -47,6 +47,7 @@ Future<int> runCockpitDaemon(List<String> arguments) async {
   final logSink = logFile.openWrite(mode: FileMode.append);
   final logger = CockpitWorkerLogger(stderrSink: logSink);
   final workerEntrypoint = await _workerEntrypoint();
+  final packageConfig = await Isolate.packageConfig;
   final authorization = await CockpitSupervisorAuthorizationPolicyStore(
     path: paths.authorizationPolicy,
     permissionHardener: hardener,
@@ -56,6 +57,9 @@ Future<int> runCockpitDaemon(List<String> arguments) async {
     homeResolver: resolver,
     dartExecutable: Platform.resolvedExecutable,
     workerEntrypoint: workerEntrypoint,
+    packageConfigPath: packageConfig?.scheme == 'file'
+        ? packageConfig!.toFilePath()
+        : null,
     authorization: authorization.withMode(configuration.authorizationMode),
     logger: logger,
   );

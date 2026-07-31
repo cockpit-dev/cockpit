@@ -36,7 +36,10 @@ cockpit workspace list \
 ```
 
 The default semantic output is preferable when an agent only needs the next
-command and resolved IDs.
+command and resolved IDs. It uses `--detail minimal`; raise to `standard` only
+for diagnosis. JSON follows the same levels, so use
+`--detail full --stdout-format json --output <file>` only when a complete
+machine-readable object is actually needed.
 
 ## Local YOLO Mode
 
@@ -79,7 +82,8 @@ Use a `flutterApp` target with an indexed development entrypoint document.
 Follow [flutter.md](flutter.md) for the complete development-only entrypoint,
 document lookup, target registration, and router wiring. This enables semantic
 UI, route, runtime/network inspection, hot reload/restart, and mixed
-Flutter/native control without shipping the bridge in production.
+Flutter/native control without shipping the bridge in production. It is the
+primary Flutter source-development adapter, not a black-box workflow.
 
 Launch supports repeatable configuration:
 
@@ -101,6 +105,24 @@ Generic operation/MCP clients send equivalent `launchConfiguration` fields:
 Cockpit owns target, device, flavor, mode, machine, remote-control, and
 debug/profile/release arguments; do not override those through `flutterArgs`.
 Do not send Flutter launch configuration to a black-box target.
+
+Read live Flutter state directly from the adapter after launch:
+
+```bash
+cockpit operation run --workspace-id <workspaceId> --kind ui.inspect \
+  --input-json '{"sessionId":"<sessionId>","profile":"minimal"}'
+cockpit operation run --workspace-id <workspaceId> --kind logs.read \
+  --input-json '{"sessionId":"<sessionId>","maxLines":40}'
+cockpit operation run --workspace-id <workspaceId> --kind errors.read \
+  --input-json '{"sessionId":"<sessionId>","maxErrors":8}'
+cockpit operation run --workspace-id <workspaceId> --kind network.read \
+  --input-json '{"sessionId":"<sessionId>","onlyFailures":true}'
+```
+
+Use `app.reload` or `app.restart` with the same `sessionId`. Use `command.run`
+or `command.batch` for typed Flutter actions, waits, and assertions. Inspect the
+advertised descriptor before the first call; keep its input in a file when the
+command or locator is non-trivial.
 
 ## Fast Loop
 

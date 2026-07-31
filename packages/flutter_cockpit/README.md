@@ -3,7 +3,7 @@
     <img src="https://raw.githubusercontent.com/cockpit-dev/cockpit/main/assets/brand/cockpit-mark.svg" width="128" alt="Cockpit logo">
   </a>
   <h1>flutter_cockpit</h1>
-  <p><strong>Optional Flutter semantic bridge for richer Cockpit automation.</strong></p>
+  <p><strong>The first-class Flutter development adapter for Cockpit.</strong></p>
   <p>
     <a href="https://pub.dev/packages/flutter_cockpit"><img src="https://img.shields.io/pub/v/flutter_cockpit?logo=flutter&amp;label=pub.dev" alt="flutter_cockpit version on pub.dev"></a>
     <a href="https://pub.dev/packages/flutter_cockpit/score"><img src="https://img.shields.io/pub/points/flutter_cockpit?logo=flutter" alt="flutter_cockpit pub points"></a>
@@ -19,14 +19,16 @@
   <p><a href="https://github.com/cockpit-dev/cockpit/blob/main/packages/flutter_cockpit/README.md">English</a> · <a href="https://github.com/cockpit-dev/cockpit/blob/main/packages/flutter_cockpit/README.zh-CN.md">简体中文</a></p>
 </div>
 
-`flutter_cockpit` is the optional in-app semantic bridge for Cockpit 2.0 E2E
-automation and AI-driven Flutter development.
+`flutter_cockpit` is Cockpit's first-class in-app adapter for AI-driven Flutter
+development and semantic application validation. It is independent from the
+black-box path used for installed production applications.
 
 It provides:
 
 - runtime bootstrap through `FlutterCockpit.runApp` or `FlutterCockpitApp`
 - command execution for taps, text input, gestures, waits, assertions, screenshots, and snapshots
 - remote session serving over HTTP
+- structured widget/semantics, route, focus, log, runtime error, network, and rebuild state
 - snapshot, artifact, recording, and bundle models
 - target, plane, surface, and fallback-aware runtime models for AI-first summaries
 

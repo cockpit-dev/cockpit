@@ -64,10 +64,9 @@ final class CockpitWorkspaceApplicationAdapters {
       CockpitLeaseResourceKind.session,
       idField: 'appId',
     ),
-    const _OperationSpec.leasedRead(
+    const _OperationSpec.read(
       'target.inspect',
       'workspace.target',
-      CockpitLeaseResourceKind.device,
       idField: 'targetId',
     ),
     const _OperationSpec.read('target.list', 'workspace.targets'),
