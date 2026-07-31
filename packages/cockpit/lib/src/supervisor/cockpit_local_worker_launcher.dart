@@ -2,8 +2,6 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:cockpit_protocol/cockpit_protocol.dart';
-import 'package:path/path.dart' as p;
-
 import '../foundation/cockpit_home.dart';
 import '../infrastructure/cockpit_process_manager.dart';
 import '../foundation/cockpit_ids.dart';
@@ -115,9 +113,9 @@ final class CockpitLocalWorkerLauncher
     if (events case final CockpitSupervisorRunProjection projection) {
       await projection.resumePendingRetentionReleases();
     }
-    final workerTemporaryDirectory = await Directory(
-      p.join(spec.stateRoot, 'producer_artifacts', 'tmp', workerOwnerId),
-    ).create(recursive: true);
+    final workerTemporaryDirectory =
+        await (Platform.isWindows ? Directory.systemTemp : Directory('/tmp'))
+            .createTemp('cockpit-worker-');
     try {
       await _permissionHardener.hardenDirectory(workerTemporaryDirectory);
     } on Object {
