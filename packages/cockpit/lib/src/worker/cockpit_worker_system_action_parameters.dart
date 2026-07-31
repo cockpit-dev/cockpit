@@ -9,6 +9,128 @@ import 'cockpit_worker_document_index.dart';
 import 'cockpit_worker_runtime_registry.dart';
 import 'cockpit_worker_value_reader.dart';
 
+CockpitSystemControlProfile cockpitWorkerSystemControlProfile(
+  CockpitSystemControlProfile profile,
+) => CockpitSystemControlProfile(
+  platform: profile.platform,
+  deviceId: profile.deviceId,
+  appId: profile.appId,
+  processId: profile.processId,
+  adapter: profile.adapter,
+  preferredPlane: profile.preferredPlane,
+  fallbackOrder: profile.fallbackOrder,
+  capabilities: <CockpitSystemControlCapability>[
+    for (final capability in profile.capabilities)
+      CockpitSystemControlCapability(
+        action: capability.action,
+        plane: capability.plane,
+        availability: capability.availability,
+        strategy: capability.strategy,
+        groups: capability.groups,
+        requires: capability.requires,
+        limitations: capability.limitations,
+        parameters: _workerSystemActionParameters(
+          capability.action,
+          profile.platform,
+          capability.parameters,
+        ),
+        fallbackActions: capability.fallbackActions,
+      ),
+  ],
+  recommendedNextStep: profile.recommendedNextStep,
+);
+
+List<CockpitSystemControlParameter> _workerSystemActionParameters(
+  CockpitSystemControlAction action,
+  String platform,
+  List<CockpitSystemControlParameter> fallback,
+) => switch (action) {
+  CockpitSystemControlAction.installApp =>
+    const <CockpitSystemControlParameter>[
+      ..._workerInputCapabilityParameters,
+      CockpitSystemControlParameter(
+        name: 'grantPermissions',
+        valueType: CockpitSystemControlParameterType.boolean,
+      ),
+    ],
+  CockpitSystemControlAction.pushFile => <CockpitSystemControlParameter>[
+    ..._workerInputCapabilityParameters,
+    if (_isDesktopPlatform(platform))
+      _workerOutputNameParameter
+    else
+      CockpitSystemControlParameter(
+        name: platform == 'ios'
+            ? 'containerDestinationPath'
+            : 'deviceDestinationPath',
+        valueType: CockpitSystemControlParameterType.string,
+        required: true,
+      ),
+  ],
+  CockpitSystemControlAction.pullFile =>
+    _isDesktopPlatform(platform)
+        ? const <CockpitSystemControlParameter>[
+            ..._workerInputCapabilityParameters,
+            _workerOutputNameParameter,
+          ]
+        : <CockpitSystemControlParameter>[
+            CockpitSystemControlParameter(
+              name: platform == 'ios'
+                  ? 'containerSourcePath'
+                  : 'deviceSourcePath',
+              valueType: CockpitSystemControlParameterType.string,
+              required: true,
+            ),
+            _workerOutputNameParameter,
+          ],
+  CockpitSystemControlAction.addMedia => <CockpitSystemControlParameter>[
+    ..._workerInputCapabilityParameters,
+    if (_isDesktopPlatform(platform))
+      _workerOutputNameParameter
+    else if (platform != 'ios')
+      const CockpitSystemControlParameter(
+        name: 'deviceDestinationPath',
+        valueType: CockpitSystemControlParameterType.string,
+      ),
+  ],
+  CockpitSystemControlAction.captureScreenshot =>
+    const <CockpitSystemControlParameter>[
+      CockpitSystemControlParameter(
+        name: 'name',
+        valueType: CockpitSystemControlParameterType.string,
+      ),
+      _workerOutputNameParameter,
+    ],
+  CockpitSystemControlAction.stopRecording =>
+    const <CockpitSystemControlParameter>[_workerOutputNameParameter],
+  _ => fallback,
+};
+
+const List<CockpitSystemControlParameter>
+_workerInputCapabilityParameters = <CockpitSystemControlParameter>[
+  CockpitSystemControlParameter(
+    name: 'documentId',
+    valueType: CockpitSystemControlParameterType.string,
+    description:
+        'Workspace document capability; mutually exclusive with artifactId.',
+  ),
+  CockpitSystemControlParameter(
+    name: 'artifactId',
+    valueType: CockpitSystemControlParameterType.string,
+    description:
+        'Managed artifact capability; mutually exclusive with documentId.',
+  ),
+];
+
+const CockpitSystemControlParameter _workerOutputNameParameter =
+    CockpitSystemControlParameter(
+      name: 'outputName',
+      valueType: CockpitSystemControlParameterType.string,
+      description: 'Optional managed artifact file name.',
+    );
+
+bool _isDesktopPlatform(String platform) =>
+    const <String>{'linux', 'macos', 'windows'}.contains(platform);
+
 final class CockpitWorkerSystemActionParameters {
   CockpitWorkerSystemActionParameters({
     required String producerRoot,

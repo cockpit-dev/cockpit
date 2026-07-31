@@ -97,6 +97,7 @@ final class CockpitWorkerTargetBinding {
     required this.targetId,
     required this.deviceResourceId,
     required this.projectDir,
+    required this.launchEntrypoint,
     required this.registration,
     this.handle,
   });
@@ -104,6 +105,7 @@ final class CockpitWorkerTargetBinding {
   final String targetId;
   final String deviceResourceId;
   final String projectDir;
+  final String? launchEntrypoint;
   final CockpitWorkerTargetRegistration registration;
   final CockpitTargetHandle? handle;
 }
@@ -254,6 +256,11 @@ final class CockpitWorkerRuntimeRegistry
       _locked(() async {
         await _ensureLoaded();
         _validateRegistration(registration);
+        await _validateTargetEntrypointCurrent(registration);
+        final project = _resolveTargetProject(
+          registration,
+          requireProject: true,
+        );
         final targetId = _newId('target');
         _targets[targetId] = CockpitWorkerTargetBinding(
           targetId: targetId,
@@ -261,7 +268,8 @@ final class CockpitWorkerRuntimeRegistry
             platform: registration.platform,
             deviceId: registration.deviceId,
           ),
-          projectDir: workspaceRoot,
+          projectDir: project.projectDir,
+          launchEntrypoint: project.launchEntrypoint,
           registration: registration,
         );
         await _persist();
@@ -382,6 +390,7 @@ final class CockpitWorkerRuntimeRegistry
       targetId: targetId,
       deviceResourceId: current.deviceResourceId,
       projectDir: current.projectDir,
+      launchEntrypoint: current.launchEntrypoint,
       registration: current.registration,
       handle: handle,
     );
@@ -417,6 +426,7 @@ final class CockpitWorkerRuntimeRegistry
       targetId: target.targetId,
       deviceResourceId: target.deviceResourceId,
       projectDir: target.projectDir,
+      launchEntrypoint: target.launchEntrypoint,
       registration: target.registration,
       handle: targetHandle,
     );
@@ -501,6 +511,7 @@ final class CockpitWorkerRuntimeRegistry
       targetId: target.targetId,
       deviceResourceId: target.deviceResourceId,
       projectDir: target.projectDir,
+      launchEntrypoint: target.launchEntrypoint,
       registration: target.registration,
       handle: targetHandle,
     );
@@ -1538,6 +1549,7 @@ final class CockpitWorkerRuntimeRegistry
       targetId: target.targetId,
       deviceResourceId: target.deviceResourceId,
       projectDir: target.projectDir,
+      launchEntrypoint: target.launchEntrypoint,
       registration: target.registration,
     );
   }
@@ -1664,6 +1676,45 @@ final class CockpitWorkerRuntimeRegistry
     }
   }
 
+  ({String projectDir, String? launchEntrypoint}) _resolveTargetProject(
+    CockpitWorkerTargetRegistration registration, {
+    required bool requireProject,
+  }) {
+    final entrypoint = registration.entrypoint;
+    if (registration.targetKind != CockpitTargetKind.flutterApp ||
+        entrypoint == null) {
+      return (projectDir: workspaceRoot, launchEntrypoint: entrypoint);
+    }
+    final absoluteEntrypoint = p.normalize(p.join(workspaceRoot, entrypoint));
+    var directory = p.dirname(absoluteEntrypoint);
+    while (p.equals(directory, workspaceRoot) ||
+        p.isWithin(workspaceRoot, directory)) {
+      final manifest = p.join(directory, 'pubspec.yaml');
+      if (FileSystemEntity.typeSync(manifest, followLinks: false) ==
+          FileSystemEntityType.file) {
+        final canonicalManifest = p.normalize(
+          File(manifest).resolveSymbolicLinksSync(),
+        );
+        if (p.equals(canonicalManifest, manifest)) {
+          return (
+            projectDir: directory,
+            launchEntrypoint: p.relative(absoluteEntrypoint, from: directory),
+          );
+        }
+      }
+      if (p.equals(directory, workspaceRoot)) break;
+      directory = p.dirname(directory);
+    }
+    if (!requireProject) {
+      return (projectDir: workspaceRoot, launchEntrypoint: entrypoint);
+    }
+    throw CockpitApplicationServiceException(
+      code: 'flutterProjectNotFound',
+      message: 'No Flutter pubspec.yaml contains the selected entrypoint.',
+      details: <String, Object?>{'entrypoint': entrypoint},
+    );
+  }
+
   void _requireWorkspace(String candidate) {
     if (candidate != workspaceId) {
       throw const CockpitApplicationServiceException(
@@ -1741,7 +1792,8 @@ final class CockpitWorkerRuntimeRegistry
     for (final entry in _targets.entries) {
       final target = entry.value;
       if (entry.key != target.targetId ||
-          target.projectDir != workspaceRoot ||
+          !(p.equals(target.projectDir, workspaceRoot) ||
+              p.isWithin(workspaceRoot, target.projectDir)) ||
           target.registration.workspaceId != workspaceId ||
           target.deviceResourceId !=
               cockpitCanonicalDeviceResourceId(
@@ -2142,6 +2194,7 @@ final class CockpitWorkerRuntimeRegistry
         const <String>{
           'targetId',
           'deviceResourceId',
+          'projectIdentity',
           'registration',
           'handle',
         },
@@ -2255,6 +2308,33 @@ final class CockpitWorkerRuntimeRegistry
           'Target physical resource identity is invalid at $path.',
         );
       }
+      final project = json['projectIdentity'] == null
+          ? _resolveTargetProject(registration, requireProject: false)
+          : (
+              projectDir: _handlePersistence._decodeWorkspaceProject(
+                workerString(
+                  json['projectIdentity'],
+                  '$path.projectIdentity',
+                  maximum: 4096,
+                ),
+                '$path.projectIdentity',
+              ),
+              launchEntrypoint: null,
+            );
+      final launchEntrypoint = registration.entrypoint == null
+          ? null
+          : p.relative(
+              p.join(workspaceRoot, registration.entrypoint),
+              from: project.projectDir,
+            );
+      if (launchEntrypoint != null &&
+          (launchEntrypoint == '..' ||
+              launchEntrypoint.startsWith('../') ||
+              launchEntrypoint.startsWith('..${p.separator}'))) {
+        throw FormatException(
+          'Target entrypoint escapes its project at $path.',
+        );
+      }
       final handleJson = json['handle'];
       _putUnique(
         _targets,
@@ -2262,7 +2342,8 @@ final class CockpitWorkerRuntimeRegistry
         CockpitWorkerTargetBinding(
           targetId: targetId,
           deviceResourceId: canonicalDeviceResourceId,
-          projectDir: workspaceRoot,
+          projectDir: project.projectDir,
+          launchEntrypoint: launchEntrypoint,
           registration: registration,
           handle: handleJson == null
               ? null
@@ -3080,6 +3161,7 @@ Map<String, Object?> _encodeTarget(
 ) => <String, Object?>{
   'targetId': binding.targetId,
   'deviceResourceId': binding.deviceResourceId,
+  'projectIdentity': handles._encodeWorkspaceProject(binding.projectDir),
   'registration': <String, Object?>{
     'workspaceId': binding.registration.workspaceId,
     'platform': binding.registration.platform,

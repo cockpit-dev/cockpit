@@ -21,11 +21,12 @@
   <p><a href="README.md">English</a> · <a href="README.zh-CN.md">简体中文</a></p>
 </div>
 
-Cockpit is a production E2E automation and verification stack for AI,
-CI, and local development. Cockpit 2.0 controls installed Android and iOS
-applications as black boxes, drives Flutter applications through their richer
-semantic bridge, and exposes the same typed resources to CLI, MCP, and future
-independent clients.
+Cockpit is a production application development, E2E automation, and
+verification stack for AI and CI. Flutter source development uses a first-class
+managed adapter with structured widget, route, log, error, network, and runtime
+state. Independently, installed Android and iOS applications can be controlled
+and verified as non-invasive black boxes. Both paths expose the same typed
+resources to CLI, MCP, and future clients without conflating their roles.
 
 It provides:
 
@@ -45,8 +46,9 @@ It provides:
   the test DSL, JSON Schema, and OpenAPI contract.
 - [`cockpit`](packages/cockpit) owns the Supervisor, workspace workers, drivers,
   CLI, MCP server, reports, and artifacts.
-- [`flutter_cockpit`](packages/flutter_cockpit) is the optional in-app Flutter
-  semantic, observation, capture, and recording bridge.
+- [`flutter_cockpit`](packages/flutter_cockpit) is the first-class in-app
+  Flutter development and semantic validation adapter. Pure black-box users do
+  not need it.
 
 Minimum versions are Dart 3.8.0 and Flutter 3.32.0. Add only what the project
 uses:
@@ -54,7 +56,7 @@ uses:
 ```yaml
 dev_dependencies:
   cockpit: any
-  flutter_cockpit: any # Optional Flutter semantic bridge.
+  flutter_cockpit: any # Flutter source development adapter.
 ```
 
 Keep Cockpit development-only. Native black-box testing does not require an
@@ -110,12 +112,13 @@ dart run cockpit workspace list
 
 ## CLI Output
 
-The default `auto` format is compact semantic text designed for agent terminal
-loops. Use `--detail minimal|standard|full` to control projection size,
-`--stdout-format json` for an exact protocol envelope, and `jsonl` for live run
-events. `--output <file>` atomically writes the complete JSON response and
-prints only a path, byte count, and SHA-256 receipt. Artifact bytes are always
-downloaded to `--output`; Cockpit never emits them as Base64.
+The default `auto` format is AI-first semantic text at `--detail minimal`.
+Command-specific presenters remove repeated identities and render homogeneous
+collections with one shared field header. Text and JSON both honor
+`minimal|standard|full`; use
+`--detail full --stdout-format json --output <file>` for the complete response.
+Stdout receives only a path, byte count, and SHA-256 receipt. Artifact bytes
+always require `--output` and are never emitted as Base64.
 
 ## Authorization
 

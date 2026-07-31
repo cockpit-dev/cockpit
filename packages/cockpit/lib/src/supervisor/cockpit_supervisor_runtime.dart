@@ -102,6 +102,7 @@ final class CockpitSupervisorRuntime {
     required CockpitHomeResolver homeResolver,
     required String dartExecutable,
     required String workerEntrypoint,
+    String? packageConfigPath,
     CockpitSupervisorAuthorizationPolicy? authorization,
     CockpitWorkerLogger? logger,
   }) async {
@@ -128,6 +129,7 @@ final class CockpitSupervisorRuntime {
     launcher = CockpitLocalWorkerLauncher(
       dartExecutable: dartExecutable,
       workerEntrypoint: workerEntrypoint,
+      packageConfigPath: packageConfigPath,
       retentionIndex: CockpitScopedSupervisorRunRetentionIndex(
         resources.identity.references,
       ),
@@ -539,46 +541,101 @@ final class CockpitSupervisorRuntime {
     CockpitIndexedDocumentKind? kind,
     String? relativePath,
   }) async {
-    final result = await executeWorkspaceOperation(
+    final documents = <CockpitDocumentResource>[];
+    var offset = 0;
+    var refreshIndex = true;
+    while (true) {
+      final page = await documentPage(
+        workspaceId,
+        kind: kind,
+        relativePath: relativePath,
+        offset: offset,
+        limit: 100,
+        refreshIndex: refreshIndex,
+      );
+      refreshIndex = false;
+      documents.addAll(page.items);
+      offset += page.items.length;
+      if (offset >= page.totalCount) return documents;
+      if (page.items.isEmpty) {
+        throw const FormatException('Document page made no progress.');
+      }
+    }
+  }
+
+  Future<({List<CockpitDocumentResource> items, int totalCount})> documentPage(
+    String workspaceId, {
+    CockpitIndexedDocumentKind? kind,
+    String? relativePath,
+    required int offset,
+    required int limit,
+    required bool refreshIndex,
+  }) async {
+    final wireKind = kind == null
+        ? null
+        : kind == CockpitIndexedDocumentKind.testCase
+        ? 'case'
+        : kind.name;
+    if (refreshIndex) {
+      final indexed = await executeWorkspaceOperation(
+        workspaceId,
+        CockpitOperationInvocation(
+          kind: 'document.index',
+          workspaceId: workspaceId,
+          input: const <String, Object?>{},
+          idempotencyKey: CockpitIdempotencyKey(
+            'document-index-${DateTime.now().microsecondsSinceEpoch}',
+          ),
+        ),
+        defaultTimeout: const Duration(minutes: 5),
+      );
+      _throwIfWorkspaceOperationFailed(indexed);
+      if (indexed.output?['documentCount'] is! int) {
+        throw const FormatException('Invalid document index summary.');
+      }
+    }
+    final listed = await executeWorkspaceOperation(
       workspaceId,
       CockpitOperationInvocation(
-        kind: 'document.index',
+        kind: 'document.list',
         workspaceId: workspaceId,
         input: <String, Object?>{
-          if (kind != null)
-            'kind': kind == CockpitIndexedDocumentKind.testCase
-                ? 'case'
-                : kind.name,
+          'kind': ?wireKind,
           'relativePath': ?relativePath,
+          'offset': offset,
+          'limit': limit,
         },
-        idempotencyKey: CockpitIdempotencyKey(
-          'document-index-${DateTime.now().microsecondsSinceEpoch}',
-        ),
       ),
-      defaultTimeout: const Duration(minutes: 5),
     );
-    _throwIfWorkspaceOperationFailed(result);
-    final raw = result.output?['documents'];
+    _throwIfWorkspaceOperationFailed(listed);
+    final raw = listed.output?['documents'];
     if (raw is! List<Object?>) {
-      throw const FormatException('Invalid document index.');
+      throw const FormatException('Invalid document page.');
     }
-    return <CockpitDocumentResource>[
-      for (var index = 0; index < raw.length; index++)
-        CockpitDocumentResource.fromJson(switch (raw[index]) {
-          final Map<Object?, Object?> document => <String, Object?>{
-            'documentId': document['documentId'],
-            'workspaceId': document['workspaceId'],
-            'relativePath': document['relativePath'],
-            'sha256': document['sha256'],
-            'modifiedAt': document['modifiedAt'],
-            'kind': document['kind'],
-            'authoredId': document['authoredId'],
-            'title': document['title'],
-            'cases': document['cases'],
-          },
-          _ => raw[index],
-        }, path: '\$.documents[$index]'),
-    ];
+    final totalCount = listed.output?['totalCount'];
+    if (totalCount is! int || totalCount < raw.length) {
+      throw const FormatException('Invalid document page count.');
+    }
+    return (
+      items: <CockpitDocumentResource>[
+        for (var index = 0; index < raw.length; index++)
+          CockpitDocumentResource.fromJson(switch (raw[index]) {
+            final Map<Object?, Object?> document => <String, Object?>{
+              'documentId': document['documentId'],
+              'workspaceId': document['workspaceId'],
+              'relativePath': document['relativePath'],
+              'sha256': document['sha256'],
+              'modifiedAt': document['modifiedAt'],
+              'kind': document['kind'],
+              'authoredId': document['authoredId'],
+              'title': document['title'],
+              'cases': document['cases'],
+            },
+            _ => raw[index],
+          }, path: '\$.documents[$index]'),
+      ],
+      totalCount: totalCount,
+    );
   }
 
   Future<List<CockpitAutomationTargetResource>> targets(
@@ -1380,23 +1437,8 @@ final class _CockpitLogicalResourceCleanupProbe
   @override
   Future<CockpitLeaseCleanupResult> cleanupAndVerify(
     CockpitLeaseCleanupContext context,
-  ) async => context.reason == CockpitLeaseCleanupReason.release
-      ? const CockpitLeaseCleanupResult.restored()
-      : _quarantinedCleanupResult();
+  ) async => const CockpitLeaseCleanupResult.restored();
 }
-
-CockpitLeaseCleanupResult _quarantinedCleanupResult() =>
-    CockpitLeaseCleanupResult.quarantined(
-      CockpitFailure(
-        primary: CockpitApiError(
-          code: 'cleanupOwnershipUnproven',
-          category: CockpitErrorCategory.resource,
-          message: 'Recovered resource ownership cannot be proven released.',
-          retryable: true,
-          responsibleLayer: CockpitResponsibleLayer.supervisor,
-        ),
-      ),
-    );
 
 CockpitRemovalPolicy _removalPolicy(bool force) =>
     force ? CockpitRemovalPolicy.force : CockpitRemovalPolicy.drain;

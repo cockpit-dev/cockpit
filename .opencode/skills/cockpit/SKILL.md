@@ -19,6 +19,62 @@ All examples use the globally installed `cockpit` executable. Install it with
 project that declares `cockpit` as a development dependency, `dart run cockpit`
 is equivalent. Never assume the Cockpit source repository is available.
 
+## Flutter Is The Primary Development Path
+
+When Flutter source is available, use the managed Flutter development session
+as an independent first-class development path. It exposes the widget and
+semantics tree, route and focus state, logs, framework/runtime errors, network
+activity, rebuild signals, screenshots, hot reload/restart, and typed UI
+commands while keeping production code untouched. This is not black-box E2E.
+Do not register the app as `nativeApp` for normal Flutter implementation work.
+Use the system/native plane only at real OS, plugin, WebView, or native-shell
+boundaries; use a black-box target only for an installed production binary or
+when source integration is unavailable.
+
+Use this fast path for the common development loop:
+
+```bash
+cockpit daemon restart --yolo
+cockpit root add --path /absolute/project-parent
+cockpit workspace register --root-id <rootId> --path /absolute/checkout
+cockpit workspace documents \
+  --workspace-id <workspaceId> --kind source \
+  --relative-path apps/mobile/cockpit/main.dart
+cockpit target register \
+  --workspace-id <workspaceId> --platform <platform> --device-id <deviceId> \
+  --target-kind flutterApp --environment development --mode development \
+  --entrypoint-document-id <documentId> --idempotency-key <uniqueKey>
+cockpit target launch \
+  --workspace-id <workspaceId> --target-id <targetId> --mode development \
+  --dart-define API_URL=https://example.test \
+  --dart-define-from-file config/development.json \
+  --env BUILD_TOKEN=<authorizedValue> \
+  --flutter-arg=--track-widget-creation \
+  --launch-timeout-ms 900000 --idempotency-key <uniqueKey>
+cockpit target inspect --target-id <targetId> --profile minimal
+cockpit operation list --workspace-id <workspaceId> --kind <neededKind>
+cockpit operation run --workspace-id <workspaceId> --kind ui.inspect \
+  --input-json '{"sessionId":"<sessionId>","profile":"minimal"}'
+cockpit operation run --workspace-id <workspaceId> --kind errors.read \
+  --input-json '{"sessionId":"<sessionId>","maxErrors":8}'
+cockpit operation run --workspace-id <workspaceId> --kind network.read \
+  --input-json '{"sessionId":"<sessionId>","onlyFailures":true}'
+cockpit operation run --workspace-id <workspaceId> --kind app.reload \
+  --input-json '{"sessionId":"<sessionId>"}' \
+  --idempotency-key <uniqueKey>
+cockpit operation run \
+  --workspace-id <workspaceId> --kind <advertisedKind> \
+  --input-file /absolute/path/to/input.json --idempotency-key <uniqueKey>
+cockpit target inspect --target-id <targetId> --profile minimal
+```
+
+Register the checkout or monorepo root once. Cockpit binds a Flutter target to
+the nearest `pubspec.yaml` containing its indexed entrypoint, so
+`apps/mobile/cockpit/main.dart` launches from `apps/mobile` without a second
+workspace. Paths passed to `workspace documents` always remain relative to the
+registered workspace root. Read [flutter.md](references/flutter.md) before
+creating the development-only shell.
+
 ## Select The Smallest Workflow
 
 | Goal | Workflow | Read |
@@ -85,16 +141,16 @@ cockpit target launch \
 cockpit target inspect --target-id <targetId> --profile minimal
 ```
 
-For Flutter, prefer the optional development shell when semantic inspection,
-hot reload, runtime errors, routes, or network evidence matter. Keep bridge
-wiring outside production `lib/`; production Flutter code must not import the bridge package.
+For Flutter source development, use the development shell and adapter by
+default. Keep bridge wiring outside production `lib/`; production Flutter code must not import the bridge package.
 A shell target is registered from its indexed entrypoint: resolve it with
 `workspace documents`, then pass the returned ID to
 `target register --entrypoint-document-id`. Follow [flutter.md](references/flutter.md)
 for the complete setup.
-A Flutter target may combine its semantic bridge and native
-system driver in the same run. An installed Flutter app remains controllable as
-a fully black-box `nativeApp` when no bridge is present.
+A Flutter session retains a secondary system driver for native and OS
+boundaries, but its primary development state and control come from the Flutter
+adapter. An installed Flutter app remains controllable as a fully black-box
+`nativeApp` when no bridge is present.
 
 ## Rapid Development Validation
 
@@ -121,6 +177,7 @@ black-box, mixed-stack, locator, timeout, and recovery workflows.
 
 ```bash
 cockpit operation list --workspace-id <workspaceId>
+cockpit operation list --workspace-id <workspaceId> --kind <neededKind>
 cockpit target inspect --target-id <targetId> --profile minimal
 ```
 
@@ -193,11 +250,15 @@ pre/post hooks that cannot appear in the canonical report.
 
 ## Output And Evidence
 
-CLI stdout defaults to compact semantic text. Keep that default for agent
-loops. Use `--detail minimal|standard|full` to change projection,
-`--stdout-format json` only for exact structured processing, and
-`--output <file>` when the complete response must stay on disk. Binary
-artifacts are always downloaded to files; never print or expand Base64.
+CLI stdout defaults to AI semantic text at `--detail minimal`. Keep this for
+normal loops: it emits one copy of each identity/state, compact collection
+rows, decision-critical counts, failures, and the next action. Use
+`--detail standard` only for diagnostic context and `--detail full` only when
+the complete object is required. The same levels apply to
+`--stdout-format json`; JSON changes encoding, not information density. Use
+`--detail full --stdout-format json --output <file>` for a complete structured
+response without putting it in terminal context. Binary artifacts always go
+to files and are never printed or expanded as Base64.
 
 A pass requires terminal run state, required assertions, no disqualifying
 runtime errors, and readable required evidence. For suites, export the whole

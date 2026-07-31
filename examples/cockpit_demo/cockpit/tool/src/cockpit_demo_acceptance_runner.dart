@@ -27,6 +27,7 @@ final class CockpitDemoAcceptanceRequest {
     this.stopDaemon = false,
     this.requireRecording = false,
     this.requireNativeLocator = false,
+    this.verboseEvents = false,
   }) {
     if (!const <String>{
       'android',
@@ -62,6 +63,7 @@ final class CockpitDemoAcceptanceRequest {
   final bool stopDaemon;
   final bool requireRecording;
   final bool requireNativeLocator;
+  final bool verboseEvents;
 }
 
 final class CockpitDemoAcceptanceResult {
@@ -535,6 +537,7 @@ final class CockpitDemoAcceptanceRunner {
         ),
         sink: eventSink,
         progress: progress,
+        verboseEvents: request.verboseEvents,
       );
       await eventSink.flush();
       await eventSink.close();
@@ -1916,6 +1919,7 @@ Future<int> _consumeEvents({
   required DateTime deadline,
   required IOSink sink,
   required CockpitDemoAcceptanceProgress? progress,
+  required bool verboseEvents,
 }) async {
   var afterSequence = 0;
   var eventCount = 0;
@@ -1938,14 +1942,9 @@ Future<int> _consumeEvents({
           lastEventId = event.eventId;
           eventCount += 1;
           sink.writeln(jsonEncode(event.toJson()));
-          progress?.call(<String, Object?>{
-            'stage': 'run',
-            'runId': runId,
-            'sequence': event.sequence,
-            'kind': event.kind,
-            if (event.lifecycle != null) 'lifecycle': event.lifecycle!.name,
-            if (event.outcome != null) 'outcome': event.outcome!.name,
-          });
+          if (verboseEvents || _isAcceptanceProgressEvent(event)) {
+            progress?.call(_acceptanceProgressEvent(event));
+          }
           continue;
         }
         if (item is CockpitRunStreamGap) {
@@ -1991,6 +1990,39 @@ Future<int> _consumeEvents({
     'Acceptance run $runId did not finish.',
     Duration.zero,
   );
+}
+
+bool _isAcceptanceProgressEvent(CockpitRunEvent event) => switch (event.kind) {
+  'run.queued' ||
+  'run.running' ||
+  'run.completed' ||
+  'case.completed' ||
+  'step.failed' ||
+  'step.blocked' ||
+  'step.cancelled' => true,
+  _ => false,
+};
+
+Map<String, Object?> _acceptanceProgressEvent(CockpitRunEvent event) {
+  final primary = event.failure?.primary;
+  return <String, Object?>{
+    'stage': 'run',
+    'runId': event.runId,
+    'sequence': event.sequence,
+    'kind': event.kind,
+    if (event.caseId != null) 'caseId': event.caseId,
+    if (event.stepExecutionId != null) 'stepExecutionId': event.stepExecutionId,
+    if (event.stepStatus != null) 'status': event.stepStatus!.name,
+    if (event.lifecycle != null) 'lifecycle': event.lifecycle!.name,
+    if (event.outcome != null) 'outcome': event.outcome!.name,
+    if (event.stability != null) 'stability': event.stability!.name,
+    if (primary != null)
+      'failure': <String, Object?>{
+        'code': primary.code,
+        'message': primary.message,
+        'retryable': primary.retryable,
+      },
+  };
 }
 
 File _artifactDestination(

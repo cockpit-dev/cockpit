@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.2.0
+
+- Updated the Android plugin to the modern Gradle plugins DSL while preserving
+  Kotlin 17 compilation and the full cross-platform Flutter bridge contract.
+- Clarified the Flutter-first development path and its structured runtime,
+  widget, route, log, error, network, reload, capture, and command capabilities.
+
 ## 2.1.0
 
 - Synchronized the Flutter bridge release with Cockpit 2.1.0 and its

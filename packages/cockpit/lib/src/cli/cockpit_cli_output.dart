@@ -20,24 +20,28 @@ void cockpitAddCliOutputOptions(ArgParser parser) {
       defaultsTo: CockpitCliStdoutFormat.auto.name,
       help:
           'Terminal output: auto selects an AI projection or an output receipt; '
-          'json preserves the complete protocol envelope.',
+          'json uses the selected detail level.',
     )
     ..addOption(
       'detail',
       allowed: CockpitCliOutputDetail.values.map((value) => value.name),
-      defaultsTo: CockpitCliOutputDetail.standard.name,
-      help: 'AI output detail. This does not change runtime evidence capture.',
+      defaultsTo: CockpitCliOutputDetail.minimal.name,
+      help:
+          'AI information density: minimal for the next decision, standard '
+          'for diagnosis, full for the complete semantic response.',
     )
     ..addOption(
       'output',
-      help: 'Atomically write the complete JSON response to this file.',
+      help:
+          'Atomically write the selected JSON projection to this file. Use '
+          '--detail full for the complete response.',
     );
 }
 
 final class CockpitCliOutputSelection {
   const CockpitCliOutputSelection({
     this.stdoutFormat = CockpitCliStdoutFormat.auto,
-    this.detail = CockpitCliOutputDetail.standard,
+    this.detail = CockpitCliOutputDetail.minimal,
     this.outputPath,
   });
 
@@ -53,7 +57,7 @@ final class CockpitCliOutputSelection {
 
   factory CockpitCliOutputSelection.fromRawArguments(List<String> arguments) {
     CockpitCliStdoutFormat stdoutFormat = CockpitCliStdoutFormat.auto;
-    CockpitCliOutputDetail detail = CockpitCliOutputDetail.standard;
+    CockpitCliOutputDetail detail = CockpitCliOutputDetail.minimal;
     String? optionValue(String name, int index) {
       final argument = arguments[index];
       final prefix = '--$name=';
@@ -95,16 +99,53 @@ final class CockpitCliOutputSelection {
 
 final class CockpitCliOutputRenderer {
   const CockpitCliOutputRenderer({
-    this.minimalMaximumBytes = 4 * 1024,
-    this.standardMaximumBytes = 16 * 1024,
+    this.minimalMaximumBytes = 2 * 1024,
+    this.standardMaximumBytes = 6 * 1024,
+    this.presenter = const CockpitCliAiPresenter(),
   }) : assert(minimalMaximumBytes > 0),
        assert(standardMaximumBytes > 0);
 
   final int minimalMaximumBytes;
   final int standardMaximumBytes;
+  final CockpitCliAiPresenter presenter;
 
-  String renderJson({required Object? data}) =>
-      cockpitCompactJsonText(<String, Object?>{'ok': true, 'data': data});
+  String renderJson({
+    required String command,
+    required Object? data,
+    required CockpitCliOutputDetail detail,
+  }) {
+    if (detail == CockpitCliOutputDetail.full) {
+      return cockpitCompactJsonText(data);
+    }
+    final projection = _Projection(
+      detail == CockpitCliOutputDetail.minimal
+          ? const _ProjectionLimits(8, 16, 1024, 6)
+          : const _ProjectionLimits(32, 64, 4096, 10),
+    );
+    final projected = presenter._present(
+      command: command,
+      data: data,
+      projection: projection,
+      detail: detail,
+      path: r'$',
+    );
+    if (projection.omitted.isEmpty) {
+      return cockpitCompactJsonText(projected);
+    }
+    final metadata = <String, Object?>{
+      'detail': detail.name,
+      'truncated': true,
+      'omitted': projection.omitted,
+    };
+    return cockpitCompactJsonText(
+      projected is Map<Object?, Object?>
+          ? <String, Object?>{
+              ...Map<String, Object?>.from(projected),
+              '_meta': metadata,
+            }
+          : <String, Object?>{'items': projected, '_meta': metadata},
+    );
+  }
 
   String renderAi({
     required String command,
@@ -123,23 +164,24 @@ final class CockpitCliOutputRenderer {
         : standardMaximumBytes;
     final attempts = detail == CockpitCliOutputDetail.minimal
         ? const <_ProjectionLimits>[
-            _ProjectionLimits(8, 12, 512, 6),
-            _ProjectionLimits(4, 8, 256, 4),
-            _ProjectionLimits(2, 6, 128, 3),
+            _ProjectionLimits(4, 10, 512, 5),
+            _ProjectionLimits(2, 8, 256, 4),
+            _ProjectionLimits(1, 6, 128, 3),
           ]
         : const <_ProjectionLimits>[
-            _ProjectionLimits(50, 64, 2048, 10),
-            _ProjectionLimits(20, 40, 1024, 8),
-            _ProjectionLimits(10, 24, 512, 6),
-            _ProjectionLimits(5, 12, 256, 4),
+            _ProjectionLimits(16, 32, 1024, 7),
+            _ProjectionLimits(8, 24, 512, 6),
+            _ProjectionLimits(4, 16, 256, 4),
+            _ProjectionLimits(2, 10, 128, 3),
           ];
     for (final limits in attempts) {
       final projection = _Projection(limits);
-      final projected = _projectForCommand(
-        command,
-        data,
-        projection,
-        r'$.data',
+      final projected = presenter._present(
+        command: command,
+        data: data,
+        projection: projection,
+        detail: detail,
+        path: r'$.data',
       );
       final text = _renderSemantic(
         command: command,
@@ -150,8 +192,7 @@ final class CockpitCliOutputRenderer {
       if (utf8.encode(text).length <= maximumBytes) return text;
     }
     return <String>[
-      'cockpit.v=2 command=${_scalar(command)} status=${_status(data)} '
-          'detail=${detail.name}',
+      'status=${_status(data)}',
       'data available=true '
           'message=${_scalar('Result exceeds the selected AI output budget.')}',
       'truncated=true',
@@ -166,19 +207,38 @@ final class CockpitCliOutputRenderer {
     String? category,
     String? responsibleLayer,
     Map<String, Object?> details = const <String, Object?>{},
+    CockpitCliOutputDetail detail = CockpitCliOutputDetail.standard,
   }) {
+    final maximumMessageLength = switch (detail) {
+      CockpitCliOutputDetail.minimal => 512,
+      CockpitCliOutputDetail.standard => 1536,
+      CockpitCliOutputDetail.full => message.length,
+    };
+    final renderedMessage = message.length <= maximumMessageLength
+        ? message
+        : '${message.substring(0, maximumMessageLength)}...';
+    final projection = detail == CockpitCliOutputDetail.full
+        ? null
+        : _Projection(
+            detail == CockpitCliOutputDetail.minimal
+                ? const _ProjectionLimits(2, 8, 256, 3)
+                : const _ProjectionLimits(4, 12, 512, 4),
+          );
+    final renderedDetails = projection?.value(details, r'$.error.details');
     final state = <String>[
       'code=${_scalar(code)}',
       'retryable=$retryable',
       if (category != null) 'category=${_scalar(category)}',
       if (responsibleLayer != null)
         'responsibleLayer=${_scalar(responsibleLayer)}',
-      'message=${_scalar(message)}',
+      'message=${_scalar(renderedMessage)}',
     ];
     return <String>[
-      'cockpit.v=2 status=error',
+      'status=error',
       'error ${state.join(' ')}',
-      if (details.isNotEmpty) 'details ${_inlineMap(details)}',
+      if (details.isNotEmpty)
+        'details ${_inlineMap((renderedDetails ?? details) as Map<Object?, Object?>)}',
+      if (projection?.omitted.isNotEmpty ?? false) 'truncated=true',
     ].join('\n');
   }
 }
@@ -203,7 +263,11 @@ final class CockpitCliOutputWriter {
   }) async {
     CockpitCliFileReceipt? receipt;
     if (selection.outputPath case final path?) {
-      final fullText = _renderer.renderJson(data: data);
+      final fullText = _renderer.renderJson(
+        command: command,
+        data: data,
+        detail: selection.detail,
+      );
       receipt = await _writeFile(path, '$fullText\n');
     }
     final effectiveFormat =
@@ -221,7 +285,13 @@ final class CockpitCliOutputWriter {
         }
         stdoutSink.writeln(receipt.path);
       case CockpitCliStdoutFormat.json || CockpitCliStdoutFormat.jsonl:
-        stdoutSink.writeln(_renderer.renderJson(data: data));
+        stdoutSink.writeln(
+          _renderer.renderJson(
+            command: command,
+            data: data,
+            detail: selection.detail,
+          ),
+        );
       case CockpitCliStdoutFormat.ai || CockpitCliStdoutFormat.auto:
         if (receipt != null) {
           stdoutSink.writeln(receipt.render());
@@ -248,7 +318,6 @@ final class CockpitCliOutputWriter {
     required StringSink stderrSink,
   }) {
     final value = <String, Object?>{
-      'ok': false,
       'error': <String, Object?>{
         'code': code,
         'message': message,
@@ -260,7 +329,13 @@ final class CockpitCliOutputWriter {
     };
     switch (selection.stdoutFormat) {
       case CockpitCliStdoutFormat.json || CockpitCliStdoutFormat.jsonl:
-        stderrSink.writeln(cockpitCompactJsonText(value));
+        stderrSink.writeln(
+          _renderer.renderJson(
+            command: 'error',
+            data: value,
+            detail: selection.detail,
+          ),
+        );
       case CockpitCliStdoutFormat.auto ||
           CockpitCliStdoutFormat.ai ||
           CockpitCliStdoutFormat.path ||
@@ -273,6 +348,7 @@ final class CockpitCliOutputWriter {
             category: category,
             responsibleLayer: responsibleLayer,
             details: details,
+            detail: selection.detail,
           ),
         );
     }
@@ -288,7 +364,13 @@ final class CockpitCliOutputWriter {
       case CockpitCliStdoutFormat.path:
         stdoutSink.writeln(receipt.path);
       case CockpitCliStdoutFormat.json || CockpitCliStdoutFormat.jsonl:
-        stdoutSink.writeln(_renderer.renderJson(data: receipt.toJson()));
+        stdoutSink.writeln(
+          _renderer.renderJson(
+            command: 'output.receipt',
+            data: receipt.toJson(),
+            detail: selection.detail,
+          ),
+        );
       case CockpitCliStdoutFormat.auto || CockpitCliStdoutFormat.ai:
         stdoutSink.writeln(receipt.render());
     }
@@ -424,48 +506,1045 @@ final class _Projection {
   }
 }
 
-Object? _projectForCommand(
-  String command,
-  Object? data,
-  _Projection projection,
-  String path,
-) {
-  if ((command == 'case.validate' || command == 'suite.validate') &&
-      data is Map<Object?, Object?>) {
-    return projection.value(_compactValidationResult(data), path);
-  }
-  if (command == 'suite.report' && data is Map<Object?, Object?>) {
-    final report = Map<String, Object?>.from(data);
-    final rawCases = report['cases'];
-    if (rawCases is List<Object?>) {
-      final ordered = rawCases.indexed.toList(growable: false)
-        ..sort((left, right) {
-          final rank = _caseRank(left.$2).compareTo(_caseRank(right.$2));
-          return rank != 0 ? rank : left.$1.compareTo(right.$1);
-        });
-      report['cases'] = <Object?>[
-        for (final item in ordered) _compactReportCase(item.$2),
-      ];
+final class CockpitCliAiPresenter {
+  const CockpitCliAiPresenter();
+
+  Object? _present({
+    required String command,
+    required Object? data,
+    required _Projection projection,
+    required CockpitCliOutputDetail detail,
+    required String path,
+  }) {
+    if (command == 'operation.list' &&
+        data is List<Object?> &&
+        data.length > 1) {
+      final kinds =
+          data
+              .whereType<Map<Object?, Object?>>()
+              .map((operation) => operation['kind'])
+              .whereType<String>()
+              .toList(growable: false)
+            ..sort();
+      if (detail == CockpitCliOutputDetail.standard) {
+        return projection.value(<String, Object?>{
+          'operationCount': data.length,
+          'items': <Map<String, Object?>>[
+            for (final operation in data.whereType<Map<Object?, Object?>>())
+              _pick(operation, const <String>[
+                'kind',
+                'scope',
+                'mutationClass',
+                'executionMode',
+                'defaultTimeoutMs',
+                'maximumTimeoutMs',
+              ]),
+          ],
+        }, path);
+      }
+      return <String, Object?>{
+        'operationCount': data.length,
+        'kinds': kinds.join(','),
+      };
     }
-    return projection.value(report, path);
+    if (command == 'daemon.logs' && data is Map<Object?, Object?>) {
+      final lines = data['lines'];
+      if (lines is List<Object?>) {
+        final start = max(0, lines.length - projection.limits.maximumListItems);
+        return projection.value(<String, Object?>{
+          ...Map<String, Object?>.from(data),
+          if (start > 0) 'omittedLineCount': start,
+          'order': 'newestFirst',
+          'lines': lines
+              .skip(start)
+              .map(_compactDaemonLogLine)
+              .toList(growable: false)
+              .reversed
+              .toList(growable: false),
+        }, path);
+      }
+    }
+    if (command == 'operation.run' && data is Map<Object?, Object?>) {
+      return projection.value(
+        _compactOperationResult(
+          data,
+          standard: detail == CockpitCliOutputDetail.standard,
+        ),
+        path,
+      );
+    }
+    if (data is Map<Object?, Object?> &&
+        const <String>{
+          'daemon.start',
+          'daemon.status',
+          'daemon.restart',
+        }.contains(command)) {
+      return projection.value(
+        _pick(
+          data,
+          detail == CockpitCliOutputDetail.minimal
+              ? const <String>[
+                  'running',
+                  'healthy',
+                  'authorizationMode',
+                  'processId',
+                  'diagnostic',
+                ]
+              : const <String>[
+                  'running',
+                  'healthy',
+                  'authorizationMode',
+                  'processId',
+                  'endpoint',
+                  'engineVersion',
+                  'apiVersion',
+                  'startedAt',
+                  'diagnostic',
+                ],
+        ),
+        path,
+      );
+    }
+    if (data is Map<Object?, Object?> && command == 'target.inspect') {
+      return projection.value(
+        _compactTargetInspection(
+          data,
+          standard: detail == CockpitCliOutputDetail.standard,
+        ),
+        path,
+      );
+    }
+    if (data is Map<Object?, Object?> && command == 'run.get') {
+      return projection.value(
+        _compactRun(data, standard: detail == CockpitCliOutputDetail.standard),
+        path,
+      );
+    }
+    if (data is Map<Object?, Object?> &&
+        (command == 'case.run' || command == 'suite.run')) {
+      return projection.value(
+        _pick(data, const <String>['runId', 'replayed']),
+        path,
+      );
+    }
+    if (data is Map<Object?, Object?> && data['items'] is List<Object?>) {
+      final compacted = _compactCollection(command, data, detail);
+      if (compacted != null) return projection.value(compacted, path);
+    }
+    if (data is List<Object?>) {
+      final compacted = _compactCollection(command, <String, Object?>{
+        'totalCount': data.length,
+        'items': data,
+      }, detail);
+      if (compacted != null) return projection.value(compacted, path);
+    }
+    if ((command == 'case.validate' || command == 'suite.validate') &&
+        data is Map<Object?, Object?>) {
+      return projection.value(
+        _compactValidationResult(
+          data,
+          standard: detail == CockpitCliOutputDetail.standard,
+        ),
+        path,
+      );
+    }
+    if (command == 'suite.report' && data is Map<Object?, Object?>) {
+      final report = Map<String, Object?>.from(data);
+      final rawCases = report['cases'];
+      if (rawCases is List<Object?>) {
+        final ordered = rawCases.indexed.toList(growable: false)
+          ..sort((left, right) {
+            final rank = _caseRank(left.$2).compareTo(_caseRank(right.$2));
+            return rank != 0 ? rank : left.$1.compareTo(right.$1);
+          });
+        report['cases'] = <Object?>[
+          for (final item in ordered) _compactReportCase(item.$2),
+        ];
+      }
+      return projection.value(report, path);
+    }
+    return projection.value(data, path);
   }
-  return projection.value(data, path);
 }
 
-Map<String, Object?> _compactValidationResult(Map<Object?, Object?> value) {
+Map<String, Object?> _pick(
+  Map<Object?, Object?> source,
+  Iterable<String> keys,
+) => <String, Object?>{
+  for (final key in keys)
+    if (source[key] != null) key: source[key],
+};
+
+Map<String, Object?> _compactOperationResult(
+  Map<Object?, Object?> value, {
+  required bool standard,
+}) {
+  final output = value['output'];
+  final kind = value['kind'];
+  final startedAt = DateTime.tryParse('${value['startedAt'] ?? ''}');
+  final finishedAt = DateTime.tryParse('${value['finishedAt'] ?? ''}');
+  return <String, Object?>{
+    ..._pick(value, const <String>[
+      'operationId',
+      'kind',
+      'lifecycle',
+      'outcome',
+    ]),
+    if (standard) ..._pick(value, const <String>['rootId', 'workspaceId']),
+    if (standard && startedAt != null && finishedAt != null)
+      'durationMs': finishedAt.difference(startedAt).inMilliseconds,
+    if (output is Map<Object?, Object?>)
+      'output': _compactOperationPayload(
+        kind is String ? kind : '',
+        output,
+        operation: value,
+        standard: standard,
+      )
+    else
+      'output': ?output,
+    if (value['failure'] is Map<Object?, Object?>)
+      'failure': _compactFailure(value['failure']! as Map<Object?, Object?>),
+  };
+}
+
+Map<String, Object?> _compactOperationPayload(
+  String kind,
+  Map<Object?, Object?> output, {
+  required Map<Object?, Object?> operation,
+  required bool standard,
+}) {
+  final compacted = switch (kind) {
+    'analyze.files' => _compactAnalysisOutput(output, standard: standard),
+    'analyze.workspace' ||
+    'fix.workspace' ||
+    'format.workspace' ||
+    'test.workspace' ||
+    'package.pub' ||
+    'shell.run' => _compactProcessOutput(output, standard: standard),
+    'lsp.request' => _compactLspOutput(output, standard: standard),
+    'ui.inspect' => _compactUiOutput(output, standard: standard),
+    'surface.inspect' => _compactSurfaceOutput(output, standard: standard),
+    'logs.read' ||
+    'session.logs.read' => _compactLogsOutput(output, standard: standard),
+    'network.read' => _compactNetworkOutput(output, standard: standard),
+    'errors.read' => _compactErrorsOutput(output, standard: standard),
+    'command.run' || 'command.remote.execute' => _compactInteractiveOutput(
+      output,
+      standard: standard,
+    ),
+    'command.batch' || 'command.remote.batch' => _compactInteractiveBatchOutput(
+      output,
+      standard: standard,
+    ),
+    'app.reload' ||
+    'app.restart' ||
+    'session.development.launch' ||
+    'session.development.get' ||
+    'session.development.reload' ||
+    'session.development.stop' ||
+    'app.launch' ||
+    'target.launch' => _compactDevelopmentOutput(output, standard: standard),
+    'development.probe.collect' => _compactProbeOutput(
+      output,
+      standard: standard,
+    ),
+    'development.probe.compare' => _compactProbeComparisonOutput(
+      output,
+      standard: standard,
+    ),
+    'lease.list' => _compactLeaseListOutput(output, standard: standard),
+    _ => _compactGenericOperationOutput(output, standard: standard),
+  };
+  compacted.removeWhere(
+    (key, child) => _repeatsOperationIdentity(key, child, operation),
+  );
+  return compacted;
+}
+
+Map<String, Object?> _compactAnalysisOutput(
+  Map<Object?, Object?> output, {
+  required bool standard,
+}) {
+  final rawDiagnostics = output['diagnostics'];
+  final diagnostics = rawDiagnostics is List<Object?>
+      ? rawDiagnostics.whereType<Map<Object?, Object?>>().toList(
+          growable: false,
+        )
+      : const <Map<Object?, Object?>>[];
+  diagnostics.sort((left, right) {
+    final severity = _diagnosticRank(
+      left['severity'],
+    ).compareTo(_diagnosticRank(right['severity']));
+    if (severity != 0) return severity;
+    return '${left['path']}:${left['line']}:${left['column']}'.compareTo(
+      '${right['path']}:${right['line']}:${right['column']}',
+    );
+  });
+  return <String, Object?>{
+    ..._pick(output, const <String>[
+      'success',
+      'clean',
+      'summary',
+      'totalDiagnostics',
+      'severityCounts',
+      'diagnosticsTruncated',
+    ]),
+    if (standard) ..._pick(output, const <String>['toolchain', 'paths']),
+    if (diagnostics.isNotEmpty)
+      'diagnostics': <Map<String, Object?>>[
+        for (final diagnostic in diagnostics)
+          _pick(
+            diagnostic,
+            standard
+                ? const <String>[
+                    'severity',
+                    'code',
+                    'message',
+                    'path',
+                    'line',
+                    'column',
+                    'endLine',
+                    'endColumn',
+                    'correction',
+                  ]
+                : const <String>[
+                    'severity',
+                    'code',
+                    'message',
+                    'path',
+                    'line',
+                    'column',
+                  ],
+          ),
+      ],
+    if (output['success'] != true)
+      ..._pick(output, const <String>['stderrPreview', 'stdoutPreview']),
+    if (standard) ..._pick(output, const <String>['command', 'exitCode']),
+  };
+}
+
+int _diagnosticRank(Object? severity) => switch ('$severity'.toLowerCase()) {
+  'error' => 0,
+  'warning' => 1,
+  'info' => 2,
+  _ => 3,
+};
+
+Map<String, Object?> _compactProcessOutput(
+  Map<Object?, Object?> output, {
+  required bool standard,
+}) => <String, Object?>{
+  ..._pick(output, const <String>['success', 'exitCode']),
+  if (standard) ..._pick(output, const <String>['command']),
+  if (_nonEmpty(output['stderr'])) 'stderr': output['stderr'],
+  if (_nonEmpty(output['stdout'])) 'stdout': output['stdout'],
+};
+
+Map<String, Object?> _compactLspOutput(
+  Map<Object?, Object?> output, {
+  required bool standard,
+}) => <String, Object?>{
+  ..._pick(output, const <String>[
+    'command',
+    'summary',
+    'found',
+    'path',
+    'line',
+    'column',
+    'contents',
+    'signature',
+    'locations',
+    'symbols',
+    'items',
+  ]),
+  if (standard)
+    for (final entry in output.entries)
+      if (entry.key is String &&
+          entry.key != 'workspaceRoot' &&
+          entry.value != null)
+        entry.key! as String: entry.value,
+};
+
+Map<String, Object?> _compactUiOutput(
+  Map<Object?, Object?> output, {
+  required bool standard,
+}) => <String, Object?>{
+  if (output['app'] is Map<Object?, Object?>)
+    'app': _pick(output['app']! as Map<Object?, Object?>, const <String>[
+      'appId',
+      'targetId',
+      'platform',
+      'state',
+    ]),
+  ..._pick(output, const <String>[
+    'routeName',
+    'diagnosticLevel',
+    'truncated',
+    'uiSummary',
+    'delta',
+    'snapshotRef',
+  ]),
+  if (standard) ..._pick(output, const <String>['diagnostics', 'snapshot']),
+};
+
+Map<String, Object?> _compactSurfaceOutput(
+  Map<Object?, Object?> output, {
+  required bool standard,
+}) => <String, Object?>{
+  if (output['target'] is Map<Object?, Object?>)
+    'target': _pick(
+      output['target']! as Map<Object?, Object?>,
+      standard
+          ? const <String>[
+              'targetId',
+              'platform',
+              'deviceId',
+              'targetKind',
+              'environment',
+              'state',
+            ]
+          : const <String>['targetId', 'platform', 'targetKind', 'state'],
+    ),
+  ..._pick(output, const <String>[
+    'surfaceKind',
+    'selectedPlane',
+    'routeName',
+    'recommendedNextStep',
+    'diagnosticLevel',
+    'truncated',
+    'uiSummary',
+    'delta',
+    'snapshotRef',
+  ]),
+  if (output['capabilityProfile'] is Map<Object?, Object?>)
+    'capabilities': _compactCapabilities(
+      output['capabilityProfile']! as Map<Object?, Object?>,
+      standard: standard,
+    ),
+  if (standard) ..._pick(output, const <String>['diagnostics', 'snapshot']),
+};
+
+Map<String, Object?> _compactLogsOutput(
+  Map<Object?, Object?> output, {
+  required bool standard,
+}) {
+  final rawLines = output['lines'];
+  final lines = rawLines is List<Object?> ? rawLines : const <Object?>[];
+  final maximum = standard ? 32 : 8;
+  final start = max(0, lines.length - maximum);
+  return <String, Object?>{
+    ..._pick(output, const <String>[
+      'appId',
+      'source',
+      'available',
+      'routeName',
+      'missingReason',
+      'truncated',
+    ]),
+    'lineCount': lines.length,
+    if (start > 0) 'omittedLineCount': start,
+    if (lines.isNotEmpty) 'order': 'newestFirst',
+    if (lines.isNotEmpty)
+      'lines': lines
+          .skip(start)
+          .toList(growable: false)
+          .reversed
+          .toList(growable: false),
+  };
+}
+
+Map<String, Object?> _compactNetworkOutput(
+  Map<Object?, Object?> output, {
+  required bool standard,
+}) => <String, Object?>{
+  ..._pick(output, const <String>[
+    'appId',
+    'source',
+    'available',
+    'routeName',
+    'summary',
+    'recentFailures',
+  ]),
+  if (standard)
+    ..._pick(output, const <String>[
+      'endpointSummaries',
+      'endpointSummariesTruncated',
+      'entries',
+    ]),
+};
+
+Map<String, Object?> _compactErrorsOutput(
+  Map<Object?, Object?> output, {
+  required bool standard,
+}) {
+  final rawErrors = output['errors'];
+  final errors = rawErrors is List<Object?> ? rawErrors : const <Object?>[];
+  return <String, Object?>{
+    ..._pick(output, const <String>[
+      'appId',
+      'source',
+      'routeName',
+      'hasErrors',
+    ]),
+    'errorCount': errors.length,
+    if (errors.isNotEmpty)
+      'errors': <Object?>[
+        for (final error in errors.take(standard ? 20 : 4))
+          if (error is Map<Object?, Object?>)
+            _pick(
+              error,
+              standard
+                  ? const <String>[
+                      'kind',
+                      'message',
+                      'source',
+                      'routeName',
+                      'recordedAt',
+                    ]
+                  : const <String>['kind', 'message', 'routeName'],
+            )
+          else
+            error,
+      ],
+  };
+}
+
+Map<String, Object?> _compactInteractiveOutput(
+  Map<Object?, Object?> output, {
+  required bool standard,
+}) => <String, Object?>{
+  if (output['command'] is Map<Object?, Object?>)
+    'command': _pick(
+      output['command']! as Map<Object?, Object?>,
+      standard
+          ? const <String>[
+              'commandId',
+              'commandType',
+              'success',
+              'durationMs',
+              'locatorResolution',
+              'usedCaptureFallback',
+              'degradationReason',
+              'error',
+            ]
+          : const <String>[
+              'commandType',
+              'success',
+              'durationMs',
+              'usedCaptureFallback',
+              'degradationReason',
+              'error',
+            ],
+    ),
+  ..._pick(output, const <String>[
+    'selectedPlane',
+    'fallbackTrail',
+    'whatChanged',
+    'whatMatters',
+    'uiSummary',
+    'delta',
+    'snapshotRef',
+    'recommendedNextStep',
+    'artifacts',
+  ]),
+  if (standard)
+    ..._pick(output, const <String>['diagnostics', 'runtimeSteps', 'snapshot']),
+};
+
+Map<String, Object?> _compactInteractiveBatchOutput(
+  Map<Object?, Object?> output, {
+  required bool standard,
+}) => <String, Object?>{
+  ..._pick(output, const <String>[
+    'summary',
+    'recordingResult',
+    'finalSnapshot',
+  ]),
+  if (output['results'] is List<Object?>)
+    'results': <Object?>[
+      for (final result in output['results']! as List<Object?>)
+        if (result is Map<Object?, Object?>)
+          _compactInteractiveOutput(result, standard: standard)
+        else
+          result,
+    ],
+};
+
+Map<String, Object?> _compactDevelopmentOutput(
+  Map<Object?, Object?> output, {
+  required bool standard,
+}) {
+  final result = <String, Object?>{
+    ..._pick(output, const <String>[
+      'appId',
+      'sessionId',
+      'targetId',
+      'state',
+      'status',
+      'success',
+      'ready',
+      'processId',
+      'platform',
+      'routeName',
+      'reloadGeneration',
+      'message',
+    ]),
+  };
+  for (final key in const <String>['app', 'target', 'sessionHandle']) {
+    final child = output[key];
+    if (child is Map<Object?, Object?>) {
+      result[key] = _pick(
+        child,
+        standard
+            ? const <String>[
+                'appId',
+                'sessionId',
+                'targetId',
+                'platform',
+                'deviceId',
+                'targetKind',
+                'state',
+                'status',
+                'processId',
+                'mode',
+                'reloadGeneration',
+              ]
+            : const <String>[
+                'appId',
+                'sessionId',
+                'targetId',
+                'platform',
+                'state',
+                'status',
+                'processId',
+              ],
+      );
+    }
+  }
+  if (output['capabilities'] is Map<Object?, Object?>) {
+    result['capabilities'] = _compactCapabilities(
+      output['capabilities']! as Map<Object?, Object?>,
+      standard: standard,
+    );
+  }
+  return result;
+}
+
+Map<String, Object?> _compactProbeOutput(
+  Map<Object?, Object?> output, {
+  required bool standard,
+}) {
+  final probe = output['probe'];
+  return <String, Object?>{
+    if (probe is Map<Object?, Object?>)
+      'probe': standard
+          ? Map<String, Object?>.from(probe)
+          : _pick(probe, const <String>[
+              'probeId',
+              'capturedAt',
+              'reason',
+              'checkpoint',
+              'routeName',
+              'reloadGeneration',
+              'ui',
+              'network',
+              'runtime',
+              'screenshot',
+            ]),
+    ..._pick(output, const <String>['warnings']),
+  };
+}
+
+Map<String, Object?> _compactProbeComparisonOutput(
+  Map<Object?, Object?> output, {
+  required bool standard,
+}) => <String, Object?>{
+  if (output['fromProbe'] is Map<Object?, Object?>)
+    'fromProbeId': (output['fromProbe']! as Map<Object?, Object?>)['probeId'],
+  if (output['toProbe'] is Map<Object?, Object?>)
+    'toProbeId': (output['toProbe']! as Map<Object?, Object?>)['probeId'],
+  ..._pick(output, const <String>['delta']),
+  if (standard) ..._pick(output, const <String>['fromProbe', 'toProbe']),
+};
+
+Map<String, Object?> _compactCapabilities(
+  Map<Object?, Object?> capabilities, {
+  required bool standard,
+}) => standard
+    ? _pick(capabilities, const <String>[
+        'surfaceKinds',
+        'supportedCommands',
+        'actionCapabilities',
+        'evidenceCapabilities',
+        'qualityFlags',
+      ])
+    : <String, Object?>{
+        'surfaceCount': _listLength(capabilities['surfaceKinds']),
+        'commandCount': _listLength(capabilities['supportedCommands']),
+        'actionCount': _listLength(capabilities['actionCapabilities']),
+        'evidenceCount': _listLength(capabilities['evidenceCapabilities']),
+        ..._pick(capabilities, const <String>['qualityFlags']),
+      };
+
+Map<String, Object?> _compactLeaseListOutput(
+  Map<Object?, Object?> output, {
+  required bool standard,
+}) {
+  final rawItems = output['items'];
+  final items = rawItems is List<Object?>
+      ? rawItems.whereType<Map<Object?, Object?>>().toList(growable: false)
+      : const <Map<Object?, Object?>>[];
+  final counts = <String, int>{};
+  for (final item in items) {
+    final state = item['state'];
+    if (state is String) counts[state] = (counts[state] ?? 0) + 1;
+  }
+  final actionable = items.where((item) => item['state'] != 'released').toList()
+    ..sort((left, right) {
+      final rank = _leaseStateRank(
+        left['state'],
+      ).compareTo(_leaseStateRank(right['state']));
+      if (rank != 0) return rank;
+      return '${right['requestedAt']}'.compareTo('${left['requestedAt']}');
+    });
+  return <String, Object?>{
+    'counts': counts,
+    'actionableCount': actionable.length,
+    if (actionable.isNotEmpty)
+      'items': <Map<String, Object?>>[
+        for (final item in actionable)
+          _pick(
+            item,
+            standard
+                ? item.keys.whereType<String>()
+                : const <String>[
+                    'leaseId',
+                    'resourceKind',
+                    'resourceId',
+                    'state',
+                    'ownerId',
+                    'requestedAt',
+                    'expiresAt',
+                  ],
+          ),
+      ],
+  };
+}
+
+Map<String, Object?> _compactGenericOperationOutput(
+  Map<Object?, Object?> output, {
+  required bool standard,
+}) {
+  if (standard) {
+    return <String, Object?>{
+      for (final entry in output.entries)
+        if (entry.key is String && entry.value != null)
+          entry.key! as String: entry.value,
+    };
+  }
+  const preferred = <String>[
+    'success',
+    'valid',
+    'available',
+    'found',
+    'state',
+    'status',
+    'summary',
+    'message',
+    'count',
+    'totalCount',
+    'items',
+    'failure',
+    'error',
+    'recommendedNextStep',
+  ];
+  final result = _pick(output, preferred);
+  if (result.isNotEmpty) return result;
+  return <String, Object?>{
+    for (final entry in output.entries.take(8))
+      if (entry.key is String && entry.value != null)
+        entry.key! as String: entry.value,
+  };
+}
+
+bool _nonEmpty(Object? value) => value is String
+    ? value.trim().isNotEmpty
+    : value is Iterable<Object?>
+    ? value.isNotEmpty
+    : value != null;
+
+bool _repeatsOperationIdentity(
+  String key,
+  Object? child,
+  Map<Object?, Object?> operation,
+) =>
+    const <String>{'operationId', 'rootId', 'workspaceId'}.contains(key) &&
+    child == operation[key];
+
+Map<String, Object?> _compactTargetInspection(
+  Map<Object?, Object?> value, {
+  required bool standard,
+}) {
+  final capability = value['capabilityProfile'];
+  final system = value['systemControl'];
+  return <String, Object?>{
+    ..._pick(value, const <String>[
+      'targetId',
+      'platform',
+      'targetKind',
+      'foregroundSurface',
+      'selectedPlane',
+      'currentRouteName',
+    ]),
+    if (standard && value['fallbackTrail'] != null)
+      'fallbackTrail': value['fallbackTrail'],
+    if (capability is Map<Object?, Object?>)
+      'capabilities': _pick(capability, const <String>[
+        'surfaceKinds',
+        'actionCapabilities',
+        'evidenceCapabilities',
+        'qualityFlags',
+      ]),
+    if (value['uiSummary'] != null) 'uiSummary': value['uiSummary'],
+    if (value['whatMatters'] != null) 'whatMatters': value['whatMatters'],
+    if (system is Map<Object?, Object?>)
+      'systemControl': standard
+          ? _pick(system, const <String>[
+              'adapter',
+              'preferredPlane',
+              'fallbackOrder',
+              'availableActions',
+              'blockedActions',
+              'actionGroups',
+              'recommendedNextStep',
+            ])
+          : <String, Object?>{
+              ..._pick(system, const <String>['adapter', 'preferredPlane']),
+              'availableActionCount': _listLength(system['availableActions']),
+              'blockedActionCount': _listLength(system['blockedActions']),
+            },
+    if (standard && value['snapshotRef'] != null)
+      'snapshotRef': value['snapshotRef'],
+    if (standard && value['snapshot'] != null) 'snapshot': value['snapshot'],
+    if (value['recommendedNextStep'] != null)
+      'recommendedNextStep': value['recommendedNextStep'],
+  };
+}
+
+Map<String, Object?> _compactRun(
+  Map<Object?, Object?> value, {
+  required bool standard,
+}) => <String, Object?>{
+  ..._pick(value, const <String>[
+    'runId',
+    'documentKind',
+    'documentId',
+    'lifecycle',
+    'outcome',
+    'stability',
+  ]),
+  if (standard)
+    ..._pick(value, const <String>[
+      'workspaceId',
+      'submittedAt',
+      'startedAt',
+      'finishedAt',
+      'caseIds',
+      'activeAttemptIds',
+    ]),
+  if (!standard) 'caseCount': _listLength(value['caseIds']),
+  if (!standard && _listLength(value['activeAttemptIds']) > 0)
+    'activeAttemptCount': _listLength(value['activeAttemptIds']),
+  if (value['failure'] is Map<Object?, Object?>)
+    'failure': _compactFailure(value['failure']! as Map<Object?, Object?>),
+};
+
+int _listLength(Object? value) => value is List<Object?> ? value.length : 0;
+
+Object? _compactDaemonLogLine(Object? value) {
+  if (value is! String) return value;
+  try {
+    final decoded = jsonDecode(value);
+    if (decoded is! Map<Object?, Object?>) return value;
+    final fields = decoded['fields'];
+    final fieldMap = fields is Map<Object?, Object?> ? fields : null;
+    Map<Object?, Object?>? nested;
+    final nestedLine = fieldMap?['line'];
+    if (nestedLine is String) {
+      try {
+        final nestedDecoded = jsonDecode(nestedLine);
+        if (nestedDecoded is Map<Object?, Object?>) nested = nestedDecoded;
+      } on FormatException {
+        // Keep the bounded outer log record when a worker line is plain text.
+      }
+    }
+    final nestedFields = nested?['fields'];
+    final nestedFieldMap = nestedFields is Map<Object?, Object?>
+        ? nestedFields
+        : null;
+    return <String, Object?>{
+      if (decoded['timestamp'] != null) 'timestamp': decoded['timestamp'],
+      if ((nested?['level'] ?? decoded['level']) != null)
+        'level': nested?['level'] ?? decoded['level'],
+      if ((nested?['message'] ?? decoded['message']) != null)
+        'message': nested?['message'] ?? decoded['message'],
+      if (nested != null) 'source': 'workspaceWorker',
+      for (final key in const <String>['workspaceId', 'processId'])
+        if (fieldMap?[key] != null) key: fieldMap![key],
+      for (final key in const <String>['operationKind', 'errorType', 'error'])
+        if ((nestedFieldMap?[key] ?? fieldMap?[key]) != null)
+          key: nestedFieldMap?[key] ?? fieldMap?[key],
+    };
+  } on FormatException {
+    return value;
+  }
+}
+
+int _leaseStateRank(Object? state) => switch (state) {
+  'quarantined' => 0,
+  'active' || 'acquired' => 1,
+  'queued' || 'requested' => 2,
+  'expired' => 3,
+  _ => 4,
+};
+
+Map<String, Object?>? _compactCollection(
+  String command,
+  Map<Object?, Object?> value,
+  CockpitCliOutputDetail detail,
+) {
+  final standard = detail == CockpitCliOutputDetail.standard;
+  final keys = switch (command) {
+    'root.list' => <String>[
+      'rootId',
+      'state',
+      'label',
+      'canonicalPath',
+      if (standard) 'createdAt',
+    ],
+    'workspace.list' => <String>[
+      'workspaceId',
+      'projectId',
+      'rootId',
+      'state',
+      'canonicalPath',
+      if (standard) ...<String>['engineVersion', 'createdAt', 'updatedAt'],
+    ],
+    'workspace.documents' || 'case.list' || 'suite.list' => <String>[
+      'documentId',
+      'kind',
+      'relativePath',
+      'authoredId',
+      'caseId',
+      'title',
+      if (standard) ...<String>['sha256', 'modifiedAt', 'cases'],
+    ],
+    'target.discover' || 'target.list' => <String>[
+      'targetId',
+      'platform',
+      'deviceId',
+      'targetKind',
+      'environment',
+      'mode',
+      'appId',
+      'state',
+      if (standard) ...<String>['flavor', 'entrypoint', 'wdaUrl'],
+    ],
+    'artifact.list' => <String>[
+      'artifactId',
+      'attemptId',
+      'stepExecutionId',
+      'kind',
+      'relativePath',
+      'mediaType',
+      'sizeBytes',
+      if (standard) ...<String>['sha256', 'createdAt', 'role'],
+    ],
+    'run.events' => <String>[
+      'sequence',
+      'kind',
+      'caseId',
+      'stepExecutionId',
+      'status',
+      'lifecycle',
+      'outcome',
+      'stability',
+      'requestedPlane',
+      'actualPlane',
+      if (standard) ...<String>[
+        'timestamp',
+        'message',
+        'durationMs',
+        'failure',
+        'artifacts',
+      ],
+    ],
+    _ => null,
+  };
+  if (keys == null) return null;
+  final rawItems = value['items']! as List<Object?>;
+  return <String, Object?>{
+    ..._pick(value, const <String>[
+      'totalCount',
+      'requestedRelativePath',
+      'workspaceRoot',
+      'hint',
+    ]),
+    'items': <Object?>[
+      for (final item in rawItems)
+        if (item is Map<Object?, Object?>)
+          <String, Object?>{
+            for (final key in keys)
+              if (item[key] != null) key: item[key],
+            if (item['cases'] is List<Object?> &&
+                (item['cases']! as List<Object?>).isNotEmpty)
+              'caseCount': (item['cases']! as List<Object?>).length,
+            if (item['failure'] is Map<Object?, Object?>)
+              'failure': _compactFailure(
+                item['failure']! as Map<Object?, Object?>,
+              ),
+          }
+        else
+          item,
+    ],
+  };
+}
+
+Map<String, Object?> _compactFailure(Map<Object?, Object?> failure) {
+  final primary = failure['primary'];
+  final source = primary is Map<Object?, Object?> ? primary : failure;
+  return <String, Object?>{
+    for (final key in const <String>[
+      'code',
+      'category',
+      'message',
+      'retryable',
+      'responsibleLayer',
+    ])
+      if (source[key] != null) key: source[key],
+  };
+}
+
+Map<String, Object?> _compactValidationResult(
+  Map<Object?, Object?> value, {
+  required bool standard,
+}) {
   final document = value['document'];
   final sourceMap = value['sourceMap'];
   return <String, Object?>{
-    for (final key in const <String>['valid', 'sourceSha256'])
+    for (final key in <String>['valid', if (standard) 'sourceSha256'])
       if (value[key] != null) key: value[key],
     if (document is Map<Object?, Object?>)
-      'document': _compactValidatedDocument(document),
+      'document': _compactValidatedDocument(document, standard: standard),
     if (value['diagnostics'] != null) 'diagnostics': value['diagnostics'],
     if (sourceMap is List<Object?>) 'sourceMapEntries': sourceMap.length,
   };
 }
 
-Map<String, Object?> _compactValidatedDocument(Map<Object?, Object?> value) {
+Map<String, Object?> _compactValidatedDocument(
+  Map<Object?, Object?> value, {
+  required bool standard,
+}) {
   int lengthOf(String key) => switch (value[key]) {
     List<Object?> items => items.length,
     Map<Object?, Object?> items => items.length,
@@ -474,18 +1553,20 @@ Map<String, Object?> _compactValidatedDocument(Map<Object?, Object?> value) {
 
   final kind = value['kind'];
   return <String, Object?>{
-    for (final key in const <String>[
+    for (final key in <String>[
       'schemaVersion',
       'kind',
       'id',
       'name',
-      'description',
-      'tags',
-      'target',
-      'defaults',
-      'execution',
-      'report',
-      'matrix',
+      if (standard) ...<String>[
+        'description',
+        'tags',
+        'target',
+        'defaults',
+        'execution',
+        'report',
+        'matrix',
+      ],
     ])
       if (value[key] != null) key: value[key],
     'counts': kind == 'suite'
@@ -583,7 +1664,11 @@ int _priority(String key) {
 
 String _status(Object? data) {
   if (data is Map<Object?, Object?>) {
+    if (data['running'] == false) return 'stopped';
+    if (data['healthy'] == false) return 'unhealthy';
     if (data['healthy'] == true) return 'healthy';
+    if (data['valid'] == true) return 'valid';
+    if (data['success'] == true) return 'succeeded';
     if (data['success'] == false || data['valid'] == false) return 'failed';
     for (final key in const <String>[
       'outcome',
@@ -594,7 +1679,6 @@ String _status(Object? data) {
       final value = data[key];
       if (value is String && value.isNotEmpty) return value;
     }
-    if (data['running'] == false) return 'stopped';
   }
   return 'ok';
 }
@@ -612,10 +1696,7 @@ String _renderSemantic({
   required CockpitCliOutputDetail detail,
   Map<String, int> omitted = const <String, int>{},
 }) {
-  final lines = <String>[
-    'cockpit.v=2 command=${_scalar(command)} status=${_status(data)} '
-        'detail=${detail.name}',
-  ];
+  final lines = <String>['status=${_status(data)}'];
   if (data is Map<Object?, Object?>) {
     _renderSemanticMap(lines, data);
   } else if (data is List<Object?>) {
@@ -637,6 +1718,16 @@ void _renderSemanticMap(List<String> lines, Map<Object?, Object?> value) {
   const issueKeys = <String>['failure', 'error', 'errors', 'failures'];
   const resultKeys = <String>['output', 'result'];
   const summaryKeys = <String>['counts', 'summary'];
+  const statusKeys = <String>{
+    'healthy',
+    'success',
+    'valid',
+    'outcome',
+    'lifecycle',
+    'status',
+    'state',
+    'running',
+  };
   final handled = <String>{
     ...collectionKeys,
     ...issueKeys,
@@ -646,7 +1737,10 @@ void _renderSemanticMap(List<String> lines, Map<Object?, Object?> value) {
   final state = <String>[];
   for (final entry in value.entries) {
     final key = entry.key;
-    if (key is! String || handled.contains(key) || entry.value == null) {
+    if (key is! String ||
+        handled.contains(key) ||
+        statusKeys.contains(key) ||
+        entry.value == null) {
       continue;
     }
     if (entry.value is String || entry.value is num || entry.value is bool) {
@@ -659,17 +1753,32 @@ void _renderSemanticMap(List<String> lines, Map<Object?, Object?> value) {
     final child = value[key];
     if (child is Map<Object?, Object?> && child.isNotEmpty) {
       lines.add('$key ${_inlineMap(child)}');
+    } else if (child != null) {
+      lines.add('$key=${_inline(child)}');
     }
   }
   for (final key in issueKeys) {
     final child = value[key];
     if (child == null) continue;
-    lines.add('issues $key=${_inline(child)}');
+    final label = key == 'failure' || key == 'error' ? 'issue' : 'issues';
+    if (child is Map<Object?, Object?>) {
+      _renderSemanticSection(lines, label, child);
+    } else if (child is List<Object?>) {
+      _renderSemanticList(lines, label, child);
+    } else {
+      lines.add('$label ${_inline(child)}');
+    }
   }
   for (final key in resultKeys) {
     final child = value[key];
     if (child == null) continue;
-    lines.add('result $key=${_inline(child)}');
+    if (child is Map<Object?, Object?>) {
+      _renderSemanticSection(lines, 'result', child);
+    } else if (child is List<Object?>) {
+      _renderSemanticList(lines, 'result', child);
+    } else {
+      lines.add('result ${_inline(child)}');
+    }
   }
   for (final key in collectionKeys) {
     final child = value[key];
@@ -680,16 +1789,75 @@ void _renderSemanticMap(List<String> lines, Map<Object?, Object?> value) {
 
   for (final entry in value.entries) {
     final key = entry.key;
-    if (key is! String || handled.contains(key) || entry.value == null) {
+    if (key is! String ||
+        handled.contains(key) ||
+        statusKeys.contains(key) ||
+        entry.value == null) {
       continue;
     }
     if (entry.value is Map<Object?, Object?> || entry.value is List<Object?>) {
-      lines.add('$key ${_inline(entry.value)}');
+      if (entry.value is Map<Object?, Object?>) {
+        _renderSemanticSection(
+          lines,
+          key,
+          entry.value! as Map<Object?, Object?>,
+        );
+      } else {
+        _renderSemanticList(lines, key, entry.value! as List<Object?>);
+      }
+    }
+  }
+}
+
+void _renderSemanticSection(
+  List<String> lines,
+  String label,
+  Map<Object?, Object?> value,
+) {
+  final scalars = <String>[];
+  for (final entry in value.entries) {
+    if (entry.key is String &&
+        entry.value != null &&
+        (entry.value is String || entry.value is num || entry.value is bool)) {
+      scalars.add('${entry.key}=${_scalar(entry.value)}');
+    }
+  }
+  if (scalars.isNotEmpty) lines.add('$label ${scalars.join(' ')}');
+  for (final entry in value.entries) {
+    final key = entry.key;
+    final child = entry.value;
+    if (key is! String || child == null) continue;
+    if (child is Map<Object?, Object?>) {
+      _renderSemanticSection(lines, '$label.$key', child);
+    } else if (child is List<Object?> && child.isNotEmpty) {
+      _renderSemanticList(lines, '$label.$key', child);
     }
   }
 }
 
 void _renderSemanticList(List<String> lines, String key, List<Object?> values) {
+  final maps = values.whereType<Map<Object?, Object?>>().toList(
+    growable: false,
+  );
+  if (values.length > 1 && maps.length == values.length) {
+    final fields = <String>[];
+    for (final item in maps) {
+      for (final candidate in item.keys.whereType<String>()) {
+        if (!fields.contains(candidate)) fields.add(candidate);
+      }
+    }
+    fields.sort((left, right) {
+      final rank = _priority(left).compareTo(_priority(right));
+      return rank != 0 ? rank : left.compareTo(right);
+    });
+    lines.add('$key[${values.length}]{${fields.join('|')}}');
+    for (final item in maps) {
+      lines.add(
+        '  ${fields.map((field) => item[field] == null ? '-' : _inline(item[field])).join(' | ')}',
+      );
+    }
+    return;
+  }
   lines.add('$key count=${values.length}');
   for (var index = 0; index < values.length; index += 1) {
     final item = values[index];

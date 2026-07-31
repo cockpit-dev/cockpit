@@ -21,10 +21,10 @@
   <p><a href="README.md">English</a> · <a href="README.zh-CN.md">简体中文</a></p>
 </div>
 
-Cockpit 是面向 AI、CI 和本地开发的生产级 E2E 自动化与验证框架。
-Cockpit 2.0 可以把已安装的 Android/iOS 应用作为黑盒独立操控，也可以通过
-Flutter 语义桥获得更丰富的应用内能力；CLI、MCP 和未来独立客户端共享同一套
-类型化协议。
+Cockpit 是面向 AI 与 CI 的生产级应用开发、E2E 自动化与验证框架。Flutter 源码
+开发使用一等受管适配器，直接获得 widget、route、log、error、network 与 runtime
+结构化状态；已安装的 Android/iOS 生产应用则可以独立做无侵入黑盒操控与验证。
+两条路径职责不同，但通过 CLI、MCP 和未来客户端共享同一套类型化协议。
 
 核心能力包括：
 
@@ -43,15 +43,15 @@ Flutter 语义桥获得更丰富的应用内能力；CLI、MCP 和未来独立�
   JSON Schema 和 OpenAPI。
 - [`cockpit`](packages/cockpit)：Supervisor、worker、平台 driver、CLI、MCP、
   报告和 artifact。
-- [`flutter_cockpit`](packages/flutter_cockpit)：可选的 Flutter 语义、观测、截图
-  和录屏桥。
+- [`flutter_cockpit`](packages/flutter_cockpit)：一等 Flutter 开发与语义验证
+  适配器；纯黑盒用户无需接入。
 
 最低版本为 Dart 3.8.0、Flutter 3.32.0：
 
 ```yaml
 dev_dependencies:
   cockpit: any
-  flutter_cockpit: any # 仅 Flutter 语义桥需要
+  flutter_cockpit: any # Flutter 源码开发适配器
 ```
 
 Cockpit 应保持为开发依赖。黑盒原生应用测试不要求修改被测应用源码，也不要求
@@ -104,11 +104,11 @@ dart run cockpit workspace list
 
 ## CLI 输出
 
-默认 `auto` 格式是面向 Agent 终端循环的紧凑语义文本。使用
-`--detail minimal|standard|full` 控制投影体积，使用
-`--stdout-format json` 获取完整协议 envelope，使用 `jsonl` 流式读取 run event。
-`--output <file>` 会原子写入完整 JSON，终端仅返回路径、字节数和 SHA-256。
-artifact 二进制始终下载到 `--output`，绝不以 Base64 输出。
+默认 `auto` 格式是 `--detail minimal` 的 AI-first 语义文本。命令专用
+presenter 会消除重复 identity，并让同构集合只声明一次字段。文本和 JSON 都遵循
+`minimal|standard|full`；需要完整响应时使用
+`--detail full --stdout-format json --output <file>`。终端只返回路径、字节数和
+SHA-256，artifact 二进制始终要求 `--output`，绝不以 Base64 输出。
 
 ## 生产授权
 

@@ -431,34 +431,28 @@ void main() {
           CockpitLeaseState.quarantined,
         );
 
-        final secondFuture = fixture.registry.acquire(
-          leaseRequest(
-            key: 'quarantine.second',
-            resourceId: 'device-quarantine',
-            holderId: 'runB',
-          ),
+        final secondRequest = leaseRequest(
+          key: 'quarantine.second',
+          resourceId: 'device-quarantine',
+          holderId: 'runB',
         );
-        await waitForLeaseCondition(() async {
-          final leases = await fixture.registry.list(
+        await expectLater(
+          fixture.registry.acquire(secondRequest),
+          throwsLease('resourceQuarantined'),
+        );
+        expect(
+          (await fixture.registry.list(
             resourceId: 'device-quarantine',
-          );
-          return leases.any(
-            (lease) =>
-                lease.holderId == 'runB' &&
-                lease.state == CockpitLeaseState.queued,
-          );
-        });
-        var secondCompleted = false;
-        unawaited(secondFuture.then((_) => secondCompleted = true));
-        await Future<void>.delayed(const Duration(milliseconds: 20));
-        expect(secondCompleted, isFalse);
+          )).where((lease) => lease.holderId == 'runB'),
+          isEmpty,
+        );
 
         await fixture.registry.recoverResource(
           CockpitLeaseResourceKind.device,
           'device-quarantine',
         );
         clock.advance(const Duration(milliseconds: 5));
-        final second = await secondFuture;
+        final second = await fixture.registry.acquire(secondRequest);
         expect(second.state, CockpitLeaseState.active);
         await fixture.registry.release(
           second.leaseId,

@@ -9,7 +9,7 @@ import 'package:test/test.dart';
 
 void main() {
   group('CockpitCliOutputSelection', () {
-    test('defaults to AI standard output', () {
+    test('defaults to AI minimal output', () {
       final parser = ArgParser();
       cockpitAddCliOutputOptions(parser);
 
@@ -18,7 +18,7 @@ void main() {
       );
 
       expect(selection.stdoutFormat, CockpitCliStdoutFormat.auto);
-      expect(selection.detail, CockpitCliOutputDetail.standard);
+      expect(selection.detail, CockpitCliOutputDetail.minimal);
       expect(selection.outputPath, isNull);
     });
 
@@ -78,7 +78,7 @@ void main() {
 
     expect(exitCode, cockpitUsageExitCode);
     final envelope = jsonDecode(stderr.toString()) as Map<String, Object?>;
-    expect(envelope['ok'], isFalse);
+    expect(envelope, isNot(contains('ok')));
     expect((envelope['error']! as Map<String, Object?>)['code'], 'usage');
   });
 
@@ -125,17 +125,16 @@ void main() {
         data: const <String, Object?>{
           'running': true,
           'healthy': true,
+          'authorizationMode': 'yolo',
           'unused': null,
         },
-        detail: CockpitCliOutputDetail.standard,
+        detail: CockpitCliOutputDetail.minimal,
       );
 
-      expect(
-        text,
-        startsWith('cockpit.v=2 command=daemon.status status=healthy'),
-      );
-      expect(text, contains('running=true'));
-      expect(text, contains('healthy=true'));
+      expect(text, startsWith('status=healthy'));
+      expect(text, contains('authorizationMode=yolo'));
+      expect(text, isNot(contains('running=true')));
+      expect(text, isNot(contains('healthy=true')));
       expect(text, isNot(contains('unused')));
       expect(() => jsonDecode(text), throwsFormatException);
     });
@@ -204,12 +203,13 @@ void main() {
 
       expect(text.length, lessThanOrEqualTo(2400));
       expect(text, contains('status=failed'));
-      expect(text, contains('[0] entryId=failed-entry caseId=failed-case'));
+      expect(text, contains('cases['));
+      expect(text, contains('failed-entry | failed-case'));
       expect(text, contains('truncated=true'));
       expect(text, contains('omitted'));
     });
 
-    test('renders exact JSON without AI projection', () {
+    test('renders exact JSON at full detail', () {
       const renderer = CockpitCliOutputRenderer();
       final data = <String, Object?>{
         'items': <Object?>[
@@ -218,16 +218,107 @@ void main() {
         ],
       };
 
-      final text = renderer.renderJson(data: data);
-      final envelope = jsonDecode(text) as Map<String, Object?>;
-
-      expect(envelope['ok'], isTrue);
-      expect(
-        ((envelope['data']! as Map<String, Object?>)['items']!
-            as List<Object?>),
-        hasLength(100),
+      final text = renderer.renderJson(
+        command: 'artifact.list',
+        data: data,
+        detail: CockpitCliOutputDetail.full,
       );
-      expect(envelope, isNot(contains('truncated')));
+      final result = jsonDecode(text) as Map<String, Object?>;
+
+      expect(result['items']! as List<Object?>, hasLength(100));
+      expect(result, isNot(contains('_meta')));
+    });
+
+    test('projects analysis for both AI text and JSON detail', () {
+      const renderer = CockpitCliOutputRenderer();
+      final operation = <String, Object?>{
+        'operationId': 'operation-1',
+        'kind': 'analyze.files',
+        'lifecycle': 'completed',
+        'outcome': 'failed',
+        'workspaceId': 'workspace-1',
+        'output': <String, Object?>{
+          'workspaceRoot': '/private/workspace',
+          'success': false,
+          'clean': false,
+          'summary': '1 error, 1 warning',
+          'totalDiagnostics': 2,
+          'severityCounts': <String, Object?>{'error': 1, 'warning': 1},
+          'diagnostics': <Object?>[
+            <String, Object?>{
+              'severity': 'warning',
+              'code': 'unused_local_variable',
+              'message': 'Unused value.',
+              'path': 'lib/a.dart',
+              'line': 8,
+              'column': 3,
+              'documentationUrl': 'https://example.invalid/unused',
+            },
+            <String, Object?>{
+              'severity': 'error',
+              'code': 'undefined_identifier',
+              'message': 'Undefined name.',
+              'path': 'lib/b.dart',
+              'line': 4,
+              'column': 7,
+            },
+          ],
+        },
+      };
+
+      final ai = renderer.renderAi(
+        command: 'operation.run',
+        data: operation,
+        detail: CockpitCliOutputDetail.minimal,
+      );
+      final json =
+          jsonDecode(
+                renderer.renderJson(
+                  command: 'operation.run',
+                  data: operation,
+                  detail: CockpitCliOutputDetail.minimal,
+                ),
+              )
+              as Map<String, Object?>;
+
+      expect(ai, startsWith('status=failed'));
+      expect(ai, contains('undefined_identifier'));
+      expect(ai, isNot(contains('documentationUrl')));
+      expect(ai, isNot(contains('/private/workspace')));
+      final output = json['output']! as Map<String, Object?>;
+      final diagnostics = output['diagnostics']! as List<Object?>;
+      expect((diagnostics.first as Map<String, Object?>)['severity'], 'error');
+      expect(output, isNot(contains('workspaceRoot')));
+    });
+
+    test('keeps latest Flutter logs and omits repeated operation identity', () {
+      const renderer = CockpitCliOutputRenderer();
+      final text = renderer.renderAi(
+        command: 'operation.run',
+        data: <String, Object?>{
+          'operationId': 'operation-logs',
+          'workspaceId': 'workspace-1',
+          'kind': 'logs.read',
+          'lifecycle': 'completed',
+          'outcome': 'succeeded',
+          'output': <String, Object?>{
+            'operationId': 'operation-logs',
+            'workspaceId': 'workspace-1',
+            'appId': 'app-1',
+            'source': 'app_snapshot',
+            'available': true,
+            'lines': <Object?>[
+              for (var index = 0; index < 20; index += 1) 'line-$index',
+            ],
+          },
+        },
+        detail: CockpitCliOutputDetail.minimal,
+      );
+
+      expect(RegExp('operation-logs').allMatches(text), hasLength(1));
+      expect(text, contains('line-19'));
+      expect(text, isNot(contains('line-0')));
+      expect(text, contains('omittedLineCount=12'));
     });
   });
 
@@ -252,13 +343,15 @@ void main() {
           'lifecycle': 'completed',
           'outcome': 'passed',
         },
-        selection: CockpitCliOutputSelection(outputPath: destination.path),
+        selection: CockpitCliOutputSelection(
+          detail: CockpitCliOutputDetail.full,
+          outputPath: destination.path,
+        ),
       );
 
       final persisted =
           jsonDecode(await destination.readAsString()) as Map<String, Object?>;
-      expect(persisted['ok'], isTrue);
-      expect((persisted['data']! as Map<String, Object?>)['runId'], 'run-1');
+      expect(persisted['runId'], 'run-1');
       expect(stdout.toString(), startsWith('output=${destination.path} '));
       expect(stdout.toString(), contains('sizeBytes='));
       expect(stdout.toString(), matches(RegExp(r'sha256=[0-9a-f]{64}')));

@@ -96,10 +96,13 @@ secondary native drivers. Read the sanitized secondary driver profile from
 
 ## Output Rules
 
-`auto`/`ai` stdout is the normal low-token format. Use `--detail minimal` for
-routine loops. Use `--stdout-format json` or `jsonl` only when a program needs
-exact data. For a complete non-binary response, `--output <path>` writes JSON
-atomically and stdout becomes a bounded path/size/SHA-256 receipt.
+`auto`/`ai` stdout at `--detail minimal` is the normal low-token format.
+Command-specific presenters remove repeated identities and share collection
+field headers. Text, `json`, and `jsonl` all honor
+`--detail minimal|standard|full`; select `full` only for the complete object.
+For a complete non-binary response, use
+`--detail full --stdout-format json --output <path>` so stdout is only a bounded
+path/size/SHA-256 receipt.
 
 `artifact read` requires `--output`; it verifies media type, byte size, and
 SHA-256 before committing the file. Never place binary data or Base64 in

@@ -382,6 +382,7 @@ final class CockpitWorkerRuntime {
     );
     final adapters = <CockpitWorkspaceOperationAdapter>[
       documents.operationAdapter(),
+      documents.listOperationAdapter(),
       targetRegistration.workspaceAdapter(),
       ...CockpitWorkspaceToolingAdapters(
         workspaceId: configuration.workspaceId,

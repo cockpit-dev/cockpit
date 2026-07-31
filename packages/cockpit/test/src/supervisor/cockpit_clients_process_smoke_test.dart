@@ -530,6 +530,8 @@ Future<Map<String, Object?>> _cli(
       ...arguments,
       '--stdout-format',
       'json',
+      '--detail',
+      'full',
     ],
     workingDirectory: packageRoot,
     environment: environment,
@@ -540,11 +542,9 @@ Future<Map<String, Object?>> _cli(
     0,
     reason: 'cockpit ${arguments.join(' ')}\n${result.stderr}',
   );
-  final envelope = Map<String, Object?>.from(
+  return Map<String, Object?>.from(
     jsonDecode('${result.stdout}'.trim()) as Map<Object?, Object?>,
   );
-  expect(envelope['ok'], isTrue, reason: '${result.stderr}');
-  return Map<String, Object?>.from(envelope['data']! as Map<Object?, Object?>);
 }
 
 Future<List<Map<String, Object?>>> _mcp(

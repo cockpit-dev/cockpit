@@ -1,5 +1,19 @@
 # Changelog
 
+## 2.2.0
+
+- Added dedicated minimal, standard, and full AI-first presenters for text and
+  JSON output, with compact collection tables, no repeated response envelope,
+  and file-only binary delivery.
+- Fixed daemon and workspace-worker startup from global activation, `dart run`,
+  and external project directories by preserving the Cockpit package config.
+- Added monorepo-aware Flutter entrypoint resolution, isolated worker temporary
+  artifacts, non-exclusive target inspection, actionable quarantined-resource
+  failures, and paginated document listing with bounded operation journals.
+- Expanded the release acceptance workflow and self-contained agent skill for
+  Flutter-first development, black-box and mixed-stack E2E, launch injection,
+  per-operation timeouts, evidence, offline reports, and platform recovery.
+
 ## 2.1.0
 
 - Added `suite report --output-dir` to export a complete offline report bundle

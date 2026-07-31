@@ -61,6 +61,7 @@ final class CockpitDaemonLifecycleClient {
     required this.paths,
     required this.dartExecutable,
     required this.daemonEntrypoint,
+    this.packageConfigPath,
     required this.permissionHardener,
     required this.directorySyncer,
     this.requiredApiMajor = 2,
@@ -70,6 +71,7 @@ final class CockpitDaemonLifecycleClient {
   final CockpitHomePaths paths;
   final String dartExecutable;
   final String daemonEntrypoint;
+  final String? packageConfigPath;
   final CockpitPermissionHardener permissionHardener;
   final CockpitDirectorySyncer directorySyncer;
   final int requiredApiMajor;
@@ -93,8 +95,8 @@ final class CockpitDaemonLifecycleClient {
           await lock.lock(FileLock.blockingExclusive);
           final rechecked = await _usableDiscovery();
           if (rechecked != null) return rechecked;
-          await _startProcess();
-          return _waitUntilReady();
+          final processId = await _startProcess();
+          return _waitUntilReady(startedProcessId: processId);
         } finally {
           try {
             await lock.unlock();
@@ -333,8 +335,8 @@ final class CockpitDaemonLifecycleClient {
       await lock.lock(FileLock.blockingExclusive);
       final rechecked = await _usableDiscovery();
       if (rechecked != null) return rechecked;
-      await _startProcess(authorizationMode);
-      return _waitUntilReady();
+      final processId = await _startProcess(authorizationMode);
+      return _waitUntilReady(startedProcessId: processId);
     } finally {
       try {
         await lock.unlock();
@@ -344,7 +346,7 @@ final class CockpitDaemonLifecycleClient {
     }
   });
 
-  Future<void> _startProcess([
+  Future<int> _startProcess([
     CockpitAuthorizationMode authorizationMode =
         CockpitAuthorizationMode.restricted,
   ]) async {
@@ -354,9 +356,10 @@ final class CockpitDaemonLifecycleClient {
         'Daemon executable paths are not configured.',
       );
     }
-    await Process.start(
+    final process = await Process.start(
       dartExecutable,
       <String>[
+        if (packageConfigPath != null) '--packages=$packageConfigPath',
         daemonEntrypoint,
         '--home=${paths.home}',
         '--authorization-mode=${authorizationMode.name}',
@@ -367,9 +370,12 @@ final class CockpitDaemonLifecycleClient {
       },
       mode: ProcessStartMode.detached,
     );
+    return process.pid;
   }
 
-  Future<CockpitDaemonDiscovery> _waitUntilReady() async {
+  Future<CockpitDaemonDiscovery> _waitUntilReady({
+    required int startedProcessId,
+  }) async {
     final deadline = DateTime.now().add(startTimeout);
     Object? lastError;
     while (DateTime.now().isBefore(deadline)) {
@@ -378,6 +384,14 @@ final class CockpitDaemonLifecycleClient {
         if (discovery != null) return discovery;
       } on Object catch (error) {
         lastError = error;
+      }
+      final processIdentity = await const CockpitSystemProcessIdentityProbe()
+          .readStartIdentity(startedProcessId);
+      if (processIdentity == null) {
+        throw CockpitDaemonException(
+          'daemonStartFailed',
+          'Daemon process exited before becoming healthy. Inspect ${paths.daemonLog}.',
+        );
       }
       await Future<void>.delayed(const Duration(milliseconds: 50));
     }

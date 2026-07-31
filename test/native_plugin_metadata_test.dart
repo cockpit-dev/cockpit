@@ -394,10 +394,9 @@ void main() {
       androidGradle,
       contains('org.jetbrains.kotlin:kotlin-gradle-plugin'),
     );
-    expect(
-      androidGradle,
-      contains('apply plugin: "org.jetbrains.kotlin.android"'),
-    );
+    expect(androidGradle, contains('id "org.jetbrains.kotlin.android"'));
+    expect(androidGradle, contains('id "com.android.library"'));
+    expect(androidGradle, isNot(contains('apply plugin:')));
     expect(androidGradle, contains('KotlinCompile'));
   });
 }

@@ -3,7 +3,7 @@
     <img src="https://raw.githubusercontent.com/cockpit-dev/cockpit/main/assets/brand/cockpit-mark.svg" width="128" alt="Cockpit logo">
   </a>
   <h1>cockpit</h1>
-  <p><strong>Headless E2E runner, Supervisor, CLI, MCP, native drivers, and offline reports.</strong></p>
+  <p><strong>Flutter development control plane and headless black-box E2E runner.</strong></p>
   <p>
     <a href="https://pub.dev/packages/cockpit"><img src="https://img.shields.io/pub/v/cockpit?logo=dart&amp;label=pub.dev" alt="cockpit version on pub.dev"></a>
     <a href="https://pub.dev/packages/cockpit/score"><img src="https://img.shields.io/pub/points/cockpit?logo=dart" alt="cockpit pub points"></a>
@@ -19,10 +19,10 @@
   <p><a href="https://github.com/cockpit-dev/cockpit/blob/main/packages/cockpit/README.md">English</a> · <a href="https://github.com/cockpit-dev/cockpit/blob/main/packages/cockpit/README.zh-CN.md">简体中文</a></p>
 </div>
 
-`cockpit` is the authenticated host client and headless execution package for
-Cockpit 2.0. It contains the Supervisor daemon, isolated workspace worker,
-resource-oriented CLI, and a thin MCP server. It does not bundle a GUI or a web
-dashboard.
+`cockpit` is the authenticated host control plane for Flutter/Dart development
+and headless black-box E2E. It contains the Supervisor daemon, isolated
+workspace worker, resource-oriented CLI, and a thin MCP server. It does not
+bundle a GUI or a web dashboard.
 
 ## Install
 
@@ -70,10 +70,11 @@ dart run cockpit workspace list
 
 ## CLI Output
 
-The default `auto` format is compact semantic text for agent loops. Select
-`--detail minimal|standard|full`, explicit lossless `--stdout-format json`, or
-streaming `jsonl` for `run events`. `--output <file>` atomically writes complete
-JSON and prints a bounded path/size/SHA-256 receipt. `artifact read` requires
+The default `auto` format is command-specific AI semantic text at
+`--detail minimal`. Text and JSON both honor
+`--detail minimal|standard|full`; use
+`--detail full --stdout-format json --output <file>` for the complete object.
+`--output` prints a bounded path/size/SHA-256 receipt. `artifact read` requires
 `--output` and never emits binary or Base64 data.
 
 Workspace commands accept `--workspace-id`. When it is omitted, Cockpit
