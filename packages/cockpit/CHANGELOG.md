@@ -7,9 +7,10 @@
   and file-only binary delivery.
 - Fixed daemon and workspace-worker startup from global activation, `dart run`,
   and external project directories by preserving the Cockpit package config.
-- Added monorepo-aware Flutter entrypoint resolution, isolated worker temporary
-  artifacts, non-exclusive target inspection, actionable quarantined-resource
-  failures, and paginated document listing with bounded operation journals.
+- Added monorepo-aware Flutter entrypoint resolution, isolated producer
+  artifacts, short per-worker temporary roots for socket-bound toolchains,
+  non-exclusive target inspection, actionable quarantined-resource failures,
+  and paginated document listing with bounded operation journals.
 - Expanded the release acceptance workflow and self-contained agent skill for
   Flutter-first development, black-box and mixed-stack E2E, launch injection,
   per-operation timeouts, evidence, offline reports, and platform recovery.
