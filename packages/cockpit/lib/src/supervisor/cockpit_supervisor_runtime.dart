@@ -31,10 +31,28 @@ import 'cockpit_supervisor_run_admission_store.dart';
 import 'cockpit_supervisor_run_projection.dart';
 import 'cockpit_supervisor_authorization.dart';
 import 'cockpit_supervisor_operation_catalog.dart';
+import 'cockpit_supervisor_operation_schema.dart';
 import 'cockpit_worker_pool.dart';
 import 'cockpit_worker_resource_authority.dart';
 
 const cockpitSupervisorEngineVersion = '2.0.0';
+
+final class CockpitDevelopmentArtifactFile {
+  const CockpitDevelopmentArtifactFile({
+    required this.artifactId,
+    required this.mediaType,
+    required this.file,
+    required this.sizeBytes,
+    required this.sha256,
+  });
+
+  final String artifactId;
+  final String mediaType;
+  final File file;
+  final int sizeBytes;
+  final String sha256;
+}
+
 final cockpitSupervisorFeatures = <CockpitFeatureDescriptor>[
   CockpitFeatureDescriptor(
     id: 'standaloneCaseRuns',
@@ -96,6 +114,7 @@ final class CockpitSupervisorRuntime {
   final Map<String, CockpitSupervisorRunProjection> _projections;
   final Map<String, Future<void>> _workerInitialization = {};
   final Map<String, _ActiveRun> _activeRuns = {};
+  final Map<String, String> _validatedRunOwners = {};
   bool _draining = false;
 
   static Future<CockpitSupervisorRuntime> initialize({
@@ -164,15 +183,12 @@ final class CockpitSupervisorRuntime {
             portBridge: bridge,
           ),
       environment: cockpitMinimumChildEnvironment(
-        environment: policy.isYolo
-            ? Platform.environment
-            : <String, String>{
-                for (final name in policy.allowedEnvironmentSecretNames)
-                  name: ?Platform.environment[name],
-              },
+        environment: <String, String>{
+          for (final name in policy.allowedEnvironmentSecretNames)
+            name: ?Platform.environment[name],
+        },
       ),
       allowedEnvironmentSecretNames: policy.allowedEnvironmentSecretNames,
-      allowAllEnvironmentSecrets: policy.isYolo,
     );
     return CockpitSupervisorRuntime._(
       resources: resources,
@@ -229,6 +245,9 @@ final class CockpitSupervisorRuntime {
 
   List<CockpitOperationDescriptor> supervisorOperations() =>
       CockpitSupervisorOperationCatalog.supervisorOperations;
+
+  Map<String, Object?> operationSchema() =>
+      CockpitSupervisorOperationSchema.document();
 
   Future<CockpitOperationResult> executeSupervisorOperation(
     CockpitOperationInvocation invocation,
@@ -297,8 +316,7 @@ final class CockpitSupervisorRuntime {
     }
     final finishedAt = DateTime.now().toUtc();
     return CockpitOperationResult(
-      operationId:
-          'operation_${CockpitSecureTokenGenerator().nextToken(byteLength: 16)}',
+      operationId: 'op-${CockpitSecureTokenGenerator().nextIdToken()}',
       kind: invocation.kind,
       rootId: invocation.rootId,
       lifecycle: CockpitOperationLifecycle.completed,
@@ -507,7 +525,7 @@ final class CockpitSupervisorRuntime {
     await _initializeWorker(spec);
     final key =
         invocation.idempotencyKey?.value ??
-        'readonly-${CockpitSecureTokenGenerator().nextToken(byteLength: 16)}';
+        'ro-${CockpitSecureTokenGenerator().nextIdToken()}';
     final submittedAt = DateTime.now().toUtc();
     final deadline = _resolveOperationDeadline(
       metadata.descriptor,
@@ -536,6 +554,59 @@ final class CockpitSupervisorRuntime {
     return result.result;
   }
 
+  Future<CockpitDevelopmentArtifactFile> developmentArtifactFile(
+    String workspaceId,
+    String sessionId,
+    String artifactId,
+  ) async {
+    workerId(workspaceId, r'$.workspaceId');
+    workerId(sessionId, r'$.sessionId');
+    workerId(artifactId, r'$.artifactId');
+    final spec = await _workerSpec(workspaceId);
+    await _initializeWorker(spec);
+    final raw = await workerPool.call(
+      spec,
+      method: 'readSessionArtifact',
+      idempotencyKey: 'read-session-artifact-$sessionId-$artifactId',
+      deadline: _deadline(),
+      params: <String, Object?>{
+        'sessionId': sessionId,
+        'artifactId': artifactId,
+      },
+    );
+    final result = CockpitWorkerReadSessionArtifactResult.fromJson(raw);
+    if (result.sessionId != sessionId || result.artifactId != artifactId) {
+      throw const FormatException('Session artifact ownership is invalid.');
+    }
+    final stateRoot = p.normalize(
+      await Directory(spec.stateRoot).resolveSymbolicLinks(),
+    );
+    final file = File(result.retainedPath);
+    final canonicalFile = p.normalize(await file.resolveSymbolicLinks());
+    if (!p.isWithin(stateRoot, canonicalFile)) {
+      throw const FormatException('Session artifact escaped worker state.');
+    }
+    final stat = await File(canonicalFile).stat();
+    final digest = (await sha256.bind(File(canonicalFile).openRead()).first)
+        .toString();
+    if (stat.type != FileSystemEntityType.file ||
+        stat.size != result.sizeBytes ||
+        digest != result.sha256) {
+      throw _apiError(
+        CockpitErrorCode.evidenceFailed,
+        CockpitErrorCategory.evidence,
+        'Session artifact changed before it could be downloaded.',
+      );
+    }
+    return CockpitDevelopmentArtifactFile(
+      artifactId: result.artifactId,
+      mediaType: result.mediaType,
+      file: File(canonicalFile),
+      sizeBytes: result.sizeBytes,
+      sha256: result.sha256,
+    );
+  }
+
   Future<List<CockpitDocumentResource>> documents(
     String workspaceId, {
     CockpitIndexedDocumentKind? kind,
@@ -547,7 +618,11 @@ final class CockpitSupervisorRuntime {
     while (true) {
       final page = await documentPage(
         workspaceId,
-        kind: kind,
+        kind: switch (kind) {
+          null => null,
+          CockpitIndexedDocumentKind.testCase => 'case',
+          _ => kind.name,
+        },
         relativePath: relativePath,
         offset: offset,
         limit: 100,
@@ -565,17 +640,12 @@ final class CockpitSupervisorRuntime {
 
   Future<({List<CockpitDocumentResource> items, int totalCount})> documentPage(
     String workspaceId, {
-    CockpitIndexedDocumentKind? kind,
+    String? kind,
     String? relativePath,
     required int offset,
     required int limit,
     required bool refreshIndex,
   }) async {
-    final wireKind = kind == null
-        ? null
-        : kind == CockpitIndexedDocumentKind.testCase
-        ? 'case'
-        : kind.name;
     if (refreshIndex) {
       final indexed = await executeWorkspaceOperation(
         workspaceId,
@@ -600,7 +670,7 @@ final class CockpitSupervisorRuntime {
         kind: 'document.list',
         workspaceId: workspaceId,
         input: <String, Object?>{
-          'kind': ?wireKind,
+          'kind': ?kind,
           'relativePath': ?relativePath,
           'offset': offset,
           'limit': limit,
@@ -799,7 +869,7 @@ final class CockpitSupervisorRuntime {
         params: <String, Object?>{'invocation': invocation.toJson()},
       );
       if (call.requestId != run.requestId ||
-          run.runId != 'run_${call.requestId}') {
+          run.runId != 'rn-${call.requestId}') {
         throw StateError('Worker request identity diverged from admission.');
       }
       operation = CockpitWorkerOperationResult.fromJson(
@@ -1346,6 +1416,9 @@ final class CockpitSupervisorRuntime {
   );
 
   Future<String> _findRunOwner(String runId) async {
+    final validatedOwner = _validatedRunOwners[runId];
+    if (validatedOwner != null) return validatedOwner;
+
     final admission = await runAdmissions.findRun(runId);
     if (admission == null) {
       throw _apiError(
@@ -1355,6 +1428,7 @@ final class CockpitSupervisorRuntime {
       );
     }
     await _validateProjectedOwner(runId, admission.workspaceId);
+    _validatedRunOwners[runId] = admission.workspaceId;
     return admission.workspaceId;
   }
 

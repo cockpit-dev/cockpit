@@ -3,6 +3,7 @@ import 'cockpit_recording_mode.dart';
 import 'cockpit_recording_purpose.dart';
 
 final class CockpitRecordingRequest {
+  /// Creates a CockpitRecordingRequest.
   const CockpitRecordingRequest({
     required this.purpose,
     required this.name,
@@ -23,6 +24,7 @@ final class CockpitRecordingRequest {
 
   bool get allowsFallback => allowFallback ?? _defaultAllowsFallback();
 
+  /// Encodes this CockpitRecordingRequest as a JSON object.
   Map<String, Object?> toJson() => {
     'purpose': purpose.name,
     'name': name,
@@ -33,6 +35,7 @@ final class CockpitRecordingRequest {
     'tailStabilizationMs': tailStabilizationDelay.inMilliseconds,
   };
 
+  /// Decodes a CockpitRecordingRequest from a JSON object.
   factory CockpitRecordingRequest.fromJson(Map<String, Object?> json) {
     final purpose = CockpitRecordingPurpose.fromJson(json['purpose']);
     return CockpitRecordingRequest(
@@ -78,6 +81,7 @@ final class CockpitRecordingRequest {
     tailStabilizationDelay,
   );
 
+  /// Returns a copy of this CockpitRecordingRequest with supplied fields replaced.
   CockpitRecordingRequest copyWith({
     CockpitRecordingPurpose? purpose,
     String? name,

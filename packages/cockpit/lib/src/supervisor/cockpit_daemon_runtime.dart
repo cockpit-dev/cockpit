@@ -8,6 +8,7 @@ import 'package:cockpit_protocol/cockpit_protocol.dart';
 
 import '../foundation/cockpit_home.dart';
 import '../foundation/cockpit_ids.dart';
+import '../foundation/cockpit_internal_process.dart';
 import '../foundation/cockpit_locked_json_store.dart';
 import '../foundation/cockpit_permissions.dart';
 import '../worker/cockpit_worker_logger.dart';
@@ -17,7 +18,10 @@ import 'cockpit_supervisor_http_api.dart';
 import 'cockpit_supervisor_authorization.dart';
 import 'cockpit_supervisor_runtime.dart';
 
-Future<int> runCockpitDaemon(List<String> arguments) async {
+Future<int> runCockpitDaemon(
+  List<String> arguments, {
+  bool selfContained = false,
+}) async {
   final configuration = _DaemonConfiguration.parse(arguments);
   final platform = Platform.isWindows
       ? CockpitHostPlatform.windows
@@ -46,8 +50,10 @@ Future<int> runCockpitDaemon(List<String> arguments) async {
   await hardener.hardenFile(logFile);
   final logSink = logFile.openWrite(mode: FileMode.append);
   final logger = CockpitWorkerLogger(stderrSink: logSink);
-  final workerEntrypoint = await _workerEntrypoint();
-  final packageConfig = await Isolate.packageConfig;
+  final workerEntrypoint = selfContained
+      ? cockpitInternalWorkerCommand
+      : await _workerEntrypoint();
+  final packageConfig = selfContained ? null : await Isolate.packageConfig;
   final authorization = await CockpitSupervisorAuthorizationPolicyStore(
     path: paths.authorizationPolicy,
     permissionHardener: hardener,
@@ -65,8 +71,7 @@ Future<int> runCockpitDaemon(List<String> arguments) async {
   );
   final startedAt = DateTime.now().toUtc();
   final serverInfo = runtime.serverInfo(
-    instanceId:
-        'instance_${CockpitSecureTokenGenerator().nextToken(byteLength: 16)}',
+    instanceId: 'in-${CockpitSecureTokenGenerator().nextIdToken()}',
     startedAt: startedAt,
   );
   final api = CockpitSupervisorHttpApi(
@@ -298,7 +303,7 @@ final class _DaemonConfiguration {
             'home',
             'foreground-workspace',
             'foreground-submission',
-            'authorization-mode',
+            'auth',
           }.contains(name) ||
           value.isEmpty ||
           values.containsKey(name)) {
@@ -323,7 +328,7 @@ final class _DaemonConfiguration {
       home: p.normalize(home),
       foregroundWorkspace: workspace == null ? null : p.normalize(workspace),
       foregroundSubmission: submission == null ? null : p.normalize(submission),
-      authorizationMode: _authorizationMode(values['authorization-mode']),
+      authorizationMode: _authorizationMode(values['auth']),
     );
   }
 

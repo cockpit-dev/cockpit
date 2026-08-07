@@ -1,4 +1,5 @@
 final class CockpitDiagnosticsConfig {
+  /// Creates a CockpitDiagnosticsConfig.
   const CockpitDiagnosticsConfig({
     this.enableRebuildTracking = false,
     this.maxTrackedRebuildEntries = 120,

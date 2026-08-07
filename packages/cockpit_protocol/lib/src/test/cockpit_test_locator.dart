@@ -17,6 +17,7 @@ enum CockpitTestLocatorStrategy {
 }
 
 final class CockpitTestLocatorTemplate {
+  /// Creates a CockpitTestLocatorTemplate.
   CockpitTestLocatorTemplate({
     this.text,
     this.label,
@@ -106,6 +107,7 @@ final class CockpitTestLocatorTemplate {
     throw StateError('Locator template has no primary strategy.');
   }
 
+  /// Encodes this CockpitTestLocatorTemplate as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
     if (text != null) 'text': text!.toJson(),
     if (label != null) 'label': label!.toJson(),
@@ -136,6 +138,7 @@ final class CockpitTestLocatorTemplate {
       'fallbacks': fallbacks.map((locator) => locator.toJson()).toList(),
   };
 
+  /// Decodes a CockpitTestLocatorTemplate from a JSON object.
   factory CockpitTestLocatorTemplate.fromJson(
     Object? value, {
     required String path,
@@ -310,6 +313,7 @@ final class CockpitTestLocatorTemplate {
 }
 
 final class CockpitTestLocator {
+  /// Creates a CockpitTestLocator.
   CockpitTestLocator({
     this.text,
     this.label,
@@ -445,6 +449,7 @@ final class CockpitTestLocator {
     }
   }
 
+  /// Encodes this CockpitTestLocator as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
     if (text != null) 'text': text,
     if (label != null) 'label': label,
@@ -475,6 +480,7 @@ final class CockpitTestLocator {
       'fallbacks': fallbacks.map((locator) => locator.toJson()).toList(),
   };
 
+  /// Decodes a CockpitTestLocator from a JSON object.
   factory CockpitTestLocator.fromJson(Object? value, {required String path}) {
     final template = CockpitTestLocatorTemplate.fromJson(value, path: path);
     Object? literal(CockpitTestTemplateValue? candidate, String field) {

@@ -170,7 +170,12 @@ final class CockpitSupervisorOperationCatalog {
               CockpitSafetyEffect.externalSideEffect,
             ],
           ),
-          _mutation('ui.remote.waitIdle', CockpitOperationScope.workspace),
+          _mutation(
+            'ui.remote.waitIdle',
+            CockpitOperationScope.workspace,
+            defaultTimeout: const Duration(seconds: 30),
+            maximumTimeout: const Duration(minutes: 5),
+          ),
           _mutation(
             'session.development.launch',
             CockpitOperationScope.workspace,
@@ -205,6 +210,11 @@ final class CockpitSupervisorOperationCatalog {
           _read('surface.inspect', CockpitOperationScope.workspace),
           _read('logs.read', CockpitOperationScope.workspace),
           _read('network.read', CockpitOperationScope.workspace),
+          _mutation(
+            'network.body',
+            CockpitOperationScope.workspace,
+            effects: const <CockpitSafetyEffect>[CockpitSafetyEffect.capture],
+          ),
           _read('errors.read', CockpitOperationScope.workspace),
           _read('session.logs.read', CockpitOperationScope.workspace),
           _mutation(
@@ -262,7 +272,13 @@ final class CockpitSupervisorOperationCatalog {
               CockpitSafetyEffect.externalSideEffect,
             ],
           ),
-          _mutation('ui.waitIdle', CockpitOperationScope.workspace),
+          _mutation(
+            'ui.waitIdle',
+            CockpitOperationScope.workspace,
+            defaultTimeout: const Duration(seconds: 30),
+            maximumTimeout: const Duration(minutes: 5),
+          ),
+          _mutation('viewport.set', CockpitOperationScope.workspace),
           _mutation(
             'recording.start',
             CockpitOperationScope.workspace,
@@ -285,6 +301,10 @@ final class CockpitSupervisorOperationCatalog {
           )
           .map((metadata) => metadata.descriptor)
           .toList(growable: false)
+        ..sort((left, right) => left.kind.compareTo(right.kind));
+
+  static List<CockpitOperationDescriptor> get allOperations =>
+      _operations.values.map((metadata) => metadata.descriptor).toList()
         ..sort((left, right) => left.kind.compareTo(right.kind));
 
   static CockpitSupervisorOperationMetadata require(String kind) {

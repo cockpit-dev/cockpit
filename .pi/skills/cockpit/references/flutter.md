@@ -1,26 +1,24 @@
 # Flutter Development Shell
 
-Use this reference for Flutter source development. The managed Flutter session
-is independent from black-box E2E and exposes structured application state and
-typed control. Installed production applications can still be tested without
-the adapter through the native black-box path in [dev.md](dev.md).
+Use this reference when adding or repairing the development-only Flutter
+bridge. Once the shell exists, use the short `cockpit dev` workflow from
+`SKILL.md`.
 
 ## Contents
 
 - [Keep production untouched](#keep-production-untouched)
-- [Add the development dependency](#add-the-development-dependency)
-- [Create the development entrypoint](#create-the-development-entrypoint)
-- [Register and launch the target](#register-and-launch-the-target)
-- [Use the Flutter control plane](#use-the-flutter-control-plane)
-- [Dart and Flutter tooling](#dart-and-flutter-tooling)
+- [Add the dependency](#add-the-dependency)
+- [Create the entrypoint](#create-the-entrypoint)
+- [Start and control](#start-and-control)
+- [Platform behavior](#platform-behavior)
 - [Router integration](#router-integration)
+- [Debugging](#debugging)
 
 ## Keep Production Untouched
 
-Keep all Cockpit imports and wiring under `cockpit/`. Do not import
+Keep Cockpit imports and wiring under `cockpit/`. Do not import
 `flutter_cockpit` from production `lib/` code and do not replace the production
-entrypoint. The shell imports the application's existing public root widget or
-bootstrap.
+entrypoint.
 
 ```text
 cockpit/
@@ -30,23 +28,21 @@ lib/
   ... unchanged production code ...
 ```
 
-## Add The Development Dependency
+The shell imports the application's existing public root widget or bootstrap.
 
-Add the bridge only as a development dependency, then resolve packages:
+## Add The Dependency
+
+Add the bridge as a development dependency:
 
 ```yaml
 dev_dependencies:
   flutter_cockpit: any
 ```
 
-```bash
-flutter pub get
-```
+Resolve packages with `flutter pub get`. The standalone `cockpit` CLI does not
+belong in the application dependencies.
 
-The standalone `cockpit` CLI may be globally installed. It does not need to be
-added to the application when the global executable is used.
-
-## Create The Development Entrypoint
+## Create The Entrypoint
 
 `cockpit/main.dart`:
 
@@ -69,13 +65,9 @@ import 'package:flutter_cockpit/flutter_cockpit_flutter.dart';
 import 'package:your_app/app.dart';
 
 Widget buildCockpitDevelopmentApp() {
-  const enableDiagnostics = bool.fromEnvironment(
+  const diagnostics = bool.fromEnvironment(
     'FLUTTER_COCKPIT_ENABLE_DEBUG_DIAGNOSTICS',
   );
-  const enableTapFeedback = bool.fromEnvironment(
-    'FLUTTER_COCKPIT_ENABLE_TAP_FEEDBACK',
-  );
-
   return FlutterCockpitApp(
     config: FlutterCockpitConfig.production(
       remoteSession: CockpitRemoteSessionConfiguration.resolveFromEnvironment(
@@ -86,8 +78,7 @@ Widget buildCockpitDevelopmentApp() {
         ),
       ),
       diagnostics: CockpitDiagnosticsConfig(
-        enableRebuildTracking: enableDiagnostics,
-        enableTapFeedback: enableTapFeedback,
+        enableRebuildTracking: diagnostics,
       ),
     ),
     child: YourExistingApp(
@@ -99,120 +90,125 @@ Widget buildCockpitDevelopmentApp() {
 }
 ```
 
-Replace only the application import, root widget, and its observer parameter
-with the application's real public API. Each Navigator needs its own
-`FlutterCockpit.createNavigatorObserver()` instance.
+Replace only the application import, root widget, and observer parameter with
+the application's real public API. Create one Cockpit observer per Navigator.
 
-## Register And Launch The Target
+## Start And Control
 
-Register the checkout or monorepo root once. Document indexing is refreshed by
-`workspace documents`; select the exact workspace-relative source path and
-reuse its `documentId`. Cockpit walks upward from that entrypoint to the nearest
-`pubspec.yaml`, launches from that Flutter project directory, and rewrites the
-entrypoint relative to it. Do not register every monorepo package as another
-workspace.
+Run from anywhere inside the checkout:
 
 ```bash
-cockpit workspace documents \
-  --workspace-id <workspaceId> \
-  --kind source \
-  --relative-path apps/mobile/cockpit/main.dart
-cockpit target register \
-  --workspace-id <workspaceId> \
-  --platform <platformFromDiscovery> \
-  --device-id <deviceIdFromDiscovery> \
-  --target-kind flutterApp \
-  --environment development \
-  --mode development \
-  --entrypoint-document-id <documentId> \
-  --idempotency-key <uniqueKey>
-cockpit target launch \
-  --workspace-id <workspaceId> \
-  --target-id <targetId> \
-  --mode development \
-  --launch-timeout-ms 900000 \
-  --idempotency-key <uniqueKey>
-cockpit target inspect \
-  --workspace-id <workspaceId> \
-  --target-id <targetId> \
-  --profile minimal
+cockpit dev start
 ```
 
-Add repeatable `--dart-define`, `--dart-define-from-file`, `--env`,
-`--flutter-arg`, and `--flavor` values only when the application needs them.
-Cockpit owns the entrypoint, device, mode, machine, and remote-control flags.
-On Android/iOS, `--env` configures the Flutter build process; it is not an
-arbitrary mobile application runtime environment. Use Dart defines or an
-application-owned configuration channel for values the mobile app must read.
-
-## Use The Flutter Control Plane
-
-The adapter is the source of truth for app-internal development state. It
-provides widget/semantics targets and relationships, visible text, route and
-focus state, framework/runtime errors, app logs, HTTP activity and failures,
-rebuild signals, screenshots, recording requests, and command results with
-locator resolution, selected plane, fallback trail, UI delta, and artifact
-references. `target.inspect` summarizes target readiness; use the focused
-session reads for current application state:
+For a monorepo or non-default entrypoint, pass the workspace-relative path:
 
 ```bash
-cockpit operation run --workspace-id <workspaceId> --kind ui.inspect \
-  --input-json '{"sessionId":"<sessionId>","profile":"minimal"}'
-cockpit operation run --workspace-id <workspaceId> --kind logs.read \
-  --input-json '{"sessionId":"<sessionId>","maxLines":40}'
-cockpit operation run --workspace-id <workspaceId> --kind errors.read \
-  --input-json '{"sessionId":"<sessionId>","maxErrors":8}'
-cockpit operation run --workspace-id <workspaceId> --kind network.read \
-  --input-json '{"sessionId":"<sessionId>","onlyFailures":true}'
-cockpit operation run --workspace-id <workspaceId> --kind app.reload \
-  --input-json '{"sessionId":"<sessionId>"}' \
-  --idempotency-key <uniqueKey>
+cockpit dev start apps/mobile/cockpit/main.dart --platform macos
 ```
 
-Use `command.run` for one typed action/assertion and `command.batch` for an
-ordered local development interaction. Use `development.probe.collect` before
-and after a change only when a durable UI/runtime/network comparison is useful.
-The secondary native/system driver is for system dialogs, permissions,
-notifications, platform views, WebViews, and native-shell screens; it is not a
-replacement for Flutter state inspection.
+Pass only real application launch choices:
 
-## Dart And Flutter Tooling
+```bash
+cockpit dev start \
+  --flavor staging \
+  --dart-define API_URL=https://example.test \
+  --dart-define-from-file config/development.json \
+  --env LOG_LEVEL=debug
+```
 
-Cockpit provides the Dart/Flutter development surface even when a separate Dart
-MCP server is not installed:
+Cockpit indexes the entrypoint, selects/registers the Flutter target, launches
+the process, authenticates the bridge, and binds one numeric handle. Do not
+manually register workspace, target, app, port, or runtime session IDs.
 
-| Need | Advertised operation |
-| --- | --- |
-| Analyze selected indexed files or the workspace | `analyze.files`, `analyze.workspace` |
-| Apply fixes, format, or run focused tests | `fix.workspace`, `format.workspace`, `test.workspace` |
-| Hover, definition, signature, document/workspace symbols | `lsp.request` |
-| Search pub.dev or run pub dependency commands | `package.search`, `package.pub` |
-| Read or search dependency source | `package.uris.read`, `package.uris.grep` |
-| Discover, launch, list, inspect, reload, restart, stop | target/app/session operations |
-| Inspect widgets, routes, logs, errors, network, and rebuild state | Flutter session operations above |
+Use task commands after launch:
 
-Resolve file paths through `workspace documents` and pass opaque document IDs
-to worker operations. Use the descriptor's timeout and execution mode. The
-Supervisor owns process, workspace, session, device, port, authorization, and
-artifact isolation, so these capabilities work consistently from CLI, MCP, and
-future protocol clients.
+```bash
+cockpit dev inspect
+cockpit dev tap "Save"
+cockpit dev type "Ada" --into "Name"
+cockpit dev wait
+cockpit dev viewport 800x600
+cockpit dev screenshot
+cockpit dev reload
+cockpit dev diagnose
+```
+
+Target conditions are conjunctive. Keep the common command short, then add
+only the condition needed to resolve ambiguity:
+
+```bash
+cockpit dev tap "Save" --id save-button
+cockpit dev tap "Save" --type TextButton --within Dialog
+cockpit dev type "Ada" --into "Name" --key profile-name
+```
+
+Execute a routine exact-text action without inspecting first. If it is
+ambiguous, run `cockpit dev inspect "Save"` once. It searches only semantic UI
+targets and returns `loc` (the shortest stable conditions) and `can` (known
+actions). Use all fields in `loc`; `text` is positional and the rest map to
+their same-named flags. Do not use internal paths or registration IDs.
+
+Available narrowing conditions are `--id`, `--key`, `--type`, `--tip`,
+`--route`, ancestor widget type `--within`, and 0-based `--index`. Exact matching is the default;
+`--contains` and `--fuzzy` apply only when explicitly requested. Conditions
+never silently choose between equal candidates.
+
+The bridge exposes widget/semantics targets, route and focus state, framework
+and isolate errors, app logs, HTTP activity, rebuild signals, screenshots,
+recording, idle state, and typed command results. Cockpit reads these through
+the same handle.
+
+## Platform Behavior
+
+- macOS, Windows, and Linux resize the owning Flutter window content area and
+  wait for settled Flutter metrics.
+- Web reports the managed browser viewport alternative.
+- Android and iOS report `fixedMobileViewport`; choose an advertised device or
+  orientation strategy instead of pretending resize succeeded.
+- Android/iOS `--env` configures the Flutter build process. Use Dart defines or
+  an application-owned configuration channel for mobile runtime values.
+- Screenshots use ADB/simctl/WDA first on Android/iOS so system dialogs are
+  visible, with Flutter view fallback. Desktop and web use Flutter view first.
+- System dialogs, permissions, platform views, and native shell screens use an
+  advertised native/system control plane; return to Flutter state for the
+  postcondition.
 
 ## Router Integration
 
-If the shell creates the Navigator, supply its Cockpit observer as above. If
-the existing application owns `MaterialApp`, `GoRouter`, or another Router and
-does not accept observers, keep production code unchanged and bind route state
-from a development-only adapter in `cockpit/`:
+If the shell creates the Navigator, supply the observer as above. If the
+existing application owns `MaterialApp`, `GoRouter`, or another Router and does
+not accept observers, bind route state from the development-only adapter:
 
 ```dart
 FlutterCockpit.bindRouteInformationProvider(router.routeInformationProvider);
 ```
 
-When no public provider is exposed, update the route from a development-only
+When no public provider exists, update route state from a development-only
 listener:
 
 ```dart
 FlutterCockpit.setCurrentRouteName(currentRouteName);
 ```
 
-Do not create a second production navigation model solely for automation.
+Do not create a second production navigation model for automation.
+
+## Debugging
+
+Use the smallest read that answers the next question:
+
+```bash
+cockpit dev status
+cockpit dev inspect "Expected text"
+cockpit dev diagnose --verbosity standard
+```
+
+Use `cockpit explain <operation>` only when a task command is
+missing. Exact live schemas are authoritative. A generic schema is not a basis
+for guessing fields.
+
+When the bridge or port changes, keep using the same handle; Cockpit proves
+process and checkout ownership before reconnecting. Unexpected process exits
+may relaunch once from stored non-secret launch configuration. Reads do not
+launch a stopped app. Finish visible verification with a current screenshot and
+zero new disqualifying runtime errors.

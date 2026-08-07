@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:math' as math;
+
 import 'package:flutter/widgets.dart';
 import 'package:flutter/rendering.dart';
 
@@ -193,6 +196,7 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
     Duration duration = const Duration(milliseconds: 220),
     CockpitRevealAlignment alignment = CockpitRevealAlignment.nearest,
     double padding = 0,
+    double offset = 0,
   }) async {
     final rootContext = _boundaryKey.currentContext;
     if (rootContext is! Element) {
@@ -210,32 +214,58 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
       return false;
     }
 
-    final binding = WidgetsBinding.instance;
-    final effectiveDuration = _isTestBinding(binding)
-        ? Duration.zero
-        : duration;
+    // Search steps preserve their requested pacing. Final placement is an
+    // atomic jump so nested scrollables cannot leave Cockpit waiting on
+    // competing animation futures after the target is already located.
+    const effectiveDuration = Duration.zero;
     final revealRequest = _resolveRevealRequest(
       match,
       alignment: alignment,
       padding: padding,
     );
-    if (revealRequest == null) {
-      return true;
+    if (revealRequest != null) {
+      unawaited(
+        Scrollable.ensureVisible(
+          match,
+          alignment: revealRequest.alignment,
+          duration: effectiveDuration,
+          alignmentPolicy: revealRequest.alignmentPolicy,
+        ).catchError((Object error, StackTrace stackTrace) {
+          FlutterError.reportError(
+            FlutterErrorDetails(
+              exception: error,
+              stack: stackTrace,
+              library: 'flutter_cockpit',
+              context: ErrorDescription('while revealing a Cockpit target'),
+            ),
+          );
+        }),
+      );
+      await _settleAtomicRevealFrame();
     }
-    await Scrollable.ensureVisible(
-      match,
-      alignment: revealRequest.alignment,
-      duration: effectiveDuration,
-      curve: Curves.easeOutCubic,
-      alignmentPolicy: revealRequest.alignmentPolicy,
-    );
     await _applyRevealAdjustment(
       match,
       alignment: alignment,
       padding: padding,
+      offset: offset,
       duration: effectiveDuration,
     );
-    return true;
+    await _settleAtomicRevealFrame();
+    return _locatorIsVisible(locator);
+  }
+
+  Future<void> _settleAtomicRevealFrame() async {
+    await Future<void>.microtask(() {});
+    final binding = WidgetsBinding.instance;
+    if (!binding.hasScheduledFrame || _isTestBinding(binding)) {
+      return;
+    }
+    try {
+      await binding.endOfFrame.timeout(const Duration(milliseconds: 250));
+    } on TimeoutException {
+      // Geometry is revalidated below; a continuously animated application
+      // must not turn one deterministic reveal into an unbounded wait.
+    }
   }
 
   List<CockpitTarget> _discoverNativeTargets() {
@@ -351,17 +381,47 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
     if (scrollables.isEmpty) {
       return const CockpitScrollStepResult(didScroll: false);
     }
-
-    final scrollable = _selectScrollableCandidate(
+    final targetElement = targetLocator == null
+        ? null
+        : _findMountedElementForLocator(rootContext, targetLocator);
+    final selection = _selectScrollableCandidate(
       scrollables,
       targetLocator: targetLocator,
+      targetElement: targetElement,
       scrollableLocator: scrollableLocator,
     );
-    if (scrollable == null) {
-      return const CockpitScrollStepResult(didScroll: false);
+    if (selection == null) {
+      return CockpitScrollStepResult(
+        didScroll: false,
+        scrollableCandidateCount: scrollables.length,
+      );
+    }
+    final scrollable = selection.candidate;
+    final position = scrollable.state.position;
+    if (_locatorIsVisible(targetLocator)) {
+      return _withScrollableSelection(
+        CockpitScrollStepResult(
+          didScroll: false,
+          strategy: 'alreadyVisible',
+          scrollableKey: scrollable.keyValue,
+          scrollablePath: scrollable.path,
+          scrollableTypeName: scrollable.typeName,
+          pixelsBefore: position.pixels,
+          pixelsAfter: position.pixels,
+          nextPixels: position.pixels,
+          minScrollExtent: position.minScrollExtent,
+          maxScrollExtent: position.maxScrollExtent,
+          viewportDimension: position.viewportDimension,
+          acceptsUserOffset: position.physics.shouldAcceptUserOffset(position),
+          allowsProgrammaticScroll: position.physics.allowUserScrolling,
+          targetMounted: true,
+          targetVisible: true,
+        ),
+        selection,
+        targetLocator: targetLocator,
+      );
     }
 
-    final position = scrollable.state.position;
     final probeSegmentCount = probeDuringScroll
         ? _scrollProbeSegmentCount(
             targetLocator: targetLocator,
@@ -395,11 +455,16 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
         lastStep = stepResult;
         didScroll = didScroll || stepResult.didScroll;
         if (_locatorIsVisible(targetLocator)) {
-          return _mergeProbeResult(
-            base: stepResult,
-            pixelsBefore: pixelsBeforeProbe,
-            pixelsAfter: position.pixels,
-            didScroll: didScroll,
+          return _withScrollableSelection(
+            _mergeProbeResult(
+              base: stepResult,
+              pixelsBefore: pixelsBeforeProbe,
+              pixelsAfter: position.pixels,
+              didScroll: didScroll,
+              targetVisible: true,
+            ),
+            selection,
+            targetLocator: targetLocator,
           );
         }
         if (!stepResult.didScroll) {
@@ -408,23 +473,31 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
       }
 
       if (lastStep != null) {
-        return _mergeProbeResult(
-          base: lastStep,
-          pixelsBefore: pixelsBeforeProbe,
-          pixelsAfter: position.pixels,
-          didScroll: didScroll,
+        return _withScrollableSelection(
+          _mergeProbeResult(
+            base: lastStep,
+            pixelsBefore: pixelsBeforeProbe,
+            pixelsAfter: position.pixels,
+            didScroll: didScroll,
+          ),
+          selection,
+          targetLocator: targetLocator,
         );
       }
     }
 
-    return _scrollScrollableByViewport(
-      scrollable,
-      reverse: reverse,
-      viewportFraction: viewportFraction,
-      duration: duration,
-      gestureProfile: gestureProfile,
-      continuous: continuous,
-      postScrollEnsureVisible: postScrollEnsureVisible,
+    return _withScrollableSelection(
+      await _scrollScrollableByViewport(
+        scrollable,
+        reverse: reverse,
+        viewportFraction: viewportFraction,
+        duration: duration,
+        gestureProfile: gestureProfile,
+        continuous: continuous,
+        postScrollEnsureVisible: postScrollEnsureVisible,
+      ),
+      selection,
+      targetLocator: targetLocator,
     );
   }
 
@@ -488,22 +561,24 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
     if (!preferProgrammatic && scrollGeometry != null) {
       final initialPixels = position.pixels;
       try {
-        await _gestureEngine.perform(
-          CockpitGestureAction.drag(
-            target: scrollableTarget,
-            geometry: scrollGeometry,
-            delta: _scrollDragDelta(
-              axisDirection: position.axisDirection,
-              distance: delta,
-              forward: nextPixels > position.pixels,
-            ),
-            duration: duration,
-            moveEventCount: continuous ? 24 : 0,
-            profile: gestureProfile,
-            touchSlopX: cockpitDefaultDragTouchSlop,
-            touchSlopY: cockpitDefaultDragTouchSlop,
-          ),
-        );
+        await _gestureEngine
+            .perform(
+              CockpitGestureAction.drag(
+                target: scrollableTarget,
+                geometry: scrollGeometry,
+                delta: _scrollDragDelta(
+                  axisDirection: position.axisDirection,
+                  distance: delta,
+                  forward: nextPixels > position.pixels,
+                ),
+                duration: duration,
+                moveEventCount: continuous ? 24 : 0,
+                profile: gestureProfile,
+                touchSlopX: cockpitDefaultDragTouchSlop,
+                touchSlopY: cockpitDefaultDragTouchSlop,
+              ),
+            )
+            .timeout(_scrollStepAnimationTimeout(duration));
         if (postScrollEnsureVisible) {
           await Future<void>.microtask(() {});
         }
@@ -531,6 +606,8 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
         // Fall through to semantics or direct position adjustment.
       } on ArgumentError {
         // Fall through to semantics or direct position adjustment.
+      } on TimeoutException {
+        // Fall through to the bounded programmatic adjustment below.
       }
     }
     if (!preferProgrammatic && semanticScrollAction != null) {
@@ -568,7 +645,8 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
     if (allowsProgrammaticScroll) {
       final initialPixels = position.pixels;
       try {
-        if (duration == Duration.zero ||
+        if (preferProgrammatic ||
+            duration == Duration.zero ||
             _isTestBinding(WidgetsBinding.instance)) {
           position.jumpTo(nextPixels);
           await Future<void>.microtask(() {});
@@ -592,16 +670,24 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
             matchedRegistryTarget: scrollableTarget != null,
           );
         }
-        await position.animateTo(
-          nextPixels,
-          duration: duration,
-          curve: Curves.easeOutCubic,
-        );
+        var animationTimedOut = false;
+        try {
+          await position
+              .animateTo(
+                nextPixels,
+                duration: duration,
+                curve: Curves.easeOutCubic,
+              )
+              .timeout(_scrollStepAnimationTimeout(duration));
+        } on TimeoutException {
+          animationTimedOut = true;
+          position.jumpTo(nextPixels);
+        }
         await Future<void>.microtask(() {});
         if ((position.pixels - initialPixels).abs() >= 0.5) {
           return CockpitScrollStepResult(
             didScroll: true,
-            strategy: 'animateTo',
+            strategy: animationTimedOut ? 'jumpTo_timeout' : 'animateTo',
             scrollableKey: scrollable.keyValue,
             scrollablePath: scrollable.path,
             scrollableTypeName: scrollable.typeName,
@@ -669,11 +755,16 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
     );
   }
 
+  Duration _scrollStepAnimationTimeout(Duration duration) {
+    return Duration(milliseconds: math.max(500, duration.inMilliseconds * 3));
+  }
+
   CockpitScrollStepResult _mergeProbeResult({
     required CockpitScrollStepResult base,
     required double pixelsBefore,
     required double pixelsAfter,
     required bool didScroll,
+    bool targetVisible = false,
   }) {
     return CockpitScrollStepResult(
       didScroll: didScroll,
@@ -683,6 +774,8 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
       scrollableKey: base.scrollableKey,
       scrollablePath: base.scrollablePath,
       scrollableTypeName: base.scrollableTypeName,
+      scrollableCandidateIndex: base.scrollableCandidateIndex,
+      scrollableCandidateCount: base.scrollableCandidateCount,
       pixelsBefore: pixelsBefore,
       pixelsAfter: pixelsAfter,
       nextPixels: base.nextPixels,
@@ -694,6 +787,40 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
       hadGestureTarget: base.hadGestureTarget,
       hadSemanticAction: base.hadSemanticAction,
       matchedRegistryTarget: base.matchedRegistryTarget,
+      targetVisibilityObserved: base.targetVisibilityObserved,
+      targetMounted: base.targetMounted,
+      targetVisible: targetVisible || base.targetVisible,
+    );
+  }
+
+  CockpitScrollStepResult _withScrollableSelection(
+    CockpitScrollStepResult result,
+    _CockpitScrollableSelection selection, {
+    required CockpitLocator? targetLocator,
+  }) {
+    final targetMounted = _locatorIsMounted(targetLocator);
+    return CockpitScrollStepResult(
+      didScroll: result.didScroll,
+      strategy: result.strategy,
+      scrollableKey: result.scrollableKey,
+      scrollablePath: result.scrollablePath,
+      scrollableTypeName: result.scrollableTypeName,
+      scrollableCandidateIndex: selection.index,
+      scrollableCandidateCount: selection.count,
+      pixelsBefore: result.pixelsBefore,
+      pixelsAfter: result.pixelsAfter,
+      nextPixels: result.nextPixels,
+      minScrollExtent: result.minScrollExtent,
+      maxScrollExtent: result.maxScrollExtent,
+      viewportDimension: result.viewportDimension,
+      acceptsUserOffset: result.acceptsUserOffset,
+      allowsProgrammaticScroll: result.allowsProgrammaticScroll,
+      hadGestureTarget: result.hadGestureTarget,
+      hadSemanticAction: result.hadSemanticAction,
+      matchedRegistryTarget: result.matchedRegistryTarget,
+      targetVisibilityObserved: targetLocator != null,
+      targetMounted: targetMounted || result.targetMounted,
+      targetVisible: result.targetVisible,
     );
   }
 
@@ -721,7 +848,106 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
     if (locator.kind == CockpitLocatorKind.route) {
       return widget.routeName == locator.value;
     }
-    return _registry.resolve(locator).isSuccess;
+    final rootContext = _boundaryKey.currentContext;
+    if (rootContext is! Element) {
+      return false;
+    }
+    final element = _findResolvedElementForLocator(rootContext, locator);
+    if (element == null || !cockpitIsVisibleInRuntimeTree(element)) {
+      return false;
+    }
+    final targetGeometry = CockpitTargetGeometryResolver.maybeFromElement(
+      element,
+    );
+    final viewportGeometry = _viewportGeometry();
+    if (targetGeometry == null || viewportGeometry == null) {
+      return false;
+    }
+    final targetRect = Rect.fromLTWH(
+      targetGeometry.left,
+      targetGeometry.top,
+      targetGeometry.width,
+      targetGeometry.height,
+    );
+    final viewportRect = Rect.fromLTWH(
+      viewportGeometry.left,
+      viewportGeometry.top,
+      viewportGeometry.width,
+      viewportGeometry.height,
+    );
+    if (!_rectContainsRect(viewportRect, targetRect)) {
+      return false;
+    }
+    return _isFullyVisibleInScrollableAncestors(element, targetRect);
+  }
+
+  bool _locatorIsMounted(CockpitLocator? locator) {
+    if (locator == null) {
+      return false;
+    }
+    if (locator.kind == CockpitLocatorKind.route) {
+      return widget.routeName == locator.value;
+    }
+    final rootContext = _boundaryKey.currentContext;
+    return rootContext is Element &&
+        _findResolvedElementForLocator(rootContext, locator) != null;
+  }
+
+  Element? _findResolvedElementForLocator(
+    Element rootElement,
+    CockpitLocator locator,
+  ) {
+    final localMatch = _findMountedElementForLocator(rootElement, locator);
+    if (localMatch != null) {
+      return localMatch;
+    }
+    if (!_requiresLogicalTargetResolution(locator)) {
+      return null;
+    }
+    final resolution = _registry.resolve(locator);
+    final resolvedNode = resolution.target?.diagnosticNodeProvider?.call();
+    return switch (resolvedNode) {
+      final Element element when resolution.isSuccess && element.mounted =>
+        element,
+      _ => null,
+    };
+  }
+
+  bool _requiresLogicalTargetResolution(CockpitLocator locator) {
+    if (locator.signalMap.length < 2) {
+      return false;
+    }
+    return locator.cockpitId != null ||
+        locator.semanticId != null ||
+        locator.key != null;
+  }
+
+  bool _isFullyVisibleInScrollableAncestors(Element element, Rect targetRect) {
+    RenderObject? renderObject = element.findRenderObject();
+    final visited = <RenderObject>{};
+    while (renderObject != null && visited.add(renderObject)) {
+      if (renderObject is RenderAbstractViewport && renderObject is RenderBox) {
+        final viewport = renderObject as RenderBox;
+        if (!viewport.attached || !viewport.hasSize) {
+          return false;
+        }
+        final viewportRect =
+            viewport.localToGlobal(Offset.zero) & viewport.size;
+        if (!_rectContainsRect(viewportRect, targetRect)) {
+          return false;
+        }
+      }
+      renderObject = renderObject.parent;
+    }
+    return true;
+  }
+
+  bool _rectContainsRect(Rect viewport, Rect target) {
+    const tolerance = 0.5;
+    return target.left >= viewport.left - tolerance &&
+        target.top >= viewport.top - tolerance &&
+        target.right <= viewport.right + tolerance &&
+        target.bottom <= viewport.bottom + tolerance;
   }
 
   CockpitTarget? _registryTargetForScrollableCandidate(
@@ -769,8 +995,32 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
       if (match != null) {
         return match;
       }
+      final stableAnchor = _visitForStableTextKeyAnchor(rootElement, candidate);
+      if (stableAnchor != null) {
+        return stableAnchor;
+      }
     }
     return null;
+  }
+
+  Element? _visitForStableTextKeyAnchor(
+    Element rootElement,
+    CockpitLocator locator,
+  ) {
+    final text = locator.text;
+    if (text == null ||
+        locator.signalMap.length != 1 ||
+        locator.matchMode != CockpitTextMatchMode.exact) {
+      return null;
+    }
+    return _visitForLocator(
+      rootElement,
+      CockpitLocator(
+        key: text,
+        ancestor: locator.ancestor,
+        index: locator.index,
+      ),
+    );
   }
 
   Iterable<CockpitLocator> _flatten(CockpitLocator locator) sync* {
@@ -811,7 +1061,37 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
     final bestMatches = matches
         .where((candidate) => candidate.score == bestScore)
         .toList(growable: false);
-    return bestMatches.length == 1 ? bestMatches.single.element : null;
+    if (bestMatches.length == 1) {
+      return bestMatches.single.element;
+    }
+
+    // A single logical control commonly repeats its label through a Semantics
+    // container and one or more descendant Text widgets. Collapse only when
+    // one matching ancestor contains every equal match. Equal matches in
+    // separate controls remain ambiguous.
+    for (final candidate in bestMatches) {
+      final isSharedMatchingAncestor = bestMatches.every(
+        (other) =>
+            identical(candidate.element, other.element) ||
+            _isElementAncestor(candidate.element, other.element),
+      );
+      if (isSharedMatchingAncestor) {
+        return candidate.element;
+      }
+    }
+    return null;
+  }
+
+  bool _isElementAncestor(Element ancestor, Element descendant) {
+    var matched = false;
+    descendant.visitAncestorElements((candidate) {
+      if (identical(candidate, ancestor)) {
+        matched = true;
+        return false;
+      }
+      return true;
+    });
+    return matched;
   }
 
   int _locatorMatchScore(Element element, CockpitLocator locator) {
@@ -925,10 +1205,16 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
   }
 
   String? _elementTextSignal(Element element) {
+    if (_isExcludedFromSemantics(element)) {
+      return null;
+    }
     return _textPreviewForAncestor(element);
   }
 
   String? _elementSemanticSignal(Element element) {
+    if (_isExcludedFromSemantics(element)) {
+      return null;
+    }
     final widget = element.widget;
     if (widget is Semantics) {
       return _normalizeText(
@@ -941,16 +1227,34 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
     return null;
   }
 
+  bool _isExcludedFromSemantics(Element element) {
+    var excluded = false;
+    element.visitAncestorElements((ancestor) {
+      if (ancestor.widget is ExcludeSemantics) {
+        excluded = true;
+        return false;
+      }
+      return true;
+    });
+    return excluded;
+  }
+
   String? _elementTooltipSignal(Element element) {
     return _elementSemanticSignal(element);
   }
 
-  _CockpitScrollableCandidate? _selectScrollableCandidate(
+  _CockpitScrollableSelection? _selectScrollableCandidate(
     List<_CockpitScrollableCandidate> candidates, {
     CockpitLocator? targetLocator,
+    Element? targetElement,
     CockpitLocator? scrollableLocator,
   }) {
-    final matchingScrollableCandidates = scrollableLocator == null
+    final indexOnlyLocator =
+        scrollableLocator != null &&
+        !scrollableLocator.hasSignals &&
+        scrollableLocator.index != null;
+    final matchingScrollableCandidates =
+        scrollableLocator == null || indexOnlyLocator
         ? candidates
         : candidates
               .where(
@@ -963,37 +1267,97 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
       return null;
     }
 
-    final ordered = matchingScrollableCandidates.toList(growable: false)
-      ..sort((left, right) {
-        final rightScore = _scrollablePriorityScore(
-          right,
-          targetLocator: targetLocator,
-          scrollableLocator: scrollableLocator,
-        );
-        final leftScore = _scrollablePriorityScore(
-          left,
-          targetLocator: targetLocator,
-          scrollableLocator: scrollableLocator,
-        );
-        final scoreCompare = rightScore.compareTo(leftScore);
-        if (scoreCompare != 0) {
-          return scoreCompare;
-        }
+    final targetScrollableCandidates = targetElement == null
+        ? const <_CockpitScrollableCandidate>[]
+        : matchingScrollableCandidates
+              .where(
+                (candidate) =>
+                    _targetScrollableDistance(targetElement, candidate) != null,
+              )
+              .toList(growable: false);
+    final ordered =
+        (targetScrollableCandidates.isEmpty
+                ? matchingScrollableCandidates
+                : targetScrollableCandidates)
+            .toList(growable: false)
+          ..sort((left, right) {
+            if (targetElement != null) {
+              final distanceCompare =
+                  (_targetScrollableDistance(targetElement, left) ?? 1 << 30)
+                      .compareTo(
+                        _targetScrollableDistance(targetElement, right) ??
+                            1 << 30,
+                      );
+              if (distanceCompare != 0) {
+                return distanceCompare;
+              }
+            }
+            final rightScore = _scrollablePriorityScore(
+              right,
+              targetLocator: targetLocator,
+              scrollableLocator: scrollableLocator,
+            );
+            final leftScore = _scrollablePriorityScore(
+              left,
+              targetLocator: targetLocator,
+              scrollableLocator: scrollableLocator,
+            );
+            final scoreCompare = rightScore.compareTo(leftScore);
+            if (scoreCompare != 0) {
+              return scoreCompare;
+            }
 
-        final viewportCompare = right.state.position.viewportDimension
-            .compareTo(left.state.position.viewportDimension);
-        if (viewportCompare != 0) {
-          return viewportCompare;
-        }
-        return right.depth.compareTo(left.depth);
-      });
+            final maxExtentCompare = right.state.position.maxScrollExtent
+                .compareTo(left.state.position.maxScrollExtent);
+            if (maxExtentCompare != 0) {
+              return maxExtentCompare;
+            }
+
+            final viewportCompare = right.state.position.viewportDimension
+                .compareTo(left.state.position.viewportDimension);
+            if (viewportCompare != 0) {
+              return viewportCompare;
+            }
+            return right.depth.compareTo(left.depth);
+          });
     if (scrollableLocator?.index case final index?) {
       if (index < 0 || index >= ordered.length) {
         return null;
       }
-      return ordered[index];
+      return _CockpitScrollableSelection(
+        candidate: ordered[index],
+        index: index,
+        count: ordered.length,
+      );
     }
-    return ordered.first;
+    return _CockpitScrollableSelection(
+      candidate: ordered.first,
+      index: 0,
+      count: ordered.length,
+    );
+  }
+
+  int? _targetScrollableDistance(
+    Element target,
+    _CockpitScrollableCandidate candidate,
+  ) {
+    if (identical(target, candidate.element) ||
+        identical(target, candidate.semanticsElement)) {
+      return 0;
+    }
+
+    int? match;
+    var distance = 1;
+    target.visitAncestorElements((ancestor) {
+      if (identical(ancestor, candidate.semanticsElement) ||
+          identical(ancestor, candidate.element)) {
+        match = distance;
+        return false;
+      }
+      distance += 1;
+      return true;
+    });
+    return match;
   }
 
   Offset _scrollDragDelta({
@@ -1056,38 +1420,25 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
 
   String? _stableKeyValue(Key? key) {
     return switch (key) {
-      ValueKey<Object?>(value: final value) => value?.toString(),
-      ObjectKey(value: final value) => value.toString(),
+      ValueKey<Object?>(value: final value) => _stableKeyPayload(value),
+      ObjectKey(value: final value) => _stableKeyPayload(value),
       _ => null,
     };
   }
 
-  String? _scrollableKeyValue(Element element) {
-    final ownKey = _stableKeyValue(element.widget.key);
-    if (ownKey != null && ownKey.isNotEmpty) {
-      return ownKey;
+  String? _stableKeyPayload(Object? value) {
+    if (value == null || value.runtimeType.toString().startsWith('_')) {
+      return null;
     }
+    final normalized = value.toString().trim();
+    return normalized.isEmpty ? null : normalized;
+  }
 
-    String? ancestorKey;
-    element.visitAncestorElements((ancestor) {
-      ancestorKey = _stableKeyValue(ancestor.widget.key);
-      return ancestorKey == null || ancestorKey!.isEmpty;
-    });
-    return ancestorKey;
+  String? _scrollableKeyValue(Element element) {
+    return _stableKeyValue(element.widget.key);
   }
 
   Element _scrollableLocatorBoundary(Element element) {
-    final keyValue = _scrollableKeyValue(element);
-    if (keyValue != null && keyValue.isNotEmpty) {
-      final keyedBoundary = _nearestElementWithStableKey(element, keyValue);
-      if (keyedBoundary != null) {
-        return keyedBoundary;
-      }
-    }
-    final descendantBoundary = _semanticScrollableBoundaryInSubtree(element);
-    if (descendantBoundary != null) {
-      return descendantBoundary;
-    }
     if (_isSemanticScrollableBoundary(element)) {
       return element;
     }
@@ -1100,41 +1451,10 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
       }
       return true;
     });
-    return boundary ?? element;
-  }
-
-  Element? _nearestElementWithStableKey(Element element, String keyValue) {
-    if (_stableKeyValue(element.widget.key) == keyValue) {
-      return element;
+    if (boundary != null) {
+      return boundary!;
     }
-
-    Element? ancestorMatch;
-    element.visitAncestorElements((ancestor) {
-      if (_stableKeyValue(ancestor.widget.key) == keyValue) {
-        ancestorMatch = ancestor;
-        return false;
-      }
-      return true;
-    });
-    if (ancestorMatch != null) {
-      return ancestorMatch;
-    }
-
-    Element? descendantMatch;
-
-    void visit(Element candidate) {
-      if (descendantMatch != null || !candidate.mounted) {
-        return;
-      }
-      if (_stableKeyValue(candidate.widget.key) == keyValue) {
-        descendantMatch = candidate;
-        return;
-      }
-      candidate.visitChildElements(visit);
-    }
-
-    element.visitChildElements(visit);
-    return descendantMatch;
+    return _semanticScrollableBoundaryInSubtree(element) ?? element;
   }
 
   Element? _semanticScrollableBoundaryInSubtree(Element element) {
@@ -1490,6 +1810,7 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
     }
 
     if (targetLocator != null) {
+      score += _scrollableTargetContextScore(candidate, targetLocator);
       final targetPath = targetLocator.path;
       if (targetPath != null) {
         if (_pathContainsScrollable(candidate.path, targetPath)) {
@@ -1513,6 +1834,100 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
       score += 10;
     }
     return score;
+  }
+
+  int _scrollableTargetContextScore(
+    _CockpitScrollableCandidate candidate,
+    CockpitLocator targetLocator,
+  ) {
+    const maxVisitedElements = 1200;
+    var visitedElements = 0;
+    var bestScore = 0;
+
+    void visit(Element element) {
+      if (!element.mounted || visitedElements >= maxVisitedElements) {
+        return;
+      }
+      visitedElements += 1;
+      for (final locator in _flatten(targetLocator)) {
+        bestScore = math.max(
+          bestScore,
+          _elementTargetContextScore(element, locator),
+        );
+      }
+      if (bestScore < 160) {
+        element.visitChildElements(visit);
+      }
+    }
+
+    visit(candidate.element);
+    return bestScore;
+  }
+
+  int _elementTargetContextScore(Element element, CockpitLocator locator) {
+    var score = 0;
+    final keyValue = _stableKeyValue(element.widget.key);
+    final semanticSignal = _elementSemanticSignal(element);
+    final textSignal = _elementTextSignal(element);
+    final tooltipSignal = _elementTooltipSignal(element);
+
+    if (locator.cockpitId case final expected?) {
+      if (keyValue == expected ||
+          _normalizedContains(semanticSignal, expected) ||
+          _normalizedContains(textSignal, expected)) {
+        score = math.max(score, 160);
+      }
+    }
+    if (locator.semanticId case final expected?) {
+      if (_normalizedContains(semanticSignal, expected)) {
+        score = math.max(score, 160);
+      }
+    }
+    if (locator.key case final expected?) {
+      if (keyValue == expected) {
+        score = math.max(score, 160);
+      }
+    }
+    if (locator.text case final expected?) {
+      score = math.max(score, _targetTextContextScore(textSignal, expected));
+      score = math.max(
+        score,
+        _targetTextContextScore(semanticSignal, expected),
+      );
+    }
+    if (locator.tooltip case final expected?) {
+      score = math.max(score, _targetTextContextScore(tooltipSignal, expected));
+    }
+    if (locator.type case final expected?) {
+      if (_matchesTypeSignal(element.widget.runtimeType.toString(), expected)) {
+        score = math.max(score, 32);
+      }
+    }
+    return score;
+  }
+
+  int _targetTextContextScore(String? candidate, String expected) {
+    final normalizedCandidate = _normalizeText(candidate)?.toLowerCase();
+    final normalizedExpected = _normalizeText(expected)?.toLowerCase();
+    if (normalizedCandidate == null || normalizedExpected == null) {
+      return 0;
+    }
+    if (normalizedCandidate == normalizedExpected) {
+      return 144;
+    }
+    if (normalizedCandidate.contains(normalizedExpected) ||
+        normalizedExpected.contains(normalizedCandidate)) {
+      return 96;
+    }
+    return 0;
+  }
+
+  bool _normalizedContains(String? candidate, String expected) {
+    final normalizedCandidate = _normalizeText(candidate)?.toLowerCase();
+    final normalizedExpected = _normalizeText(expected)?.toLowerCase();
+    return normalizedCandidate != null &&
+        normalizedExpected != null &&
+        normalizedCandidate.contains(normalizedExpected);
   }
 
   int _scrollableLocatorMatchScore(
@@ -1967,6 +2382,7 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
     Element targetElement, {
     required CockpitRevealAlignment alignment,
     required double padding,
+    required double offset,
     required Duration duration,
   }) async {
     final scrollableState = Scrollable.maybeOf(targetElement);
@@ -2005,7 +2421,7 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
     final leadingEdge = axis == Axis.vertical ? origin.dy : origin.dx;
     final trailingEdge = leadingEdge + targetExtent;
     final clampedPadding = padding.clamp(0, availableExtent).toDouble();
-    final desiredLeadingEdge = switch (alignment) {
+    final alignedLeadingEdge = switch (alignment) {
       CockpitRevealAlignment.start => clampedPadding,
       CockpitRevealAlignment.center => availableExtent / 2,
       CockpitRevealAlignment.end =>
@@ -2017,6 +2433,10 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
             ? viewportExtent - targetExtent - clampedPadding
             : leadingEdge,
     };
+    final desiredLeadingEdge = (alignedLeadingEdge + offset).clamp(
+      0,
+      availableExtent,
+    );
     final viewportDelta = leadingEdge - desiredLeadingEdge;
     if (viewportDelta.abs() < 0.5) {
       return;
@@ -2207,6 +2627,18 @@ final class _CockpitScrollableCandidate {
         )?.actionHandler(action) ??
         cockpitResolveSemanticsTargetInfo(element)?.actionHandler(action);
   }
+}
+
+final class _CockpitScrollableSelection {
+  const _CockpitScrollableSelection({
+    required this.candidate,
+    required this.index,
+    required this.count,
+  });
+
+  final _CockpitScrollableCandidate candidate;
+  final int index;
+  final int count;
 }
 
 final class _CockpitSurfaceScope extends InheritedWidget {

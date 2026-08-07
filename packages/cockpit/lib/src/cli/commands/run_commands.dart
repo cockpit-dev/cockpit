@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:args/args.dart';
@@ -17,16 +18,26 @@ final class CockpitCaseCommand extends Command<int> {
         runtime: runtime,
         name: 'list',
         description: 'List indexed cases for a workspace.',
-        configure: (parser) => parser.addOption('workspace-id'),
+        configure: (parser) => parser
+          ..addOption('workspace-id')
+          ..addOption('id', help: 'Return one exact authored case ID.')
+          ..addOption('path', help: 'Filter by relative path substring.'),
         action: (arguments) async {
           final workspaceId = await runtime.workspaceId(
             arguments.option('workspace-id'),
           );
-          await runtime.success(<String, Object?>{
-            'items': (await (await runtime.client()).cases(
-              workspaceId,
-            )).map((testCase) => testCase.toJson()).toList(),
-          });
+          final requestedId = arguments.option('id');
+          final requestedPath = arguments.option('path');
+          final items = (await (await runtime.client()).cases(workspaceId))
+              .where(
+                (testCase) =>
+                    (requestedId == null || testCase.caseId == requestedId) &&
+                    (requestedPath == null ||
+                        testCase.relativePath?.contains(requestedPath) == true),
+              )
+              .map((testCase) => testCase.toJson())
+              .toList(growable: false);
+          await runtime.success(<String, Object?>{'items': items});
           return cockpitSuccessExitCode;
         },
       ),
@@ -39,7 +50,11 @@ final class CockpitCaseCommand extends Command<int> {
         configure: (parser) => parser
           ..addOption('workspace-id')
           ..addOption('file', mandatory: true)
-          ..addOption('format', allowed: const <String>['json', 'yaml']),
+          ..addOption(
+            'input-format',
+            allowed: CockpitDocumentFormat.values.map((value) => value.name),
+            help: 'Input document format; inferred from the file, then JSON.',
+          ),
         action: (arguments) async {
           final file = File(arguments.option('file')!);
           if (await file.length() > cockpitSupervisorMaximumResponseBytes) {
@@ -48,7 +63,10 @@ final class CockpitCaseCommand extends Command<int> {
           final workspaceId = await runtime.workspaceId(
             arguments.option('workspace-id'),
           );
-          final format = _documentFormat(arguments.option('format'), file.path);
+          final format = _documentFormat(
+            arguments.option('input-format'),
+            file.path,
+          );
           final result = await (await runtime.client()).validateCaseDocument(
             workspaceId,
             CockpitDocumentValidationRequest(
@@ -67,17 +85,23 @@ final class CockpitCaseCommand extends Command<int> {
         runtime: runtime,
         name: 'run',
         description: 'Run an indexed case with canonical source identity.',
+        defaultTimeout: const Duration(minutes: 30),
+        maximumTimeout: const Duration(hours: 6),
         configure: (parser) => parser
           ..addOption('workspace-id')
           ..addOption('document-id')
           ..addOption('case-id', mandatory: true)
           ..addOption('idempotency-key', mandatory: true)
-          ..addOption('inputs-json')
-          ..addOption('inputs-file')
-          ..addOption('target-id')
+          ..addOption('inputs', help: 'Case inputs as LON, JSON, or YAML.')
+          ..addOption('inputs-file', help: 'LON, JSON, or YAML case inputs.')
           ..addOption(
-            'timeout-ms',
-            help: 'Overall case deadline; defaults to the advertised policy.',
+            'session',
+            abbr: 's',
+            help: 'Select another development session for this checkout.',
+          )
+          ..addOption(
+            'target-id',
+            help: 'Select a non-development or explicitly registered target.',
           ),
         action: (arguments) async {
           final workspaceId = await runtime.workspaceId(
@@ -117,16 +141,17 @@ final class CockpitCaseCommand extends Command<int> {
               idempotencyKey: CockpitIdempotencyKey(
                 arguments.option('idempotency-key')!,
               ),
-              inputs: runtime.jsonObject(
-                arguments.option('inputs-json'),
+              inputs: runtime.structuredObject(
+                arguments.option('inputs'),
                 arguments.option('inputs-file'),
+                option: 'inputs',
               ),
-              targetId: arguments.option('target-id'),
-              timeoutMs: _optionalInteger(
+              targetId: await _runTargetId(
+                runtime,
                 arguments,
-                'timeout-ms',
-                maximum: 21600000,
+                workspaceId: workspaceId,
               ),
+              timeoutMs: runtime.commandTimeout.inMilliseconds,
             ),
           );
           await runtime.success(accepted.toJson());
@@ -152,17 +177,31 @@ final class CockpitSuiteCommand extends Command<int> {
         runtime: runtime,
         name: 'list',
         description: 'List indexed suites for a workspace.',
-        configure: (parser) => parser.addOption('workspace-id'),
+        configure: (parser) => parser
+          ..addOption('workspace-id')
+          ..addOption('id', help: 'Return one exact authored suite ID.')
+          ..addOption('path', help: 'Filter by relative path substring.'),
         action: (arguments) async {
           final workspaceId = await runtime.workspaceId(
             arguments.option('workspace-id'),
           );
-          final items = (await (await runtime.client()).documents(workspaceId))
-              .where(
-                (document) => document.kind == CockpitIndexedDocumentKind.suite,
-              )
-              .map((document) => document.toJson())
-              .toList(growable: false);
+          final requestedId = arguments.option('id');
+          final requestedPath = arguments.option('path');
+          final items =
+              (await (await runtime.client()).documents(
+                    workspaceId,
+                    kind: CockpitIndexedDocumentKind.suite,
+                  ))
+                  .where(
+                    (document) =>
+                        document.kind == CockpitIndexedDocumentKind.suite &&
+                        (requestedId == null ||
+                            document.authoredId == requestedId) &&
+                        (requestedPath == null ||
+                            document.relativePath.contains(requestedPath)),
+                  )
+                  .map((document) => document.toJson())
+                  .toList(growable: false);
           await runtime.success(<String, Object?>{'items': items});
           return cockpitSuccessExitCode;
         },
@@ -176,7 +215,11 @@ final class CockpitSuiteCommand extends Command<int> {
         configure: (parser) => parser
           ..addOption('workspace-id')
           ..addOption('file', mandatory: true)
-          ..addOption('format', allowed: const <String>['json', 'yaml']),
+          ..addOption(
+            'input-format',
+            allowed: CockpitDocumentFormat.values.map((value) => value.name),
+            help: 'Input document format; inferred from the file, then JSON.',
+          ),
         action: (arguments) async {
           final file = File(arguments.option('file')!);
           if (await file.length() > cockpitSupervisorMaximumResponseBytes) {
@@ -188,7 +231,10 @@ final class CockpitSuiteCommand extends Command<int> {
           final result = await (await runtime.client()).validateCaseDocument(
             workspaceId,
             CockpitDocumentValidationRequest(
-              format: _documentFormat(arguments.option('format'), file.path),
+              format: _documentFormat(
+                arguments.option('input-format'),
+                file.path,
+              ),
               sourceText: await file.readAsString(),
               relativePath: p.basename(file.path),
             ),
@@ -203,17 +249,23 @@ final class CockpitSuiteCommand extends Command<int> {
         runtime: runtime,
         name: 'run',
         description: 'Run an indexed suite as one durable campaign.',
+        defaultTimeout: const Duration(hours: 2),
+        maximumTimeout: const Duration(hours: 24),
         configure: (parser) => parser
           ..addOption('workspace-id')
           ..addOption('document-id')
           ..addOption('suite-id', mandatory: true)
           ..addOption('idempotency-key', mandatory: true)
-          ..addOption('inputs-json')
-          ..addOption('inputs-file')
-          ..addOption('target-id')
+          ..addOption('inputs', help: 'Suite inputs as LON, JSON, or YAML.')
+          ..addOption('inputs-file', help: 'LON, JSON, or YAML suite inputs.')
           ..addOption(
-            'timeout-ms',
-            help: 'Overall suite deadline; defaults to the advertised policy.',
+            'session',
+            abbr: 's',
+            help: 'Select another development session for this checkout.',
+          )
+          ..addOption(
+            'target-id',
+            help: 'Select a non-development or explicitly registered target.',
           ),
         action: (arguments) async {
           final workspaceId = await runtime.workspaceId(
@@ -256,16 +308,17 @@ final class CockpitSuiteCommand extends Command<int> {
               idempotencyKey: CockpitIdempotencyKey(
                 arguments.option('idempotency-key')!,
               ),
-              inputs: runtime.jsonObject(
-                arguments.option('inputs-json'),
+              inputs: runtime.structuredObject(
+                arguments.option('inputs'),
                 arguments.option('inputs-file'),
+                option: 'inputs',
               ),
-              targetId: arguments.option('target-id'),
-              timeoutMs: _optionalInteger(
+              targetId: await _runTargetId(
+                runtime,
                 arguments,
-                'timeout-ms',
-                maximum: 86400000,
+                workspaceId: workspaceId,
               ),
+              timeoutMs: runtime.commandTimeout.inMilliseconds,
             ),
           );
           await runtime.success(accepted.toJson());
@@ -393,8 +446,7 @@ final class CockpitRunCommand extends Command<int> {
             maximum: 1000,
           );
           final jsonLines =
-              runtime.outputSelection.stdoutFormat ==
-              CockpitCliStdoutFormat.jsonl;
+              runtime.outputSelection.format == CockpitCliFormat.jsonl;
           if (jsonLines && runtime.outputSelection.outputPath != null) {
             throw const FormatException(
               '--output cannot be combined with streaming JSONL; redirect stdout instead.',
@@ -402,19 +454,32 @@ final class CockpitRunCommand extends Command<int> {
           }
           final values = <Map<String, Object?>>[];
           var emitted = 0;
-          await for (final item in (await runtime.client()).events(
-            arguments.option('run-id')!,
-            afterSequence: after,
-            lastEventId: arguments.option('last-event-id'),
-          )) {
-            final value = _streamItemJson(item);
-            emitted += 1;
-            if (jsonLines) {
-              runtime.jsonLine(value);
-            } else {
-              values.add(value);
+          final events = StreamIterator(
+            (await runtime.client()).events(
+              arguments.option('run-id')!,
+              afterSequence: after,
+              lastEventId: arguments.option('last-event-id'),
+            ),
+          );
+          try {
+            while (await events.moveNext().timeout(
+              runtime.remainingTimeout,
+              onTimeout: () => throw CockpitCliTimeoutException(
+                'run.events',
+                runtime.commandTimeout,
+              ),
+            )) {
+              final value = _streamItemJson(events.current);
+              emitted += 1;
+              if (jsonLines) {
+                runtime.jsonLine(value);
+              } else {
+                values.add(value);
+              }
+              if (emitted >= maximum) break;
             }
-            if (emitted >= maximum) break;
+          } finally {
+            await events.cancel();
           }
           if (!jsonLines) {
             await runtime.success(<String, Object?>{'items': values});
@@ -512,12 +577,36 @@ final class CockpitArtifactCommand extends Command<int> {
 CockpitDocumentFormat _documentFormat(String? requested, String path) {
   if (requested != null) return CockpitDocumentFormat.values.byName(requested);
   return switch (p.extension(path).toLowerCase()) {
-    '.json' => CockpitDocumentFormat.json,
+    '.lon' => CockpitDocumentFormat.lon,
     '.yaml' || '.yml' => CockpitDocumentFormat.yaml,
-    _ => throw const FormatException(
-      'Case format cannot be inferred; pass --format.',
-    ),
+    _ => CockpitDocumentFormat.json,
   };
+}
+
+Future<String?> _runTargetId(
+  CockpitCliRuntime runtime,
+  ArgResults arguments, {
+  required String workspaceId,
+}) async {
+  final targetId = arguments.option('target-id');
+  final session = arguments.option('session');
+  if (targetId != null && session != null) {
+    throw const FormatException(
+      '--session and --target-id are mutually exclusive.',
+    );
+  }
+  if (targetId != null) return targetId;
+
+  final handle = session == null
+      ? await runtime.maybeActiveDevelopmentSession(workspaceId: workspaceId)
+      : await runtime.resolveDevelopmentSession(session);
+  if (handle == null) return null;
+  if (handle.workspaceId != workspaceId) {
+    throw const FormatException(
+      'Session handle belongs to a different workspace.',
+    );
+  }
+  return handle.targetId!;
 }
 
 Map<String, Object?> _streamItemJson(CockpitRunStreamItem item) =>
@@ -547,21 +636,6 @@ int _integer(
   int? maximum,
 }) {
   final value = int.tryParse(arguments.option(name)!);
-  if (value == null || value < minimum || maximum != null && value > maximum) {
-    throw FormatException('--$name is invalid.');
-  }
-  return value;
-}
-
-int? _optionalInteger(
-  ArgResults arguments,
-  String name, {
-  int minimum = 1,
-  int? maximum,
-}) {
-  final raw = arguments.option(name);
-  if (raw == null) return null;
-  final value = int.tryParse(raw);
   if (value == null || value < minimum || maximum != null && value > maximum) {
     throw FormatException('--$name is invalid.');
   }

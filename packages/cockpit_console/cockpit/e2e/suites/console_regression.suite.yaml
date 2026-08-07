@@ -1,0 +1,24 @@
+schemaVersion: cockpit.test/v2
+kind: suite
+id: consoleRegression
+name: Cockpit Console regression
+description: Release smoke coverage for Flutter and non-invasive native Console control.
+tags: [acceptance, regression, console]
+execution:
+  maxConcurrency: 1
+  failFast: false
+  isolation: sharedSession
+report:
+  formats: [json, junit, html, summary]
+  includePassedAttempts: true
+cases:
+  - id: flutterSmoke
+    source:
+      kind: file
+      relativePath: packages/cockpit_console/cockpit/e2e/cases/console_flutter_smoke.case.yaml
+      caseId: consoleFlutterSmoke
+  - id: nativeSmoke
+    source:
+      kind: file
+      relativePath: packages/cockpit_console/cockpit/e2e/cases/console_native_smoke.case.yaml
+      caseId: consoleNativeSmoke

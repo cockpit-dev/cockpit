@@ -4,6 +4,7 @@ import 'cockpit_runtime_event.dart';
 import 'cockpit_runtime_query.dart';
 
 final class CockpitRuntimeSnapshot {
+  /// Creates a CockpitRuntimeSnapshot.
   const CockpitRuntimeSnapshot({
     required this.totalEntryCount,
     required this.errorCount,
@@ -25,6 +26,7 @@ final class CockpitRuntimeSnapshot {
   static const ListEquality<CockpitRuntimeEvent> _entryEquality =
       ListEquality<CockpitRuntimeEvent>();
 
+  /// Encodes this CockpitRuntimeSnapshot as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
     'totalEntryCount': totalEntryCount,
     'errorCount': errorCount,
@@ -35,6 +37,7 @@ final class CockpitRuntimeSnapshot {
     'truncated': truncated,
   };
 
+  /// Decodes a CockpitRuntimeSnapshot from a JSON object.
   factory CockpitRuntimeSnapshot.fromJson(Map<String, Object?> json) {
     final queryJson = json['query'] as Map<Object?, Object?>?;
     return CockpitRuntimeSnapshot(

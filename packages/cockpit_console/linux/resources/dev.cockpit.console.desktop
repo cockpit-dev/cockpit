@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Cockpit Console
+Comment=Desktop client for Cockpit Supervisor
+Exec=cockpit_console
+Icon=dev.cockpit.console
+Terminal=false
+Categories=Development;

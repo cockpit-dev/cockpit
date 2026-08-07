@@ -4,6 +4,7 @@ import '../model/cockpit_step_record.dart';
 import 'cockpit_command_result.dart';
 
 final class CockpitCommandExecution {
+  /// Creates a CockpitCommandExecution.
   CockpitCommandExecution({
     required this.result,
     Map<String, List<int>> artifactPayloads = const <String, List<int>>{},

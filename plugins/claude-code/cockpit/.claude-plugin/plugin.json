@@ -1,6 +1,6 @@
 {
   "name": "cockpit",
-  "description": "Cockpit 2.0 skills and MCP setup for cross-platform development, black-box application control, E2E suites, reports, and evidence.",
+  "description": "Cockpit 3.0 skills and MCP setup for Flutter development, black-box application control, E2E suites, reports, and evidence.",
   "author": {
     "name": "Cockpit Dev"
   }

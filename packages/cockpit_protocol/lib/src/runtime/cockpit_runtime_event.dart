@@ -5,6 +5,7 @@ enum CockpitRuntimeEventKind {
   uncaughtError('uncaughtError'),
   debugLog('debugLog');
 
+  /// Creates a CockpitRuntimeEventKind.
   const CockpitRuntimeEventKind(this.jsonValue);
 
   final String jsonValue;
@@ -26,6 +27,7 @@ enum CockpitRuntimeEventSeverity {
   warning('warning'),
   error('error');
 
+  /// Creates a CockpitRuntimeEventSeverity.
   const CockpitRuntimeEventSeverity(this.jsonValue);
 
   final String jsonValue;
@@ -43,6 +45,7 @@ enum CockpitRuntimeEventSeverity {
 }
 
 final class CockpitRuntimeEvent {
+  /// Creates a CockpitRuntimeEvent.
   const CockpitRuntimeEvent({
     required this.eventId,
     required this.kind,
@@ -73,6 +76,7 @@ final class CockpitRuntimeEvent {
   bool get isError => severity == CockpitRuntimeEventSeverity.error;
   bool get isWarning => severity == CockpitRuntimeEventSeverity.warning;
 
+  /// Encodes this CockpitRuntimeEvent as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
     'eventId': eventId,
     'kind': kind.jsonValue,
@@ -86,6 +90,7 @@ final class CockpitRuntimeEvent {
     'stackTraceTruncated': stackTraceTruncated,
   };
 
+  /// Decodes a CockpitRuntimeEvent from a JSON object.
   factory CockpitRuntimeEvent.fromJson(Map<String, Object?> json) {
     return CockpitRuntimeEvent(
       eventId: json['eventId']! as String,

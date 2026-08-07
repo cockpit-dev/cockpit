@@ -50,6 +50,7 @@ abstract final class CockpitErrorCode {
 }
 
 final class CockpitApiError {
+  /// Creates a CockpitApiError.
   CockpitApiError({
     required this.code,
     required this.category,
@@ -84,6 +85,7 @@ final class CockpitApiError {
   final Map<String, Object?> redactedDetails;
   final List<CockpitArtifactReference> artifacts;
 
+  /// Encodes this CockpitApiError as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
     'code': code,
     'category': category.name,
@@ -95,6 +97,7 @@ final class CockpitApiError {
       'artifacts': artifacts.map((artifact) => artifact.toJson()).toList(),
   };
 
+  /// Decodes a CockpitApiError from a JSON object.
   factory CockpitApiError.fromJson(
     Object? value, {
     String path = r'$',
@@ -168,16 +171,19 @@ final class CockpitApiError {
 }
 
 final class CockpitApiWarning {
+  /// Creates a CockpitApiWarning.
   CockpitApiWarning({required this.stage, required this.error});
 
   final CockpitWarningStage stage;
   final CockpitApiError error;
 
+  /// Encodes this CockpitApiWarning as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
     'stage': stage.name,
     'error': error.toJson(),
   };
 
+  /// Decodes a CockpitApiWarning from a JSON object.
   factory CockpitApiWarning.fromJson(
     Object? value, {
     String path = r'$',
@@ -207,6 +213,7 @@ final class CockpitApiWarning {
 }
 
 final class CockpitFailure {
+  /// Creates a CockpitFailure.
   CockpitFailure({
     required this.primary,
     Iterable<CockpitApiWarning> warnings = const <CockpitApiWarning>[],
@@ -222,12 +229,14 @@ final class CockpitFailure {
   final List<CockpitApiWarning> warnings;
   late final List<CockpitArtifactReference> artifacts;
 
+  /// Encodes this CockpitFailure as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
     'primary': primary.toJson(),
     if (warnings.isNotEmpty)
       'warnings': warnings.map((warning) => warning.toJson()).toList(),
   };
 
+  /// Decodes a CockpitFailure from a JSON object.
   factory CockpitFailure.fromJson(
     Object? value, {
     String path = r'$',
@@ -263,6 +272,7 @@ final class CockpitFailure {
 }
 
 final class CockpitApiErrorResponse {
+  /// Creates a CockpitApiErrorResponse.
   CockpitApiErrorResponse({
     this.schemaVersion = 'cockpit.foundation/v2',
     required this.requestId,
@@ -281,6 +291,7 @@ final class CockpitApiErrorResponse {
   final DateTime timestamp;
   final CockpitFailure failure;
 
+  /// Encodes this CockpitApiErrorResponse as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
     'schemaVersion': schemaVersion,
     'requestId': requestId,
@@ -288,6 +299,7 @@ final class CockpitApiErrorResponse {
     'failure': failure.toJson(),
   };
 
+  /// Decodes a CockpitApiErrorResponse from a JSON object.
   factory CockpitApiErrorResponse.fromJson(
     Object? value, {
     String path = r'$',
@@ -330,6 +342,7 @@ final class CockpitApiErrorResponse {
 }
 
 final class CockpitApiException implements Exception {
+  /// Creates a CockpitApiException.
   const CockpitApiException(this.error);
 
   final CockpitApiError error;

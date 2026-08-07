@@ -24,6 +24,7 @@ abstract final class CockpitWorkspaceStateMachine {
 }
 
 final class CockpitWorkspaceMarker {
+  /// Creates a CockpitWorkspaceMarker.
   CockpitWorkspaceMarker({
     this.schemaVersion = 'cockpit.workspace/v2',
     required this.workspaceId,
@@ -46,6 +47,7 @@ final class CockpitWorkspaceMarker {
   final String checkoutId;
   final DateTime createdAt;
 
+  /// Encodes this CockpitWorkspaceMarker as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
     'schemaVersion': schemaVersion,
     'workspaceId': workspaceId,
@@ -54,6 +56,7 @@ final class CockpitWorkspaceMarker {
     'createdAt': createdAt.toUtc().toIso8601String(),
   };
 
+  /// Decodes a CockpitWorkspaceMarker from a JSON object.
   factory CockpitWorkspaceMarker.fromJson(Object? value, {String path = r'$'}) {
     final json = CockpitFoundationValueReader.object(value, path);
     const fields = <String>{
@@ -90,6 +93,7 @@ final class CockpitWorkspaceMarker {
 }
 
 final class CockpitWorkspaceResource {
+  /// Creates a CockpitWorkspaceResource.
   CockpitWorkspaceResource({
     required this.workspaceId,
     required this.projectId,
@@ -135,6 +139,7 @@ final class CockpitWorkspaceResource {
   final DateTime registeredAt;
   final DateTime updatedAt;
 
+  /// Encodes this CockpitWorkspaceResource as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
     'workspaceId': workspaceId,
     'projectId': projectId,
@@ -147,6 +152,7 @@ final class CockpitWorkspaceResource {
     'updatedAt': updatedAt.toUtc().toIso8601String(),
   };
 
+  /// Decodes a CockpitWorkspaceResource from a JSON object.
   factory CockpitWorkspaceResource.fromJson(
     Object? value, {
     String path = r'$',
@@ -213,6 +219,7 @@ final class CockpitWorkspaceResource {
 }
 
 final class CockpitWorkspaceRegistration {
+  /// Creates a CockpitWorkspaceRegistration.
   CockpitWorkspaceRegistration({required this.rootId, required this.path}) {
     CockpitFoundationValueReader.id(rootId, r'$.rootId');
     CockpitFoundationValueReader.absolutePath(path, r'$.path');
@@ -221,11 +228,13 @@ final class CockpitWorkspaceRegistration {
   final String rootId;
   final String path;
 
+  /// Encodes this CockpitWorkspaceRegistration as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
     'rootId': rootId,
     'path': path,
   };
 
+  /// Decodes a CockpitWorkspaceRegistration from a JSON object.
   factory CockpitWorkspaceRegistration.fromJson(
     Object? value, {
     String path = r'$',
@@ -248,6 +257,7 @@ final class CockpitWorkspaceRegistration {
 }
 
 final class CockpitWorkspaceRebind {
+  /// Creates a CockpitWorkspaceRebind.
   CockpitWorkspaceRebind({
     required this.path,
     required this.expectedCheckoutId,
@@ -262,11 +272,13 @@ final class CockpitWorkspaceRebind {
   final String path;
   final String expectedCheckoutId;
 
+  /// Encodes this CockpitWorkspaceRebind as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
     'path': path,
     'expectedCheckoutId': expectedCheckoutId,
   };
 
+  /// Decodes a CockpitWorkspaceRebind from a JSON object.
   factory CockpitWorkspaceRebind.fromJson(Object? value, {String path = r'$'}) {
     final json = CockpitFoundationValueReader.object(value, path);
     CockpitFoundationValueReader.keys(
@@ -289,6 +301,7 @@ final class CockpitWorkspaceRebind {
 }
 
 final class CockpitWorkspaceRemoval {
+  /// Creates a CockpitWorkspaceRemoval.
   CockpitWorkspaceRemoval({this.force = false, this.drainTimeoutMs = 30000}) {
     if (drainTimeoutMs < 0 || drainTimeoutMs > 300000) {
       throw const FormatException('Workspace drain timeout is invalid.');
@@ -298,11 +311,13 @@ final class CockpitWorkspaceRemoval {
   final bool force;
   final int drainTimeoutMs;
 
+  /// Encodes this CockpitWorkspaceRemoval as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
     'force': force,
     'drainTimeoutMs': drainTimeoutMs,
   };
 
+  /// Decodes a CockpitWorkspaceRemoval from a JSON object.
   factory CockpitWorkspaceRemoval.fromJson(
     Object? value, {
     String path = r'$',

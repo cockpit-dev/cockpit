@@ -1,8 +1,9 @@
 import 'cockpit_hit_test_miss_policy.dart';
 
 final class CockpitInteractionPolicy {
+  /// Creates a CockpitInteractionPolicy.
   const CockpitInteractionPolicy({
-    this.targetResolveTimeout = const Duration(milliseconds: 1200),
+    this.targetResolveTimeout = const Duration(seconds: 2),
     this.targetResolvePollInterval = const Duration(milliseconds: 32),
     this.uiIdleQuietWindow = const Duration(milliseconds: 96),
     this.uiIdleTimeout = const Duration(milliseconds: 1600),
@@ -34,6 +35,7 @@ final class CockpitInteractionPolicy {
   final bool waitForNetworkIdleDuringAcceptanceCapture;
   final CockpitHitTestMissPolicy hitTestMissPolicy;
 
+  /// Returns a copy of this CockpitInteractionPolicy with supplied fields replaced.
   CockpitInteractionPolicy copyWith({
     Duration? targetResolveTimeout,
     Duration? targetResolvePollInterval,

@@ -48,7 +48,7 @@ final class CockpitLeaseWorkerResourceAuthority
       throw const FormatException('Resource authority workspace mismatch.');
     }
     final submittedAt = _utcNow();
-    final operationId = _newId('resource-operation');
+    final operationId = _newId('ro');
     final output = switch (invocation.kind) {
       'resource.acquire' => await _acquire(invocation),
       'resource.handoff' => await _handoff(invocation),
@@ -143,7 +143,7 @@ final class CockpitLeaseWorkerResourceAuthority
     if (expiresAt == null || lease.state != CockpitLeaseState.active) {
       throw const FormatException('Resource lease is not active.');
     }
-    final grantId = _newId('grant');
+    final grantId = _newId('gr');
     final grant = CockpitWorkerResourceGrant(
       grantId: grantId,
       leaseId: lease.leaseId,
@@ -323,7 +323,7 @@ final class CockpitLeaseWorkerResourceAuthority
   }
 
   String _newId(String prefix) =>
-      '${prefix}_${_tokenGenerator.nextToken(byteLength: 16)}';
+      '$prefix-${_tokenGenerator.nextResourceIdToken()}';
 }
 
 final class _AuthorityGrant {

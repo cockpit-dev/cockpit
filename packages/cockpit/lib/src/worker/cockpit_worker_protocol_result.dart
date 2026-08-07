@@ -25,6 +25,9 @@ sealed class CockpitWorkerProtocolResult {
       ),
       'publishArtifactBatch' =>
         CockpitWorkerPublishArtifactBatchResult.fromJson(value),
+      'readSessionArtifact' => CockpitWorkerReadSessionArtifactResult.fromJson(
+        value,
+      ),
       _ => throw const FormatException('Unsupported worker method.'),
     };
   }
@@ -456,6 +459,88 @@ final class CockpitWorkerPublishArtifactBatchResult
     return CockpitWorkerPublishArtifactBatchResult(
       runId: workerId(json['runId'], r'$.runId'),
       artifactIds: _ids(json['artifactIds'], r'$.artifactIds'),
+    );
+  }
+}
+
+final class CockpitWorkerReadSessionArtifactResult
+    extends CockpitWorkerProtocolResult {
+  CockpitWorkerReadSessionArtifactResult({
+    required this.sessionId,
+    required this.artifactId,
+    required this.kind,
+    required this.name,
+    required this.mediaType,
+    required this.retainedPath,
+    required this.sizeBytes,
+    required this.sha256,
+  }) {
+    workerId(sessionId, r'$.sessionId');
+    workerId(artifactId, r'$.artifactId');
+    workerId(kind, r'$.kind');
+    workerString(name, r'$.name', maximum: 512);
+    workerString(mediaType, r'$.mediaType', maximum: 128);
+    workerString(retainedPath, r'$.retainedPath', maximum: 32768);
+    if (sizeBytes < 1 ||
+        sizeBytes > 16 * 1024 * 1024 * 1024 ||
+        !RegExp(r'^[a-f0-9]{64}$').hasMatch(sha256)) {
+      throw const FormatException('Session artifact metadata is invalid.');
+    }
+  }
+
+  final String sessionId;
+  final String artifactId;
+  final String kind;
+  final String name;
+  final String mediaType;
+  final String retainedPath;
+  final int sizeBytes;
+  final String sha256;
+
+  @override
+  String get method => 'readSessionArtifact';
+
+  @override
+  Map<String, Object?> toJson() => <String, Object?>{
+    'sessionId': sessionId,
+    'artifactId': artifactId,
+    'kind': kind,
+    'name': name,
+    'mediaType': mediaType,
+    'retainedPath': retainedPath,
+    'sizeBytes': sizeBytes,
+    'sha256': sha256,
+  };
+
+  factory CockpitWorkerReadSessionArtifactResult.fromJson(Object? value) {
+    final json = _resultObject(value, const <String>{
+      'sessionId',
+      'artifactId',
+      'kind',
+      'name',
+      'mediaType',
+      'retainedPath',
+      'sizeBytes',
+      'sha256',
+    });
+    return CockpitWorkerReadSessionArtifactResult(
+      sessionId: workerId(json['sessionId'], r'$.sessionId'),
+      artifactId: workerId(json['artifactId'], r'$.artifactId'),
+      kind: workerId(json['kind'], r'$.kind'),
+      name: workerString(json['name'], r'$.name', maximum: 512),
+      mediaType: workerString(json['mediaType'], r'$.mediaType', maximum: 128),
+      retainedPath: workerString(
+        json['retainedPath'],
+        r'$.retainedPath',
+        maximum: 32768,
+      ),
+      sizeBytes: workerInteger(
+        json['sizeBytes'],
+        r'$.sizeBytes',
+        minimum: 1,
+        maximum: 16 * 1024 * 1024 * 1024,
+      ),
+      sha256: workerString(json['sha256'], r'$.sha256', maximum: 64),
     );
   }
 }

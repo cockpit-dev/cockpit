@@ -5,6 +5,7 @@ import '../runtime/cockpit_capabilities.dart';
 import '../runtime/cockpit_snapshot.dart';
 
 final class CockpitRemoteSessionStatus {
+  /// Creates a CockpitRemoteSessionStatus.
   CockpitRemoteSessionStatus({
     required this.sessionId,
     required this.platform,
@@ -14,6 +15,7 @@ final class CockpitRemoteSessionStatus {
     required this.recordingCapabilities,
     required this.snapshot,
     this.environment,
+    this.processId,
     this.activeRecording,
   });
 
@@ -25,8 +27,10 @@ final class CockpitRemoteSessionStatus {
   final CockpitRecordingCapabilities recordingCapabilities;
   final CockpitSnapshot snapshot;
   final CockpitEnvironment? environment;
+  final int? processId;
   final CockpitRecordingSession? activeRecording;
 
+  /// Encodes this CockpitRemoteSessionStatus as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
     'sessionId': sessionId,
     'platform': platform,
@@ -36,9 +40,11 @@ final class CockpitRemoteSessionStatus {
     'recordingCapabilities': recordingCapabilities.toJson(),
     'snapshot': snapshot.toJson(),
     if (environment != null) 'environment': environment!.toJson(),
+    if (processId != null) 'processId': processId,
     if (activeRecording != null) 'activeRecording': activeRecording!.toJson(),
   };
 
+  /// Decodes a CockpitRemoteSessionStatus from a JSON object.
   factory CockpitRemoteSessionStatus.fromJson(Map<String, Object?> json) {
     final capabilitiesJson = json['capabilities'] as Map<Object?, Object?>;
     final recordingCapabilitiesJson =
@@ -68,6 +74,7 @@ final class CockpitRemoteSessionStatus {
                 environmentJson as Map<Object?, Object?>,
               ),
             ),
+      processId: json['processId'] as int?,
       activeRecording: activeRecordingJson == null
           ? null
           : CockpitRecordingSession.fromJson(
@@ -90,6 +97,7 @@ final class CockpitRemoteSessionStatus {
             other.recordingCapabilities == recordingCapabilities &&
             other.snapshot == snapshot &&
             other.environment == environment &&
+            other.processId == processId &&
             other.activeRecording == activeRecording;
   }
 
@@ -103,6 +111,7 @@ final class CockpitRemoteSessionStatus {
     recordingCapabilities,
     snapshot,
     environment,
+    processId,
     activeRecording,
   );
 }

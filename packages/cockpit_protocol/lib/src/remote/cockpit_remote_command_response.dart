@@ -5,6 +5,7 @@ import 'cockpit_remote_artifact_download.dart';
 import 'cockpit_remote_artifact_payload.dart';
 
 final class CockpitRemoteCommandResponse {
+  /// Creates a CockpitRemoteCommandResponse.
   CockpitRemoteCommandResponse({
     required this.result,
     List<CockpitRemoteArtifactPayload> artifactPayloads =
@@ -21,6 +22,7 @@ final class CockpitRemoteCommandResponse {
   final List<CockpitStepRecord> runtimeSteps;
   final List<CockpitRemoteArtifactDownload> artifactDownloads;
 
+  /// Creates a CockpitRemoteCommandResponse using the named constructor `fromExecution`.
   factory CockpitRemoteCommandResponse.fromExecution(
     CockpitCommandExecution execution,
   ) {
@@ -54,6 +56,7 @@ final class CockpitRemoteCommandResponse {
     );
   }
 
+  /// Encodes this CockpitRemoteCommandResponse as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
     'result': result.toJson(),
     'artifactPayloads': artifactPayloads
@@ -68,6 +71,7 @@ final class CockpitRemoteCommandResponse {
           .toList(growable: false),
   };
 
+  /// Decodes a CockpitRemoteCommandResponse from a JSON object.
   factory CockpitRemoteCommandResponse.fromJson(Map<String, Object?> json) {
     final resultJson = json['result'] as Map<Object?, Object?>;
     final payloadJson =

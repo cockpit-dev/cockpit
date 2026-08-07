@@ -9,6 +9,7 @@ import 'cockpit_test_value_reader.dart';
 import 'cockpit_test_variable.dart';
 
 final class CockpitTestActionTemplate {
+  /// Creates a CockpitTestActionTemplate.
   CockpitTestActionTemplate({
     required this.kind,
     this.locator,
@@ -36,6 +37,7 @@ final class CockpitTestActionTemplate {
 
   CockpitTestActionSpec get spec => cockpitTestActionSpecs[kind]!;
 
+  /// Encodes this CockpitTestActionTemplate as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
     'type': kind.name,
     if (locator != null) 'locator': locator!.toJson(),
@@ -45,6 +47,7 @@ final class CockpitTestActionTemplate {
     ...extensions,
   };
 
+  /// Decodes a CockpitTestActionTemplate from a JSON object.
   factory CockpitTestActionTemplate.fromJson(
     Object? value, {
     required String path,
@@ -161,6 +164,7 @@ final class CockpitTestActionTemplate {
 }
 
 final class CockpitTestAction {
+  /// Creates a CockpitTestAction.
   CockpitTestAction({
     required this.kind,
     this.locator,
@@ -223,6 +227,7 @@ final class CockpitTestAction {
   bool get containsSecret =>
       values.values.any((value) => value is CockpitTestSecretToken);
 
+  /// Encodes this CockpitTestAction as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
     'type': kind.name,
     if (locator != null) 'locator': locator!.toJson(),
@@ -246,6 +251,7 @@ final class CockpitTestAction {
     );
   }
 
+  /// Decodes a CockpitTestAction from a JSON object.
   factory CockpitTestAction.fromJson(Object? value, {required String path}) {
     final template = CockpitTestActionTemplate.fromJson(value, path: path);
     final boundValues = <CockpitTestActionField, Object?>{};

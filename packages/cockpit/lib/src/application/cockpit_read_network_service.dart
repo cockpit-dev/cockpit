@@ -19,6 +19,8 @@ final class CockpitReadNetworkRequest {
     this.maxEntries = 8,
     this.maxEndpointSummaries = 8,
     this.includeEntries = false,
+    this.id,
+    this.before,
     this.method,
     this.uriContains,
     this.onlyFailures = false,
@@ -32,12 +34,16 @@ final class CockpitReadNetworkRequest {
   final int maxEntries;
   final int maxEndpointSummaries;
   final bool includeEntries;
+  final String? id;
+  final String? before;
   final String? method;
   final String? uriContains;
   final bool onlyFailures;
   final int? statusCodeAtLeast;
 
   CockpitNetworkQuery get networkQuery => CockpitNetworkQuery(
+    id: id,
+    before: before,
     method: method,
     uriContains: uriContains,
     onlyFailures: onlyFailures,

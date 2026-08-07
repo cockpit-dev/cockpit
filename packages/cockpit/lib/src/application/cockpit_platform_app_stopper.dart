@@ -76,6 +76,7 @@ final class CockpitPlatformAppStopper {
           '-e',
           'tell application id "$appId" to quit',
         ]);
+        await _bestEffortTerminateOwnedProcess(app);
       case 'windows':
         await _bestEffortRun(
           'taskkill',
@@ -124,18 +125,53 @@ final class CockpitPlatformAppStopper {
     List<String> arguments, {
     Duration timeout = const Duration(seconds: 5),
   }) async {
+    final result = await _runProcess(executable, arguments, timeout: timeout);
+    return result?.exitCode == 0;
+  }
+
+  Future<ProcessResult?> _runProcess(
+    String executable,
+    List<String> arguments, {
+    Duration timeout = const Duration(seconds: 5),
+  }) async {
     try {
-      final result = _usesDefaultProcessRunner
+      return _usesDefaultProcessRunner
           ? await cockpitRunProcessWithTimeout(
               executable,
               arguments,
               timeout: timeout,
             )
           : await _processRunner(executable, arguments).timeout(timeout);
-      return result.exitCode == 0;
     } on Object {
-      // Reachability checks decide whether stop really succeeded.
-      return false;
+      return null;
+    }
+  }
+
+  Future<void> _bestEffortTerminateOwnedProcess(CockpitAppHandle app) async {
+    final processId = app.processId;
+    if (processId == null || processId <= 0) {
+      return;
+    }
+    final commandResult = await _runProcess('ps', <String>[
+      '-p',
+      '$processId',
+      '-o',
+      'command=',
+    ]);
+    final command = commandResult?.stdout.toString().trim() ?? '';
+    if (command.isEmpty || !command.contains(app.projectDir)) {
+      return;
+    }
+    await _bestEffortRun('kill', <String>['-TERM', '$processId']);
+    await Future<void>.delayed(const Duration(milliseconds: 250));
+    final remaining = await _runProcess('ps', <String>[
+      '-p',
+      '$processId',
+      '-o',
+      'command=',
+    ]);
+    if ((remaining?.stdout.toString().trim() ?? '').isNotEmpty) {
+      await _bestEffortRun('kill', <String>['-KILL', '$processId']);
     }
   }
 

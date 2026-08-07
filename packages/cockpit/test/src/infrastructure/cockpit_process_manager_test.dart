@@ -18,6 +18,7 @@ void main() {
         'ProgramFiles': r'C:\Program Files',
         'LOCALAPPDATA': r'C:\Users\runner\AppData\Local',
         'COMSPEC': r'C:\Windows\System32\cmd.exe',
+        'COCKPIT_HOME': '/tmp/cockpit-isolated',
         'PSModulePath': r'C:\Windows\System32\WindowsPowerShell\v1.0\Modules',
         'SECRET_TOKEN': 'must-not-leak',
       },
@@ -32,6 +33,7 @@ void main() {
       'ProgramFiles': r'C:\Program Files',
       'LOCALAPPDATA': r'C:\Users\runner\AppData\Local',
       'COMSPEC': r'C:\Windows\System32\cmd.exe',
+      'COCKPIT_HOME': '/tmp/cockpit-isolated',
     });
   });
 

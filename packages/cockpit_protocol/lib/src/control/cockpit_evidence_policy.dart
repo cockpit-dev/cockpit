@@ -1,6 +1,7 @@
 import 'package:collection/collection.dart';
 
 final class CockpitEvidencePolicy {
+  /// Creates a CockpitEvidencePolicy.
   const CockpitEvidencePolicy({
     this.captureBeforeAction = false,
     this.captureAfterAction = false,
@@ -18,6 +19,7 @@ final class CockpitEvidencePolicy {
   static const MapEquality<String, Object?> _mapEquality =
       MapEquality<String, Object?>();
 
+  /// Encodes this CockpitEvidencePolicy as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
     'captureBeforeAction': captureBeforeAction,
     'captureAfterAction': captureAfterAction,
@@ -26,6 +28,7 @@ final class CockpitEvidencePolicy {
     'escalateToDiagnosticsOnAmbiguity': escalateToDiagnosticsOnAmbiguity,
   };
 
+  /// Decodes a CockpitEvidencePolicy from a JSON object.
   factory CockpitEvidencePolicy.fromJson(Map<String, Object?> json) {
     return CockpitEvidencePolicy(
       captureBeforeAction: json['captureBeforeAction'] as bool? ?? false,

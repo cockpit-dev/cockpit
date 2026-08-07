@@ -108,7 +108,7 @@ void main() {
     );
   });
 
-  test('yolo mode grants every operation and test safety capability', () {
+  test('yolo grants operations but never implicit environment access', () {
     final policy = CockpitSupervisorAuthorizationPolicy(
       mode: CockpitAuthorizationMode.yolo,
     );
@@ -132,7 +132,14 @@ void main() {
       policy.effectiveAllowedSafetyEffects,
       CockpitTestSafetyEffect.values.toSet(),
     );
-    expect(policy.allowsEnvironmentSecretName('ANY_SECRET'), isTrue);
+    expect(policy.allowsEnvironmentSecretName('ANY_SECRET'), isFalse);
+    expect(
+      CockpitSupervisorAuthorizationPolicy(
+        mode: CockpitAuthorizationMode.yolo,
+        allowedEnvironmentSecretNames: const <String>{'EXPLICIT_VALUE'},
+      ).allowsEnvironmentSecretName('EXPLICIT_VALUE'),
+      isTrue,
+    );
   });
 }
 

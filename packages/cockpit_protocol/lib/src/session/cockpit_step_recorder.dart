@@ -18,6 +18,7 @@ import 'cockpit_observation_assembler.dart';
 import 'cockpit_timestamp_provider.dart';
 
 final class CockpitStepRecorder {
+  /// Creates a CockpitStepRecorder.
   CockpitStepRecorder({
     required CockpitTimestampProvider now,
     required CockpitObservationAssembler observationAssembler,

@@ -4,6 +4,7 @@ import 'cockpit_operation_contract.dart';
 import 'cockpit_operation_descriptor.dart';
 
 final class CockpitOperationCatalog {
+  /// Creates a CockpitOperationCatalog.
   CockpitOperationCatalog(Iterable<CockpitOperationContract<Object?>> contracts)
     : _contracts = <String, CockpitOperationContract<Object?>>{} {
     for (final contract in contracts) {

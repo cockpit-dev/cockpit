@@ -270,6 +270,7 @@ void main() {
       return _readJson(baseUri!.resolve('/health'));
     });
     final health = CockpitRemoteSessionStatus.fromJson(healthJson!);
+    expect(health.processId, pid);
 
     expect(health.snapshot.routeName, '/home');
     expect(health.snapshot.diagnosticLevel, CockpitSnapshotProfile.live);

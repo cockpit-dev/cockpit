@@ -10,6 +10,7 @@ import '../runtime/cockpit_surface_kind.dart';
 import '../runtime/cockpit_target_kind.dart';
 
 final class CockpitObservationAssembler {
+  /// Creates a CockpitObservationAssembler.
   const CockpitObservationAssembler();
 
   CockpitSnapshot? normalizeCommandSnapshot(

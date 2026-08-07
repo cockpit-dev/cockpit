@@ -15,7 +15,13 @@ final class FlutterCockpitWeb {
       const StandardMethodCodec(),
       registrar,
     );
+    final viewportChannel = MethodChannel(
+      cockpitWebViewportChannelName,
+      const StandardMethodCodec(),
+      registrar,
+    );
     captureChannel.setMethodCallHandler(cockpitWebHandleCaptureMethodCall);
     recordingChannel.setMethodCallHandler(cockpitWebHandleRecordingMethodCall);
+    viewportChannel.setMethodCallHandler(cockpitWebHandleViewportMethodCall);
   }
 }

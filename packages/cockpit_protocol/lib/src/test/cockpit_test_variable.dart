@@ -6,6 +6,7 @@ enum CockpitTestVariableSource { constant, input, secret }
 const Object _absentVariableValue = Object();
 
 final class CockpitTestVariableDeclaration {
+  /// Creates a CockpitTestVariableDeclaration.
   CockpitTestVariableDeclaration({
     required this.source,
     required this.valueType,
@@ -56,6 +57,7 @@ final class CockpitTestVariableDeclaration {
   final bool required;
   final String? secretReference;
 
+  /// Encodes this CockpitTestVariableDeclaration as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
     'source': source.name,
     'type': valueType.name,
@@ -65,6 +67,7 @@ final class CockpitTestVariableDeclaration {
     if (secretReference != null) 'reference': secretReference,
   };
 
+  /// Decodes a CockpitTestVariableDeclaration from a JSON object.
   factory CockpitTestVariableDeclaration.fromJson(
     Object? value, {
     required String path,
@@ -163,6 +166,7 @@ Object? _typedVariableValue(
 }
 
 final class CockpitTestSecretToken {
+  /// Creates a CockpitTestSecretToken.
   const CockpitTestSecretToken(this.value);
 
   final String value;

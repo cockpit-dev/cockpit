@@ -7,5 +7,6 @@ abstract interface class CockpitTestDocument {
 
   String? get name;
 
+  /// Encodes this CockpitTestDocument as a JSON object.
   Map<String, Object?> toJson();
 }

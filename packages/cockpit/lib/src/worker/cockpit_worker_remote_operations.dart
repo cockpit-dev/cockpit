@@ -24,6 +24,7 @@ import 'cockpit_workspace_operation_registry.dart';
 final class CockpitWorkerRemoteOperations {
   factory CockpitWorkerRemoteOperations({
     required String workspaceId,
+    required String producerRoot,
     required CockpitWorkerRuntimeRegistry registry,
     required CockpitWorkerTargetResolver targets,
     required CockpitWorkerForwardedPortHandoff portHandoff,
@@ -39,6 +40,9 @@ final class CockpitWorkerRemoteOperations {
     CockpitWaitRemoteUiIdleService? waitIdleService,
   }) {
     final snapshots = snapshotStore ?? CockpitInteractiveSnapshotStore();
+    final artifactTempFileFactory = cockpitWorkerArtifactTempFileFactory(
+      producerRoot,
+    );
     return CockpitWorkerRemoteOperations._(
       workspaceId: workspaceId,
       registry: registry,
@@ -52,15 +56,24 @@ final class CockpitWorkerRemoteOperations {
           CockpitReadRemoteStatusService(snapshotStore: snapshots),
       readSnapshotService:
           readSnapshotService ??
-          CockpitReadRemoteSnapshotService(snapshotStore: snapshots),
+          CockpitReadRemoteSnapshotService(
+            snapshotStore: snapshots,
+            artifactTempFileFactory: artifactTempFileFactory,
+          ),
       collectSnapshotService:
           collectSnapshotService ?? CockpitCollectRemoteSnapshotService(),
       executeCommandService:
           executeCommandService ??
-          CockpitExecuteRemoteCommandService(snapshotStore: snapshots),
+          CockpitExecuteRemoteCommandService(
+            snapshotStore: snapshots,
+            artifactTempFileFactory: artifactTempFileFactory,
+          ),
       executeBatchService:
           executeBatchService ??
-          CockpitExecuteRemoteCommandBatchService(snapshotStore: snapshots),
+          CockpitExecuteRemoteCommandBatchService(
+            snapshotStore: snapshots,
+            artifactTempFileFactory: artifactTempFileFactory,
+          ),
       waitIdleService: waitIdleService ?? CockpitWaitRemoteUiIdleService(),
     );
   }
@@ -282,7 +295,7 @@ final class CockpitWorkerRemoteOperations {
     CockpitWorkerResultSanitizer sanitizer,
   ) async {
     final pair = await _session(input);
-    _requireSessionGrant(pair.binding, context, grants);
+    _requireSessionGrant(pair.binding, context, grants, allowUnleased: true);
     final result = await runWorkerApplicationOperation(
       context: context,
       operation: () => _query.query(
@@ -315,7 +328,7 @@ final class CockpitWorkerRemoteOperations {
       input,
       extra: const <String>{'profile', 'snapshotOptions'},
     );
-    _requireSessionGrant(pair.binding, context, grants);
+    _requireSessionGrant(pair.binding, context, grants, allowUnleased: true);
     final result = await runWorkerApplicationOperation(
       context: context,
       operation: () => _status.read(
@@ -345,7 +358,7 @@ final class CockpitWorkerRemoteOperations {
         'compareAgainstSnapshotRef',
       },
     );
-    _requireSessionGrant(pair.binding, context, grants);
+    _requireSessionGrant(pair.binding, context, grants, allowUnleased: true);
     final compareAgainstSnapshotRef = await _registry.resolveSnapshotRef(
       sessionId: pair.binding.sessionId,
       snapshotRef: pair.input.optionalId('compareAgainstSnapshotRef'),
@@ -549,19 +562,19 @@ final class CockpitWorkerRemoteOperations {
       requestedMilliseconds: pair.input.optionalInteger(
         'timeoutMs',
         minimum: 1,
-        maximum: 30000,
+        maximum: 300000,
       ),
-      defaultValue: const Duration(milliseconds: 1600),
-      maximum: const Duration(seconds: 30),
+      defaultValue: const Duration(seconds: 30),
+      maximum: const Duration(minutes: 5),
     );
     final quietWindow = Duration(
       milliseconds:
           pair.input.optionalInteger(
             'quietWindowMs',
-            minimum: 1,
-            maximum: 5000,
+            minimum: 50,
+            maximum: 60000,
           ) ??
-          96,
+          500,
     );
     if (quietWindow > timeout) {
       throw const FormatException('UI quiet window exceeds wait timeout.');
@@ -575,7 +588,7 @@ final class CockpitWorkerRemoteOperations {
           timeout: timeout,
           includeNetworkIdle: pair.input.boolean(
             'includeNetworkIdle',
-            defaultValue: true,
+            defaultValue: false,
           ),
         ),
       ),
@@ -602,8 +615,10 @@ final class CockpitWorkerRemoteOperations {
   void _requireSessionGrant(
     CockpitWorkerSessionBinding session,
     CockpitWorkspaceOperationContext context,
-    List<CockpitWorkerResourceGrant> grants,
-  ) {
+    List<CockpitWorkerResourceGrant> grants, {
+    bool allowUnleased = false,
+  }) {
+    if (allowUnleased && grants.isEmpty) return;
     requireWorkerResourceGrant(
       context: context,
       grants: grants,

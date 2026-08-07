@@ -1966,6 +1966,33 @@ void main() {
     expect(result.command.last, contains('set dark mode to true'));
   });
 
+  test('macos Automation denial is reported as blocked', () async {
+    final processManager = _TransientFailingProcessManager(
+      failures: const <_FakeProcessExit>[
+        _FakeProcessExit(
+          exitCode: 1,
+          stderr: 'execution error: Error: Error: denied (-1743)',
+        ),
+      ],
+    );
+    final service = CockpitSystemControlActionService(
+      processManager: processManager,
+    );
+
+    final result = await service.run(
+      const CockpitSystemControlActionRequest(
+        platform: 'macos',
+        action: CockpitSystemControlAction.setAppearance,
+        parameters: <String, Object?>{'appearance': 'dark'},
+      ),
+    );
+
+    expect(result.success, isFalse);
+    expect(result.availability, CockpitSystemControlAvailability.blocked);
+    expect(result.errorCode, 'systemAutomationPermissionDenied');
+    expect(result.recommendedNextStep, 'grantSystemAutomationPermission');
+  });
+
   test('windows setAppearance writes the personalize registry keys', () async {
     final processManager = _FakeProcessManager();
     final service = CockpitSystemControlActionService(
@@ -3623,6 +3650,26 @@ void main() {
       },
     });
     expect(result.toJson()['errorDetails'], result.errorDetails);
+  });
+
+  test('macos screen recording denial is reported as blocked', () async {
+    final service = CockpitSystemControlActionService(
+      processManager: _FakeProcessManager(),
+      captureAdapterFactory: (_) => const _DetailedFailingCaptureAdapter(),
+    );
+
+    final result = await service.run(
+      const CockpitSystemControlActionRequest(
+        platform: 'macos',
+        appId: 'dev.cockpit.console',
+        action: CockpitSystemControlAction.captureScreenshot,
+      ),
+    );
+
+    expect(result.success, isFalse);
+    expect(result.availability, CockpitSystemControlAvailability.blocked);
+    expect(result.errorCode, 'systemScreenRecordingPermissionDenied');
+    expect(result.recommendedNextStep, 'grantScreenRecordingPermission');
   });
 
   test(

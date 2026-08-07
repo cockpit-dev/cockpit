@@ -64,6 +64,9 @@ final class CockpitAllowedRootRegistry {
           }
           return CockpitLockedJsonUpdate.readOnly(state, root.toResource());
         }
+        if (root.state == CockpitRootState.retired) {
+          continue;
+        }
         if (_lexicalPaths.overlaps(root.canonicalPath, directory.path) ||
             root.filesystemIdentity == identity.value) {
           throw CockpitRegistryException(

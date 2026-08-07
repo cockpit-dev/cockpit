@@ -30,6 +30,21 @@ void main() {
     );
   });
 
+  test('snapshot targets retain locator ancestor metadata', () {
+    const ancestors = <CockpitSnapshotAncestor>[
+      CockpitSnapshotAncestor(typeName: 'Dialog'),
+      CockpitSnapshotAncestor(typeName: 'Scaffold'),
+    ];
+    const target = CockpitTarget(
+      registrationId: 'confirm-1',
+      text: 'Save',
+      routeName: '/editor',
+      locatorAncestors: ancestors,
+    );
+
+    expect(target.toSnapshotTarget().ancestors, ancestors);
+  });
+
   test('resolves targets by locator priority and fallback order', () {
     final registry = CockpitTargetRegistry(routeName: '/checkout');
 

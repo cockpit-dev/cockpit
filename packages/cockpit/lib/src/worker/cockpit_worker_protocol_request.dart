@@ -53,6 +53,9 @@ sealed class CockpitWorkerProtocolRequest {
       ),
       'publishArtifactBatch' =>
         CockpitWorkerPublishArtifactBatchRequest.fromJson(value),
+      'readSessionArtifact' => CockpitWorkerReadSessionArtifactRequest.fromJson(
+        value,
+      ),
       _ => throw const FormatException('Unsupported worker method.'),
     };
   }
@@ -541,6 +544,52 @@ final class CockpitWorkerPublishArtifactBatchRequest
             path: '\$.artifacts[$index]',
           ),
       ],
+    );
+  }
+}
+
+final class CockpitWorkerReadSessionArtifactRequest
+    extends CockpitWorkerProtocolRequest {
+  CockpitWorkerReadSessionArtifactRequest({
+    required super.protocolVersion,
+    required super.workspaceId,
+    required super.requestId,
+    required super.deadline,
+    required super.idempotencyKey,
+    required this.sessionId,
+    required this.artifactId,
+  }) {
+    workerId(sessionId, r'$.sessionId');
+    workerId(artifactId, r'$.artifactId');
+  }
+
+  final String sessionId;
+  final String artifactId;
+
+  @override
+  String get method => 'readSessionArtifact';
+
+  @override
+  Map<String, Object?> toJson() => <String, Object?>{
+    ...metadataJson(),
+    'sessionId': sessionId,
+    'artifactId': artifactId,
+  };
+
+  factory CockpitWorkerReadSessionArtifactRequest.fromJson(Object? value) {
+    final json = _requestObject(value, const <String>{
+      'sessionId',
+      'artifactId',
+    });
+    final metadata = _metadata(json);
+    return CockpitWorkerReadSessionArtifactRequest(
+      protocolVersion: metadata.protocolVersion,
+      workspaceId: metadata.workspaceId,
+      requestId: metadata.requestId,
+      deadline: metadata.deadline,
+      idempotencyKey: metadata.idempotencyKey,
+      sessionId: workerId(json['sessionId'], r'$.sessionId'),
+      artifactId: workerId(json['artifactId'], r'$.artifactId'),
     );
   }
 }

@@ -166,7 +166,7 @@ final class CockpitDevelopmentSessionMachineLauncher {
     final resolvedEndpoint =
         endpoint ?? await resolveRemoteSessionEndpoint(request);
     final deadline = _now().add(request.launchTimeout);
-    var attemptedMacosCacheRecovery = false;
+    var attemptedRecovery = false;
 
     while (true) {
       final machineClient = await startMachineClient(
@@ -187,26 +187,30 @@ final class CockpitDevelopmentSessionMachineLauncher {
           remoteSessionHandle: remoteSessionHandle,
         );
       } on Object catch (error) {
-        final canRecover =
-            !attemptedMacosCacheRecovery &&
-            _isRecoverableMacosDevelopmentCacheFailure(
-              request: request,
-              error: error,
-              machineClient: machineClient,
-            );
-        if (!canRecover) {
+        final recovery = attemptedRecovery
+            ? null
+            : _developmentRecovery(
+                request: request,
+                error: error,
+                machineClient: machineClient,
+              );
+        if (recovery == null) {
           await machineClient.dispose();
           rethrow;
         }
-        attemptedMacosCacheRecovery = true;
+        attemptedRecovery = true;
         await machineClient.dispose();
-        await _runMacosDevelopmentClean(
-          request,
-          timeout: _capTimeout(
-            _remaining(deadline),
-            const Duration(minutes: 2),
-          ),
-        );
+        if (recovery == _DevelopmentLaunchRecovery.clean) {
+          await _runMacosDevelopmentClean(
+            request,
+            timeout: _capTimeout(
+              _remaining(deadline),
+              const Duration(minutes: 2),
+            ),
+          );
+        } else {
+          _remaining(deadline);
+        }
       }
     }
   }
@@ -323,6 +327,7 @@ final class CockpitDevelopmentSessionMachineLauncher {
       appId: appId,
       platformAppId: platformAppId,
       platformAppIdKnown: platformAppId != null,
+      processId: status.processId,
       host: publicHost,
       hostPort: hostPort,
       devicePort: request.sessionPort,
@@ -347,7 +352,7 @@ final class CockpitDevelopmentSessionMachineLauncher {
     );
     return cockpitBuildFlutterLaunchArguments(
       userConfiguration: request.launchConfiguration,
-      internalArguments: internalArgs,
+      internalArguments: <String>['--no-dds', ...internalArgs],
     );
   }
 
@@ -652,19 +657,30 @@ final class CockpitDevelopmentSessionMachineLauncher {
         !cockpitLooksLikeIosSimulatorDeviceId(request.deviceId);
   }
 
-  bool _isRecoverableMacosDevelopmentCacheFailure({
+  _DevelopmentLaunchRecovery? _developmentRecovery({
     required CockpitLaunchDevelopmentMachineSessionRequest request,
     required Object error,
     required CockpitFlutterRunMachineClient machineClient,
   }) {
-    if (request.platform != 'macos') {
-      return false;
-    }
     final text = <String>[
       '$error',
       machineClient.recentDiagnosticSummary,
     ].where((value) => value.trim().isNotEmpty).join('\n');
-    return _isRecoverableMacosSwiftModuleCacheFailure(text);
+    if (_isRecoverableResidentCompilerFailure(text)) {
+      return _DevelopmentLaunchRecovery.retry;
+    }
+    if (request.platform == 'macos' &&
+        _isRecoverableMacosSwiftModuleCacheFailure(text)) {
+      return _DevelopmentLaunchRecovery.clean;
+    }
+    return null;
+  }
+
+  bool _isRecoverableResidentCompilerFailure(String output) {
+    return output.contains(
+          'A connection to the Resident Frontend Compiler could not be established',
+        ) &&
+        output.contains('A server is already running');
   }
 
   bool _isRecoverableMacosSwiftModuleCacheFailure(String output) {
@@ -709,6 +725,8 @@ final class CockpitDevelopmentSessionMachineLauncher {
     );
   }
 }
+
+enum _DevelopmentLaunchRecovery { retry, clean }
 
 final class CockpitResolvedRemoteSessionEndpoint {
   const CockpitResolvedRemoteSessionEndpoint({

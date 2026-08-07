@@ -1,9 +1,24 @@
 # Changelog
 
+## 3.0.0
+
+- Added the canonical command `changed` signal, viewport resize contracts, and
+  numeric development-session handle metadata used by the 3.0 task commands.
+- Added bounded network indexing and body retrieval contracts with masked
+  previews, explicit raw artifact access, SSE receiving state, and WebSocket
+  frame metadata.
+- Added signed scroll alignment and offset policy fields for deterministic
+  nested Flutter viewport placement.
+- Added LON as a first-class document format alongside JSON and YAML, including
+  strict format inference for case and suite documents.
+- Removed the 2.x compatibility surface for renamed command and output fields;
+  clients must use the 3.0 schema names.
+
 ## 2.2.1
 
-- Synchronized the public protocol patch release with Cockpit 2.2.1; protocol
-  contracts remain unchanged from 2.2.0.
+- Synchronized the public protocol patch release with Cockpit 2.2.1.
+- Added the default-safe `redact` network observer configuration used by the
+  Flutter development bridge.
 
 ## 2.2.0
 

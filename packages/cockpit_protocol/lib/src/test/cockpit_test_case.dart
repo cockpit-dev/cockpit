@@ -5,6 +5,7 @@ import 'cockpit_test_value_reader.dart';
 import 'cockpit_test_variable.dart';
 
 final class CockpitTestCase implements CockpitTestDocument {
+  /// Creates a CockpitTestCase.
   CockpitTestCase({
     this.schemaVersion = 'cockpit.test/v2',
     this.kind = 'case',
@@ -93,6 +94,7 @@ final class CockpitTestCase implements CockpitTestDocument {
   final List<CockpitTestStepTemplate> finallySteps;
   final Map<String, Object?> extensions;
 
+  /// Encodes this CockpitTestCase as a JSON object.
   @override
   Map<String, Object?> toJson() => <String, Object?>{
     'schemaVersion': schemaVersion,
@@ -119,6 +121,7 @@ final class CockpitTestCase implements CockpitTestDocument {
     ...extensions,
   };
 
+  /// Decodes a CockpitTestCase from a JSON object.
   factory CockpitTestCase.fromJson(Object? value, {String path = r'$'}) {
     final json = CockpitTestValueReader.object(value, path);
     CockpitTestValueReader.keys(

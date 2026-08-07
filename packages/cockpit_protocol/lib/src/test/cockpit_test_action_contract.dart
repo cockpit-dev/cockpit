@@ -78,6 +78,7 @@ enum CockpitTestActionField {
   systemParameters('parameters', CockpitTestValueType.json),
   snapshotOptions('snapshotOptions', CockpitTestValueType.json);
 
+  /// Creates a CockpitTestActionField.
   const CockpitTestActionField(this.wireName, this.valueType);
 
   final String wireName;
@@ -89,6 +90,7 @@ enum CockpitTestLocatorRequirement { forbidden, optional, required }
 enum CockpitTestSettlement { none, uiIdle, polling }
 
 final class CockpitTestActionSpec {
+  /// Creates a CockpitTestActionSpec.
   const CockpitTestActionSpec({
     required this.locator,
     required this.allowedFields,

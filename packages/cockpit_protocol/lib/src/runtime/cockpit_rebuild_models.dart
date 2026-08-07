@@ -1,6 +1,7 @@
 import 'package:collection/collection.dart';
 
 final class CockpitRebuildEntry {
+  /// Creates a CockpitRebuildEntry.
   const CockpitRebuildEntry({
     required this.signature,
     required this.routeName,
@@ -21,6 +22,7 @@ final class CockpitRebuildEntry {
   final String? semanticId;
   final String? textPreview;
 
+  /// Encodes this CockpitRebuildEntry as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
     'signature': signature,
     'routeName': routeName,
@@ -32,6 +34,7 @@ final class CockpitRebuildEntry {
     if (textPreview != null) 'textPreview': textPreview,
   };
 
+  /// Decodes a CockpitRebuildEntry from a JSON object.
   factory CockpitRebuildEntry.fromJson(Map<String, Object?> json) {
     return CockpitRebuildEntry(
       signature: json['signature']! as String,
@@ -73,6 +76,7 @@ final class CockpitRebuildEntry {
 }
 
 final class CockpitRebuildSnapshot {
+  /// Creates a CockpitRebuildSnapshot.
   const CockpitRebuildSnapshot({
     required this.totalRebuildCount,
     required this.uniqueElementCount,
@@ -90,6 +94,7 @@ final class CockpitRebuildSnapshot {
   static const ListEquality<CockpitRebuildEntry> _entryEquality =
       ListEquality<CockpitRebuildEntry>();
 
+  /// Encodes this CockpitRebuildSnapshot as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
     'totalRebuildCount': totalRebuildCount,
     'uniqueElementCount': uniqueElementCount,
@@ -98,6 +103,7 @@ final class CockpitRebuildSnapshot {
     'entries': entries.map((entry) => entry.toJson()).toList(growable: false),
   };
 
+  /// Decodes a CockpitRebuildSnapshot from a JSON object.
   factory CockpitRebuildSnapshot.fromJson(Map<String, Object?> json) {
     return CockpitRebuildSnapshot(
       totalRebuildCount: json['totalRebuildCount'] as int? ?? 0,

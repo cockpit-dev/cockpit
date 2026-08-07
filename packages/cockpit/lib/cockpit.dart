@@ -9,6 +9,10 @@ export 'src/infrastructure/cockpit_http_client.dart';
 export 'src/infrastructure/cockpit_monotonic_clock.dart'
     show CockpitMonotonicClock, CockpitSystemMonotonicClock;
 export 'src/infrastructure/cockpit_process_manager.dart';
+export 'src/foundation/cockpit_home.dart';
+export 'src/foundation/cockpit_permissions.dart';
+export 'src/foundation/cockpit_locked_json_store.dart';
+export 'src/foundation/cockpit_structured_input.dart';
 export 'src/infrastructure/cockpit_sdk_environment.dart';
 export 'src/artifacts/cockpit_test_attempt_bundle_writer.dart'
     show
@@ -68,6 +72,7 @@ export 'src/application/cockpit_read_remote_status_service.dart';
 export 'src/application/cockpit_read_runtime_errors_service.dart';
 export 'src/application/cockpit_read_session_logs_service.dart';
 export 'src/application/cockpit_reload_development_session_service.dart';
+export 'src/application/cockpit_resize_viewport_service.dart';
 export 'src/application/cockpit_run_batch_service.dart';
 export 'src/application/cockpit_run_command_service.dart';
 export 'src/application/cockpit_run_shell_service.dart';

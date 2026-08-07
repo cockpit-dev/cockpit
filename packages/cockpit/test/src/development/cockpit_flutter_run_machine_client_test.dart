@@ -256,6 +256,38 @@ void main() {
     expect(disposeCalled, 1);
   });
 
+  test('detach preserves the app and abandons the owned process', () async {
+    final stdoutController = StreamController<String>();
+    final stderrController = StreamController<String>();
+    final exitCode = Completer<int>();
+    final writes = <String>[];
+    var closeProcessCalls = 0;
+    final client = CockpitFlutterRunMachineClient(
+      stdoutLines: stdoutController.stream,
+      stderrLines: stderrController.stream,
+      exitCode: exitCode.future,
+      requestWriter: (payload) async {
+        writes.add(payload);
+      },
+      closeProcess: () async {
+        closeProcessCalls += 1;
+      },
+    );
+
+    final detachFuture = client.detach(appId: 'app-1');
+    await Future<void>.delayed(Duration.zero);
+    expect(writes.single, contains('"method":"app.detach"'));
+    expect(writes.single, contains('"appId":"app-1"'));
+    stdoutController.add('[{"id":0,"result":true}]');
+    expect(await detachFuture, isTrue);
+
+    await client.dispose(terminateProcess: false);
+    expect(closeProcessCalls, 0);
+    await stdoutController.close();
+    await stderrController.close();
+    exitCode.complete(0);
+  });
+
   test('dispose does not hang on a stuck shutdown hook', () async {
     final stdoutController = StreamController<String>();
     final stderrController = StreamController<String>();

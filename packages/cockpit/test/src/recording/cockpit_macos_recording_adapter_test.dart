@@ -720,16 +720,19 @@ exit 0
 
       final adapter = CockpitMacosRecordingAdapter(
         appId: 'dev.cockpit.cockpitDemo',
+        processId: 89688,
         ffmpegExecutable: ffmpegExecutable.path,
         osascriptExecutable: osascriptExecutable.path,
         windowTargetResolver:
             ({
               required appId,
+              required processId,
               required osascriptExecutable,
               required processRunner,
               required timeout,
               required activationSettleDelay,
             }) async {
+              expect(processId, 89688);
               return const CockpitMacosWindowTarget(
                 left: 1680,
                 top: 120,

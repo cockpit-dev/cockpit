@@ -16,7 +16,7 @@ a CI/release handoff.
 
 1. Terminal `run get` state and canonical report outcome.
 2. Required assertions and recorded runtime errors.
-3. Report-linked evidence with verified size and SHA-256.
+3. Report-linked evidence whose integrity Cockpit verified before commit.
 4. Human/CI projections generated from the same report fact graph.
 
 Command success, a created file, or an artifact reference alone is not product
@@ -67,7 +67,7 @@ assertions, errors, locator/plane/driver results, and evidence index.
 - Coverage shows selected journeys, matrix rows, targets, tags, and outcomes.
 - Executions exposes every attempt and ordered step, including setup, finally,
   retries, loops, calls, assertions, and step evidence.
-- Evidence provides a visual gallery and complete digest-indexed artifact list.
+- Evidence provides a visual gallery and complete artifact list.
 - Diagnostics shows failures, cleanup errors, timeouts, requested/actual
   planes, drivers, locator resolution, degradation, and source locations.
 - Environment/files records run identity, authorization, effective suite and
@@ -80,9 +80,11 @@ testers, product owners, and release leads never receive different or hidden
 facts. `summary.md` is a bounded neutral handoff, not an
 AI-authored summary. Do not rename it based on whether AI participated.
 
-Render complete case names, step IDs, matrix values, artifact paths, digests,
-and failure text. Allow long machine tokens to wrap, keep comparison tables
-horizontally scrollable, and never use ellipsis to hide evidence identities.
+Render complete case names, step IDs, matrix values, artifact paths, and
+failure text. Keep integrity digests in `manifest.json`; do not repeat them in
+terminal or summary output. Allow long machine tokens to wrap, keep comparison
+tables horizontally scrollable, and never use ellipsis to hide evidence
+identities.
 
 ## Artifact Download
 
@@ -102,7 +104,7 @@ artifact is needed:
 ```bash
 cockpit artifact list \
   --run-id <runId> \
-  --stdout-format json \
+  --format json \
   --output /absolute/bundle/artifacts.json
 cockpit artifact read \
   --run-id <runId> \

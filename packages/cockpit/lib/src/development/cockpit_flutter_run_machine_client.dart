@@ -41,6 +41,8 @@ final class CockpitFlutterRunMachineClient {
   late final StreamSubscription<String> _stderrSubscription;
   late final StreamSubscription<int> _exitCodeSubscription;
   final Completer<Uri> _vmServiceUriCompleter = Completer<Uri>();
+  final Completer<String> _appIdCompleter = Completer<String>();
+  final Completer<void> _closedCompleter = Completer<void>();
   int _nextRequestId = 0;
   String? _currentAppId;
   Uri? _currentVmServiceUri;
@@ -109,7 +111,8 @@ final class CockpitFlutterRunMachineClient {
     required String projectDir,
     required String target,
     required String deviceId,
-    required String appId,
+    String? platformAppId,
+    Uri? debugUrl,
     String? flavor,
     String? flutterExecutable,
     List<String> extraArgs = const <String>[],
@@ -126,8 +129,10 @@ final class CockpitFlutterRunMachineClient {
         target,
         '-d',
         deviceId,
-        '--app-id',
-        appId,
+        if (debugUrl != null) '--debug-url=$debugUrl',
+        if (debugUrl == null && platformAppId != null)
+          '--app-id=$platformAppId',
+        '--no-dds',
         if (flavor != null && flavor.isNotEmpty) ...<String>[
           '--flavor',
           flavor,
@@ -217,8 +222,39 @@ final class CockpitFlutterRunMachineClient {
     return sendRequest('app.stop', params: <String, Object?>{'appId': appId});
   }
 
-  Future<void> dispose() async {
-    await _closeWithinTimeout(_closeProcess?.call());
+  Future<Object?> detach({required String appId}) {
+    return sendRequest('app.detach', params: <String, Object?>{'appId': appId});
+  }
+
+  Future<String> waitForAppId({
+    Duration timeout = const Duration(seconds: 30),
+  }) {
+    final current = _currentAppId;
+    if (current != null && current.isNotEmpty) {
+      return Future<String>.value(current);
+    }
+    return Future.any<String>(<Future<String>>[
+      _appIdCompleter.future,
+      _closedCompleter.future.then<String>((_) {
+        throw CockpitFlutterRunMachineRequestException(
+          _lastExitCode == null
+              ? 'Flutter machine client closed before app.start.'
+              : _requestFailureMessage(_lastExitCode!),
+        );
+      }),
+    ]).timeout(
+      timeout,
+      onTimeout: () => throw TimeoutException(
+        'Flutter machine attach did not report app.start.',
+        timeout,
+      ),
+    );
+  }
+
+  Future<void> dispose({bool terminateProcess = true}) async {
+    if (terminateProcess) {
+      await _closeWithinTimeout(_closeProcess?.call());
+    }
     await _closeWithinTimeout(_stdoutSubscription.cancel());
     await _closeWithinTimeout(_stderrSubscription.cancel());
     await _closeWithinTimeout(_exitCodeSubscription.cancel());
@@ -232,6 +268,9 @@ final class CockpitFlutterRunMachineClient {
       }
     }
     _requestCompleters.clear();
+    if (!_closedCompleter.isCompleted) {
+      _closedCompleter.complete();
+    }
     await _eventsController.close();
   }
 
@@ -354,6 +393,10 @@ final class CockpitFlutterRunMachineClient {
     switch (eventName) {
       case 'app.start':
         _currentAppId = params?['appId'] as String?;
+        if (_currentAppId case final appId?
+            when appId.isNotEmpty && !_appIdCompleter.isCompleted) {
+          _appIdCompleter.complete(appId);
+        }
       case 'app.debugPort':
         final wsUri = params?['wsUri'] as String?;
         if (wsUri != null) {
@@ -409,6 +452,9 @@ final class CockpitFlutterRunMachineClient {
       }
     }
     _requestCompleters.clear();
+    if (!_closedCompleter.isCompleted) {
+      _closedCompleter.complete();
+    }
     _eventsController.add(
       CockpitFlutterRunMachineEvent(
         kind: CockpitFlutterRunMachineEventKind.processExit,

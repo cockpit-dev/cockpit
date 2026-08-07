@@ -56,5 +56,5 @@ const List<String> _baseArguments = <String>[
   '--state-root=/state/workspaceA',
   '--worker-owner-id=worker_A',
   '--process-start-identity=process_A',
-  '--authorization-mode=restricted',
+  '--auth=restricted',
 ];

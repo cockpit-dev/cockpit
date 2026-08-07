@@ -2,6 +2,7 @@ import '../runtime/cockpit_snapshot.dart';
 import 'cockpit_remote_artifact_download.dart';
 
 final class CockpitRemoteSnapshotResponse {
+  /// Creates a CockpitRemoteSnapshotResponse.
   CockpitRemoteSnapshotResponse({
     required this.snapshot,
     List<CockpitRemoteArtifactDownload> artifactDownloads =
@@ -11,6 +12,7 @@ final class CockpitRemoteSnapshotResponse {
   final CockpitSnapshot snapshot;
   final List<CockpitRemoteArtifactDownload> artifactDownloads;
 
+  /// Returns a copy of this CockpitRemoteSnapshotResponse with supplied fields replaced.
   CockpitRemoteSnapshotResponse copyWith({
     CockpitSnapshot? snapshot,
     List<CockpitRemoteArtifactDownload>? artifactDownloads,
@@ -21,6 +23,7 @@ final class CockpitRemoteSnapshotResponse {
     );
   }
 
+  /// Encodes this CockpitRemoteSnapshotResponse as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
     'snapshot': snapshot.toJson(),
     'artifactDownloads': artifactDownloads
@@ -28,6 +31,7 @@ final class CockpitRemoteSnapshotResponse {
         .toList(growable: false),
   };
 
+  /// Decodes a CockpitRemoteSnapshotResponse from a JSON object.
   factory CockpitRemoteSnapshotResponse.fromJson(Map<String, Object?> json) {
     final snapshotJson = json['snapshot'] as Map<Object?, Object?>;
     final downloadsJson =

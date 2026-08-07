@@ -54,7 +54,7 @@ void main() {
             },
         statusReader: (baseUri) async {
           probedBaseUris.add(baseUri);
-          return _readyStatus('android');
+          return _readyStatus('android', processId: 4242);
         },
         portForwarder: const _RecordingPortForwarder(58331),
         platformAppIdResolver:
@@ -83,6 +83,7 @@ void main() {
 
       expect(capturedStarts, hasLength(1));
       expect(capturedStarts.single['extraArgs'], <String>[
+        '--no-dds',
         '--dart-define=FLUTTER_COCKPIT_REMOTE_ENABLED=true',
         '--dart-define=FLUTTER_COCKPIT_REMOTE_HOST=0.0.0.0',
         '--dart-define=FLUTTER_COCKPIT_REMOTE_PORT=47331',
@@ -91,6 +92,7 @@ void main() {
       expect(probedBaseUris, <Uri>[Uri.parse('http://127.0.0.1:58331')]);
       expect(result.remoteSessionHandle.appId, 'machine-app-1');
       expect(result.remoteSessionHandle.platformAppId, 'dev.example.android');
+      expect(result.remoteSessionHandle.processId, 4242);
       expect(
         result.remoteSessionHandle.effectivePlatformAppId,
         'dev.example.android',
@@ -176,6 +178,7 @@ void main() {
         '--dart-define=API_URL=https://example.test',
         '--dart-define-from-file=config/dev.json',
         '--track-widget-creation',
+        '--no-dds',
         '--dart-define=FLUTTER_COCKPIT_REMOTE_ENABLED=true',
         '--dart-define=FLUTTER_COCKPIT_REMOTE_HOST=0.0.0.0',
         '--dart-define=FLUTTER_COCKPIT_REMOTE_PORT=47331',
@@ -260,6 +263,7 @@ void main() {
 
       expect(capturedStarts, hasLength(1));
       expect(capturedStarts.single['extraArgs'], <String>[
+        '--no-dds',
         '--dart-define=FLUTTER_COCKPIT_REMOTE_ENABLED=true',
         '--dart-define=FLUTTER_COCKPIT_REMOTE_HOST=0.0.0.0',
         '--dart-define=FLUTTER_COCKPIT_REMOTE_PORT=47331',
@@ -345,6 +349,7 @@ void main() {
 
       expect(capturedStarts, hasLength(1));
       expect(capturedStarts.single['extraArgs'], <String>[
+        '--no-dds',
         '--dart-define=FLUTTER_COCKPIT_REMOTE_ENABLED=true',
         '--dart-define=FLUTTER_COCKPIT_REMOTE_HOST=127.0.0.1',
         '--dart-define=FLUTTER_COCKPIT_REMOTE_PORT=59331',
@@ -552,6 +557,91 @@ void main() {
     },
   );
 
+  test('resident compiler connection races restart once without clean', () async {
+    final stdoutControllers = <StreamController<String>>[];
+    final stderrControllers = <StreamController<String>>[];
+    final exitCodes = <Completer<int>>[];
+    var starts = 0;
+    var cleans = 0;
+    final launcher = CockpitDevelopmentSessionMachineLauncher(
+      machineClientStarter:
+          ({
+            required projectDir,
+            required target,
+            required deviceId,
+            flavor,
+            flutterExecutable,
+            extraArgs = const <String>[],
+            environment,
+          }) async {
+            starts += 1;
+            final stdout = StreamController<String>();
+            final stderr = StreamController<String>();
+            final exitCode = Completer<int>();
+            stdoutControllers.add(stdout);
+            stderrControllers.add(stderr);
+            exitCodes.add(exitCode);
+            if (starts == 1) {
+              Future<void>.microtask(() {
+                stderr
+                  ..add(
+                    'A connection to the Resident Frontend Compiler could not be established.',
+                  )
+                  ..add('Bad state: A server is already running.');
+                exitCode.complete(1);
+              });
+            } else {
+              Future<void>.microtask(() {
+                stdout.add(
+                  '[{"event":"app.start","params":{"appId":"machine-app"}}]',
+                );
+              });
+            }
+            return CockpitFlutterRunMachineClient(
+              stdoutLines: stdout.stream,
+              stderrLines: stderr.stream,
+              exitCode: exitCode.future,
+              requestWriter: (_) async {},
+            );
+          },
+      recoveryProcessRunner:
+          (_, _, {workingDirectory, required timeout}) async {
+            cleans += 1;
+            return ProcessResult(1, 0, '', '');
+          },
+      statusReader: (_) async => _readyStatus('macos'),
+      platformAppIdResolver:
+          ({required projectDir, required platform, flavor}) async =>
+              'dev.example.macos',
+      now: () => DateTime.utc(2026, 4, 4, 17, 25),
+    );
+
+    final result = await launcher.launch(
+      const CockpitLaunchDevelopmentMachineSessionRequest(
+        projectDir: '/workspace/examples/cockpit_demo',
+        target: 'cockpit/main.dart',
+        platform: 'macos',
+        deviceId: 'macos',
+        sessionPort: 57331,
+        hostPort: 57331,
+        launchTimeout: Duration(seconds: 30),
+        flutterVersion: '3.44.0',
+      ),
+    );
+
+    expect(starts, 2);
+    expect(cleans, 0);
+    expect(result.remoteSessionHandle.appId, 'machine-app');
+    for (final controller in stdoutControllers) {
+      await controller.close();
+    }
+    for (final controller in stderrControllers) {
+      await controller.close();
+    }
+    if (!exitCodes.last.isCompleted) exitCodes.last.complete(0);
+    await result.machineClient.dispose();
+  });
+
   test('passes flavor through the development machine launch', () async {
     final stdoutController = StreamController<String>();
     final stderrController = StreamController<String>();
@@ -691,6 +781,7 @@ void main() {
 
       expect(capturedStarts, hasLength(1));
       expect(capturedStarts.single['extraArgs'], <String>[
+        '--no-dds',
         '--dart-define=FLUTTER_COCKPIT_REMOTE_ENABLED=true',
         '--dart-define=FLUTTER_COCKPIT_REMOTE_HOST=::',
         '--dart-define=FLUTTER_COCKPIT_REMOTE_PORT=47331',
@@ -1209,12 +1300,14 @@ final class _RecordingPortForwarder extends CockpitAndroidPortForwarder {
 CockpitRemoteSessionStatus _readyStatus(
   String platform, {
   String sessionId = 'remote-session-1',
+  int? processId,
 }) {
   return CockpitRemoteSessionStatus(
     sessionId: sessionId,
     platform: platform,
     transportType: 'http',
     currentRouteName: '/inbox',
+    processId: processId,
     capabilities: CockpitCapabilities(
       platform: platform,
       transportType: 'http',

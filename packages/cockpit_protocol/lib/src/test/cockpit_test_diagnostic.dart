@@ -3,6 +3,7 @@ import 'cockpit_test_value_reader.dart';
 enum CockpitTestDiagnosticSeverity { error, warning }
 
 final class CockpitTestSourceLocation {
+  /// Creates a CockpitTestSourceLocation.
   CockpitTestSourceLocation({
     required this.line,
     required this.column,
@@ -28,6 +29,7 @@ final class CockpitTestSourceLocation {
   final int? endLine;
   final int? endColumn;
 
+  /// Encodes this CockpitTestSourceLocation as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
     'line': line,
     'column': column,
@@ -35,6 +37,7 @@ final class CockpitTestSourceLocation {
     if (endColumn != null) 'endColumn': endColumn,
   };
 
+  /// Decodes a CockpitTestSourceLocation from a JSON object.
   factory CockpitTestSourceLocation.fromJson(
     Object? value, {
     String path = r'$',
@@ -76,6 +79,7 @@ final class CockpitTestSourceLocation {
 }
 
 final class CockpitTestSourceMapEntry {
+  /// Creates a CockpitTestSourceMapEntry.
   CockpitTestSourceMapEntry({required this.path, required this.location}) {
     CockpitTestValueReader.string(path, r'$.path');
   }
@@ -83,11 +87,13 @@ final class CockpitTestSourceMapEntry {
   final String path;
   final CockpitTestSourceLocation location;
 
+  /// Encodes this CockpitTestSourceMapEntry as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
     'path': path,
     'location': location.toJson(),
   };
 
+  /// Decodes a CockpitTestSourceMapEntry from a JSON object.
   factory CockpitTestSourceMapEntry.fromJson(
     Object? value, {
     String path = r'$',
@@ -110,6 +116,7 @@ final class CockpitTestSourceMapEntry {
 }
 
 final class CockpitTestDiagnostic {
+  /// Creates a CockpitTestDiagnostic.
   CockpitTestDiagnostic({
     required this.code,
     required this.message,
@@ -135,6 +142,7 @@ final class CockpitTestDiagnostic {
   final CockpitTestSourceLocation? location;
   final Map<String, Object?> details;
 
+  /// Encodes this CockpitTestDiagnostic as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
     'code': code,
     'message': message,
@@ -144,6 +152,7 @@ final class CockpitTestDiagnostic {
     if (details.isNotEmpty) 'details': details,
   };
 
+  /// Decodes a CockpitTestDiagnostic from a JSON object.
   factory CockpitTestDiagnostic.fromJson(Object? value, {String path = r'$'}) {
     final json = CockpitTestValueReader.object(value, path);
     CockpitTestValueReader.keys(

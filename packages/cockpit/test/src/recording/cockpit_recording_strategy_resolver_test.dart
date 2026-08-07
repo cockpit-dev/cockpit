@@ -173,7 +173,7 @@ void main() {
       remoteAdapterFactory: (client) => _FakeRecordingAdapter(),
       adbAdapterFactory: (deviceId) => _FakeRecordingAdapter(),
       simctlAdapterFactory: (deviceId) => _FakeRecordingAdapter(),
-      macosAdapterFactory: (appId) => _FakeRecordingAdapter(),
+      macosAdapterFactory: (appId, {processId}) => _FakeRecordingAdapter(),
     );
 
     final resolution = resolver.resolveDetailed(
@@ -207,7 +207,7 @@ void main() {
       remoteAdapterFactory: (client) => _FakeRecordingAdapter(),
       adbAdapterFactory: (deviceId) => _FakeRecordingAdapter(),
       simctlAdapterFactory: (deviceId) => _FakeRecordingAdapter(),
-      macosAdapterFactory: (appId) => _FakeRecordingAdapter(),
+      macosAdapterFactory: (appId, {processId}) => _FakeRecordingAdapter(),
     );
 
     final resolution = resolver.resolveDetailed(
@@ -232,7 +232,7 @@ void main() {
         remoteAdapterFactory: (client) => remoteAdapter,
         adbAdapterFactory: (deviceId) => _FakeRecordingAdapter(),
         simctlAdapterFactory: (deviceId) => _FakeRecordingAdapter(),
-        macosAdapterFactory: (appId) => _ThrowingRecordingAdapter(
+        macosAdapterFactory: (appId, {processId}) => _ThrowingRecordingAdapter(
           StateError('Screen Recording permission is missing.'),
         ),
       );
@@ -268,7 +268,7 @@ void main() {
         remoteAdapterFactory: (client) => remoteAdapter,
         adbAdapterFactory: (deviceId) => _FakeRecordingAdapter(),
         simctlAdapterFactory: (deviceId) => _FakeRecordingAdapter(),
-        macosAdapterFactory: (appId) =>
+        macosAdapterFactory: (appId, {processId}) =>
             _ThrowingRecordingAdapter(StateError('host unavailable')),
       );
       const request = CockpitRecordingRequest(
@@ -302,7 +302,7 @@ void main() {
         remoteAdapterFactory: (client) => remoteAdapter,
         adbAdapterFactory: (deviceId) => _FakeRecordingAdapter(),
         simctlAdapterFactory: (deviceId) => _FakeRecordingAdapter(),
-        macosAdapterFactory: (appId) =>
+        macosAdapterFactory: (appId, {processId}) =>
             _ThrowingRecordingAdapter(StateError('host unavailable')),
       );
       const request = CockpitRecordingRequest(
@@ -342,7 +342,7 @@ void main() {
         remoteAdapterFactory: (client) => remoteAdapter,
         adbAdapterFactory: (deviceId) => _FakeRecordingAdapter(),
         simctlAdapterFactory: (deviceId) => _FakeRecordingAdapter(),
-        macosAdapterFactory: (appId) => _ThrowingRecordingAdapter(
+        macosAdapterFactory: (appId, {processId}) => _ThrowingRecordingAdapter(
           StateError('host recorder has no screen input'),
         ),
       );
@@ -420,9 +420,10 @@ void main() {
       final fallbackAdapter = _AppNativeRecordingAdapter();
       final resolver = CockpitRecordingStrategyResolver(
         remoteAdapterFactory: (client) => fallbackAdapter,
-        macosAdapterFactory: (appId) => _ThrowingHostRecordingAdapter(
-          StateError('screen permission missing'),
-        ),
+        macosAdapterFactory: (appId, {processId}) =>
+            _ThrowingHostRecordingAdapter(
+              StateError('screen permission missing'),
+            ),
       );
       final resolution = resolver.resolveDetailed(
         platform: 'macos',
@@ -457,9 +458,10 @@ void main() {
     () async {
       final resolver = CockpitRecordingStrategyResolver(
         remoteAdapterFactory: (client) => _FakeRecordingAdapter(),
-        macosAdapterFactory: (appId) => _ThrowingHostRecordingAdapter(
-          StateError('screen permission missing'),
-        ),
+        macosAdapterFactory: (appId, {processId}) =>
+            _ThrowingHostRecordingAdapter(
+              StateError('screen permission missing'),
+            ),
       );
       final resolution = resolver.resolveDetailed(
         platform: 'macos',
@@ -480,7 +482,8 @@ void main() {
 
   test('uses the host marker when an explicit provider returns null', () {
     final resolver = CockpitRecordingStrategyResolver(
-      macosAdapterFactory: (appId) => _NullProvenanceHostRecordingAdapter(),
+      macosAdapterFactory: (appId, {processId}) =>
+          _NullProvenanceHostRecordingAdapter(),
     );
     final resolution = resolver.resolveDetailed(
       platform: 'macos',
@@ -836,7 +839,7 @@ void main() {
       remoteAdapterFactory: (client) => _FakeRecordingAdapter(),
       adbAdapterFactory: (deviceId) => _FakeRecordingAdapter(),
       simctlAdapterFactory: (deviceId) => _FakeRecordingAdapter(),
-      macosAdapterFactory: (appId) => _FakeRecordingAdapter(),
+      macosAdapterFactory: (appId, {processId}) => _FakeRecordingAdapter(),
     );
 
     final resolution = resolver.resolveDetailed(
@@ -874,7 +877,7 @@ void main() {
         remoteAdapterFactory: (client) => _FakeRecordingAdapter(),
         adbAdapterFactory: (deviceId) => _FakeRecordingAdapter(),
         simctlAdapterFactory: (deviceId) => _FakeRecordingAdapter(),
-        macosAdapterFactory: (appId) => _FakeRecordingAdapter(),
+        macosAdapterFactory: (appId, {processId}) => _FakeRecordingAdapter(),
       );
 
       final resolution = resolver.resolveDetailed(
@@ -924,7 +927,7 @@ void main() {
         remoteAdapterFactory: (client) => _FakeRecordingAdapter(),
         adbAdapterFactory: (deviceId) => _FakeRecordingAdapter(),
         simctlAdapterFactory: (deviceId) => _FakeRecordingAdapter(),
-        macosAdapterFactory: (appId) => _FakeRecordingAdapter(),
+        macosAdapterFactory: (appId, {processId}) => _FakeRecordingAdapter(),
       );
 
       final resolution = await resolver.resolveDetailedForStop(

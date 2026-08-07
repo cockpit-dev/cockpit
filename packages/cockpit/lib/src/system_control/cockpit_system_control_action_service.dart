@@ -811,6 +811,10 @@ final class CockpitSystemControlActionService {
           outputPath: outputPath.value!,
         );
       }
+      final screenRecordingDenied =
+          !result.success &&
+          request.platform == 'macos' &&
+          result.error?.details['permission'] == 'screenRecording';
 
       return CockpitSystemControlActionResult(
         platform: request.platform,
@@ -818,12 +822,20 @@ final class CockpitSystemControlActionService {
         appId: request.appId,
         processId: request.processId,
         action: request.action,
-        availability: capability.availability,
+        availability: screenRecordingDenied
+            ? CockpitSystemControlAvailability.blocked
+            : capability.availability,
         success: result.success,
         recommendedNextStep: result.success
             ? 'readPostActionState'
+            : screenRecordingDenied
+            ? 'grantScreenRecordingPermission'
             : 'inspectCaptureFailure',
-        errorCode: result.success ? null : 'systemCaptureFailed',
+        errorCode: result.success
+            ? null
+            : screenRecordingDenied
+            ? 'systemScreenRecordingPermissionDenied'
+            : 'systemCaptureFailed',
         errorMessage: result.error?.message,
         errorDetails: <String, Object?>{
           if (result.error case final error?) 'driverError': error.toJson(),
@@ -1275,20 +1287,31 @@ final class CockpitSystemControlActionService {
     }
     final exitCode = processResult.exitCode;
     final success = exitCode == 0;
+    final stdout = '${processResult.stdout}'.trimRight();
+    final stderr = '${processResult.stderr}'.trimRight();
+    final automationDenied =
+        !success &&
+        request.platform == 'macos' &&
+        command.executable == 'osascript' &&
+        stderr.contains('-1743');
     return CockpitSystemControlActionResult(
       platform: request.platform,
       deviceId: request.deviceId,
       appId: request.appId,
       processId: request.processId,
       action: request.action,
-      availability: capability.availability,
+      availability: automationDenied
+          ? CockpitSystemControlAvailability.blocked
+          : capability.availability,
       success: success,
       command: <String>[command.executable!, ...command.arguments],
       exitCode: exitCode,
-      stdout: '${processResult.stdout}'.trimRight(),
-      stderr: '${processResult.stderr}'.trimRight(),
+      stdout: stdout,
+      stderr: stderr,
       recommendedNextStep: success
           ? _recommendedNextStepAfterSuccess(request.action)
+          : automationDenied
+          ? 'grantSystemAutomationPermission'
           : 'inspectShellFailure',
       strategy: capability.strategy,
       requires: capability.requires,
@@ -1298,9 +1321,15 @@ final class CockpitSystemControlActionService {
         success: success,
         limitations: capability.limitations,
       ),
-      errorCode: success ? null : 'systemActionFailed',
+      errorCode: success
+          ? null
+          : automationDenied
+          ? 'systemAutomationPermissionDenied'
+          : 'systemActionFailed',
       errorMessage: success
           ? null
+          : automationDenied
+          ? 'macOS denied Automation access for the requested system action.'
           : 'System action command exited with $exitCode.',
     );
   }
@@ -1604,7 +1633,7 @@ CockpitCaptureAdapter? _defaultCaptureAdapterFor(
     'ios' when deviceId != null && deviceId.isNotEmpty =>
       CockpitSimctlCaptureAdapter(deviceId: deviceId),
     'macos' when appId != null && appId.isNotEmpty =>
-      CockpitMacosCaptureAdapter(appId: appId),
+      CockpitMacosCaptureAdapter(appId: appId, processId: request.processId),
     'windows' when windowAppId != null => CockpitWindowsCaptureAdapter(
       appId: windowAppId,
       processId: request.processId,
@@ -1640,7 +1669,7 @@ CockpitCaptureAdapter? _hostWindowCaptureAdapterFor(
   final windowAppId = _windowAppIdFor(request);
   return switch (Platform.operatingSystem) {
     'macos' when appId != null && appId.trim().isNotEmpty =>
-      CockpitMacosCaptureAdapter(appId: appId),
+      CockpitMacosCaptureAdapter(appId: appId, processId: request.processId),
     'windows' when windowAppId != null => CockpitWindowsCaptureAdapter(
       appId: windowAppId,
       processId: request.processId,
@@ -1665,7 +1694,7 @@ CockpitRecordingAdapter? _defaultRecordingAdapterFor(
     'ios' when deviceId != null && deviceId.isNotEmpty =>
       CockpitSimctlRecordingAdapter(deviceId: deviceId),
     'macos' when appId != null && appId.isNotEmpty =>
-      CockpitMacosRecordingAdapter(appId: appId),
+      CockpitMacosRecordingAdapter(appId: appId, processId: request.processId),
     'windows' when windowAppId != null => CockpitWindowsRecordingAdapter(
       appId: windowAppId,
       processId: request.processId,
@@ -1687,7 +1716,7 @@ CockpitRecordingAdapter? _hostWindowRecordingAdapterFor(
   final windowAppId = _windowAppIdFor(request);
   return switch (Platform.operatingSystem) {
     'macos' when appId != null && appId.trim().isNotEmpty =>
-      CockpitMacosRecordingAdapter(appId: appId),
+      CockpitMacosRecordingAdapter(appId: appId, processId: request.processId),
     'windows' when windowAppId != null => CockpitWindowsRecordingAdapter(
       appId: windowAppId,
       processId: request.processId,

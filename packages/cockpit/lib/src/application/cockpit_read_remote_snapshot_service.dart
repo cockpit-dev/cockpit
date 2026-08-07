@@ -16,6 +16,12 @@ typedef CockpitRemoteSnapshotDetailedReader =
       Uri baseUri,
       CockpitSnapshotOptions options,
     );
+
+typedef CockpitRemoteSnapshotArtifactDownloader =
+    Future<Map<String, String>> Function(
+      Uri baseUri,
+      Iterable<CockpitRemoteArtifactDownload> downloads,
+    );
 typedef CockpitRemoteSnapshotUiIdleWaiter =
     Future<bool> Function(
       Uri baseUri, {
@@ -57,6 +63,7 @@ final class CockpitReadRemoteSnapshotResult {
     this.delta,
     this.snapshotRef,
     this.artifactDownloads = const <CockpitRemoteArtifactDownload>[],
+    this.artifactSourcePaths = const <String, String>{},
     this.sessionHandle,
     this.effectiveSnapshotOptions,
   });
@@ -70,6 +77,7 @@ final class CockpitReadRemoteSnapshotResult {
   final CockpitInteractiveSnapshotDelta? delta;
   final String? snapshotRef;
   final List<CockpitRemoteArtifactDownload> artifactDownloads;
+  final Map<String, String> artifactSourcePaths;
   final CockpitRemoteSessionHandle? sessionHandle;
   final CockpitSnapshotOptions? effectiveSnapshotOptions;
 
@@ -86,6 +94,8 @@ final class CockpitReadRemoteSnapshotResult {
       'artifactDownloads': artifactDownloads
           .map((download) => download.toJson())
           .toList(growable: false),
+    if (artifactSourcePaths.isNotEmpty)
+      'artifactSourcePaths': artifactSourcePaths,
     if (sessionHandle != null) 'sessionHandle': sessionHandle!.toJson(),
     if (effectiveSnapshotOptions != null)
       'effectiveSnapshotOptions': effectiveSnapshotOptions!.toJson(),
@@ -95,6 +105,8 @@ final class CockpitReadRemoteSnapshotResult {
 final class CockpitReadRemoteSnapshotService {
   CockpitReadRemoteSnapshotService({
     CockpitRemoteSnapshotDetailedReader? readSnapshot,
+    CockpitRemoteSnapshotArtifactDownloader? downloadArtifacts,
+    CockpitRemoteArtifactTempFileFactory? artifactTempFileFactory,
     CockpitSessionReferenceResolver? sessionReferenceResolver,
     CockpitInteractiveSnapshotStore? snapshotStore,
   }) : _readSnapshot =
@@ -102,11 +114,20 @@ final class CockpitReadRemoteSnapshotService {
            ((baseUri, options) => CockpitRemoteSessionClient(
              baseUri: baseUri,
            ).readSnapshotDetailed(options: options)),
+       _downloadArtifacts =
+           downloadArtifacts ??
+           (artifactTempFileFactory == null
+               ? null
+               : (baseUri, downloads) => CockpitRemoteSessionClient(
+                   baseUri: baseUri,
+                   artifactTempFileFactory: artifactTempFileFactory,
+                 ).downloadArtifactsToFiles(downloads)),
        _sessionReferenceResolver =
            sessionReferenceResolver ?? CockpitSessionReferenceResolver(),
        _snapshotStore = snapshotStore ?? CockpitInteractiveSnapshotStore();
 
   final CockpitRemoteSnapshotDetailedReader _readSnapshot;
+  final CockpitRemoteSnapshotArtifactDownloader? _downloadArtifacts;
   final CockpitSessionReferenceResolver _sessionReferenceResolver;
   final CockpitInteractiveSnapshotStore _snapshotStore;
 
@@ -128,6 +149,14 @@ final class CockpitReadRemoteSnapshotService {
       readSnapshot: _readSnapshot,
     );
     final snapshot = snapshotResponse.snapshot;
+    final downloader = _downloadArtifacts;
+    final artifactSourcePaths =
+        request.resultProfile.artifacts ==
+                CockpitInteractiveArtifactLevel.metadata &&
+            snapshotResponse.artifactDownloads.isNotEmpty &&
+            downloader != null
+        ? await downloader(resolved.baseUri, snapshotResponse.artifactDownloads)
+        : const <String, String>{};
     final sessionKey = resolved.baseUri.toString();
     final baseline = request.compareAgainstSnapshotRef == null
         ? null
@@ -156,6 +185,7 @@ final class CockpitReadRemoteSnapshotService {
           : cockpitInteractiveDiffSnapshots(baseline.snapshot, snapshot),
       snapshotRef: snapshotRef,
       artifactDownloads: snapshotResponse.artifactDownloads,
+      artifactSourcePaths: artifactSourcePaths,
       sessionHandle: resolved.sessionHandle,
       effectiveSnapshotOptions: effectiveSnapshotOptions,
     );

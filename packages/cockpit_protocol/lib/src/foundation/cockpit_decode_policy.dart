@@ -4,6 +4,7 @@ enum CockpitFoundationFeature {
   cleanRetry('foundation.recovery.cleanRetry'),
   locatorRetry('foundation.recovery.locatorRetry');
 
+  /// Creates a CockpitFoundationFeature.
   const CockpitFoundationFeature(this.id);
 
   final String id;
@@ -25,6 +26,7 @@ final class CockpitDecodePolicy {
     allowUnknownEnumValues: false,
   );
 
+  /// Creates a CockpitDecodePolicy using the named constructor `negotiatedResponse`.
   factory CockpitDecodePolicy.negotiatedResponse(Iterable<String> featureIds) {
     final features = featureIds.toSet();
     return CockpitDecodePolicy._(
@@ -44,10 +46,12 @@ final class CockpitDecodePolicy {
 final class CockpitEnumValue<T extends Enum> {
   const CockpitEnumValue._({required this.wireValue, this.knownValue});
 
+  /// Creates a CockpitEnumValue using the named constructor `known`.
   factory CockpitEnumValue.known(T value) {
     return CockpitEnumValue<T>._(wireValue: value.name, knownValue: value);
   }
 
+  /// Creates a CockpitEnumValue using the named constructor `parse`.
   factory CockpitEnumValue.parse(
     Object? value,
     List<T> values,

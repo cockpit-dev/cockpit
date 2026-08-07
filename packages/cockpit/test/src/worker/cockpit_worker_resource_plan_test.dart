@@ -84,6 +84,10 @@ void main() {
         kind: 'development.probe.collect',
         input: <String, Object?>{'sessionId': firstSessionId},
       );
+      final viewportPlan = await registry.resolveApplicationResourcePlan(
+        kind: 'viewport.set',
+        input: <String, Object?>{'sessionId': firstSessionId},
+      );
       final appReadPlan = await registry.resolveApplicationResourcePlan(
         kind: 'app.get',
         input: <String, Object?>{'appId': first.appId},
@@ -114,6 +118,8 @@ void main() {
       );
       expect(probePlan.primaryResourceId, firstPlan.primaryResourceId);
       expect(probePlan.deviceResourceId, firstPlan.deviceResourceId);
+      expect(viewportPlan.primaryResourceId, firstPlan.primaryResourceId);
+      expect(viewportPlan.deviceResourceId, firstPlan.deviceResourceId);
       expect(appReadPlan.primaryResourceId, firstPlan.primaryResourceId);
       expect(appReadPlan.deviceResourceId, firstPlan.deviceResourceId);
       expect(targetReadPlan.primaryResourceId, firstPlan.deviceResourceId);

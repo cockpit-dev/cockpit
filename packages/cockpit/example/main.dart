@@ -11,13 +11,13 @@ Future<void> main(List<String> args) async {
 
   stdout.writeln('Cockpit host tooling example');
   stdout.writeln('');
-  stdout.writeln('Cockpit 2.0 resource commands:');
-  stdout.writeln('  dart run cockpit daemon status');
-  stdout.writeln('  dart run cockpit root list');
-  stdout.writeln('  dart run cockpit workspace list');
-  stdout.writeln('  dart run cockpit operation list');
-  stdout.writeln('  dart run cockpit case list');
-  stdout.writeln('  dart run cockpit_mcp');
+  stdout.writeln('Cockpit 3.0 fast path:');
+  stdout.writeln('  cockpit dev start');
+  stdout.writeln('  cockpit dev status');
+  stdout.writeln('  cockpit dev inspect');
+  stdout.writeln('  cockpit dev screenshot');
+  stdout.writeln('  cockpit case list');
+  stdout.writeln('  cockpit_mcp');
   stdout.writeln('');
   stdout.writeln(
     'This example can also proxy arguments into CockpitCommandRunner:',

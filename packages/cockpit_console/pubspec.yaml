@@ -1,0 +1,42 @@
+name: cockpit_console
+description: Desktop GUI client for Cockpit 3.0 E2E automation with AI and declarative modes.
+publish_to: none
+version: 1.0.0
+
+environment:
+  sdk: '>=3.8.0 <4.0.0'
+  flutter: '>=3.32.0'
+
+resolution: workspace
+
+dependencies:
+  acpd:
+    path: ../../third_party/acpd/packages/acpd
+  acpd_io:
+    path: ../../third_party/acpd/packages/acpd_io
+  cockpit: ^3.0.0
+  cockpit_protocol: ^3.0.0
+  collection: ^1.19.1
+  file_picker: ^11.0.3
+  flutter:
+    sdk: flutter
+  flutter_hooks: ^0.21.3
+  flutter_riverpod: ^3.0.0
+  hive_ce: ^2.19.3
+  hooks_riverpod: ^3.0.0
+  kache: ^2.0.0
+  kache_hive_ce: ^2.0.0
+  lucide_icons_flutter: ^3.1.15
+  path: ^1.9.0
+  yaml: ^3.1.3
+
+dev_dependencies:
+  flutter_cockpit: ^3.0.0
+  flutter_lints: ^6.0.0
+  flutter_test:
+    sdk: flutter
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/branding/cockpit_console_app_icon.png

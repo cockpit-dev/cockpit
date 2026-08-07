@@ -100,8 +100,7 @@ final class CockpitInMemoryWorkerOperationJournal
         replay: existing.result,
       );
     }
-    final operationId =
-        'operation_${_tokenGenerator.nextToken(byteLength: 16)}';
+    final operationId = 'op-${_tokenGenerator.nextResourceIdToken()}';
     _records[key] = _OperationRecord(
       idempotencyKey: key,
       fingerprint: fingerprint,
@@ -234,7 +233,7 @@ final class CockpitFileWorkerOperationJournal
       final record = _OperationRecord(
         idempotencyKey: key,
         fingerprint: fingerprint,
-        operationId: 'operation_${_tokenGenerator.nextToken(byteLength: 16)}',
+        operationId: 'op-${_tokenGenerator.nextResourceIdToken()}',
         kind: invocation.kind,
         workspaceId: invocation.workspaceId!,
         submittedAt: submittedAt.toUtc(),
@@ -980,12 +979,18 @@ bool _isLowercaseHex(String value, {required int length}) {
 String _canonicalJson(Object? value) {
   if (value is Map<Object?, Object?>) {
     final keys = value.keys.cast<String>().toList()..sort();
-    return '{${keys.map((key) => '${jsonEncode(key)}:${_canonicalJson(value[key])}').join(',')}}';
+    return '{${keys.map((key) => '${jsonEncode(key)}:${_canonicalJson(_canonicalFingerprintField(key, value[key]))}').join(',')}}';
   }
   if (value is List<Object?>) {
     return '[${value.map(_canonicalJson).join(',')}]';
   }
   return jsonEncode(value);
+}
+
+Object? _canonicalFingerprintField(String key, Object? value) {
+  if (key != 'requiredFeatures' || value is! List<Object?>) return value;
+  if (value.any((feature) => feature is! String)) return value;
+  return value.cast<String>().toList()..sort();
 }
 
 final class _OperationJournalRecordCodec

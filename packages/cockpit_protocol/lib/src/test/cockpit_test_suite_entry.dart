@@ -3,6 +3,7 @@ import 'cockpit_test_suite_source.dart';
 import 'cockpit_test_value_reader.dart';
 
 final class CockpitTestSuiteEntry {
+  /// Creates a CockpitTestSuiteEntry.
   CockpitTestSuiteEntry({
     required this.id,
     required this.source,
@@ -40,6 +41,7 @@ final class CockpitTestSuiteEntry {
   final CockpitTestSuiteRetryPolicy? retry;
   final Set<String> tags;
 
+  /// Encodes this CockpitTestSuiteEntry as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
     'id': id,
     'source': source.toJson(),
@@ -52,6 +54,7 @@ final class CockpitTestSuiteEntry {
     if (tags.isNotEmpty) 'tags': tags.toList(growable: false),
   };
 
+  /// Decodes a CockpitTestSuiteEntry from a JSON object.
   factory CockpitTestSuiteEntry.fromJson(
     Object? value, {
     required String path,

@@ -1,10 +1,12 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:cockpit_protocol/cockpit_protocol.dart';
 import 'package:path/path.dart' as p;
 
 import '../application/cockpit_application_service_exception.dart';
 import '../application/cockpit_interactive_result_profile.dart';
+import '../remote/cockpit_remote_session_client.dart';
 import 'cockpit_worker_forwarded_port_handoff.dart';
 import 'cockpit_worker_resource_grant.dart';
 import 'cockpit_worker_artifact_retainer.dart';
@@ -229,6 +231,48 @@ CockpitWorkerResourceGrant requireWorkerResourceGrant({
   return matches.single;
 }
 
+CockpitRemoteArtifactTempFileFactory cockpitWorkerArtifactTempFileFactory(
+  String producerRoot,
+) {
+  final normalizedProducerRoot = p.normalize(producerRoot);
+  if (!p.isAbsolute(normalizedProducerRoot)) {
+    throw const FormatException(
+      'Worker artifact producer root must be absolute.',
+    );
+  }
+  final temporaryRoot = p.normalize(p.join(normalizedProducerRoot, 'tmp'));
+  if (!p.isWithin(normalizedProducerRoot, temporaryRoot)) {
+    throw const FormatException(
+      'Worker artifact temporary root escapes producer ownership.',
+    );
+  }
+  return (relativePath) async {
+    final temporaryDirectory = Directory(temporaryRoot);
+    final canonicalTemporaryRoot = p.normalize(
+      await temporaryDirectory.resolveSymbolicLinks(),
+    );
+    if (!p.equals(canonicalTemporaryRoot, temporaryRoot) ||
+        !p.isWithin(normalizedProducerRoot, canonicalTemporaryRoot)) {
+      throw const FileSystemException(
+        'Worker artifact temporary root is not producer-confined.',
+      );
+    }
+    final artifactDirectory = await temporaryDirectory.createTemp(
+      'interactive_artifact_',
+    );
+    final rawBasename = p.basename(relativePath.replaceAll('\\', '/'));
+    final basename = rawBasename
+        .replaceAll(RegExp(r'[^A-Za-z0-9._-]+'), '_')
+        .replaceAll(RegExp(r'^\.+$'), '');
+    return File(
+      p.join(
+        artifactDirectory.path,
+        basename.isEmpty ? 'artifact.bin' : basename,
+      ),
+    );
+  };
+}
+
 final class CockpitWorkerResultSanitizer {
   const CockpitWorkerResultSanitizer({
     required this.workspaceRoot,
@@ -239,6 +283,7 @@ final class CockpitWorkerResultSanitizer {
   final String workspaceRoot;
   final CockpitWorkerRuntimeRegistry registry;
   final CockpitWorkerArtifactRetainer artifactRetainer;
+  static const Set<String> _routeKeys = <String>{'route', 'routeName'};
 
   Future<Map<String, Object?>> sanitize(
     Map<String, Object?> value, {
@@ -324,7 +369,7 @@ final class CockpitWorkerResultSanitizer {
           ),
         ),
       ),
-      String() => _sanitizeString(value),
+      String() => _sanitizeString(value, key: key),
       _ => value,
     };
   }
@@ -443,12 +488,13 @@ final class CockpitWorkerResultSanitizer {
     return result;
   }
 
-  String _sanitizeString(String value) {
+  String _sanitizeString(String value, {required String? key}) {
     final normalizedRoot = p.normalize(p.absolute(workspaceRoot));
     final redacted = value.replaceAll(normalizedRoot, '<workspace-path>');
     if (redacted != value) {
       return redacted;
     }
+    if (_routeKeys.contains(key)) return value;
     if (p.isAbsolute(value)) return '<redacted-path>';
     return value;
   }
@@ -522,7 +568,6 @@ String _artifactMediaType(String name) =>
 const Set<String> _directArtifactPathKeys = <String>{
   'sourcePath',
   'sourceFilePath',
-  'downloadPath',
   'outputFilePath',
   'bundlePath',
 };

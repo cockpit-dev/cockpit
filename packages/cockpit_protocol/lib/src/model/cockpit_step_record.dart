@@ -15,6 +15,7 @@ import 'cockpit_artifact_ref.dart';
 import 'cockpit_observation.dart';
 
 final class CockpitStepRecord {
+  /// Creates a CockpitStepRecord.
   CockpitStepRecord({
     required this.index,
     required this.actionType,
@@ -75,6 +76,7 @@ final class CockpitStepRecord {
   static const ListEquality<CockpitPlaneKind> _planeListEquality =
       ListEquality<CockpitPlaneKind>();
 
+  /// Encodes this CockpitStepRecord as a JSON object.
   Map<String, Object?> toJson() => {
     'index': index,
     'actionType': actionType,
@@ -105,6 +107,7 @@ final class CockpitStepRecord {
     'captureRefs': captureRefs.map((artifact) => artifact.toJson()).toList(),
   };
 
+  /// Decodes a CockpitStepRecord from a JSON object.
   factory CockpitStepRecord.fromJson(Map<String, Object?> json) {
     final actionArgs = Map<String, Object?>.from(
       (json['actionArgs'] as Map<Object?, Object?>?) ??

@@ -31,6 +31,10 @@ typedef CockpitRemoteSessionSnapshotProvider =
     });
 typedef CockpitRemoteSessionCommandExecutor =
     Future<CockpitCommandExecution> Function(CockpitCommand command);
+typedef CockpitRemoteViewportResizer =
+    Future<CockpitViewportResizeResult> Function(
+      CockpitViewportResizeRequest request,
+    );
 typedef CockpitRemoteRuntimeStepDrainer =
     FutureOr<List<CockpitStepRecord>> Function({required bool clear});
 typedef CockpitRemoteRecordingStarter =
@@ -126,6 +130,7 @@ final class CockpitRemoteSessionEndpointHandler {
     CockpitRemoteSessionReadyProvider? readyProvider,
     required CockpitRemoteSessionSnapshotProvider snapshotProvider,
     required CockpitRemoteSessionCommandExecutor commandExecutor,
+    CockpitRemoteViewportResizer? viewportResizer,
     CockpitRemoteRuntimeStepDrainer? runtimeStepDrainer,
     required CockpitRemoteRecordingStarter startRecording,
     required CockpitRemoteRecordingStopper stopRecording,
@@ -135,6 +140,7 @@ final class CockpitRemoteSessionEndpointHandler {
        _readyProvider = readyProvider,
        _snapshotProvider = snapshotProvider,
        _commandExecutor = commandExecutor,
+       _viewportResizer = viewportResizer,
        _runtimeStepDrainer = runtimeStepDrainer,
        _startRecording = startRecording,
        _stopRecording = stopRecording,
@@ -146,6 +152,7 @@ final class CockpitRemoteSessionEndpointHandler {
   final CockpitRemoteSessionReadyProvider? _readyProvider;
   final CockpitRemoteSessionSnapshotProvider _snapshotProvider;
   final CockpitRemoteSessionCommandExecutor _commandExecutor;
+  final CockpitRemoteViewportResizer? _viewportResizer;
   final CockpitRemoteRuntimeStepDrainer? _runtimeStepDrainer;
   final CockpitRemoteRecordingStarter _startRecording;
   final CockpitRemoteRecordingStopper _stopRecording;
@@ -235,6 +242,23 @@ final class CockpitRemoteSessionEndpointHandler {
                 .toList(growable: false);
           }
           return CockpitRemoteSessionEndpointResponse.json(responsePayload);
+        case ('POST', '/viewport'):
+          final resizer = _viewportResizer;
+          if (resizer == null) {
+            return const CockpitRemoteSessionEndpointResponse.json(
+              <String, Object?>{
+                'error': 'viewportUnavailable',
+                'message': 'Viewport control is unavailable in this session.',
+              },
+              statusCode: HttpStatus.notImplemented,
+            );
+          }
+          final viewportRequest = _decodePayload(
+            () => CockpitViewportResizeRequest.fromJson(request.jsonBody),
+          );
+          return CockpitRemoteSessionEndpointResponse.json(
+            (await resizer(viewportRequest)).toJson(),
+          );
         case ('POST', '/recording/start'):
           final recordingRequest = _decodePayload(
             () => CockpitRecordingRequest.fromJson(request.jsonBody),
@@ -396,6 +420,14 @@ final class CockpitRemoteSessionEndpointHandler {
     }
 
     final networkQuery = <String, Object?>{};
+    final networkId = queryParameters['networkId'];
+    if (networkId != null && networkId.isNotEmpty) {
+      networkQuery['id'] = networkId;
+    }
+    final networkBefore = queryParameters['networkBefore'];
+    if (networkBefore != null && networkBefore.isNotEmpty) {
+      networkQuery['before'] = networkBefore;
+    }
     final networkMethod = queryParameters['networkMethod'];
     if (networkMethod != null && networkMethod.isNotEmpty) {
       networkQuery['method'] = networkMethod;

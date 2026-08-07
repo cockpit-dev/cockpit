@@ -4,6 +4,7 @@ import '../model/cockpit_artifact_ref.dart';
 import '../runtime/cockpit_snapshot.dart';
 
 final class CockpitCapturedScreenshot {
+  /// Creates a CockpitCapturedScreenshot.
   const CockpitCapturedScreenshot({
     required this.artifact,
     required this.bytes,

@@ -18,6 +18,7 @@ import java.io.ByteArrayOutputStream
 class FlutterCockpitPlugin : FlutterPlugin, ActivityAware {
     private lateinit var captureChannel: MethodChannel
     private lateinit var recordingChannel: MethodChannel
+    private lateinit var viewportChannel: MethodChannel
     private lateinit var recordingCoordinator: FlutterCockpitRecordingCoordinator
     private var activity: Activity? = null
 
@@ -38,6 +39,26 @@ class FlutterCockpitPlugin : FlutterPlugin, ActivityAware {
                 "queryRecordingCapabilities" -> recordingCoordinator.queryCapabilities(result)
                 "startRecording" -> recordingCoordinator.startRecording(call, result)
                 "stopRecording" -> recordingCoordinator.stopRecording(result)
+                else -> result.notImplemented()
+            }
+        }
+        viewportChannel = MethodChannel(binding.binaryMessenger, VIEWPORT_CHANNEL_NAME)
+        viewportChannel.setMethodCallHandler { call, result ->
+            when (call.method) {
+                "queryViewportAvailability" ->
+                    result.success(
+                        mapOf(
+                            "available" to false,
+                            "reason" to "fixedMobileViewport",
+                            "alternatives" to listOf("changeOrientation", "selectAnotherDevice"),
+                        ),
+                    )
+                "resizeViewport" ->
+                    result.error(
+                        "fixedMobileViewport",
+                        "Android viewport size is controlled by the selected device.",
+                        mapOf("alternatives" to listOf("changeOrientation", "selectAnotherDevice")),
+                    )
                 else -> result.notImplemented()
             }
         }
@@ -151,6 +172,7 @@ class FlutterCockpitPlugin : FlutterPlugin, ActivityAware {
     override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
         captureChannel.setMethodCallHandler(null)
         recordingChannel.setMethodCallHandler(null)
+        viewportChannel.setMethodCallHandler(null)
         recordingCoordinator.detachFromEngine()
     }
 
@@ -177,5 +199,6 @@ class FlutterCockpitPlugin : FlutterPlugin, ActivityAware {
     private companion object {
         const val CAPTURE_CHANNEL_NAME = "dev.cockpit.flutter_cockpit/capture"
         const val RECORDING_CHANNEL_NAME = "dev.cockpit.flutter_cockpit/recording"
+        const val VIEWPORT_CHANNEL_NAME = "dev.cockpit.flutter_cockpit/viewport"
     }
 }

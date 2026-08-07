@@ -4,6 +4,7 @@ import 'cockpit_test_value_reader.dart';
 enum CockpitTestFixtureScope { suite, caseAttempt }
 
 final class CockpitTestFixture {
+  /// Creates a CockpitTestFixture.
   CockpitTestFixture({
     required this.id,
     required this.setup,
@@ -47,6 +48,7 @@ final class CockpitTestFixture {
   final Map<String, Object?> inputs;
   final List<String> dependsOn;
 
+  /// Encodes this CockpitTestFixture as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
     'id': id,
     'setup': setup.toJson(),
@@ -57,6 +59,7 @@ final class CockpitTestFixture {
     if (dependsOn.isNotEmpty) 'dependsOn': dependsOn,
   };
 
+  /// Decodes a CockpitTestFixture from a JSON object.
   factory CockpitTestFixture.fromJson(Object? value, {required String path}) {
     final json = CockpitTestValueReader.object(value, path);
     CockpitTestValueReader.keys(

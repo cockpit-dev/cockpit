@@ -8,6 +8,7 @@ import 'cockpit_recording_purpose.dart';
 import 'cockpit_recording_state.dart';
 
 final class CockpitRecordingResult {
+  /// Creates a CockpitRecordingResult.
   CockpitRecordingResult({
     required this.state,
     this.purpose,
@@ -40,6 +41,7 @@ final class CockpitRecordingResult {
 
   static const ListEquality<int> _byteEquality = ListEquality<int>();
 
+  /// Encodes this CockpitRecordingResult as a JSON object.
   Map<String, Object?> toJson() => {
     'state': state.name,
     if (purpose != null) 'purpose': purpose!.name,
@@ -56,6 +58,7 @@ final class CockpitRecordingResult {
     if (failureReason != null) 'failureReason': failureReason,
   };
 
+  /// Decodes a CockpitRecordingResult from a JSON object.
   factory CockpitRecordingResult.fromJson(Map<String, Object?> json) {
     final artifactJson = json['artifact'] as Map<Object?, Object?>?;
     return CockpitRecordingResult(
@@ -125,6 +128,7 @@ final class CockpitRecordingResult {
     failureReason,
   );
 
+  /// Returns a copy of this CockpitRecordingResult with supplied fields replaced.
   CockpitRecordingResult copyWith({
     CockpitRecordingState? state,
     CockpitRecordingPurpose? purpose,

@@ -19,7 +19,7 @@
   <p><a href="https://github.com/cockpit-dev/cockpit/blob/main/packages/cockpit/README.md">English</a> · <a href="https://github.com/cockpit-dev/cockpit/blob/main/packages/cockpit/README.zh-CN.md">简体中文</a></p>
 </div>
 
-`cockpit` 是 Cockpit 2.0 面向 Flutter/Dart 开发与无头黑盒 E2E 的认证宿主控制面，
+`cockpit` 是 Cockpit 3.0 面向 Flutter/Dart 开发与无头黑盒 E2E 的认证宿主控制面，
 包含 Supervisor daemon、隔离 workspace worker、resource-oriented CLI 和轻量 MCP
 server，不内置 GUI 或 Web dashboard。
 
@@ -28,9 +28,9 @@ server，不内置 GUI 或 Web dashboard。
 需要 Dart 3.8.0 或更高版本；Flutter workspace 使用 Flutter 3.32.0 或更高版本
 内置的 Dart SDK。
 
-```yaml
-dev_dependencies:
-  cockpit: any
+```bash
+dart pub global activate cockpit any
+cockpit --help
 ```
 
 包发布四个 executable：
@@ -53,25 +53,48 @@ Install Cockpit for the current AI host, including the CLI, complete cockpit Ski
 原生适配器和 MCP 配置见
 [Agent 接入指南](https://github.com/cockpit-dev/cockpit/blob/main/docs/agent-integrations.md)。
 
+## Flutter 快速路径
+
+从目标 checkout 内执行。Cockpit 会管理发现、Supervisor、workspace/target 注册、
+应用进程、端口和 bridge 状态：
+
+```bash
+cockpit dev start cockpit/main.dart --platform macos
+cockpit dev status
+cockpit dev inspect "Save"
+cockpit dev tap "Save"
+cockpit dev wait
+cockpit dev screenshot
+cockpit dev reload
+cockpit dev diagnose --verbosity standard
+```
+
+入口和平台可推断时直接省略。每个 checkout 会保存并自动复用一个数字 handle；需要
+确认身份时使用 `cockpit session list` 和 `cockpit session show HANDLE`。`dev` 自动
+使用仅限本地进程的 yolo Supervisor。Cockpit 不读取 keychain 或 secret store，
+`--env` 只传给当前进程。
+
 ## 多项目交互
 
 交互式 API 命令会按需启动当前用户的 Supervisor。每个项目根目录和 checkout 都要
 显式注册：
 
 ```bash
-dart run cockpit daemon start
-dart run cockpit root add --path /work/projects --label projects
-dart run cockpit workspace register --root-id <rootId> --path /work/projects/app-a
-dart run cockpit workspace register --root-id <rootId> --path /work/projects/app-b
-dart run cockpit workspace list
+cockpit daemon start
+cockpit root add --path /work/projects --label projects
+cockpit workspace register --root-id <rootId> --path /work/projects/app-a
+cockpit workspace register --root-id <rootId> --path /work/projects/app-b
+cockpit workspace list
 ```
 
 ## CLI 输出
 
-默认 `auto` 格式是 `--detail minimal` 的命令专用 AI 语义文本。文本和 JSON
-都遵循 `--detail minimal|standard|full`；需要完整对象时使用
-`--detail full --stdout-format json --output <file>`。`--output` 只返回路径、
-大小和 SHA-256；`artifact read` 强制写文件，绝不输出二进制或 Base64。
+默认输出是 minimal canonical LON，正常命令不写输出参数。
+`--verbosity standard|full` 只增加上下文，不改变操作准确性；
+`--format json|yaml|jsonl|path|none` 用于改变编码或输出方式。需要完整对象时使用
+`--verbosity full --format json --output <file>`。`--output` 只返回已验证路径；
+`artifact read` 强制写文件，二进制、Base64、hash 和对决策无意义的字节数都不会
+进入终端输出。
 
 workspace 命令可以显式传 `--workspace-id`。省略时，Cockpit 会用当前目录匹配已注册且
 active 的 workspace，并要求结果唯一；不会回退到全局 latest run、active session 或
@@ -79,36 +102,36 @@ active 的 workspace，并要求结果唯一；不会回退到全局 latest run�
 
 ```bash
 cd /work/projects/app-a
-dart run cockpit operation list
-dart run cockpit case list
+cockpit op list
+cockpit case list
 ```
 
-`operation run` 只接收类型化 JSON，并且只能执行 Supervisor 已公开的 operation。
-descriptor 决定 scope 与 idempotency，不提供任意 URL 或 HTTP method 传输。
+`op run` 只接收类型化 LON、JSON 或 YAML，并且只能执行 Supervisor 已公开的
+operation。
+descriptor 决定 scope、idempotency 和默认 timeout，不提供任意 URL 或 HTTP method
+传输；只有需要在公开最大值内覆盖预算时才传 `--timeout`。
 
 ```bash
-dart run cockpit operation run \
-  --kind analyze.workspace \
-  --workspace-id <workspaceId> \
-  --input-json '{}'
+cockpit op run analyze.workspace \
+  --workspace-id <workspaceId>
 ```
 
 ## 授权策略
 
-危险 operation、operation safety effect、测试 safety effect、production target
-和 worker 环境 secret 都需要显式授权。严格策略文件位于
+危险 operation、operation safety effect、测试 safety effect 和 production target
+都需要显式授权。严格策略文件位于
 `COCKPIT_HOME/authorization.json`，daemon 启动时只加载一次。
 
 ```bash
-dart run cockpit daemon policy validate --file authorization.json
-dart run cockpit daemon policy apply --file authorization.json --restart
-dart run cockpit daemon policy show
+cockpit daemon policy validate --file authorization.json
+cockpit daemon policy apply --file authorization.json --restart
+cockpit daemon policy show
 ```
 
-本地需要显式全权 daemon 时，使用 `dart run cockpit daemon start --yolo`（或
+本地需要显式全权 daemon 时，使用 `cockpit daemon start --yolo`（或
 `daemon restart --yolo`）。该模式只对本次 daemon 进程生效；不带开关启动会回到
 持久化受限策略。daemon 状态、attempt 和 suite 报告都会记录实际
-`authorizationMode`。
+`auth`。
 
 不带 `--restart` 时只能在 daemon 停止状态下应用。默认策略拒绝危险操作、敏感测试
 effect，以及 production/unknown target。
@@ -123,19 +146,18 @@ quarantined lease 默认持续阻塞资源。先通过公开的 `lease.list` 获
 document、case 和 idempotency identity。
 
 ```bash
-dart run cockpit case validate \
+cockpit case validate \
   --workspace-id <workspaceId> \
   --file example/cases/flutter_login.yaml
 
-dart run cockpit case run \
+cockpit case run \
   --workspace-id <workspaceId> \
   --document-id <documentId> \
   --case-id flutter-login \
-  --idempotency-key ci-login-001 \
-  --inputs-json '{}'
+  --idempotency-key ci-login-001
 
-dart run cockpit run get --run-id <runId>
-dart run cockpit run events --run-id <runId> --after-sequence 0
+cockpit run get --run-id <runId>
+cockpit run events --run-id <runId> --after-sequence 0
 ```
 
 run events 使用认证 SSE，支持 `afterSequence` 与 `Last-Event-ID` 恢复，并显式返回
@@ -163,13 +185,13 @@ target 在 accessibility 能力明确支持时还可以使用状态、层级和�
 并列时返回 `ambiguousTarget`，可增加条件、关系约束或使用 0-based `index` 选择列表项。
 
 ```bash
-dart run cockpit suite validate --file example/suites/regression.yaml
-dart run cockpit suite run \
+cockpit suite validate --file example/suites/regression.yaml
+cockpit suite run \
   --workspace-id <workspaceId> \
   --document-id <documentId> \
   --suite-id regression \
   --idempotency-key ci-regression-001
-dart run cockpit suite report --run-id <runId> \
+cockpit suite report --run-id <runId> \
   --output-dir cockpit-report
 ```
 
@@ -186,7 +208,7 @@ accessibility 启动和操作它，同时启用 Flutter-aware 重复 semantics �
 通过 semantic plane 提供 Widget、route 和 runtime 检查。
 
 ```bash
-dart run cockpit target register \
+cockpit target register \
   --workspace-id <workspaceId> \
   --platform android \
   --device-id emulator-5554 \
@@ -196,7 +218,7 @@ dart run cockpit target register \
   --mode automation \
   --idempotency-key android-target-001
 
-dart run cockpit target register \
+cockpit target register \
   --workspace-id <workspaceId> \
   --platform ios \
   --device-id <deviceUdid> \
@@ -215,8 +237,8 @@ dart run cockpit target register \
 `app.get` 重建该 profile，其中的平台应用标识与进程标识会按设计隐藏。
 
 Flutter target 启动支持重复的 `--dart-define`、`--dart-define-from-file`、
-`--flutter-arg`、`--env KEY=VALUE`，以及最长 1800000 毫秒的
-`--launch-timeout-ms`。MCP 和通用 operation 使用相同的嵌套
+`--flutter-arg`、`--env KEY=VALUE`，以及默认 20 分钟、最长 31 分钟的
+`--timeout`。MCP 和通用 operation 使用相同的嵌套
 `launchConfiguration` 字段：`dartDefines`、`dartDefineFromFiles`、
 `flutterArgs`、`environment`。Cockpit 管理的启动参数不能被覆盖，配置值也不会在
 结果中返回。
@@ -224,9 +246,9 @@ Android 和 iOS 上的 `environment` 只配置 Flutter 构建进程，移动应�
 任意宿主机环境变量；应用自身需要读取的值应使用 Dart define 或应用自己的配置通道。
 
 operation descriptor 会公开 `executionMode`、`defaultTimeoutMs` 和
-`maximumTimeoutMs`。同步操作阻塞到结果，并接受相对 `--timeout-ms` 或绝对
-`--deadline`。case/suite 提交是返回 `runId` 的持久化异步 job；可选
-`--timeout-ms` 控制整体运行预算（case 默认 30 分钟、最长 6 小时，suite 默认
+`maximumTimeoutMs`。同步操作阻塞到结果，并用一个 `--timeout` 时长覆盖默认预算。
+case/suite 提交是返回 `runId` 的持久化异步 job；`--timeout` 控制整体运行预算
+（case 默认 30 分钟、最长 6 小时，suite 默认
 2 小时、最长 24 小时）。
 
 case 的 `setup`、主步骤、`finally` 及 suite fixture 都可以使用 `type: system` 与
@@ -254,7 +276,7 @@ CI 与交互模式共用同一 HTTP API 和 worker boundary。foreground 模式�
 truth，并按 outcome 返回进程状态。
 
 ```bash
-dart run cockpitd \
+cockpitd \
   --home=/tmp/cockpit-ci \
   --foreground-workspace=/workspace/app \
   --foreground-submission=/workspace/run-submission.json
@@ -289,17 +311,17 @@ pagination、SSE resume、结构化 API error 和 artifact 完整性校验。
 使用 CLI 命令或独立 executable：
 
 ```bash
-dart run cockpit serve-mcp
-dart run cockpit_mcp
-dart run cockpit serve-mcp --profile dart
+cockpit serve-mcp
+cockpit_mcp
+cockpit serve-mcp --profile dart
 ```
 
 ```json
 {
   "mcpServers": {
     "cockpit": {
-      "command": "dart",
-      "args": ["run", "cockpit_mcp"]
+      "command": "cockpit_mcp",
+      "args": []
     }
   }
 }
@@ -332,5 +354,5 @@ Supervisor application services。
 Coverage、Executions、Evidence、Diagnostics 和 Environment/files 是同一事实图的
 任务视图，不是按人员角色复制出的报告。
 
-协议资料见 [`../../docs/contracts`](../../docs/contracts)，规范 YAML/JSON 用例见
+协议资料见 [`../../docs/contracts`](../../docs/contracts)，规范 LON/JSON/YAML 用例见
 [`example/cases`](example/cases)。

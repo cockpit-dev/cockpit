@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:test/test.dart';
 
 void main() {
-  test('published packages share the Cockpit 2.2 release version', () {
+  test('published packages share the Cockpit 3.0 release version', () {
     final runtimePubspec = File(
       'packages/flutter_cockpit/pubspec.yaml',
     ).readAsStringSync();
@@ -21,11 +21,11 @@ void main() {
     expect(runtimePubspec, isNot(contains('name: flutter_pilot')));
     expect(protocolPubspec, contains('name: cockpit_protocol'));
     expect(devtoolsPubspec, contains('name: cockpit'));
-    expect(runtimeVersion, '2.2.1');
-    expect(protocolVersion, '2.2.1');
-    expect(devtoolsVersion, '2.2.1');
-    expect(runtimePubspec, contains('cockpit_protocol: ^2.2.1'));
-    expect(devtoolsPubspec, contains('cockpit_protocol: ^2.2.1'));
+    expect(runtimeVersion, '3.0.0');
+    expect(protocolVersion, '3.0.0');
+    expect(devtoolsVersion, '3.0.0');
+    expect(runtimePubspec, contains('cockpit_protocol: ^3.0.0'));
+    expect(devtoolsPubspec, contains('cockpit_protocol: ^3.0.0'));
     expect(runtimePubspec, isNot(contains('flutter_cockpit_protocol:')));
     expect(devtoolsPubspec, isNot(contains('flutter_cockpit_protocol:')));
     expect(
@@ -176,7 +176,7 @@ void main() {
     );
     expect(runtimePubspec, contains('web_socket_channel: ^3.0.3'));
     expect(runtimePubspec, contains('flutter_lints: ^6.0.0'));
-    expect(protocolPubspec, contains('collection: ^1.18.0'));
+    expect(protocolPubspec, contains('collection: ^1.19.1'));
     expect(devtoolsPubspec, contains('lints: ^6.1.0'));
     expect(demoPubspec, contains('flutter_lints: ^6.0.0'));
     expect(devtoolsPubspec, contains('dart_mcp: ^0.5.2'));
@@ -234,10 +234,10 @@ void main() {
     expect(runtimeReadme, isNot(contains('flutter_pilot')));
 
     expect(devtoolsReadme, contains('<h1>cockpit</h1>'));
-    expect(devtoolsReadme, contains('cockpit: any'));
-    expect(devtoolsReadme, contains('dart run cockpit'));
+    expect(devtoolsReadme, contains('dart pub global activate cockpit any'));
+    expect(devtoolsReadme, isNot(contains('dart run cockpit')));
     expect(devtoolsReadme, contains('serve-mcp'));
-    expect(devtoolsReadme, contains('dart run cockpit_mcp'));
+    expect(devtoolsReadme, contains('cockpit_mcp'));
     expect(devtoolsReadme, contains('case validate'));
     expect(devtoolsReadme, contains('suite run'));
     expect(devtoolsReadme, contains('/api/v2'));
@@ -246,7 +246,7 @@ void main() {
 
     expect(runtimeReadmeZh, contains('flutter_cockpit: any'));
     expect(runtimeReadmeZh, contains('https://pub.dev/packages/cockpit'));
-    expect(devtoolsReadmeZh, contains('cockpit: any'));
+    expect(devtoolsReadmeZh, contains('dart pub global activate cockpit any'));
   });
 
   test('setup docs keep cockpit wiring outside production lib code', () {
@@ -413,8 +413,9 @@ void main() {
 
     expect(devtoolsSource, contains("package:cockpit/cockpit.dart"));
     expect(devtoolsSource, contains('CockpitCommandRunner'));
-    expect(devtoolsSource, contains('daemon status'));
-    expect(devtoolsSource, contains('workspace list'));
+    expect(devtoolsSource, contains('cockpit dev start'));
+    expect(devtoolsSource, contains('cockpit dev status'));
+    expect(devtoolsSource, contains('cockpit dev inspect'));
     expect(devtoolsSource, contains('case list'));
     expect(devtoolsSource, contains('cockpit_mcp'));
   });
@@ -524,10 +525,15 @@ void main() {
 
     final cursorRule = File('.cursor/rules/cockpit.mdc').readAsStringSync();
     final kiroSteering = File('.kiro/steering/cockpit.md').readAsStringSync();
+    final kiroPlugin = File(
+      'plugins/kiro/cockpit/plugin.json',
+    ).readAsStringSync();
     expect(cursorRule, contains('.cursor/skills/cockpit/SKILL.md'));
     expect(cursorRule, isNot(contains('dart run cockpit')));
-    expect(kiroSteering, contains('.agents/skills/cockpit/SKILL.md'));
+    expect(kiroSteering, contains('.kiro/skills/cockpit/SKILL.md'));
     expect(kiroSteering, isNot(contains('dart run cockpit')));
+    expect(kiroPlugin, contains('agent-plugins.org/schemas/1.0.0'));
+    expect(kiroPlugin, contains('"version": "3.0.0"'));
 
     for (final path in <String>[
       'plugins/codex/cockpit/README.md',
@@ -539,7 +545,7 @@ void main() {
     }
   });
 
-  test('cockpit package readmes expose the 2.0 client contract', () {
+  test('cockpit package readmes expose the v2 API contract', () {
     final devtoolsReadme = File(
       'packages/cockpit/README.md',
     ).readAsStringSync();
@@ -568,7 +574,7 @@ void main() {
       allOf(
         contains('"mcpServers"'),
         contains('"cockpit"'),
-        contains('"command": "dart"'),
+        contains('"command": "cockpit_mcp"'),
         contains('"cockpit_mcp"'),
       ),
     );

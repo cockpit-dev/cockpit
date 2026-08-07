@@ -4,6 +4,7 @@ import 'cockpit_test_suite_policy.dart';
 import 'cockpit_test_value_reader.dart';
 
 final class CockpitTestProjectTarget {
+  /// Creates a CockpitTestProjectTarget.
   CockpitTestProjectTarget({
     required this.requirements,
     Iterable<String> deviceIds = const <String>[],
@@ -26,12 +27,14 @@ final class CockpitTestProjectTarget {
   final List<String> deviceIds;
   final Map<String, String> labels;
 
+  /// Encodes this CockpitTestProjectTarget as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
     'requirements': requirements.toJson(),
     if (deviceIds.isNotEmpty) 'deviceIds': deviceIds,
     if (labels.isNotEmpty) 'labels': labels,
   };
 
+  /// Decodes a CockpitTestProjectTarget from a JSON object.
   factory CockpitTestProjectTarget.fromJson(
     Object? value, {
     required String path,
@@ -70,6 +73,7 @@ final class CockpitTestProjectTarget {
 }
 
 final class CockpitTestProject implements CockpitTestDocument {
+  /// Creates a CockpitTestProject.
   CockpitTestProject({
     this.schemaVersion = 'cockpit.test/v2',
     this.kind = 'project',
@@ -150,6 +154,7 @@ final class CockpitTestProject implements CockpitTestDocument {
   final CockpitTestSuiteReportPolicy reportDefaults;
   final Map<String, Object?> extensions;
 
+  /// Encodes this CockpitTestProject as a JSON object.
   @override
   Map<String, Object?> toJson() => <String, Object?>{
     'schemaVersion': schemaVersion,
@@ -169,6 +174,7 @@ final class CockpitTestProject implements CockpitTestDocument {
     ...extensions,
   };
 
+  /// Decodes a CockpitTestProject from a JSON object.
   factory CockpitTestProject.fromJson(Object? value, {String path = r'$'}) {
     final json = CockpitTestValueReader.object(value, path);
     CockpitTestValueReader.keys(

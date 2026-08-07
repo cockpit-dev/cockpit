@@ -1,82 +1,88 @@
-# Cockpit 2.0 AI Development Protocol
+# Cockpit AI Development Protocol
 
 Use the authenticated Supervisor for both rapid development and release E2E.
-Do not call host application services directly and do not rely on implicit
-latest app, session, task, or workspace state.
+Do not call host application services directly. For Flutter source development,
+use one checkout-scoped numeric handle and let Cockpit own internal resources.
 
-## Bootstrap
-
-```bash
-dart run cockpit daemon start
-dart run cockpit root add --path /absolute/project/root
-dart run cockpit workspace register --root-id <rootId> --path /absolute/checkout
-dart run cockpit target discover
-```
-
-Use `daemon start --yolo` only when the user explicitly requests unrestricted
-local execution. It is scoped to that daemon process; read `daemon status` and
-preserve the reported `authorizationMode` in run evidence.
-
-Read the returned JSON and reuse its identifiers. When the current directory
-belongs to exactly one active workspace, `--workspace-id` may be omitted.
-
-Register an installed black-box app with its real platform identity:
+## Flutter Bootstrap
 
 ```bash
-dart run cockpit target register \
-  --workspace-id <workspaceId> \
-  --platform android \
-  --device-id <deviceId> \
-  --target-kind nativeApp \
-  --environment test \
-  --app-id com.example.app \
-  --idempotency-key <uniqueKey>
-dart run cockpit target launch \
-  --workspace-id <workspaceId> \
-  --target-id <targetId> \
-  --idempotency-key <uniqueKey>
-dart run cockpit target inspect --target-id <targetId> --profile minimal
+cockpit dev start
 ```
 
-For Flutter development shells, register a `flutterApp` target with an indexed
-entrypoint document. Production Flutter code must not import
-`flutter_cockpit`; the bridge belongs to the development shell.
-Flutter launches accept repeatable `--dart-define`,
-`--dart-define-from-file`, `--flutter-arg`, and `--env KEY=VALUE` options and a
-`--launch-timeout-ms` value up to 1800000. Generic operations and third-party
-clients send the equivalent nested `launchConfiguration` object with
-`dartDefines`, `dartDefineFromFiles`, `flutterArgs`, and `environment`. Never
-send this object for a non-Flutter black-box target, and never assume launch
-configuration values will be echoed in a result.
+Run from anywhere inside the intended checkout. Specify only real launch
+choices when discovery cannot choose uniquely:
 
-Operation descriptors are the timeout and execution authority. Read
-`executionMode`, `defaultTimeoutMs`, and `maximumTimeoutMs` before acting.
-Synchronous operations block to a terminal result and accept either relative
-`timeoutMs`/`--timeout-ms` or an absolute `deadline`/`--deadline`. Job
-operations return a durable `runId`; case submissions default to 30 minutes
-with a 6 hour maximum, while suites default to 2 hours with a 24 hour maximum.
-Do not combine relative and absolute deadlines.
+```bash
+cockpit dev start apps/mobile/cockpit/main.dart --platform macos
+cockpit dev start --device emulator-5554 --flavor staging
+cockpit dev start --dart-define API_URL=https://example.test --env LOG_LEVEL=debug
+```
+
+The bridge belongs in a development-only entrypoint; production Flutter code
+must not import `flutter_cockpit`. Cockpit discovers/registers the workspace,
+entrypoint, target, app, process, port, and runtime session internally. It
+returns a short handle such as `1`; later commands infer the active handle for
+the checkout.
+
+`--env`, `--dart-define`, and custom Flutter arguments are never persisted or
+printed. Cockpit does not access a keychain or secret store. A session launched
+with custom values remains fully usable while running, but an unexpected exit
+requires `cockpit dev start` with those values again.
 
 ## Fast Development Loop
 
-1. Read `operation list` and target capabilities.
-2. Execute only advertised operations using `operation run` with typed JSON.
-3. Use hot reload/restart operations when the target exposes them.
-4. Re-inspect target/UI/errors after mutation.
-5. Capture evidence only when the requested claim needs it.
+1. Read `cockpit dev status` or the smallest `inspect` query.
+2. Edit one coherent change and run focused static analysis.
+3. Run `cockpit dev reload`.
+4. Perform the exact UI action and wait for its terminal state.
+5. Inspect current UI/errors; capture a screenshot only for a visible claim.
 
 ```bash
-dart run cockpit operation list --workspace-id <workspaceId>
-dart run cockpit operation run \
-  --workspace-id <workspaceId> \
-  --kind <advertisedKind> \
-  --input-file /tmp/operation.json \
-  --idempotency-key <uniqueKey>
+cockpit dev status
+cockpit dev tap "Documents"
+cockpit dev wait
+cockpit dev viewport 800x600
+cockpit dev screenshot
+cockpit dev diagnose
 ```
 
-Never guess operation parameters, target IDs, device IDs, or locators.
+Use exact text by default. An ambiguous locator fails and returns bounded
+candidates. `dev wait` is UI-only by default; add `--network` only when the
+assertion requires completed network activity.
 
-If interrupted work leaves a quarantined resource, read it with the advertised
+Keep using the same handle after a process, port, bridge, app, or runtime session
+changes. Reconciliation proves the same checkout, workspace, target, owned
+process, and authenticated bridge. Read commands never relaunch an exited app;
+a mutation may relaunch one unexpectedly exited app once. An intentionally
+stopped session requires `dev start` or `restart`.
+
+Each checkout and Git worktree identity owns independent active selection,
+worker state, process/port ownership, network state, mutation sequence, and
+artifact paths. Shared repository metadata or package names never make another
+checkout's handle implicit.
+
+Normal output is bounded canonical LON at `--verbosity minimal`. Preserve
+`minimal|standard|full`, LON/JSON/YAML/JSONL, and `path|none`. Artifact and
+file output contains only the verified absolute path; never image/file bytes,
+Base64, data URIs, hashes, byte counts, or file contents.
+
+Use the advanced protocol only when no task command covers a live capability:
+
+```bash
+cockpit explain viewport.set
+cockpit op run viewport.set --input '{width:800 height:600}'
+```
+
+`explain` resolves the authenticated live request/response schema. Do not guess
+fields when schema precision is `generic`.
+
+Operation descriptors remain timeout and execution authority for generic and E2E
+operations. Read `executionMode`, timeout bounds, idempotency, scope, and safety
+effects before acting. Synchronous operations block to a terminal result; job
+operations return a durable `runId`.
+
+If advanced or E2E work leaves a quarantined resource, read it with the advertised
 Supervisor `lease.list` operation. Use `lease.recover` only after policy
 explicitly authorizes the operation and its `reset` effect, and send the exact
 lease, workspace, resource kind/id, and holder identities. Set
@@ -85,34 +91,36 @@ forwarded ports always require verified cleanup.
 
 ## Case And Suite Runs
 
-Author YAML or JSON with `schemaVersion: cockpit.test/v2`. Validate before
+Author LON, JSON, or YAML with `schemaVersion: cockpit.test/v2`. Validate before
 indexing or running:
 
 ```bash
-dart run cockpit case validate --file case.yaml --format yaml
-dart run cockpit suite validate --file suite.yaml --format yaml
-dart run cockpit case list
-dart run cockpit suite list
-dart run cockpit case run --case-id <caseId> --idempotency-key <uniqueKey>
-dart run cockpit suite run --suite-id <suiteId> --idempotency-key <uniqueKey>
+cockpit case validate --file case.yaml
+cockpit suite validate --file suite.yaml
+cockpit case list
+cockpit suite list
+cockpit case run --case-id <caseId> --idempotency-key <uniqueKey>
+cockpit suite run --suite-id <suiteId> --idempotency-key <uniqueKey>
 ```
 
 Observe and collect the terminal result:
 
 ```bash
-dart run cockpit run events --run-id <runId> --after-sequence 0 \
-  --stdout-format jsonl
-dart run cockpit run get --run-id <runId>
-dart run cockpit suite report --run-id <runId>
-dart run cockpit artifact list --run-id <runId>
-dart run cockpit artifact read \
+cockpit run events --run-id <runId> --after-sequence 0 \
+  --format jsonl
+cockpit run get --run-id <runId>
+cockpit suite report --run-id <runId>
+cockpit artifact list --run-id <runId>
+cockpit artifact read \
   --run-id <runId> --artifact-id <artifactId> \
   --output /absolute/path/to/artifact
 ```
 
-Terminal output defaults to bounded semantic text for agent loops. Request
-`--stdout-format json` only for exact machine data, or use `--output <file>` to
-write the lossless JSON response and receive a path/size/SHA-256 receipt.
+Terminal output defaults to minimal canonical LON for agent loops. Omit default
+output options. Request `--format json` only when a consumer needs JSON, or use
+`--verbosity full --format json --output <file>` to write the complete response
+and receive only its verified path. Verbosity changes information density, not
+operation accuracy.
 `artifact read` always writes verified bytes to a file and never emits Base64.
 Use `artifact list` as the authority for artifact identity and metadata.
 

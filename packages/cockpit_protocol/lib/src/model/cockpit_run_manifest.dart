@@ -7,6 +7,7 @@ import '../runtime/cockpit_surface_kind.dart';
 import '../runtime/cockpit_target_kind.dart';
 
 final class CockpitRunManifest {
+  /// Creates a CockpitRunManifest.
   CockpitRunManifest({
     required this.sessionId,
     required this.taskId,
@@ -83,6 +84,7 @@ final class CockpitRunManifest {
   static const ListEquality<String> _stringListEquality =
       ListEquality<String>();
 
+  /// Encodes this CockpitRunManifest as a JSON object.
   Map<String, Object?> toJson() => {
     'sessionId': sessionId,
     'taskId': taskId,
@@ -119,6 +121,7 @@ final class CockpitRunManifest {
     'runtimeWarningCount': runtimeWarningCount,
   };
 
+  /// Decodes a CockpitRunManifest from a JSON object.
   factory CockpitRunManifest.fromJson(Map<String, Object?> json) {
     final artifactRefs =
         (json['artifactRefs'] as List<Object?>? ?? const <Object?>[])

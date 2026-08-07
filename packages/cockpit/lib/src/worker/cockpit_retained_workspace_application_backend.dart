@@ -2,6 +2,7 @@ import 'dart:async';
 
 import '../application/cockpit_application_service_exception.dart';
 import '../application/cockpit_interactive_snapshot_store.dart';
+import '../development/cockpit_vm_network_profiler.dart';
 import 'cockpit_worker_application_support.dart';
 import 'cockpit_worker_development_session_runtime.dart';
 import 'cockpit_worker_document_index.dart';
@@ -28,6 +29,7 @@ final class CockpitRetainedWorkspaceApplicationBackend
     required CockpitWorkerDevelopmentSessionRuntime developmentRuntime,
     required CockpitWorkerProcessManager processManager,
     required CockpitWorkerResultSanitizer resultSanitizer,
+    CockpitVmNetworkProfiler? networkProfiler,
   }) {
     workerId(workspaceId, r'$.workspaceId');
     workerString(workspaceRoot, r'$.workspaceRoot', maximum: 32768);
@@ -50,6 +52,7 @@ final class CockpitRetainedWorkspaceApplicationBackend
       ),
       remote: CockpitWorkerRemoteOperations(
         workspaceId: workspaceId,
+        producerRoot: producerRoot,
         registry: registry,
         targets: registry,
         portHandoff: portHandoff,
@@ -65,6 +68,7 @@ final class CockpitRetainedWorkspaceApplicationBackend
         targets: registry,
         processManager: processManager,
         snapshotStore: snapshots,
+        networkProfiler: networkProfiler,
       ),
       sanitizer: resultSanitizer,
     );

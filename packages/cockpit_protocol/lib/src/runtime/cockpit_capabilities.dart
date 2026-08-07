@@ -5,6 +5,7 @@ import '../control/cockpit_locator.dart';
 import 'cockpit_capability_profile.dart';
 
 final class CockpitCapabilities {
+  /// Creates a CockpitCapabilities.
   CockpitCapabilities({
     required this.platform,
     required this.transportType,
@@ -12,6 +13,8 @@ final class CockpitCapabilities {
     required this.supportsFlutterViewCapture,
     required this.supportsNativeScreenCapture,
     required this.supportsHostAutomation,
+    this.supportsViewportResize = false,
+    this.viewportResizeAlternative,
     List<CockpitCommandType> supportedCommands = const <CockpitCommandType>[],
     List<CockpitLocatorKind> supportedLocatorStrategies =
         const <CockpitLocatorKind>[],
@@ -27,6 +30,8 @@ final class CockpitCapabilities {
   final bool supportsFlutterViewCapture;
   final bool supportsNativeScreenCapture;
   final bool supportsHostAutomation;
+  final bool supportsViewportResize;
+  final String? viewportResizeAlternative;
   final List<CockpitCommandType> supportedCommands;
   final List<CockpitLocatorKind> supportedLocatorStrategies;
   final CockpitCapabilityProfile? capabilityProfile;
@@ -36,6 +41,7 @@ final class CockpitCapabilities {
   static const ListEquality<CockpitLocatorKind> _locatorListEquality =
       ListEquality<CockpitLocatorKind>();
 
+  /// Encodes this CockpitCapabilities as a JSON object.
   Map<String, Object?> toJson() => {
     'platform': platform,
     'transportType': transportType,
@@ -43,6 +49,9 @@ final class CockpitCapabilities {
     'supportsFlutterViewCapture': supportsFlutterViewCapture,
     'supportsNativeScreenCapture': supportsNativeScreenCapture,
     'supportsHostAutomation': supportsHostAutomation,
+    'supportsViewportResize': supportsViewportResize,
+    if (viewportResizeAlternative != null)
+      'viewportResizeAlternative': viewportResizeAlternative,
     'supportedCommands': supportedCommands
         .map((command) => command.name)
         .toList(),
@@ -53,6 +62,7 @@ final class CockpitCapabilities {
       'capabilityProfile': capabilityProfile!.toJson(),
   };
 
+  /// Decodes a CockpitCapabilities from a JSON object.
   factory CockpitCapabilities.fromJson(Map<String, Object?> json) {
     final capabilityProfileJson =
         json['capabilityProfile'] as Map<Object?, Object?>?;
@@ -63,6 +73,8 @@ final class CockpitCapabilities {
       supportsFlutterViewCapture: json['supportsFlutterViewCapture']! as bool,
       supportsNativeScreenCapture: json['supportsNativeScreenCapture']! as bool,
       supportsHostAutomation: json['supportsHostAutomation']! as bool,
+      supportsViewportResize: json['supportsViewportResize'] as bool? ?? false,
+      viewportResizeAlternative: json['viewportResizeAlternative'] as String?,
       supportedCommands:
           (json['supportedCommands'] as List<Object?>? ?? const <Object?>[])
               .map(CockpitCommandType.fromJson)
@@ -90,6 +102,8 @@ final class CockpitCapabilities {
             other.supportsFlutterViewCapture == supportsFlutterViewCapture &&
             other.supportsNativeScreenCapture == supportsNativeScreenCapture &&
             other.supportsHostAutomation == supportsHostAutomation &&
+            other.supportsViewportResize == supportsViewportResize &&
+            other.viewportResizeAlternative == viewportResizeAlternative &&
             other.capabilityProfile == capabilityProfile &&
             _commandListEquality.equals(
               other.supportedCommands,
@@ -109,6 +123,8 @@ final class CockpitCapabilities {
     supportsFlutterViewCapture,
     supportsNativeScreenCapture,
     supportsHostAutomation,
+    supportsViewportResize,
+    viewportResizeAlternative,
     capabilityProfile,
     _commandListEquality.hash(supportedCommands),
     _locatorListEquality.hash(supportedLocatorStrategies),

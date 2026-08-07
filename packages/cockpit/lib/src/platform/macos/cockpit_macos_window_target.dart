@@ -5,6 +5,7 @@ import '../../capture/cockpit_host_capture_adapter.dart';
 typedef CockpitMacosWindowTargetResolver =
     Future<CockpitMacosWindowTarget> Function({
       required String appId,
+      required int? processId,
       required String osascriptExecutable,
       required CockpitCaptureProcessRunner processRunner,
       required Duration timeout,
@@ -32,6 +33,7 @@ final class CockpitMacosWindowTarget {
 
 Future<CockpitMacosWindowTarget> cockpitResolveMacosWindowTarget({
   required String appId,
+  required int? processId,
   required String osascriptExecutable,
   required CockpitCaptureProcessRunner processRunner,
   required Duration timeout,
@@ -43,6 +45,7 @@ Future<CockpitMacosWindowTarget> cockpitResolveMacosWindowTarget({
     '-e',
     _windowTargetScript,
     appId,
+    processId?.toString() ?? '',
     activationSettleDelay.inMilliseconds.toString(),
   ]).timeout(timeout);
   if (result.exitCode != 0) {
@@ -54,18 +57,18 @@ Future<CockpitMacosWindowTarget> cockpitResolveMacosWindowTarget({
 
   final stdout = '${result.stdout}'.trim();
   final parts = stdout.split(',');
-  if (parts.length != 4 && parts.length != 5) {
+  if (parts.length != 5) {
     throw StateError(
       'Unable to resolve the active macOS window for $appId: invalid payload.',
     );
   }
-  final windowId = parts.length == 5 ? int.tryParse(parts[0].trim()) : null;
-  final offset = parts.length == 5 ? 1 : 0;
-  final left = int.tryParse(parts[offset].trim());
-  final top = int.tryParse(parts[offset + 1].trim());
-  final width = int.tryParse(parts[offset + 2].trim());
-  final height = int.tryParse(parts[offset + 3].trim());
-  if (left == null ||
+  final windowId = int.tryParse(parts[0].trim());
+  final left = int.tryParse(parts[1].trim());
+  final top = int.tryParse(parts[2].trim());
+  final width = int.tryParse(parts[3].trim());
+  final height = int.tryParse(parts[4].trim());
+  if (windowId == null ||
+      left == null ||
       top == null ||
       width == null ||
       height == null ||
@@ -94,7 +97,8 @@ ObjC.bindFunction('IOPMAssertionDeclareUserActivity', ['int', ['id', 'uint32', '
 
 function run(argv) {
   const appId = argv[0]
-  const settleMs = Math.max(0, Number(argv[1] || '0'))
+  const requestedPid = argv[1] === '' ? null : Number(argv[1])
+  const settleMs = Math.max(0, Number(argv[2] || '0'))
   const assertionId = Ref()
   const wakeResult = $.IOPMAssertionDeclareUserActivity(
     $('Cockpit application capture'),
@@ -109,7 +113,28 @@ function run(argv) {
     throw new Error(`No running macOS application was found for ${appId}`)
   }
 
-  const app = apps.objectAtIndex(0)
+  let app = null
+  if (requestedPid !== null) {
+    for (let index = 0; index < Number(apps.count); index += 1) {
+      const candidate = apps.objectAtIndex(index)
+      if (Number(candidate.processIdentifier) === requestedPid) {
+        app = candidate
+        break
+      }
+    }
+    if (app === null) {
+      throw new Error(
+        `No running macOS application ${appId} matches process ${requestedPid}`,
+      )
+    }
+  } else {
+    if (Number(apps.count) !== 1) {
+      throw new Error(
+        `Multiple macOS applications match ${appId}; a process id is required`,
+      )
+    }
+    app = apps.objectAtIndex(0)
+  }
   if (!app.activateWithOptions($.NSApplicationActivateIgnoringOtherApps)) {
     throw new Error(`Unable to activate macOS application ${appId}`)
   }

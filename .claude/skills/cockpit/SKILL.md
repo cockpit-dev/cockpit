@@ -1,292 +1,317 @@
 ---
 name: cockpit
-description: Use when application development or black-box application E2E work must inspect, control, or prove live mobile, desktop, web, native, Flutter, or mixed-stack behavior with Cockpit 2.0.
+description: Use when application development or black-box E2E must inspect, control, debug, resize, capture, compare, or prove live Flutter, mobile, desktop, web, native, or mixed-stack behavior through Cockpit.
 ---
 
-# Cockpit 2.0
+# Cockpit
 
-Use the authenticated Supervisor as the single control plane. Resolve explicit
-workspace, target, and run identities; inspect capabilities before acting; and
-judge results from terminal state plus evidence rather than command success.
+`cockpit dev` owns Flutter discovery, processes, ports, and Supervisor state.
+Public handles are numeric (`1`, `2`, ...). Use the globally installed `cockpit` executable
+everywhere. Live capabilities are authoritative.
 
-This skill is self-contained. Resolve every linked resource relative to this
-`SKILL.md`; never search for Cockpit's source repository. The installed
-`cockpit` CLI/MCP, its `help` output, and live capability descriptors are the
-runtime authorities.
+## Choose The Command
 
-All examples use the globally installed `cockpit` executable. Install it with
-`dart pub global activate cockpit any` when absent. Inside a Dart/Flutter
-project that declares `cockpit` as a development dependency, `dart run cockpit`
-is equivalent. Never assume the Cockpit source repository is available.
+Use the highest-level command that owns the task:
 
-## Flutter Is The Primary Development Path
+| Need | Command |
+| --- | --- |
+| Start, inspect, control, debug, resize, capture, or reload Flutter | `cockpit dev` |
+| Validate or run reusable Flutter/black-box tests | `cockpit case` / `cockpit suite` |
+| Read a durable run, event stream, report, or artifact | `cockpit run` / `cockpit artifact` |
+| Confirm session identity, checkout, entrypoint, or reachability | `cockpit session` |
+| Discover one generic live capability | `cockpit op list --kind KIND` |
+| Learn an operation schema and its safer task command | `cockpit explain KIND` |
+| Execute an advertised operation without a task command | `cockpit op run KIND` |
 
-When Flutter source is available, use the managed Flutter development session
-as an independent first-class development path. It exposes the widget and
-semantics tree, route and focus state, logs, framework/runtime errors, network
-activity, rebuild signals, screenshots, hot reload/restart, and typed UI
-commands while keeping production code untouched. This is not black-box E2E.
-Do not register the app as `nativeApp` for normal Flutter implementation work.
-Use the system/native plane only at real OS, plugin, WebView, or native-shell
-boundaries; use a black-box target only for an installed production binary or
-when source integration is unavailable.
+Do not build normal Flutter work from root/workspace/target IDs. `dev` resolves those
+internally. There is no top-level `test` command: `case` is one journey and `suite`
+is a durable campaign. There are no `raw` or `exec` aliases; `op` is the single
+advertised-operation escape hatch and is not a faster version of `dev`.
 
-Use this fast path for the common development loop:
+## Flutter Fast Path
 
-```bash
-cockpit daemon restart --yolo
-cockpit root add --path /absolute/project-parent
-cockpit workspace register --root-id <rootId> --path /absolute/checkout
-cockpit workspace documents \
-  --workspace-id <workspaceId> --kind source \
-  --relative-path apps/mobile/cockpit/main.dart
-cockpit target register \
-  --workspace-id <workspaceId> --platform <platform> --device-id <deviceId> \
-  --target-kind flutterApp --environment development --mode development \
-  --entrypoint-document-id <documentId> --idempotency-key <uniqueKey>
-cockpit target launch \
-  --workspace-id <workspaceId> --target-id <targetId> --mode development \
-  --dart-define API_URL=https://example.test \
-  --dart-define-from-file config/development.json \
-  --env BUILD_TOKEN=<authorizedValue> \
-  --flutter-arg=--track-widget-creation \
-  --launch-timeout-ms 900000 --idempotency-key <uniqueKey>
-cockpit target inspect --target-id <targetId> --profile minimal
-cockpit operation list --workspace-id <workspaceId> --kind <neededKind>
-cockpit operation run --workspace-id <workspaceId> --kind ui.inspect \
-  --input-json '{"sessionId":"<sessionId>","profile":"minimal"}'
-cockpit operation run --workspace-id <workspaceId> --kind errors.read \
-  --input-json '{"sessionId":"<sessionId>","maxErrors":8}'
-cockpit operation run --workspace-id <workspaceId> --kind network.read \
-  --input-json '{"sessionId":"<sessionId>","onlyFailures":true}'
-cockpit operation run --workspace-id <workspaceId> --kind app.reload \
-  --input-json '{"sessionId":"<sessionId>"}' \
-  --idempotency-key <uniqueKey>
-cockpit operation run \
-  --workspace-id <workspaceId> --kind <advertisedKind> \
-  --input-file /absolute/path/to/input.json --idempotency-key <uniqueKey>
-cockpit target inspect --target-id <targetId> --profile minimal
-```
-
-Register the checkout or monorepo root once. Cockpit binds a Flutter target to
-the nearest `pubspec.yaml` containing its indexed entrypoint, so
-`apps/mobile/cockpit/main.dart` launches from `apps/mobile` without a second
-workspace. Paths passed to `workspace documents` always remain relative to the
-registered workspace root. Read [flutter.md](references/flutter.md) before
-creating the development-only shell.
-
-## Select The Smallest Workflow
-
-| Goal | Workflow | Read |
-| --- | --- | --- |
-| Implement or debug quickly | inspect -> edit -> focused operation -> inspect | [dev.md](references/dev.md) |
-| Add the optional Flutter semantic bridge | create a development-only shell, register its indexed entrypoint | [flutter.md](references/flutter.md) |
-| Validate one user journey | author and run one `cockpit.test/v2` case | [e2e.md](references/e2e.md) |
-| Regression, CI, or release | run a suite, verify the offline bundle | [e2e.md](references/e2e.md), [reporting.md](references/reporting.md) |
-| A platform, driver, permission, or tool is unavailable | diagnose and repair the host before retrying | [environments.md](references/environments.md) |
-| Exact command or contract is uncertain | inspect live help, then local protocol map | [protocol.md](references/protocol.md) |
-
-Do not pay suite/report cost during every edit. Do not use a focused development
-probe as release proof.
-
-## Use YOLO For Local Development
-
-When the user asks Cockpit to develop or validate a local `development` or
-`test` target, use the YOLO daemon path by default unless the user requests a
-restricted policy. This removes authorization round-trips from reloads, UI
-control, screenshots, recordings, environment injection, and system actions.
+Start once inside the checkout, specifying only real launch choices:
 
 ```bash
-cockpit daemon status
-cockpit daemon start --yolo
-# If a daemon is already running without YOLO:
-cockpit daemon restart --yolo
+cockpit dev start
+cockpit dev start cockpit/main.dart --platform macos
+cockpit dev start --device emulator-5554
+cockpit dev start --flavor staging --dart-define API_URL=https://example.test
 ```
 
-Confirm `authorizationMode` from `daemon status`. YOLO belongs to that daemon
-process only. Never silently extend it to a production/unknown target, shared
-device, financial/destructive flow, communication with real users, or other
-external side effect.
-
-## Bootstrap Once Per Workspace
+The normal loop is deliberately short:
 
 ```bash
-cockpit daemon status
-cockpit root add --path /absolute/project/root
-cockpit workspace register --root-id <rootId> --path /absolute/checkout
-cockpit target discover
+cockpit dev status
+cockpit dev inspect "Documents"
+cockpit dev tap "Documents"
+cockpit dev type "hello" --into "Message"
+cockpit dev press enter
+cockpit dev scroll "Operations"
+cockpit dev wait
+cockpit dev viewport 800x600
+cockpit dev screenshot
+cockpit dev reload
+cockpit dev restart
+cockpit dev diagnose
+cockpit dev stop
 ```
 
-Read and reuse returned IDs. The current directory may infer a workspace only
-when it belongs to exactly one active workspace. Each checkout has its own
-workspace and worker state, so unrelated projects can run concurrently.
+After an edit, use the smallest proof loop: focused analyzer/test, `dev reload`,
+the exact interaction, `dev wait`, a focused `dev inspect`, then a current screenshot
+for visible claims. Use `restart` only when reload cannot apply the change. Do not
+start a second app to recover a healthy session, and never restart or stop sessions
+other than the selected handle.
 
-For installed black-box applications, register the discovered device and real
-platform app identifier. Black-box control is non-invasive; it does not require
-application source changes or a Cockpit SDK in the production app.
+Reads never relaunch stopped apps. Mutations may recover one owned crash. Use
+`cockpit dev start` to explicitly relaunch a stopped or crashed app. Bridge and
+port changes are reconciled internally.
+
+## Sessions And Isolation
+
+The short handle is the only routine session selector. The current checkout
+automatically reuses its active handle, and `cockpit dev use HANDLE` changes that
+checkout's selection. The selection persists. Add `--session HANDLE` only when a
+command must select another concurrent session. A handle is scoped to its checkout:
+projects, worktrees, ports, targets, apps, network activity, and artifacts cannot
+cross-bind.
 
 ```bash
-cockpit target register \
-  --workspace-id <workspaceId> \
-  --platform <discoveredPlatform> \
-  --device-id <discoveredDeviceId> \
-  --target-kind nativeApp \
-  --environment test \
-  --app-id <bundleOrApplicationId> \
-  --idempotency-key <uniqueKey>
-cockpit target launch \
-  --workspace-id <workspaceId> \
-  --target-id <targetId> \
-  --idempotency-key <uniqueKey>
-cockpit target inspect --target-id <targetId> --profile minimal
+cockpit session list
+cockpit session show 1
+cockpit dev use 2
+cockpit dev status --session 2
 ```
 
-For Flutter source development, use the development shell and adapter by
-default. Keep bridge wiring outside production `lib/`; production Flutter code must not import the bridge package.
-A shell target is registered from its indexed entrypoint: resolve it with
-`workspace documents`, then pass the returned ID to
-`target register --entrypoint-document-id`. Follow [flutter.md](references/flutter.md)
-for the complete setup.
-A Flutter session retains a secondary system driver for native and OS
-boundaries, but its primary development state and control come from the Flutter
-adapter. An installed Flutter app remains controllable as a fully black-box
-`nativeApp` when no bridge is present.
+`session show` reports the checkout path and identity, workspace, entrypoint,
+platform/device, lifecycle, and current live state. Check it before a destructive
+mutation when concurrent apps look similar. Omitting `--session` is safe because the
+active selection is stored per checkout. In the unusual case of multiple sessions
+for one checkout, select once with `dev use`, or pass `--session HANDLE` on the one
+command that intentionally targets another session.
 
-## Rapid Development Validation
+Never register roots, targets, apps, ports, or runtime sessions manually for the
+fast path. If a session is unreachable, inspect `status` or `diagnose`; `dev start`
+reconciles the owned target and preserves the local handle when recovery is safe.
+Reads do not relaunch an intentionally stopped app. A timed-out request cancels that
+request, not the owned app; check `dev status` before retrying. Cockpit does not read a
+keychain or secret store. `--env` values are process-only and are not persisted.
 
-Use this loop for active implementation:
+## Timeout Defaults
 
-`resolve -> baseline -> edit -> execute -> observe -> judge -> repeat`
+Every executable command has `--timeout VALUE`; values accept `ms`, `s`, `m`, or `h`.
+Use the default first and override only a measured slow operation. The common defaults
+are deliberately generous:
 
-1. Resolve the workspace, target, and advertised operations once.
-2. Inspect a minimal baseline before the first mutation.
-3. Make one coherent code change.
-4. Run the smallest analysis, reload, action, or assertion that exercises it.
-5. Inspect resulting UI/state and bounded runtime errors.
-6. Capture a screenshot only for a visible claim and record only for motion or
-   reproduction.
-7. Keep the daemon and target alive and repeat without relaunching unless the
-   target is unhealthy or the change requires a clean start.
+| Command | Default |
+| --- | ---: |
+| `dev start` | `20m` |
+| `dev status`, inspect/actions, viewport, screenshot, diagnose | `1m` |
+| `dev wait` | `30s` |
+| `dev network`, reload, stop | `2m` |
+| `dev restart` | `5m` |
+| `target discover` | `2m` |
+| case/suite validation | `1m` |
+| `case run` | `30m` (maximum `6h`) |
+| `suite run` | `2h` (maximum `24h`) |
 
-Each cycle should answer one missing fact. Do not run a suite, generate a full
-report, or open large artifacts during every edit. Follow
-[dev.md](references/dev.md) for common UI, route, network,
-black-box, mixed-stack, locator, timeout, and recovery workflows.
+Do not add sleeps around Cockpit. `dev wait` waits for UI quiet; add `--network` only
+when the assertion depends on network completion. Its `--quiet` option changes the
+settle window, not response verbosity. After a mutation timeout, inspect state before
+retrying because the mutation may already have committed.
 
-## Inspect Before Acting
+## UI And Evidence
+
+Execute exact text or a stable locator directly. Do not add a pre-inspect round trip.
+For ambiguity or exploration, run the smallest `dev inspect QUERY`. It
+searches semantic UI targets only and returns `loc` with the shortest stable conditions
+plus known `can`. Locator fields map to the actual command options:
+`--id`, `--key`, `--type`, `--tip`, `--route`, `--within`, and `--index`.
+`--contains` and `--fuzzy` deliberately relax text/tooltip matching; conditions
+intersect and equal matches fail. Lazy lists expose only visible rows; filter or
+`dev scroll` first.
 
 ```bash
-cockpit operation list --workspace-id <workspaceId>
-cockpit operation list --workspace-id <workspaceId> --kind <neededKind>
-cockpit target inspect --target-id <targetId> --profile minimal
+cockpit dev inspect "Save changes"
+cockpit dev tap --id save-button
+cockpit dev tap "Save" --within FilledButton
+cockpit dev type "hello" --into "Message" --contains
+cockpit dev scroll "Operations"
 ```
 
-Treat each advertised operation's input contract, `executionMode`,
-`defaultTimeoutMs`, and `maximumTimeoutMs` as authoritative. Synchronous
-operations block to a result. Job operations return a durable `runId`.
-Use either `--timeout-ms` or `--deadline` for a synchronous operation, never
-both. Give each authored step its own `timeoutMs` when its cost differs from
-the case default.
+`dev scroll TARGET` uses exact matching by default and automatically ranks visible
+scroll containers. Lazy targets are searched with independent forward and reverse
+budgets; once mounted, every scrollable ancestor is revealed from inner to outer and
+the target must be fully visible through all ancestor viewports. Add `--contains` only
+when exact text is insufficient. Use `--align start|center|end` only for deliberate
+placement; `--offset PX` moves the target toward the viewport end for positive values
+and toward the start for negative values. Omit `--align nearest`, zero offset, direction,
+and default budgets.
 
-Run focused development actions with typed file input:
+Prefer stable conditions in this order: `--id`, exact text/label, `--key`, a widget
+`--type` or ancestor `--within`, then state/route. Use `--index` last and only for a
+real ordered list. Copy every returned `loc` condition: combining conditions narrows
+the match; it does not create fallbacks. Re-inspect after list reorder, filtering,
+navigation, dialogs, sheets, or keyboard transitions. `type VALUE --into TARGET`
+replaces the field value; use `press enter` for a separate IME/key action.
+
+`dev wait` is UI-only by default; add `--network` only for request-dependent
+assertions. `--timeout VALUE` accepts `ms`, `s`, `m`, or `h`; every command has a
+generous operation-specific default, so override only when the app genuinely needs
+more time. `--quiet` on `wait` changes its settle window, not output verbosity.
+
+Default screenshot routing follows what must be visible:
+
+- Android/iOS capture the system screen first for OS dialogs, then Flutter.
+- Desktop/Web capture Flutter first, then an available system fallback.
+- `--verbosity standard` shows the source; minimal still reports fallback.
 
 ```bash
-cockpit operation run \
-  --workspace-id <workspaceId> \
-  --kind <advertisedKind> \
-  --input-file /absolute/path/to/input.json \
-  --idempotency-key <uniqueKey>
+cockpit dev screenshot
+cockpit dev screenshot --format path
+cockpit dev screenshot --save /absolute/current.png
+cockpit dev screenshot --compare /absolute/baseline.png --diff /absolute/diff.png
 ```
 
-After a mutation, inspect the resulting UI/state/errors. After timeout or
-transport loss, read state before retrying non-idempotent work.
+Visible claims require a current screenshot. Return only paths, never bytes,
+Base64, data URIs, image contents, or hashes. RGBA comparison is exact unless a
+pixel tolerance is explicitly required. `--save` selects an exact output path;
+`--compare` accepts a baseline and `--diff` writes the diff. Do not compare captures
+from different sources or viewport sizes. Android/iOS system capture is essential for
+permissions and OS dialogs; Flutter fallback must be reported rather than hidden.
 
-## Author And Run E2E
+## Network And Diagnostics
 
-Copy and adapt a local template; do not execute a template unchanged:
+The network command returns a bounded newest-first index, not unbounded bodies. The
+default page is 12 rows. Each request has a numeric ID; request/response body retrieval
+writes separate verified artifact files and prints their paths. Inspect the row first,
+then retrieve only the needed side. `--before ID` pages backward without repeating the
+current page.
 
-- [black-box-login.case.yaml](assets/templates/e2e/cases/black-box-login.case.yaml)
-- [black-box-settings.case.yaml](assets/templates/e2e/cases/black-box-settings.case.yaml)
-- [flutter-mixed-stack.case.yaml](assets/templates/e2e/cases/flutter-mixed-stack.case.yaml)
-- [regression.suite.yaml](assets/templates/e2e/suites/regression.suite.yaml)
+Sensitive query, header, cookie, structured-body, and credential-like values are
+masked with `*` by default, not removed. Use `--raw` only with `--body` when complete
+values or binary bytes are required; raw data remains in the saved body file rather
+than stdout. Metadata and bounded previews remain safe and small.
 
-Use the bundled [cockpit.test.v2.schema.json](references/cockpit.test.v2.schema.json)
-for exact fields. Keep case and suite files inside the registered workspace,
-validate them, list them to refresh the document index, and then run by the
-reported authored identity.
+SSE and other unfinished HTTP responses remain `receiving`; repeated `dev network`
+reads show their current state and body artifact without pretending the response has
+ended. This is recorded continuation, not an unbounded terminal watch. WebSocket
+connections and frame activity are indexed. Text frames may be previewed; binary and
+unsafe payloads stay metadata or files. Unsupported raw socket interception remains
+unavailable rather than simulated.
 
 ```bash
-cockpit case validate --file cockpit/e2e/cases/login.case.yaml --format yaml
-cockpit suite validate --file cockpit/e2e/suites/regression.suite.yaml --format yaml
-cockpit case list --workspace-id <workspaceId>
-cockpit suite list --workspace-id <workspaceId>
-cockpit case run \
-  --workspace-id <workspaceId> \
-  --case-id <caseId> \
-  --target-id <targetId> \
-  --idempotency-key <uniqueKey> \
-  --timeout-ms <overallCaseBudget>
-cockpit suite run \
-  --workspace-id <workspaceId> \
-  --suite-id <suiteId> \
-  --target-id <targetId> \
-  --idempotency-key <uniqueKey> \
-  --timeout-ms <overallSuiteBudget>
-cockpit run events --run-id <runId> --after-sequence 0
-cockpit run get --run-id <runId>
-cockpit suite report --run-id <runId> --output-dir cockpit-report
+cockpit dev network
+cockpit dev network 37
+cockpit dev network --before 37
+cockpit dev network --failures --method GET --uri /api
+cockpit dev network 37 --body response
+cockpit dev network 37 --body both --raw
 ```
 
-Use semantic/native/visual/coordinate planes only when advertised. Locator
-signals in one locator are conjunctive. Prefer stable IDs or labels, add
-ordered `fallbacks` for alternate representations, and use 0-based `index`
-only after stronger signals still match a list. Exact text is the default;
-select `contains`, `fuzzy`, or `regex` deliberately.
+Use `dev diagnose --verbosity standard` for bounded UI, error, log, and network
+health. Use `full` only when complete semantic data is needed; large response
+bodies should be read from their reported paths. Start with `--failures`, `--method`,
+or `--uri` when the app generates heavy traffic.
 
-Compose lifecycle behavior with suite fixtures, case `setup`/`finally`, step
-`evidence`, and explicit recording boundaries. Use `if`, bounded `retry`,
-bounded `loop`, and `call` fragments for flow control. Do not invent client-only
-pre/post hooks that cannot appear in the canonical report.
+## Output And Input
 
-## Output And Evidence
+Minimal canonical LON is the default. Omit `--verbosity minimal`, `--format lon`,
+the current session, inferred input, and default wait/screenshot settings.
+Every explicit option must change behavior. Formats are `lon|json|yaml|jsonl|path|none`;
+LON, JSON, and YAML are first-class equal projections. `path` prints one verified
+artifact/output path, `none` is silent, and `--output` writes an atomic projection
+whose stdout is only its verified path.
 
-CLI stdout defaults to AI semantic text at `--detail minimal`. Keep this for
-normal loops: it emits one copy of each identity/state, compact collection
-rows, decision-critical counts, failures, and the next action. Use
-`--detail standard` only for diagnostic context and `--detail full` only when
-the complete object is required. The same levels apply to
-`--stdout-format json`; JSON changes encoding, not information density. Use
-`--detail full --stdout-format json --output <file>` for a complete structured
-response without putting it in terminal context. Binary artifacts always go
-to files and are never printed or expanded as Base64.
+```bash
+cockpit dev diagnose --verbosity standard
+cockpit dev diagnose --verbosity full --format json --output /absolute/diagnose.json
+cockpit op run viewport.set --input '{width:800 height:600}'
+```
 
-A pass requires terminal run state, required assertions, no disqualifying
-runtime errors, and readable required evidence. For suites, export the whole
-offline directory with `suite report --output-dir <newDirectory>`; the CLI
-downloads manifest-declared files, verifies their size and SHA-256, and leaves
-no partial destination on failure. Use `summary.md` for a bounded
-handoff, `report.json` as the complete rendering fact graph, `index.html` for
-offline task-focused exploration, and `junit.xml` for CI interchange.
+`--input` and `--input-file` accept LON, JSON, or YAML. File extensions are
+preferred because input format is inferred; specify an input format only when a
+source is ambiguous. Never invent fields: use `cockpit explain OPERATION` or the
+advertised schema first.
 
-## Authorization And Recovery
+Minimal output contains only the next-decision fields. Use `--verbosity standard`
+for diagnosis and `full` only for the complete semantic response. Do not request or
+print screenshots, file contents, Base64, data URIs, hashes, or decision-irrelevant
+byte counts. Stdout reports verified paths; read an artifact file only when its
+metadata proves it is the needed evidence.
 
-Inspect policy with `daemon policy show`. Production/unknown targets,
-dangerous operations, safety effects, and secret names require policy
-authority. Use the local development YOLO rule above only within its stated
-boundary. Confirm `authorizationMode` in daemon status and the report.
+## Flutter E2E And Black-Box E2E
 
-Resume run events by sequence and reuse the original idempotency key. For
-quarantined resources, read exact identities with the advertised `lease.list`
-operation and use policy-authorized `lease.recover`; never guess or blindly
-force release resources.
+Validate documents before running them, then use the indexed case/suite identity.
+Run IDs are durable; observe bounded events and export the finalized report bundle
+only after the run reaches a terminal state.
 
-## Completion Rules
+```bash
+cockpit case validate --file /absolute/case.lon
+cockpit suite validate --file /absolute/suite.yaml
+cockpit case list --id CASE
+cockpit suite list --id SUITE
+cockpit case run --case-id CASE --idempotency-key KEY
+cockpit suite run --suite-id SUITE --idempotency-key KEY
+cockpit run get --run-id RUN
+cockpit run events --run-id RUN
+cockpit suite report --run-id RUN --output-dir /absolute/report
+cockpit artifact list --run-id RUN
+cockpit artifact read --run-id RUN --artifact-id ARTIFACT --output /absolute/artifact
+```
 
-- A visible claim needs a current screenshot; motion or reproduction needs a
-  recording when that capability is available and required.
-- A business flow needs an observable assertion after its mutation.
-- Unsupported capability is blocked/unavailable, never a simulated pass.
-- A release requires the complete quality gate and every supported platform
-  regression, not one local run or one passing device.
-- Wait for an entire CI matrix before triage; diagnose terminal reports,
-  events, artifacts, and logs together.
+`.lon`, `.json`, `.yaml`, and `.yml` documents infer their input format, so omit
+`--input-format`. Run inputs accept LON, JSON, or YAML through `--inputs` or
+`--inputs-file`. A submission idempotency key identifies one logical run: reuse it
+after transport uncertainty and never invent a new key until `run get` proves the
+first submission does not exist.
+
+Case and suite runs reuse the current checkout's active development session when
+one exists. Pass `--session HANDLE` only to select another session in that checkout,
+or `--target-id TARGET` for an explicitly registered black-box target; the two
+selectors are mutually exclusive. Use `list --id ID` for exact lookup and add
+`--path SUBSTRING` only when mirrored templates or fixtures make an ID ambiguous.
+
+`run events` reads a bounded resumable SSE sequence until terminal or disconnect.
+Resume with the last sequence or event ID; sequence numbers are monotonic. Do not
+export `suite report` before terminal completion. `artifact list` returns metadata;
+`artifact read` verifies the artifact and writes only to the requested output path.
+
+Use real live capabilities only. Unsupported capability is `unavailable` or
+`blocked`, never simulated. Distinguish product failure, authoring failure,
+environment block, and infrastructure failure in reports. A passing process exit is
+not sufficient: require terminal run state, expected assertions, no disqualifying
+runtime/network errors, and current evidence.
+
+## Advanced And References
+
+Use generic operations only when no task command covers a live capability. Query one
+kind instead of loading the full catalog, inspect its schema, then execute it:
+
+```bash
+cockpit op list --kind viewport.set
+cockpit explain viewport.set
+cockpit op run viewport.set --input '{width:800 height:600}'
+```
+
+Use `--scope supervisor` only for a Supervisor-scoped operation. Workspace scope is
+the default and resolves the current checkout. Pass `--root-id` only when the live
+descriptor declares root scope. `--session` injects the canonical runtime session only
+when the schema declares it; do not put `sessionId` into input manually. Cockpit
+generates an idempotency key only where the descriptor allows it. `op run` adopts the
+descriptor's default timeout; add `--timeout` only to override it within the advertised
+maximum.
+
+Checkouts/worktrees isolate sessions, ports, mutations, network data, and artifacts;
+never make another checkout's session implicit. Keep Cockpit wiring in a development
+entrypoint; production Flutter code must not import the bridge package.
+
+Read [flutter.md](references/flutter.md) for bridge shells,
+[dev.md](references/dev.md) for recovery/native boundaries,
+[e2e.md](references/e2e.md) for black-box E2E,
+[reporting.md](references/reporting.md) for CI,
+[environments.md](references/environments.md) for unavailable platforms, and
+[protocol.md](references/protocol.md) for live operation contracts.
+
+A pass requires terminal UI/state, no disqualifying runtime/network error, and
+current evidence. Unsupported capability is unavailable, never simulated.

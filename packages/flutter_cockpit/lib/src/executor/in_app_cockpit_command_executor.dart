@@ -569,6 +569,7 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
         resolution: resolution,
         durationMs: stopwatch.elapsedMilliseconds,
         warnings: commit.warnings,
+        changed: _changedSince(commit),
       );
     }
     if (activation != _TapActivation.direct &&
@@ -627,9 +628,12 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
         resolution: resolution,
         durationMs: stopwatch.elapsedMilliseconds,
         warnings: commit.warnings,
+        changed: _changedSince(commit),
       );
     }
-    if (activation == _TapActivation.auto && _gestureHandler != null) {
+    if (activation == _TapActivation.auto &&
+        target.supportedCommands.contains(CockpitCommandType.tap) &&
+        _gestureHandler != null) {
       final gestureResult = await _executeGestureAction(
         command: command,
         stopwatch: stopwatch,
@@ -780,6 +784,7 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
         resolution: resolution,
         durationMs: stopwatch.elapsedMilliseconds,
         warnings: commit.warnings,
+        changed: _changedSince(commit),
       );
     }
     if (target.supportedCommands.contains(CockpitCommandType.longPress) &&
@@ -810,6 +815,7 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
         resolution: resolution,
         durationMs: stopwatch.elapsedMilliseconds,
         warnings: commit.warnings,
+        changed: _changedSince(commit),
       );
     }
     return _executeResolvedGesture(
@@ -902,6 +908,7 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
         resolution: resolution,
         durationMs: stopwatch.elapsedMilliseconds,
         warnings: commit.warnings,
+        changed: _changedSince(commit),
       );
     }
     return _executeResolvedGesture(
@@ -1227,8 +1234,7 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
     final revealPadding = (_doubleParameter(command, 'revealPaddingPx') ?? 0)
         .clamp(0, 240)
         .toDouble();
-    final explicitRevealRequested =
-        revealAlignment != CockpitRevealAlignment.nearest || revealPadding > 0;
+    final revealOffset = _doubleParameter(command, 'revealOffsetPx') ?? 0;
     final allowsGenericResolution = _allowsGenericScrollResolution(locator);
 
     Future<CockpitCommandExecution?> buildScrollSuccess(
@@ -1236,13 +1242,13 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
     ) async {
       var candidateResolution = successResolution;
       for (var attempt = 0; attempt < 2; attempt += 1) {
-        if (explicitRevealRequested) {
-          await _attemptEnsureVisible(
-            locator,
-            durationPerStep,
-            alignment: revealAlignment,
-            padding: revealPadding,
-          );
+        if (await _attemptEnsureVisible(
+          locator,
+          durationPerStep,
+          alignment: revealAlignment,
+          padding: revealPadding,
+          offset: revealOffset,
+        )) {
           await _postActionSettler();
           await _settleBeforeObservation();
           await _waitForVisualContinuity(
@@ -1254,9 +1260,7 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
         if (satisfied != null) {
           candidateResolution = _scrollResolutionSuccess(satisfied);
         } else {
-          candidateResolution = allowsGenericResolution
-              ? await _resolveWithRetry(command, attempts: 2)
-              : _resolve(command);
+          candidateResolution = _resolve(command);
         }
         if (candidateResolution.isSuccess) {
           return _buildSuccessWithOptionalCapture(
@@ -1272,6 +1276,7 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
         durationPerStep,
         alignment: revealAlignment,
         padding: revealPadding,
+        offset: revealOffset,
       )) {
         await _postActionSettler();
         await _settleBeforeObservation();
@@ -1289,6 +1294,26 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
       return buildScrollSuccess(_scrollResolutionSuccess(locatorResolution));
     }
 
+    Future<CockpitCommandExecution?> confirmSimpleLocatorAfterReveal() async {
+      if (allowsGenericResolution) {
+        return null;
+      }
+      for (var attempt = 0; attempt < 3; attempt += 1) {
+        if (attempt > 0) {
+          await _waitTickHandler(const Duration(milliseconds: 16));
+        }
+        final satisfied = _scrollLocatorResolution(command);
+        if (satisfied != null) {
+          return _buildSuccessWithOptionalCapture(
+            command: command,
+            durationMs: stopwatch.elapsedMilliseconds,
+            resolution: _scrollResolutionSuccess(satisfied),
+          );
+        }
+      }
+      return null;
+    }
+
     final initialSatisfied = _scrollLocatorResolution(command);
     if (initialSatisfied != null) {
       final success = await buildScrollSatisfiedSuccess(initialSatisfied);
@@ -1297,14 +1322,58 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
       }
     }
 
-    var resolution = allowsGenericResolution
-        ? await _resolveWithRetry(command)
-        : _resolve(command);
+    var resolution = _resolve(command);
+    const maxAutoScrollableCandidates = 8;
+    final hasExplicitScrollable =
+        (scrollableKey != null && scrollableKey.isNotEmpty) ||
+        scrollableLocator != null;
     var scrollAttempts = 0;
     var scrollsPerformed = 0;
-    var currentReverse = reverse;
-    var usedDirectionFallback = false;
+    var scrollPrepareDurationMs = 0;
+    var scrollHandlerDurationMs = 0;
+    var scrollObservationDurationMs = 0;
+    var candidateIndex = 0;
+    var candidateCount = 1;
+    var availableCandidateCount = 1;
+    var searchingMountedTargetAncestors = false;
     CockpitScrollStepResult? lastScrollStep;
+    final directionsTried = <String>[];
+    final scrollableCandidatesTried = <Map<String, Object?>>[];
+
+    CockpitLocator? effectiveScrollableLocator() {
+      if (hasExplicitScrollable) {
+        return scrollableLocator;
+      }
+      return CockpitLocator(index: candidateIndex);
+    }
+
+    void recordScrollableCandidate(
+      CockpitScrollStepResult step, {
+      required bool reverse,
+    }) {
+      final candidate = <String, Object?>{
+        'index': step.scrollableCandidateIndex ?? candidateIndex,
+        if (step.scrollableCandidateCount != null)
+          'count': step.scrollableCandidateCount,
+        if (step.scrollableKey != null) 'key': step.scrollableKey,
+        if (step.scrollableTypeName != null) 'type': step.scrollableTypeName,
+        if (step.scrollablePath != null) 'path': step.scrollablePath,
+        'direction': reverse ? 'reverse' : 'forward',
+      };
+      final alreadyRecorded = scrollableCandidatesTried.any(
+        (existing) =>
+            existing['index'] == candidate['index'] &&
+            existing['key'] == candidate['key'] &&
+            existing['type'] == candidate['type'] &&
+            existing['path'] == candidate['path'] &&
+            existing['direction'] == candidate['direction'],
+      );
+      if (!alreadyRecorded &&
+          scrollableCandidatesTried.length < maxAutoScrollableCandidates * 2) {
+        scrollableCandidatesTried.add(candidate);
+      }
+    }
+
     if (allowsGenericResolution && resolution.isSuccess) {
       final success = await buildScrollSuccess(resolution);
       if (success != null) {
@@ -1317,16 +1386,19 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
       durationPerStep,
       alignment: revealAlignment,
       padding: revealPadding,
+      offset: revealOffset,
     )) {
+      final fastSuccess = await confirmSimpleLocatorAfterReveal();
+      if (fastSuccess != null) {
+        return fastSuccess;
+      }
       await _postActionSettler();
       await _settleBeforeObservation();
       await _waitForVisualContinuity(
         commandType: CockpitCommandType.scrollUntilVisible,
         routeChanged: false,
       );
-      resolution = allowsGenericResolution
-          ? await _resolveWithRetry(command, attempts: 2)
-          : _resolve(command);
+      resolution = _resolve(command);
       if (resolution.isSuccess) {
         final success = await buildScrollSuccess(resolution);
         if (success != null) {
@@ -1335,124 +1407,199 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
       }
     }
 
-    directionLoop:
-    while (true) {
-      for (var attempt = 0; attempt < maxScrolls; attempt += 1) {
-        scrollAttempts += 1;
-        await _prepareForAction(
-          command,
-          commandType: CockpitCommandType.scrollUntilVisible,
-        );
-        final scrollStep = await scrollStepHandler(
-          reverse: currentReverse,
-          viewportFraction: viewportFraction,
-          scrollableKey: scrollableKey,
-          targetLocator: locator,
-          scrollableLocator: scrollableLocator,
-          duration: durationPerStep,
-          gestureProfile: gestureProfile,
-          continuous: continuous,
-          postScrollEnsureVisible: postScrollEnsureVisible,
-        );
-        lastScrollStep = scrollStep;
-        if (!scrollStep.didScroll) {
+    if (maxScrolls > 0) {
+      final prepareStopwatch = Stopwatch()..start();
+      await _prepareForAction(
+        command,
+        commandType: CockpitCommandType.scrollUntilVisible,
+      );
+      scrollPrepareDurationMs = prepareStopwatch.elapsedMilliseconds;
+    }
+
+    candidateLoop:
+    while (candidateIndex < candidateCount) {
+      var currentReverse = reverse;
+      var usedDirectionFallback = false;
+
+      directionLoop:
+      while (true) {
+        final directionName = currentReverse ? 'reverse' : 'forward';
+        var directionStoppedWithoutProgress = false;
+        if (!directionsTried.contains(directionName)) {
+          directionsTried.add(directionName);
+        }
+
+        for (var attempt = 0; attempt < maxScrolls; attempt += 1) {
+          scrollAttempts += 1;
+          final handlerStopwatch = Stopwatch()..start();
+          final scrollStep = await scrollStepHandler(
+            reverse: currentReverse,
+            viewportFraction: viewportFraction,
+            scrollableKey: scrollableKey,
+            targetLocator: locator,
+            scrollableLocator: effectiveScrollableLocator(),
+            duration: durationPerStep,
+            gestureProfile: gestureProfile,
+            continuous: continuous,
+            postScrollEnsureVisible: postScrollEnsureVisible,
+          );
+          scrollHandlerDurationMs += handlerStopwatch.elapsedMilliseconds;
+          lastScrollStep = scrollStep;
+          recordScrollableCandidate(scrollStep, reverse: currentReverse);
+          final canResolveStepTarget =
+              !scrollStep.targetVisibilityObserved || scrollStep.targetVisible;
+          if (!hasExplicitScrollable) {
+            final reportedCount = scrollStep.scrollableCandidateCount;
+            if (reportedCount != null && reportedCount > 0) {
+              availableCandidateCount = reportedCount;
+              candidateCount = reportedCount.clamp(
+                1,
+                maxAutoScrollableCandidates,
+              );
+            }
+          }
+          if (!scrollStep.didScroll) {
+            final observationStopwatch = Stopwatch()..start();
+            await _postActionSettler();
+            scrollObservationDurationMs +=
+                observationStopwatch.elapsedMilliseconds;
+            if (canResolveStepTarget) {
+              final satisfied = _scrollLocatorResolution(command);
+              if (satisfied != null) {
+                final success = await buildScrollSatisfiedSuccess(satisfied);
+                if (success != null) {
+                  return success;
+                }
+              }
+            }
+            if (allowsGenericResolution && canResolveStepTarget) {
+              resolution = _resolve(command);
+              if (resolution.isSuccess) {
+                final success = await buildScrollSuccess(resolution);
+                if (success != null) {
+                  return success;
+                }
+              }
+              if (resolution.error?.code ==
+                  CockpitCommandError.ambiguousTargetCode) {
+                return _failureExecution(
+                  command: command,
+                  durationMs: stopwatch.elapsedMilliseconds,
+                  snapshot: _liveSnapshot().toJson(),
+                  error: resolution.error!,
+                );
+              }
+            }
+            if (!hasExplicitScrollable &&
+                scrollStep.targetMounted &&
+                !searchingMountedTargetAncestors) {
+              searchingMountedTargetAncestors = true;
+              candidateIndex = 0;
+              candidateCount = 1;
+              continue candidateLoop;
+            }
+            if (!usedDirectionFallback &&
+                _shouldTryOppositeScrollDirection(currentReverse, scrollStep)) {
+              usedDirectionFallback = true;
+              currentReverse = !currentReverse;
+              continue directionLoop;
+            }
+            directionStoppedWithoutProgress = true;
+            break;
+          }
+          scrollsPerformed += 1;
+
+          final observationStopwatch = Stopwatch()..start();
           await _postActionSettler();
-          await _settleBeforeObservation();
+          if (scrollStep.targetMounted && !scrollStep.targetVisible) {
+            _liveSnapshot();
+          }
           await _waitForVisualContinuity(
             commandType: CockpitCommandType.scrollUntilVisible,
             routeChanged: false,
           );
-          final satisfied = _scrollLocatorResolution(command);
-          if (satisfied != null) {
-            final success = await buildScrollSatisfiedSuccess(satisfied);
-            if (success != null) {
-              return success;
+          scrollObservationDurationMs +=
+              observationStopwatch.elapsedMilliseconds;
+
+          if (scrollStep.targetVisible) {
+            final satisfied = _scrollLocatorResolution(command);
+            if (satisfied != null) {
+              final success = await buildScrollSatisfiedSuccess(satisfied);
+              if (success != null) {
+                return success;
+              }
             }
           }
-          if (allowsGenericResolution) {
-            resolution = await _resolveWithRetry(command, attempts: 2);
+
+          if (allowsGenericResolution && canResolveStepTarget) {
+            resolution = _resolve(command);
             if (resolution.isSuccess) {
               final success = await buildScrollSuccess(resolution);
               if (success != null) {
                 return success;
               }
             }
-            if (resolution.error?.code ==
-                CockpitCommandError.ambiguousTargetCode) {
-              return _failureExecution(
-                command: command,
-                durationMs: stopwatch.elapsedMilliseconds,
-                snapshot: _liveSnapshot().toJson(),
-                error: resolution.error!,
-              );
+          }
+          if ((scrollStep.targetMounted || canResolveStepTarget) &&
+              await _attemptEnsureVisible(
+                locator,
+                durationPerStep,
+                alignment: revealAlignment,
+                padding: revealPadding,
+                offset: revealOffset,
+              )) {
+            final fastSuccess = await confirmSimpleLocatorAfterReveal();
+            if (fastSuccess != null) {
+              return fastSuccess;
+            }
+            await _postActionSettler();
+            await _settleBeforeObservation();
+            await _waitForVisualContinuity(
+              commandType: CockpitCommandType.scrollUntilVisible,
+              routeChanged: false,
+            );
+            resolution = _resolve(command);
+            if (resolution.isSuccess) {
+              final success = await buildScrollSuccess(resolution);
+              if (success != null) {
+                return success;
+              }
             }
           }
-          if (!usedDirectionFallback &&
-              _shouldTryOppositeScrollDirection(currentReverse, scrollStep)) {
-            usedDirectionFallback = true;
-            currentReverse = !currentReverse;
-            continue directionLoop;
+          if (canResolveStepTarget &&
+              resolution.error?.code ==
+                  CockpitCommandError.ambiguousTargetCode) {
+            return _failureExecution(
+              command: command,
+              durationMs: stopwatch.elapsedMilliseconds,
+              snapshot: _liveSnapshot().toJson(),
+              error: resolution.error!,
+            );
           }
-          break;
-        }
-        scrollsPerformed += 1;
-
-        await _postActionSettler();
-        await _settleBeforeObservation();
-        await _waitForVisualContinuity(
-          commandType: CockpitCommandType.scrollUntilVisible,
-          routeChanged: false,
-        );
-
-        final satisfied = _scrollLocatorResolution(command);
-        if (satisfied != null) {
-          final success = await buildScrollSatisfiedSuccess(satisfied);
-          if (success != null) {
-            return success;
+          if (!hasExplicitScrollable &&
+              scrollStep.targetMounted &&
+              !searchingMountedTargetAncestors) {
+            searchingMountedTargetAncestors = true;
+            candidateIndex = 0;
+            candidateCount = 1;
+            continue candidateLoop;
           }
         }
 
-        resolution = allowsGenericResolution
-            ? await _resolveWithRetry(command, attempts: 2)
-            : _resolve(command);
-        if (allowsGenericResolution && resolution.isSuccess) {
-          final success = await buildScrollSuccess(resolution);
-          if (success != null) {
-            return success;
-          }
+        if (!directionStoppedWithoutProgress &&
+            !usedDirectionFallback &&
+            maxScrolls > 0) {
+          usedDirectionFallback = true;
+          currentReverse = !currentReverse;
+          continue directionLoop;
         }
-        if (await _attemptEnsureVisible(
-          locator,
-          durationPerStep,
-          alignment: revealAlignment,
-          padding: revealPadding,
-        )) {
-          await _postActionSettler();
-          await _settleBeforeObservation();
-          await _waitForVisualContinuity(
-            commandType: CockpitCommandType.scrollUntilVisible,
-            routeChanged: false,
-          );
-          resolution = allowsGenericResolution
-              ? await _resolveWithRetry(command, attempts: 2)
-              : _resolve(command);
-          if (resolution.isSuccess) {
-            final success = await buildScrollSuccess(resolution);
-            if (success != null) {
-              return success;
-            }
-          }
-        }
-        if (resolution.error?.code == CockpitCommandError.ambiguousTargetCode) {
-          return _failureExecution(
-            command: command,
-            durationMs: stopwatch.elapsedMilliseconds,
-            snapshot: _liveSnapshot().toJson(),
-            error: resolution.error!,
-          );
-        }
+        break;
       }
-      break;
+
+      if (hasExplicitScrollable) {
+        break;
+      }
+      candidateIndex += 1;
     }
 
     return _failureExecution(
@@ -1465,7 +1612,7 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
         scrollAttempts: scrollAttempts,
         scrollsPerformed: scrollsPerformed,
         maxScrolls: maxScrolls,
-        reverse: currentReverse,
+        reverse: reverse,
         viewportFraction: viewportFraction,
         scrollableKey: scrollableKey,
         scrollableLocator: scrollableLocator,
@@ -1475,11 +1622,15 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
         postScrollEnsureVisible: postScrollEnsureVisible,
         revealAlignment: revealAlignment,
         revealPadding: revealPadding,
+        revealOffset: revealOffset,
         lastScrollStep: lastScrollStep,
-        directionsTried: <String>[
-          reverse ? 'reverse' : 'forward',
-          if (usedDirectionFallback) reverse ? 'forward' : 'reverse',
-        ],
+        directionsTried: directionsTried,
+        scrollableCandidatesTried: scrollableCandidatesTried,
+        availableScrollableCandidateCount: availableCandidateCount,
+        maxAutoScrollableCandidates: maxAutoScrollableCandidates,
+        scrollPrepareDurationMs: scrollPrepareDurationMs,
+        scrollHandlerDurationMs: scrollHandlerDurationMs,
+        scrollObservationDurationMs: scrollObservationDurationMs,
       ),
     );
   }
@@ -1500,8 +1651,16 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
     required bool postScrollEnsureVisible,
     required CockpitRevealAlignment revealAlignment,
     required double revealPadding,
+    required double revealOffset,
     CockpitScrollStepResult? lastScrollStep,
     List<String> directionsTried = const <String>[],
+    List<Map<String, Object?>> scrollableCandidatesTried =
+        const <Map<String, Object?>>[],
+    int? availableScrollableCandidateCount,
+    int? maxAutoScrollableCandidates,
+    int? scrollPrepareDurationMs,
+    int? scrollHandlerDurationMs,
+    int? scrollObservationDurationMs,
   }) {
     final enrichedResolution = _enrichResolutionFailure(command, resolution);
     final baseError = enrichedResolution.error;
@@ -1521,7 +1680,18 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
       'postScrollEnsureVisible': postScrollEnsureVisible,
       'revealAlignment': revealAlignment.name,
       'revealPaddingPx': revealPadding,
+      'revealOffsetPx': revealOffset,
       if (directionsTried.isNotEmpty) 'directionsTried': directionsTried,
+      if (scrollableCandidatesTried.isNotEmpty)
+        'scrollableCandidatesTried': scrollableCandidatesTried,
+      'availableScrollableCandidateCount': ?availableScrollableCandidateCount,
+      if (maxAutoScrollableCandidates != null &&
+          availableScrollableCandidateCount != null &&
+          availableScrollableCandidateCount > maxAutoScrollableCandidates)
+        'scrollableCandidateLimit': maxAutoScrollableCandidates,
+      'scrollPrepareDurationMs': ?scrollPrepareDurationMs,
+      'scrollHandlerDurationMs': ?scrollHandlerDurationMs,
+      'scrollObservationDurationMs': ?scrollObservationDurationMs,
       'visibleScrollables': _visibleScrollables(),
       if (lastScrollStep != null) 'lastScrollStep': lastScrollStep.toJson(),
     };
@@ -1543,6 +1713,7 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
     Duration duration, {
     required CockpitRevealAlignment alignment,
     required double padding,
+    required double offset,
   }) async {
     final ensureVisibleHandler = _ensureVisibleHandler;
     if (ensureVisibleHandler == null) {
@@ -1553,6 +1724,7 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
       duration: duration,
       alignment: alignment,
       padding: padding,
+      offset: offset,
     );
   }
 
@@ -1776,6 +1948,7 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
     return _buildSuccessWithOptionalCapture(
       command: command,
       durationMs: stopwatch.elapsedMilliseconds,
+      changed: true,
     );
   }
 
@@ -1892,6 +2065,7 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
       resolution: resolution,
       durationMs: stopwatch.elapsedMilliseconds,
       warnings: commit.warnings,
+      changed: _changedSince(commit),
     );
   }
 
@@ -2111,6 +2285,7 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
       resolution: resolution,
       durationMs: stopwatch.elapsedMilliseconds,
       warnings: commit.warnings,
+      changed: _changedSince(commit),
     );
   }
 
@@ -2410,6 +2585,7 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
       resolution: resolution,
       durationMs: stopwatch.elapsedMilliseconds,
       warnings: commit.warnings,
+      changed: _changedSince(commit),
     );
   }
 
@@ -2428,21 +2604,27 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
         ),
       );
     }
+    final beforeActionFingerprint = _actionCommitFingerprint();
     await _prepareForAction(command, commandType: command.commandType);
     final handled = await _keyEventHandler(request, command.commandType);
     await _settleBeforeObservation();
+    if (!handled) {
+      return _failureExecution(
+        command: command,
+        durationMs: stopwatch.elapsedMilliseconds,
+        snapshot: _liveSnapshot().toJson(),
+        error: CockpitCommandError.assertionFailed(
+          message:
+              'The keyboard event was not handled by the current Flutter focus tree.',
+          details: request.toJson(),
+        ),
+      );
+    }
     return _successExecution(
       command: command,
       durationMs: stopwatch.elapsedMilliseconds,
-      snapshot: _appendWarningsToSnapshot(_liveSnapshot().toJson(), [
-        if (!handled)
-          <String, Object?>{
-            'code': 'unhandledKeyEvent',
-            'message':
-                'The keyboard event was dispatched but no focused handler reported it as handled.',
-            'details': request.toJson(),
-          },
-      ]),
+      snapshot: _liveSnapshot().toJson(),
+      changed: _actionCommitFingerprint() != beforeActionFingerprint,
     );
   }
 
@@ -2465,6 +2647,7 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
               _revealAlignmentParameter(command) ??
               CockpitRevealAlignment.nearest,
           padding: 0,
+          offset: _doubleParameter(command, 'revealOffsetPx') ?? 0,
         );
     late CockpitTargetResolutionResult resolution;
     if (revealedWithEnsureVisible) {
@@ -2526,6 +2709,7 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
       resolution: resolution,
       durationMs: stopwatch.elapsedMilliseconds,
       warnings: commit.warnings,
+      changed: _changedSince(commit),
     );
   }
 
@@ -3502,6 +3686,9 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
   }) {
     final locator = command.locator;
     if (locator == null) {
+      if (requiredCommand == CockpitCommandType.dismiss) {
+        return _registry.resolveCommand(requiredCommand!);
+      }
       return CockpitTargetResolutionResult.failure(
         error: CockpitCommandError.targetNotFound(
           message: 'Command requires a locator but none was provided.',
@@ -3517,6 +3704,10 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
     CockpitCommandType? requiredCommand,
   }) async {
     var resolution = _resolve(command, requiredCommand: requiredCommand);
+    if (!_shouldStopResolutionRetry(resolution)) {
+      _liveSnapshot();
+      resolution = _resolve(command, requiredCommand: requiredCommand);
+    }
     if (_shouldStopResolutionRetry(resolution) || attempts <= 1) {
       return _enrichResolutionFailure(command, resolution);
     }
@@ -3541,6 +3732,7 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
         await _waitTickHandler(resolvePollInterval);
       }
       await _settleBeforeObservation();
+      _liveSnapshot();
       resolution = _resolve(command, requiredCommand: requiredCommand);
       if (_shouldStopResolutionRetry(resolution)) {
         return _enrichResolutionFailure(command, resolution);
@@ -3707,6 +3899,7 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
     CockpitTargetResolutionResult? resolution,
     required int durationMs,
     String? degradationReason,
+    bool? changed,
     List<Map<String, Object?>> warnings = const <Map<String, Object?>>[],
   }) async {
     final snapshot = _appendWarningsToSnapshot(
@@ -3731,6 +3924,7 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
           degradationReason,
           'afterActionCaptureFailed: $error',
         ),
+        changed: changed,
       );
     }
     if (capture == null) {
@@ -3740,6 +3934,7 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
         locatorResolution: resolution?.locatorResolution,
         snapshot: snapshot,
         degradationReason: degradationReason,
+        changed: changed,
       );
     }
 
@@ -3759,6 +3954,7 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
         degradationReason,
         capture.degradationReason,
       ),
+      changed: changed,
       artifactPayloads: capture.artifactPayloads,
     );
   }
@@ -3783,6 +3979,7 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
     CockpitCaptureKind? resolvedCaptureKind,
     bool usedCaptureFallback = false,
     String? degradationReason,
+    bool? changed,
     Map<String, List<int>> artifactPayloads = const <String, List<int>>{},
   }) {
     return CockpitCommandExecution(
@@ -3798,6 +3995,7 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
         resolvedCaptureKind: resolvedCaptureKind,
         usedCaptureFallback: usedCaptureFallback,
         degradationReason: degradationReason,
+        changed: changed,
       ),
       artifactPayloads: artifactPayloads,
     );
@@ -3953,6 +4151,14 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
     );
   }
 
+  bool? _changedSince(_ActionCommitResult commit) {
+    final before = commit.beforeActionFingerprint;
+    if (before == null || _actionCommitFingerprint() == before) {
+      return null;
+    }
+    return true;
+  }
+
   Future<_ActionCommitResult> _invokeActionAndAwaitCommit({
     required CockpitCommand command,
     required FutureOr<void> Function() action,
@@ -3980,6 +4186,7 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
     }
     if (result is! Future<void>) {
       return _ActionCommitResult(
+        beforeActionFingerprint: beforeActionFingerprint,
         diagnostics: _actionDiagnostics(
           command: command,
           commandType: commandType,
@@ -4043,6 +4250,7 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
     if (commitOutcome == _ActionCommitOutcome.actionCompleted ||
         commitOutcome == _ActionCommitOutcome.uiCommitted) {
       return _ActionCommitResult(
+        beforeActionFingerprint: beforeActionFingerprint,
         routeCommitted: routeCommitted,
         diagnostics: _actionDiagnostics(
           command: command,
@@ -4060,6 +4268,7 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
       );
     }
     return _ActionCommitResult(
+      beforeActionFingerprint: beforeActionFingerprint,
       diagnostics: _actionDiagnostics(
         command: command,
         commandType: commandType,
@@ -5399,6 +5608,7 @@ final class _ActionCommitResult {
     this.failure,
     this.routeCommitted = false,
     this.diagnostics = const <String, Object?>{},
+    this.beforeActionFingerprint,
   });
 
   const _ActionCommitResult.failure(CockpitCommandExecution failure)
@@ -5407,10 +5617,12 @@ final class _ActionCommitResult {
         failure: failure,
         routeCommitted: false,
         diagnostics: const <String, Object?>{},
+        beforeActionFingerprint: null,
       );
 
   final List<Map<String, Object?>> warnings;
   final CockpitCommandExecution? failure;
   final bool routeCommitted;
   final Map<String, Object?> diagnostics;
+  final String? beforeActionFingerprint;
 }

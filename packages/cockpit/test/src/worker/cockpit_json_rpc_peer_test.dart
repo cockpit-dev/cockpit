@@ -381,12 +381,20 @@ void main() {
 
     final first = await harness.client.call(
       method: 'health',
-      params: <String, Object?>{..._params('replay'), 'value': 1},
+      params: <String, Object?>{
+        ..._params('replay'),
+        'value': 1,
+        'requiredFeatures': <String>['featureB', 'featureA'],
+      },
       deadline: _deadline(),
     );
     final replay = await harness.client.call(
       method: 'health',
-      params: <String, Object?>{..._params('replay'), 'value': 1},
+      params: <String, Object?>{
+        ..._params('replay'),
+        'value': 1,
+        'requiredFeatures': <String>['featureA', 'featureB'],
+      },
       deadline: _deadline(),
     );
     expect(replay, first);
@@ -401,6 +409,63 @@ void main() {
     );
     expect(executions, 1);
   });
+
+  test(
+    'replays operation invocations with refreshed transport deadlines',
+    () async {
+      var executions = 0;
+      final harness = _PeerHarness((_, _) {
+        executions += 1;
+        return <String, Object?>{'execution': executions};
+      });
+      harness.start();
+      addTearDown(harness.close);
+
+      Map<String, Object?> params({
+        required String transportDeadline,
+        required String semanticDeadline,
+      }) => <String, Object?>{
+        ..._params('operation-replay'),
+        'invocation': <String, Object?>{
+          'kind': 'command.batch',
+          'deadline': transportDeadline,
+          'input': <String, Object?>{'deadline': semanticDeadline},
+        },
+      };
+
+      final first = await harness.client.call(
+        method: 'operation',
+        params: params(
+          transportDeadline: '2026-08-02T15:00:00Z',
+          semanticDeadline: '2030-01-01T00:00:00Z',
+        ),
+        deadline: _deadline(),
+      );
+      final replay = await harness.client.call(
+        method: 'operation',
+        params: params(
+          transportDeadline: '2026-08-02T16:00:00Z',
+          semanticDeadline: '2030-01-01T00:00:00Z',
+        ),
+        deadline: _deadline(),
+      );
+
+      expect(replay, first);
+      expect(executions, 1);
+      await expectLater(
+        harness.client.call(
+          method: 'operation',
+          params: params(
+            transportDeadline: '2026-08-02T17:00:00Z',
+            semanticDeadline: '2031-01-01T00:00:00Z',
+          ),
+          deadline: _deadline(),
+        ),
+        throwsA(_remoteCode('idempotencyConflict')),
+      );
+      expect(executions, 1);
+    },
+  );
 
   test('uses a fresh idempotency key for each lease heartbeat', () async {
     var heartbeats = 0;

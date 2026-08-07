@@ -1,0 +1,58 @@
+schemaVersion: cockpit.test/v2
+kind: case
+id: consoleFlutterSmoke
+name: Cockpit Console Flutter smoke
+description: Verifies Console navigation, Supervisor refresh, and Flutter-view evidence.
+tags: [acceptance, smoke, flutter]
+target:
+  platform: flutter
+  targetKind: flutterApp
+  plane: semantic
+  requiredCapabilities: [tap, captureScreenshot]
+defaults:
+  commandTimeoutMs: 20000
+  cleanupTimeoutMs: 15000
+  failFast: true
+  evidence:
+    screenshot: onFailure
+    snapshot: onFailure
+    failurePolicy: recordWarning
+steps:
+  - stepId: openDashboard
+    action:
+      type: tap
+      locator: {label: Dashboard}
+  - stepId: waitForRefresh
+    action:
+      type: waitFor
+      condition:
+        type: visible
+        locator: {text: Refresh}
+  - stepId: refreshSupervisor
+    action:
+      type: tap
+      locator: {text: Refresh}
+  - stepId: waitForOperationalState
+    action:
+      type: waitFor
+      condition:
+        type: visible
+        locator: {text: System operational}
+  - stepId: verifyOperationalState
+    action:
+      type: assertVisible
+      locator: {text: System operational}
+  - stepId: captureDashboard
+    action:
+      type: captureScreenshot
+      artifactName: console-dashboard-flutter
+      captureOptions:
+        reason: acceptance
+        includeSnapshot: true
+        profile: flutterPreferred
+        allowFallback: false
+finally:
+  - stepId: restoreDashboard
+    action:
+      type: tap
+      locator: {label: Dashboard}

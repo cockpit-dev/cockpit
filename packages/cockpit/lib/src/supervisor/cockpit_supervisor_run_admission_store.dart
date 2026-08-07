@@ -185,7 +185,7 @@ final class CockpitSupervisorRunAdmissionStore {
       workspaceId: workspaceId,
       idempotencyKey: idempotencyKey,
       fingerprint: fingerprint,
-      runId: 'run_$requestId',
+      runId: 'rn-$requestId',
       requestId: requestId,
       projectId: projectId,
       documentKind: documentKind,

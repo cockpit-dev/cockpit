@@ -27,8 +27,9 @@ host tooling. Direct protocol consumers import
 dependency, so CLI, MCP, GUI, and third-party clients can share the same wire
 models.
 
-Version 2.0 replaces the former `flutter_cockpit_protocol` package. There is no
-compatibility forwarding package.
+Version 3.0 is the current breaking release. It replaces no APIs through a
+compatibility forwarding package; the former `flutter_cockpit_protocol` name
+is not supported.
 
 ## Standalone E2E contract
 

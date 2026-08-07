@@ -206,6 +206,10 @@ final class CockpitSystemTestAutomationAdapter
       command,
       stopwatch,
     ),
+    CockpitCommandType.captureScreenshot => _captureEvidence(
+      command,
+      stopwatch,
+    ),
     CockpitCommandType.travel => _travel(command, stopwatch),
     CockpitCommandType.system => _systemAction(command, stopwatch),
     CockpitCommandType.waitForUiIdle => _waitForUiIdle(command, stopwatch),
@@ -1039,6 +1043,33 @@ final class CockpitSystemTestAutomationAdapter
     );
   }
 
+  Future<CockpitCommandExecution> _captureEvidence(
+    CockpitCommand command,
+    Stopwatch stopwatch,
+  ) async {
+    final captured = await _captureScreenshot(
+      name: _artifactStem(
+        command.screenshotRequest?.name ??
+            command.parameters['name'] as String? ??
+            command.parameters['artifactName'] as String? ??
+            command.commandId,
+      ),
+      deadline: _deadline(command),
+    );
+    if (captured.error case final error?) {
+      return _failure(command, stopwatch, error);
+    }
+    final artifact = captured.artifact!;
+    return _success(
+      command,
+      stopwatch,
+      artifacts: <CockpitArtifactRef>[artifact],
+      artifactSourcePaths: <String, String>{
+        artifact.relativePath: captured.sourcePath!,
+      },
+    );
+  }
+
   Future<CockpitCommandExecution> _waitForUiIdle(
     CockpitCommand command,
     Stopwatch stopwatch,
@@ -1280,15 +1311,22 @@ final class CockpitSystemTestAutomationAdapter
     final sourcePath = result.sourceFilePath;
     final artifact = result.artifact;
     if (!result.success || sourcePath == null || artifact == null) {
+      final details = <String, Object?>{
+        if (result.errorCode != null) 'systemErrorCode': result.errorCode,
+        if (result.errorDetails.isNotEmpty)
+          'systemErrorDetails': result.errorDetails,
+      };
       return _SystemScreenshot.error(
-        CockpitCommandError.captureFailed(
-          message: result.errorMessage ?? 'System screenshot capture failed.',
-          details: <String, Object?>{
-            if (result.errorCode != null) 'systemErrorCode': result.errorCode,
-            if (result.errorDetails.isNotEmpty)
-              'systemErrorDetails': result.errorDetails,
-          },
-        ),
+        result.availability == CockpitSystemControlAvailability.blocked
+            ? CockpitCommandError.unsupportedCapability(
+                message: result.errorMessage ?? 'System screenshot is blocked.',
+                details: details,
+              )
+            : CockpitCommandError.captureFailed(
+                message:
+                    result.errorMessage ?? 'System screenshot capture failed.',
+                details: details,
+              ),
       );
     }
     return _SystemScreenshot(

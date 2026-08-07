@@ -27,6 +27,7 @@ final class CockpitRunBatchRequest {
     this.finalSnapshotProfile,
     this.finalSnapshotOptions,
     this.defaultCommandTimeout = const Duration(seconds: 30),
+    this.cancellation,
   });
 
   final List<CockpitRunBatchCommand> commands;
@@ -42,6 +43,7 @@ final class CockpitRunBatchRequest {
   final CockpitInteractiveResultProfile? finalSnapshotProfile;
   final CockpitSnapshotOptions? finalSnapshotOptions;
   final Duration defaultCommandTimeout;
+  final Future<void>? cancellation;
 }
 
 typedef CockpitRunBatchResult = CockpitExecuteRemoteCommandBatchResult;
@@ -182,6 +184,7 @@ final class CockpitRunBatchService {
         finalSnapshotOptions: request.finalSnapshotOptions,
         defaultCommandTimeout: request.defaultCommandTimeout,
         iosDeviceId: request.iosDeviceId,
+        cancellation: request.cancellation,
       ),
     );
   }

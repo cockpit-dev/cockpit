@@ -2,20 +2,34 @@ import 'dart:convert';
 
 import 'package:cockpit/cockpit.dart';
 import 'package:cockpit/src/test/cockpit_test_variable_binder.dart';
+import 'package:cockpit_protocol/cockpit_protocol.dart';
+import 'package:lon/lon.dart';
 import 'package:test/test.dart';
 
 void main() {
   const compiler = CockpitTestDocumentCompiler();
 
-  test('YAML and canonical JSON compile to equivalent cases', () {
+  test('YAML, canonical JSON, and LON compile to equivalent cases', () {
     final yaml = compiler.compile(_caseSource());
     expect(yaml.isSuccess, isTrue, reason: _diagnostics(yaml));
 
     final canonical = jsonEncode(yaml.requireCase().testCase.toJson());
-    final json = compiler.compile(canonical);
+    final json = compiler.compile(
+      canonical,
+      format: CockpitDocumentFormat.json,
+    );
     expect(json.isSuccess, isTrue, reason: _diagnostics(json));
+    final lonResult = compiler.compile(
+      lon.encode(yaml.requireCase().testCase.toJson()),
+      format: CockpitDocumentFormat.lon,
+    );
+    expect(lonResult.isSuccess, isTrue, reason: _diagnostics(lonResult));
     expect(
       json.requireCase().testCase.toJson(),
+      yaml.requireCase().testCase.toJson(),
+    );
+    expect(
+      lonResult.requireCase().testCase.toJson(),
       yaml.requireCase().testCase.toJson(),
     );
     expect(

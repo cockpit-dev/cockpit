@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'cockpit_test_value_reader.dart';
 
 final class CockpitTestMatrix {
+  /// Creates a CockpitTestMatrix.
   CockpitTestMatrix({
     Map<String, List<Object?>> axes = const <String, List<Object?>>{},
     Iterable<Map<String, Object?>> include = const <Map<String, Object?>>[],
@@ -39,6 +40,7 @@ final class CockpitTestMatrix {
   final List<Map<String, Object?>> exclude;
   final int maxCombinations;
 
+  /// Encodes this CockpitTestMatrix as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
     'axes': axes,
     if (include.isNotEmpty) 'include': include,
@@ -46,6 +48,7 @@ final class CockpitTestMatrix {
     'maxCombinations': maxCombinations,
   };
 
+  /// Decodes a CockpitTestMatrix from a JSON object.
   factory CockpitTestMatrix.fromJson(Object? value, {required String path}) {
     final json = CockpitTestValueReader.object(value, path);
     CockpitTestValueReader.keys(json, const <String>{

@@ -261,7 +261,7 @@ final class CockpitWorkerRuntimeRegistry
           registration,
           requireProject: true,
         );
-        final targetId = _newId('target');
+        final targetId = _newId('tg');
         _targets[targetId] = CockpitWorkerTargetBinding(
           targetId: targetId,
           deviceResourceId: cockpitCanonicalDeviceResourceId(
@@ -528,7 +528,7 @@ final class CockpitWorkerRuntimeRegistry
     final existing = _apps.values
         .where((binding) => binding.handle.appId == handle.appId)
         .firstOrNull;
-    final appId = existing?.appId ?? _newId('app');
+    final appId = existing?.appId ?? _newId('ap');
     if (existing != null &&
         !_sameOptionalRemoteHandle(
           existing.handle.remoteSession,
@@ -640,6 +640,15 @@ final class CockpitWorkerRuntimeRegistry
         message: 'Development session has no remote automation handle.',
       );
     }
+    final currentHandle = current.developmentHandle;
+    if (currentHandle != null &&
+        currentHandle.developmentSessionId == handle.developmentSessionId &&
+        handle.reloadGeneration < currentHandle.reloadGeneration) {
+      return current;
+    }
+    if (_sameOptionalDevelopmentHandle(current.developmentHandle, handle)) {
+      return current;
+    }
     await _handlePersistence.validateDevelopment(handle);
     final updated = CockpitWorkerSessionBinding(
       sessionId: current.sessionId,
@@ -745,7 +754,7 @@ final class CockpitWorkerRuntimeRegistry
     final session =
         _sessions[sessionId] ?? (throw _unknownReference('session', sessionId));
     final binding = CockpitWorkerRecordingBinding(
-      recordingId: _newId('recording'),
+      recordingId: _newId('rc'),
       sessionId: sessionId,
       appId: session.appId,
       resourceId: session.resourceId,
@@ -822,7 +831,7 @@ final class CockpitWorkerRuntimeRegistry
         .firstOrNull;
     if (existing != null) return existing;
     final binding = CockpitWorkerArtifactBinding(
-      artifactId: _newId('artifact'),
+      artifactId: _newId('ar'),
       ownerKind: ownerKind,
       ownerId: ownerId,
       kind: kind,
@@ -982,7 +991,7 @@ final class CockpitWorkerRuntimeRegistry
         message: 'Worker probe retention capacity is exhausted.',
       );
     }
-    final probeId = _newId('probe');
+    final probeId = _newId('pb');
     _probes[probeId] = _ProbeBinding(
       probeId: probeId,
       sessionId: sessionId,
@@ -1023,7 +1032,7 @@ final class CockpitWorkerRuntimeRegistry
         message: 'Worker snapshot reference capacity is exhausted.',
       );
     }
-    final snapshotRef = _newId('snapshot');
+    final snapshotRef = _newId('sn');
     _snapshots[snapshotRef] = _SnapshotBinding(
       snapshotRef: snapshotRef,
       sessionId: sessionId,
@@ -1080,8 +1089,7 @@ final class CockpitWorkerRuntimeRegistry
     String? preferredResourceId,
   }) => _locked(() async {
     await _ensureLoaded();
-    if (requirements.targetKind != CockpitTargetKind.flutterApp.name ||
-        requirements.plane != CockpitTestPlane.semantic) {
+    if (requirements.targetKind != CockpitTargetKind.flutterApp.name) {
       return _selectHealthySystemSession(
         targetId: targetId,
         requirements: requirements,
@@ -1142,6 +1150,7 @@ final class CockpitWorkerRuntimeRegistry
           systemCaptureAdapter: systemDriver?.capture,
           systemRecordingAdapter: systemDriver?.recording,
           healthCheck: () async => await client.ping() && await client.ready(),
+          prepare: systemDriver?.prepare,
           isolate: (isolation, deadline) =>
               _isolateFlutterSession(candidate.sessionId, isolation, deadline),
           forceAbort: () => forceAbortSession(candidate.sessionId),
@@ -1149,6 +1158,13 @@ final class CockpitWorkerRuntimeRegistry
       } on Object {
         continue;
       }
+    }
+    if (requirements.plane != CockpitTestPlane.semantic) {
+      return _selectHealthySystemSession(
+        targetId: targetId,
+        requirements: requirements,
+        preferredResourceId: preferredResourceId,
+      );
     }
     throw const CockpitApplicationServiceException(
       code: 'healthySessionNotFound',
@@ -1162,6 +1178,7 @@ final class CockpitWorkerRuntimeRegistry
       CockpitCaptureAdapter? capture,
       CockpitRecordingAdapter? recording,
       CockpitCapabilities capabilities,
+      Future<void> Function(DateTime deadline)? prepare,
     })?
   >
   _secondarySystemDriver(CockpitWorkerSessionBinding session) async {
@@ -1214,6 +1231,11 @@ final class CockpitWorkerRuntimeRegistry
                 target: target,
                 actionService: _systemActionService,
               )
+            : null,
+        prepare:
+            actions.contains(CockpitSystemControlAction.activateWindow) &&
+                _canPrepareInAppTarget(target)
+            ? (deadline) => _activateTarget(target, deadline)
             : null,
       );
     } on Object {
@@ -1319,6 +1341,9 @@ final class CockpitWorkerRuntimeRegistry
                 )
               : null,
           lowerer: const CockpitTestActionLowerer.system(),
+          prepare: actions.contains(CockpitSystemControlAction.activateWindow)
+              ? (deadline) => _activateTarget(target, deadline)
+              : null,
           isolate: (isolation, deadline) =>
               _isolateSystemTarget(target, isolation, deadline),
           healthCheck: () async {
@@ -1337,6 +1362,48 @@ final class CockpitWorkerRuntimeRegistry
       code: 'healthySystemSessionNotFound',
       message: 'No compatible system automation target is available.',
     );
+  }
+
+  Future<void> _activateTarget(
+    CockpitSystemTestTarget target,
+    DateTime deadline,
+  ) async {
+    final remaining = deadline.difference(_utcNow());
+    if (remaining <= Duration.zero) {
+      throw TimeoutException('Session preparation deadline expired.');
+    }
+    const maximumTimeout = Duration(seconds: 30);
+    final result = await _systemActionService.run(
+      CockpitSystemControlActionRequest(
+        platform: target.platform,
+        deviceId: target.deviceId,
+        appId: target.appId,
+        processId: target.processId,
+        metadata: target.metadata,
+        action: CockpitSystemControlAction.activateWindow,
+        timeout: remaining < maximumTimeout ? remaining : maximumTimeout,
+      ),
+    );
+    if (result.success) return;
+    throw CockpitApplicationServiceException(
+      code: result.errorCode ?? 'sessionPreparationFailed',
+      message:
+          result.errorMessage ??
+          'The selected application could not be brought to the foreground.',
+      details: <String, Object?>{
+        'action': CockpitSystemControlAction.activateWindow.name,
+        'availability': result.availability.name,
+        'recommendedNextStep': result.recommendedNextStep,
+      },
+    );
+  }
+
+  bool _canPrepareInAppTarget(CockpitSystemTestTarget target) {
+    return switch (target.platform.trim().toLowerCase()) {
+      'macos' || 'windows' || 'linux' => target.processId != null,
+      'android' || 'ios' => target.appId?.trim().isNotEmpty ?? false,
+      _ => false,
+    };
   }
 
   Future<void> _isolateFlutterSession(
@@ -1507,7 +1574,7 @@ final class CockpitWorkerRuntimeRegistry
               binding.remoteHandle.appId == remoteHandle.appId,
         )
         .firstOrNull;
-    final sessionId = existing?.sessionId ?? _newId('session');
+    final sessionId = existing?.sessionId ?? _newId('ss');
     _sessions[sessionId] = CockpitWorkerSessionBinding(
       sessionId: sessionId,
       appId: appId,
@@ -2114,7 +2181,7 @@ final class CockpitWorkerRuntimeRegistry
   }
 
   String _newId(String prefix) =>
-      '${prefix}_${_tokenGenerator.nextToken(byteLength: 16)}';
+      '$prefix-${_tokenGenerator.nextResourceIdToken()}';
 
   CockpitApplicationServiceException _unknownReference(
     String kind,
@@ -3264,6 +3331,7 @@ const Set<String> _sessionResourceKinds = <String>{
   'surface.inspect',
   'logs.read',
   'network.read',
+  'network.body',
   'errors.read',
   'session.logs.read',
   'evidence.screenshot.capture',
@@ -3272,6 +3340,7 @@ const Set<String> _sessionResourceKinds = <String>{
   'app.reload',
   'app.restart',
   'ui.waitIdle',
+  'viewport.set',
   'recording.start',
 };
 

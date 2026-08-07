@@ -1,6 +1,6 @@
-# Cockpit 2.0 Protocol
+# Cockpit 3.0 Protocol
 
-Cockpit 2.0 is a resource-oriented E2E automation protocol for arbitrary
+Cockpit 3.0 is a resource-oriented E2E automation protocol for arbitrary
 applications, with an optional semantic bridge for Flutter. A per-user Supervisor owns authentication, workspace
 isolation, target authority, run admission, events, artifacts, and worker
 lifecycle. CLI, MCP, GUI, and third-party clients use the same public contract.

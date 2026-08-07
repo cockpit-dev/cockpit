@@ -6,9 +6,10 @@ import '../test/cockpit_test_suite.dart';
 import 'cockpit_decode_policy.dart';
 import 'cockpit_foundation_value_reader.dart';
 
-enum CockpitDocumentFormat { yaml, json }
+enum CockpitDocumentFormat { lon, json, yaml }
 
 final class CockpitDocumentValidationRequest {
+  /// Creates a CockpitDocumentValidationRequest.
   CockpitDocumentValidationRequest({
     required this.format,
     required this.sourceText,
@@ -31,12 +32,14 @@ final class CockpitDocumentValidationRequest {
   final String sourceText;
   final String? relativePath;
 
+  /// Encodes this CockpitDocumentValidationRequest as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
     'format': format.name,
     'sourceText': sourceText,
     if (relativePath != null) 'relativePath': relativePath,
   };
 
+  /// Decodes a CockpitDocumentValidationRequest from a JSON object.
   factory CockpitDocumentValidationRequest.fromJson(
     Object? value, {
     String path = r'$',
@@ -71,6 +74,7 @@ final class CockpitDocumentValidationRequest {
 }
 
 final class CockpitDocumentValidationResult {
+  /// Creates a CockpitDocumentValidationResult.
   CockpitDocumentValidationResult({
     required this.valid,
     required this.sourceSha256,
@@ -98,6 +102,7 @@ final class CockpitDocumentValidationResult {
   final List<CockpitTestDiagnostic> diagnostics;
   final List<CockpitTestSourceMapEntry> sourceMap;
 
+  /// Encodes this CockpitDocumentValidationResult as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
     'valid': valid,
     'sourceSha256': sourceSha256,
@@ -108,6 +113,7 @@ final class CockpitDocumentValidationResult {
     'sourceMap': sourceMap.map((entry) => entry.toJson()).toList(),
   };
 
+  /// Decodes a CockpitDocumentValidationResult from a JSON object.
   factory CockpitDocumentValidationResult.fromJson(
     Object? value, {
     String path = r'$',

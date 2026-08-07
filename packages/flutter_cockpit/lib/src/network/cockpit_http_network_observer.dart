@@ -9,6 +9,7 @@ import 'cockpit_network_endpoint_summary.dart';
 import 'cockpit_network_observer.dart';
 import 'cockpit_network_query.dart';
 import 'cockpit_network_snapshot.dart';
+import 'cockpit_web_socket_frame_decoder.dart';
 
 typedef CockpitNetworkTickHandler = Future<void> Function(Duration duration);
 
@@ -21,6 +22,9 @@ final class CockpitHttpNetworkObserver extends HttpOverrides
     this.maxBodyBytes = 4096,
     this.captureHeaders = true,
     this.captureBodies = true,
+    this.redact = true,
+    this.maxWebSocketFrames = 24,
+    this.maxWebSocketPreviewBytes = 1024,
     CockpitNetworkTickHandler? tickHandler,
   }) : _tickHandler = tickHandler ?? _defaultTickHandler;
 
@@ -30,10 +34,16 @@ final class CockpitHttpNetworkObserver extends HttpOverrides
   final int maxBodyBytes;
   final bool captureHeaders;
   final bool captureBodies;
+  final bool redact;
+  final int maxWebSocketFrames;
+  final int maxWebSocketPreviewBytes;
   final CockpitNetworkTickHandler _tickHandler;
+  static const CockpitNetworkRedactor _redactor = CockpitNetworkRedactor();
 
   final ListQueue<CockpitNetworkEntry> _entries =
       ListQueue<CockpitNetworkEntry>();
+  final LinkedHashMap<String, _CockpitPendingNetworkRecord> _pending =
+      LinkedHashMap<String, _CockpitPendingNetworkRecord>();
   HttpOverrides? _parentOverrides;
   bool _parentOverridesLocked = false;
   int _requestCounter = 0;
@@ -60,7 +70,10 @@ final class CockpitHttpNetworkObserver extends HttpOverrides
     int maxEntries = 10,
     CockpitNetworkQuery query = const CockpitNetworkQuery(),
   }) {
-    final allEntries = _entries.toList(growable: false);
+    final allEntries = <CockpitNetworkEntry>[
+      ..._entries,
+      for (final pending in _pending.values) pending.buildEntry(this),
+    ]..sort((left, right) => left.startedAt.compareTo(right.startedAt));
     final matchingEntries = allEntries
         .where((entry) => _matchesQuery(entry, query))
         .toList(growable: false);
@@ -101,13 +114,12 @@ final class CockpitHttpNetworkObserver extends HttpOverrides
   @override
   void clear() {
     _entries.clear();
-    _inFlightCount = 0;
     _lastActivityAt = DateTime.now().toUtc();
   }
 
   String nextRequestId() {
     _requestCounter += 1;
-    return 'net-${DateTime.now().toUtc().microsecondsSinceEpoch}-$_requestCounter';
+    return '$_requestCounter';
   }
 
   Map<String, String> snapshotHeaders(HttpHeaders headers) {
@@ -120,17 +132,25 @@ final class CockpitHttpNetworkObserver extends HttpOverrides
       if (captured.length >= maxHeaderCount) {
         return;
       }
-      final rawValue = values.join(', ');
-      final boundedValue = rawValue.length > maxHeaderValueLength
-          ? '${rawValue.substring(0, maxHeaderValueLength)}...'
-          : rawValue;
+      final safeValue = values
+          .map((value) => redact ? _redactor.headerValue(name, value) : value)
+          .join(', ');
+      final boundedValue = safeValue.length > maxHeaderValueLength
+          ? '${safeValue.substring(0, maxHeaderValueLength)}...'
+          : safeValue;
       captured[name] = boundedValue;
     });
     return Map<String, String>.unmodifiable(captured);
   }
 
   void _finish(_CockpitPendingNetworkRecord pending) {
-    _inFlightCount = ((_inFlightCount - 1).clamp(0, maxRetainedEntries * 10));
+    if (pending.finished) return;
+    pending.finished = true;
+    _pending.remove(pending.requestId);
+    if (pending.countsAsInFlight) {
+      pending.countsAsInFlight = false;
+      _inFlightCount = ((_inFlightCount - 1).clamp(0, maxRetainedEntries * 10));
+    }
     _lastActivityAt = DateTime.now().toUtc();
     _entries.add(pending.buildEntry(this));
     while (_entries.length > maxRetainedEntries) {
@@ -138,19 +158,50 @@ final class CockpitHttpNetworkObserver extends HttpOverrides
     }
   }
 
-  void markRequestStarted() {
+  void _markRequestStarted(_CockpitPendingNetworkRecord pending) {
+    _pending[pending.requestId] = pending;
     _inFlightCount += 1;
     _lastActivityAt = DateTime.now().toUtc();
   }
 
-  String? previewBytes(List<int> bytes) {
-    if (!captureBodies || bytes.isEmpty) {
-      return null;
+  void _markActivity(_CockpitPendingNetworkRecord pending) {
+    pending.updatedAt = DateTime.now().toUtc();
+    _lastActivityAt = pending.updatedAt;
+  }
+
+  void _markWebSocketOpened(_CockpitPendingNetworkRecord pending) {
+    if (pending.countsAsInFlight) {
+      pending.countsAsInFlight = false;
+      _inFlightCount = ((_inFlightCount - 1).clamp(0, maxRetainedEntries * 10));
     }
-    return utf8.decode(bytes, allowMalformed: true).replaceAll('\u0000', '');
+    _markActivity(pending);
+  }
+
+  String? previewBytes(
+    List<int> bytes, {
+    Map<String, String> headers = const <String, String>{},
+  }) {
+    if (!captureBodies || bytes.isEmpty) return null;
+    final value = utf8
+        .decode(bytes, allowMalformed: true)
+        .replaceAll('\u0000', '');
+    if (!redact) return value;
+    return _redactor.body(value, contentType: _redactor.contentType(headers));
   }
 
   bool _matchesQuery(CockpitNetworkEntry entry, CockpitNetworkQuery query) {
+    final id = query.id;
+    if (id != null && id.isNotEmpty && entry.requestId != id) return false;
+    final before = query.before;
+    if (before != null && before.isNotEmpty) {
+      final entrySequence = int.tryParse(entry.requestId);
+      final beforeSequence = int.tryParse(before);
+      if (entrySequence == null ||
+          beforeSequence == null ||
+          entrySequence >= beforeSequence) {
+        return false;
+      }
+    }
     if (query.onlyFailures && !entry.isFailure) {
       return false;
     }
@@ -259,7 +310,7 @@ final class _CockpitObservedHttpClient implements HttpClient {
       method: method,
       uri: url,
     );
-    observer.markRequestStarted();
+    _captureSafely(() => observer._markRequestStarted(pending));
     try {
       final request = await _delegate.openUrl(method, url);
       return _CockpitObservedHttpClientRequest(
@@ -269,7 +320,7 @@ final class _CockpitObservedHttpClient implements HttpClient {
       );
     } on Object catch (error) {
       pending.error = error.toString();
-      observer._finish(pending);
+      _captureSafely(() => observer._finish(pending));
       rethrow;
     }
   }
@@ -423,54 +474,63 @@ final class _CockpitObservedHttpClientRequest implements HttpClientRequest {
 
   @override
   void add(List<int> data) {
-    pending.captureRequestBytes(data, observer);
     _delegate.add(data);
+    _captureSafely(() => pending.captureRequestBytes(data, observer));
   }
 
   @override
   void write(Object? object) {
-    final bytes = encoding.encode('${object ?? ''}');
-    pending.captureRequestBytes(bytes, observer);
-    _delegate.write(object);
+    final value = '${object ?? ''}';
+    _delegate.write(value);
+    _captureSafely(
+      () => pending.captureRequestBytes(encoding.encode(value), observer),
+    );
   }
 
   @override
   void writeAll(Iterable<Object?> objects, [String separator = '']) {
-    final buffer = StringBuffer();
     var isFirst = true;
-    for (final object in objects) {
-      if (!isFirst) {
-        buffer.write(separator);
-      }
-      buffer.write(object ?? '');
-      isFirst = false;
-    }
-    final bytes = encoding.encode(buffer.toString());
-    pending.captureRequestBytes(bytes, observer);
-    _delegate.writeAll(objects, separator);
+    _delegate.writeAll(
+      objects.map((object) {
+        final value = '${object ?? ''}';
+        _captureSafely(
+          () => pending.captureRequestBytes(
+            encoding.encode('${isFirst ? '' : separator}$value'),
+            observer,
+          ),
+        );
+        isFirst = false;
+        return value;
+      }),
+      separator,
+    );
   }
 
   @override
   void writeCharCode(int charCode) {
-    pending.captureRequestBytes(
-      encoding.encode(String.fromCharCode(charCode)),
-      observer,
-    );
     _delegate.writeCharCode(charCode);
+    _captureSafely(
+      () => pending.captureRequestBytes(
+        encoding.encode(String.fromCharCode(charCode)),
+        observer,
+      ),
+    );
   }
 
   @override
   void writeln([Object? object = '']) {
-    final bytes = encoding.encode('${object ?? ''}\n');
-    pending.captureRequestBytes(bytes, observer);
-    _delegate.writeln(object);
+    final value = '${object ?? ''}';
+    _delegate.writeln(value);
+    _captureSafely(
+      () => pending.captureRequestBytes(encoding.encode('$value\n'), observer),
+    );
   }
 
   @override
   Future<void> addStream(Stream<List<int>> stream) {
     return _delegate.addStream(
       stream.map((chunk) {
-        pending.captureRequestBytes(chunk, observer);
+        _captureSafely(() => pending.captureRequestBytes(chunk, observer));
         return chunk;
       }),
     );
@@ -481,23 +541,39 @@ final class _CockpitObservedHttpClientRequest implements HttpClientRequest {
 
   @override
   void abort([Object? exception, StackTrace? stackTrace]) {
-    pending.error = exception?.toString() ?? 'Request aborted.';
-    pending.captureRequestHeaders(observer.snapshotHeaders(_delegate.headers));
-    observer._finish(pending);
+    _captureSafely(() {
+      pending.error = exception?.toString() ?? 'Request aborted.';
+      pending.captureRequestHeaders(
+        observer.snapshotHeaders(_delegate.headers),
+      );
+      observer._markActivity(pending);
+      observer._finish(pending);
+    });
     _delegate.abort(exception, stackTrace);
   }
 
   @override
   Future<HttpClientResponse> close() async {
-    pending.captureRequestHeaders(observer.snapshotHeaders(_delegate.headers));
+    _captureSafely(
+      () => pending.captureRequestHeaders(
+        observer.snapshotHeaders(_delegate.headers),
+      ),
+    );
+    pending.requestClosed = true;
+    _captureSafely(() => observer._markActivity(pending));
     try {
       final response = await _delegate.close();
-      if (response.contentLength == 0 || method == 'HEAD') {
-        pending.statusCode = response.statusCode;
-        pending.captureResponseHeaders(
+      pending.statusCode = response.statusCode;
+      pending.responseStarted = true;
+      _captureSafely(
+        () => pending.captureResponseHeaders(
           observer.snapshotHeaders(response.headers),
-        );
-        observer._finish(pending);
+        ),
+      );
+      _captureSafely(() => observer._markActivity(pending));
+      if (response.statusCode != HttpStatus.switchingProtocols &&
+          (response.contentLength == 0 || method == 'HEAD')) {
+        _captureSafely(() => observer._finish(pending));
         return _CockpitObservedHttpClientResponse(
           response,
           observer: observer,
@@ -512,7 +588,7 @@ final class _CockpitObservedHttpClientRequest implements HttpClientRequest {
       );
     } on Object catch (error) {
       pending.error = error.toString();
-      observer._finish(pending);
+      _captureSafely(() => observer._finish(pending));
       rethrow;
     }
   }
@@ -574,7 +650,29 @@ final class _CockpitObservedHttpClientResponse extends Stream<List<int>>
   ]) => _delegate.redirect(method, url, followLoops ?? false);
 
   @override
-  Future<Socket> detachSocket() => _delegate.detachSocket();
+  Future<Socket> detachSocket() async {
+    try {
+      pending.statusCode = _delegate.statusCode;
+      pending.responseStarted = true;
+      pending.webSocketOpened = true;
+      _captureSafely(
+        () => pending.captureResponseHeaders(
+          observer.snapshotHeaders(_delegate.headers),
+        ),
+      );
+      _captureSafely(() => observer._markWebSocketOpened(pending));
+      final socket = await _delegate.detachSocket();
+      return _CockpitObservedWebSocket(
+        socket,
+        observer: observer,
+        pending: pending,
+      );
+    } on Object catch (error) {
+      pending.error = error.toString();
+      _captureSafely(() => observer._finish(pending));
+      rethrow;
+    }
+  }
 
   @override
   HttpConnectionInfo? get connectionInfo => _delegate.connectionInfo;
@@ -586,37 +684,67 @@ final class _CockpitObservedHttpClientResponse extends Stream<List<int>>
     void Function()? onDone,
     bool? cancelOnError,
   }) {
-    return _delegate.listen(
-      (chunk) {
-        pending.captureResponseBytes(chunk, observer);
-        onData?.call(chunk);
-      },
-      onError: (Object error, StackTrace stackTrace) {
-        if (!_completed) {
-          _completed = true;
-          pending.statusCode = _delegate.statusCode;
-          pending.captureResponseHeaders(
-            observer.snapshotHeaders(_delegate.headers),
-          );
-          pending.error = error.toString();
-          observer._finish(pending);
-        }
-        if (onError case final handler?) {
-          Function.apply(handler, <Object?>[error, stackTrace]);
-        }
-      },
-      onDone: () {
-        if (!_completed) {
-          _completed = true;
-          pending.statusCode = _delegate.statusCode;
-          pending.captureResponseHeaders(
-            observer.snapshotHeaders(_delegate.headers),
-          );
-          observer._finish(pending);
-        }
-        onDone?.call();
-      },
+    final observed = _delegate.transform<List<int>>(
+      StreamTransformer<List<int>, List<int>>.fromHandlers(
+        handleData: (chunk, sink) {
+          _captureSafely(() => pending.captureResponseBytes(chunk, observer));
+          sink.add(chunk);
+        },
+        handleError: (error, stackTrace, sink) {
+          if (!_completed) {
+            _completed = true;
+            pending.statusCode = _delegate.statusCode;
+            _captureSafely(
+              () => pending.captureResponseHeaders(
+                observer.snapshotHeaders(_delegate.headers),
+              ),
+            );
+            pending.error = error.toString();
+            _captureSafely(() {
+              observer._markActivity(pending);
+              observer._finish(pending);
+            });
+          }
+          sink.addError(error, stackTrace);
+        },
+        handleDone: (sink) {
+          if (!_completed) {
+            _completed = true;
+            pending.statusCode = _delegate.statusCode;
+            _captureSafely(
+              () => pending.captureResponseHeaders(
+                observer.snapshotHeaders(_delegate.headers),
+              ),
+            );
+            _captureSafely(() => observer._finish(pending));
+          }
+          sink.close();
+        },
+      ),
+    );
+    final subscription = observed.listen(
+      onData,
+      onError: onError,
+      onDone: onDone,
       cancelOnError: cancelOnError,
+    );
+    return _CockpitObservedStreamSubscription<List<int>>(
+      subscription,
+      onCancel: () {
+        if (_completed) return;
+        _completed = true;
+        pending.statusCode = _delegate.statusCode;
+        pending.responseCancelled = true;
+        _captureSafely(
+          () => pending.captureResponseHeaders(
+            observer.snapshotHeaders(_delegate.headers),
+          ),
+        );
+        _captureSafely(() {
+          observer._markActivity(pending);
+          observer._finish(pending);
+        });
+      },
     );
   }
 
@@ -630,6 +758,226 @@ final class _CockpitObservedHttpClientResponse extends Stream<List<int>>
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
+final class _CockpitObservedStreamSubscription<T>
+    implements StreamSubscription<T> {
+  _CockpitObservedStreamSubscription(this._delegate, {required this.onCancel});
+
+  final StreamSubscription<T> _delegate;
+  final void Function() onCancel;
+  bool _cancelled = false;
+
+  @override
+  Future<void> cancel() {
+    if (!_cancelled) {
+      _cancelled = true;
+      _captureSafely(onCancel);
+    }
+    return _delegate.cancel();
+  }
+
+  @override
+  void onData(void Function(T data)? handleData) =>
+      _delegate.onData(handleData);
+
+  @override
+  void onError(Function? handleError) => _delegate.onError(handleError);
+
+  @override
+  void onDone(void Function()? handleDone) => _delegate.onDone(handleDone);
+
+  @override
+  void pause([Future<void>? resumeSignal]) => _delegate.pause(resumeSignal);
+
+  @override
+  void resume() => _delegate.resume();
+
+  @override
+  bool get isPaused => _delegate.isPaused;
+
+  @override
+  Future<E> asFuture<E>([E? futureValue]) => _delegate.asFuture(futureValue);
+}
+
+final class _CockpitObservedWebSocket extends Stream<Uint8List>
+    implements Socket {
+  _CockpitObservedWebSocket(
+    this._delegate, {
+    required this.observer,
+    required this.pending,
+  }) : _sent = CockpitWebSocketFrameDecoder(
+         maxPreviewBytes: observer.maxWebSocketPreviewBytes,
+         onFrame: (frame) => pending.captureWebSocketFrame(
+           frame,
+           CockpitWebSocketDirection.sent,
+           observer,
+         ),
+       ),
+       _received = CockpitWebSocketFrameDecoder(
+         maxPreviewBytes: observer.maxWebSocketPreviewBytes,
+         onFrame: (frame) => pending.captureWebSocketFrame(
+           frame,
+           CockpitWebSocketDirection.received,
+           observer,
+         ),
+       );
+
+  final Socket _delegate;
+  final CockpitHttpNetworkObserver observer;
+  final _CockpitPendingNetworkRecord pending;
+  final CockpitWebSocketFrameDecoder _sent;
+  final CockpitWebSocketFrameDecoder _received;
+
+  @override
+  InternetAddress get address => _delegate.address;
+
+  @override
+  InternetAddress get remoteAddress => _delegate.remoteAddress;
+
+  @override
+  int get port => _delegate.port;
+
+  @override
+  int get remotePort => _delegate.remotePort;
+
+  @override
+  Encoding get encoding => _delegate.encoding;
+
+  @override
+  set encoding(Encoding value) => _delegate.encoding = value;
+
+  @override
+  Future<dynamic> get done => _delegate.done;
+
+  @override
+  void add(List<int> data) {
+    _delegate.add(data);
+    _captureSafely(() => _sent.add(data));
+  }
+
+  @override
+  void write(Object? object) {
+    final value = '${object ?? ''}';
+    _delegate.write(value);
+    _captureSafely(() => _sent.add(encoding.encode(value)));
+  }
+
+  @override
+  void writeAll(Iterable<Object?> objects, [String separator = '']) {
+    var first = true;
+    _delegate.writeAll(
+      objects.map((object) {
+        final value = '${object ?? ''}';
+        _captureSafely(
+          () => _sent.add(encoding.encode('${first ? '' : separator}$value')),
+        );
+        first = false;
+        return value;
+      }),
+      separator,
+    );
+  }
+
+  @override
+  void writeCharCode(int charCode) {
+    _delegate.writeCharCode(charCode);
+    _captureSafely(
+      () => _sent.add(encoding.encode(String.fromCharCode(charCode))),
+    );
+  }
+
+  @override
+  void writeln([Object? object = '']) {
+    final value = '${object ?? ''}';
+    _delegate.writeln(value);
+    _captureSafely(() => _sent.add(encoding.encode('$value\n')));
+  }
+
+  @override
+  Future<void> addStream(Stream<List<int>> stream) {
+    return _delegate.addStream(
+      stream.map((chunk) {
+        _captureSafely(() => _sent.add(chunk));
+        return chunk;
+      }),
+    );
+  }
+
+  @override
+  Future<void> flush() => _delegate.flush();
+
+  @override
+  Future<dynamic> close() => _delegate.close();
+
+  @override
+  void destroy() {
+    _delegate.destroy();
+    _captureSafely(_complete);
+  }
+
+  @override
+  void addError(Object error, [StackTrace? stackTrace]) {
+    _delegate.addError(error, stackTrace);
+  }
+
+  @override
+  bool setOption(SocketOption option, bool enabled) =>
+      _delegate.setOption(option, enabled);
+
+  @override
+  Uint8List getRawOption(RawSocketOption option) =>
+      _delegate.getRawOption(option);
+
+  @override
+  void setRawOption(RawSocketOption option) => _delegate.setRawOption(option);
+
+  @override
+  StreamSubscription<Uint8List> listen(
+    void Function(Uint8List event)? onData, {
+    Function? onError,
+    void Function()? onDone,
+    bool? cancelOnError,
+  }) {
+    final observed = _delegate.transform<Uint8List>(
+      StreamTransformer<Uint8List, Uint8List>.fromHandlers(
+        handleData: (chunk, sink) {
+          _captureSafely(() => _received.add(chunk));
+          sink.add(chunk);
+        },
+        handleError: (error, stackTrace, sink) {
+          _captureSafely(() => _complete(error: error));
+          sink.addError(error, stackTrace);
+        },
+        handleDone: (sink) {
+          _captureSafely(_complete);
+          sink.close();
+        },
+      ),
+    );
+    return observed.listen(
+      onData,
+      onError: onError,
+      onDone: onDone,
+      cancelOnError: cancelOnError,
+    );
+  }
+
+  void _complete({Object? error}) {
+    if (pending.finished) return;
+    pending.webSocketClosed = true;
+    if (error != null) pending.error = error.toString();
+    observer._markActivity(pending);
+    observer._finish(pending);
+  }
+}
+
+void _captureSafely(void Function() capture) {
+  try {
+    capture();
+  } on Object {
+    // Diagnostics are strictly passive and must not enter the user data path.
+  }
+}
+
 final class _CockpitPendingNetworkRecord {
   _CockpitPendingNetworkRecord({
     required this.requestId,
@@ -641,16 +989,32 @@ final class _CockpitPendingNetworkRecord {
   final String method;
   final Uri uri;
   final DateTime startedAt;
+  DateTime updatedAt = DateTime.now().toUtc();
   final BytesBuilder _requestBytes = BytesBuilder(copy: false);
   final BytesBuilder _responseBytes = BytesBuilder(copy: false);
+  final ListQueue<CockpitWebSocketFrame> _webSocketFrames =
+      ListQueue<CockpitWebSocketFrame>();
   Map<String, String> requestHeaders = const <String, String>{};
   Map<String, String> responseHeaders = const <String, String>{};
   int? statusCode;
   String? error;
   bool requestTruncated = false;
   bool responseTruncated = false;
+  bool requestClosed = false;
+  bool responseStarted = false;
+  bool responseCancelled = false;
+  bool webSocketOpened = false;
+  bool webSocketClosing = false;
+  bool webSocketClosed = false;
+  bool finished = false;
+  bool countsAsInFlight = true;
   int requestBodyBytes = 0;
   int responseBodyBytes = 0;
+  int sentWebSocketFrames = 0;
+  int receivedWebSocketFrames = 0;
+  int sentWebSocketBytes = 0;
+  int receivedWebSocketBytes = 0;
+  int _webSocketSequence = 0;
 
   void captureRequestHeaders(Map<String, String> headers) {
     requestHeaders = headers;
@@ -665,6 +1029,7 @@ final class _CockpitPendingNetworkRecord {
     CockpitHttpNetworkObserver observer,
   ) {
     requestBodyBytes += bytes.length;
+    observer._markActivity(this);
     if (!observer.captureBodies || requestTruncated) {
       return;
     }
@@ -686,6 +1051,7 @@ final class _CockpitPendingNetworkRecord {
     CockpitHttpNetworkObserver observer,
   ) {
     responseBodyBytes += bytes.length;
+    observer._markActivity(this);
     if (!observer.captureBodies || responseTruncated) {
       return;
     }
@@ -702,23 +1068,131 @@ final class _CockpitPendingNetworkRecord {
     _responseBytes.add(bytes);
   }
 
+  void captureWebSocketFrame(
+    CockpitDecodedWebSocketFrame decoded,
+    CockpitWebSocketDirection direction,
+    CockpitHttpNetworkObserver observer,
+  ) {
+    _webSocketSequence += 1;
+    if (direction == CockpitWebSocketDirection.sent) {
+      sentWebSocketFrames += 1;
+      sentWebSocketBytes += decoded.payloadBytes;
+    } else {
+      receivedWebSocketFrames += 1;
+      receivedWebSocketBytes += decoded.payloadBytes;
+    }
+    final preview =
+        decoded.previewBytes.isEmpty ||
+            !decoded.textPayload ||
+            decoded.compressed
+        ? null
+        : utf8
+              .decode(decoded.previewBytes, allowMalformed: true)
+              .replaceAll('\u0000', '');
+    _webSocketFrames.add(
+      CockpitWebSocketFrame(
+        sequence: _webSocketSequence,
+        direction: direction,
+        kind: _webSocketFrameKind(decoded.opcode),
+        at: DateTime.now().toUtc(),
+        payloadBytes: decoded.payloadBytes,
+        finalFragment: decoded.finalFragment,
+        compressed: decoded.compressed,
+        preview: preview == null || !observer.redact
+            ? preview
+            : CockpitHttpNetworkObserver._redactor.text(preview),
+      ),
+    );
+    final frameLimit = observer.maxWebSocketFrames < 0
+        ? 0
+        : observer.maxWebSocketFrames;
+    while (_webSocketFrames.length > frameLimit) {
+      _webSocketFrames.removeFirst();
+    }
+    if (decoded.opcode == 8) {
+      if (direction == CockpitWebSocketDirection.received) {
+        webSocketClosed = true;
+        scheduleMicrotask(() => _captureSafely(() => observer._finish(this)));
+      } else {
+        webSocketClosing = true;
+      }
+    }
+    observer._markActivity(this);
+  }
+
   CockpitNetworkEntry buildEntry(CockpitHttpNetworkObserver observer) {
+    final state = error != null
+        ? CockpitNetworkState.failed
+        : webSocketOpened
+        ? (webSocketClosed
+              ? CockpitNetworkState.closed
+              : webSocketClosing
+              ? CockpitNetworkState.closing
+              : CockpitNetworkState.open)
+        : responseCancelled
+        ? CockpitNetworkState.cancelled
+        : finished
+        ? CockpitNetworkState.complete
+        : responseStarted
+        ? CockpitNetworkState.receiving
+        : requestClosed
+        ? CockpitNetworkState.waiting
+        : CockpitNetworkState.sending;
     return CockpitNetworkEntry(
       requestId: requestId,
       method: method,
-      uri: uri.toString(),
+      uri: observer.redact
+          ? CockpitHttpNetworkObserver._redactor.uri(uri).toString()
+          : uri.toString(),
       startedAt: startedAt,
       durationMs: DateTime.now().toUtc().difference(startedAt).inMilliseconds,
+      protocol: webSocketOpened
+          ? CockpitNetworkProtocol.webSocket
+          : CockpitNetworkProtocol.http,
+      state: state,
+      updatedAt: updatedAt,
       statusCode: statusCode,
       requestHeaders: requestHeaders,
       responseHeaders: responseHeaders,
-      requestBodyPreview: observer.previewBytes(_requestBytes.takeBytes()),
-      responseBodyPreview: observer.previewBytes(_responseBytes.takeBytes()),
+      requestBodyPreview: observer.previewBytes(
+        _requestBytes.toBytes(),
+        headers: requestHeaders,
+      ),
+      responseBodyPreview: observer.previewBytes(
+        _responseBytes.toBytes(),
+        headers: responseHeaders,
+      ),
       requestBodyBytes: requestBodyBytes,
       responseBodyBytes: responseBodyBytes,
       requestBodyTruncated: requestTruncated,
       responseBodyTruncated: responseTruncated,
-      error: error,
+      webSocket: webSocketOpened
+          ? CockpitWebSocketActivity(
+              sentFrames: sentWebSocketFrames,
+              receivedFrames: receivedWebSocketFrames,
+              sentBytes: sentWebSocketBytes,
+              receivedBytes: receivedWebSocketBytes,
+              recentFrames: List<CockpitWebSocketFrame>.unmodifiable(
+                _webSocketFrames,
+              ),
+              framesTruncated:
+                  sentWebSocketFrames + receivedWebSocketFrames >
+                  _webSocketFrames.length,
+            )
+          : null,
+      error: error == null || !observer.redact
+          ? error
+          : CockpitHttpNetworkObserver._redactor.text(error!),
     );
   }
 }
+
+CockpitWebSocketFrameKind _webSocketFrameKind(int opcode) => switch (opcode) {
+  0 => CockpitWebSocketFrameKind.continuation,
+  1 => CockpitWebSocketFrameKind.text,
+  2 => CockpitWebSocketFrameKind.binary,
+  8 => CockpitWebSocketFrameKind.close,
+  9 => CockpitWebSocketFrameKind.ping,
+  10 => CockpitWebSocketFrameKind.pong,
+  _ => throw StateError('Unsupported WebSocket opcode $opcode.'),
+};

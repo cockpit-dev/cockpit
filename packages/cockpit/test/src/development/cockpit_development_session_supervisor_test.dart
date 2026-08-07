@@ -651,6 +651,7 @@ void main() {
 
       final currentHandle = await supervisor.currentHandle();
       expect(currentHandle.appId, 'machine-app-early');
+      expect(currentHandle.remoteSessionHandle?.appId, 'machine-app-early');
       expect(
         currentHandle.vmServiceUri,
         Uri.parse('ws://127.0.0.1:34567/early/ws'),
@@ -878,6 +879,74 @@ void main() {
       expect(harness.stoppedAppIds, isEmpty);
     },
   );
+
+  test(
+    'supervisor detach preserves app state and closes the detached machine control process',
+    () async {
+      final harness = _MachineHarness();
+      addTearDown(harness.dispose);
+      final supervisor = CockpitDevelopmentSessionSupervisor(
+        initialHandle: harness.handle,
+        machineClient: harness.client,
+        remoteReachabilityProbe: (_) async => true,
+        appStopper: (appId) async {
+          harness.stoppedAppIds.add(appId);
+        },
+        settleTimeout: const Duration(seconds: 2),
+        settlePollInterval: const Duration(milliseconds: 10),
+      );
+      addTearDown(supervisor.dispose);
+
+      await supervisor.start();
+      await supervisor.waitForState(CockpitDevelopmentSessionState.ready);
+      final detachFuture = supervisor.detach();
+      await Future<void>.delayed(Duration.zero);
+      expect(harness.writes.last, contains('"method":"app.detach"'));
+      harness.stdoutController.add('[{"id":0,"result":true}]');
+      await detachFuture;
+
+      expect(
+        (await supervisor.currentStatus()).state,
+        CockpitDevelopmentSessionState.ready,
+      );
+      expect(harness.closeProcessCallCount, 1);
+      expect(harness.stoppedAppIds, isEmpty);
+    },
+  );
+
+  test(
+    'supervisor preserves machine control when detach is rejected',
+    () async {
+      final harness = _MachineHarness();
+      addTearDown(harness.dispose);
+      final supervisor = CockpitDevelopmentSessionSupervisor(
+        initialHandle: harness.handle,
+        machineClient: harness.client,
+        remoteReachabilityProbe: (_) async => true,
+        appStopper: (appId) async {
+          harness.stoppedAppIds.add(appId);
+        },
+        settleTimeout: const Duration(seconds: 2),
+        settlePollInterval: const Duration(milliseconds: 10),
+      );
+      addTearDown(supervisor.dispose);
+
+      await supervisor.start();
+      await supervisor.waitForState(CockpitDevelopmentSessionState.ready);
+      final detachFuture = supervisor.detach();
+      await Future<void>.delayed(Duration.zero);
+      expect(harness.writes.last, contains('"method":"app.detach"'));
+      harness.stdoutController.add('[{"id":0,"result":false}]');
+      await detachFuture;
+
+      expect(
+        (await supervisor.currentStatus()).state,
+        CockpitDevelopmentSessionState.ready,
+      );
+      expect(harness.closeProcessCallCount, 0);
+      expect(harness.stoppedAppIds, isEmpty);
+    },
+  );
 }
 
 final class _MachineHarness {
@@ -905,6 +974,7 @@ final class _MachineHarness {
               projectDir: '/workspace/examples/cockpit_demo',
               target: 'lib/main.dart',
               appId: 'dev.cockpit.cockpit_demo',
+              platformAppId: 'dev.cockpit.cockpit_demo',
               host: '127.0.0.1',
               hostPort: 57331,
               devicePort: 47331,

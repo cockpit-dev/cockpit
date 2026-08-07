@@ -1,11 +1,12 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:ffi';
 import 'dart:io';
 import 'dart:math';
 
+import 'package:ffi/ffi.dart';
 import 'package:path/path.dart' as p;
 
-import '../infrastructure/cockpit_process_manager.dart';
 import 'cockpit_home.dart';
 import 'cockpit_permissions.dart';
 
@@ -44,17 +45,69 @@ final class CockpitSystemDirectorySyncer implements CockpitDirectorySyncer {
     if (platform == CockpitHostPlatform.windows) {
       return;
     }
-    final arguments = platform == CockpitHostPlatform.linux
-        ? <String>['-f', directoryPath]
-        : const <String>[];
-    final result = await cockpitRunIsolatedProcess('sync', arguments);
-    if (result.exitCode != 0) {
-      throw FileSystemException(
-        'Could not synchronize directory metadata: ${_bounded(result.stderr)}',
-        directoryPath,
-      );
+    _syncPosixPath(directoryPath);
+  }
+}
+
+typedef _OpenNative = Int32 Function(Pointer<Utf8>, Int32);
+typedef _OpenDart = int Function(Pointer<Utf8>, int);
+typedef _FsyncNative = Int32 Function(Int32);
+typedef _FsyncDart = int Function(int);
+typedef _CloseNative = Int32 Function(Int32);
+typedef _CloseDart = int Function(int);
+typedef _ErrnoNative = Pointer<Int32> Function();
+typedef _ErrnoDart = Pointer<Int32> Function();
+typedef _StrerrorNative = Pointer<Utf8> Function(Int32);
+typedef _StrerrorDart = Pointer<Utf8> Function(int);
+
+final DynamicLibrary _posixProcess = DynamicLibrary.process();
+final _OpenDart _posixOpen = _posixProcess
+    .lookupFunction<_OpenNative, _OpenDart>('open');
+final _FsyncDart _posixFsync = _posixProcess
+    .lookupFunction<_FsyncNative, _FsyncDart>('fsync');
+final _CloseDart _posixClose = _posixProcess
+    .lookupFunction<_CloseNative, _CloseDart>('close');
+final _ErrnoDart _posixErrno = _posixProcess
+    .lookupFunction<_ErrnoNative, _ErrnoDart>(
+      Platform.isMacOS ? '__error' : '__errno_location',
+    );
+final _StrerrorDart _posixStrerror = _posixProcess
+    .lookupFunction<_StrerrorNative, _StrerrorDart>('strerror');
+
+void _syncPosixPath(String path) {
+  if (path.contains('\x00')) {
+    throw FileSystemException('Path contains a null byte.', path);
+  }
+  final nativePath = path.toNativeUtf8();
+  var descriptor = -1;
+  var failed = false;
+  try {
+    descriptor = _posixOpen(nativePath, 0);
+    if (descriptor < 0) {
+      throw _posixFileSystemException('open', path);
+    }
+    if (_posixFsync(descriptor) != 0) {
+      throw _posixFileSystemException('fsync', path);
+    }
+  } on Object {
+    failed = true;
+    rethrow;
+  } finally {
+    malloc.free(nativePath);
+    if (descriptor >= 0 && _posixClose(descriptor) != 0 && !failed) {
+      throw _posixFileSystemException('close', path);
     }
   }
+}
+
+FileSystemException _posixFileSystemException(String operation, String path) {
+  final code = _posixErrno().value;
+  final message = _posixStrerror(code).toDartString();
+  return FileSystemException(
+    'Could not synchronize filesystem metadata during $operation',
+    path,
+    OSError(message, code),
+  );
 }
 
 final class CockpitAtomicJsonFile {

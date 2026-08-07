@@ -18,6 +18,7 @@ typedef CockpitDiagnosticNodeProvider = Object? Function();
 typedef CockpitTargetGeometryProvider = CockpitTargetGeometry? Function();
 
 final class CockpitTarget {
+  /// Creates a CockpitTarget.
   const CockpitTarget({
     required this.registrationId,
     this.cockpitId,
@@ -103,6 +104,7 @@ final class CockpitTarget {
       scrollableTypeName: scrollableTypeName,
       routeName: routeName,
       supportedCommands: supportedCommands.toList(growable: false),
+      ancestors: locatorAncestors,
     );
   }
 

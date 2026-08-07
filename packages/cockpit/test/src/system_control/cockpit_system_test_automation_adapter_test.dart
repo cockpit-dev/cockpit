@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:cockpit/src/adapters/cockpit_capture_adapter.dart';
 import 'package:cockpit/src/infrastructure/cockpit_process_manager.dart';
 import 'package:cockpit/src/system_control/cockpit_android_ui_automation_client.dart';
 import 'package:cockpit/src/system_control/cockpit_system_control_action_service.dart';
@@ -90,6 +91,65 @@ void main() {
       'flutterAwareNative',
     );
   });
+
+  test('blocked system screenshot remains a blocked capability', () async {
+    final processes = _TransientUiTreeProcessManager(failFirst: false);
+    final controls = CockpitSystemControlService(processManager: processes);
+    final adapter = CockpitSystemTestAutomationAdapter(
+      target: CockpitSystemTestTarget(
+        platform: 'macos',
+        deviceId: 'macos',
+        appId: 'dev.cockpit.console',
+      ),
+      controlService: controls,
+      actionService: CockpitSystemControlActionService(
+        processManager: processes,
+        systemControlService: controls,
+        captureAdapterFactory: (_) => const _ScreenRecordingDeniedAdapter(),
+      ),
+      workspaceRoot: Directory.current.path,
+    );
+
+    final execution = await adapter.execute(
+      CockpitCommand(
+        commandId: 'capture-blocked',
+        commandType: CockpitCommandType.captureScreenshot,
+        screenshotRequest: const CockpitScreenshotRequest(
+          reason: CockpitScreenshotReason.acceptance,
+          name: 'blocked',
+        ),
+      ),
+    );
+
+    expect(execution.result.success, isFalse);
+    expect(
+      execution.result.error?.code,
+      CockpitCommandError.unsupportedCapabilityCode,
+    );
+    expect(
+      execution.result.error?.details['systemErrorCode'],
+      'systemScreenRecordingPermissionDenied',
+    );
+  });
+}
+
+final class _ScreenRecordingDeniedAdapter implements CockpitCaptureAdapter {
+  const _ScreenRecordingDeniedAdapter();
+
+  @override
+  Future<CockpitCommandExecution> capture(CockpitCommand command) async =>
+      CockpitCommandExecution(
+        result: CockpitCommandResult(
+          success: false,
+          commandId: command.commandId,
+          commandType: command.commandType,
+          durationMs: 1,
+          error: CockpitCommandError.captureFailed(
+            message: 'Screen recording permission denied.',
+            details: const <String, Object?>{'permission': 'screenRecording'},
+          ),
+        ),
+      );
 }
 
 final class _TransientUiTreeProcessManager

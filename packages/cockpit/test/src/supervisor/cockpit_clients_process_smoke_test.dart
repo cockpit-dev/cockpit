@@ -156,7 +156,7 @@ cases:
       final server = await _cli(packageRoot, environment, const <String>[
         'server',
       ]);
-      expect(server['apiVersion'], <String, Object?>{'major': 2, 'minor': 0});
+      expect(server['api'], <String, Object?>{'major': 2, 'minor': 0});
       expect(server, isNot(contains('bearerToken')));
 
       final registeredRoot = await _cli(packageRoot, environment, <String>[
@@ -313,11 +313,7 @@ cases:
         '--output-dir',
         reportDirectory,
       ]);
-      expect(reportReceipt['path'], reportDirectory);
-      expect(
-        reportReceipt['mediaType'],
-        'application/vnd.cockpit.report-bundle',
-      );
+      expect(reportReceipt, <String, Object?>{'path': reportDirectory});
       final reportManifest =
           jsonDecode(
                 await File(
@@ -349,8 +345,6 @@ cases:
         'smokeCase',
         '--idempotency-key',
         'smoke-case-run',
-        '--inputs-json',
-        '{}',
       ]);
       final runId = accepted['runId']! as String;
       final run = await _cli(packageRoot, environment, <String>[
@@ -550,9 +544,9 @@ Future<Map<String, Object?>> _cli(
     <String>[
       p.join(packageRoot, 'bin', 'cockpit.dart'),
       ...arguments,
-      '--stdout-format',
+      '--format',
       'json',
-      '--detail',
+      '--verbosity',
       'full',
     ],
     workingDirectory: packageRoot,

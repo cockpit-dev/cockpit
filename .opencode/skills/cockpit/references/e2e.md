@@ -28,6 +28,8 @@ adapt target requirements, locators, inputs, capabilities, and expected state:
 Keep test documents, visual templates, and screenshot baselines within that
 workspace. Suite file sources are workspace-relative paths. Validate every
 changed case/suite before listing or running it.
+Authored documents may use `.lon`, `.json`, `.yaml`, or `.yml`; validation
+infers the format from the extension, so omit `--input-format` normally.
 
 ## Case Model
 
@@ -42,8 +44,9 @@ A case contains:
 - `setup`, main `steps`, and always-eligible `finally`
 
 Use one case for one coherent user journey or focused product claim. Every
-mutation needs an assertion against resulting observable UI/state. Set
-`timeoutMs` on known-slow steps instead of inflating every command.
+mutation needs an assertion against resulting observable UI/state. Override
+`--timeout` only for a known-slow run, and set `timeoutMs` only on known-slow
+steps instead of inflating every step.
 
 ## Locators And Planes
 
@@ -95,7 +98,7 @@ capture layers and record fallback/degradation in the report.
 
 Screenshot baseline and visual-template paths must remain workspace-confined.
 Screenshot assertions publish actual, baseline, and diff artifacts; do not
-embed image bytes in YAML/JSON or terminal output.
+embed image bytes in LON/JSON/YAML or terminal output.
 
 Use `captureOptions.profile: nativePreferred` for device/application baselines
 and `flutterPreferred` for Flutter-view or locator-cropped baselines. Keep
@@ -151,8 +154,8 @@ ownership and isolated output/state when several rows or projects execute.
 ## Run Protocol
 
 ```bash
-cockpit case validate --file <case.yaml> --format yaml
-cockpit suite validate --file <suite.yaml> --format yaml
+cockpit case validate --file <case.yaml>
+cockpit suite validate --file <suite.yaml>
 cockpit case list --workspace-id <workspaceId>
 cockpit suite list --workspace-id <workspaceId>
 cockpit case run \
@@ -160,8 +163,7 @@ cockpit case run \
   --case-id <caseId> \
   --target-id <targetId> \
   --inputs-file <inputs.json> \
-  --idempotency-key <uniqueKey> \
-  --timeout-ms <overallCaseBudget>
+  --idempotency-key <uniqueKey>
 cockpit run events --run-id <runId> --after-sequence 0
 cockpit run get --run-id <runId>
 ```
@@ -170,7 +172,8 @@ Use `suite run` for a suite and
 `suite report --run-id <runId> --output-dir <newDirectory>` after terminal
 completion. Case
 runs default to the advertised case budget (normally 30 minutes, maximum 6
-hours); suites normally default to 2 hours, maximum 24 hours. Trust the live
+hours); suites normally default to 2 hours, maximum 24 hours. Add
+`--timeout 45m` only when the run needs a different budget, and trust the live
 descriptor if these policies differ.
 
 Resume an interrupted event stream from the last sequence. Reuse the original

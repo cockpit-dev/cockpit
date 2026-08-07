@@ -16,6 +16,7 @@ enum CockpitTestSafetyEffect {
 }
 
 final class CockpitTestEvidencePolicy {
+  /// Creates a CockpitTestEvidencePolicy.
   const CockpitTestEvidencePolicy({
     this.screenshot = CockpitTestEvidenceMode.onFailure,
     this.snapshot = CockpitTestEvidenceMode.onFailure,
@@ -26,12 +27,14 @@ final class CockpitTestEvidencePolicy {
   final CockpitTestEvidenceMode snapshot;
   final CockpitTestEvidenceFailurePolicy failurePolicy;
 
+  /// Encodes this CockpitTestEvidencePolicy as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
     'screenshot': screenshot.name,
     'snapshot': snapshot.name,
     'failurePolicy': failurePolicy.name,
   };
 
+  /// Decodes a CockpitTestEvidencePolicy from a JSON object.
   factory CockpitTestEvidencePolicy.fromJson(
     Object? value, {
     required String path,
@@ -69,6 +72,7 @@ final class CockpitTestEvidencePolicy {
 }
 
 final class CockpitTestSafetyDeclaration {
+  /// Creates a CockpitTestSafetyDeclaration.
   CockpitTestSafetyDeclaration({
     Iterable<CockpitTestSafetyEffect> effects =
         const <CockpitTestSafetyEffect>[],
@@ -82,11 +86,13 @@ final class CockpitTestSafetyDeclaration {
   final Set<CockpitTestSafetyEffect> effects;
   final String? reason;
 
+  /// Encodes this CockpitTestSafetyDeclaration as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
     'effects': effects.map((effect) => effect.name).toList(growable: false),
     if (reason != null) 'reason': reason,
   };
 
+  /// Decodes a CockpitTestSafetyDeclaration from a JSON object.
   factory CockpitTestSafetyDeclaration.fromJson(
     Object? value, {
     required String path,
@@ -126,6 +132,7 @@ final class CockpitTestSafetyDeclaration {
 }
 
 final class CockpitTestTargetRequirements {
+  /// Creates a CockpitTestTargetRequirements.
   CockpitTestTargetRequirements({
     required this.platform,
     required this.targetKind,
@@ -148,6 +155,7 @@ final class CockpitTestTargetRequirements {
   final String? appId;
   final Set<String> requiredCapabilities;
 
+  /// Encodes this CockpitTestTargetRequirements as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
     'platform': platform,
     'targetKind': targetKind,
@@ -157,6 +165,7 @@ final class CockpitTestTargetRequirements {
       'requiredCapabilities': requiredCapabilities.toList(growable: false),
   };
 
+  /// Decodes a CockpitTestTargetRequirements from a JSON object.
   factory CockpitTestTargetRequirements.fromJson(
     Object? value, {
     required String path,
@@ -210,6 +219,7 @@ final class CockpitTestTargetRequirements {
 }
 
 final class CockpitTestCompilerLimits {
+  /// Creates a CockpitTestCompilerLimits.
   factory CockpitTestCompilerLimits({
     int maxDocumentBytes = 1048576,
     int maxNesting = 16,
@@ -253,6 +263,7 @@ final class CockpitTestCompilerLimits {
   final int maxLoopIterations;
   final int maxRetryAttempts;
 
+  /// Encodes this CockpitTestCompilerLimits as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
     'maxDocumentBytes': maxDocumentBytes,
     'maxNesting': maxNesting,
@@ -261,6 +272,7 @@ final class CockpitTestCompilerLimits {
     'maxRetryAttempts': maxRetryAttempts,
   };
 
+  /// Decodes a CockpitTestCompilerLimits from a JSON object.
   factory CockpitTestCompilerLimits.fromJson(
     Object? value, {
     required String path,
@@ -292,6 +304,7 @@ final class CockpitTestCompilerLimits {
 }
 
 final class CockpitTestCaseDefaults {
+  /// Creates a CockpitTestCaseDefaults.
   factory CockpitTestCaseDefaults({
     int commandTimeoutMs = 10000,
     int cleanupTimeoutMs = 30000,
@@ -332,6 +345,7 @@ final class CockpitTestCaseDefaults {
   final CockpitTestEvidencePolicy evidence;
   final CockpitTestCompilerLimits limits;
 
+  /// Encodes this CockpitTestCaseDefaults as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
     'commandTimeoutMs': commandTimeoutMs,
     'cleanupTimeoutMs': cleanupTimeoutMs,
@@ -340,6 +354,7 @@ final class CockpitTestCaseDefaults {
     'limits': limits.toJson(),
   };
 
+  /// Decodes a CockpitTestCaseDefaults from a JSON object.
   factory CockpitTestCaseDefaults.fromJson(
     Object? value, {
     required String path,

@@ -1,5 +1,6 @@
 import 'package:cockpit_protocol/cockpit_protocol.dart';
 import 'package:cockpit/src/application/cockpit_app_handle.dart';
+import 'package:cockpit/src/application/cockpit_app_reference_resolver.dart';
 import 'package:cockpit/src/application/cockpit_inspect_surface_service.dart';
 import 'package:cockpit/src/application/cockpit_inspect_ui_service.dart';
 import 'package:cockpit/src/application/cockpit_interactive_result_profile.dart';
@@ -10,8 +11,10 @@ import 'package:cockpit/src/capture/cockpit_host_capture_adapter.dart';
 import 'package:cockpit/src/platform/cockpit_evidence_driver.dart';
 import 'package:cockpit/src/platform/cockpit_platform_driver.dart';
 import 'package:cockpit/src/platform/cockpit_platform_driver_registry.dart';
+import 'package:cockpit/src/platform/ios/cockpit_ios_device_connection.dart';
 import 'package:cockpit/src/session/cockpit_remote_session_handle.dart';
 import 'package:cockpit/src/targets/cockpit_target_handle.dart';
+import 'package:cockpit/src/targets/cockpit_target_reference_resolver.dart';
 import 'package:test/test.dart';
 
 void main() {
@@ -125,7 +128,7 @@ void main() {
         ),
         captureStrategyResolver: CockpitCaptureStrategyResolver(
           remoteAdapterFactory: (_) => _UnexpectedRemoteCaptureAdapter(),
-          macosAdapterFactory: (appId) {
+          macosAdapterFactory: (appId, {processId}) {
             capturedAppId = appId;
             return _FakeHostCaptureAdapter(
               execution: CockpitCommandExecution(
@@ -402,6 +405,15 @@ void main() {
     'inspect surface does not label physical iOS targets as simulator-only when flutter inspection succeeds',
     () async {
       final service = CockpitInspectSurfaceService(
+        targetReferenceResolver: CockpitTargetReferenceResolver(
+          appReferenceResolver: CockpitAppReferenceResolver(
+            iosDeviceConnectionReader: (_) async =>
+                const CockpitIosDeviceConnection(
+                  isPhysical: true,
+                  tunnelIpAddress: 'fd00::1',
+                ),
+          ),
+        ),
         platformDriverRegistry: CockpitPlatformDriverRegistry(
           drivers: <String, CockpitPlatformDriverFactory>{
             'ios': ({required String deviceId}) => _FakeEvidencePlatformDriver(

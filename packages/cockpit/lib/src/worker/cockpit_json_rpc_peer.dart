@@ -761,6 +761,13 @@ String _requestFingerprint(CockpitJsonRpcRequest request) {
       if (entry.key != 'requestId' && entry.key != 'deadline')
         entry.key: entry.value,
   };
+  final invocation = semanticParams['invocation'];
+  if (request.method == 'operation' && invocation is Map<String, Object?>) {
+    semanticParams['invocation'] = <String, Object?>{
+      for (final entry in invocation.entries)
+        if (entry.key != 'deadline') entry.key: entry.value,
+    };
+  }
   return sha256
       .convert(
         utf8.encode(
@@ -776,12 +783,18 @@ String _requestFingerprint(CockpitJsonRpcRequest request) {
 String _canonicalJson(Object? value) {
   if (value is Map<String, Object?>) {
     final keys = value.keys.toList()..sort();
-    return '{${keys.map((key) => '${jsonEncode(key)}:${_canonicalJson(value[key])}').join(',')}}';
+    return '{${keys.map((key) => '${jsonEncode(key)}:${_canonicalJson(_canonicalFingerprintField(key, value[key]))}').join(',')}}';
   }
   if (value is List<Object?>) {
     return '[${value.map(_canonicalJson).join(',')}]';
   }
   return jsonEncode(value);
+}
+
+Object? _canonicalFingerprintField(String key, Object? value) {
+  if (key != 'requiredFeatures' || value is! List<Object?>) return value;
+  if (value.any((feature) => feature is! String)) return value;
+  return value.cast<String>().toList()..sort();
 }
 
 String _randomPrefix() {

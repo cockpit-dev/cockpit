@@ -1,4 +1,5 @@
 final class CockpitRemoteSessionConfiguration {
+  /// Creates a CockpitRemoteSessionConfiguration.
   const CockpitRemoteSessionConfiguration({
     required this.enabled,
     this.autoStart = true,
@@ -43,6 +44,7 @@ final class CockpitRemoteSessionConfiguration {
         : withLeadingSlash;
   }
 
+  /// Encodes this CockpitRemoteSessionConfiguration as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
     'enabled': enabled,
     'autoStart': autoStart,
@@ -52,6 +54,7 @@ final class CockpitRemoteSessionConfiguration {
     if (launchId.isNotEmpty) 'launchId': launchId,
   };
 
+  /// Decodes a CockpitRemoteSessionConfiguration from a JSON object.
   factory CockpitRemoteSessionConfiguration.fromJson(
     Map<String, Object?> json,
   ) {

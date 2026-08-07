@@ -20,7 +20,7 @@ typedef CockpitAdbRecordingAdapterFactory =
 typedef CockpitSimctlRecordingAdapterFactory =
     CockpitRecordingAdapter Function(String deviceId);
 typedef CockpitMacosRecordingAdapterFactory =
-    CockpitRecordingAdapter Function(String appId);
+    CockpitRecordingAdapter Function(String appId, {int? processId});
 typedef CockpitWindowsRecordingAdapterFactory =
     CockpitRecordingAdapter Function(String appId, {int? processId});
 typedef CockpitLinuxRecordingAdapterFactory =
@@ -515,10 +515,11 @@ final class CockpitRecordingStrategyResolver {
       'macos' => _RecordingCandidate(
         implementation: 'macosHost',
         layer: CockpitRecordingLayer.hostScreen,
-        factory: () => macosAdapterFactory(resolvedAppId),
-        sessionKey: 'macos:$resolvedAppId',
-        liveSessionChecker: () =>
-            cockpitHasLiveHostRecordingSession('macos:$resolvedAppId'),
+        factory: () => macosAdapterFactory(resolvedAppId, processId: processId),
+        sessionKey: 'macos:${processId ?? resolvedAppId}',
+        liveSessionChecker: () => cockpitHasLiveHostRecordingSession(
+          'macos:${processId ?? resolvedAppId}',
+        ),
       ),
       'windows' => _RecordingCandidate(
         implementation: 'windowsHost',
@@ -735,8 +736,11 @@ final class CockpitRecordingStrategyResolver {
     return CockpitSimctlRecordingAdapter(deviceId: deviceId);
   }
 
-  static CockpitRecordingAdapter _defaultMacosAdapterFactory(String appId) {
-    return CockpitMacosRecordingAdapter(appId: appId);
+  static CockpitRecordingAdapter _defaultMacosAdapterFactory(
+    String appId, {
+    int? processId,
+  }) {
+    return CockpitMacosRecordingAdapter(appId: appId, processId: processId);
   }
 
   static CockpitRecordingAdapter _defaultWindowsAdapterFactory(

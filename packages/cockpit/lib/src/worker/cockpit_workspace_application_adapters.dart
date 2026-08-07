@@ -204,6 +204,12 @@ final class CockpitWorkspaceApplicationAdapters {
       CockpitLeaseResourceKind.session,
       idField: 'sessionId',
     ),
+    const _OperationSpec.mutate(
+      'network.body',
+      'workspace.artifacts',
+      CockpitLeaseResourceKind.capture,
+      idField: 'sessionId',
+    ),
     const _OperationSpec.leasedRead(
       'errors.read',
       'workspace.errors',
@@ -264,6 +270,12 @@ final class CockpitWorkspaceApplicationAdapters {
       idField: 'sessionId',
     ),
     const _OperationSpec.mutate(
+      'viewport.set',
+      'workspace.sessions',
+      CockpitLeaseResourceKind.session,
+      idField: 'sessionId',
+    ),
+    const _OperationSpec.mutate(
       'recording.start',
       'workspace.recordings',
       CockpitLeaseResourceKind.recording,
@@ -308,7 +320,8 @@ final class CockpitWorkspaceApplicationAdapters {
                         requiresPort: true,
                         ttl: _portGrantTtl(context),
                       ),
-                    if (resourcePlan.deviceResourceId != null)
+                    if (spec.includeDeviceLease &&
+                        resourcePlan.deviceResourceId != null)
                       CockpitWorkerResourceRequest(
                         resourceKind: CockpitLeaseResourceKind.device,
                         resourceId: resourcePlan.deviceResourceId!,
@@ -354,7 +367,8 @@ final class _OperationSpec {
   const _OperationSpec.read(this.kind, this.resourceKind, {this.idField})
     : mutationClass = CockpitMutationClass.readOnly,
       leaseKind = null,
-      requiresPort = false;
+      requiresPort = false,
+      includeDeviceLease = false;
 
   const _OperationSpec.leasedRead(
     this.kind,
@@ -362,7 +376,8 @@ final class _OperationSpec {
     this.leaseKind, {
     this.idField,
   }) : mutationClass = CockpitMutationClass.readOnly,
-       requiresPort = false;
+       requiresPort = false,
+       includeDeviceLease = false;
 
   const _OperationSpec.mutate(
     this.kind,
@@ -370,7 +385,8 @@ final class _OperationSpec {
     this.leaseKind, {
     this.idField,
     this.requiresPort = false,
-  }) : mutationClass = CockpitMutationClass.mutating;
+  }) : mutationClass = CockpitMutationClass.mutating,
+       includeDeviceLease = true;
 
   final String kind;
   final String resourceKind;
@@ -378,6 +394,7 @@ final class _OperationSpec {
   final CockpitLeaseResourceKind? leaseKind;
   final String? idField;
   final bool requiresPort;
+  final bool includeDeviceLease;
 }
 
 const Set<String> _pathInputSegments = <String>{

@@ -8,6 +8,7 @@ workspace:
   - packages/cockpit_protocol
   - packages/flutter_cockpit
   - packages/cockpit
+  - packages/cockpit_console
   - examples/cockpit_demo
   - examples/cockpit_demo/cockpit
 

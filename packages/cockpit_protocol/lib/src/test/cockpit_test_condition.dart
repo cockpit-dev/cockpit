@@ -9,6 +9,7 @@ enum CockpitTestConditionKind { visible, text, route, uiIdle, networkIdle }
 enum CockpitTestConditionState { matched, notMatched, error }
 
 final class CockpitTestConditionTemplate {
+  /// Creates a CockpitTestConditionTemplate.
   CockpitTestConditionTemplate({
     required this.kind,
     this.locator,
@@ -29,6 +30,7 @@ final class CockpitTestConditionTemplate {
   final CockpitTestTemplateValue? route;
   final CockpitTestTemplateValue? quietMs;
 
+  /// Encodes this CockpitTestConditionTemplate as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
     'type': kind.name,
     if (locator != null) 'locator': locator!.toJson(),
@@ -39,6 +41,7 @@ final class CockpitTestConditionTemplate {
     if (quietMs != null) 'quietMs': quietMs!.toJson(),
   };
 
+  /// Decodes a CockpitTestConditionTemplate from a JSON object.
   factory CockpitTestConditionTemplate.fromJson(
     Object? value, {
     required String path,
@@ -162,6 +165,7 @@ final class CockpitTestConditionTemplate {
 }
 
 final class CockpitTestCondition {
+  /// Creates a CockpitTestCondition.
   CockpitTestCondition({
     required this.kind,
     this.locator,
@@ -222,6 +226,7 @@ final class CockpitTestCondition {
   final String? route;
   final int? quietMs;
 
+  /// Encodes this CockpitTestCondition as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
     'type': kind.name,
     if (locator != null) 'locator': locator!.toJson(),
@@ -232,6 +237,7 @@ final class CockpitTestCondition {
     if (quietMs != null) 'quietMs': quietMs,
   };
 
+  /// Decodes a CockpitTestCondition from a JSON object.
   factory CockpitTestCondition.fromJson(Object? value, {required String path}) {
     final template = CockpitTestConditionTemplate.fromJson(value, path: path);
     Object? literal(CockpitTestTemplateValue? candidate, String field) {
@@ -264,23 +270,28 @@ final class CockpitTestCondition {
 final class CockpitTestConditionEvaluation {
   const CockpitTestConditionEvaluation._({required this.state, this.error});
 
+  /// Creates a CockpitTestConditionEvaluation using the named constructor `matched`.
   const CockpitTestConditionEvaluation.matched()
     : this._(state: CockpitTestConditionState.matched);
 
+  /// Creates a CockpitTestConditionEvaluation using the named constructor `notMatched`.
   const CockpitTestConditionEvaluation.notMatched()
     : this._(state: CockpitTestConditionState.notMatched);
 
+  /// Creates a CockpitTestConditionEvaluation using the named constructor `error`.
   const CockpitTestConditionEvaluation.error(CockpitTestError error)
     : this._(state: CockpitTestConditionState.error, error: error);
 
   final CockpitTestConditionState state;
   final CockpitTestError? error;
 
+  /// Encodes this CockpitTestConditionEvaluation as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
     'state': state.name,
     if (error != null) 'error': error!.toJson(),
   };
 
+  /// Decodes a CockpitTestConditionEvaluation from a JSON object.
   factory CockpitTestConditionEvaluation.fromJson(
     Object? value, {
     String path = r'$',

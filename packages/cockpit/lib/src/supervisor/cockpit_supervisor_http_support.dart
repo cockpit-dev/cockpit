@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -258,6 +259,13 @@ final class CockpitSupervisorHttpSupport {
         retryable: false,
         responsibleLayer: CockpitResponsibleLayer.supervisor,
       ),
+      TimeoutException() => CockpitApiError(
+        code: 'deadlineExceeded',
+        category: CockpitErrorCategory.cancelled,
+        message: 'Supervisor request deadline has expired.',
+        retryable: true,
+        responsibleLayer: CockpitResponsibleLayer.supervisor,
+      ),
       _ => CockpitApiError(
         code: CockpitErrorCode.internalError,
         category: CockpitErrorCategory.internal,
@@ -266,7 +274,8 @@ final class CockpitSupervisorHttpSupport {
         responsibleLayer: CockpitResponsibleLayer.supervisor,
       ),
     };
-    if (api.code == CockpitErrorCode.internalError &&
+    if ((api.code == CockpitErrorCode.internalError ||
+            error is CockpitStorageException) &&
         error is! CockpitApiException) {
       onInternalError?.call(request, error, stackTrace);
     }

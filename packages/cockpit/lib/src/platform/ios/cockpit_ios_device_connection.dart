@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -85,7 +86,9 @@ final class CockpitIosDeviceConnectionProbe {
           '--json-output',
           outputFile.path,
         ]);
-      } on ProcessException {
+      } on ProcessException catch (_) {
+        return null;
+      } on TimeoutException catch (_) {
         return null;
       }
       if (result.exitCode != 0 || !outputFile.existsSync()) {

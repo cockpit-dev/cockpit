@@ -1,6 +1,6 @@
 name: cockpit
 description: Production E2E automation CLI, daemon, MCP, drivers, and reports for Flutter and black-box apps.
-version: 2.2.1
+version: 3.0.0
 homepage: https://github.com/cockpit-dev/cockpit
 repository: https://github.com/cockpit-dev/cockpit
 issue_tracker: https://github.com/cockpit-dev/cockpit/issues
@@ -11,6 +11,10 @@ topics:
   - tooling
   - ai
   - mcp
+platforms:
+  linux:
+  macos:
+  windows:
 executables:
   cockpit:
   cockpit_mcp:
@@ -27,17 +31,20 @@ dependencies:
   dart_mcp: ^0.5.2
   file: ^7.0.1
   ffi: ^2.1.4
-  cockpit_protocol: ^2.2.1
-  crypto: ^3.0.6
-  http: ^1.3.0
-  image: ^4.5.4
+  cockpit_protocol: ^3.0.0
+  crypto: ^3.0.7
+  http: ^1.6.0
+  image: ^4.9.1
   json_schema: ^5.2.2
-  path: ^1.9.0
-  process: ^5.0.3
-  source_span: ^1.10.0
+  path: ^1.9.1
+  lon: ^1.0.1
+  process: ^5.0.5
+  source_span: ^1.10.2
   stream_channel: ^2.1.4
+  vm_service: ^15.2.0
   yaml: ^3.1.3
-  xml: ^6.5.0
+  yaml_edit: ^2.2.4
+  xml: ^7.0.1
 
   collection: ^1.19.1
 dev_dependencies:

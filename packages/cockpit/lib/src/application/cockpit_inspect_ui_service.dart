@@ -40,6 +40,8 @@ final class CockpitInspectUiResult {
     this.diagnostics,
     this.delta,
     this.snapshotRef,
+    this.artifactDownloads = const <CockpitRemoteArtifactDownload>[],
+    this.artifactSourcePaths = const <String, String>{},
     this.effectiveSnapshotOptions,
   });
 
@@ -52,6 +54,8 @@ final class CockpitInspectUiResult {
   final Map<String, Object?>? diagnostics;
   final CockpitInteractiveSnapshotDelta? delta;
   final String? snapshotRef;
+  final List<CockpitRemoteArtifactDownload> artifactDownloads;
+  final Map<String, String> artifactSourcePaths;
   final CockpitSnapshotOptions? effectiveSnapshotOptions;
 
   Map<String, Object?> toJson() => <String, Object?>{
@@ -64,6 +68,12 @@ final class CockpitInspectUiResult {
     if (diagnostics != null) 'diagnostics': diagnostics,
     if (delta != null) 'delta': delta!.toJson(),
     if (snapshotRef != null) 'snapshotRef': snapshotRef,
+    if (artifactDownloads.isNotEmpty)
+      'artifactDownloads': artifactDownloads
+          .map((download) => download.toJson())
+          .toList(growable: false),
+    if (artifactSourcePaths.isNotEmpty)
+      'artifactSourcePaths': artifactSourcePaths,
     if (effectiveSnapshotOptions != null)
       'effectiveSnapshotOptions': effectiveSnapshotOptions!.toJson(),
   };
@@ -111,6 +121,8 @@ final class CockpitInspectUiService {
       diagnostics: result.diagnostics,
       delta: result.delta,
       snapshotRef: result.snapshotRef,
+      artifactDownloads: result.artifactDownloads,
+      artifactSourcePaths: result.artifactSourcePaths,
       effectiveSnapshotOptions: result.effectiveSnapshotOptions,
     );
   }

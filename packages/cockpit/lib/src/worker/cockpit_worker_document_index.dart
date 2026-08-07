@@ -42,6 +42,7 @@ final class CockpitWorkerDocumentIndex
     '.yaml',
     '.yml',
     '.json',
+    '.lon',
   };
   static const Set<String> _excludedDirectoryNames = <String>{
     '.dart_tool',
@@ -144,6 +145,7 @@ final class CockpitWorkerDocumentIndex
                 'case',
                 'suite',
                 'project',
+                'authored',
               }.contains(kind)) {
             throw const FormatException('Invalid indexed document kind.');
           }
@@ -229,7 +231,10 @@ final class CockpitWorkerDocumentIndex
         if (_paths.extension(entity.path) != '.dart') {
           try {
             final candidate = const CockpitTestDocumentCompiler()
-                .compile(utf8.decode(bytes, allowMalformed: false))
+                .compile(
+                  utf8.decode(bytes, allowMalformed: false),
+                  format: _documentFormat(entity.path),
+                )
                 .compiled;
             compiled = candidate;
           } on Object {
@@ -293,8 +298,7 @@ final class CockpitWorkerDocumentIndex
         _byId.values
             .where(
               (document) =>
-                  (kind == null ||
-                      _documentSummary(document)['kind'] == kind) &&
+                  _matchesKind(document, kind) &&
                   (relativePath == null ||
                       document.relativePath == relativePath),
             )
@@ -503,7 +507,10 @@ final class CockpitWorkerDocumentIndex
           document.kind != CockpitIndexedDocumentKind.source) {
         try {
           final candidate = const CockpitTestDocumentCompiler()
-              .compile(utf8.decode(current.bytes, allowMalformed: false))
+              .compile(
+                utf8.decode(current.bytes, allowMalformed: false),
+                format: _documentFormat(document.relativePath),
+              )
               .compiled;
           if (candidate != null &&
               _documentKind(candidate.document) == document.kind &&
@@ -750,8 +757,13 @@ final class CockpitWorkerDocumentIndex
 
   String get _indexPath => _paths.join(stateRoot, 'documents', 'index.json');
 
-  String _newDocumentId() =>
-      'document_${_tokenGenerator.nextToken(byteLength: 16)}';
+  String _newDocumentId() => 'dc-${_tokenGenerator.nextResourceIdToken()}';
+}
+
+bool _matchesKind(_IndexedDocument document, String? kind) {
+  if (kind == null) return true;
+  if (kind == 'authored') return document.compiled != null;
+  return _documentSummary(document)['kind'] == kind;
 }
 
 Map<String, Object?> _documentSummary(_IndexedDocument indexed) {
@@ -796,6 +808,14 @@ CockpitIndexedDocumentKind _documentKind(CockpitTestDocument document) =>
       CockpitTestSuite() => CockpitIndexedDocumentKind.suite,
       CockpitTestProject() => CockpitIndexedDocumentKind.project,
       _ => throw StateError('Unsupported indexed document ${document.kind}.'),
+    };
+
+CockpitDocumentFormat _documentFormat(String path) =>
+    switch (p.extension(path).toLowerCase()) {
+      '.lon' => CockpitDocumentFormat.lon,
+      '.json' => CockpitDocumentFormat.json,
+      '.yaml' || '.yml' => CockpitDocumentFormat.yaml,
+      _ => throw const FormatException('Unsupported authored document format.'),
     };
 
 String _documentKindWire(CockpitIndexedDocumentKind kind) =>

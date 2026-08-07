@@ -1,7 +1,7 @@
-# Cockpit 2.0 Skill Contract
+# Cockpit 3.0 Skill Contract
 
 The Cockpit skill guides an AI agent through live development and E2E
-verification using only Cockpit 2.0 public client surfaces.
+verification using only Cockpit 3.0 public client surfaces.
 
 ## Required Behavior
 
@@ -49,4 +49,4 @@ capabilities as environment failures rather than faking success.
 
 The skill must never recommend retired 1.x direct commands, embedded
 dashboards, legacy artifact layouts, or implicit global sessions. Those
-surfaces are not part of Cockpit 2.0.
+surfaces are not part of Cockpit 3.0.

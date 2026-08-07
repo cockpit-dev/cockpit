@@ -222,8 +222,7 @@ final class CockpitCaseRunner {
     final target = plan.target;
     final acceptsTargetKind = switch (_lowerer.backend) {
       CockpitTestActionBackend.flutter =>
-        target.targetKind == CockpitTargetKind.flutterApp.name &&
-            target.plane == CockpitTestPlane.semantic,
+        target.targetKind == CockpitTargetKind.flutterApp.name,
       CockpitTestActionBackend.system =>
         target.targetKind != CockpitTargetKind.flutterApp.name ||
             target.plane != CockpitTestPlane.semantic,
@@ -232,8 +231,7 @@ final class CockpitCaseRunner {
       return CockpitTestError(
         code: CockpitTestErrorCode.targetMismatch,
         message: _lowerer.backend == CockpitTestActionBackend.flutter
-            ? 'Flutter case runner requires targetKind flutterApp on the '
-                  'semantic plane.'
+            ? 'Flutter case runner requires targetKind flutterApp.'
             : 'System case runner cannot execute a Flutter semantic-plane '
                   'case.',
       );

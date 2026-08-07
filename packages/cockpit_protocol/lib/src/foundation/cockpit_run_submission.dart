@@ -7,6 +7,7 @@ import 'cockpit_idempotency.dart';
 import 'cockpit_run.dart';
 
 sealed class CockpitRunSubmissionSource {
+  /// Creates a CockpitRunSubmissionSource.
   const CockpitRunSubmissionSource();
 
   String get kind;
@@ -17,6 +18,7 @@ sealed class CockpitRunSubmissionSource {
 
   String get sourceSha256;
 
+  /// Encodes this CockpitRunSubmissionSource as a JSON object.
   Map<String, Object?> toJson();
 
   static CockpitRunSubmissionSource fromJson(
@@ -36,6 +38,7 @@ sealed class CockpitRunSubmissionSource {
 }
 
 sealed class CockpitCaseSubmissionSource extends CockpitRunSubmissionSource {
+  /// Creates a CockpitCaseSubmissionSource.
   const CockpitCaseSubmissionSource();
 
   @override
@@ -44,6 +47,7 @@ sealed class CockpitCaseSubmissionSource extends CockpitRunSubmissionSource {
   @override
   CockpitRunDocumentKind get documentKind => CockpitRunDocumentKind.testCase;
 
+  /// Encodes this CockpitCaseSubmissionSource as a JSON object.
   @override
   Map<String, Object?> toJson();
 
@@ -65,6 +69,7 @@ sealed class CockpitCaseSubmissionSource extends CockpitRunSubmissionSource {
 }
 
 final class CockpitInlineCaseSource extends CockpitCaseSubmissionSource {
+  /// Creates a CockpitInlineCaseSource.
   CockpitInlineCaseSource({
     required this.testCase,
     required this.sourceSha256,
@@ -82,6 +87,7 @@ final class CockpitInlineCaseSource extends CockpitCaseSubmissionSource {
   @override
   String get documentId => testCase.id;
 
+  /// Encodes this CockpitInlineCaseSource as a JSON object.
   @override
   Map<String, Object?> toJson() => <String, Object?>{
     'kind': kind,
@@ -89,6 +95,7 @@ final class CockpitInlineCaseSource extends CockpitCaseSubmissionSource {
     'sourceSha256': sourceSha256,
   };
 
+  /// Decodes a CockpitInlineCaseSource from a JSON object.
   factory CockpitInlineCaseSource.fromJson(
     Object? value, {
     String path = r'$',
@@ -114,6 +121,7 @@ final class CockpitInlineCaseSource extends CockpitCaseSubmissionSource {
 }
 
 final class CockpitIndexedCaseSource extends CockpitCaseSubmissionSource {
+  /// Creates a CockpitIndexedCaseSource.
   CockpitIndexedCaseSource({required this.reference});
 
   @override
@@ -127,12 +135,14 @@ final class CockpitIndexedCaseSource extends CockpitCaseSubmissionSource {
   @override
   String get sourceSha256 => reference.documentSha256;
 
+  /// Encodes this CockpitIndexedCaseSource as a JSON object.
   @override
   Map<String, Object?> toJson() => <String, Object?>{
     'kind': kind,
     'reference': reference.toJson(),
   };
 
+  /// Decodes a CockpitIndexedCaseSource from a JSON object.
   factory CockpitIndexedCaseSource.fromJson(
     Object? value, {
     String path = r'$',
@@ -157,6 +167,7 @@ final class CockpitIndexedCaseSource extends CockpitCaseSubmissionSource {
 }
 
 sealed class CockpitSuiteSubmissionSource extends CockpitRunSubmissionSource {
+  /// Creates a CockpitSuiteSubmissionSource.
   const CockpitSuiteSubmissionSource();
 
   @override
@@ -182,6 +193,7 @@ sealed class CockpitSuiteSubmissionSource extends CockpitRunSubmissionSource {
 }
 
 final class CockpitInlineSuiteSource extends CockpitSuiteSubmissionSource {
+  /// Creates a CockpitInlineSuiteSource.
   CockpitInlineSuiteSource({required this.suite, required this.sourceSha256}) {
     CockpitFoundationValueReader.sha256(sourceSha256, r'$.sourceSha256');
   }
@@ -197,6 +209,7 @@ final class CockpitInlineSuiteSource extends CockpitSuiteSubmissionSource {
   @override
   String get documentId => suite.id;
 
+  /// Encodes this CockpitInlineSuiteSource as a JSON object.
   @override
   Map<String, Object?> toJson() => <String, Object?>{
     'kind': kind,
@@ -204,6 +217,7 @@ final class CockpitInlineSuiteSource extends CockpitSuiteSubmissionSource {
     'sourceSha256': sourceSha256,
   };
 
+  /// Decodes a CockpitInlineSuiteSource from a JSON object.
   factory CockpitInlineSuiteSource.fromJson(
     Object? value, {
     String path = r'$',
@@ -229,6 +243,7 @@ final class CockpitInlineSuiteSource extends CockpitSuiteSubmissionSource {
 }
 
 final class CockpitIndexedSuiteSource extends CockpitSuiteSubmissionSource {
+  /// Creates a CockpitIndexedSuiteSource.
   CockpitIndexedSuiteSource({required this.reference});
 
   @override
@@ -242,12 +257,14 @@ final class CockpitIndexedSuiteSource extends CockpitSuiteSubmissionSource {
   @override
   String get sourceSha256 => reference.documentSha256;
 
+  /// Encodes this CockpitIndexedSuiteSource as a JSON object.
   @override
   Map<String, Object?> toJson() => <String, Object?>{
     'kind': kind,
     'reference': reference.toJson(),
   };
 
+  /// Decodes a CockpitIndexedSuiteSource from a JSON object.
   factory CockpitIndexedSuiteSource.fromJson(
     Object? value, {
     String path = r'$',
@@ -272,6 +289,7 @@ final class CockpitIndexedSuiteSource extends CockpitSuiteSubmissionSource {
 }
 
 final class CockpitRunSubmission {
+  /// Creates a CockpitRunSubmission.
   CockpitRunSubmission({
     required this.workspaceId,
     required this.source,
@@ -311,6 +329,7 @@ final class CockpitRunSubmission {
   final int? timeoutMs;
   final List<String> requiredFeatures;
 
+  /// Encodes this CockpitRunSubmission as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
     'workspaceId': workspaceId,
     'source': source.toJson(),
@@ -321,6 +340,7 @@ final class CockpitRunSubmission {
     'requiredFeatures': requiredFeatures,
   };
 
+  /// Decodes a CockpitRunSubmission from a JSON object.
   factory CockpitRunSubmission.fromJson(Object? value, {String path = r'$'}) {
     final json = CockpitFoundationValueReader.object(value, path);
     CockpitFoundationValueReader.keys(
@@ -380,6 +400,7 @@ final class CockpitRunSubmission {
 }
 
 final class CockpitRunAccepted {
+  /// Creates a CockpitRunAccepted.
   CockpitRunAccepted({
     required this.workspaceId,
     required this.runId,
@@ -402,6 +423,7 @@ final class CockpitRunAccepted {
   final DateTime submittedAt;
   final bool replayed;
 
+  /// Encodes this CockpitRunAccepted as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
     'workspaceId': workspaceId,
     'runId': runId,
@@ -411,6 +433,7 @@ final class CockpitRunAccepted {
     'replayed': replayed,
   };
 
+  /// Decodes a CockpitRunAccepted from a JSON object.
   factory CockpitRunAccepted.fromJson(
     Object? value, {
     String path = r'$',
@@ -459,6 +482,7 @@ final class CockpitRunAccepted {
 }
 
 final class CockpitRunCancellationRequest {
+  /// Creates a CockpitRunCancellationRequest.
   CockpitRunCancellationRequest({required this.idempotencyKey, this.reason}) {
     if (reason != null) {
       CockpitFoundationValueReader.string(reason, r'$.reason', maximum: 512);
@@ -468,11 +492,13 @@ final class CockpitRunCancellationRequest {
   final CockpitIdempotencyKey idempotencyKey;
   final String? reason;
 
+  /// Encodes this CockpitRunCancellationRequest as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
     'idempotencyKey': idempotencyKey.toJson(),
     if (reason != null) 'reason': reason,
   };
 
+  /// Decodes a CockpitRunCancellationRequest from a JSON object.
   factory CockpitRunCancellationRequest.fromJson(
     Object? value, {
     String path = r'$',
@@ -499,6 +525,7 @@ final class CockpitRunCancellationRequest {
 }
 
 final class CockpitRunCancellation {
+  /// Creates a CockpitRunCancellation.
   CockpitRunCancellation({
     required this.runId,
     required this.requestedAt,
@@ -512,12 +539,14 @@ final class CockpitRunCancellation {
   final DateTime requestedAt;
   final bool replayed;
 
+  /// Encodes this CockpitRunCancellation as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
     'runId': runId,
     'requestedAt': requestedAt.toIso8601String(),
     'replayed': replayed,
   };
 
+  /// Decodes a CockpitRunCancellation from a JSON object.
   factory CockpitRunCancellation.fromJson(
     Object? value, {
     String path = r'$',

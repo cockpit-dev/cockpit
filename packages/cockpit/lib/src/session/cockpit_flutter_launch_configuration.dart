@@ -22,6 +22,10 @@ const Set<String> _reservedFlutterArgs = <String>{
   '--release',
   '--simulator',
   '--no-codesign',
+  '--dds',
+  '--no-dds',
+  '--disable-dds',
+  '--no-disable-dds',
 };
 
 final class CockpitFlutterLaunchConfiguration {

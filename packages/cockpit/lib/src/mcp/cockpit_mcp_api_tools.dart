@@ -202,7 +202,13 @@ List<CockpitMcpTool> _executionTools(
         'targetId': _string(),
         'profile': const <String, Object?>{
           'type': 'string',
-          'enum': <String>['minimal', 'standard', 'inspect', 'evidence'],
+          'enum': <String>[
+            'minimal',
+            'locate',
+            'standard',
+            'inspect',
+            'evidence',
+          ],
         },
       },
       required: const <String>['workspaceId', 'targetId'],
@@ -446,7 +452,9 @@ List<CockpitMcpTool> _executionTools(
         'workspaceId': _string(),
         'format': <String, Object?>{
           'type': 'string',
-          'enum': const <String>['json', 'yaml'],
+          'enum': CockpitDocumentFormat.values
+              .map((value) => value.name)
+              .toList(growable: false),
         },
         'sourceText': _string(),
         'relativePath': _string(),
@@ -685,7 +693,9 @@ List<CockpitMcpTool> _suiteTools(
         'workspaceId': _string(),
         'format': <String, Object?>{
           'type': 'string',
-          'enum': const <String>['json', 'yaml'],
+          'enum': CockpitDocumentFormat.values
+              .map((value) => value.name)
+              .toList(growable: false),
         },
         'sourceText': _string(),
         'relativePath': _string(),

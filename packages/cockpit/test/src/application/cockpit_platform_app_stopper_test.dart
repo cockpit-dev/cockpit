@@ -222,4 +222,88 @@ void main() {
       isEmpty,
     );
   });
+
+  test('macOS stop terminates only a process owned by the project', () async {
+    final invocations = <String>[];
+    var processAlive = true;
+    final stopper = CockpitPlatformAppStopper(
+      processRunner: (executable, arguments) async {
+        invocations.add('$executable ${arguments.join(' ')}');
+        if (executable == 'ps') {
+          return ProcessResult(
+            0,
+            processAlive ? 0 : 1,
+            processAlive
+                ? '/workspace/example/build/macos/Runner.app/Contents/MacOS/Runner'
+                : '',
+            '',
+          );
+        }
+        if (executable == 'kill' && arguments.first == '-TERM') {
+          processAlive = false;
+        }
+        return ProcessResult(0, 0, '', '');
+      },
+    );
+
+    await stopper.stop(
+      CockpitAppHandle(
+        appId: 'dev.example.app',
+        mode: CockpitAppMode.development,
+        platform: 'macos',
+        deviceId: 'macos',
+        projectDir: '/workspace/example',
+        target: 'cockpit/main.dart',
+        baseUrl: 'http://127.0.0.1:57331',
+        launchedAt: DateTime.utc(2026, 4, 17),
+        platformAppId: 'dev.example.app',
+        processId: 6101,
+      ),
+    );
+
+    expect(
+      invocations,
+      contains('osascript -e tell application id "dev.example.app" to quit'),
+    );
+    expect(invocations, contains('kill -TERM 6101'));
+    expect(
+      invocations.where((command) => command.contains('kill -KILL')),
+      isEmpty,
+    );
+  });
+
+  test(
+    'macOS stop does not kill a reused process outside the project',
+    () async {
+      final invocations = <String>[];
+      final stopper = CockpitPlatformAppStopper(
+        processRunner: (executable, arguments) async {
+          invocations.add('$executable ${arguments.join(' ')}');
+          if (executable == 'ps') {
+            return ProcessResult(0, 0, '/usr/bin/other-process', '');
+          }
+          return ProcessResult(0, 0, '', '');
+        },
+      );
+
+      await stopper.stop(
+        CockpitAppHandle(
+          appId: 'dev.example.app',
+          mode: CockpitAppMode.development,
+          platform: 'macos',
+          deviceId: 'macos',
+          projectDir: '/workspace/example',
+          target: 'cockpit/main.dart',
+          baseUrl: 'http://127.0.0.1:57331',
+          launchedAt: DateTime.utc(2026, 4, 17),
+          processId: 6101,
+        ),
+      );
+
+      expect(
+        invocations.where((command) => command.startsWith('kill ')),
+        isEmpty,
+      );
+    },
+  );
 }

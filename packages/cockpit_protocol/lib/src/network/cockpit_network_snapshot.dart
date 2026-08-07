@@ -5,6 +5,7 @@ import 'cockpit_network_endpoint_summary.dart';
 import 'cockpit_network_query.dart';
 
 final class CockpitNetworkSnapshot {
+  /// Creates a CockpitNetworkSnapshot.
   const CockpitNetworkSnapshot({
     required this.totalEntryCount,
     required this.failureCount,
@@ -30,6 +31,7 @@ final class CockpitNetworkSnapshot {
   static const ListEquality<CockpitNetworkEndpointSummary>
   _endpointSummaryEquality = ListEquality<CockpitNetworkEndpointSummary>();
 
+  /// Encodes this CockpitNetworkSnapshot as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
     'totalEntryCount': totalEntryCount,
     'failureCount': failureCount,
@@ -43,6 +45,7 @@ final class CockpitNetworkSnapshot {
     'truncated': truncated,
   };
 
+  /// Decodes a CockpitNetworkSnapshot from a JSON object.
   factory CockpitNetworkSnapshot.fromJson(Map<String, Object?> json) {
     final queryJson = json['query'] as Map<Object?, Object?>?;
     return CockpitNetworkSnapshot(

@@ -280,7 +280,7 @@ steps:
       );
       expect(registered.outcome, CockpitOperationOutcome.succeeded);
       final targetId = registered.output!['targetId']! as String;
-      expect(targetId, startsWith('target_'));
+      expect(targetId, startsWith('tg-'));
       final listedTargets = await _callOperation(
         pool,
         spec,
@@ -662,10 +662,9 @@ steps:
       );
       expect(activeRead.outcome, CockpitOperationOutcome.succeeded);
       expect(authority.acquiredKinds, <CockpitLeaseResourceKind>[
-        CockpitLeaseResourceKind.device,
         CockpitLeaseResourceKind.session,
       ]);
-      expect(authority.releaseCount, 2);
+      expect(authority.releaseCount, 1);
 
       authority.resetObservations();
       final successfulSubmission = _submission(liveTargetId);

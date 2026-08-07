@@ -4,6 +4,7 @@ import 'cockpit_foundation_value_reader.dart';
 import 'cockpit_operation_descriptor.dart';
 
 final class CockpitResourceDescriptor {
+  /// Creates a CockpitResourceDescriptor.
   CockpitResourceDescriptor({
     required this.kind,
     required this.scope,
@@ -29,6 +30,7 @@ final class CockpitResourceDescriptor {
   final String mediaType;
   final List<String> requiredFeatures;
 
+  /// Encodes this CockpitResourceDescriptor as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
     'kind': kind,
     'scope': scope.name,
@@ -37,6 +39,7 @@ final class CockpitResourceDescriptor {
     'requiredFeatures': requiredFeatures,
   };
 
+  /// Decodes a CockpitResourceDescriptor from a JSON object.
   factory CockpitResourceDescriptor.fromJson(
     Object? value, {
     String path = r'$',
@@ -82,6 +85,7 @@ final class CockpitResourceDescriptor {
 }
 
 final class CockpitCapabilityDocument {
+  /// Creates a CockpitCapabilityDocument.
   CockpitCapabilityDocument({
     this.schemaVersion = 'cockpit.foundation/v2',
     required this.apiVersion,
@@ -108,6 +112,7 @@ final class CockpitCapabilityDocument {
   final List<CockpitOperationDescriptor> operations;
   final List<CockpitResourceDescriptor> resources;
 
+  /// Encodes this CockpitCapabilityDocument as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
     'schemaVersion': schemaVersion,
     'apiVersion': apiVersion.toJson(),
@@ -116,6 +121,7 @@ final class CockpitCapabilityDocument {
     'resources': resources.map((resource) => resource.toJson()).toList(),
   };
 
+  /// Decodes a CockpitCapabilityDocument from a JSON object.
   factory CockpitCapabilityDocument.fromJson(
     Object? value, {
     String path = r'$',

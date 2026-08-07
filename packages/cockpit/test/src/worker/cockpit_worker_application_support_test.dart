@@ -1,6 +1,9 @@
+import 'dart:io';
+
 import 'package:cockpit/src/worker/cockpit_worker_application_support.dart';
 import 'package:cockpit/src/worker/cockpit_json_rpc_peer.dart';
 import 'package:cockpit/src/worker/cockpit_workspace_operation_registry.dart';
+import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 
 void main() {
@@ -56,5 +59,31 @@ void main() {
 
     expect(committed, isFalse);
     expect(rolledBack, isTrue);
+  });
+  test('artifact temp files remain confined to the producer root', () async {
+    final stateDirectory = await Directory.systemTemp.createTemp(
+      'cockpit_worker_artifact_factory_',
+    );
+    addTearDown(() async {
+      if (await stateDirectory.exists()) {
+        await stateDirectory.delete(recursive: true);
+      }
+    });
+    final producerDirectory = await Directory(
+      p.join(stateDirectory.path, 'producer'),
+    ).create();
+    await Directory(p.join(producerDirectory.path, 'tmp')).create();
+    final producerRoot = p.normalize(
+      await producerDirectory.resolveSymbolicLinks(),
+    );
+
+    final file = await cockpitWorkerArtifactTempFileFactory(producerRoot)(
+      '../unsafe screenshot?.png',
+    );
+
+    expect(p.isWithin(p.join(producerRoot, 'tmp'), file.path), isTrue);
+    expect(p.basename(file.path), 'unsafe_screenshot_.png');
+    await file.writeAsBytes(const <int>[1, 2, 3], flush: true);
+    expect(await file.readAsBytes(), const <int>[1, 2, 3]);
   });
 }

@@ -27,6 +27,7 @@ abstract final class CockpitRootStateMachine {
 }
 
 final class CockpitRootResource {
+  /// Creates a CockpitRootResource.
   CockpitRootResource({
     required this.rootId,
     required this.canonicalPath,
@@ -68,6 +69,7 @@ final class CockpitRootResource {
   final DateTime updatedAt;
   final DateTime? retiredAt;
 
+  /// Encodes this CockpitRootResource as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
     'rootId': rootId,
     'canonicalPath': canonicalPath,
@@ -78,6 +80,7 @@ final class CockpitRootResource {
     if (retiredAt != null) 'retiredAt': retiredAt!.toUtc().toIso8601String(),
   };
 
+  /// Decodes a CockpitRootResource from a JSON object.
   factory CockpitRootResource.fromJson(
     Object? value, {
     String path = r'$',
@@ -137,6 +140,7 @@ final class CockpitRootResource {
 }
 
 final class CockpitRootRegistration {
+  /// Creates a CockpitRootRegistration.
   CockpitRootRegistration({required this.path, this.label}) {
     CockpitFoundationValueReader.absolutePath(path, r'$.path');
     if (label != null) {
@@ -147,11 +151,13 @@ final class CockpitRootRegistration {
   final String path;
   final String? label;
 
+  /// Encodes this CockpitRootRegistration as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
     'path': path,
     if (label != null) 'label': label,
   };
 
+  /// Decodes a CockpitRootRegistration from a JSON object.
   factory CockpitRootRegistration.fromJson(
     Object? value, {
     String path = r'$',
@@ -178,6 +184,7 @@ final class CockpitRootRegistration {
 }
 
 final class CockpitRootRemoval {
+  /// Creates a CockpitRootRemoval.
   CockpitRootRemoval({this.force = false, this.drainTimeoutMs = 30000}) {
     if (drainTimeoutMs < 0 || drainTimeoutMs > 300000) {
       throw const FormatException('Root drain timeout is invalid.');
@@ -187,11 +194,13 @@ final class CockpitRootRemoval {
   final bool force;
   final int drainTimeoutMs;
 
+  /// Encodes this CockpitRootRemoval as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
     'force': force,
     'drainTimeoutMs': drainTimeoutMs,
   };
 
+  /// Decodes a CockpitRootRemoval from a JSON object.
   factory CockpitRootRemoval.fromJson(Object? value, {String path = r'$'}) {
     final json = CockpitFoundationValueReader.object(value, path);
     CockpitFoundationValueReader.keys(

@@ -1,6 +1,7 @@
 import 'package:collection/collection.dart';
 
 final class CockpitNetworkEndpointSummary {
+  /// Creates a CockpitNetworkEndpointSummary.
   const CockpitNetworkEndpointSummary({
     required this.method,
     required this.uriPattern,
@@ -22,6 +23,7 @@ final class CockpitNetworkEndpointSummary {
   static const MapEquality<String, Object?> _mapEquality =
       MapEquality<String, Object?>();
 
+  /// Encodes this CockpitNetworkEndpointSummary as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
     'method': method,
     'uriPattern': uriPattern,
@@ -32,6 +34,7 @@ final class CockpitNetworkEndpointSummary {
     if (latestUri != null) 'latestUri': latestUri,
   };
 
+  /// Decodes a CockpitNetworkEndpointSummary from a JSON object.
   factory CockpitNetworkEndpointSummary.fromJson(Map<String, Object?> json) {
     return CockpitNetworkEndpointSummary(
       method: json['method']! as String,
