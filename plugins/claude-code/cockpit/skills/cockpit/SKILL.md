@@ -9,6 +9,25 @@ description: Use when application development or black-box E2E must inspect, con
 Public handles are numeric (`1`, `2`, ...). Use the globally installed `cockpit` executable
 everywhere. Live capabilities are authoritative.
 
+## Flutter Preflight
+
+Before running any `cockpit dev` command in a Flutter source checkout, first
+confirm that its development-only Cockpit shell is integrated. A normal Flutter
+app does not expose a Cockpit bridge by itself, so starting it first waits for a
+bridge that can never become ready.
+
+Check `pubspec.yaml` and `cockpit/main.dart`. The shell must keep production
+code untouched, resolve `flutter_cockpit` as a development dependency, wrap the
+real application root in `FlutterCockpitApp`, and install the Cockpit navigator
+observer for every Navigator the app owns. Run `flutter pub get` after changing
+the dependency. If any part is absent or does not match the app's actual public
+bootstrap/router API, read and complete [flutter.md](references/flutter.md)
+before `cockpit dev start`.
+
+Only an already integrated checkout takes the fast path below. `cockpit/main.dart`
+is the default development entrypoint; pass another entrypoint only when the
+checkout intentionally uses one.
+
 ## Choose The Command
 
 Use the highest-level command that owns the task:
