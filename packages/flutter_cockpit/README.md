@@ -148,6 +148,13 @@ flutter run --target main.dart
 - screenshot and recording requests
 - remote session status and command endpoints
 
+HTTP diagnostics redact credential values by default while retaining useful
+structure such as authorization schemes, cookie names, query keys, and JSON
+field names. A development-only entrypoint can explicitly use
+`CockpitHttpNetworkObserverConfiguration(redact: false)` when raw bounded
+payloads are required; never enable raw capture in a production entrypoint or
+an evidence-producing CI run.
+
 Host-side orchestration, MCP, workspace tooling, and delivery validation live in [`cockpit`](https://pub.dev/packages/cockpit).
 The runtime bundle models now preserve `targetKind`, `primaryExecutionPlane`, `planesUsed`, `surfaceKindsUsed`, `fallbackCount`, plus per-step and per-observation plane metadata so host-side tooling can explain when Flutter control stayed on-plan versus when it had to degrade to another surface.
 On web, the runtime supports the Flutter semantic and Flutter-view control path directly, while the method channels are registered as explicit unavailable stubs so capability checks stay truthful instead of failing through missing-plugin noise. On mobile and desktop, native method-channel recording and capture register through the package plugin entries and are used as app-window evidence fallbacks; prefer system or host evidence through `cockpit` when the goal is to prove system dialogs, notifications, host windows, or cross-app behavior.

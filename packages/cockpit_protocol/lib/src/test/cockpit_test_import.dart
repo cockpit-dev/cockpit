@@ -2,6 +2,7 @@ import 'cockpit_test_case.dart';
 import 'cockpit_test_value_reader.dart';
 
 final class CockpitTestImportRequest {
+  /// Creates a CockpitTestImportRequest.
   CockpitTestImportRequest({
     required this.sourceVersion,
     required this.sourceText,
@@ -35,6 +36,7 @@ final class CockpitTestImportRequest {
   final String caseId;
   final String engineVersion;
 
+  /// Encodes this CockpitTestImportRequest as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
     'sourceVersion': sourceVersion,
     'sourceText': sourceText,
@@ -44,6 +46,7 @@ final class CockpitTestImportRequest {
     'engineVersion': engineVersion,
   };
 
+  /// Decodes a CockpitTestImportRequest from a JSON object.
   factory CockpitTestImportRequest.fromJson(
     Object? value, {
     String path = r'$',
@@ -91,6 +94,7 @@ final class CockpitTestImportRequest {
 }
 
 final class CockpitTestImportMapping {
+  /// Creates a CockpitTestImportMapping.
   CockpitTestImportMapping({
     required this.sourcePath,
     required this.destinationPath,
@@ -102,11 +106,13 @@ final class CockpitTestImportMapping {
   final String sourcePath;
   final String destinationPath;
 
+  /// Encodes this CockpitTestImportMapping as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
     'sourcePath': sourcePath,
     'destinationPath': destinationPath,
   };
 
+  /// Decodes a CockpitTestImportMapping from a JSON object.
   factory CockpitTestImportMapping.fromJson(
     Object? value, {
     String path = r'$',
@@ -132,6 +138,7 @@ final class CockpitTestImportMapping {
 }
 
 final class CockpitTestImportManifest {
+  /// Creates a CockpitTestImportManifest.
   CockpitTestImportManifest({
     this.schemaVersion = 'cockpit.import/v2',
     required this.sourceVersion,
@@ -189,6 +196,7 @@ final class CockpitTestImportManifest {
   final List<CockpitTestImportMapping> mappings;
   final List<String> warnings;
 
+  /// Encodes this CockpitTestImportManifest as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
     'schemaVersion': schemaVersion,
     'sourceVersion': sourceVersion,
@@ -201,6 +209,7 @@ final class CockpitTestImportManifest {
     'warnings': warnings,
   };
 
+  /// Decodes a CockpitTestImportManifest from a JSON object.
   factory CockpitTestImportManifest.fromJson(
     Object? value, {
     String path = r'$',
@@ -271,6 +280,7 @@ final class CockpitTestImportManifest {
 }
 
 final class CockpitTestImportResult {
+  /// Creates a CockpitTestImportResult.
   CockpitTestImportResult({required this.testCase, required this.manifest}) {
     if (testCase.id != manifest.caseId) {
       throw const FormatException(
@@ -282,11 +292,13 @@ final class CockpitTestImportResult {
   final CockpitTestCase testCase;
   final CockpitTestImportManifest manifest;
 
+  /// Encodes this CockpitTestImportResult as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
     'case': testCase.toJson(),
     'manifest': manifest.toJson(),
   };
 
+  /// Decodes a CockpitTestImportResult from a JSON object.
   factory CockpitTestImportResult.fromJson(
     Object? value, {
     String path = r'$',

@@ -25,6 +25,7 @@ enum CockpitTestErrorCode {
 }
 
 final class CockpitTestError {
+  /// Creates a CockpitTestError.
   CockpitTestError({
     required this.code,
     required this.message,
@@ -46,6 +47,7 @@ final class CockpitTestError {
   final CockpitTestSourceLocation? location;
   final Map<String, Object?> details;
 
+  /// Encodes this CockpitTestError as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
     'code': code.name,
     'message': message,
@@ -55,6 +57,7 @@ final class CockpitTestError {
     if (details.isNotEmpty) 'details': details,
   };
 
+  /// Decodes a CockpitTestError from a JSON object.
   factory CockpitTestError.fromJson(Object? value, {String path = r'$'}) {
     final json = CockpitTestValueReader.object(value, path);
     CockpitTestValueReader.keys(

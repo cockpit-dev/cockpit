@@ -68,7 +68,7 @@ Future<void> main(List<String> arguments) async {
   try {
     parsed = parser.parse(arguments);
     if (parsed.flag('help')) {
-      stdout.writeln('Run the Cockpit 2.0 demo acceptance suite.');
+      stdout.writeln('Run the Cockpit 3.0 demo acceptance suite.');
       stdout.writeln();
       stdout.writeln(parser.usage);
       return;

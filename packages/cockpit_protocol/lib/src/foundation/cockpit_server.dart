@@ -4,6 +4,7 @@ import 'cockpit_decode_policy.dart';
 import 'cockpit_foundation_value_reader.dart';
 
 final class CockpitServerInfo {
+  /// Creates a CockpitServerInfo.
   CockpitServerInfo({
     this.schemaVersion = 'cockpit.foundation/v2',
     required this.instanceId,
@@ -46,6 +47,7 @@ final class CockpitServerInfo {
   Set<String> get featureIds =>
       Set<String>.unmodifiable(features.map((feature) => feature.id));
 
+  /// Encodes this CockpitServerInfo as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
     'schemaVersion': schemaVersion,
     'instanceId': instanceId,
@@ -55,6 +57,7 @@ final class CockpitServerInfo {
     'features': features.map((feature) => feature.toJson()).toList(),
   };
 
+  /// Decodes a CockpitServerInfo from a JSON object.
   factory CockpitServerInfo.fromJson(
     Object? value, {
     String path = r'$',
@@ -116,6 +119,7 @@ final class CockpitServerInfo {
 }
 
 final class CockpitNegotiationRequest {
+  /// Creates a CockpitNegotiationRequest.
   CockpitNegotiationRequest({
     required this.apiVersion,
     Iterable<String> requiredFeatures = const <String>[],
@@ -132,11 +136,13 @@ final class CockpitNegotiationRequest {
   final CockpitApiVersion apiVersion;
   final List<String> requiredFeatures;
 
+  /// Encodes this CockpitNegotiationRequest as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
     'apiVersion': apiVersion.toJson(),
     'requiredFeatures': requiredFeatures,
   };
 
+  /// Decodes a CockpitNegotiationRequest from a JSON object.
   factory CockpitNegotiationRequest.fromJson(
     Object? value, {
     String path = r'$',
@@ -162,6 +168,7 @@ final class CockpitNegotiationRequest {
 }
 
 final class CockpitNegotiationResult {
+  /// Creates a CockpitNegotiationResult.
   CockpitNegotiationResult({
     required this.apiVersion,
     Iterable<String> featureIds = const <String>[],
@@ -181,11 +188,13 @@ final class CockpitNegotiationResult {
   CockpitDecodePolicy get responseDecodePolicy =>
       CockpitDecodePolicy.negotiatedResponse(featureIds);
 
+  /// Encodes this CockpitNegotiationResult as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
     'apiVersion': apiVersion.toJson(),
     'featureIds': featureIds,
   };
 
+  /// Decodes a CockpitNegotiationResult from a JSON object.
   factory CockpitNegotiationResult.fromJson(
     Object? value, {
     String path = r'$',

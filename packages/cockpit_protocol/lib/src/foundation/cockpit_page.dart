@@ -3,6 +3,7 @@ import 'cockpit_foundation_constraints.dart';
 import 'cockpit_foundation_value_reader.dart';
 
 final class CockpitPageRequest {
+  /// Creates a CockpitPageRequest.
   CockpitPageRequest({this.limit = 50, this.cursor}) {
     if (limit < 1 || limit > cockpitFoundationPageSizeMaximum) {
       throw const FormatException('Page limit must be between 1 and 100.');
@@ -15,11 +16,13 @@ final class CockpitPageRequest {
   final int limit;
   final String? cursor;
 
+  /// Encodes this CockpitPageRequest as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
     'limit': limit,
     if (cursor != null) 'cursor': cursor,
   };
 
+  /// Decodes a CockpitPageRequest from a JSON object.
   factory CockpitPageRequest.fromJson(Object? value, {String path = r'$'}) {
     final json = CockpitFoundationValueReader.object(value, path);
     CockpitFoundationValueReader.keys(json, const <String>{
@@ -46,6 +49,7 @@ final class CockpitPageRequest {
 }
 
 final class CockpitPage<T> {
+  /// Creates a CockpitPage.
   CockpitPage({required Iterable<T> items, this.nextCursor, this.totalCount})
     : items = List<T>.unmodifiable(items) {
     if (this.items.length > cockpitFoundationPageSizeMaximum) {
@@ -63,6 +67,7 @@ final class CockpitPage<T> {
   final String? nextCursor;
   final int? totalCount;
 
+  /// Encodes this CockpitPage as a JSON object.
   Map<String, Object?> toJson(Object? Function(T item) encodeItem) =>
       <String, Object?>{
         'items': items.map(encodeItem).toList(),

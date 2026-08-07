@@ -1,6 +1,7 @@
 import 'package:collection/collection.dart';
 
 final class CockpitAccessibilityEntry {
+  /// Creates a CockpitAccessibilityEntry.
   const CockpitAccessibilityEntry({
     required this.nodeId,
     this.label,
@@ -21,6 +22,7 @@ final class CockpitAccessibilityEntry {
 
   bool get hasMeaningfulSignal => primarySignal != null;
 
+  /// Encodes this CockpitAccessibilityEntry as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
     'nodeId': nodeId,
     if (label != null) 'label': label,
@@ -30,6 +32,7 @@ final class CockpitAccessibilityEntry {
     if (tooltip != null) 'tooltip': tooltip,
   };
 
+  /// Decodes a CockpitAccessibilityEntry from a JSON object.
   factory CockpitAccessibilityEntry.fromJson(Map<String, Object?> json) {
     return CockpitAccessibilityEntry(
       nodeId: json['nodeId']! as int,
@@ -59,6 +62,7 @@ final class CockpitAccessibilityEntry {
 }
 
 final class CockpitAccessibilitySummary {
+  /// Creates a CockpitAccessibilitySummary.
   CockpitAccessibilitySummary({
     required this.totalAccessibleTargetCount,
     required List<CockpitAccessibilityEntry> traversalEntries,
@@ -72,6 +76,7 @@ final class CockpitAccessibilitySummary {
   static const ListEquality<CockpitAccessibilityEntry> _entryEquality =
       ListEquality<CockpitAccessibilityEntry>();
 
+  /// Encodes this CockpitAccessibilitySummary as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
     'totalAccessibleTargetCount': totalAccessibleTargetCount,
     'traversalEntries': traversalEntries
@@ -80,6 +85,7 @@ final class CockpitAccessibilitySummary {
     'truncated': truncated,
   };
 
+  /// Decodes a CockpitAccessibilitySummary from a JSON object.
   factory CockpitAccessibilitySummary.fromJson(Map<String, Object?> json) {
     return CockpitAccessibilitySummary(
       totalAccessibleTargetCount:

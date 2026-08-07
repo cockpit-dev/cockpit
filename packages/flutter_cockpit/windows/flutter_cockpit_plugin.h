@@ -32,6 +32,9 @@ class FlutterCockpitPlugin : public flutter::Plugin {
   void HandleRecordingMethodCall(
       const flutter::MethodCall<flutter::EncodableValue>& method_call,
       std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result);
+  void HandleViewportMethodCall(
+      const flutter::MethodCall<flutter::EncodableValue>& method_call,
+      std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result);
 
  private:
   enum class RecordingState {
@@ -47,6 +50,9 @@ class FlutterCockpitPlugin : public flutter::Plugin {
       std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result);
   void CaptureAcceptanceScreenshot(
       std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result);
+  void ResizeViewport(
+      const flutter::MethodCall<flutter::EncodableValue>& method_call,
+      std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result);
   void QueryRecordingCapabilities(
       std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result);
   void StartRecording(
@@ -59,6 +65,8 @@ class FlutterCockpitPlugin : public flutter::Plugin {
       capture_channel_;
   std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>>
       recording_channel_;
+  std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>>
+      viewport_channel_;
   flutter::PluginRegistrarWindows* registrar_;
   std::unique_ptr<FlutterCockpitWindowRecorder> active_recorder_;
   std::chrono::steady_clock::time_point recording_started_at_;

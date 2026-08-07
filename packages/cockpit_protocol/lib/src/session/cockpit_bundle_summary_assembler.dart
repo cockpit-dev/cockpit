@@ -17,6 +17,7 @@ import 'cockpit_session.dart';
 import 'cockpit_timestamp_provider.dart';
 
 final class CockpitBundleSummaryAssembler {
+  /// Creates a CockpitBundleSummaryAssembler.
   CockpitBundleSummaryAssembler({CockpitTimestampProvider? now})
     : _now = now ?? _systemNow;
 

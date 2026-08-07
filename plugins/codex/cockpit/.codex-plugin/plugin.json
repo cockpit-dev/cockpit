@@ -1,7 +1,7 @@
 {
   "name": "cockpit",
-  "version": "2.1.0",
-  "description": "AI-first cross-platform application development, E2E execution, and regression evidence through Cockpit 2.0.",
+  "version": "3.0.0",
+  "description": "AI-first Flutter development, cross-platform E2E execution, and regression evidence through Cockpit 3.0.",
   "author": {
     "name": "Cockpit Dev"
   },
@@ -19,7 +19,7 @@
   "mcpServers": "./.mcp.json",
   "interface": {
     "displayName": "Cockpit",
-    "shortDescription": "Develop and verify apps through Cockpit 2.0.",
+    "shortDescription": "Develop and verify apps through Cockpit 3.0.",
     "longDescription": "Cockpit gives AI agents and clients one authenticated Supervisor API for Flutter development operations, black-box application control, reusable E2E cases and suites, durable execution, and regression evidence.",
     "developerName": "Cockpit Dev",
     "category": "Developer Tools",
@@ -33,8 +33,8 @@
     ],
     "websiteURL": "https://github.com/cockpit-dev/cockpit",
     "defaultPrompt": [
-      "Use Cockpit 2.0 to verify this application change.",
-      "Resolve the workspace and target, inspect capabilities, then capture proof.",
+      "Use Cockpit 3.0 to verify this application change.",
+      "Reuse the current development session, inspect the exact state, then capture proof.",
       "Validate and run the smallest suitable case or suite."
     ],
     "brandColor": "#111418"

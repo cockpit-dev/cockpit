@@ -1,0 +1,23 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "cockpit",
+  "version": "3.0.0",
+  "description": "Develop and debug Flutter apps and run cross-platform E2E validation with Cockpit.",
+  "author": {
+    "name": "Cockpit Dev",
+    "url": "https://github.com/cockpit-dev"
+  },
+  "keywords": [
+    "cockpit",
+    "flutter",
+    "debug",
+    "e2e",
+    "application testing",
+    "ui automation",
+    "screenshots",
+    "network diagnostics"
+  ],
+  "homepage": "https://github.com/cockpit-dev/cockpit",
+  "repository": "https://github.com/cockpit-dev/cockpit",
+  "license": "MIT"
+}

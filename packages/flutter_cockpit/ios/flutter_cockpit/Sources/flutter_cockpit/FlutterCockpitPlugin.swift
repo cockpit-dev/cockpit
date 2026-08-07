@@ -5,6 +5,7 @@ import UIKit
 public final class FlutterCockpitPlugin: NSObject, FlutterPlugin {
   private static let captureChannelName = "dev.cockpit.flutter_cockpit/capture"
   private static let recordingChannelName = "dev.cockpit.flutter_cockpit/recording"
+  private static let viewportChannelName = "dev.cockpit.flutter_cockpit/viewport"
 
   private let recordingManager = FlutterCockpitRecordingManager()
 
@@ -17,9 +18,14 @@ public final class FlutterCockpitPlugin: NSObject, FlutterPlugin {
       name: recordingChannelName,
       binaryMessenger: registrar.messenger()
     )
+    let viewportChannel = FlutterMethodChannel(
+      name: viewportChannelName,
+      binaryMessenger: registrar.messenger()
+    )
     let instance = FlutterCockpitPlugin()
     registrar.addMethodCallDelegate(instance, channel: captureChannel)
     registrar.addMethodCallDelegate(instance, channel: recordingChannel)
+    registrar.addMethodCallDelegate(instance, channel: viewportChannel)
   }
 
   public func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
@@ -35,6 +41,20 @@ public final class FlutterCockpitPlugin: NSObject, FlutterPlugin {
       recordingManager.startRecording(arguments: arguments, result: result)
     case "stopRecording":
       recordingManager.stopRecording(result: result)
+    case "queryViewportAvailability":
+      result([
+        "available": false,
+        "reason": "fixedMobileViewport",
+        "alternatives": ["changeOrientation", "selectAnotherDevice"],
+      ])
+    case "resizeViewport":
+      result(
+        FlutterError(
+          code: "fixedMobileViewport",
+          message: "iOS viewport size is controlled by the selected device.",
+          details: ["alternatives": ["changeOrientation", "selectAnotherDevice"]]
+        )
+      )
     default:
       result(FlutterMethodNotImplemented)
     }

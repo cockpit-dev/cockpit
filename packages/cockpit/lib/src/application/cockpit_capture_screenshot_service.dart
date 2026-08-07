@@ -17,6 +17,7 @@ final class CockpitCaptureScreenshotRequest {
     this.baseUri,
     this.androidDeviceId,
     this.iosDeviceId,
+    this.iosWdaBaseUri,
     this.name = 'screenshot',
     this.reason = CockpitScreenshotReason.acceptance,
     this.includeSnapshot = false,
@@ -33,6 +34,7 @@ final class CockpitCaptureScreenshotRequest {
   final Uri? baseUri;
   final String? androidDeviceId;
   final String? iosDeviceId;
+  final Uri? iosWdaBaseUri;
   final String name;
   final CockpitScreenshotReason reason;
   final bool includeSnapshot;
@@ -56,16 +58,19 @@ final class CockpitCaptureScreenshotService {
         const CockpitCaptureStrategyResolver(),
     CockpitAppReferenceResolver? appReferenceResolver,
     CockpitSessionRegistry? registry,
+    CockpitRemoteArtifactTempFileFactory? artifactTempFileFactory,
   }) : _runCommand =
            runCommand ?? (runCommandService ?? CockpitRunCommandService()).run,
        _captureStrategyResolver = captureStrategyResolver,
        _appReferenceResolver =
            appReferenceResolver ??
-           CockpitAppReferenceResolver(registry: registry);
+           CockpitAppReferenceResolver(registry: registry),
+       _artifactTempFileFactory = artifactTempFileFactory;
 
   final CockpitCaptureScreenshotRunCommand _runCommand;
   final CockpitCaptureStrategyResolver _captureStrategyResolver;
   final CockpitAppReferenceResolver _appReferenceResolver;
+  final CockpitRemoteArtifactTempFileFactory? _artifactTempFileFactory;
 
   Future<CockpitCaptureScreenshotResult> capture(
     CockpitCaptureScreenshotRequest request,
@@ -96,7 +101,10 @@ final class CockpitCaptureScreenshotService {
       if (platform != null && platform.isNotEmpty) {
         final captureAdapter = _captureStrategyResolver.resolve(
           platform: platform,
-          client: CockpitRemoteSessionClient(baseUri: resolved.baseUri),
+          client: CockpitRemoteSessionClient(
+            baseUri: resolved.baseUri,
+            artifactTempFileFactory: _artifactTempFileFactory,
+          ),
           platformAppId:
               app?.platformAppId ?? app?.remoteSession?.effectivePlatformAppId,
           processId: app?.processId ?? app?.remoteSession?.processId,
@@ -108,6 +116,7 @@ final class CockpitCaptureScreenshotService {
           iosDeviceId:
               request.iosDeviceId ??
               (app?.platform == 'ios' ? app?.deviceId : null),
+          iosWdaBaseUri: request.iosWdaBaseUri,
         );
         final execution = await captureAdapter.capture(command);
         return _interactiveResultFromExecution(
@@ -198,9 +207,7 @@ final class CockpitCaptureScreenshotService {
       recommendedNextStep: execution.result.success
           ? 'reviewCapturedEvidence'
           : 'inspectFailureDiagnostics',
-      whatChanged: execution.result.success
-          ? 'Command ${execution.result.commandId} completed successfully.'
-          : 'Command ${execution.result.commandId} failed.',
+      changed: execution.result.changed,
       whatMatters:
           execution.result.degradationReason ?? execution.result.error?.message,
       snapshot:

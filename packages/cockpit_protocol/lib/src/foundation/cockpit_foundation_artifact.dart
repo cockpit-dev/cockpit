@@ -2,6 +2,7 @@ import 'cockpit_decode_policy.dart';
 import 'cockpit_foundation_value_reader.dart';
 
 final class CockpitArtifactReference {
+  /// Creates a CockpitArtifactReference.
   CockpitArtifactReference({
     required this.artifactId,
     required this.runId,
@@ -18,12 +19,14 @@ final class CockpitArtifactReference {
   final String runId;
   final String? sha256;
 
+  /// Encodes this CockpitArtifactReference as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
     'artifactId': artifactId,
     'runId': runId,
     if (sha256 != null) 'sha256': sha256,
   };
 
+  /// Decodes a CockpitArtifactReference from a JSON object.
   factory CockpitArtifactReference.fromJson(
     Object? value, {
     String path = r'$',
@@ -51,6 +54,7 @@ final class CockpitArtifactReference {
 }
 
 final class CockpitArtifactResource {
+  /// Creates a CockpitArtifactResource.
   CockpitArtifactResource({
     required this.artifactId,
     required this.workspaceId,
@@ -109,6 +113,7 @@ final class CockpitArtifactResource {
     sha256: sha256,
   );
 
+  /// Encodes this CockpitArtifactResource as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
     'artifactId': artifactId,
     'workspaceId': workspaceId,
@@ -124,6 +129,7 @@ final class CockpitArtifactResource {
     'downloadUrl': downloadUrl,
   };
 
+  /// Decodes a CockpitArtifactResource from a JSON object.
   factory CockpitArtifactResource.fromJson(
     Object? value, {
     String path = r'$',

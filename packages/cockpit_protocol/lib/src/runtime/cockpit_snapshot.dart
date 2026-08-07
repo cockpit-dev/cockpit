@@ -16,6 +16,7 @@ enum CockpitDiagnosticCategory {
   typography('typography'),
   other('other');
 
+  /// Creates a CockpitDiagnosticCategory.
   const CockpitDiagnosticCategory(this.jsonValue);
 
   final String jsonValue;
@@ -33,6 +34,7 @@ enum CockpitDiagnosticCategory {
 }
 
 final class CockpitDiagnosticProperty {
+  /// Creates a CockpitDiagnosticProperty.
   const CockpitDiagnosticProperty({
     required this.name,
     required this.value,
@@ -43,12 +45,14 @@ final class CockpitDiagnosticProperty {
   final String value;
   final CockpitDiagnosticCategory category;
 
+  /// Encodes this CockpitDiagnosticProperty as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
     'name': name,
     'value': value,
     'category': category.jsonValue,
   };
 
+  /// Decodes a CockpitDiagnosticProperty from a JSON object.
   factory CockpitDiagnosticProperty.fromJson(Map<String, Object?> json) {
     return CockpitDiagnosticProperty(
       name: json['name']! as String,
@@ -71,6 +75,7 @@ final class CockpitDiagnosticProperty {
 }
 
 final class CockpitSnapshotLayout {
+  /// Creates a CockpitSnapshotLayout.
   const CockpitSnapshotLayout({
     required this.width,
     required this.height,
@@ -85,6 +90,7 @@ final class CockpitSnapshotLayout {
   final double dy;
   final String? constraintsSummary;
 
+  /// Encodes this CockpitSnapshotLayout as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
     'width': width,
     'height': height,
@@ -93,6 +99,7 @@ final class CockpitSnapshotLayout {
     if (constraintsSummary != null) 'constraintsSummary': constraintsSummary,
   };
 
+  /// Decodes a CockpitSnapshotLayout from a JSON object.
   factory CockpitSnapshotLayout.fromJson(Map<String, Object?> json) {
     return CockpitSnapshotLayout(
       width: (json['width'] as num).toDouble(),
@@ -119,16 +126,19 @@ final class CockpitSnapshotLayout {
 }
 
 final class CockpitSnapshotContent {
+  /// Creates a CockpitSnapshotContent.
   const CockpitSnapshotContent({this.displayLabel, this.textPreview});
 
   final String? displayLabel;
   final String? textPreview;
 
+  /// Encodes this CockpitSnapshotContent as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
     if (displayLabel != null) 'displayLabel': displayLabel,
     if (textPreview != null) 'textPreview': textPreview,
   };
 
+  /// Decodes a CockpitSnapshotContent from a JSON object.
   factory CockpitSnapshotContent.fromJson(Map<String, Object?> json) {
     return CockpitSnapshotContent(
       displayLabel: json['displayLabel'] as String?,
@@ -149,6 +159,7 @@ final class CockpitSnapshotContent {
 }
 
 final class CockpitSnapshotStyle {
+  /// Creates a CockpitSnapshotStyle.
   const CockpitSnapshotStyle({
     this.textColor,
     this.backgroundColor,
@@ -165,6 +176,7 @@ final class CockpitSnapshotStyle {
   final String? borderSummary;
   final String? shadowSummary;
 
+  /// Encodes this CockpitSnapshotStyle as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
     if (textColor != null) 'textColor': textColor,
     if (backgroundColor != null) 'backgroundColor': backgroundColor,
@@ -174,6 +186,7 @@ final class CockpitSnapshotStyle {
     if (shadowSummary != null) 'shadowSummary': shadowSummary,
   };
 
+  /// Decodes a CockpitSnapshotStyle from a JSON object.
   factory CockpitSnapshotStyle.fromJson(Map<String, Object?> json) {
     return CockpitSnapshotStyle(
       textColor: json['textColor'] as String?,
@@ -209,6 +222,7 @@ final class CockpitSnapshotStyle {
 }
 
 final class CockpitSnapshotAncestor {
+  /// Creates a CockpitSnapshotAncestor.
   const CockpitSnapshotAncestor({
     required this.typeName,
     this.cockpitId,
@@ -229,6 +243,7 @@ final class CockpitSnapshotAncestor {
   final String? routeName;
   final String? path;
 
+  /// Encodes this CockpitSnapshotAncestor as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
     'typeName': typeName,
     if (cockpitId != null) 'cockpitId': cockpitId,
@@ -240,6 +255,7 @@ final class CockpitSnapshotAncestor {
     if (path != null) 'path': path,
   };
 
+  /// Decodes a CockpitSnapshotAncestor from a JSON object.
   factory CockpitSnapshotAncestor.fromJson(Map<String, Object?> json) {
     return CockpitSnapshotAncestor(
       typeName: json['typeName']! as String,
@@ -281,6 +297,7 @@ final class CockpitSnapshotAncestor {
 }
 
 final class CockpitSnapshotSummary {
+  /// Creates a CockpitSnapshotSummary.
   const CockpitSnapshotSummary({
     required this.visibleTargetCount,
     required this.targetsWithCockpitIdCount,
@@ -301,6 +318,7 @@ final class CockpitSnapshotSummary {
   final bool rebuildSummaryIncluded;
   final bool accessibilitySummaryIncluded;
 
+  /// Encodes this CockpitSnapshotSummary as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
     'visibleTargetCount': visibleTargetCount,
     'targetsWithCockpitIdCount': targetsWithCockpitIdCount,
@@ -312,6 +330,7 @@ final class CockpitSnapshotSummary {
     'accessibilitySummaryIncluded': accessibilitySummaryIncluded,
   };
 
+  /// Decodes a CockpitSnapshotSummary from a JSON object.
   factory CockpitSnapshotSummary.fromJson(Map<String, Object?> json) {
     return CockpitSnapshotSummary(
       visibleTargetCount: json['visibleTargetCount'] as int? ?? 0,
@@ -357,6 +376,7 @@ final class CockpitSnapshotSummary {
 }
 
 final class CockpitFocusSnapshot {
+  /// Creates a CockpitFocusSnapshot.
   const CockpitFocusSnapshot({
     required this.hasPrimaryFocus,
     this.primaryFocusDebugLabel,
@@ -373,6 +393,7 @@ final class CockpitFocusSnapshot {
   final String? primaryFocusLabel;
   final bool isTextInputFocus;
 
+  /// Encodes this CockpitFocusSnapshot as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
     'hasPrimaryFocus': hasPrimaryFocus,
     if (primaryFocusDebugLabel != null)
@@ -385,6 +406,7 @@ final class CockpitFocusSnapshot {
     'isTextInputFocus': isTextInputFocus,
   };
 
+  /// Decodes a CockpitFocusSnapshot from a JSON object.
   factory CockpitFocusSnapshot.fromJson(Map<String, Object?> json) {
     return CockpitFocusSnapshot(
       hasPrimaryFocus: json['hasPrimaryFocus'] as bool? ?? false,
@@ -420,6 +442,7 @@ final class CockpitFocusSnapshot {
 }
 
 final class CockpitSnapshotTarget {
+  /// Creates a CockpitSnapshotTarget.
   CockpitSnapshotTarget({
     required this.registrationId,
     this.cockpitId,
@@ -473,6 +496,7 @@ final class CockpitSnapshotTarget {
   String? get displayLabel =>
       cockpitId ?? semanticId ?? text ?? tooltip ?? keyValue ?? typeName;
 
+  /// Encodes this CockpitSnapshotTarget as a JSON object.
   Map<String, Object?> toJson() => {
     'registrationId': registrationId,
     if (cockpitId != null) 'cockpitId': cockpitId,
@@ -498,6 +522,7 @@ final class CockpitSnapshotTarget {
         .toList(),
   };
 
+  /// Decodes a CockpitSnapshotTarget from a JSON object.
   factory CockpitSnapshotTarget.fromJson(Map<String, Object?> json) {
     final layoutJson = json['layout'] as Map<Object?, Object?>?;
     final contentJson = json['content'] as Map<Object?, Object?>?;
@@ -606,6 +631,7 @@ final class CockpitSnapshotTarget {
 }
 
 final class CockpitSnapshot {
+  /// Creates a CockpitSnapshot.
   CockpitSnapshot({
     required this.routeName,
     List<CockpitSnapshotTarget> visibleTargets =
@@ -636,6 +662,7 @@ final class CockpitSnapshot {
   static const ListEquality<CockpitSnapshotTarget> _targetListEquality =
       ListEquality<CockpitSnapshotTarget>();
 
+  /// Encodes this CockpitSnapshot as a JSON object.
   Map<String, Object?> toJson() => {
     if (routeName != null) 'routeName': routeName,
     'visibleTargets': visibleTargets.map((target) => target.toJson()).toList(),
@@ -651,6 +678,7 @@ final class CockpitSnapshot {
     if (focus != null) 'focus': focus!.toJson(),
   };
 
+  /// Decodes a CockpitSnapshot from a JSON object.
   factory CockpitSnapshot.fromJson(Map<String, Object?> json) {
     final diagnosticsArtifactJson =
         json['diagnosticsArtifactRef'] as Map<Object?, Object?>?;
@@ -711,6 +739,7 @@ final class CockpitSnapshot {
     );
   }
 
+  /// Returns a copy of this CockpitSnapshot with supplied fields replaced.
   CockpitSnapshot copyWith({
     String? routeName,
     List<CockpitSnapshotTarget>? visibleTargets,

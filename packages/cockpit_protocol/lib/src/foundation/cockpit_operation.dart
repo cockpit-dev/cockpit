@@ -14,6 +14,7 @@ enum CockpitOperationOutcome {
 }
 
 final class CockpitOperationInvocation {
+  /// Creates a CockpitOperationInvocation.
   CockpitOperationInvocation({
     required this.kind,
     Map<String, Object?> input = const <String, Object?>{},
@@ -56,6 +57,7 @@ final class CockpitOperationInvocation {
   final DateTime? deadline;
   final List<String> requiredFeatures;
 
+  /// Encodes this CockpitOperationInvocation as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
     'kind': kind,
     'input': input,
@@ -66,6 +68,7 @@ final class CockpitOperationInvocation {
     'requiredFeatures': requiredFeatures,
   };
 
+  /// Decodes a CockpitOperationInvocation from a JSON object.
   factory CockpitOperationInvocation.fromJson(
     Object? value, {
     String path = r'$',
@@ -121,6 +124,7 @@ final class CockpitOperationInvocation {
 }
 
 final class CockpitOperationResult {
+  /// Creates a CockpitOperationResult.
   CockpitOperationResult({
     required this.operationId,
     required this.kind,
@@ -177,6 +181,7 @@ final class CockpitOperationResult {
   final Map<String, Object?>? output;
   final CockpitFailure? failure;
 
+  /// Encodes this CockpitOperationResult as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
     'operationId': operationId,
     'kind': kind,
@@ -191,6 +196,7 @@ final class CockpitOperationResult {
     if (failure != null) 'failure': failure!.toJson(),
   };
 
+  /// Decodes a CockpitOperationResult from a JSON object.
   factory CockpitOperationResult.fromJson(
     Object? value, {
     String path = r'$',

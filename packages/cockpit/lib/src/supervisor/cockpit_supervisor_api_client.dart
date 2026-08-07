@@ -8,6 +8,7 @@ import 'package:crypto/crypto.dart';
 import 'package:path/path.dart' as p;
 
 import '../foundation/cockpit_home.dart';
+import '../foundation/cockpit_internal_process.dart';
 import '../foundation/cockpit_locked_json_store.dart';
 import 'cockpit_daemon_client.dart';
 import 'cockpit_daemon_discovery.dart';
@@ -100,8 +101,10 @@ final class CockpitSupervisorApiClient {
     Iterable<String> requiredFeatures = const <String>[],
     this.maximumResponseBytes = cockpitSupervisorMaximumResponseBytes,
     this.maximumPageItems = cockpitSupervisorMaximumPageItems,
+    Duration requestTimeout = const Duration(seconds: 30),
   }) : apiVersion = apiVersion ?? CockpitApiVersion(major: 2, minor: 0),
        _httpClientFactory = httpClientFactory ?? HttpClient.new,
+       _requestTimeout = requestTimeout,
        requiredFeatures = List<String>.unmodifiable(requiredFeatures) {
     if (maximumResponseBytes < 1 || maximumResponseBytes > 16 * 1024 * 1024) {
       throw ArgumentError.value(maximumResponseBytes, 'maximumResponseBytes');
@@ -109,6 +112,7 @@ final class CockpitSupervisorApiClient {
     if (maximumPageItems < 1 || maximumPageItems > 10000) {
       throw ArgumentError.value(maximumPageItems, 'maximumPageItems');
     }
+    _validateRequestTimeout(requestTimeout);
     CockpitNegotiationRequest(
       apiVersion: this.apiVersion,
       requiredFeatures: this.requiredFeatures,
@@ -121,8 +125,16 @@ final class CockpitSupervisorApiClient {
   final int maximumResponseBytes;
   final int maximumPageItems;
   final CockpitHttpClientFactory _httpClientFactory;
+  Duration _requestTimeout;
 
   _CockpitSupervisorSession? _session;
+
+  Duration get requestTimeout => _requestTimeout;
+
+  set requestTimeout(Duration value) {
+    _validateRequestTimeout(value);
+    _requestTimeout = value;
+  }
 
   Future<CockpitServerInfo> server() async => (await _ensureSession()).server;
 
@@ -263,6 +275,23 @@ final class CockpitSupervisorApiClient {
         ),
       );
 
+  Future<Map<String, Object?>> operationSchema() async {
+    final session = await _ensureSession();
+    final value = await _jsonRequest(
+      session,
+      'GET',
+      '/api/v2/operations/schema',
+    );
+    if (value is! Map<Object?, Object?> ||
+        value.keys.any((key) => key is! String)) {
+      throw const CockpitSupervisorClientException(
+        code: 'invalidOperationSchema',
+        message: 'Supervisor returned an invalid operation schema resource.',
+      );
+    }
+    return Map<String, Object?>.from(value);
+  }
+
   Future<CockpitOperationResult> executeOperation(
     CockpitOperationInvocation invocation,
   ) async {
@@ -275,7 +304,23 @@ final class CockpitSupervisorApiClient {
         message: 'Operation ${invocation.kind} is not advertised.',
       );
     }
-    _validateInvocation(matches.single, invocation);
+    return executeAdvertisedOperation(invocation, descriptor: matches.single);
+  }
+
+  Future<CockpitOperationResult> executeAdvertisedOperation(
+    CockpitOperationInvocation invocation, {
+    required CockpitOperationDescriptor descriptor,
+  }) async {
+    if (descriptor.kind != invocation.kind) {
+      throw CockpitSupervisorClientException(
+        code: CockpitErrorCode.unsupportedOperation,
+        message:
+            'Advertised operation ${descriptor.kind} does not match '
+            '${invocation.kind}.',
+      );
+    }
+    _validateInvocation(descriptor, invocation);
+    final workspaceId = invocation.workspaceId;
     final session = await _ensureSession();
     final path = workspaceId == null
         ? '/api/v2/operations'
@@ -290,24 +335,32 @@ final class CockpitSupervisorApiClient {
     String workspaceId, {
     CockpitIndexedDocumentKind? kind,
     String? relativePath,
-  }) => _allPages(
-    Uri.parse('/api/v2/workspaces/${_segment(workspaceId)}/documents')
-        .replace(
-          queryParameters: <String, String>{
-            if (kind != null)
-              'kind': kind == CockpitIndexedDocumentKind.testCase
-                  ? 'case'
-                  : kind.name,
-            'relativePath': ?relativePath,
-          },
-        )
-        .toString(),
-    (value, path, policy) => CockpitDocumentResource.fromJson(
-      value,
-      path: path,
-      decodePolicy: policy,
-    ),
-  );
+    bool authoredOnly = false,
+  }) {
+    if (authoredOnly && kind != null) {
+      throw ArgumentError('authoredOnly and kind are mutually exclusive.');
+    }
+    return _allPages(
+      Uri.parse('/api/v2/workspaces/${_segment(workspaceId)}/documents')
+          .replace(
+            queryParameters: <String, String>{
+              if (authoredOnly)
+                'kind': 'authored'
+              else if (kind != null)
+                'kind': kind == CockpitIndexedDocumentKind.testCase
+                    ? 'case'
+                    : kind.name,
+              'relativePath': ?relativePath,
+            },
+          )
+          .toString(),
+      (value, path, policy) => CockpitDocumentResource.fromJson(
+        value,
+        path: path,
+        decodePolicy: policy,
+      ),
+    );
+  }
 
   Future<List<CockpitCaseIndexEntry>> cases(String workspaceId) => _allPages(
     '/api/v2/workspaces/${_segment(workspaceId)}/cases',
@@ -447,7 +500,7 @@ final class CockpitSupervisorApiClient {
       lastEventId: lastEventId,
     );
     final session = await _ensureSession();
-    final client = _httpClientFactory();
+    final client = _httpClientFactory()..connectionTimeout = _requestTimeout;
     var terminal = false;
     var gap = false;
     var sequence = cursor.afterSequence;
@@ -455,13 +508,21 @@ final class CockpitSupervisorApiClient {
       final uri = session.discovery.endpoint.resolve(
         '/api/v2/runs/${_segment(runId)}/events?afterSequence=$afterSequence',
       );
-      final request = await client.getUrl(uri);
+      final request = await client
+          .getUrl(uri)
+          .timeout(
+            _requestTimeout,
+            onTimeout: () => throw _requestTimedOut('GET', uri.path),
+          );
       _authorize(request, session);
       request.headers.set(HttpHeaders.acceptHeader, 'text/event-stream');
       if (lastEventId != null) {
         request.headers.set('Last-Event-ID', lastEventId);
       }
-      final response = await request.close();
+      final response = await request.close().timeout(
+        _requestTimeout,
+        onTimeout: () => throw _requestTimedOut('GET', uri.path),
+      );
       if (response.statusCode < 200 || response.statusCode >= 300) {
         final value = _decodeJson(
           await _boundedBytes(response, maximumResponseBytes),
@@ -537,8 +598,41 @@ final class CockpitSupervisorApiClient {
   Future<CockpitArtifactDownloadReceipt> downloadArtifactToFile({
     required CockpitArtifactResource artifact,
     required File destination,
+  }) => _downloadArtifactToFile(
+    path:
+        '/api/v2/runs/${_segment(artifact.runId)}/artifacts/'
+        '${_segment(artifact.artifactId)}',
+    destination: destination,
+    expectedMediaType: artifact.mediaType,
+    expectedSizeBytes: artifact.sizeBytes,
+    expectedSha256: artifact.sha256,
+    allowOverwrite: false,
+  );
+
+  Future<CockpitArtifactDownloadReceipt> downloadDevelopmentArtifactToFile({
+    required String workspaceId,
+    required String sessionId,
+    required String artifactId,
+    required String mediaType,
+    required File destination,
+  }) => _downloadArtifactToFile(
+    path:
+        '/api/v2/workspaces/${_segment(workspaceId)}/sessions/'
+        '${_segment(sessionId)}/artifacts/${_segment(artifactId)}',
+    destination: destination,
+    expectedMediaType: mediaType,
+    allowOverwrite: true,
+  );
+
+  Future<CockpitArtifactDownloadReceipt> _downloadArtifactToFile({
+    required String path,
+    required File destination,
+    required String expectedMediaType,
+    required bool allowOverwrite,
+    int? expectedSizeBytes,
+    String? expectedSha256,
   }) async {
-    if (await destination.exists()) {
+    if (!allowOverwrite && await destination.exists()) {
       throw FileSystemException(
         'Artifact destination already exists.',
         destination.path,
@@ -551,27 +645,46 @@ final class CockpitSupervisorApiClient {
     await temporary.create(exclusive: true);
     IOSink? sink;
     final session = await _ensureSession();
-    final client = _httpClientFactory();
+    final client = _httpClientFactory()..connectionTimeout = _requestTimeout;
+    final deadline = DateTime.now().toUtc().add(_requestTimeout);
     try {
-      final request = await client.getUrl(
-        session.discovery.endpoint.resolve(
-          '/api/v2/runs/${_segment(artifact.runId)}/artifacts/'
-          '${_segment(artifact.artifactId)}',
-        ),
-      );
+      final request = await client
+          .getUrl(session.discovery.endpoint.resolve(path))
+          .timeout(
+            _remainingRequestTime(deadline, 'GET', path),
+            onTimeout: () => throw _requestTimedOut('GET', path),
+          );
       _authorize(request, session);
-      final response = await request.close();
+      final response = await request.close().timeout(
+        _remainingRequestTime(deadline, 'GET', path),
+        onTimeout: () => throw _requestTimedOut('GET', path),
+      );
       if (response.statusCode < 200 || response.statusCode >= 300) {
         final value = _decodeJson(
-          await _boundedBytes(response, cockpitSupervisorMaximumResponseBytes),
+          await _boundedBytes(
+            response,
+            cockpitSupervisorMaximumResponseBytes,
+          ).timeout(
+            _remainingRequestTime(deadline, 'GET', path),
+            onTimeout: () => throw _requestTimedOut('GET', path),
+          ),
         );
         throw _decodeApiError(response.statusCode, value);
       }
       final mediaType =
           response.headers.contentType?.mimeType ?? ContentType.binary.mimeType;
-      if (response.contentLength != artifact.sizeBytes ||
-          response.headers.value('Digest') != 'sha-256=${artifact.sha256}' ||
-          mediaType != artifact.mediaType) {
+      final declaredSize = response.contentLength;
+      final digestHeader = response.headers.value('Digest');
+      final declaredDigest = digestHeader?.startsWith('sha-256=') == true
+          ? digestHeader!.substring('sha-256='.length)
+          : null;
+      if (declaredSize < 0 ||
+          declaredSize > 16 * 1024 * 1024 * 1024 ||
+          declaredDigest == null ||
+          !RegExp(r'^[a-f0-9]{64}$').hasMatch(declaredDigest) ||
+          mediaType != expectedMediaType ||
+          expectedSizeBytes != null && declaredSize != expectedSizeBytes ||
+          expectedSha256 != null && declaredDigest != expectedSha256) {
         await response.drain<void>();
         throw const CockpitSupervisorClientException(
           code: 'artifactMetadataMismatch',
@@ -580,27 +693,48 @@ final class CockpitSupervisorApiClient {
       }
       sink = temporary.openWrite(mode: FileMode.writeOnly);
       var received = 0;
-      await for (final chunk in response) {
-        received += chunk.length;
-        if (received > artifact.sizeBytes) {
-          throw const CockpitSupervisorClientException(
-            code: 'artifactIntegrityMismatch',
-            message: 'Artifact response exceeds its declared size.',
-          );
+      final chunks = StreamIterator<List<int>>(response);
+      try {
+        while (await chunks.moveNext().timeout(
+          _remainingRequestTime(deadline, 'GET', path),
+          onTimeout: () => throw _requestTimedOut('GET', path),
+        )) {
+          final chunk = chunks.current;
+          received += chunk.length;
+          if (received > declaredSize) {
+            throw const CockpitSupervisorClientException(
+              code: 'artifactIntegrityMismatch',
+              message: 'Artifact response exceeds its declared size.',
+            );
+          }
+          sink.add(chunk);
         }
-        sink.add(chunk);
+      } finally {
+        await chunks.cancel();
       }
       await sink.flush();
       await sink.close();
       sink = null;
-      final digest = (await sha256.bind(temporary.openRead()).first).toString();
-      if (received != artifact.sizeBytes || digest != artifact.sha256) {
+      final digest =
+          (await sha256
+                  .bind(temporary.openRead())
+                  .first
+                  .timeout(
+                    _remainingRequestTime(deadline, 'GET', path),
+                    onTimeout: () => throw _requestTimedOut('GET', path),
+                  ))
+              .toString();
+      if (received != declaredSize || digest != declaredDigest) {
         throw const CockpitSupervisorClientException(
           code: 'artifactIntegrityMismatch',
           message: 'Artifact bytes failed size or digest verification.',
         );
       }
-      final committed = await temporary.rename(destination.path);
+      final committed = await _commitArtifactDownload(
+        temporary,
+        destination,
+        allowOverwrite: allowOverwrite,
+      );
       return CockpitArtifactDownloadReceipt(
         file: committed,
         mediaType: mediaType,
@@ -624,8 +758,35 @@ final class CockpitSupervisorApiClient {
     }
   }
 
+  Future<File> _commitArtifactDownload(
+    File temporary,
+    File destination, {
+    required bool allowOverwrite,
+  }) async {
+    try {
+      return await temporary.rename(destination.path);
+    } on FileSystemException {
+      if (!allowOverwrite || !await destination.exists()) rethrow;
+    }
+    final backup = File(
+      '${destination.path}.previous-$pid-'
+      '${DateTime.now().microsecondsSinceEpoch}',
+    );
+    await destination.rename(backup.path);
+    try {
+      final committed = await temporary.rename(destination.path);
+      await backup.delete();
+      return committed;
+    } on Object {
+      if (!await destination.exists() && await backup.exists()) {
+        await backup.rename(destination.path);
+      }
+      rethrow;
+    }
+  }
+
   Future<_CockpitSupervisorSession> _ensureSession() async {
-    final discovery = await lifecycle.ensure();
+    final discovery = await lifecycle.ensure(timeout: _requestTimeout);
     final cached = _session;
     if (cached != null && cached.discovery.instanceId == discovery.instanceId) {
       return cached;
@@ -683,23 +844,34 @@ final class CockpitSupervisorApiClient {
     Object? body,
   }) async {
     final client = _httpClientFactory();
+    client.connectionTimeout = _requestTimeout;
     try {
-      final request = await client.openUrl(
-        method,
-        session.discovery.endpoint.resolve(path),
+      return await (() async {
+        final request = await client.openUrl(
+          method,
+          session.discovery.endpoint.resolve(path),
+        );
+        _authorize(request, session);
+        if (body != null) {
+          request.headers.contentType = ContentType.json;
+          request.write(jsonEncode(body));
+        }
+        final response = await request.close();
+        final bytes = await _boundedBytes(response, maximumResponseBytes);
+        final value = _decodeJson(bytes);
+        if (response.statusCode < 200 || response.statusCode >= 300) {
+          throw _decodeApiError(response.statusCode, value);
+        }
+        return value;
+      })().timeout(
+        _requestTimeout,
+        onTimeout: () => throw CockpitSupervisorClientException(
+          code: 'requestTimeout',
+          message:
+              'Supervisor $method $path exceeded '
+              '${_requestTimeout.inMilliseconds}ms.',
+        ),
       );
-      _authorize(request, session);
-      if (body != null) {
-        request.headers.contentType = ContentType.json;
-        request.write(jsonEncode(body));
-      }
-      final response = await request.close();
-      final bytes = await _boundedBytes(response, maximumResponseBytes);
-      final value = _decodeJson(bytes);
-      if (response.statusCode < 200 || response.statusCode >= 300) {
-        throw _decodeApiError(response.statusCode, value);
-      }
-      return value;
     } on CockpitSupervisorClientException {
       rethrow;
     } on CockpitApiException catch (error) {
@@ -734,6 +906,32 @@ final class CockpitSupervisorApiClient {
         requiredFeatures.join(','),
       );
     }
+  }
+
+  Duration _remainingRequestTime(
+    DateTime deadline,
+    String method,
+    String path,
+  ) {
+    final remaining = deadline.difference(DateTime.now().toUtc());
+    if (remaining <= Duration.zero) throw _requestTimedOut(method, path);
+    return remaining;
+  }
+
+  CockpitSupervisorClientException _requestTimedOut(
+    String method,
+    String path,
+  ) => CockpitSupervisorClientException(
+    code: 'requestTimeout',
+    message:
+        'Supervisor $method $path exceeded '
+        '${_requestTimeout.inMilliseconds}ms.',
+  );
+}
+
+void _validateRequestTimeout(Duration value) {
+  if (value <= Duration.zero || value > const Duration(hours: 24)) {
+    throw ArgumentError.value(value, 'requestTimeout');
   }
 }
 
@@ -832,35 +1030,151 @@ final class _SseFrame {
 
 Future<CockpitSupervisorApiClient> createCockpitSupervisorApiClient({
   Iterable<String> requiredFeatures = const <String>[],
+  bool selfContained = false,
 }) async {
   final resolver = CockpitHomeResolver.system();
   final home = CockpitHome.system();
   final paths = await home.initialize();
-  final library = await Isolate.resolvePackageUri(
-    Uri.parse('package:cockpit/cockpit.dart'),
-  );
-  if (library == null) {
-    throw StateError('Unable to resolve the cockpit package entrypoint.');
+  _CockpitDaemonLaunchConfiguration launchConfiguration;
+  CockpitDaemonException? launchFailure;
+  try {
+    launchConfiguration = await _resolveDaemonLaunchConfiguration(
+      selfContained: selfContained,
+    );
+  } on CockpitDaemonException catch (error) {
+    launchConfiguration = const _CockpitDaemonLaunchConfiguration(
+      executable: '',
+      daemonArguments: <String>[],
+      restartArguments: <String>[],
+    );
+    launchFailure = error;
   }
-  final daemonEntrypoint = p.join(
-    p.dirname(p.dirname(library.toFilePath())),
-    'bin',
-    'cockpitd.dart',
-  );
-  final packageConfig = await Isolate.packageConfig;
   return CockpitSupervisorApiClient(
     lifecycle: CockpitDaemonLifecycleClient(
       paths: paths,
-      dartExecutable: Platform.resolvedExecutable,
-      daemonEntrypoint: daemonEntrypoint,
-      packageConfigPath: packageConfig?.scheme == 'file'
-          ? packageConfig!.toFilePath()
-          : null,
+      executable: launchConfiguration.executable,
+      daemonArguments: launchConfiguration.daemonArguments,
+      restartArguments: launchConfiguration.restartArguments,
       permissionHardener: home.permissionHardener,
       directorySyncer: CockpitSystemDirectorySyncer(resolver.platform),
+      launchFailure: launchFailure,
     ),
     requiredFeatures: requiredFeatures,
   );
+}
+
+Future<_CockpitDaemonLaunchConfiguration> _resolveDaemonLaunchConfiguration({
+  bool selfContained = false,
+}) async {
+  if (selfContained && !_isDartRuntime(Platform.resolvedExecutable)) {
+    return _CockpitDaemonLaunchConfiguration(
+      executable: Platform.resolvedExecutable,
+      daemonArguments: const <String>[cockpitInternalDaemonCommand],
+      restartArguments: const <String>[],
+    );
+  }
+  try {
+    final library = await Isolate.resolvePackageUri(
+      Uri.parse('package:cockpit/cockpit.dart'),
+    );
+    if (library != null && library.scheme == 'file') {
+      final packageConfig = await Isolate.packageConfig;
+      final packageArguments = packageConfig?.scheme == 'file'
+          ? <String>['--packages=${packageConfig!.toFilePath()}']
+          : const <String>[];
+      final packageRoot = p.dirname(p.dirname(library.toFilePath()));
+      return _CockpitDaemonLaunchConfiguration(
+        executable: Platform.resolvedExecutable,
+        daemonArguments: <String>[
+          ...packageArguments,
+          p.join(packageRoot, 'bin', 'cockpitd.dart'),
+        ],
+        restartArguments: <String>[
+          ...packageArguments,
+          p.join(packageRoot, 'bin', 'cockpit.dart'),
+        ],
+      );
+    }
+  } on UnsupportedError {
+    // AOT runtimes cannot resolve package: URIs.
+  }
+  return _resolveGloballyActivatedDaemon();
+}
+
+Future<_CockpitDaemonLaunchConfiguration>
+_resolveGloballyActivatedDaemon() async {
+  final environment = Platform.environment;
+  final configuredCache = environment['PUB_CACHE']?.trim();
+  final home = environment[Platform.isWindows ? 'USERPROFILE' : 'HOME']?.trim();
+  final localAppData = environment['LOCALAPPDATA']?.trim();
+  final pubCache = configuredCache != null && configuredCache.isNotEmpty
+      ? configuredCache
+      : Platform.isWindows
+      ? localAppData == null || localAppData.isEmpty
+            ? null
+            : p.join(localAppData, 'Pub', 'Cache')
+      : home == null || home.isEmpty
+      ? null
+      : p.join(home, '.pub-cache');
+  if (pubCache == null) {
+    throw const CockpitDaemonException(
+      'daemonLaunchUnavailable',
+      'Unable to locate the Pub cache. Set PUB_CACHE and activate Cockpit '
+          'with `dart pub global activate cockpit`.',
+    );
+  }
+
+  final activationLock = File(
+    p.join(pubCache, 'global_packages', 'cockpit', 'pubspec.lock'),
+  );
+  final snapshotDirectory = Directory(
+    p.join(pubCache, 'global_packages', 'cockpit', 'bin'),
+  );
+  if (!await activationLock.exists() && !await snapshotDirectory.exists()) {
+    throw const CockpitDaemonException(
+      'daemonLaunchUnavailable',
+      'Cockpit is not globally activated. Run '
+          '`dart pub global activate cockpit`.',
+    );
+  }
+  final flutterRoot = environment['FLUTTER_ROOT']?.trim();
+  final bundledDart = flutterRoot == null || flutterRoot.isEmpty
+      ? null
+      : p.join(
+          flutterRoot,
+          'bin',
+          'cache',
+          'dart-sdk',
+          'bin',
+          Platform.isWindows ? 'dart.exe' : 'dart',
+        );
+  final executable = bundledDart != null && await File(bundledDart).exists()
+      ? bundledDart
+      : Platform.isWindows
+      ? 'dart.exe'
+      : 'dart';
+  return _CockpitDaemonLaunchConfiguration(
+    executable: executable,
+    daemonArguments: const <String>['pub', 'global', 'run', 'cockpit:cockpitd'],
+    restartArguments: const <String>['pub', 'global', 'run', 'cockpit:cockpit'],
+  );
+}
+
+final class _CockpitDaemonLaunchConfiguration {
+  const _CockpitDaemonLaunchConfiguration({
+    required this.executable,
+    required this.daemonArguments,
+    required this.restartArguments,
+  });
+
+  final String executable;
+  final List<String> daemonArguments;
+  final List<String> restartArguments;
+}
+
+bool _isDartRuntime(String executable) {
+  final name = p.basenameWithoutExtension(executable).toLowerCase();
+  return name == 'dart' || name == 'dartaotruntime';
 }
 
 Future<List<int>> _boundedBytes(

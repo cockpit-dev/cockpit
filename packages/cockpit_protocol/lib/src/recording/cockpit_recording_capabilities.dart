@@ -4,6 +4,7 @@ import 'cockpit_recording_kind.dart';
 import 'cockpit_recording_layer.dart';
 
 final class CockpitRecordingCapabilities {
+  /// Creates a CockpitRecordingCapabilities.
   CockpitRecordingCapabilities({
     required this.supportsNativeRecording,
     this.preferredAcceptanceRecordingKind,
@@ -25,6 +26,7 @@ final class CockpitRecordingCapabilities {
   static const ListEquality<CockpitRecordingLayer> _layerListEquality =
       ListEquality<CockpitRecordingLayer>();
 
+  /// Encodes this CockpitRecordingCapabilities as a JSON object.
   Map<String, Object?> toJson() => {
     'supportsNativeRecording': supportsNativeRecording,
     'preferredAcceptanceRecordingKind': preferredAcceptanceRecordingKind?.name,
@@ -36,6 +38,7 @@ final class CockpitRecordingCapabilities {
     'recordingLimitations': recordingLimitations,
   };
 
+  /// Decodes a CockpitRecordingCapabilities from a JSON object.
   factory CockpitRecordingCapabilities.fromJson(Map<String, Object?> json) {
     final preferredKind = json['preferredAcceptanceRecordingKind'];
 

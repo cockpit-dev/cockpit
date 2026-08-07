@@ -35,6 +35,7 @@ typedef CockpitEnsureVisibleHandler =
       required Duration duration,
       required CockpitRevealAlignment alignment,
       required double padding,
+      required double offset,
     });
 typedef CockpitGestureHandler =
     Future<void> Function(CockpitGestureAction action);

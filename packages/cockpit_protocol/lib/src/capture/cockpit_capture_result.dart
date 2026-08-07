@@ -3,6 +3,7 @@ import 'cockpit_capture_kind.dart';
 import 'cockpit_capture_profile.dart';
 
 final class CockpitCaptureResult {
+  /// Creates a CockpitCaptureResult.
   const CockpitCaptureResult({
     required this.screenshot,
     required this.requestedProfile,

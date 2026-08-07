@@ -11,6 +11,7 @@ enum CockpitMultiTouchPhase {
 }
 
 final class CockpitMultiTouchStep {
+  /// Creates a CockpitMultiTouchStep.
   const CockpitMultiTouchStep({
     required this.pointer,
     required this.phase,
@@ -25,6 +26,7 @@ final class CockpitMultiTouchStep {
   final double dx;
   final double dy;
 
+  /// Encodes this CockpitMultiTouchStep as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
     'pointer': pointer,
     'phase': phase.name,
@@ -33,6 +35,7 @@ final class CockpitMultiTouchStep {
     'dy': dy,
   };
 
+  /// Decodes a CockpitMultiTouchStep from a JSON object.
   factory CockpitMultiTouchStep.fromJson(Map<String, Object?> json) {
     return CockpitMultiTouchStep(
       pointer: json['pointer']! as int,
@@ -59,6 +62,7 @@ final class CockpitMultiTouchStep {
 }
 
 final class CockpitMultiTouchSequence {
+  /// Creates a CockpitMultiTouchSequence.
   const CockpitMultiTouchSequence({required this.steps});
 
   final List<CockpitMultiTouchStep> steps;
@@ -66,10 +70,12 @@ final class CockpitMultiTouchSequence {
   static const ListEquality<CockpitMultiTouchStep> _stepEquality =
       ListEquality<CockpitMultiTouchStep>();
 
+  /// Encodes this CockpitMultiTouchSequence as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
     'steps': steps.map((step) => step.toJson()).toList(growable: false),
   };
 
+  /// Decodes a CockpitMultiTouchSequence from a JSON object.
   factory CockpitMultiTouchSequence.fromJson(Map<String, Object?> json) {
     return CockpitMultiTouchSequence(
       steps: (json['steps'] as List<Object?>? ?? const <Object?>[])

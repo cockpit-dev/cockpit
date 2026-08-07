@@ -215,12 +215,7 @@ final class CockpitWorkerLifecycleOperations {
     final app = await _registry.requireApp(values.id('appId'));
     final sessionId = await _registry.sessionIdForApp(app.appId);
     final session = await _registry.requireSession(sessionId);
-    requireWorkerResourceGrant(
-      context: context,
-      grants: grants,
-      kind: CockpitLeaseResourceKind.session,
-      resourceId: session.resourceId,
-    );
+    _requireSessionGrant(session, context, grants, allowUnleased: true);
     final result = await runWorkerApplicationOperation(
       context: context,
       operation: () => _readApp.read(
@@ -632,23 +627,20 @@ final class CockpitWorkerLifecycleOperations {
   ) async {
     final values = _sessionInput(input);
     final session = await _registry.requireSession(values.id('sessionId'));
-    requireWorkerResourceGrant(
-      context: context,
-      grants: grants,
-      kind: CockpitLeaseResourceKind.session,
-      resourceId: session.resourceId,
-    );
+    _requireSessionGrant(session, context, grants, allowUnleased: true);
     final handle = _developmentHandle(session);
     final result = await runWorkerApplicationOperation(
       context: context,
       operation: () => _developmentRuntime.query(handle),
     );
+    await _registry.updateDevelopmentSession(session.sessionId, result.handle);
     return sanitizer.sanitize(
       <String, Object?>{
         'sessionId': session.sessionId,
         'appId': session.appId,
         'targetId': session.targetId,
         'status': result.status.toJson(),
+        'runtime': _developmentRuntimeIdentity(result.handle),
         'recommendedNextStep': _recommendedDevelopmentNextStep(result.status),
       },
       sessionId: session.sessionId,
@@ -1105,4 +1097,46 @@ final class CockpitWorkerLifecycleOperations {
       );
     }
   }
+}
+
+void _requireSessionGrant(
+  CockpitWorkerSessionBinding session,
+  CockpitWorkspaceOperationContext context,
+  List<CockpitWorkerResourceGrant> grants, {
+  required bool allowUnleased,
+}) {
+  if (allowUnleased && grants.isEmpty) return;
+  requireWorkerResourceGrant(
+    context: context,
+    grants: grants,
+    kind: CockpitLeaseResourceKind.session,
+    resourceId: session.resourceId,
+  );
+}
+
+Map<String, Object?> _developmentRuntimeIdentity(
+  CockpitDevelopmentSessionHandle handle,
+) {
+  final remote = handle.remoteSessionHandle;
+  return <String, Object?>{
+    'developmentSessionId': handle.developmentSessionId,
+    'platform': handle.platform,
+    'deviceId': handle.deviceId,
+    'projectDir': handle.projectDir,
+    'entrypoint': handle.target,
+    'appId': handle.appId,
+    if (remote?.processId != null) 'processId': remote!.processId,
+    if (remote?.effectivePlatformAppId != null)
+      'platformAppId': remote!.effectivePlatformAppId,
+    if (remote != null)
+      'bridge': <String, Object?>{
+        'host': remote.host,
+        'hostPort': remote.hostPort,
+        'devicePort': remote.devicePort,
+        'baseUrl': remote.baseUrl,
+      },
+    'vmServiceAvailable': handle.vmServiceUri != null,
+    'launchedAt': handle.launchedAt.toUtc().toIso8601String(),
+    'reloadGeneration': handle.reloadGeneration,
+  };
 }

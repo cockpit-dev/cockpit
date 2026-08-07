@@ -16,12 +16,14 @@ enum CockpitRunEventEntityKind {
   report('report'),
   artifact('artifact');
 
+  /// Creates a CockpitRunEventEntityKind.
   const CockpitRunEventEntityKind(this.wireName);
 
   final String wireName;
 }
 
 final class CockpitRunEvent {
+  /// Creates a CockpitRunEvent.
   CockpitRunEvent({
     required this.eventId,
     required this.sequence,
@@ -138,6 +140,7 @@ final class CockpitRunEvent {
   final CockpitFailure? failure;
   final List<CockpitArtifactReference> artifacts;
 
+  /// Encodes this CockpitRunEvent as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
     'eventId': eventId,
     'sequence': sequence,
@@ -166,6 +169,7 @@ final class CockpitRunEvent {
       'artifacts': artifacts.map((artifact) => artifact.toJson()).toList(),
   };
 
+  /// Decodes a CockpitRunEvent from a JSON object.
   factory CockpitRunEvent.fromJson(
     Object? value, {
     String path = r'$',
@@ -364,6 +368,7 @@ final class CockpitRunEvent {
 }
 
 final class CockpitEventCursor {
+  /// Creates a CockpitEventCursor.
   CockpitEventCursor({this.afterSequence = 0, this.lastEventId}) {
     if (afterSequence < 0) {
       throw const FormatException('afterSequence cannot be negative.');
@@ -376,11 +381,13 @@ final class CockpitEventCursor {
   final int afterSequence;
   final String? lastEventId;
 
+  /// Encodes this CockpitEventCursor as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
     'afterSequence': afterSequence,
     if (lastEventId != null) 'lastEventId': lastEventId,
   };
 
+  /// Decodes a CockpitEventCursor from a JSON object.
   factory CockpitEventCursor.fromJson(Object? value, {String path = r'$'}) {
     final json = CockpitFoundationValueReader.object(value, path);
     CockpitFoundationValueReader.keys(
@@ -406,6 +413,7 @@ final class CockpitEventCursor {
 }
 
 final class CockpitEventReplayBoundary {
+  /// Creates a CockpitEventReplayBoundary.
   CockpitEventReplayBoundary({
     required this.requestedAfterSequence,
     required this.earliestAvailableSequence,
@@ -424,6 +432,7 @@ final class CockpitEventReplayBoundary {
 
   bool get hasGap => requestedAfterSequence + 1 < earliestAvailableSequence;
 
+  /// Encodes this CockpitEventReplayBoundary as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
     'requestedAfterSequence': requestedAfterSequence,
     'earliestAvailableSequence': earliestAvailableSequence,
@@ -431,6 +440,7 @@ final class CockpitEventReplayBoundary {
     'hasGap': hasGap,
   };
 
+  /// Decodes a CockpitEventReplayBoundary from a JSON object.
   factory CockpitEventReplayBoundary.fromJson(
     Object? value, {
     String path = r'$',

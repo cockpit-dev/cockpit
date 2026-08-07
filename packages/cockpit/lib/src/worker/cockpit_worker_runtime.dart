@@ -6,6 +6,7 @@ import 'package:cockpit_protocol/cockpit_protocol.dart';
 import 'package:path/path.dart' as p;
 
 import '../development/cockpit_development_session_status.dart';
+import '../development/cockpit_vm_network_profiler.dart';
 import '../foundation/cockpit_home.dart';
 import '../foundation/cockpit_locked_json_store.dart';
 import '../foundation/cockpit_permissions.dart';
@@ -50,7 +51,6 @@ final class CockpitWorkerRuntimeConfiguration {
     required this.authorizationMode,
     required Iterable<String> supportedFeatures,
     required Iterable<String> allowedEnvironmentSecretNames,
-    this.allowAllEnvironmentSecrets = false,
     Iterable<CockpitTestTargetEnvironment> allowedTargetEnvironments =
         const <CockpitTestTargetEnvironment>[],
     Iterable<CockpitTestSafetyEffect> allowedSafetyEffects =
@@ -76,18 +76,17 @@ final class CockpitWorkerRuntimeConfiguration {
     _validateUniqueIds(this.supportedFeatures, 'supportedFeatures');
     _validateEnvironmentNames(this.allowedEnvironmentSecretNames);
     final yolo = authorizationMode == CockpitAuthorizationMode.yolo;
-    if (allowAllEnvironmentSecrets != yolo ||
-        yolo &&
-            (this.allowedTargetEnvironments.length !=
-                    CockpitTestTargetEnvironment.values.length ||
-                !this.allowedTargetEnvironments.containsAll(
-                  CockpitTestTargetEnvironment.values,
-                ) ||
-                this.allowedSafetyEffects.length !=
-                    CockpitTestSafetyEffect.values.length ||
-                !this.allowedSafetyEffects.containsAll(
-                  CockpitTestSafetyEffect.values,
-                ))) {
+    if (yolo &&
+        (this.allowedTargetEnvironments.length !=
+                CockpitTestTargetEnvironment.values.length ||
+            !this.allowedTargetEnvironments.containsAll(
+              CockpitTestTargetEnvironment.values,
+            ) ||
+            this.allowedSafetyEffects.length !=
+                CockpitTestSafetyEffect.values.length ||
+            !this.allowedSafetyEffects.containsAll(
+              CockpitTestSafetyEffect.values,
+            ))) {
       throw const FormatException(
         'Worker authorization capabilities do not match its mode.',
       );
@@ -104,13 +103,12 @@ final class CockpitWorkerRuntimeConfiguration {
       ..addOption('worker-owner-id', mandatory: true)
       ..addOption('process-start-identity', mandatory: true)
       ..addOption(
-        'authorization-mode',
+        'auth',
         mandatory: true,
         allowed: CockpitAuthorizationMode.values.map((value) => value.name),
       )
       ..addMultiOption('feature')
       ..addMultiOption('allow-env-secret')
-      ..addFlag('allow-all-env-secrets', negatable: false)
       ..addMultiOption('allow-target-environment')
       ..addMultiOption('allow-safety-effect');
     final parsed = parser.parse(arguments);
@@ -123,11 +121,10 @@ final class CockpitWorkerRuntimeConfiguration {
       workerOwnerId: parsed.option('worker-owner-id')!,
       processStartIdentity: parsed.option('process-start-identity')!,
       authorizationMode: CockpitAuthorizationMode.values.byName(
-        parsed.option('authorization-mode')!,
+        parsed.option('auth')!,
       ),
       supportedFeatures: parsed.multiOption('feature'),
       allowedEnvironmentSecretNames: parsed.multiOption('allow-env-secret'),
-      allowAllEnvironmentSecrets: parsed.flag('allow-all-env-secrets'),
       allowedTargetEnvironments: _parseEnumAllowlist(
         parsed.multiOption('allow-target-environment'),
         CockpitTestTargetEnvironment.values,
@@ -151,7 +148,6 @@ final class CockpitWorkerRuntimeConfiguration {
   final CockpitAuthorizationMode authorizationMode;
   final List<String> supportedFeatures;
   final List<String> allowedEnvironmentSecretNames;
-  final bool allowAllEnvironmentSecrets;
   final Set<CockpitTestTargetEnvironment> allowedTargetEnvironments;
   final Set<CockpitTestSafetyEffect> allowedSafetyEffects;
 }
@@ -203,7 +199,9 @@ final class CockpitWorkerRuntime {
         'suite.run': CockpitWorkerOperationRecoveryPolicy.retryPrepared,
       },
     );
+    final networkProfiler = CockpitVmNetworkProfiler();
     final developmentRuntime = CockpitWorkerDevelopmentSessionRuntime(
+      networkProfiler: networkProfiler,
       logger: (message) => _logger.log(
         'info',
         'Development session runtime.',
@@ -320,6 +318,7 @@ final class CockpitWorkerRuntime {
       developmentRuntime: developmentRuntime,
       processManager: childProcessManager,
       resultSanitizer: resultSanitizer,
+      networkProfiler: networkProfiler,
     );
     final secretResolver = _secretResolver(_logger.redactor);
     final caseAdapters = CockpitCaseRunAdapterFactory(
@@ -417,10 +416,7 @@ final class CockpitWorkerRuntime {
       ],
     );
     Future<void> shutdownRuntime() async {
-      await Future.wait<void>(<Future<void>>[
-        developmentRuntime.dispose(),
-        registry.invalidateDevelopmentSessions(),
-      ]).timeout(const Duration(seconds: 2));
+      await developmentRuntime.dispose().timeout(const Duration(seconds: 3));
     }
 
     server = CockpitWorkerServer(
@@ -430,6 +426,7 @@ final class CockpitWorkerRuntime {
       supportedFeatures: configuration.supportedFeatures,
       operations: router,
       events: eventStore,
+      artifacts: registry,
       onInitialized: () async {
         await eventStore.resume();
         unawaited(
@@ -478,17 +475,16 @@ final class CockpitWorkerRuntime {
     CockpitWorkerLogRedactor redactor,
   ) {
     final allowedNames = configuration.allowedEnvironmentSecretNames;
-    final allowAll = configuration.allowAllEnvironmentSecrets;
     return CockpitAllowedWorkerSecretResolver(
       providers: <CockpitWorkerSecretProvider>[
-        if (allowAll || allowedNames.isNotEmpty)
+        if (allowedNames.isNotEmpty)
           CockpitEnvironmentSecretProvider(
             allowedNames: allowedNames,
-            allowAllNames: allowAll,
+            allowAllNames: false,
             environment: _environment,
           ),
       ],
-      allowedProviderIds: !allowAll && allowedNames.isEmpty
+      allowedProviderIds: allowedNames.isEmpty
           ? const <String>[]
           : const <String>['env'],
       redactor: redactor,

@@ -115,6 +115,7 @@ int _damerauLevenshteinDistance(List<int> left, List<int> right) {
 }
 
 final class CockpitLocator {
+  /// Creates a CockpitLocator.
   const CockpitLocator({
     this.cockpitId,
     this.semanticId,
@@ -205,6 +206,7 @@ final class CockpitLocator {
     return Map<String, String>.unmodifiable(map);
   }
 
+  /// Encodes this CockpitLocator as a JSON object.
   Map<String, Object?> toJson() {
     final signals = signalMap;
     return <String, Object?>{
@@ -224,6 +226,7 @@ final class CockpitLocator {
     };
   }
 
+  /// Decodes a CockpitLocator from a JSON object.
   factory CockpitLocator.fromJson(Map<String, Object?> json) {
     if (json.containsKey('kind') || json.containsKey('value')) {
       throw const FormatException(

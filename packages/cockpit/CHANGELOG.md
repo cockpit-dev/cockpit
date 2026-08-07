@@ -1,5 +1,30 @@
 # Changelog
 
+## 3.0.0
+
+- Replaced the multi-identity development workflow with `cockpit dev` and one
+  checkout-scoped numeric session handle for start, status, UI control,
+  network, viewport, screenshot, reload, restart, diagnosis, and stop.
+- Added exact AI-first UI locators, nested scrolling with alignment and signed
+  offsets, platform-aware screenshots, responsive viewport control, and
+  bounded diagnostics with artifact-path-only evidence output.
+- Added newest-first network indexes, request/response body artifacts,
+  credential masking with opt-in raw retrieval, SSE continuation state, and
+  WebSocket frame summaries.
+- Made minimal LON the default output and promoted LON, JSON, and YAML to equal
+  structured input/output formats; `--verbosity` selects minimal, standard, or
+  full response density.
+- Added operation-specific default timeouts and a consistent `--timeout` on
+  every bounded executable command, with cancellable timeout errors that leave
+  owned development sessions reusable.
+- Added concise `op`, `session`, `case`, `suite`, `run`, and `artifact`
+  command paths with schema-driven inputs and durable run/report retrieval.
+- Fixed macOS stop cleanup, daemon/session reconnection, screenshot fallback,
+  report artifact handling, and run report export performance.
+- Removed the 2.x command aliases, duplicate generic operation entrypoints,
+  long-form output flags, and legacy session identifiers instead of carrying
+  divergent compatibility behavior.
+
 ## 2.2.1
 
 - Fixed valid retirement responses being rejected after `workspace unregister`

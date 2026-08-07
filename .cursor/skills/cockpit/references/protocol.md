@@ -1,4 +1,4 @@
-# Cockpit 2.0 Protocol Map
+# Cockpit 3.0 Protocol Map
 
 This is the skill-local authority map. Do not resolve any contract through a
 Cockpit source checkout.
@@ -17,7 +17,7 @@ Cockpit source checkout.
 | Need | Authority |
 | --- | --- |
 | Current CLI flags | `cockpit help <command> <subcommand>` |
-| Available operation and input | `operation list`, then the returned descriptor |
+| Available operation and input | `op list --kind KIND`, then the returned descriptor |
 | Live target capability | `target inspect --profile minimal|inspect` |
 | Case/suite/project syntax | [`cockpit.test.v2.schema.json`](cockpit.test.v2.schema.json) |
 | Authorization | `daemon policy show` and `daemon status` |
@@ -34,7 +34,7 @@ version and current target can actually do.
 | Authorization | `daemon policy show|validate|apply` |
 | Roots/workspaces | `root add|list|remove`, `workspace register|list|documents|rebind|unregister` |
 | Targets | `target discover|register|list|get|launch|inspect` |
-| Operations | `operation list|run` |
+| Operations | `op list|run` |
 | Cases | `case validate|list|run` |
 | Suites | `suite validate|list|run|report` |
 | Runs | `run get|events|cancel` |
@@ -78,9 +78,9 @@ is target-scoped so concurrent devices do not overwrite each other.
 - Trust advertised `executionMode`, `defaultTimeoutMs`, and
   `maximumTimeoutMs`.
 - Synchronous operations block. Job operations return a durable `runId`.
-- A synchronous invocation uses one relative `timeoutMs` or absolute
-  `deadline`, never both.
-- Case and suite `--timeout-ms` values are overall run budgets. Step, command,
+- Omit the CLI `--timeout` default. Override it only with a bounded duration
+  such as `90s`, `20m`, or `2h`; Cockpit derives the operation deadline.
+- Case and suite `--timeout` values are overall run budgets. Step, command,
   cleanup, launch, and operation budgets remain independent inner limits.
 - Submission and mutation idempotency keys are stable per logical action.
 - SSE sequence numbers are monotonic and resumable.
@@ -96,17 +96,19 @@ secondary native drivers. Read the sanitized secondary driver profile from
 
 ## Output Rules
 
-`auto`/`ai` stdout at `--detail minimal` is the normal low-token format.
-Command-specific presenters remove repeated identities and share collection
-field headers. Text, `json`, and `jsonl` all honor
-`--detail minimal|standard|full`; select `full` only for the complete object.
-For a complete non-binary response, use
-`--detail full --stdout-format json --output <path>` so stdout is only a bounded
-path/size/SHA-256 receipt.
+Minimal LON is the normal low-token output. Omit `--verbosity minimal` and
+`--format lon`; defaults never belong in normal commands. Command-specific
+presenters remove repeated identities and share collection field headers.
+LON, JSON, YAML, and JSONL all honor `--verbosity minimal|standard|full`;
+verbosity changes information density, not operation accuracy. Select `full`
+only for the complete object. For a complete non-binary response, use
+`--verbosity full --format json --output <path>` so stdout is only the verified
+path.
 
 `artifact read` requires `--output`; it verifies media type, byte size, and
-SHA-256 before committing the file. Never place binary data or Base64 in
-terminal output.
+SHA-256 internally before committing the file, but stdout contains only the
+path. Never place binary data, Base64, hashes, or decision-irrelevant byte
+counts in terminal output.
 
 ## MCP And Third-Party Clients
 

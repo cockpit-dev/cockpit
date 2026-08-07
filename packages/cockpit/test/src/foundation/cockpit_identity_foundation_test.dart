@@ -1,10 +1,12 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
+import 'dart:math';
 
 import 'package:cockpit/src/foundation/cockpit_canonical_paths.dart';
 import 'package:cockpit/src/foundation/cockpit_filesystem_identity.dart';
 import 'package:cockpit/src/foundation/cockpit_home.dart';
+import 'package:cockpit/src/foundation/cockpit_ids.dart';
 import 'package:cockpit/src/foundation/cockpit_locked_json_store.dart';
 import 'package:cockpit/src/foundation/cockpit_permissions.dart';
 import 'package:cockpit/src/foundation/cockpit_windows_directory_authority.dart';
@@ -13,6 +15,31 @@ import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 
 void main() {
+  group('secure identifiers', () {
+    test('use short typed Base62 resource tokens without collisions', () {
+      final idGenerator = CockpitSecureIdGenerator(random: Random(7));
+      final identifiers = <String>{
+        for (final kind in CockpitIdKind.values) idGenerator.next(kind),
+      };
+      expect(identifiers, hasLength(CockpitIdKind.values.length));
+      for (final kind in CockpitIdKind.values) {
+        expect(
+          idGenerator.next(kind),
+          matches(RegExp('^${kind.prefix}-[A-Za-z0-9]{16}\$')),
+        );
+      }
+
+      final tokenGenerator = CockpitSecureTokenGenerator(random: Random(11));
+      final resourceIds = <String>{
+        for (var index = 0; index < 4096; index += 1)
+          tokenGenerator.nextIdToken(),
+      };
+      expect(resourceIds, hasLength(4096));
+      expect(resourceIds, everyElement(matches(RegExp(r'^[A-Za-z0-9]{16}$'))));
+      expect(tokenGenerator.nextToken(), hasLength(43));
+    });
+  });
+
   group('cockpit home', () {
     test('resolves explicit and platform user-state locations', () {
       expect(
@@ -90,6 +117,22 @@ void main() {
       },
       skip: Platform.isWindows,
     );
+
+    test('syncs individual POSIX files and directories', () async {
+      final temporary = await Directory.systemTemp.createTemp('cockpit-sync-');
+      addTearDown(() => temporary.delete(recursive: true));
+      final file = File(p.join(temporary.path, 'state.json'));
+      await file.writeAsString('{"ready":true}\n', flush: true);
+
+      final platform = Platform.isMacOS
+          ? CockpitHostPlatform.macos
+          : CockpitHostPlatform.linux;
+      final syncer = CockpitSystemDirectorySyncer(platform);
+      await syncer.sync(file.path);
+      await syncer.sync(temporary.path);
+
+      expect(await file.readAsString(), '{"ready":true}\n');
+    }, skip: Platform.isWindows);
   });
 
   group('locked atomic JSON', () {

@@ -466,6 +466,25 @@ void main() {
     expect(requests.first.physicalKey, PhysicalKeyboardKey.tab);
   });
 
+  test('fails when the current focus tree does not handle a key', () async {
+    final executor = InAppCockpitCommandExecutor(
+      registry: CockpitTargetRegistry(routeName: '/editor'),
+      keyEventHandler: (_, _) async => false,
+    );
+
+    final result = await executor.execute(
+      CockpitCommand(
+        commandId: 'cmd-unhandled-key',
+        commandType: CockpitCommandType.sendKeyEvent,
+        parameters: const <String, Object?>{'logicalKey': 'escape'},
+      ),
+    );
+
+    expect(result.success, isFalse);
+    expect(result.error?.code, CockpitCommandError.assertionFailedCode);
+    expect(result.error?.message, contains('was not handled'));
+  });
+
   testWidgets('default key dispatch reaches the focused widget immediately', (
     tester,
   ) async {
@@ -560,6 +579,34 @@ void main() {
     expect(increaseResult.success, isTrue);
     expect(dismissResult.success, isTrue);
     expect(increased, 1);
+    expect(dismissed, 1);
+  });
+
+  test('dismiss resolves the only visible dismissible target', () async {
+    final registry = CockpitTargetRegistry(routeName: '/dialog');
+    var dismissed = 0;
+    registry.register(
+      CockpitTarget(
+        registrationId: 'dialog-barrier',
+        routeName: '/dialog',
+        supportedCommands: const <CockpitCommandType>{
+          CockpitCommandType.dismiss,
+        },
+        onSemanticDismiss: () {
+          dismissed += 1;
+        },
+      ),
+    );
+    final executor = InAppCockpitCommandExecutor(registry: registry);
+
+    final result = await executor.execute(
+      CockpitCommand(
+        commandId: 'cmd-dismiss-current',
+        commandType: CockpitCommandType.dismiss,
+      ),
+    );
+
+    expect(result.success, isTrue);
     expect(dismissed, 1);
   });
 
@@ -1377,6 +1424,90 @@ void main() {
       expect(gestureCount, 0);
     },
   );
+
+  test('tap auto activation rejects passive targets', () async {
+    final registry = CockpitTargetRegistry(routeName: '/dashboard');
+    var gestureCount = 0;
+
+    registry.register(
+      CockpitTarget(
+        registrationId: 'operations-metric',
+        text: 'Operations',
+        routeName: '/dashboard',
+        geometryProvider: () => const CockpitTargetGeometry(
+          left: 20,
+          top: 120,
+          width: 220,
+          height: 48,
+          viewportLeft: 0,
+          viewportTop: 0,
+          viewportWidth: 430,
+          viewportHeight: 800,
+          viewId: 1,
+        ),
+      ),
+    );
+
+    final executor = InAppCockpitCommandExecutor(
+      registry: registry,
+      gestureHandler: (_) async {
+        gestureCount += 1;
+      },
+    );
+    final result = await executor.execute(
+      CockpitCommand(
+        commandId: 'tap-operations-metric',
+        commandType: CockpitCommandType.tap,
+        locator: const CockpitLocator(text: 'Operations'),
+      ),
+    );
+
+    expect(result.success, isFalse);
+    expect(result.error?.code, CockpitCommandError.unsupportedCapabilityCode);
+    expect(gestureCount, 0);
+  });
+
+  test('tap explicit gesture remains available for passive targets', () async {
+    final registry = CockpitTargetRegistry(routeName: '/dashboard');
+    var gestureCount = 0;
+
+    registry.register(
+      CockpitTarget(
+        registrationId: 'operations-metric',
+        text: 'Operations',
+        routeName: '/dashboard',
+        geometryProvider: () => const CockpitTargetGeometry(
+          left: 20,
+          top: 120,
+          width: 220,
+          height: 48,
+          viewportLeft: 0,
+          viewportTop: 0,
+          viewportWidth: 430,
+          viewportHeight: 800,
+          viewId: 1,
+        ),
+      ),
+    );
+
+    final executor = InAppCockpitCommandExecutor(
+      registry: registry,
+      gestureHandler: (_) async {
+        gestureCount += 1;
+      },
+    );
+    final result = await executor.execute(
+      CockpitCommand(
+        commandId: 'gesture-operations-metric',
+        commandType: CockpitCommandType.tap,
+        locator: const CockpitLocator(text: 'Operations'),
+        parameters: const <String, Object?>{'activation': 'gesture'},
+      ),
+    );
+
+    expect(result.success, isTrue, reason: result.error?.message);
+    expect(gestureCount, 1);
+  });
 
   test(
     'tap auto activation prefers route-committing direct callback over gesture',
@@ -3952,6 +4083,117 @@ void main() {
     },
   );
 
+  test('target resolution refreshes live discovery before resolving', () async {
+    final registry = CockpitTargetRegistry(routeName: '/actions');
+    var tapped = false;
+    var refreshed = false;
+    final executor = InAppCockpitCommandExecutor(
+      registry: registry,
+      snapshotProvider: ({options = const CockpitSnapshotOptions()}) {
+        if (!refreshed) {
+          refreshed = true;
+          registry.register(
+            CockpitTarget(
+              registrationId: 'project-create',
+              cockpitId: 'project.create',
+              routeName: '/actions',
+              supportedCommands: const <CockpitCommandType>{
+                CockpitCommandType.tap,
+              },
+              onTap: () {
+                tapped = true;
+              },
+            ),
+          );
+        }
+        return registry.snapshot();
+      },
+      postActionSettler: () async {},
+      interactionPolicy: const CockpitInteractionPolicy(
+        targetResolveTimeout: Duration.zero,
+        targetResolvePollInterval: Duration.zero,
+        uiIdleQuietWindow: Duration.zero,
+        uiIdleTimeout: Duration.zero,
+        preActionVisualDelay: Duration.zero,
+        actionCommitTimeout: Duration.zero,
+        actionVisualDelay: Duration.zero,
+        routeTransitionVisualDelay: Duration.zero,
+        recordingPreActionVisualDelay: Duration.zero,
+        recordingActionVisualDelay: Duration.zero,
+      ),
+    );
+
+    final result = await executor.execute(
+      CockpitCommand(
+        commandId: 'tap-refreshed-target',
+        commandType: CockpitCommandType.tap,
+        locator: const CockpitLocator(cockpitId: 'project.create'),
+      ),
+    );
+
+    expect(result.success, isTrue);
+    expect(refreshed, isTrue);
+    expect(tapped, isTrue);
+  });
+
+  test(
+    'scrollUntilVisible refreshes visible text before starting a search',
+    () async {
+      final registry = CockpitTargetRegistry(routeName: '/actions');
+      var refreshed = false;
+      var scrollCount = 0;
+      final executor = InAppCockpitCommandExecutor(
+        registry: registry,
+        snapshotProvider: ({options = const CockpitSnapshotOptions()}) {
+          if (!refreshed) {
+            refreshed = true;
+            registry.register(
+              const CockpitTarget(
+                registrationId: 'idempotency-description',
+                text:
+                    'The Idempotency key rides the invocation envelope, '
+                    'never this object.',
+                routeName: '/actions',
+              ),
+            );
+          }
+          return registry.snapshot();
+        },
+        postActionSettler: () async {},
+        scrollStepHandler:
+            ({
+              required reverse,
+              required viewportFraction,
+              scrollableKey,
+              targetLocator,
+              scrollableLocator,
+              required duration,
+              required gestureProfile,
+              required continuous,
+              required postScrollEnsureVisible,
+            }) async {
+              scrollCount += 1;
+              return const CockpitScrollStepResult(didScroll: true);
+            },
+      );
+
+      final result = await executor.execute(
+        CockpitCommand(
+          commandId: 'scroll-visible-description',
+          commandType: CockpitCommandType.scrollUntilVisible,
+          locator: const CockpitLocator(
+            text: 'Idempotency key',
+            matchMode: CockpitTextMatchMode.contains,
+          ),
+        ),
+      );
+
+      expect(result.success, isTrue);
+      expect(refreshed, isTrue);
+      expect(scrollCount, 0);
+    },
+  );
+
   testWidgets('scrollUntilVisible includes after-action screenshot evidence', (
     tester,
   ) async {
@@ -4397,6 +4639,301 @@ void main() {
       expect(result.success, isTrue);
       expect(result.locatorResolution?.matchedKind, CockpitLocatorKind.key);
       expect(result.locatorResolution?.matchedValue, 'settings-item-18');
+    },
+  );
+
+  test(
+    'scrollUntilVisible gives the opposite direction a complete search budget',
+    () async {
+      final registry = CockpitTargetRegistry(routeName: '/list');
+      var forwardAttempts = 0;
+      var reverseAttempts = 0;
+
+      final executor = InAppCockpitCommandExecutor(
+        registry: registry,
+        postActionSettler: () async {},
+        scrollStepHandler:
+            ({
+              required reverse,
+              required viewportFraction,
+              scrollableKey,
+              targetLocator,
+              scrollableLocator,
+              required duration,
+              required gestureProfile,
+              required continuous,
+              required postScrollEnsureVisible,
+            }) async {
+              if (!reverse) {
+                forwardAttempts += 1;
+                if (forwardAttempts < 3) {
+                  return CockpitScrollStepResult(
+                    didScroll: true,
+                    pixelsBefore: (forwardAttempts - 1) * 100,
+                    pixelsAfter: forwardAttempts * 100,
+                    minScrollExtent: 0,
+                    maxScrollExtent: 200,
+                  );
+                }
+                return const CockpitScrollStepResult(
+                  didScroll: false,
+                  pixelsBefore: 200,
+                  pixelsAfter: 200,
+                  nextPixels: 200,
+                  minScrollExtent: 0,
+                  maxScrollExtent: 200,
+                );
+              }
+
+              reverseAttempts += 1;
+              if (reverseAttempts == 2) {
+                registry.register(
+                  const CockpitTarget(
+                    registrationId: 'target-above',
+                    keyValue: 'target-above',
+                    routeName: '/list',
+                  ),
+                );
+              }
+              return CockpitScrollStepResult(
+                didScroll: true,
+                pixelsBefore: 200 - ((reverseAttempts - 1) * 100),
+                pixelsAfter: 200 - (reverseAttempts * 100),
+                minScrollExtent: 0,
+                maxScrollExtent: 200,
+              );
+            },
+      );
+
+      final result = await executor.execute(
+        CockpitCommand(
+          commandId: 'search-both-directions',
+          commandType: CockpitCommandType.scrollUntilVisible,
+          locator: const CockpitLocator(key: 'target-above'),
+          parameters: const <String, Object?>{'maxScrolls': 3},
+        ),
+      );
+
+      expect(result.success, isTrue);
+      expect(forwardAttempts, 3);
+      expect(reverseAttempts, 2);
+    },
+  );
+
+  test(
+    'scrollUntilVisible searches the next scrollable candidate independently',
+    () async {
+      final registry = CockpitTargetRegistry(routeName: '/split');
+      final attemptedCandidates = <int>[];
+
+      final executor = InAppCockpitCommandExecutor(
+        registry: registry,
+        postActionSettler: () async {},
+        scrollStepHandler:
+            ({
+              required reverse,
+              required viewportFraction,
+              scrollableKey,
+              targetLocator,
+              scrollableLocator,
+              required duration,
+              required gestureProfile,
+              required continuous,
+              required postScrollEnsureVisible,
+            }) async {
+              final candidateIndex = scrollableLocator?.index ?? 0;
+              attemptedCandidates.add(candidateIndex);
+              if (candidateIndex == 0) {
+                return const CockpitScrollStepResult(
+                  didScroll: false,
+                  scrollableCandidateIndex: 0,
+                  scrollableCandidateCount: 2,
+                  pixelsBefore: 0,
+                  pixelsAfter: 0,
+                  nextPixels: 0,
+                  minScrollExtent: 0,
+                  maxScrollExtent: 0,
+                );
+              }
+
+              registry.register(
+                const CockpitTarget(
+                  registrationId: 'detail-target',
+                  keyValue: 'detail-target',
+                  routeName: '/split',
+                ),
+              );
+              return const CockpitScrollStepResult(
+                didScroll: true,
+                scrollableCandidateIndex: 1,
+                scrollableCandidateCount: 2,
+              );
+            },
+      );
+
+      final result = await executor.execute(
+        CockpitCommand(
+          commandId: 'search-split-pane',
+          commandType: CockpitCommandType.scrollUntilVisible,
+          locator: const CockpitLocator(key: 'detail-target'),
+          parameters: const <String, Object?>{'maxScrolls': 2},
+        ),
+      );
+
+      expect(result.success, isTrue);
+      expect(attemptedCandidates, <int>[0, 0, 1]);
+      expect(result.locatorResolution?.matchedValue, 'detail-target');
+    },
+  );
+
+  testWidgets(
+    'scrollUntilVisible reveals a lazy nested target through every ancestor viewport',
+    (tester) async {
+      final registry = CockpitTargetRegistry(routeName: '/nested-search');
+      final outerController = ScrollController();
+      final innerController = ScrollController();
+      addTearDown(outerController.dispose);
+      addTearDown(innerController.dispose);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: SizedBox(
+            width: 320,
+            height: 320,
+            child: CockpitSurface(
+              routeName: '/nested-search',
+              registry: registry,
+              child: SingleChildScrollView(
+                key: const ValueKey<String>('outer-nested'),
+                controller: outerController,
+                child: Column(
+                  children: <Widget>[
+                    const SizedBox(height: 560),
+                    SizedBox(
+                      height: 200,
+                      child: ListView.builder(
+                        key: const ValueKey<String>('inner-nested'),
+                        controller: innerController,
+                        itemCount: 20,
+                        itemBuilder: (context, index) {
+                          return SizedBox(
+                            key: ValueKey<String>('nested-item-$index'),
+                            height: 72,
+                            child: Text('Nested item $index'),
+                          );
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: 360),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final surfaceState = tester.state<CockpitSurfaceState>(
+        find.byType(CockpitSurface),
+      );
+      final attemptedScrollables = <String>[];
+      final executor = InAppCockpitCommandExecutor(
+        registry: registry,
+        snapshotProvider: surfaceState.snapshot,
+        postActionSettler: () async {
+          await tester.pump();
+          await tester.pump();
+        },
+        interactionPolicy: const CockpitInteractionPolicy(
+          preActionVisualDelay: Duration.zero,
+          actionVisualDelay: Duration.zero,
+          routeTransitionVisualDelay: Duration.zero,
+          recordingActionVisualDelay: Duration.zero,
+          uiIdleQuietWindow: Duration.zero,
+          uiIdleTimeout: Duration.zero,
+        ),
+        ensureVisibleHandler:
+            ({
+              required locator,
+              required duration,
+              required alignment,
+              required padding,
+              required offset,
+            }) {
+              return surfaceState.ensureLocatorVisible(
+                locator,
+                duration: duration,
+                alignment: alignment,
+                padding: padding,
+                offset: offset,
+              );
+            },
+        scrollStepHandler:
+            ({
+              required reverse,
+              required viewportFraction,
+              scrollableKey,
+              targetLocator,
+              scrollableLocator,
+              required duration,
+              required gestureProfile,
+              required continuous,
+              required postScrollEnsureVisible,
+            }) async {
+              final step = await surfaceState.scrollByViewport(
+                reverse: reverse,
+                viewportFraction: viewportFraction,
+                scrollableKey: scrollableKey,
+                targetLocator: targetLocator,
+                scrollableLocator: scrollableLocator,
+                duration: duration,
+                gestureProfile: gestureProfile,
+                continuous: continuous,
+                postScrollEnsureVisible: postScrollEnsureVisible,
+              );
+              if (step.scrollableKey case final key?) {
+                attemptedScrollables.add(key);
+              }
+              return step;
+            },
+      );
+
+      final result = await executor.execute(
+        CockpitCommand(
+          commandId: 'search-nested-scrollables',
+          commandType: CockpitCommandType.scrollUntilVisible,
+          locator: const CockpitLocator(key: 'nested-item-14'),
+          parameters: const <String, Object?>{
+            'maxScrolls': 10,
+            'viewportFraction': 0.8,
+          },
+        ),
+      );
+
+      expect(
+        result.success,
+        isTrue,
+        reason: '${result.error?.message}\n${result.error?.details}',
+      );
+      expect(outerController.offset, greaterThan(0));
+      expect(innerController.offset, greaterThan(0));
+      expect(attemptedScrollables, isNotEmpty);
+      expect(attemptedScrollables.first, 'inner-nested');
+
+      final outerRect = tester.getRect(
+        find.byKey(const ValueKey<String>('outer-nested')),
+      );
+      final innerRect = tester.getRect(
+        find.byKey(const ValueKey<String>('inner-nested')),
+      );
+      final targetRect = tester.getRect(
+        find.byKey(const ValueKey<String>('nested-item-14')),
+      );
+      expect(targetRect.top, greaterThanOrEqualTo(outerRect.top - 0.5));
+      expect(targetRect.bottom, lessThanOrEqualTo(outerRect.bottom + 0.5));
+      expect(targetRect.top, greaterThanOrEqualTo(innerRect.top - 0.5));
+      expect(targetRect.bottom, lessThanOrEqualTo(innerRect.bottom + 0.5));
     },
   );
 
@@ -5009,6 +5546,7 @@ void main() {
               required duration,
               required alignment,
               required padding,
+              required offset,
             }) async {
               revealCount += 1;
               capturedAlignment = alignment;
@@ -5065,6 +5603,7 @@ void main() {
             required duration,
             required alignment,
             required padding,
+            required offset,
           }) async {
             revealCount += 1;
             return true;
@@ -5086,11 +5625,12 @@ void main() {
   });
 
   test(
-    'scrollUntilVisible forwards reveal alignment parameters to ensureVisible',
+    'scrollUntilVisible forwards reveal placement to ensureVisible',
     () async {
       final registry = CockpitTargetRegistry(routeName: '/list');
       CockpitRevealAlignment? capturedAlignment;
       double? capturedPadding;
+      double? capturedOffset;
 
       final executor = InAppCockpitCommandExecutor(
         registry: registry,
@@ -5114,9 +5654,11 @@ void main() {
               required duration,
               required alignment,
               required padding,
+              required offset,
             }) async {
               capturedAlignment = alignment;
               capturedPadding = padding;
+              capturedOffset = offset;
               registry.register(
                 CockpitTarget(
                   registrationId: 'task-39',
@@ -5136,6 +5678,7 @@ void main() {
           parameters: const <String, Object?>{
             'revealAlignment': 'center',
             'revealPaddingPx': 36,
+            'revealOffsetPx': 18,
           },
         ),
       );
@@ -5143,6 +5686,7 @@ void main() {
       expect(result.success, isTrue);
       expect(capturedAlignment, CockpitRevealAlignment.center);
       expect(capturedPadding, 36);
+      expect(capturedOffset, 18);
     },
   );
 
@@ -5182,6 +5726,7 @@ void main() {
               required duration,
               required alignment,
               required padding,
+              required offset,
             }) async {
               capturedAlignment = alignment;
               return true;
@@ -5240,6 +5785,7 @@ void main() {
               required duration,
               required alignment,
               required padding,
+              required offset,
             }) async {
               if (scrollCount == 0) {
                 return false;
@@ -5306,6 +5852,7 @@ void main() {
               required duration,
               required alignment,
               required padding,
+              required offset,
             }) async {
               ensureVisibleCount += 1;
               registry.unregister('due-today');

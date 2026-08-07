@@ -2,12 +2,14 @@ import 'cockpit_test_case.dart';
 import 'cockpit_test_value_reader.dart';
 
 sealed class CockpitTestSuiteCaseSource {
+  /// Creates a CockpitTestSuiteCaseSource.
   const CockpitTestSuiteCaseSource();
 
   String get kind;
 
   String get caseId;
 
+  /// Encodes this CockpitTestSuiteCaseSource as a JSON object.
   Map<String, Object?> toJson();
 
   static CockpitTestSuiteCaseSource fromJson(
@@ -28,6 +30,7 @@ sealed class CockpitTestSuiteCaseSource {
 
 final class CockpitTestSuiteInlineCaseSource
     extends CockpitTestSuiteCaseSource {
+  /// Creates a CockpitTestSuiteInlineCaseSource.
   CockpitTestSuiteInlineCaseSource({required this.testCase});
 
   final CockpitTestCase testCase;
@@ -38,12 +41,14 @@ final class CockpitTestSuiteInlineCaseSource
   @override
   String get caseId => testCase.id;
 
+  /// Encodes this CockpitTestSuiteInlineCaseSource as a JSON object.
   @override
   Map<String, Object?> toJson() => <String, Object?>{
     'kind': kind,
     'case': testCase.toJson(),
   };
 
+  /// Decodes a CockpitTestSuiteInlineCaseSource from a JSON object.
   factory CockpitTestSuiteInlineCaseSource.fromJson(
     Object? value, {
     required String path,
@@ -65,6 +70,7 @@ final class CockpitTestSuiteInlineCaseSource
 }
 
 final class CockpitTestSuiteFileCaseSource extends CockpitTestSuiteCaseSource {
+  /// Creates a CockpitTestSuiteFileCaseSource.
   CockpitTestSuiteFileCaseSource({
     required this.relativePath,
     required this.caseId,
@@ -80,6 +86,7 @@ final class CockpitTestSuiteFileCaseSource extends CockpitTestSuiteCaseSource {
   @override
   final String caseId;
 
+  /// Encodes this CockpitTestSuiteFileCaseSource as a JSON object.
   @override
   Map<String, Object?> toJson() => <String, Object?>{
     'kind': kind,
@@ -87,6 +94,7 @@ final class CockpitTestSuiteFileCaseSource extends CockpitTestSuiteCaseSource {
     'caseId': caseId,
   };
 
+  /// Decodes a CockpitTestSuiteFileCaseSource from a JSON object.
   factory CockpitTestSuiteFileCaseSource.fromJson(
     Object? value, {
     required String path,

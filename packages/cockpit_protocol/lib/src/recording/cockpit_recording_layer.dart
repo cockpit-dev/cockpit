@@ -4,6 +4,7 @@ enum CockpitRecordingLayer {
   hostScreen('host-screen'),
   system('system');
 
+  /// Creates a CockpitRecordingLayer.
   const CockpitRecordingLayer(this.jsonValue);
 
   final String jsonValue;

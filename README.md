@@ -2,7 +2,7 @@
   <a href="https://github.com/cockpit-dev/cockpit">
     <img src="assets/brand/cockpit-mark.svg" width="128" alt="Cockpit logo">
   </a>
-  <h1>Cockpit 2.0</h1>
+  <h1>Cockpit 3.0</h1>
   <p><strong>One control plane for Flutter development and black-box application E2E.</strong></p>
   <p>
     <a href="https://github.com/cockpit-dev/cockpit/actions/workflows/example-e2e.yml"><img src="https://github.com/cockpit-dev/cockpit/actions/workflows/example-e2e.yml/badge.svg?branch=main" alt="CI"></a>
@@ -30,7 +30,7 @@ resources to CLI, MCP, and future clients without conflating their roles.
 
 It provides:
 
-- standalone YAML or JSON cases and suites;
+- standalone LON, JSON, or YAML cases and suites;
 - semantic, native accessibility, system, visual, and coordinate planes;
 - target discovery, registration, launch, inspection, and capability truth;
 - dependency DAGs, fixtures, matrices, retries, bounded concurrency, and
@@ -50,13 +50,18 @@ It provides:
   Flutter development and semantic validation adapter. Pure black-box users do
   not need it.
 
-Minimum versions are Dart 3.8.0 and Flutter 3.32.0. Add only what the project
-uses:
+Minimum versions are Dart 3.8.0 and Flutter 3.32.0. Install the host CLI once:
+
+```bash
+dart pub global activate cockpit any
+cockpit --help
+```
+
+Flutter source development additionally uses the development-only bridge:
 
 ```yaml
 dev_dependencies:
-  cockpit: any
-  flutter_cockpit: any # Flutter source development adapter.
+  flutter_cockpit: any
 ```
 
 Keep Cockpit development-only. Native black-box testing does not require an
@@ -78,6 +83,29 @@ Install Cockpit for the current AI host, including the CLI, complete cockpit Ski
 Complete host-specific installation and verification instructions live in
 [`skills/cockpit/INSTALL.md`](skills/cockpit/INSTALL.md). Native adapter and MCP
 details are documented in the [agent integration guide](docs/agent-integrations.md).
+
+## Flutter Fast Path
+
+Run from the intended checkout. `dev` discovers and owns the workspace, target,
+process, port, and bridge, then reuses one checkout-scoped numeric handle:
+
+```bash
+cockpit dev start cockpit/main.dart --platform macos
+cockpit dev status
+cockpit dev inspect "Save"
+cockpit dev tap "Save"
+cockpit dev wait
+cockpit dev screenshot
+cockpit dev reload
+cockpit dev diagnose --verbosity standard
+```
+
+Omit the entrypoint and platform when Cockpit can infer them. Normal commands
+also omit the current handle, LON format, minimal verbosity, and operation
+timeout. `dev` automatically runs its local Supervisor in process-scoped yolo
+mode; strict policy remains available for black-box, CI, staging, and
+production workflows. Cockpit does not read a keychain or secret store, and
+`--env` values are process-only.
 
 ## Runtime Model
 
@@ -103,22 +131,22 @@ Register multiple projects once, then address them explicitly or run a command
 from inside exactly one registered workspace:
 
 ```bash
-dart run cockpit daemon start
-dart run cockpit root add --path /work/projects --label projects
-dart run cockpit workspace register --root-id <rootId> --path /work/projects/app-a
-dart run cockpit workspace register --root-id <rootId> --path /work/projects/app-b
-dart run cockpit workspace list
+cockpit daemon start
+cockpit root add --path /work/projects --label projects
+cockpit workspace register --root-id <rootId> --path /work/projects/app-a
+cockpit workspace register --root-id <rootId> --path /work/projects/app-b
+cockpit workspace list
 ```
 
 ## CLI Output
 
-The default `auto` format is AI-first semantic text at `--detail minimal`.
-Command-specific presenters remove repeated identities and render homogeneous
-collections with one shared field header. Text and JSON both honor
-`minimal|standard|full`; use
-`--detail full --stdout-format json --output <file>` for the complete response.
-Stdout receives only a path, byte count, and SHA-256 receipt. Artifact bytes
-always require `--output` and are never emitted as Base64.
+The default is minimal canonical LON. Omit default output options in normal
+commands. `--verbosity standard|full` adds context without changing operation
+accuracy; `--format json|yaml|jsonl|path|none` changes output encoding or delivery.
+Use `--verbosity full --format json --output <file>` for a complete response.
+When `--output` or an artifact command writes a file, stdout contains only its
+verified path. File bytes, Base64, hashes, and decision-irrelevant byte counts
+never enter terminal output.
 
 ## Authorization
 
@@ -164,25 +192,24 @@ cannot change authority mid-run.
     "externalNavigation",
     "financial",
     "permissionChange"
-  ],
-  "allowedEnvironmentSecretNames": ["E2E_PASSWORD"]
+  ]
 }
 ```
 
 ```bash
-dart run cockpit daemon policy validate --file authorization.json
-dart run cockpit daemon policy apply --file authorization.json --restart
-dart run cockpit daemon policy show
+cockpit daemon policy validate --file authorization.json
+cockpit daemon policy apply --file authorization.json --restart
+cockpit daemon policy show
 ```
 
 For an explicitly unrestricted local session, start the Supervisor with
-`dart run cockpit daemon start --yolo` (or `daemon restart --yolo`). YOLO
+`cockpit daemon start --yolo` (or `daemon restart --yolo`). YOLO
 applies only to that daemon process; a start or restart without the flag uses
 the persisted restricted policy. `daemon status`, attempt manifests, and suite
-`report.json` record the effective `authorizationMode`.
+`report.json` record the effective `auth`.
 
-Only named environment secrets are copied into workspace workers. A policy may
-explicitly authorize `production` or `unknown`; the default policy does not.
+A policy may explicitly authorize `production` or `unknown`; the default
+policy does not.
 Quarantined leases remain blocked until verified cleanup succeeds. The
 Supervisor advertises `lease.list` and the `reset`-authorized `lease.recover`
 operation for exact lease/workspace/resource/holder identities. An explicit
@@ -194,7 +221,7 @@ ports always require verified cleanup and can never be force released.
 Register an installed application without changing its source:
 
 ```bash
-dart run cockpit target register \
+cockpit target register \
   --workspace-id <workspaceId> \
   --platform android \
   --device-id emulator-5554 \
@@ -204,9 +231,9 @@ dart run cockpit target register \
   --mode automation \
   --idempotency-key android-target-001
 
-dart run cockpit target launch --workspace-id <workspaceId> --target-id <targetId> \
+cockpit target launch --workspace-id <workspaceId> --target-id <targetId> \
   --idempotency-key android-launch-001
-dart run cockpit target inspect --workspace-id <workspaceId> --target-id <targetId>
+cockpit target inspect --workspace-id <workspaceId> --target-id <targetId>
 ```
 
 Android uses ADB and native accessibility. iOS Simulator uses `simctl`; native
@@ -225,20 +252,20 @@ WebViews, and distinct list rows intact. Use an entrypoint-backed Flutter target
 and the `semantic` plane only when the optional development bridge is required.
 
 Flutter targets accept a structured launch configuration across CLI, MCP, and
-`operation run`. Cockpit owns the entrypoint, device, mode, flavor, and remote
+`op run`. Cockpit owns the entrypoint, device, mode, flavor, and remote
 control flags; callers can supply repeatable dart defines, define files,
 additional safe Flutter arguments, process environment values, and a launch
 budget up to 30 minutes:
 
 ```bash
-dart run cockpit target launch \
+cockpit target launch \
   --workspace-id <workspaceId> \
   --target-id <flutterTargetId> \
   --dart-define API_URL=https://api.example.test \
   --dart-define-from-file config/staging.json \
   --env LOG_LEVEL=debug \
   --flutter-arg=--track-widget-creation \
-  --launch-timeout-ms 1800000 \
+  --timeout 30m \
   --idempotency-key flutter-launch-001
 ```
 
@@ -252,10 +279,10 @@ or an application-owned configuration channel for values the app must read.
 
 Every advertised operation includes `executionMode`, `defaultTimeoutMs`, and
 `maximumTimeoutMs`. Synchronous operations block until their result and accept
-`operation run --timeout-ms <value>` or an absolute `--deadline` (not both).
+one `op run --timeout <duration>` override such as `90s` or `20m`.
 Case and suite runs are durable jobs: submission returns a `runId` immediately,
-then clients consume events and the terminal report. `case run --timeout-ms`
-defaults to 30 minutes and allows up to 6 hours; `suite run --timeout-ms`
+then clients consume events and the terminal report. `case run --timeout`
+defaults to 30 minutes and allows up to 6 hours; `suite run --timeout`
 defaults to 2 hours and allows up to 24 hours. Step and cleanup timeouts remain
 independent inner budgets.
 
@@ -290,17 +317,17 @@ Cases and suites use `schemaVersion: cockpit.test/v2`. Validate documents before
 submitting them, and use stable idempotency keys for replay:
 
 ```bash
-dart run cockpit case validate --workspace-id <workspaceId> --file cases/login.yaml
-dart run cockpit case run --workspace-id <workspaceId> \
+cockpit case validate --workspace-id <workspaceId> --file cases/login.yaml
+cockpit case run --workspace-id <workspaceId> \
   --document-id <documentId> --case-id login \
-  --idempotency-key login-2026-07-24 --inputs-json '{}' \
-  --timeout-ms 1800000
+  --idempotency-key login-2026-07-24 \
+  --timeout 30m
 
-dart run cockpit suite validate --workspace-id <workspaceId> --file suites/regression.yaml
-dart run cockpit suite run --workspace-id <workspaceId> \
+cockpit suite validate --workspace-id <workspaceId> --file suites/regression.yaml
+cockpit suite run --workspace-id <workspaceId> \
   --document-id <documentId> --suite-id regression \
   --idempotency-key regression-2026-07-24
-dart run cockpit suite report --run-id <runId> \
+cockpit suite report --run-id <runId> \
   --output-dir cockpit-report
 ```
 
@@ -340,16 +367,16 @@ and verify the manifest before trusting any file.
 Start the MCP stdio client with either command:
 
 ```bash
-dart run cockpit serve-mcp
-dart run cockpit_mcp
-dart run cockpit serve-mcp --profile dart
+cockpit serve-mcp
+cockpit_mcp
+cockpit serve-mcp --profile dart
 ```
 
 MCP is a thin authenticated Supervisor client. It does not construct drivers or
 application services in-process. It exposes bounded roots, workspaces,
 operations, targets, documents, cases, suites, runs, and artifacts. Official
 and third-party GUI clients should use `/api/v2`, authenticated SSE run events,
-public foundation DTOs, and digest-checked artifact downloads. Cockpit 2.0
+public foundation DTOs, and digest-checked artifact downloads. Cockpit 3.0
 intentionally ships no Flutter GUI and no embedded HTML dashboard; generated
 HTML reports are portable run artifacts.
 
@@ -371,15 +398,30 @@ Foreground mode owns an isolated daemon, registers one checkout, submits a
 `CockpitRunSubmission`, waits for terminal truth, and exits from the run outcome:
 
 ```bash
-dart run cockpitd \
+cockpitd \
   --home=/tmp/cockpit-ci \
   --foreground-workspace=/workspace/app \
   --foreground-submission=/workspace/run-submission.json
 ```
 
+## Source Development
+
+When changing the CLI, daemon, or worker in this repository, install the
+self-contained AOT executable once before live validation:
+
+```bash
+dart run tool/install_cockpit.dart
+```
+
+It atomically replaces the development `cockpit` executable in the Pub cache
+and restores the previous executable if compilation or launch verification
+fails. Daily commands remain `cockpit ...`; they no longer pay the dependency
+resolution cost of a path-activated `dart pub global run` wrapper. Use
+`--output PATH` only when a different installation location is intentional.
+
 ## Release Gate
 
-`.github/workflows/example-e2e.yml` is the required Cockpit 2.0 publication
+`.github/workflows/example-e2e.yml` is the required Cockpit 3.0 publication
 gate. Parallel jobs verify formatting, static analysis, repository contracts,
 every package and example test suite, dry-run publication for all three public
 packages, and real Android, iOS, macOS, Linux, web, and Windows regressions.

@@ -42,6 +42,14 @@ final class CockpitSupervisorHttpApi {
         await _root(request, path[3]);
         return;
       }
+      if (path[2] == 'operations' && path.length == 4 && path[3] == 'schema') {
+        if (request.method != 'GET') {
+          await _methodNotAllowed(request, const <String>['GET']);
+          return;
+        }
+        await support.json(request, HttpStatus.ok, runtime.operationSchema());
+        return;
+      }
       if (path[2] == 'workspaces') {
         await _workspaceRoute(request, path);
         return;
@@ -169,6 +177,28 @@ final class CockpitSupervisorHttpApi {
     }
     if (path.length < 4) return _notFound(request);
     final workspaceId = path[3];
+    if (path.length == 8 && path[4] == 'sessions' && path[6] == 'artifacts') {
+      if (request.method != 'GET') {
+        return _methodNotAllowed(request, const <String>['GET']);
+      }
+      final artifact = await runtime.developmentArtifactFile(
+        workspaceId,
+        path[5],
+        path[7],
+      );
+      request.response.statusCode = HttpStatus.ok;
+      request.response.headers
+        ..contentType = ContentType.parse(artifact.mediaType)
+        ..contentLength = artifact.sizeBytes
+        ..set('Digest', 'sha-256=${artifact.sha256}')
+        ..set(
+          'Content-Disposition',
+          'attachment; filename="${artifact.artifactId}"',
+        );
+      await request.response.addStream(artifact.file.openRead());
+      await request.response.close();
+      return;
+    }
     if (path.length == 4) {
       if (request.method != 'DELETE') {
         return _methodNotAllowed(request, const <String>['DELETE']);
@@ -228,17 +258,18 @@ final class CockpitSupervisorHttpApi {
       final query = request.uri.queryParameters;
       final kind = switch (query['kind']) {
         null => null,
-        'source' => CockpitIndexedDocumentKind.source,
-        'case' => CockpitIndexedDocumentKind.testCase,
-        'suite' => CockpitIndexedDocumentKind.suite,
-        'project' => CockpitIndexedDocumentKind.project,
+        'source' ||
+        'case' ||
+        'suite' ||
+        'project' ||
+        'authored' => query['kind'],
         _ => throw const FormatException(
           'Indexed document kind query is invalid.',
         ),
       };
       final relativePath = query['relativePath'];
       final pageScope =
-          'documents:$workspaceId:${kind?.name ?? ''}:${relativePath ?? ''}';
+          'documents:$workspaceId:${kind ?? ''}:${relativePath ?? ''}';
       final page = support.pageRequest(
         request,
         pageScope,
@@ -290,10 +321,25 @@ final class CockpitSupervisorHttpApi {
         return _methodNotAllowed(request, const <String>['GET']);
       }
       final page = support.pageRequest(request, 'cases:$workspaceId');
-      final cases = (await runtime.documents(
-        workspaceId,
-      )).expand((document) => document.cases).toList();
-      cases.sort((left, right) => left.caseId.compareTo(right.caseId));
+      final cases =
+          <CockpitCaseIndexEntry>[
+            for (final document in await runtime.documents(workspaceId))
+              if (document.kind == CockpitIndexedDocumentKind.testCase)
+                for (final testCase in document.cases)
+                  CockpitCaseIndexEntry(
+                    caseId: testCase.caseId,
+                    documentId: document.documentId,
+                    relativePath: document.relativePath,
+                    title: testCase.title,
+                    location: testCase.location,
+                  ),
+          ]..sort((left, right) {
+            final byCase = left.caseId.compareTo(right.caseId);
+            if (byCase != 0) return byCase;
+            final byPath = left.relativePath!.compareTo(right.relativePath!);
+            if (byPath != 0) return byPath;
+            return left.documentId!.compareTo(right.documentId!);
+          });
       await support.json(
         request,
         HttpStatus.ok,

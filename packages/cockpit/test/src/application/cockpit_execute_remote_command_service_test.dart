@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:cockpit_protocol/cockpit_protocol.dart';
@@ -7,11 +9,42 @@ import 'package:cockpit/src/application/cockpit_interactive_snapshot_store.dart'
 import 'package:cockpit/src/application/cockpit_session_reference_resolver.dart';
 import 'package:cockpit/src/remote/cockpit_android_port_forwarder.dart';
 import 'package:cockpit/src/remote/cockpit_remote_command_timeout_budget.dart';
+import 'package:cockpit/src/remote/cockpit_remote_session_client.dart';
 import 'package:cockpit/src/session/cockpit_remote_session_handle.dart';
+import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 
 void main() {
   group('CockpitExecuteRemoteCommandService', () {
+    test(
+      'cancellation ends an in-flight command without waiting for it',
+      () async {
+        final cancellation = Completer<void>();
+        final command = Completer<CockpitCommandExecution>();
+        final service = CockpitExecuteRemoteCommandService(
+          executeCommand: (_, _) => command.future,
+        );
+        final execution = service.execute(
+          CockpitExecuteRemoteCommandRequest(
+            sessionHandle: _sessionHandle(),
+            command: CockpitCommand(
+              commandId: 'cancelled-command',
+              commandType: CockpitCommandType.tap,
+            ),
+            resultProfile: const CockpitInteractiveResultProfile.minimal(),
+            cancellation: cancellation.future,
+          ),
+        );
+
+        cancellation.complete();
+        await expectLater(
+          execution,
+          throwsA(isA<CockpitRemoteCommandCancelledException>()),
+        );
+        expect(command.isCompleted, isFalse);
+      },
+    );
+
     test('executes a command with compact results by default', () async {
       final handle = _sessionHandle();
       Uri? capturedBaseUri;
@@ -641,6 +674,90 @@ void main() {
         expect(File(sourcePath!).readAsBytesSync(), <int>[137, 80, 78, 71]);
       },
     );
+
+    test('uses the configured artifact factory for remote downloads', () async {
+      final tempDir = await Directory.systemTemp.createTemp(
+        'cockpit_remote_command_factory_',
+      );
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() async {
+        await server.close(force: true);
+        if (await tempDir.exists()) {
+          await tempDir.delete(recursive: true);
+        }
+      });
+      server.listen((request) async {
+        if (request.method == 'POST' &&
+            request.uri.path == '/commands/execute') {
+          request.response.headers.contentType = ContentType.json;
+          request.response.write(
+            jsonEncode(
+              CockpitRemoteCommandResponse(
+                result: CockpitCommandResult(
+                  success: true,
+                  commandId: 'capture-remote',
+                  commandType: CockpitCommandType.captureScreenshot,
+                  durationMs: 10,
+                  artifacts: <CockpitArtifactRef>[
+                    CockpitArtifactRef(
+                      role: 'screenshot',
+                      relativePath: 'screenshots/remote.png',
+                    ),
+                  ],
+                ),
+                artifactDownloads: const <CockpitRemoteArtifactDownload>[
+                  CockpitRemoteArtifactDownload(
+                    artifact: CockpitArtifactRef(
+                      role: 'screenshot',
+                      relativePath: 'screenshots/remote.png',
+                    ),
+                    downloadPath: '/artifacts/remote.png',
+                  ),
+                ],
+              ).toJson(),
+            ),
+          );
+          await request.response.close();
+          return;
+        }
+        if (request.method == 'GET' &&
+            request.uri.path == '/artifacts/remote.png') {
+          request.response.add(const <int>[137, 80, 78, 71]);
+          await request.response.close();
+          return;
+        }
+        request.response.statusCode = HttpStatus.notFound;
+        await request.response.close();
+      });
+      var factoryCalls = 0;
+      final service = CockpitExecuteRemoteCommandService(
+        artifactTempFileFactory: (basename) async {
+          factoryCalls += 1;
+          return File(p.join(tempDir.path, basename));
+        },
+        readSnapshot: (_, _) async => CockpitRemoteSnapshotResponse(
+          snapshot: _richSnapshot(routeName: '/remote'),
+        ),
+      );
+
+      final result = await service.execute(
+        CockpitExecuteRemoteCommandRequest(
+          baseUri: Uri.parse('http://127.0.0.1:${server.port}'),
+          command: CockpitCommand(
+            commandId: 'capture-remote',
+            commandType: CockpitCommandType.captureScreenshot,
+          ),
+          resultProfile: const CockpitInteractiveResultProfile.inspect(),
+        ),
+      );
+
+      expect(factoryCalls, 1);
+      expect(result.artifacts.single.sourcePath, isNotNull);
+      expect(
+        await File(result.artifacts.single.sourcePath!).readAsBytes(),
+        const <int>[137, 80, 78, 71],
+      );
+    });
 
     test(
       'rejects metadata-profile screenshot refs without downloadable evidence',

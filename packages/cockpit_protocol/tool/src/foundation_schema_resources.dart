@@ -228,7 +228,7 @@ Map<String, Object?> foundationResourceDefinitions() => <String, Object?>{
   }),
   'DocumentValidationRequest': objectSchema(
     <String, Object?>{
-      'format': stringSchema(values: const <String>['yaml', 'json']),
+      'format': stringSchema(values: const <String>['lon', 'json', 'yaml']),
       'sourceText': stringSchema(minLength: 0, maxLength: 1048576),
       'relativePath': schemaRef('RelativePath'),
     },

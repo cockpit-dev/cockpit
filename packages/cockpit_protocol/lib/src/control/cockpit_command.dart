@@ -8,6 +8,7 @@ import 'cockpit_locator.dart';
 import 'cockpit_screenshot_request.dart';
 
 final class CockpitCommand {
+  /// Creates a CockpitCommand.
   CockpitCommand({
     required this.commandId,
     required this.commandType,
@@ -33,6 +34,7 @@ final class CockpitCommand {
   static const MapEquality<String, Object?> _mapEquality =
       MapEquality<String, Object?>();
 
+  /// Encodes this CockpitCommand as a JSON object.
   Map<String, Object?> toJson() => {
     'commandId': commandId,
     'commandType': commandType.name,
@@ -47,6 +49,7 @@ final class CockpitCommand {
       'screenshotRequest': screenshotRequest!.toJson(),
   };
 
+  /// Decodes a CockpitCommand from a JSON object.
   factory CockpitCommand.fromJson(Map<String, Object?> json) {
     final locatorJson = json['locator'] as Map<Object?, Object?>?;
     final snapshotOptionsJson =
@@ -84,6 +87,7 @@ final class CockpitCommand {
     );
   }
 
+  /// Returns a copy of this CockpitCommand with supplied fields replaced.
   CockpitCommand copyWith({
     String? commandId,
     CockpitCommandType? commandType,

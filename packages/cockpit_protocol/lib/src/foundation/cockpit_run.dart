@@ -37,6 +37,7 @@ abstract final class CockpitRunStateMachine {
 }
 
 final class CockpitRunResource {
+  /// Creates a CockpitRunResource.
   CockpitRunResource({
     required this.projectId,
     required this.workspaceId,
@@ -114,6 +115,7 @@ final class CockpitRunResource {
   final List<String> activeAttemptIds;
   final CockpitFailure? failure;
 
+  /// Encodes this CockpitRunResource as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
     'projectId': projectId,
     'workspaceId': workspaceId,
@@ -134,6 +136,7 @@ final class CockpitRunResource {
     if (failure != null) 'failure': failure!.toJson(),
   };
 
+  /// Decodes a CockpitRunResource from a JSON object.
   factory CockpitRunResource.fromJson(
     Object? value, {
     String path = r'$',
@@ -247,6 +250,7 @@ final class CockpitRunResource {
 }
 
 final class CockpitRunCaseResource {
+  /// Creates a CockpitRunCaseResource.
   CockpitRunCaseResource({
     required this.runId,
     required this.caseId,
@@ -271,6 +275,7 @@ final class CockpitRunCaseResource {
   final CockpitRunOutcome? outcome;
   final CockpitRunStability? stability;
 
+  /// Encodes this CockpitRunCaseResource as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
     'runId': runId,
     'caseId': caseId,
@@ -280,6 +285,7 @@ final class CockpitRunCaseResource {
     if (stability != null) 'stability': stability!.name,
   };
 
+  /// Decodes a CockpitRunCaseResource from a JSON object.
   factory CockpitRunCaseResource.fromJson(
     Object? value, {
     String path = r'$',

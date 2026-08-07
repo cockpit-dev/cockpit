@@ -24,6 +24,7 @@ typedef CockpitOperationAdmissionProjector<T> =
     CockpitOperationAdmissionProjection Function(T value);
 
 final class CockpitOperationAdmissionProjection {
+  /// Creates a CockpitOperationAdmissionProjection.
   CockpitOperationAdmissionProjection({
     required this.rootId,
     required this.workspaceId,
@@ -42,6 +43,7 @@ final class CockpitOperationAdmissionProjection {
     );
   }
 
+  /// Creates a CockpitOperationAdmissionProjection using the named constructor `empty`.
   const CockpitOperationAdmissionProjection.empty()
     : rootId = null,
       workspaceId = null,

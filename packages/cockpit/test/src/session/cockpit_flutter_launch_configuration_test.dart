@@ -76,6 +76,10 @@ void main() {
       '--release',
       '--simulator',
       '--no-codesign',
+      '--dds',
+      '--no-dds',
+      '--disable-dds',
+      '--no-disable-dds',
     ]) {
       expect(
         () => CockpitFlutterLaunchConfiguration(

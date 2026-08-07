@@ -36,15 +36,22 @@ final class CockpitStopRecordingService {
     CockpitRecordingStrategyResolver recordingStrategyResolver =
         const CockpitRecordingStrategyResolver(),
     CockpitSessionRegistry? registry,
-  }) : _stopService = stopService ?? CockpitStopRemoteRecordingService(),
+    CockpitRemoteArtifactTempFileFactory? artifactTempFileFactory,
+  }) : _stopService =
+           stopService ??
+           CockpitStopRemoteRecordingService(
+             artifactTempFileFactory: artifactTempFileFactory,
+           ),
        _appReferenceResolver =
            appReferenceResolver ??
            CockpitAppReferenceResolver(registry: registry),
-       _recordingStrategyResolver = recordingStrategyResolver;
+       _recordingStrategyResolver = recordingStrategyResolver,
+       _artifactTempFileFactory = artifactTempFileFactory;
 
   final CockpitStopRemoteRecordingService _stopService;
   final CockpitAppReferenceResolver _appReferenceResolver;
   final CockpitRecordingStrategyResolver _recordingStrategyResolver;
+  final CockpitRemoteArtifactTempFileFactory? _artifactTempFileFactory;
 
   Future<CockpitStopRecordingResult> stop(
     CockpitStopRecordingRequest request,
@@ -70,7 +77,10 @@ final class CockpitStopRecordingService {
               purpose: CockpitRecordingPurpose.acceptance,
               name: 'active-recording',
             ),
-            client: CockpitRemoteSessionClient(baseUri: resolved.baseUri),
+            client: CockpitRemoteSessionClient(
+              baseUri: resolved.baseUri,
+              artifactTempFileFactory: _artifactTempFileFactory,
+            ),
             sessionHandle: resolved.app?.remoteSession,
             androidDeviceId:
                 request.androidDeviceId ??

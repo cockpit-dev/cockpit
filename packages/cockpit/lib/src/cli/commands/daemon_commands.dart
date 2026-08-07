@@ -13,6 +13,8 @@ final class CockpitDaemonCommand extends Command<int> {
         runtime: runtime,
         name: 'start',
         description: 'Start the Cockpit Supervisor daemon.',
+        defaultTimeout: const Duration(minutes: 3),
+        maximumTimeout: const Duration(minutes: 10),
         configure: (parser) => parser.addFlag(
           'yolo',
           negatable: false,
@@ -24,6 +26,7 @@ final class CockpitDaemonCommand extends Command<int> {
             authorizationMode: arguments.flag('yolo')
                 ? CockpitAuthorizationMode.yolo
                 : CockpitAuthorizationMode.restricted,
+            timeout: runtime.remainingTimeout,
           );
           await runtime.success((await client.lifecycle.status()).toJson());
           return cockpitSuccessExitCode;
@@ -48,6 +51,8 @@ final class CockpitDaemonCommand extends Command<int> {
         runtime: runtime,
         name: 'stop',
         description: 'Stop the Supervisor daemon.',
+        defaultTimeout: const Duration(minutes: 2),
+        maximumTimeout: const Duration(minutes: 10),
         configure: (parser) => parser.addOption(
           'mode',
           allowed: CockpitDaemonShutdownMode.values.map((value) => value.name),
@@ -57,7 +62,10 @@ final class CockpitDaemonCommand extends Command<int> {
           final mode = CockpitDaemonShutdownMode.values.byName(
             arguments.option('mode')!,
           );
-          await (await runtime.client()).lifecycle.stop(mode: mode);
+          await (await runtime.client()).lifecycle.stop(
+            mode: mode,
+            timeout: runtime.remainingTimeout,
+          );
           await runtime.success(<String, Object?>{
             'stopped': true,
             'mode': mode.name,
@@ -71,6 +79,8 @@ final class CockpitDaemonCommand extends Command<int> {
         runtime: runtime,
         name: 'restart',
         description: 'Restart the Supervisor daemon.',
+        defaultTimeout: const Duration(minutes: 5),
+        maximumTimeout: const Duration(minutes: 15),
         configure: (parser) => parser.addFlag(
           'yolo',
           negatable: false,
@@ -78,10 +88,13 @@ final class CockpitDaemonCommand extends Command<int> {
         ),
         action: (arguments) async {
           final client = await runtime.client();
+          final current = await client.lifecycle.status();
           await client.lifecycle.restart(
             authorizationMode: arguments.flag('yolo')
                 ? CockpitAuthorizationMode.yolo
-                : CockpitAuthorizationMode.restricted,
+                : current.authorizationMode ??
+                      CockpitAuthorizationMode.restricted,
+            timeout: runtime.remainingTimeout,
           );
           await runtime.success((await client.lifecycle.status()).toJson());
           return cockpitSuccessExitCode;

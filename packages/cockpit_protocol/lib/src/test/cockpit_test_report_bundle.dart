@@ -5,6 +5,7 @@ import 'cockpit_test_value_reader.dart';
 enum CockpitTestReportExecutionRole { testCase, supporting, fixture }
 
 final class CockpitTestReportArtifact {
+  /// Creates a CockpitTestReportArtifact.
   CockpitTestReportArtifact({
     required this.evidenceId,
     required this.resourceId,
@@ -51,6 +52,7 @@ final class CockpitTestReportArtifact {
   final String sha256;
   final DateTime createdAt;
 
+  /// Encodes this CockpitTestReportArtifact as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
     'evidenceId': evidenceId,
     'resourceId': resourceId,
@@ -64,6 +66,7 @@ final class CockpitTestReportArtifact {
     'createdAt': createdAt.toIso8601String(),
   };
 
+  /// Decodes a CockpitTestReportArtifact from a JSON object.
   factory CockpitTestReportArtifact.fromJson(
     Object? value, {
     required String path,
@@ -140,6 +143,7 @@ final class CockpitTestReportArtifact {
 }
 
 final class CockpitTestReportExecution {
+  /// Creates a CockpitTestReportExecution.
   CockpitTestReportExecution({
     required this.role,
     this.entryId,
@@ -185,6 +189,7 @@ final class CockpitTestReportExecution {
   final CockpitTestAttemptResult result;
   final List<CockpitTestReportArtifact> artifacts;
 
+  /// Encodes this CockpitTestReportExecution as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
     'role': role.name,
     if (entryId != null) 'entryId': entryId,
@@ -193,6 +198,7 @@ final class CockpitTestReportExecution {
     'artifacts': artifacts.map((artifact) => artifact.toJson()).toList(),
   };
 
+  /// Decodes a CockpitTestReportExecution from a JSON object.
   factory CockpitTestReportExecution.fromJson(
     Object? value, {
     required String path,
@@ -241,6 +247,7 @@ final class CockpitTestReportExecution {
 }
 
 final class CockpitTestReportBundle {
+  /// Creates a CockpitTestReportBundle.
   CockpitTestReportBundle({
     this.schemaVersion = 'cockpit.report.bundle/v2',
     required this.generatedAt,
@@ -281,6 +288,7 @@ final class CockpitTestReportBundle {
   final List<CockpitTestReportExecution> executions;
   final bool complete;
 
+  /// Encodes this CockpitTestReportBundle as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
     'schemaVersion': schemaVersion,
     'generatedAt': generatedAt.toIso8601String(),
@@ -289,6 +297,7 @@ final class CockpitTestReportBundle {
     'complete': complete,
   };
 
+  /// Decodes a CockpitTestReportBundle from a JSON object.
   factory CockpitTestReportBundle.fromJson(
     Object? value, {
     String path = r'$',
@@ -345,6 +354,7 @@ final class CockpitTestReportBundle {
 }
 
 final class CockpitTestReportBundleFile {
+  /// Creates a CockpitTestReportBundleFile.
   CockpitTestReportBundleFile({
     required this.relativePath,
     required this.kind,
@@ -391,6 +401,7 @@ final class CockpitTestReportBundleFile {
   final String? resourceId;
   final String? evidenceId;
 
+  /// Encodes this CockpitTestReportBundleFile as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
     'relativePath': relativePath,
     'kind': kind,
@@ -407,6 +418,7 @@ final class CockpitTestReportBundleFile {
     },
   };
 
+  /// Decodes a CockpitTestReportBundleFile from a JSON object.
   factory CockpitTestReportBundleFile.fromJson(
     Object? value, {
     required String path,
@@ -492,6 +504,7 @@ final class CockpitTestReportBundleFile {
 }
 
 final class CockpitTestReportBundleManifest {
+  /// Creates a CockpitTestReportBundleManifest.
   CockpitTestReportBundleManifest({
     this.schemaVersion = 'cockpit.report.manifest/v2',
     required this.runId,
@@ -517,6 +530,7 @@ final class CockpitTestReportBundleManifest {
   final DateTime createdAt;
   final List<CockpitTestReportBundleFile> files;
 
+  /// Encodes this CockpitTestReportBundleManifest as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
     'schemaVersion': schemaVersion,
     'runId': runId,
@@ -524,6 +538,7 @@ final class CockpitTestReportBundleManifest {
     'files': files.map((file) => file.toJson()).toList(),
   };
 
+  /// Decodes a CockpitTestReportBundleManifest from a JSON object.
   factory CockpitTestReportBundleManifest.fromJson(
     Object? value, {
     String path = r'$',

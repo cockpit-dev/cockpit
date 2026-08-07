@@ -25,6 +25,7 @@ void main() {
       'centralizes profile layer decisions for all interactive services',
       () {
         const minimal = CockpitInteractiveResultProfile.minimal();
+        const locate = CockpitInteractiveResultProfile.locate();
         const standard = CockpitInteractiveResultProfile.standard();
         const inspect = CockpitInteractiveResultProfile.inspect();
         const evidence = CockpitInteractiveResultProfile.evidence();
@@ -36,6 +37,15 @@ void main() {
         expect(minimal.emitsDiagnostics, isFalse);
         expect(minimal.emitsSnapshotRef, isFalse);
         expect(minimal.emitsRuntimeSteps, isFalse);
+
+        expect(locate.requiresStatusSnapshotRead, isTrue);
+        expect(locate.emitsInlineSnapshot, isTrue);
+        expect(locate.emitsDiagnostics, isFalse);
+        expect(locate.emitsSnapshotRef, isFalse);
+        final locateOptions = locate.resolveSnapshotOptions();
+        expect(locateOptions.profile, CockpitSnapshotProfile.baseline);
+        expect(locateOptions.includeNetworkActivity, isFalse);
+        expect(locateOptions.includeRuntimeActivity, isFalse);
 
         expect(standard.requiresStatusSnapshotRead, isTrue);
         expect(standard.requiresPostActionSnapshotRead(), isTrue);
@@ -83,6 +93,22 @@ void main() {
       expect(snapshotOptions.networkQuery.onlyFailures, isTrue);
       expect(snapshotOptions.includeRuntimeActivity, isTrue);
       expect(snapshotOptions.runtimeQuery.onlyErrors, isTrue);
+    });
+
+    test('can require artifact metadata without widening other layers', () {
+      const standard = CockpitInteractiveResultProfile.standard();
+      final profile = standard.copyWith(
+        artifacts: CockpitInteractiveArtifactLevel.metadata,
+      );
+
+      expect(profile.name, standard.name);
+      expect(profile.ui, standard.ui);
+      expect(profile.diagnostics, standard.diagnostics);
+      expect(profile.artifacts, CockpitInteractiveArtifactLevel.metadata);
+      expect(profile.includeDelta, standard.includeDelta);
+      expect(profile.includeRuntimeSteps, standard.includeRuntimeSteps);
+      expect(profile.emitSnapshotRef, standard.emitSnapshotRef);
+      expect(profile.snapshotProfile, standard.snapshotProfile);
     });
 
     test('allows layer overrides on a preset', () {

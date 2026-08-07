@@ -4,6 +4,7 @@ import FlutterMacOS
 public final class FlutterCockpitPlugin: NSObject, FlutterPlugin {
   private static let captureChannelName = "dev.cockpit.flutter_cockpit/capture"
   private static let recordingChannelName = "dev.cockpit.flutter_cockpit/recording"
+  private static let viewportChannelName = "dev.cockpit.flutter_cockpit/viewport"
   private lazy var recordingManager = FlutterCockpitRecordingManager(
     windowProvider: { [weak self] in self?.activeWindow() }
   )
@@ -17,9 +18,14 @@ public final class FlutterCockpitPlugin: NSObject, FlutterPlugin {
       name: recordingChannelName,
       binaryMessenger: registrar.messenger
     )
+    let viewportChannel = FlutterMethodChannel(
+      name: viewportChannelName,
+      binaryMessenger: registrar.messenger
+    )
     let instance = FlutterCockpitPlugin()
     registrar.addMethodCallDelegate(instance, channel: captureChannel)
     registrar.addMethodCallDelegate(instance, channel: recordingChannel)
+    registrar.addMethodCallDelegate(instance, channel: viewportChannel)
   }
 
   public func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
@@ -35,8 +41,50 @@ public final class FlutterCockpitPlugin: NSObject, FlutterPlugin {
       recordingManager.startRecording(arguments: arguments, result: result)
     case "stopRecording":
       recordingManager.stopRecording(result: result)
+    case "queryViewportAvailability":
+      result([
+        "available": activeWindow() != nil,
+        "alternatives": [],
+      ])
+    case "resizeViewport":
+      resizeViewport(arguments: call.arguments, result: result)
     default:
       result(FlutterMethodNotImplemented)
+    }
+  }
+
+  private func resizeViewport(arguments: Any?, result: @escaping FlutterResult) {
+    guard
+      let values = arguments as? [String: Any],
+      let width = values["width"] as? NSNumber,
+      let height = values["height"] as? NSNumber
+    else {
+      result(
+        FlutterError(
+          code: "invalidViewport",
+          message: "Viewport width and height must be integers.",
+          details: nil
+        )
+      )
+      return
+    }
+
+    DispatchQueue.main.async {
+      guard let window = self.activeWindow() else {
+        result(
+          FlutterError(
+            code: "noWindow",
+            message: "Viewport resize requires an active NSWindow.",
+            details: nil
+          )
+        )
+        return
+      }
+      window.setContentSize(
+        NSSize(width: width.doubleValue, height: height.doubleValue)
+      )
+      window.displayIfNeeded()
+      result(["accepted": true])
     }
   }
 

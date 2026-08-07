@@ -111,6 +111,15 @@ void main() {
         ],
       );
       _expectRoundTrip(document, CockpitDocumentResource.fromJson);
+      _expectRoundTrip(
+        CockpitCaseIndexEntry(
+          caseId: 'loginCase',
+          documentId: document.documentId,
+          relativePath: document.relativePath,
+          title: 'Login',
+        ),
+        CockpitCaseIndexEntry.fromJson,
+      );
       final reference = CockpitIndexedCaseReference(
         documentId: document.documentId,
         caseId: document.cases.single.caseId,

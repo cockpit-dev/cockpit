@@ -29,9 +29,9 @@ bundle a GUI or a web dashboard.
 Cockpit requires Dart 3.8.0 or newer. Flutter workspaces require Flutter 3.32.0
 or newer.
 
-```yaml
-dev_dependencies:
-  cockpit: any
+```bash
+dart pub global activate cockpit any
+cockpit --help
 ```
 
 The package publishes four executables:
@@ -55,27 +55,50 @@ Complete host-specific installation and verification instructions live in
 Native adapter and MCP details are documented in the
 [agent integration guide](https://github.com/cockpit-dev/cockpit/blob/main/docs/agent-integrations.md).
 
+## Flutter Fast Path
+
+Run from the intended checkout. Cockpit owns discovery, the Supervisor,
+workspace/target registration, the app process, ports, and bridge state:
+
+```bash
+cockpit dev start cockpit/main.dart --platform macos
+cockpit dev status
+cockpit dev inspect "Save"
+cockpit dev tap "Save"
+cockpit dev wait
+cockpit dev screenshot
+cockpit dev reload
+cockpit dev diagnose --verbosity standard
+```
+
+Omit the entrypoint and platform when they are inferable. One numeric handle is
+stored per checkout and reused automatically; use `cockpit session list` and
+`cockpit session show HANDLE` when identity needs confirmation. `dev` starts
+its local Supervisor in process-scoped yolo mode. Cockpit does not read a
+keychain or secret store, and `--env` values are process-only.
+
 ## Interactive Workspaces
 
 The CLI starts the per-user Supervisor when an interactive API command needs
 it. Register every project root and checkout explicitly:
 
 ```bash
-dart run cockpit daemon start
-dart run cockpit root add --path /work/projects --label projects
-dart run cockpit workspace register --root-id <rootId> --path /work/projects/app-a
-dart run cockpit workspace register --root-id <rootId> --path /work/projects/app-b
-dart run cockpit workspace list
+cockpit daemon start
+cockpit root add --path /work/projects --label projects
+cockpit workspace register --root-id <rootId> --path /work/projects/app-a
+cockpit workspace register --root-id <rootId> --path /work/projects/app-b
+cockpit workspace list
 ```
 
 ## CLI Output
 
-The default `auto` format is command-specific AI semantic text at
-`--detail minimal`. Text and JSON both honor
-`--detail minimal|standard|full`; use
-`--detail full --stdout-format json --output <file>` for the complete object.
-`--output` prints a bounded path/size/SHA-256 receipt. `artifact read` requires
-`--output` and never emits binary or Base64 data.
+The default is minimal canonical LON, so normal commands omit output options.
+`--verbosity standard|full` adds context without changing operation accuracy;
+`--format json|yaml|jsonl|path|none` changes encoding or delivery. Use
+`--verbosity full --format json --output <file>` for the complete object.
+`--output` prints only the verified path. `artifact read` requires `--output`;
+binary data, Base64, hashes, and decision-irrelevant byte counts never enter
+terminal output.
 
 Workspace commands accept `--workspace-id`. When it is omitted, Cockpit
 resolves the current directory against registered active workspaces and
@@ -84,38 +107,37 @@ session, or unrelated checkout.
 
 ```bash
 cd /work/projects/app-a
-dart run cockpit operation list
-dart run cockpit case list
+cockpit op list
+cockpit case list
 ```
 
-`operation run` accepts typed JSON only and executes an advertised operation.
+`op run` accepts typed LON, JSON, or YAML and executes an advertised operation.
 The descriptor controls scope and idempotency; there is no arbitrary URL or
-HTTP method transport.
+HTTP method transport. Its advertised timeout is the default; pass `--timeout`
+only for a deliberate override within the advertised maximum.
 
 ```bash
-dart run cockpit operation run \
-  --kind analyze.workspace \
-  --workspace-id <workspaceId> \
-  --input-json '{}'
+cockpit op run analyze.workspace \
+  --workspace-id <workspaceId>
 ```
 
 ## Authorization Policy
 
-Dangerous operation kinds, operation safety effects, test safety effects,
-production targets, and worker environment secrets require explicit authority.
+Dangerous operation kinds, operation safety effects, test safety effects, and
+production targets require explicit authority.
 The strict policy document is stored at `COCKPIT_HOME/authorization.json` and
 is loaded once when the daemon starts.
 
 ```bash
-dart run cockpit daemon policy validate --file authorization.json
-dart run cockpit daemon policy apply --file authorization.json --restart
-dart run cockpit daemon policy show
+cockpit daemon policy validate --file authorization.json
+cockpit daemon policy apply --file authorization.json --restart
+cockpit daemon policy show
 ```
 
-Use `dart run cockpit daemon start --yolo` (or `daemon restart --yolo`) for an
+Use `cockpit daemon start --yolo` (or `daemon restart --yolo`) for an
 explicitly unrestricted local daemon. The mode lasts only for that daemon
 process; starting without the flag returns to the persisted restricted policy.
-The effective `authorizationMode` is exposed by daemon status and recorded in
+The effective `auth` is exposed by daemon status and recorded in
 attempt and suite reports.
 
 Applying without `--restart` requires a stopped daemon. The default policy
@@ -135,19 +157,18 @@ document digest. Replays use explicit workspace, document, case, and
 idempotency identities.
 
 ```bash
-dart run cockpit case validate \
+cockpit case validate \
   --workspace-id <workspaceId> \
   --file example/cases/flutter_login.yaml
 
-dart run cockpit case run \
+cockpit case run \
   --workspace-id <workspaceId> \
   --document-id <documentId> \
   --case-id flutter-login \
-  --idempotency-key ci-login-001 \
-  --inputs-json '{}'
+  --idempotency-key ci-login-001
 
-dart run cockpit run get --run-id <runId>
-dart run cockpit run events --run-id <runId> --after-sequence 0
+cockpit run get --run-id <runId>
+cockpit run events --run-id <runId> --after-sequence 0
 ```
 
 Run events use authenticated SSE with `afterSequence` and `Last-Event-ID`
@@ -180,13 +201,13 @@ by route and match quality. Equal best candidates fail as `ambiguousTarget`;
 use more signals, a relation, or 0-based `index` to select a list item.
 
 ```bash
-dart run cockpit suite validate --file example/suites/regression.yaml
-dart run cockpit suite run \
+cockpit suite validate --file example/suites/regression.yaml
+cockpit suite run \
   --workspace-id <workspaceId> \
   --document-id <documentId> \
   --suite-id regression \
   --idempotency-key ci-regression-001
-dart run cockpit suite report --run-id <runId> \
+cockpit suite report --run-id <runId> \
   --output-dir cockpit-report
 ```
 
@@ -205,7 +226,7 @@ the same tree. Entrypoint-backed targets use the optional bridge and semantic
 plane for development-only Widget, route, and runtime inspection.
 
 ```bash
-dart run cockpit target register \
+cockpit target register \
   --workspace-id <workspaceId> \
   --platform android \
   --device-id emulator-5554 \
@@ -215,7 +236,7 @@ dart run cockpit target register \
   --mode automation \
   --idempotency-key android-target-001
 
-dart run cockpit target register \
+cockpit target register \
   --workspace-id <workspaceId> \
   --platform ios \
   --device-id <deviceUdid> \
@@ -236,7 +257,8 @@ authority for its secondary native driver. Do not reconstruct it from
 
 Flutter target launches accept repeatable `--dart-define`,
 `--dart-define-from-file`, `--flutter-arg`, and `--env KEY=VALUE` options plus a
-`--launch-timeout-ms` budget up to 1800000. MCP and generic operations use the
+`--timeout` budget (20 minutes by default, 31 minutes maximum). MCP and generic
+operations use the
 same nested `launchConfiguration` fields: `dartDefines`,
 `dartDefineFromFiles`, `flutterArgs`, and `environment`. Cockpit-managed launch
 arguments cannot be overridden, and configuration values are not returned.
@@ -246,9 +268,9 @@ or an application-owned configuration channel for values the app must read.
 
 Operation descriptors publish `executionMode`, `defaultTimeoutMs`, and
 `maximumTimeoutMs`. Synchronous operations block to a result and accept a
-relative `--timeout-ms` or absolute `--deadline`. Case and suite submissions
-are asynchronous durable jobs that return `runId`; their optional
-`--timeout-ms` controls the overall run budget (case: 30 minutes by default,
+single `--timeout` duration such as `90s` or `20m`. Case and suite submissions
+are asynchronous durable jobs that return `runId`; `--timeout` controls the
+overall run budget (case: 30 minutes by default,
 6 hours maximum; suite: 2 hours by default, 24 hours maximum).
 
 Case `setup`, main steps, `finally`, and suite fixtures can use `type: system`
@@ -282,7 +304,7 @@ provided `CockpitRunSubmission` JSON, waits for terminal run truth, and exits
 with a process status derived from the run outcome.
 
 ```bash
-dart run cockpitd \
+cockpitd \
   --home=/tmp/cockpit-ci \
   --foreground-workspace=/workspace/app \
   --foreground-submission=/workspace/run-submission.json
@@ -322,17 +344,17 @@ structured API errors, and artifact integrity checks.
 Run the CLI command or the dedicated executable:
 
 ```bash
-dart run cockpit serve-mcp
-dart run cockpit_mcp
-dart run cockpit serve-mcp --profile dart
+cockpit serve-mcp
+cockpit_mcp
+cockpit serve-mcp --profile dart
 ```
 
 ```json
 {
   "mcpServers": {
     "cockpit": {
-      "command": "dart",
-      "args": ["run", "cockpit_mcp"]
+      "command": "cockpit_mcp",
+      "args": []
     }
   }
 }

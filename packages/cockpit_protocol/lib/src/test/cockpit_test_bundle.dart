@@ -2,6 +2,7 @@ import 'cockpit_test_run.dart';
 import 'cockpit_test_value_reader.dart';
 
 final class CockpitTestArtifactEntry {
+  /// Creates a CockpitTestArtifactEntry.
   CockpitTestArtifactEntry({
     required this.artifactId,
     required this.kind,
@@ -39,6 +40,7 @@ final class CockpitTestArtifactEntry {
   final String sha256;
   final String? stepExecutionId;
 
+  /// Encodes this CockpitTestArtifactEntry as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
     'artifactId': artifactId,
     'kind': kind,
@@ -49,6 +51,7 @@ final class CockpitTestArtifactEntry {
     if (stepExecutionId != null) 'stepExecutionId': stepExecutionId,
   };
 
+  /// Decodes a CockpitTestArtifactEntry from a JSON object.
   factory CockpitTestArtifactEntry.fromJson(
     Object? value, {
     String path = r'$',
@@ -105,6 +108,7 @@ final class CockpitTestArtifactEntry {
 }
 
 final class CockpitTestEvidenceIndexEntry {
+  /// Creates a CockpitTestEvidenceIndexEntry.
   CockpitTestEvidenceIndexEntry({
     required this.stepResultIndex,
     required this.stepExecutionId,
@@ -138,12 +142,14 @@ final class CockpitTestEvidenceIndexEntry {
   final String stepExecutionId;
   final List<String> artifactIds;
 
+  /// Encodes this CockpitTestEvidenceIndexEntry as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
     'stepResultIndex': stepResultIndex,
     'stepExecutionId': stepExecutionId,
     'artifactIds': artifactIds,
   };
 
+  /// Decodes a CockpitTestEvidenceIndexEntry from a JSON object.
   factory CockpitTestEvidenceIndexEntry.fromJson(
     Object? value, {
     String path = r'$',
@@ -180,6 +186,7 @@ final class CockpitTestEvidenceIndexEntry {
 }
 
 final class CockpitTestAttemptBundleManifest {
+  /// Creates a CockpitTestAttemptBundleManifest.
   CockpitTestAttemptBundleManifest({
     this.schemaVersion = 'cockpit.report/v2',
     required this.context,
@@ -280,6 +287,7 @@ final class CockpitTestAttemptBundleManifest {
   final List<CockpitTestArtifactEntry> artifacts;
   final List<CockpitTestEvidenceIndexEntry> evidenceIndex;
 
+  /// Encodes this CockpitTestAttemptBundleManifest as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
     'schemaVersion': schemaVersion,
     'context': context.toJson(),
@@ -290,6 +298,7 @@ final class CockpitTestAttemptBundleManifest {
     'evidenceIndex': evidenceIndex.map((entry) => entry.toJson()).toList(),
   };
 
+  /// Decodes a CockpitTestAttemptBundleManifest from a JSON object.
   factory CockpitTestAttemptBundleManifest.fromJson(
     Object? value, {
     String path = r'$',
@@ -365,6 +374,7 @@ final class CockpitTestAttemptBundleManifest {
 }
 
 final class CockpitTestBundleSummary {
+  /// Creates a CockpitTestBundleSummary.
   CockpitTestBundleSummary({
     required this.path,
     required this.manifestSha256,
@@ -381,12 +391,14 @@ final class CockpitTestBundleSummary {
   final String manifestSha256;
   final int artifactCount;
 
+  /// Encodes this CockpitTestBundleSummary as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
     'path': path,
     'manifestSha256': manifestSha256,
     'artifactCount': artifactCount,
   };
 
+  /// Decodes a CockpitTestBundleSummary from a JSON object.
   factory CockpitTestBundleSummary.fromJson(
     Object? value, {
     String path = r'$',

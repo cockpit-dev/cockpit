@@ -22,9 +22,10 @@ final class CockpitTargetResolutionResult {
     this.matches = const <CockpitTarget>[],
   });
 
+  /// Creates a CockpitTargetResolutionResult using the named constructor `success`.
   const CockpitTargetResolutionResult.success({
     required CockpitTarget target,
-    required CockpitLocatorResolution locatorResolution,
+    CockpitLocatorResolution? locatorResolution,
     List<CockpitTarget> matches = const <CockpitTarget>[],
   }) : this._(
          target: target,
@@ -32,6 +33,7 @@ final class CockpitTargetResolutionResult {
          matches: matches,
        );
 
+  /// Creates a CockpitTargetResolutionResult using the named constructor `failure`.
   const CockpitTargetResolutionResult.failure({
     required CockpitCommandError error,
     List<CockpitTarget> matches = const <CockpitTarget>[],
@@ -49,6 +51,7 @@ final class CockpitTargetRegistry {
   static const int liveSnapshotTargetLimit = 120;
   static const int candidateDetailLimit = 8;
 
+  /// Creates a CockpitTargetRegistry.
   CockpitTargetRegistry({this.routeName});
 
   final LinkedHashMap<String, CockpitTarget> _targets =
@@ -230,6 +233,39 @@ final class CockpitTargetRegistry {
           details: <String, Object?>{'requestedLocator': locator.toJson()},
         ),
       );
+    });
+  }
+
+  CockpitTargetResolutionResult resolveCommand(CockpitCommandType commandType) {
+    return _withDiscoveryCache(() {
+      final matches = _preferCurrentRouteMatches(
+        visibleTargets
+            .where((target) => target.supportedCommands.contains(commandType))
+            .toList(growable: false),
+      );
+      if (matches.isEmpty) {
+        return CockpitTargetResolutionResult.failure(
+          error: CockpitCommandError.targetNotFound(
+            message: 'No visible target supports ${commandType.name}.',
+            details: <String, Object?>{'requiredCommand': commandType.name},
+          ),
+        );
+      }
+      if (matches.length > 1) {
+        return CockpitTargetResolutionResult.failure(
+          error: CockpitCommandError.ambiguousTarget(
+            message: 'Multiple visible targets support ${commandType.name}.',
+            details: <String, Object?>{
+              'requiredCommand': commandType.name,
+              'candidateCount': matches.length,
+              'candidates': _candidateIdsFor(matches),
+              'candidateHints': _targetHintsFor(matches),
+            },
+          ),
+          matches: matches,
+        );
+      }
+      return CockpitTargetResolutionResult.success(target: matches.single);
     });
   }
 

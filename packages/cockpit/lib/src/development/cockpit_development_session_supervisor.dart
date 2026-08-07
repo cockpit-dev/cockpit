@@ -17,6 +17,7 @@ typedef CockpitAppStopper = Future<void> Function(String appId);
 typedef CockpitMachineClientConnector =
     Future<CockpitFlutterRunMachineClient> Function();
 typedef CockpitSupervisorLogger = Future<void> Function(String message);
+typedef CockpitVmServiceObserver = void Function(Uri uri);
 typedef CockpitWebRemoteSessionBridgeServerFactory =
     CockpitWebRemoteSessionBridgeServer? Function({
       required CockpitDevelopmentSessionHandle handle,
@@ -31,6 +32,7 @@ final class CockpitDevelopmentSessionSupervisor {
     CockpitMachineClientConnector? machineClientConnector,
     CockpitAppStopper? appStopper,
     CockpitSupervisorLogger? logger,
+    CockpitVmServiceObserver? vmServiceObserver,
     CockpitWebRemoteSessionBridgeServerFactory? webBridgeServerFactory,
     DateTime Function()? now,
     InternetAddress? bindAddress,
@@ -47,6 +49,7 @@ final class CockpitDevelopmentSessionSupervisor {
        _machineClientConnector = machineClientConnector,
        _appStopper = appStopper,
        _logger = logger,
+       _vmServiceObserver = vmServiceObserver,
        _webBridgeServerFactory =
            webBridgeServerFactory ?? cockpitCreateWebRemoteSessionBridgeServer,
        _now = now ?? DateTime.now,
@@ -72,6 +75,7 @@ final class CockpitDevelopmentSessionSupervisor {
   final CockpitMachineClientConnector? _machineClientConnector;
   final CockpitAppStopper? _appStopper;
   final CockpitSupervisorLogger? _logger;
+  final CockpitVmServiceObserver? _vmServiceObserver;
   final CockpitWebRemoteSessionBridgeServerFactory _webBridgeServerFactory;
   final DateTime Function() _now;
   final InternetAddress _bindAddress;
@@ -89,6 +93,7 @@ final class CockpitDevelopmentSessionSupervisor {
   Future<bool>? _pendingStartupSettle;
   Future<CockpitFlutterRunMachineClient>? _machineClientConnectFuture;
   bool _explicitStopRequested = false;
+  bool _detachRequested = false;
   bool _controlPlaneClosed = false;
   bool _resourcesDisposed = false;
 
@@ -133,6 +138,14 @@ final class CockpitDevelopmentSessionSupervisor {
   Future<CockpitDevelopmentSessionHandle> currentHandle() async => _handle;
 
   Future<void> get done => _doneCompleter.future;
+
+  Future<CockpitDevelopmentSessionStatus> waitForStartupRecovery() async {
+    final pending = _pendingStartupSettle;
+    if (pending != null) {
+      await pending;
+    }
+    return _status;
+  }
 
   Future<void> bindRemoteSession(
     CockpitRemoteSessionHandle remoteSessionHandle,
@@ -300,19 +313,54 @@ final class CockpitDevelopmentSessionSupervisor {
     return _status;
   }
 
+  Future<void> detach() async {
+    if (_controlPlaneClosed) {
+      return;
+    }
+    _detachRequested = true;
+    _log('detach requested');
+    final machineClient = _machineClient;
+    final appId = machineClient?.currentAppId ?? _handle.appId;
+    var detached = false;
+    if (machineClient != null && appId.isNotEmpty) {
+      try {
+        final result = await machineClient
+            .detach(appId: appId)
+            .timeout(const Duration(seconds: 2));
+        detached = result == true;
+        if (!detached) {
+          _log('detach rejected by Flutter machine client');
+        }
+      } on Object catch (error) {
+        _log('detach failed error=$error');
+      }
+    }
+    _controlPlaneClosed = true;
+    await _disposeResources(terminateMachineProcess: detached);
+    if (!_doneCompleter.isCompleted) {
+      _doneCompleter.complete();
+    }
+  }
+
   void _handleMachineEvent(CockpitFlutterRunMachineEvent event) {
     switch (event.kind) {
       case CockpitFlutterRunMachineEventKind.appStart:
         final startedAppId = event.params?['appId'] as String?;
-        if (startedAppId != null) {
-          _handle = _handle.copyWith(appId: startedAppId);
+        if (startedAppId != null && startedAppId.isNotEmpty) {
+          _bindMachineAppId(startedAppId);
         }
         _log('machine event app.start app_id=${startedAppId ?? _handle.appId}');
         _beginStartupRecovery();
       case CockpitFlutterRunMachineEventKind.appDebugPort:
         final wsUri = event.params?['wsUri'] as String?;
         if (wsUri != null) {
-          _handle = _handle.copyWith(vmServiceUri: Uri.parse(wsUri));
+          final uri = Uri.parse(wsUri);
+          _handle = _handle.copyWith(vmServiceUri: uri);
+          try {
+            _vmServiceObserver?.call(uri);
+          } on Object {
+            // Optional diagnostics must not affect Flutter machine events.
+          }
         }
         _log('machine event app.debugPort ws_uri=${wsUri ?? ''}');
       case CockpitFlutterRunMachineEventKind.appStarted:
@@ -321,6 +369,9 @@ final class CockpitDevelopmentSessionSupervisor {
       case CockpitFlutterRunMachineEventKind.appStop:
         final error = event.params?['error'] as String?;
         _log('machine event app.stop error=${error ?? ''}');
+        if (_detachRequested) {
+          break;
+        }
         if (!_explicitStopRequested &&
             _status.state == CockpitDevelopmentSessionState.starting &&
             _handle.remoteSessionHandle == null) {
@@ -351,6 +402,9 @@ final class CockpitDevelopmentSessionSupervisor {
         _setStatus(_status.copyWith(lastError: event.message));
       case CockpitFlutterRunMachineEventKind.processExit:
         _log('machine exit code=${event.exitCode?.toString() ?? ''}');
+        if (_detachRequested) {
+          break;
+        }
         final exitError = event.exitCode == null
             ? _status.lastError
             : 'flutter run exited with code ${event.exitCode}';
@@ -535,7 +589,24 @@ final class CockpitDevelopmentSessionSupervisor {
       return pending;
     }
     final future = connector()
-        .then((client) {
+        .then((client) async {
+          if (_controlPlaneClosed) {
+            final appId = client.currentAppId;
+            var terminateMachineProcess = appId == null || appId.isEmpty;
+            if (appId != null && appId.isNotEmpty) {
+              try {
+                final result = await client
+                    .detach(appId: appId)
+                    .timeout(const Duration(seconds: 2));
+                terminateMachineProcess = result == true;
+              } on Object {
+                // The supervisor is already closing; preserve the app and
+                // abandon only this replacement control connection.
+              }
+            }
+            await client.dispose(terminateProcess: terminateMachineProcess);
+            throw StateError('Development supervisor closed during attach.');
+          }
           _machineClient = client;
           _subscribeToMachineClient(client);
           _machineClientConnectFuture = null;
@@ -563,13 +634,20 @@ final class CockpitDevelopmentSessionSupervisor {
     }
     final currentAppId = client.currentAppId;
     if (currentAppId != null && currentAppId.isNotEmpty) {
-      _handle = _handle.copyWith(appId: currentAppId);
+      _bindMachineAppId(currentAppId);
     }
     final currentVmServiceUri = client.currentVmServiceUri;
     if (currentVmServiceUri != null) {
       _handle = _handle.copyWith(vmServiceUri: currentVmServiceUri);
     }
     _eventSubscription = client.events.listen(_handleMachineEvent);
+  }
+
+  void _bindMachineAppId(String appId) {
+    _handle = _handle.copyWith(
+      appId: appId,
+      remoteSessionHandle: _handle.remoteSessionHandle?.copyWith(appId: appId),
+    );
   }
 
   Future<void> _handleHttpRequest(HttpRequest request) async {
@@ -667,7 +745,7 @@ final class CockpitDevelopmentSessionSupervisor {
     }
   }
 
-  Future<void> _disposeResources() async {
+  Future<void> _disposeResources({bool terminateMachineProcess = true}) async {
     if (_resourcesDisposed) {
       return;
     }
@@ -676,7 +754,7 @@ final class CockpitDevelopmentSessionSupervisor {
     await _requestSubscription?.cancel();
     await _server?.close(force: true);
     await _webBridgeServer?.close();
-    await _machineClient?.dispose();
+    await _machineClient?.dispose(terminateProcess: terminateMachineProcess);
   }
 
   void _log(String message) {

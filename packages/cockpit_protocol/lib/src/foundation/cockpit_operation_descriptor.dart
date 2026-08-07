@@ -20,6 +20,7 @@ enum CockpitSafetyEffect {
 }
 
 final class CockpitOperationDescriptor {
+  /// Creates a CockpitOperationDescriptor.
   CockpitOperationDescriptor({
     required this.kind,
     required this.title,
@@ -104,6 +105,7 @@ final class CockpitOperationDescriptor {
   final String responseSchemaRef;
   final List<String> requiredFeatures;
 
+  /// Encodes this CockpitOperationDescriptor as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
     'kind': kind,
     'title': title,
@@ -120,6 +122,7 @@ final class CockpitOperationDescriptor {
     'requiredFeatures': requiredFeatures,
   };
 
+  /// Decodes a CockpitOperationDescriptor from a JSON object.
   factory CockpitOperationDescriptor.fromJson(
     Object? value, {
     String path = r'$',

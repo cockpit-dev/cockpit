@@ -197,7 +197,7 @@ final class CockpitWorkspaceOperationRegistry
     required CockpitRpcCancellation cancellation,
   }) async {
     final submittedAt = _utcNow();
-    var operationId = 'operation_${_tokenGenerator.nextToken(byteLength: 16)}';
+    var operationId = 'op-${_tokenGenerator.nextResourceIdToken()}';
     final adapter = _adapters[invocation.kind];
     if (adapter == null) {
       return _failureResult(
@@ -625,6 +625,18 @@ CockpitFailure _operationFailure(
       ),
     );
   }
+  if (error is FormatException) {
+    final message = error.message.toString();
+    return CockpitFailure(
+      primary: CockpitApiError(
+        code: CockpitErrorCode.invalidRequest,
+        category: CockpitErrorCategory.invalidInput,
+        message: redactor.redact(message) as String,
+        retryable: false,
+        responsibleLayer: CockpitResponsibleLayer.worker,
+      ),
+    );
+  }
   if (error is TimeoutException) {
     return CockpitFailure(
       primary: CockpitApiError(
@@ -790,6 +802,7 @@ void _assertNoPlaintextSecrets(Object? value, {String? key}) {
       _plaintextSecretKey.hasMatch(key) &&
       key != 'idempotencyKey' &&
       key != 'handoffToken' &&
+      !_isRedactedSecretValue(value) &&
       !_isSecretVariableDeclaration(value)) {
     throw CockpitApplicationServiceException(
       code: 'plaintextSecretRejected',
@@ -807,6 +820,10 @@ void _assertNoPlaintextSecrets(Object? value, {String? key}) {
     }
   }
 }
+
+bool _isRedactedSecretValue(Object? value) =>
+    value == '[REDACTED]' ||
+    value is Iterable<Object?> && value.every(_isRedactedSecretValue);
 
 bool _isSecretVariableDeclaration(Object? value) {
   if (value is! Map ||

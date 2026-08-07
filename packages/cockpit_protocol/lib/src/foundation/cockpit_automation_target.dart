@@ -13,6 +13,7 @@ enum CockpitAutomationTargetEnvironment {
 }
 
 final class CockpitAutomationTargetResource {
+  /// Creates a CockpitAutomationTargetResource.
   CockpitAutomationTargetResource({
     required this.targetId,
     required this.workspaceId,
@@ -74,6 +75,7 @@ final class CockpitAutomationTargetResource {
   final String? appId;
   final String? sessionId;
 
+  /// Encodes this CockpitAutomationTargetResource as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
     'targetId': targetId,
     'workspaceId': workspaceId,
@@ -89,6 +91,7 @@ final class CockpitAutomationTargetResource {
     if (sessionId != null) 'sessionId': sessionId,
   };
 
+  /// Decodes a CockpitAutomationTargetResource from a JSON object.
   factory CockpitAutomationTargetResource.fromJson(
     Object? value, {
     String path = r'$',

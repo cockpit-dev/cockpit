@@ -102,6 +102,7 @@ void main() {
       platform: 'android',
       transportType: 'remoteHttp',
       currentRouteName: '/form',
+      processId: 4242,
       capabilities: CockpitCapabilities(
         platform: 'android',
         transportType: 'inApp',
@@ -159,6 +160,7 @@ void main() {
     );
 
     expect(CockpitRemoteSessionStatus.fromJson(status.toJson()), status);
+    expect(status.toJson()['processId'], 4242);
     expect(
       status.toJson()['capabilities'],
       isA<Map<String, Object?>>().having(

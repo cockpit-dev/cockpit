@@ -10,7 +10,7 @@ void main() {
     final logo = File('$root/assets/brand/cockpit-mark.svg');
     final rasterLogo = File('$root/assets/brand/cockpit-mark.png');
 
-    expect(readme, contains('<h1>Cockpit 2.0</h1>'));
+    expect(readme, contains('<h1>Cockpit 3.0</h1>'));
     expect(readme, contains('assets/brand/cockpit-mark.svg'));
     expect(readme, contains('packages/flutter_cockpit'));
     expect(readme, contains('docs/agent-integrations.md'));
@@ -37,7 +37,7 @@ void main() {
     expect(skill, contains('name: cockpit'));
     expect(skill, contains('# Cockpit'));
     expect(skill, isNot(contains('name: flutter-pilot')));
-    expect(contract, contains('# Cockpit 2.0 Skill Contract'));
+    expect(contract, contains('# Cockpit 3.0 Skill Contract'));
     expect(contract, isNot(contains('`flutter-pilot` skill')));
   });
 
@@ -101,7 +101,7 @@ void main() {
     expect(legacyPaths, isEmpty);
   });
 
-  test('root readmes teach the Cockpit 2.0 resource workflow', () {
+  test('root readmes teach the Cockpit 3.0 resource workflow', () {
     final readme = File('$root/README.md').readAsStringSync();
     final readmeZh = File('$root/README.zh-CN.md').readAsStringSync();
 
@@ -154,7 +154,7 @@ void main() {
     }
   });
 
-  test('cockpit readmes keep the 2.0 client boundary explicit', () {
+  test('cockpit readmes keep the v2 API boundary explicit', () {
     final readme = File('$root/packages/cockpit/README.md').readAsStringSync();
     final readmeZh = File(
       '$root/packages/cockpit/README.zh-CN.md',

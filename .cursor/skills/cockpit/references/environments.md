@@ -24,7 +24,7 @@ Run the cheapest checks in this order:
 cockpit daemon status
 cockpit daemon doctor
 cockpit target discover
-cockpit operation list --workspace-id <workspaceId>
+cockpit op list --workspace-id <workspaceId>
 cockpit target inspect --target-id <targetId> --profile inspect
 ```
 
@@ -64,7 +64,7 @@ cockpit daemon restart --yolo
 cockpit daemon status
 ```
 
-Confirm `authorizationMode: yolo`. Do not use YOLO for production/unknown
+Confirm `auth: yolo`. Do not use YOLO for production/unknown
 targets, shared devices, or real external side effects.
 
 ## Android

@@ -2,12 +2,16 @@ import 'dart:io';
 
 import 'package:args/command_runner.dart';
 
+import '../foundation/cockpit_locked_json_store.dart';
 import '../supervisor/cockpit_daemon_client.dart';
 import '../supervisor/cockpit_supervisor_api_client.dart';
 import 'cockpit_cli_output.dart';
 import 'cockpit_cli_runtime.dart';
 import 'commands/daemon_commands.dart';
+import 'commands/dev_commands.dart';
+import 'commands/explain_command.dart';
 import 'commands/resource_commands.dart';
+import 'commands/session_commands.dart';
 import 'commands/run_commands.dart';
 import 'commands/serve_mcp_command.dart';
 
@@ -26,14 +30,17 @@ final class CockpitCommandRunner {
     : runtime = runtime ?? CockpitCliRuntime(),
       _runner = CommandRunner<int>(
         'cockpit',
-        'Authenticated Cockpit Supervisor 2.0 client.',
+        'Authenticated Cockpit 3.0 development and E2E client.',
       ) {
     _runner
       ..addCommand(CockpitDaemonCommand(this.runtime))
+      ..addCommand(CockpitDevCommand(this.runtime))
+      ..addCommand(cockpitExplainCommand(this.runtime))
+      ..addCommand(CockpitOpCommand(this.runtime))
+      ..addCommand(CockpitSessionCommand(this.runtime))
       ..addCommand(CockpitServerCommand(this.runtime))
       ..addCommand(CockpitRootCommand(this.runtime))
       ..addCommand(CockpitWorkspaceCommand(this.runtime))
-      ..addCommand(CockpitOperationCommand(this.runtime))
       ..addCommand(CockpitTargetCommand(this.runtime))
       ..addCommand(CockpitCaseCommand(this.runtime))
       ..addCommand(CockpitSuiteCommand(this.runtime))
@@ -75,11 +82,25 @@ final class CockpitCommandRunner {
     } on CockpitDaemonException catch (error) {
       runtime.error(code: error.code, message: error.message);
       return cockpitUnavailableExitCode;
+    } on CockpitCliTimeoutException catch (error) {
+      runtime.error(
+        code: 'timeout',
+        message: error.toString(),
+        retryable: true,
+      );
+      return cockpitTemporaryExitCode;
     } on FileSystemException catch (error) {
       runtime.error(
         code: 'fileSystemError',
         message: error.message,
         details: <String, Object?>{'path': ?error.path},
+      );
+      return cockpitNoInputExitCode;
+    } on CockpitStorageException catch (error) {
+      runtime.error(
+        code: error.code,
+        message: 'Cockpit state is unreadable: ${error.diagnostic}',
+        details: <String, Object?>{'path': error.path},
       );
       return cockpitNoInputExitCode;
     } on FormatException catch (error) {

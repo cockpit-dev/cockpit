@@ -32,6 +32,7 @@ const Set<String> _cockpitMinimumChildEnvironmentNames = <String>{
   'ANDROID_SDK_ROOT',
   'JAVA_HOME',
   'DEVELOPER_DIR',
+  'COCKPIT_HOME',
   'Path',
   'ProgramFiles',
   'ProgramFiles(x86)',

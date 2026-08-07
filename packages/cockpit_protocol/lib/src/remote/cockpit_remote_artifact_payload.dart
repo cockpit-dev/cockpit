@@ -3,6 +3,7 @@ import 'dart:convert';
 import '../model/cockpit_artifact_ref.dart';
 
 final class CockpitRemoteArtifactPayload {
+  /// Creates a CockpitRemoteArtifactPayload.
   const CockpitRemoteArtifactPayload({
     required this.artifact,
     required this.bytes,
@@ -11,11 +12,13 @@ final class CockpitRemoteArtifactPayload {
   final CockpitArtifactRef artifact;
   final List<int> bytes;
 
+  /// Encodes this CockpitRemoteArtifactPayload as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
     'artifact': artifact.toJson(),
     'bytesBase64': base64Encode(bytes),
   };
 
+  /// Decodes a CockpitRemoteArtifactPayload from a JSON object.
   factory CockpitRemoteArtifactPayload.fromJson(Map<String, Object?> json) {
     final artifactJson = json['artifact'] as Map<Object?, Object?>;
     return CockpitRemoteArtifactPayload(

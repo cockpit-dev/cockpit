@@ -37,6 +37,10 @@ final class CockpitWorkerProtocolSchema {
             'events': _array(_objectSchema, 1, 256),
           }),
           'publishArtifactBatch': _artifactPublicationRequestSchema(),
+          'readSessionArtifact': _requestSchema(<String, Object?>{
+            'sessionId': _idSchema,
+            'artifactId': _idSchema,
+          }),
         },
       );
 
@@ -95,6 +99,19 @@ final class CockpitWorkerProtocolSchema {
           'publishArtifactBatch': _strictObject(<String, Object?>{
             'runId': _idSchema,
             'artifactIds': _uniqueArray(_idSchema, 256),
+          }),
+          'readSessionArtifact': _strictObject(<String, Object?>{
+            'sessionId': _idSchema,
+            'artifactId': _idSchema,
+            'kind': _idSchema,
+            'name': _stringSchema(512),
+            'mediaType': _stringSchema(128),
+            'retainedPath': _stringSchema(32768),
+            'sizeBytes': _integerSchema(1, 17179869184),
+            'sha256': const <String, Object?>{
+              'type': 'string',
+              'pattern': r'^[a-f0-9]{64}$',
+            },
           }),
         },
       );

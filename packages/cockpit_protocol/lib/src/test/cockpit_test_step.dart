@@ -4,6 +4,7 @@ import 'cockpit_test_policy.dart';
 import 'cockpit_test_value_reader.dart';
 
 final class CockpitTestStepTemplate {
+  /// Creates a CockpitTestStepTemplate.
   CockpitTestStepTemplate({
     required this.stepId,
     this.description,
@@ -35,6 +36,7 @@ final class CockpitTestStepTemplate {
   final CockpitTestOperationTemplate operation;
   final Map<String, Object?> extensions;
 
+  /// Encodes this CockpitTestStepTemplate as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
     'stepId': stepId,
     if (description != null) 'description': description,
@@ -46,6 +48,7 @@ final class CockpitTestStepTemplate {
     ...extensions,
   };
 
+  /// Decodes a CockpitTestStepTemplate from a JSON object.
   factory CockpitTestStepTemplate.fromJson(
     Object? value, {
     required String path,
@@ -164,14 +167,18 @@ final class CockpitTestStepTemplate {
 }
 
 sealed class CockpitTestOperationTemplate {
+  /// Creates a CockpitTestOperationTemplate.
   const CockpitTestOperationTemplate();
 
   String get wireName;
+
+  /// Encodes this CockpitTestOperationTemplate as a JSON object.
   Object? toJson();
 }
 
 final class CockpitTestActionOperationTemplate
     extends CockpitTestOperationTemplate {
+  /// Creates a CockpitTestActionOperationTemplate.
   const CockpitTestActionOperationTemplate(this.action);
 
   final CockpitTestActionTemplate action;
@@ -179,12 +186,14 @@ final class CockpitTestActionOperationTemplate
   @override
   String get wireName => 'action';
 
+  /// Encodes this CockpitTestActionOperationTemplate as a JSON object.
   @override
   Object? toJson() => action.toJson();
 }
 
 final class CockpitTestStartRecordingOperationTemplate
     extends CockpitTestOperationTemplate {
+  /// Creates a CockpitTestStartRecordingOperationTemplate.
   CockpitTestStartRecordingOperationTemplate({
     required this.name,
     this.purpose = 'acceptance',
@@ -228,6 +237,7 @@ final class CockpitTestStartRecordingOperationTemplate
   @override
   String get wireName => 'startRecording';
 
+  /// Encodes this CockpitTestStartRecordingOperationTemplate as a JSON object.
   @override
   Object? toJson() => <String, Object?>{
     'name': name,
@@ -238,6 +248,7 @@ final class CockpitTestStartRecordingOperationTemplate
     'attachToStep': attachToStep,
   };
 
+  /// Decodes a CockpitTestStartRecordingOperationTemplate from a JSON object.
   factory CockpitTestStartRecordingOperationTemplate.fromJson(
     Object? value, {
     required String path,
@@ -286,6 +297,7 @@ final class CockpitTestStartRecordingOperationTemplate
 
 final class CockpitTestStopRecordingOperationTemplate
     extends CockpitTestOperationTemplate {
+  /// Creates a CockpitTestStopRecordingOperationTemplate.
   CockpitTestStopRecordingOperationTemplate({this.settleMs = 1400}) {
     if (settleMs < 0 || settleMs > 60000) {
       throw const FormatException('stopRecording settleMs is invalid.');
@@ -297,9 +309,11 @@ final class CockpitTestStopRecordingOperationTemplate
   @override
   String get wireName => 'stopRecording';
 
+  /// Encodes this CockpitTestStopRecordingOperationTemplate as a JSON object.
   @override
   Object? toJson() => <String, Object?>{'settleMs': settleMs};
 
+  /// Decodes a CockpitTestStopRecordingOperationTemplate from a JSON object.
   factory CockpitTestStopRecordingOperationTemplate.fromJson(
     Object? value, {
     required String path,
@@ -336,6 +350,7 @@ List<CockpitTestStepTemplate> _readSteps(
 
 final class CockpitTestIfOperationTemplate
     extends CockpitTestOperationTemplate {
+  /// Creates a CockpitTestIfOperationTemplate.
   CockpitTestIfOperationTemplate({
     required this.condition,
     required Iterable<CockpitTestStepTemplate> thenSteps,
@@ -355,6 +370,7 @@ final class CockpitTestIfOperationTemplate
   @override
   String get wireName => 'if';
 
+  /// Encodes this CockpitTestIfOperationTemplate as a JSON object.
   @override
   Object? toJson() => <String, Object?>{
     'condition': condition.toJson(),
@@ -363,6 +379,7 @@ final class CockpitTestIfOperationTemplate
       'else': elseSteps.map((step) => step.toJson()).toList(),
   };
 
+  /// Decodes a CockpitTestIfOperationTemplate from a JSON object.
   factory CockpitTestIfOperationTemplate.fromJson(
     Object? value, {
     required String path,
@@ -389,6 +406,7 @@ final class CockpitTestIfOperationTemplate
 
 final class CockpitTestRetryOperationTemplate
     extends CockpitTestOperationTemplate {
+  /// Creates a CockpitTestRetryOperationTemplate.
   CockpitTestRetryOperationTemplate({
     required this.maxAttempts,
     this.delayMs = 0,
@@ -406,6 +424,7 @@ final class CockpitTestRetryOperationTemplate
   @override
   String get wireName => 'retry';
 
+  /// Encodes this CockpitTestRetryOperationTemplate as a JSON object.
   @override
   Object? toJson() => <String, Object?>{
     'maxAttempts': maxAttempts,
@@ -413,6 +432,7 @@ final class CockpitTestRetryOperationTemplate
     'steps': steps.map((step) => step.toJson()).toList(),
   };
 
+  /// Decodes a CockpitTestRetryOperationTemplate from a JSON object.
   factory CockpitTestRetryOperationTemplate.fromJson(
     Object? value, {
     required String path,
@@ -446,6 +466,7 @@ final class CockpitTestRetryOperationTemplate
 
 final class CockpitTestLoopOperationTemplate
     extends CockpitTestOperationTemplate {
+  /// Creates a CockpitTestLoopOperationTemplate.
   CockpitTestLoopOperationTemplate({
     required this.maxIterations,
     required this.condition,
@@ -463,6 +484,7 @@ final class CockpitTestLoopOperationTemplate
   @override
   String get wireName => 'loop';
 
+  /// Encodes this CockpitTestLoopOperationTemplate as a JSON object.
   @override
   Object? toJson() => <String, Object?>{
     'maxIterations': maxIterations,
@@ -470,6 +492,7 @@ final class CockpitTestLoopOperationTemplate
     'steps': steps.map((step) => step.toJson()).toList(),
   };
 
+  /// Decodes a CockpitTestLoopOperationTemplate from a JSON object.
   factory CockpitTestLoopOperationTemplate.fromJson(
     Object? value, {
     required String path,
@@ -499,6 +522,7 @@ final class CockpitTestLoopOperationTemplate
 
 final class CockpitTestCallOperationTemplate
     extends CockpitTestOperationTemplate {
+  /// Creates a CockpitTestCallOperationTemplate.
   CockpitTestCallOperationTemplate(this.fragment) {
     CockpitTestValueReader.string(fragment, r'$.fragment', id: true);
   }
@@ -508,9 +532,11 @@ final class CockpitTestCallOperationTemplate
   @override
   String get wireName => 'call';
 
+  /// Encodes this CockpitTestCallOperationTemplate as a JSON object.
   @override
   Object? toJson() => <String, Object?>{'fragment': fragment};
 
+  /// Decodes a CockpitTestCallOperationTemplate from a JSON object.
   factory CockpitTestCallOperationTemplate.fromJson(
     Object? value, {
     required String path,

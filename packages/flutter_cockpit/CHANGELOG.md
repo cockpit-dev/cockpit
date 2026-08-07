@@ -1,9 +1,29 @@
 # Changelog
 
+## 3.0.0
+
+- Added fast exact semantic discovery with conjunctive multi-condition
+  locators, actionable-target filtering, and duplicate descendant suppression.
+- Added nested scroll-container search with forward and reverse probing,
+  `start`/`center`/`end` alignment, signed offsets, and full ancestor viewport
+  visibility checks.
+- Added native viewport resizing across desktop plugin platforms and remote
+  bridge reporting for deterministic responsive verification.
+- Added bounded HTTP, SSE, and WebSocket observation with masked credentials,
+  explicit raw body artifacts, binary-safe metadata, and truthful unfinished
+  response state.
+- Changed default tap fallback so passive text cannot report a false success;
+  explicit gesture activation remains available for deliberate pointer input.
+- Removed the 2.x bridge compatibility surface and adopted the 3.0 protocol
+  contracts directly.
+
 ## 2.2.1
 
 - Synchronized the Flutter bridge patch release with Cockpit 2.2.1; Flutter
-  runtime behavior remains unchanged from 2.2.0.
+  runtime behavior remains compatible with 2.2.0.
+- Redacted captured network credentials by default while preserving useful
+  authentication structure, with an explicit development-only raw capture
+  configuration for local diagnosis.
 
 ## 2.2.0
 

@@ -268,7 +268,7 @@ void main() {
             remoteAdapterFactory: (_) => _FakeRecordingAdapter(),
             adbAdapterFactory: (_) => _FakeRecordingAdapter(),
             simctlAdapterFactory: (_) => _FakeRecordingAdapter(),
-            macosAdapterFactory: (appId) {
+            macosAdapterFactory: (appId, {processId}) {
               capturedAppId = appId;
               return hostAdapter;
             },

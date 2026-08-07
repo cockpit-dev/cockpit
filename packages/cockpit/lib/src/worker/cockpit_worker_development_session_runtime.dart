@@ -4,10 +4,13 @@ import '../application/cockpit_app_handle.dart';
 import '../application/cockpit_application_service_exception.dart';
 import '../application/cockpit_entrypoint_resolver.dart';
 import '../application/cockpit_launch_development_session_service.dart';
+import '../application/cockpit_platform_app_stopper.dart';
 import '../development/cockpit_development_session_handle.dart';
 import '../development/cockpit_development_session_machine_launcher.dart';
 import '../development/cockpit_development_session_status.dart';
 import '../development/cockpit_development_session_supervisor.dart';
+import '../development/cockpit_flutter_run_machine_client.dart';
+import '../development/cockpit_vm_network_profiler.dart';
 import '../foundation/cockpit_ids.dart';
 import '../infrastructure/cockpit_sdk_environment.dart';
 import '../remote/cockpit_android_port_forwarder.dart';
@@ -35,6 +38,12 @@ final class CockpitWorkerDevelopmentSessionRuntime {
         cockpitReadFlutterVersion,
     CockpitTokenGenerator? tokenGenerator,
     CockpitDevelopmentMachineDiagnosticLogger? logger,
+    CockpitVmNetworkProfiler? networkProfiler,
+    CockpitPlatformAppStopper? platformAppStopper,
+    Future<CockpitFlutterRunMachineClient> Function(
+      CockpitDevelopmentSessionHandle handle,
+    )?
+    machineClientAttacher,
     DateTime Function()? utcNow,
   }) : _portForwarder = portForwarder,
        _machineLauncher =
@@ -48,6 +57,9 @@ final class CockpitWorkerDevelopmentSessionRuntime {
        _flutterVersionReader = flutterVersionReader,
        _tokenGenerator = tokenGenerator ?? CockpitSecureTokenGenerator(),
        _logger = logger,
+       _networkProfiler = networkProfiler,
+       _platformAppStopper = platformAppStopper ?? CockpitPlatformAppStopper(),
+       _machineClientAttacher = machineClientAttacher,
        _utcNow = utcNow ?? (() => DateTime.now().toUtc());
 
   final CockpitDevelopmentSessionMachineLauncher _machineLauncher;
@@ -57,9 +69,17 @@ final class CockpitWorkerDevelopmentSessionRuntime {
   final CockpitFlutterExecutableVersionReader _flutterVersionReader;
   final CockpitTokenGenerator _tokenGenerator;
   final CockpitDevelopmentMachineDiagnosticLogger? _logger;
+  final CockpitVmNetworkProfiler? _networkProfiler;
+  final CockpitPlatformAppStopper _platformAppStopper;
+  final Future<CockpitFlutterRunMachineClient> Function(
+    CockpitDevelopmentSessionHandle handle,
+  )?
+  _machineClientAttacher;
   final DateTime Function() _utcNow;
   final Map<String, CockpitDevelopmentSessionSupervisor> _sessions =
       <String, CockpitDevelopmentSessionSupervisor>{};
+  final Map<String, Future<CockpitDevelopmentSessionSupervisor>> _recoveries =
+      <String, Future<CockpitDevelopmentSessionSupervisor>>{};
 
   Future<CockpitLaunchDevelopmentSessionResult> launch(
     CockpitLaunchDevelopmentSessionRequest request,
@@ -69,8 +89,7 @@ final class CockpitWorkerDevelopmentSessionRuntime {
       projectDir: projectDir,
       target: request.target,
     );
-    final developmentSessionId =
-        'development_${_tokenGenerator.nextToken(byteLength: 16)}';
+    final developmentSessionId = 'ds-${_tokenGenerator.nextResourceIdToken()}';
     final flutterExecutable = _sdkEnvironment.flutterExecutable;
     final flutterVersion = await _flutterVersionReader(flutterExecutable);
     final hostPort = request.platform == 'android'
@@ -136,6 +155,17 @@ final class CockpitWorkerDevelopmentSessionRuntime {
           : (message) async {
               await _logger(message);
             },
+      vmServiceObserver: (uri) {
+        final profiler = _networkProfiler;
+        if (profiler == null) return;
+        unawaited(
+          profiler
+              .enable(sessionId: developmentSessionId, vmServiceUri: uri)
+              .catchError((Object error) async {
+                await _logger?.call('VM network profiling unavailable: $error');
+              }),
+        );
+      },
       bindControlPlane: false,
       settleTimeout: request.launchTimeout,
     );
@@ -168,13 +198,13 @@ final class CockpitWorkerDevelopmentSessionRuntime {
 
   Future<CockpitWorkerDevelopmentSessionSnapshot> query(
     CockpitDevelopmentSessionHandle handle,
-  ) => _snapshot(_require(handle));
+  ) async => _snapshot(await _require(handle));
 
   Future<CockpitWorkerDevelopmentSessionSnapshot> reload(
     CockpitDevelopmentSessionHandle handle,
     CockpitDevelopmentReloadMode mode,
   ) async {
-    final supervisor = _require(handle);
+    final supervisor = await _require(handle);
     await supervisor.reload(mode);
     return _snapshot(supervisor);
   }
@@ -182,45 +212,184 @@ final class CockpitWorkerDevelopmentSessionRuntime {
   Future<CockpitWorkerDevelopmentSessionSnapshot> stop(
     CockpitDevelopmentSessionHandle handle,
   ) async {
-    final supervisor = _require(handle);
+    final supervisor = await _require(handle);
     await supervisor.stop();
+    await _stopPlatformApp(await supervisor.currentHandle());
     _sessions.remove(handle.developmentSessionId);
     return _snapshot(supervisor);
   }
 
   Future<void> forceStop(CockpitDevelopmentSessionHandle handle) async {
-    final supervisor = _sessions.remove(handle.developmentSessionId);
-    if (supervisor == null) return;
+    final supervisor = await _require(handle);
+    _sessions.remove(handle.developmentSessionId);
     await supervisor.stop();
+    await _stopPlatformApp(await supervisor.currentHandle());
+  }
+
+  Future<void> _stopPlatformApp(CockpitDevelopmentSessionHandle handle) async {
+    if (handle.platform == 'web') {
+      return;
+    }
+    try {
+      await _platformAppStopper
+          .stop(CockpitAppHandle.fromDevelopmentSession(handle))
+          .timeout(const Duration(seconds: 10));
+    } on Object catch (error) {
+      await _logger?.call('Development platform stop failed: $error');
+    }
   }
 
   Future<void> dispose() async {
     final supervisors = _sessions.values.toList(growable: false);
     _sessions.clear();
-    for (final supervisor in supervisors) {
-      try {
-        await supervisor.stop();
-      } on Object {
-        await supervisor.dispose();
-      }
+    _recoveries.clear();
+    await Future.wait<void>(
+      supervisors.map((supervisor) async {
+        try {
+          await supervisor.detach();
+        } on Object catch (error) {
+          await _logger?.call('Development session detach failed: $error');
+        }
+      }),
+    );
+  }
+
+  Future<CockpitDevelopmentSessionSupervisor> _require(
+    CockpitDevelopmentSessionHandle handle,
+  ) async {
+    final existing = _sessions[handle.developmentSessionId];
+    if (existing != null) {
+      return existing;
+    }
+    final pending = _recoveries[handle.developmentSessionId];
+    if (pending != null) {
+      return pending;
+    }
+    final recovery = _recover(handle);
+    _recoveries[handle.developmentSessionId] = recovery;
+    try {
+      return await recovery;
+    } finally {
+      _recoveries.remove(handle.developmentSessionId);
     }
   }
 
-  CockpitDevelopmentSessionSupervisor _require(
+  Future<CockpitDevelopmentSessionSupervisor> _recover(
     CockpitDevelopmentSessionHandle handle,
-  ) =>
-      _sessions[handle.developmentSessionId] ??
-      (throw const CockpitApplicationServiceException(
-        code: 'developmentSessionNotOwned',
-        message: 'Development session is not active in this workspace worker.',
-      ));
+  ) async {
+    if (handle.remoteSessionHandle == null) {
+      throw const CockpitApplicationServiceException(
+        code: 'developmentSessionRecoveryUnavailable',
+        message: 'Development session has no remote runtime identity.',
+      );
+    }
+    final supervisor = CockpitDevelopmentSessionSupervisor(
+      initialHandle: handle,
+      machineClient: null,
+      machineClientConnector: () => _attachMachineClient(handle),
+      remoteReachabilityProbe: (baseUri) =>
+          _probeHandle(handle, baseUri: baseUri, readiness: false),
+      remoteControlReadinessProbe: (baseUri) =>
+          _probeHandle(handle, baseUri: baseUri, readiness: true),
+      logger: _logger == null
+          ? null
+          : (message) async {
+              await _logger(message);
+            },
+      vmServiceObserver: (uri) {
+        final profiler = _networkProfiler;
+        if (profiler == null) return;
+        unawaited(
+          profiler
+              .enable(sessionId: handle.developmentSessionId, vmServiceUri: uri)
+              .catchError((Object error) async {
+                await _logger?.call('VM network profiling unavailable: $error');
+              }),
+        );
+      },
+      bindControlPlane: false,
+      settleTimeout: const Duration(seconds: 5),
+    );
+    _sessions[handle.developmentSessionId] = supervisor;
+    try {
+      await supervisor.start();
+      await supervisor.waitForStartupRecovery();
+      return supervisor;
+    } on Object {
+      _sessions.remove(handle.developmentSessionId);
+      await supervisor.dispose();
+      rethrow;
+    }
+  }
+
+  Future<CockpitFlutterRunMachineClient> _attachMachineClient(
+    CockpitDevelopmentSessionHandle handle,
+  ) async {
+    final injected = _machineClientAttacher;
+    if (injected != null) {
+      return injected(handle);
+    }
+    final remote = handle.remoteSessionHandle!;
+    final platform = handle.platform.trim().toLowerCase();
+    final usePlatformAppId = platform == 'android' || platform == 'ios';
+    final debugUrl = usePlatformAppId ? null : handle.vmServiceUri;
+    final platformAppId = usePlatformAppId
+        ? remote.effectivePlatformAppId
+        : null;
+    if (debugUrl == null && platformAppId == null) {
+      throw const CockpitApplicationServiceException(
+        code: 'developmentSessionRecoveryUnavailable',
+        message: 'Development session has no safe Flutter attach identity.',
+      );
+    }
+    final client = await CockpitFlutterRunMachineClient.attach(
+      projectDir: handle.projectDir,
+      target: handle.target,
+      deviceId: handle.deviceId,
+      platformAppId: platformAppId,
+      debugUrl: debugUrl,
+      flutterExecutable: _sdkEnvironment.flutterExecutable,
+    );
+    try {
+      await client.waitForAppId();
+      return client;
+    } on Object {
+      await client.dispose();
+      rethrow;
+    }
+  }
+
+  Future<bool> _probeHandle(
+    CockpitDevelopmentSessionHandle handle, {
+    required Uri baseUri,
+    required bool readiness,
+  }) {
+    final remote = handle.remoteSessionHandle!;
+    return _probe(
+      platform: handle.platform,
+      deviceId: handle.deviceId,
+      hostPort: remote.hostPort,
+      devicePort: remote.devicePort,
+      baseUri: baseUri,
+      readiness: readiness,
+    );
+  }
 
   Future<CockpitWorkerDevelopmentSessionSnapshot> _snapshot(
     CockpitDevelopmentSessionSupervisor supervisor,
-  ) async => CockpitWorkerDevelopmentSessionSnapshot(
-    handle: await supervisor.currentHandle(),
-    status: await supervisor.currentStatus(),
-  );
+  ) async {
+    for (var attempt = 0; attempt < 3; attempt += 1) {
+      final handle = await supervisor.currentHandle();
+      final status = await supervisor.currentStatus();
+      if (handle.reloadGeneration == status.reloadGeneration) {
+        return CockpitWorkerDevelopmentSessionSnapshot(
+          handle: handle,
+          status: status,
+        );
+      }
+    }
+    throw StateError('Development session snapshot did not stabilize.');
+  }
 
   Future<bool> _probe({
     required String platform,

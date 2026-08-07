@@ -1,4 +1,5 @@
 final class CockpitEnvironment {
+  /// Creates a CockpitEnvironment.
   const CockpitEnvironment({
     required this.platform,
     required this.flutterVersion,
@@ -9,12 +10,14 @@ final class CockpitEnvironment {
   final String flutterVersion;
   final String dartVersion;
 
+  /// Encodes this CockpitEnvironment as a JSON object.
   Map<String, Object?> toJson() => {
     'platform': platform,
     'flutterVersion': flutterVersion,
     'dartVersion': dartVersion,
   };
 
+  /// Decodes a CockpitEnvironment from a JSON object.
   factory CockpitEnvironment.fromJson(Map<String, Object?> json) {
     return CockpitEnvironment(
       platform: json['platform']! as String,

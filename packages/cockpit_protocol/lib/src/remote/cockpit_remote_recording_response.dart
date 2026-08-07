@@ -2,6 +2,7 @@ import '../recording/cockpit_recording_result.dart';
 import 'cockpit_remote_artifact_download.dart';
 
 final class CockpitRemoteRecordingResponse {
+  /// Creates a CockpitRemoteRecordingResponse.
   CockpitRemoteRecordingResponse({
     required this.result,
     List<CockpitRemoteArtifactDownload> artifactDownloads =
@@ -11,6 +12,7 @@ final class CockpitRemoteRecordingResponse {
   final CockpitRecordingResult result;
   final List<CockpitRemoteArtifactDownload> artifactDownloads;
 
+  /// Encodes this CockpitRemoteRecordingResponse as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
     'result': result.toJson(),
     'artifactDownloads': artifactDownloads
@@ -18,6 +20,7 @@ final class CockpitRemoteRecordingResponse {
         .toList(growable: false),
   };
 
+  /// Decodes a CockpitRemoteRecordingResponse from a JSON object.
   factory CockpitRemoteRecordingResponse.fromJson(Map<String, Object?> json) {
     final resultJson = json['result'] as Map<Object?, Object?>;
     final downloadsJson =

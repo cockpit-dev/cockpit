@@ -4,7 +4,7 @@ const String cockpitFoundationV2SchemaJson = r'''
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/cockpit-dev/cockpit/packages/cockpit_protocol/schema/cockpit.foundation.v2.schema.json",
-  "title": "Cockpit 2.0 foundation API contracts",
+  "title": "Cockpit foundation v2 API contracts",
   "description": "Strict platform-neutral contracts for Cockpit Supervisor clients, resources, operations, case and suite runs, events, artifacts, reports, and leases.",
   "oneOf": [
     {
@@ -2819,8 +2819,9 @@ const String cockpitFoundationV2SchemaJson = r'''
         "format": {
           "type": "string",
           "enum": [
-            "yaml",
-            "json"
+            "lon",
+            "json",
+            "yaml"
           ],
           "minLength": 1
         },
@@ -4849,7 +4850,7 @@ const String cockpitV2OpenApiJson = r'''
   "info": {
     "title": "Cockpit Supervisor API",
     "version": "2.0.0",
-    "description": "Authenticated loopback API for Cockpit 2.0 discovery, workspaces, typed operations, case and suite runs, durable events, immutable artifacts, and aggregate reports."
+    "description": "Authenticated Cockpit foundation v2 loopback API for discovery, workspaces, typed operations, case and suite runs, durable events, immutable artifacts, and aggregate reports."
   },
   "servers": [
     {

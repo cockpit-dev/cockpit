@@ -25,7 +25,9 @@ void cockpitAddFlutterLaunchConfigurationOptions(ArgParser parser) {
     )
     ..addMultiOption(
       'env',
-      help: 'Repeatable child-process environment override as KEY=VALUE.',
+      help:
+          'Repeatable non-secret child-process environment override as '
+          'KEY=VALUE. Values are never persisted.',
       splitCommas: false,
     );
 }

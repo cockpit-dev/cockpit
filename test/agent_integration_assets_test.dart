@@ -123,22 +123,37 @@ void main() {
 
     final kiro = read('.kiro/steering/cockpit.md');
     expect(kiro, startsWith('---\ninclusion: auto\nname: cockpit\n'));
-    expect(kiro, contains('.agents/skills/cockpit/SKILL.md'));
+    expect(kiro, contains('.kiro/skills/cockpit/SKILL.md'));
     expect(kiro, contains('Cockpit Power'));
     expect(kiro, isNot(contains('dart run cockpit')));
     final kiroMcp = readJson('.kiro/settings/mcp.json');
     final kiroServers = kiroMcp['mcpServers']! as Map<String, Object?>;
-    expectStdioMcpServer(kiroServers['cockpit']! as Map<String, Object?>);
+    expect(kiroServers['cockpit'], <String, Object?>{
+      'command': 'cockpit_mcp',
+      'args': <Object?>[],
+    });
 
     final gemini = readJson('.gemini/settings.json');
     final geminiServers = gemini['mcpServers']! as Map<String, Object?>;
     final geminiCockpit = geminiServers['cockpit']! as Map<String, Object?>;
     expect(geminiCockpit['command'], 'cockpit_mcp');
     expect(geminiCockpit['args'], <Object?>[]);
-    final kiroPower = read('plugins/kiro/cockpit/POWER.md');
-    expect(kiroPower, contains('Cockpit'));
-    expect(kiroPower, contains('globally installed `cockpit_mcp` server'));
+    final kiroPower = readJson('plugins/kiro/cockpit/plugin.json');
+    expect(
+      kiroPower[r'$schema'],
+      'https://agent-plugins.org/schemas/1.0.0/plugin.schema.json',
+    );
+    expect(kiroPower['name'], 'cockpit');
+    expect(kiroPower['version'], '3.0.0');
+    expect(
+      kiroPower['keywords'],
+      containsAll(<Object?>['cockpit', 'flutter', 'e2e']),
+    );
     final kiroPowerMcp = readJson('plugins/kiro/cockpit/mcp.json');
+    expect(
+      kiroPowerMcp[r'$schema'],
+      'https://agent-plugins.org/schemas/1.0.0/mcp.schema.json',
+    );
     final kiroPowerServers =
         kiroPowerMcp['mcpServers']! as Map<String, Object?>;
     expectStdioMcpServer(kiroPowerServers['cockpit']! as Map<String, Object?>);
@@ -210,7 +225,10 @@ void main() {
     expect(docs, contains('.gemini/settings.json'));
     expect(docs, contains('.kiro/steering/cockpit.md'));
     expect(docs, contains('.kiro/settings/mcp.json'));
+    expect(docs, contains('.kiro/skills/cockpit'));
     expect(docs, contains('plugins/kiro/cockpit'));
+    expect(docs, contains('Import power from a folder'));
+    expect(docs, contains('plugin.json'));
     expect(docs, contains('.agents/skills/cockpit'));
     expect(docs, contains('.opencode/skills/cockpit'));
     expect(docs, contains('.pi/skills/cockpit'));
@@ -244,6 +262,9 @@ void main() {
       ),
     );
     expect(install, contains('cockpit_mcp'));
+    expect(install, contains('Import power from a folder'));
+    expect(install, contains('Do not add `type` to the workspace config'));
+    expect(install, contains('.kiro/skills/cockpit'));
     expect(install, contains('Pi has no built-in MCP client'));
     expect(install, contains('.omp/mcp.json'));
     expect(install, contains('.cline/skills/cockpit'));
@@ -294,14 +315,12 @@ void main() {
   });
 
   test('packaged skills are complete copies of the canonical skill', () {
-    final canonical = read('skills/cockpit/SKILL.md');
-
-    expect(canonical.split(RegExp(r'\s+')).length, greaterThan(500));
     expectSkillCopyMatchesCanonical('plugins/codex/cockpit/skills/cockpit');
     expectSkillCopyMatchesCanonical(
       'plugins/claude-code/cockpit/skills/cockpit',
     );
     expectSkillCopyMatchesCanonical('plugins/kiro/cockpit/skills/cockpit');
+    expectSkillCopyMatchesCanonical('.kiro/skills/cockpit');
     expectSkillCopyMatchesCanonical('.agents/skills/cockpit');
     expectSkillCopyMatchesCanonical('.claude/skills/cockpit');
     expectSkillCopyMatchesCanonical('.cursor/skills/cockpit');

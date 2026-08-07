@@ -147,20 +147,58 @@ gemini mcp list
 
 ## Kiro
 
-Kiro uses steering documents for project guidance, workspace MCP config for tools, and Powers for a distributable native bundle.
+Kiro uses steering documents for project guidance, workspace MCP config for
+tools, and Agent Plugins Powers for a distributable native bundle.
 
 Repository asset:
 
 ```text
+.kiro/skills/cockpit
 .kiro/steering/cockpit.md
 .kiro/settings/mcp.json
 plugins/kiro/cockpit
 ```
 
 The auto-included-on-demand workspace steering file is the repo-local trigger.
-`.kiro/settings/mcp.json` exposes the local MCP server.
-`plugins/kiro/cockpit` is the Kiro Power bundle with `POWER.md`, `mcp.json`,
-and the full skill copy.
+It directs Kiro to the complete native Skill at `.kiro/skills/cockpit`, the
+workspace location documented by Kiro for on-demand Agent Skills. The workspace
+MCP file follows Kiro's native local-server schema:
+
+```json
+{
+  "mcpServers": {
+    "cockpit": {
+      "command": "cockpit_mcp",
+      "args": []
+    }
+  }
+}
+```
+
+Kiro's workspace schema deliberately has no `type` field. Save the file to
+hot-reload the server, then confirm `cockpit` is connected in the MCP panel.
+
+`plugins/kiro/cockpit` is the current Agent Plugins Power bundle. Its required
+`plugin.json` owns activation keywords, `skills/cockpit` contains the complete
+Skill, and its schema-qualified `mcp.json` uses `type: stdio` as required by
+the Agent Plugins format. In Kiro, open Powers, choose **Add Custom Power**,
+select **Import power from a folder**, and select that directory. Do not import
+the removed legacy `POWER.md` format. Kiro manages this MCP server internally;
+it is not copied into the user-level MCP configuration and activates with the
+Power.
+
+Before either setup, install the executable and ensure Kiro inherits Dart's
+global executable directory on `PATH`:
+
+```bash
+dart pub global activate cockpit any
+cockpit --help
+cockpit dev status
+```
+
+`dev status` may truthfully report that no session exists; the important
+installation check is that Kiro can launch `cockpit_mcp` and the agent loads
+the Cockpit Skill for a Flutter debugging or E2E request.
 
 ## OpenCode
 
@@ -274,7 +312,7 @@ After installing any adapter:
 1. Restart or reload the host so it rescans plugins, skills, rules, or steering files.
 2. Ask the host to load the bundled self-contained `cockpit` skill.
 3. Run `cockpit daemon status`, then `cockpit target discover`.
-4. If MCP is configured, verify the host can see the Cockpit 2.0 workspace,
+4. If MCP is configured, verify the host can see the Cockpit 3.0 workspace,
    target, operation, case, suite, run, and artifact resources.
 5. Keep app proof proportional: inspect, act through an advertised operation
    or validated test document, re-inspect, and read report-backed evidence.

@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import '../gesture/cockpit_gesture_anchor.dart';
 
 final class CockpitTargetGeometry {
+  /// Creates a CockpitTargetGeometry.
   const CockpitTargetGeometry({
     required this.left,
     required this.top,
@@ -15,6 +16,7 @@ final class CockpitTargetGeometry {
     required this.viewId,
   });
 
+  /// Creates a CockpitTargetGeometry using the named constructor `atPoint`.
   factory CockpitTargetGeometry.atPoint({
     required double x,
     required double y,
@@ -107,6 +109,7 @@ final class CockpitTargetGeometry {
     return math.min(preferredInset, math.max(extent / 2, 1.0));
   }
 
+  /// Encodes this CockpitTargetGeometry as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
     'left': left,
     'top': top,
@@ -119,6 +122,7 @@ final class CockpitTargetGeometry {
     'viewId': viewId,
   };
 
+  /// Decodes a CockpitTargetGeometry from a JSON object.
   factory CockpitTargetGeometry.fromJson(Map<String, Object?> json) {
     return CockpitTargetGeometry(
       left: (json['left'] as num).toDouble(),

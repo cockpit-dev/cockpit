@@ -51,6 +51,35 @@ void main() {
     },
   );
 
+  test('fingerprints required feature sets independent of order', () async {
+    final journal = CockpitInMemoryWorkerOperationJournal();
+    final submittedAt = DateTime.utc(2026, 7, 22, 0, 30);
+    final first = await journal.admit(
+      invocation: _invocation(
+        'feature-order',
+        input: const <String, Object?>{
+          'requiredFeatures': <String>['inputB', 'inputA'],
+        },
+        requiredFeatures: const <String>['envelopeB', 'envelopeA'],
+      ),
+      submittedAt: submittedAt,
+    );
+
+    final replay = await journal.admit(
+      invocation: _invocation(
+        'feature-order',
+        input: const <String, Object?>{
+          'requiredFeatures': <String>['inputA', 'inputB'],
+        },
+        requiredFeatures: const <String>['envelopeA', 'envelopeB'],
+      ),
+      submittedAt: submittedAt.add(const Duration(seconds: 1)),
+    );
+
+    expect(replay.operationId, first.operationId);
+    expect(replay.execute, isTrue);
+  });
+
   test('resumes a prepared mutation with its original operation id', () async {
     final fixture = await _JournalFixture.create();
     addTearDown(fixture.dispose);
@@ -434,12 +463,14 @@ CockpitOperationInvocation _invocation(
   String idempotencyKey, {
   String kind = 'mutation.test',
   Map<String, Object?> input = const <String, Object?>{'value': 'original'},
+  Iterable<String> requiredFeatures = const <String>[],
 }) => CockpitOperationInvocation(
   kind: kind,
   workspaceId: 'workspaceA',
   idempotencyKey: CockpitIdempotencyKey(idempotencyKey),
   deadline: DateTime.utc(2026, 7, 23),
   input: input,
+  requiredFeatures: requiredFeatures,
 );
 
 CockpitOperationResult _success(

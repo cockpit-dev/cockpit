@@ -42,17 +42,20 @@ cp "$script_dir/opaque.png" "$last_arg"
 
       final adapter = CockpitMacosCaptureAdapter(
         appId: 'dev.cockpit.cockpitDemo',
+        processId: 89688,
         osascriptExecutable: executable.path,
         screencaptureExecutable: executable.path,
         windowTargetResolver:
             ({
               required appId,
+              required processId,
               required osascriptExecutable,
               required processRunner,
               required timeout,
               required activationSettleDelay,
             }) async {
               expect(appId, 'dev.cockpit.cockpitDemo');
+              expect(processId, 89688);
               expect(osascriptExecutable, executable.path);
               return const CockpitMacosWindowTarget(
                 windowId: 1234,
@@ -101,9 +104,11 @@ cp "$script_dir/opaque.png" "$last_arg"
   test('macos capture adapter reports window resolution failure', () async {
     final adapter = CockpitMacosCaptureAdapter(
       appId: 'dev.cockpit.cockpitDemo',
+      processId: 89688,
       windowTargetResolver:
           ({
             required appId,
+            required processId,
             required osascriptExecutable,
             required processRunner,
             required timeout,
@@ -150,6 +155,7 @@ cp "$script_dir/opaque.png" "$last_arg"
       final invocations = <List<String>>[];
       final adapter = CockpitMacosCaptureAdapter(
         appId: 'dev.cockpit.cockpitDemo',
+        processId: 89688,
         tempFileFactory: (_) async => output,
         processRunner: (_, arguments) async {
           invocations.add(List<String>.from(arguments));
@@ -167,6 +173,7 @@ cp "$script_dir/opaque.png" "$last_arg"
         windowTargetResolver:
             ({
               required appId,
+              required processId,
               required osascriptExecutable,
               required processRunner,
               required timeout,
@@ -201,6 +208,62 @@ cp "$script_dir/opaque.png" "$last_arg"
       );
     },
   );
+
+  test('macos capture adapter identifies screen recording denial', () async {
+    final tempDir = await Directory.systemTemp.createTemp(
+      'cockpit_macos_capture_permission',
+    );
+    addTearDown(() async {
+      if (tempDir.existsSync()) await tempDir.delete(recursive: true);
+    });
+    final invocations = <List<String>>[];
+    final adapter = CockpitMacosCaptureAdapter(
+      appId: 'dev.cockpit.cockpitDemo',
+      processId: 89688,
+      tempFileFactory: (_) async => File(p.join(tempDir.path, 'capture.png')),
+      processRunner: (_, arguments) async {
+        invocations.add(List<String>.from(arguments));
+        final stderr = arguments.contains('-l')
+            ? 'could not create image from window'
+            : arguments.contains('-R')
+            ? 'could not create image from rect'
+            : 'could not create image from display';
+        return ProcessResult(0, 1, '', stderr);
+      },
+      windowTargetResolver:
+          ({
+            required appId,
+            required processId,
+            required osascriptExecutable,
+            required processRunner,
+            required timeout,
+            required activationSettleDelay,
+          }) async => const CockpitMacosWindowTarget(
+            windowId: 1234,
+            left: 48,
+            top: 64,
+            width: 960,
+            height: 720,
+          ),
+      activationSettleDelay: Duration.zero,
+    );
+
+    final execution = await adapter.capture(
+      CockpitCommand(
+        commandId: 'capture-permission',
+        commandType: CockpitCommandType.captureScreenshot,
+        screenshotRequest: const CockpitScreenshotRequest(
+          reason: CockpitScreenshotReason.acceptance,
+          name: 'macos-permission',
+        ),
+      ),
+    );
+
+    expect(execution.result.success, isFalse);
+    expect(execution.result.error?.details['permission'], 'screenRecording');
+    expect(execution.result.error?.message, contains('Screen & System Audio'));
+    expect(invocations, hasLength(3));
+  });
 }
 
 Future<File> _writeExecutable({

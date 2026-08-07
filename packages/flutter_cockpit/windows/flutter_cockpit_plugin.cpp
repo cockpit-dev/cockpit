@@ -18,6 +18,8 @@
 #include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <climits>
+#include <cmath>
 #include <cstdint>
 #include <cstring>
 #include <filesystem>
@@ -44,6 +46,7 @@ using Microsoft::WRL::ComPtr;
 constexpr char kCaptureChannelName[] = "dev.cockpit.flutter_cockpit/capture";
 constexpr char kRecordingChannelName[] =
     "dev.cockpit.flutter_cockpit/recording";
+constexpr char kViewportChannelName[] = "dev.cockpit.flutter_cockpit/viewport";
 constexpr uint32_t kRecordingFrameRate = 15;
 constexpr auto kRecordingStartupTimeout = std::chrono::seconds(20);
 constexpr auto kRecordingStartupCancelTimeout = std::chrono::seconds(2);
@@ -164,6 +167,30 @@ std::optional<std::string> GetStringArgument(const EncodableValue* arguments,
   }
   if (const auto* value = std::get_if<std::string>(&iterator->second)) {
     return *value;
+  }
+  return std::nullopt;
+}
+
+std::optional<int> GetIntArgument(const EncodableValue* arguments,
+                                  const char* key) {
+  if (arguments == nullptr) {
+    return std::nullopt;
+  }
+  const auto* map = std::get_if<EncodableMap>(arguments);
+  if (map == nullptr) {
+    return std::nullopt;
+  }
+  const auto iterator = map->find(EncodableValue(key));
+  if (iterator == map->end()) {
+    return std::nullopt;
+  }
+  if (const auto* value = std::get_if<int32_t>(&iterator->second)) {
+    return *value;
+  }
+  if (const auto* value = std::get_if<int64_t>(&iterator->second)) {
+    if (*value >= INT_MIN && *value <= INT_MAX) {
+      return static_cast<int>(*value);
+    }
   }
   return std::nullopt;
 }
@@ -794,6 +821,10 @@ void FlutterCockpitPlugin::RegisterWithRegistrar(
       std::make_unique<flutter::MethodChannel<EncodableValue>>(
           registrar->messenger(), kRecordingChannelName,
           &flutter::StandardMethodCodec::GetInstance());
+  auto viewport_channel =
+      std::make_unique<flutter::MethodChannel<EncodableValue>>(
+          registrar->messenger(), kViewportChannelName,
+          &flutter::StandardMethodCodec::GetInstance());
 
   capture_channel->SetMethodCallHandler(
       [plugin_pointer = plugin.get()](const auto& call, auto result) {
@@ -803,9 +834,14 @@ void FlutterCockpitPlugin::RegisterWithRegistrar(
       [plugin_pointer = plugin.get()](const auto& call, auto result) {
         plugin_pointer->HandleRecordingMethodCall(call, std::move(result));
       });
+  viewport_channel->SetMethodCallHandler(
+      [plugin_pointer = plugin.get()](const auto& call, auto result) {
+        plugin_pointer->HandleViewportMethodCall(call, std::move(result));
+      });
 
   plugin->capture_channel_ = std::move(capture_channel);
   plugin->recording_channel_ = std::move(recording_channel);
+  plugin->viewport_channel_ = std::move(viewport_channel);
   registrar->AddPlugin(std::move(plugin));
 }
 
@@ -858,6 +894,25 @@ void FlutterCockpitPlugin::HandleRecordingMethodCall(
   result->NotImplemented();
 }
 
+void FlutterCockpitPlugin::HandleViewportMethodCall(
+    const flutter::MethodCall<EncodableValue>& method_call,
+    std::unique_ptr<flutter::MethodResult<EncodableValue>> result) {
+  if (method_call.method_name() == "queryViewportAvailability") {
+    EncodableMap payload;
+    payload[EncodableValue("available")] =
+        EncodableValue(ActiveWindowHandle() != nullptr);
+    payload[EncodableValue("alternatives")] =
+        EncodableValue(std::vector<EncodableValue>{});
+    result->Success(EncodableValue(payload));
+    return;
+  }
+  if (method_call.method_name() == "resizeViewport") {
+    ResizeViewport(method_call, std::move(result));
+    return;
+  }
+  result->NotImplemented();
+}
+
 HWND FlutterCockpitPlugin::ActiveWindowHandle() const {
   auto* view = registrar_ == nullptr ? nullptr : registrar_->GetView();
   return view == nullptr ? nullptr : view->GetNativeWindow();
@@ -892,6 +947,45 @@ void FlutterCockpitPlugin::CaptureAcceptanceScreenshot(
 
   EncodableMap payload;
   payload[EncodableValue("bytes")] = EncodableValue(png_bytes);
+  result->Success(EncodableValue(payload));
+}
+
+void FlutterCockpitPlugin::ResizeViewport(
+    const flutter::MethodCall<EncodableValue>& method_call,
+    std::unique_ptr<flutter::MethodResult<EncodableValue>> result) {
+  HWND hwnd = ActiveWindowHandle();
+  if (hwnd == nullptr) {
+    result->Error("noWindow", "Viewport resize requires an active Flutter HWND.");
+    return;
+  }
+  const auto width = GetIntArgument(method_call.arguments(), "width");
+  const auto height = GetIntArgument(method_call.arguments(), "height");
+  if (!width.has_value() || !height.has_value()) {
+    result->Error("invalidViewport",
+                  "Viewport width and height must be integers.");
+    return;
+  }
+
+  const UINT dpi = GetDpiForWindow(hwnd);
+  const double scale = static_cast<double>(dpi) / 96.0;
+  RECT bounds = {0, 0, static_cast<LONG>(std::lround(*width * scale)),
+                 static_cast<LONG>(std::lround(*height * scale))};
+  const DWORD style = static_cast<DWORD>(GetWindowLongPtr(hwnd, GWL_STYLE));
+  const DWORD extended_style =
+      static_cast<DWORD>(GetWindowLongPtr(hwnd, GWL_EXSTYLE));
+  if (!AdjustWindowRectExForDpi(&bounds, style, FALSE, extended_style, dpi)) {
+    result->Error("viewportResizeFailed",
+                  "Unable to calculate the DPI-aware window bounds.");
+    return;
+  }
+  if (!SetWindowPos(hwnd, nullptr, 0, 0, bounds.right - bounds.left,
+                    bounds.bottom - bounds.top,
+                    SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE)) {
+    result->Error("viewportResizeFailed", "Unable to resize the Flutter window.");
+    return;
+  }
+  EncodableMap payload;
+  payload[EncodableValue("accepted")] = EncodableValue(true);
   result->Success(EncodableValue(payload));
 }
 

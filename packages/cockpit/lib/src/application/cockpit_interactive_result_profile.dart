@@ -6,6 +6,7 @@ import 'cockpit_application_service_exception.dart';
 
 enum CockpitInteractiveResultProfileName {
   minimal('minimal'),
+  locate('locate'),
   standard('standard'),
   inspect('inspect'),
   evidence('evidence');
@@ -99,6 +100,18 @@ final class CockpitInteractiveResultProfile {
         snapshotProfile: CockpitSnapshotProfile.live,
       );
 
+  const CockpitInteractiveResultProfile.locate()
+    : this(
+        name: CockpitInteractiveResultProfileName.locate,
+        ui: CockpitInteractiveUiLevel.snapshot,
+        diagnostics: CockpitInteractiveDiagnosticsLevel.none,
+        artifacts: CockpitInteractiveArtifactLevel.none,
+        includeDelta: false,
+        includeRuntimeSteps: false,
+        emitSnapshotRef: false,
+        snapshotProfile: CockpitSnapshotProfile.baseline,
+      );
+
   const CockpitInteractiveResultProfile.standard()
     : this(
         name: CockpitInteractiveResultProfileName.standard,
@@ -154,6 +167,21 @@ final class CockpitInteractiveResultProfile {
   bool get emitsSnapshotRef => emitSnapshotRef;
 
   bool get emitsRuntimeSteps => includeRuntimeSteps;
+
+  CockpitInteractiveResultProfile copyWith({
+    CockpitInteractiveArtifactLevel? artifacts,
+  }) {
+    return CockpitInteractiveResultProfile(
+      name: name,
+      ui: ui,
+      diagnostics: diagnostics,
+      artifacts: artifacts ?? this.artifacts,
+      includeDelta: includeDelta,
+      includeRuntimeSteps: includeRuntimeSteps,
+      emitSnapshotRef: emitSnapshotRef,
+      snapshotProfile: snapshotProfile,
+    );
+  }
 
   bool get requiresStatusSnapshotRead =>
       ui != CockpitInteractiveUiLevel.none ||
@@ -214,6 +242,8 @@ final class CockpitInteractiveResultProfile {
     return switch (name) {
       CockpitInteractiveResultProfileName.minimal =>
         const CockpitInteractiveResultProfile.minimal(),
+      CockpitInteractiveResultProfileName.locate =>
+        const CockpitInteractiveResultProfile.locate(),
       CockpitInteractiveResultProfileName.standard =>
         const CockpitInteractiveResultProfile.standard(),
       CockpitInteractiveResultProfileName.inspect =>

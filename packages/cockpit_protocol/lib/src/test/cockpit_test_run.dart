@@ -30,6 +30,7 @@ enum CockpitTestStepStatus {
 }
 
 final class CockpitTestRunContext {
+  /// Creates a CockpitTestRunContext.
   CockpitTestRunContext({
     required this.projectId,
     required this.workspaceId,
@@ -59,6 +60,7 @@ final class CockpitTestRunContext {
   final String engineVersion;
   final CockpitAuthorizationMode authorizationMode;
 
+  /// Encodes this CockpitTestRunContext as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
     'projectId': projectId,
     'workspaceId': workspaceId,
@@ -66,9 +68,10 @@ final class CockpitTestRunContext {
     'caseId': caseId,
     'attemptId': attemptId,
     'engineVersion': engineVersion,
-    'authorizationMode': authorizationMode.name,
+    'auth': authorizationMode.name,
   };
 
+  /// Decodes a CockpitTestRunContext from a JSON object.
   factory CockpitTestRunContext.fromJson(Object? value, {String path = r'$'}) {
     final json = CockpitTestValueReader.object(value, path);
     const fields = <String>{
@@ -78,7 +81,7 @@ final class CockpitTestRunContext {
       'caseId',
       'attemptId',
       'engineVersion',
-      'authorizationMode',
+      'auth',
     };
     CockpitTestValueReader.keys(json, fields, path, required: fields);
     String id(String key) =>
@@ -94,15 +97,16 @@ final class CockpitTestRunContext {
         '$path.engineVersion',
       ),
       authorizationMode: CockpitTestValueReader.enumeration(
-        json['authorizationMode'],
+        json['auth'],
         CockpitAuthorizationMode.values,
-        '$path.authorizationMode',
+        '$path.auth',
       ),
     );
   }
 }
 
 final class CockpitTestStepOccurrence {
+  /// Creates a CockpitTestStepOccurrence.
   CockpitTestStepOccurrence({
     this.retryAttempt,
     this.loopIteration,
@@ -127,12 +131,14 @@ final class CockpitTestStepOccurrence {
   final int? loopIteration;
   final List<String> callPath;
 
+  /// Encodes this CockpitTestStepOccurrence as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
     if (retryAttempt != null) 'retryAttempt': retryAttempt,
     if (loopIteration != null) 'loopIteration': loopIteration,
     if (callPath.isNotEmpty) 'callPath': callPath,
   };
 
+  /// Decodes a CockpitTestStepOccurrence from a JSON object.
   factory CockpitTestStepOccurrence.fromJson(
     Object? value, {
     String path = r'$',
@@ -170,6 +176,7 @@ final class CockpitTestStepOccurrence {
 }
 
 final class CockpitTestStepResult {
+  /// Creates a CockpitTestStepResult.
   CockpitTestStepResult({
     required this.stepId,
     required this.executionId,
@@ -267,6 +274,7 @@ final class CockpitTestStepResult {
   final CockpitTestError? error;
   final List<String> evidence;
 
+  /// Encodes this CockpitTestStepResult as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
     'stepId': stepId,
     'executionId': executionId,
@@ -290,6 +298,7 @@ final class CockpitTestStepResult {
     if (evidence.isNotEmpty) 'evidence': evidence,
   };
 
+  /// Decodes a CockpitTestStepResult from a JSON object.
   factory CockpitTestStepResult.fromJson(Object? value, {String path = r'$'}) {
     final json = CockpitTestValueReader.object(value, path);
     CockpitTestValueReader.keys(
@@ -434,6 +443,7 @@ final class CockpitTestStepResult {
 }
 
 final class CockpitTestAttemptResult {
+  /// Creates a CockpitTestAttemptResult.
   CockpitTestAttemptResult({
     required this.context,
     required this.lifecycle,
@@ -492,6 +502,7 @@ final class CockpitTestAttemptResult {
   final List<CockpitTestError> cleanupErrors;
   final String? bundlePath;
 
+  /// Encodes this CockpitTestAttemptResult as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
     'context': context.toJson(),
     'lifecycle': lifecycle.name,
@@ -511,6 +522,7 @@ final class CockpitTestAttemptResult {
     if (bundlePath != null) 'bundlePath': bundlePath,
   };
 
+  /// Decodes a CockpitTestAttemptResult from a JSON object.
   factory CockpitTestAttemptResult.fromJson(
     Object? value, {
     String path = r'$',

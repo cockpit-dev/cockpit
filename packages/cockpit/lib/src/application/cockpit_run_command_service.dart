@@ -19,6 +19,7 @@ final class CockpitRunCommandRequest {
     this.snapshotOptions,
     this.compareAgainstSnapshotRef,
     this.defaultCommandTimeout = const Duration(seconds: 30),
+    this.cancellation,
   });
 
   final CockpitCommand command;
@@ -32,6 +33,7 @@ final class CockpitRunCommandRequest {
   final CockpitSnapshotOptions? snapshotOptions;
   final String? compareAgainstSnapshotRef;
   final Duration defaultCommandTimeout;
+  final Future<void>? cancellation;
 }
 
 typedef CockpitRunCommandResult = CockpitExecuteRemoteCommandResult;
@@ -67,6 +69,7 @@ final class CockpitRunCommandService {
         snapshotOptions: request.snapshotOptions,
         compareAgainstSnapshotRef: request.compareAgainstSnapshotRef,
         defaultCommandTimeout: request.defaultCommandTimeout,
+        cancellation: request.cancellation,
       ),
     );
   }

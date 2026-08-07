@@ -3,6 +3,32 @@ import 'dart:math';
 
 enum CockpitIdKind { root, workspace, checkout, project, lease, cleanup }
 
+extension CockpitIdKindPrefix on CockpitIdKind {
+  String get prefix => switch (this) {
+    CockpitIdKind.root => 'rt',
+    CockpitIdKind.workspace => 'ws',
+    CockpitIdKind.checkout => 'co',
+    CockpitIdKind.project => 'pj',
+    CockpitIdKind.lease => 'le',
+    CockpitIdKind.cleanup => 'cl',
+  };
+}
+
+const String _resourceIdAlphabet =
+    '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
+const int _resourceIdTokenLength = 16;
+
+String _nextResourceIdToken(Random random) {
+  final codeUnits = List<int>.generate(
+    _resourceIdTokenLength,
+    (_) => _resourceIdAlphabet.codeUnitAt(
+      random.nextInt(_resourceIdAlphabet.length),
+    ),
+    growable: false,
+  );
+  return String.fromCharCodes(codeUnits);
+}
+
 abstract interface class CockpitIdGenerator {
   String next(CockpitIdKind kind);
 }
@@ -15,11 +41,7 @@ final class CockpitSecureIdGenerator implements CockpitIdGenerator {
 
   @override
   String next(CockpitIdKind kind) {
-    final bytes = List<int>.generate(16, (_) => _random.nextInt(256));
-    final token = bytes
-        .map((byte) => byte.toRadixString(16).padLeft(2, '0'))
-        .join();
-    return '${kind.name}_$token';
+    return '${kind.prefix}-${_nextResourceIdToken(_random)}';
   }
 }
 
@@ -27,11 +49,29 @@ abstract interface class CockpitTokenGenerator {
   String nextToken({int byteLength = 32});
 }
 
-final class CockpitSecureTokenGenerator implements CockpitTokenGenerator {
+abstract interface class CockpitResourceIdTokenGenerator {
+  String nextIdToken();
+}
+
+extension CockpitResourceIdTokens on CockpitTokenGenerator {
+  String nextResourceIdToken() {
+    final generator = this;
+    if (generator is CockpitResourceIdTokenGenerator) {
+      return (generator as CockpitResourceIdTokenGenerator).nextIdToken();
+    }
+    return generator.nextToken(byteLength: 16);
+  }
+}
+
+final class CockpitSecureTokenGenerator
+    implements CockpitTokenGenerator, CockpitResourceIdTokenGenerator {
   CockpitSecureTokenGenerator({Random? random})
     : _random = random ?? Random.secure();
 
   final Random _random;
+
+  @override
+  String nextIdToken() => _nextResourceIdToken(_random);
 
   @override
   String nextToken({int byteLength = 32}) {

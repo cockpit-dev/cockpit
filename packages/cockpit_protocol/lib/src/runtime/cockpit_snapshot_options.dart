@@ -7,6 +7,7 @@ enum CockpitSnapshotProfile {
   investigate('investigate'),
   forensic('forensic');
 
+  /// Creates a CockpitSnapshotProfile.
   const CockpitSnapshotProfile(this.jsonValue);
 
   final String jsonValue;
@@ -24,6 +25,7 @@ enum CockpitSnapshotProfile {
 }
 
 final class CockpitSnapshotOptions {
+  /// Creates a CockpitSnapshotOptions.
   const CockpitSnapshotOptions({
     this.profile = CockpitSnapshotProfile.live,
     this.maxTargets = 25,
@@ -44,9 +46,11 @@ final class CockpitSnapshotOptions {
     this.maxAccessibilityEntries = 8,
   });
 
+  /// Creates a CockpitSnapshotOptions using the named constructor `live`.
   const CockpitSnapshotOptions.live()
     : this(profile: CockpitSnapshotProfile.live);
 
+  /// Creates a CockpitSnapshotOptions using the named constructor `baseline`.
   const CockpitSnapshotOptions.baseline()
     : this(
         profile: CockpitSnapshotProfile.baseline,
@@ -55,6 +59,7 @@ final class CockpitSnapshotOptions {
         maxPropertiesPerTarget: 6,
       );
 
+  /// Creates a CockpitSnapshotOptions using the named constructor `investigate`.
   const CockpitSnapshotOptions.investigate()
     : this(
         profile: CockpitSnapshotProfile.investigate,
@@ -71,6 +76,7 @@ final class CockpitSnapshotOptions {
         includeAccessibilitySummary: true,
       );
 
+  /// Creates a CockpitSnapshotOptions using the named constructor `forensic`.
   const CockpitSnapshotOptions.forensic()
     : this(
         profile: CockpitSnapshotProfile.forensic,
@@ -109,6 +115,7 @@ final class CockpitSnapshotOptions {
   final bool includeAccessibilitySummary;
   final int maxAccessibilityEntries;
 
+  /// Encodes this CockpitSnapshotOptions as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
     'profile': profile.jsonValue,
     'maxTargets': maxTargets,
@@ -129,6 +136,7 @@ final class CockpitSnapshotOptions {
     'maxAccessibilityEntries': maxAccessibilityEntries,
   };
 
+  /// Decodes a CockpitSnapshotOptions from a JSON object.
   factory CockpitSnapshotOptions.fromJson(Map<String, Object?> json) {
     final networkQueryJson = json['networkQuery'] as Map<Object?, Object?>?;
     final runtimeQueryJson = json['runtimeQuery'] as Map<Object?, Object?>?;
@@ -165,6 +173,7 @@ final class CockpitSnapshotOptions {
     );
   }
 
+  /// Returns a copy of this CockpitSnapshotOptions with supplied fields replaced.
   CockpitSnapshotOptions copyWith({
     CockpitSnapshotProfile? profile,
     int? maxTargets,

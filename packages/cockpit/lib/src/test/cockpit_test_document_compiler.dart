@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:cockpit_protocol/cockpit_protocol.dart';
 import 'package:crypto/crypto.dart';
 import 'package:json_schema/json_schema.dart';
+import 'package:lon/lon.dart';
 import 'package:source_span/source_span.dart';
 import 'package:yaml/yaml.dart';
 
@@ -137,7 +138,10 @@ final class CockpitTestDocumentCompiler {
           }),
       });
 
-  CockpitTestCompilationResult compile(String source) {
+  CockpitTestCompilationResult compile(
+    String source, {
+    CockpitDocumentFormat format = CockpitDocumentFormat.yaml,
+  }) {
     final bytes = utf8.encode(source);
     if (bytes.length > _maximumDocumentBytes) {
       return _failure(
@@ -149,8 +153,15 @@ final class CockpitTestDocumentCompiler {
     final sourceMap = <String, CockpitTestSourceLocation>{};
     Object? normalized;
     try {
-      final root = loadYamlNode(source);
-      normalized = _normalizeNode(root, r'$', sourceMap);
+      normalized = switch (format) {
+        CockpitDocumentFormat.lon => lon.decode(source),
+        CockpitDocumentFormat.json => jsonDecode(source),
+        CockpitDocumentFormat.yaml => _normalizeNode(
+          loadYamlNode(source),
+          r'$',
+          sourceMap,
+        ),
+      };
     } on YamlException catch (error) {
       final span = error.span;
       return CockpitTestCompilationResult(

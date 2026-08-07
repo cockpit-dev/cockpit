@@ -82,10 +82,14 @@ final class CockpitRegistryState {
     }
     for (var left = 0; left < roots.length; left += 1) {
       for (var right = left + 1; right < roots.length; right += 1) {
-        if (lexicalPaths.overlaps(
-          roots[left].canonicalPath,
-          roots[right].canonicalPath,
-        )) {
+        final leftRoot = roots[left];
+        final rightRoot = roots[right];
+        if (leftRoot.state != CockpitRootState.retired &&
+            rightRoot.state != CockpitRootState.retired &&
+            lexicalPaths.overlaps(
+              leftRoot.canonicalPath,
+              rightRoot.canonicalPath,
+            )) {
           throw const FormatException('Registry roots overlap.');
         }
       }

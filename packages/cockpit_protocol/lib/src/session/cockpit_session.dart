@@ -1,4 +1,5 @@
 final class CockpitSession {
+  /// Creates a CockpitSession.
   const CockpitSession({
     required this.sessionId,
     required this.taskId,

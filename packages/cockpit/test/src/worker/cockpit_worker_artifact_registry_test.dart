@@ -13,6 +13,59 @@ import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 
 void main() {
+  test('sanitizer preserves Flutter routes without exposing paths', () async {
+    final temporary = await Directory.systemTemp.createTemp(
+      'cockpit-worker-route-sanitizer-',
+    );
+    addTearDown(() => temporary.delete(recursive: true));
+    final workspace = await Directory(
+      p.join(temporary.path, 'workspace'),
+    ).create();
+    final stateRoot = await Directory(p.join(temporary.path, 'state')).create();
+    await Directory(p.join(stateRoot.path, 'producer_artifacts')).create();
+    final registry = CockpitWorkerRuntimeRegistry(
+      workspaceId: 'workspaceA',
+      workspaceRoot: workspace.path,
+      stateRoot: stateRoot.path,
+      stateStore: CockpitInMemoryWorkerRuntimeStateStore(),
+    );
+    final outsidePath = p.join(
+      p.rootPrefix(stateRoot.path),
+      'private',
+      'application.dart',
+    );
+
+    final result =
+        await CockpitWorkerResultSanitizer(
+          workspaceRoot: workspace.path,
+          registry: registry,
+          artifactRetainer: _retainer(stateRoot.path),
+        ).sanitize(<String, Object?>{
+          'snapshot': <String, Object?>{
+            'routeName': '/operations',
+            'visibleTargets': <Object?>[
+              <String, Object?>{
+                'route': '/operations',
+                'source': outsidePath,
+                'workspaceSource': p.join(workspace.path, 'lib', 'main.dart'),
+              },
+            ],
+          },
+        });
+
+    final snapshot = result['snapshot']! as Map<String, Object?>;
+    expect(snapshot['routeName'], '/operations');
+    final target =
+        (snapshot['visibleTargets']! as List<Object?>).single!
+            as Map<String, Object?>;
+    expect(target['route'], '/operations');
+    expect(target['source'], '<redacted-path>');
+    expect(
+      target['workspaceSource'],
+      p.join('<workspace-path>', 'lib', 'main.dart'),
+    );
+  });
+
   test('sanitizer persists opaque run-owned artifact references', () async {
     final temporary = await Directory.systemTemp.createTemp(
       'cockpit-worker-artifacts-',

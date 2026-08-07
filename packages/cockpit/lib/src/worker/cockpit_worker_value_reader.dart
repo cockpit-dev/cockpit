@@ -21,6 +21,7 @@ const Set<String> cockpitWorkerMethods = <String>{
   'replayEvents',
   'publishEventBatch',
   'publishArtifactBatch',
+  'readSessionArtifact',
 };
 
 Map<String, Object?> workerObject(Object? value, String path) {

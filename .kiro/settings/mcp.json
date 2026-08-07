@@ -1,7 +1,6 @@
 {
   "mcpServers": {
     "cockpit": {
-      "type": "stdio",
       "command": "cockpit_mcp",
       "args": []
     }

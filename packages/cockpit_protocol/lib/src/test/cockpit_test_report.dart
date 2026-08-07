@@ -9,6 +9,7 @@ import 'cockpit_test_suite_policy.dart';
 import 'cockpit_test_value_reader.dart';
 
 final class CockpitTestReportCounts {
+  /// Creates a CockpitTestReportCounts.
   const CockpitTestReportCounts({
     required this.total,
     required this.passed,
@@ -21,6 +22,7 @@ final class CockpitTestReportCounts {
     required this.flaky,
   });
 
+  /// Creates a CockpitTestReportCounts using the named constructor `fromCases`.
   factory CockpitTestReportCounts.fromCases(
     Iterable<CockpitTestCaseReport> cases,
   ) {
@@ -52,6 +54,7 @@ final class CockpitTestReportCounts {
   final int internalError;
   final int flaky;
 
+  /// Encodes this CockpitTestReportCounts as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
     'total': total,
     'passed': passed,
@@ -66,6 +69,7 @@ final class CockpitTestReportCounts {
 }
 
 final class CockpitTestSuiteReport {
+  /// Creates a CockpitTestSuiteReport.
   CockpitTestSuiteReport({
     this.schemaVersion = 'cockpit.report/v2',
     required this.projectId,
@@ -170,6 +174,7 @@ final class CockpitTestSuiteReport {
   CockpitTestReportCounts get counts =>
       CockpitTestReportCounts.fromCases(cases);
 
+  /// Encodes this CockpitTestSuiteReport as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
     'schemaVersion': schemaVersion,
     'projectId': projectId,
@@ -196,6 +201,7 @@ final class CockpitTestSuiteReport {
     'complete': complete,
   };
 
+  /// Decodes a CockpitTestSuiteReport from a JSON object.
   factory CockpitTestSuiteReport.fromJson(Object? value, {String path = r'$'}) {
     final json = CockpitTestValueReader.object(value, path);
     CockpitTestValueReader.keys(

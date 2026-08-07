@@ -1,0 +1,7 @@
+name: acpd
+description: Dart SDK runtime for the Agent Client Protocol.
+version: 0.1.0
+publish_to: none
+
+environment:
+  sdk: '>=3.5.0 <4.0.0'

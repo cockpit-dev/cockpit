@@ -43,6 +43,7 @@ final class CockpitEvidenceIndex {
   };
   static const Set<String> _recordingRoles = <String>{'recording'};
 
+  /// Creates a CockpitEvidenceIndex using the named constructor `fromSteps`.
   factory CockpitEvidenceIndex.fromSteps(List<CockpitStepRecord> steps) {
     final artifactRefs = _dedupeArtifactRefs(steps);
     final screenshotRefs = _collectArtifactPaths(

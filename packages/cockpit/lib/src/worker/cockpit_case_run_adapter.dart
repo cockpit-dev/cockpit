@@ -49,6 +49,7 @@ final class CockpitWorkerHealthySession {
     this.systemCaptureAdapter,
     this.systemRecordingAdapter,
     this.lowerer = const CockpitTestActionLowerer(),
+    this.prepare,
     this.isolate,
     this.forceAbort,
   });
@@ -66,6 +67,7 @@ final class CockpitWorkerHealthySession {
   final CockpitRecordingAdapter? systemRecordingAdapter;
   final CockpitTestActionLowerer lowerer;
   final Future<bool> Function() healthCheck;
+  final Future<void> Function(DateTime deadline)? prepare;
   final Future<void> Function(
     CockpitTestSuiteIsolation isolation,
     DateTime deadline,
@@ -549,8 +551,8 @@ final class CockpitCaseRunAdapterFactory {
         idempotencyKey: context.idempotencyKey,
         requestFingerprint: _requestFingerprint(submission, compiled),
         caseId: compiled.testCase.id,
-        proposedRunId: 'run_${context.requestId}',
-        proposedAttemptId: _newId('attempt'),
+        proposedRunId: 'rn-${context.requestId}',
+        proposedAttemptId: _newId('at'),
         now: _utcNow(),
       );
       if (reservation.replayed) {
@@ -669,6 +671,7 @@ final class CockpitCaseRunAdapterFactory {
   ) {
     final result = const CockpitTestDocumentCompiler().compile(
       request.sourceText,
+      format: request.format,
     );
     final compiled = result.compiled;
     final sourceHash =
@@ -739,6 +742,7 @@ final class CockpitCaseRunAdapterFactory {
           'Worker-owned automation session is unhealthy.',
         );
       }
+      await session.prepare?.call(context.deadline);
       await _appendEvent(
         runId,
         CockpitWorkerEventDraft(
@@ -900,7 +904,7 @@ final class CockpitCaseRunAdapterFactory {
               idempotencyKey: context.idempotencyKey,
               runId: runId,
               attemptId: attemptId,
-              intentId: _newId('completion'),
+              intentId: _newId('cp'),
               output: output,
               events: events,
               now: _utcNow(),
@@ -1221,7 +1225,7 @@ final class CockpitCaseRunAdapterFactory {
       if (submission.targetId != null) 'targetId': submission.targetId,
     };
     final target = File('$attemptRoot/preparation.json');
-    final temporary = File('$attemptRoot/.preparation.${_newId('write')}.tmp');
+    final temporary = File('$attemptRoot/.preparation.${_newId('wr')}.tmp');
     final sink = temporary.openWrite(mode: FileMode.writeOnly);
     sink.write(jsonEncode(preparation));
     await sink.flush();
@@ -1254,7 +1258,7 @@ final class CockpitCaseRunAdapterFactory {
   }
 
   String _newId(String prefix) =>
-      '${prefix}_${_tokenGenerator.nextToken(byteLength: 16)}';
+      '$prefix-${_tokenGenerator.nextResourceIdToken()}';
 
   Duration _resourceTtl(DateTime deadline) {
     final remaining = deadline.difference(_utcNow());

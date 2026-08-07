@@ -1,0 +1,48 @@
+schemaVersion: cockpit.test/v2
+kind: case
+id: consoleNativeSmoke
+name: Cockpit Console native smoke
+description: Verifies native app recovery and system capture without disturbing Flutter control.
+tags: [acceptance, smoke, black-box, native, mixed-stack]
+target:
+  platform: flutter
+  targetKind: flutterApp
+  plane: semantic
+  requiredCapabilities: [tap, captureScreenshot]
+defaults:
+  commandTimeoutMs: 30000
+  cleanupTimeoutMs: 15000
+  failFast: true
+  evidence:
+    screenshot: onFailure
+    snapshot: onFailure
+    failurePolicy: recordWarning
+steps:
+  - stepId: openDashboard
+    action:
+      type: tap
+      locator: {label: Dashboard}
+  - stepId: recoverConsoleNatively
+    plane: native
+    action:
+      type: system
+      name: recoverToApp
+  - stepId: captureDashboardNatively
+    plane: native
+    action:
+      type: captureScreenshot
+      artifactName: console-dashboard-native
+      captureOptions:
+        reason: acceptance
+        profile: nativePreferred
+        allowFallback: false
+  - stepId: verifyDashboardAfterNativeControl
+    action:
+      type: assertVisible
+      locator: {text: Dashboard}
+finally:
+  - stepId: restoreDashboard
+    plane: semantic
+    action:
+      type: tap
+      locator: {label: Dashboard}

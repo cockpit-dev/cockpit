@@ -38,6 +38,7 @@ enum CockpitTextInputAction {
 }
 
 final class CockpitTextInputRequest {
+  /// Creates a CockpitTextInputRequest.
   const CockpitTextInputRequest({
     this.text,
     this.selectionBase,
@@ -63,6 +64,7 @@ final class CockpitTextInputRequest {
       selectionBase != null ||
       selectionExtent != null;
 
+  /// Encodes this CockpitTextInputRequest as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
     'text': text,
     'selectionBase': selectionBase,
@@ -72,6 +74,7 @@ final class CockpitTextInputRequest {
     'clearExisting': clearExisting,
   };
 
+  /// Decodes a CockpitTextInputRequest from a JSON object.
   factory CockpitTextInputRequest.fromJson(Map<String, Object?> json) {
     return CockpitTextInputRequest(
       text: json['text'] as String?,
@@ -83,6 +86,7 @@ final class CockpitTextInputRequest {
     );
   }
 
+  /// Returns a copy of this CockpitTextInputRequest with supplied fields replaced.
   CockpitTextInputRequest copyWith({
     String? text,
     int? selectionBase,

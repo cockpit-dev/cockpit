@@ -123,13 +123,36 @@ Reload the Cursor window after changing Skills, rules, or MCP configuration.
 ## Kiro
 
 For a project adapter, copy the complete Skill to
-`.agents/skills/cockpit`, install `.kiro/steering/cockpit.md`, and merge the
-same stdio server shape above into `.kiro/settings/mcp.json`. The distributable
-Kiro Power at `plugins/kiro/cockpit` contains `POWER.md`, `mcp.json`, and the
-same complete Skill for hosts that install Powers through Kiro.
+`.kiro/skills/cockpit`, install `.kiro/steering/cockpit.md`, and merge the
+following Kiro-native local server into `.kiro/settings/mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "cockpit": {
+      "command": "cockpit_mcp",
+      "args": []
+    }
+  }
+}
+```
+
+Do not add `type` to the workspace config; Kiro's own schema infers a local
+server from `command`. Save the file to hot-reload it and confirm the Cockpit
+server is connected in Kiro's MCP panel.
+
+The distributable Power at `plugins/kiro/cockpit` uses the current Agent
+Plugins format: `plugin.json`, a schema-qualified `mcp.json`, and the same
+complete Skill. Open Powers, choose **Add Custom Power**, choose
+**Import power from a folder**, and select that directory. The Power MCP schema
+does require `type: stdio`; it is a different schema from the workspace file.
+Kiro manages Power MCP servers internally and activates them with the Power;
+do not also add that Power server to the user-level MCP configuration.
 
 Reload Kiro and confirm the steering file can load
-`.agents/skills/cockpit/SKILL.md` before testing MCP.
+`.kiro/skills/cockpit/SKILL.md` before testing MCP. Run `cockpit --help` from
+Kiro's terminal to confirm its process inherits Dart's global executable
+directory, then use `cockpit dev status` as the non-mutating CLI smoke.
 
 ## OpenCode
 

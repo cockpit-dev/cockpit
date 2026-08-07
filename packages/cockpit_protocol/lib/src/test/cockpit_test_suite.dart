@@ -6,6 +6,7 @@ import 'cockpit_test_suite_policy.dart';
 import 'cockpit_test_value_reader.dart';
 
 final class CockpitTestSuite implements CockpitTestDocument {
+  /// Creates a CockpitTestSuite.
   CockpitTestSuite({
     this.schemaVersion = 'cockpit.test/v2',
     this.kind = 'suite',
@@ -72,6 +73,7 @@ final class CockpitTestSuite implements CockpitTestDocument {
   final Set<String> excludeTags;
   final Map<String, Object?> extensions;
 
+  /// Encodes this CockpitTestSuite as a JSON object.
   @override
   Map<String, Object?> toJson() => <String, Object?>{
     'schemaVersion': schemaVersion,
@@ -94,6 +96,7 @@ final class CockpitTestSuite implements CockpitTestDocument {
     ...extensions,
   };
 
+  /// Decodes a CockpitTestSuite from a JSON object.
   factory CockpitTestSuite.fromJson(Object? value, {String path = r'$'}) {
     final json = CockpitTestValueReader.object(value, path);
     CockpitTestValueReader.keys(

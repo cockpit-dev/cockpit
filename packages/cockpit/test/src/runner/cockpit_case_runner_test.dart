@@ -135,6 +135,37 @@ void main() {
     expect(adapter.commands, hasLength(1));
   });
 
+  test(
+    'Flutter runner routes a native plane through its system driver',
+    () async {
+      final root = await Directory.systemTemp.createTemp(
+        'cockpit-v2-flutter-secondary-native-',
+      );
+      addTearDown(() => root.delete(recursive: true));
+      final flutterAdapter = RecordingAutomationAdapter();
+      final systemAdapter = RecordingAutomationAdapter();
+      final result =
+          await _runner(
+            flutterAdapter,
+            RecordingSecretResolver('unused'),
+            RecordingSafetyPolicy(),
+            systemAutomationAdapter: systemAdapter,
+          ).run(
+            compiled: compiler
+                .compile(_simpleCase(targetKind: 'flutterApp', plane: 'native'))
+                .requireCase(),
+            context: _context('simpleCase'),
+            targetId: 'emulatorOne',
+            targetEnvironment: CockpitTestTargetEnvironment.test,
+            reportRoot: root.path,
+          );
+
+      expect(result.outcome, CockpitTestOutcome.passed);
+      expect(flutterAdapter.commands, isEmpty);
+      expect(systemAdapter.commands, hasLength(1));
+    },
+  );
+
   test('preparation failure publication preserves validator error', () async {
     final root = await Directory.systemTemp.createTemp(
       'cockpit-v2-preparation-guard-',
@@ -458,8 +489,10 @@ CockpitCaseRunner _runner(
   RecordingSafetyPolicy safety, {
   CockpitTestBundlePrePublicationValidator? bundlePrePublicationValidator,
   CockpitTestActionLowerer lowerer = const CockpitTestActionLowerer(),
+  RecordingAutomationAdapter? systemAutomationAdapter,
 }) => CockpitCaseRunner(
   automationAdapter: adapter,
+  systemAutomationAdapter: systemAutomationAdapter,
   secretResolver: resolver,
   safetyPolicy: safety,
   lowerer: lowerer,

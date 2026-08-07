@@ -5,6 +5,8 @@ final class CockpitScrollStepResult {
     this.scrollableKey,
     this.scrollablePath,
     this.scrollableTypeName,
+    this.scrollableCandidateIndex,
+    this.scrollableCandidateCount,
     this.pixelsBefore,
     this.pixelsAfter,
     this.nextPixels,
@@ -16,6 +18,9 @@ final class CockpitScrollStepResult {
     this.hadGestureTarget = false,
     this.hadSemanticAction = false,
     this.matchedRegistryTarget = false,
+    this.targetVisibilityObserved = false,
+    this.targetMounted = false,
+    this.targetVisible = false,
   });
 
   final bool didScroll;
@@ -23,6 +28,8 @@ final class CockpitScrollStepResult {
   final String? scrollableKey;
   final String? scrollablePath;
   final String? scrollableTypeName;
+  final int? scrollableCandidateIndex;
+  final int? scrollableCandidateCount;
   final double? pixelsBefore;
   final double? pixelsAfter;
   final double? nextPixels;
@@ -34,6 +41,9 @@ final class CockpitScrollStepResult {
   final bool hadGestureTarget;
   final bool hadSemanticAction;
   final bool matchedRegistryTarget;
+  final bool targetVisibilityObserved;
+  final bool targetMounted;
+  final bool targetVisible;
 
   Map<String, Object?> toJson() {
     return <String, Object?>{
@@ -42,6 +52,10 @@ final class CockpitScrollStepResult {
       if (scrollableKey != null) 'scrollableKey': scrollableKey,
       if (scrollablePath != null) 'scrollablePath': scrollablePath,
       if (scrollableTypeName != null) 'scrollableTypeName': scrollableTypeName,
+      if (scrollableCandidateIndex != null)
+        'scrollableCandidateIndex': scrollableCandidateIndex,
+      if (scrollableCandidateCount != null)
+        'scrollableCandidateCount': scrollableCandidateCount,
       if (pixelsBefore != null) 'pixelsBefore': pixelsBefore,
       if (pixelsAfter != null) 'pixelsAfter': pixelsAfter,
       if (nextPixels != null) 'nextPixels': nextPixels,
@@ -54,6 +68,9 @@ final class CockpitScrollStepResult {
       'hadGestureTarget': hadGestureTarget,
       'hadSemanticAction': hadSemanticAction,
       'matchedRegistryTarget': matchedRegistryTarget,
+      if (targetVisibilityObserved) 'targetVisibilityObserved': true,
+      if (targetMounted) 'targetMounted': true,
+      if (targetVisible) 'targetVisible': true,
     };
   }
 }

@@ -78,10 +78,13 @@ final class CockpitStopRemoteRecordingService {
     CockpitRemoteRecordingStopper? stopRecording,
     CockpitSessionReferenceResolver? sessionReferenceResolver,
     CockpitInteractiveSessionLock? sessionLock,
+    CockpitRemoteArtifactTempFileFactory? artifactTempFileFactory,
   }) : _stopRecording =
            stopRecording ??
-           ((baseUri) =>
-               CockpitRemoteSessionClient(baseUri: baseUri).stopRecording()),
+           ((baseUri) => CockpitRemoteSessionClient(
+             baseUri: baseUri,
+             artifactTempFileFactory: artifactTempFileFactory,
+           ).stopRecording()),
        _sessionReferenceResolver =
            sessionReferenceResolver ?? CockpitSessionReferenceResolver(),
        _sessionLock = sessionLock ?? CockpitInteractiveSessionLock();

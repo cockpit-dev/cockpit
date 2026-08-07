@@ -114,7 +114,7 @@ void main() {
             ),
             adbAdapterFactory: (_) => _FakeRecordingAdapter(),
             simctlAdapterFactory: (_) => _FakeRecordingAdapter(),
-            macosAdapterFactory: (appId) {
+            macosAdapterFactory: (appId, {processId}) {
               capturedAppId = appId;
               return hostAdapter;
             },
@@ -178,7 +178,7 @@ void main() {
         );
         final service = CockpitStopRecordingService(
           recordingStrategyResolver: CockpitRecordingStrategyResolver(
-            macosAdapterFactory: (_) => hostAdapter,
+            macosAdapterFactory: (_, {processId}) => hostAdapter,
           ),
         );
 

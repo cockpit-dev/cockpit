@@ -4,6 +4,7 @@ enum CockpitRecordingMode {
   native('native'),
   full('full');
 
+  /// Creates a CockpitRecordingMode.
   const CockpitRecordingMode(this.jsonValue);
 
   final String jsonValue;

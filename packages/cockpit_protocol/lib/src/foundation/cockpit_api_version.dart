@@ -2,6 +2,7 @@ import 'cockpit_decode_policy.dart';
 import 'cockpit_foundation_value_reader.dart';
 
 final class CockpitApiVersion implements Comparable<CockpitApiVersion> {
+  /// Creates a CockpitApiVersion.
   CockpitApiVersion({required this.major, required this.minor}) {
     if (major < 1 || minor < 0) {
       throw const FormatException('API version numbers are invalid.');
@@ -11,11 +12,13 @@ final class CockpitApiVersion implements Comparable<CockpitApiVersion> {
   final int major;
   final int minor;
 
+  /// Encodes this CockpitApiVersion as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
     'major': major,
     'minor': minor,
   };
 
+  /// Decodes a CockpitApiVersion from a JSON object.
   factory CockpitApiVersion.fromJson(
     Object? value, {
     String path = r'$',
@@ -66,6 +69,7 @@ final class CockpitApiVersion implements Comparable<CockpitApiVersion> {
 }
 
 final class CockpitFeatureDescriptor {
+  /// Creates a CockpitFeatureDescriptor.
   CockpitFeatureDescriptor({
     required this.id,
     required this.revision,
@@ -81,12 +85,14 @@ final class CockpitFeatureDescriptor {
   final int revision;
   final int minimumApiMinor;
 
+  /// Encodes this CockpitFeatureDescriptor as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
     'id': id,
     'revision': revision,
     'minimumApiMinor': minimumApiMinor,
   };
 
+  /// Decodes a CockpitFeatureDescriptor from a JSON object.
   factory CockpitFeatureDescriptor.fromJson(
     Object? value, {
     String path = r'$',

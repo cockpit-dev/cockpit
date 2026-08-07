@@ -10,17 +10,20 @@ Object? cockpitTestCopyJsonValue(Object? value, {String path = r'$'}) =>
     CockpitTestValueReader.jsonValue(value, path);
 
 final class CockpitTestTemplateValue {
+  /// Creates a CockpitTestTemplateValue using the named constructor `literal`.
   CockpitTestTemplateValue.literal(Object? value, {required this.expectedType})
     : kind = CockpitTestTemplateValueKind.literal,
       value = _copyLiteral(value, expectedType, r'$'),
       variable = null;
 
+  /// Creates a CockpitTestTemplateValue using the named constructor `variable`.
   CockpitTestTemplateValue.variable(this.variable, {required this.expectedType})
     : kind = CockpitTestTemplateValueKind.variable,
       value = null {
     CockpitTestValueReader.string(variable, r'$.$var', id: true);
   }
 
+  /// Creates a CockpitTestTemplateValue using the named constructor `stringTemplate`.
   CockpitTestTemplateValue.stringTemplate(String template)
     : kind = CockpitTestTemplateValueKind.stringTemplate,
       expectedType = CockpitTestValueType.string,
@@ -34,6 +37,7 @@ final class CockpitTestTemplateValue {
   final Object? value;
   final String? variable;
 
+  /// Encodes this CockpitTestTemplateValue as a JSON object.
   Object? toJson() => switch (kind) {
     CockpitTestTemplateValueKind.literal => value,
     CockpitTestTemplateValueKind.variable => <String, Object?>{
@@ -42,6 +46,7 @@ final class CockpitTestTemplateValue {
     CockpitTestTemplateValueKind.stringTemplate => value,
   };
 
+  /// Decodes a CockpitTestTemplateValue from a JSON object.
   factory CockpitTestTemplateValue.fromJson(
     Object? value, {
     required CockpitTestValueType expectedType,

@@ -1,9 +1,12 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:cockpit_protocol/cockpit_protocol.dart';
+import 'package:crypto/crypto.dart';
 
 import 'cockpit_json_rpc_message.dart';
 import 'cockpit_json_rpc_peer.dart';
+import 'cockpit_worker_artifact_registry.dart';
 import 'cockpit_worker_protocol_request.dart';
 import 'cockpit_worker_protocol_result.dart';
 import 'cockpit_worker_protocol_schema.dart';
@@ -44,12 +47,14 @@ final class CockpitWorkerServer {
     required Iterable<String> supportedFeatures,
     required CockpitWorkerOperationDispatcher operations,
     required CockpitWorkerEventExchange events,
+    CockpitWorkerArtifactRegistry? artifacts,
     FutureOr<void> Function()? onInitialized,
     FutureOr<void> Function()? onShutdown,
     DateTime Function()? utcNow,
   }) : supportedFeatures = Set<String>.unmodifiable(supportedFeatures),
        _operations = operations,
        _events = events,
+       _artifacts = artifacts,
        _onInitialized = onInitialized,
        _onShutdown = onShutdown,
        _utcNow = utcNow ?? (() => DateTime.now().toUtc()) {
@@ -67,6 +72,7 @@ final class CockpitWorkerServer {
   final Set<String> supportedFeatures;
   final CockpitWorkerOperationDispatcher _operations;
   final CockpitWorkerEventExchange _events;
+  final CockpitWorkerArtifactRegistry? _artifacts;
   final FutureOr<void> Function()? _onInitialized;
   final FutureOr<void> Function()? _onShutdown;
   final DateTime Function() _utcNow;
@@ -120,10 +126,52 @@ final class CockpitWorkerServer {
         'methodUnavailable',
         'Artifact publication is only accepted by the Supervisor peer.',
       ),
+      CockpitWorkerReadSessionArtifactRequest() => _readSessionArtifact(
+        decoded,
+      ),
     };
     final json = result.toJson();
     CockpitWorkerProtocolSchema.validateResult(result.method, json);
     return json;
+  }
+
+  Future<CockpitWorkerReadSessionArtifactResult> _readSessionArtifact(
+    CockpitWorkerReadSessionArtifactRequest request,
+  ) async {
+    final artifacts = _artifacts;
+    if (artifacts == null) {
+      throw _rpcError(
+        'methodUnavailable',
+        'Session artifact reads are unavailable in this worker.',
+      );
+    }
+    final binding = await artifacts.requireArtifact(request.artifactId);
+    if (binding.ownerKind != 'session' ||
+        binding.ownerId != request.sessionId) {
+      throw _rpcError(
+        'artifactNotFound',
+        'Session artifact was not found for this owner.',
+      );
+    }
+    final file = File(binding.retainedPath);
+    final stat = await file.stat();
+    if (stat.type != FileSystemEntityType.file || stat.size < 1) {
+      throw _rpcError(
+        'artifactUnavailable',
+        'Session artifact file is unavailable.',
+      );
+    }
+    final digest = (await sha256.bind(file.openRead()).first).toString();
+    return CockpitWorkerReadSessionArtifactResult(
+      sessionId: request.sessionId,
+      artifactId: binding.artifactId,
+      kind: binding.kind,
+      name: binding.name,
+      mediaType: binding.mediaType,
+      retainedPath: binding.retainedPath,
+      sizeBytes: stat.size,
+      sha256: digest,
+    );
   }
 
   void _validateEnvelopeBeforeDispatch(CockpitJsonRpcRequest request) {

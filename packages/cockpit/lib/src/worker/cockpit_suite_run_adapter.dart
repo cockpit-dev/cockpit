@@ -106,7 +106,7 @@ final class CockpitSuiteRunAdapterFactory {
         compiledSuite: compiled,
         resolver: _documents,
       );
-      final runId = 'run_${context.requestId}';
+      final runId = 'rn-${context.requestId}';
       final reservation = await _runStore.reserve(
         runId: runId,
         idempotencyKey: context.idempotencyKey,
@@ -235,7 +235,7 @@ final class CockpitSuiteRunAdapterFactory {
       failure: executionFailure,
       environment: <String, Object?>{
         'engineVersion': engineVersion,
-        'authorizationMode': authorizationMode.name,
+        'auth': authorizationMode.name,
         'requiredFeatures': submission.requiredFeatures,
       },
       artifacts: execution.publishedArtifacts.map(
@@ -724,6 +724,8 @@ final class _SuiteAttemptExecution
           'Selected automation session is unhealthy.',
         );
       }
+      stage = 'sessionPreparation';
+      await session.prepare?.call(context.deadline);
       final control = CockpitCaseExecutionControl(
         forceAbort: session.forceAbort,
       );

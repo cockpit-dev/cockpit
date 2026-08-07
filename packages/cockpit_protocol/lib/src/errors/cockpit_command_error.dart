@@ -1,6 +1,7 @@
 import 'package:collection/collection.dart';
 
 final class CockpitCommandError {
+  /// Creates a CockpitCommandError.
   CockpitCommandError({
     required this.code,
     required this.message,
@@ -24,6 +25,7 @@ final class CockpitCommandError {
   static const MapEquality<String, Object?> _mapEquality =
       MapEquality<String, Object?>();
 
+  /// Creates a CockpitCommandError using the named constructor `targetNotFound`.
   factory CockpitCommandError.targetNotFound({
     required String message,
     Map<String, Object?> details = const <String, Object?>{},
@@ -35,6 +37,7 @@ final class CockpitCommandError {
     );
   }
 
+  /// Creates a CockpitCommandError using the named constructor `ambiguousTarget`.
   factory CockpitCommandError.ambiguousTarget({
     required String message,
     Map<String, Object?> details = const <String, Object?>{},
@@ -46,6 +49,7 @@ final class CockpitCommandError {
     );
   }
 
+  /// Creates a CockpitCommandError using the named constructor `timeout`.
   factory CockpitCommandError.timeout({
     required String message,
     Map<String, Object?> details = const <String, Object?>{},
@@ -57,6 +61,7 @@ final class CockpitCommandError {
     );
   }
 
+  /// Creates a CockpitCommandError using the named constructor `assertionFailed`.
   factory CockpitCommandError.assertionFailed({
     required String message,
     Map<String, Object?> details = const <String, Object?>{},
@@ -68,6 +73,7 @@ final class CockpitCommandError {
     );
   }
 
+  /// Creates a CockpitCommandError using the named constructor `captureFailed`.
   factory CockpitCommandError.captureFailed({
     required String message,
     Map<String, Object?> details = const <String, Object?>{},
@@ -79,6 +85,7 @@ final class CockpitCommandError {
     );
   }
 
+  /// Creates a CockpitCommandError using the named constructor `unsupportedCapability`.
   factory CockpitCommandError.unsupportedCapability({
     required String message,
     Map<String, Object?> details = const <String, Object?>{},
@@ -90,6 +97,7 @@ final class CockpitCommandError {
     );
   }
 
+  /// Creates a CockpitCommandError using the named constructor `invalidGestureParameters`.
   factory CockpitCommandError.invalidGestureParameters({
     required String message,
     Map<String, Object?> details = const <String, Object?>{},
@@ -101,6 +109,7 @@ final class CockpitCommandError {
     );
   }
 
+  /// Creates a CockpitCommandError using the named constructor `gestureExecutionFailed`.
   factory CockpitCommandError.gestureExecutionFailed({
     required String message,
     Map<String, Object?> details = const <String, Object?>{},
@@ -112,6 +121,7 @@ final class CockpitCommandError {
     );
   }
 
+  /// Creates a CockpitCommandError using the named constructor `targetNotHittable`.
   factory CockpitCommandError.targetNotHittable({
     required String message,
     Map<String, Object?> details = const <String, Object?>{},
@@ -123,12 +133,14 @@ final class CockpitCommandError {
     );
   }
 
+  /// Encodes this CockpitCommandError as a JSON object.
   Map<String, Object?> toJson() => {
     'code': code,
     'message': message,
     'details': details,
   };
 
+  /// Decodes a CockpitCommandError from a JSON object.
   factory CockpitCommandError.fromJson(Map<String, Object?> json) {
     return CockpitCommandError(
       code: json['code']! as String,

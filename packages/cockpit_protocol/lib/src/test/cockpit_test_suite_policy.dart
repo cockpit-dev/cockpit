@@ -7,6 +7,7 @@ enum CockpitTestSuiteIsolation { sharedSession, restartApp, resetAppData }
 enum CockpitTestReportFormat { json, junit, html, summary }
 
 final class CockpitTestSuiteRetryPolicy {
+  /// Creates a CockpitTestSuiteRetryPolicy.
   CockpitTestSuiteRetryPolicy({
     this.maxAttempts = 1,
     this.delayMs = 0,
@@ -33,12 +34,14 @@ final class CockpitTestSuiteRetryPolicy {
   final int delayMs;
   final Set<CockpitTestSuiteRetryReason> retryOn;
 
+  /// Encodes this CockpitTestSuiteRetryPolicy as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
     'maxAttempts': maxAttempts,
     'delayMs': delayMs,
     'retryOn': retryOn.map((reason) => reason.name).toList(growable: false),
   };
 
+  /// Decodes a CockpitTestSuiteRetryPolicy from a JSON object.
   factory CockpitTestSuiteRetryPolicy.fromJson(
     Object? value, {
     required String path,
@@ -94,6 +97,7 @@ final class CockpitTestSuiteRetryPolicy {
 }
 
 final class CockpitTestSuiteExecutionPolicy {
+  /// Creates a CockpitTestSuiteExecutionPolicy.
   CockpitTestSuiteExecutionPolicy({
     this.maxConcurrency = 1,
     this.failFast = false,
@@ -114,6 +118,7 @@ final class CockpitTestSuiteExecutionPolicy {
   final CockpitTestSuiteIsolation isolation;
   final CockpitTestSuiteRetryPolicy retry;
 
+  /// Encodes this CockpitTestSuiteExecutionPolicy as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
     'maxConcurrency': maxConcurrency,
     'failFast': failFast,
@@ -121,6 +126,7 @@ final class CockpitTestSuiteExecutionPolicy {
     'retry': retry.toJson(),
   };
 
+  /// Decodes a CockpitTestSuiteExecutionPolicy from a JSON object.
   factory CockpitTestSuiteExecutionPolicy.fromJson(
     Object? value, {
     required String path,
@@ -162,6 +168,7 @@ final class CockpitTestSuiteExecutionPolicy {
 }
 
 final class CockpitTestSuiteReportPolicy {
+  /// Creates a CockpitTestSuiteReportPolicy.
   CockpitTestSuiteReportPolicy({
     Iterable<CockpitTestReportFormat> formats = const <CockpitTestReportFormat>[
       CockpitTestReportFormat.json,
@@ -181,11 +188,13 @@ final class CockpitTestSuiteReportPolicy {
   final Set<CockpitTestReportFormat> formats;
   final bool includePassedAttempts;
 
+  /// Encodes this CockpitTestSuiteReportPolicy as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
     'formats': formats.map((format) => format.name).toList(growable: false),
     'includePassedAttempts': includePassedAttempts,
   };
 
+  /// Decodes a CockpitTestSuiteReportPolicy from a JSON object.
   factory CockpitTestSuiteReportPolicy.fromJson(
     Object? value, {
     required String path,

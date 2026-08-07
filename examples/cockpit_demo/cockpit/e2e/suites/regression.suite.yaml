@@ -2,7 +2,7 @@ schemaVersion: cockpit.test/v2
 kind: suite
 id: cockpitDemoRegression
 name: Cockpit demo regression
-description: Full Cockpit 2.0 release acceptance across workflow and report capabilities.
+description: Full Cockpit 3.0 release acceptance across workflow and report capabilities.
 tags: [acceptance, regression]
 execution:
   maxConcurrency: 1

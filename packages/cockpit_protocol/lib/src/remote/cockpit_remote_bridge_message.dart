@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'cockpit_remote_session_endpoint.dart';
 
 final class CockpitRemoteBridgeRequest {
+  /// Creates a CockpitRemoteBridgeRequest.
   const CockpitRemoteBridgeRequest({
     required this.requestId,
     required this.method,
@@ -17,6 +18,7 @@ final class CockpitRemoteBridgeRequest {
 
   Uri get uri => Uri.parse(path);
 
+  /// Encodes this CockpitRemoteBridgeRequest as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
     'requestId': requestId,
     'method': method,
@@ -24,6 +26,7 @@ final class CockpitRemoteBridgeRequest {
     if (jsonBody != null) 'jsonBody': jsonBody,
   };
 
+  /// Decodes a CockpitRemoteBridgeRequest from a JSON object.
   factory CockpitRemoteBridgeRequest.fromJson(Map<String, Object?> json) {
     final jsonBody = json['jsonBody'];
     final requestId = json['requestId'];
@@ -61,6 +64,7 @@ final class CockpitRemoteBridgeRequest {
 }
 
 final class CockpitRemoteBridgeResponse {
+  /// Creates a CockpitRemoteBridgeResponse.
   const CockpitRemoteBridgeResponse({
     required this.requestId,
     required this.statusCode,
@@ -78,6 +82,7 @@ final class CockpitRemoteBridgeResponse {
   List<int>? get binaryBody =>
       bytesBase64 == null ? null : base64Decode(bytesBase64!);
 
+  /// Encodes this CockpitRemoteBridgeResponse as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
     'requestId': requestId,
     'statusCode': statusCode,
@@ -86,6 +91,7 @@ final class CockpitRemoteBridgeResponse {
     if (bytesBase64 != null) 'bytesBase64': bytesBase64,
   };
 
+  /// Decodes a CockpitRemoteBridgeResponse from a JSON object.
   factory CockpitRemoteBridgeResponse.fromJson(Map<String, Object?> json) {
     final jsonBody = json['jsonBody'];
     final requestId = json['requestId'];
@@ -138,6 +144,7 @@ final class CockpitRemoteBridgeResponse {
     );
   }
 
+  /// Creates a CockpitRemoteBridgeResponse using the named constructor `fromEndpointResponse`.
   factory CockpitRemoteBridgeResponse.fromEndpointResponse({
     required String requestId,
     required CockpitRemoteSessionEndpointResponse response,

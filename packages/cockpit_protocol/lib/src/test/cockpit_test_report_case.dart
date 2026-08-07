@@ -5,6 +5,7 @@ import 'cockpit_test_case.dart';
 import 'cockpit_test_value_reader.dart';
 
 final class CockpitTestAttemptReport {
+  /// Creates a CockpitTestAttemptReport.
   CockpitTestAttemptReport({
     required this.attemptId,
     required this.number,
@@ -41,6 +42,7 @@ final class CockpitTestAttemptReport {
   final CockpitFailure? failure;
   final List<CockpitArtifactReference> artifacts;
 
+  /// Encodes this CockpitTestAttemptReport as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
     'attemptId': attemptId,
     'number': number,
@@ -54,6 +56,7 @@ final class CockpitTestAttemptReport {
       'artifacts': artifacts.map((artifact) => artifact.toJson()).toList(),
   };
 
+  /// Decodes a CockpitTestAttemptReport from a JSON object.
   factory CockpitTestAttemptReport.fromJson(
     Object? value, {
     required String path,
@@ -135,6 +138,7 @@ final class CockpitTestAttemptReport {
 }
 
 final class CockpitTestCaseReport {
+  /// Creates a CockpitTestCaseReport.
   CockpitTestCaseReport({
     required this.entryId,
     required this.caseId,
@@ -177,6 +181,7 @@ final class CockpitTestCaseReport {
   final Map<String, Object?> matrix;
   final List<CockpitTestAttemptReport> attempts;
 
+  /// Encodes this CockpitTestCaseReport as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
     'entryId': entryId,
     'caseId': caseId,
@@ -189,6 +194,7 @@ final class CockpitTestCaseReport {
     'attempts': attempts.map((attempt) => attempt.toJson()).toList(),
   };
 
+  /// Decodes a CockpitTestCaseReport from a JSON object.
   factory CockpitTestCaseReport.fromJson(
     Object? value, {
     required String path,

@@ -36,7 +36,8 @@ jobs:
       - name: Verify formatting
         run: >-
           dart format --output=none --set-exit-if-changed
-          packages/flutter_cockpit packages/cockpit examples/cockpit_demo test
+          packages/cockpit_protocol packages/flutter_cockpit packages/cockpit
+          packages/cockpit_console examples/cockpit_demo test
 
       - name: Analyze workspace
         run: dart analyze
@@ -87,6 +88,8 @@ jobs:
             directory: examples/cockpit_demo
           - name: development shell tests
             directory: examples/cockpit_demo/cockpit
+          - name: Cockpit Console tests
+            directory: packages/cockpit_console
     steps:
       - uses: actions/checkout@v6
 

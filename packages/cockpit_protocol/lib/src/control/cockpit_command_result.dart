@@ -8,6 +8,7 @@ import 'cockpit_command_type.dart';
 import 'cockpit_locator_resolution.dart';
 
 final class CockpitCommandResult {
+  /// Creates a CockpitCommandResult.
   CockpitCommandResult({
     required this.success,
     required this.commandId,
@@ -20,6 +21,7 @@ final class CockpitCommandResult {
     this.resolvedCaptureKind,
     this.usedCaptureFallback = false,
     this.degradationReason,
+    this.changed,
     this.error,
   }) : artifacts = List.unmodifiable(artifacts),
        snapshot = snapshot == null ? null : Map.unmodifiable(snapshot);
@@ -35,6 +37,7 @@ final class CockpitCommandResult {
   final CockpitCaptureKind? resolvedCaptureKind;
   final bool usedCaptureFallback;
   final String? degradationReason;
+  final bool? changed;
   final CockpitCommandError? error;
 
   static const ListEquality<CockpitArtifactRef> _artifactListEquality =
@@ -42,6 +45,7 @@ final class CockpitCommandResult {
   static const MapEquality<String, Object?> _mapEquality =
       MapEquality<String, Object?>();
 
+  /// Encodes this CockpitCommandResult as a JSON object.
   Map<String, Object?> toJson() => {
     'success': success,
     'commandId': commandId,
@@ -57,9 +61,11 @@ final class CockpitCommandResult {
       'resolvedCaptureKind': resolvedCaptureKind!.name,
     'usedCaptureFallback': usedCaptureFallback,
     if (degradationReason != null) 'degradationReason': degradationReason,
+    if (changed != null) 'changed': changed,
     if (error != null) 'error': error!.toJson(),
   };
 
+  /// Decodes a CockpitCommandResult from a JSON object.
   factory CockpitCommandResult.fromJson(Map<String, Object?> json) {
     final locatorResolutionJson =
         json['locatorResolution'] as Map<Object?, Object?>?;
@@ -96,6 +102,7 @@ final class CockpitCommandResult {
           : CockpitCaptureKind.fromJson(resolvedCaptureKind),
       usedCaptureFallback: json['usedCaptureFallback'] as bool? ?? false,
       degradationReason: json['degradationReason'] as String?,
+      changed: json['changed'] as bool?,
       error: errorJson == null
           ? null
           : CockpitCommandError.fromJson(Map<String, Object?>.from(errorJson)),
@@ -117,6 +124,7 @@ final class CockpitCommandResult {
             other.resolvedCaptureKind == resolvedCaptureKind &&
             other.usedCaptureFallback == usedCaptureFallback &&
             other.degradationReason == degradationReason &&
+            other.changed == changed &&
             other.error == error;
   }
 
@@ -133,6 +141,7 @@ final class CockpitCommandResult {
     resolvedCaptureKind,
     usedCaptureFallback,
     degradationReason,
+    changed,
     error,
   );
 }

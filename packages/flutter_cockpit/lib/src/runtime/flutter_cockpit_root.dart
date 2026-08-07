@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
@@ -28,6 +29,8 @@ import '../recording/cockpit_recording_session.dart';
 import 'flutter_cockpit.dart';
 import 'cockpit_tap_feedback_overlay.dart';
 import 'cockpit_capabilities.dart';
+import 'cockpit_process_id.dart';
+import 'cockpit_native_viewport.dart';
 import 'cockpit_runtime_query.dart';
 import 'cockpit_remote_session_platform.dart';
 import 'cockpit_runtime_tree_visibility.dart';
@@ -62,6 +65,7 @@ final class FlutterCockpitRootState extends State<FlutterCockpitRoot> {
   Object? _remoteSessionStartError;
   StackTrace? _remoteSessionStartErrorStackTrace;
   bool _reportedRemoteSessionStartFailure = false;
+  final CockpitNativeViewport _nativeViewport = const CockpitNativeViewport();
 
   @override
   void initState() {
@@ -132,6 +136,21 @@ final class FlutterCockpitRootState extends State<FlutterCockpitRoot> {
               query: options.runtimeQuery,
             ),
     );
+  }
+
+  Future<CockpitSnapshot> _remoteSnapshot({
+    required CockpitSnapshotOptions options,
+  }) async {
+    final binding = WidgetsBinding.instance;
+    if (_isTestBinding(binding)) {
+      return snapshot(options: options);
+    }
+    if (binding.schedulerPhase == SchedulerPhase.idle &&
+        !binding.hasScheduledFrame) {
+      binding.scheduleWarmUpFrame();
+    }
+    await binding.endOfFrame.timeout(const Duration(seconds: 2));
+    return snapshot(options: options);
   }
 
   Future<bool> waitForUiIdle({
@@ -451,6 +470,7 @@ final class FlutterCockpitRootState extends State<FlutterCockpitRoot> {
             required duration,
             required alignment,
             required padding,
+            required offset,
           }) {
             final surfaceState = _surfaceStateOrNull;
             if (surfaceState == null) {
@@ -461,6 +481,7 @@ final class FlutterCockpitRootState extends State<FlutterCockpitRoot> {
               duration: duration,
               alignment: alignment,
               padding: padding,
+              offset: offset,
             );
           },
       gestureHandler: (action) {
@@ -521,8 +542,9 @@ final class FlutterCockpitRootState extends State<FlutterCockpitRoot> {
       configuration: configuration,
       statusProvider: _buildRemoteSessionStatus,
       readyProvider: _buildRemoteSessionReady,
-      snapshotProvider: ({required options}) => snapshot(options: options),
+      snapshotProvider: _remoteSnapshot,
       commandExecutor: executor.executeWithArtifacts,
+      viewportResizer: _resizeRemoteViewport,
       runtimeStepDrainer: ({required clear}) {
         return FlutterCockpit.drainRecordedSteps(clear: clear);
       },
@@ -545,8 +567,9 @@ final class FlutterCockpitRootState extends State<FlutterCockpitRoot> {
       configuration: configuration,
       statusProvider: _buildRemoteSessionStatus,
       readyProvider: _buildRemoteSessionReady,
-      snapshotProvider: ({required options}) => snapshot(options: options),
+      snapshotProvider: _remoteSnapshot,
       commandExecutor: executor.executeWithArtifacts,
+      viewportResizer: _resizeRemoteViewport,
       runtimeStepDrainer: ({required clear}) {
         return FlutterCockpit.drainRecordedSteps(clear: clear);
       },
@@ -661,6 +684,9 @@ final class FlutterCockpitRootState extends State<FlutterCockpitRoot> {
     final baseCapabilities = await executor.describeCapabilities();
     final supportsNativeCapture = await FlutterCockpit.binding
         .queryNativeCaptureAvailability();
+    final viewportAvailability = await _nativeViewport.queryAvailability(
+      platform: remoteSessionPlatform,
+    );
     final configuredLaunchId = FlutterCockpit
         .binding
         .configuration
@@ -675,6 +701,7 @@ final class FlutterCockpitRootState extends State<FlutterCockpitRoot> {
       platform: remoteSessionPlatform,
       transportType: 'remoteHttp',
       currentRouteName: currentRouteName,
+      processId: cockpitCurrentProcessId(),
       capabilities: CockpitCapabilities(
         platform: baseCapabilities.platform,
         transportType: baseCapabilities.transportType,
@@ -682,6 +709,9 @@ final class FlutterCockpitRootState extends State<FlutterCockpitRoot> {
         supportsFlutterViewCapture: baseCapabilities.supportsFlutterViewCapture,
         supportsNativeScreenCapture: supportsNativeCapture,
         supportsHostAutomation: baseCapabilities.supportsHostAutomation,
+        supportsViewportResize: viewportAvailability.available,
+        viewportResizeAlternative:
+            viewportAvailability.alternatives.firstOrNull,
         supportedCommands: baseCapabilities.supportedCommands,
         supportedLocatorStrategies: baseCapabilities.supportedLocatorStrategies,
       ),
@@ -690,6 +720,93 @@ final class FlutterCockpitRootState extends State<FlutterCockpitRoot> {
       snapshot: _snapshotForRemoteSessionHealth(currentRouteName),
       environment: _runtimeEnvironmentForRemoteSessionHealth(),
       activeRecording: FlutterCockpit.binding.activeRecordingSession,
+    );
+  }
+
+  Future<CockpitViewportResizeResult> _resizeRemoteViewport(
+    CockpitViewportResizeRequest request,
+  ) async {
+    final platform = resolveCockpitRemoteSessionPlatform(
+      isWeb: kIsWeb,
+      targetPlatform: defaultTargetPlatform,
+    );
+    final before = _currentViewportMetrics();
+    final availability = await _nativeViewport.queryAvailability(
+      platform: platform,
+    );
+    if (!availability.available) {
+      return CockpitViewportResizeResult(
+        available: false,
+        changed: false,
+        requestedWidth: request.width,
+        requestedHeight: request.height,
+        platform: platform,
+        logicalWidth: before.logicalWidth,
+        logicalHeight: before.logicalHeight,
+        physicalWidth: before.physicalWidth,
+        physicalHeight: before.physicalHeight,
+        devicePixelRatio: before.devicePixelRatio,
+        reason: availability.reason ?? 'viewportUnavailable',
+        alternatives: availability.alternatives,
+      );
+    }
+
+    await _nativeViewport.resize(width: request.width, height: request.height);
+    final effective = await _waitForViewport(
+      width: request.width,
+      height: request.height,
+    );
+    return CockpitViewportResizeResult(
+      available: true,
+      changed:
+          (before.logicalWidth - effective.logicalWidth).abs() > 0.5 ||
+          (before.logicalHeight - effective.logicalHeight).abs() > 0.5,
+      requestedWidth: request.width,
+      requestedHeight: request.height,
+      platform: platform,
+      logicalWidth: effective.logicalWidth,
+      logicalHeight: effective.logicalHeight,
+      physicalWidth: effective.physicalWidth,
+      physicalHeight: effective.physicalHeight,
+      devicePixelRatio: effective.devicePixelRatio,
+    );
+  }
+
+  Future<_CockpitViewportMetrics> _waitForViewport({
+    required int width,
+    required int height,
+  }) async {
+    final deadline = DateTime.now().add(const Duration(seconds: 5));
+    var settledFrames = 0;
+    var metrics = _currentViewportMetrics();
+    while (DateTime.now().isBefore(deadline)) {
+      await Future<void>.delayed(const Duration(milliseconds: 32));
+      metrics = _currentViewportMetrics();
+      final matches =
+          (metrics.logicalWidth - width).abs() <= 1 &&
+          (metrics.logicalHeight - height).abs() <= 1;
+      if (!matches) {
+        settledFrames = 0;
+        continue;
+      }
+      settledFrames += 1;
+      if (settledFrames >= 2) return metrics;
+    }
+    throw StateError(
+      'Viewport resize did not settle at ${width}x$height logical pixels; '
+      'effective size is ${metrics.logicalWidth}x${metrics.logicalHeight}.',
+    );
+  }
+
+  _CockpitViewportMetrics _currentViewportMetrics() {
+    final view = View.of(context);
+    final dpr = view.devicePixelRatio;
+    return _CockpitViewportMetrics(
+      logicalWidth: view.physicalSize.width / dpr,
+      logicalHeight: view.physicalSize.height / dpr,
+      physicalWidth: view.physicalSize.width.round(),
+      physicalHeight: view.physicalSize.height.round(),
+      devicePixelRatio: dpr,
     );
   }
 
@@ -734,6 +851,26 @@ final class FlutterCockpitRootState extends State<FlutterCockpitRoot> {
       return null;
     }
   }
+}
+
+bool _isTestBinding(WidgetsBinding binding) {
+  return binding.runtimeType.toString().contains('TestWidgetsFlutterBinding');
+}
+
+final class _CockpitViewportMetrics {
+  const _CockpitViewportMetrics({
+    required this.logicalWidth,
+    required this.logicalHeight,
+    required this.physicalWidth,
+    required this.physicalHeight,
+    required this.devicePixelRatio,
+  });
+
+  final double logicalWidth;
+  final double logicalHeight;
+  final int physicalWidth;
+  final int physicalHeight;
+  final double devicePixelRatio;
 }
 
 bool cockpitCaptureProfilePrefersNative(

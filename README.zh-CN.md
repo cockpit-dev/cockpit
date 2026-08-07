@@ -2,7 +2,7 @@
   <a href="https://github.com/cockpit-dev/cockpit">
     <img src="assets/brand/cockpit-mark.svg" width="128" alt="Cockpit logo">
   </a>
-  <h1>Cockpit 2.0</h1>
+  <h1>Cockpit 3.0</h1>
   <p><strong>统一完成 Flutter 快速开发验证与任意应用黑盒 E2E。</strong></p>
   <p>
     <a href="https://github.com/cockpit-dev/cockpit/actions/workflows/example-e2e.yml"><img src="https://github.com/cockpit-dev/cockpit/actions/workflows/example-e2e.yml/badge.svg?branch=main" alt="CI"></a>
@@ -28,7 +28,7 @@ Cockpit 是面向 AI 与 CI 的生产级应用开发、E2E 自动化与验证框
 
 核心能力包括：
 
-- 独立 YAML/JSON case 与 suite；
+- 独立 LON/JSON/YAML case 与 suite；
 - Flutter semantic、原生 accessibility、system、visual、coordinate 平面；
 - target 发现、注册、启动、检查与真实能力声明；
 - 依赖 DAG、fixture、matrix、retry、有界并发和 fail-fast；
@@ -46,12 +46,18 @@ Cockpit 是面向 AI 与 CI 的生产级应用开发、E2E 自动化与验证框
 - [`flutter_cockpit`](packages/flutter_cockpit)：一等 Flutter 开发与语义验证
   适配器；纯黑盒用户无需接入。
 
-最低版本为 Dart 3.8.0、Flutter 3.32.0：
+最低版本为 Dart 3.8.0、Flutter 3.32.0。CLI 只需全局安装一次：
+
+```bash
+dart pub global activate cockpit any
+cockpit --help
+```
+
+Flutter 源码开发额外使用仅限开发环境的 bridge：
 
 ```yaml
 dev_dependencies:
-  cockpit: any
-  flutter_cockpit: any # Flutter 源码开发适配器
+  flutter_cockpit: any
 ```
 
 Cockpit 应保持为开发依赖。黑盒原生应用测试不要求修改被测应用源码，也不要求
@@ -71,6 +77,27 @@ Install Cockpit for the current AI host, including the CLI, complete cockpit Ski
 完整的宿主安装与验收说明见
 [`skills/cockpit/INSTALL.md`](skills/cockpit/INSTALL.md)，原生适配器和 MCP
 配置见 [Agent 接入指南](docs/agent-integrations.md)。
+
+## Flutter 快速路径
+
+从目标 checkout 内执行。`dev` 会发现并管理 workspace、target、进程、端口和
+bridge，之后复用 checkout 隔离的数字 handle：
+
+```bash
+cockpit dev start cockpit/main.dart --platform macos
+cockpit dev status
+cockpit dev inspect "Save"
+cockpit dev tap "Save"
+cockpit dev wait
+cockpit dev screenshot
+cockpit dev reload
+cockpit dev diagnose --verbosity standard
+```
+
+能够推断入口和平台时直接省略。正常命令也无需重复当前 handle、LON、minimal
+verbosity 和默认 timeout。`dev` 会自动使用仅限本地进程的 yolo Supervisor；
+黑盒、CI、staging 和 production 仍可使用严格策略。Cockpit 不读取 keychain 或
+secret store，`--env` 只传给当前进程。
 
 ## 运行架构
 
@@ -95,20 +122,20 @@ Flutter bridge / Android ADB / iOS WDA / host driver
 workspace 目录中执行命令：
 
 ```bash
-dart run cockpit daemon start
-dart run cockpit root add --path /work/projects --label projects
-dart run cockpit workspace register --root-id <rootId> --path /work/projects/app-a
-dart run cockpit workspace register --root-id <rootId> --path /work/projects/app-b
-dart run cockpit workspace list
+cockpit daemon start
+cockpit root add --path /work/projects --label projects
+cockpit workspace register --root-id <rootId> --path /work/projects/app-a
+cockpit workspace register --root-id <rootId> --path /work/projects/app-b
+cockpit workspace list
 ```
 
 ## CLI 输出
 
-默认 `auto` 格式是 `--detail minimal` 的 AI-first 语义文本。命令专用
-presenter 会消除重复 identity，并让同构集合只声明一次字段。文本和 JSON 都遵循
-`minimal|standard|full`；需要完整响应时使用
-`--detail full --stdout-format json --output <file>`。终端只返回路径、字节数和
-SHA-256，artifact 二进制始终要求 `--output`，绝不以 Base64 输出。
+默认输出是 minimal canonical LON，正常命令不写默认输出参数。
+`--verbosity standard|full` 只增加上下文，不改变操作准确性；
+`--format json|yaml|jsonl|path|none` 用于改变编码或输出方式。需要完整响应时使用
+`--verbosity full --format json --output <file>`。写入输出或 artifact 时，终端只
+返回已验证路径；文件内容、Base64、hash 和对决策无意义的字节数都不会进入输出。
 
 ## 生产授权
 
@@ -153,21 +180,20 @@ SHA-256，artifact 二进制始终要求 `--output`，绝不以 Base64 输出。
     "externalNavigation",
     "financial",
     "permissionChange"
-  ],
-  "allowedEnvironmentSecretNames": ["E2E_PASSWORD"]
+  ]
 }
 ```
 
 ```bash
-dart run cockpit daemon policy validate --file authorization.json
-dart run cockpit daemon policy apply --file authorization.json --restart
-dart run cockpit daemon policy show
+cockpit daemon policy validate --file authorization.json
+cockpit daemon policy apply --file authorization.json --restart
+cockpit daemon policy show
 ```
 
-本地需要显式全权运行时，使用 `dart run cockpit daemon start --yolo`（或
+本地需要显式全权运行时，使用 `cockpit daemon start --yolo`（或
 `daemon restart --yolo`）。YOLO 只对本次 daemon 进程生效；不带该开关的启动或
 重启会使用持久化的受限策略。`daemon status`、attempt manifest 和 suite
-`report.json` 都会记录实际 `authorizationMode`。
+`report.json` 都会记录实际 `auth`。
 
 quarantined lease 会持续阻塞资源，直到 cleanup 验证成功。Supervisor 提供
 `lease.list`，以及需要显式授权 `reset` effect 的 `lease.recover`；恢复请求必须精确
@@ -175,15 +201,14 @@ quarantined lease 会持续阻塞资源，直到 cleanup 验证成功。Supervis
 `forceRelease: true` 后解除未验证隔离，forwarded port 永远必须通过真实 cleanup
 验证，不能强制释放。
 
-只有被点名的环境变量 secret 会传入 worker。`production` 和 `unknown` 可以显式
-授权，但默认策略不会放行。
+`production` 和 `unknown` 可以显式授权，但默认策略不会放行。
 
 ## 黑盒应用
 
 无需修改应用即可注册已经安装的 Android/iOS 应用：
 
 ```bash
-dart run cockpit target register \
+cockpit target register \
   --workspace-id <workspaceId> \
   --platform android \
   --device-id emulator-5554 \
@@ -193,9 +218,9 @@ dart run cockpit target register \
   --mode automation \
   --idempotency-key android-target-001
 
-dart run cockpit target launch --workspace-id <workspaceId> --target-id <targetId> \
+cockpit target launch --workspace-id <workspaceId> --target-id <targetId> \
   --idempotency-key android-launch-001
-dart run cockpit target inspect --workspace-id <workspaceId> --target-id <targetId>
+cockpit target inspect --workspace-id <workspaceId> --target-id <targetId>
 ```
 
 Android 使用 ADB 和原生 accessibility；iOS Simulator 使用 `simctl`，原生 iOS
@@ -210,19 +235,19 @@ accessibility tree；Flutter-aware resolver 只在局部折叠同 bounds 的祖�
 semantics 并优先可操作节点，不会屏蔽原生页面、platform view、WebView 或真实列表项。
 只有需要开发态 bridge 时才使用绑定 entrypoint 的 Flutter target 和 `semantic` plane。
 
-Flutter target 通过 CLI、MCP 和 `operation run` 共用结构化启动配置。入口、设备、
+Flutter target 通过 CLI、MCP 和 `op run` 共用结构化启动配置。入口、设备、
 模式、flavor 及远程控制参数由 Cockpit 管理；调用方可以传入多个 dart define、
 define 文件、安全的额外 Flutter 参数、进程环境变量，以及最长 30 分钟的启动预算：
 
 ```bash
-dart run cockpit target launch \
+cockpit target launch \
   --workspace-id <workspaceId> \
   --target-id <flutterTargetId> \
   --dart-define API_URL=https://api.example.test \
   --dart-define-from-file config/staging.json \
   --env LOG_LEVEL=debug \
   --flutter-arg=--track-widget-creation \
-  --launch-timeout-ms 1800000 \
+  --timeout 30m \
   --idempotency-key flutter-launch-001
 ```
 
@@ -233,10 +258,10 @@ Android 和 iOS 上的 `environment` 只配置 Flutter 构建进程，移动应�
 任意宿主机环境变量；应用自身需要读取的值应使用 Dart define 或应用自己的配置通道。
 
 每个已公开 operation 都包含 `executionMode`、`defaultTimeoutMs` 和
-`maximumTimeoutMs`。同步操作会阻塞到结果，可通过
-`operation run --timeout-ms <值>` 或绝对 `--deadline` 覆盖预算，两者不能同时传入。
+`maximumTimeoutMs`。同步操作会阻塞到结果，可通过一个 `op run --timeout <时长>`
+覆盖预算，例如 `90s` 或 `20m`。
 case/suite 是持久化异步 job：提交后立即返回 `runId`，客户端再消费事件并读取终态报告。
-`case run --timeout-ms` 默认 30 分钟、最长 6 小时；`suite run --timeout-ms` 默认
+`case run --timeout` 默认 30 分钟、最长 6 小时；`suite run --timeout` 默认
 2 小时、最长 24 小时。步骤和清理超时仍是互相独立的内部预算。
 
 每个步骤都可以用 `plane` 显式选择 `semantic`、`native`、`visual` 或
@@ -263,17 +288,17 @@ case/suite 使用 `schemaVersion: cockpit.test/v2`。先验证文档，再使用
 idempotency key 提交：
 
 ```bash
-dart run cockpit case validate --workspace-id <workspaceId> --file cases/login.yaml
-dart run cockpit case run --workspace-id <workspaceId> \
+cockpit case validate --workspace-id <workspaceId> --file cases/login.yaml
+cockpit case run --workspace-id <workspaceId> \
   --document-id <documentId> --case-id login \
-  --idempotency-key login-2026-07-24 --inputs-json '{}' \
-  --timeout-ms 1800000
+  --idempotency-key login-2026-07-24 \
+  --timeout 30m
 
-dart run cockpit suite validate --workspace-id <workspaceId> --file suites/regression.yaml
-dart run cockpit suite run --workspace-id <workspaceId> \
+cockpit suite validate --workspace-id <workspaceId> --file suites/regression.yaml
+cockpit suite run --workspace-id <workspaceId> \
   --document-id <documentId> --suite-id regression \
   --idempotency-key regression-2026-07-24
-dart run cockpit suite report --run-id <runId> \
+cockpit suite report --run-id <runId> \
   --output-dir cockpit-report
 ```
 
@@ -303,10 +328,10 @@ snapshot 都是同一事实图的可携带视图。客户端必须保持相对�
 ## MCP、客户端与 CI
 
 ```bash
-dart run cockpit serve-mcp
+cockpit serve-mcp
 # 或
-dart run cockpit_mcp
-dart run cockpit serve-mcp --profile dart
+cockpit_mcp
+cockpit serve-mcp --profile dart
 ```
 
 MCP 只是认证 Supervisor 客户端，不会在进程内构造 driver 或应用服务。它提供有界的
@@ -329,15 +354,29 @@ Windsurf、Cline、Roo Code、Pi 和 Oh My Pi 的接入方式见
 CI 可以让前台 daemon 独占生命周期：
 
 ```bash
-dart run cockpitd \
+cockpitd \
   --home=/tmp/cockpit-ci \
   --foreground-workspace=/workspace/app \
   --foreground-submission=/workspace/run-submission.json
 ```
 
+## 源码开发
+
+在本仓库修改 CLI、daemon 或 worker 后，真实验证前只需安装一次 self-contained AOT
+可执行文件：
+
+```bash
+dart run tool/install_cockpit.dart
+```
+
+它会原子替换 Pub cache 中用于开发的 `cockpit`，编译或启动校验失败时恢复旧文件。
+日常命令仍然是 `cockpit ...`，不再承担 path activation 下每次执行
+`dart pub global run` 的依赖解析成本。只有明确需要其他安装位置时才使用
+`--output PATH`。
+
 ## 发布门禁
 
-`.github/workflows/example-e2e.yml` 是 Cockpit 2.0 发布前的强制门禁。各个并行 job
+`.github/workflows/example-e2e.yml` 是 Cockpit 3.0 发布前的强制门禁。各个并行 job
 会验证格式、静态分析、仓库契约、所有 package 与示例测试、三个公开包的发布 dry-run，
 以及 Android、iOS、macOS、Linux、Web、Windows 真实回归。Android 与 iOS 必须证明
 原生 locator/action/assertion 控制，只有截图回退不能通过核心平台门禁。只有全部 job

@@ -5,9 +5,11 @@ import 'package:cockpit/src/platform/web/cockpit_browser_host_app_id.dart';
 import 'package:test/test.dart';
 
 void main() {
-  test('uses adb host capture when an Android device ID is provided', () {
-    final remoteAdapter = _FakeCaptureAdapter();
-    final adbAdapter = _FakeCaptureAdapter();
+  test('prefers adb system capture on Android', () async {
+    final remoteAdapter = _SuccessfulCaptureAdapter(
+      CockpitCaptureKind.flutterView,
+    );
+    final adbAdapter = _SuccessfulCaptureAdapter(CockpitCaptureKind.hostSystem);
     final resolver = CockpitCaptureStrategyResolver(
       remoteAdapterFactory: (client) => remoteAdapter,
       adbAdapterFactory: (deviceId) => adbAdapter,
@@ -22,31 +24,70 @@ void main() {
       androidDeviceId: 'emulator-5554',
     );
 
-    expect(adapter, isA<CockpitPrioritizedCaptureAdapter>());
+    final execution = await adapter.capture(_acceptanceScreenshot());
+
+    expect(execution.result.resolvedCaptureKind, CockpitCaptureKind.hostSystem);
+    expect(adbAdapter.captureCount, 1);
+    expect(remoteAdapter.captureCount, 0);
   });
 
-  test(
-    'uses simctl host capture when an iOS simulator device ID is provided',
-    () {
-      final remoteAdapter = _FakeCaptureAdapter();
-      final simctlAdapter = _FakeCaptureAdapter();
-      final resolver = CockpitCaptureStrategyResolver(
-        remoteAdapterFactory: (client) => remoteAdapter,
-        adbAdapterFactory: (deviceId) => _FakeCaptureAdapter(),
-        simctlAdapterFactory: (deviceId) => simctlAdapter,
-      );
+  test('prefers simctl system capture on an iOS simulator', () async {
+    final remoteAdapter = _SuccessfulCaptureAdapter(
+      CockpitCaptureKind.flutterView,
+    );
+    final simctlAdapter = _SuccessfulCaptureAdapter(
+      CockpitCaptureKind.hostSystem,
+    );
+    final resolver = CockpitCaptureStrategyResolver(
+      remoteAdapterFactory: (client) => remoteAdapter,
+      adbAdapterFactory: (deviceId) => _FakeCaptureAdapter(),
+      simctlAdapterFactory: (deviceId) => simctlAdapter,
+    );
 
-      final adapter = resolver.resolve(
-        platform: 'ios',
-        client: CockpitRemoteSessionClient(
-          baseUri: Uri.parse('http://127.0.0.1:47331'),
-        ),
-        iosDeviceId: '6FD25DED-11E9-4AE9-B4B5-EDF4601981DC',
-      );
+    final adapter = resolver.resolve(
+      platform: 'ios',
+      client: CockpitRemoteSessionClient(
+        baseUri: Uri.parse('http://127.0.0.1:47331'),
+      ),
+      iosDeviceId: '6FD25DED-11E9-4AE9-B4B5-EDF4601981DC',
+    );
 
-      expect(adapter, isA<CockpitPrioritizedCaptureAdapter>());
-    },
-  );
+    final execution = await adapter.capture(_acceptanceScreenshot());
+
+    expect(execution.result.resolvedCaptureKind, CockpitCaptureKind.hostSystem);
+    expect(simctlAdapter.captureCount, 1);
+    expect(remoteAdapter.captureCount, 0);
+  });
+
+  test('prefers WDA system capture on a physical iOS device', () async {
+    final remoteAdapter = _SuccessfulCaptureAdapter(
+      CockpitCaptureKind.flutterView,
+    );
+    final wdaAdapter = _SuccessfulCaptureAdapter(CockpitCaptureKind.hostSystem);
+    final resolver = CockpitCaptureStrategyResolver(
+      remoteAdapterFactory: (client) => remoteAdapter,
+      adbAdapterFactory: (deviceId) => _FakeCaptureAdapter(),
+      simctlAdapterFactory: (deviceId) => _FakeCaptureAdapter(),
+      wdaAdapterFactory: (baseUri) {
+        expect(baseUri, Uri.parse('http://127.0.0.1:8100'));
+        return wdaAdapter;
+      },
+    );
+
+    final adapter = resolver.resolve(
+      platform: 'ios',
+      client: CockpitRemoteSessionClient(
+        baseUri: Uri.parse('http://127.0.0.1:1'),
+      ),
+      iosDeviceId: '00008110-0009341C2EF3801E',
+      iosWdaBaseUri: Uri.parse('http://127.0.0.1:8100'),
+    );
+    final execution = await adapter.capture(_acceptanceScreenshot());
+
+    expect(execution.result.resolvedCaptureKind, CockpitCaptureKind.hostSystem);
+    expect(wdaAdapter.captureCount, 1);
+    expect(remoteAdapter.captureCount, 0);
+  });
 
   test('uses remote capture for physical iOS device IDs', () {
     final remoteAdapter = _FakeCaptureAdapter();
@@ -74,7 +115,7 @@ void main() {
       remoteAdapterFactory: (client) => remoteAdapter,
       adbAdapterFactory: (deviceId) => _FakeCaptureAdapter(),
       simctlAdapterFactory: (deviceId) => _FakeCaptureAdapter(),
-      macosAdapterFactory: (appId) => macosAdapter,
+      macosAdapterFactory: (appId, {processId}) => macosAdapter,
     );
 
     final adapter = resolver.resolve(
@@ -108,7 +149,7 @@ void main() {
       remoteAdapterFactory: (client) => remoteAdapter,
       adbAdapterFactory: (deviceId) => _FakeCaptureAdapter(),
       simctlAdapterFactory: (deviceId) => _FakeCaptureAdapter(),
-      macosAdapterFactory: (appId) => _FakeCaptureAdapter(),
+      macosAdapterFactory: (appId, {processId}) => _FakeCaptureAdapter(),
       windowsAdapterFactory: (appId, {processId}) {
         capturedAppId = appId;
         capturedProcessId = processId;
@@ -195,7 +236,7 @@ void main() {
       remoteAdapterFactory: (client) => remoteAdapter,
       adbAdapterFactory: (deviceId) => _FakeCaptureAdapter(),
       simctlAdapterFactory: (deviceId) => _FakeCaptureAdapter(),
-      macosAdapterFactory: (appId) => _FakeCaptureAdapter(),
+      macosAdapterFactory: (appId, {processId}) => _FakeCaptureAdapter(),
       linuxAdapterFactory: (appId, {processId}) {
         capturedAppId = appId;
         capturedProcessId = processId;
@@ -284,7 +325,7 @@ void main() {
         remoteAdapterFactory: (client) => remoteAdapter,
         adbAdapterFactory: (deviceId) => _FakeCaptureAdapter(),
         simctlAdapterFactory: (deviceId) => _FakeCaptureAdapter(),
-        macosAdapterFactory: (appId) {
+        macosAdapterFactory: (appId, {processId}) {
           capturedAppId = appId;
           return hostAdapter;
         },
@@ -403,7 +444,7 @@ void main() {
       remoteAdapterFactory: (client) => remoteAdapter,
       adbAdapterFactory: (deviceId) => _FakeCaptureAdapter(),
       simctlAdapterFactory: (deviceId) => _FakeCaptureAdapter(),
-      macosAdapterFactory: (appId) => _FakeCaptureAdapter(),
+      macosAdapterFactory: (appId, {processId}) => _FakeCaptureAdapter(),
       browserHostAppIdResolver: cockpitResolveBrowserHostAppId,
     );
 
@@ -428,7 +469,7 @@ void main() {
       remoteAdapterFactory: (client) => remoteAdapter,
       adbAdapterFactory: (deviceId) => _FakeCaptureAdapter(),
       simctlAdapterFactory: (deviceId) => _FakeCaptureAdapter(),
-      macosAdapterFactory: (appId) => hostAdapter,
+      macosAdapterFactory: (appId, {processId}) => hostAdapter,
     );
 
     final adapter = resolver.resolve(
@@ -482,3 +523,12 @@ final class _SuccessfulCaptureAdapter implements CockpitCaptureAdapter {
     );
   }
 }
+
+CockpitCommand _acceptanceScreenshot() => CockpitCommand(
+  commandId: 'capture',
+  commandType: CockpitCommandType.captureScreenshot,
+  screenshotRequest: const CockpitScreenshotRequest(
+    reason: CockpitScreenshotReason.acceptance,
+    name: 'acceptance',
+  ),
+);

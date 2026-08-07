@@ -44,7 +44,7 @@ daemon state, workers, or target ownership:
 
 ```bash
 export COCKPIT_HOME="$PWD/.dart_tool/cockpit-home"
-dart run cockpit daemon policy apply --file e2e/authorization.ci.json
+cockpit daemon policy apply --file e2e/authorization.ci.json
 dart run tool/verify.dart --platform macos --stop-daemon
 ```
 
@@ -81,12 +81,10 @@ verified, the launched app is stopped, and requested daemon cleanup succeeds.
 Validate edited documents before running them:
 
 ```bash
-dart run cockpit case validate \
-  --file e2e/cases/task_editor_validation.case.yaml \
-  --format yaml
-dart run cockpit suite validate \
-  --file e2e/suites/regression.suite.yaml \
-  --format yaml
+cockpit case validate \
+  --file e2e/cases/task_editor_validation.case.yaml
+cockpit suite validate \
+  --file e2e/suites/regression.suite.yaml
 ```
 
 ## CI

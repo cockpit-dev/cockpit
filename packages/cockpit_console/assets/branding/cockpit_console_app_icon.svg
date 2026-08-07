@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-label="Cockpit Console app icon">
+  <rect x="64" y="64" width="896" height="896" rx="208" fill="#111317"/>
+  <rect x="70" y="70" width="884" height="884" rx="202" fill="none" stroke="#2B3038" stroke-width="12"/>
+  <path
+    d="M416 280H352C304 280 280 304 280 352V416 M608 280H672C720 280 744 304 744 352V416 M416 744H352C304 744 280 720 280 672V608 M608 744H672C720 744 744 720 744 672V608"
+    fill="none"
+    stroke="#6A9AF5"
+    stroke-width="96"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+  <path d="M420 512H604" fill="none" stroke="#3A5D9F" stroke-width="28" stroke-linecap="round"/>
+  <rect x="452" y="452" width="120" height="120" rx="34" fill="#42C990"/>
+  <rect x="485" y="485" width="54" height="54" rx="16" fill="#DDF9EC"/>
+</svg>

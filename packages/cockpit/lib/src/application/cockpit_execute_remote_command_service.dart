@@ -40,6 +40,7 @@ final class CockpitExecuteRemoteCommandRequest {
     this.snapshotOptions,
     this.compareAgainstSnapshotRef,
     this.defaultCommandTimeout = const Duration(seconds: 30),
+    this.cancellation,
   });
 
   final CockpitCommand command;
@@ -52,6 +53,7 @@ final class CockpitExecuteRemoteCommandRequest {
   final CockpitSnapshotOptions? snapshotOptions;
   final String? compareAgainstSnapshotRef;
   final Duration defaultCommandTimeout;
+  final Future<void>? cancellation;
 }
 
 final class CockpitExecuteRemoteCommandResult {
@@ -61,7 +63,7 @@ final class CockpitExecuteRemoteCommandResult {
     this.selectedPlane = CockpitPlaneKind.flutterSemanticPlane,
     this.fallbackTrail = const <CockpitPlaneKind>[],
     this.recommendedNextStep = 'continue',
-    this.whatChanged,
+    this.changed,
     this.whatMatters,
     this.uiSummary,
     this.snapshot,
@@ -79,7 +81,7 @@ final class CockpitExecuteRemoteCommandResult {
   final CockpitPlaneKind selectedPlane;
   final List<CockpitPlaneKind> fallbackTrail;
   final String recommendedNextStep;
-  final String? whatChanged;
+  final bool? changed;
   final String? whatMatters;
   final CockpitInteractiveSnapshotSummary? uiSummary;
   final CockpitSnapshot? snapshot;
@@ -97,7 +99,7 @@ final class CockpitExecuteRemoteCommandResult {
     'selectedPlane': selectedPlane.name,
     'fallbackTrail': fallbackTrail.map((planeKind) => planeKind.name).toList(),
     'recommendedNextStep': recommendedNextStep,
-    if (whatChanged != null) 'whatChanged': whatChanged,
+    if (changed != null) 'changed': changed,
     if (whatMatters != null) 'whatMatters': whatMatters,
     if (uiSummary != null) 'uiSummary': uiSummary!.toJson(),
     if (snapshot != null) 'snapshot': snapshot!.toJson(),
@@ -123,14 +125,9 @@ final class CockpitExecuteRemoteCommandService {
     CockpitInteractiveSnapshotStore? snapshotStore,
     CockpitInteractiveSessionLock? sessionLock,
     CockpitCommandArtifactTempFileFactory? artifactTempFileFactory,
-  }) : _executeCommand =
-           executeCommand ??
-           ((baseUri, command) => CockpitRemoteSessionClient(
-             baseUri: baseUri,
-             requestTimeout: cockpitRemoteCommandTransportTimeoutForCommand(
-               command,
-             ),
-           ).executeDetailed(command)),
+  }) : _executeCommand = executeCommand,
+       _artifactTempFileFactory =
+           artifactTempFileFactory ?? _defaultCommandArtifactTempFileFactory,
        _readSnapshot =
            readSnapshot ??
            ((baseUri, options) => CockpitRemoteSessionClient(
@@ -139,11 +136,9 @@ final class CockpitExecuteRemoteCommandService {
        _sessionReferenceResolver =
            sessionReferenceResolver ?? CockpitSessionReferenceResolver(),
        _snapshotStore = snapshotStore ?? CockpitInteractiveSnapshotStore(),
-       _sessionLock = sessionLock ?? CockpitInteractiveSessionLock(),
-       _artifactTempFileFactory =
-           artifactTempFileFactory ?? _defaultCommandArtifactTempFileFactory;
+       _sessionLock = sessionLock ?? CockpitInteractiveSessionLock();
 
-  final CockpitRemoteCommandExecutor _executeCommand;
+  final CockpitRemoteCommandExecutor? _executeCommand;
   final CockpitRemoteSnapshotDetailedReader _readSnapshot;
   final CockpitSessionReferenceResolver _sessionReferenceResolver;
   final CockpitInteractiveSnapshotStore _snapshotStore;
@@ -162,7 +157,7 @@ final class CockpitExecuteRemoteCommandService {
     );
     final sessionKey = resolved.baseUri.toString();
 
-    return _sessionLock.run(sessionKey, () async {
+    final execution = _sessionLock.run(sessionKey, () async {
       final effectiveCommand = _withDefaultTimeout(
         cockpitCommandWithAiEvidenceDefaults(request.command),
         defaultTimeout: request.defaultCommandTimeout,
@@ -175,6 +170,7 @@ final class CockpitExecuteRemoteCommandService {
       final execution = await _executeCommandWithContext(
         resolved.baseUri,
         effectiveCommand,
+        cancellation: request.cancellation,
       );
       final evidenceExecution = await _withPersistedMetadataArtifacts(
         execution,
@@ -221,7 +217,7 @@ final class CockpitExecuteRemoteCommandService {
           execution: execution,
           executionPlan: executionPlan,
         ),
-        whatChanged: _whatChanged(evidenceExecution.result),
+        changed: evidenceExecution.result.changed,
         whatMatters: _whatMatters(evidenceExecution.result),
         uiSummary: snapshot == null || !request.resultProfile.emitsUiSummary
             ? null
@@ -249,14 +245,43 @@ final class CockpitExecuteRemoteCommandService {
         effectiveSnapshotOptions: effectiveSnapshotOptions,
       );
     });
+    final cancellation = request.cancellation;
+    if (cancellation == null) return execution;
+    return Future.any<CockpitExecuteRemoteCommandResult>(
+      <Future<CockpitExecuteRemoteCommandResult>>[
+        execution,
+        cancellation.then<CockpitExecuteRemoteCommandResult>((_) {
+          throw const CockpitRemoteCommandCancelledException();
+        }),
+      ],
+    );
   }
 
   Future<CockpitCommandExecution> _executeCommandWithContext(
     Uri baseUri,
-    CockpitCommand command,
-  ) async {
+    CockpitCommand command, {
+    Future<void>? cancellation,
+  }) async {
     try {
-      return await _executeCommand(baseUri, command);
+      final executeCommand = _executeCommand;
+      if (executeCommand != null) {
+        final execution = executeCommand(baseUri, command);
+        return cancellation == null
+            ? await execution
+            : await Future.any<CockpitCommandExecution>(
+                <Future<CockpitCommandExecution>>[
+                  execution,
+                  cancellation.then<CockpitCommandExecution>((_) {
+                    throw const CockpitRemoteCommandCancelledException();
+                  }),
+                ],
+              );
+      }
+      return await CockpitRemoteSessionClient(
+        baseUri: baseUri,
+        requestTimeout: cockpitRemoteCommandTransportTimeoutForCommand(command),
+        artifactTempFileFactory: _artifactTempFileFactory,
+      ).executeDetailed(command, cancellation: cancellation);
     } on CockpitApplicationServiceException catch (error) {
       throw CockpitApplicationServiceException(
         code: error.code,
@@ -405,12 +430,19 @@ final class CockpitExecuteRemoteCommandService {
         (_positiveNum(command.parameters['revealPaddingPx']) ?? 0) > 0;
     final continuous = command.parameters['continuous'] == true;
     final carriesEvidence = cockpitRemoteCommandCarriesEvidence(command);
+    final explicitScrollable =
+        command.parameters['scrollableKey'] != null ||
+        command.parameters['scrollLocator'] != null ||
+        command.parameters['scrollableLocator'] != null;
+    final directionBudget = 2;
+    final candidateBudget = explicitScrollable ? 1 : 2;
 
     final perProbeBudgetMs = durationPerStepMs + (revealRequested ? 420 : 320);
     final perStepBudgetMs =
         probeSegments * perProbeBudgetMs + (continuous ? 500 : 0);
-    final stepBudgetMs = maxScrolls * perStepBudgetMs;
-    final revealBudgetMs = revealRequested ? maxScrolls * 350 : 0;
+    final searchBudget = maxScrolls * directionBudget * candidateBudget;
+    final stepBudgetMs = searchBudget * perStepBudgetMs;
+    final revealBudgetMs = revealRequested ? searchBudget * 350 : 0;
     final evidenceBudgetMs = carriesEvidence
         ? 4500 + (command.screenshotRequest?.includeSnapshot == true ? 1800 : 0)
         : 0;
@@ -497,12 +529,6 @@ final class CockpitExecuteRemoteCommandService {
       return 'reviewCapturedEvidence';
     }
     return 'continue';
-  }
-
-  static String _whatChanged(CockpitCommandResult result) {
-    return result.success
-        ? 'Command ${result.commandId} completed successfully.'
-        : 'Command ${result.commandId} failed.';
   }
 
   static String? _whatMatters(CockpitCommandResult result) {

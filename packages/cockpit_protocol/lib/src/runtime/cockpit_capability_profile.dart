@@ -7,6 +7,7 @@ import 'cockpit_surface_kind.dart';
 import 'cockpit_target_kind.dart';
 
 final class CockpitCapabilityProfile {
+  /// Creates a CockpitCapabilityProfile.
   CockpitCapabilityProfile({
     required this.targetKind,
     Set<CockpitSurfaceKind> surfaceKinds = const <CockpitSurfaceKind>{},
@@ -47,6 +48,7 @@ final class CockpitCapabilityProfile {
     return evidenceCapabilities.contains(evidenceCapability);
   }
 
+  /// Encodes this CockpitCapabilityProfile as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
     'targetKind': targetKind.name,
     'surfaceKinds': surfaceKinds
@@ -63,6 +65,7 @@ final class CockpitCapabilityProfile {
         .toList(),
   };
 
+  /// Decodes a CockpitCapabilityProfile from a JSON object.
   factory CockpitCapabilityProfile.fromJson(Map<String, Object?> json) {
     return CockpitCapabilityProfile(
       targetKind: CockpitTargetKind.fromJson(json['targetKind']),

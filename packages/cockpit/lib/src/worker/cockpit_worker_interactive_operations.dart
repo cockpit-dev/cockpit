@@ -9,12 +9,13 @@ import '../application/cockpit_inspect_surface_service.dart';
 import '../application/cockpit_inspect_ui_service.dart';
 import '../application/cockpit_interactive_result_profile.dart';
 import '../application/cockpit_interactive_snapshot_store.dart';
-import '../application/cockpit_query_development_session_service.dart';
 import '../application/cockpit_read_errors_service.dart';
 import '../application/cockpit_read_logs_service.dart';
 import '../application/cockpit_read_network_service.dart';
+import '../application/cockpit_read_network_body_service.dart';
 import '../application/cockpit_read_remote_snapshot_service.dart';
 import '../application/cockpit_read_session_logs_service.dart';
+import '../application/cockpit_resize_viewport_service.dart';
 import '../application/cockpit_run_batch_service.dart';
 import '../application/cockpit_run_command_service.dart';
 import '../application/cockpit_run_shell_service.dart';
@@ -23,7 +24,10 @@ import '../application/cockpit_start_recording_service.dart';
 import '../application/cockpit_stop_recording_service.dart';
 import '../application/cockpit_wait_idle_service.dart';
 import '../development/cockpit_development_session_status.dart';
+import '../development/cockpit_vm_network_profiler.dart';
+import '../platform/ios/cockpit_ios_device_connection.dart';
 import '../system_control/cockpit_system_control_action_service.dart';
+import '../system_control/cockpit_system_control_service.dart';
 import 'cockpit_worker_application_support.dart';
 import 'cockpit_worker_document_index.dart';
 import 'cockpit_worker_development_session_runtime.dart';
@@ -53,25 +57,33 @@ final class CockpitWorkerInteractiveOperations {
     CockpitInspectSurfaceService? inspectSurfaceService,
     CockpitReadLogsService? readLogsService,
     CockpitReadNetworkService? readNetworkService,
+    CockpitReadNetworkBodyService? readNetworkBodyService,
+    CockpitVmNetworkProfiler? networkProfiler,
     CockpitReadErrorsService? readErrorsService,
     CockpitWorkerSessionLogsServiceFactory? sessionLogsServiceFactory,
     CockpitCaptureScreenshotService? captureScreenshotService,
     CockpitRunCommandService? runCommandService,
     CockpitRunBatchService? runBatchService,
     CockpitRunShellService? runShellService,
+    CockpitSystemControlService? systemControlService,
     CockpitSystemControlActionService? systemActionService,
     CockpitWaitIdleService? waitIdleService,
     CockpitStartRecordingService? startRecordingService,
     CockpitStopRecordingService? stopRecordingService,
-    CockpitQueryDevelopmentSessionService? queryDevelopmentService,
+    CockpitResizeViewportService? resizeViewportService,
   }) {
     final snapshots = snapshotStore ?? CockpitInteractiveSnapshotStore();
     final retainedRegistry = CockpitSessionRegistry();
+    final artifactTempFileFactory = cockpitWorkerArtifactTempFileFactory(
+      producerRoot,
+    );
     final executeCommand = CockpitExecuteRemoteCommandService(
       snapshotStore: snapshots,
+      artifactTempFileFactory: artifactTempFileFactory,
     );
     final executeBatch = CockpitExecuteRemoteCommandBatchService(
       snapshotStore: snapshots,
+      artifactTempFileFactory: artifactTempFileFactory,
     );
     final runCommand =
         runCommandService ??
@@ -83,8 +95,11 @@ final class CockpitWorkerInteractiveOperations {
         CockpitInspectUiService(
           snapshotService: CockpitReadRemoteSnapshotService(
             snapshotStore: snapshots,
+            artifactTempFileFactory: artifactTempFileFactory,
           ),
         );
+    final effectiveNetworkProfiler =
+        networkProfiler ?? CockpitVmNetworkProfiler();
     return CockpitWorkerInteractiveOperations._(
       workspaceId: workspaceId,
       workspaceRoot: workspaceRoot,
@@ -105,6 +120,12 @@ final class CockpitWorkerInteractiveOperations {
       readNetworkService:
           readNetworkService ??
           CockpitReadNetworkService(registry: retainedRegistry),
+      readNetworkBodyService:
+          readNetworkBodyService ??
+          CockpitReadNetworkBodyService(
+            readBodies: effectiveNetworkProfiler.readBodies,
+            fileFactory: artifactTempFileFactory,
+          ),
       readErrorsService:
           readErrorsService ??
           CockpitReadErrorsService(registry: retainedRegistry),
@@ -114,21 +135,29 @@ final class CockpitWorkerInteractiveOperations {
               CockpitReadSessionLogsService(registry: sessionRegistry),
       captureScreenshotService:
           captureScreenshotService ??
-          CockpitCaptureScreenshotService(runCommandService: runCommand),
+          CockpitCaptureScreenshotService(
+            runCommandService: runCommand,
+            artifactTempFileFactory: artifactTempFileFactory,
+          ),
       runCommandService: runCommand,
       runBatchService: runBatch,
       runShellService:
           runShellService ??
           CockpitRunShellService(processManager: processManager),
+      systemControlService:
+          systemControlService ?? CockpitSystemControlService(),
       systemActionService:
           systemActionService ?? CockpitSystemControlActionService(),
       waitIdleService: waitIdleService ?? CockpitWaitIdleService(),
       startRecordingService:
           startRecordingService ?? CockpitStartRecordingService(),
       stopRecordingService:
-          stopRecordingService ?? CockpitStopRecordingService(),
-      queryDevelopmentService:
-          queryDevelopmentService ?? CockpitQueryDevelopmentSessionService(),
+          stopRecordingService ??
+          CockpitStopRecordingService(
+            artifactTempFileFactory: artifactTempFileFactory,
+          ),
+      resizeViewportService:
+          resizeViewportService ?? CockpitResizeViewportService(),
     );
   }
 
@@ -143,17 +172,19 @@ final class CockpitWorkerInteractiveOperations {
     required CockpitInspectSurfaceService inspectSurfaceService,
     required CockpitReadLogsService readLogsService,
     required CockpitReadNetworkService readNetworkService,
+    required CockpitReadNetworkBodyService readNetworkBodyService,
     required CockpitReadErrorsService readErrorsService,
     required CockpitWorkerSessionLogsServiceFactory sessionLogsServiceFactory,
     required CockpitCaptureScreenshotService captureScreenshotService,
     required CockpitRunCommandService runCommandService,
     required CockpitRunBatchService runBatchService,
     required CockpitRunShellService runShellService,
+    required CockpitSystemControlService systemControlService,
     required CockpitSystemControlActionService systemActionService,
     required CockpitWaitIdleService waitIdleService,
     required CockpitStartRecordingService startRecordingService,
     required CockpitStopRecordingService stopRecordingService,
-    required CockpitQueryDevelopmentSessionService queryDevelopmentService,
+    required CockpitResizeViewportService resizeViewportService,
   }) : _registry = registry,
        _developmentRuntime = developmentRuntime,
        _systemActionParameters = systemActionParameters,
@@ -162,23 +193,26 @@ final class CockpitWorkerInteractiveOperations {
        _inspectSurface = inspectSurfaceService,
        _readLogs = readLogsService,
        _readNetwork = readNetworkService,
+       _readNetworkBody = readNetworkBodyService,
        _readErrors = readErrorsService,
        _sessionLogsServiceFactory = sessionLogsServiceFactory,
        _captureScreenshot = captureScreenshotService,
        _runCommand = runCommandService,
        _runBatch = runBatchService,
        _runShell = runShellService,
+       _systemControl = systemControlService,
        _systemAction = systemActionService,
        _waitIdle = waitIdleService,
        _startRecording = startRecordingService,
        _stopRecording = stopRecordingService,
-       _queryDevelopment = queryDevelopmentService;
+       _resizeViewport = resizeViewportService;
 
   static const Set<String> kinds = <String>{
     'ui.inspect',
     'surface.inspect',
     'logs.read',
     'network.read',
+    'network.body',
     'errors.read',
     'session.logs.read',
     'evidence.screenshot.capture',
@@ -191,6 +225,7 @@ final class CockpitWorkerInteractiveOperations {
     'ui.waitIdle',
     'recording.start',
     'recording.stop',
+    'viewport.set',
   };
 
   final String workspaceId;
@@ -203,17 +238,19 @@ final class CockpitWorkerInteractiveOperations {
   final CockpitInspectSurfaceService _inspectSurface;
   final CockpitReadLogsService _readLogs;
   final CockpitReadNetworkService _readNetwork;
+  final CockpitReadNetworkBodyService _readNetworkBody;
   final CockpitReadErrorsService _readErrors;
   final CockpitWorkerSessionLogsServiceFactory _sessionLogsServiceFactory;
   final CockpitCaptureScreenshotService _captureScreenshot;
   final CockpitRunCommandService _runCommand;
   final CockpitRunBatchService _runBatch;
   final CockpitRunShellService _runShell;
+  final CockpitSystemControlService _systemControl;
   final CockpitSystemControlActionService _systemAction;
   final CockpitWaitIdleService _waitIdle;
   final CockpitStartRecordingService _startRecording;
   final CockpitStopRecordingService _stopRecording;
-  final CockpitQueryDevelopmentSessionService _queryDevelopment;
+  final CockpitResizeViewportService _resizeViewport;
 
   Future<Map<String, Object?>> execute({
     required String kind,
@@ -231,6 +268,12 @@ final class CockpitWorkerInteractiveOperations {
     ),
     'logs.read' => _readLogsOperation(input, context, grants, sanitizer),
     'network.read' => _readNetworkOperation(input, context, grants, sanitizer),
+    'network.body' => _readNetworkBodyOperation(
+      input,
+      context,
+      grants,
+      sanitizer,
+    ),
     'errors.read' => _readErrorsOperation(input, context, grants, sanitizer),
     'session.logs.read' => _readSessionLogs(input, context, grants, sanitizer),
     'evidence.screenshot.capture' => _captureScreenshotOperation(
@@ -258,6 +301,12 @@ final class CockpitWorkerInteractiveOperations {
       grants,
       sanitizer,
     ),
+    'viewport.set' => _resizeViewportOperation(
+      input,
+      context,
+      grants,
+      sanitizer,
+    ),
     _ => throw StateError('Interactive operation routing is inconsistent.'),
   };
 
@@ -275,7 +324,7 @@ final class CockpitWorkerInteractiveOperations {
         'compareAgainstSnapshotRef',
       },
     );
-    _requireSessionGrant(pair.binding, context, grants);
+    _requireSessionGrant(pair.binding, context, grants, allowUnleased: true);
     final app = await _registry.requireApp(pair.binding.appId);
     final compareAgainstSnapshotRef = await _registry.resolveSnapshotRef(
       sessionId: pair.binding.sessionId,
@@ -311,7 +360,7 @@ final class CockpitWorkerInteractiveOperations {
         'compareAgainstSnapshotRef',
       },
     );
-    _requireSessionGrant(pair.binding, context, grants);
+    _requireSessionGrant(pair.binding, context, grants, allowUnleased: true);
     final target = await _targets.requireTarget(
       workspaceId: workspaceId,
       targetId: pair.binding.targetId,
@@ -347,7 +396,7 @@ final class CockpitWorkerInteractiveOperations {
     CockpitWorkerResultSanitizer sanitizer,
   ) async {
     final pair = await _session(input, extra: const <String>{'maxLines'});
-    _requireSessionGrant(pair.binding, context, grants);
+    _requireSessionGrant(pair.binding, context, grants, allowUnleased: true);
     final result = await runWorkerApplicationOperation(
       context: context,
       operation: () => _readLogs.read(
@@ -378,13 +427,23 @@ final class CockpitWorkerInteractiveOperations {
         'maxEntries',
         'maxEndpointSummaries',
         'includeEntries',
+        'id',
+        'before',
         'method',
         'uriContains',
         'onlyFailures',
         'statusCodeAtLeast',
       },
     );
-    _requireSessionGrant(pair.binding, context, grants);
+    _requireSessionGrant(pair.binding, context, grants, allowUnleased: true);
+    final id = _networkRequestId(
+      pair.input.optionalString('id', maximum: 19),
+      r'$.input.id',
+    );
+    final before = _networkRequestId(
+      pair.input.optionalString('before', maximum: 19),
+      r'$.input.before',
+    );
     final result = await runWorkerApplicationOperation(
       context: context,
       operation: () => _readNetwork.read(
@@ -405,6 +464,8 @@ final class CockpitWorkerInteractiveOperations {
               ) ??
               8,
           includeEntries: pair.input.boolean('includeEntries'),
+          id: id,
+          before: before,
           method: pair.input.optionalString('method', maximum: 32),
           uriContains: pair.input.optionalString('uriContains', maximum: 512),
           onlyFailures: pair.input.boolean('onlyFailures'),
@@ -419,6 +480,68 @@ final class CockpitWorkerInteractiveOperations {
     return _sanitize(result.toJson(), pair.binding, sanitizer);
   }
 
+  Future<Map<String, Object?>> _readNetworkBodyOperation(
+    Map<String, Object?> input,
+    CockpitWorkspaceOperationContext context,
+    List<CockpitWorkerResourceGrant> grants,
+    CockpitWorkerResultSanitizer sanitizer,
+  ) async {
+    final pair = await _session(
+      input,
+      extra: const <String>{'requestId', 'body', 'raw'},
+      required: const <String>{'requestId', 'body'},
+    );
+    requireWorkerResourceGrant(
+      context: context,
+      grants: grants,
+      kind: CockpitLeaseResourceKind.capture,
+      resourceId: pair.binding.resourceId,
+    );
+    final development = pair.binding.developmentHandle;
+    final vmServiceUri = development?.vmServiceUri;
+    if (development == null || vmServiceUri == null) {
+      throw const CockpitApplicationServiceException(
+        code: 'networkBodyUnavailable',
+        message:
+            'Complete network bodies require an active Flutter development VM service.',
+      );
+    }
+    final requestedBody = pair.input.string('body', maximum: 16);
+    final requestId = _networkRequestId(
+      pair.input.string('requestId', maximum: 19),
+      r'$.input.requestId',
+    )!;
+    final parts = switch (requestedBody) {
+      'request' => const <CockpitNetworkBodyPart>{
+        CockpitNetworkBodyPart.request,
+      },
+      'response' => const <CockpitNetworkBodyPart>{
+        CockpitNetworkBodyPart.response,
+      },
+      'both' => const <CockpitNetworkBodyPart>{
+        CockpitNetworkBodyPart.request,
+        CockpitNetworkBodyPart.response,
+      },
+      _ => throw const FormatException(
+        'Network body must be request, response, or both.',
+      ),
+    };
+    final result = await runWorkerApplicationOperation(
+      context: context,
+      operation: () => _readNetworkBody.read(
+        CockpitReadNetworkBodyRequest(
+          sessionId: pair.binding.sessionId,
+          baseUri: pair.binding.remoteHandle.baseUri,
+          vmServiceUri: vmServiceUri,
+          requestId: requestId,
+          parts: parts,
+          raw: pair.input.boolean('raw'),
+        ),
+      ),
+    );
+    return _sanitize(result.toJson(), pair.binding, sanitizer);
+  }
+
   Future<Map<String, Object?>> _readErrorsOperation(
     Map<String, Object?> input,
     CockpitWorkspaceOperationContext context,
@@ -426,7 +549,7 @@ final class CockpitWorkerInteractiveOperations {
     CockpitWorkerResultSanitizer sanitizer,
   ) async {
     final pair = await _session(input, extra: const <String>{'maxErrors'});
-    _requireSessionGrant(pair.binding, context, grants);
+    _requireSessionGrant(pair.binding, context, grants, allowUnleased: true);
     final result = await runWorkerApplicationOperation(
       context: context,
       operation: () => _readErrors.read(
@@ -453,7 +576,7 @@ final class CockpitWorkerInteractiveOperations {
     CockpitWorkerResultSanitizer sanitizer,
   ) async {
     final pair = await _session(input, extra: const <String>{'maxLines'});
-    _requireSessionGrant(pair.binding, context, grants);
+    _requireSessionGrant(pair.binding, context, grants, allowUnleased: true);
     final handle = pair.binding.developmentHandle;
     if (handle == null) {
       throw const FormatException(
@@ -463,13 +586,11 @@ final class CockpitWorkerInteractiveOperations {
     final app = await _registry.requireApp(pair.binding.appId);
     final query = await runWorkerApplicationOperation(
       context: context,
-      operation: () => _queryDevelopment.query(
-        CockpitQueryDevelopmentSessionRequest(sessionHandle: handle),
-      ),
+      operation: () => _developmentRuntime.query(handle),
     );
     final retainedRegistry = CockpitSessionRegistry()
       ..recordDevelopmentSession(
-        handle: query.sessionHandle ?? handle,
+        handle: query.handle,
         status: query.status,
         supervisorLogPath: app.handle.supervisorLogPath,
       );
@@ -517,15 +638,23 @@ final class CockpitWorkerInteractiveOperations {
       resourceId: pair.binding.resourceId,
     );
     final app = await _registry.requireApp(pair.binding.appId);
+    final iosWdaBaseUri = await _resolveIosWdaBaseUri(
+      app.handle,
+      targetId: pair.binding.targetId,
+    );
     final captureProfile = pair.input.optionalString(
       'captureProfile',
       maximum: 32,
+    );
+    final resultProfile = pair.input.profile().copyWith(
+      artifacts: CockpitInteractiveArtifactLevel.metadata,
     );
     final result = await runWorkerApplicationOperation(
       context: context,
       operation: () => _captureScreenshot.capture(
         CockpitCaptureScreenshotRequest(
           app: app.handle,
+          iosWdaBaseUri: iosWdaBaseUri,
           name: pair.input.optionalString('name', maximum: 128) ?? 'screenshot',
           reason: CockpitScreenshotReason.fromJson(
             pair.input.optionalString('reason', maximum: 32) ?? 'acceptance',
@@ -538,12 +667,43 @@ final class CockpitWorkerInteractiveOperations {
           allowFallback: input['allowFallback'] == null
               ? null
               : pair.input.boolean('allowFallback'),
-          resultProfile: pair.input.profile(),
+          resultProfile: resultProfile,
           defaultCommandTimeout: _commandTimeout(pair.input, context),
         ),
       ),
     );
     return _sanitize(result.toJson(), pair.binding, sanitizer);
+  }
+
+  Future<Uri?> _resolveIosWdaBaseUri(
+    CockpitAppHandle app, {
+    required String targetId,
+  }) async {
+    if (app.platform.trim().toLowerCase() != 'ios' ||
+        cockpitLooksLikeIosSimulatorDeviceId(app.deviceId)) {
+      return null;
+    }
+    final target = await _targets.requireTarget(
+      workspaceId: workspaceId,
+      targetId: targetId,
+    );
+    final described = await _systemControl.describe(
+      CockpitSystemControlDescribeRequest(
+        platform: app.platform,
+        deviceId: app.deviceId,
+        appId: app.platformAppId,
+        processId: app.processId,
+        metadata: <String, Object?>{
+          if (target.registration.wdaUrl != null)
+            'wdaUrl': target.registration.wdaUrl,
+        },
+      ),
+    );
+    if (described.metadata['wdaReachable'] != true) return null;
+    final value = described.metadata['wdaUrl'];
+    if (value is! String) return null;
+    final uri = Uri.tryParse(value.trim());
+    return uri != null && uri.hasScheme && uri.host.isNotEmpty ? uri : null;
   }
 
   Future<Map<String, Object?>> _runCommandOperation(
@@ -579,6 +739,7 @@ final class CockpitWorkerInteractiveOperations {
           snapshotOptions: pair.input.optionalSnapshotOptions(),
           compareAgainstSnapshotRef: compareAgainstSnapshotRef,
           defaultCommandTimeout: _commandTimeout(pair.input, context),
+          cancellation: context.cancellation.whenCancelled,
         ),
       ),
     );
@@ -633,6 +794,7 @@ final class CockpitWorkerInteractiveOperations {
               ? null
               : CockpitSnapshotOptions.fromJson(finalOptions),
           defaultCommandTimeout: _commandTimeout(pair.input, context),
+          cancellation: context.cancellation.whenCancelled,
         ),
       ),
     );
@@ -857,19 +1019,19 @@ final class CockpitWorkerInteractiveOperations {
       requestedMilliseconds: pair.input.optionalInteger(
         'timeoutMs',
         minimum: 1,
-        maximum: 30000,
+        maximum: 300000,
       ),
-      defaultValue: const Duration(milliseconds: 1600),
-      maximum: const Duration(seconds: 30),
+      defaultValue: const Duration(seconds: 30),
+      maximum: const Duration(minutes: 5),
     );
     final quietWindow = Duration(
       milliseconds:
           pair.input.optionalInteger(
             'quietWindowMs',
-            minimum: 1,
-            maximum: 5000,
+            minimum: 50,
+            maximum: 60000,
           ) ??
-          96,
+          500,
     );
     if (quietWindow > timeout) {
       throw const FormatException('UI quiet window exceeds wait timeout.');
@@ -883,7 +1045,7 @@ final class CockpitWorkerInteractiveOperations {
           timeout: timeout,
           includeNetworkIdle: pair.input.boolean(
             'includeNetworkIdle',
-            defaultValue: true,
+            defaultValue: false,
           ),
         ),
       ),
@@ -930,6 +1092,32 @@ final class CockpitWorkerInteractiveOperations {
       recordingId: recording.recordingId,
     );
     return sanitized..['recordingId'] = recording.recordingId;
+  }
+
+  Future<Map<String, Object?>> _resizeViewportOperation(
+    Map<String, Object?> input,
+    CockpitWorkspaceOperationContext context,
+    List<CockpitWorkerResourceGrant> grants,
+    CockpitWorkerResultSanitizer sanitizer,
+  ) async {
+    final pair = await _session(
+      input,
+      extra: const <String>{'width', 'height'},
+      required: const <String>{'width', 'height'},
+    );
+    _requireSessionGrant(pair.binding, context, grants);
+    final app = await _registry.requireApp(pair.binding.appId);
+    final result = await runWorkerApplicationOperation(
+      context: context,
+      operation: () => _resizeViewport.resize(
+        CockpitResizeViewportRequest(
+          app: app.handle,
+          width: pair.input.integer('width', minimum: 200, maximum: 8192),
+          height: pair.input.integer('height', minimum: 200, maximum: 8192),
+        ),
+      ),
+    );
+    return _sanitize(result.toJson(), pair.binding, sanitizer);
   }
 
   Future<Map<String, Object?>> _stopRecordingOperation(
@@ -1049,8 +1237,10 @@ final class CockpitWorkerInteractiveOperations {
   void _requireSessionGrant(
     CockpitWorkerSessionBinding session,
     CockpitWorkspaceOperationContext context,
-    List<CockpitWorkerResourceGrant> grants,
-  ) {
+    List<CockpitWorkerResourceGrant> grants, {
+    bool allowUnleased = false,
+  }) {
+    if (allowUnleased && grants.isEmpty) return;
     requireWorkerResourceGrant(
       context: context,
       grants: grants,
@@ -1078,4 +1268,11 @@ final class _SessionInput {
 
   final CockpitWorkerApplicationInput input;
   final CockpitWorkerSessionBinding binding;
+}
+
+String? _networkRequestId(String? value, String path) {
+  if (value != null && !RegExp(r'^[1-9][0-9]{0,18}$').hasMatch(value)) {
+    throw FormatException('$path must be a positive numeric request ID.');
+  }
+  return value;
 }

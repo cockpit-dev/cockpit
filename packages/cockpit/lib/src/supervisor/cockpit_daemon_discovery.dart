@@ -7,7 +7,7 @@ import '../foundation/cockpit_home.dart';
 import '../foundation/cockpit_locked_json_store.dart';
 import '../foundation/cockpit_permissions.dart';
 
-const cockpitDaemonDiscoverySchema = 'cockpit.daemon/v2';
+const cockpitDaemonDiscoverySchema = 'cockpit.daemon/v3';
 
 final class CockpitDaemonDiscovery {
   CockpitDaemonDiscovery({
@@ -59,6 +59,11 @@ final class CockpitDaemonDiscovery {
   final DateTime startedAt;
   final CockpitAuthorizationMode authorizationMode;
 
+  bool identifiesSameInstance(CockpitDaemonDiscovery other) =>
+      processId == other.processId &&
+      processStartIdentity == other.processStartIdentity &&
+      instanceId == other.instanceId;
+
   Map<String, Object?> toJson() => <String, Object?>{
     'schemaVersion': schemaVersion,
     'instanceId': instanceId,
@@ -69,7 +74,7 @@ final class CockpitDaemonDiscovery {
     'apiVersion': <String, int>{'major': apiMajor, 'minor': apiMinor},
     'engineVersion': engineVersion,
     'startedAt': startedAt.toUtc().toIso8601String(),
-    'authorizationMode': authorizationMode.name,
+    'auth': authorizationMode.name,
   };
 
   factory CockpitDaemonDiscovery.fromJson(Object? value) {
@@ -88,7 +93,7 @@ final class CockpitDaemonDiscovery {
       'apiVersion',
       'engineVersion',
       'startedAt',
-      'authorizationMode',
+      'auth',
     };
     if (json.keys.toSet().difference(fields).isNotEmpty ||
         fields.difference(json.keys.toSet()).isNotEmpty ||
@@ -111,9 +116,9 @@ final class CockpitDaemonDiscovery {
     }
     final endpoint = Uri.tryParse(json['endpoint']! as String);
     final startedAt = DateTime.tryParse(json['startedAt']! as String);
-    final authorizationMode = json['authorizationMode'] is String
+    final authorizationMode = json['auth'] is String
         ? CockpitAuthorizationMode.values
-              .where((value) => value.name == json['authorizationMode'])
+              .where((value) => value.name == json['auth'])
               .firstOrNull
         : null;
     if (endpoint == null ||
@@ -184,10 +189,7 @@ final class CockpitDaemonDiscoveryStore {
 
   Future<void> deleteIfMatches(CockpitDaemonDiscovery discovery) async {
     final current = await read();
-    if (current == null ||
-        current.processId != discovery.processId ||
-        current.processStartIdentity != discovery.processStartIdentity ||
-        current.instanceId != discovery.instanceId) {
+    if (current == null || !current.identifiesSameInstance(discovery)) {
       return;
     }
     final file = File(paths.daemonDiscovery);
@@ -218,12 +220,11 @@ final class CockpitSystemProcessIdentityProbe
             ],
             environment: <String, String>{'COCKPIT_PROCESS_ID': '$processId'},
           )
-        : await Process.run('ps', <String>[
-            '-o',
-            'lstart=',
-            '-p',
-            '$processId',
-          ]);
+        : await Process.run(
+            'ps',
+            <String>['-o', 'lstart=', '-p', '$processId'],
+            environment: const <String, String>{'LANG': 'C', 'LC_ALL': 'C'},
+          );
     if (result.exitCode != 0) return null;
     final value = '${result.stdout}'.trim();
     return value.isEmpty || value.length > 512 ? null : value;

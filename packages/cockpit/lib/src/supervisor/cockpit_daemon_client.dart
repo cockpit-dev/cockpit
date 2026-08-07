@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:cockpit_protocol/cockpit_protocol.dart';
-
 import '../foundation/cockpit_home.dart';
 import '../foundation/cockpit_locked_json_store.dart';
 import '../foundation/cockpit_permissions.dart';
@@ -51,7 +50,7 @@ final class CockpitDaemonStatus {
     if (engineVersion != null) 'engineVersion': engineVersion,
     if (apiVersion != null) 'apiVersion': apiVersion!.toJson(),
     if (startedAt != null) 'startedAt': startedAt!.toUtc().toIso8601String(),
-    if (authorizationMode != null) 'authorizationMode': authorizationMode!.name,
+    if (authorizationMode != null) 'auth': authorizationMode!.name,
     if (diagnostic != null) 'diagnostic': diagnostic,
   };
 }
@@ -59,23 +58,26 @@ final class CockpitDaemonStatus {
 final class CockpitDaemonLifecycleClient {
   CockpitDaemonLifecycleClient({
     required this.paths,
-    required this.dartExecutable,
-    required this.daemonEntrypoint,
-    this.packageConfigPath,
+    required this.executable,
+    required Iterable<String> daemonArguments,
+    required Iterable<String> restartArguments,
     required this.permissionHardener,
     required this.directorySyncer,
     this.requiredApiMajor = 2,
     this.startTimeout = const Duration(minutes: 2),
-  });
+    this.launchFailure,
+  }) : daemonArguments = List<String>.unmodifiable(daemonArguments),
+       restartArguments = List<String>.unmodifiable(restartArguments);
 
   final CockpitHomePaths paths;
-  final String dartExecutable;
-  final String daemonEntrypoint;
-  final String? packageConfigPath;
+  final String executable;
+  final List<String> daemonArguments;
+  final List<String> restartArguments;
   final CockpitPermissionHardener permissionHardener;
   final CockpitDirectorySyncer directorySyncer;
   final int requiredApiMajor;
   final Duration startTimeout;
+  final CockpitDaemonException? launchFailure;
 
   CockpitDaemonDiscoveryStore get _store => CockpitDaemonDiscoveryStore(
     paths: paths,
@@ -83,7 +85,7 @@ final class CockpitDaemonLifecycleClient {
     directorySyncer: directorySyncer,
   );
 
-  Future<CockpitDaemonDiscovery> ensure() =>
+  Future<CockpitDaemonDiscovery> ensure({Duration? timeout}) =>
       _EnsureLocks.run(paths.daemonEnsureLock, () async {
         final first = await _usableDiscovery();
         if (first != null) return first;
@@ -96,7 +98,10 @@ final class CockpitDaemonLifecycleClient {
           final rechecked = await _usableDiscovery();
           if (rechecked != null) return rechecked;
           final processId = await _startProcess();
-          return _waitUntilReady(startedProcessId: processId);
+          return _waitUntilReady(
+            startedProcessId: processId,
+            timeout: timeout ?? startTimeout,
+          );
         } finally {
           try {
             await lock.unlock();
@@ -109,12 +114,17 @@ final class CockpitDaemonLifecycleClient {
   Future<CockpitDaemonDiscovery> start({
     CockpitAuthorizationMode authorizationMode =
         CockpitAuthorizationMode.restricted,
+    Duration? timeout,
   }) async {
+    final deadline = DateTime.now().toUtc().add(timeout ?? startTimeout);
     final current = await status();
     if (current.running && current.authorizationMode != authorizationMode) {
-      await stop(mode: CockpitDaemonShutdownMode.drain);
+      await stop(
+        mode: CockpitDaemonShutdownMode.drain,
+        timeout: _remaining(deadline),
+      );
     }
-    return _ensureStarted(authorizationMode);
+    return _ensureStarted(authorizationMode, timeout: _remaining(deadline));
   }
 
   Future<CockpitDaemonStatus> status() async {
@@ -160,25 +170,48 @@ final class CockpitDaemonLifecycleClient {
   }) async {
     final discovery = await _store.read();
     if (discovery == null) return;
-    final request = await HttpClient().postUrl(
-      discovery.endpoint.resolve('/_cockpit/lifecycle'),
-    );
-    request.headers.set(
-      HttpHeaders.authorizationHeader,
-      'Bearer ${discovery.bearerToken}',
-    );
-    request.headers.contentType = ContentType.json;
-    request.write(jsonEncode(<String, String>{'mode': mode.name}));
-    final response = await request.close().timeout(const Duration(seconds: 5));
-    await response.drain<void>();
-    if (response.statusCode != HttpStatus.accepted) {
-      throw CockpitDaemonException(
-        'shutdownRejected',
-        'Daemon rejected ${mode.name} shutdown.',
+    final identity = await const CockpitSystemProcessIdentityProbe()
+        .readStartIdentity(discovery.processId);
+    if (identity != discovery.processStartIdentity) {
+      if (await _health(discovery) != null) {
+        throw const CockpitDaemonException(
+          'discoveryIdentityMismatch',
+          'A responsive endpoint does not match the recorded process identity.',
+        );
+      }
+      await _store.deleteIfMatches(discovery);
+      return;
+    }
+    final client = HttpClient();
+    try {
+      final request = await client.postUrl(
+        discovery.endpoint.resolve('/_cockpit/lifecycle'),
       );
+      request.headers.set(
+        HttpHeaders.authorizationHeader,
+        'Bearer ${discovery.bearerToken}',
+      );
+      request.headers.contentType = ContentType.json;
+      request.write(jsonEncode(<String, String>{'mode': mode.name}));
+      final response = await request.close().timeout(
+        const Duration(seconds: 5),
+      );
+      await response.drain<void>();
+      if (response.statusCode != HttpStatus.accepted) {
+        throw CockpitDaemonException(
+          'shutdownRejected',
+          'Daemon rejected ${mode.name} shutdown.',
+        );
+      }
+    } finally {
+      client.close(force: true);
     }
     final deadline = DateTime.now().add(timeout);
     while (DateTime.now().isBefore(deadline)) {
+      final current = await _store.read();
+      if (current == null || !current.identifiesSameInstance(discovery)) {
+        return;
+      }
       final identity = await const CockpitSystemProcessIdentityProbe()
           .readStartIdentity(discovery.processId);
       if (identity != discovery.processStartIdentity) return;
@@ -193,9 +226,46 @@ final class CockpitDaemonLifecycleClient {
   Future<CockpitDaemonDiscovery> restart({
     CockpitAuthorizationMode authorizationMode =
         CockpitAuthorizationMode.restricted,
+    Duration? timeout,
   }) async {
-    await stop();
-    return _ensureStarted(authorizationMode);
+    final deadline = DateTime.now().toUtc().add(timeout ?? startTimeout);
+    await stop(timeout: _remaining(deadline));
+    return _ensureStarted(authorizationMode, timeout: _remaining(deadline));
+  }
+
+  /// Schedules a restart in an independent CLI process.
+  ///
+  /// A Supervisor client can itself run inside a managed application session.
+  /// A direct [restart] stops that session before its caller can launch the
+  /// replacement daemon. This detached handoff survives the shutdown and uses
+  /// the same Cockpit home and runtime configuration.
+  Future<void> scheduleRestart({
+    CockpitAuthorizationMode authorizationMode =
+        CockpitAuthorizationMode.restricted,
+  }) async {
+    if (launchFailure case final failure?) throw failure;
+    if (executable.isEmpty || daemonArguments.isEmpty) {
+      throw const CockpitDaemonException(
+        'daemonExecutableMissing',
+        'Daemon executable paths are not configured.',
+      );
+    }
+    await Process.start(
+      executable,
+      <String>[
+        ...restartArguments,
+        'daemon',
+        'restart',
+        if (authorizationMode == CockpitAuthorizationMode.yolo) '--yolo',
+        '--format',
+        'none',
+      ],
+      environment: <String, String>{
+        ...Platform.environment,
+        'COCKPIT_HOME': paths.home,
+      },
+      mode: ProcessStartMode.detached,
+    );
   }
 
   Future<List<String>> logs({int maximumLines = 200}) async {
@@ -325,8 +395,9 @@ final class CockpitDaemonLifecycleClient {
   }
 
   Future<CockpitDaemonDiscovery> _ensureStarted(
-    CockpitAuthorizationMode authorizationMode,
-  ) => _EnsureLocks.run(paths.daemonEnsureLock, () async {
+    CockpitAuthorizationMode authorizationMode, {
+    Duration? timeout,
+  }) => _EnsureLocks.run(paths.daemonEnsureLock, () async {
     final existing = await _usableDiscovery();
     if (existing != null) return existing;
     final lock = await File(paths.daemonEnsureLock).open(mode: FileMode.append);
@@ -336,7 +407,10 @@ final class CockpitDaemonLifecycleClient {
       final rechecked = await _usableDiscovery();
       if (rechecked != null) return rechecked;
       final processId = await _startProcess(authorizationMode);
-      return _waitUntilReady(startedProcessId: processId);
+      return _waitUntilReady(
+        startedProcessId: processId,
+        timeout: timeout ?? startTimeout,
+      );
     } finally {
       try {
         await lock.unlock();
@@ -350,19 +424,19 @@ final class CockpitDaemonLifecycleClient {
     CockpitAuthorizationMode authorizationMode =
         CockpitAuthorizationMode.restricted,
   ]) async {
-    if (dartExecutable.isEmpty || daemonEntrypoint.isEmpty) {
+    if (launchFailure case final failure?) throw failure;
+    if (executable.isEmpty || daemonArguments.isEmpty) {
       throw const CockpitDaemonException(
         'daemonExecutableMissing',
         'Daemon executable paths are not configured.',
       );
     }
     final process = await Process.start(
-      dartExecutable,
+      executable,
       <String>[
-        if (packageConfigPath != null) '--packages=$packageConfigPath',
-        daemonEntrypoint,
+        ...daemonArguments,
         '--home=${paths.home}',
-        '--authorization-mode=${authorizationMode.name}',
+        '--auth=${authorizationMode.name}',
       ],
       environment: <String, String>{
         ...Platform.environment,
@@ -375,8 +449,9 @@ final class CockpitDaemonLifecycleClient {
 
   Future<CockpitDaemonDiscovery> _waitUntilReady({
     required int startedProcessId,
+    required Duration timeout,
   }) async {
-    final deadline = DateTime.now().add(startTimeout);
+    final deadline = DateTime.now().add(timeout);
     Object? lastError;
     while (DateTime.now().isBefore(deadline)) {
       try {
@@ -399,6 +474,17 @@ final class CockpitDaemonLifecycleClient {
       'daemonStartTimeout',
       'Daemon did not publish a healthy discovery record${lastError == null ? '' : ': $lastError'}.',
     );
+  }
+
+  Duration _remaining(DateTime deadline) {
+    final remaining = deadline.difference(DateTime.now().toUtc());
+    if (remaining <= Duration.zero) {
+      throw const CockpitDaemonException(
+        'daemonTimeout',
+        'Daemon lifecycle command exceeded its timeout.',
+      );
+    }
+    return remaining;
   }
 
   Future<bool> _isCanonicalRegular(String path) async {

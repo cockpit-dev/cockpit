@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -111,4 +112,31 @@ void main() {
     expect(connection, isNull);
     expect(tempDir.listSync(), isEmpty);
   });
+
+  test(
+    'probe returns null when devicectl exceeds its process budget',
+    () async {
+      final tempDir = await Directory.systemTemp.createTemp(
+        'cockpit_ios_device_connection_timeout',
+      );
+      addTearDown(() async {
+        if (tempDir.existsSync()) {
+          await tempDir.delete(recursive: true);
+        }
+      });
+
+      final probe = CockpitIosDeviceConnectionProbe(
+        tempDirectoryPathProvider: () => tempDir.path,
+        processRunner:
+            (executable, arguments, {String? workingDirectory}) async {
+              throw TimeoutException('devicectl timed out');
+            },
+      );
+
+      final connection = await probe.probe('00008110-0009341C2EF3801E');
+
+      expect(connection, isNull);
+      expect(tempDir.listSync(), isEmpty);
+    },
+  );
 }

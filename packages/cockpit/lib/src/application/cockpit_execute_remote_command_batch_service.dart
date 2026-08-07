@@ -3,6 +3,7 @@ export 'cockpit_application_service_exception.dart';
 import 'package:cockpit_protocol/cockpit_protocol.dart';
 
 import '../session/cockpit_remote_session_handle.dart';
+import '../remote/cockpit_remote_session_client.dart';
 import 'cockpit_execute_remote_command_service.dart';
 import 'cockpit_interactive_result_profile.dart';
 import 'cockpit_interactive_session_lock.dart';
@@ -41,6 +42,7 @@ final class CockpitExecuteRemoteCommandBatchRequest {
     this.finalSnapshotProfile,
     this.finalSnapshotOptions,
     this.defaultCommandTimeout = const Duration(seconds: 30),
+    this.cancellation,
   });
 
   final List<CockpitInteractiveBatchCommand> commands;
@@ -55,6 +57,7 @@ final class CockpitExecuteRemoteCommandBatchRequest {
   final CockpitInteractiveResultProfile? finalSnapshotProfile;
   final CockpitSnapshotOptions? finalSnapshotOptions;
   final Duration defaultCommandTimeout;
+  final Future<void>? cancellation;
 }
 
 final class CockpitExecuteRemoteCommandBatchSummary {
@@ -115,6 +118,7 @@ final class CockpitExecuteRemoteCommandBatchService {
     CockpitSessionReferenceResolver? sessionReferenceResolver,
     CockpitInteractiveSnapshotStore? snapshotStore,
     CockpitInteractiveSessionLock? sessionLock,
+    CockpitCommandArtifactTempFileFactory? artifactTempFileFactory,
   }) : _executeCommand = executeCommand,
        _readSnapshot = readSnapshot,
        _startRecording = startRecording,
@@ -122,7 +126,8 @@ final class CockpitExecuteRemoteCommandBatchService {
        _sessionReferenceResolver =
            sessionReferenceResolver ?? CockpitSessionReferenceResolver(),
        _snapshotStore = snapshotStore ?? CockpitInteractiveSnapshotStore(),
-       _sessionLock = sessionLock ?? CockpitInteractiveSessionLock();
+       _sessionLock = sessionLock ?? CockpitInteractiveSessionLock(),
+       _artifactTempFileFactory = artifactTempFileFactory;
 
   final CockpitRemoteCommandExecutor? _executeCommand;
   final CockpitRemoteSnapshotDetailedReader? _readSnapshot;
@@ -131,6 +136,7 @@ final class CockpitExecuteRemoteCommandBatchService {
   final CockpitSessionReferenceResolver _sessionReferenceResolver;
   final CockpitInteractiveSnapshotStore _snapshotStore;
   final CockpitInteractiveSessionLock _sessionLock;
+  final CockpitCommandArtifactTempFileFactory? _artifactTempFileFactory;
 
   Future<CockpitExecuteRemoteCommandBatchResult> execute(
     CockpitExecuteRemoteCommandBatchRequest request,
@@ -144,13 +150,14 @@ final class CockpitExecuteRemoteCommandBatchService {
     );
     final sessionKey = resolved.baseUri.toString();
 
-    return _sessionLock.run(sessionKey, () async {
+    final execution = _sessionLock.run(sessionKey, () async {
       final executeService = CockpitExecuteRemoteCommandService(
         executeCommand: _executeCommand,
         readSnapshot: _readSnapshot,
         sessionReferenceResolver: _sessionReferenceResolver,
         snapshotStore: _snapshotStore,
         sessionLock: CockpitInteractiveSessionLock(),
+        artifactTempFileFactory: _artifactTempFileFactory,
       );
       final readSnapshotService = CockpitReadRemoteSnapshotService(
         readSnapshot: _readSnapshot,
@@ -170,6 +177,7 @@ final class CockpitExecuteRemoteCommandBatchService {
               stopRecording: _stopRecording,
               sessionReferenceResolver: _sessionReferenceResolver,
               sessionLock: CockpitInteractiveSessionLock(),
+              artifactTempFileFactory: _artifactTempFileFactory,
             );
 
       final results = <CockpitExecuteRemoteCommandResult>[];
@@ -203,6 +211,7 @@ final class CockpitExecuteRemoteCommandBatchService {
               compareAgainstSnapshotRef: batchCommand.compareAgainstSnapshotRef,
               defaultCommandTimeout: request.defaultCommandTimeout,
               iosDeviceId: request.iosDeviceId,
+              cancellation: request.cancellation,
             ),
           );
           results.add(result);
@@ -265,5 +274,15 @@ final class CockpitExecuteRemoteCommandBatchService {
         }
       }
     });
+    final cancellation = request.cancellation;
+    if (cancellation == null) return execution;
+    return Future.any<CockpitExecuteRemoteCommandBatchResult>(
+      <Future<CockpitExecuteRemoteCommandBatchResult>>[
+        execution,
+        cancellation.then<CockpitExecuteRemoteCommandBatchResult>((_) {
+          throw const CockpitRemoteCommandCancelledException();
+        }),
+      ],
+    );
   }
 }

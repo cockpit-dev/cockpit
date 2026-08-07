@@ -5,23 +5,48 @@ import 'cockpit_foundation_value_reader.dart';
 enum CockpitIndexedDocumentKind { source, testCase, suite, project }
 
 final class CockpitCaseIndexEntry {
-  CockpitCaseIndexEntry({required this.caseId, this.title, this.location}) {
+  /// Creates a CockpitCaseIndexEntry.
+  CockpitCaseIndexEntry({
+    required this.caseId,
+    this.documentId,
+    this.relativePath,
+    this.title,
+    this.location,
+  }) {
     CockpitFoundationValueReader.id(caseId, r'$.caseId');
+    if ((documentId == null) != (relativePath == null)) {
+      throw const FormatException(
+        'Indexed case document identity must include both documentId and relativePath.',
+      );
+    }
+    if (documentId != null) {
+      CockpitFoundationValueReader.id(documentId!, r'$.documentId');
+      CockpitFoundationValueReader.relativePath(
+        relativePath!,
+        r'$.relativePath',
+      );
+    }
     if (title != null) {
       CockpitFoundationValueReader.string(title, r'$.title', maximum: 256);
     }
   }
 
   final String caseId;
+  final String? documentId;
+  final String? relativePath;
   final String? title;
   final CockpitTestSourceLocation? location;
 
+  /// Encodes this CockpitCaseIndexEntry as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
     'caseId': caseId,
+    if (documentId != null) 'documentId': documentId,
+    if (relativePath != null) 'relativePath': relativePath,
     if (title != null) 'title': title,
     if (location != null) 'location': location!.toJson(),
   };
 
+  /// Decodes a CockpitCaseIndexEntry from a JSON object.
   factory CockpitCaseIndexEntry.fromJson(
     Object? value, {
     String path = r'$',
@@ -30,13 +55,31 @@ final class CockpitCaseIndexEntry {
     final json = CockpitFoundationValueReader.object(value, path);
     CockpitFoundationValueReader.keys(
       json,
-      const <String>{'caseId', 'title', 'location'},
+      const <String>{
+        'caseId',
+        'documentId',
+        'relativePath',
+        'title',
+        'location',
+      },
       path,
       required: const <String>{'caseId'},
       policy: decodePolicy,
     );
     return CockpitCaseIndexEntry(
       caseId: CockpitFoundationValueReader.id(json['caseId'], '$path.caseId'),
+      documentId: json['documentId'] == null
+          ? null
+          : CockpitFoundationValueReader.id(
+              json['documentId'],
+              '$path.documentId',
+            ),
+      relativePath: json['relativePath'] == null
+          ? null
+          : CockpitFoundationValueReader.relativePath(
+              json['relativePath'],
+              '$path.relativePath',
+            ),
       title: CockpitFoundationValueReader.optionalString(
         json['title'],
         '$path.title',
@@ -53,6 +96,7 @@ final class CockpitCaseIndexEntry {
 }
 
 final class CockpitDocumentResource {
+  /// Creates a CockpitDocumentResource.
   CockpitDocumentResource({
     required this.documentId,
     required this.workspaceId,
@@ -98,6 +142,7 @@ final class CockpitDocumentResource {
   final String? title;
   final List<CockpitCaseIndexEntry> cases;
 
+  /// Encodes this CockpitDocumentResource as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
     'documentId': documentId,
     'workspaceId': workspaceId,
@@ -110,6 +155,7 @@ final class CockpitDocumentResource {
     'cases': cases.map((testCase) => testCase.toJson()).toList(),
   };
 
+  /// Decodes a CockpitDocumentResource from a JSON object.
   factory CockpitDocumentResource.fromJson(
     Object? value, {
     String path = r'$',
@@ -195,6 +241,7 @@ CockpitIndexedDocumentKind _documentKind(Object? value, String path) {
 }
 
 final class CockpitIndexedCaseReference {
+  /// Creates a CockpitIndexedCaseReference.
   CockpitIndexedCaseReference({
     required this.documentId,
     required this.caseId,
@@ -209,12 +256,14 @@ final class CockpitIndexedCaseReference {
   final String caseId;
   final String documentSha256;
 
+  /// Encodes this CockpitIndexedCaseReference as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
     'documentId': documentId,
     'caseId': caseId,
     'documentSha256': documentSha256,
   };
 
+  /// Decodes a CockpitIndexedCaseReference from a JSON object.
   factory CockpitIndexedCaseReference.fromJson(
     Object? value, {
     String path = r'$',
@@ -244,6 +293,7 @@ final class CockpitIndexedCaseReference {
 }
 
 final class CockpitIndexedSuiteReference {
+  /// Creates a CockpitIndexedSuiteReference.
   CockpitIndexedSuiteReference({
     required this.documentId,
     required this.suiteId,
@@ -258,12 +308,14 @@ final class CockpitIndexedSuiteReference {
   final String suiteId;
   final String documentSha256;
 
+  /// Encodes this CockpitIndexedSuiteReference as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
     'documentId': documentId,
     'suiteId': suiteId,
     'documentSha256': documentSha256,
   };
 
+  /// Decodes a CockpitIndexedSuiteReference from a JSON object.
   factory CockpitIndexedSuiteReference.fromJson(
     Object? value, {
     String path = r'$',

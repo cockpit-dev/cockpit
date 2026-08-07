@@ -23,6 +23,7 @@ import 'cockpit_step_recorder.dart';
 import 'cockpit_timestamp_provider.dart';
 
 final class CockpitSessionController {
+  /// Creates a CockpitSessionController.
   CockpitSessionController({
     required String sessionId,
     required String taskId,

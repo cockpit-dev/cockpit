@@ -15,6 +15,7 @@ final class CockpitInteractiveCommandCore {
     this.resolvedCaptureKind,
     required this.usedCaptureFallback,
     this.degradationReason,
+    this.changed,
     this.error,
   });
 
@@ -27,6 +28,7 @@ final class CockpitInteractiveCommandCore {
   final String? resolvedCaptureKind;
   final bool usedCaptureFallback;
   final String? degradationReason;
+  final bool? changed;
   final CockpitCommandError? error;
 
   factory CockpitInteractiveCommandCore.fromResult(
@@ -42,6 +44,7 @@ final class CockpitInteractiveCommandCore {
       resolvedCaptureKind: result.resolvedCaptureKind?.name,
       usedCaptureFallback: result.usedCaptureFallback,
       degradationReason: result.degradationReason,
+      changed: result.changed,
       error: result.error,
     );
   }
@@ -58,6 +61,7 @@ final class CockpitInteractiveCommandCore {
     if (resolvedCaptureKind != null) 'resolvedCaptureKind': resolvedCaptureKind,
     'usedCaptureFallback': usedCaptureFallback,
     if (degradationReason != null) 'degradationReason': degradationReason,
+    if (changed != null) 'changed': changed,
     if (error != null) 'error': error!.toJson(),
   };
 }

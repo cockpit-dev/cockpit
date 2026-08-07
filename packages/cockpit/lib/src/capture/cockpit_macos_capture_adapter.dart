@@ -10,6 +10,7 @@ import 'cockpit_host_capture_adapter.dart';
 final class CockpitMacosCaptureAdapter implements CockpitHostCaptureAdapter {
   CockpitMacosCaptureAdapter({
     required String appId,
+    int? processId,
     String osascriptExecutable = 'osascript',
     String screencaptureExecutable = 'screencapture',
     CockpitCaptureProcessRunner? processRunner,
@@ -20,6 +21,7 @@ final class CockpitMacosCaptureAdapter implements CockpitHostCaptureAdapter {
     Duration timeout = const Duration(seconds: 5),
     Duration activationSettleDelay = const Duration(milliseconds: 250),
   }) : _appId = appId,
+       _processId = processId,
        _osascriptExecutable = osascriptExecutable,
        _screencaptureExecutable = screencaptureExecutable,
        _processRunner = processRunner,
@@ -29,6 +31,7 @@ final class CockpitMacosCaptureAdapter implements CockpitHostCaptureAdapter {
        _activationSettleDelay = activationSettleDelay;
 
   final String _appId;
+  final int? _processId;
   final String _osascriptExecutable;
   final String _screencaptureExecutable;
   final CockpitCaptureProcessRunner? _processRunner;
@@ -61,6 +64,7 @@ final class CockpitMacosCaptureAdapter implements CockpitHostCaptureAdapter {
     try {
       final windowTarget = await _windowTargetResolver(
         appId: _appId,
+        processId: _processId,
         osascriptExecutable: _osascriptExecutable,
         processRunner: _runProcess,
         timeout: _timeout,
@@ -92,18 +96,27 @@ final class CockpitMacosCaptureAdapter implements CockpitHostCaptureAdapter {
           outputFile.path,
         ]);
       }
-      stopwatch.stop();
-
       if (result.exitCode != 0) {
+        final displayProbe = await _probeDisplayCapture(outputFile);
+        final screenRecordingDenied =
+            displayProbe != null &&
+            displayProbe.exitCode != 0 &&
+            '${displayProbe.stderr}'.contains(
+              'could not create image from display',
+            );
+        stopwatch.stop();
         return cockpitFailedCaptureExecution(
           command: command,
           durationMs: stopwatch.elapsedMilliseconds,
-          message: 'macOS screencapture failed.',
+          message: screenRecordingDenied
+              ? 'macOS screen capture is blocked. Grant Screen & System Audio Recording permission to the host application.'
+              : 'macOS screencapture failed.',
           details: <String, Object?>{
             'appId': _appId,
             'strategy': strategy,
             'exitCode': result.exitCode,
             'stderr': '${result.stderr}'.trim(),
+            if (screenRecordingDenied) 'permission': 'screenRecording',
             if (windowFailure != null)
               'windowAttempt': <String, Object?>{
                 'windowId': windowId,
@@ -113,6 +126,7 @@ final class CockpitMacosCaptureAdapter implements CockpitHostCaptureAdapter {
           },
         );
       }
+      stopwatch.stop();
       return cockpitValidateHostCaptureOutput(
         command: command,
         artifact: artifact,
@@ -121,6 +135,7 @@ final class CockpitMacosCaptureAdapter implements CockpitHostCaptureAdapter {
         captureDescription: 'macOS screencapture',
         details: <String, Object?>{
           'appId': _appId,
+          if (_processId != null) 'processId': _processId,
           'strategy': strategy,
           if (windowFailure != null) 'windowId': windowId,
         },
@@ -162,5 +177,21 @@ final class CockpitMacosCaptureAdapter implements CockpitHostCaptureAdapter {
       arguments,
       timeout: _timeout,
     );
+  }
+
+  Future<ProcessResult?> _probeDisplayCapture(File outputFile) async {
+    final probe = File('${outputFile.path}.display-probe.png');
+    if (probe.existsSync()) probe.deleteSync();
+    try {
+      return await _runProcess(_screencaptureExecutable, <String>[
+        '-x',
+        '-o',
+        probe.path,
+      ]);
+    } on Object {
+      return null;
+    } finally {
+      if (probe.existsSync()) probe.deleteSync();
+    }
   }
 }

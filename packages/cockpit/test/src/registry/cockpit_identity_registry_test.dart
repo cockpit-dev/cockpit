@@ -39,7 +39,7 @@ void main() {
         final same = await fixture.roots.register(rootDirectory.path);
         expect(same.rootId, root.rootId);
         expect(root.filesystemIdentity, startsWith('posix:'));
-        expect(root.rootId, matches(r'^root_[a-f0-9]{32}$'));
+        expect(root.rootId, matches(r'^rt-[A-Za-z0-9]{16}$'));
         await expectLater(
           fixture.roots.register(nested.path),
           throwsRegistry('rootOverlap'),
@@ -802,6 +802,61 @@ void main() {
           ),
           throwsRegistry('workspaceRetired'),
         );
+      },
+    );
+
+    test(
+      'allows an active parent root beside a retained descendant tombstone',
+      () async {
+        final fixture = await _RegistryFixture.create();
+        addTearDown(fixture.dispose);
+        final parentDirectory = await fixture.directory('parent');
+        final retiredRootDirectory = await Directory(
+          p.join(parentDirectory.path, 'retired-root'),
+        ).create();
+        final retiredRoot = await fixture.roots.register(
+          retiredRootDirectory.path,
+        );
+        final retiredWorkspace = await fixture.registerChild(
+          retiredRoot,
+          retiredRootDirectory,
+          'workspace',
+        );
+        await fixture.references.setRun(
+          workspaceId: retiredWorkspace.workspaceId,
+          runId: 'run_retained_overlap',
+          active: false,
+          retained: true,
+          artifactCount: 1,
+        );
+
+        await fixture.workspaces.unregister(
+          retiredWorkspace.workspaceId,
+          policy: CockpitRemovalPolicy.force,
+        );
+        final retirement = await fixture.roots.remove(
+          retiredRoot.rootId,
+          policy: CockpitRemovalPolicy.force,
+        );
+        expect(retirement.tombstoneRetained, isTrue);
+
+        final parentRoot = await fixture.roots.register(parentDirectory.path);
+        expect(parentRoot.state, CockpitRootState.active);
+        expect(await fixture.roots.list(), hasLength(2));
+
+        await fixture.references.releaseRunRetention(
+          retiredWorkspace.workspaceId,
+          'run_retained_overlap',
+        );
+        await fixture.references.releaseArtifactReferences(
+          retiredWorkspace.workspaceId,
+          'run_retained_overlap',
+          1,
+        );
+        final remainingRoots = await fixture.roots.list();
+        expect(remainingRoots, hasLength(1));
+        expect(remainingRoots.single.rootId, parentRoot.rootId);
+        expect(remainingRoots.single.state, CockpitRootState.active);
       },
     );
 

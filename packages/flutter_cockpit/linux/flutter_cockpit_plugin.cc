@@ -47,6 +47,7 @@ namespace {
 constexpr char kCaptureChannelName[] = "dev.cockpit.flutter_cockpit/capture";
 constexpr char kRecordingChannelName[] =
     "dev.cockpit.flutter_cockpit/recording";
+constexpr char kViewportChannelName[] = "dev.cockpit.flutter_cockpit/viewport";
 constexpr int kRecordingFrameRate = 15;
 constexpr guint kRecordingFrameIntervalMs = 1000 / kRecordingFrameRate;
 constexpr auto kRecordingStopTimeout = std::chrono::seconds(10);
@@ -231,6 +232,22 @@ std::optional<std::string> GetStringArgument(FlMethodCall* method_call,
     return std::nullopt;
   }
   return std::string(fl_value_get_string(value));
+}
+
+std::optional<int> GetIntArgument(FlMethodCall* method_call, const char* key) {
+  FlValue* args = fl_method_call_get_args(method_call);
+  if (args == nullptr || fl_value_get_type(args) != FL_VALUE_TYPE_MAP) {
+    return std::nullopt;
+  }
+  FlValue* value = fl_value_lookup_string(args, key);
+  if (value == nullptr || fl_value_get_type(value) != FL_VALUE_TYPE_INT) {
+    return std::nullopt;
+  }
+  const int64_t parsed = fl_value_get_int(value);
+  if (parsed < 1 || parsed > 8192) {
+    return std::nullopt;
+  }
+  return static_cast<int>(parsed);
 }
 
 GObjectHandle<FlView> GetActiveView(FlutterCockpitPlugin* self) {
@@ -993,6 +1010,48 @@ void HandleRecordingMethodCall(FlutterCockpitPlugin* self,
           FL_METHOD_RESPONSE(fl_method_not_implemented_response_new()));
 }
 
+void HandleViewportMethodCall(FlutterCockpitPlugin* self,
+                              FlMethodCall* method_call) {
+  const gchar* method = fl_method_call_get_name(method_call);
+  auto view = GetActiveView(self);
+  GtkWidget* top_level = view == nullptr
+      ? nullptr
+      : gtk_widget_get_toplevel(GTK_WIDGET(view.get()));
+  const bool available = top_level != nullptr && GTK_IS_WINDOW(top_level);
+
+  if (strcmp(method, "queryViewportAvailability") == 0) {
+    g_autoptr(FlValue) payload = fl_value_new_map();
+    fl_value_set_string_take(payload, "available", fl_value_new_bool(available));
+    g_autoptr(FlValue) alternatives = fl_value_new_list();
+    fl_value_set_string(payload, "alternatives", alternatives);
+    Respond(method_call, SuccessResponse(payload));
+    return;
+  }
+  if (strcmp(method, "resizeViewport") == 0) {
+    if (!available) {
+      Respond(method_call,
+              ErrorResponse("noWindow",
+                            "Viewport resize requires an active GtkWindow."));
+      return;
+    }
+    const auto width = GetIntArgument(method_call, "width");
+    const auto height = GetIntArgument(method_call, "height");
+    if (!width.has_value() || !height.has_value()) {
+      Respond(method_call,
+              ErrorResponse("invalidViewport",
+                            "Viewport width and height must be integers."));
+      return;
+    }
+    gtk_window_resize(GTK_WINDOW(top_level), *width, *height);
+    g_autoptr(FlValue) payload = fl_value_new_map();
+    fl_value_set_string_take(payload, "accepted", fl_value_new_bool(true));
+    Respond(method_call, SuccessResponse(payload));
+    return;
+  }
+  Respond(method_call,
+          FL_METHOD_RESPONSE(fl_method_not_implemented_response_new()));
+}
+
 static void CaptureMethodCallHandler(FlMethodChannel* channel,
                                      FlMethodCall* method_call,
                                      gpointer user_data) {
@@ -1005,6 +1064,13 @@ static void RecordingMethodCallHandler(FlMethodChannel* channel,
                                        gpointer user_data) {
   auto* plugin = FLUTTER_COCKPIT_PLUGIN(user_data);
   HandleRecordingMethodCall(plugin, method_call);
+}
+
+static void ViewportMethodCallHandler(FlMethodChannel* channel,
+                                      FlMethodCall* method_call,
+                                      gpointer user_data) {
+  auto* plugin = FLUTTER_COCKPIT_PLUGIN(user_data);
+  HandleViewportMethodCall(plugin, method_call);
 }
 
 }  // namespace
@@ -1050,6 +1116,13 @@ void flutter_cockpit_plugin_register_with_registrar(FlPluginRegistrar* registrar
       FL_METHOD_CODEC(codec));
   fl_method_channel_set_method_call_handler(
       recording_channel, RecordingMethodCallHandler, g_object_ref(plugin),
+      g_object_unref);
+
+  g_autoptr(FlMethodChannel) viewport_channel = fl_method_channel_new(
+      fl_plugin_registrar_get_messenger(registrar), kViewportChannelName,
+      FL_METHOD_CODEC(codec));
+  fl_method_channel_set_method_call_handler(
+      viewport_channel, ViewportMethodCallHandler, g_object_ref(plugin),
       g_object_unref);
 
   g_object_unref(plugin);

@@ -6,6 +6,7 @@ import '../model/cockpit_run_manifest.dart';
 import '../model/cockpit_step_record.dart';
 
 final class CockpitContextBundle {
+  /// Creates a CockpitContextBundle.
   CockpitContextBundle({
     required this.manifest,
     required this.environment,
@@ -34,6 +35,7 @@ final class CockpitContextBundle {
   static const DeepCollectionEquality _handoffEquality =
       DeepCollectionEquality();
 
+  /// Encodes this CockpitContextBundle as a JSON object.
   Map<String, Object?> toJson() => {
     'manifest': manifest.toJson(),
     'environment': environment.toJson(),
@@ -46,6 +48,7 @@ final class CockpitContextBundle {
     'delivery': delivery,
   };
 
+  /// Decodes a CockpitContextBundle from a JSON object.
   factory CockpitContextBundle.fromJson(Map<String, Object?> json) {
     final manifestJson = Map<String, Object?>.from(
       json['manifest']! as Map<Object?, Object?>,

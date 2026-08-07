@@ -19,6 +19,7 @@ enum CockpitObservationPhase {
 }
 
 final class CockpitObservation {
+  /// Creates a CockpitObservation.
   CockpitObservation({
     this.routeName,
     List<String> interactiveElements = const [],
@@ -47,6 +48,7 @@ final class CockpitObservation {
 
   static const ListEquality<String> _listEquality = ListEquality<String>();
 
+  /// Encodes this CockpitObservation as a JSON object.
   Map<String, Object?> toJson() => {
     if (routeName != null) 'routeName': routeName,
     'interactiveElements': interactiveElements,
@@ -62,6 +64,7 @@ final class CockpitObservation {
     if (fallbackUsed) 'fallbackUsed': fallbackUsed,
   };
 
+  /// Decodes a CockpitObservation from a JSON object.
   factory CockpitObservation.fromJson(Map<String, Object?> json) {
     final interactiveElements =
         (json['interactiveElements'] as List<Object?>? ?? const <Object?>[])

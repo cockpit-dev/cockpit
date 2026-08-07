@@ -1,18 +1,20 @@
 import 'dart:io';
 
-import 'package:args/args.dart';
 import 'package:args/command_runner.dart';
 import 'package:cockpit_protocol/cockpit_protocol.dart';
 import 'package:path/path.dart' as p;
 
 import '../../supervisor/cockpit_supervisor_api_client.dart';
 import '../cockpit_cli_output.dart';
+import '../cockpit_cli_timeout.dart';
 import '../cockpit_flutter_launch_configuration_cli.dart';
 import '../cockpit_cli_runtime.dart';
+import 'operation_execution.dart';
 
 final class CockpitServerCommand extends Command<int> {
   CockpitServerCommand(this.runtime) {
     cockpitAddCliOutputOptions(argParser);
+    cockpitAddCliTimeoutOption(argParser);
   }
 
   final CockpitCliRuntime runtime;
@@ -29,8 +31,14 @@ final class CockpitServerCommand extends Command<int> {
       command: name,
       selection: CockpitCliOutputSelection.fromArguments(argResults!),
     );
-    await runtime.success((await (await runtime.client()).server()).toJson());
-    return cockpitSuccessExitCode;
+    runtime.configureTimeout(
+      cockpitReadCliTimeout(argResults!),
+      explicit: argResults!.wasParsed('timeout'),
+    );
+    return runtime.runTimed(() async {
+      await runtime.success((await (await runtime.client()).server()).toJson());
+      return cockpitSuccessExitCode;
+    });
   }
 }
 
@@ -77,17 +85,17 @@ final class CockpitRootCommand extends Command<int> {
         runtime: runtime,
         name: 'remove',
         description: 'Unregister a root.',
+        defaultTimeout: const Duration(minutes: 2),
+        maximumTimeout: const Duration(minutes: 10),
         configure: (parser) => parser
           ..addOption('root-id', mandatory: true)
-          ..addFlag('force', negatable: false)
-          ..addOption('drain-timeout-ms', defaultsTo: '30000'),
+          ..addFlag('force', negatable: false),
         action: (arguments) async {
-          final timeout = _integer(arguments, 'drain-timeout-ms');
           final result = await (await runtime.client()).removeRoot(
             arguments.option('root-id')!,
             CockpitRootRemoval(
               force: arguments.flag('force'),
-              drainTimeoutMs: timeout,
+              drainTimeoutMs: runtime.operationTimeout.inMilliseconds,
             ),
           );
           await runtime.success(result.toJson());
@@ -235,16 +243,17 @@ final class CockpitWorkspaceCommand extends Command<int> {
         runtime: runtime,
         name: 'unregister',
         description: 'Unregister a workspace.',
+        defaultTimeout: const Duration(minutes: 2),
+        maximumTimeout: const Duration(minutes: 10),
         configure: (parser) => parser
           ..addOption('workspace-id', mandatory: true)
-          ..addFlag('force', negatable: false)
-          ..addOption('drain-timeout-ms', defaultsTo: '30000'),
+          ..addFlag('force', negatable: false),
         action: (arguments) async {
           final result = await (await runtime.client()).removeWorkspace(
             arguments.option('workspace-id')!,
             CockpitWorkspaceRemoval(
               force: arguments.flag('force'),
-              drainTimeoutMs: _integer(arguments, 'drain-timeout-ms'),
+              drainTimeoutMs: runtime.operationTimeout.inMilliseconds,
             ),
           );
           await runtime.success(result.toJson());
@@ -263,8 +272,8 @@ final class CockpitWorkspaceCommand extends Command<int> {
   String get description => 'Manage registered workspace checkouts.';
 }
 
-final class CockpitOperationCommand extends Command<int> {
-  CockpitOperationCommand(this.runtime) {
+final class CockpitOpCommand extends Command<int> {
+  CockpitOpCommand(this.runtime) {
     addSubcommand(
       CockpitLeafCommand(
         runtime: runtime,
@@ -275,8 +284,12 @@ final class CockpitOperationCommand extends Command<int> {
             'scope',
             allowed: const <String>['supervisor', 'workspace'],
             defaultsTo: 'workspace',
+            help: 'Read workspace operations or Supervisor operations.',
           )
-          ..addOption('workspace-id')
+          ..addOption(
+            'workspace-id',
+            help: 'Select a registered workspace; current checkout by default.',
+          )
           ..addOption('kind', help: 'Return one exact operation descriptor.'),
         action: (arguments) async {
           final workspaceId = arguments.option('scope') == 'workspace'
@@ -308,72 +321,28 @@ final class CockpitOperationCommand extends Command<int> {
       CockpitLeafCommand(
         runtime: runtime,
         name: 'run',
-        description: 'Execute an advertised typed operation.',
-        configure: (parser) => parser
-          ..addOption('kind', mandatory: true)
-          ..addOption('workspace-id')
-          ..addOption('root-id')
-          ..addOption('input-json')
-          ..addOption('input-file')
-          ..addOption('idempotency-key')
-          ..addOption(
-            'timeout-ms',
-            help: 'Relative operation timeout; defaults to advertised policy.',
-          )
-          ..addOption('deadline'),
-        action: (arguments) async {
-          final client = await runtime.client();
-          final kind = arguments.option('kind')!;
-          final global = await client.operations();
-          final globalMatch = global
-              .where((item) => item.kind == kind)
-              .firstOrNull;
-          final CockpitOperationDescriptor descriptor;
-          String? workspaceId;
-          if (globalMatch != null) {
-            descriptor = globalMatch;
-          } else {
-            workspaceId = await runtime.workspaceId(
-              arguments.option('workspace-id'),
-            );
-            final matches = (await client.operations(
-              workspaceId: workspaceId,
-            )).where((item) => item.kind == kind);
-            if (matches.length != 1) {
-              throw CockpitSupervisorClientException(
-                code: CockpitErrorCode.unsupportedOperation,
-                message: 'Operation $kind is not advertised.',
-              );
-            }
-            descriptor = matches.single;
-          }
-          if (descriptor.scope == CockpitOperationScope.root &&
-              arguments.option('root-id') == null) {
+        description: 'Execute one advertised operation.',
+        invocationSuffix: 'KIND [arguments]',
+        example:
+            'cockpit op run viewport.set --input '
+            '\'{width:800 height:600}\'',
+        configure: cockpitConfigureOperationExecution,
+        defaultTimeout: const Duration(minutes: 2),
+        timeoutDefaultDescription:
+            'Defaults to the advertised budget after discovery and cannot '
+            'exceed its advertised maximum.',
+        actionManagesTimeout: true,
+        action: (arguments) {
+          if (arguments.rest.length != 1) {
             throw const FormatException(
-              '--root-id is required for this operation.',
+              'op run requires exactly one operation kind.',
             );
           }
-          final result = await client.executeOperation(
-            CockpitOperationInvocation(
-              kind: kind,
-              input: runtime.jsonObject(
-                arguments.option('input-json'),
-                arguments.option('input-file'),
-              ),
-              rootId: descriptor.scope == CockpitOperationScope.root
-                  ? arguments.option('root-id')
-                  : null,
-              workspaceId: descriptor.scope == CockpitOperationScope.workspace
-                  ? workspaceId
-                  : null,
-              idempotencyKey: arguments.option('idempotency-key') == null
-                  ? null
-                  : CockpitIdempotencyKey(arguments.option('idempotency-key')!),
-              deadline: _operationDeadline(arguments, descriptor),
-            ),
+          return cockpitExecuteOperation(
+            runtime,
+            arguments,
+            kind: arguments.rest.single,
           );
-          await runtime.success(result.toJson());
-          return cockpitExitCodeForOperation(result);
         },
       ),
     );
@@ -382,7 +351,7 @@ final class CockpitOperationCommand extends Command<int> {
   final CockpitCliRuntime runtime;
 
   @override
-  String get name => 'operation';
+  String get name => 'op';
 
   @override
   String get description => 'Inspect and execute advertised operations.';
@@ -395,22 +364,15 @@ final class CockpitTargetCommand extends Command<int> {
         runtime: runtime,
         name: 'discover',
         description: 'Discover locally available launch targets.',
-        configure: (parser) =>
-            parser.addOption('timeout-ms', defaultsTo: '120000'),
+        defaultTimeout: const Duration(minutes: 2),
+        maximumTimeout: const Duration(minutes: 10),
         action: (arguments) async {
-          final timeoutMs = _integer(arguments, 'timeout-ms');
-          if (timeoutMs < 1 || timeoutMs > 300000) {
-            throw const FormatException(
-              '--timeout-ms must be between 1 and 300000.',
-            );
-          }
+          final timeoutMs = runtime.operationTimeout.inMilliseconds;
           final result = await (await runtime.client()).executeOperation(
             CockpitOperationInvocation(
               kind: 'target.discover',
               input: <String, Object?>{'timeoutMs': timeoutMs},
-              deadline: DateTime.now().toUtc().add(
-                Duration(milliseconds: timeoutMs) + const Duration(seconds: 30),
-              ),
+              deadline: runtime.commandDeadline,
             ),
           );
           await runtime.success(result.toJson());
@@ -464,6 +426,8 @@ final class CockpitTargetCommand extends Command<int> {
         runtime: runtime,
         name: 'register',
         description: 'Register a workspace-owned automation target.',
+        defaultTimeout: const Duration(minutes: 5),
+        maximumTimeout: const Duration(minutes: 15),
         configure: (parser) => parser
           ..addOption('workspace-id')
           ..addOption('platform', mandatory: true)
@@ -501,18 +465,11 @@ final class CockpitTargetCommand extends Command<int> {
             'wda-url',
             help: 'WebDriverAgent endpoint assigned to this iOS target.',
           )
-          ..addOption('timeout-ms', defaultsTo: '300000')
           ..addOption('idempotency-key', mandatory: true),
         action: (arguments) async {
           final workspaceId = await runtime.workspaceId(
             arguments.option('workspace-id'),
           );
-          final timeoutMs = _integer(arguments, 'timeout-ms');
-          if (timeoutMs < 1000 || timeoutMs > 900000) {
-            throw const FormatException(
-              '--timeout-ms must be between 1000 and 900000.',
-            );
-          }
           final result = await (await runtime.client()).executeOperation(
             CockpitOperationInvocation(
               kind: 'target.register',
@@ -537,9 +494,7 @@ final class CockpitTargetCommand extends Command<int> {
                 if (arguments.option('wda-url') != null)
                   'wdaUrl': arguments.option('wda-url'),
               },
-              deadline: DateTime.now().toUtc().add(
-                Duration(milliseconds: timeoutMs),
-              ),
+              deadline: runtime.commandDeadline,
             ),
           );
           await runtime.success(result.toJson());
@@ -552,6 +507,8 @@ final class CockpitTargetCommand extends Command<int> {
         runtime: runtime,
         name: 'launch',
         description: 'Launch or activate a registered automation target.',
+        defaultTimeout: const Duration(minutes: 20),
+        maximumTimeout: const Duration(minutes: 31),
         configure: (parser) {
           parser
             ..addOption('workspace-id')
@@ -560,7 +517,6 @@ final class CockpitTargetCommand extends Command<int> {
               'mode',
               allowed: const <String>['development', 'automation'],
             )
-            ..addOption('launch-timeout-ms', defaultsTo: '600000')
             ..addOption('idempotency-key', mandatory: true);
           cockpitAddFlutterLaunchConfigurationOptions(parser);
         },
@@ -568,12 +524,7 @@ final class CockpitTargetCommand extends Command<int> {
           final workspaceId = await runtime.workspaceId(
             arguments.option('workspace-id'),
           );
-          final timeoutMs = _integer(arguments, 'launch-timeout-ms');
-          if (timeoutMs < 1000 || timeoutMs > 1800000) {
-            throw const FormatException(
-              '--launch-timeout-ms must be between 1000 and 1800000.',
-            );
-          }
+          final timeoutMs = runtime.operationTimeout.inMilliseconds;
           final launchConfiguration = cockpitReadFlutterLaunchConfiguration(
             arguments,
           );
@@ -591,9 +542,7 @@ final class CockpitTargetCommand extends Command<int> {
                 'launchTimeoutMs': timeoutMs,
                 'launchConfiguration': ?launchConfiguration,
               },
-              deadline: DateTime.now().toUtc().add(
-                Duration(milliseconds: timeoutMs) + const Duration(seconds: 30),
-              ),
+              deadline: runtime.commandDeadline,
             ),
           );
           await runtime.success(result.toJson());
@@ -631,6 +580,7 @@ final class CockpitTargetCommand extends Command<int> {
                 if (arguments.option('profile') != null)
                   'profile': arguments.option('profile'),
               },
+              deadline: runtime.commandDeadline,
             ),
           );
           await runtime.success(result.toJson());
@@ -647,35 +597,4 @@ final class CockpitTargetCommand extends Command<int> {
 
   @override
   String get description => 'Discover and manage automation targets.';
-}
-
-int _integer(ArgResults arguments, String name) {
-  final value = int.tryParse(arguments.option(name)!);
-  if (value == null) throw FormatException('--$name is invalid.');
-  return value;
-}
-
-DateTime? _operationDeadline(
-  ArgResults arguments,
-  CockpitOperationDescriptor descriptor,
-) {
-  final rawDeadline = arguments.option('deadline');
-  final rawTimeout = arguments.option('timeout-ms');
-  if (rawDeadline != null && rawTimeout != null) {
-    throw const FormatException(
-      '--deadline and --timeout-ms cannot be combined.',
-    );
-  }
-  if (rawDeadline != null) return DateTime.parse(rawDeadline).toUtc();
-  if (rawTimeout == null) return null;
-  final timeoutMs = int.tryParse(rawTimeout);
-  if (timeoutMs == null ||
-      timeoutMs < 1 ||
-      timeoutMs > descriptor.maximumTimeoutMs) {
-    throw FormatException(
-      '--timeout-ms must be between 1 and '
-      '${descriptor.maximumTimeoutMs} for ${descriptor.kind}.',
-    );
-  }
-  return DateTime.now().toUtc().add(Duration(milliseconds: timeoutMs));
 }

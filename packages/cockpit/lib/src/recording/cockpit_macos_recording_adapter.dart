@@ -12,6 +12,7 @@ final class CockpitMacosRecordingAdapter
     implements CockpitHostRecordingAdapter {
   CockpitMacosRecordingAdapter({
     required String appId,
+    int? processId,
     String ffmpegExecutable = 'ffmpeg',
     String osascriptExecutable = 'osascript',
     CockpitRecordingProcessStarter processStarter =
@@ -32,6 +33,7 @@ final class CockpitMacosRecordingAdapter
     CockpitPidLivenessChecker pidLivenessChecker =
         cockpitDefaultPidLivenessChecker,
   }) : _appId = appId,
+       _processId = processId,
        _ffmpegExecutable = ffmpegExecutable,
        _osascriptExecutable = osascriptExecutable,
        _processStarter = processStarter,
@@ -49,6 +51,7 @@ final class CockpitMacosRecordingAdapter
        _pidLivenessChecker = pidLivenessChecker;
 
   final String _appId;
+  final int? _processId;
   final String _ffmpegExecutable;
   final String _osascriptExecutable;
   final CockpitRecordingProcessStarter _processStarter;
@@ -79,7 +82,7 @@ final class CockpitMacosRecordingAdapter
   Stopwatch? _stopwatch;
   DateTime? _startedAt;
 
-  String get _sessionCacheKey => 'macos:$_appId';
+  String get _sessionCacheKey => 'macos:${_processId ?? _appId}';
 
   bool get _usesBrowserHostCapture => _browserAppIds.contains(_appId);
 
@@ -497,6 +500,7 @@ final class CockpitMacosRecordingAdapter
       '-e',
       _activateAppScript,
       _appId,
+      _processId?.toString() ?? '',
     ], timeout: _commandTimeout);
     if (result.exitCode != 0) {
       throw StateError(
@@ -512,6 +516,7 @@ ObjC.bindFunction('IOPMAssertionDeclareUserActivity', ['int', ['id', 'uint32', '
 
 function run(argv) {
   const appId = argv[0]
+  const requestedPid = argv[1] === '' ? null : Number(argv[1])
   const assertionId = Ref()
   const wakeResult = $.IOPMAssertionDeclareUserActivity(
     $('Cockpit application recording'),
@@ -525,7 +530,30 @@ function run(argv) {
   if (apps.count === 0) {
     throw new Error(`No running macOS application was found for ${appId}`)
   }
-  if (!apps.objectAtIndex(0).activateWithOptions($.NSApplicationActivateIgnoringOtherApps)) {
+
+  let app = null
+  if (requestedPid !== null) {
+    for (let index = 0; index < Number(apps.count); index += 1) {
+      const candidate = apps.objectAtIndex(index)
+      if (Number(candidate.processIdentifier) === requestedPid) {
+        app = candidate
+        break
+      }
+    }
+    if (app === null) {
+      throw new Error(
+        `No running macOS application ${appId} matches process ${requestedPid}`,
+      )
+    }
+  } else {
+    if (Number(apps.count) !== 1) {
+      throw new Error(
+        `Multiple macOS applications match ${appId}; a process id is required`,
+      )
+    }
+    app = apps.objectAtIndex(0)
+  }
+  if (!app.activateWithOptions($.NSApplicationActivateIgnoringOtherApps)) {
     throw new Error(`Unable to activate macOS application ${appId}`)
   }
 }
@@ -608,6 +636,7 @@ function run(argv) {
     try {
       return await _windowTargetResolver(
         appId: _appId,
+        processId: _processId,
         osascriptExecutable: _osascriptExecutable,
         processRunner: (executable, arguments) =>
             _runProcess(executable, arguments, timeout: _commandTimeout),

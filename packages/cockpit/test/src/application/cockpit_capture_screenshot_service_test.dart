@@ -149,7 +149,7 @@ void main() {
         remoteAdapterFactory: (_) => remoteAdapter,
         adbAdapterFactory: (_) => throw StateError('adb not expected'),
         simctlAdapterFactory: (_) => throw StateError('simctl not expected'),
-        macosAdapterFactory: (_) => hostAdapter,
+        macosAdapterFactory: (_, {processId}) => hostAdapter,
       ),
     );
 
@@ -205,7 +205,7 @@ void main() {
           remoteAdapterFactory: (_) => remoteAdapter,
           adbAdapterFactory: (_) => throw StateError('adb not expected'),
           simctlAdapterFactory: (_) => throw StateError('simctl not expected'),
-          macosAdapterFactory: (_) => hostAdapter,
+          macosAdapterFactory: (_, {processId}) => hostAdapter,
         ),
       );
 
@@ -245,7 +245,7 @@ void main() {
           remoteAdapterFactory: (_) => remoteAdapter,
           adbAdapterFactory: (_) => throw StateError('adb not expected'),
           simctlAdapterFactory: (_) => throw StateError('simctl not expected'),
-          macosAdapterFactory: (_) => hostAdapter,
+          macosAdapterFactory: (_, {processId}) => hostAdapter,
         ),
       );
 
@@ -310,7 +310,7 @@ void main() {
           remoteAdapterFactory: (_) => remoteAdapter,
           adbAdapterFactory: (_) => throw StateError('adb not expected'),
           simctlAdapterFactory: (_) => throw StateError('simctl not expected'),
-          macosAdapterFactory: (_) => hostAdapter,
+          macosAdapterFactory: (_, {processId}) => hostAdapter,
         ),
       );
 
@@ -369,7 +369,7 @@ void main() {
           remoteAdapterFactory: (_) => remoteAdapter,
           adbAdapterFactory: (_) => throw StateError('adb not expected'),
           simctlAdapterFactory: (_) => throw StateError('simctl not expected'),
-          macosAdapterFactory: (_) => hostAdapter,
+          macosAdapterFactory: (_, {processId}) => hostAdapter,
         ),
       );
 
@@ -582,7 +582,7 @@ void main() {
         remoteAdapterFactory: (_) => remoteAdapter,
         adbAdapterFactory: (_) => throw StateError('adb not expected'),
         simctlAdapterFactory: (_) => throw StateError('simctl not expected'),
-        macosAdapterFactory: (appId) {
+        macosAdapterFactory: (appId, {processId}) {
           expect(appId, 'com.google.Chrome');
           return hostAdapter;
         },

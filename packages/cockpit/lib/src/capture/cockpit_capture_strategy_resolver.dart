@@ -11,6 +11,7 @@ import 'cockpit_prioritized_capture_adapter.dart';
 import 'cockpit_linux_capture_adapter.dart';
 import 'cockpit_macos_capture_adapter.dart';
 import 'cockpit_simctl_capture_adapter.dart';
+import 'cockpit_wda_capture_adapter.dart';
 import 'cockpit_windows_capture_adapter.dart';
 
 typedef CockpitRemoteCaptureAdapterFactory =
@@ -19,8 +20,10 @@ typedef CockpitAdbCaptureAdapterFactory =
     CockpitCaptureAdapter Function(String deviceId);
 typedef CockpitSimctlCaptureAdapterFactory =
     CockpitCaptureAdapter Function(String deviceId);
+typedef CockpitWdaCaptureAdapterFactory =
+    CockpitCaptureAdapter Function(Uri baseUri);
 typedef CockpitMacosCaptureAdapterFactory =
-    CockpitCaptureAdapter Function(String appId);
+    CockpitCaptureAdapter Function(String appId, {int? processId});
 typedef CockpitWindowsCaptureAdapterFactory =
     CockpitCaptureAdapter Function(String appId, {int? processId});
 typedef CockpitLinuxCaptureAdapterFactory =
@@ -33,6 +36,7 @@ final class CockpitCaptureStrategyResolver {
     this.remoteAdapterFactory = _defaultRemoteAdapterFactory,
     this.adbAdapterFactory = _defaultAdbAdapterFactory,
     this.simctlAdapterFactory = _defaultSimctlAdapterFactory,
+    this.wdaAdapterFactory = _defaultWdaAdapterFactory,
     this.macosAdapterFactory = _defaultMacosAdapterFactory,
     this.windowsAdapterFactory = _defaultWindowsAdapterFactory,
     this.linuxAdapterFactory = _defaultLinuxAdapterFactory,
@@ -43,6 +47,7 @@ final class CockpitCaptureStrategyResolver {
   final CockpitRemoteCaptureAdapterFactory remoteAdapterFactory;
   final CockpitAdbCaptureAdapterFactory adbAdapterFactory;
   final CockpitSimctlCaptureAdapterFactory simctlAdapterFactory;
+  final CockpitWdaCaptureAdapterFactory wdaAdapterFactory;
   final CockpitMacosCaptureAdapterFactory macosAdapterFactory;
   final CockpitWindowsCaptureAdapterFactory windowsAdapterFactory;
   final CockpitLinuxCaptureAdapterFactory linuxAdapterFactory;
@@ -58,6 +63,7 @@ final class CockpitCaptureStrategyResolver {
     String? deviceId,
     String? androidDeviceId,
     String? iosDeviceId,
+    Uri? iosWdaBaseUri,
   }) {
     final remoteAdapter = remoteAdapterFactory(client);
     if (platform == 'android' &&
@@ -79,6 +85,13 @@ final class CockpitCaptureStrategyResolver {
         client: client,
       );
     }
+    if (platform == 'ios' && iosWdaBaseUri != null) {
+      return CockpitPrioritizedCaptureAdapter(
+        remoteAdapter: remoteAdapter,
+        hostAcceptanceAdapter: wdaAdapterFactory(iosWdaBaseUri),
+        client: client,
+      );
+    }
     final resolvedAppId = _hostAppIdFor(
       platform: platform,
       platformAppId: platformAppId ?? sessionHandle?.effectivePlatformAppId,
@@ -90,7 +103,10 @@ final class CockpitCaptureStrategyResolver {
         resolvedAppId.isNotEmpty) {
       return CockpitPrioritizedCaptureAdapter(
         remoteAdapter: remoteAdapter,
-        hostAcceptanceAdapter: macosAdapterFactory(resolvedAppId),
+        hostAcceptanceAdapter: macosAdapterFactory(
+          resolvedAppId,
+          processId: resolvedProcessId,
+        ),
         client: client,
         preferHostForAcceptance: false,
       );
@@ -197,8 +213,15 @@ final class CockpitCaptureStrategyResolver {
     return CockpitSimctlCaptureAdapter(deviceId: deviceId);
   }
 
-  static CockpitCaptureAdapter _defaultMacosAdapterFactory(String appId) {
-    return CockpitMacosCaptureAdapter(appId: appId);
+  static CockpitCaptureAdapter _defaultWdaAdapterFactory(Uri baseUri) {
+    return CockpitWdaCaptureAdapter(baseUri: baseUri);
+  }
+
+  static CockpitCaptureAdapter _defaultMacosAdapterFactory(
+    String appId, {
+    int? processId,
+  }) {
+    return CockpitMacosCaptureAdapter(appId: appId, processId: processId);
   }
 
   static CockpitCaptureAdapter _defaultWindowsAdapterFactory(

@@ -69,7 +69,7 @@ final class CockpitSupervisorAuthorizationPolicy {
       : allowedSafetyEffects;
 
   bool allowsEnvironmentSecretName(String name) =>
-      isYolo || allowedEnvironmentSecretNames.contains(name);
+      allowedEnvironmentSecretNames.contains(name);
 
   CockpitSupervisorAuthorizationPolicy withMode(
     CockpitAuthorizationMode value,

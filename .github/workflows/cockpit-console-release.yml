@@ -1,0 +1,194 @@
+name: Cockpit Console Release
+
+on:
+  push:
+    tags:
+      - 'cockpit-console-v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing cockpit-console-v<version> tag to release
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cockpit-console-release-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  FLUTTER_VERSION: '3.44.0'
+
+jobs:
+  validate:
+    name: Validate Console release
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    outputs:
+      tag: ${{ steps.release.outputs.tag }}
+      version: ${{ steps.release.outputs.version }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          ref: ${{ inputs.tag || github.ref }}
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+
+      - name: Bootstrap workspace
+        run: flutter pub get
+
+      - name: Resolve release identity
+        id: release
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          dart run tool/validate_release.dart "$RELEASE_TAG"
+          echo "tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
+          echo "version=${RELEASE_TAG#cockpit-console-v}" >> "$GITHUB_OUTPUT"
+        working-directory: packages/cockpit_console
+
+      - name: Analyze Console
+        run: flutter analyze
+        working-directory: packages/cockpit_console
+
+      - name: Test Console
+        run: flutter test
+        working-directory: packages/cockpit_console
+
+  build:
+    name: Build ${{ matrix.platform }} package
+    needs: validate
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos
+            os: macos-latest
+            extension: zip
+          - platform: linux
+            os: ubuntu-latest
+            extension: tar.gz
+          - platform: windows
+            os: windows-2022
+            extension: zip
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.validate.outputs.tag }}
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+
+      - name: Install Linux build dependencies
+        if: matrix.platform == 'linux'
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev
+
+      - name: Enable desktop target
+        run: flutter config --enable-${{ matrix.platform }}-desktop
+
+      - name: Bootstrap workspace
+        run: flutter pub get
+
+      - name: Build Console
+        run: flutter build ${{ matrix.platform }} --release
+        working-directory: packages/cockpit_console
+
+      - name: Package macOS application
+        if: matrix.platform == 'macos'
+        shell: bash
+        env:
+          VERSION: ${{ needs.validate.outputs.version }}
+        run: |
+          mkdir -p dist
+          ditto -c -k --keepParent \
+            "build/macos/Build/Products/Release/Cockpit Console.app" \
+            "dist/cockpit-console-${VERSION}-macos.zip"
+        working-directory: packages/cockpit_console
+
+      - name: Package Linux application
+        if: matrix.platform == 'linux'
+        shell: bash
+        env:
+          VERSION: ${{ needs.validate.outputs.version }}
+        run: |
+          mkdir -p dist "$RUNNER_TEMP/cockpit-console"
+          cp -a build/linux/x64/release/bundle/. \
+            "$RUNNER_TEMP/cockpit-console/"
+          tar -C "$RUNNER_TEMP" -czf \
+            "dist/cockpit-console-${VERSION}-linux-x64.tar.gz" \
+            cockpit-console
+        working-directory: packages/cockpit_console
+
+      - name: Package Windows application
+        if: matrix.platform == 'windows'
+        shell: pwsh
+        env:
+          VERSION: ${{ needs.validate.outputs.version }}
+        run: |
+          $dist = New-Item -ItemType Directory -Path dist -Force
+          $package = Join-Path $env:RUNNER_TEMP 'cockpit-console'
+          New-Item -ItemType Directory -Path $package -Force | Out-Null
+          Copy-Item -Path 'build\windows\x64\runner\Release\*' `
+            -Destination $package -Recurse
+          Compress-Archive -Path $package `
+            -DestinationPath "$($dist.FullName)\cockpit-console-$env:VERSION-windows-x64.zip"
+        working-directory: packages/cockpit_console
+
+      - name: Upload desktop package
+        uses: actions/upload-artifact@v7
+        with:
+          name: cockpit-console-${{ matrix.platform }}
+          if-no-files-found: error
+          path: packages/cockpit_console/dist/cockpit-console-*.${{ matrix.extension }}
+
+  release:
+    name: Publish GitHub Release
+    needs:
+      - validate
+      - build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          ref: ${{ needs.validate.outputs.tag }}
+
+      - uses: actions/download-artifact@v7
+        with:
+          pattern: cockpit-console-*
+          path: dist
+          merge-multiple: true
+
+      - name: Create or update release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.validate.outputs.tag }}
+          VERSION: ${{ needs.validate.outputs.version }}
+        run: |
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" dist/* --clobber
+          else
+            gh release create "$RELEASE_TAG" dist/* \
+              --verify-tag \
+              --title "Cockpit Console $VERSION" \
+              --generate-notes
+          fi

@@ -832,11 +832,25 @@ void main() {
           'local-probe-compare',
         ),
       );
+      final networkBody = await _callOperation(
+        harness.client,
+        _applicationInvocation(
+          'network.body',
+          'network-body-capture-grant',
+          input: const <String, Object?>{
+            'sessionId': 'sessionA',
+            'requestId': '37',
+            'body': 'response',
+          },
+        ),
+      );
       expect(registryRead.outcome, CockpitOperationOutcome.succeeded);
       expect(localCompare.outcome, CockpitOperationOutcome.succeeded);
+      expect(networkBody.outcome, CockpitOperationOutcome.succeeded);
       expect(resolver.resolvedKinds, <String>[
         'session.remote.status',
         'command.run',
+        'network.body',
       ]);
       expect(backend.grantCountByKind['app.list'], 0);
       expect(backend.grantCountByKind['development.probe.compare'], 0);
@@ -946,6 +960,44 @@ void main() {
     expect(result.outcome, CockpitOperationOutcome.failed);
     expect(result.failure?.primary.code, 'expectedFailure');
     expect(authority.releaseCancellations, <bool>[false]);
+  });
+
+  test('invalid worker input is reported as invalid request', () async {
+    final registry = CockpitWorkspaceOperationRegistry(
+      workspaceId: workspaceId,
+      workspaceRoot: workspaceRoot,
+      adapters: <CockpitWorkspaceOperationAdapter>[
+        CockpitWorkspaceOperationAdapter(
+          kind: 'read.invalidInput',
+          mutationClass: CockpitMutationClass.readOnly,
+          resourceKinds: const <String>[],
+          prepare: (context, input) => CockpitPreparedWorkspaceOperation(
+            resources: const <CockpitWorkerResourceRequest>[],
+            execute: (_) => throw const FormatException(
+              r'Invalid integer at $.input.timeoutMs.',
+            ),
+          ),
+        ),
+      ],
+      resourceAuthority: _RecordingResourceAuthority(),
+      operationJournal: CockpitInMemoryWorkerOperationJournal(),
+      terminateUnsafeWorker: () async {},
+    );
+
+    final result = await registry.execute(
+      CockpitOperationInvocation(
+        kind: 'read.invalidInput',
+        workspaceId: workspaceId,
+        deadline: _deadline(),
+      ),
+      requestId: 'request-invalid-input',
+      cancellation: CockpitRpcCancellation.detached(),
+    );
+
+    expect(result.outcome, CockpitOperationOutcome.failed);
+    expect(result.failure?.primary.code, CockpitErrorCode.invalidRequest);
+    expect(result.failure?.primary.category, CockpitErrorCategory.invalidInput);
+    expect(result.failure?.primary.message, contains('timeoutMs'));
   });
 
   test('internal failure cancels resource leases', () async {
@@ -2114,6 +2166,15 @@ final class _ReadMutationBackend implements CockpitWorkerApplicationBackend {
         hasLength(1),
       );
       mutationEntered.complete();
+    } else if (kind == 'network.body') {
+      expect(
+        grants.where(
+          (grant) =>
+              grant.resourceKind == CockpitLeaseResourceKind.capture &&
+              grant.resourceId == 'session_resource_A',
+        ),
+        hasLength(1),
+      );
     } else {
       expect(grants, isEmpty);
     }

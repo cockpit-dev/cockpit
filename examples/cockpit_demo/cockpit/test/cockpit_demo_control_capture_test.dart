@@ -113,12 +113,14 @@ void main() {
               required duration,
               required alignment,
               required padding,
+              required offset,
             }) {
               return surfaceState.ensureLocatorVisible(
                 locator,
                 duration: duration,
                 alignment: alignment,
                 padding: padding,
+                offset: offset,
               );
             },
       );
@@ -207,12 +209,14 @@ void main() {
             required duration,
             required alignment,
             required padding,
+            required offset,
           }) {
             return surfaceState.ensureLocatorVisible(
               locator,
               duration: duration,
               alignment: alignment,
               padding: padding,
+              offset: offset,
             );
           },
     );
@@ -259,7 +263,8 @@ void main() {
     expect(
       revealSyncCheck.success,
       isTrue,
-      reason: revealSyncCheck.error?.message,
+      reason:
+          '${revealSyncCheck.error?.message}\n${revealSyncCheck.error?.details}',
     );
     expect(runSyncCheck.success, isTrue, reason: runSyncCheck.error?.message);
     expect(result.success, isTrue, reason: result.error?.message);
@@ -514,12 +519,14 @@ void main() {
                 required duration,
                 required alignment,
                 required padding,
+                required offset,
               }) {
                 return surfaceState.ensureLocatorVisible(
                   locator,
                   duration: duration,
                   alignment: alignment,
                   padding: padding,
+                  offset: offset,
                 );
               },
         );

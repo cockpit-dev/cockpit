@@ -6,6 +6,7 @@ import 'package:test/test.dart';
 const _skillRoots = <String>[
   'skills/cockpit',
   '.agents/skills/cockpit',
+  '.kiro/skills/cockpit',
   '.claude/skills/cockpit',
   '.cursor/skills/cockpit',
   '.cline/skills/cockpit',
@@ -29,7 +30,7 @@ void main() {
       expect(
         _relativeFiles(repositoryRoot, root),
         canonicalFiles,
-        reason: '$root must contain the complete deployable 2.0 skill.',
+        reason: '$root must contain the complete deployable 3.0 skill.',
       );
       for (final relativePath in canonicalFiles) {
         expect(
@@ -43,7 +44,7 @@ void main() {
     }
   });
 
-  test('skill teaches the Cockpit 2.0 control and evidence workflow', () {
+  test('skill teaches the short Flutter development workflow', () {
     final skill = read('${_skillRoots.first}/SKILL.md');
     final frontmatterEnd = skill.indexOf('\n---\n', 4);
 
@@ -56,41 +57,87 @@ void main() {
       frontmatter.last,
       allOf(
         startsWith('description: Use when '),
-        contains('black-box application'),
-        contains('Cockpit 2.0'),
+        contains('application development'),
+        contains('black-box E2E'),
+        contains('live Flutter'),
       ),
     );
 
     for (final contract in <String>[
-      'authenticated Supervisor',
-      'daemon start --yolo',
-      'workspace',
-      'target discover',
-      'target register',
-      'target inspect --target-id',
-      'workspace documents',
-      'operation list',
-      'operation run',
-      'cockpit.test/v2',
-      'case validate',
-      'case run',
-      'suite validate',
-      'suite run',
-      'run events',
-      'run get',
-      'suite report',
-      'daemon policy show',
-      'idempotency',
-      'terminal run state',
-      'cockpit.test.v2.schema.json',
-      'Binary',
-      'Rapid Development Validation',
-      'resolve -> baseline -> edit -> execute -> observe -> judge -> repeat',
+      'cockpit dev',
+      'Flutter Fast Path',
+      'cockpit dev start',
+      'Public handles are numeric',
+      '--session HANDLE',
+      'The selection persists',
+      'cockpit dev status',
+      'cockpit dev inspect',
+      'Do not add a pre-inspect round trip',
+      'semantic UI targets only',
+      '`loc` with the shortest stable conditions',
+      'conditions\nintersect',
+      '`--within`',
+      'equal matches fail',
+      'cockpit dev reload',
+      'cockpit dev restart',
+      'cockpit dev viewport',
+      'cockpit dev screenshot',
+      'Android/iOS capture the system screen first',
+      'Desktop/Web capture Flutter first',
+      'cockpit dev diagnose',
+      'reconciled internally',
+      'current screenshot',
+      'Minimal canonical LON',
+      '--format',
+      '--verbosity',
+      'Every explicit option must change behavior',
       'references/flutter.md',
       'references/environments.md',
     ]) {
       expect(skill, contains(contract), reason: contract);
     }
+  });
+
+  test('skill omits defaults and retired format-specific input flags', () {
+    final distribution = _skillRoots
+        .expand(
+          (root) => _relativeFiles(repositoryRoot, root)
+              .where((path) => path.endsWith('.md'))
+              .map((path) => read('$root/$path')),
+        )
+        .join('\n');
+
+    for (final retired in <String>[
+      '--stdout-format',
+      '--detail',
+      '--input-json',
+      '--inputs-json',
+      'authorizationMode',
+    ]) {
+      expect(distribution, isNot(contains(retired)), reason: retired);
+    }
+
+    final examples = RegExp(
+      r'```bash\n([\s\S]*?)\n```',
+    ).allMatches(distribution).map((match) => match.group(1)!).join('\n');
+    for (final redundantDefault in <String>[
+      '--verbosity minimal',
+      '--format lon',
+      '--session s1',
+      '--quiet-ms 500',
+      '--direction down',
+      '--format yaml',
+    ]) {
+      expect(
+        examples,
+        isNot(contains(redundantDefault)),
+        reason: redundantDefault,
+      );
+    }
+
+    expect(distribution, contains('lon|json|yaml|jsonl|path|none'));
+    expect(distribution, contains('--input \'{width:800 height:600}\''));
+    expect(distribution, contains('LON, JSON, or YAML'));
   });
 
   test('skill distribution contains no retired client surface', () {
@@ -115,6 +162,8 @@ void main() {
       'live-run',
       'Maestro',
       'Dify',
+      'cockpit raw',
+      'cockpit exec',
     ]) {
       expect(distribution, isNot(contains(retired)), reason: retired);
     }
@@ -178,7 +227,7 @@ void main() {
     for (final authority in <String>[
       'cockpit.test.v2.schema.json',
       'cockpit help',
-      'operation list',
+      'op list',
       'target inspect',
       'SSE sequence numbers are monotonic and resumable',
       'session affinity',
@@ -208,9 +257,11 @@ void main() {
       'FlutterCockpitApp',
       'CockpitRemoteSessionConfiguration.resolveFromEnvironment',
       'FlutterCockpit.createNavigatorObserver()',
-      'workspace documents',
-      '--entrypoint-document-id',
-      'target launch',
+      'cockpit dev start',
+      'cockpit dev inspect',
+      'cockpit dev reload',
+      'one numeric handle',
+      'manually register workspace',
       'bindRouteInformationProvider',
       'setCurrentRouteName',
     ]) {
@@ -251,8 +302,12 @@ void main() {
       '${_skillRoots.first}/references/environments.md',
     );
 
-    expect(development, contains('--flutter-arg=--track-widget-creation'));
-    expect(development, isNot(contains('--flutter-arg --')));
+    expect(development, contains('cockpit dev start'));
+    expect(development, contains('cockpit dev reload'));
+    expect(development, contains('never reads a keychain or secret store'));
+    expect(development, isNot(contains('credential vault')));
+    expect(development, isNot(contains('--session s1')));
+    expect(development, isNot(contains('--quiet-ms 500')));
     expect(environments, contains('## Contents'));
     expect(environments, contains('cockpit help'));
     expect(environments, isNot(contains('cockpit --version')));
@@ -272,7 +327,7 @@ void main() {
       '## macOS',
       'Accessibility',
       '## Parallel Projects And Devices',
-      'authorizationMode: yolo',
+      'auth: yolo',
     ]) {
       expect(environments, contains(requirement), reason: requirement);
     }

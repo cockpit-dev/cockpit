@@ -9,6 +9,7 @@ enum CockpitScreenshotReason {
   assertionFailure('assertion_failure'),
   acceptance('acceptance');
 
+  /// Creates a CockpitScreenshotReason.
   const CockpitScreenshotReason(this.jsonValue);
 
   final String jsonValue;
@@ -26,6 +27,7 @@ enum CockpitScreenshotReason {
 }
 
 final class CockpitScreenshotRequest {
+  /// Creates a CockpitScreenshotRequest.
   const CockpitScreenshotRequest({
     required this.reason,
     required this.name,
@@ -48,6 +50,7 @@ final class CockpitScreenshotRequest {
 
   bool get allowsFallback => allowFallback ?? true;
 
+  /// Encodes this CockpitScreenshotRequest as a JSON object.
   Map<String, Object?> toJson() => {
     'reason': reason.jsonValue,
     'name': name,
@@ -59,6 +62,7 @@ final class CockpitScreenshotRequest {
     if (cropLocator != null) 'cropLocator': cropLocator!.toJson(),
   };
 
+  /// Decodes a CockpitScreenshotRequest from a JSON object.
   factory CockpitScreenshotRequest.fromJson(Map<String, Object?> json) {
     final snapshotOptionsJson =
         json['snapshotOptions'] as Map<Object?, Object?>?;
@@ -109,6 +113,7 @@ final class CockpitScreenshotRequest {
     cropLocator,
   );
 
+  /// Returns a copy of this CockpitScreenshotRequest with supplied fields replaced.
   CockpitScreenshotRequest copyWith({
     CockpitScreenshotReason? reason,
     String? name,

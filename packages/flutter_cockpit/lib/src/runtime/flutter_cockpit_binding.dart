@@ -693,6 +693,9 @@ CockpitHttpNetworkObserver? _buildHttpNetworkObserver(
     maxBodyBytes: configuration.maxBodyBytes,
     captureHeaders: configuration.captureHeaders,
     captureBodies: configuration.captureBodies,
+    redact: configuration.redact,
+    maxWebSocketFrames: configuration.maxWebSocketFrames,
+    maxWebSocketPreviewBytes: configuration.maxWebSocketPreviewBytes,
   );
 }
 

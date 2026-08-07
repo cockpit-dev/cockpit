@@ -48,6 +48,7 @@ abstract final class CockpitLeaseStateMachine {
 }
 
 final class CockpitLeaseRequest {
+  /// Creates a CockpitLeaseRequest.
   CockpitLeaseRequest({
     required this.workspaceId,
     required this.resourceKind,
@@ -80,6 +81,7 @@ final class CockpitLeaseRequest {
   final int waitTimeoutMs;
   final int ttlMs;
 
+  /// Encodes this CockpitLeaseRequest as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
     'workspaceId': workspaceId,
     'resourceKind': resourceKind.name,
@@ -90,6 +92,7 @@ final class CockpitLeaseRequest {
     'ttlMs': ttlMs,
   };
 
+  /// Decodes a CockpitLeaseRequest from a JSON object.
   factory CockpitLeaseRequest.fromJson(Object? value, {String path = r'$'}) {
     final json = CockpitFoundationValueReader.object(value, path);
     const fields = <String>{
@@ -142,6 +145,7 @@ final class CockpitLeaseRequest {
 }
 
 final class CockpitLeaseResource {
+  /// Creates a CockpitLeaseResource.
   CockpitLeaseResource({
     required this.leaseId,
     required this.workspaceId,
@@ -193,6 +197,7 @@ final class CockpitLeaseResource {
   final int? queuePosition;
   final CockpitFailure? failure;
 
+  /// Encodes this CockpitLeaseResource as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
     'leaseId': leaseId,
     'workspaceId': workspaceId,
@@ -208,6 +213,7 @@ final class CockpitLeaseResource {
     if (failure != null) 'failure': failure!.toJson(),
   };
 
+  /// Decodes a CockpitLeaseResource from a JSON object.
   factory CockpitLeaseResource.fromJson(
     Object? value, {
     String path = r'$',

@@ -10,7 +10,7 @@ Map<String, Object?> buildFoundationOpenApi() => <String, Object?>{
     'title': 'Cockpit Supervisor API',
     'version': '2.0.0',
     'description':
-        'Authenticated loopback API for Cockpit 2.0 discovery, workspaces, typed operations, case and suite runs, durable events, immutable artifacts, and aggregate reports.',
+        'Authenticated Cockpit foundation v2 loopback API for discovery, workspaces, typed operations, case and suite runs, durable events, immutable artifacts, and aggregate reports.',
   },
   'servers': <Object?>[
     <String, Object?>{
