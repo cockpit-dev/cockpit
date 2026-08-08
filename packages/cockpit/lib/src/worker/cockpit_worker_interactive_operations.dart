@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:cockpit_protocol/cockpit_protocol.dart';
 import 'package:path/path.dart' as p;
 
@@ -1110,6 +1112,10 @@ final class CockpitWorkerInteractiveOperations {
     );
     _requireSessionGrant(pair.binding, context, grants);
     final app = await _registry.requireApp(pair.binding.appId);
+    final requestTimeout = context.deadline.difference(DateTime.now().toUtc());
+    if (requestTimeout <= Duration.zero) {
+      throw TimeoutException('Workspace operation deadline expired.');
+    }
     final result = await runWorkerApplicationOperation(
       context: context,
       operation: () => _resizeViewport.resize(
@@ -1117,6 +1123,7 @@ final class CockpitWorkerInteractiveOperations {
           app: app.handle,
           width: pair.input.integer('width', minimum: 200, maximum: 8192),
           height: pair.input.integer('height', minimum: 200, maximum: 8192),
+          timeout: requestTimeout,
         ),
       ),
     );

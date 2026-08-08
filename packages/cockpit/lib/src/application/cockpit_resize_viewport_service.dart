@@ -8,6 +8,7 @@ typedef CockpitRemoteViewportResize =
     Future<CockpitViewportResizeResult> Function(
       Uri baseUri,
       CockpitViewportResizeRequest request,
+      Duration requestTimeout,
     );
 
 final class CockpitResizeViewportRequest {
@@ -15,11 +16,13 @@ final class CockpitResizeViewportRequest {
     required this.app,
     required this.width,
     required this.height,
+    required this.timeout,
   });
 
   final CockpitAppHandle app;
   final int width;
   final int height;
+  final Duration timeout;
 }
 
 final class CockpitResizeViewportService {
@@ -28,9 +31,9 @@ final class CockpitResizeViewportService {
     CockpitInteractiveSessionLock? sessionLock,
   }) : _resize =
            resize ??
-           ((baseUri, request) => CockpitRemoteSessionClient(
+           ((baseUri, request, requestTimeout) => CockpitRemoteSessionClient(
              baseUri: baseUri,
-           ).resizeViewport(request)),
+           ).resizeViewport(request, requestTimeout: requestTimeout)),
        _sessionLock = sessionLock ?? CockpitInteractiveSessionLock();
 
   final CockpitRemoteViewportResize _resize;
@@ -45,7 +48,7 @@ final class CockpitResizeViewportService {
     );
     return _sessionLock.run(
       request.app.baseUrl,
-      () => _resize(request.app.baseUri, resizeRequest),
+      () => _resize(request.app.baseUri, resizeRequest, request.timeout),
     );
   }
 }

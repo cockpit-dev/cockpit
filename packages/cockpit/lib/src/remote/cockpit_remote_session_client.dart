@@ -63,13 +63,14 @@ final class CockpitRemoteSessionClient {
   }
 
   Future<CockpitViewportResizeResult> resizeViewport(
-    CockpitViewportResizeRequest request,
-  ) async {
+    CockpitViewportResizeRequest request, {
+    Duration? requestTimeout,
+  }) async {
     final payload = await _send(
       method: 'POST',
       path: '/viewport',
       body: request.toJson(),
-      requestTimeout: const Duration(seconds: 8),
+      requestTimeout: requestTimeout,
     );
     return CockpitViewportResizeResult.fromJson(payload);
   }
