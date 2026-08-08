@@ -260,13 +260,7 @@ try {
   $daclOffset = [System.BitConverter]::ToUInt32($descriptor, 16)
   $daclPresent = (($control -band 0x0004) -ne 0) -and ($daclOffset -ne 0)
   $current = [System.Security.Principal.WindowsIdentity]::GetCurrent().User
-  try {
-    $owner = [System.Security.Principal.SecurityIdentifier]::new($acl.Owner)
-  } catch {
-    $owner = [System.Security.Principal.NTAccount]::new($acl.Owner).Translate(
-      [System.Security.Principal.SecurityIdentifier]
-    )
-  }
+  $owner = $acl.GetOwner([System.Security.Principal.SecurityIdentifier])
   $allowedWriters = @(
     $current.Value,
     'S-1-5-18',
@@ -285,13 +279,16 @@ try {
     0x40000000 -bor
     0x10000000
   $unsafe = -not $daclPresent
-  foreach ($rule in $acl.Access) {
+  $rules = $acl.GetAccessRules(
+    $true,
+    $true,
+    [System.Security.Principal.SecurityIdentifier]
+  )
+  foreach ($rule in $rules) {
     if ($rule.AccessControlType -ne [System.Security.AccessControl.AccessControlType]::Allow) {
       continue
     }
-    $sid = $rule.IdentityReference.Translate(
-      [System.Security.Principal.SecurityIdentifier]
-    ).Value
+    $sid = $rule.IdentityReference.Value
     if ($allowedWriters -notcontains $sid -and (($rule.FileSystemRights -band $writeRights) -ne 0)) {
       $unsafe = $true
     }

@@ -8,6 +8,7 @@ import 'package:cockpit/src/foundation/cockpit_home.dart';
 import 'package:cockpit/src/foundation/cockpit_ids.dart';
 import 'package:cockpit/src/foundation/cockpit_locked_json_store.dart';
 import 'package:cockpit/src/foundation/cockpit_permissions.dart';
+import 'package:cockpit/src/foundation/cockpit_windows_directory_authority.dart';
 import 'package:cockpit/src/infrastructure/cockpit_clock.dart';
 import 'package:cockpit/src/registry/cockpit_allowed_root_registry.dart';
 import 'package:cockpit/src/registry/cockpit_directory_ancestor_policy.dart';
@@ -75,6 +76,25 @@ void main() {
   });
 
   group('directory authority races', () {
+    test('Windows ACL probes use SID-native access rules', () {
+      for (final script in <String>[
+        cockpitWindowsSecurityInspectionPowerShell,
+        cockpitWindowsDirectoryAuthorityPowerShell,
+      ]) {
+        expect(
+          script,
+          contains(r'GetOwner([System.Security.Principal.SecurityIdentifier])'),
+        );
+        expect(script, contains(r'GetAccessRules('));
+        expect(
+          script,
+          contains(r'[System.Security.Principal.SecurityIdentifier]'),
+        );
+        expect(script, contains(r'$rule.IdentityReference.Value'));
+        expect(script, isNot(contains('.Translate(')));
+      }
+    });
+
     test('rejects identity changes during security inspection', () async {
       final temporary = await Directory.systemTemp.createTemp(
         'cockpit-attestation-',

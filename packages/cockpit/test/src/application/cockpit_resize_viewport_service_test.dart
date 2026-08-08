@@ -7,10 +7,12 @@ void main() {
   test('forwards a typed viewport request to the owned app endpoint', () async {
     Uri? baseUri;
     CockpitViewportResizeRequest? captured;
+    Duration? timeout;
     final service = CockpitResizeViewportService(
-      resize: (uri, request) async {
+      resize: (uri, request, requestTimeout) async {
         baseUri = uri;
         captured = request;
+        timeout = requestTimeout;
         return CockpitViewportResizeResult(
           available: true,
           changed: true,
@@ -35,11 +37,13 @@ void main() {
         ),
         width: 800,
         height: 600,
+        timeout: const Duration(seconds: 45),
       ),
     );
 
     expect(baseUri, Uri.parse('http://127.0.0.1:43123'));
     expect(captured?.toJson(), {'width': 800, 'height': 600});
+    expect(timeout, const Duration(seconds: 45));
     expect(result.available, isTrue);
     expect(result.changed, isTrue);
   });
