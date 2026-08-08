@@ -302,10 +302,10 @@ final class CockpitDurableWorkerArtifactPublisher
           null,
         );
       });
+      final artifactDrafts = <CockpitWorkerEventDraft>[];
       for (final resource in resources) {
         if (!await _events.containsArtifact(runId, resource.artifactId)) {
-          await _events.append(
-            runId,
+          artifactDrafts.add(
             CockpitWorkerEventDraft(
               kind: 'artifact.published',
               entityKind: CockpitRunEventEntityKind.artifact,
@@ -314,10 +314,14 @@ final class CockpitDurableWorkerArtifactPublisher
               stepExecutionId: resource.stepExecutionId,
               artifacts: <CockpitArtifactReference>[resource.reference],
             ),
-            publishImmediately: false,
           );
         }
       }
+      await _events.appendBatch(
+        runId,
+        artifactDrafts,
+        publishImmediately: false,
+      );
       await _publish(
         projectId: context.projectId,
         runId: runId,
@@ -491,20 +495,24 @@ final class CockpitDurableWorkerArtifactPublisher
           null,
         );
       });
+      final artifactDrafts = <CockpitWorkerEventDraft>[];
       for (final resource in resources) {
         if (await _events.containsArtifact(runId, resource.artifactId)) {
           continue;
         }
-        await _events.append(
-          runId,
+        artifactDrafts.add(
           CockpitWorkerEventDraft(
             kind: 'artifact.published',
             entityKind: CockpitRunEventEntityKind.artifact,
             artifacts: <CockpitArtifactReference>[resource.reference],
           ),
-          publishImmediately: false,
         );
       }
+      await _events.appendBatch(
+        runId,
+        artifactDrafts,
+        publishImmediately: false,
+      );
       await _publish(
         projectId: report.projectId,
         runId: runId,
@@ -1092,6 +1100,7 @@ final class CockpitDurableWorkerArtifactPublisher
       }
       contextByAttempt[manifest.context.attemptId] = manifest.context;
     }
+    final artifactDrafts = <CockpitWorkerEventDraft>[];
     for (final resource in resources) {
       if (await _events.containsArtifact(runId, resource.artifactId)) continue;
       final attemptId = resource.attemptId;
@@ -1101,8 +1110,7 @@ final class CockpitDurableWorkerArtifactPublisher
           'Persisted artifact has no immutable attempt manifest.',
         );
       }
-      await _events.append(
-        runId,
+      artifactDrafts.add(
         CockpitWorkerEventDraft(
           kind: 'artifact.published',
           entityKind: CockpitRunEventEntityKind.artifact,
@@ -1111,9 +1119,9 @@ final class CockpitDurableWorkerArtifactPublisher
           stepExecutionId: resource.stepExecutionId,
           artifacts: <CockpitArtifactReference>[resource.reference],
         ),
-        publishImmediately: false,
       );
     }
+    await _events.appendBatch(runId, artifactDrafts, publishImmediately: false);
     return Map<String, CockpitTestRunContext>.unmodifiable(contextByAttempt);
   }
 

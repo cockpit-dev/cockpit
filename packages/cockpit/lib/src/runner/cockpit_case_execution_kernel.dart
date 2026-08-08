@@ -608,22 +608,66 @@ final class CockpitCaseExecutionKernel {
     required CockpitCaseExecutionControl control,
     required CockpitCaseCleanupControl? cleanupControl,
     required CockpitMonotonicDeadline deadline,
-  }) => _controlled(
-    (lease) => _delegate.evaluateCondition(
-      node: node,
-      condition: condition,
-      timeout: _controlConditionTimeout(deadline.remaining),
-      cleanup: cleanupControl != null,
-      lease: lease,
-    ),
-    control: control,
-    cleanupControl: cleanupControl,
-    deadline: deadline,
-  );
+  }) async {
+    if (deadline.isExpired) {
+      throw const CockpitDeadlineExceeded();
+    }
+    final commandTimeout = _controlConditionTimeout(deadline.remaining);
+    final probeDeadline = CockpitMonotonicDeadline.after(
+      _clock,
+      _controlConditionProbeTimeout(
+        remaining: deadline.remaining,
+        commandTimeout: commandTimeout,
+      ),
+    );
+    try {
+      return await _controlled(
+        (lease) => _delegate.evaluateCondition(
+          node: node,
+          condition: condition,
+          timeout: commandTimeout,
+          cleanup: cleanupControl != null,
+          lease: lease,
+        ),
+        control: control,
+        cleanupControl: cleanupControl,
+        deadline: probeDeadline,
+      );
+    } on CockpitDeadlineExceeded {
+      if (deadline.isExpired) {
+        rethrow;
+      }
+      return CockpitTestKernelConditionResult(
+        evaluation: CockpitTestConditionEvaluation.error(
+          CockpitTestError(
+            code: CockpitTestErrorCode.conditionError,
+            message: 'Condition probe did not return within its guard budget.',
+            stepId: node.stepId,
+            details: <String, Object?>{
+              'commandTimeoutMs': commandTimeout.inMilliseconds,
+              'probeTimeoutMs': _controlConditionProbeTimeout(
+                remaining: deadline.remaining,
+                commandTimeout: commandTimeout,
+              ).inMilliseconds,
+            },
+          ),
+        ),
+      );
+    }
+  }
 
   Duration _controlConditionTimeout(Duration remaining) {
     const maximum = Duration(milliseconds: 500);
     return remaining < maximum ? remaining : maximum;
+  }
+
+  Duration _controlConditionProbeTimeout({
+    required Duration remaining,
+    required Duration commandTimeout,
+  }) {
+    const transportHeadroom = Duration(milliseconds: 4500);
+    final requested = commandTimeout + transportHeadroom;
+    return requested < remaining ? requested : remaining;
   }
 
   Future<T> _controlled<T>(

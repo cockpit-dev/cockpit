@@ -20,6 +20,7 @@ final class CockpitCliSessionHandle {
     required this.updatedAt,
     this.checkoutIdentity,
     this.checkoutPath,
+    this.projectPath,
     this.targetId,
     this.appId,
     this.entrypoint,
@@ -37,6 +38,7 @@ final class CockpitCliSessionHandle {
   final DateTime updatedAt;
   final String? checkoutIdentity;
   final String? checkoutPath;
+  final String? projectPath;
   final String? targetId;
   final String? appId;
   final String? entrypoint;
@@ -55,6 +57,7 @@ final class CockpitCliSessionHandle {
     DateTime? updatedAt,
     String? checkoutIdentity,
     String? checkoutPath,
+    String? projectPath,
     String? targetId,
     String? appId,
     String? entrypoint,
@@ -72,6 +75,7 @@ final class CockpitCliSessionHandle {
     updatedAt: updatedAt ?? this.updatedAt,
     checkoutIdentity: checkoutIdentity ?? this.checkoutIdentity,
     checkoutPath: checkoutPath ?? this.checkoutPath,
+    projectPath: projectPath ?? this.projectPath,
     targetId: targetId ?? this.targetId,
     appId: appId ?? this.appId,
     entrypoint: replaceLaunchIdentity
@@ -92,6 +96,7 @@ final class CockpitCliSessionHandle {
     'workspaceId': workspaceId,
     if (checkoutIdentity != null) 'checkoutIdentity': checkoutIdentity,
     if (checkoutPath != null) 'checkoutPath': checkoutPath,
+    if (projectPath != null) 'projectPath': projectPath,
     if (targetId != null) 'targetId': targetId,
     if (appId != null) 'appId': appId,
     if (entrypoint != null) 'entrypoint': entrypoint,
@@ -159,6 +164,7 @@ final class CockpitCliSessionHandleStore {
   Future<CockpitCliSessionHandle> bindDevelopment({
     required String checkoutIdentity,
     required String checkoutPath,
+    required String projectPath,
     required String workspaceId,
     required String sessionId,
     required String targetId,
@@ -171,9 +177,17 @@ final class CockpitCliSessionHandleStore {
     bool? recoverable,
     int? launchTimeoutMilliseconds,
     bool replaceLaunchIdentity = false,
+    String? handleId,
   }) => _store.transact<CockpitCliSessionHandle>((state) {
     _checkoutIdentity(checkoutIdentity, r'$.checkoutIdentity');
     _absolutePath(checkoutPath, r'$.checkoutPath');
+    _absolutePath(projectPath, r'$.projectPath');
+    if (!p.equals(checkoutPath, projectPath) &&
+        !p.isWithin(checkoutPath, projectPath)) {
+      throw const FormatException(
+        'Flutter project path must be inside its checkout.',
+      );
+    }
     _identifier(workspaceId, r'$.workspaceId');
     _identifier(sessionId, r'$.sessionId');
     _identifier(targetId, r'$.targetId');
@@ -188,15 +202,31 @@ final class CockpitCliSessionHandleStore {
       r'$.launchTimeoutMilliseconds',
     );
 
-    final activeId = state.activeByCheckout[checkoutIdentity];
-    final existing = state.handles
+    final requestedHandle = handleId == null ? null : _resolve(state, handleId);
+    if (handleId != null && requestedHandle == null) {
+      throw FormatException('Unknown CLI session handle $handleId.');
+    }
+    final targetMatches = state.handles
         .where(
           (item) =>
-              item.handleId == activeId ||
-              (item.checkoutIdentity == checkoutIdentity &&
-                  item.workspaceId == workspaceId),
+              item.checkoutIdentity == checkoutIdentity &&
+              item.projectPath == projectPath &&
+              item.targetId == targetId,
         )
-        .firstOrNull;
+        .toList(growable: false);
+    if (targetMatches.length > 1) {
+      throw const FormatException(
+        'Flutter target is bound to multiple local session handles.',
+      );
+    }
+    if (requestedHandle != null &&
+        targetMatches.isNotEmpty &&
+        targetMatches.single.handleId != requestedHandle.handleId) {
+      throw const FormatException(
+        'Flutter target belongs to a different local session handle.',
+      );
+    }
+    final existing = requestedHandle ?? targetMatches.firstOrNull;
     late final CockpitCliSessionHandle handle;
     if (existing == null) {
       if (entrypoint == null || platform == null || deviceId == null) {
@@ -210,6 +240,7 @@ final class CockpitCliSessionHandleStore {
         workspaceId: workspaceId,
         checkoutIdentity: checkoutIdentity,
         checkoutPath: p.normalize(checkoutPath),
+        projectPath: p.normalize(projectPath),
         targetId: targetId,
         appId: appId,
         entrypoint: entrypoint,
@@ -227,6 +258,11 @@ final class CockpitCliSessionHandleStore {
           'Active session belongs to a different checkout identity.',
         );
       }
+      if (existing.projectPath != projectPath) {
+        throw const FormatException(
+          'Development session belongs to a different Flutter project.',
+        );
+      }
       if (replaceLaunchIdentity &&
           (entrypoint == null || platform == null || deviceId == null)) {
         throw const FormatException(
@@ -238,6 +274,7 @@ final class CockpitCliSessionHandleStore {
         workspaceId: workspaceId,
         checkoutIdentity: checkoutIdentity,
         checkoutPath: p.normalize(checkoutPath),
+        projectPath: p.normalize(projectPath),
         targetId: targetId,
         appId: appId,
         entrypoint: entrypoint,
@@ -252,39 +289,99 @@ final class CockpitCliSessionHandleStore {
       );
       state.handles[state.handles.indexOf(existing)] = handle;
     }
-    state.activeByCheckout[checkoutIdentity] = handle.handleId;
+    state.activeByProject[projectPath] = handle.handleId;
     return CockpitLockedJsonUpdate.write(state, handle);
   });
 
-  Future<CockpitCliSessionHandle?> activeForCheckout(
-    String checkoutIdentity,
-  ) async {
-    _checkoutIdentity(checkoutIdentity, r'$.checkoutIdentity');
-    final state = await _store.read();
-    final handleId = state.activeByCheckout[checkoutIdentity];
-    if (handleId == null) return null;
-    return state.handles.where((item) => item.handleId == handleId).firstOrNull;
-  }
-
-  Future<CockpitCliSessionHandle> selectForCheckout({
+  Future<CockpitCliSessionHandle?> activeForPath({
     required String checkoutIdentity,
-    required String reference,
-  }) => _store.transact<CockpitCliSessionHandle>((state) {
+    required String path,
+    String? workspaceId,
+  }) async {
     _checkoutIdentity(checkoutIdentity, r'$.checkoutIdentity');
-    final handle = _resolve(state, reference);
-    if (handle == null) {
-      throw FormatException('Unknown CLI session handle $reference.');
-    }
-    if (handle.checkoutIdentity != checkoutIdentity) {
-      throw const FormatException(
-        'Session handle belongs to a different checkout.',
+    _absolutePath(path, r'$.path');
+    final state = await _store.read();
+    final candidates = state.activeByProject.entries
+        .map(
+          (entry) => state.handles
+              .where((item) => item.handleId == entry.value)
+              .firstOrNull,
+        )
+        .whereType<CockpitCliSessionHandle>()
+        .where(
+          (item) =>
+              item.checkoutIdentity == checkoutIdentity &&
+              (workspaceId == null || item.workspaceId == workspaceId),
+        )
+        .toList(growable: false);
+    final containing =
+        candidates
+            .where(
+              (item) =>
+                  p.equals(item.projectPath!, path) ||
+                  p.isWithin(item.projectPath!, path),
+            )
+            .toList(growable: false)
+          ..sort(
+            (left, right) =>
+                right.projectPath!.length.compareTo(left.projectPath!.length),
+          );
+    if (containing.isNotEmpty) return containing.first;
+
+    final descendants = candidates
+        .where((item) => p.isWithin(path, item.projectPath!))
+        .toList(growable: false);
+    if (descendants.length == 1) return descendants.single;
+    if (descendants.length > 1) {
+      final handles = descendants.map((item) => item.handleId).join(', ');
+      throw FormatException(
+        'Multiple Flutter projects are active below this directory '
+        '($handles); use --session HANDLE or run inside one project.',
       );
     }
-    state.activeByCheckout[checkoutIdentity] = handle.handleId;
-    final updated = handle.copyWith(updatedAt: _utcNow().toUtc());
-    state.handles[state.handles.indexOf(handle)] = updated;
-    return CockpitLockedJsonUpdate.write(state, updated);
-  });
+    return null;
+  }
+
+  Future<CockpitCliSessionHandle?> developmentForTarget({
+    required String checkoutIdentity,
+    required String projectPath,
+    required String targetId,
+  }) async {
+    _checkoutIdentity(checkoutIdentity, r'$.checkoutIdentity');
+    _absolutePath(projectPath, r'$.projectPath');
+    _identifier(targetId, r'$.targetId');
+    final matches = (await _store.read()).handles
+        .where(
+          (item) =>
+              item.checkoutIdentity == checkoutIdentity &&
+              item.projectPath == projectPath &&
+              item.targetId == targetId,
+        )
+        .toList(growable: false);
+    if (matches.length > 1) {
+      throw const FormatException(
+        'Flutter target is bound to multiple local session handles.',
+      );
+    }
+    return matches.firstOrNull;
+  }
+
+  Future<CockpitCliSessionHandle> selectDevelopment(String reference) =>
+      _store.transact<CockpitCliSessionHandle>((state) {
+        final handle = _resolve(state, reference);
+        if (handle == null) {
+          throw FormatException('Unknown CLI session handle $reference.');
+        }
+        if (!handle.isDevelopment) {
+          throw const FormatException(
+            'Session handle is not a Flutter development session.',
+          );
+        }
+        state.activeByProject[handle.projectPath!] = handle.handleId;
+        final updated = handle.copyWith(updatedAt: _utcNow().toUtc());
+        state.handles[state.handles.indexOf(handle)] = updated;
+        return CockpitLockedJsonUpdate.write(state, updated);
+      });
 
   Future<CockpitCliSessionHandle?> find(String reference) async {
     _identifier(reference, r'$.session');
@@ -303,7 +400,7 @@ final class CockpitCliSessionHandleStore {
       return CockpitLockedJsonUpdate.readOnly(state, false);
     }
     state.handles.remove(handle);
-    state.activeByCheckout.removeWhere((_, value) => value == handle.handleId);
+    state.activeByProject.removeWhere((_, value) => value == handle.handleId);
     return CockpitLockedJsonUpdate.write(state, true);
   });
 
@@ -313,6 +410,7 @@ final class CockpitCliSessionHandleStore {
     required String workspaceId,
     String? checkoutIdentity,
     String? checkoutPath,
+    String? projectPath,
     String? targetId,
     String? appId,
     String? entrypoint,
@@ -341,6 +439,7 @@ final class CockpitCliSessionHandleStore {
       workspaceId: workspaceId,
       checkoutIdentity: checkoutIdentity,
       checkoutPath: checkoutPath,
+      projectPath: projectPath,
       targetId: targetId,
       appId: appId,
       entrypoint: entrypoint,
@@ -384,25 +483,25 @@ final class _SessionHandleState {
   _SessionHandleState({
     required this.nextOrdinal,
     required this.handles,
-    required this.activeByCheckout,
+    required this.activeByProject,
   });
 
   factory _SessionHandleState.initial() => _SessionHandleState(
     nextOrdinal: 1,
     handles: <CockpitCliSessionHandle>[],
-    activeByCheckout: <String, String>{},
+    activeByProject: <String, String>{},
   );
 
   int nextOrdinal;
   final List<CockpitCliSessionHandle> handles;
-  final Map<String, String> activeByCheckout;
+  final Map<String, String> activeByProject;
 }
 
 final class _SessionHandleStateCodec
     implements CockpitJsonCodec<_SessionHandleState> {
   const _SessionHandleStateCodec();
 
-  static const schemaVersion = 'cockpit.cli-sessions/v5';
+  static const schemaVersion = 'cockpit.cli-sessions/v6';
 
   @override
   _SessionHandleState decode(Object? value) {
@@ -414,7 +513,7 @@ final class _SessionHandleStateCodec
       'schemaVersion',
       'nextOrdinal',
       'handles',
-      'activeByCheckout',
+      'activeByProject',
     }, r'$');
     final nextOrdinal = json['nextOrdinal'];
     final rawHandles = json['handles'];
@@ -440,6 +539,7 @@ final class _SessionHandleStateCodec
           'workspaceId',
           'checkoutIdentity',
           'checkoutPath',
+          'projectPath',
           'targetId',
           'appId',
           'entrypoint',
@@ -455,6 +555,7 @@ final class _SessionHandleStateCodec
         optional: const <String>{
           'checkoutIdentity',
           'checkoutPath',
+          'projectPath',
           'targetId',
           'appId',
           'entrypoint',
@@ -482,6 +583,9 @@ final class _SessionHandleStateCodec
       final checkoutPath = item['checkoutPath'] == null
           ? null
           : _absolutePath(item['checkoutPath'], '$path.checkoutPath');
+      final projectPath = item['projectPath'] == null
+          ? null
+          : _absolutePath(item['projectPath'], '$path.projectPath');
       final targetId = item['targetId'] == null
           ? null
           : _identifier(item['targetId'], '$path.targetId');
@@ -511,6 +615,7 @@ final class _SessionHandleStateCodec
       );
       final developmentFields = <Object?>[
         checkoutPath,
+        projectPath,
         targetId,
         appId,
         entrypoint,
@@ -521,6 +626,12 @@ final class _SessionHandleStateCodec
           ? developmentFields.any((field) => field != null) || flavor != null
           : developmentFields.any((field) => field == null)) {
         throw FormatException('Incomplete development identity at $path.');
+      }
+      if (checkoutPath != null &&
+          projectPath != null &&
+          !p.equals(checkoutPath, projectPath) &&
+          !p.isWithin(checkoutPath, projectPath)) {
+        throw FormatException('Project path is outside its checkout at $path.');
       }
       final updatedAt = DateTime.tryParse('${item['updatedAt']}');
       if (updatedAt == null || !updatedAt.isUtc) {
@@ -533,6 +644,7 @@ final class _SessionHandleStateCodec
           workspaceId: workspaceId,
           checkoutIdentity: checkoutIdentity,
           checkoutPath: checkoutPath,
+          projectPath: projectPath,
           targetId: targetId,
           appId: appId,
           entrypoint: entrypoint,
@@ -546,32 +658,25 @@ final class _SessionHandleStateCodec
         ),
       );
     }
-    final activeByCheckout = <String, String>{};
-    final rawActive = _object(json['activeByCheckout'], r'$.activeByCheckout');
+    final activeByProject = <String, String>{};
+    final rawActive = _object(json['activeByProject'], r'$.activeByProject');
     for (final entry in rawActive.entries) {
-      final checkout = _checkoutIdentity(
-        entry.key,
-        r'$.activeByCheckout.<key>',
-      );
-      final handle = _identifier(
-        entry.value,
-        r'$.activeByCheckout.' + checkout,
-      );
+      final project = _absolutePath(entry.key, r'$.activeByProject.<key>');
+      final handle = _identifier(entry.value, r'$.activeByProject.' + project);
       final match = handles
           .where(
-            (item) =>
-                item.handleId == handle && item.checkoutIdentity == checkout,
+            (item) => item.handleId == handle && item.projectPath == project,
           )
           .firstOrNull;
       if (match == null) {
-        throw const FormatException('Invalid active checkout session binding.');
+        throw const FormatException('Invalid active project session binding.');
       }
-      activeByCheckout[checkout] = handle;
+      activeByProject[project] = handle;
     }
     return _SessionHandleState(
       nextOrdinal: nextOrdinal,
       handles: handles,
-      activeByCheckout: activeByCheckout,
+      activeByProject: activeByProject,
     );
   }
 
@@ -580,7 +685,7 @@ final class _SessionHandleStateCodec
     'schemaVersion': schemaVersion,
     'nextOrdinal': value.nextOrdinal,
     'handles': value.handles.map((item) => item.toJson()).toList(),
-    'activeByCheckout': value.activeByCheckout,
+    'activeByProject': value.activeByProject,
   };
 }
 

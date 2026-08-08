@@ -15,11 +15,12 @@ void main() {
   });
 
   test('Acceptance CLI allows three minutes for target discovery', () async {
+    final root = _cockpitRoot();
     final result = await Process.run('dart', const <String>[
       'run',
       'tool/verify.dart',
       '--help',
-    ]);
+    ], workingDirectory: root);
 
     expect(result.exitCode, 0);
     expect(
@@ -34,7 +35,7 @@ void main() {
   test(
     'release acceptance compiles the complete Flutter command surface',
     () async {
-      final root = Directory.current.absolute.path;
+      final root = _cockpitRoot();
       final suiteFile = File(
         p.join(root, 'e2e', 'suites', 'regression.suite.yaml'),
       );
@@ -113,6 +114,14 @@ void main() {
       );
     },
   );
+}
+
+String _cockpitRoot() {
+  final current = Directory.current.absolute.path;
+  final nested = p.join(current, 'cockpit');
+  return File(p.join(nested, 'tool', 'verify.dart')).existsSync()
+      ? nested
+      : current;
 }
 
 void _collectActionTypes(Object? value, Set<String> actionTypes) {

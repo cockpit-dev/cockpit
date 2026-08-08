@@ -55,7 +55,7 @@ void main() {
       await supervisor.bindRemoteSession(harness.handle.remoteSessionHandle!);
       await supervisor.waitForState(CockpitDevelopmentSessionState.ready);
 
-      expect(connectorCalls, 1);
+      expect(connectorCalls, 0);
       final currentHandle = await supervisor.currentHandle();
       expect(currentHandle.appId, '');
       expect(
@@ -315,6 +315,7 @@ void main() {
 
       await supervisor.start();
       await supervisor.waitForState(CockpitDevelopmentSessionState.ready);
+      expect(connectorCalls, 0);
 
       final reloadFuture = supervisor.reload(
         CockpitDevelopmentReloadMode.hotReload,
@@ -788,6 +789,72 @@ void main() {
         harness.stoppedAppIds,
         contains(harness.handle.remoteSessionHandle?.appId),
       );
+    },
+  );
+
+  test('startup recovery does not attach for a read', () async {
+    final harness = _MachineHarness();
+    addTearDown(harness.dispose);
+
+    var connectorCalls = 0;
+    final supervisor = CockpitDevelopmentSessionSupervisor(
+      initialHandle: harness.handle,
+      machineClient: null,
+      machineClientConnector: () async {
+        connectorCalls += 1;
+        throw StateError('attach unavailable');
+      },
+      remoteReachabilityProbe: (_) async => false,
+      startupSettleTimeout: const Duration(milliseconds: 40),
+      settleTimeout: const Duration(seconds: 1),
+      settlePollInterval: const Duration(milliseconds: 5),
+    );
+    addTearDown(supervisor.dispose);
+
+    await supervisor.start();
+    await supervisor.waitForStartupRecovery();
+
+    expect(connectorCalls, 0);
+    expect(
+      (await supervisor.currentStatus()).state,
+      CockpitDevelopmentSessionState.failed,
+    );
+  });
+
+  test(
+    'reload keeps its full settle budget after fast startup recovery',
+    () async {
+      final harness = _MachineHarness();
+      addTearDown(harness.dispose);
+      var reloading = false;
+      var reloadChecks = 0;
+      final supervisor = CockpitDevelopmentSessionSupervisor(
+        initialHandle: harness.handle,
+        machineClient: harness.client,
+        remoteReachabilityProbe: (_) async {
+          if (!reloading) return true;
+          reloadChecks += 1;
+          return reloadChecks >= 6;
+        },
+        settleTimeout: const Duration(seconds: 1),
+        startupSettleTimeout: const Duration(milliseconds: 100),
+        settlePollInterval: const Duration(milliseconds: 25),
+      );
+      addTearDown(supervisor.dispose);
+
+      await supervisor.start();
+      await supervisor.waitForState(CockpitDevelopmentSessionState.ready);
+
+      reloading = true;
+      final restart = supervisor.reload(
+        CockpitDevelopmentReloadMode.hotRestart,
+      );
+      await Future<void>.delayed(Duration.zero);
+      harness.stdoutController.add('[{"id":0,"result":{"code":0}}]');
+
+      final status = await restart;
+      expect(status.state, CockpitDevelopmentSessionState.ready);
+      expect(reloadChecks, greaterThanOrEqualTo(7));
     },
   );
 

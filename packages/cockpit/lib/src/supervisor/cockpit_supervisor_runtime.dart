@@ -27,6 +27,7 @@ import 'cockpit_lease_registry.dart';
 import 'cockpit_local_worker_launcher.dart';
 import 'cockpit_loopback_port_cleanup_probe.dart';
 import 'cockpit_supervisor_resource_registry.dart';
+import 'cockpit_supervisor_run_event_source.dart';
 import 'cockpit_supervisor_run_admission_store.dart';
 import 'cockpit_supervisor_run_projection.dart';
 import 'cockpit_supervisor_authorization.dart';
@@ -82,7 +83,8 @@ final cockpitSupervisorFeatures = <CockpitFeatureDescriptor>[
   ),
 ];
 
-final class CockpitSupervisorRuntime {
+final class CockpitSupervisorRuntime
+    implements CockpitSupervisorRunEventSource {
   CockpitSupervisorRuntime._({
     required this.resources,
     required this.workerPool,
@@ -962,6 +964,7 @@ final class CockpitSupervisorRuntime {
     );
   }
 
+  @override
   Future<CockpitRunResource> run(String runId) async {
     final active = _activeRuns[runId];
     final admission = await runAdmissions.findRun(runId);
@@ -1054,6 +1057,7 @@ final class CockpitSupervisorRuntime {
     );
   }
 
+  @override
   Future<CockpitSupervisorEventReplay> events(
     String runId,
     int afterSequence,
@@ -1090,6 +1094,7 @@ final class CockpitSupervisorRuntime {
     return _projection(workspaceId).requireSuiteReport(runId);
   }
 
+  @override
   Future<int> sequenceForEventId(String runId, String eventId) async {
     final replay = await events(runId, 0);
     final matches = replay.events.where((event) => event.eventId == eventId);

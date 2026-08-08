@@ -52,6 +52,43 @@ void main() {
     ]);
   });
 
+  test('macos tap activates the exact target before posting input', () async {
+    final processManager = _FakeProcessManager();
+    final service = CockpitSystemControlActionService(
+      processManager: processManager,
+    );
+
+    final result = await service.run(
+      const CockpitSystemControlActionRequest(
+        platform: 'macos',
+        appId: 'dev.cockpit.example',
+        action: CockpitSystemControlAction.tap,
+        parameters: <String, Object?>{'x': 42, 'y': 88},
+      ),
+    );
+
+    expect(result.success, isTrue);
+    expect(result.command.take(4), <String>[
+      'osascript',
+      '-l',
+      'JavaScript',
+      '-e',
+    ]);
+    expect(result.command[4], contains('activateWithOptions'));
+    expect(result.command[4], contains('while (!app.active'));
+    expect(result.command[4], contains('delay(0.1)'));
+    expect(result.command.skip(5), <String>[
+      'appId',
+      'dev.cockpit.example',
+      'tap',
+      '42',
+      '88',
+      '42',
+      '88',
+      '0',
+    ]);
+  });
+
   test('android pressKey batches repeated keys in one process', () async {
     final processManager = _FakeProcessManager();
     final service = CockpitSystemControlActionService(
@@ -3282,10 +3319,32 @@ void main() {
     ]);
   });
 
-  test('macos readUiTree uses bounded System Events tree dump', () async {
+  test('macos readUiTree uses bounded AXUIElement tree read', () async {
     final processManager = _FakeProcessManager();
+    int? resolvedProcessId;
+    int? resolvedMaxDepth;
+    int? resolvedMaxNodes;
     final service = CockpitSystemControlActionService(
       processManager: processManager,
+      macosApplicationProcessIdResolver:
+          ({required appId, required timeout}) async {
+            expect(appId, 'dev.cockpit.example');
+            expect(timeout, greaterThan(Duration.zero));
+            return 4242;
+          },
+      macosAccessibilityTreeReader:
+          ({
+            required processId,
+            required maxDepth,
+            required maxNodes,
+            required timeout,
+          }) async {
+            resolvedProcessId = processId;
+            resolvedMaxDepth = maxDepth;
+            resolvedMaxNodes = maxNodes;
+            expect(timeout, greaterThan(Duration.zero));
+            return _macosUiTree;
+          },
     );
 
     final result = await service.run(
@@ -3298,17 +3357,47 @@ void main() {
     );
 
     expect(result.success, isTrue);
-    expect(result.command[0], 'osascript');
-    expect(
-      result.command,
-      containsAllInOrder(<String>['-l', 'JavaScript', '-e']),
+    expect(result.stdout, _macosUiTree);
+    expect(result.command, isEmpty);
+    expect(result.strategy, 'AXUIElement tree reader');
+    expect(result.requires, <String>['Accessibility permission']);
+    expect(resolvedProcessId, 4242);
+    expect(resolvedMaxDepth, 2);
+    expect(resolvedMaxNodes, 20);
+    expect(processManager.starts, isEmpty);
+  });
+
+  test('macos readUiTree defaults cover full application trees', () async {
+    int? resolvedMaxDepth;
+    int? resolvedMaxNodes;
+    final service = CockpitSystemControlActionService(
+      processManager: _FakeProcessManager(),
+      macosApplicationProcessIdResolver:
+          ({required appId, required timeout}) async => 4242,
+      macosAccessibilityTreeReader:
+          ({
+            required processId,
+            required maxDepth,
+            required maxNodes,
+            required timeout,
+          }) async {
+            resolvedMaxDepth = maxDepth;
+            resolvedMaxNodes = maxNodes;
+            return _macosUiTree;
+          },
     );
-    expect(result.command.sublist(result.command.length - 4), <String>[
-      'appId',
-      'dev.cockpit.example',
-      '2',
-      '20',
-    ]);
+
+    final result = await service.run(
+      const CockpitSystemControlActionRequest(
+        platform: 'macos',
+        appId: 'dev.cockpit.example',
+        action: CockpitSystemControlAction.readUiTree,
+      ),
+    );
+
+    expect(result.success, isTrue);
+    expect(resolvedMaxDepth, 16);
+    expect(resolvedMaxNodes, 2000);
   });
 
   test('macos readProcessList uses ps', () async {
@@ -4192,6 +4281,8 @@ final class _FakeAndroidUiAutomation implements CockpitAndroidUiAutomation {
     return 'tapNotification text=$text handled=true';
   }
 }
+
+const String _macosUiTree = '{"platform":"macos","nodeCount":1,"windows":[]}';
 
 final class _FakeProcessManager implements CockpitProcessManager {
   final starts = <_StartedProcess>[];

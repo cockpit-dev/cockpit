@@ -117,6 +117,7 @@ final class CockpitCaptureScreenshotService {
               request.iosDeviceId ??
               (app?.platform == 'ios' ? app?.deviceId : null),
           iosWdaBaseUri: request.iosWdaBaseUri,
+          artifactTempFileFactory: _artifactTempFileFactory,
         );
         final execution = await captureAdapter.capture(command);
         return _interactiveResultFromExecution(

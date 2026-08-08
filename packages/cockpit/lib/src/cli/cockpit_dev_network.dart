@@ -132,13 +132,13 @@ final class CockpitDevNetworkService {
   }) async {
     final home = CockpitHome.system();
     final homePaths = await home.initialize();
-    final checkout = await runtime.checkoutIdentity();
+    final checkoutIdentity = session.checkoutIdentity!;
     final safeId = requestId.replaceAll(RegExp(r'[^A-Za-z0-9._-]+'), '_');
     final directory = Directory(
       p.join(
         homePaths.artifactsDirectory,
         'development',
-        checkout.value.substring(0, 16),
+        checkoutIdentity.substring(0, 16),
         session.handleId,
         'network',
         safeId,

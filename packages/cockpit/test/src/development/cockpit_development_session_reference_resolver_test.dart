@@ -36,6 +36,7 @@ void main() {
 
     expect(handle.developmentSessionId, 'dev-session-1');
     expect(handle.reloadGeneration, 1);
+    expect(handle.reloadRecoverable, isFalse);
   });
 
   test('rejects snake case development handles', () async {

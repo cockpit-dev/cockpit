@@ -779,29 +779,37 @@ void main() {
         expect(rootRetirement.tombstoneRetained, isTrue);
         expect(evidence.existsSync(), isTrue);
         expect(Directory(workspace.canonicalPath).existsSync(), isTrue);
+        final replacementRoot = await fixture.roots.register(
+          rootDirectory.path,
+        );
+        final replacementWorkspace = await fixture.workspaces.register(
+          rootId: replacementRoot.rootId,
+          path: workspace.canonicalPath,
+        );
+        expect(replacementRoot.rootId, isNot(root.rootId));
+        expect(replacementWorkspace.workspaceId, isNot(workspace.workspaceId));
+        expect(replacementWorkspace.checkoutId, isNot(workspace.checkoutId));
+        expect(await fixture.roots.list(), hasLength(2));
+        expect(await fixture.workspaces.list(), hasLength(2));
         await fixture.references.releaseRunRetention(
           workspace.workspaceId,
           'run_retained',
         );
-        expect(await fixture.roots.list(), hasLength(1));
         await fixture.references.releaseArtifactReferences(
           workspace.workspaceId,
           'run_retained',
           2,
         );
-        expect(await fixture.roots.list(), isEmpty);
-        expect(await fixture.workspaces.list(), isEmpty);
+        final remainingRoots = await fixture.roots.list();
+        expect(remainingRoots, hasLength(1));
+        expect(remainingRoots.single.rootId, replacementRoot.rootId);
+        final remainingWorkspaces = await fixture.workspaces.list();
+        expect(remainingWorkspaces, hasLength(1));
+        expect(
+          remainingWorkspaces.single.workspaceId,
+          replacementWorkspace.workspaceId,
+        );
         expect(evidence.existsSync(), isTrue);
-        final replacementRoot = await fixture.roots.register(
-          rootDirectory.path,
-        );
-        await expectLater(
-          fixture.workspaces.register(
-            rootId: replacementRoot.rootId,
-            path: workspace.canonicalPath,
-          ),
-          throwsRegistry('workspaceRetired'),
-        );
       },
     );
 

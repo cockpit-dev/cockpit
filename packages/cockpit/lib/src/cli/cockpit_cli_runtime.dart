@@ -6,7 +6,6 @@ import 'package:args/command_runner.dart';
 import 'package:cockpit_protocol/cockpit_protocol.dart';
 import 'package:path/path.dart' as p;
 
-import '../application/cockpit_compact_json.dart';
 import '../development/cockpit_checkout_identity.dart';
 import '../foundation/cockpit_home.dart';
 import '../foundation/cockpit_locked_json_store.dart';
@@ -147,6 +146,7 @@ final class CockpitCliRuntime {
     StringSink? stdoutSink,
     StringSink? stderrSink,
     String? workingDirectory,
+    bool? interactive,
   }) : _clientProvider =
            clientProvider ??
            (() => createCockpitSupervisorApiClient(selfContained: true)),
@@ -156,6 +156,7 @@ final class CockpitCliRuntime {
            sessionHandleStoreProvider ?? _systemCliSessionHandleStore,
        _checkoutIdentityResolver =
            checkoutIdentityResolver ?? CockpitCheckoutIdentityResolver(),
+       interactive = interactive ?? (stderrSink == null && stderr.hasTerminal),
        stdoutSink = stdoutSink ?? stdout,
        stderrSink = stderrSink ?? stderr,
        workingDirectory = workingDirectory ?? Directory.current.path {
@@ -173,6 +174,7 @@ final class CockpitCliRuntime {
   final StringSink stdoutSink;
   final StringSink stderrSink;
   final String workingDirectory;
+  final bool interactive;
   Future<CockpitSupervisorApiClient>? _client;
   late final CockpitCliOutputWriter _outputWriter;
   String _command = 'cockpit';
@@ -324,10 +326,14 @@ final class CockpitCliRuntime {
       return handle;
     }
     final checkout = await checkoutIdentity();
-    final handle = await store.activeForCheckout(checkout.value);
+    final handle = await store.activeForPath(
+      checkoutIdentity: checkout.value,
+      path: await canonicalWorkingDirectory(),
+    );
     if (handle == null) {
       throw const FormatException(
-        'No session is active for this checkout; run `cockpit session list`.',
+        'No session is active for this Flutter project; run '
+        '`cockpit session list`.',
       );
     }
     return handle;
@@ -339,28 +345,39 @@ final class CockpitCliRuntime {
   Future<CockpitCheckoutIdentity> checkoutIdentity() =>
       _checkoutIdentityResolver.resolve(workingDirectory);
 
+  Future<String> canonicalWorkingDirectory() async =>
+      p.normalize(await Directory(workingDirectory).resolveSymbolicLinks());
+
   Future<CockpitCliSessionHandle> resolveDevelopmentSession(
     String? reference,
   ) async {
-    final checkout = await checkoutIdentity();
     final store = await sessionHandleStore();
     if (reference == null) {
-      final active = await store.activeForCheckout(checkout.value);
+      final checkout = await checkoutIdentity();
+      final active = await store.activeForPath(
+        checkoutIdentity: checkout.value,
+        path: await canonicalWorkingDirectory(),
+      );
       if (active == null) {
         throw const FormatException(
-          'No active development session for this checkout; run '
+          'No active development session for this Flutter project; run '
           '`cockpit dev start`.',
         );
       }
       return _requireDevelopmentHandle(active);
     }
-    return _requireDevelopmentHandle(
-      await store.selectForCheckout(
-        checkoutIdentity: checkout.value,
-        reference: reference,
-      ),
-    );
+    final handle = await store.find(reference);
+    if (handle == null) {
+      throw FormatException('Unknown CLI session $reference.');
+    }
+    return _requireDevelopmentHandle(handle);
   }
+
+  Future<CockpitCliSessionHandle> selectDevelopmentSession(
+    String reference,
+  ) async => _requireDevelopmentHandle(
+    await (await sessionHandleStore()).selectDevelopment(reference),
+  );
 
   Future<CockpitCliSessionHandle> activeDevelopmentSession({
     String? workspaceId,
@@ -370,7 +387,7 @@ final class CockpitCliRuntime {
     );
     if (active == null) {
       throw const FormatException(
-        'No active development session for this checkout; run '
+        'No active development session for this Flutter project; run '
         '`cockpit dev start`.',
       );
     }
@@ -381,8 +398,10 @@ final class CockpitCliRuntime {
     String? workspaceId,
   }) async {
     final checkout = await checkoutIdentity();
-    final active = await (await sessionHandleStore()).activeForCheckout(
-      checkout.value,
+    final active = await (await sessionHandleStore()).activeForPath(
+      checkoutIdentity: checkout.value,
+      path: await canonicalWorkingDirectory(),
+      workspaceId: workspaceId,
     );
     if (active == null) return null;
     final development = _requireDevelopmentHandle(active);
@@ -397,6 +416,7 @@ final class CockpitCliRuntime {
 
   Future<CockpitCliSessionHandle> bindDevelopmentSession({
     required CockpitCheckoutIdentity checkout,
+    required String projectPath,
     required String workspaceId,
     required String sessionId,
     required String targetId,
@@ -413,6 +433,7 @@ final class CockpitCliRuntime {
     (store) => store.bindDevelopment(
       checkoutIdentity: checkout.value,
       checkoutPath: checkout.canonicalRoot,
+      projectPath: projectPath,
       workspaceId: workspaceId,
       sessionId: sessionId,
       targetId: targetId,
@@ -427,6 +448,53 @@ final class CockpitCliRuntime {
       replaceLaunchIdentity: replaceLaunchIdentity,
     ),
   );
+
+  Future<CockpitCliSessionHandle> updateDevelopmentSession({
+    required CockpitCliSessionHandle previous,
+    required String workspaceId,
+    required String sessionId,
+    required String targetId,
+    required String appId,
+    String? entrypoint,
+    String? platform,
+    String? deviceId,
+    String? flavor,
+    String lifecycle = 'ready',
+    bool? recoverable,
+    int? launchTimeoutMilliseconds,
+    bool replaceLaunchIdentity = false,
+  }) {
+    final checkoutIdentity = previous.checkoutIdentity;
+    final checkoutPath = previous.checkoutPath;
+    final projectPath = previous.projectPath;
+    if (checkoutIdentity == null ||
+        checkoutPath == null ||
+        projectPath == null) {
+      throw const FormatException(
+        'Session handle is not a Flutter development session.',
+      );
+    }
+    return sessionHandleStore().then(
+      (store) => store.bindDevelopment(
+        checkoutIdentity: checkoutIdentity,
+        checkoutPath: checkoutPath,
+        projectPath: projectPath,
+        workspaceId: workspaceId,
+        sessionId: sessionId,
+        targetId: targetId,
+        appId: appId,
+        entrypoint: entrypoint,
+        platform: platform,
+        deviceId: deviceId,
+        flavor: flavor,
+        lifecycle: lifecycle,
+        recoverable: recoverable,
+        launchTimeoutMilliseconds: launchTimeoutMilliseconds,
+        replaceLaunchIdentity: replaceLaunchIdentity,
+        handleId: previous.handleId,
+      ),
+    );
+  }
 
   Future<Map<String, Object?>> operationContract(
     CockpitSupervisorApiClient client,
@@ -543,6 +611,13 @@ final class CockpitCliRuntime {
     _outputSelection = selection;
   }
 
+  void progress(String message) {
+    if (!interactive || _outputSelection.format == CockpitCliFormat.none) {
+      return;
+    }
+    stderrSink.writeln('[cockpit] $message');
+  }
+
   Future<void> success(Object? data) async {
     await _outputWriter.writeSuccess(
       command: _command,
@@ -551,12 +626,18 @@ final class CockpitCliRuntime {
     );
   }
 
+  bool get usesPathOutput => _outputSelection.format == CockpitCliFormat.path;
+
   void fileReceipt(CockpitCliFileReceipt receipt) {
     _outputWriter.writeReceipt(receipt: receipt, selection: _outputSelection);
   }
 
   void jsonLine(Object? value) {
-    stdoutSink.writeln(cockpitCompactJsonText(value));
+    _outputWriter.writeJsonLine(
+      command: _command,
+      data: value,
+      selection: _outputSelection,
+    );
   }
 
   void error({
@@ -597,26 +678,61 @@ final class CockpitCliRuntime {
       }
       return explicit;
     }
+    final active = await maybeActiveDevelopmentSession();
+    if (active != null &&
+        workspaces.any(
+          (workspace) =>
+              workspace.workspaceId == active.workspaceId &&
+              workspace.state == CockpitWorkspaceState.active,
+        )) {
+      return active.workspaceId;
+    }
     final canonicalCwd = p.normalize(
       await Directory(workingDirectory).resolveSymbolicLinks(),
     );
-    final matches = workspaces.where((workspace) {
-      if (workspace.state != CockpitWorkspaceState.active) return false;
-      final relative = p.relative(canonicalCwd, from: workspace.canonicalPath);
-      return relative == '.' ||
-          relative != '..' &&
-              !relative.startsWith('../') &&
-              p.isRelative(relative);
-    }).toList();
-    if (matches.length != 1) {
-      throw CockpitSupervisorClientException(
-        code: matches.isEmpty ? 'workspaceNotFound' : 'workspaceAmbiguous',
-        message: matches.isEmpty
-            ? 'Current directory is not inside a registered workspace.'
-            : 'Current directory matches multiple workspaces; pass --workspace-id.',
-      );
+    final containing =
+        workspaces
+            .where(
+              (workspace) =>
+                  workspace.state == CockpitWorkspaceState.active &&
+                  (p.equals(workspace.canonicalPath, canonicalCwd) ||
+                      p.isWithin(workspace.canonicalPath, canonicalCwd)),
+            )
+            .toList(growable: false)
+          ..sort(
+            (left, right) =>
+                right.canonicalPath.length.compareTo(left.canonicalPath.length),
+          );
+    if (containing.isNotEmpty) {
+      final selected = containing.first;
+      if (containing
+          .skip(1)
+          .any(
+            (workspace) =>
+                p.equals(workspace.canonicalPath, selected.canonicalPath),
+          )) {
+        throw const CockpitSupervisorClientException(
+          code: 'workspaceAmbiguous',
+          message: 'Current project has duplicate active workspaces.',
+        );
+      }
+      return selected.workspaceId;
     }
-    return matches.single.workspaceId;
+    final descendants = workspaces
+        .where(
+          (workspace) =>
+              workspace.state == CockpitWorkspaceState.active &&
+              p.isWithin(canonicalCwd, workspace.canonicalPath),
+        )
+        .toList(growable: false);
+    if (descendants.length == 1) return descendants.single.workspaceId;
+    throw CockpitSupervisorClientException(
+      code: descendants.isEmpty ? 'workspaceNotFound' : 'workspaceAmbiguous',
+      message: descendants.isEmpty
+          ? 'Current directory does not resolve to an active workspace.'
+          : 'Multiple project workspaces are active below this directory; '
+                'run inside one project or pass --workspace-id.',
+    );
   }
 
   Map<String, Object?> structuredObject(

@@ -184,7 +184,23 @@ final class CockpitDiagnosticBuilder {
     CockpitSnapshotOptions options,
   ) {
     if (options.profile == CockpitSnapshotProfile.live) {
-      return _TargetBuildResult(target: target.toSnapshotTarget());
+      return _TargetBuildResult(
+        target: CockpitSnapshotTarget(
+          registrationId: target.registrationId,
+          cockpitId: target.cockpitId,
+          semanticId: target.semanticId,
+          keyValue: target.keyValue,
+          text: target.text,
+          tooltip: target.tooltip,
+          typeName: target.typeName,
+          path: target.path,
+          scrollablePath: target.scrollablePath,
+          scrollableKeyValue: target.scrollableKeyValue,
+          scrollableTypeName: target.scrollableTypeName,
+          routeName: target.routeName,
+          supportedCommands: target.supportedCommands.toList(growable: false),
+        ),
+      );
     }
 
     final runtimeNode = _resolveRuntimeNode(target);

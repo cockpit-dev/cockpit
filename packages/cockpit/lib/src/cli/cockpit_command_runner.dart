@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:args/command_runner.dart';
 
 import '../foundation/cockpit_locked_json_store.dart';
+import '../foundation/cockpit_version.dart';
 import '../supervisor/cockpit_daemon_client.dart';
 import '../supervisor/cockpit_supervisor_api_client.dart';
 import 'cockpit_cli_output.dart';
@@ -32,6 +33,11 @@ final class CockpitCommandRunner {
         'cockpit',
         'Authenticated Cockpit 3.0 development and E2E client.',
       ) {
+    _runner.argParser.addFlag(
+      'version',
+      negatable: false,
+      help: 'Print the Cockpit package version.',
+    );
     _runner
       ..addCommand(CockpitDaemonCommand(this.runtime))
       ..addCommand(CockpitDevCommand(this.runtime))
@@ -57,6 +63,17 @@ final class CockpitCommandRunner {
   Map<String, Command<int>> get commands => _runner.commands;
 
   Future<int> run(List<String> arguments) async {
+    if (arguments.contains('--version')) {
+      if (arguments.length != 1) {
+        runtime.error(
+          code: 'usage',
+          message: '--version cannot be combined with commands or options.',
+        );
+        return cockpitUsageExitCode;
+      }
+      runtime.stdoutSink.writeln('cockpit $cockpitVersion');
+      return cockpitSuccessExitCode;
+    }
     runtime.configureOutput(
       command: _commandPath(arguments),
       selection: CockpitCliOutputSelection.fromRawArguments(arguments),

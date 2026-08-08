@@ -23,6 +23,16 @@ cockpit dev start
 cockpit dev status
 ```
 
+Use `cockpit session list` for an immediate local index. It performs no daemon,
+worker, Flutter attach, reconnect, or app launch work; `lastState` is only the
+last saved state. Use `cockpit session show HANDLE` when live reachability is
+actually required.
+
+Interactive `dev start` prints bounded launch stages to stderr so a Flutter build
+does not look frozen. Machine-readable stdout remains a single clean projection;
+non-interactive and redirected runs emit no progress, and `--format none` is fully
+silent. The stages describe real boundaries rather than estimated percentages.
+
 For each coherent edit:
 
 1. Inspect only the state needed for the change.
@@ -131,15 +141,21 @@ by the live capability response.
 
 ## Parallel Projects
 
-Run commands from inside the intended checkout. Cockpit derives a canonical
-identity from the checkout root and, for Git, the worktree-specific Git
-directory. Each checkout owns separate:
+Run commands from inside the intended Flutter project. Cockpit combines its
+canonical project path with the checkout identity derived from the checkout root
+and, for Git, the worktree-specific Git directory. Each project owns its active
+handle, while checkout identity keeps every runtime resource isolated:
 
-- active numeric handle selection;
+- project-scoped active numeric handle selection;
 - workspace worker and target/app/session mapping;
 - process and port ownership;
 - mutation sequence and network state;
 - artifact paths.
+
+One monorepo may therefore run several Flutter projects without cross-selecting
+sessions. A command from a common ancestor resolves one active descendant project;
+if several match, it fails as ambiguous and requires running inside the project or
+passing `--session HANDLE`.
 
 Different worktrees of one repository may run concurrently and must remain
 isolated even when they share a Git common directory and package name. Do not

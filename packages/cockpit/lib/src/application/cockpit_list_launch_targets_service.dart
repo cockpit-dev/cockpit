@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:path/path.dart' as p;
+
 import '../infrastructure/cockpit_process_output_collector.dart';
 import '../infrastructure/cockpit_process_manager.dart';
 import '../infrastructure/cockpit_sdk_environment.dart';
@@ -50,19 +52,26 @@ final class CockpitListLaunchTargetsService {
   CockpitListLaunchTargetsService({
     CockpitProcessManager? processManager,
     CockpitSdkEnvironment? sdkEnvironment,
+    String? toolDirectory,
     this.defaultTimeout = const Duration(minutes: 3),
   }) : _processManager = processManager ?? const LocalCockpitProcessManager(),
-       _sdkEnvironment = sdkEnvironment ?? CockpitSdkEnvironment.current();
+       _sdkEnvironment = sdkEnvironment ?? CockpitSdkEnvironment.current(),
+       _toolDirectory =
+           toolDirectory ??
+           p.join(Directory.systemTemp.path, 'cockpit_flutter_tool');
 
   final CockpitProcessManager _processManager;
   final CockpitSdkEnvironment _sdkEnvironment;
+  final String _toolDirectory;
   final Duration defaultTimeout;
 
   Future<CockpitListLaunchTargetsResult> list({Duration? timeout}) async {
     final effectiveTimeout = timeout ?? defaultTimeout;
+    await Directory(_toolDirectory).create(recursive: true);
     final process = await _processManager.start(
       _sdkEnvironment.flutterExecutable,
       const <String>['devices', '--machine'],
+      workingDirectory: _toolDirectory,
     );
     final stdoutCollector = CockpitProcessOutputCollector(process.stdout);
     final stderrCollector = CockpitProcessOutputCollector(process.stderr);

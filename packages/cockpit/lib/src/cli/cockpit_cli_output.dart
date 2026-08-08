@@ -344,6 +344,25 @@ final class CockpitCliOutputWriter {
     }
   }
 
+  void writeJsonLine({
+    required String command,
+    required Object? data,
+    required CockpitCliOutputSelection selection,
+  }) {
+    if (selection.format != CockpitCliFormat.jsonl ||
+        selection.outputPath != null) {
+      throw StateError('Streaming JSONL requires stdout JSONL output.');
+    }
+    _rejectInlineArtifactContent(data);
+    stdoutSink.writeln(
+      _renderer.renderJson(
+        command: command,
+        data: data,
+        detail: selection.detail,
+      ),
+    );
+  }
+
   void writeError({
     required String code,
     required String message,
@@ -849,6 +868,21 @@ final class CockpitCliAiPresenter {
       );
     }
     if (data is Map<Object?, Object?> && command == 'target.inspect') {
+      final output = data['output'];
+      if (output is Map<Object?, Object?>) {
+        return projection.value(<String, Object?>{
+          ..._compactTargetInspection(
+            output,
+            standard: detail == CockpitCliOutputDetail.standard,
+          ),
+          if (data['outcome'] != null && data['outcome'] != 'succeeded')
+            'outcome': data['outcome'],
+          if (data['failure'] is Map<Object?, Object?>)
+            'failure': _compactFailure(
+              data['failure']! as Map<Object?, Object?>,
+            ),
+        }, path);
+      }
       return projection.value(
         _compactTargetInspection(
           data,
@@ -868,6 +902,15 @@ final class CockpitCliAiPresenter {
         data['items'] is List<Object?>) {
       return projection.value(
         _compactRunEvents(
+          data,
+          standard: detail == CockpitCliOutputDetail.standard,
+        ),
+        path,
+      );
+    }
+    if (data is Map<Object?, Object?> && command == 'run.events') {
+      return projection.value(
+        _compactRunStreamItem(
           data,
           standard: detail == CockpitCliOutputDetail.standard,
         ),
@@ -1093,12 +1136,13 @@ Map<String, Object?> _compactDevStatus(
   final result = <String, Object?>{
     ..._pick(state, const <String>[
       'lifecycle',
-      'checkoutPath',
+      'projectPath',
       'entrypoint',
       'platform',
       'deviceId',
       'flavor',
     ]),
+    if (standard) ..._pick(state, const <String>['checkoutPath']),
     if (ui is Map<Object?, Object?>) ..._pick(ui, const <String>['routeName']),
     if (target is Map<Object?, Object?>)
       ..._pick(target, const <String>['platform', 'targetKind']),
@@ -2040,8 +2084,8 @@ Map<String, Object?> _compactTargetInspection(
   final capability = value['capabilityProfile'];
   final system = value['systemControl'];
   return <String, Object?>{
-    ..._pick(value, const <String>[
-      'targetId',
+    ..._pick(value, <String>[
+      if (standard) 'targetId',
       'platform',
       'targetKind',
       'foregroundSurface',
@@ -2051,13 +2095,8 @@ Map<String, Object?> _compactTargetInspection(
     if (standard && value['fallbackTrail'] != null)
       'fallbackTrail': value['fallbackTrail'],
     if (capability is Map<Object?, Object?>)
-      'capabilities': _pick(capability, const <String>[
-        'surfaceKinds',
-        'actionCapabilities',
-        'evidenceCapabilities',
-        'qualityFlags',
-      ]),
-    if (value['uiSummary'] != null) 'uiSummary': value['uiSummary'],
+      'capabilities': _compactCapabilities(capability, standard: standard),
+    if (standard && value['uiSummary'] != null) 'uiSummary': value['uiSummary'],
     if (value['whatMatters'] != null) 'whatMatters': value['whatMatters'],
     if (system is Map<Object?, Object?>)
       'systemControl': standard
@@ -2193,18 +2232,19 @@ Map<String, Object?>? _compactCollection(
     ],
     'session.list' => <String>[
       'handleId',
-      'checkoutPath',
+      'projectPath',
       'entrypoint',
       'platform',
       'deviceId',
       'flavor',
-      'lifecycle',
-      'reachable',
+      'lastState',
       if (standard) ...<String>[
         'sessionId',
         'workspaceId',
         'targetId',
         'appId',
+        'checkoutPath',
+        'checkoutIdentity',
         'updatedAt',
       ],
     ],
@@ -2326,6 +2366,22 @@ Map<String, Object?> _compactRunEvents(
   };
 }
 
+Map<String, Object?> _compactRunStreamItem(
+  Map<Object?, Object?> item, {
+  required bool standard,
+}) {
+  if (item['type'] == 'event' && item['event'] is Map<Object?, Object?>) {
+    return <String, Object?>{
+      'type': 'event',
+      'event': _compactRunEvent(
+        item['event']! as Map<Object?, Object?>,
+        standard: standard,
+      ),
+    };
+  }
+  return _pick(item, const <String>['type', 'afterSequence', 'boundary']);
+}
+
 Map<String, Object?> _compactRunEvent(
   Map<Object?, Object?> event, {
   required bool standard,
@@ -2367,7 +2423,7 @@ Map<String, Object?> _compactSession(
   return <String, Object?>{
     ..._pick(value, const <String>[
       'handleId',
-      'checkoutPath',
+      'projectPath',
       'entrypoint',
       'platform',
       'deviceId',
@@ -2390,6 +2446,8 @@ Map<String, Object?> _compactSession(
         'workspaceId',
         'targetId',
         'appId',
+        'checkoutPath',
+        'checkoutIdentity',
         'updatedAt',
       ]),
       'runtime': ?runtimeMap,
@@ -2420,8 +2478,7 @@ Map<String, Object?> _compactValidationResult(
   final document = value['document'];
   final sourceMap = value['sourceMap'];
   return <String, Object?>{
-    for (final key in <String>['valid', if (standard) 'sourceSha256'])
-      if (value[key] != null) key: value[key],
+    if (value['valid'] != null) 'valid': value['valid'],
     if (document is Map<Object?, Object?>)
       'document': _compactValidatedDocument(document, standard: standard),
     if (value['diagnostics'] != null) 'diagnostics': value['diagnostics'],
@@ -2545,6 +2602,7 @@ const Map<String, String> _conciseCliFieldNames = <String, String>{
   'startedAt': 'started',
   'processId': 'pid',
   'routeName': 'route',
+  'currentRouteName': 'route',
   'targetKind': 'target',
   'errorCount': 'errors',
   'runtimeErrorCount': 'errors',
@@ -2576,7 +2634,8 @@ const Map<String, String> _conciseCliFieldNames = <String, String>{
   'recommendedCommand': 'devCommand',
   'sessionHandle': 'session',
   'handleId': 'session',
-  'checkoutPath': 'path',
+  'projectPath': 'path',
+  'checkoutPath': 'checkoutPath',
   'entrypoint': 'entry',
   'deviceId': 'device',
   'developmentSessionId': 'runtimeId',

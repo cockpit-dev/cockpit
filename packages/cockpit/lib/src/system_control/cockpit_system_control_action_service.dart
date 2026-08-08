@@ -19,6 +19,7 @@ import '../recording/cockpit_macos_recording_adapter.dart';
 import '../recording/cockpit_simctl_recording_adapter.dart';
 import '../recording/cockpit_windows_recording_adapter.dart';
 import 'cockpit_android_ui_automation_client.dart';
+import 'cockpit_macos_accessibility_tree.dart';
 import 'cockpit_system_control_adapter.dart';
 import 'cockpit_ios_webdriver_agent_client.dart';
 import 'cockpit_system_control_parameters.dart';
@@ -56,6 +57,8 @@ final class CockpitSystemControlActionService {
     CockpitSystemControlRecordingAdapterFactory? recordingAdapterFactory,
     CockpitAndroidUiAutomation? androidUiAutomation,
     CockpitIosWdaRunner? iosWdaRunner,
+    CockpitMacosAccessibilityTreeReader? macosAccessibilityTreeReader,
+    CockpitMacosApplicationProcessIdResolver? macosApplicationProcessIdResolver,
   }) : _processManager = processManager ?? const LocalCockpitProcessManager(),
        _registry = registry,
        _systemControlService =
@@ -75,7 +78,18 @@ final class CockpitSystemControlActionService {
              processManager:
                  processManager ?? const LocalCockpitProcessManager(),
            ),
-       _iosWdaRunner = iosWdaRunner ?? CockpitIosWebDriverAgentClient().run;
+       _iosWdaRunner = iosWdaRunner ?? CockpitIosWebDriverAgentClient().run,
+       _macosAccessibilityTreeReader =
+           macosAccessibilityTreeReader ?? cockpitReadMacosAccessibilityTree,
+       _macosApplicationProcessIdResolver =
+           macosApplicationProcessIdResolver ??
+           (({required appId, required timeout}) =>
+               cockpitResolveMacosApplicationProcessId(
+                 appId: appId,
+                 timeout: timeout,
+                 processManager:
+                     processManager ?? const LocalCockpitProcessManager(),
+               ));
 
   final CockpitProcessManager _processManager;
   final CockpitSystemControlRegistry _registry;
@@ -84,6 +98,9 @@ final class CockpitSystemControlActionService {
   final CockpitSystemControlRecordingAdapterFactory _recordingAdapterFactory;
   final CockpitAndroidUiAutomation _androidUiAutomation;
   final CockpitIosWdaRunner _iosWdaRunner;
+  final CockpitMacosAccessibilityTreeReader _macosAccessibilityTreeReader;
+  final CockpitMacosApplicationProcessIdResolver
+  _macosApplicationProcessIdResolver;
 
   Future<CockpitSystemControlActionResult> run(
     CockpitSystemControlActionRequest request,
@@ -182,8 +199,119 @@ final class CockpitSystemControlActionService {
     if (command.executable == cockpitAndroidUiAutomationCommandExecutable) {
       return _runAndroidUiAutomationCommand(request, capability, command);
     }
+    if (command.executable == cockpitMacosAccessibilityCommandExecutable) {
+      return _runMacosAccessibilityTreeCommand(request, capability, command);
+    }
 
     return _runProcessCommand(request, capability, command);
+  }
+
+  Future<CockpitSystemControlActionResult> _runMacosAccessibilityTreeCommand(
+    CockpitSystemControlActionRequest request,
+    CockpitSystemControlCapability capability,
+    CockpitResolvedSystemControlCommand command,
+  ) async {
+    final stopwatch = Stopwatch()..start();
+    Duration remaining() {
+      final value = request.timeout - stopwatch.elapsed;
+      if (value <= Duration.zero) {
+        throw TimeoutException('macOS accessibility deadline elapsed.');
+      }
+      return value;
+    }
+
+    try {
+      if (command.arguments.length != 4) {
+        throw const CockpitMacosAccessibilityException(
+          code: 'invalidMacosAccessibilityRequest',
+          message: 'macOS accessibility command arguments are invalid.',
+        );
+      }
+      final maxDepth = int.parse(command.arguments[2]);
+      final maxNodes = int.parse(command.arguments[3]);
+      final processId =
+          request.processId ??
+          await _macosApplicationProcessIdResolver(
+            appId: request.appId!,
+            timeout: remaining(),
+          );
+      final stdout = await _macosAccessibilityTreeReader(
+        processId: processId,
+        maxDepth: maxDepth,
+        maxNodes: maxNodes,
+        timeout: remaining(),
+      ).timeout(remaining());
+      return CockpitSystemControlActionResult(
+        platform: request.platform,
+        deviceId: request.deviceId,
+        appId: request.appId,
+        processId: processId,
+        action: request.action,
+        availability: capability.availability,
+        success: true,
+        stdout: stdout,
+        recommendedNextStep: 'resolveNativeLocator',
+        strategy: capability.strategy,
+        requires: capability.requires,
+        limitations: capability.limitations,
+      );
+    } on TimeoutException {
+      return CockpitSystemControlActionResult(
+        platform: request.platform,
+        deviceId: request.deviceId,
+        appId: request.appId,
+        processId: request.processId,
+        action: request.action,
+        availability: capability.availability,
+        success: false,
+        errorCode: 'systemActionTimedOut',
+        errorMessage:
+            'macOS accessibility timed out after '
+            '${request.timeout.inMilliseconds}ms.',
+        recommendedNextStep: 'inspectMacosAccessibility',
+        strategy: capability.strategy,
+        requires: capability.requires,
+        limitations: capability.limitations,
+      );
+    } on CockpitMacosAccessibilityException catch (error) {
+      final permissionDenied =
+          error.code == 'macosAccessibilityPermissionDenied';
+      return CockpitSystemControlActionResult(
+        platform: request.platform,
+        deviceId: request.deviceId,
+        appId: request.appId,
+        processId: request.processId,
+        action: request.action,
+        availability: permissionDenied
+            ? CockpitSystemControlAvailability.blocked
+            : capability.availability,
+        success: false,
+        errorCode: error.code,
+        errorMessage: error.message,
+        recommendedNextStep: permissionDenied
+            ? 'grantAccessibilityPermission'
+            : 'inspectMacosAccessibility',
+        strategy: capability.strategy,
+        requires: capability.requires,
+        limitations: capability.limitations,
+      );
+    } on Object catch (error) {
+      return CockpitSystemControlActionResult(
+        platform: request.platform,
+        deviceId: request.deviceId,
+        appId: request.appId,
+        processId: request.processId,
+        action: request.action,
+        availability: capability.availability,
+        success: false,
+        errorCode: 'macosAccessibilityFailed',
+        errorMessage: 'macOS accessibility failed: $error',
+        recommendedNextStep: 'inspectMacosAccessibility',
+        strategy: capability.strategy,
+        requires: capability.requires,
+        limitations: capability.limitations,
+      );
+    }
   }
 
   Future<CockpitSystemControlActionResult> _preparePermissions(

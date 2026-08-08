@@ -248,6 +248,29 @@ void main() {
     }
     expect(launcher.launchCount('workspaceA'), 1);
   });
+
+  test('reserves a fresh cleanup deadline after worker drain', () async {
+    final base = DateTime.utc(2026, 8, 8, 7);
+    var tick = 0;
+    final launcher = _FakeLauncher();
+    final pool = CockpitWorkerPool(
+      launcher: launcher,
+      utcNow: () => base.add(Duration(seconds: tick++)),
+      heartbeatInterval: const Duration(seconds: 30),
+    );
+    final spec = _spec('workspaceA');
+    final connection = await pool.connectionFor(spec) as _FakeConnection;
+
+    await pool.shutdownWorkspace(spec.key, grace: const Duration(seconds: 10));
+
+    expect(connection.drainDeadline, isNotNull);
+    expect(connection.shutdownDeadline, isNotNull);
+    expect(
+      connection.shutdownDeadline!.isAfter(connection.drainDeadline!),
+      isTrue,
+    );
+    expect(connection.isClosed, isTrue);
+  });
 }
 
 CockpitWorkspaceWorkerSpec _spec(
@@ -340,6 +363,8 @@ final class _FakeConnection implements CockpitWorkspaceWorkerConnection {
       <String, Completer<Object?>>{};
   final List<String> cancelledRequestIds = <String>[];
   DateTime? initializationDeadline;
+  DateTime? drainDeadline;
+  DateTime? shutdownDeadline;
   var _closed = false;
   var _activeHealthCalls = 0;
   var maximumConcurrentHealthCalls = 0;
@@ -367,11 +392,8 @@ final class _FakeConnection implements CockpitWorkspaceWorkerConnection {
       'operation' => await _operation(requestId!),
       'cancel' => _cancel(params['targetRequestId']! as String),
       'health' => await _health(),
-      'drain' => CockpitWorkerDrainResult(
-        draining: true,
-        activeRequestCount: 0,
-      ).toJson(),
-      'shutdown' => const CockpitWorkerShutdownResult(accepted: true).toJson(),
+      'drain' => _drain(deadline),
+      'shutdown' => _shutdown(deadline),
       _ => throw StateError('Unexpected fake worker method $method.'),
     };
   }
@@ -403,6 +425,19 @@ final class _FakeConnection implements CockpitWorkspaceWorkerConnection {
       engineVersion: spec.key.engineVersion,
       negotiatedFeatures: const <String>[],
     ).toJson();
+  }
+
+  Map<String, Object?> _drain(DateTime deadline) {
+    drainDeadline = deadline;
+    return CockpitWorkerDrainResult(
+      draining: true,
+      activeRequestCount: 0,
+    ).toJson();
+  }
+
+  Map<String, Object?> _shutdown(DateTime deadline) {
+    shutdownDeadline = deadline;
+    return const CockpitWorkerShutdownResult(accepted: true).toJson();
   }
 
   Future<Object?> _operation(String requestId) {

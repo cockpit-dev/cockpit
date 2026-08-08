@@ -2,11 +2,92 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:cockpit/src/infrastructure/cockpit_flutter_tool_isolation.dart';
 import 'package:cockpit/src/infrastructure/cockpit_process_manager.dart';
 import 'package:process/process.dart';
 import 'package:test/test.dart';
 
 void main() {
+  test('resident Flutter tool uses a checkout-local compiler', () async {
+    final temp = await Directory.systemTemp.createTemp(
+      'cockpit flutter isolation ',
+    );
+    addTearDown(() => temp.delete(recursive: true));
+    final sdkBin = Directory('${temp.path}/sdk/bin')
+      ..createSync(recursive: true);
+    final flutterDev = File('${sdkBin.path}/flutter-dev')
+      ..writeAsStringSync('#!/bin/sh\n');
+    final flutter = Link('${sdkBin.path}/flutter')..createSync(flutterDev.path);
+    final project = Directory('${temp.path}/project with spaces')
+      ..createSync(recursive: true);
+
+    final environment = cockpitIsolateFlutterTool(
+      executable: flutter.path,
+      workingDirectory: project.path,
+      environment: const <String, String>{
+        'API_TOKEN': 'value',
+        'FLUTTER_TOOL_ARGS':
+            '--enable-asserts --resident-compiler-info-file=/tmp/shared.json',
+      },
+      windows: false,
+    );
+
+    expect(environment, <String, String>{
+      'API_TOKEN': 'value',
+      'FLUTTER_TOOL_ARGS':
+          '--enable-asserts '
+          '--resident-compiler-info-file=.dart_tool/cockpit_flutter_compiler.json',
+    });
+    expect(Directory('${project.path}/.dart_tool').existsSync(), isTrue);
+  });
+
+  test('resident Flutter tool resolves a bare executable from PATH', () async {
+    final temp = await Directory.systemTemp.createTemp('cockpit-flutter-path-');
+    addTearDown(() => temp.delete(recursive: true));
+    final flutterDev = File('${temp.path}/flutter-dev')
+      ..writeAsStringSync('#!/bin/sh\n');
+    Link('${temp.path}/flutter').createSync(flutterDev.path);
+    final project = Directory('${temp.path}/project')..createSync();
+
+    final environment = cockpitIsolateFlutterTool(
+      executable: 'flutter',
+      workingDirectory: project.path,
+      environment: null,
+      parentEnvironment: <String, String>{
+        'PATH': temp.path,
+        'FLUTTER_TOOL_ARGS': '--enable-asserts',
+      },
+      windows: false,
+    );
+
+    expect(
+      environment?['FLUTTER_TOOL_ARGS'],
+      '--enable-asserts '
+      '--resident-compiler-info-file=.dart_tool/cockpit_flutter_compiler.json',
+    );
+  });
+
+  test('snapshot Flutter tool keeps the original environment', () async {
+    final temp = await Directory.systemTemp.createTemp(
+      'cockpit-flutter-snapshot-',
+    );
+    addTearDown(() => temp.delete(recursive: true));
+    final flutter = File('${temp.path}/flutter')
+      ..writeAsStringSync('#!/bin/sh\n');
+    final project = Directory('${temp.path}/project')..createSync();
+    const original = <String, String>{'API_TOKEN': 'value'};
+
+    final environment = cockpitIsolateFlutterTool(
+      executable: flutter.path,
+      workingDirectory: project.path,
+      environment: original,
+      windows: false,
+    );
+
+    expect(identical(environment, original), isTrue);
+    expect(Directory('${project.path}/.dart_tool').existsSync(), isFalse);
+  });
+
   test('isolated children retain required host runtime environment', () {
     final environment = cockpitMinimumChildEnvironment(
       parentEnvironment: const <String, String>{

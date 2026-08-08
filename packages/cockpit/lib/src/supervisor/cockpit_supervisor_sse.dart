@@ -4,7 +4,7 @@ import 'dart:io';
 
 import 'package:cockpit_protocol/cockpit_protocol.dart';
 
-import 'cockpit_supervisor_runtime.dart';
+import 'cockpit_supervisor_run_event_source.dart';
 
 final class CockpitSupervisorSse {
   const CockpitSupervisorSse(
@@ -13,7 +13,7 @@ final class CockpitSupervisorSse {
     this.pollInterval = const Duration(milliseconds: 100),
   });
 
-  final CockpitSupervisorRuntime runtime;
+  final CockpitSupervisorRunEventSource runtime;
   final Duration heartbeatInterval;
   final Duration pollInterval;
 
@@ -21,15 +21,6 @@ final class CockpitSupervisorSse {
     final after = await _resumeSequence(request, runId);
     var replay = await runtime.events(runId, after);
     if (replay.hasGap) throw _gap(replay.boundary!);
-    final run = await runtime.run(runId);
-    final replayContainsTerminal = replay.events.any(
-      (event) =>
-          event.entityKind == CockpitRunEventEntityKind.run &&
-          event.lifecycle == CockpitRunLifecycle.completed,
-    );
-    final terminalAtOrBeforeCursor =
-        run.lifecycle == CockpitRunLifecycle.completed &&
-        !replayContainsTerminal;
 
     request.response.statusCode = HttpStatus.ok;
     request.response.headers
@@ -37,11 +28,6 @@ final class CockpitSupervisorSse {
       ..set(HttpHeaders.cacheControlHeader, 'no-cache, no-transform')
       ..set(HttpHeaders.connectionHeader, 'keep-alive')
       ..set('X-Accel-Buffering', 'no');
-
-    if (terminalAtOrBeforeCursor) {
-      await request.response.close();
-      return;
-    }
 
     var sequence = after;
     var heartbeatAt = DateTime.now().add(heartbeatInterval);
@@ -72,6 +58,15 @@ final class CockpitSupervisorSse {
           heartbeatAt = DateTime.now().add(heartbeatInterval);
         }
         if (terminal) return;
+        if (replay.events.isEmpty) {
+          final run = await runtime.run(runId);
+          if (run.lifecycle == CockpitRunLifecycle.completed) {
+            replay = await runtime.events(runId, sequence);
+            if (replay.hasGap) throw _gap(replay.boundary!);
+            if (replay.events.isEmpty) return;
+            continue;
+          }
+        }
         if (!DateTime.now().isBefore(heartbeatAt)) {
           request.response.write(': heartbeat\n\n');
           await request.response.flush();

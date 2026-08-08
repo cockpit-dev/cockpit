@@ -106,7 +106,6 @@ final class _DevTarget {
     semanticId,
     key,
     type,
-    route,
   ].any((value) => _searchText(value)?.contains(query) ?? false);
 
   int compareForQuery(_DevTarget other, String query) {
@@ -122,15 +121,7 @@ final class _DevTarget {
   }
 
   int _queryRank(String query) {
-    final fields = <String?>[
-      text,
-      tip,
-      cockpitId,
-      semanticId,
-      key,
-      type,
-      route,
-    ];
+    final fields = <String?>[text, tip, cockpitId, semanticId, key, type];
     for (var index = 0; index < fields.length; index += 1) {
       final value = _searchText(fields[index]);
       if (value == query) return index;

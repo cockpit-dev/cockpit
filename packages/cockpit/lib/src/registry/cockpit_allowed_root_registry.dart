@@ -47,6 +47,9 @@ final class CockpitAllowedRootRegistry {
     final identity = attestation.identity;
     return _database.transact<CockpitRootResource>((state) async {
       for (final root in state.roots) {
+        if (root.state == CockpitRootState.retired) {
+          continue;
+        }
         if (_lexicalPaths.equals(root.canonicalPath, directory.path)) {
           if (root.identityQuality.isStrong &&
               (identity.quality != root.identityQuality ||
@@ -56,16 +59,7 @@ final class CockpitAllowedRootRegistry {
               message: 'Allowed root filesystem identity changed.',
             );
           }
-          if (root.state == CockpitRootState.retired) {
-            throw const CockpitRegistryException(
-              code: 'rootRetired',
-              message: 'A retired root cannot regain mutation authority.',
-            );
-          }
           return CockpitLockedJsonUpdate.readOnly(state, root.toResource());
-        }
-        if (root.state == CockpitRootState.retired) {
-          continue;
         }
         if (_lexicalPaths.overlaps(root.canonicalPath, directory.path) ||
             root.filesystemIdentity == identity.value) {

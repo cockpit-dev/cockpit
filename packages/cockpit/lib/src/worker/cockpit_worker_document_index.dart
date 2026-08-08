@@ -418,24 +418,47 @@ final class CockpitWorkerDocumentIndex
     CockpitTestSuiteFileCaseSource source,
   ) async {
     await _ensureLoaded();
-    final document = _byId.values
+    final caseDocuments = _byId.values
+        .where((candidate) {
+          final compiled = candidate.compiled;
+          return compiled is CockpitCompiledTestCase &&
+              compiled.testCase.id == source.caseId;
+        })
+        .toList(growable: false);
+    final exact = caseDocuments
         .where((candidate) => candidate.relativePath == source.relativePath)
-        .singleOrNull;
-    final compiled = document?.compiled;
-    if (document == null ||
-        compiled is! CockpitCompiledTestCase ||
-        compiled.testCase.id != source.caseId) {
-      throw const FormatException(
-        'Suite file case source is stale or invalid.',
+        .toList(growable: false);
+    final suffix = '/${source.relativePath}';
+    final matches = exact.isNotEmpty
+        ? exact
+        : caseDocuments
+              .where((candidate) => candidate.relativePath.endsWith(suffix))
+              .toList(growable: false);
+    if (matches.length != 1) {
+      final paths = matches
+          .map((candidate) => candidate.relativePath)
+          .take(3)
+          .join(', ');
+      throw FormatException(
+        matches.isEmpty
+            ? 'Suite case ${source.caseId} source ${source.relativePath} '
+                  'was not found in the workspace document index.'
+            : 'Suite case ${source.caseId} source ${source.relativePath} is '
+                  'ambiguous in the workspace document index: $paths.',
       );
+    }
+    final document = matches.single;
+    final compiled = document.compiled;
+    if (compiled is! CockpitCompiledTestCase) {
+      throw StateError('Resolved suite case document is not compiled.');
     }
     final current = await _readConfinedDocument(
       document.relativePath,
       expectedSha256: document.sourceSha256,
     );
     if (current == null) {
-      throw const FormatException(
-        'Suite file case source is stale or invalid.',
+      throw FormatException(
+        'Suite case ${source.caseId} source ${document.relativePath} is stale.',
       );
     }
     return compiled;

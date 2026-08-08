@@ -13,7 +13,7 @@ android {
     namespace = "dev.cockpit.cockpit_demo"
     // The example app must stay compatible with the plugin graph used in CI.
     compileSdk = 36
-    ndkVersion = "27.0.12077973"
+    ndkVersion = "28.2.13676358"
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17

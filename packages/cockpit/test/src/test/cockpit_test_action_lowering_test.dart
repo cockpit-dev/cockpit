@@ -100,6 +100,37 @@ void main() {
     }
   });
 
+  test('control-flow conditions lower to one-shot probes', () {
+    final condition = CockpitTestCondition(
+      kind: CockpitTestConditionKind.visible,
+      locator: CockpitTestLocator(testId: 'save-button'),
+    );
+    final probe = flutterLowerer
+        .lowerCondition(
+          condition: condition,
+          commandId: 'condition-probe',
+          timeoutMs: 500,
+          requestedPlane: CockpitTestPlane.semantic,
+          capabilities: capabilities,
+          probe: true,
+        )
+        .value!
+        .command;
+    final wait = flutterLowerer
+        .lowerCondition(
+          condition: condition,
+          commandId: 'condition-wait',
+          timeoutMs: 5000,
+          requestedPlane: CockpitTestPlane.semantic,
+          capabilities: capabilities,
+        )
+        .value!
+        .command;
+
+    expect(probe.parameters['probe'], isTrue);
+    expect(wait.parameters, isNot(contains('probe')));
+  });
+
   test('unsupported planes, locators, and lossy gestures fail explicitly', () {
     final nativePlane = flutterLowerer.lower(
       action: sampleBoundAction(CockpitTestActionKind.back),

@@ -10,11 +10,15 @@ let package = Package(
   products: [
     .library(name: "flutter-cockpit", targets: ["flutter_cockpit"]),
   ],
-  dependencies: [],
+  dependencies: [
+    .package(name: "FlutterFramework", path: "../FlutterFramework"),
+  ],
   targets: [
     .target(
       name: "flutter_cockpit",
-      dependencies: [],
+      dependencies: [
+        .product(name: "FlutterFramework", package: "FlutterFramework"),
+      ],
       resources: [
         .process("PrivacyInfo.xcprivacy"),
       ]

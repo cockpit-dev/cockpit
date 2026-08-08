@@ -1,6 +1,7 @@
 import 'package:cockpit_protocol/cockpit_protocol.dart';
 
 import '../../platform/windows/cockpit_windows_powershell.dart';
+import '../cockpit_macos_accessibility_tree.dart';
 import '../cockpit_system_control_action.dart';
 import '../cockpit_system_control_adapter.dart';
 import '../cockpit_system_control_parameters.dart';
@@ -437,7 +438,7 @@ final class CockpitDesktopSystemControlAdapter
 
   String get _uiTreeStrategy {
     return switch (platform) {
-      'macos' => 'accessibility-tree-dumper',
+      'macos' => 'AXUIElement tree reader',
       'windows' => 'UIAutomation tree walker',
       'linux' => 'AT-SPI tree walker',
       _ => 'native accessibility tree',
@@ -633,10 +634,7 @@ final class CockpitDesktopSystemControlAdapter
 
   List<String> get _uiTreeRequires {
     return switch (platform) {
-      'macos' => const <String>[
-        'Accessibility permission',
-        'Automation permission for System Events',
-      ],
+      'macos' => const <String>['Accessibility permission'],
       'windows' => const <String>['PowerShell', 'UI Automation'],
       'linux' => const <String>['AT-SPI tree dump helper'],
       _ => const <String>['native accessibility tree helper'],
@@ -759,8 +757,7 @@ final class CockpitDesktopSystemControlAdapter
     return switch (request.action) {
       CockpitSystemControlAction.tap => cockpitCoordinateCommand(
         request,
-        (x, y) => _macosJxa(<String>[
-          _macosMouseScript,
+        (x, y) => _macosJxaWithTarget(request, _macosMouseScript, <String>[
           'tap',
           '$x',
           '$y',
@@ -771,15 +768,11 @@ final class CockpitDesktopSystemControlAdapter
       ),
       CockpitSystemControlAction.longPress => cockpitLongPressCommand(
         request,
-        (x, y, durationMs) => _macosJxa(<String>[
+        (x, y, durationMs) => _macosJxaWithTarget(
+          request,
           _macosMouseScript,
-          'longPress',
-          '$x',
-          '$y',
-          '$x',
-          '$y',
-          '$durationMs',
-        ]),
+          <String>['longPress', '$x', '$y', '$x', '$y', '$durationMs'],
+        ),
       ),
       CockpitSystemControlAction.drag => cockpitDragCommand(request, (
         startX,
@@ -788,8 +781,7 @@ final class CockpitDesktopSystemControlAdapter
         endY,
         durationMs,
       ) {
-        return _macosJxa(<String>[
-          _macosMouseScript,
+        return _macosJxaWithTarget(request, _macosMouseScript, <String>[
           'drag',
           '$startX',
           '$startY',
@@ -1327,7 +1319,17 @@ final class CockpitDesktopSystemControlAdapter
     if (limits.error != null) {
       return limits.error!;
     }
-    return _macosJxaWithTarget(request, _macosReadUiTreeScript, limits.values);
+    final target = _targetArgs(request);
+    if (target == null) {
+      return const CockpitResolvedSystemControlCommand.error(
+        code: 'missingSystemActionTarget',
+        message: 'This macOS action requires --app-id or --process-id.',
+      );
+    }
+    return CockpitResolvedSystemControlCommand(
+      cockpitMacosAccessibilityCommandExecutable,
+      <String>[...target, ...limits.values],
+    );
   }
 
   CockpitResolvedSystemControlCommand _macosJxaWithTarget(
@@ -1847,8 +1849,8 @@ final class CockpitDesktopSystemControlAdapter
       );
     }
     return _UiTreeReadLimits.values(<String>[
-      '${maxDepth.value ?? 4}',
-      '${maxNodes.value ?? 120}',
+      '${maxDepth.value ?? 16}',
+      '${maxNodes.value ?? 2000}',
     ]);
   }
 
@@ -2031,13 +2033,31 @@ final class CockpitDesktopSystemControlAdapter
 
   static const String _macosMouseScript = r'''
 function run(argv) {
-  const action = argv[0]
-  const startX = Number(argv[1])
-  const startY = Number(argv[2])
-  const endX = Number(argv[3])
-  const endY = Number(argv[4])
-  const durationMs = Number(argv[5] || '0')
+  const targetKind = argv[0]
+  const targetValue = argv[1]
+  const action = argv[2]
+  const startX = Number(argv[3])
+  const startY = Number(argv[4])
+  const endX = Number(argv[5])
+  const endY = Number(argv[6])
+  const durationMs = Number(argv[7] || '0')
   ObjC.import('ApplicationServices')
+  ObjC.import('AppKit')
+  let app = null
+  if (targetKind === 'processId') {
+    app = $.NSRunningApplication.runningApplicationWithProcessIdentifier(Number(targetValue))
+  } else {
+    const apps = $.NSRunningApplication.runningApplicationsWithBundleIdentifier(targetValue)
+    if (apps.count > 0) app = apps.objectAtIndex(0)
+  }
+  if (!app) throw new Error(`No running macOS application found for ${targetKind}:${targetValue}`)
+  if (!app.activateWithOptions($.NSApplicationActivateIgnoringOtherApps)) {
+    throw new Error(`Unable to activate macOS application ${targetKind}:${targetValue}`)
+  }
+  const activationDeadline = Date.now() + 1000
+  while (!app.active && Date.now() < activationDeadline) delay(0.01)
+  if (!app.active) throw new Error(`macOS application did not become active: ${targetKind}:${targetValue}`)
+  delay(0.1)
   const eventTap = 0
   const leftButton = 0
   const mouseDown = 1
@@ -2156,105 +2176,6 @@ on run argv
     do shell script "kill -TERM " & quoted form of targetValue
   end if
 end run
-''';
-
-  static const String _macosReadUiTreeScript = r'''
-function run(argv) {
-  const targetKind = argv[0]
-  const targetValue = argv[1]
-  const maxDepth = Math.max(0, Number(argv[2] || '4'))
-  const maxNodes = Math.max(1, Number(argv[3] || '120'))
-  const systemEvents = Application('System Events')
-  let process = null
-  if (targetKind === 'appId') {
-    const app = Application(targetValue)
-    app.activate()
-    delay(0.2)
-    const appName = app.name()
-    const matches = systemEvents.applicationProcesses.whose({ name: appName })()
-    process = matches.length > 0 ? matches[0] : null
-  } else {
-    const pid = Number(targetValue)
-    const matches = systemEvents.applicationProcesses.whose({ unixId: pid })()
-    process = matches.length > 0 ? matches[0] : null
-  }
-  if (!process) {
-    throw new Error(`No macOS accessibility process found for ${targetKind}:${targetValue}`)
-  }
-
-  let nodeCount = 0
-  function readString(factory) {
-    try {
-      const value = factory()
-      if (value === undefined || value === null) return undefined
-      const text = String(value)
-      return text.length === 0 ? undefined : text
-    } catch (_) {
-      return undefined
-    }
-  }
-  function readFrame(element) {
-    try {
-      const position = element.position()
-      const size = element.size()
-      return { x: Number(position[0]), y: Number(position[1]), width: Number(size[0]), height: Number(size[1]) }
-    } catch (_) {
-      return undefined
-    }
-  }
-  function readChildren(element) {
-    try {
-      return element.uiElements()
-    } catch (_) {
-      return []
-    }
-  }
-  function readNode(element, depth) {
-    if (nodeCount >= maxNodes) return null
-    nodeCount += 1
-    const node = {}
-    const role = readString(() => element.role())
-    const subrole = readString(() => element.subrole())
-    const title = readString(() => element.title())
-    const name = readString(() => element.name())
-    const description = readString(() => element.description())
-    const value = readString(() => element.value())
-    const frame = readFrame(element)
-    if (role) node.role = role
-    if (subrole) node.subrole = subrole
-    if (title) node.title = title
-    if (name && name !== title) node.name = name
-    if (description && description !== title && description !== name) node.description = description
-    if (value) node.value = value
-    if (frame) node.frame = frame
-    if (depth < maxDepth && nodeCount < maxNodes) {
-      const children = []
-      const rawChildren = readChildren(element)
-      for (let i = 0; i < rawChildren.length && nodeCount < maxNodes; i += 1) {
-        const child = readNode(rawChildren[i], depth + 1)
-        if (child) children.push(child)
-      }
-      if (children.length > 0) node.children = children
-    }
-    return node
-  }
-
-  const windows = []
-  const rawWindows = process.windows()
-  for (let i = 0; i < rawWindows.length && nodeCount < maxNodes; i += 1) {
-    const windowNode = readNode(rawWindows[i], 0)
-    if (windowNode) windows.push(windowNode)
-  }
-  return JSON.stringify({
-    platform: 'macos',
-    target: { kind: targetKind, value: targetValue },
-    maxDepth,
-    maxNodes,
-    nodeCount,
-    truncated: nodeCount >= maxNodes,
-    windows
-  })
-}
 ''';
 
   static const String _macosReadWindowsScript = r'''

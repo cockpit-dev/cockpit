@@ -35,25 +35,82 @@ void main() {
     }
   });
 
-  test('Darwin SwiftPM packages use Flutter template-compatible metadata', () {
+  test('Darwin packages support SwiftPM and CocoaPods metadata', () {
     final iosPackage = _packageFile(
       'ios/flutter_cockpit/Package.swift',
     ).readAsStringSync();
     final macosPackage = _packageFile(
       'macos/flutter_cockpit/Package.swift',
     ).readAsStringSync();
+    final iosPodspec = _packageFile(
+      'ios/flutter_cockpit.podspec',
+    ).readAsStringSync();
+    final macosPodspec = _packageFile(
+      'macos/flutter_cockpit.podspec',
+    ).readAsStringSync();
+    final macosPlugin = _packageFile(
+      'macos/flutter_cockpit/Sources/flutter_cockpit/FlutterCockpitPlugin.swift',
+    ).readAsStringSync();
 
     expect(iosPackage, contains('name: "flutter_cockpit"'));
     expect(iosPackage, contains('.iOS("13.0")'));
-    expect(iosPackage, contains('dependencies: []'));
+    expect(
+      iosPackage,
+      contains(
+        '.package(name: "FlutterFramework", path: "../FlutterFramework")',
+      ),
+    );
+    expect(
+      iosPackage,
+      contains(
+        '.product(name: "FlutterFramework", package: "FlutterFramework")',
+      ),
+    );
     expect(iosPackage, contains('.process("PrivacyInfo.xcprivacy")'));
-    expect(iosPackage, isNot(contains('FlutterFramework')));
 
     expect(macosPackage, contains('name: "flutter_cockpit"'));
     expect(macosPackage, contains('.macOS("10.15")'));
-    expect(macosPackage, contains('dependencies: []'));
+    expect(
+      macosPackage,
+      contains(
+        '.package(name: "FlutterFramework", path: "../FlutterFramework")',
+      ),
+    );
+    expect(
+      macosPackage,
+      contains(
+        '.product(name: "FlutterFramework", package: "FlutterFramework")',
+      ),
+    );
     expect(macosPackage, contains('.process("PrivacyInfo.xcprivacy")'));
-    expect(macosPackage, isNot(contains('FlutterFramework')));
+
+    for (final podspec in <String>[iosPodspec, macosPodspec]) {
+      expect(podspec, contains("s.version          = '3.0.1'"));
+      expect(podspec, contains(":type => 'MIT'"));
+      expect(
+        podspec,
+        contains(":git => 'https://github.com/cockpit-dev/cockpit.git'"),
+      );
+      expect(podspec, contains(':tag => "v#{s.version}"'));
+      expect(
+        podspec,
+        matches(
+          RegExp(
+            "s\\.source_files\\s*=\\s*'flutter_cockpit/Sources/flutter_cockpit/\\*\\*/\\*\\.swift'",
+          ),
+        ),
+      );
+      expect(
+        podspec,
+        contains(
+          "'flutter_cockpit/Sources/flutter_cockpit/PrivacyInfo.xcprivacy'",
+        ),
+      );
+    }
+    expect(iosPodspec, contains("s.dependency 'Flutter'"));
+    expect(macosPodspec, contains("s.dependency 'FlutterMacOS'"));
+    expect(macosPlugin, contains('flutterViewController(for: registrar.view)'));
+    expect(macosPlugin, isNot(contains('registrar.viewController')));
   });
 }
 

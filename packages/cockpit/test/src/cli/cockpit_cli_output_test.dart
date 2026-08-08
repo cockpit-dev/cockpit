@@ -98,6 +98,58 @@ void main() {
     );
   });
 
+  test('interactive progress is isolated to stderr', () {
+    final stdout = StringBuffer();
+    final stderr = StringBuffer();
+    final runtime = CockpitCliRuntime(
+      stdoutSink: stdout,
+      stderrSink: stderr,
+      interactive: true,
+    );
+
+    runtime.configureOutput(
+      command: 'dev.start',
+      selection: const CockpitCliOutputSelection(),
+    );
+    runtime.progress('Building and launching Flutter...');
+
+    expect(stdout, isEmpty);
+    expect(stderr.toString(), '[cockpit] Building and launching Flutter...\n');
+  });
+
+  test('progress stays silent outside interactive terminals', () {
+    final stderr = StringBuffer();
+    final runtime = CockpitCliRuntime(
+      stdoutSink: StringBuffer(),
+      stderrSink: stderr,
+    );
+
+    runtime.configureOutput(
+      command: 'dev.start',
+      selection: const CockpitCliOutputSelection(),
+    );
+    runtime.progress('Preparing Flutter target...');
+
+    expect(stderr, isEmpty);
+  });
+
+  test('none format suppresses interactive progress', () {
+    final stderr = StringBuffer();
+    final runtime = CockpitCliRuntime(
+      stdoutSink: StringBuffer(),
+      stderrSink: stderr,
+      interactive: true,
+    );
+
+    runtime.configureOutput(
+      command: 'dev.start',
+      selection: const CockpitCliOutputSelection(format: CockpitCliFormat.none),
+    );
+    runtime.progress('Resolving checkout...');
+
+    expect(stderr, isEmpty);
+  });
+
   test('LON, JSON, and YAML preserve one semantic projection', () {
     const renderer = CockpitCliOutputRenderer();
     const data = <String, Object?>{
@@ -153,7 +205,7 @@ void main() {
                   'session': '1',
                   'state': <String, Object?>{
                     'lifecycle': 'ready',
-                    'checkoutPath': '/workspace/app',
+                    'projectPath': '/workspace/app',
                     'entrypoint': 'lib/main.dart',
                   },
                 },
@@ -501,6 +553,64 @@ void main() {
     expect(output, contains('cockpit/main.dart'));
   });
 
+  test('target inspect unwraps operation output at every useful density', () {
+    const renderer = CockpitCliOutputRenderer();
+    const data = <String, Object?>{
+      'kind': 'target.inspect',
+      'outcome': 'succeeded',
+      'output': <String, Object?>{
+        'targetId': 'target-1',
+        'platform': 'android',
+        'targetKind': 'flutterApp',
+        'foregroundSurface': 'flutterSemantic',
+        'selectedPlane': 'flutterSemanticPlane',
+        'currentRouteName': '/inbox',
+        'recommendedNextStep': 'runNextCommand',
+        'capabilityProfile': <String, Object?>{
+          'surfaceKinds': <String>['flutterSemantic', 'nativeUi'],
+          'actionCapabilities': <String>['tap', 'typeText'],
+          'evidenceCapabilities': <String>['nativeScreenshot'],
+        },
+        'systemControl': <String, Object?>{
+          'adapter': 'android.adb',
+          'preferredPlane': 'flutterSemanticPlane',
+          'availableActions': <String>['tap'],
+          'blockedActions': <String>['dumpUiTree'],
+        },
+      },
+    };
+
+    final minimal =
+        lon.decode(
+              renderer.renderAi(
+                command: 'target.inspect',
+                data: data,
+                detail: CockpitCliOutputDetail.minimal,
+              ),
+            )!
+            as Map<Object?, Object?>;
+    expect(minimal['platform'], 'android');
+    expect(minimal['route'], '/inbox');
+    expect(minimal, isNot(contains('targetId')));
+    expect(minimal['capabilities'], containsPair('actionCount', 2));
+    expect(minimal['systemControl'], containsPair('blockedCount', 1));
+
+    final standard =
+        lon.decode(
+              renderer.renderAi(
+                command: 'target.inspect',
+                data: data,
+                detail: CockpitCliOutputDetail.standard,
+              ),
+            )!
+            as Map<Object?, Object?>;
+    expect(standard['targetId'], 'target-1');
+    expect(
+      standard['capabilities'],
+      containsPair('actionCapabilities', <Object?>['tap', 'typeText']),
+    );
+  });
+
   test('standard listings omit digests that do not change the next action', () {
     const renderer = CockpitCliOutputRenderer();
     const data = <String, Object?>{
@@ -626,6 +736,70 @@ void main() {
     );
     expect(finalEvent['outcome'], 'failed');
     expect(value, isNot(contains('_meta')));
+  });
+
+  test('streaming run events apply JSONL verbosity projection per line', () {
+    final stdout = StringBuffer();
+    final runtime =
+        CockpitCliRuntime(stdoutSink: stdout, stderrSink: StringBuffer())
+          ..configureOutput(
+            command: 'run.events',
+            selection: const CockpitCliOutputSelection(
+              format: CockpitCliFormat.jsonl,
+            ),
+          );
+
+    runtime.jsonLine(const <String, Object?>{
+      'type': 'event',
+      'event': <String, Object?>{
+        'sequence': 7,
+        'kind': 'step.passed',
+        'stepExecutionId': 'main/capture',
+        'status': 'passed',
+        'artifacts': <Object?>[
+          <String, Object?>{
+            'artifactId': 'artifact-1',
+            'sha256': 'unused-digest',
+            'sizeBytes': 140965,
+          },
+        ],
+      },
+    });
+
+    final line = jsonDecode(stdout.toString()) as Map<String, Object?>;
+    final event = line['event']! as Map<String, Object?>;
+    expect(line['type'], 'event');
+    expect(event['sequence'], 7);
+    expect(event['artifactCount'], 1);
+    expect(stdout.toString(), isNot(contains('sha256')));
+    expect(stdout.toString(), isNot(contains('unused-digest')));
+    expect(stdout.toString(), isNot(contains('140965')));
+  });
+
+  test('full streaming run events preserve the complete JSONL event', () {
+    final stdout = StringBuffer();
+    final runtime =
+        CockpitCliRuntime(stdoutSink: stdout, stderrSink: StringBuffer())
+          ..configureOutput(
+            command: 'run.events',
+            selection: const CockpitCliOutputSelection(
+              format: CockpitCliFormat.jsonl,
+              detail: CockpitCliOutputDetail.full,
+            ),
+          );
+
+    runtime.jsonLine(const <String, Object?>{
+      'type': 'event',
+      'event': <String, Object?>{
+        'sequence': 7,
+        'kind': 'step.passed',
+        'artifacts': <Object?>[
+          <String, Object?>{'sha256': 'complete-digest'},
+        ],
+      },
+    });
+
+    expect(stdout.toString(), contains('complete-digest'));
   });
 
   test('suite report exposes complete offline bundle export', () {

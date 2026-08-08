@@ -134,9 +134,8 @@ final class CockpitDevRuntime {
         previous.lifecycle == lifecycle) {
       return previous;
     }
-    final checkout = await runtime.checkoutIdentity();
-    return runtime.bindDevelopmentSession(
-      checkout: checkout,
+    return runtime.updateDevelopmentSession(
+      previous: previous,
       workspaceId: previous.workspaceId,
       sessionId: sessionId,
       targetId: targetId,
@@ -164,9 +163,8 @@ final class CockpitDevRuntime {
     if (sessionId is! String || appId is! String) return null;
     if (sessionId == previous.sessionId && appId == previous.appId) return null;
 
-    final checkout = await runtime.checkoutIdentity();
-    final rebound = await runtime.bindDevelopmentSession(
-      checkout: checkout,
+    final rebound = await runtime.updateDevelopmentSession(
+      previous: previous,
       workspaceId: previous.workspaceId,
       sessionId: sessionId,
       targetId: previous.targetId!,
@@ -230,9 +228,8 @@ final class CockpitDevRuntime {
       );
     }
     final output = launched.output ?? const <String, Object?>{};
-    final checkout = await runtime.checkoutIdentity();
-    final resolved = await runtime.bindDevelopmentSession(
-      checkout: checkout,
+    final resolved = await runtime.updateDevelopmentSession(
+      previous: previous,
       workspaceId: previous.workspaceId,
       sessionId: output['sessionId'] as String,
       targetId: output['targetId'] as String? ?? previous.targetId!,
@@ -260,9 +257,8 @@ final class CockpitDevRuntime {
     CockpitCliSessionHandle previous,
     String lifecycle,
   ) async {
-    final checkout = await runtime.checkoutIdentity();
-    return runtime.bindDevelopmentSession(
-      checkout: checkout,
+    return runtime.updateDevelopmentSession(
+      previous: previous,
       workspaceId: previous.workspaceId,
       sessionId: previous.sessionId,
       targetId: previous.targetId!,
@@ -767,9 +763,8 @@ final class CockpitDevRuntime {
     final output = result.output ?? const <String, Object?>{};
     var resolved = session;
     if (_operationSucceeded(result)) {
-      final checkout = await runtime.checkoutIdentity();
-      resolved = await runtime.bindDevelopmentSession(
-        checkout: checkout,
+      resolved = await runtime.updateDevelopmentSession(
+        previous: session,
         workspaceId: session.workspaceId,
         sessionId: output['sessionId'] as String? ?? session.sessionId,
         targetId: session.targetId!,
@@ -863,6 +858,17 @@ final class CockpitDevRuntime {
     String? next,
     int failureExitCode = cockpitDataExitCode,
   }) async {
+    if (!ok && runtime.usesPathOutput) {
+      final failure = _pathOutputFailure(errors, action: action);
+      runtime.error(
+        code: failure.code,
+        message: failure.message,
+        retryable: failure.retryable,
+        category: failure.category,
+        responsibleLayer: failure.responsibleLayer,
+      );
+      return failureExitCode;
+    }
     await runtime.success(<String, Object?>{
       'ok': ok,
       'action': action,
@@ -889,6 +895,59 @@ final class CockpitDevRuntime {
     capturePolicy: CockpitCapturePolicy.onFailure,
     timeoutMs: (timeout ?? runtime.commandTimeout).inMilliseconds,
   );
+}
+
+({
+  String code,
+  String message,
+  bool retryable,
+  String? category,
+  String? responsibleLayer,
+})
+_pathOutputFailure(List<Object?> errors, {required String action}) {
+  for (final error in errors) {
+    final candidate = _firstCliFailureMap(error);
+    if (candidate == null) continue;
+    final code = candidate['code'];
+    final message = candidate['message'];
+    if (code is String &&
+        code.isNotEmpty &&
+        message is String &&
+        message.isNotEmpty) {
+      return (
+        code: code,
+        message: message,
+        retryable: candidate['retryable'] == true,
+        category: candidate['category'] as String?,
+        responsibleLayer:
+            candidate['responsibleLayer'] as String? ??
+            candidate['layer'] as String?,
+      );
+    }
+  }
+  return (
+    code: 'developmentOperationFailed',
+    message: 'The $action operation did not complete.',
+    retryable: false,
+    category: null,
+    responsibleLayer: null,
+  );
+}
+
+Map<Object?, Object?>? _firstCliFailureMap(Object? value) {
+  if (value is Map<Object?, Object?>) {
+    if (value['code'] is String && value['message'] is String) return value;
+    for (final child in value.values) {
+      final nested = _firstCliFailureMap(child);
+      if (nested != null) return nested;
+    }
+  } else if (value is Iterable<Object?>) {
+    for (final child in value) {
+      final nested = _firstCliFailureMap(child);
+      if (nested != null) return nested;
+    }
+  }
+  return null;
 }
 
 bool _operationSucceeded(CockpitOperationResult result) =>
@@ -1026,6 +1085,7 @@ List<Map<String, Object?>> _objectRows(Object? value) => value is List<Object?>
 
 Map<String, Object?> _sessionIdentity(CockpitCliSessionHandle session) =>
     <String, Object?>{
+      if (session.projectPath != null) 'projectPath': session.projectPath,
       if (session.checkoutPath != null) 'checkoutPath': session.checkoutPath,
       if (session.entrypoint != null) 'entrypoint': session.entrypoint,
       if (session.platform != null) 'platform': session.platform,

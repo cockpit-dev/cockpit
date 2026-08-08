@@ -144,10 +144,19 @@ sudo xcodebuild -license accept
 sudo xcodebuild -runFirstLaunch
 ```
 
-Flutter iOS builds may additionally require CocoaPods. Confirm `pod --version`
-and repair the CocoaPods/Ruby installation reported by `flutter doctor -v`;
-WDA-only black-box control of an already installed app does not require the
-target application's Pods.
+Flutter plugins may arrive through Swift Package Manager or CocoaPods. Do not
+force a migration: inspect the app's `pubspec.yaml`, Xcode project, and
+`flutter config --list` first. Flutter 3.44 and newer enable SwiftPM by default;
+a project or global `enable-swift-package-manager: false` selects CocoaPods,
+and an enabled project may still fall back to CocoaPods for another plugin that
+does not support SwiftPM.
+
+Only require `pod --version` when the resolved build actually uses CocoaPods;
+then repair the CocoaPods/Ruby installation reported by `flutter doctor -v`.
+For SwiftPM, require the generated `FlutterGeneratedPluginSwiftPackage` and its
+Flutter framework preparation pre-action to exist, then prove the selected path
+with one real build. WDA-only black-box control of an already installed app
+requires neither package manager.
 
 Boot a Simulator explicitly and wait for readiness:
 

@@ -24,39 +24,45 @@ import 'package:test/test.dart';
 
 void main() {
   test('lists Flutter launch targets from machine output', () async {
+    final toolDirectory = await Directory.systemTemp.createTemp(
+      'cockpit-flutter-tool-test-',
+    );
+    addTearDown(() => toolDirectory.delete(recursive: true));
+    final processManager = _MachineProcessManager(
+      stdoutPayload: jsonEncode(<Map<String, Object?>>[
+        <String, Object?>{
+          'id': 'macos',
+          'name': 'macOS',
+          'targetPlatform': 'darwin',
+          'isSupported': true,
+          'emulator': false,
+          'sdk': 'macos',
+        },
+        <String, Object?>{
+          'id': 'emulator-5554',
+          'name': 'Pixel 8',
+          'targetPlatform': 'android-arm64',
+          'isSupported': true,
+          'emulator': true,
+          'sdk': 'android',
+        },
+        <String, Object?>{
+          'id': 'chrome',
+          'name': 'Chrome',
+          'targetPlatform': 'web-javascript',
+          'isSupported': true,
+          'emulator': false,
+          'sdk': 'web',
+        },
+      ]),
+    );
     final service = CockpitListLaunchTargetsService(
-      processManager: _MachineProcessManager(
-        stdoutPayload: jsonEncode(<Map<String, Object?>>[
-          <String, Object?>{
-            'id': 'macos',
-            'name': 'macOS',
-            'targetPlatform': 'darwin',
-            'isSupported': true,
-            'emulator': false,
-            'sdk': 'macos',
-          },
-          <String, Object?>{
-            'id': 'emulator-5554',
-            'name': 'Pixel 8',
-            'targetPlatform': 'android-arm64',
-            'isSupported': true,
-            'emulator': true,
-            'sdk': 'android',
-          },
-          <String, Object?>{
-            'id': 'chrome',
-            'name': 'Chrome',
-            'targetPlatform': 'web-javascript',
-            'isSupported': true,
-            'emulator': false,
-            'sdk': 'web',
-          },
-        ]),
-      ),
+      processManager: processManager,
       sdkEnvironment: const CockpitSdkEnvironment(
         dartExecutable: 'dart-sdk',
         flutterExecutable: 'flutter-sdk',
       ),
+      toolDirectory: toolDirectory.path,
     );
 
     final result = await service.list();
@@ -70,6 +76,7 @@ void main() {
     expect(result.targets[2].platformType, 'web-javascript');
     expect(result.targets[2].platform, 'web');
     expect(result.targets[0].toJson()['platform'], 'macos');
+    expect(processManager.lastWorkingDirectory, toolDirectory.path);
   });
 
   test(
@@ -918,6 +925,7 @@ final class _MachineProcessManager implements CockpitProcessManager {
   final bool hangOnStart;
   final bool keepOutputOpenAfterExit;
   _OpenOutputFakeProcess? openOutputProcess;
+  String? lastWorkingDirectory;
 
   @override
   Future<ProcessResult> run(
@@ -948,6 +956,7 @@ final class _MachineProcessManager implements CockpitProcessManager {
     bool runInShell = false,
     ProcessStartMode mode = ProcessStartMode.normal,
   }) async {
+    lastWorkingDirectory = workingDirectory;
     if (hangOnStart) {
       return _HangingFakeProcess();
     }

@@ -543,10 +543,19 @@ final class CockpitCaseRunAdapterFactory {
         );
       }
       final compiled = await _compiled(source);
-      final plan = CockpitTestVariableBinder().bind(
-        compiled,
-        inputs: submission.inputs,
-      );
+      late final CockpitTestExecutionPlan plan;
+      try {
+        plan = CockpitTestVariableBinder().bind(
+          compiled,
+          inputs: submission.inputs,
+        );
+      } on CockpitTestBindingException catch (error) {
+        throw CockpitApplicationServiceException(
+          code: error.error.code.name,
+          message: error.error.message,
+          details: <String, Object?>{'testError': error.error.toJson()},
+        );
+      }
       final reservation = await _runStore.reserve(
         idempotencyKey: context.idempotencyKey,
         requestFingerprint: _requestFingerprint(submission, compiled),

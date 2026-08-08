@@ -288,6 +288,61 @@ void main() {
       ]);
     },
   );
+
+  test('persists and publishes a result event batch in one exchange', () async {
+    final publisher = _RecordingPublisher();
+    final store = _store(stateRoot, publisher: publisher);
+    final drafts = <CockpitWorkerEventDraft>[
+      for (var index = 0; index < 64; index += 1)
+        CockpitWorkerEventDraft(
+          kind: 'step.passed',
+          entityKind: CockpitRunEventEntityKind.step,
+          caseId: 'caseA',
+          attemptId: 'attemptA',
+          stepExecutionId: 'main/step$index',
+          stepStatus: CockpitTestStepStatus.passed,
+        ),
+    ];
+
+    final appended = await store.appendBatch('runA', drafts);
+
+    expect(appended, hasLength(64));
+    expect(
+      appended.map((event) => event.sequence),
+      orderedEquals(<int>[
+        for (var sequence = 1; sequence <= 64; sequence += 1) sequence,
+      ]),
+    );
+    expect(publisher.calls, hasLength(1));
+    expect(publisher.calls.single.events, hasLength(64));
+    expect(publisher.events['runA'], hasLength(64));
+  });
+
+  test('chunks a durable result batch at the publication limit', () async {
+    final publisher = _RecordingPublisher();
+    final store = _store(stateRoot, publisher: publisher);
+    final drafts = <CockpitWorkerEventDraft>[
+      for (var index = 0; index < 300; index += 1)
+        CockpitWorkerEventDraft(
+          kind: 'step.passed',
+          entityKind: CockpitRunEventEntityKind.step,
+          caseId: 'caseA',
+          attemptId: 'attemptA',
+          stepExecutionId: 'main/step$index',
+          stepStatus: CockpitTestStepStatus.passed,
+        ),
+    ];
+
+    await store.appendBatch('runA', drafts);
+
+    expect(publisher.calls, hasLength(2));
+    expect(
+      publisher.calls.map((request) => request.events.length),
+      orderedEquals(<int>[256, 44]),
+    );
+    expect(publisher.events['runA'], hasLength(300));
+    expect(await _store(stateRoot).eventsForRun('runA'), hasLength(300));
+  });
 }
 
 CockpitWorkerRunEventStore _store(

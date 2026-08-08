@@ -236,6 +236,7 @@ final class CockpitCaseDriverDelegate implements CockpitCaseExecutionDelegate {
       timeoutMs: timeout.inMilliseconds,
       requestedPlane: requestedPlane,
       capabilities: driver.capabilities,
+      probe: true,
     );
     if (!lowering.isSuccess) {
       return CockpitTestKernelConditionResult(

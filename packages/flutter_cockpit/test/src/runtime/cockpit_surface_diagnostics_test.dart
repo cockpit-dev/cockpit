@@ -66,6 +66,7 @@ void main() {
       expect(createButton.text, 'Add task');
       expect(createButton.tooltip, 'Create a task');
       expect(createButton.semanticId, 'Create task');
+      expect(createButton.ancestors, isEmpty);
       expect(createButton.supportedCommands, contains(CockpitCommandType.tap));
       expect(
         textField.supportedCommands,

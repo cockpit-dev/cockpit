@@ -1,7 +1,10 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:cockpit/src/cli/cockpit_cli_runtime.dart';
 import 'package:cockpit/src/cli/cockpit_cli_session_handles.dart';
+import 'package:cockpit/src/cli/cockpit_command_runner.dart';
+import 'package:cockpit/src/development/cockpit_checkout_identity.dart';
 import 'package:cockpit/src/foundation/cockpit_locked_json_store.dart';
 import 'package:cockpit/src/foundation/cockpit_permissions.dart';
 import 'package:cockpit_protocol/cockpit_protocol.dart';
@@ -66,6 +69,7 @@ void main() {
     final first = await store.bindDevelopment(
       checkoutIdentity: identity,
       checkoutPath: checkout,
+      projectPath: checkout,
       workspaceId: 'workspace-1',
       sessionId: 'session-1',
       targetId: 'target-1',
@@ -78,6 +82,7 @@ void main() {
     final reconnected = await store.bindDevelopment(
       checkoutIdentity: identity,
       checkoutPath: checkout,
+      projectPath: checkout,
       workspaceId: 'workspace-1',
       sessionId: 'session-2',
       targetId: 'target-1',
@@ -87,7 +92,13 @@ void main() {
     expect(reconnected.handleId, first.handleId);
     expect(reconnected.sessionId, 'session-2');
     expect(reconnected.appId, 'app-2');
-    expect((await store.activeForCheckout(identity))?.handleId, '1');
+    expect(
+      (await store.activeForPath(
+        checkoutIdentity: identity,
+        path: checkout,
+      ))?.handleId,
+      '1',
+    );
     expect(reconnected.entrypoint, 'lib/main.dart');
     expect(reconnected.platform, 'macos');
     expect(reconnected.deviceId, 'macos');
@@ -100,6 +111,7 @@ void main() {
       final handle = await store.bindDevelopment(
         checkoutIdentity: 'c' * 64,
         checkoutPath: checkout,
+        projectPath: checkout,
         workspaceId: 'workspace-1',
         sessionId: 'session-1',
         targetId: 'target-1',
@@ -117,13 +129,14 @@ void main() {
       final persisted = await File(
         p.join(temporaryDirectory.path, 'sessions.json'),
       ).readAsString();
-      expect(persisted, contains('cockpit.cli-sessions/v5'));
+      expect(persisted, contains('cockpit.cli-sessions/v6'));
       expect(persisted, isNot(contains('secret-value')));
       expect(persisted, isNot(contains('launchConfiguration')));
 
       final rebound = await store.bindDevelopment(
         checkoutIdentity: 'c' * 64,
         checkoutPath: checkout,
+        projectPath: checkout,
         workspaceId: 'workspace-1',
         sessionId: 'session-2',
         targetId: 'target-1',
@@ -135,12 +148,17 @@ void main() {
     },
   );
 
-  test('does not select a development handle across checkouts', () async {
+  test('keeps implicit selection isolated across checkouts', () async {
     final firstIdentity = 'a' * 64;
     final secondIdentity = 'b' * 64;
+    final firstProject = p.join(temporaryDirectory.path, 'first');
+    final secondProject = p.join(temporaryDirectory.path, 'second');
+    await Directory(firstProject).create();
+    await Directory(secondProject).create();
     final handle = await store.bindDevelopment(
       checkoutIdentity: firstIdentity,
       checkoutPath: p.normalize(temporaryDirectory.path),
+      projectPath: p.normalize(firstProject),
       workspaceId: 'workspace-1',
       sessionId: 'session-1',
       targetId: 'target-1',
@@ -150,13 +168,27 @@ void main() {
       deviceId: 'macos',
     );
 
-    await expectLater(
-      store.selectForCheckout(
-        checkoutIdentity: secondIdentity,
-        reference: handle.handleId,
-      ),
-      throwsA(isA<FormatException>()),
+    await store.bindDevelopment(
+      checkoutIdentity: secondIdentity,
+      checkoutPath: p.normalize(temporaryDirectory.path),
+      projectPath: p.normalize(secondProject),
+      workspaceId: 'workspace-2',
+      sessionId: 'session-2',
+      targetId: 'target-2',
+      appId: 'app-2',
+      entrypoint: 'lib/main.dart',
+      platform: 'macos',
+      deviceId: 'macos',
     );
+
+    expect(
+      await store.activeForPath(
+        checkoutIdentity: secondIdentity,
+        path: firstProject,
+      ),
+      isNull,
+    );
+    expect((await store.selectDevelopment(handle.handleId)).handleId, '1');
   });
 
   test(
@@ -199,6 +231,7 @@ void main() {
     await store.bindDevelopment(
       checkoutIdentity: checkout.value,
       checkoutPath: checkout.canonicalRoot,
+      projectPath: checkout.canonicalRoot,
       workspaceId: 'workspace-1',
       sessionId: 'session-1',
       targetId: 'target-1',
@@ -224,6 +257,158 @@ void main() {
       runtime.activeDevelopmentSession(workspaceId: 'workspace-2'),
       throwsA(isA<FormatException>()),
     );
+  });
+
+  test(
+    'resolves implicit sessions by project and rejects ancestor ambiguity',
+    () async {
+      final firstProject = Directory(
+        p.join(temporaryDirectory.path, 'apps', 'first'),
+      );
+      final secondProject = Directory(
+        p.join(temporaryDirectory.path, 'apps', 'second'),
+      );
+      final gitCommon = Directory(p.join(temporaryDirectory.path, '.git'));
+      await Future.wait(<Future<void>>[
+        firstProject.create(recursive: true),
+        secondProject.create(recursive: true),
+        gitCommon.create(recursive: true),
+      ]);
+      final resolver = CockpitCheckoutIdentityResolver(
+        processRunner: (_, _, {workingDirectory, environment}) async =>
+            ProcessResult(
+              1,
+              0,
+              '${temporaryDirectory.path}\n'
+                  '${gitCommon.path}\n'
+                  '${gitCommon.path}\n',
+              '',
+            ),
+      );
+      CockpitCliRuntime createRuntime(String workingDirectory) =>
+          CockpitCliRuntime(
+            workingDirectory: workingDirectory,
+            stdoutSink: StringBuffer(),
+            stderrSink: StringBuffer(),
+            sessionHandleStoreProvider: () async => store,
+            checkoutIdentityResolver: resolver,
+          );
+
+      final firstRuntime = createRuntime(firstProject.path);
+      final checkout = await firstRuntime.checkoutIdentity();
+      final firstPath = p.normalize(await firstProject.resolveSymbolicLinks());
+      final secondPath = p.normalize(
+        await secondProject.resolveSymbolicLinks(),
+      );
+      final first = await store.bindDevelopment(
+        checkoutIdentity: checkout.value,
+        checkoutPath: checkout.canonicalRoot,
+        projectPath: firstPath,
+        workspaceId: 'workspace-1',
+        sessionId: 'session-1',
+        targetId: 'target-1',
+        appId: 'app-1',
+        entrypoint: 'lib/main.dart',
+        platform: 'macos',
+        deviceId: 'macos',
+      );
+      final second = await store.bindDevelopment(
+        checkoutIdentity: checkout.value,
+        checkoutPath: checkout.canonicalRoot,
+        projectPath: secondPath,
+        workspaceId: 'workspace-2',
+        sessionId: 'session-2',
+        targetId: 'target-2',
+        appId: 'app-2',
+        entrypoint: 'lib/main.dart',
+        platform: 'android',
+        deviceId: 'emulator-5554',
+      );
+
+      expect(
+        (await firstRuntime.resolveDevelopmentSession(null)).handleId,
+        first.handleId,
+      );
+      expect(
+        (await createRuntime(
+          secondProject.path,
+        ).resolveDevelopmentSession(null)).handleId,
+        second.handleId,
+      );
+      final rootRuntime = createRuntime(temporaryDirectory.path);
+      await expectLater(
+        rootRuntime.resolveDevelopmentSession(null),
+        throwsA(
+          isA<FormatException>().having(
+            (error) => error.message,
+            'message',
+            contains('Multiple Flutter projects'),
+          ),
+        ),
+      );
+      expect(
+        (await rootRuntime.resolveDevelopmentSession(second.handleId)).handleId,
+        second.handleId,
+      );
+      expect(
+        (await store.activeForPath(
+          checkoutIdentity: checkout.value,
+          path: firstPath,
+        ))?.handleId,
+        first.handleId,
+      );
+    },
+  );
+
+  test('session list reads saved state without connecting', () async {
+    final checkout = await CockpitCliRuntime(
+      workingDirectory: temporaryDirectory.path,
+      stdoutSink: StringBuffer(),
+      stderrSink: StringBuffer(),
+    ).checkoutIdentity();
+    await store.bindDevelopment(
+      checkoutIdentity: checkout.value,
+      checkoutPath: checkout.canonicalRoot,
+      projectPath: checkout.canonicalRoot,
+      workspaceId: 'workspace-1',
+      sessionId: 'session-1',
+      targetId: 'target-1',
+      appId: 'app-1',
+      entrypoint: 'lib/main.dart',
+      platform: 'android',
+      deviceId: 'emulator-5554',
+      lifecycle: 'crashed',
+    );
+    final stdout = StringBuffer();
+    var clientRequests = 0;
+    final runner = CockpitCommandRunner(
+      runtime: CockpitCliRuntime(
+        workingDirectory: temporaryDirectory.path,
+        stdoutSink: stdout,
+        stderrSink: StringBuffer(),
+        sessionHandleStoreProvider: () async => store,
+        clientProvider: () async {
+          clientRequests += 1;
+          throw StateError('session list must not connect');
+        },
+      ),
+    );
+
+    final exitCode = await runner.run(const <String>[
+      'session',
+      'list',
+      '--format',
+      'json',
+    ]);
+    final output = jsonDecode(stdout.toString()) as Map<String, Object?>;
+    final items = output['items']! as List<Object?>;
+    final item = items.single! as Map<String, Object?>;
+
+    expect(exitCode, cockpitSuccessExitCode);
+    expect(clientRequests, 0);
+    expect(item['lastState'], 'crashed');
+    expect(item, isNot(contains('lifecycle')));
+    expect(item, isNot(contains('reachable')));
   });
 
   test('generates required idempotency keys and enforces prohibition', () {

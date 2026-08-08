@@ -34,6 +34,7 @@ final class CockpitSuiteCompiler {
   Future<CockpitSuiteExecutionPlan> compile({
     required CockpitCompiledTestSuite compiledSuite,
     required CockpitSuiteCaseResolver resolver,
+    Map<String, Object?> inputs = const <String, Object?>{},
   }) async {
     final suite = compiledSuite.suite;
     final resolvedEntries = <String, CockpitCompiledTestCase>{};
@@ -50,8 +51,9 @@ final class CockpitSuiteCompiler {
             : await _resolve(fixture.teardown!, resolver),
       );
     }
+    _validateRuntimeInputs(inputs, resolvedEntries, resolvedFixtures);
     _validateFixtureScopes(suite, resolvedFixtures);
-    final built = _buildNodes(suite, resolvedEntries, resolvedFixtures);
+    final built = _buildNodes(suite, resolvedEntries, resolvedFixtures, inputs);
     return CockpitSuiteExecutionPlan(
       suite: suite,
       sourceSha256: compiledSuite.sourceSha256,
@@ -80,12 +82,19 @@ final class CockpitSuiteCompiler {
     CockpitTestSuite suite,
     Map<String, CockpitCompiledTestCase> entries,
     Map<String, _ResolvedFixture> fixtures,
+    Map<String, Object?> runtimeInputs,
   ) {
     final builders = <String, _NodeBuilder>{};
     final rowsByEntry = <String, List<_CaseRow>>{};
-    _addCaseRows(suite, entries, rowsByEntry, builders);
-    _addCaseAttemptFixtures(suite, fixtures, rowsByEntry, builders);
-    _addSuiteFixtures(suite, fixtures, rowsByEntry, builders);
+    _addCaseRows(suite, entries, rowsByEntry, builders, runtimeInputs);
+    _addCaseAttemptFixtures(
+      suite,
+      fixtures,
+      rowsByEntry,
+      builders,
+      runtimeInputs,
+    );
+    _addSuiteFixtures(suite, fixtures, rowsByEntry, builders, runtimeInputs);
     _wireCaseDependencies(suite, rowsByEntry, builders);
     final scheduledIds = <String>{
       for (final builder in builders.values)
@@ -143,6 +152,7 @@ final class CockpitSuiteCompiler {
     Map<String, CockpitCompiledTestCase> entries,
     Map<String, List<_CaseRow>> rowsByEntry,
     Map<String, _NodeBuilder> builders,
+    Map<String, Object?> runtimeInputs,
   ) {
     var rowCount = 0;
     final selectedEntries = _selectedEntryIds(suite);
@@ -187,7 +197,12 @@ final class CockpitSuiteCompiler {
               entryId: entry.id,
               kind: CockpitSuitePlanNodeKind.isolation,
               compiledCase: entries[entry.id]!,
-              inputs: _bindMatrix(entry.inputs, matrix),
+              inputs: _nodeInputs(
+                entries[entry.id]!,
+                entry.inputs,
+                runtimeInputs,
+                matrix,
+              ),
               matrix: matrix,
               targetId: targetId,
               retry: entry.retry ?? suite.execution.retry,
@@ -204,7 +219,12 @@ final class CockpitSuiteCompiler {
               entryId: entry.id,
               kind: CockpitSuitePlanNodeKind.testCase,
               compiledCase: entries[entry.id]!,
-              inputs: _bindMatrix(entry.inputs, matrix),
+              inputs: _nodeInputs(
+                entries[entry.id]!,
+                entry.inputs,
+                runtimeInputs,
+                matrix,
+              ),
               matrix: matrix,
               targetId: targetId,
               retry: entry.retry ?? suite.execution.retry,
@@ -248,6 +268,41 @@ final class CockpitSuiteCompiler {
     return selected;
   }
 
+  void _validateRuntimeInputs(
+    Map<String, Object?> inputs,
+    Map<String, CockpitCompiledTestCase> entries,
+    Map<String, _ResolvedFixture> fixtures,
+  ) {
+    final accepted = <String>{
+      for (final compiled in entries.values) ..._inputNames(compiled),
+      for (final fixture in fixtures.values) ...<String>{
+        ..._inputNames(fixture.setup),
+        if (fixture.teardown != null) ..._inputNames(fixture.teardown!),
+      },
+    };
+    final unknown = inputs.keys.toSet().difference(accepted).toList()..sort();
+    if (unknown.isNotEmpty) {
+      throw FormatException(
+        'Unknown suite runtime input${unknown.length == 1 ? '' : 's'}: '
+        '${unknown.join(', ')}.',
+      );
+    }
+  }
+
+  Map<String, Object?> _nodeInputs(
+    CockpitCompiledTestCase compiled,
+    Map<String, Object?> authoredInputs,
+    Map<String, Object?> runtimeInputs,
+    Map<String, Object?> matrix,
+  ) {
+    final accepted = _inputNames(compiled);
+    return _bindMatrix(<String, Object?>{
+      ...authoredInputs,
+      for (final entry in runtimeInputs.entries)
+        if (accepted.contains(entry.key)) entry.key: entry.value,
+    }, matrix);
+  }
+
   void _validateFixtureScopes(
     CockpitTestSuite suite,
     Map<String, _ResolvedFixture> fixtures,
@@ -270,6 +325,7 @@ final class CockpitSuiteCompiler {
     Map<String, _ResolvedFixture> fixtures,
     Map<String, List<_CaseRow>> rowsByEntry,
     Map<String, _NodeBuilder> builders,
+    Map<String, Object?> runtimeInputs,
   ) {
     for (final rows in rowsByEntry.values) {
       for (final row in rows) {
@@ -284,7 +340,12 @@ final class CockpitSuiteCompiler {
             entryId: row.entry.id,
             kind: CockpitSuitePlanNodeKind.fixtureSetup,
             compiledCase: resolved.setup,
-            inputs: _bindMatrix(fixture.inputs, row.matrix),
+            inputs: _nodeInputs(
+              resolved.setup,
+              fixture.inputs,
+              runtimeInputs,
+              row.matrix,
+            ),
             matrix: row.matrix,
             targetId: fixture.targetId ?? row.targetId,
             retry: suite.execution.retry,
@@ -312,7 +373,12 @@ final class CockpitSuiteCompiler {
               entryId: row.entry.id,
               kind: CockpitSuitePlanNodeKind.fixtureTeardown,
               compiledCase: teardownCase,
-              inputs: _bindMatrix(fixture.inputs, row.matrix),
+              inputs: _nodeInputs(
+                teardownCase,
+                fixture.inputs,
+                runtimeInputs,
+                row.matrix,
+              ),
               matrix: row.matrix,
               targetId: fixture.targetId ?? row.targetId,
               retry: suite.execution.retry,
@@ -360,6 +426,7 @@ final class CockpitSuiteCompiler {
     Map<String, _ResolvedFixture> fixtures,
     Map<String, List<_CaseRow>> rowsByEntry,
     Map<String, _NodeBuilder> builders,
+    Map<String, Object?> runtimeInputs,
   ) {
     final consumers = <String, Set<String>>{};
     for (final entry in suite.cases) {
@@ -382,7 +449,12 @@ final class CockpitSuiteCompiler {
         entryId: fixtureId,
         kind: CockpitSuitePlanNodeKind.fixtureSetup,
         compiledCase: resolved.setup,
-        inputs: fixture.inputs,
+        inputs: _nodeInputs(
+          resolved.setup,
+          fixture.inputs,
+          runtimeInputs,
+          const <String, Object?>{},
+        ),
         matrix: const <String, Object?>{},
         targetId: fixture.targetId,
         retry: suite.execution.retry,
@@ -402,7 +474,12 @@ final class CockpitSuiteCompiler {
         entryId: fixtureId,
         kind: CockpitSuitePlanNodeKind.fixtureTeardown,
         compiledCase: teardownCase,
-        inputs: fixture.inputs,
+        inputs: _nodeInputs(
+          teardownCase,
+          fixture.inputs,
+          runtimeInputs,
+          const <String, Object?>{},
+        ),
         matrix: const <String, Object?>{},
         targetId: fixture.targetId,
         retry: suite.execution.retry,
@@ -622,6 +699,11 @@ String _nodeId(String kind, String owner, Object? identity) {
       .toString();
   return '${kind}_${digest.substring(0, 24)}';
 }
+
+Set<String> _inputNames(CockpitCompiledTestCase compiled) => <String>{
+  for (final entry in compiled.testCase.variables.entries)
+    if (entry.value.source == CockpitTestVariableSource.input) entry.key,
+};
 
 Map<String, Object?> _bindMatrix(
   Map<String, Object?> input,

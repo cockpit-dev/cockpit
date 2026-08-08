@@ -17,6 +17,7 @@ import '../suite/cockpit_suite_report_writer.dart';
 import '../suite/cockpit_suite_row_attempt_executor.dart';
 import '../suite/cockpit_suite_scheduler.dart';
 import '../test/cockpit_test_document_compiler.dart';
+import '../test/cockpit_test_execution_plan.dart';
 import '../test/cockpit_test_safety_policy.dart';
 import '../test/cockpit_test_secret_resolver.dart';
 import '../test/cockpit_test_variable_binder.dart';
@@ -105,6 +106,7 @@ final class CockpitSuiteRunAdapterFactory {
       final plan = await const CockpitSuiteCompiler().compile(
         compiledSuite: compiled,
         resolver: _documents,
+        inputs: submission.inputs,
       );
       final runId = 'rn-${context.requestId}';
       final reservation = await _runStore.reserve(
@@ -639,13 +641,25 @@ final class _SuiteAttemptExecution
     }
     final compiled = node.compiledCase;
     final testCase = compiled.testCase;
-    final plan = CockpitTestVariableBinder().bind(
-      compiled,
-      inputs: node.inputs,
-    );
+    final startedAt = _utcNow();
+    late final CockpitTestExecutionPlan plan;
+    try {
+      plan = CockpitTestVariableBinder().bind(compiled, inputs: node.inputs);
+    } on CockpitTestBindingException catch (error) {
+      return _suiteRuntimeFailure(
+        attemptId: attemptId,
+        attemptNumber: attemptNumber,
+        startedAt: startedAt,
+        targetId: node.targetId ?? 'unassigned',
+        code: error.error.code.name,
+        message: error.error.message,
+        category: CockpitErrorCategory.invalidInput,
+        retryable: false,
+        details: <String, Object?>{'testError': error.error.toJson()},
+      );
+    }
     late final CockpitWorkerHealthySession session;
     late final _SuiteRowResourceBoundary? rowBoundary;
-    final startedAt = _utcNow();
     try {
       session = await _selectSession(node);
       rowBoundary = await _rowResourceBoundary(node, session);
@@ -1041,17 +1055,24 @@ final class _SuiteAttemptExecution
         preferredResourceId: preferredResourceId,
       );
     } on CockpitApplicationServiceException catch (error) {
-      if (preferredResourceId == null ||
-          error.code != 'healthySessionNotFound') {
+      if (error.code != 'healthySessionNotFound' &&
+          error.code != 'healthySystemSessionNotFound') {
         rethrow;
       }
+      final requirements = node.compiledCase.testCase.target;
       throw CockpitApplicationServiceException(
         code: 'suiteSessionUnavailable',
-        message:
-            'The session required by the durable suite checkpoint is unavailable.',
+        message: preferredResourceId == null
+            ? 'No compatible healthy ${requirements.targetKind} session is '
+                  'available for this suite case.'
+            : 'The session required by the durable suite checkpoint is unavailable.',
         details: <String, Object?>{
           'nodeId': node.nodeId,
-          'sessionResourceId': preferredResourceId,
+          'targetId': ?node.targetId,
+          'targetKind': requirements.targetKind,
+          'platform': requirements.platform,
+          'plane': requirements.plane.name,
+          'sessionResourceId': ?preferredResourceId,
         },
       );
     }
@@ -1163,13 +1184,13 @@ final class _SuiteAttemptExecution
         )
         .map((event) => event.attemptId!)
         .toSet();
+    final drafts = <CockpitWorkerEventDraft>[];
     for (var index = 0; index < caseNodes.length; index += 1) {
       final node = caseNodes[index];
       final testCase = report.cases[index];
       for (final attempt in testCase.attempts) {
         if (!completedAttemptIds.add(attempt.attemptId)) continue;
-        await _eventStore.append(
-          runId,
+        drafts.add(
           CockpitWorkerEventDraft(
             kind: 'attempt.completed',
             entityKind: CockpitRunEventEntityKind.attempt,
@@ -1193,8 +1214,7 @@ final class _SuiteAttemptExecution
             event.outcome == testCase.outcome,
       );
       if (alreadyCompleted) continue;
-      await _eventStore.append(
-        runId,
+      drafts.add(
         CockpitWorkerEventDraft(
           kind: 'case.completed',
           entityKind: CockpitRunEventEntityKind.testCase,
@@ -1210,6 +1230,7 @@ final class _SuiteAttemptExecution
         ),
       );
     }
+    await _eventStore.appendBatch(runId, drafts);
   }
 
   CockpitTestAttemptReport _suiteRuntimeFailure({
@@ -1254,9 +1275,9 @@ final class _SuiteAttemptExecution
     List<CockpitArtifactResource> artifacts, {
     required bool includeAttemptCompletion,
   }) async {
+    final drafts = <CockpitWorkerEventDraft>[];
     for (final step in result.steps) {
-      await _eventStore.append(
-        runId,
+      drafts.add(
         CockpitWorkerEventDraft(
           kind: 'step.${step.status.name}',
           entityKind: CockpitRunEventEntityKind.step,
@@ -1282,38 +1303,39 @@ final class _SuiteAttemptExecution
         ),
       );
     }
-    if (!includeAttemptCompletion) return;
-    final outcome = _runOutcome(result.outcome);
-    final failure = result.primaryError == null
-        ? null
-        : CockpitFailure(
-            primary: _apiError(result.primaryError!),
-            warnings: <CockpitApiWarning>[
-              for (final warning in result.cleanupErrors)
-                CockpitApiWarning(
-                  stage: CockpitWarningStage.cleanup,
-                  error: _apiError(warning),
-                ),
-            ],
-          );
-    await _eventStore.append(
-      runId,
-      CockpitWorkerEventDraft(
-        kind: 'attempt.completed',
-        entityKind: CockpitRunEventEntityKind.attempt,
-        caseId: result.context.caseId,
-        attemptId: result.context.attemptId,
-        outcome: outcome,
-        targetId: result.targetId,
-        requestedPlane: result.requestedPlane,
-        actualPlane: result.actualPlane,
-        failure: failure,
-        artifacts: artifacts
-            .where((artifact) => artifact.kind == 'attempt.manifest')
-            .map((artifact) => artifact.reference)
-            .toList(growable: false),
-      ),
-    );
+    if (includeAttemptCompletion) {
+      final outcome = _runOutcome(result.outcome);
+      final failure = result.primaryError == null
+          ? null
+          : CockpitFailure(
+              primary: _apiError(result.primaryError!),
+              warnings: <CockpitApiWarning>[
+                for (final warning in result.cleanupErrors)
+                  CockpitApiWarning(
+                    stage: CockpitWarningStage.cleanup,
+                    error: _apiError(warning),
+                  ),
+              ],
+            );
+      drafts.add(
+        CockpitWorkerEventDraft(
+          kind: 'attempt.completed',
+          entityKind: CockpitRunEventEntityKind.attempt,
+          caseId: result.context.caseId,
+          attemptId: result.context.attemptId,
+          outcome: outcome,
+          targetId: result.targetId,
+          requestedPlane: result.requestedPlane,
+          actualPlane: result.actualPlane,
+          failure: failure,
+          artifacts: artifacts
+              .where((artifact) => artifact.kind == 'attempt.manifest')
+              .map((artifact) => artifact.reference)
+              .toList(growable: false),
+        ),
+      );
+    }
+    await _eventStore.appendBatch(runId, drafts);
   }
 
   CockpitTestAttemptReport _attemptReport(

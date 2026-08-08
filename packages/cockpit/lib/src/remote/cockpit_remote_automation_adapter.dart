@@ -1,13 +1,16 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:cockpit_protocol/cockpit_protocol.dart';
 import 'package:path/path.dart' as p;
 
 import '../adapters/cockpit_automation_adapter.dart';
+import '../adapters/cockpit_active_operation_aborter.dart';
 import '../system_control/cockpit_visual_matcher.dart';
 import 'cockpit_remote_session_client.dart';
 
-final class CockpitRemoteAutomationAdapter implements CockpitAutomationAdapter {
+final class CockpitRemoteAutomationAdapter
+    implements CockpitAutomationAdapter, CockpitActiveOperationAborter {
   CockpitRemoteAutomationAdapter({
     required CockpitRemoteSessionClient client,
     required String workspaceRoot,
@@ -18,6 +21,7 @@ final class CockpitRemoteAutomationAdapter implements CockpitAutomationAdapter {
 
   final CockpitRemoteSessionClient _client;
   final CockpitVisualMatcher _visualMatcher;
+  final Set<Completer<void>> _activeCancellations = <Completer<void>>{};
 
   @override
   Future<CockpitCapabilities> describeCapabilities() async {
@@ -45,16 +49,38 @@ final class CockpitRemoteAutomationAdapter implements CockpitAutomationAdapter {
   }
 
   @override
-  Future<CockpitCommandExecution> execute(CockpitCommand command) {
-    if (command.commandType == CockpitCommandType.assertScreenshot) {
-      return _assertScreenshot(command);
+  Future<CockpitCommandExecution> execute(CockpitCommand command) async {
+    final cancellation = Completer<void>();
+    _activeCancellations.add(cancellation);
+    try {
+      if (command.commandType == CockpitCommandType.assertScreenshot) {
+        return await _assertScreenshot(
+          command,
+          cancellation: cancellation.future,
+        );
+      }
+      return await _client.executeDetailed(
+        command,
+        cancellation: cancellation.future,
+      );
+    } finally {
+      _activeCancellations.remove(cancellation);
     }
-    return _client.executeDetailed(command);
+  }
+
+  @override
+  Future<void> abortActiveOperation() async {
+    for (final cancellation in _activeCancellations.toList(growable: false)) {
+      if (!cancellation.isCompleted) {
+        cancellation.complete();
+      }
+    }
   }
 
   Future<CockpitCommandExecution> _assertScreenshot(
-    CockpitCommand command,
-  ) async {
+    CockpitCommand command, {
+    required Future<void> cancellation,
+  }) async {
     final stopwatch = Stopwatch()..start();
     final baseline = command.parameters['baseline'];
     if (baseline is! String || baseline.trim().isEmpty) {
@@ -96,6 +122,7 @@ final class CockpitRemoteAutomationAdapter implements CockpitAutomationAdapter {
           cropLocator: configuredCapture?.cropLocator ?? command.locator,
         ),
       ),
+      cancellation: cancellation,
     );
     if (!capture.result.success) {
       return CockpitCommandExecution(

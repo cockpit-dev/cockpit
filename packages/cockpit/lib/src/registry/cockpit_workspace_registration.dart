@@ -17,10 +17,12 @@ extension CockpitWorkspaceRegistrationOperations on CockpitWorkspaceRegistry {
       _confirmAttestedRoot(state, rootAuthority, target.directory.path);
       final samePath = state.workspaces
           .where(
-            (value) => _lexicalPaths.equals(
-              value.canonicalPath,
-              target.directory.path,
-            ),
+            (value) =>
+                value.state != CockpitWorkspaceState.retired &&
+                _lexicalPaths.equals(
+                  value.canonicalPath,
+                  target.directory.path,
+                ),
           )
           .toList();
       var freshTarget = await _reattestMatching(
@@ -138,10 +140,7 @@ extension CockpitWorkspaceRegistrationOperations on CockpitWorkspaceRegistry {
           value.workspaceId == marker.workspaceId ||
           value.checkoutId == marker.checkoutId,
     )) {
-      throw const CockpitRegistryException(
-        code: 'workspaceRetired',
-        message: 'A retired workspace identity cannot be reauthorized.',
-      );
+      return _createLocal(state, rootId, target);
     }
     final candidates = state.workspaces
         .where(

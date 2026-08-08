@@ -10,13 +10,10 @@ final class CockpitSessionCommand extends Command<int> {
       CockpitLeafCommand(
         runtime: runtime,
         name: 'list',
-        description: 'List local session handles with current reachability.',
+        description: 'List saved local session handles without reconnecting.',
         action: (_) async {
           final handles = await runtime.sessionHandles();
-          final dev = CockpitDevRuntime(runtime);
-          final items = await Future.wait(
-            handles.map((handle) => _sessionListItem(dev, handle)),
-          );
+          final items = handles.map(_sessionListItem).toList(growable: false);
           await runtime.success(<String, Object?>{
             'totalCount': items.length,
             'items': items,
@@ -111,49 +108,7 @@ final class CockpitSessionCommand extends Command<int> {
   String get description => 'Manage short local references to app sessions.';
 }
 
-Future<Map<String, Object?>> _sessionListItem(
-  CockpitDevRuntime dev,
-  CockpitCliSessionHandle handle,
-) async {
-  final stored = handle.toJson();
-  if (!handle.isDevelopment) return stored;
-  if (handle.lifecycle == 'stopped') {
-    return <String, Object?>{...stored, 'reachable': false};
-  }
-  try {
-    final result = await dev.invoke(
-      handle,
-      'session.development.get',
-      <String, Object?>{'sessionId': handle.sessionId},
-    );
-    if (!dev.operationSucceeded(result)) {
-      return <String, Object?>{
-        ...stored,
-        'lifecycle': 'crashed',
-        'reachable': false,
-      };
-    }
-    final status = result.output?['status'];
-    final state = status is Map<Object?, Object?> ? status['state'] : null;
-    final ready =
-        state == 'ready' &&
-        status is Map<Object?, Object?> &&
-        status['appReachable'] == true &&
-        status['remoteSessionReachable'] == true;
-    return <String, Object?>{
-      ...stored,
-      'lifecycle': ready
-          ? 'ready'
-          : state == 'stopped'
-          ? 'stopped'
-          : 'crashed',
-      'reachable': ready,
-    };
-  } on Object {
-    return <String, Object?>{
-      ...stored,
-      'lifecycle': 'unknown',
-      'reachable': false,
-    };
-  }
+Map<String, Object?> _sessionListItem(CockpitCliSessionHandle handle) {
+  final stored = handle.toJson()..remove('lifecycle');
+  return <String, Object?>{...stored, 'lastState': handle.lifecycle};
 }

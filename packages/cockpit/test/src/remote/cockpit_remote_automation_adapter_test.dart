@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -105,6 +106,62 @@ void main() {
       );
     },
   );
+
+  test('remote automation adapter aborts its active HTTP command', () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    final requestStarted = Completer<void>();
+    final releaseResponse = Completer<void>();
+    addTearDown(() async {
+      if (!releaseResponse.isCompleted) {
+        releaseResponse.complete();
+      }
+      await server.close(force: true);
+    });
+
+    server.listen((request) async {
+      requestStarted.complete();
+      await releaseResponse.future;
+      try {
+        request.response.headers.contentType = ContentType.json;
+        request.response.write(
+          jsonEncode(
+            CockpitCommandResult(
+              success: true,
+              commandId: 'stalled-command',
+              commandType: CockpitCommandType.waitFor,
+              durationMs: 1,
+            ).toJson(),
+          ),
+        );
+        await request.response.close();
+      } on Object {
+        // The client intentionally closes the request during cancellation.
+      }
+    });
+
+    final adapter = CockpitRemoteAutomationAdapter(
+      client: CockpitRemoteSessionClient(
+        baseUri: Uri.parse('http://127.0.0.1:${server.port}'),
+      ),
+      workspaceRoot: Directory.current.path,
+    );
+    final execution = adapter.execute(
+      CockpitCommand(
+        commandId: 'stalled-command',
+        commandType: CockpitCommandType.waitFor,
+        locator: const CockpitLocator(route: '/never'),
+        timeoutMs: 500,
+      ),
+    );
+    await requestStarted.future;
+
+    final cancellationExpectation = expectLater(
+      execution,
+      throwsA(isA<CockpitRemoteCommandCancelledException>()),
+    );
+    await adapter.abortActiveOperation();
+    await cancellationExpectation;
+  });
 
   test('remote adapter compares Flutter-view screenshots locally', () async {
     final workspace = await Directory.systemTemp.createTemp(

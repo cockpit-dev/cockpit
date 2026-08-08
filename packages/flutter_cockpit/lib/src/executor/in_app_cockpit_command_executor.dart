@@ -1,7 +1,6 @@
 // ignore_for_file: deprecated_member_use
 
 import 'dart:async';
-import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
@@ -76,8 +75,10 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
     required CockpitTargetRegistry registry,
     CockpitCaptureHandler? captureHandler,
     CockpitSnapshotProvider? snapshotProvider,
+    CockpitLocatorProbe? locatorProbe,
     CockpitPostActionSettler? postActionSettler,
     CockpitScrollStepHandler? scrollStepHandler,
+    bool scrollStepProbesTarget = false,
     CockpitEnsureVisibleHandler? ensureVisibleHandler,
     CockpitGestureHandler? gestureHandler,
     CockpitNetworkActivityClearer? clearNetworkActivityHandler,
@@ -97,8 +98,10 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
          captureHandler: captureHandler,
          snapshotProvider:
              snapshotProvider ?? _defaultSnapshotProvider(registry),
+         locatorProbe: locatorProbe,
          postActionSettler: postActionSettler ?? _defaultPostActionSettler,
          scrollStepHandler: scrollStepHandler,
+         scrollStepProbesTarget: scrollStepProbesTarget,
          ensureVisibleHandler: ensureVisibleHandler,
          gestureHandler: gestureHandler,
          clearNetworkActivityHandler: clearNetworkActivityHandler,
@@ -1374,6 +1377,135 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
       }
     }
 
+    CockpitScrollStepResult mergeScrollProbeSegment(
+      CockpitScrollStepResult? aggregate,
+      CockpitScrollStepResult segment, {
+      required int segmentCount,
+      bool targetVisible = false,
+    }) {
+      final didScroll = (aggregate?.didScroll ?? false) || segment.didScroll;
+      return CockpitScrollStepResult(
+        didScroll: didScroll,
+        strategy: didScroll && segmentCount > 1 && segment.strategy != 'none'
+            ? '${segment.strategy}_probe'
+            : segment.strategy,
+        scrollableKey: segment.scrollableKey ?? aggregate?.scrollableKey,
+        scrollablePath: segment.scrollablePath ?? aggregate?.scrollablePath,
+        scrollableTypeName:
+            segment.scrollableTypeName ?? aggregate?.scrollableTypeName,
+        scrollableCandidateIndex:
+            segment.scrollableCandidateIndex ??
+            aggregate?.scrollableCandidateIndex,
+        scrollableCandidateCount:
+            segment.scrollableCandidateCount ??
+            aggregate?.scrollableCandidateCount,
+        pixelsBefore: aggregate?.pixelsBefore ?? segment.pixelsBefore,
+        pixelsAfter: segment.pixelsAfter ?? aggregate?.pixelsAfter,
+        nextPixels: segment.nextPixels ?? aggregate?.nextPixels,
+        minScrollExtent: segment.minScrollExtent ?? aggregate?.minScrollExtent,
+        maxScrollExtent: segment.maxScrollExtent ?? aggregate?.maxScrollExtent,
+        viewportDimension:
+            segment.viewportDimension ?? aggregate?.viewportDimension,
+        acceptsUserOffset:
+            segment.acceptsUserOffset ?? aggregate?.acceptsUserOffset,
+        allowsProgrammaticScroll:
+            segment.allowsProgrammaticScroll ??
+            aggregate?.allowsProgrammaticScroll,
+        hadGestureTarget:
+            (aggregate?.hadGestureTarget ?? false) || segment.hadGestureTarget,
+        hadSemanticAction:
+            (aggregate?.hadSemanticAction ?? false) ||
+            segment.hadSemanticAction,
+        matchedRegistryTarget:
+            (aggregate?.matchedRegistryTarget ?? false) ||
+            segment.matchedRegistryTarget,
+        targetVisibilityObserved:
+            (aggregate?.targetVisibilityObserved ?? false) ||
+            segment.targetVisibilityObserved ||
+            targetVisible,
+        targetMounted:
+            (aggregate?.targetMounted ?? false) ||
+            segment.targetMounted ||
+            targetVisible,
+        targetVisible:
+            (aggregate?.targetVisible ?? false) ||
+            segment.targetVisible ||
+            targetVisible,
+      );
+    }
+
+    Future<CockpitScrollStepResult> runScrollAttempt(
+      bool currentReverse,
+    ) async {
+      if (_context.scrollStepProbesTarget) {
+        return scrollStepHandler(
+          reverse: currentReverse,
+          viewportFraction: viewportFraction,
+          scrollableKey: scrollableKey,
+          targetLocator: locator,
+          scrollableLocator: effectiveScrollableLocator(),
+          duration: durationPerStep,
+          gestureProfile: gestureProfile,
+          continuous: continuous,
+          postScrollEnsureVisible: postScrollEnsureVisible,
+        );
+      }
+
+      final clampedFraction = viewportFraction.clamp(0.1, 0.95).toDouble();
+      final segmentCount = clampedFraction < 0.4
+          ? 1
+          : (clampedFraction / 0.2).floor().clamp(1, 4);
+      final segmentFraction = clampedFraction / segmentCount;
+      CockpitScrollStepResult? aggregate;
+
+      for (
+        var segmentIndex = 0;
+        segmentIndex < segmentCount;
+        segmentIndex += 1
+      ) {
+        final segment = await scrollStepHandler(
+          reverse: currentReverse,
+          viewportFraction: segmentFraction,
+          scrollableKey: scrollableKey,
+          targetLocator: locator,
+          scrollableLocator: effectiveScrollableLocator(),
+          duration: durationPerStep,
+          gestureProfile: gestureProfile,
+          continuous: continuous,
+          postScrollEnsureVisible: postScrollEnsureVisible,
+        );
+        aggregate = mergeScrollProbeSegment(
+          aggregate,
+          segment,
+          segmentCount: segmentCount,
+        );
+        if (!segment.didScroll || segmentCount == 1) {
+          break;
+        }
+
+        final observationStopwatch = Stopwatch()..start();
+        await _postActionSettler();
+        await _waitForVisualContinuity(
+          commandType: CockpitCommandType.scrollUntilVisible,
+          routeChanged: false,
+        );
+        scrollObservationDurationMs += observationStopwatch.elapsedMilliseconds;
+        final targetVisible =
+            _scrollLocatorResolution(command) != null ||
+            (allowsGenericResolution && _resolveProbe(command).isSuccess);
+        if (targetVisible) {
+          return mergeScrollProbeSegment(
+            aggregate,
+            segment,
+            segmentCount: segmentCount,
+            targetVisible: true,
+          );
+        }
+      }
+
+      return aggregate ?? const CockpitScrollStepResult(didScroll: false);
+    }
+
     if (allowsGenericResolution && resolution.isSuccess) {
       final success = await buildScrollSuccess(resolution);
       if (success != null) {
@@ -1425,6 +1557,7 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
       while (true) {
         final directionName = currentReverse ? 'reverse' : 'forward';
         var directionStoppedWithoutProgress = false;
+        CockpitScrollStepResult? lastDirectionScrollStep;
         if (!directionsTried.contains(directionName)) {
           directionsTried.add(directionName);
         }
@@ -1432,19 +1565,10 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
         for (var attempt = 0; attempt < maxScrolls; attempt += 1) {
           scrollAttempts += 1;
           final handlerStopwatch = Stopwatch()..start();
-          final scrollStep = await scrollStepHandler(
-            reverse: currentReverse,
-            viewportFraction: viewportFraction,
-            scrollableKey: scrollableKey,
-            targetLocator: locator,
-            scrollableLocator: effectiveScrollableLocator(),
-            duration: durationPerStep,
-            gestureProfile: gestureProfile,
-            continuous: continuous,
-            postScrollEnsureVisible: postScrollEnsureVisible,
-          );
+          final scrollStep = await runScrollAttempt(currentReverse);
           scrollHandlerDurationMs += handlerStopwatch.elapsedMilliseconds;
           lastScrollStep = scrollStep;
+          lastDirectionScrollStep = scrollStep;
           recordScrollableCandidate(scrollStep, reverse: currentReverse);
           final canResolveStepTarget =
               !scrollStep.targetVisibilityObserved || scrollStep.targetVisible;
@@ -1584,11 +1708,22 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
             candidateCount = 1;
             continue candidateLoop;
           }
+          if (!usedDirectionFallback &&
+              _shouldTryOppositeScrollDirection(currentReverse, scrollStep)) {
+            usedDirectionFallback = true;
+            currentReverse = !currentReverse;
+            continue directionLoop;
+          }
         }
 
         if (!directionStoppedWithoutProgress &&
             !usedDirectionFallback &&
-            maxScrolls > 0) {
+            maxScrolls > 0 &&
+            lastDirectionScrollStep != null &&
+            _shouldTryOppositeScrollDirection(
+              currentReverse,
+              lastDirectionScrollStep,
+            )) {
           usedDirectionFallback = true;
           currentReverse = !currentReverse;
           continue directionLoop;
@@ -2831,6 +2966,13 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
         ),
       );
     }
+    if (_boolParameter(command, 'probe') ?? false) {
+      return _executeAssertTextProbe(
+        command,
+        stopwatch,
+        expectedText: expectedText,
+      );
+    }
 
     await _settleBeforeObservation();
     final timeoutMs = command.timeoutMs ?? _defaultAssertSettleTimeoutMs;
@@ -2934,6 +3076,13 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
           message:
               'waitFor requires a locator, routeName parameter, or text parameter.',
         ),
+      );
+    }
+    if (_boolParameter(command, 'probe') ?? false) {
+      return _executeWaitForProbe(
+        command,
+        stopwatch,
+        waitCondition: waitCondition,
       );
     }
     if (_boolParameter(command, 'absent') ?? false) {
@@ -3042,6 +3191,242 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
         },
       ),
     );
+  }
+
+  CockpitCommandExecution _executeAssertTextProbe(
+    CockpitCommand command,
+    Stopwatch stopwatch, {
+    required String expectedText,
+  }) {
+    final locator = command.locator;
+    final useGlobalTextObservation =
+        locator == null ||
+        _isSimpleLocatorFor(locator, CockpitLocatorKind.text);
+    final textMatchMode = _textMatchModeParameter(command);
+    if (useGlobalTextObservation) {
+      final locatorProbe = _context.locatorProbe;
+      if (locatorProbe != null) {
+        final resolution = locatorProbe(
+          locator ??
+              CockpitLocator(text: expectedText, matchMode: textMatchMode),
+        );
+        if (resolution.isSuccess &&
+            _targetContainsText(
+              resolution.target!,
+              expectedText,
+              matchMode: textMatchMode,
+            )) {
+          return _successExecution(
+            command: command,
+            durationMs: stopwatch.elapsedMilliseconds,
+            locatorResolution: resolution.locatorResolution,
+          );
+        }
+        return _failureExecution(
+          command: command,
+          durationMs: stopwatch.elapsedMilliseconds,
+          locatorResolution: resolution.locatorResolution,
+          error:
+              resolution.error ??
+              CockpitCommandError.assertionFailed(
+                message: 'Resolved target does not contain "$expectedText".',
+                details: <String, Object?>{
+                  'probe': true,
+                  'expectedText': expectedText,
+                  'routeName': _currentRouteName(),
+                },
+              ),
+        );
+      }
+      final visibleTargets = _registry.visibleTargets;
+      if (_visibleTargetsContainText(
+        visibleTargets,
+        expectedText,
+        matchMode: textMatchMode,
+      )) {
+        return _successExecution(
+          command: command,
+          durationMs: stopwatch.elapsedMilliseconds,
+        );
+      }
+      return _failureExecution(
+        command: command,
+        durationMs: stopwatch.elapsedMilliseconds,
+        error: CockpitCommandError.assertionFailed(
+          message: 'Expected visible text "$expectedText" was not found.',
+          details: <String, Object?>{
+            'probe': true,
+            'expectedText': expectedText,
+            'routeName': _currentRouteName(),
+            'visibleTextCandidates': _visibleTextCandidates(
+              visibleTargets,
+            ).take(12).toList(growable: false),
+          },
+        ),
+      );
+    }
+
+    final resolution = _resolveProbe(command);
+    if (resolution.isSuccess &&
+        _targetContainsText(
+          resolution.target!,
+          expectedText,
+          matchMode: textMatchMode,
+        )) {
+      return _successExecution(
+        command: command,
+        durationMs: stopwatch.elapsedMilliseconds,
+        locatorResolution: resolution.locatorResolution,
+      );
+    }
+    return _failureExecution(
+      command: command,
+      durationMs: stopwatch.elapsedMilliseconds,
+      locatorResolution: resolution.locatorResolution,
+      error:
+          resolution.error ??
+          CockpitCommandError.assertionFailed(
+            message: 'Resolved target does not contain "$expectedText".',
+            details: <String, Object?>{
+              'probe': true,
+              'expectedText': expectedText,
+              'routeName': _currentRouteName(),
+            },
+          ),
+    );
+  }
+
+  CockpitCommandExecution _executeWaitForProbe(
+    CockpitCommand command,
+    Stopwatch stopwatch, {
+    required String waitCondition,
+  }) {
+    final absent = _boolParameter(command, 'absent') ?? false;
+    final routeName = _expectedRouteName(command);
+    if (routeName != null) {
+      final minVisibleTargets = _minVisibleTargetsForWait(command);
+      final matched =
+          _currentRouteName() == routeName &&
+          _hasEnoughVisibleTargetsForProbe(minVisibleTargets);
+      if (matched != absent) {
+        return _successExecution(
+          command: command,
+          durationMs: stopwatch.elapsedMilliseconds,
+          locatorResolution: CockpitLocatorResolution(
+            matchedKind: CockpitLocatorKind.route,
+            matchedValue: routeName,
+          ),
+        );
+      }
+      return _failureExecution(
+        command: command,
+        durationMs: stopwatch.elapsedMilliseconds,
+        error: CockpitCommandError.timeout(
+          message: absent
+              ? 'Route "$routeName" is currently active.'
+              : 'Route "$routeName" is not currently ready.',
+          details: <String, Object?>{
+            'probe': true,
+            'waitCondition': waitCondition,
+            'absent': absent,
+            'routeName': _currentRouteName(),
+            'minVisibleTargets': minVisibleTargets,
+          },
+        ),
+      );
+    }
+
+    final locator = command.locator;
+    final expectedText = _expectedText(command);
+    CockpitLocatorResolution? locatorResolution;
+    CockpitCommandError? resolutionError;
+    var matched = false;
+    List<CockpitTarget>? visibleTargets;
+    if (expectedText != null &&
+        (locator == null ||
+            _isSimpleLocatorFor(locator, CockpitLocatorKind.text))) {
+      final matchMode = locator?.matchMode ?? _textMatchModeParameter(command);
+      final locatorProbe = _context.locatorProbe;
+      if (locatorProbe != null) {
+        final resolution = locatorProbe(
+          locator ?? CockpitLocator(text: expectedText, matchMode: matchMode),
+        );
+        matched = resolution.isSuccess;
+        locatorResolution = resolution.locatorResolution;
+        resolutionError = resolution.error;
+      } else {
+        visibleTargets = _registry.visibleTargets;
+        matched = _visibleTargetsContainText(
+          visibleTargets,
+          expectedText,
+          matchMode: matchMode,
+        );
+        if (matched) {
+          locatorResolution = CockpitLocatorResolution(
+            matchedKind: CockpitLocatorKind.text,
+            matchedValue: expectedText,
+          );
+        }
+      }
+    } else if (locator != null) {
+      final resolution = _resolveProbe(command);
+      matched = resolution.isSuccess;
+      locatorResolution = resolution.locatorResolution;
+      resolutionError = resolution.error;
+    }
+
+    if (matched != absent) {
+      return _successExecution(
+        command: command,
+        durationMs: stopwatch.elapsedMilliseconds,
+        locatorResolution: locatorResolution,
+      );
+    }
+    if (!absent && resolutionError != null) {
+      return _failureExecution(
+        command: command,
+        durationMs: stopwatch.elapsedMilliseconds,
+        error: resolutionError,
+      );
+    }
+    return _failureExecution(
+      command: command,
+      durationMs: stopwatch.elapsedMilliseconds,
+      locatorResolution: locatorResolution,
+      error: CockpitCommandError.timeout(
+        message: absent
+            ? 'The probed target is currently visible.'
+            : 'The probed target is not currently visible.',
+        details: <String, Object?>{
+          'probe': true,
+          'waitCondition': waitCondition,
+          'absent': absent,
+          'routeName': _currentRouteName(),
+          if (visibleTargets != null)
+            'visibleTextCandidates': _visibleTextCandidates(
+              visibleTargets,
+            ).take(12).toList(growable: false),
+        },
+      ),
+    );
+  }
+
+  bool _hasEnoughVisibleTargetsForProbe(int minVisibleTargets) {
+    if (minVisibleTargets <= 0) {
+      return true;
+    }
+    if (minVisibleTargets == 1) {
+      return _registry.hasRouteReadyVisibleTargets;
+    }
+    return _registry.routeReadyVisibleTargets.length >= minVisibleTargets;
+  }
+
+  CockpitTargetResolutionResult _resolveProbe(CockpitCommand command) {
+    final locator = command.locator;
+    if (locator == null) {
+      return _resolve(command);
+    }
+    return _context.locatorProbe?.call(locator) ?? _resolve(command);
   }
 
   Future<CockpitCommandExecution> _executeWaitForAbsent(
@@ -4009,12 +4394,14 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
     List<CockpitArtifactRef> artifacts = const <CockpitArtifactRef>[],
     Map<String, Object?>? snapshot,
   }) {
-    final enrichedError = _enrichFailureError(
-      command: command,
-      durationMs: durationMs,
-      error: error,
-      snapshot: snapshot,
-    );
+    final enrichedError = (_boolParameter(command, 'probe') ?? false)
+        ? error
+        : _enrichFailureError(
+            command: command,
+            durationMs: durationMs,
+            error: error,
+            snapshot: snapshot,
+          );
     return CockpitCommandExecution(
       result: CockpitCommandResult(
         success: false,
@@ -4081,30 +4468,32 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
     CockpitKeyEventRequest request,
     CockpitCommandType type,
   ) async {
-    // `flutter_test` still drives synthetic key delivery through KeyEventManager.
-    // The newer HardwareKeyboard handler API is observer-oriented and does not
-    // provide an imperative dispatch surface for app-side automation.
-    bool dispatchKeyData(ui.KeyData keyData) =>
-        ServicesBinding.instance.keyEventManager.handleKeyData(keyData);
+    bool dispatchKeyEvent(KeyEvent event) {
+      final hardwareHandled = HardwareKeyboard.instance.handleKeyEvent(event);
+      final focusHandled =
+          ServicesBinding.instance.keyEventManager.keyMessageHandler?.call(
+            KeyMessage(<KeyEvent>[event], null),
+          ) ??
+          false;
+      return hardwareHandled || focusHandled;
+    }
 
-    final physicalKey = request.physicalKey;
-    final keyData = switch (type) {
+    final physicalKey =
+        request.physicalKey ?? PhysicalKeyboardKey(request.logicalKey.keyId);
+    final keyEvent = switch (type) {
       CockpitCommandType.sendKeyEvent ||
-      CockpitCommandType.sendKeyDownEvent => ui.KeyData(
-        type: ui.KeyEventType.down,
-        physical: physicalKey?.usbHidUsage ?? 0,
-        logical: request.logicalKey.keyId,
+      CockpitCommandType.sendKeyDownEvent => KeyDownEvent(
+        physicalKey: physicalKey,
+        logicalKey: request.logicalKey,
         timeStamp: Duration.zero,
         character:
             request.character ?? _fallbackCharacterFor(request.logicalKey),
         synthesized: true,
       ),
-      CockpitCommandType.sendKeyUpEvent => ui.KeyData(
-        type: ui.KeyEventType.up,
-        physical: physicalKey?.usbHidUsage ?? 0,
-        logical: request.logicalKey.keyId,
+      CockpitCommandType.sendKeyUpEvent => KeyUpEvent(
+        physicalKey: physicalKey,
+        logicalKey: request.logicalKey,
         timeStamp: Duration.zero,
-        character: null,
         synthesized: true,
       ),
       _ => throw ArgumentError.value(
@@ -4113,17 +4502,15 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
         'Unsupported key event type.',
       ),
     };
-    final handled = dispatchKeyData(keyData);
+    final handled = dispatchKeyEvent(keyEvent);
     if (type != CockpitCommandType.sendKeyEvent) {
       return handled;
     }
-    final releaseHandled = dispatchKeyData(
-      ui.KeyData(
-        type: ui.KeyEventType.up,
-        physical: physicalKey?.usbHidUsage ?? 0,
-        logical: request.logicalKey.keyId,
+    final releaseHandled = dispatchKeyEvent(
+      KeyUpEvent(
+        physicalKey: physicalKey,
+        logicalKey: request.logicalKey,
         timeStamp: Duration.zero,
-        character: null,
         synthesized: true,
       ),
     );

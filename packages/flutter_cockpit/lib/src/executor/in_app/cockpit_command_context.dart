@@ -16,6 +16,8 @@ typedef CockpitCaptureHandler =
     Future<CockpitCaptureResult> Function(CockpitScreenshotRequest request);
 typedef CockpitSnapshotProvider =
     CockpitSnapshot Function({CockpitSnapshotOptions options});
+typedef CockpitLocatorProbe =
+    CockpitTargetResolutionResult Function(CockpitLocator locator);
 typedef CockpitPostActionSettler = Future<void> Function();
 typedef CockpitScrollStepHandler =
     Future<CockpitScrollStepResult> Function({
@@ -60,8 +62,10 @@ final class CockpitInAppCommandContext {
     required this.registry,
     required this.captureHandler,
     required this.snapshotProvider,
+    required this.locatorProbe,
     required this.postActionSettler,
     required this.scrollStepHandler,
+    required this.scrollStepProbesTarget,
     required this.ensureVisibleHandler,
     required this.gestureHandler,
     required this.clearNetworkActivityHandler,
@@ -80,8 +84,10 @@ final class CockpitInAppCommandContext {
   final CockpitTargetRegistry registry;
   final CockpitCaptureHandler? captureHandler;
   final CockpitSnapshotProvider snapshotProvider;
+  final CockpitLocatorProbe? locatorProbe;
   final CockpitPostActionSettler postActionSettler;
   final CockpitScrollStepHandler? scrollStepHandler;
+  final bool scrollStepProbesTarget;
   final CockpitEnsureVisibleHandler? ensureVisibleHandler;
   final CockpitGestureHandler? gestureHandler;
   final CockpitNetworkActivityClearer? clearNetworkActivityHandler;

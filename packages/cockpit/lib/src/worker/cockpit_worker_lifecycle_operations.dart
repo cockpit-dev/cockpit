@@ -280,14 +280,15 @@ final class CockpitWorkerLifecycleOperations {
         message: 'Worker target has not been launched.',
       );
     }
+    final resultProfile = values.profile(
+      defaultName: CockpitInteractiveResultProfileName.minimal,
+    );
     final result = await runWorkerApplicationOperation(
       context: context,
       operation: () => _readTarget.read(
         CockpitReadTargetRequest(
           target: handle,
-          resultProfile: values.profile(
-            defaultName: CockpitInteractiveResultProfileName.minimal,
-          ),
+          resultProfile: resultProfile,
           snapshotOptions: values.optionalSnapshotOptions(),
         ),
       ),
@@ -297,7 +298,8 @@ final class CockpitWorkerLifecycleOperations {
         ? null
         : await _registry.sessionIdForApp(latestApp.appId);
     Map<String, Object?>? systemControl;
-    if (latestApp != null) {
+    if (latestApp != null &&
+        resultProfile.name != CockpitInteractiveResultProfileName.minimal) {
       final described = await runWorkerApplicationOperation(
         context: context,
         operation: () => _systemControl.describe(

@@ -9,6 +9,25 @@ description: Use when application development or black-box E2E must inspect, con
 Public handles are numeric (`1`, `2`, ...). Use the globally installed `cockpit` executable
 everywhere. Live capabilities are authoritative.
 
+## Flutter Preflight
+
+Before running any `cockpit dev` command in a Flutter source checkout, first
+confirm that its development-only Cockpit shell is integrated. A normal Flutter
+app does not expose a Cockpit bridge by itself, so starting it first waits for a
+bridge that can never become ready.
+
+Check `pubspec.yaml` and `cockpit/main.dart`. The shell must keep production
+code untouched, resolve `flutter_cockpit` as a development dependency, wrap the
+real application root in `FlutterCockpitApp`, and install the Cockpit navigator
+observer for every Navigator the app owns. Run `flutter pub get` after changing
+the dependency. If any part is absent or does not match the app's actual public
+bootstrap/router API, read and complete [flutter.md](references/flutter.md)
+before `cockpit dev start`.
+
+Only an already integrated checkout takes the fast path below. `cockpit/main.dart`
+is the default development entrypoint; pass another entrypoint only when the
+checkout intentionally uses one.
+
 ## Choose The Command
 
 Use the highest-level command that owns the task:
@@ -63,18 +82,24 @@ for visible claims. Use `restart` only when reload cannot apply the change. Do n
 start a second app to recover a healthy session, and never restart or stop sessions
 other than the selected handle.
 
+On a human terminal, `dev start` reports its real launch stages on stderr while
+Flutter builds and the bridge becomes ready. Structured stdout remains clean;
+Agent/CI or redirected runs stay quiet, and `--format none` suppresses progress.
+Do not add polling, sleeps, or verbose flags just to prove that launch is active.
+
 Reads never relaunch stopped apps. Mutations may recover one owned crash. Use
 `cockpit dev start` to explicitly relaunch a stopped or crashed app. Bridge and
 port changes are reconciled internally.
 
 ## Sessions And Isolation
 
-The short handle is the only routine session selector. The current checkout
-automatically reuses its active handle, and `cockpit dev use HANDLE` changes that
-checkout's selection. The selection persists. Add `--session HANDLE` only when a
-command must select another concurrent session. A handle is scoped to its checkout:
-projects, worktrees, ports, targets, apps, network activity, and artifacts cannot
-cross-bind.
+The short handle is the only routine session selector. Cockpit stores one active
+handle per canonical Flutter project, guarded by checkout identity. Commands run
+inside that project reuse it automatically. One checkout may contain many Flutter
+projects, and one project may keep concurrent platform or target handles. `cockpit
+dev use HANDLE` changes the active selection for that handle's project. The selection persists.
+An explicit `--session HANDLE` selects exactly one command and never changes the
+saved active selection.
 
 ```bash
 cockpit session list
@@ -83,12 +108,18 @@ cockpit dev use 2
 cockpit dev status --session 2
 ```
 
-`session show` reports the checkout path and identity, workspace, entrypoint,
-platform/device, lifecycle, and current live state. Check it before a destructive
-mutation when concurrent apps look similar. Omitting `--session` is safe because the
-active selection is stored per checkout. In the unusual case of multiple sessions
-for one checkout, select once with `dev use`, or pass `--session HANDLE` on the one
-command that intentionally targets another session.
+`session show` reports the Flutter project, checkout path and identity, workspace,
+entrypoint, platform/device, lifecycle, and current live state. Check it before a
+destructive mutation when concurrent apps look similar. Omitting `--session` is safe
+when running inside the intended project and its active handle is the intended
+target. With concurrent targets for that project, select once with `dev use`, or
+pass `--session HANDLE` on the exact command. From a common ancestor containing
+multiple active projects, Cockpit fails as ambiguous instead of guessing.
+
+`session list` is a fast, side-effect-free local index: it never starts a worker,
+attaches Flutter, reconnects, or relaunches an app. Its `lastState` is the last saved
+state, not a live probe. Use `session show HANDLE` or `dev status --session HANDLE`
+only when current reachability is needed.
 
 Never register roots, targets, apps, ports, or runtime sessions manually for the
 fast path. If a session is unreachable, inspect `status` or `diagnose`; `dev start`
@@ -130,6 +161,10 @@ plus known `can`. Locator fields map to the actual command options:
 `--contains` and `--fuzzy` deliberately relax text/tooltip matching; conditions
 intersect and equal matches fail. Lazy lists expose only visible rows; filter or
 `dev scroll` first.
+
+`inspect` accepts one discovery query, not locator flags. Copy its returned `loc`
+fields into the action command. An off-screen lazy target may have no inspect match;
+pass that target directly to `dev scroll`, which owns mounting and reveal.
 
 ```bash
 cockpit dev inspect "Save changes"
@@ -266,10 +301,10 @@ cockpit artifact read --run-id RUN --artifact-id ARTIFACT --output /absolute/art
 after transport uncertainty and never invent a new key until `run get` proves the
 first submission does not exist.
 
-Case and suite runs reuse the current checkout's active development session when
-one exists. Pass `--session HANDLE` only to select another session in that checkout,
-or `--target-id TARGET` for an explicitly registered black-box target; the two
-selectors are mutually exclusive. Use `list --id ID` for exact lookup and add
+Case and suite runs reuse the current Flutter project's active development session
+when one exists. Pass `--session HANDLE` only to select another exact development
+session, or `--target-id TARGET` for an explicitly registered black-box target; the
+two selectors are mutually exclusive. Use `list --id ID` for exact lookup and add
 `--path SUBSTRING` only when mirrored templates or fixtures make an ID ambiguous.
 
 `run events` reads a bounded resumable SSE sequence until terminal or disconnect.

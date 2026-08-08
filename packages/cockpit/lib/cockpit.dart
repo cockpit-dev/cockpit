@@ -13,6 +13,7 @@ export 'src/foundation/cockpit_home.dart';
 export 'src/foundation/cockpit_permissions.dart';
 export 'src/foundation/cockpit_locked_json_store.dart';
 export 'src/foundation/cockpit_structured_input.dart';
+export 'src/foundation/cockpit_version.dart';
 export 'src/infrastructure/cockpit_sdk_environment.dart';
 export 'src/artifacts/cockpit_test_attempt_bundle_writer.dart'
     show

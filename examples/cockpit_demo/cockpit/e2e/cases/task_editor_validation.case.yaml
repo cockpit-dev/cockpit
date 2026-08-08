@@ -60,6 +60,7 @@ setup:
       locator:
         testId: cockpit-launch-configuration
         label: {$var: launchConfigurationLabel}
+        matchMode: contains
   - stepId: establishInboxBaseline
     description: Establish the case baseline
     timeoutMs: 15000
@@ -78,7 +79,7 @@ steps:
         - stepId: assertEditorTitle
           action:
             type: assertVisible
-            locator: {text: Task title}
+            locator: {testId: task-title-field}
       else:
         - stepId: assertUnexpectedInbox
           action:

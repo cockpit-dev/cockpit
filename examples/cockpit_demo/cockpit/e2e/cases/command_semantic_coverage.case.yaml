@@ -207,6 +207,18 @@ steps:
       type: tap
       locator: {testId: lab-key-pad-activator}
       activation: gesture
+  - stepId: waitForKeyPadFocus
+    timeoutMs: 12000
+    retry:
+      maxAttempts: 3
+      delayMs: 100
+      steps:
+        - stepId: verifyKeyPadFocus
+          action:
+            type: assertText
+            locator: {testId: lab-key-focus-status}
+            text: keyFocus:yes
+            matchMode: exact
   - stepId: sendKeyDown
     timeoutMs: 12000
     action:

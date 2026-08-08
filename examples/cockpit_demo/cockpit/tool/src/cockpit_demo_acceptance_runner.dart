@@ -384,7 +384,7 @@ final class CockpitDemoAcceptanceRunner {
           deadline: DateTime.now().toUtc().add(const Duration(minutes: 1)),
           input: <String, Object?>{
             'targetId': target.targetId,
-            'profile': 'minimal',
+            'profile': 'inspect',
           },
         ),
       );
@@ -508,6 +508,16 @@ final class CockpitDemoAcceptanceRunner {
         platformAppId: platformAppId,
         nativeLocatorSupported: nativeLocatorSupported,
       );
+
+      if (visualBaseline case final baseline?) {
+        await _applyVisualViewport(
+          api: api,
+          workspaceId: workspace.workspaceId,
+          sessionId: sessionId,
+          invocationId: invocationId,
+          baseline: baseline,
+        );
+      }
 
       advance('run', 'Submitting the indexed regression suite.');
       final accepted = await api.submitRun(
@@ -903,6 +913,8 @@ typedef _CockpitDemoVisualBaseline = ({
   String profile,
   String path,
   String captureProfile,
+  int? logicalWidth,
+  int? logicalHeight,
 });
 
 _CockpitDemoVisualBaseline? _visualBaselineForTarget({
@@ -918,26 +930,36 @@ _CockpitDemoVisualBaseline? _visualBaselineForTarget({
         profile: profile,
         path: 'e2e/baselines/android/settings.png',
         captureProfile: 'nativePreferred',
+        logicalWidth: null,
+        logicalHeight: null,
       ),
     ('ios', 'iphone-16-pro-1206x2622') when device.name == 'iPhone 16 Pro' => (
       profile: profile,
       path: 'e2e/baselines/ios/settings.png',
       captureProfile: 'nativePreferred',
+      logicalWidth: null,
+      logicalHeight: null,
     ),
     ('linux', 'linux-1280x720') => (
       profile: profile,
       path: 'e2e/baselines/linux/settings.png',
       captureProfile: 'flutterPreferred',
+      logicalWidth: 1280,
+      logicalHeight: 720,
     ),
     ('macos', 'macos-800x600') => (
       profile: profile,
       path: 'e2e/baselines/macos/settings.png',
       captureProfile: 'flutterPreferred',
+      logicalWidth: 800,
+      logicalHeight: 600,
     ),
     ('windows', 'windows-1028x681') => (
       profile: profile,
       path: 'e2e/baselines/windows/settings.png',
       captureProfile: 'flutterPreferred',
+      logicalWidth: 1028,
+      logicalHeight: 681,
     ),
     _ => null,
   };
@@ -948,6 +970,54 @@ _CockpitDemoVisualBaseline? _visualBaselineForTarget({
     );
   }
   return baseline;
+}
+
+Future<void> _applyVisualViewport({
+  required CockpitSupervisorApiClient api,
+  required String workspaceId,
+  required String sessionId,
+  required String invocationId,
+  required _CockpitDemoVisualBaseline baseline,
+}) async {
+  final width = baseline.logicalWidth;
+  final height = baseline.logicalHeight;
+  if (width == null || height == null) {
+    return;
+  }
+  final operation = await _operation(
+    api,
+    CockpitOperationInvocation(
+      kind: 'viewport.set',
+      workspaceId: workspaceId,
+      idempotencyKey: CockpitIdempotencyKey('$invocationId-viewport'),
+      deadline: DateTime.now().toUtc().add(const Duration(minutes: 2)),
+      input: <String, Object?>{
+        'sessionId': sessionId,
+        'width': width,
+        'height': height,
+      },
+    ),
+  );
+  final output = operation.output;
+  if (output == null) {
+    throw const FormatException(
+      'Visual viewport operation returned no result.',
+    );
+  }
+  final result = CockpitViewportResizeResult.fromJson(output);
+  final logicalWidth = result.logicalWidth;
+  final logicalHeight = result.logicalHeight;
+  if (!result.available ||
+      logicalWidth == null ||
+      logicalHeight == null ||
+      (logicalWidth - width).abs() > 0.5 ||
+      (logicalHeight - height).abs() > 0.5) {
+    throw FormatException(
+      'Visual profile ${baseline.profile} requires a ${width}x$height logical '
+      'viewport, but the target reported '
+      '${logicalWidth ?? 'unknown'}x${logicalHeight ?? 'unknown'}.',
+    );
+  }
 }
 
 String _launchConfigurationLabel({

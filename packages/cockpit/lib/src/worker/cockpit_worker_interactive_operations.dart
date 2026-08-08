@@ -114,7 +114,10 @@ final class CockpitWorkerInteractiveOperations {
       inspectUiService: inspectUi,
       inspectSurfaceService:
           inspectSurfaceService ??
-          CockpitInspectSurfaceService(inspectUiService: inspectUi),
+          CockpitInspectSurfaceService(
+            inspectUiService: inspectUi,
+            artifactTempFileFactory: artifactTempFileFactory,
+          ),
       readLogsService:
           readLogsService ?? CockpitReadLogsService(registry: retainedRegistry),
       readNetworkService:

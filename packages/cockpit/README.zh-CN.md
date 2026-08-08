@@ -69,10 +69,12 @@ cockpit dev reload
 cockpit dev diagnose --verbosity standard
 ```
 
-入口和平台可推断时直接省略。每个 checkout 会保存并自动复用一个数字 handle；需要
-确认身份时使用 `cockpit session list` 和 `cockpit session show HANDLE`。`dev` 自动
-使用仅限本地进程的 yolo Supervisor。Cockpit 不读取 keychain 或 secret store，
-`--env` 只传给当前进程。
+入口和平台可推断时直接省略。Cockpit 会按 canonical Flutter project 保存一个 active
+数字 handle，并用 checkout identity 保证隔离；同一项目可以保留不同平台或 target 的
+多个 handle。需要确认或切换时使用 `cockpit session list`、`cockpit session show
+HANDLE` 和 `cockpit dev use HANDLE`。显式 `--session` 只选择当前命令，不会改变已保存
+的 active handle。`dev` 自动使用仅限本地进程的 yolo Supervisor。Cockpit 不读取
+keychain 或 secret store，`--env` 只传给当前进程。
 
 ## 多项目交互
 

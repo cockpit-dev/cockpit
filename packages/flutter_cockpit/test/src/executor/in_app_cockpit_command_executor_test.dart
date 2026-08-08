@@ -509,7 +509,7 @@ void main() {
       registry: CockpitTargetRegistry(routeName: '/keyboard'),
     );
 
-    await executor.execute(
+    final down = await executor.execute(
       CockpitCommand(
         commandId: 'key-down',
         commandType: CockpitCommandType.sendKeyDownEvent,
@@ -519,7 +519,7 @@ void main() {
         },
       ),
     );
-    await executor.execute(
+    final up = await executor.execute(
       CockpitCommand(
         commandId: 'key-up',
         commandType: CockpitCommandType.sendKeyUpEvent,
@@ -530,6 +530,8 @@ void main() {
       ),
     );
 
+    expect(down.success, isTrue);
+    expect(up.success, isTrue);
     expect(events, hasLength(2));
     expect(events.first, isA<KeyDownEvent>());
     expect(events.last, isA<KeyUpEvent>());
@@ -2485,6 +2487,44 @@ void main() {
     expect(result.snapshot?['routeName'], '/success');
   });
 
+  test('assertText probe skips settling and snapshot construction', () async {
+    final registry = CockpitTargetRegistry(routeName: '/success')
+      ..register(
+        const CockpitTarget(
+          registrationId: 'success',
+          text: 'Hello, Alice',
+          routeName: '/success',
+        ),
+      );
+    var settleCount = 0;
+    var snapshotCount = 0;
+    final executor = InAppCockpitCommandExecutor(
+      registry: registry,
+      postActionSettler: () async => settleCount += 1,
+      snapshotProvider: ({options = const CockpitSnapshotOptions()}) {
+        snapshotCount += 1;
+        return CockpitSnapshot(routeName: registry.routeName);
+      },
+    );
+
+    final result = await executor.execute(
+      CockpitCommand(
+        commandId: 'cmd-probe-text',
+        commandType: CockpitCommandType.assertText,
+        parameters: const <String, Object?>{
+          'text': 'Hello, Alice',
+          'probe': true,
+        },
+        timeoutMs: 500,
+      ),
+    );
+
+    expect(result.success, isTrue);
+    expect(result.snapshot, isNull);
+    expect(settleCount, 0);
+    expect(snapshotCount, 0);
+  });
+
   test('assertText observes once after settling consumes its budget', () async {
     final registry = CockpitTargetRegistry(routeName: '/command-lab');
     registry.register(
@@ -2630,6 +2670,76 @@ void main() {
     expect(result.success, isTrue);
     expect(result.locatorResolution?.matchedValue, 'success_label');
     expect(result.snapshot?['routeName'], '/success');
+  });
+
+  test('waitFor route probe uses readiness without a full snapshot', () async {
+    final registry = CockpitTargetRegistry(routeName: '/editor')
+      ..discoveredTargetsProvider = () {
+        throw StateError(
+          'A route probe must not enumerate the full discovered target set.',
+        );
+      }
+      ..discoveredTargetsReadinessProbe =
+          ({allowRouteFallback = true, routeName}) =>
+              !allowRouteFallback && routeName == '/editor';
+    var snapshotCount = 0;
+    final executor = InAppCockpitCommandExecutor(
+      registry: registry,
+      snapshotProvider: ({options = const CockpitSnapshotOptions()}) {
+        snapshotCount += 1;
+        return CockpitSnapshot(routeName: registry.routeName);
+      },
+    );
+
+    final result = await executor.execute(
+      CockpitCommand(
+        commandId: 'cmd-probe-editor-route',
+        commandType: CockpitCommandType.waitFor,
+        parameters: const <String, Object?>{
+          'routeName': '/editor',
+          'probe': true,
+        },
+        timeoutMs: 500,
+      ),
+    );
+
+    expect(result.success, isTrue);
+    expect(result.snapshot, isNull);
+    expect(snapshotCount, 0);
+  });
+
+  test('unmatched route probe skips full failure diagnostics', () async {
+    final registry = CockpitTargetRegistry(routeName: '/inbox')
+      ..discoveredTargetsProvider = () {
+        throw StateError(
+          'A condition probe failure must not enumerate discovered targets.',
+        );
+      };
+    var snapshotCount = 0;
+    final executor = InAppCockpitCommandExecutor(
+      registry: registry,
+      snapshotProvider: ({options = const CockpitSnapshotOptions()}) {
+        snapshotCount += 1;
+        return CockpitSnapshot(routeName: registry.routeName);
+      },
+    );
+
+    final result = await executor.execute(
+      CockpitCommand(
+        commandId: 'cmd-probe-missing-route',
+        commandType: CockpitCommandType.waitFor,
+        parameters: const <String, Object?>{
+          'routeName': '/editor',
+          'probe': true,
+        },
+        timeoutMs: 500,
+      ),
+    );
+
+    expect(result.success, isFalse);
+    expect(result.snapshot, isNull);
+    expect(result.error?.details['failureDiagnostics'], isNull);
+    expect(snapshotCount, 0);
   });
 
   test(

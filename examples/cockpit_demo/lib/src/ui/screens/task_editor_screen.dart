@@ -95,6 +95,10 @@ final class _TaskEditorScreenState extends State<TaskEditorScreen> {
     _notesController.clear();
   }
 
+  void _goBack() {
+    Navigator.of(context).pop();
+  }
+
   void _toggleTag(String tagId) {
     setState(() {
       if (_selectedTagIds.contains(tagId)) {
@@ -130,6 +134,13 @@ final class _TaskEditorScreenState extends State<TaskEditorScreen> {
       builder: (context, _) {
         return Scaffold(
           appBar: AppBar(
+            leading: Semantics(
+              label: 'Back',
+              button: true,
+              excludeSemantics: true,
+              onTap: _goBack,
+              child: BackButton(onPressed: _goBack),
+            ),
             title: Text(widget.task == null ? 'Create task' : 'Edit task'),
           ),
           body: DecoratedBox(

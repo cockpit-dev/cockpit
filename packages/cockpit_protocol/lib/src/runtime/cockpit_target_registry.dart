@@ -48,7 +48,7 @@ final class CockpitTargetResolutionResult {
 }
 
 final class CockpitTargetRegistry {
-  static const int liveSnapshotTargetLimit = 120;
+  static const int liveSnapshotTargetLimit = 25;
   static const int candidateDetailLimit = 8;
 
   /// Creates a CockpitTargetRegistry.
@@ -275,7 +275,7 @@ final class CockpitTargetRegistry {
       final prioritizedTargets = _prioritizeForLiveSnapshot(targets);
       final truncatedTargets = prioritizedTargets
           .take(liveSnapshotTargetLimit)
-          .map((target) => target.toSnapshotTarget())
+          .map(_liveSnapshotTarget)
           .toList(growable: false);
 
       return CockpitSnapshot(
@@ -298,6 +298,24 @@ final class CockpitTargetRegistry {
         ),
       );
     });
+  }
+
+  CockpitSnapshotTarget _liveSnapshotTarget(CockpitTarget target) {
+    return CockpitSnapshotTarget(
+      registrationId: target.registrationId,
+      cockpitId: target.cockpitId,
+      semanticId: target.semanticId,
+      keyValue: target.keyValue,
+      text: target.text,
+      tooltip: target.tooltip,
+      typeName: target.typeName,
+      path: target.path,
+      scrollablePath: target.scrollablePath,
+      scrollableKeyValue: target.scrollableKeyValue,
+      scrollableTypeName: target.scrollableTypeName,
+      routeName: target.routeName,
+      supportedCommands: target.supportedCommands.toList(growable: false),
+    );
   }
 
   T _withDiscoveryCache<T>(T Function() action) {

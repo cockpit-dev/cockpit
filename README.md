@@ -86,8 +86,9 @@ details are documented in the [agent integration guide](docs/agent-integrations.
 
 ## Flutter Fast Path
 
-Run from the intended checkout. `dev` discovers and owns the workspace, target,
-process, port, and bridge, then reuses one checkout-scoped numeric handle:
+Run from the intended Flutter project. `dev` discovers and owns the workspace,
+target, process, port, and bridge, then reuses that project's active numeric
+handle while checkout identity keeps concurrent projects isolated:
 
 ```bash
 cockpit dev start cockpit/main.dart --platform macos
