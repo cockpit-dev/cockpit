@@ -21,11 +21,11 @@ void main() {
     expect(runtimePubspec, isNot(contains('name: flutter_pilot')));
     expect(protocolPubspec, contains('name: cockpit_protocol'));
     expect(devtoolsPubspec, contains('name: cockpit'));
-    expect(runtimeVersion, '3.0.0');
-    expect(protocolVersion, '3.0.0');
-    expect(devtoolsVersion, '3.0.0');
-    expect(runtimePubspec, contains('cockpit_protocol: ^3.0.0'));
-    expect(devtoolsPubspec, contains('cockpit_protocol: ^3.0.0'));
+    expect(runtimeVersion, '3.0.1');
+    expect(protocolVersion, '3.0.1');
+    expect(devtoolsVersion, '3.0.1');
+    expect(runtimePubspec, contains('cockpit_protocol: ^3.0.1'));
+    expect(devtoolsPubspec, contains('cockpit_protocol: ^3.0.1'));
     expect(runtimePubspec, isNot(contains('flutter_cockpit_protocol:')));
     expect(devtoolsPubspec, isNot(contains('flutter_cockpit_protocol:')));
     expect(
@@ -85,6 +85,9 @@ void main() {
     final shellPubspec = File(
       'examples/cockpit_demo/cockpit/pubspec.yaml',
     ).readAsStringSync();
+    final consolePubspec = File(
+      'packages/cockpit_console/pubspec.yaml',
+    ).readAsStringSync();
     final rootReadme = File('README.md').readAsStringSync();
     final rootReadmeZh = File('README.zh-CN.md').readAsStringSync();
     final runtimeReadme = File(
@@ -126,6 +129,7 @@ void main() {
       devtoolsPubspec,
       demoPubspec,
       shellPubspec,
+      consolePubspec,
     ]) {
       expect(pubspec, contains("sdk: '>=3.8.0 <4.0.0'"));
       expect(pubspec, isNot(contains("sdk: '>=3.5.0 <4.0.0'")));
@@ -135,22 +139,32 @@ void main() {
     expect(runtimePubspec, contains("flutter: '>=3.32.0'"));
     expect(demoPubspec, contains("flutter: '>=3.32.0'"));
     expect(shellPubspec, contains("flutter: '>=3.32.0'"));
+    expect(consolePubspec, contains("flutter: '>=3.44.0'"));
     if (Platform.version.startsWith('3.8.')) {
       expect(workspaceLockfile, contains('dart: ">=3.8.0 <4.0.0"'));
       expect(workspaceLockfile, contains('flutter: ">=3.32.0"'));
       expect(workspaceLockfile, isNot(contains('>=3.10.0-0')));
     }
-    expect(acceptanceWorkflow, contains("FLUTTER_VERSION: '3.32.0'"));
+    expect(acceptanceWorkflow, contains("MINIMUM_FLUTTER_VERSION: '3.32.0'"));
+    expect(acceptanceWorkflow, contains("CURRENT_FLUTTER_VERSION: '3.44.0'"));
     for (final job in const <String>[
       'static_analysis',
+      'minimum_flutter',
       'dart_tests',
       'flutter_tests',
       'publication',
+      'darwin_packaging',
       'regression',
       'release_gate',
     ]) {
       expect(acceptanceWorkflow, contains('\n  $job:\n'));
     }
+    expect(
+      RegExp(
+        'prepare-minimum-flutter-workspace\\.sh',
+      ).allMatches(acceptanceWorkflow),
+      hasLength(5),
+    );
     expect(acceptanceWorkflow, isNot(contains('needs: quality')));
     expect(
       RegExp('--require-recording').allMatches(acceptanceWorkflow),
@@ -533,7 +547,7 @@ void main() {
     expect(kiroSteering, contains('.kiro/skills/cockpit/SKILL.md'));
     expect(kiroSteering, isNot(contains('dart run cockpit')));
     expect(kiroPlugin, contains('agent-plugins.org/schemas/1.0.0'));
-    expect(kiroPlugin, contains('"version": "3.0.0"'));
+    expect(kiroPlugin, contains('"version": "3.0.1"'));
 
     for (final path in <String>[
       'plugins/codex/cockpit/README.md',

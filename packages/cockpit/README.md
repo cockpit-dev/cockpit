@@ -71,11 +71,14 @@ cockpit dev reload
 cockpit dev diagnose --verbosity standard
 ```
 
-Omit the entrypoint and platform when they are inferable. One numeric handle is
-stored per checkout and reused automatically; use `cockpit session list` and
-`cockpit session show HANDLE` when identity needs confirmation. `dev` starts
-its local Supervisor in process-scoped yolo mode. Cockpit does not read a
-keychain or secret store, and `--env` values are process-only.
+Omit the entrypoint and platform when they are inferable. Cockpit stores one
+active numeric handle per canonical Flutter project, guarded by checkout
+identity; the same project may keep separate platform/target handles. Use
+`cockpit session list`, `cockpit session show HANDLE`, and `cockpit dev use
+HANDLE` when identity needs confirmation or selection. Explicit `--session`
+targets one command without changing the saved active handle. `dev` starts its
+local Supervisor in process-scoped yolo mode. Cockpit does not read a keychain
+or secret store, and `--env` values are process-only.
 
 ## Interactive Workspaces
 

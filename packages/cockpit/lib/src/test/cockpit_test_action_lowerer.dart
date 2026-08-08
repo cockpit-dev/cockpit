@@ -169,6 +169,7 @@ final class CockpitTestActionLowerer {
     required int timeoutMs,
     required CockpitTestPlane requestedPlane,
     required CockpitCapabilities capabilities,
+    bool probe = false,
   }) {
     if (backend == CockpitTestActionBackend.flutter &&
         requestedPlane != CockpitTestPlane.semantic) {
@@ -214,6 +215,7 @@ final class CockpitTestActionLowerer {
           locator: locatorResult.locator,
           parameters: <String, Object?>{
             ..._conditionParameters(condition),
+            if (probe) 'probe': true,
             if (backend == CockpitTestActionBackend.system &&
                 condition.matchMode != null)
               'matchMode': condition.matchMode!.name,

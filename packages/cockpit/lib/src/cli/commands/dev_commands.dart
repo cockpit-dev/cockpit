@@ -40,7 +40,7 @@ final class CockpitDevCommand extends Command<int> {
 
   @override
   String get description =>
-      'Develop and debug the current Flutter checkout with one session handle.';
+      'Develop and debug Flutter apps through short isolated sessions.';
 }
 
 CockpitLeafCommand _start(CockpitCliRuntime runtime) => CockpitLeafCommand(
@@ -83,14 +83,14 @@ CockpitLeafCommand _use(CockpitCliRuntime runtime, CockpitDevRuntime dev) =>
     CockpitLeafCommand(
       runtime: runtime,
       name: 'use',
-      description: 'Select a development session for the current checkout.',
+      description: 'Select a development session for its Flutter project.',
       invocationSuffix: 'HANDLE [arguments]',
       example: 'cockpit dev use 2',
       action: (arguments) async {
         if (arguments.rest.length != 1) {
           throw const FormatException('dev use requires one session handle.');
         }
-        final session = await runtime.resolveDevelopmentSession(
+        final session = await runtime.selectDevelopmentSession(
           arguments.rest.single,
         );
         return dev.writeEnvelope(
@@ -213,7 +213,11 @@ CockpitLeafCommand _network(
   defaultTimeout: const Duration(minutes: 2),
   maximumTimeout: const Duration(minutes: 10),
   configure: (parser) => parser
-    ..addOption('session', abbr: 's', help: 'Select another checkout session.')
+    ..addOption(
+      'session',
+      abbr: 's',
+      help: 'Select an exact development session.',
+    )
     ..addOption('before', help: 'Read requests older than this numeric ID.')
     ..addOption('limit', defaultsTo: '12', help: 'Maximum recent rows.')
     ..addFlag('failures', negatable: false, help: 'Show failed requests only.')
@@ -284,7 +288,7 @@ void _validateNetworkId(String? value, String name) {
 void _sessionOption(ArgParser parser) => parser.addOption(
   'session',
   abbr: 's',
-  help: 'Select another session owned by this checkout.',
+  help: 'Select an exact development session.',
 );
 
 int _integer(String value) {

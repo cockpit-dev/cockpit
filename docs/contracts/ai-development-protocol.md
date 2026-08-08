@@ -2,7 +2,8 @@
 
 Use the authenticated Supervisor for both rapid development and release E2E.
 Do not call host application services directly. For Flutter source development,
-use one checkout-scoped numeric handle and let Cockpit own internal resources.
+use a project-scoped numeric handle guarded by checkout identity and let Cockpit
+own internal resources.
 
 ## Flutter Bootstrap
 
@@ -23,7 +24,11 @@ The bridge belongs in a development-only entrypoint; production Flutter code
 must not import `flutter_cockpit`. Cockpit discovers/registers the workspace,
 entrypoint, target, app, process, port, and runtime session internally. It
 returns a short handle such as `1`; later commands infer the active handle for
-the checkout.
+the canonical Flutter project. A monorepo may have independent active handles
+for multiple Flutter projects, and one project may keep several platform/target
+handles. `dev use HANDLE` changes that project's active handle; explicit
+`--session HANDLE` selects one command without changing it. A common ancestor
+with multiple active projects fails as ambiguous instead of guessing.
 
 `--env`, `--dart-define`, and custom Flutter arguments are never persisted or
 printed. Cockpit does not access a keychain or secret store. A session launched
@@ -52,15 +57,15 @@ candidates. `dev wait` is UI-only by default; add `--network` only when the
 assertion requires completed network activity.
 
 Keep using the same handle after a process, port, bridge, app, or runtime session
-changes. Reconciliation proves the same checkout, workspace, target, owned
+changes. Reconciliation proves the same checkout, Flutter project, workspace, target, owned
 process, and authenticated bridge. Read commands never relaunch an exited app;
 a mutation may relaunch one unexpectedly exited app once. An intentionally
 stopped session requires `dev start` or `restart`.
 
-Each checkout and Git worktree identity owns independent active selection,
-worker state, process/port ownership, network state, mutation sequence, and
-artifact paths. Shared repository metadata or package names never make another
-checkout's handle implicit.
+Each Flutter project owns its active selection. Checkout and Git worktree identity
+independently protect worker state, process/port ownership, network state, mutation
+sequence, and artifact paths. Shared repository metadata or package names never make
+another project or checkout handle implicit.
 
 Normal output is bounded canonical LON at `--verbosity minimal`. Preserve
 `minimal|standard|full`, LON/JSON/YAML/JSONL, and `path|none`. Artifact and

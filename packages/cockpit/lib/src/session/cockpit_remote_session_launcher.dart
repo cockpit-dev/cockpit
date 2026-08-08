@@ -193,12 +193,21 @@ Future<String> cockpitReadActiveFlutterVersion({
 
 Future<String> cockpitReadFlutterVersion(
   String flutterExecutable, {
-  CockpitFlutterCommandRunner processRunner = cockpitRunIsolatedProcess,
+  CockpitFlutterCommandRunner? processRunner,
+  String? workingDirectory,
 }) async {
-  final result = await processRunner(flutterExecutable, <String>[
-    '--version',
-    '--machine',
-  ]);
+  final arguments = <String>['--version', '--machine'];
+  final processDirectory =
+      workingDirectory != null && Directory(workingDirectory).existsSync()
+      ? workingDirectory
+      : null;
+  final result = processRunner == null
+      ? await cockpitRunIsolatedProcess(
+          flutterExecutable,
+          arguments,
+          workingDirectory: processDirectory,
+        )
+      : await processRunner(flutterExecutable, arguments);
   if (result.exitCode != 0) {
     throw StateError(
       'Unable to resolve Flutter version: ${result.stderr ?? result.stdout}',

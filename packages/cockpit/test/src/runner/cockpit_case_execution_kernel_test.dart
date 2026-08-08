@@ -93,6 +93,46 @@ void main() {
     expect(delegate.events, isNot(contains('action:errorElse:primary')));
   });
 
+  test(
+    'stalled condition probe does not consume its parent step deadline',
+    () async {
+      final clock = ManualCockpitClock();
+      final delegate = DeterministicCaseDelegate();
+      delegate.hangingConditions['stalledIf'] =
+          Completer<CockpitTestKernelConditionResult>();
+      final recorder = CockpitTestAttemptRecorder(clock: clock);
+      final future = _kernel(clock, delegate, recorder).run(
+        plan: testExecutionPlan(
+          steps: <CockpitTestExecutionNode>[
+            _controlNode(
+              'stalledIf',
+              CockpitTestIfPlanOperation(
+                condition: _visibleCondition(),
+                thenSteps: <CockpitTestExecutionNode>[
+                  actionNode('stalledThen', 'main'),
+                ],
+                elseSteps: <CockpitTestExecutionNode>[
+                  actionNode('stalledElse', 'main'),
+                ],
+              ),
+              timeoutMs: 10000,
+            ),
+          ],
+        ),
+        control: CockpitCaseExecutionControl(),
+      );
+
+      await _pump();
+      clock.elapse(const Duration(seconds: 5));
+      final result = await future;
+
+      expect(result.primaryError?.code, CockpitTestErrorCode.conditionError);
+      expect(clock.elapsed, const Duration(seconds: 5));
+      expect(delegate.events, isNot(contains('action:stalledThen:primary')));
+      expect(delegate.events, isNot(contains('action:stalledElse:primary')));
+    },
+  );
+
   test('retry and loop keep occurrences separate from execution ids', () async {
     final clock = ManualCockpitClock();
     final delegate = DeterministicCaseDelegate()
@@ -279,12 +319,13 @@ CockpitTestExecutionNode _loopNode() => _controlNode(
 
 CockpitTestExecutionNode _controlNode(
   String id,
-  CockpitTestPlanOperation operation,
-) => CockpitTestExecutionNode(
+  CockpitTestPlanOperation operation, {
+  int timeoutMs = 1000,
+}) => CockpitTestExecutionNode(
   stepId: id,
   executionId: 'main/$id',
   section: 'main',
-  timeoutMs: 1000,
+  timeoutMs: timeoutMs,
   evidence: const CockpitTestEvidencePolicy(
     screenshot: CockpitTestEvidenceMode.none,
     snapshot: CockpitTestEvidenceMode.none,

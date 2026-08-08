@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import '../application/cockpit_app_handle.dart';
 import '../application/cockpit_application_service_exception.dart';
@@ -16,6 +17,7 @@ import '../infrastructure/cockpit_sdk_environment.dart';
 import '../remote/cockpit_android_port_forwarder.dart';
 import '../remote/cockpit_remote_session_client.dart';
 import '../session/cockpit_remote_session_launcher.dart';
+import '../session/cockpit_flutter_launch_configuration.dart';
 
 final class CockpitWorkerDevelopmentSessionSnapshot {
   const CockpitWorkerDevelopmentSessionSnapshot({
@@ -34,8 +36,7 @@ final class CockpitWorkerDevelopmentSessionRuntime {
         const CockpitAndroidPortForwarder(),
     CockpitEntrypointResolver? entrypointResolver,
     CockpitSdkEnvironment? sdkEnvironment,
-    CockpitFlutterExecutableVersionReader flutterVersionReader =
-        cockpitReadFlutterVersion,
+    CockpitFlutterExecutableVersionReader? flutterVersionReader,
     CockpitTokenGenerator? tokenGenerator,
     CockpitDevelopmentMachineDiagnosticLogger? logger,
     CockpitVmNetworkProfiler? networkProfiler,
@@ -66,7 +67,7 @@ final class CockpitWorkerDevelopmentSessionRuntime {
   final CockpitAndroidPortForwarder _portForwarder;
   final CockpitEntrypointResolver _entrypointResolver;
   final CockpitSdkEnvironment _sdkEnvironment;
-  final CockpitFlutterExecutableVersionReader _flutterVersionReader;
+  final CockpitFlutterExecutableVersionReader? _flutterVersionReader;
   final CockpitTokenGenerator _tokenGenerator;
   final CockpitDevelopmentMachineDiagnosticLogger? _logger;
   final CockpitVmNetworkProfiler? _networkProfiler;
@@ -80,6 +81,7 @@ final class CockpitWorkerDevelopmentSessionRuntime {
       <String, CockpitDevelopmentSessionSupervisor>{};
   final Map<String, Future<CockpitDevelopmentSessionSupervisor>> _recoveries =
       <String, Future<CockpitDevelopmentSessionSupervisor>>{};
+  final Set<String> _reloadsNeedingRelaunch = <String>{};
 
   Future<CockpitLaunchDevelopmentSessionResult> launch(
     CockpitLaunchDevelopmentSessionRequest request,
@@ -91,7 +93,12 @@ final class CockpitWorkerDevelopmentSessionRuntime {
     );
     final developmentSessionId = 'ds-${_tokenGenerator.nextResourceIdToken()}';
     final flutterExecutable = _sdkEnvironment.flutterExecutable;
-    final flutterVersion = await _flutterVersionReader(flutterExecutable);
+    final flutterVersion = await (_flutterVersionReader == null
+        ? cockpitReadFlutterVersion(
+            flutterExecutable,
+            workingDirectory: projectDir,
+          )
+        : _flutterVersionReader(flutterExecutable));
     final hostPort = request.platform == 'android'
         ? await _portForwarder.ensureForwarded(
             deviceId: request.deviceId,
@@ -130,6 +137,10 @@ final class CockpitWorkerDevelopmentSessionRuntime {
           port: hostPort,
         ).toString(),
         supervisorBaseUrl: 'cockpit-worker://development/$developmentSessionId',
+        flavor: request.flavor,
+        flutterVersion: flutterVersion,
+        bindHost: endpoint.bindHost,
+        reloadRecoverable: request.launchConfiguration.isEmpty,
         launchedAt: _utcNow(),
         reloadGeneration: 0,
       ),
@@ -184,15 +195,18 @@ final class CockpitWorkerDevelopmentSessionRuntime {
       );
       final snapshot = await _snapshot(supervisor);
       _sessions[developmentSessionId] = supervisor;
+      _reloadsNeedingRelaunch.remove(developmentSessionId);
       return CockpitLaunchDevelopmentSessionResult(
         sessionHandle: snapshot.handle,
         status: snapshot.status,
         app: CockpitAppHandle.fromDevelopmentSession(snapshot.handle),
       );
-    } on Object catch (error) {
+    } on Object catch (error, stackTrace) {
       supervisor.reportStartupFailure(error);
       await supervisor.dispose();
-      rethrow;
+      final mapped = _developmentLaunchFailure(error);
+      if (identical(mapped, error)) rethrow;
+      Error.throwWithStackTrace(mapped, stackTrace);
     }
   }
 
@@ -205,7 +219,35 @@ final class CockpitWorkerDevelopmentSessionRuntime {
     CockpitDevelopmentReloadMode mode,
   ) async {
     final supervisor = await _require(handle);
-    await supervisor.reload(mode);
+    if (_reloadsNeedingRelaunch.contains(handle.developmentSessionId)) {
+      throw CockpitApplicationServiceException(
+        code: 'reloadNeedsRelaunch',
+        message:
+            'Cockpit reattached to this app after its worker restarted, but '
+            'the original custom launch values were intentionally not '
+            'persisted. Relaunch with `cockpit dev start` and the original '
+            'launch options before reloading or restarting.',
+        details: <String, Object?>{'mode': mode.jsonValue},
+      );
+    }
+    try {
+      await supervisor.reload(mode);
+    } on CockpitApplicationServiceException {
+      rethrow;
+    } on Object catch (error) {
+      final status = await supervisor.currentStatus();
+      final restart = mode == CockpitDevelopmentReloadMode.hotRestart;
+      throw CockpitApplicationServiceException(
+        code: restart ? 'hotRestartFailed' : 'hotReloadFailed',
+        message:
+            status.lastError ??
+            (restart ? 'Hot restart failed.' : 'Hot reload failed.'),
+        details: <String, Object?>{
+          'state': status.state.jsonValue,
+          'cause': error.runtimeType.toString(),
+        },
+      );
+    }
     return _snapshot(supervisor);
   }
 
@@ -216,12 +258,14 @@ final class CockpitWorkerDevelopmentSessionRuntime {
     await supervisor.stop();
     await _stopPlatformApp(await supervisor.currentHandle());
     _sessions.remove(handle.developmentSessionId);
+    _reloadsNeedingRelaunch.remove(handle.developmentSessionId);
     return _snapshot(supervisor);
   }
 
   Future<void> forceStop(CockpitDevelopmentSessionHandle handle) async {
     final supervisor = await _require(handle);
     _sessions.remove(handle.developmentSessionId);
+    _reloadsNeedingRelaunch.remove(handle.developmentSessionId);
     await supervisor.stop();
     await _stopPlatformApp(await supervisor.currentHandle());
   }
@@ -243,6 +287,7 @@ final class CockpitWorkerDevelopmentSessionRuntime {
     final supervisors = _sessions.values.toList(growable: false);
     _sessions.clear();
     _recoveries.clear();
+    _reloadsNeedingRelaunch.clear();
     await Future.wait<void>(
       supervisors.map((supervisor) async {
         try {
@@ -308,15 +353,21 @@ final class CockpitWorkerDevelopmentSessionRuntime {
         );
       },
       bindControlPlane: false,
-      settleTimeout: const Duration(seconds: 5),
+      startupSettleTimeout: const Duration(seconds: 5),
     );
     _sessions[handle.developmentSessionId] = supervisor;
+    if (handle.reloadRecoverable) {
+      _reloadsNeedingRelaunch.remove(handle.developmentSessionId);
+    } else {
+      _reloadsNeedingRelaunch.add(handle.developmentSessionId);
+    }
     try {
       await supervisor.start();
       await supervisor.waitForStartupRecovery();
       return supervisor;
     } on Object {
       _sessions.remove(handle.developmentSessionId);
+      _reloadsNeedingRelaunch.remove(handle.developmentSessionId);
       await supervisor.dispose();
       rethrow;
     }
@@ -342,13 +393,16 @@ final class CockpitWorkerDevelopmentSessionRuntime {
         message: 'Development session has no safe Flutter attach identity.',
       );
     }
+    final extraArgs = await _recoveryFlutterArguments(handle);
     final client = await CockpitFlutterRunMachineClient.attach(
       projectDir: handle.projectDir,
       target: handle.target,
       deviceId: handle.deviceId,
       platformAppId: platformAppId,
       debugUrl: debugUrl,
+      flavor: handle.flavor,
       flutterExecutable: _sdkEnvironment.flutterExecutable,
+      extraArgs: extraArgs,
     );
     try {
       await client.waitForAppId();
@@ -357,6 +411,37 @@ final class CockpitWorkerDevelopmentSessionRuntime {
       await client.dispose();
       rethrow;
     }
+  }
+
+  Future<List<String>> _recoveryFlutterArguments(
+    CockpitDevelopmentSessionHandle handle,
+  ) async {
+    if (!handle.reloadRecoverable) {
+      return const <String>[];
+    }
+    final remote = handle.remoteSessionHandle!;
+    final flutterVersion =
+        handle.flutterVersion ??
+        await (_flutterVersionReader == null
+            ? cockpitReadFlutterVersion(
+                _sdkEnvironment.flutterExecutable,
+                workingDirectory: handle.projectDir,
+              )
+            : _flutterVersionReader(_sdkEnvironment.flutterExecutable));
+    final bindHost =
+        handle.bindHost ?? cockpitRemoteBindHostForPlatform(handle.platform);
+    final disableIpv6UnsafeObservers =
+        handle.platform == 'ios' && bindHost == '::';
+    return <String>[
+      ...cockpitBuildRemoteControlDartDefineArguments(
+        host: bindHost,
+        port: remote.devicePort,
+        flutterVersion: flutterVersion,
+        launchId: handle.developmentSessionId,
+        disableHttpNetworkObserver: disableIpv6UnsafeObservers,
+        disableRuntimeObserver: disableIpv6UnsafeObservers,
+      ),
+    ];
   }
 
   Future<bool> _probeHandle(
@@ -420,5 +505,36 @@ final class CockpitWorkerDevelopmentSessionRuntime {
       throw TimeoutException('Development session launch timed out.');
     }
     return remaining;
+  }
+
+  Object _developmentLaunchFailure(Object error) {
+    if (error is CockpitApplicationServiceException ||
+        error is CockpitDevelopmentSessionFallbackException ||
+        error is TimeoutException) {
+      return error;
+    }
+    if (error is StateError ||
+        error is ProcessException ||
+        error is FileSystemException ||
+        error is CockpitFlutterRunMachineRequestException) {
+      return CockpitApplicationServiceException(
+        code: 'flutterLaunchFailed',
+        message: _developmentLaunchFailureMessage(error),
+        details: <String, Object?>{'cause': error.runtimeType.toString()},
+      );
+    }
+    return error;
+  }
+
+  String _developmentLaunchFailureMessage(Object error) {
+    if (error is StateError) return error.message.toString();
+    if (error is CockpitFlutterRunMachineRequestException) {
+      return error.message;
+    }
+    if (error is FileSystemException) {
+      final path = error.path;
+      return path == null ? error.message : '${error.message}: $path';
+    }
+    return '$error';
   }
 }

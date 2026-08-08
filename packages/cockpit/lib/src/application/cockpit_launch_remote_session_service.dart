@@ -56,8 +56,7 @@ final class CockpitLaunchRemoteSessionService {
     CockpitRemoteSessionLauncher? launcher,
     CockpitRemoteSessionStatusReader? statusReader,
     CockpitSdkEnvironment? sdkEnvironment,
-    CockpitFlutterExecutableVersionReader flutterVersionForExecutableReader =
-        cockpitReadFlutterVersion,
+    CockpitFlutterExecutableVersionReader? flutterVersionForExecutableReader,
     CockpitEntrypointResolver? entrypointResolver,
     CockpitHostPortAllocator sessionPortAllocator = cockpitAllocateHostPort,
     CockpitHostPortAvailabilityChecker sessionPortAvailabilityChecker =
@@ -73,7 +72,7 @@ final class CockpitLaunchRemoteSessionService {
   final CockpitRemoteSessionLauncher _launcher;
   final CockpitRemoteSessionStatusReader _statusReader;
   final CockpitSdkEnvironment _sdkEnvironment;
-  final CockpitFlutterExecutableVersionReader
+  final CockpitFlutterExecutableVersionReader?
   _flutterVersionForExecutableReader;
   final CockpitEntrypointResolver _entrypointResolver;
   final CockpitHostPortAllocator _sessionPortAllocator;
@@ -99,9 +98,12 @@ final class CockpitLaunchRemoteSessionService {
       portAvailabilityChecker: _sessionPortAvailabilityChecker,
     );
     final flutterExecutable = _sdkEnvironment.flutterExecutable;
-    final flutterVersion = await _flutterVersionForExecutableReader(
-      flutterExecutable,
-    );
+    final flutterVersion = await (_flutterVersionForExecutableReader == null
+        ? cockpitReadFlutterVersion(
+            flutterExecutable,
+            workingDirectory: normalizedProjectDir,
+          )
+        : _flutterVersionForExecutableReader(flutterExecutable));
     final sessionHandle = await _launcher.launch(
       CockpitRemoteSessionLaunchOptions(
         projectDir: normalizedProjectDir,

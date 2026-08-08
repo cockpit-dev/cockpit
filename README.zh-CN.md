@@ -80,8 +80,9 @@ Install Cockpit for the current AI host, including the CLI, complete cockpit Ski
 
 ## Flutter 快速路径
 
-从目标 checkout 内执行。`dev` 会发现并管理 workspace、target、进程、端口和
-bridge，之后复用 checkout 隔离的数字 handle：
+从目标 Flutter project 内执行。`dev` 会发现并管理 workspace、target、进程、端口
+和 bridge，之后复用该项目的 active 数字 handle，同时用 checkout identity 隔离并行
+项目：
 
 ```bash
 cockpit dev start cockpit/main.dart --platform macos

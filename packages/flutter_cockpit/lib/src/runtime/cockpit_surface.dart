@@ -8,6 +8,8 @@ import '../capture/cockpit_captured_screenshot.dart';
 import '../capture/flutter_view_capture.dart';
 import '../control/cockpit_command_type.dart';
 import '../control/cockpit_locator.dart';
+import '../control/cockpit_locator_resolution.dart';
+import '../errors/cockpit_command_error.dart';
 import '../gesture/cockpit_gesture_engine.dart';
 import '../control/cockpit_screenshot_request.dart';
 import '../gesture/cockpit_gesture_action.dart';
@@ -88,6 +90,68 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
 
   CockpitTargetRegistry get registry => _registry;
 
+  CockpitTargetResolutionResult probeVisibleLocator(CockpitLocator locator) {
+    final rootContext = _boundaryKey.currentContext;
+    if (rootContext is! Element) {
+      return CockpitTargetResolutionResult.failure(
+        error: CockpitCommandError.targetNotFound(
+          message: 'The Flutter surface is not mounted.',
+        ),
+      );
+    }
+    for (final candidate in _flatten(locator)) {
+      var probe = _probeForLocator(rootContext, candidate, visibleOnly: true);
+      if (probe.element == null && !probe.ambiguous) {
+        final text = candidate.text;
+        if (text != null &&
+            candidate.signalMap.length == 1 &&
+            candidate.matchMode == CockpitTextMatchMode.exact) {
+          probe = _probeForLocator(
+            rootContext,
+            CockpitLocator(
+              key: text,
+              ancestor: candidate.ancestor,
+              index: candidate.index,
+            ),
+            visibleOnly: true,
+          );
+        }
+      }
+      if (probe.ambiguous) {
+        return CockpitTargetResolutionResult.failure(
+          error: CockpitCommandError.ambiguousTarget(
+            message: 'Multiple visible Flutter elements matched the locator.',
+            details: <String, Object?>{
+              'matchedKind': candidate.kind.name,
+              'matchedValue': candidate.value,
+              'candidateCount': probe.matchCount,
+            },
+          ),
+        );
+      }
+      final element = probe.element;
+      if (element != null) {
+        return CockpitTargetResolutionResult.success(
+          target: _probeTargetForElement(element),
+          locatorResolution: CockpitLocatorResolution(
+            matchedKind: candidate.kind,
+            matchedValue: candidate.value,
+            matchedSignals: _matchedLocatorSignals(candidate),
+          ),
+        );
+      }
+    }
+    if (_requiresLogicalTargetResolution(locator)) {
+      return _registry.resolve(locator);
+    }
+    return CockpitTargetResolutionResult.failure(
+      error: CockpitCommandError.targetNotFound(
+        message: 'No visible Flutter element matched the locator.',
+        details: <String, Object?>{'requestedLocator': locator.toJson()},
+      ),
+    );
+  }
+
   @override
   void initState() {
     super.initState();
@@ -116,15 +180,13 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
   CockpitSnapshot snapshot({
     CockpitSnapshotOptions options = const CockpitSnapshotOptions(),
   }) {
-    final snapshot = options.profile == CockpitSnapshotProfile.live
-        ? _registry.snapshot()
-        : _diagnosticBuilder
-              .build(
-                routeName: _registry.routeName,
-                visibleTargets: _registry.visibleTargets,
-                options: options,
-              )
-              .snapshot;
+    final snapshot = _diagnosticBuilder
+        .build(
+          routeName: _registry.routeName,
+          visibleTargets: _registry.visibleTargets,
+          options: options,
+        )
+        .snapshot;
     if (!options.includeRebuildActivity || widget.rebuildTracker == null) {
       return snapshot.copyWith(focus: cockpitBuildFocusSnapshot());
     }
@@ -391,9 +453,13 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
       scrollableLocator: scrollableLocator,
     );
     if (selection == null) {
+      final targetMounted = targetElement != null;
       return CockpitScrollStepResult(
         didScroll: false,
         scrollableCandidateCount: scrollables.length,
+        targetVisibilityObserved: targetLocator != null,
+        targetMounted: targetMounted,
+        targetVisible: targetMounted && _locatorIsVisible(targetLocator),
       );
     }
     final scrollable = selection.candidate;
@@ -422,70 +488,6 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
       );
     }
 
-    final probeSegmentCount = probeDuringScroll
-        ? _scrollProbeSegmentCount(
-            targetLocator: targetLocator,
-            viewportFraction: viewportFraction,
-          )
-        : 1;
-    if (probeSegmentCount > 1) {
-      final stepViewportFraction = viewportFraction / probeSegmentCount;
-      final stepDuration = duration == Duration.zero
-          ? Duration.zero
-          : Duration(
-              milliseconds: (duration.inMilliseconds / probeSegmentCount)
-                  .ceil()
-                  .clamp(1, duration.inMilliseconds),
-            );
-      final pixelsBeforeProbe = position.pixels;
-      var didScroll = false;
-      CockpitScrollStepResult? lastStep;
-
-      for (var index = 0; index < probeSegmentCount; index += 1) {
-        final stepResult = await _scrollScrollableByViewport(
-          scrollable,
-          reverse: reverse,
-          viewportFraction: stepViewportFraction,
-          duration: stepDuration,
-          gestureProfile: gestureProfile,
-          continuous: continuous,
-          postScrollEnsureVisible: postScrollEnsureVisible,
-          preferProgrammatic: true,
-        );
-        lastStep = stepResult;
-        didScroll = didScroll || stepResult.didScroll;
-        if (_locatorIsVisible(targetLocator)) {
-          return _withScrollableSelection(
-            _mergeProbeResult(
-              base: stepResult,
-              pixelsBefore: pixelsBeforeProbe,
-              pixelsAfter: position.pixels,
-              didScroll: didScroll,
-              targetVisible: true,
-            ),
-            selection,
-            targetLocator: targetLocator,
-          );
-        }
-        if (!stepResult.didScroll) {
-          break;
-        }
-      }
-
-      if (lastStep != null) {
-        return _withScrollableSelection(
-          _mergeProbeResult(
-            base: lastStep,
-            pixelsBefore: pixelsBeforeProbe,
-            pixelsAfter: position.pixels,
-            didScroll: didScroll,
-          ),
-          selection,
-          targetLocator: targetLocator,
-        );
-      }
-    }
-
     return _withScrollableSelection(
       await _scrollScrollableByViewport(
         scrollable,
@@ -495,6 +497,7 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
         gestureProfile: gestureProfile,
         continuous: continuous,
         postScrollEnsureVisible: postScrollEnsureVisible,
+        preferProgrammatic: probeDuringScroll && targetLocator != null,
       ),
       selection,
       targetLocator: targetLocator,
@@ -759,40 +762,6 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
     return Duration(milliseconds: math.max(500, duration.inMilliseconds * 3));
   }
 
-  CockpitScrollStepResult _mergeProbeResult({
-    required CockpitScrollStepResult base,
-    required double pixelsBefore,
-    required double pixelsAfter,
-    required bool didScroll,
-    bool targetVisible = false,
-  }) {
-    return CockpitScrollStepResult(
-      didScroll: didScroll,
-      strategy: didScroll && base.strategy != 'none'
-          ? '${base.strategy}_probe'
-          : base.strategy,
-      scrollableKey: base.scrollableKey,
-      scrollablePath: base.scrollablePath,
-      scrollableTypeName: base.scrollableTypeName,
-      scrollableCandidateIndex: base.scrollableCandidateIndex,
-      scrollableCandidateCount: base.scrollableCandidateCount,
-      pixelsBefore: pixelsBefore,
-      pixelsAfter: pixelsAfter,
-      nextPixels: base.nextPixels,
-      minScrollExtent: base.minScrollExtent,
-      maxScrollExtent: base.maxScrollExtent,
-      viewportDimension: base.viewportDimension,
-      acceptsUserOffset: base.acceptsUserOffset,
-      allowsProgrammaticScroll: base.allowsProgrammaticScroll,
-      hadGestureTarget: base.hadGestureTarget,
-      hadSemanticAction: base.hadSemanticAction,
-      matchedRegistryTarget: base.matchedRegistryTarget,
-      targetVisibilityObserved: base.targetVisibilityObserved,
-      targetMounted: base.targetMounted,
-      targetVisible: targetVisible || base.targetVisible,
-    );
-  }
-
   CockpitScrollStepResult _withScrollableSelection(
     CockpitScrollStepResult result,
     _CockpitScrollableSelection selection, {
@@ -822,23 +791,6 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
       targetMounted: targetMounted || result.targetMounted,
       targetVisible: result.targetVisible,
     );
-  }
-
-  int _scrollProbeSegmentCount({
-    required CockpitLocator? targetLocator,
-    required double viewportFraction,
-  }) {
-    if (targetLocator == null) {
-      return 1;
-    }
-    final clampedFraction = viewportFraction.clamp(0.1, 0.95).toDouble();
-    if (clampedFraction < 0.4) {
-      return 1;
-    }
-    if (_locatorIsVisible(targetLocator)) {
-      return 1;
-    }
-    return (clampedFraction / 0.2).floor().clamp(1, 4);
   }
 
   bool _locatorIsVisible(CockpitLocator? locator) {
@@ -1031,6 +983,14 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
   }
 
   Element? _visitForLocator(Element rootElement, CockpitLocator locator) {
+    return _probeForLocator(rootElement, locator).element;
+  }
+
+  _CockpitMountedLocatorProbe _probeForLocator(
+    Element rootElement,
+    CockpitLocator locator, {
+    bool visibleOnly = false,
+  }) {
     final matchesByRenderObject = <Object, ({Element element, int score})>{};
 
     void visit(Element element) {
@@ -1038,22 +998,29 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
         return;
       }
       final score = _locatorMatchScore(element, locator);
-      if (score >= 0) {
+      if (score >= 0 && (!visibleOnly || _elementIsFullyVisible(element))) {
         final identity = element.findRenderObject() ?? element;
         final current = matchesByRenderObject[identity];
         if (current == null || score > current.score) {
           matchesByRenderObject[identity] = (element: element, score: score);
         }
       }
-      element.visitChildElements(visit);
+      if (visibleOnly) {
+        element.debugVisitOnstageChildren(visit);
+      } else {
+        element.visitChildElements(visit);
+      }
     }
 
     visit(rootElement);
     final matches = matchesByRenderObject.values.toList(growable: false);
-    if (matches.isEmpty) return null;
+    if (matches.isEmpty) return const _CockpitMountedLocatorProbe();
     final index = locator.index;
     if (index != null) {
-      return index < matches.length ? matches[index].element : null;
+      return _CockpitMountedLocatorProbe(
+        element: index < matches.length ? matches[index].element : null,
+        matchCount: matches.length,
+      );
     }
     final bestScore = matches
         .map((candidate) => candidate.score)
@@ -1062,7 +1029,10 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
         .where((candidate) => candidate.score == bestScore)
         .toList(growable: false);
     if (bestMatches.length == 1) {
-      return bestMatches.single.element;
+      return _CockpitMountedLocatorProbe(
+        element: bestMatches.single.element,
+        matchCount: bestMatches.length,
+      );
     }
 
     // A single logical control commonly repeats its label through a Semantics
@@ -1076,10 +1046,78 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
             _isElementAncestor(candidate.element, other.element),
       );
       if (isSharedMatchingAncestor) {
-        return candidate.element;
+        return _CockpitMountedLocatorProbe(
+          element: candidate.element,
+          matchCount: bestMatches.length,
+        );
       }
     }
-    return null;
+    return _CockpitMountedLocatorProbe(
+      ambiguous: true,
+      matchCount: bestMatches.length,
+    );
+  }
+
+  CockpitTarget _probeTargetForElement(Element element) {
+    final semanticId = _elementSemanticSignal(element);
+    final keyValue = _stableKeyValue(element.widget.key);
+    return CockpitTarget(
+      registrationId: 'probe:${identityHashCode(element)}',
+      cockpitId: semanticId ?? keyValue,
+      semanticId: semanticId,
+      keyValue: keyValue,
+      text: _elementTextSignal(element),
+      tooltip: _elementTooltipSignal(element),
+      typeName: element.widget.runtimeType.toString(),
+      path: _locatorPathForElement(element),
+      routeName: widget.routeName,
+      locatorAncestors: _extractLocatorAncestors(element),
+      diagnosticNodeProvider: () => element,
+      geometryProvider: () =>
+          CockpitTargetGeometryResolver.maybeFromElement(element),
+    );
+  }
+
+  Map<String, String> _matchedLocatorSignals(CockpitLocator locator) {
+    if (locator.signalMap.length <= 1 &&
+        locator.ancestor == null &&
+        locator.index == null &&
+        locator.matchMode == CockpitTextMatchMode.exact) {
+      return const <String, String>{};
+    }
+    return <String, String>{
+      ...locator.signalMap,
+      if (locator.matchMode != CockpitTextMatchMode.exact)
+        'matchMode': locator.matchMode.name,
+      if (locator.index != null) 'index': '${locator.index}',
+    };
+  }
+
+  bool _elementIsFullyVisible(Element element) {
+    if (!cockpitIsVisibleInRuntimeTree(element)) {
+      return false;
+    }
+    final targetGeometry = CockpitTargetGeometryResolver.maybeFromElement(
+      element,
+    );
+    final viewportGeometry = _viewportGeometry();
+    if (targetGeometry == null || viewportGeometry == null) {
+      return false;
+    }
+    final targetRect = Rect.fromLTWH(
+      targetGeometry.left,
+      targetGeometry.top,
+      targetGeometry.width,
+      targetGeometry.height,
+    );
+    final viewportRect = Rect.fromLTWH(
+      viewportGeometry.left,
+      viewportGeometry.top,
+      viewportGeometry.width,
+      viewportGeometry.height,
+    );
+    return _rectContainsRect(viewportRect, targetRect) &&
+        _isFullyVisibleInScrollableAncestors(element, targetRect);
   }
 
   bool _isElementAncestor(Element ancestor, Element descendant) {
@@ -1205,26 +1243,24 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
   }
 
   String? _elementTextSignal(Element element) {
-    if (_isExcludedFromSemantics(element)) {
+    final text = _textPreviewForAncestor(element);
+    if (text == null || _isExcludedFromSemantics(element)) {
       return null;
     }
-    return _textPreviewForAncestor(element);
+    return text;
   }
 
   String? _elementSemanticSignal(Element element) {
-    if (_isExcludedFromSemantics(element)) {
+    final widget = element.widget;
+    if (widget is! Semantics || _isExcludedFromSemantics(element)) {
       return null;
     }
-    final widget = element.widget;
-    if (widget is Semantics) {
-      return _normalizeText(
-        widget.properties.identifier ??
-            widget.properties.label ??
-            widget.properties.value ??
-            widget.properties.hint,
-      );
-    }
-    return null;
+    return _normalizeText(
+      widget.properties.identifier ??
+          widget.properties.label ??
+          widget.properties.value ??
+          widget.properties.hint,
+    );
   }
 
   bool _isExcludedFromSemantics(Element element) {
@@ -2582,6 +2618,18 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
       child: RepaintBoundary(key: _boundaryKey, child: widget.child),
     );
   }
+}
+
+final class _CockpitMountedLocatorProbe {
+  const _CockpitMountedLocatorProbe({
+    this.element,
+    this.ambiguous = false,
+    this.matchCount = 0,
+  });
+
+  final Element? element;
+  final bool ambiguous;
+  final int matchCount;
 }
 
 final class _CockpitRevealRequest {

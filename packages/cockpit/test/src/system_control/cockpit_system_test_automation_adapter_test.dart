@@ -92,6 +92,60 @@ void main() {
     );
   });
 
+  test('native tap waits for moving target bounds to stabilize', () async {
+    final processes = _TransientUiTreeProcessManager(
+      uiTrees: const <String>[
+        _movingBackTree,
+        _settledBackTree,
+        _settledBackTree,
+      ],
+      failFirst: false,
+    );
+    final controls = CockpitSystemControlService(processManager: processes);
+    final adapter = CockpitSystemTestAutomationAdapter(
+      target: CockpitSystemTestTarget(
+        platform: 'android',
+        deviceId: 'emulator-5554',
+        appId: 'dev.cockpit.demo',
+        targetKind: CockpitTargetKind.flutterApp,
+      ),
+      controlService: controls,
+      actionService: CockpitSystemControlActionService(
+        processManager: processes,
+        systemControlService: controls,
+        androidUiAutomation: processes,
+      ),
+      workspaceRoot: Directory.current.path,
+      delay: (_) async {},
+    );
+
+    final execution = await adapter.execute(
+      CockpitCommand(
+        commandId: 'tap-back',
+        commandType: CockpitCommandType.tap,
+        parameters: <String, Object?>{
+          'cockpitTestLocator': <String, Object?>{
+            'label': 'Back',
+            'type': 'Button',
+          },
+        },
+        timeoutMs: 1000,
+      ),
+    );
+
+    expect(execution.result.success, isTrue);
+    expect(processes.uiTreeReads, 3);
+    expect(processes.starts.single, <String>[
+      '-s',
+      'emulator-5554',
+      'shell',
+      'input',
+      'tap',
+      '384',
+      '246',
+    ]);
+  });
+
   test('blocked system screenshot remains a blocked capability', () async {
     final processes = _TransientUiTreeProcessManager(failFirst: false);
     final controls = CockpitSystemControlService(processManager: processes);
@@ -156,12 +210,15 @@ final class _TransientUiTreeProcessManager
     implements CockpitProcessManager, CockpitAndroidUiAutomation {
   _TransientUiTreeProcessManager({
     this.uiTree = _uiTree,
+    this.uiTrees = const <String>[],
     this.failFirst = true,
   });
 
   final String uiTree;
+  final List<String> uiTrees;
   final bool failFirst;
   int uiTreeReads = 0;
+  final List<List<String>> starts = <List<String>>[];
 
   @override
   Future<String> readUiTree({
@@ -173,6 +230,9 @@ final class _TransientUiTreeProcessManager
     uiTreeReads += 1;
     if (failFirst && uiTreeReads == 1) {
       throw StateError('UI hierarchy unavailable');
+    }
+    if (uiTrees.isNotEmpty) {
+      return uiTrees[(uiTreeReads - 1).clamp(0, uiTrees.length - 1)];
     }
     return uiTree;
   }
@@ -220,7 +280,37 @@ final class _TransientUiTreeProcessManager
     bool runInShell = false,
     ProcessStartMode mode = ProcessStartMode.normal,
   }) async {
+    if (executable == 'adb' && arguments.contains('tap')) {
+      starts.add(List<String>.unmodifiable(arguments));
+      return _CompletedProcess();
+    }
     throw StateError('Unexpected process: $executable ${arguments.join(' ')}');
+  }
+}
+
+final class _CompletedProcess implements Process {
+  final StreamController<List<int>> _stdinController =
+      StreamController<List<int>>();
+
+  @override
+  Future<int> get exitCode async => 0;
+
+  @override
+  int get pid => 1234;
+
+  @override
+  Stream<List<int>> get stderr => const Stream<List<int>>.empty();
+
+  @override
+  IOSink get stdin => IOSink(_stdinController.sink);
+
+  @override
+  Stream<List<int>> get stdout => const Stream<List<int>>.empty();
+
+  @override
+  bool kill([ProcessSignal signal = ProcessSignal.sigterm]) {
+    _stdinController.close();
+    return true;
   }
 }
 
@@ -234,4 +324,14 @@ const _flutterUiTree = '''<?xml version="1.0" encoding="UTF-8"?>
   <node text="Save" class="android.view.View" enabled="true" clickable="true" bounds="[40,100][360,180]">
     <node text="Save" class="android.view.View" enabled="true" clickable="false" bounds="[40,100][360,180]" />
   </node>
+</hierarchy>''';
+
+const _movingBackTree = '''<?xml version="1.0" encoding="UTF-8"?>
+<hierarchy bounds="[0,0][1200,800]">
+  <node content-desc="Back" class="Button" enabled="true" clickable="true" bounds="[432,218][488,274]" />
+</hierarchy>''';
+
+const _settledBackTree = '''<?xml version="1.0" encoding="UTF-8"?>
+<hierarchy bounds="[0,0][1200,800]">
+  <node content-desc="Back" class="Button" enabled="true" clickable="true" bounds="[356,218][412,274]" />
 </hierarchy>''';

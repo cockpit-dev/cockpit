@@ -12,6 +12,9 @@ sessions while using the same public Supervisor contracts as the CLI.
 
 ## Development
 
+Cockpit Console requires Flutter 3.44.0 or newer. The published Cockpit
+packages retain their independent Flutter 3.32.0 compatibility floor.
+
 From the repository root:
 
 ```bash

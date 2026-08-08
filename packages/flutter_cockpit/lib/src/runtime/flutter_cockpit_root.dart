@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
@@ -29,6 +30,7 @@ import '../recording/cockpit_recording_session.dart';
 import 'flutter_cockpit.dart';
 import 'cockpit_tap_feedback_overlay.dart';
 import 'cockpit_capabilities.dart';
+import 'cockpit_native_semantics.dart';
 import 'cockpit_process_id.dart';
 import 'cockpit_native_viewport.dart';
 import 'cockpit_runtime_query.dart';
@@ -65,6 +67,9 @@ final class FlutterCockpitRootState extends State<FlutterCockpitRoot> {
   Object? _remoteSessionStartError;
   StackTrace? _remoteSessionStartErrorStackTrace;
   bool _reportedRemoteSessionStartFailure = false;
+  SemanticsHandle? _semanticsHandle;
+  final CockpitNativeSemantics _nativeSemantics =
+      const CockpitNativeSemantics();
   final CockpitNativeViewport _nativeViewport = const CockpitNativeViewport();
 
   @override
@@ -354,6 +359,7 @@ final class FlutterCockpitRootState extends State<FlutterCockpitRoot> {
     _routeInformationUnbinders.clear();
     unawaited(_remoteSessionServer?.close());
     unawaited(_remoteSessionBridgeClient?.close());
+    _semanticsHandle?.dispose();
     _tapFeedbackController?.dispose();
     super.dispose();
   }
@@ -433,7 +439,14 @@ final class FlutterCockpitRootState extends State<FlutterCockpitRoot> {
       registry: FlutterCockpit.binding.registry,
       captureHandler: captureScreenshot,
       snapshotProvider: snapshot,
+      locatorProbe: (locator) {
+        final surface = _surfaceStateOrNull;
+        return surface == null
+            ? FlutterCockpit.binding.registry.resolve(locator)
+            : surface.probeVisibleLocator(locator);
+      },
       routeNameSynchronizer: FlutterCockpit.binding.setDiscoveredRouteName,
+      scrollStepProbesTarget: true,
       scrollStepHandler:
           ({
             required reverse,
@@ -530,6 +543,11 @@ final class FlutterCockpitRootState extends State<FlutterCockpitRoot> {
     }
     if (_remoteSessionServer != null || _remoteSessionBridgeClient != null) {
       return;
+    }
+
+    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.macOS) {
+      await _nativeSemantics.enable();
+      _semanticsHandle ??= SemanticsBinding.instance.ensureSemantics();
     }
 
     final executor = _buildRemoteCommandExecutor(

@@ -39,6 +39,7 @@ final class CockpitDevelopmentSessionSupervisor {
     int bindPort = 0,
     bool bindControlPlane = true,
     Duration settleTimeout = const Duration(seconds: 30),
+    Duration? startupSettleTimeout,
     Duration settlePollInterval = const Duration(milliseconds: 500),
     Duration settleProbeTimeout = const Duration(seconds: 2),
   }) : _handle = initialHandle,
@@ -57,6 +58,7 @@ final class CockpitDevelopmentSessionSupervisor {
        _bindPort = bindPort,
        _bindControlPlane = bindControlPlane,
        _settleTimeout = settleTimeout,
+       _startupSettleTimeout = startupSettleTimeout ?? settleTimeout,
        _settlePollInterval = settlePollInterval,
        _settleProbeTimeout = settleProbeTimeout,
        _status = CockpitDevelopmentSessionStatus(
@@ -82,6 +84,7 @@ final class CockpitDevelopmentSessionSupervisor {
   final int _bindPort;
   final bool _bindControlPlane;
   final Duration _settleTimeout;
+  final Duration _startupSettleTimeout;
   final Duration _settlePollInterval;
   final Duration _settleProbeTimeout;
   CockpitDevelopmentSessionStatus _status;
@@ -452,13 +455,16 @@ final class CockpitDevelopmentSessionSupervisor {
   Future<bool> _settleReadyState({
     CockpitDevelopmentReloadMode? lastReloadMode,
     required bool bumpGeneration,
+    Duration? timeout,
   }) async {
+    final effectiveTimeout = timeout ?? _settleTimeout;
     _log(
       'settle begin '
       'mode=${lastReloadMode?.jsonValue ?? 'startup'} '
-      'base_url=${_handle.baseUri}',
+      'base_url=${_handle.baseUri} '
+      'timeout_ms=${effectiveTimeout.inMilliseconds}',
     );
-    final deadline = _now().add(_settleTimeout);
+    final deadline = _now().add(effectiveTimeout);
     var remoteReachable = false;
     var remoteControlReady = false;
     var ready = false;
@@ -560,13 +566,10 @@ final class CockpitDevelopmentSessionSupervisor {
     if (!_canProbeRemoteSession) {
       return;
     }
-    _pendingStartupSettle ??= _settleReadyState(bumpGeneration: false);
-    if (_machineClient == null) {
-      final connectFuture = _ensureMachineClientConnected(
-        updateStatusOnFailure: false,
-      );
-      unawaited(connectFuture.catchError((_) => null));
-    }
+    _pendingStartupSettle ??= _settleReadyState(
+      bumpGeneration: false,
+      timeout: _startupSettleTimeout,
+    );
   }
 
   bool get _canProbeRemoteSession {

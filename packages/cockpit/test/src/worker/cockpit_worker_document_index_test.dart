@@ -265,6 +265,85 @@ steps:
     expect(summaries.single['relativePath'], 'lib/app.dart');
   });
 
+  test('resolves a unique nested-project suite case source', () async {
+    final fixture = await _DocumentFixture.create();
+    addTearDown(fixture.dispose);
+    final file = await File(
+      p.join(
+        fixture.workspace.path,
+        'packages',
+        'demo',
+        'e2e',
+        'cases',
+        'nested.case.yaml',
+      ),
+    ).create(recursive: true);
+    await file.writeAsString('''
+schemaVersion: cockpit.test/v2
+kind: case
+id: nestedCase
+target: {platform: flutter, targetKind: flutterApp, plane: semantic}
+steps:
+  - stepId: goBack
+    action: {type: back}
+''');
+    final index = fixture.index();
+    await index.refresh();
+
+    final compiled = await index.resolveFile(
+      CockpitTestSuiteFileCaseSource(
+        relativePath: 'e2e/cases/nested.case.yaml',
+        caseId: 'nestedCase',
+      ),
+    );
+
+    expect(compiled.testCase.id, 'nestedCase');
+  });
+
+  test('rejects ambiguous nested-project suite case sources', () async {
+    final fixture = await _DocumentFixture.create();
+    addTearDown(fixture.dispose);
+    for (final project in <String>['alpha', 'beta']) {
+      final file = await File(
+        p.join(
+          fixture.workspace.path,
+          'packages',
+          project,
+          'e2e',
+          'cases',
+          'shared.case.yaml',
+        ),
+      ).create(recursive: true);
+      await file.writeAsString('''
+schemaVersion: cockpit.test/v2
+kind: case
+id: sharedCase
+target: {platform: flutter, targetKind: flutterApp, plane: semantic}
+steps:
+  - stepId: goBack
+    action: {type: back}
+''');
+    }
+    final index = fixture.index();
+    await index.refresh();
+
+    await expectLater(
+      index.resolveFile(
+        CockpitTestSuiteFileCaseSource(
+          relativePath: 'e2e/cases/shared.case.yaml',
+          caseId: 'sharedCase',
+        ),
+      ),
+      throwsA(
+        isA<FormatException>().having(
+          (error) => error.message,
+          'message',
+          contains('ambiguous'),
+        ),
+      ),
+    );
+  });
+
   test('restores the in-memory index when atomic publication fails', () async {
     final fixture = await _DocumentFixture.create();
     addTearDown(fixture.dispose);

@@ -16,8 +16,9 @@ claiming validation. When the Cockpit Power is installed, its bundled
 Cockpit, Flutter debugging, UI automation, and E2E requests.
 
 ```bash
+cockpit session list
 cockpit dev status
-cockpit dev inspect
+cockpit dev inspect "TARGET"
 cockpit dev diagnose --verbosity standard
 ```
 

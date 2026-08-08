@@ -70,11 +70,26 @@ bool _isVisibleInAncestorTree(Element element) {
   var isVisible = true;
   element.visitAncestorElements((ancestor) {
     final widget = ancestor.widget;
-    if (widget is Offstage && widget.offstage) {
+    if ((widget is Offstage && widget.offstage) ||
+        _belongsToInactiveModalRoute(widget)) {
       isVisible = false;
       return false;
     }
     return true;
   });
   return isVisible;
+}
+
+bool _belongsToInactiveModalRoute(Widget widget) {
+  if (widget is! InheritedModel<dynamic>) {
+    return false;
+  }
+  try {
+    final dynamic modalScopeStatus = widget;
+    final dynamic route = modalScopeStatus.route;
+    final dynamic isCurrent = modalScopeStatus.isCurrent;
+    return route is ModalRoute<dynamic> && isCurrent is bool && !isCurrent;
+  } on Object {
+    return false;
+  }
 }

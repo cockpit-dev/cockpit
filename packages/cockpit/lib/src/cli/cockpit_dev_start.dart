@@ -6,6 +6,7 @@ import 'package:path/path.dart' as p;
 import '../development/cockpit_checkout_identity.dart';
 import '../supervisor/cockpit_supervisor_api_client.dart';
 import 'cockpit_cli_runtime.dart';
+import 'cockpit_cli_session_handles.dart';
 import 'cockpit_dev_runtime.dart';
 
 final class CockpitDevStartRequest {
@@ -42,16 +43,32 @@ final class CockpitDevStartService {
   final CockpitDevRuntime dev;
 
   Future<int> start(CockpitDevStartRequest request) async {
-    final checkout = await runtime.checkoutIdentity();
     final store = await runtime.sessionHandleStore();
-    final active = request.sessionReference == null
-        ? await store.activeForCheckout(checkout.value)
-        : await runtime.resolveDevelopmentSession(request.sessionReference);
+    CockpitCheckoutIdentity? resolvedCheckout;
+    CockpitCliSessionHandle? active;
+    if (request.sessionReference != null) {
+      active = await runtime.resolveDevelopmentSession(
+        request.sessionReference,
+      );
+    } else if (!request.hasExplicitSelection) {
+      runtime.progress('Resolving Flutter project...');
+      resolvedCheckout = await runtime.checkoutIdentity();
+      active = await store.activeForPath(
+        checkoutIdentity: resolvedCheckout.value,
+        path: await runtime.canonicalWorkingDirectory(),
+      );
+    }
     if (active != null && !request.hasExplicitSelection) {
+      runtime.progress(
+        active.lifecycle == 'stopped'
+            ? 'Relaunching session ${active.handleId}...'
+            : 'Reconnecting session ${active.handleId}...',
+      );
       final resolution = active.lifecycle == 'stopped'
           ? await dev.relaunch(active)
           : await dev.reconcile(active, allowRelaunch: true);
       if (resolution.ready) {
+        runtime.progress('Ready: session ${resolution.session.handleId}.');
         return dev.writeEnvelope(
           action: 'start',
           session: resolution.session,
@@ -63,9 +80,45 @@ final class CockpitDevStartService {
       return dev.writeUnavailable(action: 'start', resolution: resolution);
     }
 
+    runtime.progress('Resolving checkout...');
+    final checkout = resolvedCheckout ?? await runtime.checkoutIdentity();
+    final launchRequest = active == null || request.sessionReference == null
+        ? request
+        : CockpitDevStartRequest(
+            sessionReference: request.sessionReference,
+            entrypoint: request.entrypoint ?? active.entrypoint,
+            platform: request.platform ?? active.platform,
+            deviceId: request.deviceId ?? active.deviceId,
+            flavor: request.flavor ?? active.flavor,
+            launchConfiguration: request.launchConfiguration,
+            launchTimeoutMilliseconds: request.launchTimeoutMilliseconds,
+          );
+    runtime.progress('Preparing Flutter target...');
+    final project = await _project(
+      checkout,
+      requestedEntrypoint: launchRequest.entrypoint,
+    );
+    final projectDirectory = project.path;
+    final entrypoint = project.entrypoint;
+    if (active != null &&
+        (active.checkoutIdentity != checkout.value ||
+            !p.equals(active.projectPath!, projectDirectory))) {
+      throw const CockpitSupervisorClientException(
+        code: 'sessionProjectMismatch',
+        message:
+            'The selected session belongs to a different Flutter project. '
+            'Run inside that project or omit --session to start another app.',
+      );
+    }
+    final launchConfiguration =
+        await cockpitResolveDevFlutterLaunchConfiguration(
+          launchRequest.launchConfiguration,
+          sourceDirectory: runtime.workingDirectory,
+          projectDirectory: projectDirectory,
+        );
+    runtime.progress('Starting Cockpit services...');
     final client = await runtime.developmentClient();
-    final workspace = await _workspace(client, checkout);
-    final entrypoint = await _entrypoint(workspace, request.entrypoint);
+    final workspace = await _workspace(client, checkout, projectDirectory);
     final documents = await client.documents(
       workspace.workspaceId,
       kind: CockpitIndexedDocumentKind.source,
@@ -80,21 +133,18 @@ final class CockpitDevStartService {
       );
     }
 
-    final device = await _device(client, request);
+    runtime.progress('Discovering Flutter devices...');
+    final device = await _device(client, launchRequest);
     var targets = await client.targets(workspace.workspaceId);
     var matches = targets
         .where(
-          (target) =>
-              target.targetKind == CockpitTargetKind.flutterApp &&
-              target.mode == CockpitAutomationTargetMode.development &&
-              target.entrypoint == entrypoint &&
-              target.platform == device.platform &&
-              target.deviceId == device.id &&
-              target.flavor == request.flavor &&
-              (target.environment ==
-                      CockpitAutomationTargetEnvironment.development ||
-                  target.environment ==
-                      CockpitAutomationTargetEnvironment.test),
+          (target) => cockpitMatchesDevelopmentTarget(
+            target,
+            entrypoint: entrypoint,
+            platform: device.platform,
+            deviceId: device.id,
+            flavor: launchRequest.flavor,
+          ),
         )
         .toList(growable: false);
     if (matches.length > 1) {
@@ -117,7 +167,7 @@ final class CockpitDevStartService {
           'environment': CockpitAutomationTargetEnvironment.development.name,
           'mode': CockpitAutomationTargetMode.development.name,
           'entrypointDocumentId': documents.single.documentId,
-          if (request.flavor != null) 'flavor': request.flavor,
+          if (launchRequest.flavor != null) 'flavor': launchRequest.flavor,
         },
       );
       if (!_succeeded(registered)) {
@@ -126,12 +176,13 @@ final class CockpitDevStartService {
       targets = await client.targets(workspace.workspaceId);
       matches = targets
           .where(
-            (target) =>
-                target.targetKind == CockpitTargetKind.flutterApp &&
-                target.entrypoint == entrypoint &&
-                target.platform == device.platform &&
-                target.deviceId == device.id &&
-                target.flavor == request.flavor,
+            (target) => cockpitMatchesDevelopmentTarget(
+              target,
+              entrypoint: entrypoint,
+              platform: device.platform,
+              deviceId: device.id,
+              flavor: launchRequest.flavor,
+            ),
           )
           .toList(growable: false);
       if (matches.length != 1) {
@@ -142,6 +193,42 @@ final class CockpitDevStartService {
       }
     }
     final target = matches.single;
+    if (active != null && active.targetId != target.targetId) {
+      throw const CockpitSupervisorClientException(
+        code: 'sessionTargetMismatch',
+        message:
+            'The selected session uses a different Flutter launch target. '
+            'Omit --session to start or select that target independently.',
+      );
+    }
+    active ??= await store.developmentForTarget(
+      checkoutIdentity: checkout.value,
+      projectPath: projectDirectory,
+      targetId: target.targetId,
+    );
+    if (active != null && active.lifecycle != 'stopped') {
+      runtime.progress('Stopping session ${active.handleId} for relaunch...');
+      final stopped = await dev.invoke(
+        active,
+        'session.development.stop',
+        <String, Object?>{'sessionId': active.sessionId},
+      );
+      if (!_succeeded(stopped)) {
+        return _writePreSessionFailure('start', stopped);
+      }
+      active = await runtime.updateDevelopmentSession(
+        previous: active,
+        workspaceId: active.workspaceId,
+        sessionId: active.sessionId,
+        targetId: active.targetId!,
+        appId: active.appId!,
+        lifecycle: 'stopped',
+      );
+    }
+    runtime.progress(
+      'Building and launching Flutter on ${device.id}; '
+      'waiting for the Cockpit bridge...',
+    );
     final launched = await _invokeWorkspace(
       client,
       workspace.workspaceId,
@@ -150,13 +237,13 @@ final class CockpitDevStartService {
         'targetId': target.targetId,
         'mode': 'development',
         'launchTimeoutMs': runtime.operationTimeout.inMilliseconds,
-        if (request.launchConfiguration != null)
-          'launchConfiguration': request.launchConfiguration,
+        'launchConfiguration': ?launchConfiguration,
       },
     );
     if (!_succeeded(launched)) {
       return _writePreSessionFailure('start', launched);
     }
+    runtime.progress('Binding development session...');
     final output = launched.output ?? const <String, Object?>{};
     final sessionId = output['sessionId'];
     final appId = output['appId'];
@@ -167,21 +254,38 @@ final class CockpitDevStartService {
         message: 'Flutter launch did not return app, target, and session IDs.',
       );
     }
-    final recoverable = request.launchConfiguration == null;
-    final handle = await runtime.bindDevelopmentSession(
-      checkout: checkout,
-      workspaceId: workspace.workspaceId,
-      sessionId: sessionId,
-      targetId: targetId,
-      appId: appId,
-      entrypoint: entrypoint,
-      platform: device.platform,
-      deviceId: device.id,
-      flavor: request.flavor,
-      recoverable: recoverable,
-      launchTimeoutMilliseconds: request.launchTimeoutMilliseconds,
-      replaceLaunchIdentity: true,
-    );
+    final recoverable = launchConfiguration == null;
+    final handle = active == null
+        ? await runtime.bindDevelopmentSession(
+            checkout: checkout,
+            projectPath: projectDirectory,
+            workspaceId: workspace.workspaceId,
+            sessionId: sessionId,
+            targetId: targetId,
+            appId: appId,
+            entrypoint: entrypoint,
+            platform: device.platform,
+            deviceId: device.id,
+            flavor: launchRequest.flavor,
+            recoverable: recoverable,
+            launchTimeoutMilliseconds: launchRequest.launchTimeoutMilliseconds,
+            replaceLaunchIdentity: true,
+          )
+        : await runtime.updateDevelopmentSession(
+            previous: active,
+            workspaceId: workspace.workspaceId,
+            sessionId: sessionId,
+            targetId: targetId,
+            appId: appId,
+            entrypoint: entrypoint,
+            platform: device.platform,
+            deviceId: device.id,
+            flavor: launchRequest.flavor,
+            recoverable: recoverable,
+            launchTimeoutMilliseconds: launchRequest.launchTimeoutMilliseconds,
+            replaceLaunchIdentity: true,
+          );
+    runtime.progress('Ready: session ${handle.handleId}.');
     return dev.writeEnvelope(
       action: 'start',
       session: handle,
@@ -190,6 +294,7 @@ final class CockpitDevStartService {
         'lifecycle': 'ready',
         'platform': device.platform,
         'device': device.id,
+        'projectPath': projectDirectory,
         'entrypoint': entrypoint,
         'recoverable': recoverable,
       },
@@ -200,22 +305,13 @@ final class CockpitDevStartService {
   Future<CockpitWorkspaceResource> _workspace(
     CockpitSupervisorApiClient client,
     CockpitCheckoutIdentity checkout,
+    String projectPath,
   ) async {
-    final workspaces = await client.workspaces();
-    final exact = workspaces
-        .where(
-          (item) =>
-              item.state == CockpitWorkspaceState.active &&
-              p.equals(item.canonicalPath, checkout.canonicalRoot),
-        )
-        .toList(growable: false);
-    if (exact.length == 1) return exact.single;
-    if (exact.length > 1) {
-      throw const CockpitSupervisorClientException(
-        code: 'workspaceAmbiguous',
-        message: 'Checkout has multiple active workspace registrations.',
-      );
-    }
+    final existing = cockpitSelectDevWorkspace(
+      await client.workspaces(),
+      projectPath: projectPath,
+    );
+    if (existing != null) return existing;
     final roots = await client.roots();
     final rootMatches = roots
         .where(
@@ -235,46 +331,52 @@ final class CockpitDevStartService {
             CockpitRootRegistration(path: checkout.canonicalRoot),
           );
     return client.registerWorkspace(
-      CockpitWorkspaceRegistration(
-        rootId: root.rootId,
-        path: checkout.canonicalRoot,
+      CockpitWorkspaceRegistration(rootId: root.rootId, path: projectPath),
+    );
+  }
+
+  Future<({String path, String entrypoint})> _project(
+    CockpitCheckoutIdentity checkout, {
+    String? requestedEntrypoint,
+  }) async {
+    final absoluteEntrypoint = requestedEntrypoint == null
+        ? await _defaultEntrypoint(checkout.canonicalRoot)
+        : _absoluteEntrypoint(checkout.canonicalRoot, requestedEntrypoint);
+    final projectPath = _flutterProjectDirectory(
+      checkout.canonicalRoot,
+      absoluteEntrypoint,
+    );
+    return (
+      path: projectPath,
+      entrypoint: p.posix.joinAll(
+        p.split(p.relative(absoluteEntrypoint, from: projectPath)),
       ),
     );
   }
 
-  Future<String> _entrypoint(
-    CockpitWorkspaceResource workspace,
-    String? requested,
-  ) async {
-    if (requested != null) {
-      return _workspaceRelativeFile(workspace.canonicalPath, requested);
-    }
-    final package = await _nearestFlutterPackage(workspace.canonicalPath);
-    for (final candidate in const <String>[
-      'cockpit/main.dart',
-      'lib/main.dart',
-    ]) {
-      final file = File(p.join(package, candidate));
+  Future<String> _defaultEntrypoint(String checkoutRoot) async {
+    final project = await _nearestFlutterPackage(checkoutRoot);
+    for (final candidate in const <String>['cockpit/main.dart', 'main.dart']) {
+      final file = File(p.join(project, candidate));
       if (await file.exists()) {
-        return p.posix.joinAll(
-          p.split(p.relative(file.path, from: workspace.canonicalPath)),
-        );
+        return p.normalize(await file.resolveSymbolicLinks());
       }
     }
     throw const CockpitSupervisorClientException(
-      code: 'entrypointNotFound',
+      code: 'flutterBridgeShellMissing',
       message:
-          'No unique cockpit/main.dart or lib/main.dart entrypoint was found; '
-          'pass one to `cockpit dev start <entrypoint>`.',
+          'No Cockpit Flutter bridge shell was found. Integrate '
+          'cockpit/main.dart first, or pass an intentional development '
+          'entrypoint explicitly.',
     );
   }
 
-  Future<String> _nearestFlutterPackage(String workspaceRoot) async {
+  Future<String> _nearestFlutterPackage(String checkoutRoot) async {
     var current = p.normalize(
       await Directory(runtime.workingDirectory).resolveSymbolicLinks(),
     );
-    if (!p.equals(current, workspaceRoot) &&
-        !p.isWithin(workspaceRoot, current)) {
+    if (!p.equals(current, checkoutRoot) &&
+        !p.isWithin(checkoutRoot, current)) {
       throw const CockpitSupervisorClientException(
         code: 'checkoutPathMismatch',
         message: 'Current directory is outside its resolved checkout root.',
@@ -282,15 +384,42 @@ final class CockpitDevStartService {
     }
     while (true) {
       if (await File(p.join(current, 'pubspec.yaml')).exists()) return current;
-      if (p.equals(current, workspaceRoot)) break;
+      if (p.equals(current, checkoutRoot)) break;
       final parent = p.dirname(current);
-      if (parent == current || !p.isWithin(workspaceRoot, parent)) break;
+      if (parent == current || !p.isWithin(checkoutRoot, parent)) break;
       current = parent;
     }
-    return workspaceRoot;
+    throw const CockpitSupervisorClientException(
+      code: 'flutterProjectNotFound',
+      message: 'No Flutter pubspec.yaml contains the current directory.',
+    );
   }
 
-  String _workspaceRelativeFile(String workspaceRoot, String requested) {
+  String _flutterProjectDirectory(
+    String checkoutRoot,
+    String absoluteEntrypoint,
+  ) {
+    var directory = p.dirname(absoluteEntrypoint);
+    while (p.equals(directory, checkoutRoot) ||
+        p.isWithin(checkoutRoot, directory)) {
+      final manifest = p.join(directory, 'pubspec.yaml');
+      if (FileSystemEntity.typeSync(manifest, followLinks: false) ==
+          FileSystemEntityType.file) {
+        final canonicalManifest = p.normalize(
+          File(manifest).resolveSymbolicLinksSync(),
+        );
+        if (p.equals(canonicalManifest, manifest)) return directory;
+      }
+      if (p.equals(directory, checkoutRoot)) break;
+      directory = p.dirname(directory);
+    }
+    throw const CockpitSupervisorClientException(
+      code: 'flutterProjectNotFound',
+      message: 'No Flutter pubspec.yaml contains the selected entrypoint.',
+    );
+  }
+
+  String _absoluteEntrypoint(String checkoutRoot, String requested) {
     final unresolved = p.normalize(
       p.isAbsolute(requested)
           ? requested
@@ -299,18 +428,18 @@ final class CockpitDevStartService {
     final file = File(unresolved);
     if (!file.existsSync()) {
       throw FileSystemException(
-        'Flutter entrypoint must be an existing file inside the workspace.',
+        'Flutter entrypoint must be an existing file inside the checkout.',
         unresolved,
       );
     }
     final absolute = p.normalize(file.resolveSymbolicLinksSync());
-    if (!p.isWithin(workspaceRoot, absolute)) {
+    if (!p.isWithin(checkoutRoot, absolute)) {
       throw FileSystemException(
-        'Flutter entrypoint must resolve inside the workspace.',
+        'Flutter entrypoint must resolve inside the checkout.',
         absolute,
       );
     }
-    return p.posix.joinAll(p.split(p.relative(absolute, from: workspaceRoot)));
+    return absolute;
   }
 
   Future<({String id, String platform})> _device(
@@ -439,6 +568,96 @@ final class CockpitDevStartService {
   }
 }
 
+CockpitWorkspaceResource? cockpitSelectDevWorkspace(
+  Iterable<CockpitWorkspaceResource> workspaces, {
+  required String projectPath,
+}) {
+  final matches = workspaces
+      .where(
+        (item) =>
+            item.state == CockpitWorkspaceState.active &&
+            p.equals(item.canonicalPath, projectPath),
+      )
+      .toList(growable: false);
+  if (matches.length > 1) {
+    throw const CockpitSupervisorClientException(
+      code: 'workspaceAmbiguous',
+      message: 'Flutter project has multiple active workspace registrations.',
+    );
+  }
+  return matches.firstOrNull;
+}
+
+bool cockpitMatchesDevelopmentTarget(
+  CockpitAutomationTargetResource target, {
+  required String entrypoint,
+  required String platform,
+  required String deviceId,
+  required String? flavor,
+}) {
+  return target.targetKind == CockpitTargetKind.flutterApp &&
+      target.mode == CockpitAutomationTargetMode.development &&
+      target.entrypoint == entrypoint &&
+      target.platform == platform &&
+      target.deviceId == deviceId &&
+      target.flavor == flavor &&
+      (target.environment == CockpitAutomationTargetEnvironment.development ||
+          target.environment == CockpitAutomationTargetEnvironment.test);
+}
+
 bool _succeeded(CockpitOperationResult result) =>
     result.lifecycle == CockpitOperationLifecycle.completed &&
     result.outcome == CockpitOperationOutcome.succeeded;
+
+Future<Map<String, Object?>?> cockpitResolveDevFlutterLaunchConfiguration(
+  Map<String, Object?>? configuration, {
+  required String sourceDirectory,
+  required String projectDirectory,
+}) async {
+  if (configuration == null) return null;
+  final rawFiles = configuration['dartDefineFromFiles'];
+  if (rawFiles == null) return configuration;
+  if (rawFiles is! List<Object?> || rawFiles.any((value) => value is! String)) {
+    throw const FormatException(
+      'Flutter dartDefineFromFiles must contain only file paths.',
+    );
+  }
+
+  final canonicalProject = p.normalize(
+    await Directory(projectDirectory).resolveSymbolicLinks(),
+  );
+  final canonicalSource = p.normalize(
+    await Directory(sourceDirectory).resolveSymbolicLinks(),
+  );
+  final resolvedFiles = <String>[];
+  for (final rawFile in rawFiles.cast<String>()) {
+    final requestedPath = p.normalize(
+      p.isAbsolute(rawFile) ? rawFile : p.join(canonicalSource, rawFile),
+    );
+    if (await FileSystemEntity.type(requestedPath, followLinks: false) !=
+        FileSystemEntityType.file) {
+      throw FormatException(
+        'Flutter --dart-define-from-file is not an existing regular file: '
+        '$rawFile',
+      );
+    }
+    final canonicalFile = p.normalize(
+      await File(requestedPath).resolveSymbolicLinks(),
+    );
+    if (!p.isWithin(canonicalProject, canonicalFile)) {
+      throw FormatException(
+        'Flutter --dart-define-from-file must resolve inside the selected '
+        'Flutter project: $rawFile',
+      );
+    }
+    resolvedFiles.add(
+      p.posix.joinAll(
+        p.split(p.relative(canonicalFile, from: canonicalProject)),
+      ),
+    );
+  }
+  return <String, Object?>{
+    ...configuration,
+    'dartDefineFromFiles': resolvedFiles,
+  };
+}

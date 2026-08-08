@@ -109,6 +109,7 @@ final class CockpitInspectSurfaceService {
     CockpitPlatformDriverRegistry? platformDriverRegistry,
     CockpitCaptureStrategyResolver captureStrategyResolver =
         const CockpitCaptureStrategyResolver(),
+    CockpitRemoteArtifactTempFileFactory? artifactTempFileFactory,
   }) : _inspectSurfaceOverride = inspectSurface,
        _inspectFlutterSurface =
            inspectFlutterSurface ??
@@ -117,13 +118,15 @@ final class CockpitInspectSurfaceService {
            targetReferenceResolver ?? CockpitTargetReferenceResolver(),
        _platformDriverRegistry =
            platformDriverRegistry ?? CockpitPlatformDriverRegistry(),
-       _captureStrategyResolver = captureStrategyResolver;
+       _captureStrategyResolver = captureStrategyResolver,
+       _artifactTempFileFactory = artifactTempFileFactory;
 
   final CockpitInspectSurfaceFunction? _inspectSurfaceOverride;
   final CockpitInspectFlutterSurfaceFunction _inspectFlutterSurface;
   final CockpitTargetReferenceResolver _targetReferenceResolver;
   final CockpitPlatformDriverRegistry _platformDriverRegistry;
   final CockpitCaptureStrategyResolver _captureStrategyResolver;
+  final CockpitRemoteArtifactTempFileFactory? _artifactTempFileFactory;
 
   Future<CockpitInspectSurfaceResult> inspect(
     CockpitInspectSurfaceRequest request,
@@ -163,7 +166,10 @@ final class CockpitInspectSurfaceService {
     final fallbackApp = resolved.app ?? _appFromTarget(target);
     final captureAdapter = _captureStrategyResolver.resolve(
       platform: target.platform,
-      client: CockpitRemoteSessionClient(baseUri: resolved.baseUri),
+      client: CockpitRemoteSessionClient(
+        baseUri: resolved.baseUri,
+        artifactTempFileFactory: _artifactTempFileFactory,
+      ),
       platformAppId: fallbackApp.platformAppId,
       processId: fallbackApp.processId,
       sessionHandle: fallbackApp.remoteSession,
@@ -171,6 +177,7 @@ final class CockpitInspectSurfaceService {
           request.androidDeviceId ??
           (target.platform == 'android' ? target.deviceId : null),
       iosDeviceId: target.platform == 'ios' ? target.deviceId : null,
+      artifactTempFileFactory: _artifactTempFileFactory,
     );
     final capture = await captureAdapter.capture(
       CockpitCommand(

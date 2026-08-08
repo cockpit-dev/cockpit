@@ -274,7 +274,7 @@ final class CockpitSystemTestAutomationAdapter
     Stopwatch stopwatch,
   ) async {
     final deadline = _deadline(command);
-    final point = await _resolvePoint(command, deadline);
+    final point = await _resolveStablePoint(command, deadline);
     if (point.error != null) {
       return _failure(
         command,
@@ -304,7 +304,7 @@ final class CockpitSystemTestAutomationAdapter
     Stopwatch stopwatch,
   ) async {
     final deadline = _deadline(command);
-    final point = await _resolvePoint(command, deadline);
+    final point = await _resolveStablePoint(command, deadline);
     if (point.error != null) {
       return _failure(
         command,
@@ -339,7 +339,7 @@ final class CockpitSystemTestAutomationAdapter
     Stopwatch stopwatch,
   ) async {
     final deadline = _deadline(command);
-    final point = await _resolvePoint(command, deadline);
+    final point = await _resolveStablePoint(command, deadline);
     if (point.error != null) {
       return _failure(
         command,
@@ -386,7 +386,7 @@ final class CockpitSystemTestAutomationAdapter
     List<CockpitArtifactRef> artifacts = const <CockpitArtifactRef>[];
     Map<String, String> sourcePaths = const <String, String>{};
     if (locator != null) {
-      final point = await _resolvePoint(command, deadline);
+      final point = await _resolveStablePoint(command, deadline);
       if (point.error != null) {
         return _failure(
           command,
@@ -445,7 +445,7 @@ final class CockpitSystemTestAutomationAdapter
     Map<String, String> sourcePaths = const <String, String>{};
     int? inferredCharacters;
     if (locator != null) {
-      final point = await _resolvePoint(command, deadline);
+      final point = await _resolveStablePoint(command, deadline);
       if (point.error != null) {
         return _failure(
           command,
@@ -555,7 +555,7 @@ final class CockpitSystemTestAutomationAdapter
     Map<String, String> sourcePaths = const <String, String>{};
     final locator = _locator(command);
     if (locator != null) {
-      final point = await _resolvePoint(command, deadline);
+      final point = await _resolveStablePoint(command, deadline);
       if (point.error != null) {
         return _failure(
           command,
@@ -679,7 +679,7 @@ final class CockpitSystemTestAutomationAdapter
     int viewportWidth;
     int viewportHeight;
     if (locator != null) {
-      final point = await _resolvePoint(command, deadline);
+      final point = await _resolveStablePoint(command, deadline);
       if (point.error != null) {
         return _failure(
           command,
@@ -1275,6 +1275,74 @@ final class CockpitSystemTestAutomationAdapter
       viewportWidth: visualViewportWidth ?? snapshot?.viewportWidth,
       viewportHeight: visualViewportHeight ?? snapshot?.viewportHeight,
     );
+  }
+
+  Future<_ResolvedPoint> _resolveStablePoint(
+    CockpitCommand command,
+    DateTime deadline,
+  ) async {
+    var previous = await _resolvePoint(command, deadline);
+    if (previous.error != null || !_requiresStablePoint(previous)) {
+      return previous;
+    }
+    final candidateDeadline = _utcNow().add(const Duration(seconds: 2));
+    final stabilityDeadline = deadline.isBefore(candidateDeadline)
+        ? deadline
+        : candidateDeadline;
+    for (var sample = 0; sample < 8; sample += 1) {
+      final remaining = stabilityDeadline.difference(_utcNow());
+      if (remaining <= Duration.zero) break;
+      const interval = Duration(milliseconds: 50);
+      await _delay(remaining < interval ? remaining : interval);
+      final current = await _resolvePoint(command, deadline);
+      if (current.error != null) {
+        if (current.error!.code != CockpitCommandError.targetNotFoundCode) {
+          return current;
+        }
+        previous = current;
+        continue;
+      }
+      if (previous.error == null && _sameResolvedPoint(previous, current)) {
+        return current;
+      }
+      previous = current;
+    }
+    return _ResolvedPoint.error(
+      CockpitCommandError.targetNotHittable(
+        message: 'Native target bounds did not stabilize before input.',
+        details: <String, Object?>{
+          if (previous.x != null) 'lastX': previous.x,
+          if (previous.y != null) 'lastY': previous.y,
+          'stabilityWindowMs': 2000,
+        },
+      ),
+      viewportWidth: previous.viewportWidth,
+      viewportHeight: previous.viewportHeight,
+      artifacts: previous.artifacts,
+      artifactSourcePaths: previous.artifactSourcePaths,
+    );
+  }
+
+  bool _requiresStablePoint(_ResolvedPoint point) =>
+      switch (point.resolution?.matchedKind) {
+        CockpitLocatorKind.coordinate ||
+        CockpitLocatorKind.visual ||
+        null => false,
+        _ => true,
+      };
+
+  bool _sameResolvedPoint(_ResolvedPoint left, _ResolvedPoint right) {
+    final leftX = left.x;
+    final leftY = left.y;
+    final rightX = right.x;
+    final rightY = right.y;
+    if (leftX == null || leftY == null || rightX == null || rightY == null) {
+      return false;
+    }
+    return (leftX - rightX).abs() <= 1 &&
+        (leftY - rightY).abs() <= 1 &&
+        left.resolution?.matchedKind == right.resolution?.matchedKind &&
+        left.resolution?.matchedValue == right.resolution?.matchedValue;
   }
 
   Future<CockpitNativeUiResolution> _resolveNativeNode(

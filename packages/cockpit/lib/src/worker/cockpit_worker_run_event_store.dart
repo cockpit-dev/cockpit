@@ -229,6 +229,22 @@ final class CockpitWorkerRunEventStore implements CockpitWorkerEventExchange {
     );
   }
 
+  Future<List<CockpitRunEvent>> appendBatch(
+    String runId,
+    List<CockpitWorkerEventDraft> drafts, {
+    bool publishImmediately = true,
+  }) async {
+    await initialize();
+    return _locked(
+      runId,
+      () => _appendBatchInitialized(
+        runId,
+        drafts,
+        publishImmediately: publishImmediately,
+      ),
+    );
+  }
+
   Future<CockpitRunEvent> _appendInitialized(
     String runId,
     CockpitWorkerEventDraft draft, {
@@ -243,6 +259,27 @@ final class CockpitWorkerRunEventStore implements CockpitWorkerEventExchange {
     await _appendExactInitialized(safeEvent);
     if (publishImmediately) await _publishPending(runId);
     return safeEvent;
+  }
+
+  Future<List<CockpitRunEvent>> _appendBatchInitialized(
+    String runId,
+    List<CockpitWorkerEventDraft> drafts, {
+    required bool publishImmediately,
+  }) async {
+    if (!_initialized) {
+      throw StateError('Worker event store is not initialized.');
+    }
+    workerId(runId, r'$.runId');
+    if (drafts.isEmpty) return const <CockpitRunEvent>[];
+    final current = _events.putIfAbsent(runId, () => <CockpitRunEvent>[]);
+    final exact = <CockpitRunEvent>[
+      for (var index = 0; index < drafts.length; index += 1)
+        _buildEvent(runId, drafts[index], current.length + index + 1),
+    ];
+    await _preflightExactEvents(runId, exact);
+    await _appendExactBatchInitialized(exact);
+    if (publishImmediately) await _publishPending(runId);
+    return List<CockpitRunEvent>.unmodifiable(exact);
   }
 
   CockpitRunEvent _buildEvent(
@@ -280,19 +317,8 @@ final class CockpitWorkerRunEventStore implements CockpitWorkerEventExchange {
   }
 
   Future<void> _appendExactInitialized(CockpitRunEvent event) async {
-    final events = _events.putIfAbsent(event.runId, () => <CockpitRunEvent>[]);
-    if (events.length >= maximumEventsPerRun) {
-      throw const FormatException('Worker event count bound was exceeded.');
-    }
-    if (event.sequence != events.length + 1) {
-      throw const FormatException('Worker exact event sequence has a gap.');
-    }
-    if (_eventIds.contains(event.eventId)) {
-      throw const FormatException('Worker generated a duplicate event id.');
-    }
-    await _appendDurably(event);
-    _eventIds.add(event.eventId);
-    events.add(event);
+    await _preflightExactEvents(event.runId, <CockpitRunEvent>[event]);
+    await _appendExactBatchInitialized(<CockpitRunEvent>[event]);
   }
 
   Future<CockpitWorkerCaseCompletionIntent> appendCompletionBatch({
@@ -388,8 +414,30 @@ final class CockpitWorkerRunEventStore implements CockpitWorkerEventExchange {
         .where((event) => event.sequence > current.length)
         .toList(growable: false);
     await _preflightExactEvents(runId, missing);
-    for (final event in missing) {
-      await _appendExactInitialized(event);
+    await _appendExactBatchInitialized(missing);
+  }
+
+  Future<void> _appendExactBatchInitialized(List<CockpitRunEvent> exact) async {
+    if (exact.isEmpty) return;
+    final runId = exact.first.runId;
+    final events = _events.putIfAbsent(runId, () => <CockpitRunEvent>[]);
+    final generatedIds = <String>{};
+    for (var index = 0; index < exact.length; index += 1) {
+      final event = exact[index];
+      if (event.runId != runId || event.sequence != events.length + index + 1) {
+        throw const FormatException(
+          'Worker exact event batch sequence has a gap.',
+        );
+      }
+      if (_eventIds.contains(event.eventId) ||
+          !generatedIds.add(event.eventId)) {
+        throw const FormatException('Worker generated a duplicate event id.');
+      }
+    }
+    await _appendDurablyBatch(exact);
+    for (final event in exact) {
+      _eventIds.add(event.eventId);
+      events.add(event);
     }
   }
 
@@ -695,10 +743,13 @@ final class CockpitWorkerRunEventStore implements CockpitWorkerEventExchange {
     return safe;
   }
 
-  Future<void> _appendDurably(CockpitRunEvent event) async {
-    final directory = await _prepareRunDirectory(event.runId);
+  Future<void> _appendDurablyBatch(List<CockpitRunEvent> events) async {
+    if (events.isEmpty) return;
+    final directory = await _prepareRunDirectory(events.first.runId);
     final file = File(p.join(directory.path, 'events.ndjson'));
-    final bytes = utf8.encode('${jsonEncode(event.toJson())}\n');
+    final bytes = utf8.encode(
+      '${events.map((event) => jsonEncode(event.toJson())).join('\n')}\n',
+    );
     final existingLength = await file.exists() ? await file.length() : 0;
     if (existingLength + bytes.length > maximumLogBytes) {
       throw const FormatException('Worker event log byte bound was exceeded.');

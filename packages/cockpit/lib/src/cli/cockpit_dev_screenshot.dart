@@ -60,7 +60,10 @@ final class CockpitDevScreenshotService {
       );
     }
     final destination = savePath == null
-        ? await _defaultDestination(session.handleId)
+        ? await _defaultDestination(
+            checkoutIdentity: session.checkoutIdentity!,
+            handleId: session.handleId,
+          )
         : _pngPath(savePath, '--save');
     final receipt = await (await runtime.client())
         .downloadDevelopmentArtifactToFile(
@@ -139,15 +142,17 @@ final class CockpitDevScreenshotService {
     );
   }
 
-  Future<String> _defaultDestination(String handleId) async {
+  Future<String> _defaultDestination({
+    required String checkoutIdentity,
+    required String handleId,
+  }) async {
     final home = CockpitHome.system();
     final paths = await home.initialize();
-    final checkout = await runtime.checkoutIdentity();
     final directory = Directory(
       p.join(
         paths.artifactsDirectory,
         'development',
-        checkout.value.substring(0, 16),
+        checkoutIdentity.substring(0, 16),
         handleId,
       ),
     );

@@ -41,14 +41,20 @@ final class CockpitRegistryState {
   void validate(CockpitLexicalPaths lexicalPaths) {
     _unique(roots.map((value) => value.rootId), 'rootId');
     _unique(
-      roots.map((value) => value.filesystemIdentity),
+      roots
+          .where((value) => value.state != CockpitRootState.retired)
+          .map((value) => value.filesystemIdentity),
       'root filesystem identity',
     );
     _unique(workspaces.map((value) => value.workspaceId), 'workspaceId');
     _unique(workspaces.map((value) => value.checkoutId), 'checkoutId');
     _unique(
       workspaces
-          .where((value) => value.identityQuality.isStrong)
+          .where(
+            (value) =>
+                value.state != CockpitWorkspaceState.retired &&
+                value.identityQuality.isStrong,
+          )
           .map((value) => value.filesystemIdentity),
       'strong workspace filesystem identity',
     );
@@ -103,10 +109,12 @@ final class CockpitRegistryState {
     }
     for (var left = 0; left < workspaces.length; left += 1) {
       for (var right = left + 1; right < workspaces.length; right += 1) {
-        if (lexicalPaths.equals(
-          workspaces[left].canonicalPath,
-          workspaces[right].canonicalPath,
-        )) {
+        if (workspaces[left].state != CockpitWorkspaceState.retired &&
+            workspaces[right].state != CockpitWorkspaceState.retired &&
+            lexicalPaths.equals(
+              workspaces[left].canonicalPath,
+              workspaces[right].canonicalPath,
+            )) {
           throw const FormatException('Duplicate workspace canonical path.');
         }
       }
@@ -127,7 +135,8 @@ final class CockpitRegistryState {
       }
       if (workspace.identityQuality.isStrong) {
         for (final candidate in roots) {
-          if (candidate.identityQuality.isStrong &&
+          if (candidate.state != CockpitRootState.retired &&
+              candidate.identityQuality.isStrong &&
               candidate.filesystemIdentity == workspace.filesystemIdentity &&
               !lexicalPaths.equals(
                 candidate.canonicalPath,

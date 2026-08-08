@@ -34,6 +34,10 @@ final class CockpitDevelopmentSessionHandle {
     required this.launchedAt,
     required this.reloadGeneration,
     this.launchMode = CockpitDevelopmentLaunchMode.development,
+    this.flavor,
+    this.flutterVersion,
+    this.bindHost,
+    this.reloadRecoverable = true,
     this.remoteSessionHandle,
     this.vmServiceUri,
     this.lastReloadAt,
@@ -48,6 +52,10 @@ final class CockpitDevelopmentSessionHandle {
   final String appBaseUrl;
   final String supervisorBaseUrl;
   final CockpitDevelopmentLaunchMode launchMode;
+  final String? flavor;
+  final String? flutterVersion;
+  final String? bindHost;
+  final bool reloadRecoverable;
   final CockpitRemoteSessionHandle? remoteSessionHandle;
   final Uri? vmServiceUri;
   final DateTime launchedAt;
@@ -68,6 +76,10 @@ final class CockpitDevelopmentSessionHandle {
     'appBaseUrl': appBaseUrl,
     'supervisorBaseUrl': supervisorBaseUrl,
     'launchMode': launchMode.jsonValue,
+    if (flavor != null) 'flavor': flavor,
+    if (flutterVersion != null) 'flutterVersion': flutterVersion,
+    if (bindHost != null) 'bindHost': bindHost,
+    'reloadRecoverable': reloadRecoverable,
     if (remoteSessionHandle != null)
       'remoteSessionHandle': remoteSessionHandle!.toJson(),
     if (vmServiceUri != null) 'vmServiceUri': vmServiceUri!.toString(),
@@ -92,6 +104,10 @@ final class CockpitDevelopmentSessionHandle {
       launchMode: json['launchMode'] == null
           ? CockpitDevelopmentLaunchMode.development
           : CockpitDevelopmentLaunchMode.fromJson(json['launchMode']),
+      flavor: json['flavor'] as String?,
+      flutterVersion: json['flutterVersion'] as String?,
+      bindHost: json['bindHost'] as String?,
+      reloadRecoverable: json['reloadRecoverable'] as bool? ?? false,
       remoteSessionHandle: remoteSessionHandleJson == null
           ? null
           : CockpitRemoteSessionHandle.fromJson(
@@ -118,6 +134,10 @@ final class CockpitDevelopmentSessionHandle {
     String? appBaseUrl,
     String? supervisorBaseUrl,
     CockpitDevelopmentLaunchMode? launchMode,
+    Object? flavor = _cockpitUnsetDevelopmentSessionHandleField,
+    Object? flutterVersion = _cockpitUnsetDevelopmentSessionHandleField,
+    Object? bindHost = _cockpitUnsetDevelopmentSessionHandleField,
+    bool? reloadRecoverable,
     Object? remoteSessionHandle = _cockpitUnsetDevelopmentSessionHandleField,
     Object? vmServiceUri = _cockpitUnsetDevelopmentSessionHandleField,
     DateTime? launchedAt,
@@ -134,6 +154,17 @@ final class CockpitDevelopmentSessionHandle {
       appBaseUrl: appBaseUrl ?? this.appBaseUrl,
       supervisorBaseUrl: supervisorBaseUrl ?? this.supervisorBaseUrl,
       launchMode: launchMode ?? this.launchMode,
+      flavor: identical(flavor, _cockpitUnsetDevelopmentSessionHandleField)
+          ? this.flavor
+          : flavor as String?,
+      flutterVersion:
+          identical(flutterVersion, _cockpitUnsetDevelopmentSessionHandleField)
+          ? this.flutterVersion
+          : flutterVersion as String?,
+      bindHost: identical(bindHost, _cockpitUnsetDevelopmentSessionHandleField)
+          ? this.bindHost
+          : bindHost as String?,
+      reloadRecoverable: reloadRecoverable ?? this.reloadRecoverable,
       remoteSessionHandle:
           identical(
             remoteSessionHandle,

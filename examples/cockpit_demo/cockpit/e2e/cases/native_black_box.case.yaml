@@ -1,14 +1,13 @@
 schemaVersion: cockpit.test/v2
 kind: case
 id: demoNativeBlackBox
-name: Independent native black-box validation
-description: Controls and validates the installed app through a separately registered native target without the Flutter bridge.
+name: Native-plane black-box validation
+description: Controls and validates the running app exclusively through the platform-native tree while the development session preserves app identity and isolation.
 tags: [acceptance, black-box, native, requires-native-tree]
 target:
-  platform: android
-  targetKind: nativeApp
+  platform: flutter
+  targetKind: flutterApp
   plane: native
-  appId: dev.cockpit.placeholder
   requiredCapabilities: [tap, waitFor, assertVisible, captureScreenshot]
 defaults:
   commandTimeoutMs: 30000
@@ -95,7 +94,7 @@ steps:
     timeoutMs: 60000
     action:
       type: captureScreenshot
-      artifactName: independent-native-black-box
+      artifactName: native-plane-black-box
       captureOptions: {reason: acceptance, includeSnapshot: true, attachToStep: true, allowFallback: false}
 finally:
   - stepId: recoverNativeTargetAfterCase

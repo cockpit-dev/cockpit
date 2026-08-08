@@ -18,6 +18,7 @@ void main() {
   late CockpitCliRuntime runtime;
   late CockpitCliSessionHandle session;
   late StringBuffer stdout;
+  late StringBuffer stderr;
 
   setUp(() async {
     temporaryDirectory = await Directory.systemTemp.createTemp(
@@ -29,10 +30,11 @@ void main() {
       directorySyncer: const _NoopDirectorySyncer(),
     );
     stdout = StringBuffer();
+    stderr = StringBuffer();
     runtime = CockpitCliRuntime(
       workingDirectory: temporaryDirectory.path,
       stdoutSink: stdout,
-      stderrSink: StringBuffer(),
+      stderrSink: stderr,
       sessionHandleStoreProvider: () async => store,
       checkoutIdentityResolver: CockpitCheckoutIdentityResolver(
         processRunner: (_, _, {workingDirectory, environment}) async =>
@@ -42,6 +44,7 @@ void main() {
     final checkout = await runtime.checkoutIdentity();
     session = await runtime.bindDevelopmentSession(
       checkout: checkout,
+      projectPath: checkout.canonicalRoot,
       workspaceId: 'workspace-1',
       sessionId: 'session-old',
       targetId: 'target-1',
@@ -53,6 +56,36 @@ void main() {
   });
 
   tearDown(() => temporaryDirectory.delete(recursive: true));
+
+  test('path output preserves the operation failure', () async {
+    runtime.configureOutput(
+      command: 'dev.screenshot',
+      selection: const CockpitCliOutputSelection(format: CockpitCliFormat.path),
+    );
+    final dev = CockpitDevRuntime(runtime);
+
+    final exitCode = await dev.writeEnvelope(
+      action: 'screenshot',
+      session: session,
+      ok: false,
+      state: const <String, Object?>{},
+      changed: 'none',
+      errors: const <Object?>[
+        <String, Object?>{
+          'primary': <String, Object?>{
+            'code': 'captureFailed',
+            'message': 'adb screencap failed.',
+          },
+        },
+      ],
+    );
+
+    expect(exitCode, cockpitDataExitCode);
+    expect(stdout, isEmpty);
+    expect(stderr.toString(), contains('captureFailed'));
+    expect(stderr.toString(), contains('adb screencap failed.'));
+    expect(stderr.toString(), isNot(contains('--format path requires')));
+  });
 
   test(
     'rebinds the latest same-target bridge while retaining its handle',
@@ -165,6 +198,7 @@ void main() {
     final checkout = await runtime.checkoutIdentity();
     session = await runtime.bindDevelopmentSession(
       checkout: checkout,
+      projectPath: checkout.canonicalRoot,
       workspaceId: 'workspace-1',
       sessionId: 'session-custom',
       targetId: 'target-1',

@@ -150,9 +150,11 @@ Kiro manages Power MCP servers internally and activates them with the Power;
 do not also add that Power server to the user-level MCP configuration.
 
 Reload Kiro and confirm the steering file can load
-`.kiro/skills/cockpit/SKILL.md` before testing MCP. Run `cockpit --help` from
-Kiro's terminal to confirm its process inherits Dart's global executable
-directory, then use `cockpit dev status` as the non-mutating CLI smoke.
+`.kiro/skills/cockpit/SKILL.md` before testing MCP. From Kiro's terminal, run
+`cockpit --version` and `cockpit session list` to confirm its process inherits
+Dart's global executable directory without requiring an active app. After a
+Flutter project has the development shell described in `references/flutter.md`,
+run `cockpit dev start`, then `cockpit dev status` as the live CLI smoke.
 
 ## OpenCode
 

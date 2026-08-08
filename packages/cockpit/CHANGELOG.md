@@ -1,5 +1,26 @@
 # Changelog
 
+## 3.0.1
+
+- Scoped active numeric session handles to canonical Flutter projects and
+  checkout identity, including nested-project discovery, explicit selection,
+  side-effect-free listing, and unambiguous concurrent target reuse.
+- Preserved running Flutter applications across daemon and worker restarts by
+  detaching the machine control plane and reconnecting the same session instead
+  of stopping or relaunching unrelated apps.
+- Added interactive `dev start` stage progress, project-relative entrypoint
+  resolution, isolated Flutter tool state, and bounded recovery for faster,
+  clearer startup from global AOT installations.
+- Restored dependency resolution on the declared Flutter 3.32 minimum while
+  retaining the process control, image comparison, XML parsing,
+  source-location, and HTTP profiling APIs used by current Flutter releases.
+- Replaced macOS System Events tree reads with bounded native Accessibility
+  traversal, exact app activation, and stable locator bounds before input.
+- Hardened platform-aware capture, native/system actions, focused semantic
+  inspection, nested scrolling, runtime input binding, and terminal SSE replay.
+- Batched durable suite events and artifacts while preserving append-only
+  recovery, reducing large acceptance-run persistence and exchange overhead.
+
 ## 3.0.0
 
 - Replaced the multi-identity development workflow with `cockpit dev` and one

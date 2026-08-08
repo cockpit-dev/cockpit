@@ -217,7 +217,10 @@ void main() {
       hasLength(CockpitTargetRegistry.liveSnapshotTargetLimit),
     );
     expect(snapshot.truncated, isTrue);
-    expect(snapshot.summary?.visibleTargetCount, greaterThan(120));
+    expect(
+      snapshot.summary?.visibleTargetCount,
+      greaterThan(CockpitTargetRegistry.liveSnapshotTargetLimit),
+    );
     expect(
       snapshot.visibleTargets.take(4).map((target) => target.keyValue),
       <String?>['key-0', 'key-1', 'key-2', 'key-3'],
@@ -246,6 +249,26 @@ void main() {
     expect(snapshot.summary?.visibleTargetCount, 1);
     expect(snapshot.summary?.targetsWithTextCount, 1);
     expect(discoveryCalls, 1);
+  });
+
+  test('live snapshots omit locator ancestor diagnostics', () {
+    final registry = CockpitTargetRegistry(routeName: '/inbox')
+      ..register(
+        const CockpitTarget(
+          registrationId: 'new-task',
+          keyValue: 'fab-add-task',
+          text: 'New task',
+          routeName: '/inbox',
+          supportedCommands: {CockpitCommandType.tap},
+          locatorAncestors: <CockpitSnapshotAncestor>[
+            CockpitSnapshotAncestor(typeName: 'Scaffold', path: '/scaffold'),
+          ],
+        ),
+      );
+
+    final snapshot = registry.snapshot();
+
+    expect(snapshot.visibleTargets.single.ancestors, isEmpty);
   });
 
   test('reuses discovered targets while resolving fallback locator chains', () {

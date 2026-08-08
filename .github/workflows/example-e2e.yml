@@ -15,7 +15,7 @@ concurrency:
 
 env:
   MINIMUM_FLUTTER_VERSION: '3.32.0'
-  REGRESSION_FLUTTER_VERSION: '3.44.0'
+  CURRENT_FLUTTER_VERSION: '3.44.0'
 
 jobs:
   static_analysis:
@@ -27,7 +27,7 @@ jobs:
 
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: ${{ env.MINIMUM_FLUTTER_VERSION }}
+          flutter-version: ${{ env.CURRENT_FLUTTER_VERSION }}
           channel: stable
 
       - name: Bootstrap workspace
@@ -41,6 +41,32 @@ jobs:
 
       - name: Analyze workspace
         run: dart analyze
+
+  minimum_flutter:
+    name: minimum Flutter compatibility
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.MINIMUM_FLUTTER_VERSION }}
+          channel: stable
+
+      - name: Prepare minimum Flutter workspace
+        run: bash .github/scripts/prepare-minimum-flutter-workspace.sh
+
+      - name: Bootstrap workspace
+        run: flutter pub get
+
+      - name: Analyze minimum-version packages
+        run: |
+          dart analyze packages/cockpit_protocol
+          dart analyze packages/flutter_cockpit
+          dart analyze packages/cockpit
+          dart analyze examples/cockpit_demo
+          dart analyze examples/cockpit_demo/cockpit
 
   dart_tests:
     name: ${{ matrix.name }}
@@ -67,6 +93,9 @@ jobs:
           flutter-version: ${{ env.MINIMUM_FLUTTER_VERSION }}
           channel: stable
 
+      - name: Prepare minimum Flutter workspace
+        run: bash .github/scripts/prepare-minimum-flutter-workspace.sh
+
       - name: Bootstrap workspace
         run: flutter pub get
 
@@ -84,19 +113,27 @@ jobs:
         include:
           - name: Flutter bridge tests
             directory: packages/flutter_cockpit
+            flutter-version: '3.32.0'
           - name: production example tests
             directory: examples/cockpit_demo
+            flutter-version: '3.32.0'
           - name: development shell tests
             directory: examples/cockpit_demo/cockpit
+            flutter-version: '3.32.0'
           - name: Cockpit Console tests
             directory: packages/cockpit_console
+            flutter-version: '3.44.0'
     steps:
       - uses: actions/checkout@v6
 
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: ${{ env.MINIMUM_FLUTTER_VERSION }}
+          flutter-version: ${{ matrix.flutter-version }}
           channel: stable
+
+      - name: Prepare minimum Flutter workspace
+        if: matrix.flutter-version == '3.32.0'
+        run: bash .github/scripts/prepare-minimum-flutter-workspace.sh
 
       - name: Bootstrap workspace
         run: flutter pub get
@@ -130,12 +167,107 @@ jobs:
           flutter-version: ${{ env.MINIMUM_FLUTTER_VERSION }}
           channel: stable
 
+      - name: Prepare minimum Flutter workspace
+        run: bash .github/scripts/prepare-minimum-flutter-workspace.sh
+
       - name: Bootstrap workspace
         run: flutter pub get
 
       - name: Validate ${{ matrix.package }} publication
         working-directory: ${{ matrix.directory }}
         run: ${{ matrix.command }}
+
+  darwin_packaging:
+    name: Darwin ${{ matrix.label }}
+    runs-on: macos-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - manager: cocoapods
+            label: CocoaPods
+            flutter-version: '3.32.0'
+          - manager: swiftpm
+            label: SwiftPM
+            flutter-version: '3.44.0'
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ matrix.flutter-version }}
+          channel: stable
+
+      - name: Select CocoaPods integration
+        if: matrix.manager == 'cocoapods'
+        run: flutter config --no-enable-swift-package-manager
+
+      - name: Select SwiftPM integration
+        if: matrix.manager == 'swiftpm'
+        run: >-
+          flutter config --enable-swift-package-manager
+          --no-enable-uiscene-migration
+
+      - name: Prepare a SwiftPM-only development shell
+        if: matrix.manager == 'swiftpm'
+        working-directory: examples/cockpit_demo/cockpit
+        run: |
+          (cd ios && pod deintegrate)
+          (cd macos && pod deintegrate)
+          rm ios/Podfile ios/Podfile.lock macos/Podfile macos/Podfile.lock
+          sed -i '' '/Pods\/Target Support Files\/Pods-Runner/d' \
+            ios/Flutter/Debug.xcconfig \
+            ios/Flutter/Release.xcconfig \
+            macos/Flutter/Flutter-Debug.xcconfig \
+            macos/Flutter/Flutter-Release.xcconfig
+          perl -0pi -e \
+            's/\s*<FileRef\s+location = "group:Pods\/Pods\.xcodeproj">\s*<\/FileRef>//g' \
+            ios/Runner.xcworkspace/contents.xcworkspacedata \
+            macos/Runner.xcworkspace/contents.xcworkspacedata
+
+      - name: Prepare minimum Flutter workspace
+        if: matrix.manager == 'cocoapods'
+        run: bash .github/scripts/prepare-minimum-flutter-workspace.sh
+
+      - name: Bootstrap workspace
+        run: flutter pub get
+
+      - name: Validate iOS CocoaPods package
+        if: matrix.manager == 'cocoapods'
+        run: |
+          pod lib lint packages/flutter_cockpit/ios/flutter_cockpit.podspec --configuration=Debug --skip-tests --use-modular-headers
+          pod lib lint packages/flutter_cockpit/ios/flutter_cockpit.podspec --configuration=Debug --skip-tests --use-modular-headers --use-libraries
+
+      - name: Validate macOS CocoaPods package
+        if: matrix.manager == 'cocoapods'
+        run: |
+          pod lib lint packages/flutter_cockpit/macos/flutter_cockpit.podspec --configuration=Debug --skip-tests --use-modular-headers
+          pod lib lint packages/flutter_cockpit/macos/flutter_cockpit.podspec --configuration=Debug --skip-tests --use-modular-headers --use-libraries
+
+      - name: Build macOS with ${{ matrix.label }}
+        working-directory: examples/cockpit_demo/cockpit
+        run: flutter build macos --debug --target main.dart
+
+      - name: Build iOS Simulator with ${{ matrix.label }}
+        working-directory: examples/cockpit_demo/cockpit
+        run: >-
+          flutter build ios --simulator --debug --no-codesign
+          --target main.dart
+
+      - name: Verify CocoaPods linked flutter_cockpit
+        if: matrix.manager == 'cocoapods'
+        working-directory: examples/cockpit_demo/cockpit
+        run: |
+          grep -q 'flutter_cockpit' macos/Podfile.lock
+          grep -q 'flutter_cockpit' ios/Podfile.lock
+
+      - name: Verify SwiftPM linked flutter_cockpit
+        if: matrix.manager == 'swiftpm'
+        working-directory: examples/cockpit_demo/cockpit
+        run: |
+          grep -q 'flutter_cockpit' macos/Flutter/ephemeral/Packages/FlutterGeneratedPluginSwiftPackage/Package.swift
+          grep -q 'flutter_cockpit' ios/Flutter/ephemeral/Packages/FlutterGeneratedPluginSwiftPackage/Package.swift
 
   regression:
     name: ${{ matrix.platform }} regression
@@ -216,7 +348,7 @@ jobs:
 
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: ${{ env.REGRESSION_FLUTTER_VERSION }}
+          flutter-version: ${{ env.CURRENT_FLUTTER_VERSION }}
           channel: stable
 
       - name: Configure short Windows runtime paths
@@ -491,7 +623,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: cockpit-2-${{ matrix.platform }}-regression
+          name: cockpit-3-${{ matrix.platform }}-regression
           retention-days: 14
           if-no-files-found: warn
           path: |
@@ -503,25 +635,31 @@ jobs:
     if: always()
     needs:
       - static_analysis
+      - minimum_flutter
       - dart_tests
       - flutter_tests
       - publication
+      - darwin_packaging
       - regression
     runs-on: ubuntu-latest
     steps:
       - name: Require every parallel gate
         env:
           STATIC_ANALYSIS: ${{ needs.static_analysis.result }}
+          MINIMUM_FLUTTER: ${{ needs.minimum_flutter.result }}
           DART_TESTS: ${{ needs.dart_tests.result }}
           FLUTTER_TESTS: ${{ needs.flutter_tests.result }}
           PUBLICATION: ${{ needs.publication.result }}
+          DARWIN_PACKAGING: ${{ needs.darwin_packaging.result }}
           REGRESSION: ${{ needs.regression.result }}
         run: |
           for result in \
             "$STATIC_ANALYSIS" \
+            "$MINIMUM_FLUTTER" \
             "$DART_TESTS" \
             "$FLUTTER_TESTS" \
             "$PUBLICATION" \
+            "$DARWIN_PACKAGING" \
             "$REGRESSION"; do
             if [[ "$result" != "success" ]]; then
               echo "Required gate finished with: $result"

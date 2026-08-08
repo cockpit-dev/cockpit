@@ -693,7 +693,13 @@ void main() {
         withTarget.profile
             .capabilityFor(CockpitSystemControlAction.readUiTree)
             ?.requires,
-        contains('Automation permission for System Events'),
+        contains('Accessibility permission'),
+      );
+      expect(
+        withTarget.profile
+            .capabilityFor(CockpitSystemControlAction.readUiTree)
+            ?.requires,
+        isNot(contains('Automation permission for System Events')),
       );
       expect(
         withTarget.profile

@@ -325,8 +325,18 @@ final class CockpitSupervisorApiClient {
     final path = workspaceId == null
         ? '/api/v2/operations'
         : '/api/v2/workspaces/${_segment(workspaceId)}/operations';
+    final deadline = invocation.deadline;
+    final requestTimeout = deadline == null
+        ? null
+        : _remainingRequestTime(deadline, 'POST', path);
     return CockpitOperationResult.fromJson(
-      await _jsonRequest(session, 'POST', path, body: invocation.toJson()),
+      await _jsonRequest(
+        session,
+        'POST',
+        path,
+        body: invocation.toJson(),
+        requestTimeout: requestTimeout,
+      ),
       decodePolicy: session.decodePolicy,
     );
   }
@@ -842,9 +852,12 @@ final class CockpitSupervisorApiClient {
     String method,
     String path, {
     Object? body,
+    Duration? requestTimeout,
   }) async {
+    final effectiveTimeout = requestTimeout ?? _requestTimeout;
+    _validateRequestTimeout(effectiveTimeout);
     final client = _httpClientFactory();
-    client.connectionTimeout = _requestTimeout;
+    client.connectionTimeout = effectiveTimeout;
     try {
       return await (() async {
         final request = await client.openUrl(
@@ -864,12 +877,12 @@ final class CockpitSupervisorApiClient {
         }
         return value;
       })().timeout(
-        _requestTimeout,
+        effectiveTimeout,
         onTimeout: () => throw CockpitSupervisorClientException(
           code: 'requestTimeout',
           message:
               'Supervisor $method $path exceeded '
-              '${_requestTimeout.inMilliseconds}ms.',
+              '${effectiveTimeout.inMilliseconds}ms.',
         ),
       );
     } on CockpitSupervisorClientException {

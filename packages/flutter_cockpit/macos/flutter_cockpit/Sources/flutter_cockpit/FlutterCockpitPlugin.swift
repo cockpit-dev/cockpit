@@ -5,9 +5,16 @@ public final class FlutterCockpitPlugin: NSObject, FlutterPlugin {
   private static let captureChannelName = "dev.cockpit.flutter_cockpit/capture"
   private static let recordingChannelName = "dev.cockpit.flutter_cockpit/recording"
   private static let viewportChannelName = "dev.cockpit.flutter_cockpit/viewport"
+  private static let accessibilityChannelName = "dev.cockpit.flutter_cockpit/accessibility"
+  private weak var engine: FlutterEngine?
   private lazy var recordingManager = FlutterCockpitRecordingManager(
     windowProvider: { [weak self] in self?.activeWindow() }
   )
+
+  private init(engine: FlutterEngine?) {
+    self.engine = engine
+    super.init()
+  }
 
   public static func register(with registrar: FlutterPluginRegistrar) {
     let captureChannel = FlutterMethodChannel(
@@ -22,10 +29,30 @@ public final class FlutterCockpitPlugin: NSObject, FlutterPlugin {
       name: viewportChannelName,
       binaryMessenger: registrar.messenger
     )
-    let instance = FlutterCockpitPlugin()
+    let accessibilityChannel = FlutterMethodChannel(
+      name: accessibilityChannelName,
+      binaryMessenger: registrar.messenger
+    )
+    let engine = flutterViewController(for: registrar.view)?.engine
+    if let engine {
+      _ = enableEngineSemantics(engine)
+    }
+    let instance = FlutterCockpitPlugin(engine: engine)
     registrar.addMethodCallDelegate(instance, channel: captureChannel)
     registrar.addMethodCallDelegate(instance, channel: recordingChannel)
     registrar.addMethodCallDelegate(instance, channel: viewportChannel)
+    registrar.addMethodCallDelegate(instance, channel: accessibilityChannel)
+  }
+
+  private static func flutterViewController(for view: NSView?) -> FlutterViewController? {
+    var responder: NSResponder? = view
+    while let current = responder {
+      if let controller = current as? FlutterViewController {
+        return controller
+      }
+      responder = current.nextResponder
+    }
+    return view?.window?.contentViewController as? FlutterViewController
   }
 
   public func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
@@ -48,9 +75,46 @@ public final class FlutterCockpitPlugin: NSObject, FlutterPlugin {
       ])
     case "resizeViewport":
       resizeViewport(arguments: call.arguments, result: result)
+    case "enableSemantics":
+      enableSemantics(result: result)
     default:
       result(FlutterMethodNotImplemented)
     }
+  }
+
+  private func enableSemantics(result: @escaping FlutterResult) {
+    DispatchQueue.main.async {
+      guard let engine = self.engine else {
+        result(
+          FlutterError(
+            code: "engineUnavailable",
+            message: "Flutter engine is unavailable for native semantics.",
+            details: nil
+          )
+        )
+        return
+      }
+      guard Self.enableEngineSemantics(engine) else {
+        result(
+          FlutterError(
+            code: "semanticsUnavailable",
+            message: "Flutter engine rejected native semantics activation.",
+            details: nil
+          )
+        )
+        return
+      }
+      result(["enabled": true])
+    }
+  }
+
+  private static func enableEngineSemantics(_ engine: FlutterEngine) -> Bool {
+    let setter = NSSelectorFromString("setSemanticsEnabled:")
+    guard engine.responds(to: setter) else {
+      return false
+    }
+    engine.setValue(true, forKey: "semanticsEnabled")
+    return engine.value(forKey: "semanticsEnabled") as? Bool == true
   }
 
   private func resizeViewport(arguments: Any?, result: @escaping FlutterResult) {

@@ -1,14 +1,38 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:cockpit/src/cli/cockpit_cli_runtime.dart';
 import 'package:cockpit/src/cli/cockpit_command_runner.dart';
 import 'package:cockpit/src/cli/cockpit_dev_locator_advisor.dart';
 import 'package:cockpit/src/cli/commands/dev_interaction_commands.dart';
 import 'package:cockpit/src/foundation/cockpit_locked_json_store.dart';
+import 'package:cockpit/src/foundation/cockpit_version.dart';
 import 'package:cockpit_protocol/cockpit_protocol.dart';
+import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
+import 'package:yaml/yaml.dart';
 
 void main() {
+  test('top-level version is instant and matches pubspec', () async {
+    final stdout = StringBuffer();
+    final runner = CockpitCommandRunner(
+      runtime: CockpitCliRuntime(
+        stdoutSink: stdout,
+        stderrSink: StringBuffer(),
+        clientProvider: () async =>
+            throw StateError('--version must not connect to the Supervisor.'),
+      ),
+    );
+
+    final exitCode = await runner.run(const <String>['--version']);
+    final pubspec =
+        loadYaml(_cockpitPubspecFile().readAsStringSync()) as YamlMap;
+
+    expect(exitCode, cockpitSuccessExitCode);
+    expect(stdout.toString(), 'cockpit $cockpitVersion\n');
+    expect(pubspec['version'], cockpitVersion);
+  });
+
   test('dev exposes the task-oriented Flutter command surface', () {
     final runner = CockpitCommandRunner(
       runtime: CockpitCliRuntime(
@@ -443,6 +467,38 @@ void main() {
     );
   });
 
+  test('dev locator search does not recall every target from its route', () {
+    final result = cockpitBuildDevLocatorMatches(<String, Object?>{
+      'snapshot': <String, Object?>{
+        'visibleTargets': <Object?>[
+          <String, Object?>{
+            'registrationId': 'inbox-title',
+            'text': 'Inbox',
+            'typeName': 'RichText',
+            'routeName': '/inbox',
+            'supportedCommands': const <Object?>[],
+            'ancestors': const <Object?>[],
+          },
+          <String, Object?>{
+            'registrationId': 'reset-button',
+            'text': 'Reset',
+            'typeName': 'TextButton',
+            'routeName': '/inbox',
+            'supportedCommands': <Object?>['tap'],
+            'ancestors': const <Object?>[],
+          },
+        ],
+      },
+    }, 'Inbox');
+
+    expect(result['count'], 1);
+    expect(result['matches'], <Object?>[
+      <String, Object?>{
+        'loc': <String, Object?>{'text': 'Inbox'},
+      },
+    ]);
+  });
+
   test('dev locator advice rejects index ordered by internal identity', () {
     Map<String, Object?> target(String registrationId) => <String, Object?>{
       'registrationId': registrationId,
@@ -473,4 +529,23 @@ void main() {
       everyElement(isNot(contains('index'))),
     );
   });
+}
+
+File _cockpitPubspecFile() {
+  var directory = Directory.current.absolute;
+  while (true) {
+    for (final candidate in <File>[
+      File(p.join(directory.path, 'pubspec.yaml')),
+      File(p.join(directory.path, 'packages', 'cockpit', 'pubspec.yaml')),
+    ]) {
+      if (!candidate.existsSync()) continue;
+      final pubspec = loadYaml(candidate.readAsStringSync());
+      if (pubspec is YamlMap && pubspec['name'] == 'cockpit') return candidate;
+    }
+    final parent = directory.parent;
+    if (parent.path == directory.path) {
+      throw StateError('Unable to locate packages/cockpit/pubspec.yaml.');
+    }
+    directory = parent;
+  }
 }

@@ -386,7 +386,7 @@ void main() {
   );
 
   testWidgets(
-    'scrollByViewport uses programmatic segmented probing for target-driven search',
+    'scrollByViewport uses a controlled jump for target-driven search',
     (tester) async {
       final controller = ScrollController();
       addTearDown(controller.dispose);
@@ -426,7 +426,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(didScroll.didScroll, isTrue);
-      expect(didScroll.strategy, 'jumpTo_probe');
+      expect(didScroll.strategy, 'jumpTo');
       expect(didScroll.hadSemanticAction, isFalse);
       expect(controller.offset, greaterThan(0));
     },
@@ -496,6 +496,56 @@ void main() {
       expect(result.scrollableKey, 'matching-details');
       expect(rightController.offset, greaterThan(0));
       expect(leftController.offset, 0);
+    },
+  );
+
+  testWidgets(
+    'scrollByViewport ignores scrollables from inactive navigator routes',
+    (tester) async {
+      final navigatorKey = GlobalKey<NavigatorState>();
+      final inboxController = ScrollController();
+      final settingsController = ScrollController();
+      addTearDown(inboxController.dispose);
+      addTearDown(settingsController.dispose);
+
+      await tester.pumpWidget(
+        CockpitSurface(
+          routeName: '/settings',
+          child: MaterialApp(
+            navigatorKey: navigatorKey,
+            home: ListView.builder(
+              controller: inboxController,
+              itemCount: 60,
+              itemBuilder: (context, index) =>
+                  SizedBox(height: 72, child: Text('Inbox task $index')),
+            ),
+            routes: <String, WidgetBuilder>{
+              '/settings': (context) => ListView.builder(
+                controller: settingsController,
+                itemCount: 40,
+                itemBuilder: (context, index) =>
+                    SizedBox(height: 72, child: Text('Settings task $index')),
+              ),
+            },
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      navigatorKey.currentState!.pushNamed('/settings');
+      await tester.pumpAndSettle();
+
+      final surfaceState = tester.state<CockpitSurfaceState>(
+        find.byType(CockpitSurface),
+      );
+      final result = await surfaceState.scrollByViewport(
+        targetLocator: const CockpitLocator(text: 'Settings task 20'),
+        duration: Duration.zero,
+      );
+      await tester.pump();
+
+      expect(result.didScroll, isTrue);
+      expect(inboxController.offset, 0);
+      expect(settingsController.offset, greaterThan(0));
     },
   );
 
@@ -645,6 +695,65 @@ void main() {
       expect(outerStep.scrollableCandidateIndex, 1);
       expect(outerStep.scrollableCandidateCount, 2);
       expect(outerStep.scrollableKey, 'outer-candidate');
+    },
+  );
+
+  testWidgets(
+    'scrollByViewport preserves mounted target state when ranking narrows',
+    (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: SizedBox(
+            width: 640,
+            height: 320,
+            child: CockpitSurface(
+              routeName: '/mounted-target',
+              child: Row(
+                children: <Widget>[
+                  Expanded(
+                    child: SingleChildScrollView(
+                      child: Column(
+                        children: const <Widget>[
+                          SizedBox(height: 900),
+                          Text('Unrelated target'),
+                        ],
+                      ),
+                    ),
+                  ),
+                  Expanded(
+                    child: SingleChildScrollView(
+                      child: Column(
+                        children: const <Widget>[
+                          SizedBox(height: 700),
+                          Text('Mounted target'),
+                          SizedBox(height: 200),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final surfaceState = tester.state<CockpitSurfaceState>(
+        find.byType(CockpitSurface),
+      );
+      final result = await surfaceState.scrollByViewport(
+        targetLocator: const CockpitLocator(text: 'Mounted target'),
+        scrollableLocator: const CockpitLocator(index: 1),
+        duration: Duration.zero,
+        probeDuringScroll: false,
+      );
+
+      expect(result.didScroll, isFalse);
+      expect(result.scrollableCandidateCount, 2);
+      expect(result.targetVisibilityObserved, isTrue);
+      expect(result.targetMounted, isTrue);
+      expect(result.targetVisible, isFalse);
     },
   );
 }

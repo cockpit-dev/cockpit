@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:process/process.dart';
 
+import 'cockpit_flutter_tool_isolation.dart';
 import 'cockpit_process_output_collector.dart';
 
 const Set<String> _cockpitMinimumChildEnvironmentNames = <String>{
@@ -143,11 +144,18 @@ Future<Process> cockpitStartIsolatedProcess(
   bool runInShell = false,
   ProcessStartMode mode = ProcessStartMode.normal,
 }) {
+  final processEnvironment = cockpitIsolateFlutterTool(
+    executable: executable,
+    workingDirectory: workingDirectory,
+    environment: environment,
+  );
   return Process.start(
     executable,
     arguments,
     workingDirectory: workingDirectory,
-    environment: cockpitMinimumChildEnvironment(environment: environment),
+    environment: cockpitMinimumChildEnvironment(
+      environment: processEnvironment,
+    ),
     includeParentEnvironment: false,
     runInShell: runInShell,
     mode: mode,
@@ -163,11 +171,18 @@ Future<ProcessResult> cockpitRunIsolatedProcess(
   Encoding? stdoutEncoding = systemEncoding,
   Encoding? stderrEncoding = systemEncoding,
 }) {
+  final processEnvironment = cockpitIsolateFlutterTool(
+    executable: executable,
+    workingDirectory: workingDirectory,
+    environment: environment,
+  );
   return Process.run(
     executable,
     arguments,
     workingDirectory: workingDirectory,
-    environment: cockpitMinimumChildEnvironment(environment: environment),
+    environment: cockpitMinimumChildEnvironment(
+      environment: processEnvironment,
+    ),
     includeParentEnvironment: false,
     runInShell: runInShell,
     stdoutEncoding: stdoutEncoding,
@@ -245,10 +260,17 @@ final class LocalCockpitProcessManager implements CockpitProcessManager {
     Encoding? stdoutEncoding,
     Encoding? stderrEncoding,
   }) {
+    final processEnvironment = usesHostProcessManager
+        ? cockpitIsolateFlutterTool(
+            executable: executable,
+            workingDirectory: workingDirectory,
+            environment: environment,
+          )
+        : environment;
     return _processManager.run(
       <Object>[executable, ...arguments],
       workingDirectory: workingDirectory,
-      environment: environment,
+      environment: processEnvironment,
       includeParentEnvironment: includeParentEnvironment,
       runInShell: runInShell,
       stdoutEncoding: stdoutEncoding,
@@ -266,10 +288,17 @@ final class LocalCockpitProcessManager implements CockpitProcessManager {
     bool runInShell = false,
     ProcessStartMode mode = ProcessStartMode.normal,
   }) {
+    final processEnvironment = usesHostProcessManager
+        ? cockpitIsolateFlutterTool(
+            executable: executable,
+            workingDirectory: workingDirectory,
+            environment: environment,
+          )
+        : environment;
     return _processManager.start(
       <Object>[executable, ...arguments],
       workingDirectory: workingDirectory,
-      environment: environment,
+      environment: processEnvironment,
       includeParentEnvironment: includeParentEnvironment,
       runInShell: runInShell,
       mode: mode,

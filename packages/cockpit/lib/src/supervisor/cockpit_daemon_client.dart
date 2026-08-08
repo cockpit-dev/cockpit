@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:cockpit_protocol/cockpit_protocol.dart';
 import '../foundation/cockpit_home.dart';
@@ -274,16 +275,7 @@ final class CockpitDaemonLifecycleClient {
     }
     final file = File(paths.daemonLog);
     if (!await file.exists()) return const <String>[];
-    if (await file.length() > 8 * 1024 * 1024) {
-      throw const CockpitDaemonException(
-        'logTooLarge',
-        'Daemon log exceeds its read bound.',
-      );
-    }
-    final lines = const LineSplitter().convert(await file.readAsString());
-    return lines
-        .skip(lines.length > maximumLines ? lines.length - maximumLines : 0)
-        .toList();
+    return cockpitReadLogTail(file, maximumLines: maximumLines);
   }
 
   Future<Map<String, Object?>> doctor() async {
@@ -498,6 +490,61 @@ final class CockpitDaemonLifecycleClient {
       return false;
     }
   }
+}
+
+const int _cockpitDaemonLogReadChunkBytes = 64 * 1024;
+const int _cockpitDaemonLogReadLimitBytes = 2 * 1024 * 1024;
+const int _cockpitDaemonLogLineLimitChars = 16 * 1024;
+
+Future<List<String>> cockpitReadLogTail(
+  File file, {
+  required int maximumLines,
+}) async {
+  if (maximumLines < 1 || maximumLines > 2000) {
+    throw ArgumentError.value(maximumLines, 'maximumLines');
+  }
+  final handle = await file.open();
+  try {
+    final length = await handle.length();
+    if (length == 0) return const <String>[];
+    final chunks = <List<int>>[];
+    var offset = length;
+    var bytesRead = 0;
+    var newlineCount = 0;
+    while (offset > 0 &&
+        bytesRead < _cockpitDaemonLogReadLimitBytes &&
+        newlineCount <= maximumLines) {
+      final readSize = math.min(
+        _cockpitDaemonLogReadChunkBytes,
+        math.min(offset, _cockpitDaemonLogReadLimitBytes - bytesRead),
+      );
+      offset -= readSize;
+      await handle.setPosition(offset);
+      final chunk = await handle.read(readSize);
+      chunks.add(chunk);
+      bytesRead += chunk.length;
+      newlineCount += chunk.where((byte) => byte == 0x0a).length;
+      if (chunk.length < readSize) break;
+    }
+
+    final bytes = <int>[for (final chunk in chunks.reversed) ...chunk];
+    var start = 0;
+    if (offset > 0) {
+      final firstNewline = bytes.indexOf(0x0a);
+      start = firstNewline < 0 ? 0 : firstNewline + 1;
+    }
+    final text = utf8.decode(bytes.sublist(start), allowMalformed: true);
+    final lines = const LineSplitter().convert(text);
+    final first = math.max(0, lines.length - maximumLines);
+    return lines.skip(first).map(_limitDaemonLogLine).toList(growable: false);
+  } finally {
+    await handle.close();
+  }
+}
+
+String _limitDaemonLogLine(String line) {
+  if (line.length <= _cockpitDaemonLogLineLimitChars) return line;
+  return '…[truncated]${line.substring(line.length - _cockpitDaemonLogLineLimitChars)}';
 }
 
 abstract final class _EnsureLocks {

@@ -1,5 +1,17 @@
 # Changelog
 
+## 3.0.1
+
+- Aligned iOS and macOS plugin packaging with Flutter's dual-distribution
+  guidance by keeping current CocoaPods podspecs and adding the required
+  FlutterFramework dependencies to both SwiftPM packages.
+- Exposed Flutter semantics through the native macOS accessibility tree for
+  black-box locators without changing production application entrypoints.
+- Hardened nested and lazy scrolling with bidirectional search, deterministic
+  alignment and offsets, and full visibility through every scroll ancestor.
+- Reduced routine semantic snapshots and visible-target probes so live UI
+  inspection stays accurate and token-efficient on large trees.
+
 ## 3.0.0
 
 - Added fast exact semantic discovery with conjunctive multi-condition

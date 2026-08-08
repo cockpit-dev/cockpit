@@ -14,6 +14,63 @@ import 'package:test/test.dart';
 
 void main() {
   test(
+    'suite runtime inputs target declared variables and override authored values',
+    () async {
+      final suite = CockpitTestSuite(
+        id: 'runtimeInputSuite',
+        cases: <CockpitTestSuiteEntry>[
+          CockpitTestSuiteEntry(
+            id: 'alpha',
+            source: CockpitTestSuiteInlineCaseSource(
+              testCase: _inputTestCase('alphaCase', 'shared'),
+            ),
+            inputs: const <String, Object?>{'shared': 'authored'},
+          ),
+          CockpitTestSuiteEntry(
+            id: 'beta',
+            source: CockpitTestSuiteInlineCaseSource(
+              testCase: _inputTestCase('betaCase', 'other'),
+            ),
+            inputs: const <String, Object?>{'other': 'beta'},
+          ),
+        ],
+      );
+
+      final plan = await _compilePlan(
+        suite,
+        inputs: const <String, Object?>{'shared': 'runtime'},
+      );
+      final cases = <String, CockpitSuitePlanNode>{
+        for (final node in plan.caseNodes) node.entryId: node,
+      };
+
+      expect(cases['alpha']!.inputs, <String, Object?>{'shared': 'runtime'});
+      expect(cases['beta']!.inputs, <String, Object?>{'other': 'beta'});
+    },
+  );
+
+  test('suite runtime inputs reject names unused by every case', () async {
+    await expectLater(
+      _compilePlan(
+        CockpitTestSuite(
+          id: 'unknownInputSuite',
+          cases: <CockpitTestSuiteEntry>[
+            CockpitTestSuiteEntry(id: 'only', source: _source('onlyCase')),
+          ],
+        ),
+        inputs: const <String, Object?>{'misspelled': true},
+      ),
+      throwsA(
+        isA<FormatException>().having(
+          (error) => error.message,
+          'message',
+          contains('Unknown suite runtime input'),
+        ),
+      ),
+    );
+  });
+
+  test(
     'suite runtime preserves isolation, fixture, and dependency order',
     () async {
       final plan = await _compilePlan(_orderedSuite());
@@ -631,16 +688,40 @@ CockpitTestCase _testCase(String caseId) =>
       ],
     });
 
-Future<CockpitSuiteExecutionPlan> _compilePlan(CockpitTestSuite suite) =>
-    const CockpitSuiteCompiler().compile(
-      compiledSuite: CockpitCompiledTestSuite(
-        suite: suite,
-        sourceSha256:
-            'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
-        sourceMap: const <String, CockpitTestSourceLocation>{},
-      ),
-      resolver: const _NoFileCases(),
-    );
+CockpitTestCase _inputTestCase(String caseId, String inputName) =>
+    CockpitTestCase.fromJson(<String, Object?>{
+      'schemaVersion': 'cockpit.test/v2',
+      'kind': 'case',
+      'id': caseId,
+      'target': <String, Object?>{
+        'platform': 'flutter',
+        'targetKind': 'flutterApp',
+        'plane': 'semantic',
+      },
+      'variables': <String, Object?>{
+        inputName: <String, Object?>{'source': 'input', 'type': 'string'},
+      },
+      'steps': <Object?>[
+        <String, Object?>{
+          'stepId': 'waitUntilIdle',
+          'action': <String, Object?>{'type': 'waitForUiIdle', 'quietMs': 100},
+        },
+      ],
+    });
+
+Future<CockpitSuiteExecutionPlan> _compilePlan(
+  CockpitTestSuite suite, {
+  Map<String, Object?> inputs = const <String, Object?>{},
+}) => const CockpitSuiteCompiler().compile(
+  compiledSuite: CockpitCompiledTestSuite(
+    suite: suite,
+    sourceSha256:
+        'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+    sourceMap: const <String, CockpitTestSourceLocation>{},
+  ),
+  resolver: const _NoFileCases(),
+  inputs: inputs,
+);
 
 Future<CockpitSuiteScheduleResult> _run({
   required String runId,

@@ -154,6 +154,34 @@ void main() {
     );
   });
 
+  test('CI builds flutter_cockpit through CocoaPods and SwiftPM', () {
+    final workflow = File(
+      '$root/.github/workflows/example-e2e.yml',
+    ).readAsStringSync();
+
+    expect(workflow, contains('manager: cocoapods'));
+    expect(workflow, contains("flutter-version: '3.32.0'"));
+    expect(workflow, contains('manager: swiftpm'));
+    expect(workflow, contains("flutter-version: '3.44.0'"));
+    expect(
+      workflow,
+      contains('working-directory: examples/cockpit_demo/cockpit'),
+    );
+    expect(
+      workflow,
+      contains('flutter build macos --debug --target main.dart'),
+    );
+    expect(workflow, contains('--target main.dart'));
+    expect(workflow, contains('pod lib lint packages/flutter_cockpit/ios'));
+    expect(workflow, contains('pod lib lint packages/flutter_cockpit/macos'));
+    expect(workflow, contains('Verify CocoaPods linked flutter_cockpit'));
+    expect(workflow, contains('Verify SwiftPM linked flutter_cockpit'));
+    expect(
+      workflow,
+      contains('FlutterGeneratedPluginSwiftPackage/Package.swift'),
+    );
+  });
+
   test('iOS app and development shell remain 3.32-compatible', () {
     final appRoot = '$root/examples/cockpit_demo/ios/Runner';
     final appDelegate = File('$appRoot/AppDelegate.swift').readAsStringSync();
@@ -376,14 +404,34 @@ void main() {
     expect(macosPodspec, contains('flutter_cockpit/Sources/flutter_cockpit'));
     expect(iosPackage, contains('name: "flutter_cockpit"'));
     expect(iosPackage, contains('.iOS("13.0")'));
-    expect(iosPackage, contains('dependencies: []'));
+    expect(
+      iosPackage,
+      contains(
+        '.package(name: "FlutterFramework", path: "../FlutterFramework")',
+      ),
+    );
+    expect(
+      iosPackage,
+      contains(
+        '.product(name: "FlutterFramework", package: "FlutterFramework")',
+      ),
+    );
     expect(iosPackage, contains('.process("PrivacyInfo.xcprivacy")'));
-    expect(iosPackage, isNot(contains('FlutterFramework')));
     expect(macosPackage, contains('name: "flutter_cockpit"'));
     expect(macosPackage, contains('.macOS("10.15")'));
-    expect(macosPackage, contains('dependencies: []'));
+    expect(
+      macosPackage,
+      contains(
+        '.package(name: "FlutterFramework", path: "../FlutterFramework")',
+      ),
+    );
+    expect(
+      macosPackage,
+      contains(
+        '.product(name: "FlutterFramework", package: "FlutterFramework")',
+      ),
+    );
     expect(macosPackage, contains('.process("PrivacyInfo.xcprivacy")'));
-    expect(macosPackage, isNot(contains('FlutterFramework')));
     expect(manifest, contains('package="dev.cockpit.flutter_cockpit"'));
     expect(
       androidGradle,

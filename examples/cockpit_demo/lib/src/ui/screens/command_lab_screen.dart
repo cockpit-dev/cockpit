@@ -38,12 +38,14 @@ final class _CommandLabScreenState extends State<CommandLabScreen> {
     super.initState();
     _textController.addListener(_onTextChanged);
     _textFocusNode.addListener(_onFocusChanged);
+    _keyPadFocusNode.addListener(_onFocusChanged);
   }
 
   @override
   void dispose() {
     _textController.removeListener(_onTextChanged);
     _textFocusNode.removeListener(_onFocusChanged);
+    _keyPadFocusNode.removeListener(_onFocusChanged);
     _textController.dispose();
     _textFocusNode.dispose();
     _keyPadFocusNode.dispose();
@@ -288,6 +290,11 @@ final class _CommandLabScreenState extends State<CommandLabScreen> {
             ),
             const SizedBox(height: 20),
             _statusText('lab-key-status', 'key:$_key', theme),
+            _statusText(
+              'lab-key-focus-status',
+              'keyFocus:${_keyPadFocusNode.hasFocus ? 'yes' : 'no'}',
+              theme,
+            ),
             Focus(
               focusNode: _keyPadFocusNode,
               onKeyEvent: _recordKeyEvent,

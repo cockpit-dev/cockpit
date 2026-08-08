@@ -642,7 +642,11 @@ CockpitFailure _operationFailure(
       primary: CockpitApiError(
         code: 'deadlineExceeded',
         category: CockpitErrorCategory.cancelled,
-        message: 'Workspace operation deadline has expired.',
+        message:
+            redactor.redact(
+                  error.message ?? 'Workspace operation deadline has expired.',
+                )
+                as String,
         retryable: true,
         responsibleLayer: CockpitResponsibleLayer.worker,
       ),

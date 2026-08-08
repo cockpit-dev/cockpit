@@ -1,5 +1,11 @@
 # Changelog
 
+## 3.0.1
+
+- Reduced the default live semantic projection to a bounded set of concise
+  locator and capability fields while preserving detailed target resolution
+  for explicit inspection.
+
 ## 3.0.0
 
 - Added the canonical command `changed` signal, viewport resize contracts, and

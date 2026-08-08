@@ -294,7 +294,6 @@ final class CockpitWorkerPool {
     CockpitWorkspaceWorkerConnection? connection;
     try {
       connection = await slot.ready.timeout(grace);
-      final deadline = _utcNow().add(grace);
       if (!force) {
         await connection.call(
           method: 'drain',
@@ -305,7 +304,7 @@ final class CockpitWorkerPool {
               'cancellationGraceMs': grace.inMilliseconds.clamp(0, 300000),
             },
           ),
-          deadline: deadline,
+          deadline: _utcNow().add(grace),
         );
       }
       await connection.call(
@@ -315,7 +314,7 @@ final class CockpitWorkerPool {
           'shutdown',
           extra: <String, Object?>{'force': force},
         ),
-        deadline: deadline,
+        deadline: _utcNow().add(grace),
       );
     } on Object {
       force = true;
