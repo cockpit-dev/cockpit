@@ -237,6 +237,7 @@ final class CockpitDemoAcceptanceRunner {
           'suiteRuns',
         ],
       );
+      api.requestTimeout = request.discoveryTimeout;
       await api.server();
 
       advance('workspace', 'Resolving root and workspace identity.');
