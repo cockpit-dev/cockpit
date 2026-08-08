@@ -267,7 +267,7 @@ void main() {
     expect(recorder.artifacts, isEmpty);
   });
 
-  test('runner deadline revokes the active driver operation', () async {
+  test('runner guard revokes a driver that never returns', () async {
     final root = await Directory.systemTemp.createTemp('cockpit-v2-timeout-');
     addTearDown(() => root.delete(recursive: true));
     final clock = ManualCockpitClock();
@@ -290,7 +290,7 @@ void main() {
     }
     expect(adapter.command, isNotNull);
 
-    clock.elapse(const Duration(milliseconds: 50));
+    clock.elapse(const Duration(milliseconds: 6300));
     final result = await future;
     adapter.completeWithArtifact();
     await _pump();

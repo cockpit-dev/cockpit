@@ -2,8 +2,8 @@ export 'cockpit_application_service_exception.dart';
 
 import 'package:cockpit_protocol/cockpit_protocol.dart';
 
+import '../remote/cockpit_remote_read_budget.dart';
 import '../remote/cockpit_remote_session_client.dart';
-import '../session/cockpit_remote_session_launcher.dart';
 import '../session/cockpit_remote_session_handle.dart';
 import 'cockpit_interactive_result_data.dart';
 import 'cockpit_interactive_result_profile.dart';
@@ -23,6 +23,7 @@ final class CockpitReadRemoteStatusRequest {
     this.iosDeviceId,
     this.resultProfile = const CockpitInteractiveResultProfile.minimal(),
     this.snapshotOptions,
+    this.deadline,
   });
 
   final Uri? baseUri;
@@ -32,6 +33,7 @@ final class CockpitReadRemoteStatusRequest {
   final String? iosDeviceId;
   final CockpitInteractiveResultProfile resultProfile;
   final CockpitSnapshotOptions? snapshotOptions;
+  final DateTime? deadline;
 }
 
 final class CockpitReadRemoteStatusResult {
@@ -95,18 +97,14 @@ final class CockpitReadRemoteStatusService {
     CockpitRemoteSnapshotDetailedReader? readSnapshot,
     CockpitSessionReferenceResolver? sessionReferenceResolver,
     CockpitInteractiveSnapshotStore? snapshotStore,
-  }) : _readStatus = readStatus ?? cockpitReadRemoteSessionStatus,
-       _readSnapshot =
-           readSnapshot ??
-           ((baseUri, options) => CockpitRemoteSessionClient(
-             baseUri: baseUri,
-           ).readSnapshotDetailed(options: options)),
+  }) : _readStatus = readStatus,
+       _readSnapshot = readSnapshot,
        _sessionReferenceResolver =
            sessionReferenceResolver ?? CockpitSessionReferenceResolver(),
        _snapshotStore = snapshotStore ?? CockpitInteractiveSnapshotStore();
 
-  final CockpitRemoteStatusReader _readStatus;
-  final CockpitRemoteSnapshotDetailedReader _readSnapshot;
+  final CockpitRemoteStatusReader? _readStatus;
+  final CockpitRemoteSnapshotDetailedReader? _readSnapshot;
   final CockpitSessionReferenceResolver _sessionReferenceResolver;
   final CockpitInteractiveSnapshotStore _snapshotStore;
 
@@ -120,7 +118,15 @@ final class CockpitReadRemoteStatusService {
       androidDeviceId: request.androidDeviceId,
       iosDeviceId: request.iosDeviceId,
     );
-    final status = await _readStatus(resolved.baseUri);
+    final budget = CockpitRemoteReadBudget(request.deadline);
+    final status = await budget.run(() {
+      final override = _readStatus;
+      if (override != null) return override(resolved.baseUri);
+      return CockpitRemoteSessionClient(
+        baseUri: resolved.baseUri,
+        requestTimeout: budget.remaining(),
+      ).readStatus();
+    });
     final effectiveSnapshotOptions =
         request.resultProfile.requiresStatusSnapshotRead
         ? request.resultProfile.resolveSnapshotOptions(request.snapshotOptions)
@@ -130,7 +136,15 @@ final class CockpitReadRemoteStatusService {
         : await cockpitReadRemoteSnapshotConsistently(
             baseUri: resolved.baseUri,
             options: effectiveSnapshotOptions,
-            readSnapshot: _readSnapshot,
+            readSnapshot: (baseUri, options) {
+              final override = _readSnapshot;
+              if (override != null) return override(baseUri, options);
+              return CockpitRemoteSessionClient(
+                baseUri: baseUri,
+                requestTimeout: budget.remaining(),
+              ).readSnapshotDetailed(options: options);
+            },
+            deadline: request.deadline,
           );
     final snapshot = snapshotResponse?.snapshot ?? status.snapshot;
     final snapshotRef = request.resultProfile.emitsSnapshotRef

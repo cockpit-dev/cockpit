@@ -89,12 +89,20 @@ Future<int> cockpitExecuteOperation(
       client,
       descriptor,
     );
-    if (injectsSession && sessionHandle == null && input['sessionId'] == null) {
+    if (injectsSession &&
+        sessionHandle == null &&
+        input['sessionId'] == null &&
+        input['targetId'] == null) {
       sessionHandle = await runtime.activeDevelopmentSession(
         workspaceId: workspaceId,
       );
     }
     if (sessionHandle != null && injectsSession) {
+      if (input['targetId'] != null) {
+        throw const FormatException(
+          '--session cannot be combined with input.targetId.',
+        );
+      }
       final suppliedSessionId = input['sessionId'];
       if (suppliedSessionId != null &&
           suppliedSessionId != sessionHandle!.sessionId) {

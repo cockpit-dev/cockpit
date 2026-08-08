@@ -528,45 +528,23 @@ void main() {
       skip: !Platform.isWindows,
     );
 
-    test('PowerShell probe requests complete stable directory identity', () {
-      expect(cockpitWindowsFileIdentityPowerShell, contains('CreateFileW'));
-      expect(
-        cockpitWindowsFileIdentityPowerShell,
-        contains(
-          'CharSet = CharSet.Unicode,\n'
-          '      ExactSpelling = true,\n'
-          '      SetLastError = true',
+    test('native probe requests complete stable directory identity', () async {
+      final sourceUri = await Isolate.resolvePackageUri(
+        Uri.parse(
+          'package:cockpit/src/foundation/'
+          'cockpit_windows_filesystem_identity.dart',
         ),
       );
-      expect(
-        'ExactSpelling = true'.allMatches(cockpitWindowsFileIdentityPowerShell),
-        hasLength(2),
-      );
-      expect(
-        cockpitWindowsFileIdentityPowerShell,
-        contains('GetFileInformationByHandleEx'),
-      );
-      expect(
-        cockpitWindowsFileIdentityPowerShell,
-        contains('FileIdInfoClass = 18'),
-      );
-      expect(
-        cockpitWindowsFileIdentityPowerShell,
-        contains('StructLayout(LayoutKind.Sequential, Size = 16)'),
-      );
-      expect(cockpitWindowsFileIdentityPowerShell, contains('size != 24'));
-      expect(
-        cockpitWindowsFileIdentityPowerShell,
-        contains('FileShareRead | FileShareWrite | FileShareDelete'),
-      );
-      expect(
-        cockpitWindowsFileIdentityPowerShell,
-        contains('FileFlagBackupSemantics = 0x02000000'),
-      );
-      expect(
-        cockpitWindowsFileIdentityPowerShell,
-        contains('VolumeSerialNumber.ToString("x16")'),
-      );
+      expect(sourceUri, isNotNull);
+      final source = await File.fromUri(sourceUri!).readAsString();
+      expect(source, contains("'CreateFileW'"));
+      expect(source, contains("'GetFileInformationByHandleEx'"));
+      expect(source, contains('const int _fileIdInfoClass = 18;'));
+      expect(source, contains('sizeOf<_CockpitWindowsFileIdInfo>() != 24'));
+      expect(source, contains('_fileFlagBackupSemantics'));
+      expect(source, contains('shareDelete: true'));
+      expect(source, isNot(contains('powershell.exe')));
+      expect(source, isNot(contains('Add-Type')));
     });
 
     test(
@@ -596,38 +574,37 @@ void main() {
       },
     );
 
-    test('combined authority probe holds a no-delete-share lease', () {
-      expect(
-        'ExactSpelling = true'.allMatches(
-          cockpitWindowsDirectoryAuthorityPowerShell,
-        ),
-        hasLength(2),
-      );
-      expect(
-        cockpitWindowsDirectoryAuthorityPowerShell,
-        contains('FileShareRead | FileShareWrite,'),
-      );
-      expect(
-        cockpitWindowsDirectoryAuthorityPowerShell,
-        isNot(contains('FileShareDelete')),
-      );
-      expect(
-        cockpitWindowsDirectoryAuthorityPowerShell,
-        contains(r'$lease = [Cockpit.NativeDirectoryAuthorityLease]::Open'),
-      );
-      expect(
-        cockpitWindowsDirectoryAuthorityPowerShell.indexOf(r'$acl = Get-Acl'),
-        greaterThan(
-          cockpitWindowsDirectoryAuthorityPowerShell.indexOf(
-            r'$lease = [Cockpit.NativeDirectoryAuthorityLease]::Open',
+    test(
+      'combined authority probe holds a native no-delete-share lease',
+      () async {
+        final sourceUri = await Isolate.resolvePackageUri(
+          Uri.parse(
+            'package:cockpit/src/foundation/'
+            'cockpit_windows_directory_authority.dart',
           ),
-        ),
-      );
-      expect(
-        cockpitWindowsDirectoryAuthorityPowerShell,
-        contains(r'$lease.Dispose()'),
-      );
-    });
+        );
+        expect(sourceUri, isNotNull);
+        final source = await File.fromUri(sourceUri!).readAsString();
+        expect(source, contains('shareDelete: false'));
+        expect(
+          source.indexOf('shareDelete: false'),
+          lessThan(source.indexOf("'powershell.exe'")),
+        );
+        expect(
+          source.indexOf('lease?.close()'),
+          greaterThan(source.indexOf("'powershell.exe'")),
+        );
+        expect(cockpitWindowsDirectoryAuthorityPowerShell, contains('Get-Acl'));
+        expect(
+          cockpitWindowsDirectoryAuthorityPowerShell,
+          isNot(contains('Add-Type')),
+        );
+        expect(
+          cockpitWindowsDirectoryAuthorityPowerShell,
+          isNot(contains('CreateFileW')),
+        );
+      },
+    );
 
     test(
       'combined authority probe attests a real directory',

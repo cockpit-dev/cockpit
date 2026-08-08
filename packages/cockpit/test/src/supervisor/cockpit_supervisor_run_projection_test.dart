@@ -88,6 +88,44 @@ void main() {
     expect(gap.replayAfterSequence, 1);
   });
 
+  test('terminal Supervisor truth stops conflicting worker replay', () async {
+    final projection = _projection(stateRoot);
+    await projection.publish(
+      _publish('runA', afterSequence: 0, events: [_event('runA', 1)]),
+    );
+    await projection.publish(
+      _publish(
+        'runA',
+        afterSequence: 1,
+        events: <CockpitRunEvent>[
+          _event(
+            'runA',
+            2,
+            id: 'supervisor-terminal',
+            kind: 'run.interrupted',
+            lifecycle: CockpitRunLifecycle.completed,
+            outcome: CockpitRunOutcome.interrupted,
+            stability: CockpitRunStability.unknown,
+            failure: _interruptedFailure(),
+          ),
+        ],
+      ),
+    );
+
+    final replay = await projection.publish(
+      _publish(
+        'runA',
+        afterSequence: 1,
+        events: <CockpitRunEvent>[_event('runA', 2, id: 'worker-conflict')],
+      ),
+    );
+
+    expect(replay.terminal, isTrue);
+    expect(replay.highestContiguousSequence, 2);
+    final events = await projection.readEvents('runA', afterSequence: 0);
+    expect(events.events.last.eventId, 'supervisor-terminal');
+  });
+
   test(
     'preflights the event owner bound without a partial projection write',
     () async {
@@ -493,16 +531,34 @@ CockpitRunEvent _event(
   int sequence, {
   String? id,
   DateTime? timestamp,
+  String kind = 'run.progress',
+  CockpitRunLifecycle lifecycle = CockpitRunLifecycle.running,
+  CockpitRunOutcome? outcome,
+  CockpitRunStability? stability,
+  CockpitFailure? failure,
 }) => CockpitRunEvent(
   eventId: id ?? 'event-$runId-$sequence',
   sequence: sequence,
   timestamp: timestamp ?? DateTime.utc(2026, 7, 22),
-  kind: 'run.progress',
+  kind: kind,
   entityKind: CockpitRunEventEntityKind.run,
   projectId: 'projectA',
   workspaceId: 'workspaceA',
   runId: runId,
-  lifecycle: CockpitRunLifecycle.running,
+  lifecycle: lifecycle,
+  outcome: outcome,
+  stability: stability,
+  failure: failure,
+);
+
+CockpitFailure _interruptedFailure() => CockpitFailure(
+  primary: CockpitApiError(
+    code: CockpitErrorCode.interrupted,
+    category: CockpitErrorCategory.interrupted,
+    message: 'The worker stopped before the run reached a terminal state.',
+    retryable: true,
+    responsibleLayer: CockpitResponsibleLayer.worker,
+  ),
 );
 
 final class _RetentionIndex implements CockpitSupervisorRunRetentionIndex {

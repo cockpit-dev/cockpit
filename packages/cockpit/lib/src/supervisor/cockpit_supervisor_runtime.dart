@@ -239,7 +239,7 @@ final class CockpitSupervisorRuntime
       features: cockpitSupervisorFeatures,
       operations: operations.values.toList()
         ..sort((a, b) => a.kind.compareTo(b.kind)),
-      resources: _resourceDescriptors,
+      resources: cockpitSupervisorResourceDescriptors,
     );
   }
 
@@ -511,18 +511,19 @@ final class CockpitSupervisorRuntime
     if (invocation.workspaceId != workspaceId || invocation.rootId != null) {
       throw const FormatException('Workspace operation scope mismatch.');
     }
-    if (invocation.kind == 'case.run' || invocation.kind == 'suite.run') {
-      throw _apiError(
-        CockpitErrorCode.unsupportedOperation,
-        CockpitErrorCategory.unsupported,
-        '${invocation.kind} must use the dedicated run submission route.',
-      );
-    }
     final metadata = CockpitSupervisorOperationCatalog.require(invocation.kind);
     if (metadata.descriptor.scope != CockpitOperationScope.workspace) {
       throw const FormatException('Workspace operation scope mismatch.');
     }
     authorization.authorizeOperation(metadata, invocation);
+    if (invocation.kind == 'case.run' || invocation.kind == 'suite.run') {
+      return _submitRunOperation(
+        workspaceId,
+        invocation,
+        metadata.descriptor,
+        defaultTimeout: defaultTimeout,
+      );
+    }
     final spec = await _workerSpec(workspaceId);
     await _initializeWorker(spec);
     final key =
@@ -554,6 +555,76 @@ final class CockpitSupervisorRuntime
       ),
     );
     return result.result;
+  }
+
+  Future<CockpitOperationResult> _submitRunOperation(
+    String workspaceId,
+    CockpitOperationInvocation invocation,
+    CockpitOperationDescriptor descriptor, {
+    required Duration? defaultTimeout,
+  }) async {
+    final submittedAt = DateTime.now().toUtc();
+    _resolveOperationDeadline(
+      descriptor,
+      submittedAt: submittedAt,
+      requestedDeadline: invocation.deadline,
+      defaultTimeout: defaultTimeout,
+    );
+    final idempotencyKey = invocation.idempotencyKey;
+    if (idempotencyKey == null) {
+      throw const FormatException('Run operations require idempotency.');
+    }
+    final input = invocation.input;
+    _requireKeys(input, const <String>{
+      'source',
+      'inputs',
+      'targetId',
+      'timeoutMs',
+    });
+    final rawInputs = input['inputs'];
+    if (rawInputs != null &&
+        (rawInputs is! Map<Object?, Object?> ||
+            rawInputs.keys.any((key) => key is! String))) {
+      throw const FormatException('inputs must be a JSON object.');
+    }
+    final submission = CockpitRunSubmission(
+      workspaceId: workspaceId,
+      source: CockpitRunSubmissionSource.fromJson(input['source']),
+      idempotencyKey: idempotencyKey,
+      inputs: rawInputs == null
+          ? const <String, Object?>{}
+          : Map<String, Object?>.from(rawInputs as Map<Object?, Object?>),
+      targetId: _optionalString(input, 'targetId'),
+      timeoutMs: _optionalInteger(
+        input,
+        'timeoutMs',
+        minimum: 1,
+        maximum: descriptor.maximumTimeoutMs,
+      ),
+      requiredFeatures: invocation.requiredFeatures,
+    );
+    final expectedKind =
+        submission.source.documentKind == CockpitRunDocumentKind.testCase
+        ? 'case.run'
+        : 'suite.run';
+    if (invocation.kind != expectedKind) {
+      throw FormatException(
+        '${invocation.kind} cannot submit a ${submission.source.documentKind.name} source.',
+      );
+    }
+    final accepted = await submitRun(submission);
+    final finishedAt = DateTime.now().toUtc();
+    return CockpitOperationResult(
+      operationId: 'op-${CockpitSecureTokenGenerator().nextResourceIdToken()}',
+      kind: invocation.kind,
+      workspaceId: workspaceId,
+      lifecycle: CockpitOperationLifecycle.completed,
+      outcome: CockpitOperationOutcome.succeeded,
+      submittedAt: submittedAt,
+      startedAt: submittedAt,
+      finishedAt: finishedAt,
+      output: accepted.toJson(),
+    );
   }
 
   Future<CockpitDevelopmentArtifactFile> developmentArtifactFile(
@@ -1696,65 +1767,84 @@ CockpitApiException _apiError(
   ),
 );
 
-final _resourceDescriptors = <CockpitResourceDescriptor>[
-  CockpitResourceDescriptor(
-    kind: 'supervisor.roots',
-    scope: CockpitOperationScope.supervisor,
-    uriTemplate: '/api/v2/roots',
-    mediaType: 'application/json',
-  ),
-  CockpitResourceDescriptor(
-    kind: 'supervisor.workspaces',
-    scope: CockpitOperationScope.supervisor,
-    uriTemplate: '/api/v2/workspaces',
-    mediaType: 'application/json',
-  ),
-  CockpitResourceDescriptor(
-    kind: 'workspace.documents',
-    scope: CockpitOperationScope.workspace,
-    uriTemplate: '/api/v2/workspaces/{workspaceId}/documents',
-    mediaType: 'application/json',
-  ),
-  CockpitResourceDescriptor(
-    kind: 'workspace.targets',
-    scope: CockpitOperationScope.workspace,
-    uriTemplate: '/api/v2/workspaces/{workspaceId}/targets',
-    mediaType: 'application/json',
-  ),
-  CockpitResourceDescriptor(
-    kind: 'workspace.target',
-    scope: CockpitOperationScope.workspace,
-    uriTemplate: '/api/v2/workspaces/{workspaceId}/targets/{targetId}',
-    mediaType: 'application/json',
-  ),
-  CockpitResourceDescriptor(
-    kind: 'workspace.cases',
-    scope: CockpitOperationScope.workspace,
-    uriTemplate: '/api/v2/workspaces/{workspaceId}/cases',
-    mediaType: 'application/json',
-  ),
-  CockpitResourceDescriptor(
-    kind: 'workspace.runs',
-    scope: CockpitOperationScope.workspace,
-    uriTemplate: '/api/v2/workspaces/{workspaceId}/runs',
-    mediaType: 'application/json',
-  ),
-  CockpitResourceDescriptor(
-    kind: 'run.events',
-    scope: CockpitOperationScope.workspace,
-    uriTemplate: '/api/v2/runs/{runId}/events',
-    mediaType: 'text/event-stream',
-  ),
-  CockpitResourceDescriptor(
-    kind: 'run.artifacts',
-    scope: CockpitOperationScope.workspace,
-    uriTemplate: '/api/v2/runs/{runId}/artifacts',
-    mediaType: 'application/json',
-  ),
-  CockpitResourceDescriptor(
-    kind: 'run.artifact',
-    scope: CockpitOperationScope.workspace,
-    uriTemplate: '/api/v2/runs/{runId}/artifacts/{artifactId}',
-    mediaType: 'application/octet-stream',
-  ),
-];
+final List<CockpitResourceDescriptor> cockpitSupervisorResourceDescriptors =
+    List<CockpitResourceDescriptor>.unmodifiable(<CockpitResourceDescriptor>[
+      CockpitResourceDescriptor(
+        kind: 'supervisor.roots',
+        scope: CockpitOperationScope.supervisor,
+        uriTemplate: '/api/v2/roots',
+        mediaType: 'application/json',
+      ),
+      CockpitResourceDescriptor(
+        kind: 'supervisor.workspaces',
+        scope: CockpitOperationScope.supervisor,
+        uriTemplate: '/api/v2/workspaces',
+        mediaType: 'application/json',
+      ),
+      CockpitResourceDescriptor(
+        kind: 'supervisor.operations',
+        scope: CockpitOperationScope.supervisor,
+        uriTemplate: '/api/v2/operations',
+        mediaType: 'application/json',
+      ),
+      CockpitResourceDescriptor(
+        kind: 'supervisor.operationSchema',
+        scope: CockpitOperationScope.supervisor,
+        uriTemplate: '/api/v2/operations/schema',
+        mediaType: 'application/schema+json',
+      ),
+      CockpitResourceDescriptor(
+        kind: 'workspace.documents',
+        scope: CockpitOperationScope.workspace,
+        uriTemplate: '/api/v2/workspaces/{workspaceId}/documents',
+        mediaType: 'application/json',
+      ),
+      CockpitResourceDescriptor(
+        kind: 'workspace.targets',
+        scope: CockpitOperationScope.workspace,
+        uriTemplate: '/api/v2/workspaces/{workspaceId}/targets',
+        mediaType: 'application/json',
+      ),
+      CockpitResourceDescriptor(
+        kind: 'workspace.operations',
+        scope: CockpitOperationScope.workspace,
+        uriTemplate: '/api/v2/workspaces/{workspaceId}/operations',
+        mediaType: 'application/json',
+      ),
+      CockpitResourceDescriptor(
+        kind: 'workspace.target',
+        scope: CockpitOperationScope.workspace,
+        uriTemplate: '/api/v2/workspaces/{workspaceId}/targets/{targetId}',
+        mediaType: 'application/json',
+      ),
+      CockpitResourceDescriptor(
+        kind: 'workspace.cases',
+        scope: CockpitOperationScope.workspace,
+        uriTemplate: '/api/v2/workspaces/{workspaceId}/cases',
+        mediaType: 'application/json',
+      ),
+      CockpitResourceDescriptor(
+        kind: 'workspace.runs',
+        scope: CockpitOperationScope.workspace,
+        uriTemplate: '/api/v2/workspaces/{workspaceId}/runs',
+        mediaType: 'application/json',
+      ),
+      CockpitResourceDescriptor(
+        kind: 'run.events',
+        scope: CockpitOperationScope.workspace,
+        uriTemplate: '/api/v2/runs/{runId}/events',
+        mediaType: 'text/event-stream',
+      ),
+      CockpitResourceDescriptor(
+        kind: 'run.artifacts',
+        scope: CockpitOperationScope.workspace,
+        uriTemplate: '/api/v2/runs/{runId}/artifacts',
+        mediaType: 'application/json',
+      ),
+      CockpitResourceDescriptor(
+        kind: 'run.artifact',
+        scope: CockpitOperationScope.workspace,
+        uriTemplate: '/api/v2/runs/{runId}/artifacts/{artifactId}',
+        mediaType: 'application/octet-stream',
+      ),
+    ]);

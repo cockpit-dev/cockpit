@@ -59,8 +59,43 @@ Future<T> cockpitRaceDeadline<T>({
   if (remaining == Duration.zero) {
     throw const CockpitDeadlineExceeded();
   }
-  final timeout = clock
-      .delay(remaining)
-      .then<T>((_) => throw const CockpitDeadlineExceeded());
-  return Future.any<T>(<Future<T>>[operation, timeout]);
+  final first = await Future.any<_CockpitDeadlineRace<T>>(
+    <Future<_CockpitDeadlineRace<T>>>[
+      operation.then<_CockpitDeadlineRace<T>>(
+        _CockpitDeadlineResult<T>.new,
+        onError: (Object error, StackTrace stackTrace) =>
+            _CockpitDeadlineError<T>(error, stackTrace),
+      ),
+      clock
+          .delay(remaining)
+          .then<_CockpitDeadlineRace<T>>((_) => _CockpitDeadlineTimeout<T>()),
+    ],
+  );
+  return switch (first) {
+    _CockpitDeadlineResult<T>(:final value) => value,
+    _CockpitDeadlineError<T>(:final error, :final stackTrace) =>
+      Error.throwWithStackTrace(error, stackTrace),
+    _CockpitDeadlineTimeout<T>() => throw const CockpitDeadlineExceeded(),
+  };
+}
+
+sealed class _CockpitDeadlineRace<T> {
+  const _CockpitDeadlineRace();
+}
+
+final class _CockpitDeadlineResult<T> extends _CockpitDeadlineRace<T> {
+  const _CockpitDeadlineResult(this.value);
+
+  final T value;
+}
+
+final class _CockpitDeadlineError<T> extends _CockpitDeadlineRace<T> {
+  const _CockpitDeadlineError(this.error, this.stackTrace);
+
+  final Object error;
+  final StackTrace stackTrace;
+}
+
+final class _CockpitDeadlineTimeout<T> extends _CockpitDeadlineRace<T> {
+  const _CockpitDeadlineTimeout();
 }

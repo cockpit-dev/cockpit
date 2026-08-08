@@ -150,6 +150,27 @@ void main() {
     },
   );
 
+  test('stops replay after the Supervisor terminalizes a run', () async {
+    await _store(
+      stateRoot,
+    ).append('runA', _terminalDraft(), publishImmediately: false);
+    final publisher = _TerminalPublisher();
+    final recovered = _store(stateRoot, publisher: publisher);
+
+    await recovered.resume();
+    await recovered.publishRun('runA');
+
+    expect(publisher.calls, hasLength(1));
+    final relay =
+        jsonDecode(
+              await File(
+                p.join(stateRoot, 'runs', 'runA', 'relay.json'),
+              ).readAsString(),
+            )
+            as Map<String, Object?>;
+    expect(relay['sequence'], 1);
+  });
+
   test('does not advance acknowledgement for an unresolved gap', () async {
     final store = _store(stateRoot, publisher: const _GapPublisher());
 
@@ -453,6 +474,7 @@ final class _RecordingPublisher implements CockpitWorkerEventPublisher {
     return CockpitWorkerPublishEventBatchResult(
       runId: request.runId,
       highestContiguousSequence: persisted.length,
+      terminal: false,
     );
   }
 }
@@ -466,8 +488,25 @@ final class _GapPublisher implements CockpitWorkerEventPublisher {
   ) async => CockpitWorkerPublishEventBatchResult(
     runId: request.runId,
     highestContiguousSequence: request.afterSequence,
+    terminal: false,
     replayAfterSequence: request.afterSequence,
   );
+}
+
+final class _TerminalPublisher implements CockpitWorkerEventPublisher {
+  final List<CockpitWorkerPublishEventBatchRequest> calls = [];
+
+  @override
+  Future<CockpitWorkerPublishEventBatchResult> publish(
+    CockpitWorkerPublishEventBatchRequest request,
+  ) async {
+    calls.add(request);
+    return CockpitWorkerPublishEventBatchResult(
+      runId: request.runId,
+      highestContiguousSequence: request.events.last.sequence,
+      terminal: true,
+    );
+  }
 }
 
 final class _FixedTokenGenerator implements CockpitTokenGenerator {

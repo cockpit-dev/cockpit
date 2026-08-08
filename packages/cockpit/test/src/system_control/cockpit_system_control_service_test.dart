@@ -1003,6 +1003,14 @@ void main() {
     expect(
       _parameter(
         macos,
+        CockpitSystemControlAction.dismissSystemDialog,
+        'decision',
+      )?.allowedValues,
+      <String>['accept', 'dismiss'],
+    );
+    expect(
+      _parameter(
+        macos,
         CockpitSystemControlAction.captureScreenshot,
         'name',
       )?.valueType,

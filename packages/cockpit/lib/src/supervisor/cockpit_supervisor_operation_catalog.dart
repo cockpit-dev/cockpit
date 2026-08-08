@@ -394,22 +394,286 @@ CockpitSupervisorOperationMetadata _metadata(
   List<CockpitSafetyEffect> effects,
   Duration defaultTimeout,
   Duration maximumTimeout,
-) => CockpitSupervisorOperationMetadata(
-  descriptor: CockpitOperationDescriptor(
-    kind: kind,
-    title: kind,
-    description: 'Cockpit $kind operation.',
-    scope: scope,
-    mutationClass: mutationClass,
-    idempotency: idempotency,
-    executionMode: executionMode,
-    defaultTimeoutMs: defaultTimeout.inMilliseconds,
-    maximumTimeoutMs: maximumTimeout.inMilliseconds,
-    requestSchemaRef: 'cockpit://operations/schema#/\$defs/$kind.request',
-    responseSchemaRef: 'cockpit://operations/schema#/\$defs/$kind.response',
-    safetyEffects: effects
-        .map(CockpitEnumValue<CockpitSafetyEffect>.known)
-        .toList(growable: false),
+) {
+  final help = _operationHelp[kind];
+  if (help == null) {
+    throw StateError('Missing public operation help: $kind.');
+  }
+  return CockpitSupervisorOperationMetadata(
+    descriptor: CockpitOperationDescriptor(
+      kind: kind,
+      title: help.title,
+      description: help.description,
+      scope: scope,
+      mutationClass: mutationClass,
+      idempotency: idempotency,
+      executionMode: executionMode,
+      defaultTimeoutMs: defaultTimeout.inMilliseconds,
+      maximumTimeoutMs: maximumTimeout.inMilliseconds,
+      requestSchemaRef: 'cockpit://operations/schema#/\$defs/$kind.request',
+      responseSchemaRef: 'cockpit://operations/schema#/\$defs/$kind.response',
+      safetyEffects: effects
+          .map(CockpitEnumValue<CockpitSafetyEffect>.known)
+          .toList(growable: false),
+    ),
+    requiresExplicitAuthorization: effects.isNotEmpty,
+  );
+}
+
+const Map<String, ({String title, String description})>
+_operationHelp = <String, ({String title, String description})>{
+  'target.discover': (
+    title: 'Discover targets',
+    description: 'Discover host, simulator, emulator, and device targets.',
   ),
-  requiresExplicitAuthorization: effects.isNotEmpty,
-);
+  'lease.list': (
+    title: 'List leases',
+    description: 'List resource leases with optional ownership filters.',
+  ),
+  'lease.recover': (
+    title: 'Recover lease',
+    description: 'Verify and recover one stale or quarantined lease.',
+  ),
+  'system.capabilities': (
+    title: 'Inspect system capabilities',
+    description: 'Describe native control available for one platform target.',
+  ),
+  'system.diagnostics': (
+    title: 'Read system diagnostics',
+    description: 'Read bounded Supervisor health and resource diagnostics.',
+  ),
+  'project.create': (
+    title: 'Create project',
+    description: 'Create a production Dart CLI or Flutter application.',
+  ),
+  'package.search': (
+    title: 'Search packages',
+    description: 'Search pub.dev packages with bounded result metadata.',
+  ),
+  'document.index': (
+    title: 'Index documents',
+    description: 'Refresh the workspace document index with optional filters.',
+  ),
+  'document.list': (
+    title: 'List documents',
+    description: 'List indexed workspace documents with bounded pagination.',
+  ),
+  'case.validate': (
+    title: 'Validate case',
+    description: 'Validate one inline Cockpit case without running it.',
+  ),
+  'case.run': (
+    title: 'Run case',
+    description: 'Submit one indexed or inline case as a durable run.',
+  ),
+  'suite.run': (
+    title: 'Run suite',
+    description: 'Submit one indexed or inline suite as a durable run.',
+  ),
+  'analyze.files': (
+    title: 'Analyze files',
+    description:
+        'Analyze selected indexed Dart files with bounded diagnostics.',
+  ),
+  'analyze.workspace': (
+    title: 'Analyze workspace',
+    description: 'Run static analysis for the registered workspace.',
+  ),
+  'fix.workspace': (
+    title: 'Apply Dart fixes',
+    description: 'Apply safe Dart fixes across the registered workspace.',
+  ),
+  'format.workspace': (
+    title: 'Format workspace',
+    description: 'Format the workspace or selected indexed documents.',
+  ),
+  'test.workspace': (
+    title: 'Test workspace',
+    description: 'Run bounded Dart or Flutter tests for selected paths.',
+  ),
+  'package.pub': (
+    title: 'Run Pub command',
+    description: 'Run an allowed dependency-management command through Pub.',
+  ),
+  'lsp.request': (
+    title: 'Query language server',
+    description: 'Run one bounded Dart language-server query.',
+  ),
+  'package.uris.read': (
+    title: 'Read package URI',
+    description: 'Read bounded text or archive metadata for a package URI.',
+  ),
+  'package.uris.grep': (
+    title: 'Search package URIs',
+    description: 'Search dependency sources without unrelated file scans.',
+  ),
+  'app.list': (
+    title: 'List applications',
+    description: 'List applications owned by the current workspace.',
+  ),
+  'app.get': (
+    title: 'Inspect application',
+    description: 'Read one application and its current live Flutter state.',
+  ),
+  'target.list': (
+    title: 'List workspace targets',
+    description: 'List registered targets isolated to the current workspace.',
+  ),
+  'target.get': (
+    title: 'Get target',
+    description: 'Read one registered target without launching it.',
+  ),
+  'target.inspect': (
+    title: 'Inspect target',
+    description: 'Read live target capabilities, surface, and selected state.',
+  ),
+  'target.register': (
+    title: 'Register target',
+    description:
+        'Register a Flutter, native, browser, device, or system target.',
+  ),
+  'app.launch': (
+    title: 'Launch application',
+    description: 'Launch one registered target as a managed application.',
+  ),
+  'target.launch': (
+    title: 'Launch target',
+    description: 'Launch one target in the requested execution mode.',
+  ),
+  'app.stop': (
+    title: 'Stop application',
+    description: 'Stop exactly one managed application by application ID.',
+  ),
+  'session.remote.launch': (
+    title: 'Launch remote session',
+    description: 'Launch a Flutter bridge session for one registered target.',
+  ),
+  'session.remote.get': (
+    title: 'Get remote session',
+    description: 'Read one remote session identity and connection state.',
+  ),
+  'session.remote.status': (
+    title: 'Read remote status',
+    description: 'Read live bridge status with an optional bounded snapshot.',
+  ),
+  'snapshot.remote.read': (
+    title: 'Read remote snapshot',
+    description: 'Read and optionally compare one bounded Flutter snapshot.',
+  ),
+  'snapshot.remote.collect': (
+    title: 'Collect remote snapshot',
+    description: 'Collect a protocol snapshot and artifact references.',
+  ),
+  'command.remote.execute': (
+    title: 'Execute remote command',
+    description: 'Execute one typed Flutter command through a remote session.',
+  ),
+  'command.remote.batch': (
+    title: 'Execute remote batch',
+    description: 'Execute an ordered batch of typed Flutter commands.',
+  ),
+  'ui.remote.waitIdle': (
+    title: 'Wait for remote UI',
+    description:
+        'Wait for Flutter UI quiet, optionally including network idle.',
+  ),
+  'session.development.launch': (
+    title: 'Launch development session',
+    description:
+        'Launch a resident Flutter development session for one target.',
+  ),
+  'session.development.get': (
+    title: 'Get development session',
+    description: 'Read one development session and its launch identity.',
+  ),
+  'session.development.reload': (
+    title: 'Reload development session',
+    description: 'Hot reload or hot restart exactly one development session.',
+  ),
+  'session.development.stop': (
+    title: 'Stop development session',
+    description: 'Stop exactly one managed Flutter development session.',
+  ),
+  'development.probe.collect': (
+    title: 'Collect development probe',
+    description: 'Capture bounded UI, runtime, log, and network state.',
+  ),
+  'development.probe.compare': (
+    title: 'Compare development probes',
+    description: 'Compare two retained probes from the same session.',
+  ),
+  'ui.inspect': (
+    title: 'Inspect UI',
+    description: 'Inspect semantic UI with optional snapshot comparison.',
+  ),
+  'surface.inspect': (
+    title: 'Inspect surface',
+    description:
+        'Inspect the current route, viewport, overlays, and visible UI.',
+  ),
+  'logs.read': (
+    title: 'Read application logs',
+    description: 'Read a bounded tail of application runtime logs.',
+  ),
+  'network.read': (
+    title: 'Read network index',
+    description: 'Read a bounded, filterable network activity index.',
+  ),
+  'network.body': (
+    title: 'Export network body',
+    description:
+        'Export selected request or response bodies to artifact files.',
+  ),
+  'errors.read': (
+    title: 'Read runtime errors',
+    description: 'Read a bounded list of captured application errors.',
+  ),
+  'session.logs.read': (
+    title: 'Read session logs',
+    description: 'Read a bounded log tail for one exact session.',
+  ),
+  'evidence.screenshot.capture': (
+    title: 'Capture screenshot evidence',
+    description: 'Capture current UI using the requested source policy.',
+  ),
+  'command.run': (
+    title: 'Run interactive command',
+    description: 'Execute one command with compact AI-oriented output.',
+  ),
+  'command.batch': (
+    title: 'Run interactive batch',
+    description: 'Execute a command batch with recording and final snapshot.',
+  ),
+  'shell.run': (
+    title: 'Run shell command',
+    description: 'Run one argv-safe process inside the workspace boundary.',
+  ),
+  'system.action': (
+    title: 'Run system action',
+    description: 'Run one native action for an exact session or target.',
+  ),
+  'app.reload': (
+    title: 'Reload application',
+    description: 'Hot reload the application bound to one exact session.',
+  ),
+  'app.restart': (
+    title: 'Restart application',
+    description: 'Hot restart the application bound to one exact session.',
+  ),
+  'ui.waitIdle': (
+    title: 'Wait for UI',
+    description: 'Wait for UI quiet through the interactive session path.',
+  ),
+  'viewport.set': (
+    title: 'Set viewport',
+    description: 'Resize one Flutter session to an exact logical viewport.',
+  ),
+  'recording.start': (
+    title: 'Start recording',
+    description: 'Start one bounded recording for an exact session.',
+  ),
+  'recording.stop': (
+    title: 'Stop recording',
+    description: 'Stop one recording and finalize its artifact metadata.',
+  ),
+};

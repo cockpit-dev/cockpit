@@ -541,6 +541,7 @@ void main() {
       '/api/v2/roots': <String>{'get', 'post'},
       '/api/v2/roots/{rootId}': <String>{'delete'},
       '/api/v2/operations': <String>{'get', 'post'},
+      '/api/v2/operations/schema': <String>{'get'},
       '/api/v2/workspaces': <String>{'get'},
       '/api/v2/workspaces/register': <String>{'post'},
       '/api/v2/workspaces/{workspaceId}/rebind': <String>{'post'},
@@ -653,6 +654,25 @@ void main() {
         (eventOperation['responses']! as Map<String, Object?>)['200']!
             as Map<String, Object?>;
     expect(eventResponse['content'], contains('text/event-stream'));
+
+    final operationSchemaOperation =
+        (paths['/api/v2/operations/schema']! as Map<String, Object?>)['get']!
+            as Map<String, Object?>;
+    final operationSchemaResponse =
+        (operationSchemaOperation['responses']! as Map<String, Object?>)['200']!
+            as Map<String, Object?>;
+    final operationSchemaContent =
+        operationSchemaResponse['content']! as Map<String, Object?>;
+    expect(operationSchemaContent, contains('application/schema+json'));
+    final operationSchema =
+        (operationSchemaContent['application/schema+json']!
+                as Map<String, Object?>)['schema']!
+            as Map<String, Object?>;
+    expect(
+      ((operationSchema['properties']! as Map<String, Object?>)[r'$schema']!
+          as Map<String, Object?>)['const'],
+      'https://json-schema.org/draft/2020-12/schema',
+    );
 
     final artifactOperation =
         (paths['/api/v2/runs/{runId}/artifacts/{artifactId}']!

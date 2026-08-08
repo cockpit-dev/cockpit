@@ -9,7 +9,7 @@ void main() {
     );
   });
 
-  test('CockpitRecordingLayer round-trips through json aliases', () {
+  test('CockpitRecordingLayer accepts only canonical wire values', () {
     expect(
       CockpitRecordingLayer.fromJson(
         CockpitRecordingLayer.hostScreen.jsonValue,
@@ -17,8 +17,8 @@ void main() {
       CockpitRecordingLayer.hostScreen,
     );
     expect(
-      CockpitRecordingLayer.fromJson('appWindow'),
-      CockpitRecordingLayer.appWindow,
+      () => CockpitRecordingLayer.fromJson('appWindow'),
+      throwsArgumentError,
     );
   });
 
@@ -28,16 +28,8 @@ void main() {
       CockpitRecordingPurpose.acceptance,
     );
     expect(
-      CockpitRecordingPurpose.fromJson('diagnostic'),
-      CockpitRecordingPurpose.repro,
-    );
-    expect(
-      CockpitRecordingPurpose.fromJson('debug'),
-      CockpitRecordingPurpose.repro,
-    );
-    expect(
-      CockpitRecordingPurpose.fromJson('investigation'),
-      CockpitRecordingPurpose.repro,
+      () => CockpitRecordingPurpose.fromJson('diagnostic'),
+      throwsArgumentError,
     );
   });
 
@@ -96,13 +88,13 @@ void main() {
     },
   );
 
-  test('CockpitRecordingRequest defaults name from purpose when omitted', () {
-    final request = CockpitRecordingRequest.fromJson(<String, Object?>{
-      'purpose': 'acceptance',
-    });
-
-    expect(request.purpose, CockpitRecordingPurpose.acceptance);
-    expect(request.name, 'acceptance');
+  test('CockpitRecordingRequest rejects incomplete input', () {
+    expect(
+      () => CockpitRecordingRequest.fromJson(<String, Object?>{
+        'purpose': 'acceptance',
+      }),
+      throwsFormatException,
+    );
   });
 
   test(

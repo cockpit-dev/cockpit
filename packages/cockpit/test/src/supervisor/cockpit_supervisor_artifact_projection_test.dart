@@ -699,6 +699,7 @@ final class _AcknowledgeEventPublisher implements CockpitWorkerEventPublisher {
   ) async => CockpitWorkerPublishEventBatchResult(
     runId: request.runId,
     highestContiguousSequence: request.events.last.sequence,
+    terminal: false,
   );
 }
 

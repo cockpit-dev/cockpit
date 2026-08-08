@@ -367,6 +367,7 @@ final class CockpitWorkerPublishEventBatchResult
   CockpitWorkerPublishEventBatchResult({
     required this.runId,
     required this.highestContiguousSequence,
+    required this.terminal,
     this.replayAfterSequence,
   }) {
     workerId(runId, r'$.runId');
@@ -385,6 +386,7 @@ final class CockpitWorkerPublishEventBatchResult
 
   final String runId;
   final int highestContiguousSequence;
+  final bool terminal;
   final int? replayAfterSequence;
 
   bool get hasGap => replayAfterSequence != null;
@@ -396,6 +398,7 @@ final class CockpitWorkerPublishEventBatchResult
   Map<String, Object?> toJson() => <String, Object?>{
     'runId': runId,
     'highestContiguousSequence': highestContiguousSequence,
+    'terminal': terminal,
     if (replayAfterSequence != null) 'replayAfterSequence': replayAfterSequence,
   };
 
@@ -406,10 +409,15 @@ final class CockpitWorkerPublishEventBatchResult
       const <String>{
         'runId',
         'highestContiguousSequence',
+        'terminal',
         'replayAfterSequence',
       },
       r'$',
-      required: const <String>{'runId', 'highestContiguousSequence'},
+      required: const <String>{
+        'runId',
+        'highestContiguousSequence',
+        'terminal',
+      },
     );
     return CockpitWorkerPublishEventBatchResult(
       runId: workerId(json['runId'], r'$.runId'),
@@ -418,6 +426,7 @@ final class CockpitWorkerPublishEventBatchResult
         r'$.highestContiguousSequence',
         minimum: 0,
       ),
+      terminal: workerBoolean(json['terminal'], r'$.terminal'),
       replayAfterSequence: json['replayAfterSequence'] == null
           ? null
           : workerInteger(

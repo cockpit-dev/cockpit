@@ -3,18 +3,8 @@ enum CockpitRecordingPurpose {
   repro;
 
   static CockpitRecordingPurpose fromJson(Object? json) {
-    final normalized = '$json'.trim().toLowerCase();
-    switch (normalized) {
-      case 'acceptance':
-        return CockpitRecordingPurpose.acceptance;
-      case 'repro':
-      case 'diagnostic':
-      case 'debug':
-      case 'investigation':
-        return CockpitRecordingPurpose.repro;
-    }
     return values.firstWhere(
-      (purpose) => purpose.name == normalized,
+      (purpose) => purpose.name == json,
       orElse: () => throw ArgumentError.value(
         json,
         'json',

@@ -20,7 +20,7 @@ enum CockpitRecordingLayer {
 
   static CockpitRecordingLayer fromJson(Object? json) {
     return values.firstWhere(
-      (candidate) => candidate.jsonValue == json || candidate.name == json,
+      (candidate) => candidate.jsonValue == json,
       orElse: () => throw ArgumentError.value(
         json,
         'json',

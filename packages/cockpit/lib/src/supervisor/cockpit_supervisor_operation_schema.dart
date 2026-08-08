@@ -1,4 +1,8 @@
+import '../system_control/cockpit_system_control_profile.dart';
 import 'cockpit_supervisor_operation_catalog.dart';
+
+part 'cockpit_supervisor_operation_request_schemas.dart';
+part 'cockpit_supervisor_operation_response_schemas.dart';
 
 final class CockpitSupervisorOperationSchema {
   CockpitSupervisorOperationSchema._();
@@ -6,11 +10,15 @@ final class CockpitSupervisorOperationSchema {
   static Map<String, Object?> document() {
     final definitions = <String, Object?>{};
     for (final descriptor in CockpitSupervisorOperationCatalog.allOperations) {
-      definitions['${descriptor.kind}.request'] =
-          _requestSchemas[descriptor.kind] ?? _genericRequest(descriptor.kind);
-      definitions['${descriptor.kind}.response'] = _genericResponse(
-        descriptor.kind,
-      );
+      final request = _requestSchemas[descriptor.kind];
+      final response = _responseSchemas[descriptor.kind];
+      if (request == null || response == null) {
+        throw StateError(
+          'Missing public operation contract: ${descriptor.kind}.',
+        );
+      }
+      definitions['${descriptor.kind}.request'] = request;
+      definitions['${descriptor.kind}.response'] = response;
     }
     return <String, Object?>{
       r'$schema': 'https://json-schema.org/draft/2020-12/schema',
@@ -26,29 +34,20 @@ Map<String, Object?> _object({
   List<String> required = const <String>[],
   String precision = 'exact',
   String? description,
+  List<Map<String, Object?>> examples = const <Map<String, Object?>>[],
+  List<Map<String, Object?>> oneOf = const <Map<String, Object?>>[],
+  List<Map<String, Object?>> allOf = const <Map<String, Object?>>[],
+  bool additionalProperties = false,
 }) => <String, Object?>{
   'type': 'object',
   'properties': properties,
   if (required.isNotEmpty) 'required': required,
-  'additionalProperties': false,
+  'additionalProperties': additionalProperties,
+  if (oneOf.isNotEmpty) 'oneOf': oneOf,
+  if (allOf.isNotEmpty) 'allOf': allOf,
+  if (examples.isNotEmpty) 'examples': examples,
   'x-cockpit-precision': precision,
   'description': ?description,
-};
-
-Map<String, Object?> _genericRequest(String kind) => <String, Object?>{
-  'type': 'object',
-  'additionalProperties': true,
-  'x-cockpit-precision': 'generic',
-  'description':
-      'The live runtime advertises $kind, but its field-level request schema '
-      'is not yet published. Prefer a task-oriented command.',
-};
-
-Map<String, Object?> _genericResponse(String kind) => <String, Object?>{
-  'type': 'object',
-  'additionalProperties': true,
-  'x-cockpit-precision': 'generic',
-  'description': 'Successful $kind operation output.',
 };
 
 const Map<String, Object?> _id = <String, Object?>{
@@ -63,6 +62,32 @@ const Map<String, Object?> _positiveTimeout = <String, Object?>{
   'type': 'integer',
   'minimum': 1,
   'maximum': 1800000,
+};
+const Map<String, Object?> _boolean = <String, Object?>{'type': 'boolean'};
+const Map<String, Object?> _integer = <String, Object?>{'type': 'integer'};
+const Map<String, Object?> _string = <String, Object?>{
+  'type': 'string',
+  'minLength': 1,
+};
+const Map<String, Object?> _absoluteHttpUrl = <String, Object?>{
+  'type': 'string',
+  'minLength': 8,
+  'maxLength': 2048,
+  'format': 'uri',
+  'pattern': r'^[Hh][Tt][Tt][Pp][Ss]?://[^/?#\s]+(?:[/?#].*)?$',
+};
+const Map<String, Object?> _sha256 = <String, Object?>{
+  'type': 'string',
+  'pattern': r'^[a-f0-9]{64}$',
+};
+const Map<String, Object?> _utcTimestamp = <String, Object?>{
+  'type': 'string',
+  'format': 'date-time',
+};
+const Map<String, Object?> _jsonObject = <String, Object?>{'type': 'object'};
+const Map<String, Object?> _stringList = <String, Object?>{
+  'type': 'array',
+  'items': _string,
 };
 const Map<String, Object?> _profile = <String, Object?>{
   'type': 'string',
@@ -79,197 +104,84 @@ const Map<String, Object?> _launchConfiguration = <String, Object?>{
     'dartDefines': <String, Object?>{
       'type': 'array',
       'items': <String, Object?>{'type': 'string', 'minLength': 3},
+      'maxItems': 1024,
     },
     'dartDefineFromFiles': <String, Object?>{
       'type': 'array',
       'items': <String, Object?>{'type': 'string', 'minLength': 1},
+      'maxItems': 1024,
     },
     'flutterArgs': <String, Object?>{
       'type': 'array',
       'items': <String, Object?>{'type': 'string', 'minLength': 1},
+      'maxItems': 1024,
     },
     'environment': <String, Object?>{
       'type': 'object',
       'additionalProperties': <String, Object?>{'type': 'string'},
+      'maxProperties': 1024,
     },
   },
   'additionalProperties': false,
 };
 
-final Map<String, Map<String, Object?>> _requestSchemas =
-    <String, Map<String, Object?>>{
-      for (final kind in <String>['app.list', 'target.list']) kind: _object(),
-      for (final kind in <String>[
-        'app.reload',
-        'app.restart',
-        'session.development.get',
-        'session.development.stop',
-      ])
-        kind: _object(
-          properties: const <String, Object?>{'sessionId': _sessionId},
-          required: const <String>['sessionId'],
-        ),
-      'target.inspect': _object(
-        properties: const <String, Object?>{
-          'targetId': _id,
-          'profile': _profile,
-          'snapshotOptions': <String, Object?>{'type': 'object'},
-        },
-        required: const <String>['targetId'],
-      ),
-      for (final kind in <String>['ui.inspect', 'surface.inspect'])
-        kind: _object(
-          properties: const <String, Object?>{
-            'sessionId': _sessionId,
-            'profile': _profile,
-            'snapshotOptions': <String, Object?>{'type': 'object'},
-            'compareAgainstSnapshotRef': _id,
-          },
-          required: const <String>['sessionId'],
-        ),
-      'logs.read': _sessionReadSchema(<String, Object?>{
-        'maxLines': const <String, Object?>{
-          'type': 'integer',
-          'minimum': 1,
-          'maximum': 10000,
-        },
-      }),
-      'errors.read': _sessionReadSchema(<String, Object?>{
-        'maxErrors': const <String, Object?>{
-          'type': 'integer',
-          'minimum': 1,
-          'maximum': 10000,
-        },
-      }),
-      'network.read': _sessionReadSchema(<String, Object?>{
-        'id': _networkRequestId,
-        'before': _networkRequestId,
-        'includeEntries': const <String, Object?>{'type': 'boolean'},
-        'onlyFailures': const <String, Object?>{'type': 'boolean'},
-        'method': const <String, Object?>{
-          'type': 'string',
-          'minLength': 1,
-          'maxLength': 32,
-        },
-        'uriContains': const <String, Object?>{
-          'type': 'string',
-          'minLength': 1,
-          'maxLength': 512,
-        },
-        'statusCodeAtLeast': const <String, Object?>{
-          'type': 'integer',
-          'minimum': 100,
-          'maximum': 599,
-        },
-        'maxEntries': const <String, Object?>{
-          'type': 'integer',
-          'minimum': 1,
-          'maximum': 1000,
-        },
-        'maxEndpointSummaries': const <String, Object?>{
-          'type': 'integer',
-          'minimum': 1,
-          'maximum': 1000,
-        },
-      }),
-      'network.body': _object(
-        properties: const <String, Object?>{
-          'sessionId': _sessionId,
-          'requestId': _networkRequestId,
-          'body': <String, Object?>{
-            'type': 'string',
-            'enum': <String>['request', 'response', 'both'],
-          },
-          'raw': <String, Object?>{'type': 'boolean', 'default': false},
-        },
-        required: const <String>['sessionId', 'requestId', 'body'],
-      ),
-      for (final kind in <String>['ui.waitIdle', 'ui.remote.waitIdle'])
-        kind: _object(
-          properties: const <String, Object?>{
-            'sessionId': _sessionId,
-            'quietWindowMs': <String, Object?>{
-              'type': 'integer',
-              'minimum': 50,
-              'maximum': 60000,
-              'default': 500,
-            },
-            'timeoutMs': <String, Object?>{
-              'type': 'integer',
-              'minimum': 1,
-              'maximum': 300000,
-              'default': 30000,
-            },
-            'includeNetworkIdle': <String, Object?>{
-              'type': 'boolean',
-              'default': false,
-            },
-          },
-          required: const <String>['sessionId'],
-        ),
-      'viewport.set': _object(
-        properties: const <String, Object?>{
-          'sessionId': _sessionId,
-          'width': <String, Object?>{
-            'type': 'integer',
-            'minimum': 200,
-            'maximum': 8192,
-            'examples': <int>[800],
-          },
-          'height': <String, Object?>{
-            'type': 'integer',
-            'minimum': 200,
-            'maximum': 8192,
-            'examples': <int>[600],
-          },
-        },
-        required: const <String>['sessionId', 'width', 'height'],
-      ),
-      'evidence.screenshot.capture': _object(
-        properties: const <String, Object?>{
-          'sessionId': _sessionId,
-          'name': <String, Object?>{
-            'type': 'string',
-            'minLength': 1,
-            'maxLength': 128,
-          },
-        },
-        required: const <String>['sessionId'],
-      ),
-      'command.run': _object(
-        properties: const <String, Object?>{
-          'sessionId': _sessionId,
-          'command': <String, Object?>{'type': 'object'},
-          'profile': _profile,
-        },
-        required: const <String>['sessionId', 'command'],
-        precision: 'structural',
-      ),
-      for (final kind in <String>[
-        'app.launch',
-        'target.launch',
-        'session.development.launch',
-        'session.remote.launch',
-      ])
-        kind: _object(
-          properties: const <String, Object?>{
-            'targetId': _id,
-            'mode': <String, Object?>{
-              'type': 'string',
-              'enum': <String>['development', 'automation'],
-            },
-            'launchTimeoutMs': _positiveTimeout,
-            'launchConfiguration': _launchConfiguration,
-          },
-          required: const <String>['targetId'],
-        ),
+Map<String, Object?> _boundedInteger(int minimum, int maximum, {int? value}) =>
+    <String, Object?>{
+      'type': 'integer',
+      'minimum': minimum,
+      'maximum': maximum,
+      'default': ?value,
     };
 
-Map<String, Object?> _sessionReadSchema(Map<String, Object?> extraProperties) =>
-    _object(
-      properties: <String, Object?>{
-        'sessionId': _sessionId,
-        ...extraProperties,
-      },
-      required: const <String>['sessionId'],
-    );
+Map<String, Object?> _boundedString(int maximum) => <String, Object?>{
+  'type': 'string',
+  'minLength': 1,
+  'maxLength': maximum,
+};
+
+Map<String, Object?> _nonBlankBoundedString(int maximum) => <String, Object?>{
+  ..._boundedString(maximum),
+  'pattern': r'\S',
+};
+
+Map<String, Object?> _enum(List<String> values, {String? defaultValue}) =>
+    <String, Object?>{
+      'type': 'string',
+      'enum': values,
+      'default': ?defaultValue,
+    };
+
+Map<String, Object?> _array(
+  Map<String, Object?> items, {
+  int? minimum,
+  int? maximum,
+  bool unique = false,
+}) => <String, Object?>{
+  'type': 'array',
+  'items': items,
+  'minItems': ?minimum,
+  'maxItems': ?maximum,
+  if (unique) 'uniqueItems': true,
+};
+
+Map<String, Object?> _sessionRequest({
+  Map<String, Object?> properties = const <String, Object?>{},
+  List<String> required = const <String>[],
+  String precision = 'exact',
+}) => _object(
+  properties: <String, Object?>{'sessionId': _sessionId, ...properties},
+  required: <String>['sessionId', ...required],
+  precision: precision,
+);
+
+Map<String, Object?> _structuralResponse(
+  String description, {
+  Map<String, Object?> properties = const <String, Object?>{},
+  List<String> required = const <String>[],
+}) => _object(
+  properties: properties,
+  required: required,
+  precision: 'structural',
+  description: description,
+  additionalProperties: true,
+);

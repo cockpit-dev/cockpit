@@ -869,10 +869,26 @@ final class CockpitWorkerInteractiveOperations {
   ) async {
     final values = CockpitWorkerApplicationInput(
       input,
-      allowed: const <String>{'targetId', 'action', 'parameters', 'timeoutMs'},
-      required: const <String>{'targetId', 'action'},
+      allowed: const <String>{
+        'sessionId',
+        'targetId',
+        'action',
+        'parameters',
+        'timeoutMs',
+      },
+      required: const <String>{'action'},
     );
-    final targetId = values.id('targetId');
+    final targetValue = values.optionalId('targetId');
+    final sessionValue = values.optionalId('sessionId');
+    if ((targetValue == null) == (sessionValue == null)) {
+      throw const FormatException(
+        'system.action requires exactly one of targetId or sessionId.',
+      );
+    }
+    final session = sessionValue == null
+        ? null
+        : await _registry.requireSession(sessionValue);
+    final targetId = session?.targetId ?? targetValue!;
     final target = await _targets.requireTarget(
       workspaceId: workspaceId,
       targetId: targetId,
@@ -883,7 +899,9 @@ final class CockpitWorkerInteractiveOperations {
       kind: CockpitLeaseResourceKind.device,
       resourceId: target.deviceResourceId,
     );
-    final app = await _registry.latestAppForTarget(targetId);
+    final app = session == null
+        ? await _registry.latestAppForTarget(targetId)
+        : await _registry.requireApp(session.appId);
     final action = CockpitSystemControlAction.fromJson(
       values.string('action', maximum: 64),
     );

@@ -2739,10 +2739,30 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
         ),
       );
     }
-    final beforeActionFingerprint = _actionCommitFingerprint();
+    if (_shouldUseFocusedTextInputAction(command.commandType, request)) {
+      final focusedTextInput = _resolveActiveTextInput(
+        requiredCommand: CockpitCommandType.sendTextInputAction,
+      );
+      if (focusedTextInput.isSuccess) {
+        return _executeSendTextInputAction(
+          command.copyWith(
+            commandType: CockpitCommandType.sendTextInputAction,
+            parameters: <String, Object?>{
+              'inputAction': _focusedTextInputAction().name,
+            },
+          ),
+          stopwatch,
+        );
+      }
+    }
+    final previousRouteName = _currentRouteName();
+    final beforeActionFingerprint = _observableUiFingerprint();
     await _prepareForAction(command, commandType: command.commandType);
     final handled = await _keyEventHandler(request, command.commandType);
-    await _settleBeforeObservation();
+    await _stabilizeAfterAction(
+      previousRouteName,
+      commandType: command.commandType,
+    );
     if (!handled) {
       return _failureExecution(
         command: command,
@@ -2759,8 +2779,57 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
       command: command,
       durationMs: stopwatch.elapsedMilliseconds,
       snapshot: _liveSnapshot().toJson(),
-      changed: _actionCommitFingerprint() != beforeActionFingerprint,
+      changed: _observableUiFingerprint() != beforeActionFingerprint,
     );
+  }
+
+  bool _shouldUseFocusedTextInputAction(
+    CockpitCommandType commandType,
+    CockpitKeyEventRequest request,
+  ) {
+    if (commandType != CockpitCommandType.sendKeyEvent ||
+        (request.logicalKey != LogicalKeyboardKey.enter &&
+            request.logicalKey != LogicalKeyboardKey.numpadEnter)) {
+      return false;
+    }
+    return cockpitBuildFocusSnapshot().isTextInputFocus;
+  }
+
+  CockpitTextInputAction _focusedTextInputAction() {
+    final focusContext = FocusManager.instance.primaryFocus?.context;
+    if (focusContext is! Element) {
+      return CockpitTextInputAction.done;
+    }
+
+    TextInputAction? action;
+    void visit(Element element) {
+      if (action != null || !element.mounted) {
+        return;
+      }
+      final widget = element.widget;
+      if (widget is EditableText) {
+        action = widget.textInputAction;
+        return;
+      }
+      element.visitChildElements(visit);
+    }
+
+    visit(focusContext);
+    return switch (action) {
+      TextInputAction.next => CockpitTextInputAction.next,
+      TextInputAction.previous => CockpitTextInputAction.previous,
+      TextInputAction.search => CockpitTextInputAction.search,
+      TextInputAction.send => CockpitTextInputAction.send,
+      TextInputAction.go => CockpitTextInputAction.go,
+      TextInputAction.newline => CockpitTextInputAction.newline,
+      TextInputAction.none => CockpitTextInputAction.none,
+      TextInputAction.unspecified => CockpitTextInputAction.unspecified,
+      TextInputAction.continueAction => CockpitTextInputAction.continueAction,
+      TextInputAction.emergencyCall => CockpitTextInputAction.emergencyCall,
+      TextInputAction.join => CockpitTextInputAction.join,
+      TextInputAction.route => CockpitTextInputAction.route,
+      TextInputAction.done || null => CockpitTextInputAction.done,
+    };
   }
 
   Future<CockpitCommandExecution> _executeSemanticAction(
@@ -4997,6 +5066,30 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
     final targets =
         _registry.registeredTargets
             .where(_isRouteReadyTarget)
+            .map(
+              (target) => <String?>[
+                target.routeName,
+                target.registrationId,
+                target.cockpitId,
+                target.semanticId,
+                target.keyValue,
+                target.text,
+                target.tooltip,
+                target.typeName,
+                target.path,
+              ].whereType<String>().join('\u001f'),
+            )
+            .toList(growable: false)
+          ..sort();
+    return <String?>[
+      _currentRouteName(),
+      targets.join('\u001e'),
+    ].whereType<String>().join('\u001d');
+  }
+
+  String _observableUiFingerprint() {
+    final targets =
+        _registry.routeReadyVisibleTargets
             .map(
               (target) => <String?>[
                 target.routeName,

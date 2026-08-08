@@ -69,6 +69,20 @@ final class CockpitFlutterLaunchConfiguration {
     Map<String, Object?> json,
   ) {
     try {
+      const allowed = <String>{
+        'dartDefines',
+        'dartDefineFromFiles',
+        'flutterArgs',
+        'environment',
+      };
+      final unknown = json.keys.toSet().difference(allowed);
+      if (unknown.isNotEmpty) {
+        throw CockpitApplicationServiceException(
+          code: 'invalidLaunchConfiguration',
+          message: 'Launch configuration contains unknown fields.',
+          details: <String, Object?>{'fields': unknown.toList()..sort()},
+        );
+      }
       return CockpitFlutterLaunchConfiguration(
         dartDefines: _readStringList(json, 'dartDefines'),
         dartDefineFromFiles: _readStringList(json, 'dartDefineFromFiles'),
@@ -284,6 +298,12 @@ final class CockpitFlutterLaunchConfiguration {
         message: 'Launch configuration list fields must be arrays.',
       );
     }
+    if (value.length > 1024) {
+      throw const CockpitApplicationServiceException(
+        code: 'invalidLaunchConfiguration',
+        message: 'Launch configuration arrays are limited to 1024 entries.',
+      );
+    }
     return value
         .map((entry) {
           if (entry is! String) {
@@ -309,6 +329,12 @@ final class CockpitFlutterLaunchConfiguration {
       throw const CockpitApplicationServiceException(
         code: 'invalidLaunchConfiguration',
         message: 'Launch configuration environment must be an object.',
+      );
+    }
+    if (value.length > 1024) {
+      throw const CockpitApplicationServiceException(
+        code: 'invalidLaunchConfiguration',
+        message: 'Launch configuration environment is limited to 1024 entries.',
       );
     }
     final result = <String, String>{};

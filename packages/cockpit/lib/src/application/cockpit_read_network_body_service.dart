@@ -72,16 +72,20 @@ final class CockpitReadNetworkBodyResult {
   const CockpitReadNetworkBodyResult({
     required this.requestId,
     required this.artifacts,
+    required this.absent,
+    required this.continuing,
   });
 
   final String requestId;
   final Map<CockpitNetworkBodyPart, CockpitNetworkBodyArtifact> artifacts;
-
-  bool get continuing => artifacts.values.any((artifact) => !artifact.complete);
+  final Set<CockpitNetworkBodyPart> absent;
+  final bool continuing;
 
   Map<String, Object?> toJson() => <String, Object?>{
     'requestId': requestId,
     'continuing': continuing,
+    if (absent.isNotEmpty)
+      'absent': absent.map((part) => part.name).toList(growable: false),
     for (final entry in artifacts.entries) entry.key.name: entry.value.toJson(),
   };
 }
@@ -145,10 +149,17 @@ final class CockpitReadNetworkBodyService {
       entry: matches.single,
     );
     final artifacts = <CockpitNetworkBodyPart, CockpitNetworkBodyArtifact>{};
+    final absent = <CockpitNetworkBodyPart>{};
+    var continuing = false;
     for (final part in request.parts) {
       final body = part == CockpitNetworkBodyPart.request
           ? bodies.request
           : bodies.response;
+      continuing = continuing || !body.complete;
+      if (!body.present) {
+        absent.add(part);
+        continue;
+      }
       final bytes = _outputBytes(body, raw: request.raw);
       final extension = _extension(body.mediaType, raw: request.raw);
       final basename = _basename(request.requestId, part, extension);
@@ -168,6 +179,8 @@ final class CockpitReadNetworkBodyService {
           Map<CockpitNetworkBodyPart, CockpitNetworkBodyArtifact>.unmodifiable(
             artifacts,
           ),
+      absent: Set<CockpitNetworkBodyPart>.unmodifiable(absent),
+      continuing: continuing,
     );
   }
 

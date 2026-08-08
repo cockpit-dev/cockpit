@@ -826,7 +826,7 @@ final class CockpitDesktopSystemControlAdapter
         _macosTerminateTargetScript,
       ),
       CockpitSystemControlAction.dismissSystemDialog =>
-        _macosAppleScriptWithTarget(request, _macosPressBackScript),
+        _macosDismissSystemDialogCommand(request),
       CockpitSystemControlAction.openUrl => cockpitTextCommand(
         request,
         'url',
@@ -1329,6 +1329,34 @@ final class CockpitDesktopSystemControlAdapter
     return CockpitResolvedSystemControlCommand(
       cockpitMacosAccessibilityCommandExecutable,
       <String>[...target, ...limits.values],
+    );
+  }
+
+  CockpitResolvedSystemControlCommand _macosDismissSystemDialogCommand(
+    CockpitSystemControlActionRequest request,
+  ) {
+    final target = _targetArgs(request);
+    if (target == null) {
+      return const CockpitResolvedSystemControlCommand.error(
+        code: 'missingSystemActionTarget',
+        message: 'This macOS action requires --app-id or --process-id.',
+      );
+    }
+    final decision = cockpitReadSystemControlStringParameter(
+      request.parameters,
+      'decision',
+      allowedValues: const <String>['accept', 'dismiss'],
+    );
+    if (decision.isInvalid) {
+      return const CockpitResolvedSystemControlCommand.error(
+        code: 'invalidSystemActionParameter',
+        message:
+            'dismissSystemDialog decision must be accept or dismiss when provided.',
+      );
+    }
+    return CockpitResolvedSystemControlCommand(
+      cockpitMacosSystemDialogCommandExecutable,
+      <String>[decision.value ?? 'accept'],
     );
   }
 
@@ -1890,23 +1918,36 @@ final class CockpitDesktopSystemControlAdapter
     CockpitSystemControlAction action, {
     required bool hasInputTarget,
   }) {
+    final isMacosSystemDialog =
+        platform == 'macos' &&
+        action == CockpitSystemControlAction.dismissSystemDialog;
     return CockpitSystemControlCapability(
       action: action,
       plane: CockpitPlaneKind.nativeUiPlane,
       availability: hasInputTarget
           ? CockpitSystemControlAvailability.available
           : CockpitSystemControlAvailability.blocked,
-      strategy: inputStrategy,
+      strategy: isMacosSystemDialog
+          ? 'AXUIElement dialog action'
+          : inputStrategy,
       requires: <String>[
-        ..._targetedInputRequires,
+        ...(isMacosSystemDialog
+            ? const <String>['Accessibility permission']
+            : _targetedInputRequires),
         if (!hasInputTarget) 'app id or process id',
       ],
-      limitations: limitations,
+      limitations: <String>[
+        ...limitations,
+        if (isMacosSystemDialog)
+          'Only a real target-owned accessible sheet or modal dialog is changed; no dialog is a safe no-op.',
+      ],
       parameters: switch (action) {
         CockpitSystemControlAction.typeText =>
           CockpitSystemControlParameterSets.text,
         CockpitSystemControlAction.pressKey =>
           CockpitSystemControlParameterSets.key,
+        CockpitSystemControlAction.dismissSystemDialog =>
+          CockpitSystemControlParameterSets.systemDialogDecision,
         _ => const <CockpitSystemControlParameter>[],
       },
     );

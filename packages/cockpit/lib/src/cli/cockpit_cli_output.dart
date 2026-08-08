@@ -1303,6 +1303,7 @@ Map<String, Object?> _compactDevNetwork(
   ..._compactNetworkOutput(state, standard: standard),
   if (state['body'] is Map<Object?, Object?>)
     'body': Map<String, Object?>.from(state['body']! as Map<Object?, Object?>),
+  if (state['absent'] is List<Object?>) 'absent': state['absent'],
   if (state['continuing'] == true) 'continuing': true,
 };
 
@@ -2244,7 +2245,6 @@ Map<String, Object?>? _compactCollection(
         'targetId',
         'appId',
         'checkoutPath',
-        'checkoutIdentity',
         'updatedAt',
       ],
     ],
@@ -2447,7 +2447,6 @@ Map<String, Object?> _compactSession(
         'targetId',
         'appId',
         'checkoutPath',
-        'checkoutIdentity',
         'updatedAt',
       ]),
       'runtime': ?runtimeMap,

@@ -17,7 +17,7 @@ Cockpit source checkout.
 | Need | Authority |
 | --- | --- |
 | Current CLI flags | `cockpit help <command> <subcommand>` |
-| Available operation and input | `op list --kind KIND`, then the returned descriptor |
+| Available operation and input | `cockpit explain KIND` for the live descriptor and full request/response schema |
 | Live target capability | `target inspect --profile minimal|inspect` |
 | Case/suite/project syntax | [`cockpit.test.v2.schema.json`](cockpit.test.v2.schema.json) |
 | Authorization | `daemon policy show` and `daemon status` |
@@ -35,6 +35,7 @@ version and current target can actually do.
 | Roots/workspaces | `root add|list|remove`, `workspace register|list|documents|rebind|unregister` |
 | Targets | `target discover|register|list|get|launch|inspect` |
 | Operations | `op list|run` |
+| Operation contract | `explain KIND` |
 | Cases | `case validate|list|run` |
 | Suites | `suite validate|list|run|report` |
 | Runs | `run get|events|cancel` |
@@ -121,7 +122,21 @@ cockpit serve-mcp
 ```
 
 When building another client, use the installed `cockpit_protocol` package for
-OpenAPI/schema/Dart contracts. The skill is operational guidance, not a
-replacement transport specification. Preserve resource IDs, authentication,
+OpenAPI/schema/Dart contracts. The primary control sequence is:
+
+```text
+GET  /api/v2/server
+GET  /api/v2/capabilities
+GET  /api/v2/operations
+GET  /api/v2/workspaces/{workspaceId}/operations
+GET  /api/v2/operations/schema
+POST /api/v2/operations
+POST /api/v2/workspaces/{workspaceId}/operations
+GET  /api/v2/runs/{runId}/events
+```
+
+REST owns commands and resources. Authenticated SSE owns durable/resumable run
+events. WebSocket is an internal Flutter Web bridge, not a public client
+command transport. Preserve resource IDs, authentication, negotiated headers,
 timeouts, idempotency, SSE resume, artifact digest checks, and canonical report
 semantics across every client.

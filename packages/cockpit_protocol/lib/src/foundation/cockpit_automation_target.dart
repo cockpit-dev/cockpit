@@ -30,7 +30,7 @@ final class CockpitAutomationTargetResource {
   }) {
     CockpitFoundationValueReader.id(targetId, r'$.targetId');
     CockpitFoundationValueReader.id(workspaceId, r'$.workspaceId');
-    CockpitFoundationValueReader.string(platform, r'$.platform', maximum: 64);
+    CockpitFoundationValueReader.string(platform, r'$.platform', maximum: 32);
     CockpitFoundationValueReader.string(deviceId, r'$.deviceId', maximum: 256);
     if (entrypoint != null) {
       CockpitFoundationValueReader.relativePath(entrypoint, r'$.entrypoint');
@@ -139,7 +139,7 @@ final class CockpitAutomationTargetResource {
       platform: CockpitFoundationValueReader.string(
         json['platform'],
         '$path.platform',
-        maximum: 64,
+        maximum: 32,
       ),
       deviceId: CockpitFoundationValueReader.string(
         json['deviceId'],

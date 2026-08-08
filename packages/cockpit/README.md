@@ -338,6 +338,23 @@ then:
 4. decode public foundation DTOs strictly;
 5. use only advertised `/api/v2` resources and operations.
 
+The complete generic client surface is:
+
+```text
+GET  /api/v2/operations
+GET  /api/v2/workspaces/{workspaceId}/operations
+GET  /api/v2/operations/schema
+POST /api/v2/operations
+POST /api/v2/workspaces/{workspaceId}/operations
+GET  /api/v2/runs/{runId}/events
+```
+
+REST owns commands and resources. Authenticated SSE owns durable resumable run
+events. WebSocket is reserved for the internal Flutter Web bridge and is not a
+public client command transport. The operation invocation envelope owns scope,
+idempotency, and deadline; `input` contains only fields from the selected live
+request schema.
+
 The shared `CockpitSupervisorApiClient` implements this flow for the CLI and
 MCP server, including 1 MiB response limits, bounded pagination, SSE resume,
 structured API errors, and artifact integrity checks.

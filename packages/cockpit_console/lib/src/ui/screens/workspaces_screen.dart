@@ -26,6 +26,20 @@ final class WorkspacesScreen extends HookConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final roots = ref.watch(rootsProvider);
     final workspaces = ref.watch(workspacesProvider);
+    final showRemoved = useState(false);
+    final activeRoots = roots.items
+        .where((item) => item.state != CockpitRootState.retired)
+        .toList(growable: false);
+    final removedRoots = roots.items
+        .where((item) => item.state == CockpitRootState.retired)
+        .toList(growable: false);
+    final activeWorkspaces = workspaces.items
+        .where((item) => item.state != CockpitWorkspaceState.retired)
+        .toList(growable: false);
+    final removedWorkspaces = workspaces.items
+        .where((item) => item.state == CockpitWorkspaceState.retired)
+        .toList(growable: false);
+    final removedCount = removedRoots.length + removedWorkspaces.length;
 
     // The provider owns connection single-flight and surfaces failures. Loading
     // unconditionally avoids a mount-before-connect race that otherwise leaves
@@ -74,19 +88,59 @@ final class WorkspacesScreen extends HookConsumerWidget {
               children: [
                 _SectionHeader(
                   title: 'Allowed folders',
-                  count: roots.items.length,
+                  count: activeRoots.length,
                   actionLabel: 'Add folder',
                   onAdd: () => _showRegisterRootDialog(context, ref),
                 ),
                 const SizedBox(height: 8),
-                _RootsList(state: roots),
+                _RootsList(state: roots, items: activeRoots),
                 const SizedBox(height: 32),
                 _SectionHeader(
                   title: 'Projects',
-                  count: workspaces.items.length,
+                  count: activeWorkspaces.length,
                 ),
                 const SizedBox(height: 8),
-                _WorkspacesList(state: workspaces),
+                _WorkspacesList(state: workspaces, items: activeWorkspaces),
+                if (removedCount > 0) ...[
+                  const SizedBox(height: 16),
+                  TextButton.icon(
+                    onPressed: () => showRemoved.value = !showRemoved.value,
+                    icon: Icon(
+                      showRemoved.value
+                          ? LucideIcons.chevronUp
+                          : LucideIcons.history,
+                      size: 14,
+                    ),
+                    label: Text(
+                      showRemoved.value
+                          ? 'Hide removed history'
+                          : 'Show removed history ($removedCount)',
+                    ),
+                  ),
+                ],
+                if (showRemoved.value) ...[
+                  if (removedRoots.isNotEmpty) ...[
+                    const SizedBox(height: 16),
+                    _SectionHeader(
+                      title: 'Removed folders',
+                      count: removedRoots.length,
+                    ),
+                    const SizedBox(height: 8),
+                    _RootsList(state: roots, items: removedRoots),
+                  ],
+                  if (removedWorkspaces.isNotEmpty) ...[
+                    const SizedBox(height: 24),
+                    _SectionHeader(
+                      title: 'Removed projects',
+                      count: removedWorkspaces.length,
+                    ),
+                    const SizedBox(height: 8),
+                    _WorkspacesList(
+                      state: workspaces,
+                      items: removedWorkspaces,
+                    ),
+                  ],
+                ],
               ],
             ),
           ),
@@ -162,9 +216,10 @@ final class _SectionHeader extends StatelessWidget {
 }
 
 final class _RootsList extends StatelessWidget {
-  const _RootsList({required this.state});
+  const _RootsList({required this.state, required this.items});
 
   final RootsState state;
+  final List<CockpitRootResource> items;
 
   @override
   Widget build(BuildContext context) {
@@ -175,7 +230,7 @@ final class _RootsList extends StatelessWidget {
       );
     }
 
-    if (state.items.isEmpty) {
+    if (items.isEmpty) {
       return Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -206,9 +261,9 @@ final class _RootsList extends StatelessWidget {
           ),
           child: Column(
             children: [
-              for (var i = 0; i < state.items.length; i++) ...[
+              for (var i = 0; i < items.length; i++) ...[
                 if (i > 0) Divider(height: 1, color: theme.dividerColor),
-                _RootTile(item: state.items[i]),
+                _RootTile(item: items[i]),
               ],
             ],
           ),
@@ -410,9 +465,10 @@ Future<bool?> _confirmRemoval({
 }
 
 final class _WorkspacesList extends StatelessWidget {
-  const _WorkspacesList({required this.state});
+  const _WorkspacesList({required this.state, required this.items});
 
   final WorkspacesState state;
+  final List<CockpitWorkspaceResource> items;
 
   @override
   Widget build(BuildContext context) {
@@ -423,7 +479,7 @@ final class _WorkspacesList extends StatelessWidget {
       );
     }
 
-    if (state.items.isEmpty) {
+    if (items.isEmpty) {
       return Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -454,9 +510,9 @@ final class _WorkspacesList extends StatelessWidget {
           ),
           child: Column(
             children: [
-              for (var i = 0; i < state.items.length; i++) ...[
+              for (var i = 0; i < items.length; i++) ...[
                 if (i > 0) Divider(height: 1, color: theme.dividerColor),
-                _WorkspaceTile(item: state.items[i]),
+                _WorkspaceTile(item: items[i]),
               ],
             ],
           ),
@@ -478,132 +534,145 @@ final class _WorkspaceTile extends HookConsumerWidget {
     final isSelected = selectedId == item.workspaceId;
     final removing = useState(false);
     final removed = item.state == CockpitWorkspaceState.retired;
+    final projectName = p.basename(item.canonicalPath);
 
-    return InkWell(
-      onTap: removed
-          ? null
-          : () => ref
-                .read(selectedWorkspaceIdProvider.notifier)
-                .select(item.workspaceId),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        color: isSelected
-            ? theme.colorScheme.primary.withValues(alpha: 0.06)
-            : null,
-        child: Row(
-          children: [
-            Icon(
-              LucideIcons.gitBranch,
-              size: 15,
-              color: isSelected
-                  ? theme.colorScheme.primary
-                  : theme.colorScheme.onSurfaceVariant,
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Flexible(
-                        child: Text(
-                          item.canonicalPath,
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                            fontFamily: 'monospace',
-                            color: isSelected
-                                ? theme.colorScheme.primary
-                                : theme.colorScheme.onSurface,
+    return Semantics(
+      container: true,
+      button: !removed,
+      enabled: !removed,
+      selected: isSelected,
+      label: removed
+          ? 'Removed project $projectName'
+          : 'Select project $projectName',
+      child: InkWell(
+        onTap: removed
+            ? null
+            : () => ref
+                  .read(selectedWorkspaceIdProvider.notifier)
+                  .select(item.workspaceId),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          color: isSelected
+              ? theme.colorScheme.primary.withValues(alpha: 0.06)
+              : null,
+          child: Row(
+            children: [
+              Icon(
+                LucideIcons.gitBranch,
+                size: 15,
+                color: isSelected
+                    ? theme.colorScheme.primary
+                    : theme.colorScheme.onSurfaceVariant,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            item.canonicalPath,
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              fontFamily: 'monospace',
+                              color: isSelected
+                                  ? theme.colorScheme.primary
+                                  : theme.colorScheme.onSurface,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
                         ),
-                      ),
-                      const SizedBox(width: 8),
-                      _StateBadge(stateName: item.state.name),
-                    ],
-                  ),
-                  const SizedBox(height: 1),
-                  Text(
-                    '${item.workspaceId} · root ${item.rootId}',
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: theme.colorScheme.onSurfaceVariant,
+                        const SizedBox(width: 8),
+                        _StateBadge(stateName: item.state.name),
+                      ],
                     ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 8),
-            if (!removed) ...[
-              SizedBox(
-                width: 30,
-                height: 30,
-                child: IconButton(
-                  onPressed: removing.value
-                      ? null
-                      : () => showDialog<void>(
-                          context: context,
-                          builder: (_) =>
-                              _RebindWorkspaceDialog(workspace: item),
-                        ),
-                  icon: const Icon(LucideIcons.gitCompare, size: 13),
-                  tooltip: 'Update project location',
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(
-                    minWidth: 30,
-                    minHeight: 30,
-                  ),
+                    const SizedBox(height: 1),
+                    Text(
+                      '${item.workspaceId} · root ${item.rootId}',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
                 ),
               ),
-              const SizedBox(width: 4),
+              const SizedBox(width: 8),
+              if (!removed) ...[
+                SizedBox(
+                  width: 30,
+                  height: 30,
+                  child: IconButton(
+                    onPressed: removing.value
+                        ? null
+                        : () => showDialog<void>(
+                            context: context,
+                            builder: (_) =>
+                                _RebindWorkspaceDialog(workspace: item),
+                          ),
+                    icon: const Icon(LucideIcons.gitCompare, size: 13),
+                    tooltip: 'Update project location',
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(
+                      minWidth: 30,
+                      minHeight: 30,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 4),
+              ],
+              if (isSelected && !removed)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 1,
+                  ),
+                  decoration: ConsoleShapes.decoration(
+                    color: theme.colorScheme.primary.withValues(alpha: 0.12),
+                    radius: 6,
+                  ),
+                  child: Text(
+                    'Current',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                      color: theme.colorScheme.primary,
+                    ),
+                  ),
+                ),
+              if (removing.value && !removed)
+                const Padding(
+                  padding: EdgeInsets.all(4),
+                  child: SizedBox(
+                    width: 14,
+                    height: 14,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                )
+              else if (!removed)
+                SizedBox(
+                  width: 30,
+                  height: 30,
+                  child: IconButton(
+                    onPressed: () => _confirmRemove(context, ref, removing),
+                    icon: const Icon(LucideIcons.trash2, size: 13),
+                    tooltip: 'Remove project from Cockpit',
+                    color: theme.colorScheme.error,
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(
+                      minWidth: 30,
+                      minHeight: 30,
+                    ),
+                  ),
+                ),
             ],
-            if (isSelected && !removed)
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-                decoration: ConsoleShapes.decoration(
-                  color: theme.colorScheme.primary.withValues(alpha: 0.12),
-                  radius: 6,
-                ),
-                child: Text(
-                  'Current',
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w600,
-                    color: theme.colorScheme.primary,
-                  ),
-                ),
-              ),
-            if (removing.value && !removed)
-              const Padding(
-                padding: EdgeInsets.all(4),
-                child: SizedBox(
-                  width: 14,
-                  height: 14,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                ),
-              )
-            else if (!removed)
-              SizedBox(
-                width: 30,
-                height: 30,
-                child: IconButton(
-                  onPressed: () => _confirmRemove(context, ref, removing),
-                  icon: const Icon(LucideIcons.trash2, size: 13),
-                  tooltip: 'Remove project from Cockpit',
-                  color: theme.colorScheme.error,
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(
-                    minWidth: 30,
-                    minHeight: 30,
-                  ),
-                ),
-              ),
-          ],
+          ),
         ),
       ),
     );

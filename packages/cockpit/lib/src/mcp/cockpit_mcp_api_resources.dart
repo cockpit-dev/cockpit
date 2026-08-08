@@ -53,6 +53,14 @@ List<CockpitMcpResource> cockpitMcpApiResources(
       'items': (await api.operations()).map((item) => item.toJson()).toList(),
     },
   ),
+  _CockpitApiResource.fixed(
+    client: client,
+    name: 'operation_schema',
+    uri: 'cockpit://operations/schema',
+    description:
+        'Live request and response contracts for every advertised operation.',
+    read: (api, _) => api.operationSchema(),
+  ),
   _CockpitApiResource.template(
     client: client,
     name: 'workspace_operations',

@@ -249,7 +249,6 @@ final class CockpitWorkspaceApplicationAdapters {
       'system.action',
       'workspace.target',
       CockpitLeaseResourceKind.device,
-      idField: 'targetId',
     ),
     const _OperationSpec.mutate(
       'app.reload',

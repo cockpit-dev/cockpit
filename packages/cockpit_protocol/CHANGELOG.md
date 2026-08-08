@@ -1,5 +1,15 @@
 # Changelog
 
+## 3.0.2
+
+- Added strict bounded decoding for network queries, runtime queries, snapshot
+  options, recording requests, and public automation target fields.
+- Expanded the foundation OpenAPI and JSON Schema contracts for complete
+  external REST clients while keeping unknown, malformed, and oversized input
+  fail-closed.
+- Removed recording aliases and implicit request names so LON, JSON, and YAML
+  clients share one canonical wire contract.
+
 ## 3.0.1
 
 - Reduced the default live semantic projection to a bounded set of concise

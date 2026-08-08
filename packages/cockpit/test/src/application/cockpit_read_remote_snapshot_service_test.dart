@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:cockpit_protocol/cockpit_protocol.dart';
 import 'package:cockpit/src/application/cockpit_interactive_result_profile.dart';
 import 'package:cockpit/src/application/cockpit_interactive_snapshot_store.dart';
@@ -281,6 +283,37 @@ void main() {
         expect(response.snapshot.visibleTargets, isNotEmpty);
       },
     );
+
+    test('all transition retries share one remote read deadline', () async {
+      var readCount = 0;
+      final stopwatch = Stopwatch()..start();
+
+      await expectLater(
+        cockpitReadRemoteSnapshotConsistently(
+          baseUri: _sessionHandle().baseUri,
+          options: const CockpitSnapshotOptions.forensic(),
+          deadline: DateTime.now().toUtc().add(
+            const Duration(milliseconds: 220),
+          ),
+          readSnapshot: (_, _) {
+            readCount += 1;
+            if (readCount == 1) {
+              return Future<CockpitRemoteSnapshotResponse>.value(
+                CockpitRemoteSnapshotResponse(
+                  snapshot: _emptySnapshot('/editor'),
+                ),
+              );
+            }
+            return Completer<CockpitRemoteSnapshotResponse>().future;
+          },
+        ),
+        throwsA(isA<TimeoutException>()),
+      );
+      stopwatch.stop();
+
+      expect(readCount, 2);
+      expect(stopwatch.elapsed, lessThan(const Duration(seconds: 1)));
+    });
 
     test('filters failures-only diagnostics for inspect reads', () async {
       final service = CockpitReadRemoteSnapshotService(

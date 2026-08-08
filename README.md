@@ -381,6 +381,14 @@ public foundation DTOs, and digest-checked artifact downloads. Cockpit 3.0
 intentionally ships no Flutter GUI and no embedded HTML dashboard; generated
 HTML reports are portable run artifacts.
 
+REST is the complete public command/resource control plane. Discover global and
+workspace operation descriptors, read their exact contracts from
+`GET /api/v2/operations/schema`, and execute them through the matching global or
+workspace operation POST route. Authenticated SSE is the durable resumable run
+event stream. WebSocket is only an internal Flutter Web bridge transport, not a
+third-party command protocol; captured app WebSocket frames remain available as
+network evidence.
+
 The default `core` profile keeps the control plane small. Optional profiles are
 `dart`, `flutter` (`dart` plus Flutter), `app`, `e2e` (`app` plus E2E), and
 `all`; `--enable <name>` and `--disable <name>` provide exact overrides. The

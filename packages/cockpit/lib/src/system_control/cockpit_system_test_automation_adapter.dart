@@ -156,6 +156,8 @@ final class CockpitSystemTestAutomationAdapter
           message: error.message,
         ),
       );
+    } on _SystemObservationException catch (error) {
+      return _failure(command, stopwatch, error.error);
     } on Object catch (error) {
       return _failure(
         command,
@@ -1421,11 +1423,23 @@ final class CockpitSystemTestAutomationAdapter
       const <String, Object?>{},
       deadline,
     );
-    if (!result.success ||
-        result.stdout == null ||
-        result.stdout!.trim().isEmpty) {
+    if (!result.success) {
+      if (result.availability != CockpitSystemControlAvailability.available) {
+        throw _SystemObservationException(_actionError(result));
+      }
       throw StateError(
         result.errorMessage ?? 'Native UI tree could not be read.',
+      );
+    }
+    if (result.stdout == null || result.stdout!.trim().isEmpty) {
+      throw _SystemObservationException(
+        CockpitCommandError(
+          code: 'systemDriverFailed',
+          message: 'Native UI tree read completed without a tree.',
+          details: <String, Object?>{
+            if (result.strategy != null) 'strategy': result.strategy,
+          },
+        ),
       );
     }
     return CockpitNativeUiSnapshot.parse(result.stdout!);
@@ -1470,26 +1484,26 @@ final class CockpitSystemTestAutomationAdapter
       : _failure(
           command,
           stopwatch,
-          CockpitCommandError(
-            code:
-                action.availability ==
-                    CockpitSystemControlAvailability.available
-                ? 'systemActionFailed'
-                : CockpitCommandError.unsupportedCapabilityCode,
-            message:
-                action.errorMessage ??
-                'System action ${action.action.name} failed.',
-            details: <String, Object?>{
-              if (action.errorCode != null) 'systemErrorCode': action.errorCode,
-              if (action.strategy != null) 'strategy': action.strategy,
-              if (action.requires.isNotEmpty) 'requires': action.requires,
-              if (action.limitations.isNotEmpty)
-                'limitations': action.limitations,
-            },
-          ),
+          _actionError(action),
           artifacts: artifacts,
           artifactSourcePaths: artifactSourcePaths,
         );
+
+  CockpitCommandError _actionError(CockpitSystemControlActionResult action) =>
+      CockpitCommandError(
+        code: action.availability == CockpitSystemControlAvailability.available
+            ? 'systemActionFailed'
+            : CockpitCommandError.unsupportedCapabilityCode,
+        message:
+            action.errorMessage ??
+            'System action ${action.action.name} failed.',
+        details: <String, Object?>{
+          if (action.errorCode != null) 'systemErrorCode': action.errorCode,
+          if (action.strategy != null) 'strategy': action.strategy,
+          if (action.requires.isNotEmpty) 'requires': action.requires,
+          if (action.limitations.isNotEmpty) 'limitations': action.limitations,
+        },
+      );
 
   CockpitCommandExecution _success(
     CockpitCommand command,
@@ -1592,6 +1606,12 @@ final class _SystemScreenshot {
   final String? sourcePath;
   final CockpitArtifactRef? artifact;
   final CockpitCommandError? error;
+}
+
+final class _SystemObservationException implements Exception {
+  const _SystemObservationException(this.error);
+
+  final CockpitCommandError error;
 }
 
 String _artifactStem(String value) {

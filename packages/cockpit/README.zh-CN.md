@@ -305,6 +305,22 @@ event、artifact 和 daemon log 统一定位失败，不在执行中反复猜测
 4. 严格解码公开 foundation DTO；
 5. 只调用 advertised `/api/v2` resource 与 operation。
 
+完整的通用客户端控制面为：
+
+```text
+GET  /api/v2/operations
+GET  /api/v2/workspaces/{workspaceId}/operations
+GET  /api/v2/operations/schema
+POST /api/v2/operations
+POST /api/v2/workspaces/{workspaceId}/operations
+GET  /api/v2/runs/{runId}/events
+```
+
+REST 负责命令和资源，认证 SSE 负责可恢复的持久 run event。WebSocket 仅保留给
+Flutter Web 内部 bridge，不是公开客户端命令传输。operation invocation envelope
+负责 scope、idempotency 和 deadline，`input` 只包含对应 live request schema 声明的
+字段。
+
 CLI 和 MCP 共用 `CockpitSupervisorApiClient`，统一处理 1 MiB 响应上限、bounded
 pagination、SSE resume、结构化 API error 和 artifact 完整性校验。
 

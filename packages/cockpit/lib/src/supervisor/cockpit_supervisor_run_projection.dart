@@ -185,18 +185,29 @@ final class CockpitSupervisorRunProjection
         maximumArtifacts: maximumArtifacts,
       );
       final current = projection.runs[request.runId];
+      final highest = current?.highestSequence ?? 0;
+      if (current != null && _isTerminalRun(current)) {
+        return CockpitLockedJsonUpdate.readOnly(
+          raw,
+          CockpitWorkerPublishEventBatchResult(
+            runId: request.runId,
+            highestContiguousSequence: highest,
+            terminal: true,
+          ),
+        );
+      }
       if (current?.phase == _ProjectedRunPhase.releasing) {
         throw const FormatException(
           'Published events cannot mutate a releasing run.',
         );
       }
-      final highest = current?.highestSequence ?? 0;
       if (request.afterSequence > highest) {
         return CockpitLockedJsonUpdate.readOnly(
           raw,
           CockpitWorkerPublishEventBatchResult(
             runId: request.runId,
             highestContiguousSequence: highest,
+            terminal: false,
             replayAfterSequence: highest,
           ),
         );
@@ -230,6 +241,7 @@ final class CockpitSupervisorRunProjection
             CockpitWorkerPublishEventBatchResult(
               runId: request.runId,
               highestContiguousSequence: nextHighest,
+              terminal: false,
               replayAfterSequence: nextHighest,
             ),
           );
@@ -274,6 +286,7 @@ final class CockpitSupervisorRunProjection
       final response = CockpitWorkerPublishEventBatchResult(
         runId: request.runId,
         highestContiguousSequence: nextHighest,
+        terminal: false,
       );
       return pending.isNotEmpty
           ? CockpitLockedJsonUpdate.write(projection.toJson(), response)
@@ -1023,11 +1036,7 @@ final class CockpitSupervisorRunProjection
     );
     final run = projection.runs[runId];
     if (run == null) return;
-    final terminal = run.events.any(
-      (event) =>
-          event.entityKind == CockpitRunEventEntityKind.run &&
-          event.lifecycle == CockpitRunLifecycle.completed,
-    );
+    final terminal = _isTerminalRun(run);
     await _retentionIndex.retainRun(
       workspaceId: workspaceId,
       runId: runId,
@@ -1045,6 +1054,12 @@ final class CockpitSupervisorRunProjection
     workerId(runId, r'$.runId');
   }
 }
+
+bool _isTerminalRun(_ProjectedRun run) => run.events.any(
+  (event) =>
+      event.entityKind == CockpitRunEventEntityKind.run &&
+      event.lifecycle == CockpitRunLifecycle.completed,
+);
 
 final class _ProjectionCodec implements CockpitJsonCodec<Map<String, Object?>> {
   const _ProjectionCodec();

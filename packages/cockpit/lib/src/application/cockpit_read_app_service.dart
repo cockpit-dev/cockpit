@@ -18,6 +18,7 @@ final class CockpitReadAppRequest {
     this.androidDeviceId,
     this.resultProfile = const CockpitInteractiveResultProfile.minimal(),
     this.snapshotOptions,
+    this.deadline,
   });
 
   final String? appId;
@@ -27,6 +28,7 @@ final class CockpitReadAppRequest {
   final String? androidDeviceId;
   final CockpitInteractiveResultProfile resultProfile;
   final CockpitSnapshotOptions? snapshotOptions;
+  final DateTime? deadline;
 }
 
 final class CockpitReadAppResult {
@@ -128,6 +130,7 @@ final class CockpitReadAppService {
         sessionHandle: resolved.app?.remoteSession,
         resultProfile: request.resultProfile,
         snapshotOptions: request.snapshotOptions,
+        deadline: request.deadline,
       ),
     );
     final capabilityProfile = await _resolveCapabilityProfile(

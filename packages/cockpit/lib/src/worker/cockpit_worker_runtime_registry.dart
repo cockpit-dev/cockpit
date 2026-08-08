@@ -325,6 +325,16 @@ final class CockpitWorkerRuntimeRegistry
     required Map<String, Object?> input,
   }) => _locked(() async {
     await _ensureLoaded();
+    if (kind == 'system.action') {
+      final targetId = _systemActionTargetId(input);
+      final target =
+          _targets[targetId] ?? (throw _unknownReference('target', targetId));
+      await _validateTargetEntrypointCurrent(target.registration);
+      return CockpitWorkerApplicationResourcePlan(
+        primaryResourceId: target.deviceResourceId,
+        requiresPort: false,
+      );
+    }
     if (_targetResourceKinds.contains(kind)) {
       final targetId = workerId(input['targetId'], r'$.input.targetId');
       final target =
@@ -370,6 +380,23 @@ final class CockpitWorkerRuntimeRegistry
     }
     throw FormatException('No canonical resource identity for $kind.');
   });
+
+  String _systemActionTargetId(Map<String, Object?> input) {
+    final targetValue = input['targetId'];
+    final sessionValue = input['sessionId'];
+    if ((targetValue == null) == (sessionValue == null)) {
+      throw const FormatException(
+        'system.action requires exactly one of targetId or sessionId.',
+      );
+    }
+    if (sessionValue != null) {
+      final sessionId = workerId(sessionValue, r'$.input.sessionId');
+      return (_sessions[sessionId] ??
+              (throw _unknownReference('session', sessionId)))
+          .targetId;
+    }
+    return workerId(targetValue, r'$.input.targetId');
+  }
 
   CockpitWorkerApplicationResourcePlan _sessionResourcePlan(
     CockpitWorkerSessionBinding session,
@@ -3302,7 +3329,6 @@ const Set<String> _targetResourceKinds = <String>{
   'target.launch',
   'session.remote.launch',
   'session.development.launch',
-  'system.action',
 };
 
 bool _targetKindRequiresAppId(CockpitTargetKind kind) => switch (kind) {

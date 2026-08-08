@@ -235,8 +235,8 @@ List<CockpitMcpTool> _executionTools(
     inputSchema: _schema(
       properties: <String, Object?>{
         'workspaceId': _string(),
-        'platform': _string(),
-        'deviceId': _string(),
+        'platform': _boundedString(32),
+        'deviceId': _boundedString(256),
         'targetKind': _enumString(const <String>[
           'flutterApp',
           'nativeApp',
@@ -248,10 +248,10 @@ List<CockpitMcpTool> _executionTools(
         ]),
         'environment': _string(),
         'mode': _string(),
-        'entrypointDocumentId': _string(),
-        'flavor': _string(),
-        'appId': _nonBlankString(),
-        'wdaUrl': _string(),
+        'entrypointDocumentId': _boundedString(128),
+        'flavor': _boundedString(128),
+        'appId': _nonBlankString(maximum: 512),
+        'wdaUrl': _absoluteHttpUrlSchema(),
         'timeoutMs': _integer(minimum: 1000, maximum: 900000),
         'idempotencyKey': _string(),
       },
@@ -810,9 +810,19 @@ Map<String, Object?> _string() => const <String, Object?>{
   'maxLength': 1048576,
 };
 
-Map<String, Object?> _nonBlankString() => <String, Object?>{
-  ..._string(),
-  'pattern': r'\S',
+Map<String, Object?> _boundedString(int maximum) => <String, Object?>{
+  'type': 'string',
+  'minLength': 1,
+  'maxLength': maximum,
+};
+
+Map<String, Object?> _nonBlankString({int maximum = 1048576}) =>
+    <String, Object?>{..._boundedString(maximum), 'pattern': r'\S'};
+
+Map<String, Object?> _absoluteHttpUrlSchema() => <String, Object?>{
+  ..._boundedString(2048),
+  'format': 'uri',
+  'pattern': r'^[Hh][Tt][Tt][Pp][Ss]?://[^/?#\s]+(?:[/?#].*)?$',
 };
 
 Map<String, Object?> _enumString(List<String> values) => <String, Object?>{

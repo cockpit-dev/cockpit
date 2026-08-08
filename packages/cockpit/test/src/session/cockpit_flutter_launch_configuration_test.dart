@@ -1,3 +1,4 @@
+import 'package:cockpit/src/application/cockpit_application_service_exception.dart';
 import 'package:cockpit/src/session/cockpit_flutter_launch_configuration.dart';
 import 'package:test/test.dart';
 
@@ -36,6 +37,18 @@ void main() {
   });
 
   test('launch configuration rejects malformed or reserved values', () {
+    expect(
+      () => CockpitFlutterLaunchConfiguration.fromJson(const <String, Object?>{
+        'unknown': true,
+      }),
+      throwsA(isA<CockpitApplicationServiceException>()),
+    );
+    expect(
+      () => CockpitFlutterLaunchConfiguration.fromJson(<String, Object?>{
+        'flutterArgs': List<String>.filled(1025, '--verbose'),
+      }),
+      throwsA(isA<CockpitApplicationServiceException>()),
+    );
     expect(
       () => CockpitFlutterLaunchConfiguration(
         dartDefines: const <String>['FLUTTER_COCKPIT_CUSTOM=1'],
