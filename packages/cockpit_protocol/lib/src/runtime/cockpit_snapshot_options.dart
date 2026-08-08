@@ -1,4 +1,5 @@
 import '../network/cockpit_network_query.dart';
+import '../foundation/cockpit_foundation_value_reader.dart';
 import 'cockpit_runtime_query.dart';
 
 enum CockpitSnapshotProfile {
@@ -138,38 +139,86 @@ final class CockpitSnapshotOptions {
 
   /// Decodes a CockpitSnapshotOptions from a JSON object.
   factory CockpitSnapshotOptions.fromJson(Map<String, Object?> json) {
-    final networkQueryJson = json['networkQuery'] as Map<Object?, Object?>?;
-    final runtimeQueryJson = json['runtimeQuery'] as Map<Object?, Object?>?;
+    CockpitFoundationValueReader.keys(json, const <String>{
+      'profile',
+      'maxTargets',
+      'maxAncestorsPerTarget',
+      'maxPropertiesPerTarget',
+      'includeStyleDetails',
+      'includeDiagnosticProperties',
+      'emitArtifactWhenLarge',
+      'includeRebuildActivity',
+      'maxRebuildEntries',
+      'includeNetworkActivity',
+      'maxNetworkEntries',
+      'networkQuery',
+      'includeRuntimeActivity',
+      'maxRuntimeEntries',
+      'runtimeQuery',
+      'includeAccessibilitySummary',
+      'maxAccessibilityEntries',
+    }, r'$');
+    final networkQueryJson = json['networkQuery'] == null
+        ? null
+        : CockpitFoundationValueReader.object(
+            json['networkQuery'],
+            r'$.networkQuery',
+          );
+    final runtimeQueryJson = json['runtimeQuery'] == null
+        ? null
+        : CockpitFoundationValueReader.object(
+            json['runtimeQuery'],
+            r'$.runtimeQuery',
+          );
     return CockpitSnapshotOptions(
       profile: json['profile'] == null
           ? CockpitSnapshotProfile.live
           : CockpitSnapshotProfile.fromJson(json['profile']),
-      maxTargets: json['maxTargets'] as int? ?? 25,
-      maxAncestorsPerTarget: json['maxAncestorsPerTarget'] as int? ?? 0,
-      maxPropertiesPerTarget: json['maxPropertiesPerTarget'] as int? ?? 0,
-      includeStyleDetails: json['includeStyleDetails'] as bool? ?? false,
-      includeDiagnosticProperties:
-          json['includeDiagnosticProperties'] as bool? ?? false,
-      emitArtifactWhenLarge: json['emitArtifactWhenLarge'] as bool? ?? false,
-      includeRebuildActivity: json['includeRebuildActivity'] as bool? ?? false,
-      maxRebuildEntries: json['maxRebuildEntries'] as int? ?? 8,
-      includeNetworkActivity: json['includeNetworkActivity'] as bool? ?? false,
-      maxNetworkEntries: json['maxNetworkEntries'] as int? ?? 8,
+      maxTargets: _integer(json, 'maxTargets', 25, maximum: 100000),
+      maxAncestorsPerTarget: _integer(
+        json,
+        'maxAncestorsPerTarget',
+        0,
+        maximum: 256,
+      ),
+      maxPropertiesPerTarget: _integer(
+        json,
+        'maxPropertiesPerTarget',
+        0,
+        maximum: 100000,
+      ),
+      includeStyleDetails: _boolean(json, 'includeStyleDetails'),
+      includeDiagnosticProperties: _boolean(
+        json,
+        'includeDiagnosticProperties',
+      ),
+      emitArtifactWhenLarge: _boolean(json, 'emitArtifactWhenLarge'),
+      includeRebuildActivity: _boolean(json, 'includeRebuildActivity'),
+      maxRebuildEntries: _integer(json, 'maxRebuildEntries', 8, maximum: 10000),
+      includeNetworkActivity: _boolean(json, 'includeNetworkActivity'),
+      maxNetworkEntries: _integer(json, 'maxNetworkEntries', 8, maximum: 10000),
       networkQuery: networkQueryJson == null
           ? const CockpitNetworkQuery()
           : CockpitNetworkQuery.fromJson(
               Map<String, Object?>.from(networkQueryJson),
             ),
-      includeRuntimeActivity: json['includeRuntimeActivity'] as bool? ?? false,
-      maxRuntimeEntries: json['maxRuntimeEntries'] as int? ?? 8,
+      includeRuntimeActivity: _boolean(json, 'includeRuntimeActivity'),
+      maxRuntimeEntries: _integer(json, 'maxRuntimeEntries', 8, maximum: 10000),
       runtimeQuery: runtimeQueryJson == null
           ? const CockpitRuntimeQuery()
           : CockpitRuntimeQuery.fromJson(
               Map<String, Object?>.from(runtimeQueryJson),
             ),
-      includeAccessibilitySummary:
-          json['includeAccessibilitySummary'] as bool? ?? false,
-      maxAccessibilityEntries: json['maxAccessibilityEntries'] as int? ?? 8,
+      includeAccessibilitySummary: _boolean(
+        json,
+        'includeAccessibilitySummary',
+      ),
+      maxAccessibilityEntries: _integer(
+        json,
+        'maxAccessibilityEntries',
+        8,
+        maximum: 10000,
+      ),
     );
   }
 
@@ -267,3 +316,21 @@ final class CockpitSnapshotOptions {
     maxAccessibilityEntries,
   );
 }
+
+bool _boolean(Map<String, Object?> json, String key) => json[key] == null
+    ? false
+    : CockpitFoundationValueReader.boolean(json[key], '\$.$key');
+
+int _integer(
+  Map<String, Object?> json,
+  String key,
+  int defaultValue, {
+  required int maximum,
+}) => json[key] == null
+    ? defaultValue
+    : CockpitFoundationValueReader.integer(
+        json[key],
+        '\$.$key',
+        min: 0,
+        max: maximum,
+      );

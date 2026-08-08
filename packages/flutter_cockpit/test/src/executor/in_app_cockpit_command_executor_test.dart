@@ -485,6 +485,39 @@ void main() {
     expect(result.error?.message, contains('was not handled'));
   });
 
+  test(
+    'key events settle refreshed UI state before reporting changed',
+    () async {
+      final registry = CockpitTargetRegistry(routeName: '/keyboard');
+      var status = 'before';
+      registry.discoveredTargetsProvider = () => <CockpitTarget>[
+        CockpitTarget(
+          registrationId: 'key-status',
+          routeName: '/keyboard',
+          text: status,
+        ),
+      ];
+      final executor = InAppCockpitCommandExecutor(
+        registry: registry,
+        keyEventHandler: (_, _) async {
+          status = 'after';
+          return true;
+        },
+      );
+
+      final result = await executor.execute(
+        CockpitCommand(
+          commandId: 'cmd-key-changed',
+          commandType: CockpitCommandType.sendKeyEvent,
+          parameters: const <String, Object?>{'logicalKey': 'Arrow Right'},
+        ),
+      );
+
+      expect(result.success, isTrue);
+      expect(result.changed, isTrue);
+    },
+  );
+
   testWidgets('default key dispatch reaches the focused widget immediately', (
     tester,
   ) async {
@@ -6383,6 +6416,71 @@ void main() {
       expect(find.text('Alpha'), findsOneWidget);
     },
   );
+
+  testWidgets('enter key uses the focused Flutter text input action', (
+    tester,
+  ) async {
+    final registry = CockpitTargetRegistry(routeName: '/editor');
+    final focusNode = FocusNode();
+    final controller = TextEditingController();
+    addTearDown(focusNode.dispose);
+    addTearDown(controller.dispose);
+    String? submitted;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: CockpitSurface(
+          routeName: '/editor',
+          registry: registry,
+          child: Scaffold(
+            body: TextField(
+              key: const ValueKey<String>('submit-input'),
+              controller: controller,
+              focusNode: focusNode,
+              textInputAction: TextInputAction.done,
+              onSubmitted: (value) => submitted = value,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final surfaceState = tester.state<CockpitSurfaceState>(
+      find.byType(CockpitSurface),
+    );
+    final executor = InAppCockpitCommandExecutor(
+      registry: registry,
+      snapshotProvider: surfaceState.snapshot,
+      postActionSettler: () async {
+        await tester.pump();
+        await tester.pump();
+      },
+      gestureHandler: surfaceState.performGesture,
+    );
+
+    final enterText = await executor.execute(
+      CockpitCommand(
+        commandId: 'cmd-enter-submit-value',
+        commandType: CockpitCommandType.enterText,
+        locator: const CockpitLocator(key: 'submit-input'),
+        parameters: const <String, Object?>{'text': 'Cockpit submit'},
+      ),
+    );
+    final submit = await executor.execute(
+      CockpitCommand(
+        commandId: 'cmd-press-enter',
+        commandType: CockpitCommandType.sendKeyEvent,
+        parameters: const <String, Object?>{'logicalKey': 'Enter'},
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(enterText.success, isTrue);
+    expect(submit.success, isTrue);
+    expect(submit.commandType, CockpitCommandType.sendTextInputAction);
+    expect(submitted, 'Cockpit submit');
+  });
 
   testWidgets('copy, erase, and paste operate on a live Flutter text field', (
     tester,

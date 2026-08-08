@@ -58,6 +58,7 @@ final class CockpitSystemControlActionService {
     CockpitAndroidUiAutomation? androidUiAutomation,
     CockpitIosWdaRunner? iosWdaRunner,
     CockpitMacosAccessibilityTreeReader? macosAccessibilityTreeReader,
+    CockpitMacosSystemDialogHandler? macosSystemDialogHandler,
     CockpitMacosApplicationProcessIdResolver? macosApplicationProcessIdResolver,
   }) : _processManager = processManager ?? const LocalCockpitProcessManager(),
        _registry = registry,
@@ -81,6 +82,8 @@ final class CockpitSystemControlActionService {
        _iosWdaRunner = iosWdaRunner ?? CockpitIosWebDriverAgentClient().run,
        _macosAccessibilityTreeReader =
            macosAccessibilityTreeReader ?? cockpitReadMacosAccessibilityTree,
+       _macosSystemDialogHandler =
+           macosSystemDialogHandler ?? cockpitDismissMacosSystemDialog,
        _macosApplicationProcessIdResolver =
            macosApplicationProcessIdResolver ??
            (({required appId, required timeout}) =>
@@ -99,6 +102,7 @@ final class CockpitSystemControlActionService {
   final CockpitAndroidUiAutomation _androidUiAutomation;
   final CockpitIosWdaRunner _iosWdaRunner;
   final CockpitMacosAccessibilityTreeReader _macosAccessibilityTreeReader;
+  final CockpitMacosSystemDialogHandler _macosSystemDialogHandler;
   final CockpitMacosApplicationProcessIdResolver
   _macosApplicationProcessIdResolver;
 
@@ -202,6 +206,13 @@ final class CockpitSystemControlActionService {
     if (command.executable == cockpitMacosAccessibilityCommandExecutable) {
       return _runMacosAccessibilityTreeCommand(request, capability, command);
     }
+    if (command.executable == cockpitMacosSystemDialogCommandExecutable) {
+      return _runMacosSystemDialogCommand(
+        effectiveRequest,
+        capability,
+        command,
+      );
+    }
 
     return _runProcessCommand(request, capability, command);
   }
@@ -274,8 +285,10 @@ final class CockpitSystemControlActionService {
         limitations: capability.limitations,
       );
     } on CockpitMacosAccessibilityException catch (error) {
-      final permissionDenied =
-          error.code == 'macosAccessibilityPermissionDenied';
+      final permissionDenied = const <String>{
+        'macosAccessibilityPermissionDenied',
+        'macosAccessibilityPermissionStale',
+      }.contains(error.code);
       return CockpitSystemControlActionResult(
         platform: request.platform,
         deviceId: request.deviceId,
@@ -307,6 +320,111 @@ final class CockpitSystemControlActionService {
         errorCode: 'macosAccessibilityFailed',
         errorMessage: 'macOS accessibility failed: $error',
         recommendedNextStep: 'inspectMacosAccessibility',
+        strategy: capability.strategy,
+        requires: capability.requires,
+        limitations: capability.limitations,
+      );
+    }
+  }
+
+  Future<CockpitSystemControlActionResult> _runMacosSystemDialogCommand(
+    CockpitSystemControlActionRequest request,
+    CockpitSystemControlCapability capability,
+    CockpitResolvedSystemControlCommand command,
+  ) async {
+    final stopwatch = Stopwatch()..start();
+    Duration remaining() {
+      final value = request.timeout - stopwatch.elapsed;
+      if (value <= Duration.zero) {
+        throw TimeoutException('macOS system dialog deadline elapsed.');
+      }
+      return value;
+    }
+
+    try {
+      if (command.arguments.length != 1) {
+        throw const CockpitMacosAccessibilityException(
+          code: 'invalidMacosSystemDialogRequest',
+          message: 'macOS system dialog command arguments are invalid.',
+        );
+      }
+      final processId =
+          request.processId ??
+          await _macosApplicationProcessIdResolver(
+            appId: request.appId!,
+            timeout: remaining(),
+          );
+      final stdout = await _macosSystemDialogHandler(
+        processId: processId,
+        decision: command.arguments.single,
+        timeout: remaining(),
+      ).timeout(remaining());
+      return CockpitSystemControlActionResult(
+        platform: request.platform,
+        deviceId: request.deviceId,
+        appId: request.appId,
+        processId: processId,
+        action: request.action,
+        availability: capability.availability,
+        success: true,
+        stdout: stdout,
+        recommendedNextStep: 'readPostActionState',
+        strategy: capability.strategy,
+        requires: capability.requires,
+        limitations: capability.limitations,
+      );
+    } on TimeoutException {
+      return CockpitSystemControlActionResult(
+        platform: request.platform,
+        deviceId: request.deviceId,
+        appId: request.appId,
+        processId: request.processId,
+        action: request.action,
+        availability: capability.availability,
+        success: false,
+        errorCode: 'systemActionTimedOut',
+        errorMessage:
+            'macOS system dialog action timed out after '
+            '${request.timeout.inMilliseconds}ms.',
+        recommendedNextStep: 'inspectMacosSystemDialog',
+        strategy: capability.strategy,
+        requires: capability.requires,
+        limitations: capability.limitations,
+      );
+    } on CockpitMacosAccessibilityException catch (error) {
+      final permissionDenied =
+          error.code == 'macosAccessibilityPermissionDenied';
+      return CockpitSystemControlActionResult(
+        platform: request.platform,
+        deviceId: request.deviceId,
+        appId: request.appId,
+        processId: request.processId,
+        action: request.action,
+        availability: permissionDenied
+            ? CockpitSystemControlAvailability.blocked
+            : capability.availability,
+        success: false,
+        errorCode: error.code,
+        errorMessage: error.message,
+        recommendedNextStep: permissionDenied
+            ? 'grantAccessibilityPermission'
+            : 'inspectMacosSystemDialog',
+        strategy: capability.strategy,
+        requires: capability.requires,
+        limitations: capability.limitations,
+      );
+    } on Object catch (error) {
+      return CockpitSystemControlActionResult(
+        platform: request.platform,
+        deviceId: request.deviceId,
+        appId: request.appId,
+        processId: request.processId,
+        action: request.action,
+        availability: capability.availability,
+        success: false,
+        errorCode: 'macosAccessibilityFailed',
+        errorMessage: 'macOS system dialog action failed: $error',
+        recommendedNextStep: 'inspectMacosSystemDialog',
         strategy: capability.strategy,
         requires: capability.requires,
         limitations: capability.limitations,

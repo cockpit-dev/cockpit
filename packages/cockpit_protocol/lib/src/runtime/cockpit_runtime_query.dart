@@ -1,5 +1,7 @@
 import 'package:collection/collection.dart';
 
+import '../foundation/cockpit_foundation_value_reader.dart';
+
 final class CockpitRuntimeQuery {
   /// Creates a CockpitRuntimeQuery.
   const CockpitRuntimeQuery({this.onlyErrors = false, this.messageContains});
@@ -22,9 +24,24 @@ final class CockpitRuntimeQuery {
 
   /// Decodes a CockpitRuntimeQuery from a JSON object.
   factory CockpitRuntimeQuery.fromJson(Map<String, Object?> json) {
+    CockpitFoundationValueReader.keys(json, const <String>{
+      'onlyErrors',
+      'messageContains',
+    }, r'$');
     return CockpitRuntimeQuery(
-      onlyErrors: json['onlyErrors'] as bool? ?? false,
-      messageContains: json['messageContains'] as String?,
+      onlyErrors: json['onlyErrors'] == null
+          ? false
+          : CockpitFoundationValueReader.boolean(
+              json['onlyErrors'],
+              r'$.onlyErrors',
+            ),
+      messageContains: json['messageContains'] == null
+          ? null
+          : CockpitFoundationValueReader.string(
+              json['messageContains'],
+              r'$.messageContains',
+              maximum: 1024,
+            ),
     );
   }
 

@@ -161,6 +161,7 @@ final class CockpitWorkerRunEventStore implements CockpitWorkerEventExchange {
   final Set<String> _eventIds = <String>{};
   final Map<String, int> _acknowledged = <String, int>{};
   final Set<String> _probedSupervisorCursors = <String>{};
+  final Set<String> _terminalSupervisorRuns = <String>{};
   final Map<String, Future<void>> _runLocks = <String, Future<void>>{};
   var _initialized = false;
   Future<void>? _initialization;
@@ -607,6 +608,7 @@ final class CockpitWorkerRunEventStore implements CockpitWorkerEventExchange {
         return CockpitWorkerPublishEventBatchResult(
           runId: request.runId,
           highestContiguousSequence: known.length,
+          terminal: false,
           replayAfterSequence: known.length,
         );
       }
@@ -620,12 +622,13 @@ final class CockpitWorkerRunEventStore implements CockpitWorkerEventExchange {
     return CockpitWorkerPublishEventBatchResult(
       runId: request.runId,
       highestContiguousSequence: known.length,
+      terminal: false,
     );
   }
 
   Future<void> _publishPending(String runId) async {
     final publisher = _publisher;
-    if (publisher == null) return;
+    if (publisher == null || _terminalSupervisorRuns.contains(runId)) return;
     final events = _events[runId] ?? const <CockpitRunEvent>[];
     var cursor = _probedSupervisorCursors.contains(runId)
         ? _acknowledged[runId] ?? 0
@@ -643,7 +646,20 @@ final class CockpitWorkerRunEventStore implements CockpitWorkerEventExchange {
         events: events.sublist(cursor, end),
       );
       final result = await publisher.publish(request);
-      if (result.runId != runId || result.highestContiguousSequence < cursor) {
+      if (result.runId != runId) {
+        throw const FormatException(
+          'Supervisor event acknowledgement is invalid.',
+        );
+      }
+      if (result.terminal) {
+        _terminalSupervisorRuns.add(runId);
+        cursor = events.length;
+        _acknowledged[runId] = cursor;
+        _probedSupervisorCursors.add(runId);
+        await _writeAcknowledgement(runId, cursor);
+        return;
+      }
+      if (result.highestContiguousSequence < cursor) {
         throw const FormatException(
           'Supervisor event acknowledgement is invalid.',
         );

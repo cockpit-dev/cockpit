@@ -225,6 +225,7 @@ final class CockpitWorkerLifecycleOperations {
             defaultName: CockpitInteractiveResultProfileName.minimal,
           ),
           snapshotOptions: values.optionalSnapshotOptions(),
+          deadline: context.deadline,
         ),
       ),
     );
@@ -290,6 +291,7 @@ final class CockpitWorkerLifecycleOperations {
           target: handle,
           resultProfile: resultProfile,
           snapshotOptions: values.optionalSnapshotOptions(),
+          deadline: context.deadline,
         ),
       ),
     );
@@ -298,8 +300,7 @@ final class CockpitWorkerLifecycleOperations {
         ? null
         : await _registry.sessionIdForApp(latestApp.appId);
     Map<String, Object?>? systemControl;
-    if (latestApp != null &&
-        resultProfile.name != CockpitInteractiveResultProfileName.minimal) {
+    if (latestApp != null) {
       final described = await runWorkerApplicationOperation(
         context: context,
         operation: () => _systemControl.describe(

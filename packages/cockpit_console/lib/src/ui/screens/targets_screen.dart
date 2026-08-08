@@ -2,6 +2,7 @@ import 'package:cockpit_console/src/providers/core_providers.dart';
 import 'package:cockpit_console/src/providers/data_providers.dart';
 import 'package:cockpit_console/src/theme/console_colors.dart';
 import 'package:cockpit_console/src/theme/console_shapes.dart';
+import 'package:cockpit_console/src/ui/navigation/console_nav.dart';
 import 'package:cockpit_console/src/ui/widgets/console_form_controls.dart';
 import 'package:cockpit_console/src/ui/widgets/empty_state.dart';
 import 'package:cockpit_console/src/ui/widgets/screen_scaffold.dart';
@@ -37,7 +38,7 @@ final class TargetsScreen extends HookConsumerWidget {
     }, [workspaceId]);
 
     if (workspaceId == null) {
-      return const ScreenScaffold(
+      return ScreenScaffold(
         title: 'Apps & devices',
         subtitle: 'Find and connect the apps and devices used by this project',
         body: EmptyStateView(
@@ -45,6 +46,13 @@ final class TargetsScreen extends HookConsumerWidget {
           title: 'Select a project',
           description:
               'Choose a project from the Projects page to view its apps and devices.',
+          action: FilledButton.icon(
+            onPressed: () => ref
+                .read(navProvider.notifier)
+                .go(ConsoleNavDestination.workspaces),
+            icon: const Icon(LucideIcons.folderOpen, size: 14),
+            label: const Text('Choose project'),
+          ),
         ),
       );
     }
@@ -316,27 +324,33 @@ final class _RegisteredTargetTile extends HookConsumerWidget {
           ),
           const SizedBox(width: 10),
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  _targetTitle(item),
-                  style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
+            child: Semantics(
+              container: true,
+              label: 'App ${_targetTitle(item)}',
+              value: status,
+              excludeSemantics: true,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    _targetTitle(item),
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 1),
-                Text(
-                  _targetSummary(item),
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: theme.colorScheme.onSurfaceVariant,
+                  const SizedBox(height: 1),
+                  Text(
+                    _targetSummary(item),
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
+                ],
+              ),
             ),
           ),
           Container(

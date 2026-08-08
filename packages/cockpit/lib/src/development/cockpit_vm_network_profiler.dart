@@ -61,11 +61,13 @@ final class CockpitVmNetworkBody {
   const CockpitVmNetworkBody({
     required this.bytes,
     required this.complete,
+    required this.present,
     this.mediaType,
   });
 
   final Uint8List bytes;
   final bool complete;
+  final bool present;
   final String? mediaType;
 }
 
@@ -123,15 +125,19 @@ final class CockpitVmNetworkProfiler {
       );
       final requestHeaders = _headers(request.request?.headers);
       final responseHeaders = _headers(request.response?.headers);
+      final requestBody = request.requestBody;
+      final responseBody = request.responseBody;
       return CockpitVmNetworkBodies(
         request: CockpitVmNetworkBody(
-          bytes: request.requestBody ?? Uint8List(0),
+          bytes: requestBody ?? Uint8List(0),
           complete: request.endTime != null,
+          present: requestBody?.isNotEmpty ?? false,
           mediaType: _mediaType(requestHeaders),
         ),
         response: CockpitVmNetworkBody(
-          bytes: request.responseBody ?? Uint8List(0),
+          bytes: responseBody ?? Uint8List(0),
           complete: request.response?.isComplete ?? false,
+          present: responseBody?.isNotEmpty ?? false,
           mediaType: _mediaType(responseHeaders),
         ),
       );

@@ -1,5 +1,7 @@
 import 'package:collection/collection.dart';
 
+import '../foundation/cockpit_foundation_value_reader.dart';
+
 final class CockpitNetworkQuery {
   /// Creates a CockpitNetworkQuery.
   const CockpitNetworkQuery({
@@ -41,13 +43,45 @@ final class CockpitNetworkQuery {
 
   /// Decodes a CockpitNetworkQuery from a JSON object.
   factory CockpitNetworkQuery.fromJson(Map<String, Object?> json) {
+    CockpitFoundationValueReader.keys(json, const <String>{
+      'id',
+      'before',
+      'method',
+      'uriContains',
+      'onlyFailures',
+      'statusCodeAtLeast',
+    }, r'$');
     return CockpitNetworkQuery(
-      id: json['id'] as String?,
-      before: json['before'] as String?,
-      method: json['method'] as String?,
-      uriContains: json['uriContains'] as String?,
-      onlyFailures: json['onlyFailures'] as bool? ?? false,
-      statusCodeAtLeast: json['statusCodeAtLeast'] as int?,
+      id: _requestId(json['id'], r'$.id'),
+      before: _requestId(json['before'], r'$.before'),
+      method: json['method'] == null
+          ? null
+          : CockpitFoundationValueReader.string(
+              json['method'],
+              r'$.method',
+              maximum: 32,
+            ),
+      uriContains: json['uriContains'] == null
+          ? null
+          : CockpitFoundationValueReader.string(
+              json['uriContains'],
+              r'$.uriContains',
+              maximum: 512,
+            ),
+      onlyFailures: json['onlyFailures'] == null
+          ? false
+          : CockpitFoundationValueReader.boolean(
+              json['onlyFailures'],
+              r'$.onlyFailures',
+            ),
+      statusCodeAtLeast: json['statusCodeAtLeast'] == null
+          ? null
+          : CockpitFoundationValueReader.integer(
+              json['statusCodeAtLeast'],
+              r'$.statusCodeAtLeast',
+              min: 100,
+              max: 599,
+            ),
     );
   }
 
@@ -60,4 +94,13 @@ final class CockpitNetworkQuery {
 
   @override
   int get hashCode => _mapEquality.hash(toJson());
+}
+
+String? _requestId(Object? value, String path) {
+  if (value == null) return null;
+  final result = CockpitFoundationValueReader.string(value, path, maximum: 19);
+  if (!RegExp(r'^[1-9][0-9]{0,18}$').hasMatch(result)) {
+    throw FormatException('Expected a numeric network request id at $path.');
+  }
+  return result;
 }

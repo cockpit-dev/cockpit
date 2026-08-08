@@ -121,7 +121,7 @@ String? _opExample(
   required bool sessionAvailable,
 }) {
   if (!sessionAvailable) return null;
-  final input = _requiredInputExample(requestSchema);
+  final input = cockpitOperationInputExample(requestSchema);
   if (input == null) return null;
   final encoded = lon.encode(input).replaceAll("'", "'\"'\"'");
   return 'cockpit op run $kind${session == null ? '' : ' --session $session'} '
@@ -137,18 +137,23 @@ bool _requestInjectsSession(Map<String, Object?> requestSchema) {
       session['x-cockpit-injected-by'] == '--session';
 }
 
-Map<String, Object?>? _requiredInputExample(
+Map<String, Object?>? cockpitOperationInputExample(
   Map<String, Object?> requestSchema,
 ) {
+  final properties = requestSchema['properties'];
   final rootExamples = requestSchema['examples'];
   if (rootExamples is List<Object?> && rootExamples.isNotEmpty) {
     final example = rootExamples.first;
     if (example is Map<Object?, Object?>) {
-      return Map<String, Object?>.from(example);
+      return <String, Object?>{
+        for (final entry in example.entries)
+          if (entry.key is String &&
+              !_isInjectedProperty(properties, entry.key as String))
+            entry.key as String: entry.value,
+      };
     }
   }
   final required = requestSchema['required'];
-  final properties = requestSchema['properties'];
   if (required is! List<Object?> || properties is! Map<Object?, Object?>) {
     return const <String, Object?>{};
   }
@@ -162,6 +167,13 @@ Map<String, Object?>? _requiredInputExample(
     input[name] = example;
   }
   return input;
+}
+
+bool _isInjectedProperty(Object? properties, String name) {
+  if (properties is! Map<Object?, Object?>) return false;
+  final property = properties[name];
+  return property is Map<Object?, Object?> &&
+      property['x-cockpit-injected-by'] != null;
 }
 
 Object? _propertyExample(Map<Object?, Object?> schema) {

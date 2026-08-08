@@ -175,6 +175,21 @@ cases:
         workspace.path,
       ]);
       final workspaceId = registeredWorkspace['workspaceId']! as String;
+      final explained = await _cli(packageRoot, environment, <String>[
+        'explain',
+        'viewport.set',
+        '--workspace-id',
+        workspaceId,
+      ]);
+      final explainedOperation =
+          explained['operation']! as Map<String, Object?>;
+      expect(explainedOperation['title'], 'Set viewport');
+      final inputContract = explained['input']! as Map<String, Object?>;
+      final inputSchema = inputContract['schema']! as Map<String, Object?>;
+      expect(
+        inputSchema['properties']! as Map<String, Object?>,
+        containsPair('width', isA<Map<String, Object?>>()),
+      );
 
       final registeredTarget = await _cli(packageRoot, environment, <String>[
         'target',
@@ -278,6 +293,9 @@ cases:
         ),
         contains('smokeSuite'),
       );
+      final indexedSuite = (suites['items']! as List<Object?>)
+          .cast<Map<String, Object?>>()
+          .singleWhere((item) => item['authoredId'] == 'smokeSuite');
       final validatedSuite = await _cli(packageRoot, environment, <String>[
         'suite',
         'validate',
@@ -288,16 +306,29 @@ cases:
       ]);
       expect(validatedSuite['valid'], isTrue);
       final acceptedSuite = await _cli(packageRoot, environment, <String>[
-        'suite',
+        'op',
         'run',
+        'suite.run',
         '--workspace-id',
         workspaceId,
-        '--suite-id',
-        'smokeSuite',
+        '--input',
+        jsonEncode(<String, Object?>{
+          'source': <String, Object?>{
+            'kind': 'indexed',
+            'reference': <String, Object?>{
+              'documentId': indexedSuite['documentId'],
+              'suiteId': indexedSuite['authoredId'],
+              'documentSha256': indexedSuite['sha256'],
+            },
+          },
+        }),
         '--idempotency-key',
         'smoke-suite-run',
       ]);
-      final suiteRunId = acceptedSuite['runId']! as String;
+      expect(acceptedSuite['outcome'], 'succeeded');
+      final suiteRunId =
+          (acceptedSuite['output']! as Map<String, Object?>)['runId']!
+              as String;
       final suiteRun = await _waitForCompletedRun(
         packageRoot,
         environment,
@@ -487,6 +518,19 @@ cases:
       final testOutput = testStructured['output']! as Map<String, Object?>;
       final testCommand = testOutput['command']! as Map<String, Object?>;
       expect(testCommand['arguments'], <Object?>['test', 'test']);
+      final schemaResource = response(14)['result']! as Map<String, Object?>;
+      final schemaContents =
+          (schemaResource['contents']! as List<Object?>).single;
+      final schemaJson =
+          jsonDecode(
+                (schemaContents as Map<String, Object?>)['text']! as String,
+              )
+              as Map<String, Object?>;
+      expect(schemaJson[r'$id'], 'cockpit://operations/schema');
+      expect(
+        schemaJson[r'$defs']! as Map<String, Object?>,
+        contains('viewport.set.request'),
+      );
 
       final workspaceRetirement = await _cli(packageRoot, environment, <String>[
         'workspace',
@@ -593,7 +637,7 @@ Future<List<Map<String, Object?>>> _mcp(
     output.addAll(chunk);
     responseLines += chunk.where((byte) => byte == 0x0a).length;
     if (responseLines >= 1 && !initialized.isCompleted) initialized.complete();
-    if (responseLines >= 13 && !responsesReceived.isCompleted) {
+    if (responseLines >= 14 && !responsesReceived.isCompleted) {
       responsesReceived.complete();
     }
   }).asFuture<void>();
@@ -725,6 +769,12 @@ Future<List<Map<String, Object?>>> _mcp(
         },
       },
     },
+    <String, Object?>{
+      'jsonrpc': '2.0',
+      'id': 14,
+      'method': 'resources/read',
+      'params': <String, Object?>{'uri': 'cockpit://operations/schema'},
+    },
   ]) {
     process.stdin.add(_encodeLine(message));
   }
@@ -734,7 +784,7 @@ Future<List<Map<String, Object?>>> _mcp(
   await Future.wait(<Future<void>>[outputDone, errorDone]);
   expect(exitCode, 0, reason: errors.toString());
   final responses = _decodeLines(output);
-  expect(responses, hasLength(13), reason: errors.toString());
+  expect(responses, hasLength(14), reason: errors.toString());
   return responses;
 }
 

@@ -4,6 +4,7 @@ export 'cockpit_application_service_exception.dart';
 
 import 'package:cockpit_protocol/cockpit_protocol.dart';
 
+import '../remote/cockpit_remote_read_budget.dart';
 import '../remote/cockpit_remote_session_client.dart';
 import '../session/cockpit_remote_session_handle.dart';
 import 'cockpit_interactive_result_data.dart';
@@ -40,6 +41,7 @@ final class CockpitReadRemoteSnapshotRequest {
     this.resultProfile = const CockpitInteractiveResultProfile.standard(),
     this.snapshotOptions,
     this.compareAgainstSnapshotRef,
+    this.deadline,
   });
 
   final Uri? baseUri;
@@ -50,6 +52,7 @@ final class CockpitReadRemoteSnapshotRequest {
   final CockpitInteractiveResultProfile resultProfile;
   final CockpitSnapshotOptions? snapshotOptions;
   final String? compareAgainstSnapshotRef;
+  final DateTime? deadline;
 }
 
 final class CockpitReadRemoteSnapshotResult {
@@ -109,11 +112,7 @@ final class CockpitReadRemoteSnapshotService {
     CockpitRemoteArtifactTempFileFactory? artifactTempFileFactory,
     CockpitSessionReferenceResolver? sessionReferenceResolver,
     CockpitInteractiveSnapshotStore? snapshotStore,
-  }) : _readSnapshot =
-           readSnapshot ??
-           ((baseUri, options) => CockpitRemoteSessionClient(
-             baseUri: baseUri,
-           ).readSnapshotDetailed(options: options)),
+  }) : _readSnapshot = readSnapshot,
        _downloadArtifacts =
            downloadArtifacts ??
            (artifactTempFileFactory == null
@@ -126,7 +125,7 @@ final class CockpitReadRemoteSnapshotService {
            sessionReferenceResolver ?? CockpitSessionReferenceResolver(),
        _snapshotStore = snapshotStore ?? CockpitInteractiveSnapshotStore();
 
-  final CockpitRemoteSnapshotDetailedReader _readSnapshot;
+  final CockpitRemoteSnapshotDetailedReader? _readSnapshot;
   final CockpitRemoteSnapshotArtifactDownloader? _downloadArtifacts;
   final CockpitSessionReferenceResolver _sessionReferenceResolver;
   final CockpitInteractiveSnapshotStore _snapshotStore;
@@ -146,7 +145,15 @@ final class CockpitReadRemoteSnapshotService {
     final snapshotResponse = await cockpitReadRemoteSnapshotConsistently(
       baseUri: resolved.baseUri,
       options: effectiveSnapshotOptions,
-      readSnapshot: _readSnapshot,
+      readSnapshot: (baseUri, options) {
+        final override = _readSnapshot;
+        if (override != null) return override(baseUri, options);
+        return CockpitRemoteSessionClient(
+          baseUri: baseUri,
+          requestTimeout: CockpitRemoteReadBudget(request.deadline).remaining(),
+        ).readSnapshotDetailed(options: options);
+      },
+      deadline: request.deadline,
     );
     final snapshot = snapshotResponse.snapshot;
     final downloader = _downloadArtifacts;
@@ -197,28 +204,36 @@ Future<CockpitRemoteSnapshotResponse> cockpitReadRemoteSnapshotConsistently({
   required CockpitSnapshotOptions options,
   required CockpitRemoteSnapshotDetailedReader readSnapshot,
   CockpitRemoteSnapshotUiIdleWaiter? waitForUiIdle,
+  DateTime? deadline,
 }) async {
-  var response = await readSnapshot(baseUri, options);
+  final budget = CockpitRemoteReadBudget(deadline);
+  Future<CockpitRemoteSnapshotResponse> readOnce() =>
+      budget.run(() => readSnapshot(baseUri, options));
+
+  var response = await readOnce();
   if (!_isLikelyTransitionEmptySnapshot(response.snapshot)) {
     return response;
   }
 
   for (final delay in _transitionSnapshotRetryDelays) {
-    await Future<void>.delayed(delay);
-    response = await readSnapshot(baseUri, options);
+    await budget.delay(delay);
+    response = await readOnce();
     if (!_isLikelyTransitionEmptySnapshot(response.snapshot)) {
       break;
     }
   }
 
   if (_isLikelyTransitionEmptySnapshot(response.snapshot)) {
-    await (waitForUiIdle ?? _defaultWaitForRemoteUiIdle)(
-      baseUri,
-      quietWindow: _transitionSnapshotIdleQuietWindow,
-      timeout: _transitionSnapshotIdleTimeout,
-      includeNetworkIdle: true,
+    final idleTimeout = budget.bound(_transitionSnapshotIdleTimeout);
+    await budget.run(
+      () => (waitForUiIdle ?? _defaultWaitForRemoteUiIdle)(
+        baseUri,
+        quietWindow: _transitionSnapshotIdleQuietWindow,
+        timeout: idleTimeout,
+        includeNetworkIdle: true,
+      ),
     );
-    response = await readSnapshot(baseUri, options);
+    response = await readOnce();
   }
 
   return response;

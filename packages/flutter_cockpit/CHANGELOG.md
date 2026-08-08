@@ -1,5 +1,16 @@
 # Changelog
 
+## 3.0.2
+
+- Routed Enter on a focused Flutter text field through its real IME action so
+  submit, next, search, send, and related application callbacks execute
+  correctly during Cockpit control.
+- Settled key actions against observable route and semantic state before
+  reporting whether the UI changed, avoiding stale success projections.
+- Tightened recording wire values and required recording request fields so
+  malformed client input fails explicitly instead of selecting aliases or
+  implicit names.
+
 ## 3.0.1
 
 - Aligned iOS and macOS plugin packaging with Flutter's dual-distribution

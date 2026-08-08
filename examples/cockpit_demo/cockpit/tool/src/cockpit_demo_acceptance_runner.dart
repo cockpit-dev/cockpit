@@ -385,7 +385,7 @@ final class CockpitDemoAcceptanceRunner {
           deadline: DateTime.now().toUtc().add(const Duration(minutes: 1)),
           input: <String, Object?>{
             'targetId': target.targetId,
-            'profile': 'inspect',
+            'profile': 'minimal',
           },
         ),
       );

@@ -1,5 +1,24 @@
 # Changelog
 
+## 3.0.2
+
+- Completed the public REST and MCP control plane with strict operation help,
+  request/response schemas, resource discovery, and case/suite submission
+  through the same advertised operations used by the CLI.
+- Bounded remote status and snapshot retries by the caller deadline, tightened
+  network body retrieval to available artifact parts, and kept absent or
+  continuing bodies explicit without emitting empty files.
+- Isolated macOS Accessibility traversal from the worker, detected stale or
+  cyclic AX trees, and made blocked native waits terminate immediately with
+  actionable permission guidance instead of consuming the full step timeout.
+- Stopped durable worker replay after the Supervisor terminalizes a run,
+  preventing sequence conflicts and worker restart loops after interruption.
+- Replaced Windows PowerShell file identity probing with native handle-based
+  identity leases and hardened directory authority checks.
+- Removed cross-platform Flutter launch stalls, preserved command deadlines,
+  and kept common status, inspection, network, capture, and reload paths
+  responsive through the selected numeric session.
+
 ## 3.0.1
 
 - Scoped active numeric session handles to canonical Flutter projects and

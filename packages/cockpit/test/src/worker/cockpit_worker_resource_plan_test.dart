@@ -101,6 +101,16 @@ void main() {
             kind: 'target.launch',
             input: <String, Object?>{'targetId': installedFlutterTarget},
           );
+      final sessionSystemActionPlan = await registry
+          .resolveApplicationResourcePlan(
+            kind: 'system.action',
+            input: <String, Object?>{'sessionId': firstSessionId},
+          );
+      final targetSystemActionPlan = await registry
+          .resolveApplicationResourcePlan(
+            kind: 'system.action',
+            input: <String, Object?>{'targetId': targetA},
+          );
 
       expect(firstSessionId, isNot(secondSessionId));
       expect(firstPlan.primaryResourceId, isNot(secondPlan.primaryResourceId));
@@ -125,6 +135,33 @@ void main() {
       expect(targetReadPlan.primaryResourceId, firstPlan.deviceResourceId);
       expect(targetReadPlan.deviceResourceId, isNull);
       expect(installedFlutterLaunchPlan.requiresPort, isFalse);
+      expect(
+        sessionSystemActionPlan.primaryResourceId,
+        firstPlan.deviceResourceId,
+      );
+      expect(
+        targetSystemActionPlan.primaryResourceId,
+        firstPlan.deviceResourceId,
+      );
+      expect(sessionSystemActionPlan.deviceResourceId, isNull);
+      expect(targetSystemActionPlan.deviceResourceId, isNull);
+      await expectLater(
+        registry.resolveApplicationResourcePlan(
+          kind: 'system.action',
+          input: const <String, Object?>{},
+        ),
+        throwsFormatException,
+      );
+      await expectLater(
+        registry.resolveApplicationResourcePlan(
+          kind: 'system.action',
+          input: <String, Object?>{
+            'sessionId': firstSessionId,
+            'targetId': targetA,
+          },
+        ),
+        throwsFormatException,
+      );
       for (final kind in const <String>{
         'session.remote.get',
         'session.remote.status',

@@ -198,7 +198,14 @@ cockpit dev status
 
 `dev status` may truthfully report that no session exists; the important
 installation check is that Kiro can launch `cockpit_mcp` and the agent loads
-the Cockpit Skill for a Flutter debugging or E2E request.
+the Cockpit Skill for a Flutter debugging or E2E request. Confirm the MCP
+client can list operation resources and read `cockpit://operations/schema`.
+
+Before Kiro runs `cockpit dev start` in a Flutter checkout, it must follow the
+Skill's Flutter preflight: verify `flutter_cockpit` is a development dependency
+and that `cockpit/main.dart` wraps the real app and installs the navigator
+observer. Starting an ordinary Flutter entrypoint without that bridge waits for
+a session that cannot become ready.
 
 ## OpenCode
 

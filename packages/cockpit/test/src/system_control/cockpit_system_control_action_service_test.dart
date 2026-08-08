@@ -8,6 +8,7 @@ import 'package:cockpit_protocol/cockpit_protocol.dart';
 import 'package:cockpit/src/adapters/cockpit_capture_adapter.dart';
 import 'package:cockpit/src/adapters/cockpit_recording_adapter.dart';
 import 'package:cockpit/src/system_control/cockpit_ios_webdriver_agent_client.dart';
+import 'package:cockpit/src/system_control/cockpit_macos_accessibility_tree.dart';
 import 'package:cockpit/src/system_control/cockpit_system_control_action_service.dart';
 import 'package:cockpit/src/system_control/cockpit_system_control_service.dart';
 import 'package:test/test.dart';
@@ -3319,6 +3320,72 @@ void main() {
     ]);
   });
 
+  test('macos dismissSystemDialog uses targeted Accessibility action', () async {
+    final processManager = _FakeProcessManager();
+    int? capturedProcessId;
+    String? capturedDecision;
+    final service = CockpitSystemControlActionService(
+      processManager: processManager,
+      macosApplicationProcessIdResolver:
+          ({required appId, required timeout}) async {
+            expect(appId, 'dev.cockpit.example');
+            return 4242;
+          },
+      macosSystemDialogHandler:
+          ({required processId, required decision, required timeout}) async {
+            capturedProcessId = processId;
+            capturedDecision = decision;
+            expect(timeout, greaterThan(Duration.zero));
+            return 'dismissSystemDialog decision=$decision handled=false reason=noDialog';
+          },
+    );
+
+    final result = await service.run(
+      const CockpitSystemControlActionRequest(
+        platform: 'macos',
+        appId: 'dev.cockpit.example',
+        action: CockpitSystemControlAction.dismissSystemDialog,
+        parameters: <String, Object?>{'decision': 'dismiss'},
+      ),
+    );
+
+    expect(result.success, isTrue);
+    expect(result.command, isEmpty);
+    expect(result.stdout, contains('handled=false reason=noDialog'));
+    expect(result.recommendedNextStep, 'readPostActionState');
+    expect(result.strategy, 'AXUIElement dialog action');
+    expect(result.requires, <String>['Accessibility permission']);
+    expect(capturedProcessId, 4242);
+    expect(capturedDecision, 'dismiss');
+    expect(processManager.starts, isEmpty);
+  });
+
+  test(
+    'macos dismissSystemDialog defaults to accepting a real dialog',
+    () async {
+      String? capturedDecision;
+      final service = CockpitSystemControlActionService(
+        processManager: _FakeProcessManager(),
+        macosSystemDialogHandler:
+            ({required processId, required decision, required timeout}) async {
+              capturedDecision = decision;
+              return 'dismissSystemDialog decision=$decision handled=true';
+            },
+      );
+
+      final result = await service.run(
+        const CockpitSystemControlActionRequest(
+          platform: 'macos',
+          processId: 4242,
+          action: CockpitSystemControlAction.dismissSystemDialog,
+        ),
+      );
+
+      expect(result.success, isTrue);
+      expect(capturedDecision, 'accept');
+    },
+  );
+
   test('macos readUiTree uses bounded AXUIElement tree read', () async {
     final processManager = _FakeProcessManager();
     int? resolvedProcessId;
@@ -3398,6 +3465,35 @@ void main() {
     expect(result.success, isTrue);
     expect(resolvedMaxDepth, 16);
     expect(resolvedMaxNodes, 2000);
+  });
+
+  test('macos stale accessibility permission is blocked explicitly', () async {
+    final service = CockpitSystemControlActionService(
+      processManager: _FakeProcessManager(),
+      macosAccessibilityTreeReader:
+          ({
+            required processId,
+            required maxDepth,
+            required maxNodes,
+            required timeout,
+          }) async => throw const CockpitMacosAccessibilityException(
+            code: 'macosAccessibilityPermissionStale',
+            message: 'Accessibility permission must be granted again.',
+          ),
+    );
+
+    final result = await service.run(
+      const CockpitSystemControlActionRequest(
+        platform: 'macos',
+        processId: 4242,
+        action: CockpitSystemControlAction.readUiTree,
+      ),
+    );
+
+    expect(result.success, isFalse);
+    expect(result.availability, CockpitSystemControlAvailability.blocked);
+    expect(result.errorCode, 'macosAccessibilityPermissionStale');
+    expect(result.recommendedNextStep, 'grantAccessibilityPermission');
   });
 
   test('macos readProcessList uses ps', () async {

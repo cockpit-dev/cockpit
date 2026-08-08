@@ -71,6 +71,23 @@ Map<String, Object?> buildFoundationApiPaths() => <String, Object?>{
       },
     ),
   },
+  '/api/v2/operations/schema': <String, Object?>{
+    'get': negotiatedOperation(
+      operationId: 'getOperationSchema',
+      summary: 'Read live operation request and response contracts',
+      responses: <String, Object?>{
+        '200': <String, Object?>{
+          'description':
+              'JSON Schema 2020-12 document for every advertised operation.',
+          'content': <String, Object?>{
+            'application/schema+json': <String, Object?>{
+              'schema': _operationSchemaDocument(),
+            },
+          },
+        },
+      },
+    ),
+  },
   '/api/v2/workspaces': <String, Object?>{
     'get': negotiatedOperation(
       operationId: 'listWorkspaces',
@@ -382,4 +399,26 @@ Map<String, Object?> _pathParameter(String name) => <String, Object?>{
     'type': 'string',
     'pattern': r'^[A-Za-z][A-Za-z0-9._-]{0,127}$',
   },
+};
+
+Map<String, Object?> _operationSchemaDocument() => <String, Object?>{
+  'type': 'object',
+  'required': <String>[r'$schema', r'$id', 'title', r'$defs'],
+  'properties': <String, Object?>{
+    r'$schema': <String, Object?>{
+      'type': 'string',
+      'const': 'https://json-schema.org/draft/2020-12/schema',
+    },
+    r'$id': <String, Object?>{
+      'type': 'string',
+      'const': 'cockpit://operations/schema',
+    },
+    'title': <String, Object?>{'type': 'string', 'minLength': 1},
+    r'$defs': <String, Object?>{
+      'type': 'object',
+      'minProperties': 1,
+      'additionalProperties': <String, Object?>{'type': 'object'},
+    },
+  },
+  'additionalProperties': false,
 };

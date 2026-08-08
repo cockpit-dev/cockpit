@@ -338,6 +338,7 @@ final class CockpitWorkerRemoteOperations {
             defaultName: CockpitInteractiveResultProfileName.minimal,
           ),
           snapshotOptions: pair.input.optionalSnapshotOptions(),
+          deadline: context.deadline,
         ),
       ),
     );
@@ -371,6 +372,7 @@ final class CockpitWorkerRemoteOperations {
           resultProfile: pair.input.profile(),
           snapshotOptions: pair.input.optionalSnapshotOptions(),
           compareAgainstSnapshotRef: compareAgainstSnapshotRef,
+          deadline: context.deadline,
         ),
       ),
     );

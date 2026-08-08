@@ -106,7 +106,7 @@ Map<String, Object?> foundationResourceDefinitions() => <String, Object?>{
     <String, Object?>{
       'targetId': schemaRef('Identifier'),
       'workspaceId': schemaRef('Identifier'),
-      'platform': stringSchema(maxLength: 64),
+      'platform': stringSchema(maxLength: 32),
       'deviceId': stringSchema(maxLength: 256),
       'targetKind': stringSchema(
         values: const <String>[

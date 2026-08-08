@@ -113,6 +113,7 @@ void main() {
                       utf8.encode('{"token":"secret","visible":"yes"}'),
                     ),
                     complete: true,
+                    present: true,
                     mediaType: 'application/json; charset=utf-8',
                   ),
                   response: CockpitVmNetworkBody(
@@ -120,6 +121,7 @@ void main() {
                       utf8.encode('data: {"password":"secret"}\n\n'),
                     ),
                     complete: false,
+                    present: true,
                     mediaType: 'text/event-stream',
                   ),
                 );
@@ -181,11 +183,13 @@ void main() {
               request: CockpitVmNetworkBody(
                 bytes: bytes,
                 complete: true,
+                present: true,
                 mediaType: 'application/octet-stream',
               ),
               response: CockpitVmNetworkBody(
                 bytes: bytes,
                 complete: true,
+                present: true,
                 mediaType: 'application/octet-stream',
               ),
             ),
@@ -224,6 +228,105 @@ void main() {
       expect(artifact.relativePath, 'network-41-response.bin');
       expect(artifact.redacted, isFalse);
       expect(await File(artifact.sourceFilePath).readAsBytes(), bytes);
+    });
+
+    test('reports absent parts without creating empty artifacts', () async {
+      final directory = await Directory.systemTemp.createTemp(
+        'cockpit_network_absent_body_test_',
+      );
+      addTearDown(() => directory.delete(recursive: true));
+      final entry = _networkEntry('42');
+      final service = CockpitReadNetworkBodyService(
+        readBodies:
+            ({
+              required sessionId,
+              required vmServiceUri,
+              required entry,
+            }) async => CockpitVmNetworkBodies(
+              request: CockpitVmNetworkBody(
+                bytes: Uint8List(0),
+                complete: true,
+                present: false,
+              ),
+              response: CockpitVmNetworkBody(
+                bytes: Uint8List.fromList(utf8.encode('{"ok":true}')),
+                complete: true,
+                present: true,
+                mediaType: 'application/json',
+              ),
+            ),
+        fileFactory: (basename) async => File('${directory.path}/$basename'),
+        readSnapshot: (_, _) async => _snapshot(entry),
+      );
+
+      final result = await service.read(
+        CockpitReadNetworkBodyRequest(
+          sessionId: 'session-1',
+          baseUri: Uri.parse('http://127.0.0.1:57331'),
+          vmServiceUri: Uri.parse('ws://127.0.0.1:8181/ws'),
+          requestId: '42',
+          parts: const <CockpitNetworkBodyPart>{
+            CockpitNetworkBodyPart.request,
+            CockpitNetworkBodyPart.response,
+          },
+        ),
+      );
+
+      expect(result.absent, <CockpitNetworkBodyPart>{
+        CockpitNetworkBodyPart.request,
+      });
+      expect(result.continuing, isFalse);
+      expect(result.artifacts, contains(CockpitNetworkBodyPart.response));
+      expect(result.artifacts, isNot(contains(CockpitNetworkBodyPart.request)));
+      expect(await directory.list().length, 1);
+    });
+
+    test('keeps an empty unfinished response marked as continuing', () async {
+      final directory = await Directory.systemTemp.createTemp(
+        'cockpit_network_continuing_body_test_',
+      );
+      addTearDown(() => directory.delete(recursive: true));
+      final entry = _networkEntry('43');
+      final service = CockpitReadNetworkBodyService(
+        readBodies:
+            ({
+              required sessionId,
+              required vmServiceUri,
+              required entry,
+            }) async => CockpitVmNetworkBodies(
+              request: CockpitVmNetworkBody(
+                bytes: Uint8List(0),
+                complete: true,
+                present: false,
+              ),
+              response: CockpitVmNetworkBody(
+                bytes: Uint8List(0),
+                complete: false,
+                present: false,
+                mediaType: 'text/event-stream',
+              ),
+            ),
+        fileFactory: (basename) async => File('${directory.path}/$basename'),
+        readSnapshot: (_, _) async => _snapshot(entry),
+      );
+
+      final result = await service.read(
+        CockpitReadNetworkBodyRequest(
+          sessionId: 'session-1',
+          baseUri: Uri.parse('http://127.0.0.1:57331'),
+          vmServiceUri: Uri.parse('ws://127.0.0.1:8181/ws'),
+          requestId: '43',
+          parts: const <CockpitNetworkBodyPart>{
+            CockpitNetworkBodyPart.response,
+          },
+        ),
+      );
+
+      expect(result.continuing, isTrue);
+      expect(result.absent, <CockpitNetworkBodyPart>{
+        CockpitNetworkBodyPart.response,
+      });
+      expect(await directory.list().isEmpty, isTrue);
     });
 
     test('rejects WebSocket body retrieval before VM profiling', () async {

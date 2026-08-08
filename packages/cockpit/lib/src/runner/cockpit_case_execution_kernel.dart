@@ -2,9 +2,12 @@ import 'package:cockpit_protocol/cockpit_protocol.dart';
 
 import '../artifacts/cockpit_test_attempt_recorder.dart';
 import '../infrastructure/cockpit_monotonic_clock.dart';
+import '../remote/cockpit_remote_command_timeout_budget.dart';
 import '../test/cockpit_test_execution_plan.dart';
 import 'cockpit_case_execution_control.dart';
 import 'cockpit_case_operation_lease.dart';
+
+const Duration _commandReturnSettlementGrace = Duration(milliseconds: 250);
 
 final class CockpitTestKernelOperationResult {
   const CockpitTestKernelOperationResult.success({
@@ -144,6 +147,7 @@ final class CockpitCaseExecutionKernel {
         control: control,
         cleanupControl: null,
         parentDeadline: null,
+        parentGuardDeadline: null,
         occurrence: const _KernelOccurrence(),
         failFast: plan.defaults.failFast,
       );
@@ -154,6 +158,7 @@ final class CockpitCaseExecutionKernel {
           control: control,
           cleanupControl: null,
           parentDeadline: null,
+          parentGuardDeadline: null,
           occurrence: const _KernelOccurrence(),
           failFast: plan.defaults.failFast,
         );
@@ -178,6 +183,7 @@ final class CockpitCaseExecutionKernel {
         control: control,
         cleanupControl: cleanupControl,
         parentDeadline: cleanupDeadline,
+        parentGuardDeadline: cleanupDeadline,
         occurrence: const _KernelOccurrence(),
         failFast: false,
         collectedErrors: cleanupErrors,
@@ -214,6 +220,7 @@ final class CockpitCaseExecutionKernel {
     required CockpitCaseExecutionControl control,
     required CockpitCaseCleanupControl? cleanupControl,
     required CockpitMonotonicDeadline? parentDeadline,
+    required CockpitMonotonicDeadline? parentGuardDeadline,
     required _KernelOccurrence occurrence,
     required bool failFast,
     List<CockpitTestError>? collectedErrors,
@@ -235,6 +242,7 @@ final class CockpitCaseExecutionKernel {
         control: control,
         cleanupControl: cleanupControl,
         parentDeadline: parentDeadline,
+        parentGuardDeadline: parentGuardDeadline,
         occurrence: occurrence,
       );
       final error = outcome.error;
@@ -323,6 +331,7 @@ final class CockpitCaseExecutionKernel {
     required CockpitCaseExecutionControl control,
     required CockpitCaseCleanupControl? cleanupControl,
     required CockpitMonotonicDeadline? parentDeadline,
+    required CockpitMonotonicDeadline? parentGuardDeadline,
     required _KernelOccurrence occurrence,
   }) async {
     final handle = _recorder.startStep(
@@ -345,6 +354,12 @@ final class CockpitCaseExecutionKernel {
       _clock,
       Duration(milliseconds: budgetMs),
     );
+    final requestedGuard =
+        Duration(milliseconds: budgetMs) + _nodeCommandReturnGrace(node);
+    final guardBudget = parentGuardDeadline == null
+        ? requestedGuard
+        : parentGuardDeadline.clamp(requestedGuard);
+    final guardDeadline = CockpitMonotonicDeadline.after(_clock, guardBudget);
     try {
       final outcome = await _executeNode(
         node,
@@ -352,6 +367,7 @@ final class CockpitCaseExecutionKernel {
         control: control,
         cleanupControl: cleanupControl,
         deadline: deadline,
+        guardDeadline: guardDeadline,
         occurrence: occurrence,
       );
       final error = outcome.error;
@@ -418,6 +434,7 @@ final class CockpitCaseExecutionKernel {
     required CockpitCaseExecutionControl control,
     required CockpitCaseCleanupControl? cleanupControl,
     required CockpitMonotonicDeadline deadline,
+    required CockpitMonotonicDeadline guardDeadline,
     required _KernelOccurrence occurrence,
   }) async {
     final operation = node.operation;
@@ -433,7 +450,7 @@ final class CockpitCaseExecutionKernel {
           ),
           control: control,
           cleanupControl: cleanupControl,
-          deadline: deadline,
+          deadline: guardDeadline,
         );
         return _KernelNodeOutcome(
           error: result.error,
@@ -516,6 +533,7 @@ final class CockpitCaseExecutionKernel {
           control: control,
           cleanupControl: cleanupControl,
           parentDeadline: deadline,
+          parentGuardDeadline: guardDeadline,
           occurrence: occurrence,
           failFast: plan.defaults.failFast,
         );
@@ -536,6 +554,7 @@ final class CockpitCaseExecutionKernel {
             control: control,
             cleanupControl: cleanupControl,
             parentDeadline: deadline,
+            parentGuardDeadline: guardDeadline,
             occurrence: occurrence.copyWith(retryAttempt: attempt),
             failFast: plan.defaults.failFast,
           );
@@ -585,6 +604,7 @@ final class CockpitCaseExecutionKernel {
             control: control,
             cleanupControl: cleanupControl,
             parentDeadline: deadline,
+            parentGuardDeadline: guardDeadline,
             occurrence: occurrence.copyWith(loopIteration: iteration),
             failFast: plan.defaults.failFast,
           );
@@ -668,6 +688,54 @@ final class CockpitCaseExecutionKernel {
     const transportHeadroom = Duration(milliseconds: 4500);
     final requested = commandTimeout + transportHeadroom;
     return requested < remaining ? requested : remaining;
+  }
+
+  Duration _nodeCommandReturnGrace(CockpitTestExecutionNode node) {
+    final operation = node.operation;
+    return switch (operation) {
+      CockpitTestActionPlanOperation(:final action) =>
+        _actionCarriesEvidence(node, action)
+            ? cockpitRemoteCommandEvidenceTransportHeadroom +
+                  _commandReturnSettlementGrace
+            : cockpitRemoteCommandPlainTransportHeadroom +
+                  _commandReturnSettlementGrace,
+      CockpitTestIfPlanOperation(:final thenSteps, :final elseSteps) =>
+        _maximumNodeCommandReturnGrace(<CockpitTestExecutionNode>[
+          ...thenSteps,
+          ...elseSteps,
+        ]),
+      CockpitTestRetryPlanOperation(:final steps) ||
+      CockpitTestLoopPlanOperation(
+        :final steps,
+      ) => _maximumNodeCommandReturnGrace(steps),
+      CockpitTestStartRecordingPlanOperation() ||
+      CockpitTestStopRecordingPlanOperation() => Duration.zero,
+    };
+  }
+
+  Duration _maximumNodeCommandReturnGrace(
+    Iterable<CockpitTestExecutionNode> nodes,
+  ) {
+    var maximum = Duration.zero;
+    for (final node in nodes) {
+      final candidate = _nodeCommandReturnGrace(node);
+      if (candidate > maximum) {
+        maximum = candidate;
+      }
+    }
+    return maximum;
+  }
+
+  bool _actionCarriesEvidence(
+    CockpitTestExecutionNode node,
+    CockpitTestAction action,
+  ) {
+    if (node.evidence.screenshot != CockpitTestEvidenceMode.none ||
+        node.evidence.snapshot != CockpitTestEvidenceMode.none) {
+      return true;
+    }
+    return action.kind == CockpitTestActionKind.captureScreenshot ||
+        action.kind == CockpitTestActionKind.assertScreenshot;
   }
 
   Future<T> _controlled<T>(

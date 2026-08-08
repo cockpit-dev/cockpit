@@ -337,6 +337,36 @@ generates an idempotency key only where the descriptor allows it. `op run` adopt
 descriptor's default timeout; add `--timeout` only to override it within the advertised
 maximum.
 
+## Public Client Control
+
+REST is the complete external command and resource control plane. A client reads
+the live catalogs and operation schema, then executes the same advertised
+operations used by CLI and MCP:
+
+```text
+GET  /api/v2/server
+GET  /api/v2/capabilities
+GET  /api/v2/operations
+GET  /api/v2/workspaces/{workspaceId}/operations
+GET  /api/v2/operations/schema
+POST /api/v2/operations
+POST /api/v2/workspaces/{workspaceId}/operations
+GET  /api/v2/runs/{runId}/events
+```
+
+Use the bearer token and loopback endpoint from Supervisor discovery, send the
+negotiated API/feature headers, and use `cockpit_protocol` for strict DTO,
+OpenAPI, and JSON Schema contracts. Supervisor operations use the global POST;
+workspace operations use the workspace POST. The operation invocation envelope
+owns workspace/root identity, idempotency, and deadline; its `input` contains
+only the selected operation's advertised request fields.
+
+SSE is the durable, resumable stream for run events. Resume with
+`afterSequence` or `Last-Event-ID`; do not replace it with terminal polling.
+WebSocket is only an internal Flutter Web bridge transport and is not a public
+client command protocol. App network WebSocket frames may still appear in
+`dev network`; that capture feature is unrelated to client control.
+
 Checkouts/worktrees isolate sessions, ports, mutations, network data, and artifacts;
 never make another checkout's session implicit. Keep Cockpit wiring in a development
 entrypoint; production Flutter code must not import the bridge package.

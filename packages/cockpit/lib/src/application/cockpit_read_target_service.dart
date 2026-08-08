@@ -26,6 +26,7 @@ final class CockpitReadTargetRequest {
     this.androidDeviceId,
     this.resultProfile = const CockpitInteractiveResultProfile.minimal(),
     this.snapshotOptions,
+    this.deadline,
   });
 
   final CockpitTargetHandle? target;
@@ -36,6 +37,7 @@ final class CockpitReadTargetRequest {
   final String? androidDeviceId;
   final CockpitInteractiveResultProfile resultProfile;
   final CockpitSnapshotOptions? snapshotOptions;
+  final DateTime? deadline;
 }
 
 final class CockpitReadTargetResult {
@@ -141,6 +143,7 @@ final class CockpitReadTargetService {
           baseUri: resolved.baseUri,
           resultProfile: request.resultProfile,
           snapshotOptions: request.snapshotOptions,
+          deadline: request.deadline,
         ),
       );
       final remoteProfile =

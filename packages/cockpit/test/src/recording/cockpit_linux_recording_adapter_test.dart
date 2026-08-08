@@ -377,11 +377,16 @@ done
         body: r'''
 #!/bin/sh
 script_dir="$(CDPATH= cd -- "$(dirname "$0")" && pwd)"
-if [ "$1" = "-xa" ]; then
-  printf '%s\n' "$$" > "$script_dir/activation.pid"
+if [ "$1" = "--activation-child" ]; then
   while true; do
     sleep 1
   done
+fi
+if [ "$1" = "-xa" ]; then
+  printf '%s\n' "$$" > "$script_dir/activation.pid"
+  "$0" --activation-child &
+  printf '%s\n' "$!" > "$script_dir/activation-child.pid"
+  wait
 fi
 while true; do
   sleep 1
@@ -431,15 +436,27 @@ done
       );
 
       final activationPidFile = File(p.join(tempDir.path, 'activation.pid'));
-      expect(activationPidFile.existsSync(), isTrue);
-      final activationPid = int.parse(activationPidFile.readAsStringSync());
+      final activationChildPidFile = File(
+        p.join(tempDir.path, 'activation-child.pid'),
+      );
+      final observedPids = <int>[
+        if (activationPidFile.existsSync())
+          int.parse(activationPidFile.readAsStringSync()),
+        if (activationChildPidFile.existsSync())
+          int.parse(activationChildPidFile.readAsStringSync()),
+      ];
       addTearDown(() async {
-        await _killProcessIfAlive(activationPid);
+        for (final pid in observedPids) {
+          await _killProcessIfAlive(pid);
+        }
       });
       expect(
-        await _isProcessAlive(activationPid),
-        isFalse,
-        reason: 'Timed-out activation command must not survive startRecording.',
+        await _liveProcessIdsContaining(ffmpegExecutable.path),
+        isEmpty,
+        reason:
+            'Timed-out activation and recording processes must not survive '
+            'startRecording, even when the activation script has not yet '
+            'written its PID under scheduler load.',
       );
     },
   );
@@ -522,4 +539,25 @@ Future<void> _killProcessIfAlive(int pid) async {
     return;
   }
   await Process.run('/bin/kill', <String>['-KILL', '$pid']);
+}
+
+Future<List<int>> _liveProcessIdsContaining(String commandFragment) async {
+  final result = await Process.run('ps', const <String>[
+    '-axo',
+    'pid=,stat=,command=',
+  ]);
+  if (result.exitCode != 0) {
+    throw StateError('Unable to inspect process state: ${result.stderr}');
+  }
+  final matches = <int>[];
+  for (final line in '${result.stdout}'.split('\n')) {
+    final match = RegExp(r'^\s*(\d+)\s+(\S+)\s+(.*)$').firstMatch(line);
+    if (match == null || !match.group(3)!.contains(commandFragment)) {
+      continue;
+    }
+    if (!match.group(2)!.startsWith('Z')) {
+      matches.add(int.parse(match.group(1)!));
+    }
+  }
+  return matches;
 }

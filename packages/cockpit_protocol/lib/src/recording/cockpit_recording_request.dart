@@ -1,3 +1,4 @@
+import '../foundation/cockpit_foundation_value_reader.dart';
 import 'cockpit_recording_layer.dart';
 import 'cockpit_recording_mode.dart';
 import 'cockpit_recording_purpose.dart';
@@ -37,22 +38,55 @@ final class CockpitRecordingRequest {
 
   /// Decodes a CockpitRecordingRequest from a JSON object.
   factory CockpitRecordingRequest.fromJson(Map<String, Object?> json) {
+    CockpitFoundationValueReader.keys(
+      json,
+      const <String>{
+        'purpose',
+        'name',
+        'mode',
+        'layer',
+        'allowFallback',
+        'attachToStep',
+        'tailStabilizationMs',
+      },
+      r'$',
+      required: const <String>{'purpose', 'name'},
+    );
     final purpose = CockpitRecordingPurpose.fromJson(json['purpose']);
     return CockpitRecordingRequest(
       purpose: purpose,
-      name: (json['name'] as String?)?.trim().isNotEmpty == true
-          ? json['name']! as String
-          : purpose.name,
+      name: CockpitFoundationValueReader.string(
+        json['name'],
+        r'$.name',
+        maximum: 128,
+      ),
       mode: json['mode'] == null
           ? CockpitRecordingMode.auto
           : CockpitRecordingMode.fromJson(json['mode']),
       layer: json['layer'] == null
           ? null
           : CockpitRecordingLayer.fromJson(json['layer']),
-      allowFallback: json['allowFallback'] as bool?,
-      attachToStep: json['attachToStep'] as bool? ?? false,
+      allowFallback: json['allowFallback'] == null
+          ? null
+          : CockpitFoundationValueReader.boolean(
+              json['allowFallback'],
+              r'$.allowFallback',
+            ),
+      attachToStep: json['attachToStep'] == null
+          ? false
+          : CockpitFoundationValueReader.boolean(
+              json['attachToStep'],
+              r'$.attachToStep',
+            ),
       tailStabilizationDelay: Duration(
-        milliseconds: (json['tailStabilizationMs'] as int?) ?? 1400,
+        milliseconds: json['tailStabilizationMs'] == null
+            ? 1400
+            : CockpitFoundationValueReader.integer(
+                json['tailStabilizationMs'],
+                r'$.tailStabilizationMs',
+                min: 0,
+                max: 60000,
+              ),
       ),
     );
   }

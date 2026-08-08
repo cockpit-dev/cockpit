@@ -78,17 +78,31 @@ String _compactRunPath(String value) {
 }
 
 String _runDocumentLabel(CockpitDocumentResource document) {
-  final parts = document.relativePath
-      .split('/')
-      .where((part) => part.isNotEmpty)
-      .toList();
-  final path = parts.length <= 4
-      ? parts.join('/')
-      : '${parts.first}/…/${parts.sublist(parts.length - 3).join('/')}';
   final kind = document.kind == CockpitIndexedDocumentKind.suite
       ? 'Suite'
       : 'Case';
-  return '$kind · $path';
+  final title = document.title?.trim();
+  final name = title != null && title.isNotEmpty
+      ? title
+      : document.authoredId ?? _compactRunPath(document.relativePath);
+  return '$kind · $name';
+}
+
+String? _runFailureMessage(Object? failure) {
+  if (failure is! Map<Object?, Object?>) return null;
+  final primary = failure['primary'];
+  if (primary is! Map<Object?, Object?>) return null;
+  final message = primary['message'];
+  if (message is! String || message.trim().isEmpty) return null;
+  return message.trim();
+}
+
+String? _runFailureCode(Object? failure) {
+  if (failure is! Map<Object?, Object?>) return null;
+  final primary = failure['primary'];
+  if (primary is! Map<Object?, Object?>) return null;
+  final code = primary['code'];
+  return code is String && code.trim().isNotEmpty ? code.trim() : null;
 }
 
 String formatRunEventMessage({
@@ -256,11 +270,51 @@ final class RunsScreen extends HookConsumerWidget {
         : const <CockpitAutomationTargetResource>[];
 
     Future<void> submitRun() async {
-      final document = selectedDoc;
+      var document = selectedDoc;
       final key = idempotencyCtrl.text.trim();
       if (workspaceId == null || document == null || key.isEmpty) return;
       if (document.kind == CockpitIndexedDocumentKind.testCase &&
           selectedCaseId.value == null) {
+        return;
+      }
+      final selectedDocument = document;
+
+      try {
+        ref.invalidate(documentsForWorkspaceProvider(workspaceId));
+        final freshDocuments = await ref.read(
+          documentsForWorkspaceProvider(workspaceId).future,
+        );
+        if (!context.mounted ||
+            ref.read(selectedWorkspaceIdProvider) != workspaceId) {
+          return;
+        }
+        document = freshDocuments
+            .where(
+              (item) =>
+                  item.kind == selectedDocument.kind &&
+                  item.authoredId == selectedDocument.authoredId &&
+                  item.relativePath == selectedDocument.relativePath,
+            )
+            .firstOrNull;
+        if (document == null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'The selected test file changed or was removed. Choose it again.',
+              ),
+            ),
+          );
+          selectedDocId.value = null;
+          selectedCaseId.value = null;
+          return;
+        }
+        selectedDocId.value = document.documentId;
+      } on Object catch (error) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Could not refresh test files: $error')),
+          );
+        }
         return;
       }
 
@@ -371,7 +425,7 @@ final class RunsScreen extends HookConsumerWidget {
     }
 
     if (workspaceId == null) {
-      return const ScreenScaffold(
+      return ScreenScaffold(
         title: 'Test runs',
         subtitle: 'Run a test case or suite and follow its result',
         body: EmptyStateView(
@@ -379,6 +433,13 @@ final class RunsScreen extends HookConsumerWidget {
           title: 'Select a project',
           description:
               'Choose a project from the Projects page to start a test run.',
+          action: FilledButton.icon(
+            onPressed: () => ref
+                .read(navProvider.notifier)
+                .go(ConsoleNavDestination.workspaces),
+            icon: const Icon(LucideIcons.folderOpen, size: 14),
+            label: const Text('Choose project'),
+          ),
         ),
       );
     }
@@ -552,12 +613,15 @@ final class RunsScreen extends HookConsumerWidget {
           final entityKind = json['entityKind'] as String?;
           final lifecycle = json['lifecycle'] as String?;
           final outcome = json['outcome'] as String?;
-          final message = formatRunEventMessage(
-            kind: kind,
-            entityKind: entityKind,
-            lifecycle: lifecycle,
-            outcome: outcome,
-          );
+          final failureMessage = _runFailureMessage(json['failure']);
+          final message = failureMessage == null
+              ? formatRunEventMessage(
+                  kind: kind,
+                  entityKind: entityKind,
+                  lifecycle: lifecycle,
+                  outcome: outcome,
+                )
+              : '${formatRunEventMessage(kind: kind, entityKind: entityKind, lifecycle: lifecycle, outcome: outcome)}: $failureMessage';
           record(
             RunEvent(
               kind: kind,
@@ -689,7 +753,7 @@ final class _SubmissionBar extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
               child: Text(
-                'Select a test file and case, then choose where to run it.',
+                'Choose a case or suite. Override the app only when the test file default is not the intended target.',
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
                 ),
@@ -718,17 +782,18 @@ final class _SubmissionBar extends StatelessWidget {
                         child: ConsoleDropdownField<String>(
                           initialValue: selectedDocument?.documentId,
                           label: '1. Test file',
+                          hint: const Text('Choose a test file'),
                           items: [
                             for (final document in documents)
                               DropdownMenuItem(
                                 value: document.documentId,
-                                child: Text(
-                                  _runDocumentLabel(document),
-                                  style: const TextStyle(
-                                    fontSize: 12,
-                                    fontFamily: 'monospace',
+                                child: Tooltip(
+                                  message: document.relativePath,
+                                  child: Text(
+                                    _runDocumentLabel(document),
+                                    style: const TextStyle(fontSize: 12),
+                                    overflow: TextOverflow.ellipsis,
                                   ),
-                                  overflow: TextOverflow.ellipsis,
                                 ),
                               ),
                           ],
@@ -756,6 +821,7 @@ final class _SubmissionBar extends StatelessWidget {
                           child: ConsoleDropdownField<String>(
                             initialValue: selectedCase,
                             label: '2. Test case',
+                            hint: const Text('Choose a test case'),
                             items: [
                               for (final entry in availableCases)
                                 DropdownMenuItem(
@@ -996,6 +1062,9 @@ final class _RunDetail extends HookWidget {
     final theme = Theme.of(context);
     final scrollCtrl = useScrollController();
     final terminal = runResource?['lifecycle'] == 'completed';
+    final failure = runResource?['failure'];
+    final failureMessage = _runFailureMessage(failure);
+    final failureCode = _runFailureCode(failure);
 
     useEffect(() {
       if (scrollCtrl.hasClients) {
@@ -1062,7 +1131,7 @@ final class _RunDetail extends HookWidget {
                 TextButton.icon(
                   onPressed: onRefreshArtifacts,
                   icon: const Icon(LucideIcons.download, size: 12),
-                  label: const Text('Refresh files'),
+                  label: const Text('Refresh artifacts'),
                 ),
                 if (terminal)
                   TextButton.icon(
@@ -1088,6 +1157,8 @@ final class _RunDetail extends HookWidget {
               ],
             ),
           ),
+          if (failureMessage != null)
+            _RunFailureBanner(message: failureMessage, code: failureCode),
           Expanded(
             child: LayoutBuilder(
               builder: (context, constraints) {
@@ -1130,6 +1201,67 @@ final class _RunDetail extends HookWidget {
               },
             ),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+final class _RunFailureBanner extends StatelessWidget {
+  const _RunFailureBanner({required this.message, this.code});
+
+  final String message;
+  final String? code;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.error.withValues(alpha: 0.08),
+        border: Border(bottom: BorderSide(color: theme.dividerColor)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            LucideIcons.alertCircle,
+            size: 15,
+            color: theme.colorScheme.error,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Why this run failed',
+                  style: theme.textTheme.labelMedium?.copyWith(
+                    color: theme.colorScheme.error,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                SelectableText(
+                  message,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurface,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (code != null) ...[
+            const SizedBox(width: 12),
+            Text(
+              code!,
+              style: TextStyle(
+                fontSize: 11,
+                fontFamily: 'monospace',
+                color: theme.colorScheme.error,
+              ),
+            ),
+          ],
         ],
       ),
     );

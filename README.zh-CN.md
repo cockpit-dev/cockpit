@@ -338,8 +338,14 @@ cockpit serve-mcp --profile dart
 MCP 只是认证 Supervisor 客户端，不会在进程内构造 driver 或应用服务。它提供有界的
 roots、workspaces、operations、targets、documents、cases、suites、runs 和 artifacts
 资源。官方或第三方 GUI 应使用 `/api/v2`、认证 SSE、公开 DTO 和带 digest 校验的
-artifact 下载。2.0 暂不提供 Flutter GUI，也不内置 HTML dashboard；HTML 只作为
+artifact 下载。3.0 不提供 Flutter GUI，也不内置 HTML dashboard；HTML 只作为
 可移植回归报告 artifact 生成。
+
+REST 是完整的公开命令与资源控制面。客户端先读取全局及 workspace operation
+descriptor，再从 `GET /api/v2/operations/schema` 获取精确的请求/响应契约，最后调用
+对应的全局或 workspace operation POST 路由。认证 SSE 是可恢复的持久 run event
+stream。WebSocket 仅用于 Flutter Web 内部 bridge，不是第三方命令协议；应用自身的
+WebSocket frame 仍可作为 network evidence 捕获。
 
 默认 `core` profile 保持控制面精简；可选 profile 为 `dart`、`flutter`（包含
 `dart`）、`app`、`e2e`（包含 `app`）和 `all`，并可用 `--enable <name>`、

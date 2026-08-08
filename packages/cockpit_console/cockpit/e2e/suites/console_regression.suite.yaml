@@ -15,10 +15,10 @@ cases:
   - id: flutterSmoke
     source:
       kind: file
-      relativePath: packages/cockpit_console/cockpit/e2e/cases/console_flutter_smoke.case.yaml
+      relativePath: cockpit/e2e/cases/console_flutter_smoke.case.yaml
       caseId: consoleFlutterSmoke
   - id: nativeSmoke
     source:
       kind: file
-      relativePath: packages/cockpit_console/cockpit/e2e/cases/console_native_smoke.case.yaml
+      relativePath: cockpit/e2e/cases/console_native_smoke.case.yaml
       caseId: consoleNativeSmoke

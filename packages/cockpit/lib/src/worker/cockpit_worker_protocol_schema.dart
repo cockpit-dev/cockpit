@@ -92,9 +92,14 @@ final class CockpitWorkerProtocolSchema {
             <String, Object?>{
               'runId': _idSchema,
               'highestContiguousSequence': _integerSchema(0, 2147483647),
+              'terminal': const <String, Object?>{'type': 'boolean'},
               'replayAfterSequence': _integerSchema(0, 2147483647),
             },
-            required: const <String>{'runId', 'highestContiguousSequence'},
+            required: const <String>{
+              'runId',
+              'highestContiguousSequence',
+              'terminal',
+            },
           ),
           'publishArtifactBatch': _strictObject(<String, Object?>{
             'runId': _idSchema,

@@ -184,7 +184,7 @@ final class CockpitWorkerTargetRegistrationDispatcher
       platform: workerString(
         input['platform'],
         r'$.input.platform',
-        maximum: 64,
+        maximum: 32,
       ),
       deviceId: workerString(
         input['deviceId'],

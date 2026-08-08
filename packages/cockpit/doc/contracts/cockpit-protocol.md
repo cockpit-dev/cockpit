@@ -45,6 +45,14 @@ resources are resolved through Supervisor-owned indexes, never through global
   `COCKPIT_HOME`.
 - HTTP uses `/api/v2`; event streams use authenticated SSE and resumable event
   sequence identifiers.
+- REST is the complete public command/resource control plane. Clients discover
+  operation descriptors from `/api/v2/operations` and workspace operation
+  catalogs, read exact request/response contracts from
+  `/api/v2/operations/schema`, and execute through the matching global or
+  workspace operation POST route.
+- Public client control does not use WebSocket. The Flutter Web bridge may use
+  WebSocket internally, but that transport is not a client API. Captured app
+  WebSocket activity is network evidence, not a control channel.
 - CLI and MCP are thin clients. They do not construct drivers or application
   services in process.
 - `cockpit_worker` is private Supervisor infrastructure and is not a public

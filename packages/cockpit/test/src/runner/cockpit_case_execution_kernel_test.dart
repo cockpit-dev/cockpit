@@ -133,6 +133,69 @@ void main() {
     },
   );
 
+  test(
+    'action timeout result wins after the logical command deadline',
+    () async {
+      final clock = ManualCockpitClock();
+      final delegate = DeterministicCaseDelegate();
+      final completion = Completer<CockpitTestKernelOperationResult>();
+      delegate.hangingActions['lateTimeout'] = completion;
+      final recorder = CockpitTestAttemptRecorder(clock: clock);
+      final future = _kernel(clock, delegate, recorder).run(
+        plan: testExecutionPlan(
+          steps: <CockpitTestExecutionNode>[actionNode('lateTimeout', 'main')],
+        ),
+        control: CockpitCaseExecutionControl(),
+      );
+
+      await _pump();
+      expect(
+        delegate.actionTimeouts['lateTimeout'],
+        const Duration(seconds: 1),
+      );
+      clock.elapse(const Duration(seconds: 1));
+      await _pump();
+      completion.complete(
+        CockpitTestKernelOperationResult.failure(
+          CockpitTestError(
+            code: CockpitTestErrorCode.timeout,
+            message: 'Detailed driver timeout.',
+            stepId: 'lateTimeout',
+            details: const <String, Object?>{'driverTimeout': true},
+          ),
+        ),
+      );
+      final result = await future;
+
+      expect(result.primaryError?.message, 'Detailed driver timeout.');
+      expect(result.primaryError?.details['driverTimeout'], isTrue);
+    },
+  );
+
+  test('action guard remains bounded when the driver never returns', () async {
+    final clock = ManualCockpitClock();
+    final delegate = DeterministicCaseDelegate();
+    delegate.hangingActions['neverReturns'] =
+        Completer<CockpitTestKernelOperationResult>();
+    final recorder = CockpitTestAttemptRecorder(clock: clock);
+    final future = _kernel(clock, delegate, recorder).run(
+      plan: testExecutionPlan(
+        steps: <CockpitTestExecutionNode>[actionNode('neverReturns', 'main')],
+      ),
+      control: CockpitCaseExecutionControl(),
+    );
+
+    await _pump();
+    clock.elapse(const Duration(milliseconds: 7250));
+    final result = await future;
+
+    expect(result.primaryError?.code, CockpitTestErrorCode.timeout);
+    expect(
+      result.primaryError?.message,
+      'Step exceeded its monotonic deadline.',
+    );
+  });
+
   test('retry and loop keep occurrences separate from execution ids', () async {
     final clock = ManualCockpitClock();
     final delegate = DeterministicCaseDelegate()

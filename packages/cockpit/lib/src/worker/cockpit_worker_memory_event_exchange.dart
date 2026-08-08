@@ -46,6 +46,7 @@ final class CockpitWorkerMemoryEventExchange
       return CockpitWorkerPublishEventBatchResult(
         runId: request.runId,
         highestContiguousSequence: highest,
+        terminal: false,
         replayAfterSequence: highest,
       );
     }
@@ -64,6 +65,7 @@ final class CockpitWorkerMemoryEventExchange
         return CockpitWorkerPublishEventBatchResult(
           runId: request.runId,
           highestContiguousSequence: events.length,
+          terminal: false,
           replayAfterSequence: events.length,
         );
       }
@@ -76,6 +78,7 @@ final class CockpitWorkerMemoryEventExchange
     return CockpitWorkerPublishEventBatchResult(
       runId: request.runId,
       highestContiguousSequence: events.length,
+      terminal: false,
     );
   }
 

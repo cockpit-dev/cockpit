@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:cockpit/src/adapters/cockpit_capture_adapter.dart';
 import 'package:cockpit/src/infrastructure/cockpit_process_manager.dart';
 import 'package:cockpit/src/system_control/cockpit_android_ui_automation_client.dart';
+import 'package:cockpit/src/system_control/cockpit_macos_accessibility_tree.dart';
 import 'package:cockpit/src/system_control/cockpit_system_control_action_service.dart';
 import 'package:cockpit/src/system_control/cockpit_system_control_service.dart';
 import 'package:cockpit/src/system_control/cockpit_system_test_automation_adapter.dart';
@@ -49,6 +50,62 @@ void main() {
       execution.result.locatorResolution?.matchedSignals['adapter'],
       'native',
     );
+  });
+
+  test('native wait stops immediately for blocked UI observation', () async {
+    final processes = _TransientUiTreeProcessManager(failFirst: false);
+    final controls = CockpitSystemControlService(processManager: processes);
+    var delayCount = 0;
+    final adapter = CockpitSystemTestAutomationAdapter(
+      target: CockpitSystemTestTarget(
+        platform: 'macos',
+        deviceId: 'macos',
+        appId: 'dev.cockpit.demo',
+        processId: 4242,
+        targetKind: CockpitTargetKind.flutterApp,
+      ),
+      controlService: controls,
+      actionService: CockpitSystemControlActionService(
+        processManager: processes,
+        systemControlService: controls,
+        macosAccessibilityTreeReader:
+            ({
+              required processId,
+              required maxDepth,
+              required maxNodes,
+              required timeout,
+            }) async => throw const CockpitMacosAccessibilityException(
+              code: 'macosAccessibilityPermissionStale',
+              message: 'Accessibility permission must be granted again.',
+            ),
+      ),
+      workspaceRoot: Directory.current.path,
+      delay: (_) async {
+        delayCount += 1;
+      },
+    );
+
+    final execution = await adapter.execute(
+      CockpitCommand(
+        commandId: 'wait-for-blocked-native-tree',
+        commandType: CockpitCommandType.waitFor,
+        parameters: <String, Object?>{
+          'cockpitTestLocator': <String, Object?>{'label': 'Ready'},
+        },
+        timeoutMs: 30000,
+      ),
+    );
+
+    expect(execution.result.success, isFalse);
+    expect(
+      execution.result.error?.code,
+      CockpitCommandError.unsupportedCapabilityCode,
+    );
+    expect(
+      execution.result.error?.details['systemErrorCode'],
+      'macosAccessibilityPermissionStale',
+    );
+    expect(delayCount, 0);
   });
 
   test('Flutter black-box resolution records its optimized adapter', () async {

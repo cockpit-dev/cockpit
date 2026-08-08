@@ -2508,7 +2508,7 @@
         "platform": {
           "type": "string",
           "minLength": 1,
-          "maxLength": 64
+          "maxLength": 32
         },
         "deviceId": {
           "type": "string",

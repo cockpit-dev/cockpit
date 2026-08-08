@@ -2511,7 +2511,7 @@ const String cockpitFoundationV2SchemaJson = r'''
         "platform": {
           "type": "string",
           "minLength": 1,
-          "maxLength": 64
+          "maxLength": 32
         },
         "deviceId": {
           "type": "string",
@@ -5266,6 +5266,93 @@ const String cockpitV2OpenApiJson = r'''
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/OperationResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/TooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMedia"
+          },
+          "422": {
+            "$ref": "#/components/responses/Unprocessable"
+          },
+          "426": {
+            "$ref": "#/components/responses/UpgradeRequired"
+          },
+          "429": {
+            "$ref": "#/components/responses/ResourceBusy"
+          },
+          "500": {
+            "$ref": "#/components/responses/Internal"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        }
+      }
+    },
+    "/api/v2/operations/schema": {
+      "get": {
+        "operationId": "getOperationSchema",
+        "summary": "Read live operation request and response contracts",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ApiVersion"
+          },
+          {
+            "$ref": "#/components/parameters/RequiredFeatures"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "JSON Schema 2020-12 document for every advertised operation.",
+            "content": {
+              "application/schema+json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "$schema",
+                    "$id",
+                    "title",
+                    "$defs"
+                  ],
+                  "properties": {
+                    "$schema": {
+                      "type": "string",
+                      "const": "https://json-schema.org/draft/2020-12/schema"
+                    },
+                    "$id": {
+                      "type": "string",
+                      "const": "cockpit://operations/schema"
+                    },
+                    "title": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "$defs": {
+                      "type": "object",
+                      "minProperties": 1,
+                      "additionalProperties": {
+                        "type": "object"
+                      }
+                    }
+                  },
+                  "additionalProperties": false
                 }
               }
             }

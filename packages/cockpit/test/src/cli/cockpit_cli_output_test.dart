@@ -5,6 +5,7 @@ import 'package:args/args.dart';
 import 'package:cockpit/src/cli/cockpit_cli_output.dart';
 import 'package:cockpit/src/cli/cockpit_cli_runtime.dart';
 import 'package:cockpit/src/cli/cockpit_command_runner.dart';
+import 'package:cockpit/src/cli/commands/explain_command.dart';
 import 'package:lon/lon.dart';
 import 'package:test/test.dart';
 import 'package:yaml/yaml.dart';
@@ -190,6 +191,40 @@ void main() {
 
     expect(jsonValue, lonValue);
     expect(yamlValue, lonValue);
+  });
+
+  test('session output omits the internal checkout identity hash', () {
+    const renderer = CockpitCliOutputRenderer();
+    final hash = 'c' * 64;
+    final value =
+        jsonDecode(
+              renderer.renderJson(
+                command: 'session.list',
+                data: <String, Object?>{
+                  'items': <Object?>[
+                    <String, Object?>{
+                      'handleId': '1',
+                      'projectPath': '/workspace/app',
+                      'entrypoint': 'cockpit/main.dart',
+                      'platform': 'macos',
+                      'deviceId': 'macos',
+                      'lastState': 'ready',
+                      'checkoutPath': '/workspace',
+                      'checkoutIdentity': hash,
+                    },
+                  ],
+                  'totalCount': 1,
+                },
+                detail: CockpitCliOutputDetail.standard,
+              ),
+            )
+            as Map<String, Object?>;
+    final item =
+        (value['items']! as List<Object?>).single as Map<String, Object?>;
+
+    expect(item['checkoutPath'], '/workspace');
+    expect(item, isNot(contains('checkout')));
+    expect(jsonEncode(value), isNot(contains(hash)));
   });
 
   test('dev status does not invent diagnostics that were not collected', () {
@@ -390,6 +425,7 @@ void main() {
           },
         ],
         'body': <String, String>{'response': '/tmp/network-37-response.json'},
+        'absent': <String>['request'],
         'continuing': true,
       },
       'evidence': <String, String>{'response': '/tmp/network-37-response.json'},
@@ -405,6 +441,7 @@ void main() {
     expect(rendered, contains('id:"37"'));
     expect(rendered, contains('active:1'));
     expect(rendered, contains('response:/tmp/network-37-response.json'));
+    expect(rendered, contains('absent:[request]'));
     expect(
       RegExp(
         RegExp.escape('/tmp/network-37-response.json'),
@@ -1247,6 +1284,28 @@ void main() {
 
       expect(profile['values'], 'minimal|locate|standard|inspect|evidence');
       expect(value, isNot(contains('_meta')));
+    });
+
+    test('explain examples omit CLI-injected session identity', () {
+      expect(
+        cockpitOperationInputExample(const <String, Object?>{
+          'type': 'object',
+          'properties': <String, Object?>{
+            'sessionId': <String, Object?>{
+              'type': 'string',
+              'x-cockpit-injected-by': '--session',
+            },
+            'action': <String, Object?>{'type': 'string'},
+          },
+          'examples': <Object?>[
+            <String, Object?>{
+              'sessionId': 'session-example',
+              'action': 'readUiTree',
+            },
+          ],
+        }),
+        <String, Object?>{'action': 'readUiTree'},
+      );
     });
   });
 

@@ -4,7 +4,6 @@ import 'package:path/path.dart' as p;
 
 import '../foundation/cockpit_home.dart';
 import '../foundation/cockpit_ids.dart';
-import '../supervisor/cockpit_supervisor_api_client.dart';
 import 'cockpit_cli_runtime.dart';
 import 'cockpit_cli_session_handles.dart';
 import 'cockpit_dev_runtime.dart';
@@ -100,23 +99,43 @@ final class CockpitDevNetworkService {
     }
     final bodyOutput = captured.output ?? const <String, Object?>{};
     final references = <String, _DevelopmentArtifact>{
-      for (final part in _parts(body)) part: _artifact(bodyOutput, part),
+      for (final part in _parts(body)) part: ?_artifact(bodyOutput, part),
     };
+    final absent = _absentParts(bodyOutput);
     final paths = await _download(
       session: session,
       requestId: requestId!,
       artifacts: references,
     );
     final continuing = bodyOutput['continuing'] == true;
+    final state = <String, Object?>{
+      ...networkState,
+      'body': paths,
+      if (absent.isNotEmpty) 'absent': absent,
+      if (continuing) 'continuing': true,
+    };
+    if (paths.isEmpty) {
+      return dev.writeEnvelope(
+        action: 'network',
+        session: session,
+        ok: false,
+        state: state,
+        changed: 'none',
+        errors: <Object?>[
+          <String, Object?>{
+            'code': 'networkBodyAbsent',
+            'message':
+                'Network request $requestId has no ${absent.join(' or ')} body.',
+          },
+        ],
+        failureExitCode: cockpitDataExitCode,
+      );
+    }
     return dev.writeEnvelope(
       action: 'network',
       session: session,
       ok: true,
-      state: <String, Object?>{
-        ...networkState,
-        'body': paths,
-        if (continuing) 'continuing': true,
-      },
+      state: state,
       changed: 'captured',
       evidence: paths,
       next: continuing
@@ -184,7 +203,7 @@ bool _hasOneEntry(Map<String, Object?> state, String requestId) {
 Iterable<String> _parts(String body) =>
     body == 'both' ? const <String>['request', 'response'] : <String>[body];
 
-_DevelopmentArtifact _artifact(Map<String, Object?> output, String part) {
+_DevelopmentArtifact? _artifact(Map<String, Object?> output, String part) {
   final partValue = output[part];
   final partMap = partValue is Map<Object?, Object?> ? partValue : null;
   final artifactValue = partMap?['artifact'];
@@ -199,12 +218,15 @@ _DevelopmentArtifact _artifact(Map<String, Object?> output, String part) {
   final name = reference?['name'];
   final mediaType = reference?['mediaType'];
   if (id is! String || name is! String || mediaType is! String) {
-    throw CockpitSupervisorClientException(
-      code: 'networkBodyArtifactMissing',
-      message: 'Network $part body returned no session-owned artifact.',
-    );
+    return null;
   }
   return _DevelopmentArtifact(id: id, name: name, mediaType: mediaType);
+}
+
+List<String> _absentParts(Map<String, Object?> output) {
+  final value = output['absent'];
+  if (value is! List<Object?>) return const <String>[];
+  return value.whereType<String>().toList(growable: false);
 }
 
 final class _DevelopmentArtifact {

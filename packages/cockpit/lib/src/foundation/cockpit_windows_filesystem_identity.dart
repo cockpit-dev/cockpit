@@ -1,6 +1,8 @@
+import 'dart:ffi';
 import 'dart:io';
 
-import '../infrastructure/cockpit_process_manager.dart';
+import 'package:ffi/ffi.dart';
+
 import 'cockpit_filesystem_identity.dart';
 import 'cockpit_home.dart';
 
@@ -20,39 +22,40 @@ abstract interface class CockpitWindowsFileIdentityProbe {
   Future<CockpitWindowsFileIdentityProbeResult> inspect(String canonicalPath);
 }
 
-final class CockpitPowerShellWindowsFileIdentityProbe
+final class CockpitNativeWindowsFileIdentityProbe
     implements CockpitWindowsFileIdentityProbe {
-  const CockpitPowerShellWindowsFileIdentityProbe();
+  const CockpitNativeWindowsFileIdentityProbe();
 
   @override
   Future<CockpitWindowsFileIdentityProbeResult> inspect(
     String canonicalPath,
   ) async {
-    final result = await cockpitRunIsolatedProcess(
-      'powershell.exe',
-      <String>[
-        '-NoLogo',
-        '-NoProfile',
-        '-NonInteractive',
-        '-Command',
-        cockpitWindowsFileIdentityPowerShell,
-      ],
-      environment: <String, String>{
-        'COCKPIT_FILE_IDENTITY_PATH': canonicalPath,
-      },
+    final lease = CockpitWindowsFileIdentityLease.open(
+      canonicalPath,
+      shareDelete: true,
     );
-    return CockpitWindowsFileIdentityProbeResult(
-      exitCode: result.exitCode,
-      stdout: result.stdout.toString(),
-      stderr: result.stderr.toString(),
-    );
+    try {
+      return CockpitWindowsFileIdentityProbeResult(
+        exitCode: 0,
+        stdout: lease.read(),
+        stderr: '',
+      );
+    } on FileSystemException catch (error) {
+      return CockpitWindowsFileIdentityProbeResult(
+        exitCode: error.osError?.errorCode ?? 1,
+        stdout: '',
+        stderr: error.message,
+      );
+    } finally {
+      lease.close();
+    }
   }
 }
 
 final class CockpitWindowsFilesystemIdentityProvider
     implements CockpitFilesystemIdentityProvider {
   const CockpitWindowsFilesystemIdentityProvider({
-    this.probe = const CockpitPowerShellWindowsFileIdentityProbe(),
+    this.probe = const CockpitNativeWindowsFileIdentityProbe(),
   });
 
   final CockpitWindowsFileIdentityProbe probe;
@@ -91,7 +94,7 @@ final class CockpitSystemFilesystemIdentityProvider
   const CockpitSystemFilesystemIdentityProvider({
     required this.platform,
     required this.metadataProvider,
-    this.windowsProbe = const CockpitPowerShellWindowsFileIdentityProbe(),
+    this.windowsProbe = const CockpitNativeWindowsFileIdentityProbe(),
   });
 
   final CockpitHostPlatform platform;
@@ -126,133 +129,185 @@ bool _isFixedWidthHex(String value, int width) =>
           (codeUnit >= 0x61 && codeUnit <= 0x66),
     );
 
-const cockpitWindowsFileIdentityPowerShell = r'''
-$ErrorActionPreference = 'Stop'
-$path = $env:COCKPIT_FILE_IDENTITY_PATH
-if (-not ('Cockpit.NativeFileIdentity' -as [type])) {
-  Add-Type -TypeDefinition @'
-using System;
-using System.ComponentModel;
-using System.Runtime.InteropServices;
-using Microsoft.Win32.SafeHandles;
+final class CockpitWindowsFileIdentityLease {
+  CockpitWindowsFileIdentityLease._({
+    required _CockpitWindowsFileIdentityApi api,
+    required int handle,
+    required String path,
+  }) : _api = api,
+       _handle = handle,
+       _path = path;
 
-namespace Cockpit {
-  [StructLayout(LayoutKind.Sequential, Size = 16)]
-  internal struct FileId128 {
-    public byte B00;
-    public byte B01;
-    public byte B02;
-    public byte B03;
-    public byte B04;
-    public byte B05;
-    public byte B06;
-    public byte B07;
-    public byte B08;
-    public byte B09;
-    public byte B10;
-    public byte B11;
-    public byte B12;
-    public byte B13;
-    public byte B14;
-    public byte B15;
-
-    public string ToHex() {
-      return B00.ToString("x2") + B01.ToString("x2") +
-        B02.ToString("x2") + B03.ToString("x2") +
-        B04.ToString("x2") + B05.ToString("x2") +
-        B06.ToString("x2") + B07.ToString("x2") +
-        B08.ToString("x2") + B09.ToString("x2") +
-        B10.ToString("x2") + B11.ToString("x2") +
-        B12.ToString("x2") + B13.ToString("x2") +
-        B14.ToString("x2") + B15.ToString("x2");
+  static CockpitWindowsFileIdentityLease open(
+    String canonicalPath, {
+    required bool shareDelete,
+  }) {
+    if (!Platform.isWindows) {
+      throw UnsupportedError('Windows file identity requires Windows.');
     }
-  }
-
-  [StructLayout(LayoutKind.Sequential)]
-  internal struct FileIdInfo {
-    public ulong VolumeSerialNumber;
-    public FileId128 FileId;
-  }
-
-  public static class NativeFileIdentity {
-    private const uint FileShareRead = 0x00000001;
-    private const uint FileShareWrite = 0x00000002;
-    private const uint FileShareDelete = 0x00000004;
-    private const uint OpenExisting = 3;
-    private const uint FileFlagBackupSemantics = 0x02000000;
-    private const int FileIdInfoClass = 18;
-
-    [DllImport(
-      "kernel32.dll",
-      CharSet = CharSet.Unicode,
-      ExactSpelling = true,
-      SetLastError = true
-    )]
-    private static extern SafeFileHandle CreateFileW(
-      string fileName,
-      uint desiredAccess,
-      uint shareMode,
-      IntPtr securityAttributes,
-      uint creationDisposition,
-      uint flagsAndAttributes,
-      IntPtr templateFile
-    );
-
-    [DllImport(
-      "kernel32.dll",
-      ExactSpelling = true,
-      SetLastError = true
-    )]
-    private static extern bool GetFileInformationByHandleEx(
-      SafeFileHandle file,
-      int fileInformationClass,
-      out FileIdInfo fileInformation,
-      uint bufferSize
-    );
-
-    public static string Read(string path) {
-      using (SafeFileHandle handle = CreateFileW(
-        ExtendedPath(path),
+    final api = _CockpitWindowsFileIdentityApi.instance;
+    final extendedPath = _extendedWindowsPath(canonicalPath).toNativeUtf16();
+    try {
+      final handle = api.createFile(
+        extendedPath,
         0,
-        FileShareRead | FileShareWrite | FileShareDelete,
-        IntPtr.Zero,
-        OpenExisting,
-        FileFlagBackupSemantics,
-        IntPtr.Zero
-      )) {
-        if (handle.IsInvalid) {
-          throw new Win32Exception(Marshal.GetLastWin32Error());
-        }
-        int size = Marshal.SizeOf(typeof(FileIdInfo));
-        if (size != 24) {
-          throw new InvalidOperationException("Unexpected FILE_ID_INFO size.");
-        }
-        FileIdInfo info;
-        if (!GetFileInformationByHandleEx(
-          handle,
-          FileIdInfoClass,
-          out info,
-          (uint)size
-        )) {
-          throw new Win32Exception(Marshal.GetLastWin32Error());
-        }
-        return info.VolumeSerialNumber.ToString("x16") +
-          "|" + info.FileId.ToHex();
+        _fileShareRead | _fileShareWrite | (shareDelete ? _fileShareDelete : 0),
+        nullptr,
+        _openExisting,
+        _fileFlagBackupSemantics,
+        0,
+      );
+      if (handle == _invalidHandleValue) {
+        final errorCode = api.getLastError();
+        throw FileSystemException(
+          'Could not open Windows directory identity handle.',
+          canonicalPath,
+          OSError('CreateFileW failed.', errorCode),
+        );
       }
-    }
-
-    private static string ExtendedPath(string path) {
-      if (path.StartsWith(@"\\?\", StringComparison.Ordinal)) {
-        return path;
-      }
-      if (path.StartsWith(@"\\", StringComparison.Ordinal)) {
-        return @"\\?\UNC\" + path.Substring(2);
-      }
-      return @"\\?\" + path;
+      return CockpitWindowsFileIdentityLease._(
+        api: api,
+        handle: handle,
+        path: canonicalPath,
+      );
+    } finally {
+      calloc.free(extendedPath);
     }
   }
+
+  final _CockpitWindowsFileIdentityApi _api;
+  final String _path;
+  int _handle;
+
+  String read() {
+    if (_handle == _invalidHandleValue) {
+      throw StateError('Windows file identity lease is closed.');
+    }
+    if (sizeOf<_CockpitWindowsFileIdInfo>() != 24) {
+      throw StateError('Unexpected FILE_ID_INFO size.');
+    }
+    final info = calloc<_CockpitWindowsFileIdInfo>();
+    try {
+      final succeeded = _api.getFileInformationByHandleEx(
+        _handle,
+        _fileIdInfoClass,
+        info.cast<Void>(),
+        sizeOf<_CockpitWindowsFileIdInfo>(),
+      );
+      if (succeeded == 0) {
+        final errorCode = _api.getLastError();
+        throw FileSystemException(
+          'Could not read stable Windows file identity.',
+          _path,
+          OSError('GetFileInformationByHandleEx failed.', errorCode),
+        );
+      }
+      final volume = info.ref.volumeSerialNumber
+          .toRadixString(16)
+          .padLeft(16, '0');
+      final fileId = StringBuffer();
+      for (var index = 0; index < 16; index += 1) {
+        fileId.write(info.ref.fileId[index].toRadixString(16).padLeft(2, '0'));
+      }
+      return '$volume|$fileId';
+    } finally {
+      calloc.free(info);
+    }
+  }
+
+  void close() {
+    final handle = _handle;
+    if (handle == _invalidHandleValue) return;
+    _handle = _invalidHandleValue;
+    _api.closeHandle(handle);
+  }
 }
-'@
+
+final class _CockpitWindowsFileIdentityApi {
+  _CockpitWindowsFileIdentityApi._()
+    : _library = DynamicLibrary.open('kernel32.dll') {
+    createFile = _library.lookupFunction<_CreateFileNative, _CreateFileDart>(
+      'CreateFileW',
+    );
+    getFileInformationByHandleEx = _library
+        .lookupFunction<
+          _GetFileInformationByHandleExNative,
+          _GetFileInformationByHandleExDart
+        >('GetFileInformationByHandleEx');
+    closeHandle = _library.lookupFunction<_CloseHandleNative, _CloseHandleDart>(
+      'CloseHandle',
+    );
+    getLastError = _library
+        .lookupFunction<_GetLastErrorNative, _GetLastErrorDart>('GetLastError');
+  }
+
+  static final _CockpitWindowsFileIdentityApi instance =
+      _CockpitWindowsFileIdentityApi._();
+
+  final DynamicLibrary _library;
+  late final _CreateFileDart createFile;
+  late final _GetFileInformationByHandleExDart getFileInformationByHandleEx;
+  late final _CloseHandleDart closeHandle;
+  late final _GetLastErrorDart getLastError;
 }
-[Console]::Out.WriteLine([Cockpit.NativeFileIdentity]::Read($path))
-''';
+
+final class _CockpitWindowsFileIdInfo extends Struct {
+  @Uint64()
+  external int volumeSerialNumber;
+
+  @Array(16)
+  external Array<Uint8> fileId;
+}
+
+const int _fileShareRead = 0x00000001;
+const int _fileShareWrite = 0x00000002;
+const int _fileShareDelete = 0x00000004;
+const int _openExisting = 3;
+const int _fileFlagBackupSemantics = 0x02000000;
+const int _fileIdInfoClass = 18;
+const int _invalidHandleValue = -1;
+
+String _extendedWindowsPath(String path) {
+  if (path.startsWith(r'\\?\')) return path;
+  if (path.startsWith(r'\\')) return '${r'\\?\UNC\'}${path.substring(2)}';
+  return '${r'\\?\'}$path';
+}
+
+typedef _CreateFileNative =
+    IntPtr Function(
+      Pointer<Utf16> fileName,
+      Uint32 desiredAccess,
+      Uint32 shareMode,
+      Pointer<Void> securityAttributes,
+      Uint32 creationDisposition,
+      Uint32 flagsAndAttributes,
+      IntPtr templateFile,
+    );
+typedef _CreateFileDart =
+    int Function(
+      Pointer<Utf16> fileName,
+      int desiredAccess,
+      int shareMode,
+      Pointer<Void> securityAttributes,
+      int creationDisposition,
+      int flagsAndAttributes,
+      int templateFile,
+    );
+typedef _GetFileInformationByHandleExNative =
+    Int32 Function(
+      IntPtr file,
+      Int32 fileInformationClass,
+      Pointer<Void> fileInformation,
+      Uint32 bufferSize,
+    );
+typedef _GetFileInformationByHandleExDart =
+    int Function(
+      int file,
+      int fileInformationClass,
+      Pointer<Void> fileInformation,
+      int bufferSize,
+    );
+typedef _CloseHandleNative = Int32 Function(IntPtr handle);
+typedef _CloseHandleDart = int Function(int handle);
+typedef _GetLastErrorNative = Uint32 Function();
+typedef _GetLastErrorDart = int Function();
