@@ -17,6 +17,16 @@ abstract final class ConsoleShapes {
     );
   }
 
+  static RoundedSuperellipseBorder drawer({BorderSide side = BorderSide.none}) {
+    return RoundedSuperellipseBorder(
+      side: side,
+      borderRadius: const BorderRadius.only(
+        topRight: Radius.circular(dialogRadius),
+        bottomRight: Radius.circular(dialogRadius),
+      ),
+    );
+  }
+
   static ShapedInputBorder input(BorderSide side) {
     return ShapedInputBorder(
       borderSide: side,

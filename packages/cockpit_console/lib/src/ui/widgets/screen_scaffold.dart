@@ -1,4 +1,6 @@
+import 'package:cockpit_console/src/ui/widgets/console_shell_header.dart';
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 /// Standard scaffold for console screens: title bar with actions + scrollable
 /// content area with consistent padding.
@@ -32,7 +34,7 @@ final class ScreenScaffold extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _buildHeader(context, theme),
-          Container(height: 1, color: theme.dividerColor),
+          const ConsoleShellDivider(),
           Expanded(child: body),
         ],
       ),
@@ -40,26 +42,26 @@ final class ScreenScaffold extends StatelessWidget {
   }
 
   Widget _buildHeader(BuildContext context, ThemeData theme) {
-    if (header != null) return header!;
+    if (header != null) {
+      return ConsoleShellHeader(child: _withNavigationMenu(context, header!));
+    }
     final titleBlock = Column(
+      mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
           title,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
-          style: theme.textTheme.headlineMedium?.copyWith(
-            fontSize: 20,
-            fontWeight: FontWeight.w700,
-          ),
+          style: theme.textTheme.headlineSmall,
         ),
         if (subtitle != null) ...[
-          const SizedBox(height: 2),
+          const SizedBox(height: 1),
           Text(
             subtitle!,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: theme.textTheme.bodySmall?.copyWith(fontSize: 12),
+            style: theme.textTheme.bodySmall,
           ),
         ],
       ],
@@ -69,38 +71,39 @@ final class ScreenScaffold extends StatelessWidget {
       builder: (context, constraints) {
         if (constraints.maxWidth < stackActionsBelowWidth &&
             screenActions?.isNotEmpty == true) {
-          final horizontalPadding = constraints.maxWidth < 720 ? 16.0 : 24.0;
-          return Padding(
-            padding: EdgeInsets.fromLTRB(
-              horizontalPadding,
-              16,
-              horizontalPadding,
-              12,
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                titleBlock,
-                const SizedBox(height: 8),
-                Wrap(
+          final horizontalPadding = ConsoleShellHeaderStyle.horizontalPadding(
+            constraints.maxWidth,
+          );
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              ConsoleShellHeader(
+                horizontalPadding: horizontalPadding,
+                child: _withNavigationMenu(context, titleBlock),
+              ),
+              const ConsoleShellDivider(),
+              Padding(
+                padding: EdgeInsets.symmetric(
+                  horizontal: horizontalPadding,
+                  vertical: 8,
+                ),
+                child: Wrap(
                   runSpacing: 8,
                   crossAxisAlignment: WrapCrossAlignment.center,
                   children: screenActions!,
                 ),
-              ],
-            ),
+              ),
+            ],
           );
         }
-        return Padding(
-          padding: EdgeInsets.fromLTRB(
-            constraints.maxWidth < 720 ? 16 : 24,
-            16,
-            constraints.maxWidth < 720 ? 16 : 24,
-            12,
+        return ConsoleShellHeader(
+          horizontalPadding: ConsoleShellHeaderStyle.horizontalPadding(
+            constraints.maxWidth,
           ),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
+              ..._navigationMenuLeading(context),
               Expanded(child: titleBlock),
               ...?screenActions,
             ],
@@ -108,5 +111,29 @@ final class ScreenScaffold extends StatelessWidget {
         );
       },
     );
+  }
+
+  Widget _withNavigationMenu(BuildContext context, Widget child) {
+    final leading = _navigationMenuLeading(context);
+    if (leading.isEmpty) return child;
+    return Row(
+      children: [
+        ...leading,
+        Expanded(child: child),
+      ],
+    );
+  }
+
+  List<Widget> _navigationMenuLeading(BuildContext context) {
+    final scaffold = Scaffold.maybeOf(context);
+    if (scaffold?.hasDrawer != true) return const <Widget>[];
+    return <Widget>[
+      IconButton(
+        onPressed: scaffold!.openDrawer,
+        icon: const Icon(LucideIcons.menu),
+        tooltip: 'Open navigation',
+      ),
+      const SizedBox(width: 12),
+    ];
   }
 }
