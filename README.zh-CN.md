@@ -59,9 +59,10 @@ cockpit --help
 cockpit update
 ```
 
-它会安装并验证最新版本、删除 Cockpit 已废弃的源码安装 payload，并在保留授权模式
-和持久化状态的前提下替换旧 Supervisor。Dart Pub 的共享下载缓存仍由 Pub 自己管理，
-Cockpit 不会删除其他包的缓存。
+它会安装并验证最新版本，把源码安装的原生 executable 安全交还给 Pub，再恢复为单个
+优化后的 AOT executable，删除旧版与临时升级 payload，并在保留授权模式和持久化
+状态的前提下替换旧 Supervisor。Dart Pub 的共享下载缓存仍由 Pub 自己管理，Cockpit
+不会删除其他包的缓存。
 
 Flutter 源码开发额外使用仅限开发环境的 bridge：
 
@@ -410,8 +411,8 @@ dart run tool/install_cockpit.dart
 它会在所有平台把一个原生 executable 原子替换到 Dart 全局 bin 目录，并删除旧的
 launcher/payload 分离布局；编译或启动校验失败时恢复旧文件。日常命令仍然是
 `cockpit ...`，不再承担 path activation 下每次执行 `dart pub global run` 的依赖
-解析成本，之后可用 `cockpit update` 换回最新 hosted 版本。只有明确需要其他安装
-位置时才使用 `--output PATH`。
+解析成本，之后可用 `cockpit update` 安全换成最新 hosted 版本并重新编译回同一个
+快速单 executable 布局。只有明确需要其他安装位置时才使用 `--output PATH`。
 
 ## 发布门禁
 

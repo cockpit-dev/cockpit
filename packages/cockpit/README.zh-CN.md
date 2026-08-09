@@ -33,9 +33,10 @@ dart pub global activate cockpit any
 cockpit --help
 ```
 
-使用 `cockpit update` 安装并验证最新版本、删除 Cockpit 已废弃的源码安装 payload，
-并在保留授权模式和持久化状态的前提下替换旧 Supervisor。Dart Pub 的共享下载缓存
-仍由 Pub 自己管理，Cockpit 不会删除其他包的缓存。
+使用 `cockpit update` 安装并验证最新版本，把源码安装的原生 executable 安全交还给
+Pub，再恢复为单个优化后的 AOT executable，删除旧版与临时升级 payload，并在保留
+授权模式和持久化状态的前提下替换旧 Supervisor。Dart Pub 的共享下载缓存仍由 Pub
+自己管理，Cockpit 不会删除其他包的缓存。
 
 包发布四个 executable：
 

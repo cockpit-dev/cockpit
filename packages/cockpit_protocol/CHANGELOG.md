@@ -1,5 +1,10 @@
 # Changelog
 
+## 3.0.7
+
+- Synchronized the protocol package with the Cockpit 3.0.7 updater repair;
+  public protocol contracts are unchanged.
+
 ## 3.0.6
 
 - Synchronized the protocol package with the Cockpit 3.0.6 runtime identity
