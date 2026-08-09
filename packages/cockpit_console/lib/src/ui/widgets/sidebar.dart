@@ -103,7 +103,12 @@ final class Sidebar extends HookConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _Header(collapsed: collapsed, drawer: drawer, onClose: onClose),
+          _Header(
+            collapsed: collapsed,
+            drawer: drawer,
+            onClose: onClose,
+            onToggleCollapsed: onToggleCollapsed,
+          ),
           const ConsoleShellDivider(),
           Expanded(
             child: ListView(
@@ -113,6 +118,7 @@ final class Sidebar extends HookConsumerWidget {
                   _NavItem(
                     destination: dest,
                     collapsed: collapsed,
+                    drawer: drawer,
                     onSelected: onDestinationSelected,
                   ),
               ],
@@ -151,7 +157,6 @@ final class Sidebar extends HookConsumerWidget {
                         ),
                       ),
                       themeToggle,
-                      ?toggleCollapsed,
                     ],
                   ),
           ),
@@ -166,11 +171,13 @@ final class _Header extends StatelessWidget {
     required this.collapsed,
     required this.drawer,
     required this.onClose,
+    required this.onToggleCollapsed,
   });
 
   final bool collapsed;
   final bool drawer;
   final VoidCallback? onClose;
+  final VoidCallback? onToggleCollapsed;
 
   @override
   Widget build(BuildContext context) {
@@ -223,6 +230,12 @@ final class _Header extends StatelessWidget {
               icon: const Icon(LucideIcons.x, size: 16),
               tooltip: 'Close navigation',
             ),
+          if (!drawer && onToggleCollapsed != null)
+            IconButton(
+              onPressed: onToggleCollapsed,
+              icon: const Icon(LucideIcons.panelLeftClose, size: 16),
+              tooltip: 'Collapse navigation',
+            ),
         ],
       ),
     );
@@ -252,11 +265,13 @@ final class _NavItem extends HookConsumerWidget {
   const _NavItem({
     required this.destination,
     required this.collapsed,
+    required this.drawer,
     this.onSelected,
   });
 
   final ConsoleNavDestination destination;
   final bool collapsed;
+  final bool drawer;
   final VoidCallback? onSelected;
 
   @override
@@ -274,6 +289,14 @@ final class _NavItem extends HookConsumerWidget {
     final fg = selected
         ? theme.colorScheme.onSurface
         : theme.colorScheme.onSurfaceVariant;
+    final itemHeight = drawer
+        ? ConsoleShellLayoutStyle.drawerNavigationItemHeight
+        : collapsed
+        ? ConsoleShellLayoutStyle.navigationRailItemHeight
+        : ConsoleShellLayoutStyle.navigationItemHeight;
+    final iconSize = collapsed
+        ? ConsoleShellLayoutStyle.navigationRailIconSize
+        : ConsoleShellLayoutStyle.navigationIconSize;
     void navigate() {
       ref.read(navProvider.notifier).go(destination);
       onSelected?.call();
@@ -290,7 +313,7 @@ final class _NavItem extends HookConsumerWidget {
         onTap: navigate,
         customBorder: ConsoleShapes.border(radius: ConsoleShapes.smallRadius),
         child: Container(
-          height: 30,
+          height: itemHeight,
           margin: const EdgeInsets.only(bottom: 1),
           padding: EdgeInsets.symmetric(horizontal: collapsed ? 0 : 8),
           decoration: ConsoleShapes.decoration(
@@ -302,7 +325,7 @@ final class _NavItem extends HookConsumerWidget {
                 ? MainAxisAlignment.center
                 : MainAxisAlignment.start,
             children: [
-              Icon(destination.icon, size: 16, color: fg),
+              Icon(destination.icon, size: iconSize, color: fg),
               if (!collapsed) ...[
                 const SizedBox(width: 8),
                 Expanded(
