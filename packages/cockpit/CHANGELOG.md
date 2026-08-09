@@ -1,5 +1,12 @@
 # Changelog
 
+## 3.0.9
+
+- Fixed development-session recovery after a Supervisor restart. Lazy Flutter
+  attach now waits for `app.started`, persisted VM-service WebSocket URLs are
+  normalized to Flutter's HTTP attach base, and rejected `app.restart`
+  responses no longer advance generation or mark a reachable app as crashed.
+
 ## 3.0.8
 
 - Prevented `cockpit update` from accepting a stale Pub version index that

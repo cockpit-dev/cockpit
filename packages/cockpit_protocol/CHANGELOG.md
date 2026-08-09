@@ -1,5 +1,10 @@
 # Changelog
 
+## 3.0.9
+
+- Synchronized the protocol package with Cockpit's Supervisor-restart recovery;
+  public protocol contracts are unchanged.
+
 ## 3.0.8
 
 - Synchronized the protocol package with Cockpit's downgrade-safe updater;
