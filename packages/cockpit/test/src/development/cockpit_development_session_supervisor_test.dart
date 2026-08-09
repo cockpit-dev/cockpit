@@ -383,6 +383,55 @@ void main() {
     );
   });
 
+  test('rejected hot reload keeps a healthy session ready', () async {
+    final harness = _MachineHarness();
+    addTearDown(harness.dispose);
+
+    final supervisor = CockpitDevelopmentSessionSupervisor(
+      initialHandle: harness.handle,
+      machineClient: harness.client,
+      remoteReachabilityProbe: (_) async => true,
+      settlePollInterval: const Duration(milliseconds: 10),
+    );
+    addTearDown(supervisor.dispose);
+
+    await supervisor.start();
+    harness.stdoutController.add(
+      '[{"event":"app.start","params":{"appId":"app-1"}}]',
+    );
+    harness.stdoutController.add('[{"event":"app.started","params":{}}]');
+    await supervisor.bindRemoteSession(harness.handle.remoteSessionHandle!);
+    await supervisor.waitForState(CockpitDevelopmentSessionState.ready);
+
+    final generation = (await supervisor.currentStatus()).reloadGeneration;
+    final reloadFuture = supervisor.reload(
+      CockpitDevelopmentReloadMode.hotReload,
+    );
+    await Future<void>.delayed(Duration.zero);
+    harness.stdoutController.add(
+      '[{"id":0,"result":{"code":1,"message":"restart required"}}]',
+    );
+
+    await expectLater(
+      reloadFuture,
+      throwsA(
+        isA<CockpitFlutterRunMachineRequestException>().having(
+          (error) => error.message,
+          'message',
+          contains('restart required'),
+        ),
+      ),
+    );
+    final status = await supervisor.currentStatus();
+    expect(status.state, CockpitDevelopmentSessionState.ready);
+    expect(status.appReachable, isTrue);
+    expect(status.remoteSessionReachable, isTrue);
+    expect(status.reloadGeneration, generation);
+    expect(status.lastReloadMode, CockpitDevelopmentReloadMode.hotReload);
+    expect(status.lastReloadSucceeded, isFalse);
+    expect(status.lastError, contains('restart required'));
+  });
+
   test('startup readiness does not depend on UI idle commands', () async {
     final harness = _MachineHarness();
     addTearDown(harness.dispose);

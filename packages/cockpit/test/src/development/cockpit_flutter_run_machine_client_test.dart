@@ -6,6 +6,21 @@ import 'package:cockpit/src/development/cockpit_flutter_run_machine_event.dart';
 import 'package:test/test.dart';
 
 void main() {
+  test('Flutter attach uses the VM Service HTTP base URI', () {
+    expect(
+      cockpitFlutterAttachDebugUri(
+        Uri.parse('ws://127.0.0.1:54133/jstqu_3j7wM=/ws'),
+      ).toString(),
+      'http://127.0.0.1:54133/jstqu_3j7wM=/',
+    );
+    expect(
+      cockpitFlutterAttachDebugUri(
+        Uri.parse('wss://example.test/runtime/ws'),
+      ).toString(),
+      'https://example.test/runtime/',
+    );
+  });
+
   test(
     'machine output lines map to typed events and capture VM service URI',
     () async {
@@ -34,6 +49,10 @@ void main() {
       final events = <CockpitFlutterRunMachineEvent>[];
       final subscription = client.events.listen(events.add);
       addTearDown(subscription.cancel);
+      var appStarted = false;
+      final appStartedFuture = client.waitForAppStarted().then((_) {
+        appStarted = true;
+      });
 
       stdoutController
         ..add('[{"event":"daemon.connected","params":{"pid":123}}]')
@@ -43,6 +62,10 @@ void main() {
         );
 
       await Future<void>.delayed(Duration.zero);
+      expect(appStarted, isFalse);
+      stdoutController.add('[{"event":"app.started","params":{}}]');
+      await appStartedFuture;
+      await Future<void>.delayed(Duration.zero);
 
       expect(
         events.map((event) => event.kind),
@@ -50,6 +73,7 @@ void main() {
           CockpitFlutterRunMachineEventKind.daemonConnected,
           CockpitFlutterRunMachineEventKind.appStart,
           CockpitFlutterRunMachineEventKind.appDebugPort,
+          CockpitFlutterRunMachineEventKind.appStarted,
         ]),
       );
       expect(client.currentAppId, 'app-1');
@@ -92,9 +116,25 @@ void main() {
     final successResult = await successFuture;
     expect(successResult, <String, Object?>{'code': 0, 'message': 'ok'});
 
+    final rejectedFuture = client.hotReload(appId: 'app-1');
+    await Future<void>.delayed(Duration.zero);
+    stdoutController.add(
+      '[{"id":1,"result":{"code":1,"message":"reload rejected"}}]',
+    );
+    await expectLater(
+      rejectedFuture,
+      throwsA(
+        isA<CockpitFlutterRunMachineRequestException>().having(
+          (error) => error.message,
+          'message',
+          allOf(contains('code 1'), contains('reload rejected')),
+        ),
+      ),
+    );
+
     final failureFuture = client.hotRestart(appId: 'app-1');
     await Future<void>.delayed(Duration.zero);
-    stdoutController.add('[{"id":1,"error":"hot restart failed"}]');
+    stdoutController.add('[{"id":2,"error":"hot restart failed"}]');
     await expectLater(
       failureFuture,
       throwsA(
