@@ -115,21 +115,21 @@ flowchart TB
   subgraph ControlPath["cockpit_protocol · 类型化控制平面"]
     direction LR
     Actors["AI Agent · 开发者 · CI"]
-    Surfaces["Skill · CLI · MCP · REST/SSE"]
-    Supervisor["Supervisor · 认证/策略/run"]
+    Surfaces["Skill · CLI · MCP · REST · SSE"]
+    Supervisor["Supervisor · 认证 · 策略 · run"]
     Actors --> Surfaces --> Supervisor
   end
 
-  subgraph RuntimePath["Workspace/engine 隔离"]
+  subgraph RuntimePath["Workspace · engine 隔离"]
     direction LR
     Workers["Workspace worker · A/B/…/N"]
     Router["每个 worker 的能力路由"]
 
     subgraph Planes["按实时能力选择执行平面"]
       direction LR
-      Flutter["Flutter · semantic/runtime"]
-      Native["移动黑盒 · ADB/WDA"]
-      Desktop["Web/桌面 · browser/window"]
+      Flutter["Flutter · semantic · runtime"]
+      Native["移动黑盒 · ADB · WDA"]
+      Desktop["Web · 桌面 · browser · window"]
     end
 
     Workers --> Router
