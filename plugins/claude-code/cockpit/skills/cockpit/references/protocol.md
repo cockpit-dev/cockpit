@@ -103,8 +103,8 @@ presenters remove repeated identities and share collection field headers.
 LON, JSON, YAML, and JSONL all honor `--verbosity minimal|standard|full`;
 verbosity changes information density, not operation accuracy. Select `full`
 only for the complete object. For a complete non-binary response, use
-`--verbosity full --format json --output <path>` so stdout is only the verified
-path.
+`--verbosity full --output <path>.lon` so stdout is only the verified path.
+Request JSON only for `jq`, a JSON-only consumer, or JSON wire inspection.
 
 `artifact read` requires `--output`; it verifies media type, byte size, and
 SHA-256 internally before committing the file, but stdout contains only the

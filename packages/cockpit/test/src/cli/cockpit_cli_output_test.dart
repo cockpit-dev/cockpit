@@ -25,7 +25,7 @@ void main() {
       expect(parser.usage, contains('lon by default'));
       expect(
         parser.usage,
-        contains('json/yaml/jsonl for structured pipelines'),
+        contains('json only for jq or a JSON-only consumer'),
       );
       expect(parser.usage, contains('--format'));
       expect(parser.usage, isNot(contains('--stdout-format')));

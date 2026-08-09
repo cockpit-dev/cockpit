@@ -34,6 +34,7 @@ Use the highest-level command that owns the task:
 
 | Need | Command |
 | --- | --- |
+| Update the installed CLI and running Supervisor | `cockpit update` |
 | Start, inspect, control, debug, resize, capture, or reload Flutter | `cockpit dev` |
 | Validate or run reusable Flutter/black-box tests | `cockpit case` / `cockpit suite` |
 | Read a durable run, event stream, report, or artifact | `cockpit run` / `cockpit artifact` |
@@ -128,11 +129,10 @@ Reads do not relaunch an intentionally stopped app. A timed-out request cancels 
 request, not the owned app; check `dev status` before retrying. Cockpit does not read a
 keychain or secret store. `--env` values are process-only and are not persisted.
 
-After `dart pub global activate cockpit any`, the next command that needs the
-Supervisor compares its running engine with the installed package. An older engine is
-drained and replaced automatically while preserving its authorization mode and durable
-state. Do not manually delete Cockpit home data, caches, sessions, or ports after an
-upgrade.
+Use `cockpit update` for normal upgrades. It installs and verifies the latest Pub
+release, removes Cockpit's retired source-install payload, and reconnects the
+Supervisor with the installed engine while preserving authorization and durable
+state. Do not manually delete Cockpit home data, Pub caches, sessions, or ports.
 
 ## Timeout Defaults
 
@@ -259,8 +259,9 @@ or `--uri` when the app generates heavy traffic.
 
 Minimal canonical LON is the default. For routine human or Agent reads, omit
 `--format`; never request JSON merely because it is structured. Use `--format json`
-only when piping to `jq`, passing output to a JSON-only consumer/API, or inspecting
-JSON-specific wire behavior. If no such consumer exists, keep LON. Omit
+only on a pipeline that uses `jq`, when the next consumer/API explicitly requires
+JSON, or when inspecting JSON-specific wire behavior. JSON without one of those
+consumers is a command-authoring error: remove `--format json` and keep LON. Omit
 `--verbosity minimal`, `--format lon`, the current session, inferred input, and
 default wait/screenshot settings. Every explicit option must change behavior.
 Formats are `lon|json|yaml|jsonl|path|none`; LON, JSON, and YAML are first-class

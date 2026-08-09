@@ -33,8 +33,9 @@ dart pub global activate cockpit any
 cockpit --help
 ```
 
-升级时重新执行同一条激活命令即可。下一条需要 Supervisor 的命令会自动替换仍在
-运行的旧版 engine，同时保留授权模式和持久化状态；无需手动重启 daemon 或删除缓存。
+使用 `cockpit update` 安装并验证最新版本、删除 Cockpit 已废弃的源码安装 payload，
+并在保留授权模式和持久化状态的前提下替换旧 Supervisor。Dart Pub 的共享下载缓存
+仍由 Pub 自己管理，Cockpit 不会删除其他包的缓存。
 
 包发布四个 executable：
 
@@ -97,7 +98,8 @@ cockpit workspace list
 默认输出是 minimal canonical LON，正常命令不写输出参数。
 `--verbosity standard|full` 只增加上下文，不改变操作准确性；
 `--format json|yaml|jsonl|path|none` 用于改变编码或输出方式。需要完整对象时使用
-`--verbosity full --format json --output <file>`。`--output` 只返回已验证路径；
+`--verbosity full --output <file>.lon`；仅在配合 `jq`、JSON-only 消费者或检查 JSON
+线协议时才请求 JSON。`--output` 只返回已验证路径；
 `artifact read` 强制写文件，二进制、Base64、hash 和对决策无意义的字节数都不会
 进入终端输出。
 

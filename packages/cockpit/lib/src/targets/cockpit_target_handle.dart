@@ -92,17 +92,28 @@ final class CockpitTargetHandle {
       target: app.target,
       connection: CockpitTargetConnection(baseUrl: app.baseUrl),
       launchedAt: app.launchedAt,
-      metadata: <String, Object?>{
-        'appId': app.appId,
-        'appMode': app.mode.jsonValue,
-        'supportsHotReload': app.supportsHotReload,
-        if (app.platformAppId != null) 'platformAppId': app.platformAppId,
-        if (app.processId != null) 'processId': app.processId,
-        if (app.remoteSession != null)
-          'remoteSession': app.remoteSession!.toJson(),
-        if (app.supervisorLogPath != null)
-          'supervisorLogPath': app.supervisorLogPath,
-      },
+      metadata: _targetMetadataForApp(app),
+    );
+  }
+
+  /// Rebinds this registered target to the current handle for the same app.
+  ///
+  /// Flutter attach and hot-restart can replace the runtime app identity while
+  /// the public workspace target remains stable. Capability information and
+  /// target kind belong to that stable target; connection and runtime metadata
+  /// must follow the refreshed app handle atomically.
+  CockpitTargetHandle withAppHandle(CockpitAppHandle app) {
+    return CockpitTargetHandle(
+      targetId: app.appId,
+      targetKind: targetKind,
+      platform: app.platform,
+      deviceId: app.deviceId,
+      projectDir: app.projectDir,
+      target: app.target,
+      connection: CockpitTargetConnection(baseUrl: app.baseUrl),
+      launchedAt: app.launchedAt,
+      capabilityProfile: capabilityProfile,
+      metadata: _targetMetadataForApp(app, base: metadata),
     );
   }
 
@@ -176,4 +187,35 @@ final class CockpitTargetHandle {
     capabilityProfile,
     _metadataEquality.hash(metadata),
   );
+}
+
+Map<String, Object?> _targetMetadataForApp(
+  CockpitAppHandle app, {
+  Map<String, Object?> base = const <String, Object?>{},
+}) {
+  final metadata = Map<String, Object?>.of(base)
+    ..['appId'] = app.appId
+    ..['appMode'] = app.mode.jsonValue
+    ..['supportsHotReload'] = app.supportsHotReload;
+  _writeOptionalMetadata(metadata, 'platformAppId', app.platformAppId);
+  _writeOptionalMetadata(metadata, 'processId', app.processId);
+  _writeOptionalMetadata(
+    metadata,
+    'remoteSession',
+    app.remoteSession?.toJson(),
+  );
+  _writeOptionalMetadata(metadata, 'supervisorLogPath', app.supervisorLogPath);
+  return metadata;
+}
+
+void _writeOptionalMetadata(
+  Map<String, Object?> metadata,
+  String key,
+  Object? value,
+) {
+  if (value == null) {
+    metadata.remove(key);
+  } else {
+    metadata[key] = value;
+  }
 }

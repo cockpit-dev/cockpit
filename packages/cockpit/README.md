@@ -34,10 +34,10 @@ dart pub global activate cockpit any
 cockpit --help
 ```
 
-Re-run the activation command to upgrade. The next command that needs the
-Supervisor replaces an older running engine with the installed version while
-preserving its authorization mode and durable state; no manual daemon restart
-or cache cleanup is required.
+Run `cockpit update` to install and verify the latest release, remove Cockpit's
+retired source payload, and replace an older running Supervisor while preserving
+its authorization mode and durable state. Dart Pub continues to own its shared
+download cache; Cockpit never deletes unrelated cached packages.
 
 The package publishes four executables:
 
@@ -103,7 +103,8 @@ cockpit workspace list
 The default is minimal canonical LON, so normal commands omit output options.
 `--verbosity standard|full` adds context without changing operation accuracy;
 `--format json|yaml|jsonl|path|none` changes encoding or delivery. Use
-`--verbosity full --format json --output <file>` for the complete object.
+`--verbosity full --output <file>.lon` for the complete object. Request JSON
+only for `jq`, a JSON-only consumer, or JSON wire inspection.
 `--output` prints only the verified path. `artifact read` requires `--output`;
 binary data, Base64, hashes, and decision-irrelevant byte counts never enter
 terminal output.

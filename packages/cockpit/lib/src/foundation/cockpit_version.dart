@@ -1,1 +1,1 @@
-const String cockpitVersion = '3.0.5';
+const String cockpitVersion = '3.0.6';

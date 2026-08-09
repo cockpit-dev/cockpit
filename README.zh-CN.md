@@ -53,8 +53,15 @@ dart pub global activate cockpit any
 cockpit --help
 ```
 
-升级时重新执行同一条激活命令即可。下一条需要 Supervisor 的命令会自动替换仍在
-运行的旧版 engine，同时保留授权模式和持久化状态；无需手动重启 daemon 或删除缓存。
+使用一条命令升级已安装的运行时：
+
+```bash
+cockpit update
+```
+
+它会安装并验证最新版本、删除 Cockpit 已废弃的源码安装 payload，并在保留授权模式
+和持久化状态的前提下替换旧 Supervisor。Dart Pub 的共享下载缓存仍由 Pub 自己管理，
+Cockpit 不会删除其他包的缓存。
 
 Flutter 源码开发额外使用仅限开发环境的 bridge：
 
@@ -158,7 +165,8 @@ cockpit workspace list
 默认输出是 minimal canonical LON，正常命令不写默认输出参数。
 `--verbosity standard|full` 只增加上下文，不改变操作准确性；
 `--format json|yaml|jsonl|path|none` 用于改变编码或输出方式。需要完整响应时使用
-`--verbosity full --format json --output <file>`。写入输出或 artifact 时，终端只
+`--verbosity full --output <file>.lon`；仅在配合 `jq`、JSON-only 消费者或检查 JSON
+线协议时才请求 JSON。写入输出或 artifact 时，终端只
 返回已验证路径；文件内容、Base64、hash 和对决策无意义的字节数都不会进入输出。
 
 ## 生产授权
@@ -399,10 +407,11 @@ cockpitd \
 dart run tool/install_cockpit.dart
 ```
 
-它会原子替换 Pub cache 中用于开发的 `cockpit`，编译或启动校验失败时恢复旧文件。
-日常命令仍然是 `cockpit ...`，不再承担 path activation 下每次执行
-`dart pub global run` 的依赖解析成本。只有明确需要其他安装位置时才使用
-`--output PATH`。
+它会在所有平台把一个原生 executable 原子替换到 Dart 全局 bin 目录，并删除旧的
+launcher/payload 分离布局；编译或启动校验失败时恢复旧文件。日常命令仍然是
+`cockpit ...`，不再承担 path activation 下每次执行 `dart pub global run` 的依赖
+解析成本，之后可用 `cockpit update` 换回最新 hosted 版本。只有明确需要其他安装
+位置时才使用 `--output PATH`。
 
 ## 发布门禁
 

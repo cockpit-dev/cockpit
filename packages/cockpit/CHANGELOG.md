@@ -1,5 +1,18 @@
 # Changelog
 
+## 3.0.6
+
+- Added `cockpit update` to install and verify the latest hosted release,
+  reconcile the running Supervisor in place, and remove the retired split AOT
+  source-install payload without touching Dart Pub's shared package cache.
+- Kept registered target handles synchronized when Flutter attach, reload, or
+  suite isolation replaces the runtime application identity, including
+  self-healing persisted pre-upgrade state and preserving the Supervisor log
+  reference. `dev diagnose` no longer fails after an otherwise healthy
+  Supervisor reconnect.
+- Made routine LON output explicit across the AI Skill and public guidance;
+  JSON is now reserved for `jq`, JSON-only consumers, and wire inspection.
+
 ## 3.0.5
 
 - Reported impossible macOS viewport requests immediately as unavailable with

@@ -104,8 +104,7 @@ artifact is needed:
 ```bash
 cockpit artifact list \
   --run-id <runId> \
-  --format json \
-  --output /absolute/bundle/artifacts.json
+  --output /absolute/bundle/artifacts.lon
 cockpit artifact read \
   --run-id <runId> \
   --artifact-id <artifactId> \
