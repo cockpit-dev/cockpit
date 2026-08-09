@@ -7,6 +7,11 @@ abstract final class ConsoleShellLayoutStyle {
   static const double sidebarWidth = 200;
   static const double sidebarRailWidth = 56;
   static const double drawerWidth = 240;
+  static const double navigationItemHeight = 34;
+  static const double navigationRailItemHeight = 30;
+  static const double drawerNavigationItemHeight = 40;
+  static const double navigationIconSize = 18;
+  static const double navigationRailIconSize = 16;
 }
 
 /// Shared geometry for the primary app-shell header on both sides of the
