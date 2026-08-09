@@ -1,5 +1,10 @@
 # Changelog
 
+## 3.0.9
+
+- Synchronized the Flutter bridge with Cockpit's Supervisor-restart recovery;
+  bridge behavior is unchanged.
+
 ## 3.0.8
 
 - Synchronized the Flutter bridge with Cockpit's downgrade-safe updater;
