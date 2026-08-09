@@ -108,58 +108,65 @@ workspace/engine 启动独立 worker。系统不存在跨项目的全局 latest 
 latest session。
 
 ```mermaid
+%%{init: {"theme": "base", "themeVariables": {"darkMode": true, "background": "#08090A", "fontFamily": "system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif", "fontSize": "15px", "primaryColor": "#181A1F", "primaryTextColor": "#EDEDEF", "primaryBorderColor": "#5B8DEF", "lineColor": "#7D8190", "secondaryColor": "#121317", "tertiaryColor": "#0D0F13", "clusterBkg": "#0D0F13", "clusterBorder": "#30323A", "edgeLabelBackground": "#121317"}, "flowchart": {"curve": "basis", "nodeSpacing": 30, "rankSpacing": 38, "padding": 14}}}%%
 flowchart TB
-  subgraph Clients["AI、开发者与 CI"]
-    Agent["AI Agent<br/>Cockpit Skill"]
-    CLI["cockpit CLI"]
-    MCP["MCP 客户端"]
-    API["REST / SSE 客户端"]
+  subgraph Architecture[" "]
+    direction TB
+  subgraph ControlPath["类型化控制平面"]
+    direction LR
+    Actors["AI Agent + Skill<br/>开发者 · CI"]
+    Surfaces["CLI · MCP · REST / SSE"]
+    Contract["cockpit_protocol<br/>DTO · Schema · OpenAPI · 测试 DSL"]
+    Supervisor["Supervisor<br/>认证 · 策略 · 身份<br/>lease · 端口 · run · artifact"]
+    Actors --> Surfaces --> Contract --> Supervisor
   end
 
-  Contract["cockpit_protocol<br/>DTO · JSON Schema · OpenAPI · 测试 DSL"]
+  subgraph RuntimePath["隔离的 workspace 执行层"]
+    direction LR
+    Workers["Workspace worker<br/>A · B · … · N<br/>每个 workspace 独立 engine worker"]
+    Router["实时能力路由<br/>位于每个 worker 内"]
 
-  subgraph Control["每用户独立控制平面"]
-    Supervisor["Supervisor<br/>认证 · 策略 · workspace 身份<br/>lease · 端口 · run · artifact"]
+    subgraph Planes["执行平面"]
+      direction LR
+      Flutter["Flutter 应用<br/>semantic UI · route · log · error · network"]
+      Native["已安装移动应用<br/>ADB · WDA · accessibility · 系统 UI"]
+      Desktop["Web 与桌面应用<br/>browser · window · capture"]
+    end
+
+    Workers --> Router
+    Router --> Flutter
+    Router --> Native
+    Router --> Desktop
   end
 
-  subgraph Isolation["workspace 与 engine 隔离"]
-    WorkerA["Workspace A worker"]
-    WorkerB["Workspace B worker"]
-    WorkerN["Workspace N worker"]
+  Evidence["状态 · 事件 · 报告 · artifact<br/>持久化到所属 workspace"]
+
+  Supervisor -->|准入 · 调度| Workers
+  Flutter -.->|观察 · 采集| Evidence
+  Native -.-> Evidence
+  Desktop -.-> Evidence
   end
 
-  subgraph Execution["按实时能力选择执行平面"]
-    Router["实时能力路由<br/>位于每个 workspace worker 内"]
-    Flutter["flutter_cockpit bridge<br/>semantic UI · route · log · error · network"]
-    Native["原生 / 黑盒适配器<br/>ADB · WDA · accessibility · host control"]
-    Web["Web / 桌面适配器<br/>browser · window · capture"]
-  end
+  classDef actor fill:#181A1F,stroke:#7D8190,color:#EDEDEF,stroke-width:1.5px
+  classDef surface fill:#181A1F,stroke:#5B8DEF,color:#EDEDEF,stroke-width:1.5px
+  classDef contract fill:#345CBA,stroke:#7BA1F2,color:#FFFFFF,stroke-width:2px
+  classDef control fill:#121317,stroke:#5B8DEF,color:#EDEDEF,stroke-width:2px
+  classDef worker fill:#181A1F,stroke:#4A7DD8,color:#EDEDEF,stroke-width:1.5px
+  classDef plane fill:#151922,stroke:#5B8DEF,color:#EDEDEF,stroke-width:1.5px
+  classDef evidence fill:#102A22,stroke:#4CB782,color:#EDEDEF,stroke-width:2px
 
-  Targets["运行中的应用<br/>Flutter 源码 · 已安装移动/桌面应用 · Web"]
+  class Actors actor
+  class Surfaces surface
+  class Contract contract
+  class Supervisor,Router control
+  class Workers worker
+  class Flutter,Native,Desktop plane
+  class Evidence evidence
 
-  Agent --> CLI
-  Agent --> MCP
-  CLI -->|认证 operation| Supervisor
-  MCP -->|认证 operation| Supervisor
-  API -->|REST 命令 · SSE 事件| Supervisor
-  Contract -.->|统一类型契约| CLI
-  Contract -.-> MCP
-  Contract -.-> API
-  Contract -.-> Supervisor
-  Supervisor -->|准入与调度| WorkerA
-  Supervisor --> WorkerB
-  Supervisor --> WorkerN
-  WorkerA --> Router
-  WorkerB --> Router
-  WorkerN --> Router
-  Router --> Flutter
-  Router --> Native
-  Router --> Web
-  Flutter --> Targets
-  Native --> Targets
-  Web --> Targets
-  Targets -.->|状态与证据| Router
-  Router -.->|持久事件 · 报告 · artifact| Supervisor
+  style Architecture fill:#08090A,stroke:#08090A,color:#EDEDEF
+  style ControlPath fill:#0D0F13,stroke:#30323A,color:#EDEDEF
+  style RuntimePath fill:#0D0F13,stroke:#30323A,color:#EDEDEF
+  style Planes fill:#111318,stroke:#30323A,color:#EDEDEF
 ```
 
 并行开发多个项目时，先分别注册，之后显式传 `workspaceId`，或者从唯一匹配的
