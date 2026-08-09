@@ -2739,7 +2739,11 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
         ),
       );
     }
-    if (_shouldUseFocusedTextInputAction(command.commandType, request)) {
+    final focusedTextInputAction = _focusedTextInputActionForKeyEvent(
+      command.commandType,
+      request,
+    );
+    if (focusedTextInputAction != null) {
       final focusedTextInput = _resolveActiveTextInput(
         requiredCommand: CockpitCommandType.sendTextInputAction,
       );
@@ -2748,7 +2752,7 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
           command.copyWith(
             commandType: CockpitCommandType.sendTextInputAction,
             parameters: <String, Object?>{
-              'inputAction': _focusedTextInputAction().name,
+              'inputAction': focusedTextInputAction.name,
             },
           ),
           stopwatch,
@@ -2783,38 +2787,54 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
     );
   }
 
-  bool _shouldUseFocusedTextInputAction(
+  CockpitTextInputAction? _focusedTextInputActionForKeyEvent(
     CockpitCommandType commandType,
     CockpitKeyEventRequest request,
   ) {
     if (commandType != CockpitCommandType.sendKeyEvent ||
         (request.logicalKey != LogicalKeyboardKey.enter &&
             request.logicalKey != LogicalKeyboardKey.numpadEnter)) {
-      return false;
+      return null;
     }
-    return cockpitBuildFocusSnapshot().isTextInputFocus;
+    if (!cockpitBuildFocusSnapshot().isTextInputFocus) {
+      return null;
+    }
+    final action = _focusedTextInputAction();
+    return action == CockpitTextInputAction.newline ? null : action;
   }
 
   CockpitTextInputAction _focusedTextInputAction() {
-    final focusContext = FocusManager.instance.primaryFocus?.context;
+    final primaryFocus = FocusManager.instance.primaryFocus;
+    final focusContext = primaryFocus?.context;
     if (focusContext is! Element) {
       return CockpitTextInputAction.done;
     }
 
     TextInputAction? action;
-    void visit(Element element) {
-      if (action != null || !element.mounted) {
-        return;
-      }
+    bool inspect(Element element) {
+      if (!element.mounted) return false;
       final widget = element.widget;
-      if (widget is EditableText) {
+      if (widget is EditableText &&
+          (identical(widget.focusNode, primaryFocus) ||
+              widget.focusNode.hasFocus)) {
         action = widget.textInputAction;
-        return;
+        return true;
       }
-      element.visitChildElements(visit);
+      return false;
     }
 
-    visit(focusContext);
+    inspect(focusContext);
+    if (action == null) {
+      focusContext.visitAncestorElements((ancestor) => !inspect(ancestor));
+    }
+    if (action == null) {
+      void visitDescendants(Element element) {
+        if (action != null || inspect(element)) return;
+        element.visitChildElements(visitDescendants);
+      }
+
+      focusContext.visitChildElements(visitDescendants);
+    }
     return switch (action) {
       TextInputAction.next => CockpitTextInputAction.next,
       TextInputAction.previous => CockpitTextInputAction.previous,

@@ -6422,8 +6422,10 @@ void main() {
   ) async {
     final registry = CockpitTargetRegistry(routeName: '/editor');
     final focusNode = FocusNode();
+    final nextFocusNode = FocusNode();
     final controller = TextEditingController();
     addTearDown(focusNode.dispose);
+    addTearDown(nextFocusNode.dispose);
     addTearDown(controller.dispose);
     String? submitted;
 
@@ -6433,12 +6435,17 @@ void main() {
           routeName: '/editor',
           registry: registry,
           child: Scaffold(
-            body: TextField(
-              key: const ValueKey<String>('submit-input'),
-              controller: controller,
-              focusNode: focusNode,
-              textInputAction: TextInputAction.done,
-              onSubmitted: (value) => submitted = value,
+            body: Column(
+              children: <Widget>[
+                TextField(
+                  key: const ValueKey<String>('submit-input'),
+                  controller: controller,
+                  focusNode: focusNode,
+                  textInputAction: TextInputAction.next,
+                  onSubmitted: (value) => submitted = value,
+                ),
+                TextField(focusNode: nextFocusNode),
+              ],
             ),
           ),
         ),
@@ -6480,6 +6487,69 @@ void main() {
     expect(submit.success, isTrue);
     expect(submit.commandType, CockpitCommandType.sendTextInputAction);
     expect(submitted, 'Cockpit submit');
+    expect(nextFocusNode.hasFocus, isTrue);
+  });
+
+  testWidgets('enter key reaches shortcuts around a multiline text input', (
+    tester,
+  ) async {
+    final registry = CockpitTargetRegistry(routeName: '/editor');
+    final focusNode = FocusNode();
+    addTearDown(focusNode.dispose);
+    var submitted = 0;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: CockpitSurface(
+          routeName: '/editor',
+          registry: registry,
+          child: Scaffold(
+            body: CallbackShortcuts(
+              bindings: <ShortcutActivator, VoidCallback>{
+                const SingleActivator(LogicalKeyboardKey.enter): () {
+                  submitted += 1;
+                },
+              },
+              child: TextField(
+                focusNode: focusNode,
+                keyboardType: TextInputType.multiline,
+                textInputAction: TextInputAction.newline,
+                minLines: 1,
+                maxLines: 5,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    focusNode.requestFocus();
+    await tester.pumpAndSettle();
+
+    final surfaceState = tester.state<CockpitSurfaceState>(
+      find.byType(CockpitSurface),
+    );
+    final executor = InAppCockpitCommandExecutor(
+      registry: registry,
+      snapshotProvider: surfaceState.snapshot,
+      postActionSettler: () async {
+        await tester.pump();
+        await tester.pump();
+      },
+      gestureHandler: surfaceState.performGesture,
+    );
+
+    final result = await executor.execute(
+      CockpitCommand(
+        commandId: 'cmd-press-enter-shortcut',
+        commandType: CockpitCommandType.sendKeyEvent,
+        parameters: const <String, Object?>{'logicalKey': 'Enter'},
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(result.success, isTrue);
+    expect(result.commandType, CockpitCommandType.sendKeyEvent);
+    expect(submitted, 1);
   });
 
   testWidgets('copy, erase, and paste operate on a live Flutter text field', (
