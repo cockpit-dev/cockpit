@@ -1,5 +1,13 @@
 # Changelog
 
+## 3.0.4
+
+- Preserved real Enter key delivery for focused multiline inputs so app-level
+  Flutter shortcuts run, while single-line fields still receive their declared
+  IME submit, search, navigation, or completion action.
+- Resolved the focused `EditableText` through its actual focus-node ancestry
+  instead of silently treating non-default input actions as `done`.
+
 ## 3.0.3
 
 - Synchronized the Flutter bridge patch release with Cockpit 3.0.3 and the

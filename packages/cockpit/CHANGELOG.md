@@ -1,5 +1,11 @@
 # Changelog
 
+## 3.0.4
+
+- Fixed `cockpit dev press enter` for multiline Flutter controls that bind
+  Enter through app-level shortcuts, without regressing normal IME submission
+  for single-line text fields.
+
 ## 3.0.3
 
 - Kept independent workspace operations available while a timed-out worker
