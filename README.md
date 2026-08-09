@@ -117,50 +117,54 @@ active workspace and engine version. No command relies on a global "latest"
 project or session.
 
 ```mermaid
-%%{init: {"flowchart": {"curve": "linear", "nodeSpacing": 32, "rankSpacing": 44, "padding": 14}}}%%
+%%{init: {"theme": "base", "themeVariables": {"darkMode": true, "background": "#0D1117", "fontFamily": "system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif", "fontSize": "15px", "primaryColor": "#161B22", "primaryTextColor": "#F0F6FC", "primaryBorderColor": "#3D444D", "lineColor": "#6E7681", "secondaryColor": "#111D2E", "tertiaryColor": "#0D1117", "clusterBkg": "#0D1117", "clusterBorder": "#30363D", "edgeLabelBackground": "#0D1117"}, "flowchart": {"curve": "linear", "nodeSpacing": 28, "rankSpacing": 46, "padding": 16}}}%%
 flowchart TB
-  subgraph ControlPath["cockpit_protocol · typed control plane"]
-    direction LR
-    Actors("AI agents · developers · CI")
-    Surfaces("Skill · CLI · MCP · API")
-    Supervisor("Supervisor · identity · auth · policy · leases · runs")
-    Actors --> Surfaces --> Supervisor
-  end
-
-  subgraph RuntimePath["Workspace engine isolation · capability execution"]
+  subgraph Architecture[" "]
     direction TB
-    Workers("Workspace workers · A/B/…/N")
-    Router("Capability router · per worker")
-    Flutter("Flutter · semantic · runtime")
-    Native("Mobile black box · ADB · WDA")
-    Desktop("Web · desktop · browser · window")
+    subgraph ControlPath["cockpit_protocol · typed control plane"]
+      direction LR
+      Actors["AI agents · developers · CI"]
+      Surfaces["Skill · CLI · MCP<br/>REST API"]
+      Supervisor["Supervisor<br/>identity · auth · policy · runs"]
+      Actors --> Surfaces --> Supervisor
+    end
 
-    Workers --> Router
-    Router --> Flutter
-    Router --> Native
-    Router --> Desktop
+    subgraph RuntimePath["Isolated workspace execution"]
+      direction LR
+      Workers["Workspace workers · A/B/…/N"]
+      Router["Capability router · per worker"]
+
+      subgraph Adapters["Execution adapters"]
+        direction LR
+        Flutter["Flutter · semantic · runtime"]
+        Native["Mobile black box · ADB · WDA"]
+        Desktop["Web · desktop · browser · window"]
+      end
+
+      Workers --> Router --> Adapters
+    end
+
+    Evidence["State · events · reports · artifacts"]
+
+    Supervisor --> Workers
+    Adapters -.-> Evidence
   end
 
-  Evidence("Observable state · events · reports · artifacts")
+  classDef node fill:#161B22,stroke:#3D444D,color:#F0F6FC,stroke-width:1.25px
+  classDef gateway fill:#111D2E,stroke:#5B8DEF,color:#F0F6FC,stroke-width:1.75px,font-weight:600
+  classDef core fill:#345CBA,stroke:#7BA1F2,color:#FFFFFF,stroke-width:2px,font-weight:700
+  classDef evidence fill:#102A22,stroke:#4CB782,color:#F0F6FC,stroke-width:1.75px,font-weight:600
 
-  Supervisor --> Workers
-  Flutter -.-> Evidence
-  Native -.-> Evidence
-  Desktop -.-> Evidence
-
-  classDef neutral fill:transparent,stroke:#8B949E,stroke-width:1.25px
-  classDef accent fill:#345CBA,stroke:#7BA1F2,color:#FFFFFF,stroke-width:1.75px,font-weight:700
-  classDef active fill:transparent,stroke:#5B8DEF,stroke-width:2px,font-weight:600
-  classDef evidence fill:transparent,stroke:#2DA44E,stroke-width:2px,font-weight:600
-
-  class Actors,Workers,Flutter,Native,Desktop neutral
-  class Surfaces,Router active
-  class Supervisor accent
+  class Actors,Workers,Flutter,Native,Desktop node
+  class Surfaces,Router gateway
+  class Supervisor core
   class Evidence evidence
 
-  style ControlPath fill:transparent,stroke:#8B949E,stroke-width:1px
-  style RuntimePath fill:transparent,stroke:#8B949E,stroke-width:1px
-  linkStyle default stroke:#8B949E,stroke-width:1.25px
+  style Architecture fill:#0D1117,stroke:#0D1117,color:#F0F6FC
+  style ControlPath fill:#010409,stroke:#30363D,color:#F0F6FC,stroke-width:1px
+  style RuntimePath fill:#010409,stroke:#30363D,color:#F0F6FC,stroke-width:1px
+  style Adapters fill:#0D1117,stroke:#21262D,color:#8B949E,stroke-width:1px
+  linkStyle default stroke:#6E7681,stroke-width:1.4px
 ```
 
 Register multiple projects once, then address them explicitly or run a command
