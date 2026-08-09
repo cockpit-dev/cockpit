@@ -108,27 +108,23 @@ workspace/engine 启动独立 worker。系统不存在跨项目的全局 latest 
 latest session。
 
 ```mermaid
-%%{init: {"flowchart": {"curve": "linear", "nodeSpacing": 30, "rankSpacing": 42, "padding": 12}}}%%
+%%{init: {"flowchart": {"curve": "linear", "nodeSpacing": 32, "rankSpacing": 44, "padding": 14}}}%%
 flowchart TB
   subgraph ControlPath["cockpit_protocol · 类型化控制平面"]
     direction LR
-    Actors["AI Agent · 开发者 · CI"]
-    Surfaces["Skill · CLI · MCP · API"]
-    Supervisor["Supervisor · 认证 · 策略 · run"]
+    Actors("AI Agent · 开发者 · CI")
+    Surfaces("Skill · CLI · MCP · API")
+    Supervisor("Supervisor · 身份 · 认证 · 策略 · lease · run")
     Actors --> Surfaces --> Supervisor
   end
 
-  subgraph RuntimePath["Workspace · engine 隔离"]
-    direction LR
-    Workers["Workspace worker · A/B/…/N"]
-    Router["每个 worker 的能力路由"]
-
-    subgraph Planes["按实时能力选择执行平面"]
-      direction LR
-      Flutter["Flutter · semantic · runtime"]
-      Native["移动黑盒 · ADB · WDA"]
-      Desktop["Web · 桌面 · browser · window"]
-    end
+  subgraph RuntimePath["Workspace engine 隔离 · 按能力执行"]
+    direction TB
+    Workers("Workspace worker · A/B/…/N")
+    Router("每个 worker 的能力路由")
+    Flutter("Flutter · semantic · runtime")
+    Native("移动黑盒 · ADB · WDA")
+    Desktop("Web · 桌面 · browser · window")
 
     Workers --> Router
     Router --> Flutter
@@ -136,28 +132,26 @@ flowchart TB
     Router --> Desktop
   end
 
-  Evidence["状态 · 事件 · 报告 · artifact"]
+  Evidence("可观测状态 · 事件 · 报告 · artifact")
 
-  Supervisor -->|身份 · lease · 端口| Workers
-  Flutter -.->|观察 · 采集| Evidence
+  Supervisor --> Workers
+  Flutter -.-> Evidence
   Native -.-> Evidence
   Desktop -.-> Evidence
 
-  classDef actor stroke:#8B949E,stroke-width:1.5px
-  classDef surface stroke:#5B8DEF,stroke-width:1.5px
-  classDef primary stroke:#2F81F7,stroke-width:3px,font-weight:700
-  classDef control stroke:#5B8DEF,stroke-width:2px,font-weight:600
-  classDef worker stroke:#5B8DEF,stroke-width:1.5px
-  classDef plane stroke:#8B949E,stroke-width:1.5px
-  classDef evidence stroke:#2DA44E,stroke-width:2.5px,font-weight:600
+  classDef neutral fill:transparent,stroke:#8B949E,stroke-width:1.25px
+  classDef accent fill:#345CBA,stroke:#7BA1F2,color:#FFFFFF,stroke-width:1.75px,font-weight:700
+  classDef active fill:transparent,stroke:#5B8DEF,stroke-width:2px,font-weight:600
+  classDef evidence fill:transparent,stroke:#2DA44E,stroke-width:2px,font-weight:600
 
-  class Actors actor
-  class Surfaces surface
-  class Supervisor primary
-  class Router control
-  class Workers worker
-  class Flutter,Native,Desktop plane
+  class Actors,Workers,Flutter,Native,Desktop neutral
+  class Surfaces,Router active
+  class Supervisor accent
   class Evidence evidence
+
+  style ControlPath fill:transparent,stroke:#8B949E,stroke-width:1px
+  style RuntimePath fill:transparent,stroke:#8B949E,stroke-width:1px
+  linkStyle default stroke:#8B949E,stroke-width:1.25px
 ```
 
 并行开发多个项目时，先分别注册，之后显式传 `workspaceId`，或者从唯一匹配的
