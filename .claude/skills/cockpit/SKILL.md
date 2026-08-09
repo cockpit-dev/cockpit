@@ -128,6 +128,12 @@ Reads do not relaunch an intentionally stopped app. A timed-out request cancels 
 request, not the owned app; check `dev status` before retrying. Cockpit does not read a
 keychain or secret store. `--env` values are process-only and are not persisted.
 
+After `dart pub global activate cockpit any`, the next command that needs the
+Supervisor compares its running engine with the installed package. An older engine is
+drained and replaced automatically while preserving its authorization mode and durable
+state. Do not manually delete Cockpit home data, caches, sessions, or ports after an
+upgrade.
+
 ## Timeout Defaults
 
 Every executable command has `--timeout VALUE`; values accept `ms`, `s`, `m`, or `h`.
@@ -251,16 +257,21 @@ or `--uri` when the app generates heavy traffic.
 
 ## Output And Input
 
-Minimal canonical LON is the default. Omit `--verbosity minimal`, `--format lon`,
-the current session, inferred input, and default wait/screenshot settings.
-Every explicit option must change behavior. Formats are `lon|json|yaml|jsonl|path|none`;
-LON, JSON, and YAML are first-class equal projections. `path` prints one verified
-artifact/output path, `none` is silent, and `--output` writes an atomic projection
-whose stdout is only its verified path.
+Minimal canonical LON is the default. For routine human or Agent reads, omit
+`--format`; never request JSON merely because it is structured. Use `--format json`
+only when piping to `jq`, passing output to a JSON-only consumer/API, or inspecting
+JSON-specific wire behavior. If no such consumer exists, keep LON. Omit
+`--verbosity minimal`, `--format lon`, the current session, inferred input, and
+default wait/screenshot settings. Every explicit option must change behavior.
+Formats are `lon|json|yaml|jsonl|path|none`; LON, JSON, and YAML are first-class
+equal projections, not equal defaults. `path` prints one verified artifact/output
+path, `none` is silent, and `--output` writes an atomic projection whose stdout is
+only its verified path.
 
 ```bash
 cockpit dev diagnose --verbosity standard
-cockpit dev diagnose --verbosity full --format json --output /absolute/diagnose.json
+cockpit dev diagnose --verbosity full --output /absolute/diagnose.lon
+cockpit dev status --format json | jq '.state.lifecycle'
 cockpit op run viewport.set --input '{width:800 height:600}'
 ```
 

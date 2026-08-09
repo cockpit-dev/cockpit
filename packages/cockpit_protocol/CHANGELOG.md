@@ -1,5 +1,10 @@
 # Changelog
 
+## 3.0.5
+
+- Synchronized the protocol package with the Cockpit 3.0.5 patch release so
+  the CLI, Flutter bridge, and public client contracts retain one version.
+
 ## 3.0.4
 
 - Synchronized the protocol package with the Cockpit 3.0.4 patch release so

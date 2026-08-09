@@ -33,6 +33,9 @@ dart pub global activate cockpit any
 cockpit --help
 ```
 
+升级时重新执行同一条激活命令即可。下一条需要 Supervisor 的命令会自动替换仍在
+运行的旧版 engine，同时保留授权模式和持久化状态；无需手动重启 daemon 或删除缓存。
+
 包发布四个 executable：
 
 - `cockpit`：交互式资源命令

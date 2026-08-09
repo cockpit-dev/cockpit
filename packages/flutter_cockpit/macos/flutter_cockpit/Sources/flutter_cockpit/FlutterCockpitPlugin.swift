@@ -144,9 +144,27 @@ public final class FlutterCockpitPlugin: NSObject, FlutterPlugin {
         )
         return
       }
-      window.setContentSize(
-        NSSize(width: width.doubleValue, height: height.doubleValue)
+      let requestedContentSize = NSSize(
+        width: width.doubleValue,
+        height: height.doubleValue
       )
+      if let visibleFrame = window.screen?.visibleFrame {
+        let maximumContentSize = window.contentRect(forFrameRect: visibleFrame).size
+        if requestedContentSize.width > maximumContentSize.width + 0.5 ||
+          requestedContentSize.height > maximumContentSize.height + 0.5
+        {
+          result([
+            "accepted": false,
+            "reason": "viewportExceedsScreen",
+            "alternatives": [
+              "useViewportAtMost:\(Int(maximumContentSize.width))x\(Int(maximumContentSize.height))",
+              "moveWindowToLargerDisplay",
+            ],
+          ])
+          return
+        }
+      }
+      window.setContentSize(requestedContentSize)
       window.displayIfNeeded()
       result(["accepted": true])
     }

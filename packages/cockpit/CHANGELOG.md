@@ -1,5 +1,16 @@
 # Changelog
 
+## 3.0.5
+
+- Reported impossible macOS viewport requests immediately as unavailable with
+  the active display's exact logical content limit and recovery alternatives,
+  avoiding a misleading settle timeout while preserving exact valid resizes.
+- Versioned Supervisor and worker engines with the installed Cockpit package;
+  the first managed command after an upgrade now drains and replaces an older
+  running engine automatically while preserving authorization and durable state.
+- Made the Agent Skill keep default LON output for routine work and reserve
+  JSON for `jq`, JSON-only consumers, or explicit wire-format inspection.
+
 ## 3.0.4
 
 - Fixed `cockpit dev press enter` for multiline Flutter controls that bind

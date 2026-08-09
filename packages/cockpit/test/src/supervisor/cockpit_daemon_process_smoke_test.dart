@@ -5,6 +5,7 @@ import 'dart:isolate';
 import 'package:cockpit/src/foundation/cockpit_home.dart';
 import 'package:cockpit/src/foundation/cockpit_locked_json_store.dart';
 import 'package:cockpit/src/foundation/cockpit_permissions.dart';
+import 'package:cockpit/src/foundation/cockpit_version.dart';
 import 'package:cockpit/src/supervisor/cockpit_daemon_client.dart';
 import 'package:cockpit/src/supervisor/cockpit_daemon_discovery.dart';
 import 'package:cockpit/src/supervisor/cockpit_daemon_host.dart';
@@ -223,6 +224,7 @@ Future<void> main(List<String> arguments) async {
       restartArguments: const <String>['unused'],
       permissionHardener: policy,
       directorySyncer: syncer,
+      requiredEngineVersion: 'test',
     );
 
     final stopwatch = Stopwatch()..start();
@@ -232,6 +234,120 @@ Future<void> main(List<String> arguments) async {
     expect(stopwatch.elapsed, lessThan(const Duration(seconds: 1)));
     expect(await File(paths.daemonDiscovery).exists(), isFalse);
   });
+
+  test(
+    'ensure replaces an older engine and preserves authorization',
+    () async {
+      final temporary = await Directory.systemTemp.createTemp(
+        'cockpitd-engine-upgrade-',
+      );
+      final paths = CockpitHomePaths(await temporary.resolveSymbolicLinks());
+      final policy = Platform.isWindows
+          ? const CockpitWindowsAclPermissionHardener()
+          : const CockpitPosixPermissionHardener();
+      final syncer = CockpitSystemDirectorySyncer(
+        Platform.isWindows
+            ? CockpitHostPlatform.windows
+            : Platform.isMacOS
+            ? CockpitHostPlatform.macos
+            : CockpitHostPlatform.linux,
+      );
+      final store = CockpitDaemonDiscoveryStore(
+        paths: paths,
+        permissionHardener: policy,
+        directorySyncer: syncer,
+      );
+      final oldServer = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      final startedAt = DateTime.now().toUtc();
+      final oldDiscovery = CockpitDaemonDiscovery(
+        instanceId: 'daemon-old-engine',
+        processId: pid,
+        processStartIdentity: await const CockpitSystemProcessIdentityProbe()
+            .current(),
+        endpoint: Uri(
+          scheme: 'http',
+          host: InternetAddress.loopbackIPv4.address,
+          port: oldServer.port,
+        ),
+        bearerToken: List<String>.filled(32, 'o').join(),
+        apiMajor: 2,
+        apiMinor: 0,
+        engineVersion: '3.0.4',
+        startedAt: startedAt,
+        authorizationMode: CockpitAuthorizationMode.yolo,
+      );
+      await store.write(oldDiscovery);
+      var shutdownCount = 0;
+      oldServer.listen((request) async {
+        if (request.uri.path == '/_cockpit/health') {
+          request.response.headers.contentType = ContentType.json;
+          request.response.write(
+            jsonEncode(
+              CockpitServerInfo(
+                instanceId: oldDiscovery.instanceId,
+                apiVersion: CockpitApiVersion(major: 2, minor: 0),
+                engineVersion: oldDiscovery.engineVersion,
+                startedAt: startedAt,
+              ).toJson(),
+            ),
+          );
+          await request.response.close();
+          return;
+        }
+        if (request.uri.path == '/_cockpit/lifecycle') {
+          await request.drain<void>();
+          shutdownCount += 1;
+          request.response.statusCode = HttpStatus.accepted;
+          await request.response.close();
+          await store.deleteIfMatches(oldDiscovery);
+          await oldServer.close(force: true);
+          return;
+        }
+        request.response.statusCode = HttpStatus.notFound;
+        await request.response.close();
+      });
+
+      final packageLibrary = await Isolate.resolvePackageUri(
+        Uri.parse('package:cockpit/cockpit.dart'),
+      );
+      if (packageLibrary == null) throw StateError('Cannot resolve cockpit.');
+      final packageRoot = p.dirname(p.dirname(packageLibrary.toFilePath()));
+      final lifecycle = CockpitDaemonLifecycleClient(
+        paths: paths,
+        executable: Platform.resolvedExecutable,
+        daemonArguments: <String>[p.join(packageRoot, 'bin', 'cockpitd.dart')],
+        restartArguments: <String>[p.join(packageRoot, 'bin', 'cockpit.dart')],
+        permissionHardener: policy,
+        directorySyncer: syncer,
+        requiredEngineVersion: cockpitVersion,
+      );
+      addTearDown(() async {
+        try {
+          await lifecycle.stop(
+            mode: CockpitDaemonShutdownMode.emergency,
+            timeout: const Duration(seconds: 5),
+          );
+        } on Object {
+          // The assertion failure remains primary; the process timeout is bounded.
+        }
+        await oldServer.close(force: true);
+        if (await temporary.exists()) await temporary.delete(recursive: true);
+      });
+
+      expect((await lifecycle.status()).diagnostic, 'upgradeRequired');
+
+      final upgraded = await lifecycle.ensure(
+        timeout: const Duration(seconds: 20),
+      );
+
+      expect(shutdownCount, 1);
+      expect(upgraded.instanceId, isNot(oldDiscovery.instanceId));
+      expect(upgraded.engineVersion, cockpitVersion);
+      expect(upgraded.authorizationMode, CockpitAuthorizationMode.yolo);
+      expect((await lifecycle.status()).diagnostic, isNull);
+    },
+    timeout: const Timeout(Duration(seconds: 30)),
+  );
 
   test(
     'cockpitd discovery auth route and ensure process smoke',
@@ -276,6 +392,7 @@ Future<void> main(List<String> arguments) async {
               ? CockpitHostPlatform.macos
               : CockpitHostPlatform.linux,
         ),
+        requiredEngineVersion: cockpitVersion,
       );
       final ensured = await Future.wait(
         List<Future<CockpitDaemonDiscovery>>.generate(

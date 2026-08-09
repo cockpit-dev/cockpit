@@ -14,6 +14,18 @@ final class CockpitViewportAvailability {
   final List<String> alternatives;
 }
 
+final class CockpitNativeViewportResizeResult {
+  CockpitNativeViewportResizeResult({
+    required this.accepted,
+    this.reason,
+    List<String> alternatives = const <String>[],
+  }) : alternatives = List<String>.unmodifiable(alternatives);
+
+  final bool accepted;
+  final String? reason;
+  final List<String> alternatives;
+}
+
 final class CockpitNativeViewport {
   const CockpitNativeViewport({MethodChannel? channel})
     : _channel = channel ?? const MethodChannel(_channelName);
@@ -58,13 +70,24 @@ final class CockpitNativeViewport {
     }
   }
 
-  Future<void> resize({required int width, required int height}) async {
+  Future<CockpitNativeViewportResizeResult> resize({
+    required int width,
+    required int height,
+  }) async {
     final payload = await _channel.invokeMethod<Object?>(
       'resizeViewport',
       <String, Object?>{'width': width, 'height': height},
     );
-    if (payload is! Map<Object?, Object?> || payload['accepted'] != true) {
-      throw StateError('Native viewport resize was not accepted.');
+    if (payload is! Map<Object?, Object?> || payload['accepted'] is! bool) {
+      throw StateError('Native viewport resize returned an invalid payload.');
     }
+    return CockpitNativeViewportResizeResult(
+      accepted: payload['accepted'] as bool,
+      reason: payload['reason'] as String?,
+      alternatives:
+          (payload['alternatives'] as List<Object?>? ?? const <Object?>[])
+              .whereType<String>()
+              .toList(growable: false),
+    );
   }
 }

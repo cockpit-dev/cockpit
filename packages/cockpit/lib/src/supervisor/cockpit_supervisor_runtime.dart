@@ -14,6 +14,7 @@ import '../foundation/cockpit_ids.dart';
 import '../foundation/cockpit_locked_json_store.dart';
 import '../foundation/cockpit_permissions.dart';
 import '../foundation/cockpit_storage_key.dart';
+import '../foundation/cockpit_version.dart';
 import '../infrastructure/cockpit_process_manager.dart';
 import '../registry/cockpit_registry_models.dart';
 import '../registry/cockpit_workspace_registry.dart';
@@ -36,7 +37,7 @@ import 'cockpit_supervisor_operation_schema.dart';
 import 'cockpit_worker_pool.dart';
 import 'cockpit_worker_resource_authority.dart';
 
-const cockpitSupervisorEngineVersion = '2.0.0';
+const cockpitSupervisorEngineVersion = cockpitVersion;
 
 final class CockpitDevelopmentArtifactFile {
   const CockpitDevelopmentArtifactFile({

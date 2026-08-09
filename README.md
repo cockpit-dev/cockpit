@@ -57,6 +57,11 @@ dart pub global activate cockpit any
 cockpit --help
 ```
 
+Re-run the activation command to upgrade. The next command that needs the
+Supervisor replaces an older running engine with the installed version while
+preserving its authorization mode and durable state; no manual daemon restart
+or cache cleanup is required.
+
 Flutter source development additionally uses the development-only bridge:
 
 ```yaml

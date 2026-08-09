@@ -32,6 +32,11 @@ version in host configuration:
 dart pub global activate cockpit any
 ```
 
+Re-run the same command to upgrade. The next command that needs the Supervisor
+detects an older running engine, drains it, and starts the installed version
+while preserving its authorization mode and durable state. Do not manually
+delete the Cockpit home, caches, sessions, or ports after upgrading.
+
 Ensure Dart's global executable directory is on `PATH`, run `cockpit help`,
 and confirm the host can resolve `cockpit_mcp`. Do not invoke `cockpit_mcp`
 outside an MCP stdio handshake.
