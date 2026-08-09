@@ -588,21 +588,14 @@ void main() {
         expect(source, contains('shareDelete: false'));
         expect(
           source.indexOf('shareDelete: false'),
-          lessThan(source.indexOf("'powershell.exe'")),
+          lessThan(source.indexOf('CockpitNativeWindowsSecurityProvider')),
         );
         expect(
           source.indexOf('lease?.close()'),
-          greaterThan(source.indexOf("'powershell.exe'")),
+          greaterThan(source.indexOf('CockpitNativeWindowsSecurityProvider')),
         );
-        expect(cockpitWindowsDirectoryAuthorityPowerShell, contains('Get-Acl'));
-        expect(
-          cockpitWindowsDirectoryAuthorityPowerShell,
-          isNot(contains('Add-Type')),
-        );
-        expect(
-          cockpitWindowsDirectoryAuthorityPowerShell,
-          isNot(contains('CreateFileW')),
-        );
+        expect(source, isNot(contains('powershell.exe')));
+        expect(source, isNot(contains('Get-Acl')));
       },
     );
 
@@ -630,17 +623,29 @@ void main() {
 
   test('Windows ACL inspection fails closed on every mutation mask', () async {
     final sourceUri = await Isolate.resolvePackageUri(
-      Uri.parse(
-        'package:cockpit/src/foundation/cockpit_filesystem_identity.dart',
-      ),
+      Uri.parse('package:cockpit/src/foundation/cockpit_windows_security.dart'),
     );
     expect(sourceUri, isNotNull);
     final source = await File.fromUri(sourceUri!).readAsString();
-    expect(source, contains(r'$daclOffset -ne 0'));
+    expect(source, contains("'GetNamedSecurityInfoW'"));
+    expect(source, contains("'OpenProcessToken'"));
+    expect(source, contains("'GetTokenInformation'"));
+    expect(source, contains("'ConvertSidToStringSidW'"));
+    expect(source, contains("'GetAclInformation'"));
+    expect(source, contains("'GetAce'"));
+    expect(source, contains('dacl.value == nullptr'));
+    expect(source, contains('0x00000002'));
+    expect(source, contains('0x00000004'));
+    expect(source, contains('0x00000010'));
+    expect(source, contains('0x00000040'));
+    expect(source, contains('0x00000100'));
+    expect(source, contains('0x00010000'));
+    expect(source, contains('0x00040000'));
+    expect(source, contains('0x00080000'));
     expect(source, contains('0x40000000'));
     expect(source, contains('0x10000000'));
-    expect(source, isNot(contains('FileSystemRights]::Modify -bor')));
-    expect(source, isNot(contains('FileSystemRights]::FullControl -bor')));
+    expect(source, isNot(contains('powershell.exe')));
+    expect(source, isNot(contains('Get-Acl')));
   });
 }
 

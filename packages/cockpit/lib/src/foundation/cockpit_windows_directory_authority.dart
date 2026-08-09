@@ -1,8 +1,8 @@
 import 'dart:io';
 
-import '../infrastructure/cockpit_process_manager.dart';
 import 'cockpit_filesystem_identity.dart';
 import 'cockpit_windows_filesystem_identity.dart';
+import 'cockpit_windows_security.dart';
 
 abstract interface class CockpitWindowsDirectoryAuthorityProbe {
   Future<CockpitWindowsFileIdentityProbeResult> inspect(String canonicalPath);
@@ -23,24 +23,14 @@ final class CockpitSystemWindowsDirectoryAuthorityProbe
         shareDelete: false,
       );
       final identity = lease.read();
-      final result = await cockpitRunIsolatedProcess(
-        'powershell.exe',
-        <String>[
-          '-NoLogo',
-          '-NoProfile',
-          '-NonInteractive',
-          '-Command',
-          cockpitWindowsDirectoryAuthorityPowerShell,
-        ],
-        environment: <String, String>{
-          'COCKPIT_DIRECTORY_AUTHORITY_PATH': canonicalPath,
-        },
-      );
-      final security = result.stdout.toString().trim();
+      final security = await const CockpitNativeWindowsSecurityProvider()
+          .inspect(canonicalPath);
       return CockpitWindowsFileIdentityProbeResult(
-        exitCode: result.exitCode,
-        stdout: result.exitCode == 0 ? '$identity|$security' : '',
-        stderr: result.stderr.toString(),
+        exitCode: 0,
+        stdout:
+            '$identity|${security.ownerVerified}|${security.ownerTrusted}|'
+            '${security.unsafeWritable}',
+        stderr: '',
       );
     } on FileSystemException catch (error) {
       return CockpitWindowsFileIdentityProbeResult(
@@ -123,50 +113,3 @@ bool? _parseBoolean(String value) => switch (value.toLowerCase()) {
   'false' => false,
   _ => null,
 };
-
-const cockpitWindowsDirectoryAuthorityPowerShell = r'''
-$ErrorActionPreference = 'Stop'
-$path = $env:COCKPIT_DIRECTORY_AUTHORITY_PATH
-$acl = Get-Acl -LiteralPath $path
-$descriptor = $acl.GetSecurityDescriptorBinaryForm()
-$control = [System.BitConverter]::ToUInt16($descriptor, 2)
-$daclOffset = [System.BitConverter]::ToUInt32($descriptor, 16)
-$daclPresent = (($control -band 0x0004) -ne 0) -and ($daclOffset -ne 0)
-$current = [System.Security.Principal.WindowsIdentity]::GetCurrent().User
-$owner = $acl.GetOwner([System.Security.Principal.SecurityIdentifier])
-$allowedWriters = @(
-  $current.Value,
-  'S-1-5-18',
-  'S-1-5-32-544',
-  'S-1-5-80-956008885-3418522649-1831038044-1853292631-2271478464'
-)
-$writeRights =
-  [System.Security.AccessControl.FileSystemRights]::WriteData -bor
-  [System.Security.AccessControl.FileSystemRights]::AppendData -bor
-  [System.Security.AccessControl.FileSystemRights]::WriteExtendedAttributes -bor
-  [System.Security.AccessControl.FileSystemRights]::WriteAttributes -bor
-  [System.Security.AccessControl.FileSystemRights]::DeleteSubdirectoriesAndFiles -bor
-  [System.Security.AccessControl.FileSystemRights]::Delete -bor
-  [System.Security.AccessControl.FileSystemRights]::ChangePermissions -bor
-  [System.Security.AccessControl.FileSystemRights]::TakeOwnership -bor
-  0x40000000 -bor
-  0x10000000
-$unsafe = -not $daclPresent
-$rules = $acl.GetAccessRules(
-  $true,
-  $true,
-  [System.Security.Principal.SecurityIdentifier]
-)
-foreach ($rule in $rules) {
-  if ($rule.AccessControlType -ne [System.Security.AccessControl.AccessControlType]::Allow) {
-    continue
-  }
-  $sid = $rule.IdentityReference.Value
-  if ($allowedWriters -notcontains $sid -and (($rule.FileSystemRights -band $writeRights) -ne 0)) {
-    $unsafe = $true
-  }
-}
-[Console]::Out.WriteLine(
-  "$(($owner.Value -eq $current.Value).ToString())|$(($allowedWriters -contains $owner.Value).ToString())|$($unsafe.ToString())"
-)
-''';

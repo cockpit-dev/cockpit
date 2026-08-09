@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 
 import 'package:cockpit/src/foundation/cockpit_canonical_paths.dart';
 import 'package:cockpit/src/foundation/cockpit_filesystem_identity.dart';
@@ -8,7 +9,6 @@ import 'package:cockpit/src/foundation/cockpit_home.dart';
 import 'package:cockpit/src/foundation/cockpit_ids.dart';
 import 'package:cockpit/src/foundation/cockpit_locked_json_store.dart';
 import 'package:cockpit/src/foundation/cockpit_permissions.dart';
-import 'package:cockpit/src/foundation/cockpit_windows_directory_authority.dart';
 import 'package:cockpit/src/infrastructure/cockpit_clock.dart';
 import 'package:cockpit/src/registry/cockpit_allowed_root_registry.dart';
 import 'package:cockpit/src/registry/cockpit_directory_ancestor_policy.dart';
@@ -76,23 +76,20 @@ void main() {
   });
 
   group('directory authority races', () {
-    test('Windows ACL probes use SID-native access rules', () {
-      for (final script in <String>[
-        cockpitWindowsSecurityInspectionPowerShell,
-        cockpitWindowsDirectoryAuthorityPowerShell,
-      ]) {
-        expect(
-          script,
-          contains(r'GetOwner([System.Security.Principal.SecurityIdentifier])'),
-        );
-        expect(script, contains(r'GetAccessRules('));
-        expect(
-          script,
-          contains(r'[System.Security.Principal.SecurityIdentifier]'),
-        );
-        expect(script, contains(r'$rule.IdentityReference.Value'));
-        expect(script, isNot(contains('.Translate(')));
-      }
+    test('Windows ancestor ACL probes use native Win32 APIs', () async {
+      final sourceUri = await Isolate.resolvePackageUri(
+        Uri.parse(
+          'package:cockpit/src/registry/'
+          'cockpit_directory_ancestor_policy.dart',
+        ),
+      );
+      expect(sourceUri, isNotNull);
+      final source = await File.fromUri(sourceUri!).readAsString();
+      expect(source, contains('CockpitNativeWindowsSecurityProvider'));
+      expect(
+        source,
+        isNot(contains('CockpitPowerShellWindowsSecurityProvider')),
+      );
     });
 
     test('rejects identity changes during security inspection', () async {

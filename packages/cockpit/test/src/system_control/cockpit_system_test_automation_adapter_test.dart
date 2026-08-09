@@ -203,6 +203,61 @@ void main() {
     ]);
   });
 
+  test('macOS native tap presses the resolved accessibility element', () async {
+    final processes = _TransientUiTreeProcessManager(failFirst: false);
+    final controls = CockpitSystemControlService(processManager: processes);
+    String? pressedPath;
+    int? pressedProcessId;
+    final adapter = CockpitSystemTestAutomationAdapter(
+      target: CockpitSystemTestTarget(
+        platform: 'macos',
+        deviceId: 'macos',
+        appId: 'dev.cockpit.demo',
+        processId: 4242,
+        targetKind: CockpitTargetKind.flutterApp,
+      ),
+      controlService: controls,
+      actionService: CockpitSystemControlActionService(
+        processManager: processes,
+        systemControlService: controls,
+        macosAccessibilityTreeReader:
+            ({
+              required processId,
+              required maxDepth,
+              required maxNodes,
+              required timeout,
+            }) async => _macosBackTree,
+      ),
+      macosAccessibilityElementPresser:
+          ({required processId, required nativePath, required timeout}) async {
+            pressedProcessId = processId;
+            pressedPath = nativePath;
+            return true;
+          },
+      workspaceRoot: Directory.current.path,
+      delay: (_) async {},
+    );
+
+    final execution = await adapter.execute(
+      CockpitCommand(
+        commandId: 'press-macos-back',
+        commandType: CockpitCommandType.tap,
+        parameters: <String, Object?>{
+          'cockpitTestLocator': <String, Object?>{
+            'label': 'Back',
+            'type': 'Button',
+          },
+        },
+        timeoutMs: 1000,
+      ),
+    );
+
+    expect(execution.result.success, isTrue);
+    expect(pressedProcessId, 4242);
+    expect(pressedPath, 'w0/c0');
+    expect(processes.starts, isEmpty);
+  });
+
   test('blocked system screenshot remains a blocked capability', () async {
     final processes = _TransientUiTreeProcessManager(failFirst: false);
     final controls = CockpitSystemControlService(processManager: processes);
@@ -392,3 +447,24 @@ const _settledBackTree = '''<?xml version="1.0" encoding="UTF-8"?>
 <hierarchy bounds="[0,0][1200,800]">
   <node content-desc="Back" class="Button" enabled="true" clickable="true" bounds="[356,218][412,274]" />
 </hierarchy>''';
+
+const _macosBackTree = '''{
+  "platform": "macos",
+  "windows": [
+    {
+      "nativePath": "w0",
+      "role": "AXWindow",
+      "frame": {"x": 100, "y": 50, "width": 800, "height": 600},
+      "children": [
+        {
+          "nativePath": "w0/c0",
+          "role": "AXButton",
+          "title": "Back",
+          "description": "Back",
+          "enabled": true,
+          "frame": {"x": 110, "y": 60, "width": 56, "height": 56}
+        }
+      ]
+    }
+  ]
+}''';

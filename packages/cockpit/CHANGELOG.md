@@ -10,11 +10,14 @@
   continuing bodies explicit without emitting empty files.
 - Isolated macOS Accessibility traversal from the worker, detected stale or
   cyclic AX trees, and made blocked native waits terminate immediately with
-  actionable permission guidance instead of consuming the full step timeout.
+  actionable permission guidance instead of consuming the full step timeout;
+  resolved native controls now execute through `AXPress` before any coordinate
+  fallback so a successful input result reflects a real semantic action.
 - Stopped durable worker replay after the Supervisor terminalizes a run,
   preventing sequence conflicts and worker restart loops after interruption.
-- Replaced Windows PowerShell file identity probing with native handle-based
-  identity leases and hardened directory authority checks.
+- Replaced Windows PowerShell file identity and ACL probing with native
+  handle-based identity leases plus Win32 owner, DACL, ACE, and SID inspection,
+  including every ancestor checked during root and workspace registration.
 - Removed cross-platform Flutter launch stalls, preserved command deadlines,
   and kept common status, inspection, network, capture, and reload paths
   responsive through the selected numeric session.
