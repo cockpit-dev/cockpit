@@ -34,10 +34,12 @@ dart pub global activate cockpit any
 cockpit --help
 ```
 
-Run `cockpit update` to install and verify the latest release, remove Cockpit's
-retired source payload, and replace an older running Supervisor while preserving
-its authorization mode and durable state. Dart Pub continues to own its shared
-download cache; Cockpit never deletes unrelated cached packages.
+Run `cockpit update` to install and verify the latest release, safely hand any
+source-installed native executable back to Pub, restore one optimized AOT
+executable, remove retired and temporary update payloads, and replace an older
+running Supervisor while preserving its authorization mode and durable state.
+Dart Pub continues to own its shared download cache; Cockpit never deletes
+unrelated cached packages.
 
 The package publishes four executables:
 

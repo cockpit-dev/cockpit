@@ -1,5 +1,7 @@
 import 'dart:io';
 
+import 'package:path/path.dart' as p;
+
 import '../infrastructure/cockpit_process_manager.dart';
 
 Future<ProcessResult> cockpitRunUpdateProcess(
@@ -33,17 +35,29 @@ Future<void> cockpitRemoveLegacySourcePayload({
   required bool windows,
   required String resolvedExecutable,
 }) async {
-  final root = _pubCacheRoot(environment, windows: windows);
+  final root = cockpitPubCacheRoot(environment, windows: windows);
   if (root == null) return;
   final legacy = Directory(
     Directory(root).uri.resolve('cockpit-aot/').toFilePath(),
   );
   if (!await legacy.exists()) return;
-  if (windows && _isWithin(resolvedExecutable, legacy.path)) return;
+  if (windows && cockpitPathIsWithin(resolvedExecutable, legacy.path)) return;
   await legacy.delete(recursive: true);
 }
 
-String? _pubCacheRoot(
+String cockpitReadInstalledVersion(String output) {
+  final match = RegExp(
+    r'^cockpit\s+(\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?)$',
+  ).firstMatch(output.trim());
+  if (match == null) {
+    throw const FormatException(
+      'The installed Cockpit executable returned an invalid version.',
+    );
+  }
+  return match.group(1)!;
+}
+
+String? cockpitPubCacheRoot(
   Map<String, String> environment, {
   required bool windows,
 }) {
@@ -63,11 +77,9 @@ String? _pubCacheRoot(
       : Directory(home).uri.resolve('.pub-cache/').toFilePath();
 }
 
-bool _isWithin(String path, String directory) {
-  final normalizedPath = File(path).absolute.path;
-  final normalizedDirectory = Directory(directory).absolute.path;
+bool cockpitPathIsWithin(String path, String directory) {
+  final normalizedPath = p.normalize(p.absolute(path));
+  final normalizedDirectory = p.normalize(p.absolute(directory));
   return normalizedPath == normalizedDirectory ||
-      normalizedPath.startsWith(
-        '$normalizedDirectory${Platform.pathSeparator}',
-      );
+      p.isWithin(normalizedDirectory, normalizedPath);
 }

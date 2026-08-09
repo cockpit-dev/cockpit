@@ -63,10 +63,11 @@ Upgrade the installed runtime with one command:
 cockpit update
 ```
 
-It installs and verifies the latest release, removes Cockpit's retired source
-payload, and replaces an older running Supervisor while preserving its
-authorization mode and durable state. Dart Pub owns its shared download cache;
-Cockpit never deletes unrelated cached packages.
+It installs and verifies the latest release, safely hands a source-installed
+native executable back to Pub, restores one optimized AOT executable, removes
+retired and temporary update payloads, and replaces an older running Supervisor
+while preserving its authorization mode and durable state. Dart Pub owns its
+shared download cache; Cockpit never deletes unrelated cached packages.
 
 Flutter source development additionally uses the development-only bridge:
 
@@ -459,8 +460,9 @@ every platform and removes the retired split launcher/payload layout.
 Compilation or launch verification failure restores the previous installation.
 Daily commands remain `cockpit ...`; they no longer pay the dependency
 resolution cost of a path-activated `dart pub global run` wrapper, and
-`cockpit update` can replace the development executable with the latest hosted
-release. Use `--output PATH` only when a different single-executable location is
+`cockpit update` can safely replace the development executable with the latest
+hosted release and compile it back to the same fast single-executable layout.
+Use `--output PATH` only when a different single-executable location is
 intentional.
 
 ## Release Gate

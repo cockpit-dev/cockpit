@@ -1,5 +1,13 @@
 # Changelog
 
+## 3.0.7
+
+- Fixed `cockpit update` when the fast source installer had placed a native AOT
+  executable in Dart Pub's launcher directory. The updater now hands the live
+  executable to Pub through a recoverable text launcher, verifies the hosted
+  package, recompiles it to AOT, atomically restores the single fast executable,
+  and removes takeover files without losing sessions or Supervisor state.
+
 ## 3.0.6
 
 - Added `cockpit update` to install and verify the latest hosted release,
