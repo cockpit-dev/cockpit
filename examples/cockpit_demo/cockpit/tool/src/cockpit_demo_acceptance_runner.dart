@@ -202,6 +202,7 @@ final class CockpitDemoAcceptanceRunner {
     bool? nativeBlackBoxSupported;
     bool? nativeLocatorSupported;
     _CockpitDemoVisualBaseline? visualBaseline;
+    File? generatedVisualBaseline;
     String? systemControlAdapter;
     String? deviceId;
     String? appId;
@@ -488,12 +489,38 @@ final class CockpitDemoAcceptanceRunner {
           'locator control. ${nativeLocatorProbe.detail}',
         );
       }
+      if (visualBaseline case final baseline?) {
+        await _applyVisualViewport(
+          api: api,
+          workspaceId: workspace.workspaceId,
+          sessionId: sessionId,
+          invocationId: invocationId,
+          baseline: baseline,
+        );
+        generatedVisualBaseline = await _captureRuntimeVisualBaseline(
+          api: api,
+          projectDirectory: projectDirectory,
+          workspaceId: workspace.workspaceId,
+          sessionId: sessionId,
+          invocationId: invocationId,
+          baseline: baseline,
+        );
+      }
       effectiveSuite = _suiteForRuntime(
         validatedSuite,
         recordingCapabilities: recordingCapabilities,
         systemControlProfile: systemControlProfile,
         mixedPlaneSupported: mixedPlaneSupported,
-        visualBaseline: visualBaseline?.path,
+        visualBaseline: generatedVisualBaseline == null
+            ? null
+            : p.posix.joinAll(
+                p.split(
+                  p.relative(
+                    generatedVisualBaseline.path,
+                    from: projectDirectory,
+                  ),
+                ),
+              ),
         visualProfile: visualBaseline?.profile,
         visualCaptureProfile: visualBaseline?.captureProfile,
         taskTitle: 'Cockpit $invocationId',
@@ -509,16 +536,6 @@ final class CockpitDemoAcceptanceRunner {
         platformAppId: platformAppId,
         nativeLocatorSupported: nativeLocatorSupported,
       );
-
-      if (visualBaseline case final baseline?) {
-        await _applyVisualViewport(
-          api: api,
-          workspaceId: workspace.workspaceId,
-          sessionId: sessionId,
-          invocationId: invocationId,
-          baseline: baseline,
-        );
-      }
 
       advance('run', 'Submitting the indexed regression suite.');
       final accepted = await api.submitRun(
@@ -637,6 +654,10 @@ final class CockpitDemoAcceptanceRunner {
           failures: cleanupFailures,
         );
       }
+      await _deleteGeneratedVisualBaseline(
+        generatedVisualBaseline,
+        cleanupFailures,
+      );
       if (api != null && request.stopDaemon) {
         try {
           await api.lifecycle.stop(mode: CockpitDaemonShutdownMode.drain);
@@ -912,7 +933,6 @@ CockpitTestSuite _suiteForRuntime(
 
 typedef _CockpitDemoVisualBaseline = ({
   String profile,
-  String path,
   String captureProfile,
   int? logicalWidth,
   int? logicalHeight,
@@ -929,35 +949,30 @@ _CockpitDemoVisualBaseline? _visualBaselineForTarget({
         when device.sdk?.contains('(API 34)') ?? false =>
       (
         profile: profile,
-        path: 'e2e/baselines/android/settings.png',
-        captureProfile: 'nativePreferred',
+        captureProfile: 'flutterPreferred',
         logicalWidth: null,
         logicalHeight: null,
       ),
     ('ios', 'iphone-16-pro-1206x2622') when device.name == 'iPhone 16 Pro' => (
       profile: profile,
-      path: 'e2e/baselines/ios/settings.png',
-      captureProfile: 'nativePreferred',
+      captureProfile: 'flutterPreferred',
       logicalWidth: null,
       logicalHeight: null,
     ),
     ('linux', 'linux-1280x720') => (
       profile: profile,
-      path: 'e2e/baselines/linux/settings.png',
       captureProfile: 'flutterPreferred',
       logicalWidth: 1280,
       logicalHeight: 720,
     ),
     ('macos', 'macos-800x600') => (
       profile: profile,
-      path: 'e2e/baselines/macos/settings.png',
       captureProfile: 'flutterPreferred',
       logicalWidth: 800,
       logicalHeight: 600,
     ),
     ('windows', 'windows-1028x681') => (
       profile: profile,
-      path: 'e2e/baselines/windows/settings.png',
       captureProfile: 'flutterPreferred',
       logicalWidth: 1028,
       logicalHeight: 681,
@@ -971,6 +986,97 @@ _CockpitDemoVisualBaseline? _visualBaselineForTarget({
     );
   }
   return baseline;
+}
+
+Future<File> _captureRuntimeVisualBaseline({
+  required CockpitSupervisorApiClient api,
+  required String projectDirectory,
+  required String workspaceId,
+  required String sessionId,
+  required String invocationId,
+  required _CockpitDemoVisualBaseline baseline,
+}) async {
+  await _operation(
+    api,
+    CockpitOperationInvocation(
+      kind: 'ui.waitIdle',
+      workspaceId: workspaceId,
+      idempotencyKey: CockpitIdempotencyKey('$invocationId-visual-idle'),
+      deadline: DateTime.now().toUtc().add(const Duration(seconds: 45)),
+      input: <String, Object?>{
+        'sessionId': sessionId,
+        'quietWindowMs': 300,
+        'timeoutMs': 30000,
+      },
+    ),
+  );
+  final capture = await _operation(
+    api,
+    CockpitOperationInvocation(
+      kind: 'evidence.screenshot.capture',
+      workspaceId: workspaceId,
+      idempotencyKey: CockpitIdempotencyKey('$invocationId-visual-baseline'),
+      deadline: DateTime.now().toUtc().add(const Duration(minutes: 1)),
+      input: <String, Object?>{
+        'sessionId': sessionId,
+        'name': 'runtime-visual-baseline',
+        'reason': 'baseline',
+        'attachToStep': false,
+        'captureProfile': baseline.captureProfile,
+        'allowFallback': false,
+        'timeoutMs': 45000,
+      },
+    ),
+  );
+  final artifacts = capture.output?['artifacts'];
+  if (artifacts is! List<Object?>) {
+    throw const FormatException(
+      'Runtime visual baseline capture returned no artifact index.',
+    );
+  }
+  Map<String, Object?>? screenshotRef;
+  for (final raw in artifacts) {
+    if (raw is! Map<Object?, Object?> || raw['role'] != 'screenshot') continue;
+    final artifactRef = raw['artifactRef'];
+    if (artifactRef is Map<Object?, Object?>) {
+      screenshotRef = Map<String, Object?>.from(artifactRef);
+      break;
+    }
+  }
+  final artifactId = screenshotRef?['artifactId'];
+  final mediaType = screenshotRef?['mediaType'];
+  if (artifactId is! String || mediaType is! String) {
+    throw const FormatException(
+      'Runtime visual baseline capture returned no screenshot artifact.',
+    );
+  }
+  final directory = Directory(
+    p.join(projectDirectory, '.dart_tool', 'cockpit', 'acceptance-baselines'),
+  );
+  await directory.create(recursive: true);
+  final destination = File(
+    p.join(directory.path, '${baseline.profile}-$invocationId.png'),
+  );
+  await api.downloadDevelopmentArtifactToFile(
+    workspaceId: workspaceId,
+    sessionId: sessionId,
+    artifactId: artifactId,
+    mediaType: mediaType,
+    destination: destination,
+  );
+  return destination;
+}
+
+Future<void> _deleteGeneratedVisualBaseline(
+  File? baseline,
+  List<Map<String, Object?>> failures,
+) async {
+  if (baseline == null) return;
+  try {
+    if (await baseline.exists()) await baseline.delete();
+  } on Object catch (error) {
+    failures.add(_failure(error, 'visualBaselineCleanup'));
+  }
 }
 
 Future<void> _applyVisualViewport({

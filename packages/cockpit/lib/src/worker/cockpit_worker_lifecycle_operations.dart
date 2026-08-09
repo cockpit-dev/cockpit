@@ -284,18 +284,19 @@ final class CockpitWorkerLifecycleOperations {
     final resultProfile = values.profile(
       defaultName: CockpitInteractiveResultProfileName.minimal,
     );
+    final latestApp = await _registry.latestAppForTarget(binding.targetId);
     final result = await runWorkerApplicationOperation(
       context: context,
       operation: () => _readTarget.read(
         CockpitReadTargetRequest(
           target: handle,
+          app: latestApp?.handle,
           resultProfile: resultProfile,
           snapshotOptions: values.optionalSnapshotOptions(),
           deadline: context.deadline,
         ),
       ),
     );
-    final latestApp = await _registry.latestAppForTarget(binding.targetId);
     final sessionId = latestApp == null
         ? null
         : await _registry.sessionIdForApp(latestApp.appId);

@@ -43,6 +43,24 @@ final class CockpitTargetReferenceResolver {
     String? androidDeviceId,
   }) async {
     if (target != null) {
+      if (app != null) {
+        _requireMatchingTargetApp(target, app);
+        final resolvedApp = await _appReferenceResolver.resolve(
+          app: app,
+          baseUri: baseUri,
+        );
+        final currentApp = resolvedApp.app ?? app;
+        return CockpitResolvedTargetReference(
+          baseUri: resolvedApp.baseUri,
+          target: target.copyWith(
+            connection: CockpitTargetConnection(
+              baseUrl: resolvedApp.baseUri.toString(),
+            ),
+            metadata: _metadataWithResolvedApp(target.metadata, currentApp),
+          ),
+          app: currentApp,
+        );
+      }
       final refreshed = await _refreshTargetConnection(
         target,
         overrideBaseUri: baseUri,
@@ -101,6 +119,21 @@ final class CockpitTargetReferenceResolver {
       message:
           'A target handle, target handle path, app handle, or base URI is required.',
     );
+  }
+
+  void _requireMatchingTargetApp(
+    CockpitTargetHandle target,
+    CockpitAppHandle app,
+  ) {
+    final targetAppId = target.metadata['appId'];
+    if ((targetAppId is String && targetAppId != app.appId) ||
+        target.platform != app.platform ||
+        target.deviceId != app.deviceId) {
+      throw const CockpitApplicationServiceException(
+        code: 'targetAppIdentityMismatch',
+        message: 'Target and application handles describe different runtimes.',
+      );
+    }
   }
 
   Future<CockpitTargetHandle> readTargetHandle(String path) async {

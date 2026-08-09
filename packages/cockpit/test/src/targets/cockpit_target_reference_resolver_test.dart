@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:cockpit_protocol/cockpit_protocol.dart';
 import 'package:cockpit/src/application/cockpit_app_handle.dart';
 import 'package:cockpit/src/application/cockpit_app_reference_resolver.dart';
+import 'package:cockpit/src/application/cockpit_application_service_exception.dart';
 import 'package:cockpit/src/platform/ios/cockpit_ios_device_connection.dart';
 import 'package:cockpit/src/remote/cockpit_android_port_forwarder.dart';
 import 'package:cockpit/src/session/cockpit_remote_session_handle.dart';
@@ -356,6 +357,90 @@ void main() {
       expect(remoteSession?['devicePort'], 47331);
     },
   );
+
+  test(
+    'uses the current app handle when a target connection is stale',
+    () async {
+      final target = CockpitTargetHandle(
+        targetId: 'target-1',
+        targetKind: CockpitTargetKind.desktopApp,
+        platform: 'windows',
+        deviceId: 'windows',
+        projectDir: r'C:\workspace\app',
+        target: 'cockpit/main.dart',
+        connection: const CockpitTargetConnection(
+          baseUrl: 'http://127.0.0.1:47001',
+        ),
+        launchedAt: DateTime.utc(2026, 8, 9),
+        metadata: const <String, Object?>{
+          'appId': 'app-1',
+          'appMode': 'automation',
+          'processId': 100,
+        },
+      );
+      final app = CockpitAppHandle(
+        appId: 'app-1',
+        mode: CockpitAppMode.automation,
+        platform: 'windows',
+        deviceId: 'windows',
+        projectDir: r'C:\workspace\app',
+        target: 'cockpit/main.dart',
+        baseUrl: 'http://127.0.0.1:47002',
+        launchedAt: DateTime.utc(2026, 8, 9),
+        processId: 200,
+      );
+
+      final resolved = await CockpitTargetReferenceResolver().resolve(
+        target: target,
+        app: app,
+      );
+
+      expect(resolved.baseUri.toString(), 'http://127.0.0.1:47002');
+      expect(resolved.app, same(app));
+      expect(
+        resolved.target?.connection.baseUri.toString(),
+        'http://127.0.0.1:47002',
+      );
+      expect(resolved.target?.metadata['processId'], 200);
+    },
+  );
+
+  test('rejects mismatched target and app handles', () async {
+    final target = CockpitTargetHandle(
+      targetId: 'target-1',
+      targetKind: CockpitTargetKind.desktopApp,
+      platform: 'windows',
+      deviceId: 'windows',
+      projectDir: r'C:\workspace\app',
+      target: 'cockpit/main.dart',
+      connection: const CockpitTargetConnection(
+        baseUrl: 'http://127.0.0.1:47001',
+      ),
+      launchedAt: DateTime.utc(2026, 8, 9),
+      metadata: const <String, Object?>{'appId': 'app-1'},
+    );
+    final app = CockpitAppHandle(
+      appId: 'app-2',
+      mode: CockpitAppMode.automation,
+      platform: 'windows',
+      deviceId: 'windows',
+      projectDir: r'C:\workspace\app',
+      target: 'cockpit/main.dart',
+      baseUrl: 'http://127.0.0.1:47002',
+      launchedAt: DateTime.utc(2026, 8, 9),
+    );
+
+    await expectLater(
+      CockpitTargetReferenceResolver().resolve(target: target, app: app),
+      throwsA(
+        isA<CockpitApplicationServiceException>().having(
+          (error) => error.code,
+          'code',
+          'targetAppIdentityMismatch',
+        ),
+      ),
+    );
+  });
 }
 
 final class _FailingAndroidPortForwarder extends CockpitAndroidPortForwarder {
