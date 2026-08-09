@@ -174,7 +174,7 @@ void main() {
 
   test('parses macOS accessibility JSON trees', () {
     final macos = CockpitNativeUiSnapshot.parse('''
-{"platform":"macos","windows":[{"role":"AXWindow","title":"Cockpit","frame":{"x":20,"y":40,"width":800,"height":600},"children":[{"role":"AXButton","title":"New task","description":"Create task","frame":{"x":650,"y":70,"width":110,"height":44}}]}]}
+{"platform":"macos","windows":[{"nativePath":"w0","role":"AXWindow","title":"Cockpit","frame":{"x":20,"y":40,"width":800,"height":600},"children":[{"nativePath":"w0/c0","role":"AXButton","title":"New task","description":"Create task","frame":{"x":650,"y":70,"width":110,"height":44}}]}]}
 ''');
 
     final result = macos.resolve(CockpitTestLocator(label: 'New task'));
@@ -182,6 +182,7 @@ void main() {
     expect(result.found, isTrue);
     expect(result.centerX, 705);
     expect(result.node?.roles, contains('AXButton'));
+    expect(result.node?.attributes['nativepath'], 'w0/c0');
   });
 
   test('parses Windows UI Automation JSON trees', () {

@@ -22,6 +22,13 @@ typedef CockpitMacosAccessibilityTreeReader =
       required Duration timeout,
     });
 
+typedef CockpitMacosAccessibilityElementPresser =
+    Future<bool> Function({
+      required int processId,
+      required String nativePath,
+      required Duration timeout,
+    });
+
 typedef CockpitMacosApplicationProcessIdResolver =
     Future<int> Function({required String appId, required Duration timeout});
 
@@ -111,6 +118,33 @@ Future<String> cockpitReadMacosAccessibilityTree({
       timeout: timeout,
     ),
     debugName: 'cockpit.macosAccessibilityTree',
+  );
+}
+
+Future<bool> cockpitPressMacosAccessibilityElement({
+  required int processId,
+  required String nativePath,
+  required Duration timeout,
+}) async {
+  if (!Platform.isMacOS) {
+    throw UnsupportedError('macOS accessibility actions require macOS.');
+  }
+  if (processId <= 0 || nativePath.trim().isEmpty) {
+    throw const CockpitMacosAccessibilityException(
+      code: 'invalidMacosAccessibilityRequest',
+      message: 'A positive process id and native element path are required.',
+    );
+  }
+  if (timeout <= Duration.zero) {
+    throw TimeoutException('macOS accessibility deadline elapsed.');
+  }
+  return Isolate.run(
+    () => _MacosAccessibilityApi.instance.pressElement(
+      processId: processId,
+      nativePath: nativePath,
+      timeout: timeout,
+    ),
+    debugName: 'cockpit.macosAccessibilityPress',
   );
 }
 
@@ -318,7 +352,7 @@ final class _MacosAccessibilityApi {
                 selfReferentialWindows += 1;
                 continue;
               }
-              final node = _readNode(window, 0, attributes, state);
+              final node = _readNode(window, 0, 'w$index', attributes, state);
               if (node != null) encodedWindows.add(node);
             }
           }
@@ -352,6 +386,101 @@ final class _MacosAccessibilityApi {
       attributes.dispose(this);
       _cfRelease(application);
     }
+  }
+
+  bool pressElement({
+    required int processId,
+    required String nativePath,
+    required Duration timeout,
+  }) {
+    final path = _parseMacosNativePath(nativePath);
+    final application = _createApplication(processId);
+    if (application == nullptr) {
+      throw CockpitMacosAccessibilityException(
+        code: 'macosAccessibilityProcessNotFound',
+        message:
+            'Unable to create a macOS accessibility target for process '
+            '$processId.',
+      );
+    }
+    final stopwatch = Stopwatch()..start();
+    final attributes = _MacosAccessibilityAttributes.create(this);
+    final retainedArrays = <Pointer<Void>>[];
+    void applyRemainingTimeout() {
+      final remaining = timeout - stopwatch.elapsed;
+      if (remaining <= Duration.zero) {
+        throw TimeoutException('macOS accessibility action timed out.');
+      }
+      _setMessagingTimeout(
+        application,
+        math.min(remaining.inMicroseconds / Duration.microsecondsPerSecond, 5),
+      );
+    }
+
+    try {
+      applyRemainingTimeout();
+      var elements = _copyAttribute(application, attributes.windows);
+      if (elements == nullptr || _typeId(elements) != _cfArrayTypeId) {
+        throw const CockpitMacosAccessibilityException(
+          code: 'macosAccessibilityTargetStale',
+          message: 'The macOS application no longer exposes its window tree.',
+        );
+      }
+      retainedArrays.add(elements);
+      Pointer<Void> element = _requiredArrayElement(
+        elements,
+        path.first,
+        nativePath,
+      );
+      for (final childIndex in path.skip(1)) {
+        applyRemainingTimeout();
+        elements = _copyAttribute(element, attributes.children);
+        if (elements == nullptr || _typeId(elements) != _cfArrayTypeId) {
+          throw CockpitMacosAccessibilityException(
+            code: 'macosAccessibilityTargetStale',
+            message: 'The macOS element path is no longer present: $nativePath',
+          );
+        }
+        retainedArrays.add(elements);
+        element = _requiredArrayElement(elements, childIndex, nativePath);
+      }
+      applyRemainingTimeout();
+      final error = _performAction(element, attributes.pressAction);
+      if (error == 0) return true;
+      if (error == _axErrorActionUnsupported ||
+          error == _axErrorAttributeUnsupported ||
+          error == _axErrorNoValue) {
+        return false;
+      }
+      _throwAxError(error, 'press accessibility element');
+    } finally {
+      for (final array in retainedArrays.reversed) {
+        _cfRelease(array);
+      }
+      attributes.dispose(this);
+      _cfRelease(application);
+    }
+  }
+
+  Pointer<Void> _requiredArrayElement(
+    Pointer<Void> values,
+    int index,
+    String nativePath,
+  ) {
+    if (index < 0 || index >= _cfArrayGetCount(values)) {
+      throw CockpitMacosAccessibilityException(
+        code: 'macosAccessibilityTargetStale',
+        message: 'The macOS element path is no longer present: $nativePath',
+      );
+    }
+    final element = _cfArrayGetValue(values, index);
+    if (element == nullptr || _typeId(element) != _axElementTypeId) {
+      throw CockpitMacosAccessibilityException(
+        code: 'macosAccessibilityTargetStale',
+        message: 'The macOS element path is no longer actionable: $nativePath',
+      );
+    }
+    return element;
   }
 
   String dismissSystemDialog({
@@ -531,6 +660,7 @@ final class _MacosAccessibilityApi {
   Map<String, Object?>? _readNode(
     Pointer<Void> element,
     int depth,
+    String nativePath,
     _MacosAccessibilityAttributes attributes,
     _MacosTreeReadState state,
   ) {
@@ -551,7 +681,7 @@ final class _MacosAccessibilityApi {
           message: 'macOS accessibility returned an invalid node payload.',
         );
       }
-      final node = <String, Object?>{};
+      final node = <String, Object?>{'nativePath': nativePath};
       _addString(node, 'role', payload, _MacosAttributeIndex.role);
       _addString(node, 'subrole', payload, _MacosAttributeIndex.subrole);
       _addString(node, 'title', payload, _MacosAttributeIndex.title);
@@ -582,7 +712,13 @@ final class _MacosAccessibilityApi {
           ) {
             final child = _cfArrayGetValue(children, index);
             if (child != nullptr && _typeId(child) == _axElementTypeId) {
-              final encoded = _readNode(child, depth + 1, attributes, state);
+              final encoded = _readNode(
+                child,
+                depth + 1,
+                '$nativePath/c$index',
+                attributes,
+                state,
+              );
               if (encoded != null) encodedChildren.add(encoded);
             }
           }
@@ -784,11 +920,15 @@ final class _MacosAccessibilityAttributes {
   _MacosAccessibilityAttributes._({
     required this.windows,
     required this.nodeAttributes,
+    required this.children,
+    required this.pressAction,
     required List<Pointer<Void>> ownedValues,
   }) : _ownedValues = ownedValues;
 
   final Pointer<Void> windows;
   final Pointer<Void> nodeAttributes;
+  final Pointer<Void> children;
+  final Pointer<Void> pressAction;
   final List<Pointer<Void>> _ownedValues;
 
   static _MacosAccessibilityAttributes create(_MacosAccessibilityApi api) {
@@ -812,6 +952,7 @@ final class _MacosAccessibilityAttributes {
       ])
         api._createCfString(name),
     ];
+    final pressAction = api._createCfString('AXPress');
     final valuePointers = calloc<Pointer<Void>>(values.length);
     try {
       for (var index = 0; index < values.length; index += 1) {
@@ -832,12 +973,15 @@ final class _MacosAccessibilityAttributes {
       return _MacosAccessibilityAttributes._(
         windows: windows,
         nodeAttributes: nodeAttributes,
-        ownedValues: values,
+        children: values[_MacosAttributeIndex.children],
+        pressAction: pressAction,
+        ownedValues: <Pointer<Void>>[...values, pressAction],
       );
     } catch (_) {
       for (final value in values) {
         api._cfRelease(value);
       }
+      api._cfRelease(pressAction);
       api._cfRelease(windows);
       rethrow;
     } finally {
@@ -924,6 +1068,36 @@ final class _MacosDialogAttributes {
 }
 
 enum _MacosDialogResult { handled, noSafeAction, notDialog }
+
+List<int> _parseMacosNativePath(String value) {
+  final components = value.trim().split('/');
+  if (components.isEmpty || !components.first.startsWith('w')) {
+    throw const CockpitMacosAccessibilityException(
+      code: 'invalidMacosAccessibilityRequest',
+      message: 'The macOS native element path is invalid.',
+    );
+  }
+  final result = <int>[];
+  for (var index = 0; index < components.length; index += 1) {
+    final component = components[index];
+    final prefix = index == 0 ? 'w' : 'c';
+    if (!component.startsWith(prefix)) {
+      throw const CockpitMacosAccessibilityException(
+        code: 'invalidMacosAccessibilityRequest',
+        message: 'The macOS native element path is invalid.',
+      );
+    }
+    final number = int.tryParse(component.substring(1));
+    if (number == null || number < 0) {
+      throw const CockpitMacosAccessibilityException(
+        code: 'invalidMacosAccessibilityRequest',
+        message: 'The macOS native element path is invalid.',
+      );
+    }
+    result.add(number);
+  }
+  return List<int>.unmodifiable(result);
+}
 
 abstract final class _MacosAttributeIndex {
   static const int role = 0;

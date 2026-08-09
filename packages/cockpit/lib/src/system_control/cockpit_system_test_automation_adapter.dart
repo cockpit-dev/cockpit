@@ -7,6 +7,7 @@ import 'package:crypto/crypto.dart';
 import 'package:path/path.dart' as p;
 
 import '../adapters/cockpit_automation_adapter.dart';
+import 'cockpit_macos_accessibility_tree.dart';
 import 'cockpit_native_ui_snapshot.dart';
 import 'cockpit_system_control_action_service.dart';
 import 'cockpit_system_control_service.dart';
@@ -23,11 +24,15 @@ final class CockpitSystemTestAutomationAdapter
     DateTime Function()? utcNow,
     Future<void> Function(Duration)? delay,
     CockpitVisualMatcher? visualMatcher,
+    CockpitMacosAccessibilityElementPresser? macosAccessibilityElementPresser,
   }) : _target = target,
        _controlService = controlService,
        _actionService = actionService,
        _visualMatcher =
            visualMatcher ?? CockpitVisualMatcher(workspaceRoot: workspaceRoot),
+       _macosAccessibilityElementPresser =
+           macosAccessibilityElementPresser ??
+           cockpitPressMacosAccessibilityElement,
        _utcNow = utcNow ?? (() => DateTime.now().toUtc()),
        _delay = delay ?? Future<void>.delayed;
 
@@ -35,6 +40,8 @@ final class CockpitSystemTestAutomationAdapter
   final CockpitSystemControlService _controlService;
   final CockpitSystemControlActionService _actionService;
   final CockpitVisualMatcher _visualMatcher;
+  final CockpitMacosAccessibilityElementPresser
+  _macosAccessibilityElementPresser;
   final DateTime Function() _utcNow;
   final Future<void> Function(Duration) _delay;
 
@@ -286,6 +293,38 @@ final class CockpitSystemTestAutomationAdapter
         artifactSourcePaths: point.artifactSourcePaths,
       );
     }
+    final nativePath = point.nativePath;
+    final processId = _target.processId;
+    if (_target.platform.trim().toLowerCase() == 'macos' &&
+        processId != null &&
+        processId > 0 &&
+        nativePath != null) {
+      try {
+        final remaining = _remaining(deadline);
+        final pressed = await _macosAccessibilityElementPresser(
+          processId: processId,
+          nativePath: nativePath,
+          timeout: remaining,
+        ).timeout(remaining);
+        if (pressed) {
+          return _success(
+            command,
+            stopwatch,
+            resolution: point.resolution,
+            artifacts: point.artifacts,
+            artifactSourcePaths: point.artifactSourcePaths,
+          );
+        }
+      } on CockpitMacosAccessibilityException catch (error) {
+        return _failure(
+          command,
+          stopwatch,
+          _macosAccessibilityActionError(error),
+          artifacts: point.artifacts,
+          artifactSourcePaths: point.artifactSourcePaths,
+        );
+      }
+    }
     final result = await _runAction(
       CockpitSystemControlAction.tap,
       <String, Object?>{'x': point.x, 'y': point.y},
@@ -298,6 +337,40 @@ final class CockpitSystemTestAutomationAdapter
       point.resolution,
       artifacts: point.artifacts,
       artifactSourcePaths: point.artifactSourcePaths,
+    );
+  }
+
+  Duration _remaining(DateTime deadline) {
+    final remaining = deadline.difference(_utcNow());
+    if (remaining <= Duration.zero) {
+      throw TimeoutException('System command deadline elapsed.');
+    }
+    return remaining;
+  }
+
+  CockpitCommandError _macosAccessibilityActionError(
+    CockpitMacosAccessibilityException error,
+  ) {
+    final details = <String, Object?>{'systemErrorCode': error.code};
+    if (const <String>{
+      'macosAccessibilityPermissionDenied',
+      'macosAccessibilityPermissionStale',
+    }.contains(error.code)) {
+      return CockpitCommandError.unsupportedCapability(
+        message: error.message,
+        details: details,
+      );
+    }
+    if (error.code == 'macosAccessibilityTargetStale') {
+      return CockpitCommandError.targetNotHittable(
+        message: error.message,
+        details: details,
+      );
+    }
+    return CockpitCommandError(
+      code: 'systemDriverFailed',
+      message: error.message,
+      details: details,
     );
   }
 
@@ -1257,6 +1330,7 @@ final class CockpitSystemTestAutomationAdapter
         y: y,
         viewportWidth: snapshot.viewportWidth,
         viewportHeight: snapshot.viewportHeight,
+        nativePath: resolution.node?.attributes['nativepath'],
         textLength: resolution.node?.textValues
             .map((value) => value.length)
             .maxOrNull,
@@ -1343,6 +1417,7 @@ final class CockpitSystemTestAutomationAdapter
     }
     return (leftX - rightX).abs() <= 1 &&
         (leftY - rightY).abs() <= 1 &&
+        left.nativePath == right.nativePath &&
         left.resolution?.matchedKind == right.resolution?.matchedKind &&
         left.resolution?.matchedValue == right.resolution?.matchedValue;
   }
@@ -1559,6 +1634,7 @@ final class _ResolvedPoint {
     required this.y,
     required this.viewportWidth,
     required this.viewportHeight,
+    this.nativePath,
     this.textLength,
     required this.resolution,
     List<CockpitArtifactRef> artifacts = const <CockpitArtifactRef>[],
@@ -1581,6 +1657,7 @@ final class _ResolvedPoint {
        ),
        x = null,
        y = null,
+       nativePath = null,
        textLength = null,
        resolution = null;
 
@@ -1588,6 +1665,7 @@ final class _ResolvedPoint {
   final int? y;
   final int? viewportWidth;
   final int? viewportHeight;
+  final String? nativePath;
   final int? textLength;
   final CockpitLocatorResolution? resolution;
   final List<CockpitArtifactRef> artifacts;

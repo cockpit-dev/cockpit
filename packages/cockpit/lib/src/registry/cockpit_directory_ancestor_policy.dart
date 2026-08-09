@@ -2,6 +2,7 @@ import 'package:path/path.dart' as p;
 
 import '../foundation/cockpit_filesystem_identity.dart';
 import '../foundation/cockpit_home.dart';
+import '../foundation/cockpit_windows_security.dart';
 import 'cockpit_registry_models.dart';
 
 abstract interface class CockpitDirectoryAncestorPolicy {
@@ -14,7 +15,7 @@ final class CockpitSystemDirectoryAncestorPolicy
     required CockpitHostPlatform platform,
     required CockpitPosixMetadataProvider metadataProvider,
     CockpitWindowsSecurityProvider windowsSecurityProvider =
-        const CockpitPowerShellWindowsSecurityProvider(),
+        const CockpitNativeWindowsSecurityProvider(),
   }) : _platform = platform,
        _metadataProvider = metadataProvider,
        _windowsSecurityProvider = windowsSecurityProvider;
