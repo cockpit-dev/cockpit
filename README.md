@@ -121,25 +121,24 @@ project or session.
 flowchart TB
   subgraph Architecture[" "]
     direction TB
-  subgraph ControlPath["Typed control plane"]
+  subgraph ControlPath["cockpit_protocol · typed control plane"]
     direction LR
-    Actors["AI agent + Skill<br/>developers · CI"]
-    Surfaces["CLI · MCP · REST / SSE"]
-    Contract["cockpit_protocol<br/>DTOs · schemas · OpenAPI · test DSL"]
-    Supervisor["Supervisor<br/>auth · policy · identity<br/>leases · ports · runs · artifacts"]
-    Actors --> Surfaces --> Contract --> Supervisor
+    Actors["AI agents · developers · CI"]
+    Surfaces["Skill · CLI · MCP · REST/SSE"]
+    Supervisor["Supervisor · auth/policy/runs"]
+    Actors --> Surfaces --> Supervisor
   end
 
-  subgraph RuntimePath["Isolated workspace execution"]
+  subgraph RuntimePath["Workspace/engine isolation"]
     direction LR
-    Workers["Workspace workers<br/>A · B · … · N<br/>one engine worker per workspace"]
-    Router["Live capability router<br/>inside every worker"]
+    Workers["Workspace workers · A/B/…/N"]
+    Router["Capability router · per worker"]
 
-    subgraph Planes["Execution planes"]
+    subgraph Planes["Capability-driven execution"]
       direction LR
-      Flutter["Flutter applications<br/>semantic UI · routes · logs · errors · network"]
-      Native["Installed mobile apps<br/>ADB · WDA · accessibility · system UI"]
-      Desktop["Web & desktop apps<br/>browser · window · capture"]
+      Flutter["Flutter · semantic/runtime"]
+      Native["Mobile black box · ADB/WDA"]
+      Desktop["Web/desktop · browser/window"]
     end
 
     Workers --> Router
@@ -148,9 +147,9 @@ flowchart TB
     Router --> Desktop
   end
 
-  Evidence["State · events · reports · artifacts<br/>persisted under the owning workspace"]
+  Evidence["State · events · reports · artifacts"]
 
-  Supervisor -->|admit · dispatch| Workers
+  Supervisor -->|identity · leases · ports| Workers
   Flutter -.->|observe · capture| Evidence
   Native -.-> Evidence
   Desktop -.-> Evidence
@@ -158,7 +157,7 @@ flowchart TB
 
   classDef actor fill:#181A1F,stroke:#7D8190,color:#EDEDEF,stroke-width:1.5px
   classDef surface fill:#181A1F,stroke:#5B8DEF,color:#EDEDEF,stroke-width:1.5px
-  classDef contract fill:#345CBA,stroke:#7BA1F2,color:#FFFFFF,stroke-width:2px
+  classDef primary fill:#345CBA,stroke:#7BA1F2,color:#FFFFFF,stroke-width:2px
   classDef control fill:#121317,stroke:#5B8DEF,color:#EDEDEF,stroke-width:2px
   classDef worker fill:#181A1F,stroke:#4A7DD8,color:#EDEDEF,stroke-width:1.5px
   classDef plane fill:#151922,stroke:#5B8DEF,color:#EDEDEF,stroke-width:1.5px
@@ -166,8 +165,8 @@ flowchart TB
 
   class Actors actor
   class Surfaces surface
-  class Contract contract
-  class Supervisor,Router control
+  class Supervisor primary
+  class Router control
   class Workers worker
   class Flutter,Native,Desktop plane
   class Evidence evidence

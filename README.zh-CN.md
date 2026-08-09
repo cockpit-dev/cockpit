@@ -112,25 +112,24 @@ latest session。
 flowchart TB
   subgraph Architecture[" "]
     direction TB
-  subgraph ControlPath["类型化控制平面"]
+  subgraph ControlPath["cockpit_protocol · 类型化控制平面"]
     direction LR
-    Actors["AI Agent + Skill<br/>开发者 · CI"]
-    Surfaces["CLI · MCP · REST / SSE"]
-    Contract["cockpit_protocol<br/>DTO · Schema · OpenAPI · 测试 DSL"]
-    Supervisor["Supervisor<br/>认证 · 策略 · 身份<br/>lease · 端口 · run · artifact"]
-    Actors --> Surfaces --> Contract --> Supervisor
+    Actors["AI Agent · 开发者 · CI"]
+    Surfaces["Skill · CLI · MCP · REST/SSE"]
+    Supervisor["Supervisor · 认证/策略/run"]
+    Actors --> Surfaces --> Supervisor
   end
 
-  subgraph RuntimePath["隔离的 workspace 执行层"]
+  subgraph RuntimePath["Workspace/engine 隔离"]
     direction LR
-    Workers["Workspace worker<br/>A · B · … · N<br/>每个 workspace 独立 engine worker"]
-    Router["实时能力路由<br/>位于每个 worker 内"]
+    Workers["Workspace worker · A/B/…/N"]
+    Router["每个 worker 的能力路由"]
 
-    subgraph Planes["执行平面"]
+    subgraph Planes["按实时能力选择执行平面"]
       direction LR
-      Flutter["Flutter 应用<br/>semantic UI · route · log · error · network"]
-      Native["已安装移动应用<br/>ADB · WDA · accessibility · 系统 UI"]
-      Desktop["Web 与桌面应用<br/>browser · window · capture"]
+      Flutter["Flutter · semantic/runtime"]
+      Native["移动黑盒 · ADB/WDA"]
+      Desktop["Web/桌面 · browser/window"]
     end
 
     Workers --> Router
@@ -139,9 +138,9 @@ flowchart TB
     Router --> Desktop
   end
 
-  Evidence["状态 · 事件 · 报告 · artifact<br/>持久化到所属 workspace"]
+  Evidence["状态 · 事件 · 报告 · artifact"]
 
-  Supervisor -->|准入 · 调度| Workers
+  Supervisor -->|身份 · lease · 端口| Workers
   Flutter -.->|观察 · 采集| Evidence
   Native -.-> Evidence
   Desktop -.-> Evidence
@@ -149,7 +148,7 @@ flowchart TB
 
   classDef actor fill:#181A1F,stroke:#7D8190,color:#EDEDEF,stroke-width:1.5px
   classDef surface fill:#181A1F,stroke:#5B8DEF,color:#EDEDEF,stroke-width:1.5px
-  classDef contract fill:#345CBA,stroke:#7BA1F2,color:#FFFFFF,stroke-width:2px
+  classDef primary fill:#345CBA,stroke:#7BA1F2,color:#FFFFFF,stroke-width:2px
   classDef control fill:#121317,stroke:#5B8DEF,color:#EDEDEF,stroke-width:2px
   classDef worker fill:#181A1F,stroke:#4A7DD8,color:#EDEDEF,stroke-width:1.5px
   classDef plane fill:#151922,stroke:#5B8DEF,color:#EDEDEF,stroke-width:1.5px
@@ -157,8 +156,8 @@ flowchart TB
 
   class Actors actor
   class Surfaces surface
-  class Contract contract
-  class Supervisor,Router control
+  class Supervisor primary
+  class Router control
   class Workers worker
   class Flutter,Native,Desktop plane
   class Evidence evidence
