@@ -124,7 +124,7 @@ flowchart TB
   subgraph ControlPath["cockpit_protocol · typed control plane"]
     direction LR
     Actors["AI agents · developers · CI"]
-    Surfaces["Skill · CLI · MCP · REST · SSE"]
+    Surfaces["Skill · CLI · MCP · API"]
     Supervisor["Supervisor · auth · policy · runs"]
     Actors --> Surfaces --> Supervisor
   end
