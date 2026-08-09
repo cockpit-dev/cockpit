@@ -422,11 +422,13 @@ self-contained AOT executable once before live validation:
 dart run tool/install_cockpit.dart
 ```
 
-It atomically replaces the development `cockpit` executable in the Pub cache
-and restores the previous executable if compilation or launch verification
-fails. Daily commands remain `cockpit ...`; they no longer pay the dependency
-resolution cost of a path-activated `dart pub global run` wrapper. Use
-`--output PATH` only when a different installation location is intentional.
+On Unix it atomically installs an AOT payload behind a Pub-compatible launcher;
+on Windows it installs the native executable beside Pub's launcher. Compilation
+or launch verification failure restores the previous installation. Daily
+commands remain `cockpit ...`; they no longer pay the dependency resolution cost
+of a path-activated `dart pub global run` wrapper, and a later
+`dart pub global activate cockpit` can still replace the launcher normally. Use
+`--output PATH` only when a different single-executable location is intentional.
 
 ## Release Gate
 
