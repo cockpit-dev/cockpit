@@ -35,13 +35,6 @@ final class CockpitJsonRpcPeerClosedException implements Exception {
   String toString() => 'CockpitJsonRpcPeerClosedException';
 }
 
-final class CockpitJsonRpcPeerCleanupPendingException implements Exception {
-  const CockpitJsonRpcPeerCleanupPendingException();
-
-  @override
-  String toString() => 'CockpitJsonRpcPeerCleanupPendingException';
-}
-
 final class CockpitRpcCancellation {
   CockpitRpcCancellation._();
 
@@ -215,9 +208,6 @@ final class CockpitJsonRpcPeer {
   }) {
     if (!_started || _closed) {
       throw const CockpitJsonRpcPeerClosedException();
-    }
-    if (_outboundCleanupPending.isNotEmpty) {
-      throw const CockpitJsonRpcPeerCleanupPendingException();
     }
     workerMethod(method, r'$.method');
     final now = _utcNow();

@@ -1,5 +1,11 @@
 # Changelog
 
+## 3.0.3
+
+- Kept independent workspace operations available while a timed-out worker
+  request finishes its bounded terminal cleanup, preventing one slow native
+  probe from blocking status, capture, cleanup, or subsequent automation.
+
 ## 3.0.2
 
 - Completed the public REST and MCP control plane with strict operation help,
