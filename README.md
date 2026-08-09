@@ -124,21 +124,21 @@ flowchart TB
   subgraph ControlPath["cockpit_protocol · typed control plane"]
     direction LR
     Actors["AI agents · developers · CI"]
-    Surfaces["Skill · CLI · MCP · REST/SSE"]
-    Supervisor["Supervisor · auth/policy/runs"]
+    Surfaces["Skill · CLI · MCP · REST · SSE"]
+    Supervisor["Supervisor · auth · policy · runs"]
     Actors --> Surfaces --> Supervisor
   end
 
-  subgraph RuntimePath["Workspace/engine isolation"]
+  subgraph RuntimePath["Workspace · engine isolation"]
     direction LR
     Workers["Workspace workers · A/B/…/N"]
     Router["Capability router · per worker"]
 
     subgraph Planes["Capability-driven execution"]
       direction LR
-      Flutter["Flutter · semantic/runtime"]
-      Native["Mobile black box · ADB/WDA"]
-      Desktop["Web/desktop · browser/window"]
+      Flutter["Flutter · semantic · runtime"]
+      Native["Mobile black box · ADB · WDA"]
+      Desktop["Web · desktop · browser · window"]
     end
 
     Workers --> Router
