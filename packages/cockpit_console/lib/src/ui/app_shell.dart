@@ -33,11 +33,11 @@ final class AppShell extends HookConsumerWidget {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final useDrawer =
-            constraints.maxWidth < ConsoleShellLayoutStyle.drawerBreakpoint;
-        final defaultCollapsed =
-            constraints.maxWidth <
-            ConsoleShellLayoutStyle.compactSidebarBreakpoint;
+        final navigationMode = ConsoleShellLayoutStyle.navigationMode(
+          constraints.maxWidth,
+        );
+        final useDrawer = navigationMode == ConsoleNavigationMode.drawer;
+        final defaultCollapsed = navigationMode == ConsoleNavigationMode.rail;
         final collapsed = collapsedOverride.value ?? defaultCollapsed;
 
         return Scaffold(

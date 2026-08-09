@@ -1,6 +1,7 @@
 import 'package:cockpit_console/src/providers/core_providers.dart';
 import 'package:cockpit_console/src/providers/data_providers.dart';
 import 'package:cockpit_console/src/theme/console_colors.dart';
+import 'package:cockpit_console/src/ui/navigation/console_nav.dart';
 import 'package:cockpit_console/src/ui/widgets/console_form_controls.dart';
 import 'package:cockpit_console/src/ui/widgets/empty_state.dart';
 import 'package:cockpit_console/src/ui/widgets/screen_scaffold.dart';
@@ -39,7 +40,7 @@ final class DocumentsScreen extends HookConsumerWidget {
     }, [workspaceId]);
 
     if (workspaceId == null) {
-      return const ScreenScaffold(
+      return ScreenScaffold(
         title: 'Tests',
         subtitle: 'Create and check case or suite files in LON, JSON, or YAML',
         body: EmptyStateView(
@@ -47,6 +48,13 @@ final class DocumentsScreen extends HookConsumerWidget {
           title: 'Select a project',
           description:
               'Choose a project from the Projects page to view its test files.',
+          action: FilledButton.icon(
+            onPressed: () => ref
+                .read(navProvider.notifier)
+                .go(ConsoleNavDestination.workspaces),
+            icon: const Icon(LucideIcons.folderOpen, size: 16),
+            label: const Text('Choose project'),
+          ),
         ),
       );
     }
@@ -63,6 +71,12 @@ final class DocumentsScreen extends HookConsumerWidget {
           icon: LucideIcons.alertCircle,
           title: "Couldn't load test files",
           description: '$error',
+          action: OutlinedButton.icon(
+            onPressed: () =>
+                ref.invalidate(documentsForWorkspaceProvider(workspaceId)),
+            icon: const Icon(LucideIcons.refreshCw, size: 16),
+            label: const Text('Retry'),
+          ),
         ),
         data: (documents) {
           return _SplitLayout(

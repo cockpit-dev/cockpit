@@ -71,6 +71,7 @@ final class Sidebar extends HookConsumerWidget {
       ),
     );
     final themeToggle = IconButton(
+      key: const ValueKey(ConsoleNavigationIds.theme),
       icon: Icon(
         themeMode == ThemeMode.dark ? LucideIcons.sun : LucideIcons.moon,
         size: 15,
@@ -80,19 +81,6 @@ final class Sidebar extends HookConsumerWidget {
       tooltip: 'Toggle theme',
       style: IconButton.styleFrom(minimumSize: const Size.square(28)),
     );
-    final toggleCollapsed = onToggleCollapsed == null
-        ? null
-        : IconButton(
-            icon: Icon(
-              collapsed
-                  ? LucideIcons.panelLeftOpen
-                  : LucideIcons.panelLeftClose,
-              size: 15,
-            ),
-            onPressed: onToggleCollapsed,
-            tooltip: collapsed ? 'Expand navigation' : 'Collapse navigation',
-            style: IconButton.styleFrom(minimumSize: const Size.square(28)),
-          );
     return Container(
       width: drawer
           ? null
@@ -136,10 +124,6 @@ final class Sidebar extends HookConsumerWidget {
                       statusIndicator,
                       const SizedBox(height: 8),
                       themeToggle,
-                      if (toggleCollapsed != null) ...[
-                        const SizedBox(height: 4),
-                        toggleCollapsed,
-                      ],
                     ],
                   )
                 : Row(
@@ -183,15 +167,32 @@ final class _Header extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     if (collapsed) {
-      return const ConsoleShellHeader(
+      return ConsoleShellHeader(
         horizontalPadding: 0,
-        child: Center(
-          child: Tooltip(
-            message: 'Cockpit Console',
-            waitDuration: Duration(milliseconds: 300),
-            showDuration: Duration(seconds: 2),
-            child: _BrandMark(includeSemantics: true),
-          ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Tooltip(
+              message: 'Cockpit Console',
+              waitDuration: Duration(milliseconds: 300),
+              showDuration: Duration(seconds: 2),
+              child: _BrandMark(includeSemantics: true),
+            ),
+            if (onToggleCollapsed != null) ...[
+              const SizedBox(width: 2),
+              IconButton(
+                key: const ValueKey(ConsoleNavigationIds.toggle),
+                onPressed: onToggleCollapsed,
+                icon: const Icon(LucideIcons.panelLeftOpen, size: 15),
+                tooltip: 'Expand navigation',
+                style: IconButton.styleFrom(
+                  minimumSize: const Size.square(28),
+                  maximumSize: const Size.square(28),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+              ),
+            ],
+          ],
         ),
       );
     }
@@ -226,12 +227,14 @@ final class _Header extends StatelessWidget {
           ),
           if (drawer)
             IconButton(
+              key: const ValueKey(ConsoleNavigationIds.close),
               onPressed: onClose,
               icon: const Icon(LucideIcons.x, size: 16),
               tooltip: 'Close navigation',
             ),
           if (!drawer && onToggleCollapsed != null)
             IconButton(
+              key: const ValueKey(ConsoleNavigationIds.toggle),
               onPressed: onToggleCollapsed,
               icon: const Icon(LucideIcons.panelLeftClose, size: 16),
               tooltip: 'Collapse navigation',
@@ -298,8 +301,8 @@ final class _NavItem extends HookConsumerWidget {
         ? ConsoleShellLayoutStyle.navigationRailIconSize
         : ConsoleShellLayoutStyle.navigationIconSize;
     void navigate() {
-      ref.read(navProvider.notifier).go(destination);
       onSelected?.call();
+      ref.read(navProvider.notifier).go(destination);
     }
 
     final item = Semantics(

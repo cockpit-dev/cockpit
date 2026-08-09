@@ -37,8 +37,7 @@ final class _CockpitConsoleAppState extends ConsumerState<CockpitConsoleApp> {
     if (!_initialized) {
       _initialized = true;
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        unawaited(_initializePreferences());
-        unawaited(_initializeSupervisor());
+        unawaited(_initialize());
       });
     }
 
@@ -53,6 +52,19 @@ final class _CockpitConsoleAppState extends ConsumerState<CockpitConsoleApp> {
       navigatorObservers: widget.navigatorObservers,
       home: _startupComplete ? const AppShell() : const _ConsoleStartupView(),
     );
+  }
+
+  Future<void> _initialize() async {
+    await Future.wait<void>([
+      _initializePreferences(),
+      _initializeSupervisor(),
+    ]);
+    if (!mounted) return;
+    final workspaceState = ref.read(workspacesProvider);
+    if (ref.read(supervisorProvider) is SupervisorConnected &&
+        workspaceState.error == null) {
+      ref.read(workspacesProvider.notifier).reconcileSelection();
+    }
   }
 
   Future<void> _initializePreferences() async {
