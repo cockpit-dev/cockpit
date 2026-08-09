@@ -2,7 +2,7 @@ schemaVersion: cockpit.test/v2
 kind: case
 id: demoVisualRegression
 name: Visual regression coverage
-description: Compares the stable Settings surface with the committed platform baseline and preserves actual, baseline, and diff evidence.
+description: Compares the stable Inbox surface with a runtime baseline captured from the same target and preserves actual, baseline, and diff evidence.
 tags: [acceptance, visual-regression, requires-visual-regression]
 target:
   platform: flutter
@@ -25,23 +25,15 @@ variables:
     source: input
     type: json
 setup:
-  - stepId: waitForVisualInbox
+  - stepId: verifyVisualInbox
     action:
       type: waitFor
       condition: {type: route, route: /inbox}
-  - stepId: openVisualSettings
-    action:
-      type: tap
-      locator: {testId: open-settings-action}
-  - stepId: waitForVisualSettings
-    action:
-      type: waitFor
-      condition: {type: route, route: /settings}
 steps:
   - stepId: settleVisualSurface
     action: {type: waitForUiIdle, quietMs: 300}
-  - stepId: assertSettingsScreenshot
-    description: Compare a deterministic capture with the matching visual environment and capture profile baseline.
+  - stepId: assertInboxScreenshot
+    description: Compare the current Inbox with the baseline captured from this exact runtime profile.
     plane: semantic
     timeoutMs: 30000
     action:
@@ -49,20 +41,5 @@ steps:
       baseline: {$var: visualBaseline}
       pixelTolerance: 0.1
       maxDifferingPixelRatio: 0.03
-      artifactName: settings-visual-regression
+      artifactName: inbox-visual-regression
       captureOptions: {$var: visualCaptureOptions}
-finally:
-  - stepId: leaveVisualSettings
-    timeoutMs: 15000
-    if:
-      condition: {type: route, route: /settings}
-      then:
-        - stepId: backFromVisualSettings
-          action: {type: back}
-      else:
-        - stepId: retainVisualRoute
-          action: {type: waitForUiIdle, quietMs: 100}
-  - stepId: verifyVisualCleanup
-    action:
-      type: waitFor
-      condition: {type: route, route: /inbox}

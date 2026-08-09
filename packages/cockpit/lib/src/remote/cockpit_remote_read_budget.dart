@@ -1,24 +1,33 @@
 import 'dart:async';
 
 final class CockpitRemoteReadBudget {
-  const CockpitRemoteReadBudget(this.deadline);
+  CockpitRemoteReadBudget(this.deadline, {DateTime Function()? utcNow})
+    : _utcNow = utcNow ?? (() => DateTime.now().toUtc());
 
   final DateTime? deadline;
+  final DateTime Function() _utcNow;
 
   Duration? remaining() {
     final value = deadline;
     if (value == null) return null;
-    final remaining = value.toUtc().difference(DateTime.now().toUtc());
+    final remaining = value.toUtc().difference(_utcNow());
     if (remaining <= Duration.zero) {
       throw TimeoutException('Remote read deadline expired.');
     }
     return remaining;
   }
 
-  Duration bound(Duration requested) {
+  Duration bound(Duration requested, {Duration reserve = Duration.zero}) {
+    if (reserve < Duration.zero) {
+      throw ArgumentError.value(reserve, 'reserve');
+    }
     final available = remaining();
-    if (available == null || requested <= available) return requested;
-    return available;
+    if (available == null) return requested;
+    final usable = available - reserve;
+    if (usable <= Duration.zero) {
+      throw TimeoutException('Remote read deadline has no response budget.');
+    }
+    return requested <= usable ? requested : usable;
   }
 
   Future<T> run<T>(Future<T> Function() operation) {

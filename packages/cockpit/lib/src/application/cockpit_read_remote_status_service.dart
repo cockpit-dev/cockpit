@@ -124,7 +124,10 @@ final class CockpitReadRemoteStatusService {
       if (override != null) return override(resolved.baseUri);
       return CockpitRemoteSessionClient(
         baseUri: resolved.baseUri,
-        requestTimeout: budget.remaining(),
+        requestTimeout: budget.bound(
+          const Duration(seconds: 30),
+          reserve: const Duration(seconds: 3),
+        ),
       ).readStatus();
     });
     final effectiveSnapshotOptions =
@@ -141,7 +144,10 @@ final class CockpitReadRemoteStatusService {
               if (override != null) return override(baseUri, options);
               return CockpitRemoteSessionClient(
                 baseUri: baseUri,
-                requestTimeout: budget.remaining(),
+                requestTimeout: budget.bound(
+                  const Duration(seconds: 30),
+                  reserve: const Duration(seconds: 3),
+                ),
               ).readSnapshotDetailed(options: options);
             },
             deadline: request.deadline,
