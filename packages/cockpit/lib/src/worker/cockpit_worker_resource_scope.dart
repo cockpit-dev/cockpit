@@ -12,6 +12,10 @@ final class CockpitWorkerResourceScope {
   }) : _authority = authority,
        _cancellation = cancellation,
        grants = List<CockpitWorkerResourceGrant>.unmodifiable(grants) {
+    // Heartbeats start immediately, before a caller can attach its first
+    // guard. Keep the failure observed during that gap while preserving the
+    // original future for every guard to surface.
+    _failure.future.ignore();
     for (var index = 0; index < grants.length; index += 1) {
       _scheduleHeartbeat(grants[index], ttls[index]);
     }

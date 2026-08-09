@@ -5,6 +5,9 @@
 - Fixed `cockpit dev press enter` for multiline Flutter controls that bind
   Enter through app-level shortcuts, without regressing normal IME submission
   for single-line text fields.
+- Isolated suite retry resource leases by attempt and observed heartbeat
+  failures from session preparation onward, preventing a transient native
+  activation timeout from terminating the workspace worker on retry.
 
 ## 3.0.3
 

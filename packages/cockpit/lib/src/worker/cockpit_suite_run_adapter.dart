@@ -662,7 +662,7 @@ final class _SuiteAttemptExecution
     late final _SuiteRowResourceBoundary? rowBoundary;
     try {
       session = await _selectSession(node);
-      rowBoundary = await _rowResourceBoundary(node, session);
+      rowBoundary = await _rowResourceBoundary(node, session, attemptNumber);
     } on CockpitApplicationServiceException catch (error) {
       if (error.code != 'suiteSessionDrift' &&
           error.code != 'suiteSessionUnavailable') {
@@ -718,28 +718,37 @@ final class _SuiteAttemptExecution
       idempotencyKey: '${context.idempotencyKey}-${node.nodeId}-$attemptNumber',
       deadline: context.deadline,
     );
+    Future<T> guardResources<T>(Future<T> operation) {
+      final guarded = scope.guard(operation);
+      return rowBoundary == null ? guarded : rowBoundary.scope.guard(guarded);
+    }
+
     void Function()? unregisterForceAbort;
     var stage = 'attemptEvent';
     try {
-      await _eventStore.append(
-        runId,
-        CockpitWorkerEventDraft(
-          kind: 'attempt.running',
-          entityKind: CockpitRunEventEntityKind.attempt,
-          caseId: testCase.id,
-          attemptId: attemptId,
-          targetId: session.targetId,
-          requestedPlane: testCase.target.plane,
+      await guardResources(
+        _eventStore.append(
+          runId,
+          CockpitWorkerEventDraft(
+            kind: 'attempt.running',
+            entityKind: CockpitRunEventEntityKind.attempt,
+            caseId: testCase.id,
+            attemptId: attemptId,
+            targetId: session.targetId,
+            requestedPlane: testCase.target.plane,
+          ),
         ),
       );
       stage = 'healthCheck';
-      if (!await session.healthCheck()) {
+      if (!await guardResources(session.healthCheck())) {
         throw const FormatException(
           'Selected automation session is unhealthy.',
         );
       }
       stage = 'sessionPreparation';
-      await session.prepare?.call(context.deadline);
+      if (session.prepare case final prepare?) {
+        await guardResources(prepare(context.deadline));
+      }
       final control = CockpitCaseExecutionControl(
         forceAbort: session.forceAbort,
       );
@@ -797,9 +806,7 @@ final class _SuiteAttemptExecution
           control: control,
         ),
       );
-      final result = await (rowBoundary == null
-          ? run
-          : rowBoundary.scope.guard(run));
+      final result = await guardResources(run);
       stage = 'redactionVerification';
       await scanner.verify(attemptRoot);
       var artifacts = const <CockpitArtifactResource>[];
@@ -915,7 +922,11 @@ final class _SuiteAttemptExecution
         details: error.details,
       );
     }
-    final rowBoundary = await _rowResourceBoundary(node, session);
+    final rowBoundary = await _rowResourceBoundary(
+      node,
+      session,
+      attemptNumber,
+    );
     if (rowBoundary == null) {
       throw StateError('Suite isolation is missing its case row boundary.');
     }
@@ -966,7 +977,7 @@ final class _SuiteAttemptExecution
         );
       }
       final refreshed = await _selectSession(node);
-      await _rowResourceBoundary(node, refreshed);
+      await _rowResourceBoundary(node, refreshed, attemptNumber);
     } on CockpitApplicationServiceException catch (error) {
       if (cancellation.isCancelled) {
         return _suiteRuntimeFailure(
@@ -1091,6 +1102,7 @@ final class _SuiteAttemptExecution
   Future<_SuiteRowResourceBoundary?> _rowResourceBoundary(
     CockpitSuitePlanNode node,
     CockpitWorkerHealthySession session,
+    int attemptNumber,
   ) async {
     final caseNodeId = node.caseNodeId;
     if (caseNodeId == null) return null;
@@ -1100,18 +1112,22 @@ final class _SuiteAttemptExecution
       () => <String, Future<_SuiteRowResourceBoundary>>{},
     );
     return boundaries.putIfAbsent(
-      boundaryResourceId,
-      () => _acquireRowResourceBoundary(caseNodeId, session),
+      '$attemptNumber\u0000$boundaryResourceId',
+      () => _acquireRowResourceBoundary(caseNodeId, session, attemptNumber),
     );
   }
 
   Future<_SuiteRowResourceBoundary> _acquireRowResourceBoundary(
     String caseNodeId,
     CockpitWorkerHealthySession session,
+    int attemptNumber,
   ) async {
     final digest = sha256
         .convert(
-          utf8.encode('$runId\u0000$caseNodeId\u0000${session.resourceId}'),
+          utf8.encode(
+            '$runId\u0000$caseNodeId\u0000$attemptNumber\u0000'
+            '${session.resourceId}',
+          ),
         )
         .toString();
     final scope = await CockpitWorkerResourceScope.acquire(
