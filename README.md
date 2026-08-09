@@ -117,27 +117,23 @@ active workspace and engine version. No command relies on a global "latest"
 project or session.
 
 ```mermaid
-%%{init: {"flowchart": {"curve": "linear", "nodeSpacing": 30, "rankSpacing": 42, "padding": 12}}}%%
+%%{init: {"flowchart": {"curve": "linear", "nodeSpacing": 32, "rankSpacing": 44, "padding": 14}}}%%
 flowchart TB
   subgraph ControlPath["cockpit_protocol · typed control plane"]
     direction LR
-    Actors["AI agents · developers · CI"]
-    Surfaces["Skill · CLI · MCP · API"]
-    Supervisor["Supervisor · auth · policy · runs"]
+    Actors("AI agents · developers · CI")
+    Surfaces("Skill · CLI · MCP · API")
+    Supervisor("Supervisor · identity · auth · policy · leases · runs")
     Actors --> Surfaces --> Supervisor
   end
 
-  subgraph RuntimePath["Workspace · engine isolation"]
-    direction LR
-    Workers["Workspace workers · A/B/…/N"]
-    Router["Capability router · per worker"]
-
-    subgraph Planes["Capability-driven execution"]
-      direction LR
-      Flutter["Flutter · semantic · runtime"]
-      Native["Mobile black box · ADB · WDA"]
-      Desktop["Web · desktop · browser · window"]
-    end
+  subgraph RuntimePath["Workspace engine isolation · capability execution"]
+    direction TB
+    Workers("Workspace workers · A/B/…/N")
+    Router("Capability router · per worker")
+    Flutter("Flutter · semantic · runtime")
+    Native("Mobile black box · ADB · WDA")
+    Desktop("Web · desktop · browser · window")
 
     Workers --> Router
     Router --> Flutter
@@ -145,28 +141,26 @@ flowchart TB
     Router --> Desktop
   end
 
-  Evidence["State · events · reports · artifacts"]
+  Evidence("Observable state · events · reports · artifacts")
 
-  Supervisor -->|identity · leases · ports| Workers
-  Flutter -.->|observe · capture| Evidence
+  Supervisor --> Workers
+  Flutter -.-> Evidence
   Native -.-> Evidence
   Desktop -.-> Evidence
 
-  classDef actor stroke:#8B949E,stroke-width:1.5px
-  classDef surface stroke:#5B8DEF,stroke-width:1.5px
-  classDef primary stroke:#2F81F7,stroke-width:3px,font-weight:700
-  classDef control stroke:#5B8DEF,stroke-width:2px,font-weight:600
-  classDef worker stroke:#5B8DEF,stroke-width:1.5px
-  classDef plane stroke:#8B949E,stroke-width:1.5px
-  classDef evidence stroke:#2DA44E,stroke-width:2.5px,font-weight:600
+  classDef neutral fill:transparent,stroke:#8B949E,stroke-width:1.25px
+  classDef accent fill:#345CBA,stroke:#7BA1F2,color:#FFFFFF,stroke-width:1.75px,font-weight:700
+  classDef active fill:transparent,stroke:#5B8DEF,stroke-width:2px,font-weight:600
+  classDef evidence fill:transparent,stroke:#2DA44E,stroke-width:2px,font-weight:600
 
-  class Actors actor
-  class Surfaces surface
-  class Supervisor primary
-  class Router control
-  class Workers worker
-  class Flutter,Native,Desktop plane
+  class Actors,Workers,Flutter,Native,Desktop neutral
+  class Surfaces,Router active
+  class Supervisor accent
   class Evidence evidence
+
+  style ControlPath fill:transparent,stroke:#8B949E,stroke-width:1px
+  style RuntimePath fill:transparent,stroke:#8B949E,stroke-width:1px
+  linkStyle default stroke:#8B949E,stroke-width:1.25px
 ```
 
 Register multiple projects once, then address them explicitly or run a command
