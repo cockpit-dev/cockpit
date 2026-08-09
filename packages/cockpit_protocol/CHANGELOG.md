@@ -1,5 +1,10 @@
 # Changelog
 
+## 3.0.8
+
+- Synchronized the protocol package with Cockpit's downgrade-safe updater;
+  public protocol contracts are unchanged.
+
 ## 3.0.7
 
 - Synchronized the protocol package with the Cockpit 3.0.7 updater repair;

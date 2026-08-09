@@ -130,10 +130,12 @@ request, not the owned app; check `dev status` before retrying. Cockpit does not
 keychain or secret store. `--env` values are process-only and are not persisted.
 
 Use `cockpit update` for normal upgrades. It installs and verifies the latest Pub
-release, safely hands any source-installed native executable back to Pub, restores
-one optimized AOT executable, removes retired and temporary update payloads, and
-reconnects the Supervisor while preserving authorization and durable state. Do not
-manually delete Cockpit home data, Pub caches, sessions, executables, or ports.
+release, but constrains resolution to a version at least as new as the running
+executable; a stale Pub index fails safely instead of downgrading Cockpit. It safely
+hands any source-installed native executable back to Pub, restores one optimized AOT
+executable, removes retired and temporary update payloads, and reconnects the
+Supervisor while preserving authorization and durable state. Do not manually delete
+Cockpit home data, Pub caches, sessions, executables, or ports.
 
 ## Timeout Defaults
 

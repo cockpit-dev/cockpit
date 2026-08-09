@@ -1,5 +1,10 @@
 # Changelog
 
+## 3.0.8
+
+- Synchronized the Flutter bridge with Cockpit's downgrade-safe updater;
+  bridge behavior is unchanged.
+
 ## 3.0.7
 
 - Synchronized the Flutter bridge with the Cockpit 3.0.7 updater repair;

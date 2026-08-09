@@ -58,7 +58,7 @@ void main() {
       'global',
       'activate',
       'cockpit',
-      'any',
+      '>=3.0.6',
     ]);
     expect(
       calls[1],
@@ -266,6 +266,40 @@ void main() {
       ),
     );
     expect(calls, 2);
+  });
+
+  test('blocks a stale Pub cache from downgrading Cockpit', () async {
+    final calls = <List<String>>[];
+    final service = CockpitUpdateService(
+      environment: const <String, String>{},
+      processRunner: (executable, arguments, timeout) async {
+        calls.add(<String>[executable, ...arguments]);
+        return ProcessResult(
+          calls.length,
+          0,
+          calls.length == 2 ? 'cockpit 3.0.6\n' : '',
+          '',
+        );
+      },
+    );
+
+    await expectLater(
+      service.update(
+        currentVersion: '3.0.7',
+        timeout: const Duration(minutes: 1),
+      ),
+      throwsA(
+        isA<CockpitUpdateException>()
+            .having((error) => error.code, 'code', 'updateDowngradeBlocked')
+            .having(
+              (error) => error.message,
+              'message',
+              contains('older than the running 3.0.7 release'),
+            ),
+      ),
+    );
+    expect(calls, hasLength(2));
+    expect(calls.first, contains('>=3.0.7'));
   });
 }
 

@@ -38,12 +38,14 @@ After the first installation, upgrade the runtime with:
 cockpit update
 ```
 
-It installs and verifies the latest release, removes Cockpit's retired
-source-install payload, safely lets Pub replace a source-installed native
-executable, recompiles the hosted release to one optimized AOT executable, and
-reconnects the Supervisor while preserving its authorization mode and durable
-state. Temporary takeover files are removed automatically. Dart Pub owns its
-shared download cache; Cockpit does not delete unrelated cached packages.
+It installs and verifies the latest release while requiring Pub to resolve a
+version at least as new as the running executable, so a stale index cannot
+downgrade Cockpit. It removes Cockpit's retired source-install payload, safely
+lets Pub replace a source-installed native executable, recompiles the hosted
+release to one optimized AOT executable, and reconnects the Supervisor while
+preserving its authorization mode and durable state. Temporary takeover files
+are removed automatically. Dart Pub owns its shared download cache; Cockpit does
+not delete unrelated cached packages.
 
 Update the host-native plugin through that host's plugin manager. For a manual
 Skill installation, stage the complete new Skill directory, validate it, then

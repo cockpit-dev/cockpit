@@ -1,5 +1,12 @@
 # Changelog
 
+## 3.0.8
+
+- Prevented `cockpit update` from accepting a stale Pub version index that
+  resolves an older hosted release. Activation now requires a version at least
+  as new as the running executable, and verification blocks any downgrade before
+  the hosted installation is accepted or compiled to AOT.
+
 ## 3.0.7
 
 - Fixed `cockpit update` when the fast source installer had placed a native AOT

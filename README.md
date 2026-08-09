@@ -63,11 +63,13 @@ Upgrade the installed runtime with one command:
 cockpit update
 ```
 
-It installs and verifies the latest release, safely hands a source-installed
-native executable back to Pub, restores one optimized AOT executable, removes
-retired and temporary update payloads, and replaces an older running Supervisor
-while preserving its authorization mode and durable state. Dart Pub owns its
-shared download cache; Cockpit never deletes unrelated cached packages.
+It installs and verifies the latest release while requiring Pub to resolve a
+version at least as new as the running executable, so stale package indexes fail
+safely instead of downgrading Cockpit. It hands a source-installed native
+executable back to Pub, restores one optimized AOT executable, removes retired
+and temporary update payloads, and replaces an older running Supervisor while
+preserving its authorization mode and durable state. Dart Pub owns its shared
+download cache; Cockpit never deletes unrelated cached packages.
 
 Flutter source development additionally uses the development-only bridge:
 
