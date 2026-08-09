@@ -16,9 +16,22 @@ Future<void> main(List<String> arguments) async {
 
     final destination = File(output);
     await destination.parent.create(recursive: true);
+    final usesLauncher = arguments.isEmpty && !Platform.isWindows;
+    final payload = usesLauncher
+        ? File.fromUri(
+            destination.parent.parent.uri.resolve('cockpit-aot/cockpit'),
+          )
+        : destination;
+    await payload.parent.create(recursive: true);
     final suffix = '$pid-${DateTime.now().microsecondsSinceEpoch}';
-    final staging = File('${destination.path}.install-$suffix');
-    final backup = File('${destination.path}.backup-$suffix');
+    final payloadStaging = File('${payload.path}.install-$suffix');
+    final payloadBackup = File('${payload.path}.backup-$suffix');
+    final launcherStaging = usesLauncher
+        ? File('${destination.path}.install-$suffix')
+        : null;
+    final launcherBackup = usesLauncher
+        ? File('${destination.path}.backup-$suffix')
+        : null;
 
     try {
       final compiler = await Process.run(Platform.resolvedExecutable, <String>[
@@ -26,22 +39,68 @@ Future<void> main(List<String> arguments) async {
         'exe',
         entrypoint.path,
         '-o',
-        staging.path,
+        payloadStaging.path,
       ], workingDirectory: root.path);
-      if (compiler.exitCode != 0 || !await staging.exists()) {
+      if (compiler.exitCode != 0 || !await payloadStaging.exists()) {
         final details = '${compiler.stderr}'.trim();
         throw ProcessException(
           Platform.resolvedExecutable,
-          <String>['compile', 'exe', entrypoint.path, '-o', staging.path],
+          <String>[
+            'compile',
+            'exe',
+            entrypoint.path,
+            '-o',
+            payloadStaging.path,
+          ],
           details.isEmpty ? 'Cockpit AOT compilation failed.' : details,
           compiler.exitCode,
         );
       }
 
-      final replaced = await destination.exists();
-      if (replaced) await destination.rename(backup.path);
+      final payloadProbe = await Process.run(
+        payloadStaging.path,
+        const <String>['--help'],
+      );
+      if (payloadProbe.exitCode != 0) {
+        throw ProcessException(
+          payloadStaging.path,
+          const <String>['--help'],
+          'Compiled Cockpit executable did not start successfully.',
+          payloadProbe.exitCode,
+        );
+      }
+
+      if (launcherStaging != null) {
+        await launcherStaging.writeAsString(
+          _launcherScript(payload.path),
+          flush: true,
+        );
+        final chmod = await Process.run('chmod', <String>[
+          '755',
+          launcherStaging.path,
+        ]);
+        if (chmod.exitCode != 0) {
+          throw ProcessException(
+            'chmod',
+            <String>['755', launcherStaging.path],
+            '${chmod.stderr}'.trim(),
+            chmod.exitCode,
+          );
+        }
+      }
+
+      final replacedPayload = await payload.exists();
+      final replacedLauncher =
+          launcherBackup != null && await destination.exists();
+      if (replacedPayload) await payload.rename(payloadBackup.path);
+      if (replacedLauncher) {
+        await destination.rename(launcherBackup.path);
+      }
       try {
-        await staging.rename(destination.path);
+        await payloadStaging.rename(payload.path);
+        if (launcherStaging != null) {
+          await launcherStaging.rename(destination.path);
+        }
         final probe = await Process.run(destination.path, const <String>[
           '--help',
         ]);
@@ -54,18 +113,35 @@ Future<void> main(List<String> arguments) async {
           );
         }
       } on Object {
-        if (await destination.exists()) await destination.delete();
-        if (replaced && await backup.exists()) {
-          await backup.rename(destination.path);
+        if (launcherStaging != null && await destination.exists()) {
+          await destination.delete();
+        }
+        if (await payload.exists()) await payload.delete();
+        if (replacedPayload && await payloadBackup.exists()) {
+          await payloadBackup.rename(payload.path);
+        }
+        if (replacedLauncher && await launcherBackup.exists()) {
+          await launcherBackup.rename(destination.path);
         }
         rethrow;
       }
-      if (await backup.exists()) await backup.delete();
+      if (await payloadBackup.exists()) await payloadBackup.delete();
+      if (launcherBackup != null && await launcherBackup.exists()) {
+        await launcherBackup.delete();
+      }
       stdout.writeln(destination.path);
     } finally {
-      if (await staging.exists()) await staging.delete();
-      if (await backup.exists() && !await destination.exists()) {
-        await backup.rename(destination.path);
+      if (await payloadStaging.exists()) await payloadStaging.delete();
+      if (launcherStaging != null && await launcherStaging.exists()) {
+        await launcherStaging.delete();
+      }
+      if (await payloadBackup.exists() && !await payload.exists()) {
+        await payloadBackup.rename(payload.path);
+      }
+      if (launcherBackup != null &&
+          await launcherBackup.exists() &&
+          !await destination.exists()) {
+        await launcherBackup.rename(destination.path);
       }
     }
   } on FormatException catch (error) {
@@ -75,6 +151,11 @@ Future<void> main(List<String> arguments) async {
     stderr.writeln('Cockpit installation failed: $error');
     exitCode = 1;
   }
+}
+
+String _launcherScript(String payloadPath) {
+  final quoted = "'${payloadPath.replaceAll("'", "'\"'\"'")}'";
+  return '#!/bin/sh\nexec $quoted "\$@"\n';
 }
 
 String _outputPath(List<String> arguments) {
