@@ -265,9 +265,15 @@ final class CockpitDevelopmentSessionSupervisor {
       return _status;
     } on Object catch (error) {
       _log('reload failed mode=${mode.jsonValue} error=$error');
+      final appStillReady =
+          machineClient.lastExitCode == null &&
+          _status.appReachable &&
+          _status.remoteSessionReachable;
       _setStatus(
         _status.copyWith(
-          state: CockpitDevelopmentSessionState.failed,
+          state: appStillReady
+              ? CockpitDevelopmentSessionState.ready
+              : CockpitDevelopmentSessionState.failed,
           lastReloadMode: mode,
           lastReloadSucceeded: false,
           lastError: error is StateError ? error.message : '$error',

@@ -377,35 +377,40 @@ final class CockpitWorkerDevelopmentSessionRuntime {
     CockpitDevelopmentSessionHandle handle,
   ) async {
     final injected = _machineClientAttacher;
+    late final CockpitFlutterRunMachineClient client;
     if (injected != null) {
-      return injected(handle);
-    }
-    final remote = handle.remoteSessionHandle!;
-    final platform = handle.platform.trim().toLowerCase();
-    final usePlatformAppId = platform == 'android' || platform == 'ios';
-    final debugUrl = usePlatformAppId ? null : handle.vmServiceUri;
-    final platformAppId = usePlatformAppId
-        ? remote.effectivePlatformAppId
-        : null;
-    if (debugUrl == null && platformAppId == null) {
-      throw const CockpitApplicationServiceException(
-        code: 'developmentSessionRecoveryUnavailable',
-        message: 'Development session has no safe Flutter attach identity.',
+      client = await injected(handle);
+    } else {
+      final remote = handle.remoteSessionHandle!;
+      final platform = handle.platform.trim().toLowerCase();
+      final usePlatformAppId = platform == 'android' || platform == 'ios';
+      final debugUrl = usePlatformAppId || handle.vmServiceUri == null
+          ? null
+          : cockpitFlutterAttachDebugUri(handle.vmServiceUri!);
+      final platformAppId = usePlatformAppId
+          ? remote.effectivePlatformAppId
+          : null;
+      if (debugUrl == null && platformAppId == null) {
+        throw const CockpitApplicationServiceException(
+          code: 'developmentSessionRecoveryUnavailable',
+          message: 'Development session has no safe Flutter attach identity.',
+        );
+      }
+      final extraArgs = await _recoveryFlutterArguments(handle);
+      client = await CockpitFlutterRunMachineClient.attach(
+        projectDir: handle.projectDir,
+        target: handle.target,
+        deviceId: handle.deviceId,
+        platformAppId: platformAppId,
+        debugUrl: debugUrl,
+        flavor: handle.flavor,
+        flutterExecutable: _sdkEnvironment.flutterExecutable,
+        extraArgs: extraArgs,
       );
     }
-    final extraArgs = await _recoveryFlutterArguments(handle);
-    final client = await CockpitFlutterRunMachineClient.attach(
-      projectDir: handle.projectDir,
-      target: handle.target,
-      deviceId: handle.deviceId,
-      platformAppId: platformAppId,
-      debugUrl: debugUrl,
-      flavor: handle.flavor,
-      flutterExecutable: _sdkEnvironment.flutterExecutable,
-      extraArgs: extraArgs,
-    );
     try {
       await client.waitForAppId();
+      await client.waitForAppStarted();
       return client;
     } on Object {
       await client.dispose();

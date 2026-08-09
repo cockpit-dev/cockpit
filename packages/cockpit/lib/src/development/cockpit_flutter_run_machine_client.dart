@@ -16,6 +16,33 @@ final class CockpitFlutterRunMachineRequestException implements Exception {
   String toString() => 'CockpitFlutterRunMachineRequestException: $message';
 }
 
+Uri cockpitFlutterAttachDebugUri(Uri vmServiceUri) {
+  final scheme = switch (vmServiceUri.scheme) {
+    'ws' => 'http',
+    'wss' => 'https',
+    'http' || 'https' => vmServiceUri.scheme,
+    _ => throw ArgumentError.value(
+      vmServiceUri,
+      'vmServiceUri',
+      'Flutter VM Service URI must use ws, wss, http, or https.',
+    ),
+  };
+  if (scheme == vmServiceUri.scheme) {
+    return vmServiceUri;
+  }
+  if (!vmServiceUri.path.endsWith('/ws')) {
+    throw ArgumentError.value(
+      vmServiceUri,
+      'vmServiceUri',
+      'Flutter VM Service WebSocket URI must end with /ws.',
+    );
+  }
+  return vmServiceUri.replace(
+    scheme: scheme,
+    path: vmServiceUri.path.substring(0, vmServiceUri.path.length - 2),
+  );
+}
+
 final class CockpitFlutterRunMachineClient {
   CockpitFlutterRunMachineClient({
     required Stream<String> stdoutLines,
@@ -42,6 +69,7 @@ final class CockpitFlutterRunMachineClient {
   late final StreamSubscription<int> _exitCodeSubscription;
   final Completer<Uri> _vmServiceUriCompleter = Completer<Uri>();
   final Completer<String> _appIdCompleter = Completer<String>();
+  final Completer<void> _appStartedCompleter = Completer<void>();
   final Completer<void> _closedCompleter = Completer<void>();
   int _nextRequestId = 0;
   String? _currentAppId;
@@ -188,34 +216,49 @@ final class CockpitFlutterRunMachineClient {
     required String appId,
     bool pause = false,
     String? reason,
-  }) {
-    return sendRequest(
-      'app.restart',
-      params: <String, Object?>{
-        'appId': appId,
-        'fullRestart': false,
-        'pause': pause,
-        'reason': reason,
-        'debounce': true,
-      },
-    );
-  }
+  }) =>
+      _restart(appId: appId, fullRestart: false, pause: pause, reason: reason);
 
   Future<Object?> hotRestart({
     required String appId,
     bool pause = false,
     String? reason,
-  }) {
-    return sendRequest(
+  }) => _restart(appId: appId, fullRestart: true, pause: pause, reason: reason);
+
+  Future<Object?> _restart({
+    required String appId,
+    required bool fullRestart,
+    required bool pause,
+    required String? reason,
+  }) async {
+    final result = await sendRequest(
       'app.restart',
       params: <String, Object?>{
         'appId': appId,
-        'fullRestart': true,
+        'fullRestart': fullRestart,
         'pause': pause,
         'reason': reason,
         'debounce': true,
       },
     );
+    if (result is! Map<Object?, Object?> || result['code'] is! int) {
+      throw const CockpitFlutterRunMachineRequestException(
+        'Flutter app.restart returned an invalid result.',
+      );
+    }
+    final code = result['code']! as int;
+    if (code != 0) {
+      final message = result['message'] is String
+          ? (result['message']! as String).trim()
+          : '';
+      final operation = fullRestart ? 'Hot restart' : 'Hot reload';
+      throw CockpitFlutterRunMachineRequestException(
+        message.isEmpty
+            ? '$operation was rejected by Flutter (code $code).'
+            : '$operation was rejected by Flutter (code $code): $message',
+      );
+    }
+    return result;
   }
 
   Future<Object?> stop({required String appId}) {
@@ -246,6 +289,31 @@ final class CockpitFlutterRunMachineClient {
       timeout,
       onTimeout: () => throw TimeoutException(
         'Flutter machine attach did not report app.start.',
+        timeout,
+      ),
+    );
+  }
+
+  Future<void> waitForAppStarted({
+    Duration timeout = const Duration(seconds: 90),
+  }) {
+    if (_appStartedCompleter.isCompleted) {
+      return Future<void>.value();
+    }
+    return Future.any<void>(<Future<void>>[
+      _appStartedCompleter.future,
+      _closedCompleter.future.then<void>((_) {
+        throw CockpitFlutterRunMachineRequestException(
+          _lastExitCode == null
+              ? 'Flutter machine client closed before app.started.'
+              : _requestFailureMessage(_lastExitCode!),
+        );
+      }),
+    ]).timeout(
+      timeout,
+      onTimeout: () => throw TimeoutException(
+        'Flutter machine attach did not report app.started.'
+        '${_lastStderrLine == null ? '' : ' Last Flutter message: $_lastStderrLine'}',
         timeout,
       ),
     );
@@ -405,6 +473,10 @@ final class CockpitFlutterRunMachineClient {
         if (_currentVmServiceUri != null &&
             !_vmServiceUriCompleter.isCompleted) {
           _vmServiceUriCompleter.complete(_currentVmServiceUri!);
+        }
+      case 'app.started':
+        if (!_appStartedCompleter.isCompleted) {
+          _appStartedCompleter.complete();
         }
     }
 

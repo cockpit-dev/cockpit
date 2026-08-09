@@ -169,10 +169,20 @@ void main() {
       expect(recovered.handle.remoteSessionHandle?.appId, 'old-machine-app');
       expect(attachCalls, 0);
 
-      final reloaded = await runtime.reload(
+      final reloadFuture = runtime.reload(
         recovered.handle,
         CockpitDevelopmentReloadMode.hotReload,
       );
+      while (attachCalls == 0) {
+        await Future<void>.delayed(Duration.zero);
+      }
+      await Future<void>.delayed(Duration.zero);
+      expect(
+        writes.any((payload) => payload.contains('"method":"app.restart"')),
+        isFalse,
+      );
+      stdoutController.add('[{"event":"app.started","params":{}}]');
+      final reloaded = await reloadFuture;
       expect(attachCalls, 1);
       expect(reloaded.handle.appId, 'attached-app');
       expect(reloaded.handle.remoteSessionHandle?.appId, 'attached-app');
