@@ -129,6 +129,7 @@ final class ScreenScaffold extends StatelessWidget {
     if (scaffold?.hasDrawer != true) return const <Widget>[];
     return <Widget>[
       IconButton(
+        key: const ValueKey(ConsoleNavigationIds.menu),
         onPressed: scaffold!.openDrawer,
         icon: const Icon(LucideIcons.menu),
         tooltip: 'Open navigation',

@@ -146,6 +146,20 @@ final class WorkspacesState {
   }
 }
 
+String? resolveActiveWorkspaceSelection(
+  String? selectedWorkspaceId,
+  Iterable<CockpitWorkspaceResource> workspaces,
+) {
+  if (selectedWorkspaceId == null) return null;
+  return workspaces.any(
+        (workspace) =>
+            workspace.workspaceId == selectedWorkspaceId &&
+            workspace.state == CockpitWorkspaceState.active,
+      )
+      ? selectedWorkspaceId
+      : null;
+}
+
 final class WorkspacesNotifier extends Notifier<WorkspacesState> {
   int _refreshGeneration = 0;
 
@@ -160,16 +174,23 @@ final class WorkspacesNotifier extends Notifier<WorkspacesState> {
       final workspaces = await client.workspaces();
       if (generation != _refreshGeneration) return;
       state = WorkspacesState(items: workspaces, loading: false);
-      final selectedWorkspaceId = ref.read(selectedWorkspaceIdProvider);
-      if (selectedWorkspaceId != null &&
-          !workspaces.any(
-            (workspace) => workspace.workspaceId == selectedWorkspaceId,
-          )) {
-        ref.read(selectedWorkspaceIdProvider.notifier).select(null);
-      }
+      reconcileSelection();
     } on Object catch (error) {
       if (generation != _refreshGeneration) return;
       state = state.copyWith(loading: false, error: '$error');
+    }
+  }
+
+  void reconcileSelection() {
+    final selectedWorkspaceId = ref.read(selectedWorkspaceIdProvider);
+    final resolvedWorkspaceId = resolveActiveWorkspaceSelection(
+      selectedWorkspaceId,
+      state.items,
+    );
+    if (resolvedWorkspaceId != selectedWorkspaceId) {
+      ref
+          .read(selectedWorkspaceIdProvider.notifier)
+          .select(resolvedWorkspaceId);
     }
   }
 

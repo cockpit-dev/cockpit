@@ -1,5 +1,14 @@
 import 'package:flutter/material.dart';
 
+enum ConsoleNavigationMode { sidebar, rail, drawer }
+
+abstract final class ConsoleNavigationIds {
+  static const String menu = 'nav-menu';
+  static const String toggle = 'nav-toggle';
+  static const String close = 'nav-close';
+  static const String theme = 'theme-toggle';
+}
+
 /// Responsive geometry shared by the complete application shell.
 abstract final class ConsoleShellLayoutStyle {
   static const double drawerBreakpoint = 720;
@@ -12,6 +21,12 @@ abstract final class ConsoleShellLayoutStyle {
   static const double drawerNavigationItemHeight = 40;
   static const double navigationIconSize = 18;
   static const double navigationRailIconSize = 16;
+
+  static ConsoleNavigationMode navigationMode(double width) {
+    if (width < drawerBreakpoint) return ConsoleNavigationMode.drawer;
+    if (width < compactSidebarBreakpoint) return ConsoleNavigationMode.rail;
+    return ConsoleNavigationMode.sidebar;
+  }
 }
 
 /// Shared geometry for the primary app-shell header on both sides of the

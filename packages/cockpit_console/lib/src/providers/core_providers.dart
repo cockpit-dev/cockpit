@@ -9,6 +9,25 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../ui/navigation/console_nav.dart';
 
+/// Keeps asynchronous reads responsive while honoring Cockpit's authoritative
+/// retryability contract. Permanent protocol failures surface immediately;
+/// transient failures receive two short retries before the UI offers an
+/// explicit retry action.
+Duration? consoleProviderRetry(int retryCount, Object error) {
+  if (error is CockpitApiException && !error.error.retryable) return null;
+  if (error is CockpitSupervisorClientException &&
+      error.apiError?.retryable == false) {
+    return null;
+  }
+  return ProviderContainer.defaultRetry(
+    retryCount,
+    error,
+    maxRetries: 2,
+    minDelay: const Duration(milliseconds: 250),
+    maxDelay: const Duration(seconds: 1),
+  );
+}
+
 /// Thin console adapter over the canonical [CockpitSupervisorApiClient].
 ///
 /// Console flows speak the provider-facing shapes they always have (raw maps

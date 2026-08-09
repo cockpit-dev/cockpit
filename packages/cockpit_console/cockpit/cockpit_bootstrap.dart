@@ -49,6 +49,7 @@ Widget buildCockpitConsoleDevelopmentApp() {
   return FlutterCockpitApp(
     config: FlutterCockpitConfig.fromRuntimeConfiguration(configuration),
     child: ProviderScope(
+      retry: consoleProviderRetry,
       child: CockpitConsoleApp(
         navigatorObservers: <NavigatorObserver>[
           FlutterCockpit.createNavigatorObserver(),
