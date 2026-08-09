@@ -108,10 +108,8 @@ workspace/engine 启动独立 worker。系统不存在跨项目的全局 latest 
 latest session。
 
 ```mermaid
-%%{init: {"theme": "base", "themeVariables": {"darkMode": true, "background": "#08090A", "fontFamily": "system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif", "fontSize": "15px", "primaryColor": "#181A1F", "primaryTextColor": "#EDEDEF", "primaryBorderColor": "#5B8DEF", "lineColor": "#7D8190", "secondaryColor": "#121317", "tertiaryColor": "#0D0F13", "clusterBkg": "#0D0F13", "clusterBorder": "#30323A", "edgeLabelBackground": "#121317"}, "flowchart": {"curve": "basis", "nodeSpacing": 30, "rankSpacing": 38, "padding": 14}}}%%
+%%{init: {"flowchart": {"curve": "linear", "nodeSpacing": 30, "rankSpacing": 42, "padding": 12}}}%%
 flowchart TB
-  subgraph Architecture[" "]
-    direction TB
   subgraph ControlPath["cockpit_protocol · 类型化控制平面"]
     direction LR
     Actors["AI Agent · 开发者 · CI"]
@@ -144,15 +142,14 @@ flowchart TB
   Flutter -.->|观察 · 采集| Evidence
   Native -.-> Evidence
   Desktop -.-> Evidence
-  end
 
-  classDef actor fill:#181A1F,stroke:#7D8190,color:#EDEDEF,stroke-width:1.5px
-  classDef surface fill:#181A1F,stroke:#5B8DEF,color:#EDEDEF,stroke-width:1.5px
-  classDef primary fill:#345CBA,stroke:#7BA1F2,color:#FFFFFF,stroke-width:2px
-  classDef control fill:#121317,stroke:#5B8DEF,color:#EDEDEF,stroke-width:2px
-  classDef worker fill:#181A1F,stroke:#4A7DD8,color:#EDEDEF,stroke-width:1.5px
-  classDef plane fill:#151922,stroke:#5B8DEF,color:#EDEDEF,stroke-width:1.5px
-  classDef evidence fill:#102A22,stroke:#4CB782,color:#EDEDEF,stroke-width:2px
+  classDef actor stroke:#8B949E,stroke-width:1.5px
+  classDef surface stroke:#5B8DEF,stroke-width:1.5px
+  classDef primary stroke:#2F81F7,stroke-width:3px,font-weight:700
+  classDef control stroke:#5B8DEF,stroke-width:2px,font-weight:600
+  classDef worker stroke:#5B8DEF,stroke-width:1.5px
+  classDef plane stroke:#8B949E,stroke-width:1.5px
+  classDef evidence stroke:#2DA44E,stroke-width:2.5px,font-weight:600
 
   class Actors actor
   class Surfaces surface
@@ -161,11 +158,6 @@ flowchart TB
   class Workers worker
   class Flutter,Native,Desktop plane
   class Evidence evidence
-
-  style Architecture fill:#08090A,stroke:#08090A,color:#EDEDEF
-  style ControlPath fill:#0D0F13,stroke:#30323A,color:#EDEDEF
-  style RuntimePath fill:#0D0F13,stroke:#30323A,color:#EDEDEF
-  style Planes fill:#111318,stroke:#30323A,color:#EDEDEF
 ```
 
 并行开发多个项目时，先分别注册，之后显式传 `workspaceId`，或者从唯一匹配的
