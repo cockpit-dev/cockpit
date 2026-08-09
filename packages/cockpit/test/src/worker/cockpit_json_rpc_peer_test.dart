@@ -217,7 +217,7 @@ void main() {
   );
 
   test(
-    'waits for remote terminal cleanup before completing a timeout',
+    'allows unrelated calls while a timeout awaits terminal cleanup',
     () async {
       final protocolErrors = <Object>[];
       final harness = _PeerHarness(
@@ -251,13 +251,14 @@ void main() {
       expect(completed, isFalse);
       expect(harness.client.isOutboundCleanupPending, isTrue);
       expect(
-        () => harness.client.call(
+        await harness.client.call(
           method: 'health',
           params: _params('during-cleanup'),
           deadline: _deadline(),
         ),
-        throwsA(isA<CockpitJsonRpcPeerCleanupPendingException>()),
+        isA<Map<String, Object?>>(),
       );
+      expect(harness.client.isOutboundCleanupPending, isTrue);
       await expectLater(call, throwsA(isA<TimeoutException>()));
       expect(protocolErrors, isEmpty);
       expect(harness.client.isOutboundCleanupPending, isFalse);

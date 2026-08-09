@@ -229,8 +229,7 @@ final class CockpitSupervisorHttpSupport {
         responsibleLayer: CockpitResponsibleLayer.worker,
         redactedDetails: _boundedDetails(error.error.details),
       ),
-      CockpitJsonRpcPeerClosedException() ||
-      CockpitJsonRpcPeerCleanupPendingException() => CockpitApiError(
+      CockpitJsonRpcPeerClosedException() => CockpitApiError(
         code: 'workerUnavailable',
         category: CockpitErrorCategory.environment,
         message: 'Workspace worker is unavailable.',

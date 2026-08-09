@@ -168,7 +168,7 @@ void main() {
       });
 
       test(
-        '${direction.name} waits for terminal cleanup before timeout',
+        '${direction.name} permits unrelated calls during timeout cleanup',
         () async {
           final protocolErrors = <Object>[];
           final harness = direction.open(
@@ -208,18 +208,21 @@ void main() {
           expect(completed, isFalse);
           expect(harness.peer.isOutboundCleanupPending, isTrue);
           expect(
-            () => harness.peer.call(
-              method: 'publishEventBatch',
-              params: _publishParams(
-                key: 'during-cleanup',
-                runId: 'runDuringCleanup',
-                afterSequence: 0,
-                eventSequence: 1,
+            CockpitWorkerPublishEventBatchResult.fromJson(
+              await harness.peer.call(
+                method: 'publishEventBatch',
+                params: _publishParams(
+                  key: 'during-cleanup',
+                  runId: 'runDuringCleanup',
+                  afterSequence: 0,
+                  eventSequence: 1,
+                ),
+                deadline: _deadline(),
               ),
-              deadline: _deadline(),
-            ),
-            throwsA(isA<CockpitJsonRpcPeerCleanupPendingException>()),
+            ).highestContiguousSequence,
+            1,
           );
+          expect(harness.peer.isOutboundCleanupPending, isTrue);
           await expectLater(call, throwsA(isA<TimeoutException>()));
           expect(protocolErrors, isEmpty);
           expect(harness.peer.isOutboundCleanupPending, isFalse);
