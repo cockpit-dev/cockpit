@@ -107,16 +107,59 @@ workspace 身份、授权、准入、lease、端口、run 投影和 artifact；�
 workspace/engine 启动独立 worker。系统不存在跨项目的全局 latest project 或
 latest session。
 
-```text
-CLI / MCP / 第三方客户端
-          |
-      认证 HTTP/SSE
-          |
-       Supervisor
-          |
-  workspace 隔离 worker
-          |
-Flutter bridge / Android ADB / iOS WDA / host driver
+```mermaid
+flowchart TB
+  subgraph Clients["AI、开发者与 CI"]
+    Agent["AI Agent<br/>Cockpit Skill"]
+    CLI["cockpit CLI"]
+    MCP["MCP 客户端"]
+    API["REST / SSE 客户端"]
+  end
+
+  Contract["cockpit_protocol<br/>DTO · JSON Schema · OpenAPI · 测试 DSL"]
+
+  subgraph Control["每用户独立控制平面"]
+    Supervisor["Supervisor<br/>认证 · 策略 · workspace 身份<br/>lease · 端口 · run · artifact"]
+  end
+
+  subgraph Isolation["workspace 与 engine 隔离"]
+    WorkerA["Workspace A worker"]
+    WorkerB["Workspace B worker"]
+    WorkerN["Workspace N worker"]
+  end
+
+  subgraph Execution["按实时能力选择执行平面"]
+    Router["实时能力路由<br/>位于每个 workspace worker 内"]
+    Flutter["flutter_cockpit bridge<br/>semantic UI · route · log · error · network"]
+    Native["原生 / 黑盒适配器<br/>ADB · WDA · accessibility · host control"]
+    Web["Web / 桌面适配器<br/>browser · window · capture"]
+  end
+
+  Targets["运行中的应用<br/>Flutter 源码 · 已安装移动/桌面应用 · Web"]
+
+  Agent --> CLI
+  Agent --> MCP
+  CLI -->|认证 operation| Supervisor
+  MCP -->|认证 operation| Supervisor
+  API -->|REST 命令 · SSE 事件| Supervisor
+  Contract -.->|统一类型契约| CLI
+  Contract -.-> MCP
+  Contract -.-> API
+  Contract -.-> Supervisor
+  Supervisor -->|准入与调度| WorkerA
+  Supervisor --> WorkerB
+  Supervisor --> WorkerN
+  WorkerA --> Router
+  WorkerB --> Router
+  WorkerN --> Router
+  Router --> Flutter
+  Router --> Native
+  Router --> Web
+  Flutter --> Targets
+  Native --> Targets
+  Web --> Targets
+  Targets -.->|状态与证据| Router
+  Router -.->|持久事件 · 报告 · artifact| Supervisor
 ```
 
 并行开发多个项目时，先分别注册，之后显式传 `workspaceId`，或者从唯一匹配的

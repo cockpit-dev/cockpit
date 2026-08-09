@@ -116,16 +116,59 @@ ports, run projections, and artifacts. It starts an isolated worker for each
 active workspace and engine version. No command relies on a global "latest"
 project or session.
 
-```text
-CLI / MCP / third-party client
-          |
-    authenticated HTTP/SSE
-          |
-    per-user Supervisor
-          |
-  workspace-scoped worker
-          |
- Flutter bridge / Android ADB / iOS WDA / host driver
+```mermaid
+flowchart TB
+  subgraph Clients["AI, humans, and CI"]
+    Agent["AI agent<br/>Cockpit Skill"]
+    CLI["cockpit CLI"]
+    MCP["MCP client"]
+    API["REST / SSE client"]
+  end
+
+  Contract["cockpit_protocol<br/>DTOs · JSON Schema · OpenAPI · test DSL"]
+
+  subgraph Control["Per-user control plane"]
+    Supervisor["Supervisor<br/>authentication · policy · workspace identity<br/>leases · ports · runs · artifacts"]
+  end
+
+  subgraph Isolation["Workspace and engine isolation"]
+    WorkerA["Workspace A worker"]
+    WorkerB["Workspace B worker"]
+    WorkerN["Workspace N worker"]
+  end
+
+  subgraph Execution["Capability-driven execution planes"]
+    Router["Live capability router<br/>inside each workspace worker"]
+    Flutter["flutter_cockpit bridge<br/>semantic UI · routes · logs · errors · network"]
+    Native["Native / black-box adapters<br/>ADB · WDA · accessibility · host control"]
+    Web["Web / desktop adapters<br/>browser · window · capture"]
+  end
+
+  Targets["Running applications<br/>Flutter source · installed mobile/desktop apps · web"]
+
+  Agent --> CLI
+  Agent --> MCP
+  CLI -->|authenticated operations| Supervisor
+  MCP -->|authenticated operations| Supervisor
+  API -->|REST commands · SSE events| Supervisor
+  Contract -.->|shared typed contract| CLI
+  Contract -.-> MCP
+  Contract -.-> API
+  Contract -.-> Supervisor
+  Supervisor -->|admit and dispatch| WorkerA
+  Supervisor --> WorkerB
+  Supervisor --> WorkerN
+  WorkerA --> Router
+  WorkerB --> Router
+  WorkerN --> Router
+  Router --> Flutter
+  Router --> Native
+  Router --> Web
+  Flutter --> Targets
+  Native --> Targets
+  Web --> Targets
+  Targets -.->|state and evidence| Router
+  Router -.->|durable events · reports · artifacts| Supervisor
 ```
 
 Register multiple projects once, then address them explicitly or run a command
