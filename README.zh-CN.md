@@ -108,54 +108,35 @@ workspace/engine 启动独立 worker。系统不存在跨项目的全局 latest 
 latest session。
 
 ```mermaid
-%%{init: {"theme": "base", "themeVariables": {"darkMode": true, "background": "#0D1117", "fontFamily": "system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif", "fontSize": "15px", "primaryColor": "#161B22", "primaryTextColor": "#F0F6FC", "primaryBorderColor": "#3D444D", "lineColor": "#6E7681", "secondaryColor": "#111D2E", "tertiaryColor": "#0D1117", "clusterBkg": "#0D1117", "clusterBorder": "#30363D", "edgeLabelBackground": "#0D1117"}, "flowchart": {"curve": "linear", "nodeSpacing": 28, "rankSpacing": 46, "padding": 16}}}%%
+%%{init: {"flowchart": {"curve": "linear", "nodeSpacing": 36, "rankSpacing": 44, "padding": 12}}}%%
 flowchart TB
-  subgraph Architecture[" "]
-    direction TB
-    subgraph ControlPath["cockpit_protocol · 类型化控制平面"]
-      direction LR
-      Actors["AI Agent · 开发者 · CI"]
-      Surfaces["Skill · CLI · MCP<br/>REST API"]
-      Supervisor["Supervisor<br/>身份 · 认证 · 策略 · run"]
-      Actors --> Surfaces --> Supervisor
-    end
-
-    subgraph RuntimePath["隔离的 workspace 执行环境"]
-      direction LR
-      Workers["Workspace worker · A/B/…/N"]
-      Router["每个 worker 的能力路由"]
-
-      subgraph Adapters["执行适配器"]
-        direction LR
-        Flutter["Flutter · semantic · runtime"]
-        Native["移动黑盒 · ADB · WDA"]
-        Desktop["Web · 桌面 · browser · window"]
-      end
-
-      Workers --> Router --> Adapters
-    end
-
-    Evidence["状态 · 事件 · 报告 · artifact"]
-
-    Supervisor --> Workers
-    Adapters -.-> Evidence
+  subgraph ControlPath["cockpit_protocol · 类型化控制平面"]
+    direction LR
+    Actors["AI Agent · 开发者 · CI"]
+    Surfaces["Skill · CLI · MCP · REST API"]
+    Supervisor["Supervisor<br/>身份 · 认证 · 策略 · run"]
+    Actors --> Surfaces --> Supervisor
   end
 
-  classDef node fill:#161B22,stroke:#3D444D,color:#F0F6FC,stroke-width:1.25px
-  classDef gateway fill:#111D2E,stroke:#5B8DEF,color:#F0F6FC,stroke-width:1.75px,font-weight:600
-  classDef core fill:#345CBA,stroke:#7BA1F2,color:#FFFFFF,stroke-width:2px,font-weight:700
-  classDef evidence fill:#102A22,stroke:#4CB782,color:#F0F6FC,stroke-width:1.75px,font-weight:600
+  Workers["隔离的 workspace worker<br/>A / B / … / N"]
+  Router["每个 worker<br/>独立能力路由"]
+  Flutter["Flutter<br/>semantic · runtime"]
+  Native["移动黑盒<br/>ADB · WDA"]
+  Desktop["Web · 桌面<br/>browser · window"]
+  Evidence["状态 · 事件 · 报告 · artifact"]
 
-  class Actors,Workers,Flutter,Native,Desktop node
+  Supervisor --> Workers --> Router
+  Router --> Flutter & Native & Desktop
+  Flutter & Native & Desktop -.-> Evidence
+
+  classDef gateway stroke:#5B8DEF,stroke-width:2px,font-weight:600
+  classDef core fill:#345CBA,stroke:#7BA1F2,color:#FFFFFF,stroke-width:2px,font-weight:700
+  classDef evidence fill:#247A57,stroke:#4CB782,color:#FFFFFF,stroke-width:2px,font-weight:600
   class Surfaces,Router gateway
   class Supervisor core
   class Evidence evidence
 
-  style Architecture fill:#0D1117,stroke:#0D1117,color:#F0F6FC
-  style ControlPath fill:#010409,stroke:#30363D,color:#F0F6FC,stroke-width:1px
-  style RuntimePath fill:#010409,stroke:#30363D,color:#F0F6FC,stroke-width:1px
-  style Adapters fill:#0D1117,stroke:#21262D,color:#8B949E,stroke-width:1px
-  linkStyle default stroke:#6E7681,stroke-width:1.4px
+  style ControlPath fill:transparent,stroke:transparent
 ```
 
 并行开发多个项目时，先分别注册，之后显式传 `workspaceId`，或者从唯一匹配的
