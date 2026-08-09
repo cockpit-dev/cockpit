@@ -59,10 +59,11 @@ cockpit --help
 cockpit update
 ```
 
-它会安装并验证最新版本，把源码安装的原生 executable 安全交还给 Pub，再恢复为单个
-优化后的 AOT executable，删除旧版与临时升级 payload，并在保留授权模式和持久化
-状态的前提下替换旧 Supervisor。Dart Pub 的共享下载缓存仍由 Pub 自己管理，Cockpit
-不会删除其他包的缓存。
+它会安装并验证最新版本，同时要求 Pub 解析出的版本不得低于当前 executable；即使
+Pub 版本索引尚未刷新，也会安全失败而不会把 Cockpit 降级。随后它会把源码安装的原生
+executable 安全交还给 Pub，再恢复为单个优化后的 AOT executable，删除旧版与临时
+升级 payload，并在保留授权模式和持久化状态的前提下替换旧 Supervisor。Dart Pub 的
+共享下载缓存仍由 Pub 自己管理，Cockpit 不会删除其他包的缓存。
 
 Flutter 源码开发额外使用仅限开发环境的 bridge：
 

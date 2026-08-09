@@ -144,7 +144,7 @@ void main() {
       'https://agent-plugins.org/schemas/1.0.0/plugin.schema.json',
     );
     expect(kiroPower['name'], 'cockpit');
-    expect(kiroPower['version'], '3.0.7');
+    expect(kiroPower['version'], '3.0.8');
     expect(
       kiroPower['keywords'],
       containsAll(<Object?>['cockpit', 'flutter', 'e2e']),

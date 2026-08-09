@@ -1,5 +1,7 @@
 import 'dart:io';
 
+import 'package:pub_semver/pub_semver.dart';
+
 import '../foundation/cockpit_version.dart';
 import '../infrastructure/cockpit_process_manager.dart';
 import 'cockpit_update_installation.dart';
@@ -55,7 +57,7 @@ final class CockpitUpdateService {
       onProgress?.call('Installing the latest Cockpit release...');
       final activation = await _invoke(
         dart,
-        const <String>['pub', 'global', 'activate', 'cockpit', 'any'],
+        <String>['pub', 'global', 'activate', 'cockpit', '>=$currentVersion'],
         deadline,
         failureCode: 'updateInstallFailed',
         failureMessage:
@@ -81,6 +83,10 @@ final class CockpitUpdateService {
         message: 'The updated Cockpit executable could not be verified.',
       );
       final installedVersion = _readVersion('${probe.stdout}');
+      _requireNoDowngrade(
+        currentVersion: currentVersion,
+        installedVersion: installedVersion,
+      );
       await installation.acceptHosted();
 
       onProgress?.call('Optimizing the installed Cockpit executable...');
@@ -192,6 +198,29 @@ final class CockpitUpdateService {
         retryable: false,
       );
     }
+  }
+
+  void _requireNoDowngrade({
+    required String currentVersion,
+    required String installedVersion,
+  }) {
+    try {
+      final current = Version.parse(currentVersion);
+      final installed = Version.parse(installedVersion);
+      if (installed >= current) return;
+    } on FormatException {
+      throw const CockpitUpdateException(
+        'updateVerificationFailed',
+        'Cockpit could not compare the current and installed versions.',
+        retryable: false,
+      );
+    }
+    throw CockpitUpdateException(
+      'updateDowngradeBlocked',
+      'Dart Pub resolved Cockpit $installedVersion, which is older than the '
+          'running $currentVersion release. The current executable was kept; '
+          'retry after Pub finishes publishing the newer release.',
+    );
   }
 
   Future<void> _removeLegacySourcePayload() async {
