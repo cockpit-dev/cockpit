@@ -10,6 +10,7 @@ import 'package:path/path.dart' as p;
 import '../foundation/cockpit_home.dart';
 import '../foundation/cockpit_internal_process.dart';
 import '../foundation/cockpit_locked_json_store.dart';
+import '../foundation/cockpit_version.dart';
 import 'cockpit_daemon_client.dart';
 import 'cockpit_daemon_discovery.dart';
 
@@ -1070,6 +1071,7 @@ Future<CockpitSupervisorApiClient> createCockpitSupervisorApiClient({
       restartArguments: launchConfiguration.restartArguments,
       permissionHardener: home.permissionHardener,
       directorySyncer: CockpitSystemDirectorySyncer(resolver.platform),
+      requiredEngineVersion: cockpitVersion,
       launchFailure: launchFailure,
     ),
     requiredFeatures: requiredFeatures,

@@ -1,5 +1,12 @@
 # Changelog
 
+## 3.0.5
+
+- Rejected macOS logical viewport sizes that cannot fit the active display
+  immediately with `viewportExceedsScreen` and an exact maximum-size
+  alternative, instead of waiting for an impossible resize to settle.
+- Preserved exact native window resizing for dimensions that fit the display.
+
 ## 3.0.4
 
 - Preserved real Enter key delivery for focused multiline inputs so app-level

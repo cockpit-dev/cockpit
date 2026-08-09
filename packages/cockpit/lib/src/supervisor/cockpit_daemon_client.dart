@@ -64,6 +64,7 @@ final class CockpitDaemonLifecycleClient {
     required Iterable<String> restartArguments,
     required this.permissionHardener,
     required this.directorySyncer,
+    required this.requiredEngineVersion,
     this.requiredApiMajor = 2,
     this.startTimeout = const Duration(minutes: 2),
     this.launchFailure,
@@ -76,6 +77,7 @@ final class CockpitDaemonLifecycleClient {
   final List<String> restartArguments;
   final CockpitPermissionHardener permissionHardener;
   final CockpitDirectorySyncer directorySyncer;
+  final String requiredEngineVersion;
   final int requiredApiMajor;
   final Duration startTimeout;
   final CockpitDaemonException? launchFailure;
@@ -88,6 +90,7 @@ final class CockpitDaemonLifecycleClient {
 
   Future<CockpitDaemonDiscovery> ensure({Duration? timeout}) =>
       _EnsureLocks.run(paths.daemonEnsureLock, () async {
+        var launchAuthorizationMode = CockpitAuthorizationMode.restricted;
         final first = await _usableDiscovery();
         if (first != null) return first;
         final lock = await File(
@@ -96,9 +99,12 @@ final class CockpitDaemonLifecycleClient {
         try {
           await permissionHardener.hardenFile(File(paths.daemonEnsureLock));
           await lock.lock(FileLock.blockingExclusive);
-          final rechecked = await _usableDiscovery();
+          final rechecked = await _usableDiscovery(
+            replaceIncompatibleEngine: true,
+            onEngineReplacement: (mode) => launchAuthorizationMode = mode,
+          );
           if (rechecked != null) return rechecked;
-          final processId = await _startProcess();
+          final processId = await _startProcess(launchAuthorizationMode);
           return _waitUntilReady(
             startedProcessId: processId,
             timeout: timeout ?? startTimeout,
@@ -161,6 +167,8 @@ final class CockpitDaemonLifecycleClient {
           ? 'healthUnavailable'
           : server.apiVersion.major != requiredApiMajor
           ? 'upgradeRequired'
+          : server.engineVersion != requiredEngineVersion
+          ? 'upgradeRequired'
           : null,
     );
   }
@@ -171,6 +179,14 @@ final class CockpitDaemonLifecycleClient {
   }) async {
     final discovery = await _store.read();
     if (discovery == null) return;
+    await _stopDiscovery(discovery, mode: mode, timeout: timeout);
+  }
+
+  Future<void> _stopDiscovery(
+    CockpitDaemonDiscovery discovery, {
+    required CockpitDaemonShutdownMode mode,
+    required Duration timeout,
+  }) async {
     final identity = await const CockpitSystemProcessIdentityProbe()
         .readStartIdentity(discovery.processId);
     if (identity != discovery.processStartIdentity) {
@@ -294,7 +310,10 @@ final class CockpitDaemonLifecycleClient {
     };
   }
 
-  Future<CockpitDaemonDiscovery?> _usableDiscovery() async {
+  Future<CockpitDaemonDiscovery?> _usableDiscovery({
+    bool replaceIncompatibleEngine = false,
+    void Function(CockpitAuthorizationMode mode)? onEngineReplacement,
+  }) async {
     CockpitDaemonDiscovery? discovery;
     try {
       discovery = await _store.read();
@@ -322,6 +341,16 @@ final class CockpitDaemonLifecycleClient {
           'upgradeRequired',
           'An active daemon uses an incompatible API major.',
         );
+      }
+      if (server.engineVersion != requiredEngineVersion) {
+        if (!replaceIncompatibleEngine) return null;
+        onEngineReplacement?.call(discovery.authorizationMode);
+        await _stopDiscovery(
+          discovery,
+          mode: CockpitDaemonShutdownMode.drain,
+          timeout: const Duration(seconds: 30),
+        );
+        return null;
       }
       return discovery;
     }
@@ -396,7 +425,7 @@ final class CockpitDaemonLifecycleClient {
     try {
       await permissionHardener.hardenFile(File(paths.daemonEnsureLock));
       await lock.lock(FileLock.blockingExclusive);
-      final rechecked = await _usableDiscovery();
+      final rechecked = await _usableDiscovery(replaceIncompatibleEngine: true);
       if (rechecked != null) return rechecked;
       final processId = await _startProcess(authorizationMode);
       return _waitUntilReady(

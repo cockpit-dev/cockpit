@@ -769,7 +769,26 @@ final class FlutterCockpitRootState extends State<FlutterCockpitRoot> {
       );
     }
 
-    await _nativeViewport.resize(width: request.width, height: request.height);
+    final resize = await _nativeViewport.resize(
+      width: request.width,
+      height: request.height,
+    );
+    if (!resize.accepted) {
+      return CockpitViewportResizeResult(
+        available: false,
+        changed: false,
+        requestedWidth: request.width,
+        requestedHeight: request.height,
+        platform: platform,
+        logicalWidth: before.logicalWidth,
+        logicalHeight: before.logicalHeight,
+        physicalWidth: before.physicalWidth,
+        physicalHeight: before.physicalHeight,
+        devicePixelRatio: before.devicePixelRatio,
+        reason: resize.reason ?? 'viewportResizeRejected',
+        alternatives: resize.alternatives,
+      );
+    }
     final effective = await _waitForViewport(
       width: request.width,
       height: request.height,

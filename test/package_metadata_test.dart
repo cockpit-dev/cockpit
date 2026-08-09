@@ -13,6 +13,9 @@ void main() {
     final devtoolsPubspec = File(
       'packages/cockpit/pubspec.yaml',
     ).readAsStringSync();
+    final supervisorRuntime = File(
+      'packages/cockpit/lib/src/supervisor/cockpit_supervisor_runtime.dart',
+    ).readAsStringSync();
     final runtimeVersion = _readPackageVersion('packages/flutter_cockpit');
     final protocolVersion = _readPackageVersion('packages/cockpit_protocol');
     final devtoolsVersion = _readPackageVersion('packages/cockpit');
@@ -21,11 +24,15 @@ void main() {
     expect(runtimePubspec, isNot(contains('name: flutter_pilot')));
     expect(protocolPubspec, contains('name: cockpit_protocol'));
     expect(devtoolsPubspec, contains('name: cockpit'));
-    expect(runtimeVersion, '3.0.4');
-    expect(protocolVersion, '3.0.4');
-    expect(devtoolsVersion, '3.0.4');
-    expect(runtimePubspec, contains('cockpit_protocol: ^3.0.4'));
-    expect(devtoolsPubspec, contains('cockpit_protocol: ^3.0.4'));
+    expect(runtimeVersion, '3.0.5');
+    expect(protocolVersion, '3.0.5');
+    expect(devtoolsVersion, '3.0.5');
+    expect(runtimePubspec, contains('cockpit_protocol: ^3.0.5'));
+    expect(devtoolsPubspec, contains('cockpit_protocol: ^3.0.5'));
+    expect(
+      supervisorRuntime,
+      contains('const cockpitSupervisorEngineVersion = cockpitVersion;'),
+    );
     expect(runtimePubspec, isNot(contains('flutter_cockpit_protocol:')));
     expect(devtoolsPubspec, isNot(contains('flutter_cockpit_protocol:')));
     expect(
@@ -547,7 +554,7 @@ void main() {
     expect(kiroSteering, contains('.kiro/skills/cockpit/SKILL.md'));
     expect(kiroSteering, isNot(contains('dart run cockpit')));
     expect(kiroPlugin, contains('agent-plugins.org/schemas/1.0.0'));
-    expect(kiroPlugin, contains('"version": "3.0.4"'));
+    expect(kiroPlugin, contains('"version": "3.0.5"'));
 
     for (final path in <String>[
       'plugins/codex/cockpit/README.md',
