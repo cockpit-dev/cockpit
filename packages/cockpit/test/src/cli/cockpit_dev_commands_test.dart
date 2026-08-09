@@ -153,6 +153,21 @@ void main() {
     );
   });
 
+  test('update exposes one bounded runtime upgrade command', () {
+    final runner = CockpitCommandRunner(
+      runtime: CockpitCliRuntime(
+        stdoutSink: StringBuffer(),
+        stderrSink: StringBuffer(),
+      ),
+    );
+    final update = runner.commands['update'];
+
+    expect(update, isNotNull);
+    expect(update!.description, 'Update Cockpit and reconnect its Supervisor.');
+    expect(update.argParser.options['timeout']!.defaultsTo, '10m');
+    expect(update.argParser.options['format']!.defaultsTo, 'lon');
+  });
+
   test('dev combines optional target conditions in one exact locator', () {
     final runner = CockpitCommandRunner(
       runtime: CockpitCliRuntime(

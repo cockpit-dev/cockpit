@@ -8,6 +8,7 @@ import '../supervisor/cockpit_daemon_client.dart';
 import '../supervisor/cockpit_supervisor_api_client.dart';
 import 'cockpit_cli_output.dart';
 import 'cockpit_cli_runtime.dart';
+import 'cockpit_update_service.dart';
 import 'commands/daemon_commands.dart';
 import 'commands/dev_commands.dart';
 import 'commands/explain_command.dart';
@@ -15,6 +16,7 @@ import 'commands/resource_commands.dart';
 import 'commands/session_commands.dart';
 import 'commands/run_commands.dart';
 import 'commands/serve_mcp_command.dart';
+import 'commands/update_command.dart';
 
 export 'cockpit_cli_runtime.dart'
     show
@@ -27,18 +29,21 @@ export 'cockpit_cli_runtime.dart'
         cockpitUsageExitCode;
 
 final class CockpitCommandRunner {
-  CockpitCommandRunner({CockpitCliRuntime? runtime})
-    : runtime = runtime ?? CockpitCliRuntime(),
-      _runner = CommandRunner<int>(
-        'cockpit',
-        'Authenticated Cockpit 3.0 development and E2E client.',
-      ) {
+  CockpitCommandRunner({
+    CockpitCliRuntime? runtime,
+    CockpitUpdateService? updateService,
+  }) : runtime = runtime ?? CockpitCliRuntime(),
+       _runner = CommandRunner<int>(
+         'cockpit',
+         'Authenticated Cockpit 3.0 development and E2E client.',
+       ) {
     _runner.argParser.addFlag(
       'version',
       negatable: false,
       help: 'Print the Cockpit package version.',
     );
     _runner
+      ..addCommand(cockpitUpdateCommand(this.runtime, service: updateService))
       ..addCommand(CockpitDaemonCommand(this.runtime))
       ..addCommand(CockpitDevCommand(this.runtime))
       ..addCommand(cockpitExplainCommand(this.runtime))

@@ -87,15 +87,15 @@ void main() {
       'cockpit dev diagnose',
       'reconciled internally',
       'current screenshot',
+      'cockpit update',
       'Minimal canonical LON',
       'never request JSON merely because it is structured',
-      'only when piping to `jq`',
-      'If no such consumer exists, keep LON',
+      'only on a pipeline that uses `jq`',
+      'JSON without one of those\nconsumers is a command-authoring error',
       'equal projections, not equal defaults',
       "cockpit dev status --format json | jq '.state.lifecycle'",
-      'next command that needs the',
-      'compares its running engine with the installed package',
-      'Do not manually delete Cockpit home data',
+      'installs and verifies the latest Pub\nrelease',
+      'Do not manually delete Cockpit home data, Pub caches',
       '--format',
       '--verbosity',
       'Every explicit option must change behavior',
@@ -128,6 +128,16 @@ void main() {
     final examples = RegExp(
       r'```bash\n([\s\S]*?)\n```',
     ).allMatches(distribution).map((match) => match.group(1)!).join('\n');
+    for (final line
+        in examples
+            .split('\n')
+            .where((line) => line.contains('--format json'))) {
+      expect(
+        line,
+        contains('| jq'),
+        reason: 'JSON example requires an explicit JSON consumer: $line',
+      );
+    }
     for (final redundantDefault in <String>[
       '--verbosity minimal',
       '--format lon',

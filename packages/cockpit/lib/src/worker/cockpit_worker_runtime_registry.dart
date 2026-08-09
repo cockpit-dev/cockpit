@@ -671,9 +671,19 @@ final class CockpitWorkerRuntimeRegistry
     if (currentHandle != null &&
         currentHandle.developmentSessionId == handle.developmentSessionId &&
         handle.reloadGeneration < currentHandle.reloadGeneration) {
+      final app = _apps[current.appId];
+      if (app != null &&
+          _syncTargetHandleFromApp(current.targetId, app.handle)) {
+        await _persist();
+      }
       return current;
     }
     if (_sameOptionalDevelopmentHandle(current.developmentHandle, handle)) {
+      final app = _apps[current.appId];
+      if (app != null &&
+          _syncTargetHandleFromApp(current.targetId, app.handle)) {
+        await _persist();
+      }
       return current;
     }
     await _handlePersistence.validateDevelopment(handle);
@@ -691,12 +701,17 @@ final class CockpitWorkerRuntimeRegistry
     _sessions[sessionId] = updated;
     final app = _apps[current.appId];
     if (app != null) {
+      final refreshedApp = CockpitAppHandle.fromDevelopmentSession(
+        handle,
+        supervisorLogPath: app.handle.supervisorLogPath,
+      );
       _apps[current.appId] = CockpitWorkerAppBinding(
         appId: app.appId,
         targetId: app.targetId,
-        handle: CockpitAppHandle.fromDevelopmentSession(handle),
+        handle: refreshedApp,
         updatedAt: updated.updatedAt,
       );
+      _syncTargetHandleFromApp(current.targetId, refreshedApp);
     }
     await _persist();
     return updated;
@@ -1493,17 +1508,36 @@ final class CockpitWorkerRuntimeRegistry
         environment: currentSession.environment,
         updatedAt: _utcNow(),
       );
+      final refreshedApp = CockpitAppHandle.fromDevelopmentSession(
+        restarted,
+        supervisorLogPath: currentApp.handle.supervisorLogPath,
+      );
       _apps[currentApp.appId] = CockpitWorkerAppBinding(
         appId: currentApp.appId,
         targetId: currentApp.targetId,
-        handle: CockpitAppHandle.fromDevelopmentSession(
-          restarted,
-          supervisorLogPath: currentApp.handle.supervisorLogPath,
-        ),
+        handle: refreshedApp,
         updatedAt: _utcNow(),
       );
+      _syncTargetHandleFromApp(currentSession.targetId, refreshedApp);
       await _persist();
     });
+  }
+
+  bool _syncTargetHandleFromApp(String targetId, CockpitAppHandle app) {
+    final target = _targets[targetId];
+    final handle = target?.handle;
+    if (target == null || handle == null) return false;
+    final refreshedHandle = handle.withAppHandle(app);
+    if (refreshedHandle == handle) return false;
+    _targets[targetId] = CockpitWorkerTargetBinding(
+      targetId: target.targetId,
+      deviceResourceId: target.deviceResourceId,
+      projectDir: target.projectDir,
+      launchEntrypoint: target.launchEntrypoint,
+      registration: target.registration,
+      handle: refreshedHandle,
+    );
+    return true;
   }
 
   Future<void> _isolateSystemTarget(

@@ -1,5 +1,10 @@
 # Changelog
 
+## 3.0.6
+
+- Synchronized the Flutter bridge with the Cockpit 3.0.6 runtime identity
+  recovery patch release; bridge behavior is unchanged.
+
 ## 3.0.5
 
 - Rejected macOS logical viewport sizes that cannot fit the active display

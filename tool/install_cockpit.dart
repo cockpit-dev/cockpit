@@ -16,22 +16,9 @@ Future<void> main(List<String> arguments) async {
 
     final destination = File(output);
     await destination.parent.create(recursive: true);
-    final usesLauncher = arguments.isEmpty && !Platform.isWindows;
-    final payload = usesLauncher
-        ? File.fromUri(
-            destination.parent.parent.uri.resolve('cockpit-aot/cockpit'),
-          )
-        : destination;
-    await payload.parent.create(recursive: true);
     final suffix = '$pid-${DateTime.now().microsecondsSinceEpoch}';
-    final payloadStaging = File('${payload.path}.install-$suffix');
-    final payloadBackup = File('${payload.path}.backup-$suffix');
-    final launcherStaging = usesLauncher
-        ? File('${destination.path}.install-$suffix')
-        : null;
-    final launcherBackup = usesLauncher
-        ? File('${destination.path}.backup-$suffix')
-        : null;
+    final staging = File('${destination.path}.install-$suffix');
+    final backup = File('${destination.path}.backup-$suffix');
 
     try {
       final compiler = await Process.run(Platform.resolvedExecutable, <String>[
@@ -39,68 +26,34 @@ Future<void> main(List<String> arguments) async {
         'exe',
         entrypoint.path,
         '-o',
-        payloadStaging.path,
+        staging.path,
       ], workingDirectory: root.path);
-      if (compiler.exitCode != 0 || !await payloadStaging.exists()) {
+      if (compiler.exitCode != 0 || !await staging.exists()) {
         final details = '${compiler.stderr}'.trim();
         throw ProcessException(
           Platform.resolvedExecutable,
-          <String>[
-            'compile',
-            'exe',
-            entrypoint.path,
-            '-o',
-            payloadStaging.path,
-          ],
+          <String>['compile', 'exe', entrypoint.path, '-o', staging.path],
           details.isEmpty ? 'Cockpit AOT compilation failed.' : details,
           compiler.exitCode,
         );
       }
 
-      final payloadProbe = await Process.run(
-        payloadStaging.path,
-        const <String>['--help'],
-      );
+      final payloadProbe = await Process.run(staging.path, const <String>[
+        '--help',
+      ]);
       if (payloadProbe.exitCode != 0) {
         throw ProcessException(
-          payloadStaging.path,
+          staging.path,
           const <String>['--help'],
           'Compiled Cockpit executable did not start successfully.',
           payloadProbe.exitCode,
         );
       }
 
-      if (launcherStaging != null) {
-        await launcherStaging.writeAsString(
-          _launcherScript(payload.path),
-          flush: true,
-        );
-        final chmod = await Process.run('chmod', <String>[
-          '755',
-          launcherStaging.path,
-        ]);
-        if (chmod.exitCode != 0) {
-          throw ProcessException(
-            'chmod',
-            <String>['755', launcherStaging.path],
-            '${chmod.stderr}'.trim(),
-            chmod.exitCode,
-          );
-        }
-      }
-
-      final replacedPayload = await payload.exists();
-      final replacedLauncher =
-          launcherBackup != null && await destination.exists();
-      if (replacedPayload) await payload.rename(payloadBackup.path);
-      if (replacedLauncher) {
-        await destination.rename(launcherBackup.path);
-      }
+      final replaced = await destination.exists();
+      if (replaced) await destination.rename(backup.path);
       try {
-        await payloadStaging.rename(payload.path);
-        if (launcherStaging != null) {
-          await launcherStaging.rename(destination.path);
-        }
+        await staging.rename(destination.path);
         final probe = await Process.run(destination.path, const <String>[
           '--help',
         ]);
@@ -113,35 +66,19 @@ Future<void> main(List<String> arguments) async {
           );
         }
       } on Object {
-        if (launcherStaging != null && await destination.exists()) {
-          await destination.delete();
-        }
-        if (await payload.exists()) await payload.delete();
-        if (replacedPayload && await payloadBackup.exists()) {
-          await payloadBackup.rename(payload.path);
-        }
-        if (replacedLauncher && await launcherBackup.exists()) {
-          await launcherBackup.rename(destination.path);
+        if (await destination.exists()) await destination.delete();
+        if (replaced && await backup.exists()) {
+          await backup.rename(destination.path);
         }
         rethrow;
       }
-      if (await payloadBackup.exists()) await payloadBackup.delete();
-      if (launcherBackup != null && await launcherBackup.exists()) {
-        await launcherBackup.delete();
-      }
+      if (await backup.exists()) await backup.delete();
+      if (arguments.isEmpty) await _deleteLegacyPayload(destination);
       stdout.writeln(destination.path);
     } finally {
-      if (await payloadStaging.exists()) await payloadStaging.delete();
-      if (launcherStaging != null && await launcherStaging.exists()) {
-        await launcherStaging.delete();
-      }
-      if (await payloadBackup.exists() && !await payload.exists()) {
-        await payloadBackup.rename(payload.path);
-      }
-      if (launcherBackup != null &&
-          await launcherBackup.exists() &&
-          !await destination.exists()) {
-        await launcherBackup.rename(destination.path);
+      if (await staging.exists()) await staging.delete();
+      if (await backup.exists() && !await destination.exists()) {
+        await backup.rename(destination.path);
       }
     }
   } on FormatException catch (error) {
@@ -153,9 +90,11 @@ Future<void> main(List<String> arguments) async {
   }
 }
 
-String _launcherScript(String payloadPath) {
-  final quoted = "'${payloadPath.replaceAll("'", "'\"'\"'")}'";
-  return '#!/bin/sh\nexec $quoted "\$@"\n';
+Future<void> _deleteLegacyPayload(File destination) async {
+  final legacy = Directory.fromUri(
+    destination.parent.parent.uri.resolve('cockpit-aot/'),
+  );
+  if (await legacy.exists()) await legacy.delete(recursive: true);
 }
 
 String _outputPath(List<String> arguments) {

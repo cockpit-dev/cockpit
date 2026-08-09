@@ -122,10 +122,10 @@ cockpit artifact read \
 ```
 
 Terminal output defaults to minimal canonical LON for agent loops. Omit default
-output options. Request `--format json` only when a consumer needs JSON, or use
-`--verbosity full --format json --output <file>` to write the complete response
-and receive only its verified path. Verbosity changes information density, not
-operation accuracy.
+output options. Request `--format json` only with `jq`, a JSON-only consumer, or
+JSON wire inspection. Otherwise use `--verbosity full --output <file>.lon` to
+write the complete response and receive only its verified path. Verbosity
+changes information density, not operation accuracy.
 `artifact read` always writes verified bytes to a file and never emits Base64.
 Use `artifact list` as the authority for artifact identity and metadata.
 

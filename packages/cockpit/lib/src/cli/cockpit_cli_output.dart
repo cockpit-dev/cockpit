@@ -22,9 +22,9 @@ void cockpitAddCliOutputOptions(ArgParser parser) {
       allowed: CockpitCliFormat.values.map((value) => value.name),
       defaultsTo: CockpitCliFormat.lon.name,
       help:
-          'Output encoding: lon by default; json/yaml/jsonl for structured '
-          'pipelines; path prints the primary artifact or --output path; '
-          'none stays silent.',
+          'Output encoding: lon by default; json only for jq or a JSON-only '
+          'consumer; yaml/jsonl for an explicit compatible consumer; path '
+          'prints the primary artifact or --output path; none stays silent.',
     )
     ..addOption(
       'verbosity',

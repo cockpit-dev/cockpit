@@ -57,10 +57,16 @@ dart pub global activate cockpit any
 cockpit --help
 ```
 
-Re-run the activation command to upgrade. The next command that needs the
-Supervisor replaces an older running engine with the installed version while
-preserving its authorization mode and durable state; no manual daemon restart
-or cache cleanup is required.
+Upgrade the installed runtime with one command:
+
+```bash
+cockpit update
+```
+
+It installs and verifies the latest release, removes Cockpit's retired source
+payload, and replaces an older running Supervisor while preserving its
+authorization mode and durable state. Dart Pub owns its shared download cache;
+Cockpit never deletes unrelated cached packages.
 
 Flutter source development additionally uses the development-only bridge:
 
@@ -169,7 +175,8 @@ cockpit workspace list
 The default is minimal canonical LON. Omit default output options in normal
 commands. `--verbosity standard|full` adds context without changing operation
 accuracy; `--format json|yaml|jsonl|path|none` changes output encoding or delivery.
-Use `--verbosity full --format json --output <file>` for a complete response.
+Use `--verbosity full --output <file>.lon` for a complete response. Request JSON
+only for `jq`, a JSON-only consumer, or JSON wire inspection.
 When `--output` or an artifact command writes a file, stdout contains only its
 verified path. File bytes, Base64, hashes, and decision-irrelevant byte counts
 never enter terminal output.
@@ -447,13 +454,14 @@ self-contained AOT executable once before live validation:
 dart run tool/install_cockpit.dart
 ```
 
-On Unix it atomically installs an AOT payload behind a Pub-compatible launcher;
-on Windows it installs the native executable beside Pub's launcher. Compilation
-or launch verification failure restores the previous installation. Daily
-commands remain `cockpit ...`; they no longer pay the dependency resolution cost
-of a path-activated `dart pub global run` wrapper, and a later
-`dart pub global activate cockpit` can still replace the launcher normally. Use
-`--output PATH` only when a different single-executable location is intentional.
+It atomically replaces one native executable in Dart's global bin directory on
+every platform and removes the retired split launcher/payload layout.
+Compilation or launch verification failure restores the previous installation.
+Daily commands remain `cockpit ...`; they no longer pay the dependency
+resolution cost of a path-activated `dart pub global run` wrapper, and
+`cockpit update` can replace the development executable with the latest hosted
+release. Use `--output PATH` only when a different single-executable location is
+intentional.
 
 ## Release Gate
 

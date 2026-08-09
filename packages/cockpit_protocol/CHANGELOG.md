@@ -1,5 +1,10 @@
 # Changelog
 
+## 3.0.6
+
+- Synchronized the protocol package with the Cockpit 3.0.6 runtime identity
+  recovery patch release; public protocol contracts are unchanged.
+
 ## 3.0.5
 
 - Synchronized the protocol package with the Cockpit 3.0.5 patch release so

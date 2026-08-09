@@ -32,10 +32,21 @@ version in host configuration:
 dart pub global activate cockpit any
 ```
 
-Re-run the same command to upgrade. The next command that needs the Supervisor
-detects an older running engine, drains it, and starts the installed version
-while preserving its authorization mode and durable state. Do not manually
-delete the Cockpit home, caches, sessions, or ports after upgrading.
+After the first installation, upgrade the runtime with:
+
+```bash
+cockpit update
+```
+
+It installs and verifies the latest release, removes Cockpit's retired
+source-install payload, and reconnects the Supervisor while preserving its
+authorization mode and durable state. Dart Pub owns its shared download cache;
+Cockpit does not delete unrelated cached packages.
+
+Update the host-native plugin through that host's plugin manager. For a manual
+Skill installation, stage the complete new Skill directory, validate it, then
+atomically replace the old directory. Never merge-copy a new Skill over the old
+one because removed files from earlier releases would remain active.
 
 Ensure Dart's global executable directory is on `PATH`, run `cockpit help`,
 and confirm the host can resolve `cockpit_mcp`. Do not invoke `cockpit_mcp`
@@ -53,8 +64,8 @@ the CLI.
 
 1. Identify the active host and install only its adapter below.
 2. Prefer a native plugin or installer when one exists.
-3. Otherwise copy this whole directory into the host's Skill directory and
-   merge the MCP configuration without removing existing servers.
+3. Otherwise atomically replace this whole directory in the host's Skill
+   directory and merge the MCP configuration without removing existing servers.
 4. Copy real files. Do not leave a symlink to a temporary clone or any path
    outside the installed Skill directory. The source checkout may be deleted
    after installation.

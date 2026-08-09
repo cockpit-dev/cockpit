@@ -19,6 +19,114 @@ import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 
 void main() {
+  test(
+    'development refresh keeps target and app runtime identities aligned',
+    () async {
+      final temporary = await Directory.systemTemp.createTemp(
+        'cockpit-worker-development-refresh-',
+      );
+      addTearDown(() => temporary.delete(recursive: true));
+      final workspaceRoot = await temporary.resolveSymbolicLinks();
+      final stateRoot = await Directory(
+        p.join(workspaceRoot, 'state'),
+      ).create();
+      final supervisorLog = await File(
+        p.join(stateRoot.path, 'logs', 'supervisor.log'),
+      ).create(recursive: true);
+      final store = CockpitInMemoryWorkerRuntimeStateStore();
+      final registry = CockpitWorkerRuntimeRegistry(
+        workspaceId: 'workspaceA',
+        workspaceRoot: workspaceRoot,
+        stateRoot: stateRoot.path,
+        stateStore: store,
+      );
+      final targetId = await registry.registerTarget(
+        const CockpitWorkerTargetRegistration(
+          workspaceId: 'workspaceA',
+          platform: 'macos',
+          deviceId: 'macos',
+          targetKind: CockpitTargetKind.flutterApp,
+          environment: CockpitTestTargetEnvironment.development,
+        ),
+      );
+      final initialRemote = CockpitRemoteSessionHandle(
+        platform: 'macos',
+        deviceId: 'macos',
+        projectDir: workspaceRoot,
+        target: 'cockpit/main.dart',
+        appId: 'runtime-old',
+        platformAppId: 'dev.cockpit.console',
+        host: '127.0.0.1',
+        hostPort: 9101,
+        devicePort: 9101,
+        baseUrl: 'http://127.0.0.1:9101',
+        launchedAt: DateTime.utc(2026, 8, 9),
+      );
+      final initialDevelopment = CockpitDevelopmentSessionHandle(
+        developmentSessionId: 'development-session-A',
+        platform: initialRemote.platform,
+        deviceId: initialRemote.deviceId,
+        projectDir: initialRemote.projectDir,
+        target: initialRemote.target,
+        appId: initialRemote.appId,
+        appBaseUrl: initialRemote.baseUrl,
+        supervisorBaseUrl: 'cockpit-worker://development/A',
+        launchedAt: initialRemote.launchedAt,
+        reloadGeneration: 0,
+        remoteSessionHandle: initialRemote,
+      );
+      final initialApp = CockpitAppHandle.fromDevelopmentSession(
+        initialDevelopment,
+        supervisorLogPath: supervisorLog.path,
+      );
+      final app = await registry.recordLaunchedApp(
+        targetId: targetId,
+        targetHandle: CockpitTargetHandle.fromAppHandle(initialApp),
+        appHandle: initialApp,
+      );
+      final sessionId = await registry.sessionIdForApp(app.appId);
+      final refreshedRemote = initialRemote.copyWith(appId: 'runtime-new');
+      final refreshedDevelopment = initialDevelopment.copyWith(
+        appId: refreshedRemote.appId,
+        reloadGeneration: 1,
+        remoteSessionHandle: refreshedRemote,
+      );
+
+      await registry.updateDevelopmentSession(sessionId, refreshedDevelopment);
+
+      final target = await registry.readTarget(targetId);
+      final refreshedApp = await registry.requireApp(app.appId);
+      final session = await registry.requireSession(sessionId);
+      expect(target.handle?.targetId, 'runtime-new');
+      expect(target.handle?.metadata['appId'], 'runtime-new');
+      expect(
+        (target.handle?.metadata['remoteSession']
+            as Map<String, Object?>)['appId'],
+        'runtime-new',
+      );
+      expect(refreshedApp.handle.appId, 'runtime-new');
+      expect(refreshedApp.handle.supervisorLogPath, supervisorLog.path);
+      expect(session.remoteHandle.appId, 'runtime-new');
+
+      await registry.recordTargetHandle(
+        targetId: targetId,
+        handle: CockpitTargetHandle.fromAppHandle(initialApp),
+      );
+      await registry.updateDevelopmentSession(sessionId, refreshedDevelopment);
+      final healedTarget = await registry.readTarget(targetId);
+      expect(healedTarget.handle?.metadata['appId'], 'runtime-new');
+
+      final reopened = CockpitWorkerRuntimeRegistry(
+        workspaceId: 'workspaceA',
+        workspaceRoot: workspaceRoot,
+        stateRoot: stateRoot.path,
+        stateStore: store,
+      );
+      final reopenedTarget = await reopened.readTarget(targetId);
+      expect(reopenedTarget.handle?.metadata['appId'], 'runtime-new');
+    },
+  );
+
   test('replaces the stale session when the same app is relaunched', () async {
     final temporary = await Directory.systemTemp.createTemp(
       'cockpit-worker-app-relaunch-',
