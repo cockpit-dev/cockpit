@@ -1,5 +1,10 @@
 # Changelog
 
+## 3.0.3
+
+- Synchronized the Flutter bridge patch release with Cockpit 3.0.3 and the
+  matching protocol package while preserving the validated runtime behavior.
+
 ## 3.0.2
 
 - Routed Enter on a focused Flutter text field through its real IME action so

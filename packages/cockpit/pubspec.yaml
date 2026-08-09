@@ -31,7 +31,7 @@ dependencies:
   dart_mcp: ^0.5.2
   file: ^7.0.1
   ffi: ^2.1.4
-  cockpit_protocol: ^3.0.2
+  cockpit_protocol: ^3.0.3
   crypto: ^3.0.7
   http: ^1.6.0
   image: ^4.8.0

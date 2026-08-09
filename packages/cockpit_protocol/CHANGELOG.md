@@ -1,5 +1,10 @@
 # Changelog
 
+## 3.0.3
+
+- Synchronized the protocol patch release with Cockpit 3.0.3 so the CLI,
+  Flutter bridge, and independent clients keep one published version baseline.
+
 ## 3.0.2
 
 - Added strict bounded decoding for network queries, runtime queries, snapshot
