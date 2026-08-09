@@ -117,58 +117,65 @@ active workspace and engine version. No command relies on a global "latest"
 project or session.
 
 ```mermaid
+%%{init: {"theme": "base", "themeVariables": {"darkMode": true, "background": "#08090A", "fontFamily": "system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif", "fontSize": "15px", "primaryColor": "#181A1F", "primaryTextColor": "#EDEDEF", "primaryBorderColor": "#5B8DEF", "lineColor": "#7D8190", "secondaryColor": "#121317", "tertiaryColor": "#0D0F13", "clusterBkg": "#0D0F13", "clusterBorder": "#30323A", "edgeLabelBackground": "#121317"}, "flowchart": {"curve": "basis", "nodeSpacing": 30, "rankSpacing": 38, "padding": 14}}}%%
 flowchart TB
-  subgraph Clients["AI, humans, and CI"]
-    Agent["AI agent<br/>Cockpit Skill"]
-    CLI["cockpit CLI"]
-    MCP["MCP client"]
-    API["REST / SSE client"]
+  subgraph Architecture[" "]
+    direction TB
+  subgraph ControlPath["Typed control plane"]
+    direction LR
+    Actors["AI agent + Skill<br/>developers · CI"]
+    Surfaces["CLI · MCP · REST / SSE"]
+    Contract["cockpit_protocol<br/>DTOs · schemas · OpenAPI · test DSL"]
+    Supervisor["Supervisor<br/>auth · policy · identity<br/>leases · ports · runs · artifacts"]
+    Actors --> Surfaces --> Contract --> Supervisor
   end
 
-  Contract["cockpit_protocol<br/>DTOs · JSON Schema · OpenAPI · test DSL"]
+  subgraph RuntimePath["Isolated workspace execution"]
+    direction LR
+    Workers["Workspace workers<br/>A · B · … · N<br/>one engine worker per workspace"]
+    Router["Live capability router<br/>inside every worker"]
 
-  subgraph Control["Per-user control plane"]
-    Supervisor["Supervisor<br/>authentication · policy · workspace identity<br/>leases · ports · runs · artifacts"]
+    subgraph Planes["Execution planes"]
+      direction LR
+      Flutter["Flutter applications<br/>semantic UI · routes · logs · errors · network"]
+      Native["Installed mobile apps<br/>ADB · WDA · accessibility · system UI"]
+      Desktop["Web & desktop apps<br/>browser · window · capture"]
+    end
+
+    Workers --> Router
+    Router --> Flutter
+    Router --> Native
+    Router --> Desktop
   end
 
-  subgraph Isolation["Workspace and engine isolation"]
-    WorkerA["Workspace A worker"]
-    WorkerB["Workspace B worker"]
-    WorkerN["Workspace N worker"]
+  Evidence["State · events · reports · artifacts<br/>persisted under the owning workspace"]
+
+  Supervisor -->|admit · dispatch| Workers
+  Flutter -.->|observe · capture| Evidence
+  Native -.-> Evidence
+  Desktop -.-> Evidence
   end
 
-  subgraph Execution["Capability-driven execution planes"]
-    Router["Live capability router<br/>inside each workspace worker"]
-    Flutter["flutter_cockpit bridge<br/>semantic UI · routes · logs · errors · network"]
-    Native["Native / black-box adapters<br/>ADB · WDA · accessibility · host control"]
-    Web["Web / desktop adapters<br/>browser · window · capture"]
-  end
+  classDef actor fill:#181A1F,stroke:#7D8190,color:#EDEDEF,stroke-width:1.5px
+  classDef surface fill:#181A1F,stroke:#5B8DEF,color:#EDEDEF,stroke-width:1.5px
+  classDef contract fill:#345CBA,stroke:#7BA1F2,color:#FFFFFF,stroke-width:2px
+  classDef control fill:#121317,stroke:#5B8DEF,color:#EDEDEF,stroke-width:2px
+  classDef worker fill:#181A1F,stroke:#4A7DD8,color:#EDEDEF,stroke-width:1.5px
+  classDef plane fill:#151922,stroke:#5B8DEF,color:#EDEDEF,stroke-width:1.5px
+  classDef evidence fill:#102A22,stroke:#4CB782,color:#EDEDEF,stroke-width:2px
 
-  Targets["Running applications<br/>Flutter source · installed mobile/desktop apps · web"]
+  class Actors actor
+  class Surfaces surface
+  class Contract contract
+  class Supervisor,Router control
+  class Workers worker
+  class Flutter,Native,Desktop plane
+  class Evidence evidence
 
-  Agent --> CLI
-  Agent --> MCP
-  CLI -->|authenticated operations| Supervisor
-  MCP -->|authenticated operations| Supervisor
-  API -->|REST commands · SSE events| Supervisor
-  Contract -.->|shared typed contract| CLI
-  Contract -.-> MCP
-  Contract -.-> API
-  Contract -.-> Supervisor
-  Supervisor -->|admit and dispatch| WorkerA
-  Supervisor --> WorkerB
-  Supervisor --> WorkerN
-  WorkerA --> Router
-  WorkerB --> Router
-  WorkerN --> Router
-  Router --> Flutter
-  Router --> Native
-  Router --> Web
-  Flutter --> Targets
-  Native --> Targets
-  Web --> Targets
-  Targets -.->|state and evidence| Router
-  Router -.->|durable events · reports · artifacts| Supervisor
+  style Architecture fill:#08090A,stroke:#08090A,color:#EDEDEF
+  style ControlPath fill:#0D0F13,stroke:#30323A,color:#EDEDEF
+  style RuntimePath fill:#0D0F13,stroke:#30323A,color:#EDEDEF
+  style Planes fill:#111318,stroke:#30323A,color:#EDEDEF
 ```
 
 Register multiple projects once, then address them explicitly or run a command
