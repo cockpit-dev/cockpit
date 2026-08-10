@@ -163,12 +163,30 @@ final class CockpitDaemonDiscoveryStore {
 
   Future<CockpitDaemonDiscovery?> read() async {
     final file = File(paths.daemonDiscovery);
+    for (var attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        return await _readExisting(file);
+      } on FileSystemException {
+        final currentType = await FileSystemEntity.type(
+          file.path,
+          followLinks: false,
+        );
+        if (currentType == FileSystemEntityType.notFound) return null;
+        if (attempt != 0 || currentType != FileSystemEntityType.file) rethrow;
+      }
+    }
+    throw StateError('Unreachable daemon discovery read state.');
+  }
+
+  Future<CockpitDaemonDiscovery?> _readExisting(File file) async {
     if (!await file.exists()) return null;
     await cockpitValidateCanonicalRegularFile(
       file.path,
       diagnostic: 'Daemon discovery is not a canonical regular file.',
     );
-    if (!Platform.isWindows && (await file.stat()).mode & 0x3f != 0) {
+    final stat = await file.stat();
+    if (stat.type == FileSystemEntityType.notFound) return null;
+    if (!Platform.isWindows && stat.mode & 0x3f != 0) {
       throw const FormatException(
         'Daemon discovery permissions are not current-user only.',
       );
