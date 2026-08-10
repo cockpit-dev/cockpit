@@ -6,7 +6,9 @@
   lock. Concurrent reads no longer race an authorization change, lifecycle lock
   waits honor each command timeout, and an unflagged `daemon start` or restart
   preserves the authorization of an already running daemon instead of silently
-  downgrading yolo mode.
+  downgrading yolo mode. Discovery reads also treat a record that disappears
+  during an expected daemon shutdown as absent without weakening canonical-file
+  validation for records that still exist.
 - Made the global capability document a static Supervisor catalog, reducing a
   real Console cold request from 3.89 seconds to 5 milliseconds without
   launching or reconnecting workers from unrelated workspaces. Workspace-scoped
