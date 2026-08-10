@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import '../application/cockpit_application_service_exception.dart';
+import '../application/cockpit_app_temp_store.dart';
 import '../application/cockpit_interactive_snapshot_store.dart';
 import '../development/cockpit_vm_network_profiler.dart';
 import 'cockpit_worker_application_support.dart';
@@ -27,6 +28,7 @@ final class CockpitRetainedWorkspaceApplicationBackend
     required String producerRoot,
     required CockpitWorkerForwardedPortHandoff portHandoff,
     required CockpitWorkerDevelopmentSessionRuntime developmentRuntime,
+    required CockpitAppTempStore appTempStore,
     required CockpitWorkerProcessManager processManager,
     required CockpitWorkerResultSanitizer resultSanitizer,
     CockpitVmNetworkProfiler? networkProfiler,
@@ -49,6 +51,7 @@ final class CockpitRetainedWorkspaceApplicationBackend
         targets: registry,
         portHandoff: portHandoff,
         developmentRuntime: developmentRuntime,
+        appTempStore: appTempStore,
       ),
       remote: CockpitWorkerRemoteOperations(
         workspaceId: workspaceId,
@@ -56,6 +59,7 @@ final class CockpitRetainedWorkspaceApplicationBackend
         registry: registry,
         targets: registry,
         portHandoff: portHandoff,
+        appTempStore: appTempStore,
         snapshotStore: snapshots,
       ),
       interactive: CockpitWorkerInteractiveOperations(

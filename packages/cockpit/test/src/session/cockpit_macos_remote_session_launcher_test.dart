@@ -604,6 +604,10 @@ void main() {
             flutterArgs: const <String>['--track-widget-creation'],
             environment: const <String, String>{'API_TOKEN': 'secret'},
           ),
+          appEnvironment: const <String, String>{
+            'API_TOKEN': 'secret',
+            'TMPDIR': '/stable/app-temp',
+          },
         ),
       );
 
@@ -621,6 +625,7 @@ void main() {
       });
       expect(startInvocation?['environment'], <String, String>{
         'API_TOKEN': 'secret',
+        'TMPDIR': '/stable/app-temp',
       });
       expect(handle.processId, 6101);
     },

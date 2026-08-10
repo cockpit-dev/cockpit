@@ -1,6 +1,7 @@
 import 'package:cockpit_protocol/cockpit_protocol.dart';
 
 import '../application/cockpit_app_handle.dart';
+import '../application/cockpit_app_temp_store.dart';
 import '../application/cockpit_collect_remote_snapshot_service.dart';
 import '../application/cockpit_execute_remote_command_batch_service.dart';
 import '../application/cockpit_execute_remote_command_service.dart';
@@ -28,6 +29,7 @@ final class CockpitWorkerRemoteOperations {
     required CockpitWorkerRuntimeRegistry registry,
     required CockpitWorkerTargetResolver targets,
     required CockpitWorkerForwardedPortHandoff portHandoff,
+    required CockpitAppTempStore appTempStore,
     CockpitInteractiveSnapshotStore? snapshotStore,
     CockpitLaunchRemoteSessionService? launchService,
     CockpitStopAppService? stopAppService,
@@ -48,8 +50,11 @@ final class CockpitWorkerRemoteOperations {
       registry: registry,
       targets: targets,
       portHandoff: portHandoff,
-      launchService: launchService ?? CockpitLaunchRemoteSessionService(),
-      stopAppService: stopAppService ?? CockpitStopAppService(),
+      launchService:
+          launchService ??
+          CockpitLaunchRemoteSessionService(appTempStore: appTempStore),
+      stopAppService:
+          stopAppService ?? CockpitStopAppService(appTempStore: appTempStore),
       queryService: queryService ?? CockpitQueryRemoteSessionService(),
       statusService:
           statusService ??

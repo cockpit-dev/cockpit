@@ -729,7 +729,7 @@ void main() {
   });
 
   test(
-    'leased read stays read-only and excludes a same-session mutation',
+    'safe reads stay unleased while same-session mutations remain exclusive',
     () async {
       final backend = _ReadMutationBackend();
       final resolver = _ReadMutationResourceResolver();
@@ -796,15 +796,14 @@ void main() {
 
       final read = _callOperation(
         harness.client,
-        _applicationInvocation('session.remote.status', 'leased-read'),
+        _applicationInvocation('session.remote.status', 'unleased-read'),
       );
       await backend.readEntered.future;
       final mutation = _callOperation(
         harness.client,
-        _applicationInvocation('command.run', 'leased-mutation'),
+        _applicationInvocation('command.run', 'session-mutation'),
       );
-      await Future<void>.delayed(const Duration(milliseconds: 50));
-      expect(backend.mutationEntered.isCompleted, isFalse);
+      await backend.mutationEntered.future.timeout(const Duration(seconds: 1));
 
       backend.releaseRead.complete();
       final results = await Future.wait<CockpitOperationResult>(
@@ -815,10 +814,7 @@ void main() {
         everyElement(CockpitOperationOutcome.succeeded),
       );
       expect(backend.mutationEntered.isCompleted, isTrue);
-      expect(authority.sessionAcquisitions, <String>[
-        'session_resource_A',
-        'session_resource_A',
-      ]);
+      expect(authority.sessionAcquisitions, <String>['session_resource_A']);
 
       final registryRead = await _callOperation(
         harness.client,
@@ -847,14 +843,23 @@ void main() {
           },
         ),
       );
+      final screenshot = await _callOperation(
+        harness.client,
+        _applicationInvocation(
+          'evidence.screenshot.capture',
+          'screenshot-device-capture-grants',
+        ),
+      );
       expect(registryRead.outcome, CockpitOperationOutcome.succeeded);
       expect(localCompare.outcome, CockpitOperationOutcome.succeeded);
       expect(networkBody.outcome, CockpitOperationOutcome.succeeded);
+      expect(screenshot.outcome, CockpitOperationOutcome.succeeded);
       expect(resolver.resolvedKinds, <String>[
-        'session.remote.status',
         'command.run',
         'network.body',
+        'evidence.screenshot.capture',
       ]);
+      expect(backend.grantCountByKind['session.remote.status'], 0);
       expect(backend.grantCountByKind['app.list'], 0);
       expect(backend.grantCountByKind['development.probe.compare'], 0);
     },
@@ -913,12 +918,9 @@ void main() {
     expect(resolver.resolveCount, 1);
     expect(
       authority.requests.map((request) => request.resourceKind),
-      <CockpitLeaseResourceKind>[
-        CockpitLeaseResourceKind.device,
-        CockpitLeaseResourceKind.session,
-      ],
+      <CockpitLeaseResourceKind>[CockpitLeaseResourceKind.session],
     );
-    expect(authority.releaseCount, 2);
+    expect(authority.releaseCount, 1);
   });
 
   test('completed application failure releases leases normally', () async {
@@ -2128,7 +2130,7 @@ final class _ProbeBackend implements CockpitWorkerApplicationBackend {
     expect(kind, 'development.probe.collect');
     expect(input, const <String, Object?>{'sessionId': 'sessionA'});
     expect(context.idempotencyKey, isNotEmpty);
-    expect(grants, hasLength(2));
+    expect(grants, hasLength(1));
     recordCount += 1;
     return <String, Object?>{'probeId': 'probe_$recordCount'};
   }
@@ -2149,14 +2151,7 @@ final class _ReadMutationBackend implements CockpitWorkerApplicationBackend {
   }) async {
     grantCountByKind[kind] = grants.length;
     if (kind == 'session.remote.status') {
-      expect(
-        grants.where(
-          (grant) =>
-              grant.resourceKind == CockpitLeaseResourceKind.session &&
-              grant.resourceId == 'session_resource_A',
-        ),
-        hasLength(1),
-      );
+      expect(grants, isEmpty);
       readEntered.complete();
       await releaseRead.future;
     } else if (kind == 'command.run') {
@@ -2177,6 +2172,14 @@ final class _ReadMutationBackend implements CockpitWorkerApplicationBackend {
               grant.resourceId == 'session_resource_A',
         ),
         hasLength(1),
+      );
+    } else if (kind == 'evidence.screenshot.capture') {
+      expect(
+        grants.map((grant) => grant.resourceKind),
+        <CockpitLeaseResourceKind>[
+          CockpitLeaseResourceKind.device,
+          CockpitLeaseResourceKind.capture,
+        ],
       );
     } else {
       expect(grants, isEmpty);

@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:cockpit/src/application/cockpit_app_handle.dart';
 import 'package:cockpit/src/application/cockpit_launch_target_service.dart';
+import 'package:cockpit/src/application/cockpit_app_temp_store.dart';
 import 'package:cockpit/src/foundation/cockpit_locked_json_store.dart';
 import 'package:cockpit/src/foundation/cockpit_permissions.dart';
 import 'package:cockpit/src/targets/cockpit_target_handle.dart';
@@ -50,6 +51,10 @@ void main() {
       workspaceId: 'workspace-1',
       targetId: targetId,
     );
+    final appTempStore = CockpitAppTempStore(
+      root: p.join(stateRoot, 'app-temp'),
+      permissionHardener: const _NoopPermissionHardener(),
+    );
     CockpitLaunchTargetRequest? captured;
     final now = DateTime.now().toUtc();
     final operations = CockpitWorkerLifecycleOperations(
@@ -57,7 +62,10 @@ void main() {
       registry: registry,
       targets: registry,
       portHandoff: const _ImmediatePortHandoff(57331),
-      developmentRuntime: CockpitWorkerDevelopmentSessionRuntime(),
+      developmentRuntime: CockpitWorkerDevelopmentSessionRuntime(
+        appTempStore: appTempStore,
+      ),
+      appTempStore: appTempStore,
       launchTargetService: CockpitLaunchTargetService(
         launchTarget: (request) async {
           captured = request;

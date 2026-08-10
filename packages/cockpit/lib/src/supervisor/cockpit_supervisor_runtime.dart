@@ -1582,7 +1582,7 @@ final class _CockpitProductionCleanupProbeResolver
 }
 
 final class _CockpitLogicalResourceCleanupProbe
-    implements CockpitLeaseCleanupProbe {
+    implements CockpitImmediateLeaseReleaseProbe {
   const _CockpitLogicalResourceCleanupProbe();
 
   @override

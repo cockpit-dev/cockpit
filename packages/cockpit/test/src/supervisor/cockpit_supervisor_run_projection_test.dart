@@ -427,6 +427,15 @@ void main() {
       expect(workerTemporaryPath.length, lessThan(64));
     }
     expect(await Directory(workerTemporaryPath).exists(), isFalse);
+    final appTempArgument = processes.startArguments!.singleWhere(
+      (argument) => argument.startsWith('--app-temp-root='),
+    );
+    final appTempRoot = appTempArgument.substring('--app-temp-root='.length);
+    expect(appTempRoot, isNot(workerTemporaryPath));
+    expect(
+      p.dirname(appTempRoot),
+      Platform.isWindows ? Directory.systemTemp.path : '/tmp',
+    );
     expect(retention.releaseAttempts, 2);
     expect(
       (await _projection(
@@ -637,6 +646,7 @@ final class _NoopDirectorySyncer implements CockpitDirectorySyncer {
 
 final class _RejectingProcessManager implements CockpitProcessManager {
   var startCalls = 0;
+  List<String>? startArguments;
   Map<String, String>? startEnvironment;
 
   @override
@@ -662,6 +672,7 @@ final class _RejectingProcessManager implements CockpitProcessManager {
     ProcessStartMode mode = ProcessStartMode.normal,
   }) {
     startCalls += 1;
+    startArguments = List<String>.unmodifiable(arguments);
     startEnvironment = environment;
     throw StateError('process start sentinel');
   }

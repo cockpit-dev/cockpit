@@ -214,6 +214,49 @@ void main() {
     },
   );
 
+  test('stop app releases managed desktop application temp', () async {
+    final tempDir = await Directory.systemTemp.createTemp(
+      'cockpit-stop-app-temp-',
+    );
+    addTearDown(() => tempDir.delete(recursive: true));
+    final store = CockpitAppTempStore(
+      root: '${tempDir.path}/apps',
+      permissionHardener: const _NoopPermissionHardener(),
+    );
+    final remote = CockpitRemoteSessionHandle(
+      platform: 'windows',
+      deviceId: 'windows',
+      projectDir: '/workspace/examples/cockpit_demo',
+      target: 'cockpit/main.dart',
+      appId: 'cockpit_demo',
+      host: '127.0.0.1',
+      hostPort: 57331,
+      devicePort: 57331,
+      baseUrl: 'http://127.0.0.1:57331',
+      launchedAt: DateTime.utc(2026, 8, 10),
+    );
+    final key = cockpitRemoteAppTempKey(
+      platform: remote.platform,
+      hostPort: remote.hostPort,
+    );
+    final path = await store.prepare(key);
+
+    final result =
+        await CockpitStopAppService(
+          appTempStore: store,
+          stopAutomation: (_) async {},
+          probeReachability: (_) async => false,
+        ).stop(
+          CockpitStopAppRequest(
+            app: CockpitAppHandle.fromRemoteSession(remote),
+          ),
+        );
+
+    expect(result.status.state, 'stopped');
+    expect(result.status.lastError, isNull);
+    expect(await Directory(path).exists(), isFalse);
+  });
+
   test(
     'stop app fails fast for physical iOS automation apps without a resolved bundle id',
     () async {
@@ -259,4 +302,17 @@ void main() {
       expect(probeCalls, 0);
     },
   );
+}
+
+final class _NoopPermissionHardener implements CockpitPermissionHardener {
+  const _NoopPermissionHardener();
+
+  @override
+  CockpitPermissionPolicy get policy => CockpitPermissionPolicy.posixOwnerOnly;
+
+  @override
+  Future<void> hardenDirectory(Directory directory) async {}
+
+  @override
+  Future<void> hardenFile(File file) async {}
 }

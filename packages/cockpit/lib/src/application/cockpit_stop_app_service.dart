@@ -5,6 +5,8 @@ import 'package:path/path.dart' as p;
 import '../development/cockpit_development_session_status.dart';
 import '../platform/ios/cockpit_ios_device_connection.dart';
 import '../remote/cockpit_remote_session_client.dart';
+import '../session/cockpit_remote_session_handle.dart';
+import 'cockpit_app_temp_store.dart';
 import 'cockpit_app_handle.dart';
 import 'cockpit_app_reference_resolver.dart';
 import 'cockpit_application_service_exception.dart';
@@ -117,6 +119,7 @@ final class CockpitStopAppService {
     CockpitStopDevelopmentAppFunction? stopDevelopment,
     CockpitStopAutomationAppFunction? stopAutomation,
     CockpitAppReachabilityProbe? probeReachability,
+    CockpitAppTempStore? appTempStore,
   }) : _stopDevelopment =
            stopDevelopment ?? _defaultStopDevelopment(stopService),
        _stopAutomation =
@@ -126,13 +129,15 @@ final class CockpitStopAppService {
            appReferenceResolver ??
            CockpitAppReferenceResolver(registry: registry),
        _registry = registry,
-       _probeReachability = probeReachability ?? cockpitProbeAppReachability;
+       _probeReachability = probeReachability ?? cockpitProbeAppReachability,
+       _appTempStore = appTempStore;
 
   final CockpitStopDevelopmentAppFunction _stopDevelopment;
   final CockpitStopAutomationAppFunction _stopAutomation;
   final CockpitAppReferenceResolver _appReferenceResolver;
   final CockpitSessionRegistry? _registry;
   final CockpitAppReachabilityProbe _probeReachability;
+  final CockpitAppTempStore? _appTempStore;
 
   Future<CockpitStopAppResult> stop(CockpitStopAppRequest request) async {
     final resolved = await _appReferenceResolver.resolve(
@@ -208,11 +213,20 @@ final class CockpitStopAppService {
     }
     _validateAutomationStopSupport(automationApp);
     await _stopAutomation(automationApp);
-    final status = await _waitUntilStopped(automationApp);
+    var status = await _waitUntilStopped(automationApp);
     final remoteHandle =
         automationApp.remoteSession ?? resolved.remoteRecord?.handle;
     if (remoteHandle != null) {
       _registry?.removeRemoteSession(remoteHandle);
+      if (await _releaseAutomationTemp(remoteHandle) case final error?) {
+        status = CockpitAppStopStatus(
+          mode: status.mode,
+          state: status.state,
+          appReachable: status.appReachable,
+          remoteSessionReachable: status.remoteSessionReachable,
+          lastError: error,
+        );
+      }
     }
     final appJsonPath = await _persistAppIfRequested(
       path: request.appHandlePath,
@@ -223,6 +237,26 @@ final class CockpitStopAppService {
       status: status,
       appJsonPath: appJsonPath,
     );
+  }
+
+  Future<String?> _releaseAutomationTemp(
+    CockpitRemoteSessionHandle handle,
+  ) async {
+    final store = _appTempStore;
+    if (store == null || !cockpitUsesManagedAppTemp(handle.platform)) {
+      return null;
+    }
+    try {
+      await store.release(
+        cockpitRemoteAppTempKey(
+          platform: handle.platform,
+          hostPort: handle.hostPort,
+        ),
+      );
+      return null;
+    } on Object catch (error) {
+      return 'Application temporary directory cleanup failed: $error';
+    }
   }
 
   Future<void> _bestEffortStopDevelopmentPlatformApp(

@@ -169,6 +169,43 @@ void main() {
       }
     });
 
+    test('immediate cleanup probes release logical leases directly', () async {
+      final cleanup = _ImmediateReleaseCleanupProbe();
+      final fixture = await CockpitLeaseTestFixture.create(
+        probes: <CockpitLeaseResourceKind, CockpitLeaseCleanupProbe>{
+          CockpitLeaseResourceKind.session: cleanup,
+        },
+      );
+      addTearDown(fixture.dispose);
+      final first = await fixture.registry.acquire(
+        leaseRequest(
+          key: 'immediate.first',
+          resourceId: 'session-resource',
+          resourceKind: CockpitLeaseResourceKind.session,
+          waitTimeoutMs: 0,
+        ),
+      );
+
+      final released = await fixture.registry.release(
+        first.leaseId,
+        holderId: first.holderId,
+      );
+      final second = await fixture.registry.acquire(
+        leaseRequest(
+          key: 'immediate.second',
+          resourceId: 'session-resource',
+          holderId: 'runB',
+          resourceKind: CockpitLeaseResourceKind.session,
+          waitTimeoutMs: 0,
+        ),
+      );
+
+      expect(released.state, CockpitLeaseState.released);
+      expect(second.state, CockpitLeaseState.active);
+      expect(cleanup.contexts, isEmpty);
+      await fixture.registry.release(second.leaseId, holderId: second.holderId);
+    });
+
     test('shares root admission fences with workspace retirement', () async {
       final fixture = await CockpitLeaseTestFixture.create();
       addTearDown(fixture.dispose);
@@ -743,6 +780,20 @@ void main() {
       },
     );
   });
+}
+
+final class _ImmediateReleaseCleanupProbe
+    implements CockpitImmediateLeaseReleaseProbe {
+  final List<CockpitLeaseCleanupContext> contexts =
+      <CockpitLeaseCleanupContext>[];
+
+  @override
+  Future<CockpitLeaseCleanupResult> cleanupAndVerify(
+    CockpitLeaseCleanupContext context,
+  ) async {
+    contexts.add(context);
+    return const CockpitLeaseCleanupResult.restored();
+  }
 }
 
 Matcher throwsLease(String code) => throwsA(

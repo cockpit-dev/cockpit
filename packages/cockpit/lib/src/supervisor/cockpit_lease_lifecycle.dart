@@ -82,6 +82,9 @@ extension CockpitLeaseLifecycleOperations on CockpitLeaseRegistry {
       final now = _now;
       _expireDue(state, now);
       final record = _requireHolder(state, leaseId, holderId);
+      final canReleaseImmediately =
+          _cleanupProbes.resolve(record.resourceKind)
+              is CockpitImmediateLeaseReleaseProbe;
       late final CockpitLeaseRecord updated;
       switch (record.state) {
         case CockpitLeaseState.queued:
@@ -92,13 +95,23 @@ extension CockpitLeaseLifecycleOperations on CockpitLeaseRegistry {
           _replace(state, updated);
           _grantAvailable(state, now);
         case CockpitLeaseState.active:
-          updated = record.copyWith(
-            state: CockpitLeaseState.releasing,
-            cleanupReason: reason,
-            cleanupClaimId: null,
-            cleanupClaimExpiresAt: null,
-          );
+          updated = canReleaseImmediately
+              ? record.copyWith(
+                  state: CockpitLeaseState.released,
+                  releasedAt: now,
+                  cleanupReason: null,
+                  cleanupClaimId: null,
+                  cleanupClaimExpiresAt: null,
+                  failure: null,
+                )
+              : record.copyWith(
+                  state: CockpitLeaseState.releasing,
+                  cleanupReason: reason,
+                  cleanupClaimId: null,
+                  cleanupClaimExpiresAt: null,
+                );
           _replace(state, updated);
+          if (canReleaseImmediately) _grantAvailable(state, now);
         case CockpitLeaseState.releasing || CockpitLeaseState.expired:
           updated = record;
         case CockpitLeaseState.quarantined || CockpitLeaseState.released:
@@ -113,8 +126,9 @@ extension CockpitLeaseLifecycleOperations on CockpitLeaseRegistry {
         leaseId,
         includeQuarantined: started.state == CockpitLeaseState.quarantined,
       );
+      return get(leaseId);
     }
-    return get(leaseId);
+    return started;
   }
 
   Future<CockpitLeaseResource> _finishQueuedWait(

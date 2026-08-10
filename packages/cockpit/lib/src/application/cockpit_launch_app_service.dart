@@ -10,6 +10,7 @@ import '../development/cockpit_development_session_machine_launcher.dart';
 import '../session/cockpit_flutter_launch_configuration.dart';
 import '../session/cockpit_remote_session_handle.dart';
 import '../session/cockpit_remote_session_launcher.dart';
+import 'cockpit_app_temp_store.dart';
 import 'cockpit_app_handle.dart';
 import 'cockpit_compact_json.dart';
 import 'cockpit_launch_development_session_service.dart';
@@ -74,13 +75,17 @@ final class CockpitLaunchAppService {
         cockpitReadRemoteSessionStatus,
     CockpitSessionRegistry? registry,
     CockpitExistingDesktopAppStopper? stopExistingDesktopApp,
+    CockpitAppTempStore? appTempStore,
   }) : _developmentService =
            developmentService ?? CockpitLaunchDevelopmentSessionService(),
-       _remoteService = remoteService ?? CockpitLaunchRemoteSessionService(),
+       _remoteService =
+           remoteService ??
+           CockpitLaunchRemoteSessionService(appTempStore: appTempStore),
        _remoteStatusReader = remoteStatusReader,
        _registry = registry,
        _stopExistingDesktopApp =
-           stopExistingDesktopApp ?? _defaultStopExistingDesktopApp;
+           stopExistingDesktopApp ??
+           _defaultStopExistingDesktopApp(appTempStore);
 
   final CockpitLaunchDevelopmentSessionService _developmentService;
   final CockpitLaunchRemoteSessionService _remoteService;
@@ -300,10 +305,12 @@ final class CockpitLaunchAppService {
   bool _isDesktopSingleInstancePlatform(String platform) {
     return platform == 'macos' || platform == 'windows' || platform == 'linux';
   }
-
-  static Future<void> _defaultStopExistingDesktopApp(
-    CockpitAppHandle app,
-  ) async {
-    await CockpitStopAppService().stop(CockpitStopAppRequest(app: app));
-  }
 }
+
+CockpitExistingDesktopAppStopper _defaultStopExistingDesktopApp(
+  CockpitAppTempStore? appTempStore,
+) => (app) async {
+  await CockpitStopAppService(
+    appTempStore: appTempStore,
+  ).stop(CockpitStopAppRequest(app: app));
+};

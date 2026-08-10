@@ -2,6 +2,7 @@ import 'package:cockpit_protocol/cockpit_protocol.dart';
 import 'package:path/path.dart' as p;
 
 import '../application/cockpit_app_handle.dart';
+import '../application/cockpit_app_temp_store.dart';
 import '../application/cockpit_application_service_exception.dart';
 import '../application/cockpit_collect_development_probe_service.dart';
 import '../application/cockpit_compare_development_probe_service.dart';
@@ -34,6 +35,7 @@ final class CockpitWorkerLifecycleOperations {
     required CockpitWorkerTargetResolver targets,
     required CockpitWorkerForwardedPortHandoff portHandoff,
     required CockpitWorkerDevelopmentSessionRuntime developmentRuntime,
+    required CockpitAppTempStore appTempStore,
     CockpitLaunchAppService? launchAppService,
     CockpitLaunchTargetService? launchTargetService,
     CockpitStopAppService? stopAppService,
@@ -47,11 +49,18 @@ final class CockpitWorkerLifecycleOperations {
        _targets = targets,
        _portHandoff = portHandoff,
        _developmentRuntime = developmentRuntime,
-       _launchApp = launchAppService ?? CockpitLaunchAppService(),
+       _launchApp =
+           launchAppService ??
+           CockpitLaunchAppService(appTempStore: appTempStore),
        _launchTarget =
            launchTargetService ??
-           CockpitLaunchTargetService(launchAppService: launchAppService),
-       _stopApp = stopAppService ?? CockpitStopAppService(),
+           CockpitLaunchTargetService(
+             launchAppService:
+                 launchAppService ??
+                 CockpitLaunchAppService(appTempStore: appTempStore),
+           ),
+       _stopApp =
+           stopAppService ?? CockpitStopAppService(appTempStore: appTempStore),
        _readApp = readAppService ?? CockpitReadAppService(),
        _readTarget = readTargetService ?? CockpitReadTargetService(),
        _collectProbe =
