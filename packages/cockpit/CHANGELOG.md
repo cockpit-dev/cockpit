@@ -1,5 +1,13 @@
 # Changelog
 
+## 3.0.11
+
+- Fixed `cockpit update` to ask Pub for the current latest hosted release
+  instead of passing a lower-bound constraint that could treat the already
+  active version as sufficient and skip a newer release. Installed-version
+  verification, downgrade blocking, rollback, AOT optimization, and Supervisor
+  reconnection remain enforced.
+
 ## 3.0.10
 
 - Preserved a stable application temporary directory across Supervisor and
