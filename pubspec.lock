@@ -12,17 +12,19 @@ packages:
   acpd:
     dependency: transitive
     description:
-      path: "third_party/acpd/packages/acpd"
-      relative: true
-    source: path
-    version: "0.1.0"
+      name: acpd
+      sha256: "711e62e626697164c30e61ca2d575c05a15d192b6eac9e98829acd25d5ed72b8"
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.0.0"
   acpd_io:
     dependency: transitive
     description:
-      path: "third_party/acpd/packages/acpd_io"
-      relative: true
-    source: path
-    version: "0.1.0"
+      name: acpd_io
+      sha256: "88e63805a89e342f1dd932e2a57976fb519aedae7053a7b78e122982bfccae4f"
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.0.0"
   analyzer:
     dependency: transitive
     description:

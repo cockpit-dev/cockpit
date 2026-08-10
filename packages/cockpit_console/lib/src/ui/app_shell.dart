@@ -19,9 +19,9 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 ///
 /// Uses a Riverpod-backed indexed navigation model (no Router) since the
 /// console is a single-window desktop app. Each nav destination maps to a
-/// screen builder. Wide and medium windows use a persistent sidebar that can
-/// be collapsed to an icon rail. Narrow windows use a drawer so navigation
-/// never permanently consumes the working area.
+/// screen builder. Every width keeps persistent navigation: wide and medium
+/// windows toggle between a sidebar and icon rail, while narrow windows keep
+/// the rail and open the expanded sidebar as a drawer from its bottom action.
 final class AppShell extends HookConsumerWidget {
   const AppShell({super.key});
 
@@ -30,17 +30,21 @@ final class AppShell extends HookConsumerWidget {
     final current = ref.watch(navProvider);
     final theme = Theme.of(context);
     final collapsedOverride = useState<bool?>(null);
+    final drawerOpen = useState(false);
+    final scaffoldKey = useMemoized(GlobalKey<ScaffoldState>.new);
 
     return LayoutBuilder(
       builder: (context, constraints) {
         final navigationMode = ConsoleShellLayoutStyle.navigationMode(
           constraints.maxWidth,
         );
-        final useDrawer = navigationMode == ConsoleNavigationMode.drawer;
+        final useDrawer = navigationMode == ConsoleNavigationMode.railDrawer;
         final defaultCollapsed = navigationMode == ConsoleNavigationMode.rail;
         final collapsed = collapsedOverride.value ?? defaultCollapsed;
 
         return Scaffold(
+          key: scaffoldKey,
+          onDrawerChanged: useDrawer ? (open) => drawerOpen.value = open : null,
           drawer: useDrawer
               ? Drawer(
                   width: ConsoleShellLayoutStyle.drawerWidth,
@@ -54,7 +58,8 @@ final class AppShell extends HookConsumerWidget {
                     builder: (drawerContext) => Sidebar(
                       collapsed: false,
                       drawer: true,
-                      onClose: () => Navigator.of(drawerContext).pop(),
+                      onToggleNavigation: () =>
+                          Navigator.of(drawerContext).pop(),
                       onDestinationSelected: () =>
                           Navigator.of(drawerContext).pop(),
                     ),
@@ -67,14 +72,17 @@ final class AppShell extends HookConsumerWidget {
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    if (!useDrawer) ...[
-                      Sidebar(
-                        collapsed: collapsed,
-                        onToggleCollapsed: () =>
-                            collapsedOverride.value = !collapsed,
+                    ExcludeSemantics(
+                      excluding: useDrawer && drawerOpen.value,
+                      child: Sidebar(
+                        collapsed: useDrawer || collapsed,
+                        opensDrawer: useDrawer,
+                        onToggleNavigation: useDrawer
+                            ? () => scaffoldKey.currentState?.openDrawer()
+                            : () => collapsedOverride.value = !collapsed,
                       ),
-                      Container(width: 1, color: theme.dividerColor),
-                    ],
+                    ),
+                    Container(width: 1, color: theme.dividerColor),
                     Expanded(child: _buildContent(current)),
                   ],
                 ),

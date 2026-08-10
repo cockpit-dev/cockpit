@@ -1,6 +1,5 @@
 import 'package:cockpit_console/src/ui/widgets/console_shell_header.dart';
 import 'package:flutter/material.dart';
-import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 /// Standard scaffold for console screens: title bar with actions + scrollable
 /// content area with consistent padding.
@@ -43,7 +42,7 @@ final class ScreenScaffold extends StatelessWidget {
 
   Widget _buildHeader(BuildContext context, ThemeData theme) {
     if (header != null) {
-      return ConsoleShellHeader(child: _withNavigationMenu(context, header!));
+      return ConsoleShellHeader(child: header!);
     }
     final titleBlock = Column(
       mainAxisSize: MainAxisSize.min,
@@ -79,7 +78,7 @@ final class ScreenScaffold extends StatelessWidget {
             children: [
               ConsoleShellHeader(
                 horizontalPadding: horizontalPadding,
-                child: _withNavigationMenu(context, titleBlock),
+                child: titleBlock,
               ),
               const ConsoleShellDivider(),
               Padding(
@@ -103,7 +102,6 @@ final class ScreenScaffold extends StatelessWidget {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              ..._navigationMenuLeading(context),
               Expanded(child: titleBlock),
               ...?screenActions,
             ],
@@ -111,30 +109,5 @@ final class ScreenScaffold extends StatelessWidget {
         );
       },
     );
-  }
-
-  Widget _withNavigationMenu(BuildContext context, Widget child) {
-    final leading = _navigationMenuLeading(context);
-    if (leading.isEmpty) return child;
-    return Row(
-      children: [
-        ...leading,
-        Expanded(child: child),
-      ],
-    );
-  }
-
-  List<Widget> _navigationMenuLeading(BuildContext context) {
-    final scaffold = Scaffold.maybeOf(context);
-    if (scaffold?.hasDrawer != true) return const <Widget>[];
-    return <Widget>[
-      IconButton(
-        key: const ValueKey(ConsoleNavigationIds.menu),
-        onPressed: scaffold!.openDrawer,
-        icon: const Icon(LucideIcons.menu),
-        tooltip: 'Open navigation',
-      ),
-      const SizedBox(width: 12),
-    ];
   }
 }

@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
 
-enum ConsoleNavigationMode { sidebar, rail, drawer }
+enum ConsoleNavigationMode { sidebar, rail, railDrawer }
 
 abstract final class ConsoleNavigationIds {
-  static const String menu = 'nav-menu';
   static const String toggle = 'nav-toggle';
   static const String close = 'nav-close';
   static const String theme = 'theme-toggle';
@@ -23,7 +22,7 @@ abstract final class ConsoleShellLayoutStyle {
   static const double navigationRailIconSize = 16;
 
   static ConsoleNavigationMode navigationMode(double width) {
-    if (width < drawerBreakpoint) return ConsoleNavigationMode.drawer;
+    if (width < drawerBreakpoint) return ConsoleNavigationMode.railDrawer;
     if (width < compactSidebarBreakpoint) return ConsoleNavigationMode.rail;
     return ConsoleNavigationMode.sidebar;
   }

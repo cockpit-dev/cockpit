@@ -17,16 +17,16 @@ final class Sidebar extends HookConsumerWidget {
   const Sidebar({
     required this.collapsed,
     this.drawer = false,
-    this.onToggleCollapsed,
-    this.onClose,
+    this.opensDrawer = false,
+    this.onToggleNavigation,
     this.onDestinationSelected,
     super.key,
   });
 
   final bool collapsed;
   final bool drawer;
-  final VoidCallback? onToggleCollapsed;
-  final VoidCallback? onClose;
+  final bool opensDrawer;
+  final VoidCallback? onToggleNavigation;
   final VoidCallback? onDestinationSelected;
 
   @override
@@ -71,7 +71,11 @@ final class Sidebar extends HookConsumerWidget {
       ),
     );
     final themeToggle = IconButton(
-      key: const ValueKey(ConsoleNavigationIds.theme),
+      key: ValueKey(
+        drawer
+            ? '${ConsoleNavigationIds.theme}-drawer'
+            : ConsoleNavigationIds.theme,
+      ),
       icon: Icon(
         themeMode == ThemeMode.dark ? LucideIcons.sun : LucideIcons.moon,
         size: 15,
@@ -81,6 +85,32 @@ final class Sidebar extends HookConsumerWidget {
       tooltip: 'Toggle theme',
       style: IconButton.styleFrom(minimumSize: const Size.square(28)),
     );
+    final navigationToggle = onToggleNavigation == null
+        ? null
+        : IconButton(
+            key: ValueKey(
+              drawer ? ConsoleNavigationIds.close : ConsoleNavigationIds.toggle,
+            ),
+            onPressed: onToggleNavigation,
+            icon: Icon(
+              drawer || !collapsed
+                  ? LucideIcons.panelLeftClose
+                  : LucideIcons.panelLeftOpen,
+              size: collapsed ? 15 : 16,
+            ),
+            tooltip: drawer
+                ? 'Close navigation'
+                : opensDrawer
+                ? 'Open navigation'
+                : collapsed
+                ? 'Expand navigation'
+                : 'Collapse navigation',
+            style: IconButton.styleFrom(
+              minimumSize: const Size.square(28),
+              maximumSize: const Size.square(28),
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+          );
     return Container(
       width: drawer
           ? null
@@ -91,12 +121,7 @@ final class Sidebar extends HookConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _Header(
-            collapsed: collapsed,
-            drawer: drawer,
-            onClose: onClose,
-            onToggleCollapsed: onToggleCollapsed,
-          ),
+          _Header(collapsed: collapsed),
           const ConsoleShellDivider(),
           Expanded(
             child: ListView(
@@ -124,6 +149,10 @@ final class Sidebar extends HookConsumerWidget {
                       statusIndicator,
                       const SizedBox(height: 8),
                       themeToggle,
+                      if (navigationToggle != null) ...[
+                        const SizedBox(height: 4),
+                        navigationToggle,
+                      ],
                     ],
                   )
                 : Row(
@@ -141,6 +170,10 @@ final class Sidebar extends HookConsumerWidget {
                         ),
                       ),
                       themeToggle,
+                      if (navigationToggle != null) ...[
+                        const SizedBox(width: 4),
+                        navigationToggle,
+                      ],
                     ],
                   ),
           ),
@@ -151,17 +184,9 @@ final class Sidebar extends HookConsumerWidget {
 }
 
 final class _Header extends StatelessWidget {
-  const _Header({
-    required this.collapsed,
-    required this.drawer,
-    required this.onClose,
-    required this.onToggleCollapsed,
-  });
+  const _Header({required this.collapsed});
 
   final bool collapsed;
-  final bool drawer;
-  final VoidCallback? onClose;
-  final VoidCallback? onToggleCollapsed;
 
   @override
   Widget build(BuildContext context) {
@@ -169,30 +194,13 @@ final class _Header extends StatelessWidget {
     if (collapsed) {
       return ConsoleShellHeader(
         horizontalPadding: 0,
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Tooltip(
-              message: 'Cockpit Console',
-              waitDuration: Duration(milliseconds: 300),
-              showDuration: Duration(seconds: 2),
-              child: _BrandMark(includeSemantics: true),
-            ),
-            if (onToggleCollapsed != null) ...[
-              const SizedBox(width: 2),
-              IconButton(
-                key: const ValueKey(ConsoleNavigationIds.toggle),
-                onPressed: onToggleCollapsed,
-                icon: const Icon(LucideIcons.panelLeftOpen, size: 15),
-                tooltip: 'Expand navigation',
-                style: IconButton.styleFrom(
-                  minimumSize: const Size.square(28),
-                  maximumSize: const Size.square(28),
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                ),
-              ),
-            ],
-          ],
+        child: const Center(
+          child: Tooltip(
+            message: 'Cockpit Console',
+            waitDuration: Duration(milliseconds: 300),
+            showDuration: Duration(seconds: 2),
+            child: _BrandMark(includeSemantics: true),
+          ),
         ),
       );
     }
@@ -225,20 +233,6 @@ final class _Header extends StatelessWidget {
               ],
             ),
           ),
-          if (drawer)
-            IconButton(
-              key: const ValueKey(ConsoleNavigationIds.close),
-              onPressed: onClose,
-              icon: const Icon(LucideIcons.x, size: 16),
-              tooltip: 'Close navigation',
-            ),
-          if (!drawer && onToggleCollapsed != null)
-            IconButton(
-              key: const ValueKey(ConsoleNavigationIds.toggle),
-              onPressed: onToggleCollapsed,
-              icon: const Icon(LucideIcons.panelLeftClose, size: 16),
-              tooltip: 'Collapse navigation',
-            ),
         ],
       ),
     );
@@ -301,8 +295,9 @@ final class _NavItem extends HookConsumerWidget {
         ? ConsoleShellLayoutStyle.navigationRailIconSize
         : ConsoleShellLayoutStyle.navigationIconSize;
     void navigate() {
+      final navigation = ref.read(navProvider.notifier);
+      navigation.go(destination);
       onSelected?.call();
-      ref.read(navProvider.notifier).go(destination);
     }
 
     final item = Semantics(

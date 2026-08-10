@@ -10,12 +10,10 @@ environment:
 resolution: workspace
 
 dependencies:
-  acpd:
-    path: ../../third_party/acpd/packages/acpd
-  acpd_io:
-    path: ../../third_party/acpd/packages/acpd_io
-  cockpit: ^3.0.4
-  cockpit_protocol: ^3.0.4
+  acpd: ^1.0.0
+  acpd_io: ^1.0.0
+  cockpit: ^3.0.12
+  cockpit_protocol: ^3.0.12
   collection: ^1.19.1
   file_picker: ^11.0.3
   flutter:
@@ -31,7 +29,7 @@ dependencies:
   yaml: ^3.1.3
 
 dev_dependencies:
-  flutter_cockpit: ^3.0.4
+  flutter_cockpit: ^3.0.12
   flutter_lints: ^6.0.0
   flutter_test:
     sdk: flutter
