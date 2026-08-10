@@ -1,5 +1,10 @@
 # Changelog
 
+## 3.0.11
+
+- Synchronized the Flutter bridge with Cockpit's latest-release updater
+  correction; bridge behavior is unchanged.
+
 ## 3.0.10
 
 - Captured Android and iOS through the system screen first so permissions and

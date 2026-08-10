@@ -1,5 +1,10 @@
 # Changelog
 
+## 3.0.11
+
+- Synchronized the protocol package with Cockpit's latest-release updater
+  correction; public protocol contracts are unchanged.
+
 ## 3.0.10
 
 - Synchronized the protocol package with Cockpit's desktop-session recovery,
