@@ -240,8 +240,10 @@ cockpit daemon policy show
 
 For an explicitly unrestricted local session, start the Supervisor with
 `cockpit daemon start --yolo` (or `daemon restart --yolo`). YOLO
-applies only to that daemon process; a start or restart without the flag uses
-the persisted restricted policy. `daemon status`, attempt manifests, and suite
+applies only to that daemon process. An unflagged start or restart preserves a
+healthy running daemon's current mode; when no daemon is running, it starts with
+the persisted restricted policy. Stop first when an explicit return to
+restricted mode is required. `daemon status`, attempt manifests, and suite
 `report.json` record the effective `auth`.
 
 A policy may explicitly authorize `production` or `unknown`; the default

@@ -225,9 +225,10 @@ cockpit daemon policy show
 ```
 
 本地需要显式全权运行时，使用 `cockpit daemon start --yolo`（或
-`daemon restart --yolo`）。YOLO 只对本次 daemon 进程生效；不带该开关的启动或
-重启会使用持久化的受限策略。`daemon status`、attempt manifest 和 suite
-`report.json` 都会记录实际 `auth`。
+`daemon restart --yolo`）。YOLO 只对本次 daemon 进程生效。daemon 已健康运行时，
+不带该开关的 start/restart 会保留当前授权；daemon 未运行时则使用持久化的受限策略
+启动。需要明确回到 restricted 时，先停止 daemon 再无开关启动。`daemon status`、
+attempt manifest 和 suite `report.json` 都会记录实际 `auth`。
 
 quarantined lease 会持续阻塞资源，直到 cleanup 验证成功。Supervisor 提供
 `lease.list`，以及需要显式授权 `reset` effect 的 `lease.recover`；恢复请求必须精确

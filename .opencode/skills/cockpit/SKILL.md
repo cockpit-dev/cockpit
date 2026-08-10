@@ -137,6 +137,12 @@ executable, removes retired and temporary update payloads, and reconnects the
 Supervisor while preserving authorization and durable state. Do not manually delete
 Cockpit home data, Pub caches, sessions, executables, or ports.
 
+Manual daemon lifecycle is conservative. `cockpit daemon start` and an unflagged
+`daemon restart` preserve the authorization of a healthy running daemon; with no
+running daemon they start restricted. Add `--yolo` only to explicitly require yolo.
+To return to restricted, stop the daemon and start it without `--yolo`. Lifecycle
+lock waits consume the command's own timeout instead of blocking indefinitely.
+
 ## Timeout Defaults
 
 Every executable command has `--timeout VALUE`; values accept `ms`, `s`, `m`, or `h`.
@@ -368,6 +374,10 @@ POST /api/v2/operations
 POST /api/v2/workspaces/{workspaceId}/operations
 GET  /api/v2/runs/{runId}/events
 ```
+
+`/api/v2/capabilities` is the static Supervisor-wide catalog and never starts,
+attaches, or reconnects workspace workers. Use the selected workspace's operations
+route when exact workspace-live operation availability is required.
 
 Use the bearer token and loopback endpoint from Supervisor discovery, send the
 negotiated API/feature headers, and use `cockpit_protocol` for strict DTO,

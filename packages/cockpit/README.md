@@ -149,9 +149,11 @@ cockpit daemon policy show
 
 Use `cockpit daemon start --yolo` (or `daemon restart --yolo`) for an
 explicitly unrestricted local daemon. The mode lasts only for that daemon
-process; starting without the flag returns to the persisted restricted policy.
-The effective `auth` is exposed by daemon status and recorded in
-attempt and suite reports.
+process. An unflagged start or restart preserves a healthy running daemon's
+current mode; when no daemon is running, it starts with the persisted restricted
+policy. Stop first when an explicit return to restricted mode is required. The
+effective `auth` is exposed by daemon status and recorded in attempt and suite
+reports.
 
 Applying without `--restart` requires a stopped daemon. The default policy
 denies dangerous operations and sensitive test effects; it does not authorize

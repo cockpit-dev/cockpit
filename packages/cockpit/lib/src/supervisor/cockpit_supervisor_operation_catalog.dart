@@ -303,6 +303,16 @@ final class CockpitSupervisorOperationCatalog {
           .toList(growable: false)
         ..sort((left, right) => left.kind.compareTo(right.kind));
 
+  static List<CockpitOperationDescriptor> get workspaceOperations =>
+      _operations.values
+          .where(
+            (metadata) =>
+                metadata.descriptor.scope == CockpitOperationScope.workspace,
+          )
+          .map((metadata) => metadata.descriptor)
+          .toList(growable: false)
+        ..sort((left, right) => left.kind.compareTo(right.kind));
+
   static List<CockpitOperationDescriptor> get allOperations =>
       _operations.values.map((metadata) => metadata.descriptor).toList()
         ..sort((left, right) => left.kind.compareTo(right.kind));

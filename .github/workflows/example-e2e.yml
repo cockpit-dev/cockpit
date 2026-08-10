@@ -449,32 +449,33 @@ jobs:
         if: matrix.platform == 'ios'
         shell: bash
         run: |
-          IOS_DEVICE_ID="$(xcrun simctl list devices available -j | python3 -c '
-          import json, sys
-          data = json.load(sys.stdin)["devices"]
-          devices = [d for runtime, entries in data.items() if "iOS" in runtime for d in entries if d.get("isAvailable") and d.get("name") == "iPhone 16 Pro"]
-          print(devices[0]["udid"] if devices else "")
-          ')"
-          if [[ -z "$IOS_DEVICE_ID" ]]; then
-            IOS_RUNTIME_ID="$(xcrun simctl list runtimes available -j | python3 -c '
+          IOS_RUNTIME_ID="$(xcrun simctl list runtimes available -j | python3 -c '
           import json, sys
           runtimes = [r for r in json.load(sys.stdin)["runtimes"] if r.get("isAvailable") and "iOS" in r.get("identifier", "")]
           runtimes.sort(key=lambda r: tuple(int(p) for p in r.get("version", "0").split(".")))
           print(runtimes[-1]["identifier"] if runtimes else "")
           ')"
-            IOS_DEVICE_TYPE_ID="$(xcrun simctl list devicetypes -j | python3 -c '
+          IOS_DEVICE_TYPE_ID="$(xcrun simctl list devicetypes -j | python3 -c '
           import json, sys
           types = [d for d in json.load(sys.stdin)["devicetypes"] if d.get("name") == "iPhone 16 Pro"]
           print(types[0]["identifier"] if types else "")
           ')"
-            if [[ -z "$IOS_RUNTIME_ID" || -z "$IOS_DEVICE_TYPE_ID" ]]; then
-              echo "The exact iPhone 16 Pro visual profile is unavailable." >&2
-              exit 1
-            fi
-            IOS_DEVICE_ID="$(xcrun simctl create "iPhone 16 Pro" "$IOS_DEVICE_TYPE_ID" "$IOS_RUNTIME_ID")"
+          if [[ -z "$IOS_RUNTIME_ID" || -z "$IOS_DEVICE_TYPE_ID" ]]; then
+            echo "The exact iPhone 16 Pro visual profile is unavailable." >&2
+            exit 1
+          fi
+          IOS_DEVICE_ID="$(xcrun simctl list devices available -j | python3 -c '
+          import json, sys
+          devices = json.load(sys.stdin)["devices"].get(sys.argv[1], [])
+          matches = [d for d in devices if d.get("isAvailable") and d.get("name") == "iPhone 16 Pro"]
+          print(matches[0]["udid"] if matches else "")
+          ' "$IOS_RUNTIME_ID")"
+          if [[ -z "$IOS_DEVICE_ID" ]]; then
+            IOS_DEVICE_ID="$(xcrun simctl create "Cockpit iPhone 16 Pro" "$IOS_DEVICE_TYPE_ID" "$IOS_RUNTIME_ID")"
           fi
           xcrun simctl boot "$IOS_DEVICE_ID" || true
           xcrun simctl bootstatus "$IOS_DEVICE_ID" -b
+          xcrun simctl list devices "$IOS_RUNTIME_ID"
           echo "IOS_DEVICE_ID=$IOS_DEVICE_ID" >> "$GITHUB_ENV"
 
       - name: Start iOS WebDriverAgent

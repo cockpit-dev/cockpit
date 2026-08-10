@@ -111,6 +111,34 @@ environment:
         ],
       );
       final workspaceId = workspaceResult['workspaceId']! as String;
+      final discovery = await _waitForDiscovery(
+        CockpitHomePaths(environment['COCKPIT_HOME']!),
+      );
+      final capabilitiesStopwatch = Stopwatch()..start();
+      final capabilities = await _get(
+        discovery,
+        '/api/v2/capabilities',
+        headers: const <String, String>{'Cockpit-API-Version': '2.0'},
+      );
+      capabilitiesStopwatch.stop();
+      expect(capabilities.statusCode, HttpStatus.ok);
+      expect(
+        capabilitiesStopwatch.elapsed,
+        lessThan(const Duration(seconds: 2)),
+      );
+      final capabilityKinds =
+          ((jsonDecode(utf8.decode(capabilities.body))
+                      as Map<String, Object?>)['operations']!
+                  as List<Object?>)
+              .cast<Map<String, Object?>>()
+              .map((operation) => operation['kind']);
+      expect(capabilityKinds, contains('analyze.workspace'));
+      expect(
+        await File(
+          CockpitHomePaths(environment['COCKPIT_HOME']!).daemonLog,
+        ).readAsString(),
+        isNot(contains('Workspace worker started.')),
+      );
       final cases = await _runAotCli(executable, environment, <String>[
         'case',
         'list',
@@ -118,6 +146,106 @@ environment:
         workspaceId,
       ]);
       expect(cases['items'], isEmpty);
+
+      final beforePreservingStart = await Process.run(
+        executable,
+        const <String>['daemon', 'status', '--format', 'json'],
+        environment: environment,
+      );
+      expect(beforePreservingStart.exitCode, 0);
+      final beforePreservingStartJson =
+          jsonDecode('${beforePreservingStart.stdout}') as Map<String, Object?>;
+      final preservingStart = await Process.run(executable, const <String>[
+        'daemon',
+        'start',
+        '--format',
+        'none',
+      ], environment: environment);
+      expect(
+        preservingStart.exitCode,
+        0,
+        reason: '${preservingStart.stdout}\n${preservingStart.stderr}',
+      );
+      final afterPreservingStart = await Process.run(executable, const <String>[
+        'daemon',
+        'status',
+        '--format',
+        'json',
+      ], environment: environment);
+      expect(afterPreservingStart.exitCode, 0);
+      final afterPreservingStartJson =
+          jsonDecode('${afterPreservingStart.stdout}') as Map<String, Object?>;
+      expect(
+        afterPreservingStartJson['auth'],
+        CockpitAuthorizationMode.yolo.name,
+      );
+      expect(
+        afterPreservingStartJson['processId'],
+        beforePreservingStartJson['processId'],
+      );
+
+      for (var iteration = 0; iteration < 3; iteration += 1) {
+        final stopped = await Process.run(executable, const <String>[
+          'daemon',
+          'stop',
+          '--mode',
+          'emergency',
+          '--format',
+          'none',
+        ], environment: environment).timeout(const Duration(seconds: 20));
+        expect(
+          stopped.exitCode,
+          0,
+          reason: '${stopped.stdout}\n${stopped.stderr}',
+        );
+        final restricted = await Process.run(executable, const <String>[
+          'daemon',
+          'start',
+          '--format',
+          'none',
+        ], environment: environment).timeout(const Duration(seconds: 20));
+        expect(
+          restricted.exitCode,
+          0,
+          reason: '${restricted.stdout}\n${restricted.stderr}',
+        );
+
+        final concurrent = await Future.wait(<Future<ProcessResult>>[
+          Process.run(executable, const <String>[
+            'daemon',
+            'start',
+            '--yolo',
+            '--format',
+            'none',
+          ], environment: environment),
+          for (var reader = 0; reader < 8; reader += 1)
+            Process.run(executable, const <String>[
+              'workspace',
+              'list',
+              '--format',
+              'none',
+            ], environment: environment),
+        ]).timeout(const Duration(seconds: 30));
+        for (final result in concurrent) {
+          expect(
+            result.exitCode,
+            0,
+            reason: '${result.stdout}\n${result.stderr}',
+          );
+        }
+
+        final status = await Process.run(executable, const <String>[
+          'daemon',
+          'status',
+          '--format',
+          'json',
+        ], environment: environment).timeout(const Duration(seconds: 20));
+        expect(status.exitCode, 0, reason: '${status.stderr}');
+        expect(
+          (jsonDecode('${status.stdout}') as Map<String, Object?>)['auth'],
+          CockpitAuthorizationMode.yolo.name,
+        );
+      }
     },
     timeout: const Timeout(Duration(minutes: 3)),
   );
@@ -233,6 +361,80 @@ Future<void> main(List<String> arguments) async {
 
     expect(stopwatch.elapsed, lessThan(const Duration(seconds: 1)));
     expect(await File(paths.daemonDiscovery).exists(), isFalse);
+  });
+
+  test('daemon lifecycle lock respects the requested timeout', () async {
+    final temporary = await Directory.systemTemp.createTemp(
+      'cockpit-daemon-lock-timeout-',
+    );
+    final paths = CockpitHomePaths(await temporary.resolveSymbolicLinks());
+    final ready = File(p.join(temporary.path, 'ready'));
+    final release = File(p.join(temporary.path, 'release'));
+    final packageLibrary = await Isolate.resolvePackageUri(
+      Uri.parse('package:cockpit/cockpit.dart'),
+    );
+    if (packageLibrary == null) throw StateError('Cannot resolve cockpit.');
+    final packageRoot = p.dirname(p.dirname(packageLibrary.toFilePath()));
+    final holder = await Process.start(Platform.resolvedExecutable, <String>[
+      p.join(
+        packageRoot,
+        'test',
+        'src',
+        'supervisor',
+        'cockpit_daemon_lock_holder.dart',
+      ),
+      paths.daemonEnsureLock,
+      ready.path,
+      release.path,
+    ]);
+    addTearDown(() async {
+      await release.writeAsString('release');
+      await holder.exitCode.timeout(
+        const Duration(seconds: 5),
+        onTimeout: () {
+          holder.kill(ProcessSignal.sigkill);
+          return -1;
+        },
+      );
+      if (await temporary.exists()) await temporary.delete(recursive: true);
+    });
+    final readyDeadline = DateTime.now().add(const Duration(seconds: 5));
+    while (!await ready.exists() && DateTime.now().isBefore(readyDeadline)) {
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+    }
+    expect(await ready.exists(), isTrue);
+
+    final policy = Platform.isWindows
+        ? const CockpitWindowsAclPermissionHardener()
+        : const CockpitPosixPermissionHardener();
+    final lifecycle = CockpitDaemonLifecycleClient(
+      paths: paths,
+      executable: Platform.resolvedExecutable,
+      daemonArguments: const <String>['unused'],
+      restartArguments: const <String>['unused'],
+      permissionHardener: policy,
+      directorySyncer: CockpitSystemDirectorySyncer(
+        Platform.isWindows
+            ? CockpitHostPlatform.windows
+            : Platform.isMacOS
+            ? CockpitHostPlatform.macos
+            : CockpitHostPlatform.linux,
+      ),
+      requiredEngineVersion: 'test',
+    );
+    final stopwatch = Stopwatch()..start();
+    await expectLater(
+      lifecycle.ensure(timeout: const Duration(milliseconds: 150)),
+      throwsA(
+        isA<CockpitDaemonException>().having(
+          (error) => error.code,
+          'code',
+          'daemonTimeout',
+        ),
+      ),
+    );
+    stopwatch.stop();
+    expect(stopwatch.elapsed, lessThan(const Duration(seconds: 2)));
   });
 
   test(
