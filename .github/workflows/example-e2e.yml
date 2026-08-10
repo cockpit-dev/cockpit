@@ -471,7 +471,7 @@ jobs:
           print(matches[0]["udid"] if matches else "")
           ' "$IOS_RUNTIME_ID")"
           if [[ -z "$IOS_DEVICE_ID" ]]; then
-            IOS_DEVICE_ID="$(xcrun simctl create "Cockpit iPhone 16 Pro" "$IOS_DEVICE_TYPE_ID" "$IOS_RUNTIME_ID")"
+            IOS_DEVICE_ID="$(xcrun simctl create "iPhone 16 Pro" "$IOS_DEVICE_TYPE_ID" "$IOS_RUNTIME_ID")"
           fi
           xcrun simctl boot "$IOS_DEVICE_ID" || true
           xcrun simctl bootstatus "$IOS_DEVICE_ID" -b
