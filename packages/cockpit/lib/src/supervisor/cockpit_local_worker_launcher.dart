@@ -1,5 +1,8 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
+
+import 'package:path/path.dart' as p;
 
 import '../foundation/cockpit_home.dart';
 import '../infrastructure/cockpit_process_manager.dart';
@@ -106,6 +109,10 @@ final class CockpitLocalWorkerLauncher
     final workerTemporaryDirectory =
         await (Platform.isWindows ? Directory.systemTemp : Directory('/tmp'))
             .createTemp('cockpit-worker-');
+    final appTemporaryRoot = p.join(
+      Platform.isWindows ? Directory.systemTemp.path : '/tmp',
+      'cockpit-app-${base64Url.encode(utf8.encode(spec.key.workspaceId)).replaceAll('=', '')}',
+    );
     try {
       await _permissionHardener.hardenDirectory(workerTemporaryDirectory);
     } on Object {
@@ -124,6 +131,7 @@ final class CockpitLocalWorkerLauncher
           '--engine-version=${spec.key.engineVersion}',
           '--workspace-root=${spec.workspaceRoot}',
           '--state-root=${spec.stateRoot}',
+          '--app-temp-root=$appTemporaryRoot',
           '--worker-owner-id=$workerOwnerId',
           '--process-start-identity=$processStartIdentity',
           '--auth=${spec.authorizationMode.name}',

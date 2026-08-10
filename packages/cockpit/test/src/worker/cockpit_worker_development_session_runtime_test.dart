@@ -4,10 +4,12 @@ import 'dart:io';
 
 import 'package:cockpit/src/application/cockpit_application_service_exception.dart';
 import 'package:cockpit/src/application/cockpit_launch_development_session_service.dart';
+import 'package:cockpit/src/application/cockpit_app_temp_store.dart';
 import 'package:cockpit/src/development/cockpit_development_session_handle.dart';
 import 'package:cockpit/src/development/cockpit_development_session_machine_launcher.dart';
 import 'package:cockpit/src/development/cockpit_development_session_status.dart';
 import 'package:cockpit/src/development/cockpit_flutter_run_machine_client.dart';
+import 'package:cockpit/src/foundation/cockpit_permissions.dart';
 import 'package:cockpit/src/session/cockpit_remote_session_handle.dart';
 import 'package:cockpit/src/worker/cockpit_worker_development_session_runtime.dart';
 import 'package:path/path.dart' as p;
@@ -38,6 +40,7 @@ void main() {
       if (!exitCode.isCompleted) exitCode.complete(0);
       await machineClient.dispose(terminateProcess: false);
     });
+    Map<String, String>? launchEnvironment;
     final launcher = CockpitDevelopmentSessionMachineLauncher(
       machineClientStarter:
           ({
@@ -49,6 +52,7 @@ void main() {
             extraArgs = const <String>[],
             environment,
           }) async {
+            launchEnvironment = environment;
             scheduleMicrotask(() {
               stderrController.add(
                 'Did not find the file passed to '
@@ -60,6 +64,7 @@ void main() {
           },
     );
     final runtime = CockpitWorkerDevelopmentSessionRuntime(
+      appTempStore: _appTempStore(project),
       machineLauncher: launcher,
       flutterVersionReader: (_) async => '3.32.0',
     );
@@ -84,6 +89,10 @@ void main() {
             ),
       ),
     );
+    final appTempPath = launchEnvironment!['TMPDIR']!;
+    expect(launchEnvironment!['TMP'], appTempPath);
+    expect(launchEnvironment!['TEMP'], appTempPath);
+    expect(await Directory(appTempPath).exists(), isFalse);
   });
 
   test(
@@ -148,14 +157,19 @@ void main() {
       });
 
       var attachCalls = 0;
+      Map<String, String>? attachEnvironment;
+      final runtimeRoot = await Directory.systemTemp.createTemp(
+        'cockpit-worker-recovery-',
+      );
+      addTearDown(() => runtimeRoot.delete(recursive: true));
       final runtime = CockpitWorkerDevelopmentSessionRuntime(
-        machineClientAttacher: (handle) async {
+        appTempStore: _appTempStore(runtimeRoot),
+        machineClientAttacher: (handle, environment) async {
           attachCalls += 1;
-          stdoutController
-            ..add('[{"event":"app.start","params":{"appId":"attached-app"}}]')
-            ..add(
-              '[{"event":"app.debugPort","params":{"wsUri":"ws://127.0.0.1:61234/direct/ws"}}]',
-            );
+          attachEnvironment = environment;
+          stdoutController.add(
+            '[{"event":"app.start","params":{"appId":"attached-app"}}]',
+          );
           await Future<void>.delayed(Duration.zero);
           return machineClient;
         },
@@ -179,15 +193,18 @@ void main() {
       await Future<void>.delayed(Duration.zero);
       expect(
         writes.any((payload) => payload.contains('"method":"app.restart"')),
-        isFalse,
+        isTrue,
       );
-      stdoutController.add('[{"event":"app.started","params":{}}]');
       final reloaded = await reloadFuture;
       expect(attachCalls, 1);
       expect(reloaded.handle.appId, 'attached-app');
       expect(reloaded.handle.remoteSessionHandle?.appId, 'attached-app');
       expect(reloaded.status.state, CockpitDevelopmentSessionState.ready);
       expect(reloaded.handle.reloadGeneration, 4);
+      final appTempPath = attachEnvironment!['TMPDIR']!;
+      expect(attachEnvironment!['TMP'], appTempPath);
+      expect(attachEnvironment!['TEMP'], appTempPath);
+      expect(await Directory(appTempPath).exists(), isTrue);
       expect(
         writes.any((payload) => payload.contains('"method":"app.restart"')),
         isTrue,
@@ -199,6 +216,7 @@ void main() {
         isTrue,
       );
       expect(closeProcessCalls, 1);
+      expect(await Directory(appTempPath).exists(), isTrue);
     },
   );
 
@@ -243,8 +261,13 @@ void main() {
         await machineClient.dispose(terminateProcess: false);
       });
 
+      final runtimeRoot = await Directory.systemTemp.createTemp(
+        'cockpit-worker-custom-recovery-',
+      );
+      addTearDown(() => runtimeRoot.delete(recursive: true));
       final runtime = CockpitWorkerDevelopmentSessionRuntime(
-        machineClientAttacher: (handle) async {
+        appTempStore: _appTempStore(runtimeRoot),
+        machineClientAttacher: (handle, _) async {
           stdoutController.add(
             '[{"event":"app.start","params":{"appId":"attached-app"}}]',
           );
@@ -280,6 +303,24 @@ void main() {
       );
     },
   );
+}
+
+CockpitAppTempStore _appTempStore(Directory root) => CockpitAppTempStore(
+  root: p.join(root.path, 'app-temp'),
+  permissionHardener: const _NoopPermissionHardener(),
+);
+
+final class _NoopPermissionHardener implements CockpitPermissionHardener {
+  const _NoopPermissionHardener();
+
+  @override
+  CockpitPermissionPolicy get policy => CockpitPermissionPolicy.posixOwnerOnly;
+
+  @override
+  Future<void> hardenDirectory(Directory directory) async {}
+
+  @override
+  Future<void> hardenFile(File file) async {}
 }
 
 CockpitDevelopmentSessionHandle _persistedHandle({

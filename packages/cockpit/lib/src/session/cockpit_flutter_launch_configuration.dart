@@ -28,6 +28,8 @@ const Set<String> _reservedFlutterArgs = <String>{
   '--no-disable-dds',
 };
 
+const Set<String> _reservedEnvironmentNames = <String>{'TMPDIR', 'TMP', 'TEMP'};
+
 final class CockpitFlutterLaunchConfiguration {
   factory CockpitFlutterLaunchConfiguration({
     Iterable<String> dartDefines = const <String>[],
@@ -117,6 +119,42 @@ final class CockpitFlutterLaunchConfiguration {
   Map<String, String>? get processEnvironment => environment.isEmpty
       ? null
       : Map<String, String>.unmodifiable(environment);
+
+  CockpitFlutterLaunchConfiguration withManagedEnvironment(
+    Map<String, String> managedEnvironment,
+  ) {
+    final invalidNames = managedEnvironment.keys
+        .where(
+          (name) => !_reservedEnvironmentNames.contains(name.toUpperCase()),
+        )
+        .toList(growable: false);
+    if (invalidNames.isNotEmpty) {
+      throw ArgumentError.value(
+        invalidNames,
+        'managedEnvironment',
+        'Only cockpit-managed environment variables are allowed.',
+      );
+    }
+    final conflicts = environment.keys
+        .where((name) => _reservedEnvironmentNames.contains(name.toUpperCase()))
+        .toList(growable: false);
+    if (conflicts.isNotEmpty) {
+      throw CockpitApplicationServiceException(
+        code: 'invalidLaunchConfiguration',
+        message: 'TMPDIR, TMP, and TEMP are managed by cockpit development.',
+        details: <String, Object?>{'fields': conflicts},
+      );
+    }
+    return CockpitFlutterLaunchConfiguration._(
+      dartDefines: dartDefines,
+      dartDefineFromFiles: dartDefineFromFiles,
+      flutterArgs: flutterArgs,
+      environment: Map<String, String>.unmodifiable(<String, String>{
+        ...environment,
+        ...managedEnvironment,
+      }),
+    );
+  }
 
   Future<void> validateProjectFiles(String projectDir) async {
     if (dartDefineFromFiles.isEmpty) return;

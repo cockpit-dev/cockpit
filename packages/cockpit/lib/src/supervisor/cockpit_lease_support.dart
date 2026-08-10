@@ -88,6 +88,11 @@ abstract interface class CockpitLeaseCleanupProbe {
   );
 }
 
+/// Marks a cleanup probe whose explicitly ended leases need no external
+/// cleanup before the resource can be granted again.
+abstract interface class CockpitImmediateLeaseReleaseProbe
+    implements CockpitLeaseCleanupProbe {}
+
 abstract interface class CockpitLeaseCleanupProbeResolver {
   CockpitLeaseCleanupProbe resolve(CockpitLeaseResourceKind resourceKind);
 }

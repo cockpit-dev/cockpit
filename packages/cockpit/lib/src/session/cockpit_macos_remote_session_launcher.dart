@@ -124,7 +124,9 @@ final class CockpitMacosRemoteSessionLauncher
       flavor: options.flavor,
     );
     final bundleId = await _bundleIdResolver(appBundlePath: appBundlePath);
-    final processEnvironment = options.launchConfiguration.processEnvironment;
+    final processEnvironment =
+        options.appEnvironment ??
+        options.launchConfiguration.processEnvironment;
     final executablePath =
         processEnvironment == null || processEnvironment.isEmpty
         ? null

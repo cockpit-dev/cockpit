@@ -104,6 +104,25 @@ void main() {
     }
   });
 
+  test('managed development environment rejects conflicting user temp', () {
+    final configuration = CockpitFlutterLaunchConfiguration(
+      environment: const <String, String>{'temp': '/tmp/custom'},
+    );
+
+    expect(
+      () => configuration.withManagedEnvironment(const <String, String>{
+        'TMPDIR': '/tmp/cockpit',
+      }),
+      throwsA(
+        isA<CockpitApplicationServiceException>().having(
+          (error) => error.code,
+          'code',
+          'invalidLaunchConfiguration',
+        ),
+      ),
+    );
+  });
+
   test('remote control dart defines are rendered by one shared builder', () {
     expect(
       cockpitBuildRemoteControlDartDefineArguments(

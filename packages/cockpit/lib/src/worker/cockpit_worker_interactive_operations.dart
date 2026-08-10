@@ -642,6 +642,16 @@ final class CockpitWorkerInteractiveOperations {
       kind: CockpitLeaseResourceKind.capture,
       resourceId: pair.binding.resourceId,
     );
+    final target = await _targets.requireTarget(
+      workspaceId: workspaceId,
+      targetId: pair.binding.targetId,
+    );
+    requireWorkerResourceGrant(
+      context: context,
+      grants: grants,
+      kind: CockpitLeaseResourceKind.device,
+      resourceId: target.deviceResourceId,
+    );
     final app = await _registry.requireApp(pair.binding.appId);
     final iosWdaBaseUri = await _resolveIosWdaBaseUri(
       app.handle,

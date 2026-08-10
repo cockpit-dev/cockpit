@@ -358,6 +358,10 @@ void main() {
             flutterArgs: const <String>['--track-widget-creation'],
             environment: const <String, String>{'API_TOKEN': 'secret'},
           ),
+          appEnvironment: const <String, String>{
+            'API_TOKEN': 'secret',
+            'TMPDIR': '/stable/app-temp',
+          },
         ),
       );
 
@@ -373,7 +377,10 @@ void main() {
       expect(buildInvocations.single['environment'], <String, String>{
         'API_TOKEN': 'secret',
       });
-      expect(runtimeEnvironment, <String, String>{'API_TOKEN': 'secret'});
+      expect(runtimeEnvironment, <String, String>{
+        'API_TOKEN': 'secret',
+        'TMPDIR': '/stable/app-temp',
+      });
     },
   );
 }

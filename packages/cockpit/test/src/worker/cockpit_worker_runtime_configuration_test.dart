@@ -54,6 +54,7 @@ const List<String> _baseArguments = <String>[
   '--engine-version=engineA',
   '--workspace-root=/workspace/workspaceA',
   '--state-root=/state/workspaceA',
+  '--app-temp-root=/tmp/cockpit-app-workspaceA',
   '--worker-owner-id=worker_A',
   '--process-start-identity=process_A',
   '--auth=restricted',

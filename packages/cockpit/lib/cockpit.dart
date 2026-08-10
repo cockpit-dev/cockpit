@@ -25,6 +25,7 @@ export 'src/adapters/cockpit_active_operation_aborter.dart';
 export 'src/adapters/cockpit_capture_adapter.dart';
 export 'src/adapters/cockpit_recording_adapter.dart';
 export 'src/application/cockpit_application_service_exception.dart';
+export 'src/application/cockpit_app_temp_store.dart';
 export 'src/application/cockpit_app_handle.dart';
 export 'src/application/cockpit_capture_screenshot_service.dart';
 export 'src/application/cockpit_command_evidence_defaults.dart';

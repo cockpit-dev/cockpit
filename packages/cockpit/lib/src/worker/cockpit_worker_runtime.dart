@@ -6,6 +6,7 @@ import 'package:cockpit_protocol/cockpit_protocol.dart';
 import 'package:path/path.dart' as p;
 
 import '../development/cockpit_development_session_status.dart';
+import '../application/cockpit_app_temp_store.dart';
 import '../development/cockpit_vm_network_profiler.dart';
 import '../foundation/cockpit_home.dart';
 import '../foundation/cockpit_locked_json_store.dart';
@@ -46,6 +47,7 @@ final class CockpitWorkerRuntimeConfiguration {
     required this.engineVersion,
     required this.workspaceRoot,
     required this.stateRoot,
+    required this.appTempRoot,
     required this.workerOwnerId,
     required this.processStartIdentity,
     required this.authorizationMode,
@@ -73,6 +75,7 @@ final class CockpitWorkerRuntimeConfiguration {
     workerString(processStartIdentity, r'$.processStartIdentity', maximum: 512);
     _validateAbsolutePath(workspaceRoot, 'workspaceRoot');
     _validateAbsolutePath(stateRoot, 'stateRoot');
+    _validateAbsolutePath(appTempRoot, 'appTempRoot');
     _validateUniqueIds(this.supportedFeatures, 'supportedFeatures');
     _validateEnvironmentNames(this.allowedEnvironmentSecretNames);
     final yolo = authorizationMode == CockpitAuthorizationMode.yolo;
@@ -100,6 +103,7 @@ final class CockpitWorkerRuntimeConfiguration {
       ..addOption('engine-version', mandatory: true)
       ..addOption('workspace-root', mandatory: true)
       ..addOption('state-root', mandatory: true)
+      ..addOption('app-temp-root', mandatory: true)
       ..addOption('worker-owner-id', mandatory: true)
       ..addOption('process-start-identity', mandatory: true)
       ..addOption(
@@ -118,6 +122,7 @@ final class CockpitWorkerRuntimeConfiguration {
       engineVersion: parsed.option('engine-version')!,
       workspaceRoot: parsed.option('workspace-root')!,
       stateRoot: parsed.option('state-root')!,
+      appTempRoot: parsed.option('app-temp-root')!,
       workerOwnerId: parsed.option('worker-owner-id')!,
       processStartIdentity: parsed.option('process-start-identity')!,
       authorizationMode: CockpitAuthorizationMode.values.byName(
@@ -143,6 +148,7 @@ final class CockpitWorkerRuntimeConfiguration {
   final String engineVersion;
   final String workspaceRoot;
   final String stateRoot;
+  final String appTempRoot;
   final String workerOwnerId;
   final String processStartIdentity;
   final CockpitAuthorizationMode authorizationMode;
@@ -200,7 +206,12 @@ final class CockpitWorkerRuntime {
       },
     );
     final networkProfiler = CockpitVmNetworkProfiler();
+    final appTempStore = CockpitAppTempStore(
+      root: configuration.appTempRoot,
+      permissionHardener: _permissionHardener,
+    );
     final developmentRuntime = CockpitWorkerDevelopmentSessionRuntime(
+      appTempStore: appTempStore,
       networkProfiler: networkProfiler,
       logger: (message) => _logger.log(
         'info',
@@ -316,6 +327,7 @@ final class CockpitWorkerRuntime {
       producerRoot: roots.producerRoot,
       portHandoff: portHandoff,
       developmentRuntime: developmentRuntime,
+      appTempStore: appTempStore,
       processManager: childProcessManager,
       resultSanitizer: resultSanitizer,
       networkProfiler: networkProfiler,

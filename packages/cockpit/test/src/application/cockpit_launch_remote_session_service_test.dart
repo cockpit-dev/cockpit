@@ -2,9 +2,12 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:cockpit_protocol/cockpit_protocol.dart';
+import 'package:cockpit/src/application/cockpit_app_temp_store.dart';
 import 'package:cockpit/src/application/cockpit_launch_remote_session_service.dart';
 import 'package:cockpit/src/application/cockpit_entrypoint_resolver.dart';
+import 'package:cockpit/src/foundation/cockpit_permissions.dart';
 import 'package:cockpit/src/infrastructure/cockpit_sdk_environment.dart';
+import 'package:cockpit/src/session/cockpit_flutter_launch_configuration.dart';
 import 'package:cockpit/src/session/cockpit_remote_session_handle.dart';
 import 'package:cockpit/src/session/cockpit_remote_session_launch_options.dart';
 import 'package:cockpit/src/session/cockpit_remote_session_launcher.dart';
@@ -278,7 +281,150 @@ void main() {
       expect(result.sessionHandle.baseUrl, 'http://127.0.0.1:59331');
     },
   );
+
+  test(
+    'desktop remote app temp survives worker replacement and excludes the build',
+    () async {
+      final tempDir = await Directory.systemTemp.createTemp(
+        'cockpit-remote-app-temp-',
+      );
+      addTearDown(() => tempDir.delete(recursive: true));
+      final appTempRoot = p.join(tempDir.path, 'apps');
+      final store = CockpitAppTempStore(
+        root: appTempRoot,
+        permissionHardener: const _NoopPermissionHardener(),
+      );
+      CockpitRemoteSessionLaunchOptions? capturedOptions;
+      final expectedHandle = CockpitRemoteSessionHandle(
+        platform: 'linux',
+        deviceId: 'linux',
+        projectDir: tempDir.path,
+        target: 'cockpit/main.dart',
+        appId: 'cockpit_demo',
+        host: '127.0.0.1',
+        hostPort: 47331,
+        devicePort: 47331,
+        baseUrl: 'http://127.0.0.1:47331',
+        launchedAt: DateTime.utc(2026, 8, 10),
+      );
+      final service = CockpitLaunchRemoteSessionService(
+        appTempStore: store,
+        sdkEnvironment: const CockpitSdkEnvironment(
+          dartExecutable: '/opt/flutter/bin/cache/dart-sdk/bin/dart',
+          flutterExecutable: '/opt/flutter/bin/flutter',
+        ),
+        flutterVersionForExecutableReader: (_) async => '3.44.0',
+        entrypointResolver: CockpitEntrypointResolver(exists: (_) => true),
+        launcher: _CapturingRemoteSessionLauncher(
+          handle: expectedHandle,
+          onLaunch: (options) {
+            capturedOptions = options;
+          },
+        ),
+        statusReader: (_) async => _status(platform: 'linux'),
+      );
+
+      await service.launch(
+        CockpitLaunchRemoteSessionRequest(
+          projectDir: tempDir.path,
+          platform: 'linux',
+          deviceId: 'linux',
+          sessionPort: 47331,
+          launchConfiguration: CockpitFlutterLaunchConfiguration(
+            environment: const <String, String>{'LOG_LEVEL': 'debug'},
+          ),
+        ),
+      );
+
+      expect(capturedOptions?.launchConfiguration.environment, <String, String>{
+        'LOG_LEVEL': 'debug',
+      });
+      final environment = capturedOptions!.appEnvironment!;
+      final path = environment['TMPDIR']!;
+      expect(environment, <String, String>{
+        'LOG_LEVEL': 'debug',
+        'TMPDIR': path,
+        'TMP': path,
+        'TEMP': path,
+      });
+      expect(await Directory(path).exists(), isTrue);
+
+      final replacement = CockpitAppTempStore(
+        root: appTempRoot,
+        permissionHardener: const _NoopPermissionHardener(),
+      );
+      expect(
+        await replacement.prepare(
+          cockpitRemoteAppTempKey(platform: 'linux', hostPort: 47331),
+        ),
+        path,
+      );
+    },
+  );
+
+  test('desktop remote app temp is released when launch fails', () async {
+    final tempDir = await Directory.systemTemp.createTemp(
+      'cockpit-failed-remote-app-temp-',
+    );
+    addTearDown(() => tempDir.delete(recursive: true));
+    final appTempRoot = p.join(tempDir.path, 'apps');
+    final service = CockpitLaunchRemoteSessionService(
+      appTempStore: CockpitAppTempStore(
+        root: appTempRoot,
+        permissionHardener: const _NoopPermissionHardener(),
+      ),
+      sdkEnvironment: const CockpitSdkEnvironment(
+        dartExecutable: '/opt/flutter/bin/cache/dart-sdk/bin/dart',
+        flutterExecutable: '/opt/flutter/bin/flutter',
+      ),
+      flutterVersionForExecutableReader: (_) async => '3.44.0',
+      entrypointResolver: CockpitEntrypointResolver(exists: (_) => true),
+      launcher: const _ThrowingRemoteSessionLauncher(),
+    );
+
+    await expectLater(
+      () => service.launch(
+        CockpitLaunchRemoteSessionRequest(
+          projectDir: tempDir.path,
+          platform: 'windows',
+          deviceId: 'windows',
+          sessionPort: 47331,
+        ),
+      ),
+      throwsA(isA<StateError>()),
+    );
+
+    expect(
+      await Directory(
+        p.join(
+          appTempRoot,
+          cockpitRemoteAppTempKey(platform: 'windows', hostPort: 47331),
+        ),
+      ).exists(),
+      isFalse,
+    );
+  });
 }
+
+CockpitRemoteSessionStatus _status({required String platform}) =>
+    CockpitRemoteSessionStatus(
+      sessionId: 'remote-$platform-session',
+      platform: platform,
+      transportType: 'remoteHttp',
+      currentRouteName: '/',
+      capabilities: CockpitCapabilities(
+        platform: platform,
+        transportType: 'remoteHttp',
+        supportsInAppControl: true,
+        supportsFlutterViewCapture: true,
+        supportsNativeScreenCapture: true,
+        supportsHostAutomation: true,
+      ),
+      recordingCapabilities: CockpitRecordingCapabilities(
+        supportsNativeRecording: true,
+      ),
+      snapshot: CockpitSnapshot(routeName: '/'),
+    );
 
 final class _FakeRemoteSessionLauncher implements CockpitRemoteSessionLauncher {
   const _FakeRemoteSessionLauncher(this.handle);
@@ -315,4 +461,27 @@ final class _CapturingRemoteSessionLauncher
     onLaunch(options);
     return handle;
   }
+}
+
+final class _ThrowingRemoteSessionLauncher
+    implements CockpitRemoteSessionLauncher {
+  const _ThrowingRemoteSessionLauncher();
+
+  @override
+  Future<CockpitRemoteSessionHandle> launch(
+    CockpitRemoteSessionLaunchOptions options,
+  ) => throw StateError('launch failed');
+}
+
+final class _NoopPermissionHardener implements CockpitPermissionHardener {
+  const _NoopPermissionHardener();
+
+  @override
+  CockpitPermissionPolicy get policy => CockpitPermissionPolicy.posixOwnerOnly;
+
+  @override
+  Future<void> hardenDirectory(Directory directory) async {}
+
+  @override
+  Future<void> hardenFile(File file) async {}
 }

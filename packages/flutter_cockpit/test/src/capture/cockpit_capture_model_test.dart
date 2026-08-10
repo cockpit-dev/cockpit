@@ -42,6 +42,39 @@ void main() {
     );
   });
 
+  test('automatic acceptance capture is native only on mobile', () {
+    for (final platform in <TargetPlatform>[
+      TargetPlatform.android,
+      TargetPlatform.iOS,
+    ]) {
+      expect(
+        cockpitCaptureProfilePrefersNative(
+          CockpitCaptureProfile.acceptance,
+          isWeb: false,
+          platform: platform,
+        ),
+        isTrue,
+        reason: platform.name,
+      );
+    }
+    for (final platform in <TargetPlatform>[
+      TargetPlatform.fuchsia,
+      TargetPlatform.linux,
+      TargetPlatform.macOS,
+      TargetPlatform.windows,
+    ]) {
+      expect(
+        cockpitCaptureProfilePrefersNative(
+          CockpitCaptureProfile.acceptance,
+          isWeb: false,
+          platform: platform,
+        ),
+        isFalse,
+        reason: platform.name,
+      );
+    }
+  });
+
   test('CockpitScreenshotRequest preserves capture routing intent', () {
     const request = CockpitScreenshotRequest(
       reason: CockpitScreenshotReason.acceptance,

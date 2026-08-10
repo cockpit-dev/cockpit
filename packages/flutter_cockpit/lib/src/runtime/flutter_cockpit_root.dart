@@ -210,6 +210,7 @@ final class FlutterCockpitRootState extends State<FlutterCockpitRoot> {
     final prefersNativeCapture = cockpitCaptureProfilePrefersNative(
       effectiveProfile,
       isWeb: kIsWeb,
+      platform: defaultTargetPlatform,
     );
     if (prefersNativeCapture) {
       if (effectiveRequest.cropLocator != null) {
@@ -913,7 +914,15 @@ final class _CockpitViewportMetrics {
 bool cockpitCaptureProfilePrefersNative(
   CockpitCaptureProfile profile, {
   required bool isWeb,
+  TargetPlatform? platform,
 }) {
-  return profile == CockpitCaptureProfile.nativePreferred ||
-      (!isWeb && profile == CockpitCaptureProfile.acceptance);
+  if (profile == CockpitCaptureProfile.nativePreferred) return true;
+  if (isWeb || profile != CockpitCaptureProfile.acceptance) return false;
+  return switch (platform ?? defaultTargetPlatform) {
+    TargetPlatform.android || TargetPlatform.iOS => true,
+    TargetPlatform.fuchsia ||
+    TargetPlatform.linux ||
+    TargetPlatform.macOS ||
+    TargetPlatform.windows => false,
+  };
 }

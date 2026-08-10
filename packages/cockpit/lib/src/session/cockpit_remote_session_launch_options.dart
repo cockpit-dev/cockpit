@@ -13,6 +13,7 @@ final class CockpitRemoteSessionLaunchOptions {
     this.flutterExecutable,
     this.launchId,
     this.launchConfiguration = CockpitFlutterLaunchConfiguration.empty,
+    this.appEnvironment,
   });
 
   final String projectDir;
@@ -26,4 +27,7 @@ final class CockpitRemoteSessionLaunchOptions {
   final String? flutterExecutable;
   final String? launchId;
   final CockpitFlutterLaunchConfiguration launchConfiguration;
+
+  /// Environment applied only to the detached desktop app process.
+  final Map<String, String>? appEnvironment;
 }

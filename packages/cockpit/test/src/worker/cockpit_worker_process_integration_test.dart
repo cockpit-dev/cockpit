@@ -661,10 +661,8 @@ steps:
         input: <String, Object?>{'sessionId': liveSessionId},
       );
       expect(activeRead.outcome, CockpitOperationOutcome.succeeded);
-      expect(authority.acquiredKinds, <CockpitLeaseResourceKind>[
-        CockpitLeaseResourceKind.session,
-      ]);
-      expect(authority.releaseCount, 1);
+      expect(authority.acquiredKinds, isEmpty);
+      expect(authority.releaseCount, 0);
 
       authority.resetObservations();
       final successfulSubmission = _submission(liveTargetId);

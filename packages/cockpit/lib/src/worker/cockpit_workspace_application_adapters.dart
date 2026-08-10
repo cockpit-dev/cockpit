@@ -58,12 +58,7 @@ final class CockpitWorkspaceApplicationAdapters {
 
   List<CockpitWorkspaceOperationAdapter> create() => <_OperationSpec>[
     const _OperationSpec.read('app.list', 'workspace.apps'),
-    const _OperationSpec.leasedRead(
-      'app.get',
-      'workspace.app',
-      CockpitLeaseResourceKind.session,
-      idField: 'appId',
-    ),
+    const _OperationSpec.read('app.get', 'workspace.app', idField: 'appId'),
     const _OperationSpec.read(
       'target.inspect',
       'workspace.target',
@@ -102,22 +97,19 @@ final class CockpitWorkspaceApplicationAdapters {
       idField: 'targetId',
       requiresPort: true,
     ),
-    const _OperationSpec.leasedRead(
+    const _OperationSpec.read(
       'session.remote.get',
       'workspace.sessions',
-      CockpitLeaseResourceKind.session,
       idField: 'sessionId',
     ),
-    const _OperationSpec.leasedRead(
+    const _OperationSpec.read(
       'session.remote.status',
       'workspace.sessions',
-      CockpitLeaseResourceKind.session,
       idField: 'sessionId',
     ),
-    const _OperationSpec.leasedRead(
+    const _OperationSpec.read(
       'snapshot.remote.read',
       'workspace.snapshots',
-      CockpitLeaseResourceKind.session,
       idField: 'sessionId',
     ),
     const _OperationSpec.mutate(
@@ -151,10 +143,9 @@ final class CockpitWorkspaceApplicationAdapters {
       idField: 'targetId',
       requiresPort: true,
     ),
-    const _OperationSpec.leasedRead(
+    const _OperationSpec.read(
       'session.development.get',
       'workspace.sessions',
-      CockpitLeaseResourceKind.session,
       idField: 'sessionId',
     ),
     const _OperationSpec.mutate(
@@ -180,28 +171,24 @@ final class CockpitWorkspaceApplicationAdapters {
       'workspace.probes',
       idField: 'sessionId',
     ),
-    const _OperationSpec.leasedRead(
+    const _OperationSpec.read(
       'ui.inspect',
       'workspace.ui',
-      CockpitLeaseResourceKind.session,
       idField: 'sessionId',
     ),
-    const _OperationSpec.leasedRead(
+    const _OperationSpec.read(
       'surface.inspect',
       'workspace.ui',
-      CockpitLeaseResourceKind.session,
       idField: 'sessionId',
     ),
-    const _OperationSpec.leasedRead(
+    const _OperationSpec.read(
       'logs.read',
       'workspace.logs',
-      CockpitLeaseResourceKind.session,
       idField: 'sessionId',
     ),
-    const _OperationSpec.leasedRead(
+    const _OperationSpec.read(
       'network.read',
       'workspace.network',
-      CockpitLeaseResourceKind.session,
       idField: 'sessionId',
     ),
     const _OperationSpec.mutate(
@@ -210,16 +197,14 @@ final class CockpitWorkspaceApplicationAdapters {
       CockpitLeaseResourceKind.capture,
       idField: 'sessionId',
     ),
-    const _OperationSpec.leasedRead(
+    const _OperationSpec.read(
       'errors.read',
       'workspace.errors',
-      CockpitLeaseResourceKind.session,
       idField: 'sessionId',
     ),
-    const _OperationSpec.leasedRead(
+    const _OperationSpec.read(
       'session.logs.read',
       'workspace.sessionLogs',
-      CockpitLeaseResourceKind.session,
       idField: 'sessionId',
     ),
     const _OperationSpec.mutate(
@@ -227,6 +212,7 @@ final class CockpitWorkspaceApplicationAdapters {
       'workspace.artifacts',
       CockpitLeaseResourceKind.capture,
       idField: 'sessionId',
+      includeDeviceLease: true,
     ),
     const _OperationSpec.mutate(
       'command.run',
@@ -369,23 +355,14 @@ final class _OperationSpec {
       requiresPort = false,
       includeDeviceLease = false;
 
-  const _OperationSpec.leasedRead(
-    this.kind,
-    this.resourceKind,
-    this.leaseKind, {
-    this.idField,
-  }) : mutationClass = CockpitMutationClass.readOnly,
-       requiresPort = false,
-       includeDeviceLease = false;
-
   const _OperationSpec.mutate(
     this.kind,
     this.resourceKind,
     this.leaseKind, {
     this.idField,
     this.requiresPort = false,
-  }) : mutationClass = CockpitMutationClass.mutating,
-       includeDeviceLease = true;
+    this.includeDeviceLease = false,
+  }) : mutationClass = CockpitMutationClass.mutating;
 
   final String kind;
   final String resourceKind;

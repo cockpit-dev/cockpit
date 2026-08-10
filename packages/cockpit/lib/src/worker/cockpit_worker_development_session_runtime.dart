@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import '../application/cockpit_app_temp_store.dart';
 import '../application/cockpit_app_handle.dart';
 import '../application/cockpit_application_service_exception.dart';
 import '../application/cockpit_entrypoint_resolver.dart';
@@ -31,6 +32,7 @@ final class CockpitWorkerDevelopmentSessionSnapshot {
 
 final class CockpitWorkerDevelopmentSessionRuntime {
   CockpitWorkerDevelopmentSessionRuntime({
+    required CockpitAppTempStore appTempStore,
     CockpitDevelopmentSessionMachineLauncher? machineLauncher,
     CockpitAndroidPortForwarder portForwarder =
         const CockpitAndroidPortForwarder(),
@@ -43,10 +45,12 @@ final class CockpitWorkerDevelopmentSessionRuntime {
     CockpitPlatformAppStopper? platformAppStopper,
     Future<CockpitFlutterRunMachineClient> Function(
       CockpitDevelopmentSessionHandle handle,
+      Map<String, String>? environment,
     )?
     machineClientAttacher,
     DateTime Function()? utcNow,
-  }) : _portForwarder = portForwarder,
+  }) : _appTempStore = appTempStore,
+       _portForwarder = portForwarder,
        _machineLauncher =
            machineLauncher ??
            CockpitDevelopmentSessionMachineLauncher(
@@ -63,6 +67,7 @@ final class CockpitWorkerDevelopmentSessionRuntime {
        _machineClientAttacher = machineClientAttacher,
        _utcNow = utcNow ?? (() => DateTime.now().toUtc());
 
+  final CockpitAppTempStore _appTempStore;
   final CockpitDevelopmentSessionMachineLauncher _machineLauncher;
   final CockpitAndroidPortForwarder _portForwarder;
   final CockpitEntrypointResolver _entrypointResolver;
@@ -74,6 +79,7 @@ final class CockpitWorkerDevelopmentSessionRuntime {
   final CockpitPlatformAppStopper _platformAppStopper;
   final Future<CockpitFlutterRunMachineClient> Function(
     CockpitDevelopmentSessionHandle handle,
+    Map<String, String>? environment,
   )?
   _machineClientAttacher;
   final DateTime Function() _utcNow;
@@ -106,7 +112,7 @@ final class CockpitWorkerDevelopmentSessionRuntime {
             devicePort: request.sessionPort,
           )
         : request.sessionPort;
-    final machineRequest = CockpitLaunchDevelopmentMachineSessionRequest(
+    final endpointRequest = CockpitLaunchDevelopmentMachineSessionRequest(
       projectDir: projectDir,
       target: target,
       flavor: request.flavor,
@@ -121,7 +127,25 @@ final class CockpitWorkerDevelopmentSessionRuntime {
       launchConfiguration: request.launchConfiguration,
     );
     final endpoint = await _machineLauncher.resolveRemoteSessionEndpoint(
-      machineRequest,
+      endpointRequest,
+    );
+    final machineRequest = CockpitLaunchDevelopmentMachineSessionRequest(
+      projectDir: projectDir,
+      target: target,
+      flavor: request.flavor,
+      platform: request.platform,
+      deviceId: request.deviceId,
+      sessionPort: request.sessionPort,
+      hostPort: hostPort,
+      launchTimeout: request.launchTimeout,
+      flutterExecutable: flutterExecutable,
+      flutterVersion: flutterVersion,
+      launchId: developmentSessionId,
+      launchConfiguration: await _launchConfiguration(
+        developmentSessionId: developmentSessionId,
+        platform: request.platform,
+        configuration: request.launchConfiguration,
+      ),
     );
     final supervisor = CockpitDevelopmentSessionSupervisor(
       initialHandle: CockpitDevelopmentSessionHandle(
@@ -181,8 +205,8 @@ final class CockpitWorkerDevelopmentSessionRuntime {
       settleTimeout: request.launchTimeout,
     );
     final deadline = _utcNow().add(request.launchTimeout);
-    await supervisor.start();
     try {
+      await supervisor.start();
       final launched = await _machineLauncher.launchWithLifecycle(
         machineRequest,
         endpoint: endpoint,
@@ -203,7 +227,17 @@ final class CockpitWorkerDevelopmentSessionRuntime {
       );
     } on Object catch (error, stackTrace) {
       supervisor.reportStartupFailure(error);
-      await supervisor.dispose();
+      try {
+        await supervisor.dispose();
+      } on Object catch (disposeError) {
+        await _logger?.call(
+          'Development session startup cleanup failed: $disposeError',
+        );
+      }
+      await _releaseAppTemp(
+        developmentSessionId: developmentSessionId,
+        platform: request.platform,
+      );
       final mapped = _developmentLaunchFailure(error);
       if (identical(mapped, error)) rethrow;
       Error.throwWithStackTrace(mapped, stackTrace);
@@ -255,19 +289,33 @@ final class CockpitWorkerDevelopmentSessionRuntime {
     CockpitDevelopmentSessionHandle handle,
   ) async {
     final supervisor = await _require(handle);
-    await supervisor.stop();
-    await _stopPlatformApp(await supervisor.currentHandle());
-    _sessions.remove(handle.developmentSessionId);
-    _reloadsNeedingRelaunch.remove(handle.developmentSessionId);
+    try {
+      await supervisor.stop();
+      await _stopPlatformApp(await supervisor.currentHandle());
+    } finally {
+      _sessions.remove(handle.developmentSessionId);
+      _reloadsNeedingRelaunch.remove(handle.developmentSessionId);
+      await _releaseAppTemp(
+        developmentSessionId: handle.developmentSessionId,
+        platform: handle.platform,
+      );
+    }
     return _snapshot(supervisor);
   }
 
   Future<void> forceStop(CockpitDevelopmentSessionHandle handle) async {
     final supervisor = await _require(handle);
-    _sessions.remove(handle.developmentSessionId);
-    _reloadsNeedingRelaunch.remove(handle.developmentSessionId);
-    await supervisor.stop();
-    await _stopPlatformApp(await supervisor.currentHandle());
+    try {
+      await supervisor.stop();
+      await _stopPlatformApp(await supervisor.currentHandle());
+    } finally {
+      _sessions.remove(handle.developmentSessionId);
+      _reloadsNeedingRelaunch.remove(handle.developmentSessionId);
+      await _releaseAppTemp(
+        developmentSessionId: handle.developmentSessionId,
+        platform: handle.platform,
+      );
+    }
   }
 
   Future<void> _stopPlatformApp(CockpitDevelopmentSessionHandle handle) async {
@@ -377,9 +425,13 @@ final class CockpitWorkerDevelopmentSessionRuntime {
     CockpitDevelopmentSessionHandle handle,
   ) async {
     final injected = _machineClientAttacher;
+    final environment = await _appProcessEnvironment(
+      developmentSessionId: handle.developmentSessionId,
+      platform: handle.platform,
+    );
     late final CockpitFlutterRunMachineClient client;
     if (injected != null) {
-      client = await injected(handle);
+      client = await injected(handle, environment);
     } else {
       final remote = handle.remoteSessionHandle!;
       final platform = handle.platform.trim().toLowerCase();
@@ -406,11 +458,11 @@ final class CockpitWorkerDevelopmentSessionRuntime {
         flavor: handle.flavor,
         flutterExecutable: _sdkEnvironment.flutterExecutable,
         extraArgs: extraArgs,
+        environment: environment,
       );
     }
     try {
       await client.waitForAppId();
-      await client.waitForAppStarted();
       return client;
     } on Object {
       await client.dispose();
@@ -447,6 +499,42 @@ final class CockpitWorkerDevelopmentSessionRuntime {
         disableRuntimeObserver: disableIpv6UnsafeObservers,
       ),
     ];
+  }
+
+  Future<CockpitFlutterLaunchConfiguration> _launchConfiguration({
+    required String developmentSessionId,
+    required String platform,
+    required CockpitFlutterLaunchConfiguration configuration,
+  }) async {
+    final environment = await _appProcessEnvironment(
+      developmentSessionId: developmentSessionId,
+      platform: platform,
+    );
+    if (environment == null) return configuration;
+    return configuration.withManagedEnvironment(environment);
+  }
+
+  Future<Map<String, String>?> _appProcessEnvironment({
+    required String developmentSessionId,
+    required String platform,
+  }) async {
+    if (!cockpitUsesManagedAppTemp(platform)) return null;
+    final path = await _appTempStore.prepare(developmentSessionId);
+    return cockpitAppTempEnvironment(path);
+  }
+
+  Future<void> _releaseAppTemp({
+    required String developmentSessionId,
+    required String platform,
+  }) async {
+    if (!cockpitUsesManagedAppTemp(platform)) return;
+    try {
+      await _appTempStore.release(developmentSessionId);
+    } on Object catch (error) {
+      await _logger?.call(
+        'Development application temporary directory cleanup failed: $error',
+      );
+    }
   }
 
   Future<bool> _probeHandle(

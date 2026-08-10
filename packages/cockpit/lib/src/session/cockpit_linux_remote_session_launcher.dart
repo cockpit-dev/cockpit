@@ -103,7 +103,9 @@ final class CockpitLinuxRemoteSessionLauncher
     final processId = await _appStarter(
       executablePath: executablePath,
       workingDirectory: executablePathContext.dirname(executablePath),
-      environment: options.launchConfiguration.processEnvironment,
+      environment:
+          options.appEnvironment ??
+          options.launchConfiguration.processEnvironment,
       timeout: _capTimeout(_remaining(deadline), const Duration(seconds: 10)),
     );
 
