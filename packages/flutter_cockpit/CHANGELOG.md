@@ -1,5 +1,14 @@
 # Changelog
 
+## 3.0.10
+
+- Captured Android and iOS through the system screen first so permissions and
+  operating-system dialogs remain visible, while desktop and web keep the
+  lower-latency Flutter capture path as their default.
+- Advanced a bounded Flutter frame timeline for hidden desktop and web
+  surfaces that cannot receive normal vsync, allowing actions, routes, and
+  animations to commit before Cockpit observes their result.
+
 ## 3.0.9
 
 - Synchronized the Flutter bridge with Cockpit's Supervisor-restart recovery;

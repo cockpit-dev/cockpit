@@ -1,5 +1,17 @@
 # Changelog
 
+## 3.0.10
+
+- Preserved a stable application temporary directory across Supervisor and
+  worker replacement for desktop Flutter development, restoring DevFS reload
+  and restart without relaunching the app or touching concurrent sessions.
+- Applied the same isolated temporary-directory lifecycle to detached Linux,
+  Windows, and environment-driven macOS automation apps, with cleanup on stop
+  and launch failure and explicit rejection of conflicting user temp settings.
+- Released logical leases immediately when they require no external cleanup,
+  removed unnecessary session leases from safe reads, and required the device
+  lease for screenshots so concurrent commands remain correctly isolated.
+
 ## 3.0.9
 
 - Fixed development-session recovery after a Supervisor restart. Lazy Flutter

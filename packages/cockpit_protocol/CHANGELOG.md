@@ -1,5 +1,11 @@
 # Changelog
 
+## 3.0.10
+
+- Synchronized the protocol package with Cockpit's desktop-session recovery,
+  resource-lease, and capture corrections; public protocol contracts are
+  unchanged.
+
 ## 3.0.9
 
 - Synchronized the protocol package with Cockpit's Supervisor-restart recovery;
