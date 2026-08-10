@@ -13,6 +13,8 @@ import '../capture/cockpit_simctl_capture_adapter.dart';
 import '../capture/cockpit_windows_capture_adapter.dart';
 import '../capture/cockpit_wda_capture_adapter.dart';
 import '../infrastructure/cockpit_process_manager.dart';
+import '../platform/windows/cockpit_windows_native_input.dart';
+import '../platform/windows/cockpit_windows_window_target.dart';
 import '../recording/cockpit_adb_recording_adapter.dart';
 import '../recording/cockpit_linux_recording_adapter.dart';
 import '../recording/cockpit_macos_recording_adapter.dart';
@@ -60,6 +62,8 @@ final class CockpitSystemControlActionService {
     CockpitMacosAccessibilityTreeReader? macosAccessibilityTreeReader,
     CockpitMacosSystemDialogHandler? macosSystemDialogHandler,
     CockpitMacosApplicationProcessIdResolver? macosApplicationProcessIdResolver,
+    CockpitWindowsNativeInputExecutor? windowsNativeInputExecutor,
+    CockpitWindowsFocusStateReader? windowsFocusStateReader,
   }) : _processManager = processManager ?? const LocalCockpitProcessManager(),
        _registry = registry,
        _systemControlService =
@@ -92,7 +96,11 @@ final class CockpitSystemControlActionService {
                  timeout: timeout,
                  processManager:
                      processManager ?? const LocalCockpitProcessManager(),
-               ));
+               )),
+       _windowsNativeInputExecutor =
+           windowsNativeInputExecutor ?? cockpitExecuteWindowsNativeInput,
+       _windowsFocusStateReader =
+           windowsFocusStateReader ?? cockpitReadWindowsFocusState;
 
   final CockpitProcessManager _processManager;
   final CockpitSystemControlRegistry _registry;
@@ -105,6 +113,8 @@ final class CockpitSystemControlActionService {
   final CockpitMacosSystemDialogHandler _macosSystemDialogHandler;
   final CockpitMacosApplicationProcessIdResolver
   _macosApplicationProcessIdResolver;
+  final CockpitWindowsNativeInputExecutor _windowsNativeInputExecutor;
+  final CockpitWindowsFocusStateReader _windowsFocusStateReader;
 
   Future<CockpitSystemControlActionResult> run(
     CockpitSystemControlActionRequest request,
@@ -213,8 +223,198 @@ final class CockpitSystemControlActionService {
         command,
       );
     }
+    if (command.executable == cockpitWindowsNativeInputCommandExecutable) {
+      return _runWindowsNativeInputCommand(
+        effectiveRequest,
+        capability,
+        command,
+      );
+    }
+    if (command.executable == cockpitWindowsFocusStateCommandExecutable) {
+      return _runWindowsFocusStateCommand(
+        effectiveRequest,
+        capability,
+        command,
+      );
+    }
 
-    return _runProcessCommand(request, capability, command);
+    return _runProcessCommand(effectiveRequest, capability, command);
+  }
+
+  Future<CockpitSystemControlActionResult> _runWindowsFocusStateCommand(
+    CockpitSystemControlActionRequest request,
+    CockpitSystemControlCapability capability,
+    CockpitResolvedSystemControlCommand command,
+  ) async {
+    try {
+      final stdout = await _windowsFocusStateReader(
+        timeout: request.timeout,
+      ).timeout(request.timeout);
+      return CockpitSystemControlActionResult(
+        platform: request.platform,
+        deviceId: request.deviceId,
+        appId: request.appId,
+        processId: request.processId,
+        action: request.action,
+        availability: capability.availability,
+        success: true,
+        command: <String>[command.executable!, ...command.arguments],
+        stdout: stdout,
+        recommendedNextStep: _recommendedNextStepAfterSuccess(request.action),
+        strategy: capability.strategy,
+        requires: capability.requires,
+        limitations: capability.limitations,
+      );
+    } on TimeoutException {
+      return CockpitSystemControlActionResult(
+        platform: request.platform,
+        deviceId: request.deviceId,
+        appId: request.appId,
+        processId: request.processId,
+        action: request.action,
+        availability: capability.availability,
+        success: false,
+        command: <String>[command.executable!, ...command.arguments],
+        recommendedNextStep: 'inspectWindowsFocus',
+        strategy: capability.strategy,
+        requires: capability.requires,
+        limitations: capability.limitations,
+        errorCode: 'systemActionTimedOut',
+        errorMessage:
+            'Windows focus inspection timed out after '
+            '${request.timeout.inMilliseconds}ms.',
+      );
+    } on CockpitWindowsWindowException catch (error) {
+      return CockpitSystemControlActionResult(
+        platform: request.platform,
+        deviceId: request.deviceId,
+        appId: request.appId,
+        processId: request.processId,
+        action: request.action,
+        availability: capability.availability,
+        success: false,
+        command: <String>[command.executable!, ...command.arguments],
+        recommendedNextStep: 'inspectWindowsFocus',
+        strategy: capability.strategy,
+        requires: capability.requires,
+        limitations: capability.limitations,
+        errorCode: error.code,
+        errorMessage: error.message,
+      );
+    } on Object catch (error) {
+      return CockpitSystemControlActionResult(
+        platform: request.platform,
+        deviceId: request.deviceId,
+        appId: request.appId,
+        processId: request.processId,
+        action: request.action,
+        availability: capability.availability,
+        success: false,
+        command: <String>[command.executable!, ...command.arguments],
+        recommendedNextStep: 'inspectWindowsFocus',
+        strategy: capability.strategy,
+        requires: capability.requires,
+        limitations: capability.limitations,
+        errorCode: 'windowsFocusInspectionFailed',
+        errorMessage: 'Windows focus inspection failed: $error',
+      );
+    }
+  }
+
+  Future<CockpitSystemControlActionResult> _runWindowsNativeInputCommand(
+    CockpitSystemControlActionRequest request,
+    CockpitSystemControlCapability capability,
+    CockpitResolvedSystemControlCommand command,
+  ) async {
+    try {
+      await _windowsNativeInputExecutor(
+        command.arguments,
+        timeout: request.timeout,
+      );
+      return CockpitSystemControlActionResult(
+        platform: request.platform,
+        deviceId: request.deviceId,
+        appId: request.appId,
+        processId: request.processId,
+        action: request.action,
+        availability: capability.availability,
+        success: true,
+        command: <String>[command.executable!, ...command.arguments],
+        recommendedNextStep: 'continueSystemAutomation',
+        strategy: capability.strategy,
+        requires: capability.requires,
+        limitations: capability.limitations,
+      );
+    } on TimeoutException {
+      return CockpitSystemControlActionResult(
+        platform: request.platform,
+        deviceId: request.deviceId,
+        appId: request.appId,
+        processId: request.processId,
+        action: request.action,
+        availability: capability.availability,
+        success: false,
+        command: <String>[command.executable!, ...command.arguments],
+        recommendedNextStep: 'inspectWindowsInput',
+        strategy: capability.strategy,
+        requires: capability.requires,
+        limitations: capability.limitations,
+        errorCode: 'systemActionTimedOut',
+        errorMessage:
+            'Windows input timed out after ${request.timeout.inMilliseconds}ms.',
+      );
+    } on CockpitWindowsWindowException catch (error) {
+      return CockpitSystemControlActionResult(
+        platform: request.platform,
+        deviceId: request.deviceId,
+        appId: request.appId,
+        processId: request.processId,
+        action: request.action,
+        availability: capability.availability,
+        success: false,
+        command: <String>[command.executable!, ...command.arguments],
+        recommendedNextStep: 'inspectWindowsInput',
+        strategy: capability.strategy,
+        requires: capability.requires,
+        limitations: capability.limitations,
+        errorCode: error.code,
+        errorMessage: error.message,
+      );
+    } on FormatException catch (error) {
+      return CockpitSystemControlActionResult(
+        platform: request.platform,
+        deviceId: request.deviceId,
+        appId: request.appId,
+        processId: request.processId,
+        action: request.action,
+        availability: capability.availability,
+        success: false,
+        command: <String>[command.executable!, ...command.arguments],
+        recommendedNextStep: 'inspectWindowsInput',
+        strategy: capability.strategy,
+        requires: capability.requires,
+        limitations: capability.limitations,
+        errorCode: 'invalidWindowsInput',
+        errorMessage: error.message,
+      );
+    } on Object catch (error) {
+      return CockpitSystemControlActionResult(
+        platform: request.platform,
+        deviceId: request.deviceId,
+        appId: request.appId,
+        processId: request.processId,
+        action: request.action,
+        availability: capability.availability,
+        success: false,
+        command: <String>[command.executable!, ...command.arguments],
+        recommendedNextStep: 'inspectWindowsInput',
+        strategy: capability.strategy,
+        requires: capability.requires,
+        limitations: capability.limitations,
+        errorCode: 'windowsInputFailed',
+        errorMessage: 'Windows input failed: $error',
+      );
+    }
   }
 
   Future<CockpitSystemControlActionResult> _runMacosAccessibilityTreeCommand(
@@ -1464,6 +1664,12 @@ final class CockpitSystemControlActionService {
     }
     if (command.executable == cockpitAndroidUiAutomationCommandExecutable) {
       return _runAndroidUiAutomationCommand(request, capability, command);
+    }
+    if (command.executable == cockpitWindowsNativeInputCommandExecutable) {
+      return _runWindowsNativeInputCommand(request, capability, command);
+    }
+    if (command.executable == cockpitWindowsFocusStateCommandExecutable) {
+      return _runWindowsFocusStateCommand(request, capability, command);
     }
     return _runProcessCommand(request, capability, command);
   }

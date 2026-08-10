@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:cockpit_protocol/cockpit_protocol.dart';
 import 'package:cockpit/src/capture/cockpit_windows_capture_adapter.dart';
+import 'package:cockpit/src/platform/windows/cockpit_windows_window_target.dart';
 import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 
@@ -25,6 +26,7 @@ void main() {
         appId: 'cockpit_demo',
         processId: 4101,
         tempFileFactory: (_) async => outputFile,
+        windowResolver: _windowResolver,
         processRunner: (executable, arguments) async {
           expect(executable, 'powershell');
           invocations.add(List<String>.from(arguments));
@@ -65,11 +67,11 @@ void main() {
       expect(script, isNot(contains('PrimaryScreen.Bounds')));
       expect(script, isNot(contains('PrintWindow')));
       expect(script, contains('CopyFromScreen'));
-      expect(script, contains('GetWindowRect'));
+      expect(script, isNot(contains('GetWindowRect')));
+      expect(script, isNot(contains('Add-Type @"')));
       expect(script, contains(r'$outputPath = $args[0]'));
-      expect(script, contains(r'$appId = $args[1]'));
       expect(script, contains("} '${outputFile.path.replaceAll("'", "''")}'"));
-      expect(script, contains("'cockpit_demo' '4101' '250'"));
+      expect(script, contains("'120' '48' '900' '640'"));
     },
   );
 
@@ -79,6 +81,7 @@ void main() {
       final adapter = CockpitWindowsCaptureAdapter(
         appId: 'cockpit_demo',
         timeout: const Duration(milliseconds: 50),
+        windowResolver: _windowResolver,
         processRunner: (executable, arguments) {
           return Future<ProcessResult>.delayed(
             const Duration(milliseconds: 150),
@@ -121,6 +124,7 @@ void main() {
       appId: 'cockpit_demo',
       timeout: const Duration(milliseconds: 50),
       tempFileFactory: (_) async => outputFile,
+      windowResolver: _windowResolver,
       processRunner: (executable, arguments) async {
         await Future<void>.delayed(const Duration(milliseconds: 100));
         outputFile.writeAsBytesSync(_opaquePng);
@@ -147,6 +151,7 @@ void main() {
   test('windows capture adapter reports capture process failure', () async {
     final adapter = CockpitWindowsCaptureAdapter(
       appId: 'cockpit_demo',
+      windowResolver: _windowResolver,
       processRunner: (executable, arguments) async =>
           ProcessResult(0, 1, '', 'No visible Windows window was found.'),
     );
@@ -173,7 +178,58 @@ void main() {
       contains('No visible Windows window was found.'),
     );
   });
+
+  test('windows capture adapter preserves window resolution failure', () async {
+    final adapter = CockpitWindowsCaptureAdapter(
+      appId: 'cockpit_demo',
+      windowResolver:
+          ({
+            required appId,
+            required processId,
+            required timeout,
+            required activationSettleDelay,
+          }) async {
+            throw const CockpitWindowsWindowException(
+              'windowsWindowAmbiguous',
+              'Multiple windows match cockpit_demo.',
+            );
+          },
+    );
+
+    final execution = await adapter.capture(
+      CockpitCommand(
+        commandId: 'capture-window-ambiguous',
+        commandType: CockpitCommandType.captureScreenshot,
+        screenshotRequest: const CockpitScreenshotRequest(
+          reason: CockpitScreenshotReason.acceptance,
+          name: 'windows-window-ambiguous',
+        ),
+      ),
+    );
+
+    expect(execution.result.success, isFalse);
+    expect(execution.result.error?.message, 'Windows host screenshot failed.');
+    expect(
+      execution.result.error?.details,
+      containsPair('errorCode', 'windowsWindowAmbiguous'),
+    );
+  });
 }
+
+Future<CockpitWindowsWindowTarget> _windowResolver({
+  required String appId,
+  required int? processId,
+  required Duration timeout,
+  required Duration activationSettleDelay,
+}) async => CockpitWindowsWindowTarget(
+  processId: processId ?? 4101,
+  title: 'Cockpit Demo',
+  handle: 4242,
+  left: 120,
+  top: 48,
+  width: 900,
+  height: 640,
+);
 
 String _decodeWindowsPowerShellEncodedCommand(String encoded) {
   final bytes = base64.decode(encoded);

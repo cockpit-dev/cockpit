@@ -21,7 +21,6 @@ void main() {
       });
 
       final ffmpegInvocations = <List<String>>[];
-      final activationInvocations = <List<String>>[];
 
       final adapter = CockpitWindowsRecordingAdapter(
         appId: 'cockpit_demo',
@@ -30,14 +29,13 @@ void main() {
             ({
               required appId,
               required processId,
-              required powershellExecutable,
-              required processRunner,
               required timeout,
               required activationSettleDelay,
             }) async {
               expect(appId, 'cockpit_demo');
               expect(processId, 4101);
               return const CockpitWindowsWindowTarget(
+                processId: 4101,
                 title: 'Cockpit Demo',
                 handle: 4242,
                 left: 120,
@@ -47,7 +45,6 @@ void main() {
               );
             },
         ffmpegExecutable: 'ffmpeg',
-        powershellExecutable: 'powershell',
         processStarter: (executable, arguments) async {
           expect(executable, 'ffmpeg');
           ffmpegInvocations.add(List<String>.from(arguments));
@@ -58,10 +55,6 @@ void main() {
               File(outputPath).writeAsStringSync('windows-video');
             },
           );
-        },
-        processRunner: (executable, arguments) async {
-          activationInvocations.add(<String>[executable, ...arguments]);
-          return ProcessResult(0, 0, '', '');
         },
         startupTimeout: const Duration(seconds: 2),
         stopTimeout: const Duration(seconds: 2),
@@ -97,7 +90,6 @@ void main() {
       expect(ffmpegInvocations.single.join(' '), contains('-i hwnd=4242'));
       expect(ffmpegInvocations.single.join(' '), isNot(contains('title=')));
       expect(ffmpegInvocations.single.join(' '), isNot(contains('-i desktop')));
-      expect(activationInvocations, isEmpty);
     },
   );
 
@@ -119,11 +111,10 @@ void main() {
             ({
               required appId,
               required processId,
-              required powershellExecutable,
-              required processRunner,
               required timeout,
               required activationSettleDelay,
             }) async => const CockpitWindowsWindowTarget(
+              processId: 4101,
               title: 'Cockpit Demo',
               handle: 4242,
               left: 20,
@@ -132,7 +123,6 @@ void main() {
               height: 240,
             ),
         ffmpegExecutable: 'ffmpeg',
-        powershellExecutable: 'powershell',
         processStarter: (executable, arguments) async {
           final outputPath = arguments.last;
           return _FakeRecordingProcess(
@@ -145,7 +135,6 @@ void main() {
             },
           );
         },
-        processRunner: (_, _) async => ProcessResult(0, 0, '', ''),
         startupTimeout: const Duration(milliseconds: 500),
         startupEvidenceTimeout: const Duration(seconds: 2),
         stopTimeout: const Duration(seconds: 2),
@@ -185,11 +174,10 @@ void main() {
             ({
               required appId,
               required processId,
-              required powershellExecutable,
-              required processRunner,
               required timeout,
               required activationSettleDelay,
             }) async => const CockpitWindowsWindowTarget(
+              processId: 4101,
               title: 'Cockpit Demo',
               handle: 4242,
               left: 20,
@@ -198,10 +186,8 @@ void main() {
               height: 240,
             ),
         ffmpegExecutable: 'ffmpeg',
-        powershellExecutable: 'powershell',
         processStarter: (_, _) async =>
             _FakeRecordingProcess(onStopRequested: () async {}),
-        processRunner: (_, _) async => ProcessResult(0, 0, '', ''),
         startupTimeout: const Duration(milliseconds: 500),
         startupEvidenceTimeout: const Duration(milliseconds: 200),
         stopTimeout: const Duration(seconds: 2),
@@ -236,11 +222,10 @@ void main() {
             ({
               required appId,
               required processId,
-              required powershellExecutable,
-              required processRunner,
               required timeout,
               required activationSettleDelay,
             }) async => const CockpitWindowsWindowTarget(
+              processId: 4101,
               title: 'Cockpit Demo',
               handle: 4242,
               left: 20,
@@ -249,13 +234,11 @@ void main() {
               height: 240,
             ),
         ffmpegExecutable: 'ffmpeg',
-        powershellExecutable: 'powershell',
         processStarter: (_, _) async => _FakeRecordingProcess(
           startupLine:
               'Press [q] to stop\n[gdigrab @ 0x123] Capturing window failed',
           onStopRequested: () async {},
         ),
-        processRunner: (_, _) async => ProcessResult(0, 0, '', ''),
         startupTimeout: const Duration(seconds: 2),
         stopTimeout: const Duration(seconds: 2),
         finalizationPollInterval: const Duration(milliseconds: 10),
