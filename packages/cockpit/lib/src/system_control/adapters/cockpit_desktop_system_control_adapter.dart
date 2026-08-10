@@ -1,6 +1,8 @@
 import 'package:cockpit_protocol/cockpit_protocol.dart';
 
+import '../../platform/windows/cockpit_windows_native_input.dart';
 import '../../platform/windows/cockpit_windows_powershell.dart';
+import '../../platform/windows/cockpit_windows_window_target.dart';
 import '../cockpit_macos_accessibility_tree.dart';
 import '../cockpit_system_control_action.dart';
 import '../cockpit_system_control_adapter.dart';
@@ -1035,9 +1037,11 @@ final class CockpitDesktopSystemControlAdapter
       CockpitSystemControlAction.readDeviceInfo => _windowsPowershell(
         r'[pscustomobject]@{ computerSystem = (Get-CimInstance Win32_ComputerSystem | Select-Object Manufacturer,Model,TotalPhysicalMemory); operatingSystem = (Get-CimInstance Win32_OperatingSystem | Select-Object Caption,Version,BuildNumber,OSArchitecture) } | ConvertTo-Json -Compress',
       ),
-      CockpitSystemControlAction.readFocusState => _windowsPowershell(
-        _windowsReadFocusStateScript,
-      ),
+      CockpitSystemControlAction.readFocusState =>
+        const CockpitResolvedSystemControlCommand(
+          cockpitWindowsFocusStateCommandExecutable,
+          <String>[],
+        ),
       CockpitSystemControlAction.readSystemLogs => _windowsSystemLogsCommand(
         request,
       ),
@@ -1418,7 +1422,10 @@ final class CockpitDesktopSystemControlAdapter
   }
 
   CockpitResolvedSystemControlCommand _windowsInput(List<String> args) {
-    return _windowsPowershell(_windowsInputScript, arguments: args);
+    return CockpitResolvedSystemControlCommand(
+      cockpitWindowsNativeInputCommandExecutable,
+      args,
+    );
   }
 
   CockpitResolvedSystemControlCommand _windowsTerminateCommand(
@@ -2267,108 +2274,6 @@ function run() {
 }
 ''';
 
-  static const String _windowsInputScript = r'''
-Add-Type -AssemblyName System.Windows.Forms
-Add-Type -AssemblyName System.Drawing
-Add-Type @"
-using System;
-using System.Runtime.InteropServices;
-
-public static class CockpitInputInterop {
-  [DllImport("user32.dll")]
-  public static extern bool SetForegroundWindow(IntPtr hWnd);
-
-  [DllImport("user32.dll")]
-  public static extern bool ShowWindowAsync(IntPtr hWnd, int nCmdShow);
-
-  [DllImport("user32.dll")]
-  public static extern void mouse_event(uint dwFlags, uint dx, uint dy, uint dwData, UIntPtr dwExtraInfo);
-}
-"@
-$action = $args[0]
-$appId = $args[1]
-$processIdArg = $args[2]
-function Resolve-TargetProcess {
-  if (-not [string]::IsNullOrWhiteSpace($processIdArg)) {
-    return Get-Process -Id ([int]$processIdArg) -ErrorAction Stop |
-      Where-Object { $_.MainWindowHandle -ne 0 } |
-      Select-Object -First 1
-  }
-  if (-not [string]::IsNullOrWhiteSpace($appId)) {
-    return Get-Process -Name $appId -ErrorAction Stop |
-      Where-Object { $_.MainWindowHandle -ne 0 } |
-      Sort-Object -Property Id -Descending |
-      Select-Object -First 1
-  }
-  return $null
-}
-function Activate-Target {
-  $process = Resolve-TargetProcess
-  if ($null -eq $process) {
-    throw "No target window was found for process '$appId' '$processIdArg'."
-  }
-  $handle = [IntPtr]$process.MainWindowHandle
-  [void][CockpitInputInterop]::ShowWindowAsync($handle, 9)
-  [void][CockpitInputInterop]::SetForegroundWindow($handle)
-  Start-Sleep -Milliseconds 150
-}
-function Click-At($x, $y, $holdMs) {
-  [System.Windows.Forms.Cursor]::Position = [System.Drawing.Point]::new($x, $y)
-  [CockpitInputInterop]::mouse_event(0x0002, 0, 0, 0, [UIntPtr]::Zero)
-  Start-Sleep -Milliseconds $holdMs
-  [CockpitInputInterop]::mouse_event(0x0004, 0, 0, 0, [UIntPtr]::Zero)
-}
-function Escape-SendKeys([string]$value) {
-  return $value.Replace('{', '{{}').Replace('}', '{}}').Replace('+', '{+}').Replace('^', '{^}').Replace('%', '{%}').Replace('~', '{~}').Replace('(', '{(}').Replace(')', '{)}').Replace('[', '{[}').Replace(']', '{]}')
-}
-function Convert-Key([string]$value) {
-  switch ($value.ToLowerInvariant()) {
-    'enter' { return '{ENTER}' }
-    'return' { return '{ENTER}' }
-    'escape' { return '{ESC}' }
-    'esc' { return '{ESC}' }
-    'tab' { return '{TAB}' }
-    'backspace' { return '{BACKSPACE}' }
-    'delete' { return '{DELETE}' }
-    'space' { return ' ' }
-    default { return (Escape-SendKeys $value) }
-  }
-}
-switch ($action) {
-  'activateWindow' { Activate-Target }
-  'tap' { Click-At ([int]$args[3]) ([int]$args[4]) 50 }
-  'longPress' { Click-At ([int]$args[3]) ([int]$args[4]) ([int]$args[5]) }
-  'drag' {
-    $startX = [int]$args[3]
-    $startY = [int]$args[4]
-    $endX = [int]$args[5]
-    $endY = [int]$args[6]
-    $durationMs = [int]$args[7]
-    [System.Windows.Forms.Cursor]::Position = [System.Drawing.Point]::new($startX, $startY)
-    [CockpitInputInterop]::mouse_event(0x0002, 0, 0, 0, [UIntPtr]::Zero)
-    Start-Sleep -Milliseconds $durationMs
-    [System.Windows.Forms.Cursor]::Position = [System.Drawing.Point]::new($endX, $endY)
-    [CockpitInputInterop]::mouse_event(0x0004, 0, 0, 0, [UIntPtr]::Zero)
-  }
-  'typeText' {
-    Activate-Target
-    [System.Windows.Forms.SendKeys]::SendWait((Escape-SendKeys $args[3]))
-  }
-  'pressKey' {
-    Activate-Target
-    $repeat = [int]$args[4]
-    for ($index = 0; $index -lt $repeat; $index++) {
-      [System.Windows.Forms.SendKeys]::SendWait((Convert-Key $args[3]))
-    }
-  }
-  'pressBack' {
-    Activate-Target
-    [System.Windows.Forms.SendKeys]::SendWait('{ESC}')
-  }
-  default { throw "Unsupported cockpit input action: $action" }
-}
-''';
-
   static const String _windowsReadUiTreeScript = r'''
 Add-Type -AssemblyName UIAutomationClient
 Add-Type -AssemblyName UIAutomationTypes
@@ -2559,37 +2464,6 @@ return "process=" & procName & linefeed & "pid=" & procId & linefeed & "window="
 on run argv
   display notification (item 2 of argv) with title (item 1 of argv)
 end run
-''';
-
-  static const String _windowsReadFocusStateScript = r'''
-Add-Type @"
-using System;
-using System.Runtime.InteropServices;
-using System.Text;
-
-public static class CockpitFocusInterop {
-  [DllImport("user32.dll")]
-  public static extern IntPtr GetForegroundWindow();
-
-  [DllImport("user32.dll", CharSet = CharSet.Unicode)]
-  public static extern int GetWindowText(IntPtr hWnd, StringBuilder text, int count);
-
-  [DllImport("user32.dll")]
-  public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
-}
-"@
-$handle = [CockpitFocusInterop]::GetForegroundWindow()
-$title = New-Object System.Text.StringBuilder 512
-[void][CockpitFocusInterop]::GetWindowText($handle, $title, 512)
-$procId = [uint32]0
-[void][CockpitFocusInterop]::GetWindowThreadProcessId($handle, [ref]$procId)
-$processName = ''
-try { $processName = (Get-Process -Id $procId -ErrorAction Stop).ProcessName } catch {}
-[pscustomobject]@{
-  processId = [int]$procId
-  processName = $processName
-  windowTitle = $title.ToString()
-} | ConvertTo-Json -Compress
 ''';
 
   static const String _windowsSetAppearanceScript = r'''

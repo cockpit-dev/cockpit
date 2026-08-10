@@ -13,7 +13,6 @@ final class CockpitWindowsRecordingAdapter
     required String appId,
     int? processId,
     String ffmpegExecutable = 'ffmpeg',
-    String powershellExecutable = 'powershell',
     CockpitRecordingProcessStarter processStarter =
         cockpitStartDetachedRecordingProcess,
     CockpitRecordingProcessRunner? processRunner,
@@ -34,9 +33,7 @@ final class CockpitWindowsRecordingAdapter
   }) : _appId = appId,
        _processId = processId,
        _ffmpegExecutable = ffmpegExecutable,
-       _powershellExecutable = powershellExecutable,
        _processStarter = processStarter,
-       _processRunner = processRunner,
        _ffprobeProcessRunner = ffprobeProcessRunner ?? processRunner,
        _tempFileFactory = tempFileFactory,
        _windowResolver = windowResolver,
@@ -52,9 +49,7 @@ final class CockpitWindowsRecordingAdapter
   final String _appId;
   final int? _processId;
   final String _ffmpegExecutable;
-  final String _powershellExecutable;
   final CockpitRecordingProcessStarter _processStarter;
-  final CockpitRecordingProcessRunner? _processRunner;
   final CockpitRecordingProcessRunner? _ffprobeProcessRunner;
   final CockpitRecordingTempFileFactory _tempFileFactory;
   final CockpitWindowsWindowResolver _windowResolver;
@@ -88,9 +83,6 @@ final class CockpitWindowsRecordingAdapter
     final windowTarget = await _windowResolver(
       appId: _appId,
       processId: _processId,
-      powershellExecutable: _powershellExecutable,
-      processRunner: (executable, arguments) =>
-          _runProcess(executable, arguments, timeout: _commandTimeout),
       timeout: _commandTimeout,
       activationSettleDelay: _activationSettleDelay,
     );
@@ -615,22 +607,6 @@ final class CockpitWindowsRecordingAdapter
       return maximum;
     }
     return _stopTimeout < maximum ? _stopTimeout : maximum;
-  }
-
-  Future<ProcessResult> _runProcess(
-    String executable,
-    List<String> arguments, {
-    required Duration timeout,
-  }) {
-    final injected = _processRunner;
-    if (injected != null) {
-      return injected(executable, arguments).timeout(timeout);
-    }
-    return cockpitRunRecordingProcessWithTimeout(
-      executable,
-      arguments,
-      timeout: timeout,
-    );
   }
 
   Future<ProcessResult> _runFfprobeProcess(

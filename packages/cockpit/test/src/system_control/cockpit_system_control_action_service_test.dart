@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:cockpit/src/infrastructure/cockpit_process_manager.dart';
+import 'package:cockpit/src/platform/windows/cockpit_windows_native_input.dart';
+import 'package:cockpit/src/platform/windows/cockpit_windows_window_target.dart';
 import 'package:cockpit/src/system_control/cockpit_android_ui_automation_client.dart';
 import 'package:cockpit_protocol/cockpit_protocol.dart';
 import 'package:cockpit/src/adapters/cockpit_capture_adapter.dart';
@@ -3532,6 +3534,180 @@ void main() {
       result.command,
       containsAllInOrder(<String>['-l', 'JavaScript', '-e']),
     );
+  });
+
+  for (final testCase
+      in <
+        ({
+          String name,
+          CockpitSystemControlAction action,
+          Map<String, Object?> parameters,
+          List<String> arguments,
+        })
+      >[
+        (
+          name: 'activateWindow',
+          action: CockpitSystemControlAction.activateWindow,
+          parameters: const <String, Object?>{},
+          arguments: const <String>['activateWindow', 'cockpit_demo', '4101'],
+        ),
+        (
+          name: 'tap',
+          action: CockpitSystemControlAction.tap,
+          parameters: const <String, Object?>{'x': 42, 'y': 88},
+          arguments: const <String>['tap', '', '', '42', '88'],
+        ),
+        (
+          name: 'typeText',
+          action: CockpitSystemControlAction.typeText,
+          parameters: const <String, Object?>{'text': 'hello'},
+          arguments: const <String>[
+            'typeText',
+            'cockpit_demo',
+            '4101',
+            'hello',
+          ],
+        ),
+        (
+          name: 'pressKey',
+          action: CockpitSystemControlAction.pressKey,
+          parameters: const <String, Object?>{'key': 'enter', 'repeat': 2},
+          arguments: const <String>[
+            'pressKey',
+            'cockpit_demo',
+            '4101',
+            'enter',
+            '2',
+          ],
+        ),
+      ]) {
+    test('windows ${testCase.name} executes through native input', () async {
+      final processManager = _FakeProcessManager();
+      late List<String> arguments;
+      late Duration capturedTimeout;
+      final service = CockpitSystemControlActionService(
+        processManager: processManager,
+        windowsNativeInputExecutor:
+            (values, {required Duration timeout}) async {
+              arguments = List<String>.from(values);
+              capturedTimeout = timeout;
+            },
+      );
+
+      final result = await service.run(
+        CockpitSystemControlActionRequest(
+          platform: 'windows',
+          appId: testCase.action == CockpitSystemControlAction.tap
+              ? null
+              : 'cockpit_demo',
+          processId: testCase.action == CockpitSystemControlAction.tap
+              ? null
+              : 4101,
+          action: testCase.action,
+          parameters: testCase.parameters,
+          timeout: const Duration(seconds: 7),
+        ),
+      );
+
+      expect(result.success, isTrue);
+      expect(result.command.first, cockpitWindowsNativeInputCommandExecutable);
+      expect(arguments, testCase.arguments);
+      expect(capturedTimeout, const Duration(seconds: 7));
+      expect(processManager.starts, isEmpty);
+    });
+  }
+
+  test('windows native input timeout returns structured failure', () async {
+    final service = CockpitSystemControlActionService(
+      processManager: _FakeProcessManager(),
+      windowsNativeInputExecutor: (_, {required timeout}) async {
+        throw TimeoutException('input timeout');
+      },
+    );
+
+    final result = await service.run(
+      const CockpitSystemControlActionRequest(
+        platform: 'windows',
+        appId: 'cockpit_demo',
+        action: CockpitSystemControlAction.activateWindow,
+        timeout: Duration(milliseconds: 250),
+      ),
+    );
+
+    expect(result.success, isFalse);
+    expect(result.errorCode, 'systemActionTimedOut');
+    expect(result.errorMessage, contains('250ms'));
+  });
+
+  test('windows readFocusState executes through native inspection', () async {
+    final processManager = _FakeProcessManager();
+    late Duration capturedTimeout;
+    final service = CockpitSystemControlActionService(
+      processManager: processManager,
+      windowsFocusStateReader: ({required timeout}) async {
+        capturedTimeout = timeout;
+        return '{"processId":4101,"processName":"cockpit_demo","windowTitle":"Cockpit Demo"}';
+      },
+    );
+
+    final result = await service.run(
+      const CockpitSystemControlActionRequest(
+        platform: 'windows',
+        action: CockpitSystemControlAction.readFocusState,
+        timeout: Duration(seconds: 7),
+      ),
+    );
+
+    expect(result.success, isTrue);
+    expect(result.command, <String>[cockpitWindowsFocusStateCommandExecutable]);
+    expect(result.stdout, contains('cockpit_demo'));
+    expect(result.recommendedNextStep, 'readPostActionState');
+    expect(capturedTimeout, const Duration(seconds: 7));
+    expect(processManager.starts, isEmpty);
+  });
+
+  test('windows focus inspection timeout returns structured failure', () async {
+    final service = CockpitSystemControlActionService(
+      processManager: _FakeProcessManager(),
+      windowsFocusStateReader: ({required timeout}) async {
+        throw TimeoutException('focus timeout');
+      },
+    );
+
+    final result = await service.run(
+      const CockpitSystemControlActionRequest(
+        platform: 'windows',
+        action: CockpitSystemControlAction.readFocusState,
+        timeout: Duration(milliseconds: 250),
+      ),
+    );
+
+    expect(result.success, isFalse);
+    expect(result.errorCode, 'systemActionTimedOut');
+    expect(result.errorMessage, contains('250ms'));
+  });
+
+  test('windows focus inspection preserves native failure codes', () async {
+    final service = CockpitSystemControlActionService(
+      processManager: _FakeProcessManager(),
+      windowsFocusStateReader: ({required timeout}) async {
+        throw const CockpitWindowsWindowException(
+          'windowsFocusUnavailable',
+          'The foreground window is unavailable.',
+        );
+      },
+    );
+
+    final result = await service.run(
+      const CockpitSystemControlActionRequest(
+        platform: 'windows',
+        action: CockpitSystemControlAction.readFocusState,
+      ),
+    );
+
+    expect(result.success, isFalse);
+    expect(result.errorCode, 'windowsFocusUnavailable');
+    expect(result.errorMessage, 'The foreground window is unavailable.');
   });
 
   test('windows readUiTree uses bounded UI Automation tree dump', () async {
