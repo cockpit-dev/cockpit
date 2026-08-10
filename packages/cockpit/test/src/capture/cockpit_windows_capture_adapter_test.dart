@@ -1,113 +1,104 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:cockpit_protocol/cockpit_protocol.dart';
 import 'package:cockpit/src/capture/cockpit_windows_capture_adapter.dart';
+import 'package:cockpit/src/platform/windows/cockpit_windows_screen_capture.dart';
 import 'package:cockpit/src/platform/windows/cockpit_windows_window_target.dart';
+import 'package:image/image.dart' as img;
 import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 
 void main() {
-  test(
-    'windows capture adapter runs powershell capture and writes a screenshot',
-    () async {
-      final tempDir = await Directory.systemTemp.createTemp(
-        'cockpit_windows_capture_adapter',
-      );
-      addTearDown(() async {
-        if (tempDir.existsSync()) {
-          await tempDir.delete(recursive: true);
-        }
-      });
+  test('windows capture adapter writes an in-process screen capture', () async {
+    final tempDir = await Directory.systemTemp.createTemp(
+      'cockpit_windows_capture_adapter',
+    );
+    addTearDown(() async {
+      if (tempDir.existsSync()) {
+        await tempDir.delete(recursive: true);
+      }
+    });
 
-      final invocations = <List<String>>[];
-      final outputFile = File(p.join(tempDir.path, 'acceptance.png'));
-      final adapter = CockpitWindowsCaptureAdapter(
-        appId: 'cockpit_demo',
-        processId: 4101,
-        tempFileFactory: (_) async => outputFile,
-        windowResolver: _windowResolver,
-        processRunner: (executable, arguments) async {
-          expect(executable, 'powershell');
-          invocations.add(List<String>.from(arguments));
-          outputFile.writeAsBytesSync(_opaquePng);
-          return ProcessResult(0, 0, '', '');
-        },
-      );
+    late CockpitWindowsWindowTarget capturedTarget;
+    late File capturedOutputFile;
+    late Duration capturedTimeout;
+    final outputFile = File(p.join(tempDir.path, 'acceptance.png'));
+    final adapter = CockpitWindowsCaptureAdapter(
+      appId: 'cockpit_demo',
+      processId: 4101,
+      tempFileFactory: (_) async => outputFile,
+      windowResolver: _windowResolver,
+      screenCaptureWriter:
+          ({required target, required outputFile, required timeout}) async {
+            capturedTarget = target;
+            capturedOutputFile = outputFile;
+            capturedTimeout = timeout;
+            outputFile.writeAsBytesSync(_opaquePng);
+          },
+    );
 
-      final execution = await adapter.capture(
-        CockpitCommand(
-          commandId: 'capture-1',
-          commandType: CockpitCommandType.captureScreenshot,
-          screenshotRequest: const CockpitScreenshotRequest(
-            reason: CockpitScreenshotReason.acceptance,
-            name: 'windows-acceptance',
-            attachToStep: true,
-          ),
+    final execution = await adapter.capture(
+      CockpitCommand(
+        commandId: 'capture-1',
+        commandType: CockpitCommandType.captureScreenshot,
+        screenshotRequest: const CockpitScreenshotRequest(
+          reason: CockpitScreenshotReason.acceptance,
+          name: 'windows-acceptance',
+          attachToStep: true,
         ),
-      );
+      ),
+    );
 
-      expect(execution.result.success, isTrue);
-      expect(
-        execution.result.artifacts.single.relativePath,
-        matches(
-          RegExp(
-            r'^screenshots/\d{8}T\d{12}Z_windows_acceptance_acceptance\.png$',
-          ),
+    expect(execution.result.success, isTrue);
+    expect(
+      execution.result.artifacts.single.relativePath,
+      matches(
+        RegExp(
+          r'^screenshots/\d{8}T\d{12}Z_windows_acceptance_acceptance\.png$',
         ),
-      );
-      expect(execution.artifactSourcePaths, isNotEmpty);
-      expect(outputFile.readAsBytesSync(), _opaquePng);
-      expect(invocations.single[0], '-NoProfile');
-      expect(invocations.single[1], '-NonInteractive');
-      expect(invocations.single[2], '-EncodedCommand');
-      final script = _decodeWindowsPowerShellEncodedCommand(
-        invocations.single[3],
-      );
-      expect(script, isNot(contains('PrimaryScreen.Bounds')));
-      expect(script, isNot(contains('PrintWindow')));
-      expect(script, contains('CopyFromScreen'));
-      expect(script, isNot(contains('GetWindowRect')));
-      expect(script, isNot(contains('Add-Type @"')));
-      expect(script, contains(r'$outputPath = $args[0]'));
-      expect(script, contains("} '${outputFile.path.replaceAll("'", "''")}'"));
-      expect(script, contains("'120' '48' '900' '640'"));
-    },
-  );
+      ),
+    );
+    expect(execution.artifactSourcePaths, isNotEmpty);
+    expect(outputFile.readAsBytesSync(), _opaquePng);
+    expect(capturedTarget.processId, 4101);
+    expect(capturedTarget.left, 120);
+    expect(capturedTarget.top, 48);
+    expect(capturedTarget.width, 900);
+    expect(capturedTarget.height, 640);
+    expect(capturedOutputFile.path, outputFile.path);
+    expect(capturedTimeout, greaterThan(Duration.zero));
+  });
 
-  test(
-    'windows capture adapter times out stalled powershell capture',
-    () async {
-      final adapter = CockpitWindowsCaptureAdapter(
-        appId: 'cockpit_demo',
-        timeout: const Duration(milliseconds: 50),
-        windowResolver: _windowResolver,
-        processRunner: (executable, arguments) {
-          return Future<ProcessResult>.delayed(
-            const Duration(milliseconds: 150),
-            () => ProcessResult(0, 0, '', ''),
-          );
-        },
-      );
+  test('windows capture adapter times out stalled native capture', () async {
+    final adapter = CockpitWindowsCaptureAdapter(
+      appId: 'cockpit_demo',
+      timeout: const Duration(milliseconds: 50),
+      windowResolver: _windowResolver,
+      screenCaptureWriter:
+          ({required target, required outputFile, required timeout}) {
+            return Future<void>.delayed(const Duration(milliseconds: 150));
+          },
+    );
 
-      final execution = await adapter.capture(
-        CockpitCommand(
-          commandId: 'capture-2',
-          commandType: CockpitCommandType.captureScreenshot,
-          screenshotRequest: const CockpitScreenshotRequest(
-            reason: CockpitScreenshotReason.acceptance,
-            name: 'windows-timeout',
-          ),
+    final execution = await adapter.capture(
+      CockpitCommand(
+        commandId: 'capture-2',
+        commandType: CockpitCommandType.captureScreenshot,
+        screenshotRequest: const CockpitScreenshotRequest(
+          reason: CockpitScreenshotReason.acceptance,
+          name: 'windows-timeout',
         ),
-      );
+      ),
+    );
 
-      expect(execution.result.success, isFalse);
-      expect(
-        execution.result.error?.message,
-        'Windows host screenshot timed out.',
-      );
-    },
-  );
+    expect(execution.result.success, isFalse);
+    expect(
+      execution.result.error?.message,
+      'Windows host screenshot timed out.',
+    );
+  });
 
   test('windows capture adapter honors the command timeout budget', () async {
     final tempDir = await Directory.systemTemp.createTemp(
@@ -125,11 +116,11 @@ void main() {
       timeout: const Duration(milliseconds: 50),
       tempFileFactory: (_) async => outputFile,
       windowResolver: _windowResolver,
-      processRunner: (executable, arguments) async {
-        await Future<void>.delayed(const Duration(milliseconds: 100));
-        outputFile.writeAsBytesSync(_opaquePng);
-        return ProcessResult(0, 0, '', '');
-      },
+      screenCaptureWriter:
+          ({required target, required outputFile, required timeout}) async {
+            await Future<void>.delayed(const Duration(milliseconds: 100));
+            outputFile.writeAsBytesSync(_opaquePng);
+          },
     );
 
     final execution = await adapter.capture(
@@ -148,12 +139,17 @@ void main() {
     expect(outputFile.readAsBytesSync(), _opaquePng);
   });
 
-  test('windows capture adapter reports capture process failure', () async {
+  test('windows capture adapter reports native capture failure', () async {
     final adapter = CockpitWindowsCaptureAdapter(
       appId: 'cockpit_demo',
       windowResolver: _windowResolver,
-      processRunner: (executable, arguments) async =>
-          ProcessResult(0, 1, '', 'No visible Windows window was found.'),
+      screenCaptureWriter:
+          ({required target, required outputFile, required timeout}) async {
+            throw const CockpitWindowsScreenCaptureException(
+              'windowsScreenCopyFailed',
+              'Windows could not copy the requested screen bounds.',
+            );
+          },
     );
 
     final execution = await adapter.capture(
@@ -174,8 +170,8 @@ void main() {
       containsPair('appId', 'cockpit_demo'),
     );
     expect(
-      execution.result.error?.details['stderr'],
-      contains('No visible Windows window was found.'),
+      execution.result.error?.details,
+      containsPair('errorCode', 'windowsScreenCopyFailed'),
     );
   });
 
@@ -214,6 +210,21 @@ void main() {
       containsPair('errorCode', 'windowsWindowAmbiguous'),
     );
   });
+
+  test('windows BGRA capture encoding produces an opaque PNG', () {
+    final png = cockpitEncodeWindowsBgraPng(
+      width: 2,
+      height: 1,
+      bytes: Uint8List.fromList(<int>[0, 0, 255, 0, 0, 255, 0, 0]),
+    );
+
+    final image = img.decodePng(png);
+    expect(image, isNotNull);
+    final red = image!.getPixel(0, 0);
+    final green = image.getPixel(1, 0);
+    expect((red.r, red.g, red.b, red.a), (255, 0, 0, 255));
+    expect((green.r, green.g, green.b, green.a), (0, 255, 0, 255));
+  });
 }
 
 Future<CockpitWindowsWindowTarget> _windowResolver({
@@ -230,14 +241,6 @@ Future<CockpitWindowsWindowTarget> _windowResolver({
   width: 900,
   height: 640,
 );
-
-String _decodeWindowsPowerShellEncodedCommand(String encoded) {
-  final bytes = base64.decode(encoded);
-  return String.fromCharCodes(<int>[
-    for (var index = 0; index < bytes.length; index += 2)
-      bytes[index] | (bytes[index + 1] << 8),
-  ]);
-}
 
 final List<int> _opaquePng = base64Decode(
   'iVBORw0KGgoAAAANSUhEUgAAAAIAAAABCAYAAAD0In+KAAAAEUlEQVQI12O8rmb7n4GBgQEADj0CO1/m6EIAAAAASUVORK5CYII=',
