@@ -9,11 +9,21 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 
+import 'acp_state.dart';
+
+export 'acp_state.dart';
+
 const _maximumConcurrentTerminals = 8;
 const _maximumTerminalOutputBytes = 1024 * 1024;
 const _maximumFileResponseBytes = 4 * 1024 * 1024;
 const _maximumFileScanBytes = 64 * 1024 * 1024;
 const _maximumFileWriteBytes = 16 * 1024 * 1024;
+const _maximumPromptPayloadBytes = 14 * 1024 * 1024;
+const _initializeTimeout = Duration(seconds: 30);
+const _controlTimeout = Duration(seconds: 30);
+const _sessionSetupTimeout = Duration(minutes: 2);
+const _promptTimeout = Duration(minutes: 30);
+const _maximumPendingSessionUpdates = 65536;
 
 /// Bounds the retained agent stderr tail surfaced in connection-failure
 /// messages. The acpd_io transport already caps captured stderr at 64 KiB;
@@ -30,6 +40,8 @@ final class AcpConnectionConfig {
     this.clientName = 'cockpit-console',
     this.clientVersion = '0.1.0',
     this.sessionCwd = '.',
+    this.additionalDirectories = const [],
+    this.mcpServers = const [],
   });
 
   final String command;
@@ -39,6 +51,8 @@ final class AcpConnectionConfig {
   final String clientName;
   final String clientVersion;
   final String sessionCwd;
+  final List<String> additionalDirectories;
+  final List<McpServer> mcpServers;
 
   acpd_io.AcpAgentConfig toSdkConfig({String? resolvedWorkingDirectory}) =>
       acpd_io.AcpAgentConfig(
@@ -63,113 +77,21 @@ String resolveAcpSessionRoot(AcpConnectionConfig config) {
   return Directory(requestedSessionRoot).resolveSymbolicLinksSync();
 }
 
-/// A chat message in the ACP conversation.
-final class AcpChatMessage {
-  const AcpChatMessage({
-    required this.role,
-    required this.text,
-    this.isStreaming = false,
-    this.thoughts = const [],
-    this.toolCalls = const [],
-  });
-
-  final AcpMessageRole role;
-  final String text;
-  final bool isStreaming;
-  final List<String> thoughts;
-  final List<String> toolCalls;
-
-  AcpChatMessage copyWith({
-    String? text,
-    bool? isStreaming,
-    List<String>? thoughts,
-    List<String>? toolCalls,
-  }) {
-    return AcpChatMessage(
-      role: role,
-      text: text ?? this.text,
-      isStreaming: isStreaming ?? this.isStreaming,
-      thoughts: thoughts ?? this.thoughts,
-      toolCalls: toolCalls ?? this.toolCalls,
-    );
-  }
-}
-
-enum AcpMessageRole { user, assistant, error }
-
-/// A permission request surfaced to the user for interactive approval.
-///
-/// Exposes the ACP [ToolCall] that requires approval and the immutable set of
-/// [options] the agent offered. Resolved via
-/// [AcpAgentNotifier.respondToPermission].
-final class AcpPermissionPrompt {
-  const AcpPermissionPrompt({
-    required this.requestId,
-    required this.toolCall,
-    required this.options,
-  });
-
-  /// Stable identity binding a UI decision to this exact queued request.
-  final String requestId;
-
-  /// The tool call that needs permission.
-  final ToolCall toolCall;
-
-  /// The permission options offered by the agent (immutable).
-  final List<PermissionOption> options;
-  bool acceptsDecision({required String requestId, String? optionId}) =>
-      this.requestId == requestId &&
-      (optionId == null ||
-          options.any((option) => option.optionId == optionId));
-}
-
-/// State of the ACP agent connection.
-sealed class AcpAgentState {
-  const AcpAgentState();
-}
-
-final class AcpDisconnected extends AcpAgentState {
-  const AcpDisconnected();
-}
-
-final class AcpConnecting extends AcpAgentState {
-  const AcpConnecting();
-}
-
-final class AcpConnected extends AcpAgentState {
-  const AcpConnected({
-    required this.agentInfo,
-    required this.sessionId,
-    required this.modes,
-    this.messages = const [],
-    this.pendingPermission,
-    this.isPrompting = false,
-  });
-
-  final Implementation agentInfo;
-  final String sessionId;
-  final List<SessionMode> modes;
-
-  /// Reactive, immutable list of chat messages. The UI rebuilds on every
-  /// streaming chunk, completion, error, and clear transition.
-  final List<AcpChatMessage> messages;
-
-  /// The head of the permission queue awaiting user response, or null if no
-  /// permission request is pending.
-  final AcpPermissionPrompt? pendingPermission;
-
-  /// Whether a prompt turn is currently in flight.
-  ///
-  /// This is the single source of truth for send/stop/concurrency. It is true
-  /// for the entire turn — from dispatch through completion, error, or cancel —
-  /// so the UI can disable the composer and show a Stop button while preventing
-  /// a second concurrent turn.
-  final bool isPrompting;
-}
-
-final class AcpError extends AcpAgentState {
-  const AcpError(this.message);
-  final String message;
+@visibleForTesting
+List<String> resolveAcpAdditionalDirectories(
+  AcpConnectionConfig config,
+  String sessionRoot,
+) {
+  return config.additionalDirectories
+      .map((directory) {
+        final requested = p.isAbsolute(directory)
+            ? directory
+            : p.join(sessionRoot, directory);
+        return Directory(requested).resolveSymbolicLinksSync();
+      })
+      .toSet()
+      .where((directory) => !p.equals(directory, sessionRoot))
+      .toList(growable: false);
 }
 
 /// Exception for path-confinement violations.
@@ -205,10 +127,18 @@ final class AcpAgentNotifier extends Notifier<AcpAgentState> {
   acpd_io.AcpAgent? _agentProcess;
   ClientConnection? _client;
   Session? _session;
+  AcpSessionState? _activeSessionState;
+  AcpSessionSpec? _defaultSessionSpec;
+  HandlerRegistration? _sessionUpdateSub;
 
-  /// Canonical absolute path of the session root, cached for confinement
-  /// checks. Null when not connected.
-  String? _sessionRootCanonical;
+  /// Canonical roots exposed to the active ACP session. The first root is cwd;
+  /// the remainder are additional directories advertised at session setup.
+  final List<String> _sessionRootsCanonical = [];
+
+  String? _pendingSessionId;
+  bool _captureUnknownPendingSession = false;
+  final Map<String, List<SessionUpdate>> _pendingSessionUpdates = {};
+  String? _pendingSessionOverflowError;
 
   // Mutable working state — published to the UI through immutable copies.
   final List<AcpChatMessage> _messages = [];
@@ -238,8 +168,9 @@ final class AcpAgentNotifier extends Notifier<AcpAgentState> {
   // Connection lifecycle
   // ===========================================================================
 
-  /// Connects to an agent, advertises client capabilities, and creates a
-  /// session. On failure, cleans up all partial transport/process resources.
+  /// Connects to an agent, advertises every implemented client capability,
+  /// then creates the initial session. Authentication and session-setup
+  /// failures keep the initialized connection available for recovery.
   Future<void> connect(AcpConnectionConfig config) async {
     final generation = ++_lifecycleGeneration;
     state = const AcpConnecting();
@@ -248,10 +179,12 @@ final class AcpAgentNotifier extends Notifier<AcpAgentState> {
 
     acpd_io.AcpAgent? agent;
     ClientConnection? client;
-    Session? session;
-
     try {
       final sessionRoot = resolveAcpSessionRoot(config);
+      final additionalDirectories = resolveAcpAdditionalDirectories(
+        config,
+        sessionRoot,
+      );
       final launchDirectory = config.workingDirectory == null
           ? null
           : Directory(
@@ -277,36 +210,36 @@ final class AcpAgentNotifier extends Notifier<AcpAgentState> {
           clientCapabilities: const ClientCapabilities(
             fs: FileSystemCapabilities(readTextFile: true, writeTextFile: true),
             terminal: true,
+            session: ClientSessionCapabilities(
+              configOptions: SessionConfigOptionsCapabilities(
+                boolean: BooleanConfigOptionCapabilities(),
+              ),
+            ),
           ),
         ),
+        timeout: _initializeTimeout,
       );
       if (generation != _lifecycleGeneration) {
         await _closeConnectionAttempt(agent: agent, client: client);
         return;
       }
 
-      session = await Session.create(
-        client,
-        NewSessionRequest(cwd: sessionRoot, mcpServers: const []),
-      );
-      if (generation != _lifecycleGeneration) {
-        await _closeConnectionAttempt(
-          agent: agent,
-          client: client,
-          session: session,
-        );
-        return;
-      }
-
-      _sessionRootCanonical = sessionRoot;
       _agentProcess = agent;
       _client = client;
-      _session = session;
+      _defaultSessionSpec = AcpSessionSpec(
+        cwd: sessionRoot,
+        additionalDirectories: additionalDirectories,
+        mcpServers: config.mcpServers,
+      );
       _messages.clear();
       _permissionQueue.clear();
       _terminals.clear();
       _activeTurn = null;
       _isPrompting = false;
+      _sessionUpdateSub = client.connection.onNotification(
+        SessionUpdateNotification.methodName,
+        _handleSessionUpdateNotification,
+      );
 
       unawaited(
         client.closed.then(
@@ -317,22 +250,27 @@ final class AcpAgentNotifier extends Notifier<AcpAgentState> {
         agentInfo:
             initResp.agentInfo ??
             Implementation(name: config.command, version: 'unknown'),
-        sessionId: session.sessionId,
-        modes: session.modes?.availableModes ?? const [],
-        messages: const [],
-        pendingPermission: null,
-        isPrompting: false,
+        protocolVersion: initResp.protocolVersion,
+        capabilities: initResp.agentCapabilities ?? const AgentCapabilities(),
+        authMethods: List.unmodifiable(initResp.authMethods),
+        authStatus: initResp.authMethods.isEmpty
+            ? AcpAuthStatus.unavailable
+            : AcpAuthStatus.available,
+        sessionDefaults: _defaultSessionSpec,
+      );
+
+      await _createSessionInternal(
+        cwd: sessionRoot,
+        additionalDirectories: additionalDirectories,
+        mcpServers: config.mcpServers,
+        exposeBusyState: false,
       );
     } on Object catch (error) {
       await _stderrSub?.cancel();
       _stderrSub = null;
-      await _closeConnectionAttempt(
-        agent: agent,
-        client: client,
-        session: session,
-      );
+      await _closeConnectionAttempt(agent: agent, client: client);
       if (generation == _lifecycleGeneration) {
-        _sessionRootCanonical = null;
+        _sessionRootsCanonical.clear();
         state = AcpError(describeAcpConnectionError('$error', _agentStderr));
       }
     }
@@ -382,27 +320,41 @@ final class AcpAgentNotifier extends Notifier<AcpAgentState> {
   // Prompt turns
   // ===========================================================================
 
-  /// Sends a prompt to the agent and streams the response into [messages].
-  ///
-  /// Turns are serialized: if a turn is already in flight (or the agent is not
-  /// connected) this is a no-op and returns `false`. The
-  /// [AcpConnected.isPrompting] guard is the single source of truth.
-  ///
-  /// Returns `true` only when the turn was actually dispatched, so callers can
-  /// clear their input exactly on success and never on a rejected concurrent
-  /// submit.
-  Future<bool> sendPrompt(String text) async {
+  Future<bool> sendPrompt(String text) =>
+      sendPromptContent(<ContentBlock>[TextContentBlock(text: text)]);
+
+  /// Sends one complete ACP prompt. Non-text blocks are retained exactly so
+  /// image, audio, resource-link, and embedded-resource capable agents can use
+  /// the full v1 prompt surface.
+  Future<bool> sendPromptContent(List<ContentBlock> content) async {
     final session = _session;
     final client = _client;
     final connected = state;
     if (session == null ||
         client == null ||
         connected is! AcpConnected ||
+        connected.activeSession == null ||
+        content.isEmpty ||
         _isPrompting) {
       return false;
     }
 
-    _messages.add(AcpChatMessage(role: AcpMessageRole.user, text: text));
+    final prompt = List<ContentBlock>.unmodifiable(content);
+    try {
+      _validatePromptContent(prompt, connected.capabilities);
+    } on AcpPromptValidationException catch (error) {
+      _setLastError(error.message);
+      return false;
+    }
+
+    final userIndex = _messages.length;
+    _messages.add(
+      AcpChatMessage(
+        role: AcpMessageRole.user,
+        text: _contentText(prompt),
+        content: prompt,
+      ),
+    );
     final assistantIndex = _messages.length;
     _messages.add(
       const AcpChatMessage(
@@ -414,93 +366,70 @@ final class AcpAgentNotifier extends Notifier<AcpAgentState> {
     final turn = _ActiveTurn(
       generation: _lifecycleGeneration,
       session: session,
+      userIndex: userIndex,
       assistantIndex: assistantIndex,
     );
     _activeTurn = turn;
     _isPrompting = true;
     _publishState();
 
-    final thoughts = <String>[];
-    final toolCalls = <String>[];
-    final sessionId = session.sessionId;
-
     try {
-      final updateSub = client.connection.onNotification('session/update', (
-        params,
-      ) {
-        if (!_isActiveTurn(turn)) return;
-        final notification = _parseSessionUpdate(params);
-        if (notification == null || notification.sessionId != sessionId) {
-          return;
-        }
-        switch (notification.update) {
-          case AgentMessageChunk(:final chunk):
-            final chunkText = _extractText(chunk.content);
-            if (chunkText.isNotEmpty) {
-              final current = _messages[assistantIndex];
-              _messages[assistantIndex] = current.copyWith(
-                text: current.text + chunkText,
-              );
-              _publishState();
-            }
-          case AgentThoughtChunk(:final chunk):
-            final chunkText = _extractText(chunk.content);
-            if (chunkText.isNotEmpty) {
-              thoughts.add(chunkText);
-              _messages[assistantIndex] = _messages[assistantIndex].copyWith(
-                thoughts: List.unmodifiable(thoughts),
-              );
-              _publishState();
-            }
-          case ToolCallUpdateSession(:final toolCall):
-            toolCalls.add(toolCall.title);
-            _messages[assistantIndex] = _messages[assistantIndex].copyWith(
-              toolCalls: List.unmodifiable(toolCalls),
-            );
-            _publishState();
-          case ToolCallStatusUpdate():
-          case PlanUpdate():
-          case AvailableCommandsSessionUpdate():
-          case CurrentModeSessionUpdate():
-          case ConfigOptionSessionUpdate():
-          case SessionInfoSessionUpdate():
-          case UsageSessionUpdate():
-          case UserMessageChunk():
-            break;
-          case _:
-            break;
-        }
-      });
-
-      try {
-        final result = await session.sendPrompt([TextContentBlock(text: text)]);
-        if (!_isActiveTurn(turn)) return true;
-        if (_messages[assistantIndex].text.isEmpty &&
-            thoughts.isEmpty &&
-            toolCalls.isEmpty) {
-          _messages[assistantIndex] = AcpChatMessage(
-            role: AcpMessageRole.assistant,
-            text: result.agentText.isEmpty
-                ? '(Agent returned no text. Stop reason: ${result.stopReason.toJson()})'
-                : result.agentText,
-          );
-        } else {
-          _messages[assistantIndex] = _messages[assistantIndex].copyWith(
-            isStreaming: false,
-          );
-        }
-      } finally {
-        updateSub.dispose();
+      final result = await session.sendPrompt(prompt, timeout: _promptTimeout);
+      if (!_isActiveTurn(turn)) return true;
+      final assistantMessages = _turnAssistantMessageIndices(turn);
+      final streamedText = assistantMessages
+          .map((index) => _messages[index].text)
+          .join();
+      final hasStreamedContent = assistantMessages.any(
+        (index) => _messageHasContent(_messages[index]),
+      );
+      if (streamedText.isEmpty && result.agentText.isNotEmpty) {
+        final current = _messages[assistantIndex];
+        _messages[assistantIndex] = current.copyWith(text: result.agentText);
+      } else if (!hasStreamedContent) {
+        _messages[assistantIndex] = AcpChatMessage(
+          role: AcpMessageRole.assistant,
+          text:
+              '(Agent returned no content. Stop reason: ${result.stopReason.toJson()})',
+        );
       }
     } on Object catch (error) {
       if (_isActiveTurn(turn)) {
-        _messages[assistantIndex] = AcpChatMessage(
-          role: AcpMessageRole.error,
-          text: '$error',
-        );
+        final hasPartialResponse = _turnAssistantMessageIndices(
+          turn,
+        ).any((index) => _messageHasContent(_messages[index]));
+        if (hasPartialResponse) {
+          _messages.add(
+            AcpChatMessage(role: AcpMessageRole.error, text: '$error'),
+          );
+        } else {
+          _messages[assistantIndex] = AcpChatMessage(
+            role: AcpMessageRole.error,
+            text: '$error',
+          );
+        }
+        if (error is RpcError && error.code == ErrorCode.authRequired.code) {
+          _setAuthRequired(error.message);
+        }
       }
     } finally {
       if (_isActiveTurn(turn)) {
+        if (turn.userEchoContent.isNotEmpty &&
+            turn.userIndex < _messages.length) {
+          _messages[turn.userIndex] = _messages[turn.userIndex].copyWith(
+            text: _contentText(turn.userEchoContent),
+            content: List.unmodifiable(turn.userEchoContent),
+          );
+        }
+        for (
+          var index = turn.assistantIndex;
+          index < _messages.length;
+          index++
+        ) {
+          if (_messages[index].isStreaming) {
+            _messages[index] = _messages[index].copyWith(isStreaming: false);
+          }
+        }
         turn.cancelTimer?.cancel();
         _activeTurn = null;
         _isPrompting = false;
@@ -568,6 +497,482 @@ final class AcpAgentNotifier extends Notifier<AcpAgentState> {
   // Session lifecycle
   // ===========================================================================
 
+  Future<bool> authenticate(String methodId) async {
+    final client = _client;
+    final connected = state;
+    if (client == null || connected is! AcpConnected) return false;
+    if (!connected.authMethods.any((method) => method.id == methodId)) {
+      _setLastError('The agent did not advertise auth method "$methodId".');
+      return false;
+    }
+    if (!_beginAction(AcpBusyAction.authenticate)) return false;
+    state = (state as AcpConnected).copyWith(
+      authStatus: AcpAuthStatus.authenticating,
+    );
+    try {
+      await client.client.authenticate(
+        AuthenticateRequest(methodId: methodId),
+        timeout: _sessionSetupTimeout,
+      );
+      _endAction(authStatus: AcpAuthStatus.authenticated);
+      final spec = _defaultSessionSpec;
+      if (_session == null && spec != null) {
+        return _createSessionInternal(
+          cwd: spec.cwd,
+          additionalDirectories: spec.additionalDirectories,
+          mcpServers: spec.mcpServers,
+          exposeBusyState: true,
+        );
+      }
+      return true;
+    } on Object catch (error) {
+      _endAction(
+        error: '$error',
+        authStatus:
+            error is RpcError && error.code == ErrorCode.authRequired.code
+            ? AcpAuthStatus.required
+            : AcpAuthStatus.available,
+      );
+      return false;
+    }
+  }
+
+  Future<bool> logout() async {
+    final client = _client;
+    final connected = state;
+    if (client == null || connected is! AcpConnected) return false;
+    if (!connected.canLogout) {
+      _setLastError('The connected agent does not support logout.');
+      return false;
+    }
+    if (!_beginAction(AcpBusyAction.logout)) return false;
+    state = (state as AcpConnected).copyWith(
+      authStatus: AcpAuthStatus.loggingOut,
+    );
+    try {
+      await client.client.logout(timeout: _sessionSetupTimeout);
+      await _detachActiveSession();
+      _endAction(authStatus: AcpAuthStatus.available);
+      return true;
+    } on Object catch (error) {
+      _endAction(error: '$error', authStatus: AcpAuthStatus.authenticated);
+      return false;
+    }
+  }
+
+  Future<bool> createSession({
+    String? cwd,
+    List<String>? additionalDirectories,
+    List<McpServer>? mcpServers,
+  }) async {
+    final defaults = _defaultSessionSpec;
+    if (defaults == null) return false;
+    try {
+      final spec = _canonicalizeSessionSpec(
+        cwd: cwd ?? defaults.cwd,
+        additionalDirectories:
+            additionalDirectories ?? defaults.additionalDirectories,
+        mcpServers: mcpServers ?? defaults.mcpServers,
+      );
+      return _createSessionInternal(
+        cwd: spec.cwd,
+        additionalDirectories: spec.additionalDirectories,
+        mcpServers: spec.mcpServers,
+        exposeBusyState: true,
+      );
+    } on Object catch (error) {
+      _setLastError('$error');
+      return false;
+    }
+  }
+
+  Future<bool> loadSession(SessionInfo info, {List<McpServer>? mcpServers}) {
+    return _openExistingSession(info, resume: false, mcpServers: mcpServers);
+  }
+
+  Future<bool> resumeSession(SessionInfo info, {List<McpServer>? mcpServers}) {
+    return _openExistingSession(info, resume: true, mcpServers: mcpServers);
+  }
+
+  Future<bool> _openExistingSession(
+    SessionInfo info, {
+    required bool resume,
+    List<McpServer>? mcpServers,
+  }) async {
+    final client = _client;
+    final connected = state;
+    if (client == null || connected is! AcpConnected) return false;
+    if (resume ? !connected.canResumeSessions : !connected.canLoadSessions) {
+      _setLastError(
+        resume
+            ? 'The connected agent does not support session resume.'
+            : 'The connected agent does not support session load.',
+      );
+      return false;
+    }
+    final action = resume
+        ? AcpBusyAction.resumeSession
+        : AcpBusyAction.loadSession;
+    if (!_beginAction(action)) return false;
+    Session? candidate;
+    try {
+      final spec = _canonicalizeSessionSpec(
+        cwd: info.cwd,
+        additionalDirectories: info.additionalDirectories,
+        mcpServers: mcpServers ?? _defaultSessionSpec?.mcpServers ?? const [],
+      );
+      _validateSessionSpec(spec, connected.capabilities);
+      _beginPendingSession(info.sessionId);
+      candidate = resume
+          ? await Session.resume(
+              client,
+              ResumeSessionRequest(
+                sessionId: info.sessionId,
+                cwd: spec.cwd,
+                additionalDirectories: spec.additionalDirectories,
+                mcpServers: spec.mcpServers,
+              ),
+              timeout: _sessionSetupTimeout,
+            )
+          : await Session.load(
+              client,
+              LoadSessionRequest(
+                sessionId: info.sessionId,
+                cwd: spec.cwd,
+                additionalDirectories: spec.additionalDirectories,
+                mcpServers: spec.mcpServers,
+              ),
+              timeout: _sessionSetupTimeout,
+            );
+      _throwIfPendingSessionOverflow();
+      _defaultSessionSpec = spec;
+      await _activateSession(candidate, spec);
+      _endAction(
+        authStatus: connected.authMethods.isEmpty
+            ? AcpAuthStatus.unavailable
+            : AcpAuthStatus.authenticated,
+      );
+      return true;
+    } on Object catch (error) {
+      candidate?.dispose();
+      _endAction(
+        error: '$error',
+        authStatus: _authStatusAfterError(error, connected),
+      );
+      return false;
+    } finally {
+      _clearPendingSession();
+    }
+  }
+
+  Future<bool> closeSession() async {
+    final connected = state;
+    final session = _session;
+    if (connected is! AcpConnected || session == null) return false;
+    if (!connected.canCloseSessions) {
+      _setLastError('The connected agent does not support session close.');
+      return false;
+    }
+    if (!_beginAction(AcpBusyAction.closeSession)) return false;
+    try {
+      await session.close(timeout: _sessionSetupTimeout);
+      await _detachActiveSession(sessionAlreadyDisposed: true);
+      _endAction();
+      return true;
+    } on Object catch (error) {
+      _endAction(error: '$error');
+      return false;
+    }
+  }
+
+  Future<bool> deleteSession(String sessionId) async {
+    final client = _client;
+    final connected = state;
+    if (client == null || connected is! AcpConnected) return false;
+    if (!connected.canDeleteSessions) {
+      _setLastError('The connected agent does not support session deletion.');
+      return false;
+    }
+    if (!_beginAction(AcpBusyAction.deleteSession)) return false;
+    try {
+      await client.client.deleteSession(
+        DeleteSessionRequest(sessionId: sessionId),
+        timeout: _sessionSetupTimeout,
+      );
+      if (_session?.sessionId == sessionId) {
+        await _detachActiveSession();
+      }
+      final current = state as AcpConnected;
+      state = current.copyWith(
+        recentSessions: current.recentSessions
+            .where((session) => session.sessionId != sessionId)
+            .toList(growable: false),
+        busy: null,
+        lastError: null,
+      );
+      return true;
+    } on Object catch (error) {
+      _endAction(error: '$error');
+      return false;
+    }
+  }
+
+  Future<bool> refreshSessions({String? cwd}) =>
+      _listSessions(cwd: cwd, append: false);
+
+  Future<bool> loadMoreSessions() {
+    final connected = state;
+    if (connected is! AcpConnected || connected.nextSessionCursor == null) {
+      return Future.value(false);
+    }
+    return _listSessions(
+      cwd: connected.activeSession?.cwd ?? _defaultSessionSpec?.cwd,
+      cursor: connected.nextSessionCursor,
+      append: true,
+    );
+  }
+
+  Future<bool> _listSessions({
+    required bool append,
+    String? cwd,
+    String? cursor,
+  }) async {
+    final client = _client;
+    final connected = state;
+    if (client == null || connected is! AcpConnected) return false;
+    if (!connected.canListSessions) {
+      _setLastError('The connected agent does not support session listing.');
+      return false;
+    }
+    if (!_beginAction(AcpBusyAction.listSessions)) return false;
+    try {
+      final response = await client.client.listSessions(
+        ListSessionsRequest(cwd: cwd, cursor: cursor),
+        timeout: _controlTimeout,
+      );
+      final current = state as AcpConnected;
+      final sessions = append
+          ? _mergeSessionLists(current.recentSessions, response.sessions)
+          : List<SessionInfo>.unmodifiable(response.sessions);
+      state = current.copyWith(
+        recentSessions: sessions,
+        nextSessionCursor: response.nextCursor,
+        busy: null,
+        lastError: null,
+      );
+      return true;
+    } on Object catch (error) {
+      _endAction(error: '$error');
+      return false;
+    }
+  }
+
+  Future<bool> setMode(String modeId) async {
+    final session = _session;
+    final connected = state;
+    final sessionState = _activeSessionState;
+    if (session == null || connected is! AcpConnected || sessionState == null) {
+      return false;
+    }
+    if (!(sessionState.modes?.availableModes ?? const []).any(
+      (mode) => mode.id == modeId,
+    )) {
+      _setLastError('The active session did not advertise mode "$modeId".');
+      return false;
+    }
+    if (!_beginAction(AcpBusyAction.setMode)) return false;
+    try {
+      await session.setMode(modeId, timeout: _controlTimeout);
+      final latest = _activeSessionState;
+      if (latest != null && latest.sessionId == session.sessionId) {
+        _activeSessionState = latest.copyWith(modes: session.modes);
+      }
+      _endAction();
+      _publishState();
+      return true;
+    } on Object catch (error) {
+      _endAction(error: '$error');
+      return false;
+    }
+  }
+
+  Future<bool> setConfigOption(String configId, Object value) async {
+    final session = _session;
+    final connected = state;
+    final sessionState = _activeSessionState;
+    if (session == null || connected is! AcpConnected || sessionState == null) {
+      return false;
+    }
+    final matches = sessionState.configOptions.where(
+      (option) => option.id == configId,
+    );
+    if (matches.isEmpty) {
+      _setLastError(
+        'The active session did not advertise config option "$configId".',
+      );
+      return false;
+    }
+    final option = matches.first;
+    late final SetSessionConfigOptionRequest request;
+    switch (option) {
+      case SessionConfigBooleanOption():
+        if (value is! bool) {
+          _setLastError('Config option "$configId" requires a boolean value.');
+          return false;
+        }
+        request = SetBooleanConfigOption(
+          sessionId: session.sessionId,
+          configId: configId,
+          value: value,
+        );
+      case SessionConfigSelectOptionValue(:final options):
+        if (value is! String || !_selectOptionValues(options).contains(value)) {
+          _setLastError(
+            'Config option "$configId" requires one advertised value.',
+          );
+          return false;
+        }
+        request = SetValueIdConfigOption(
+          sessionId: session.sessionId,
+          configId: configId,
+          value: value,
+        );
+    }
+    if (!_beginAction(AcpBusyAction.setConfig)) return false;
+    try {
+      final options = await session.setConfigOption(
+        request,
+        timeout: _controlTimeout,
+      );
+      final latest = _activeSessionState;
+      if (latest != null && latest.sessionId == session.sessionId) {
+        _activeSessionState = latest.copyWith(configOptions: options);
+      }
+      _endAction();
+      _publishState();
+      return true;
+    } on Object catch (error) {
+      _endAction(error: '$error');
+      return false;
+    }
+  }
+
+  Future<bool> _createSessionInternal({
+    required String cwd,
+    required List<String> additionalDirectories,
+    required List<McpServer> mcpServers,
+    required bool exposeBusyState,
+  }) async {
+    final client = _client;
+    final connected = state;
+    if (client == null || connected is! AcpConnected) return false;
+    if (exposeBusyState && !_beginAction(AcpBusyAction.createSession)) {
+      return false;
+    }
+    Session? candidate;
+    try {
+      final spec = _canonicalizeSessionSpec(
+        cwd: cwd,
+        additionalDirectories: additionalDirectories,
+        mcpServers: mcpServers,
+      );
+      _validateSessionSpec(spec, connected.capabilities);
+      _beginPendingSession(null, captureUnknown: true);
+      candidate = await Session.create(
+        client,
+        NewSessionRequest(
+          cwd: spec.cwd,
+          additionalDirectories: spec.additionalDirectories,
+          mcpServers: spec.mcpServers,
+        ),
+        timeout: _sessionSetupTimeout,
+      );
+      _pendingSessionId = candidate.sessionId;
+      _throwIfPendingSessionOverflow();
+      _defaultSessionSpec = spec;
+      await _activateSession(candidate, spec);
+      _endAction(
+        authStatus: connected.authMethods.isEmpty
+            ? AcpAuthStatus.unavailable
+            : AcpAuthStatus.authenticated,
+      );
+      return true;
+    } on Object catch (error) {
+      candidate?.dispose();
+      _endAction(
+        error: '$error',
+        authStatus: _authStatusAfterError(error, connected),
+      );
+      return false;
+    } finally {
+      _clearPendingSession();
+    }
+  }
+
+  Future<void> _activateSession(Session session, AcpSessionSpec spec) async {
+    final updates = List<SessionUpdate>.unmodifiable(
+      _pendingSessionUpdates[session.sessionId] ?? const [],
+    );
+    await _detachActiveSession();
+    _session = session;
+    _sessionRootsCanonical
+      ..clear()
+      ..add(spec.cwd)
+      ..addAll(spec.additionalDirectories);
+    _messages.clear();
+    _activeSessionState = AcpSessionState(
+      sessionId: session.sessionId,
+      cwd: spec.cwd,
+      additionalDirectories: spec.additionalDirectories,
+      mcpServers: spec.mcpServers,
+      modes: session.modes,
+      configOptions: List.unmodifiable(session.configOptions),
+    );
+    final connected = state;
+    if (connected is AcpConnected) {
+      state = connected.copyWith(
+        recentSessions: _mergeSessionLists(<SessionInfo>[
+          SessionInfo(
+            sessionId: session.sessionId,
+            cwd: spec.cwd,
+            additionalDirectories: spec.additionalDirectories,
+          ),
+        ], connected.recentSessions),
+      );
+    }
+    for (final update in updates) {
+      _applySessionUpdate(update, publish: false);
+    }
+    for (var index = 0; index < _messages.length; index++) {
+      _messages[index] = _messages[index].copyWith(isStreaming: false);
+    }
+    _publishState();
+  }
+
+  Future<void> _detachActiveSession({
+    bool sessionAlreadyDisposed = false,
+  }) async {
+    final session = _session;
+    final terminals = _terminals.values.toList(growable: false);
+    _session = null;
+    _activeSessionState = null;
+    _sessionRootsCanonical.clear();
+    _messages.clear();
+    _activeTurn?.cancelTimer?.cancel();
+    _activeTurn = null;
+    _isPrompting = false;
+    for (final pending in _permissionQueue) {
+      pending.complete(const PermissionCancelled());
+    }
+    _permissionQueue.clear();
+    _terminals.clear();
+    if (!sessionAlreadyDisposed) session?.dispose();
+    await Future.wait<void>([
+      for (final terminal in terminals) terminal.dispose(),
+    ]);
+    _publishState();
+  }
+
   Future<void> disconnect() async {
     final generation = ++_lifecycleGeneration;
     await _cleanup();
@@ -596,14 +1001,428 @@ final class AcpAgentNotifier extends Notifier<AcpAgentState> {
         ? _permissionQueue.first.prompt
         : null;
 
-    state = AcpConnected(
-      agentInfo: current.agentInfo,
-      sessionId: current.sessionId,
-      modes: current.modes,
-      messages: List.unmodifiable(_messages),
-      pendingPermission: promptHead,
-      isPrompting: _isPrompting,
+    final active = _activeSessionState;
+    state = current.copyWith(
+      sessionDefaults: _defaultSessionSpec,
+      activeSession: active?.copyWith(
+        messages: List.unmodifiable(_messages),
+        pendingPermission: promptHead,
+        isPrompting: _isPrompting,
+      ),
     );
+  }
+
+  bool _beginAction(AcpBusyAction action) {
+    final current = state;
+    if (current is! AcpConnected || current.busy != null || _isPrompting) {
+      return false;
+    }
+    state = current.copyWith(busy: action, lastError: null);
+    return true;
+  }
+
+  void _endAction({String? error, AcpAuthStatus? authStatus}) {
+    final current = state;
+    if (current is! AcpConnected) return;
+    state = current.copyWith(
+      busy: null,
+      lastError: error,
+      authStatus: authStatus,
+    );
+  }
+
+  void _setLastError(String message) {
+    final current = state;
+    if (current is AcpConnected) {
+      state = current.copyWith(lastError: message);
+    }
+  }
+
+  void _setAuthRequired(String message) {
+    final current = state;
+    if (current is AcpConnected) {
+      state = current.copyWith(
+        authStatus: AcpAuthStatus.required,
+        lastError: message,
+      );
+    }
+  }
+
+  AcpAuthStatus _authStatusAfterError(Object error, AcpConnected connected) {
+    if (error is RpcError && error.code == ErrorCode.authRequired.code) {
+      return AcpAuthStatus.required;
+    }
+    return connected.authStatus;
+  }
+
+  void _beginPendingSession(String? sessionId, {bool captureUnknown = false}) {
+    _pendingSessionId = sessionId;
+    _captureUnknownPendingSession = captureUnknown;
+    _pendingSessionUpdates.clear();
+    _pendingSessionOverflowError = null;
+  }
+
+  void _clearPendingSession() {
+    _pendingSessionId = null;
+    _captureUnknownPendingSession = false;
+    _pendingSessionUpdates.clear();
+    _pendingSessionOverflowError = null;
+  }
+
+  void _throwIfPendingSessionOverflow() {
+    final error = _pendingSessionOverflowError;
+    if (error != null) throw StateError(error);
+  }
+
+  void _handleSessionUpdateNotification(Object? params) {
+    final notification = _parseSessionUpdate(params);
+    if (notification == null) return;
+    final acceptsPending =
+        notification.sessionId == _pendingSessionId ||
+        (_captureUnknownPendingSession && _pendingSessionId == null);
+    if (acceptsPending) {
+      final retainedCount = _pendingSessionUpdates.values.fold<int>(
+        0,
+        (count, updates) => count + updates.length,
+      );
+      if (retainedCount >= _maximumPendingSessionUpdates) {
+        _pendingSessionOverflowError =
+            'Session setup emitted more than $_maximumPendingSessionUpdates updates; '
+            'the session was not opened because partial history is unsafe.';
+        return;
+      }
+      _pendingSessionUpdates
+          .putIfAbsent(notification.sessionId, () => <SessionUpdate>[])
+          .add(notification.update);
+      return;
+    }
+    if (notification.sessionId == _session?.sessionId) {
+      _applySessionUpdate(notification.update);
+    }
+  }
+
+  void _applySessionUpdate(SessionUpdate update, {bool publish = true}) {
+    var sessionState = _activeSessionState;
+    if (sessionState == null) return;
+    switch (update) {
+      case UserMessageChunk(:final chunk):
+        final turn = _activeTurn;
+        if (turn != null && _isActiveTurn(turn)) {
+          final firstMessageId = turn.userEchoMessageId;
+          if (turn.userEchoContent.isEmpty ||
+              chunk.messageId == null ||
+              firstMessageId == null ||
+              chunk.messageId == firstMessageId) {
+            turn.userEchoMessageId ??= chunk.messageId;
+            turn.userEchoContent.add(chunk.content);
+          } else {
+            _appendMessageChunk(AcpMessageRole.user, chunk);
+          }
+          if (turn.userEchoMessageId != null) {
+            _messages[turn.userIndex] = _messages[turn.userIndex].copyWith(
+              messageId: turn.userEchoMessageId,
+            );
+          }
+        } else {
+          _appendMessageChunk(AcpMessageRole.user, chunk);
+        }
+      case AgentMessageChunk(:final chunk):
+        _appendMessageChunk(AcpMessageRole.assistant, chunk);
+      case AgentThoughtChunk(:final chunk):
+        final text = _extractText(chunk.content);
+        if (text.isNotEmpty) _appendThought(text);
+      case ToolCallUpdateSession(:final toolCall):
+        final toolCalls = Map<String, AcpToolCallState>.of(
+          sessionState.toolCalls,
+        )..[toolCall.toolCallId] = AcpToolCallState.fromToolCall(toolCall);
+        sessionState = sessionState.copyWith(toolCalls: toolCalls);
+        _attachToolCall(toolCall.toolCallId);
+      case ToolCallStatusUpdate(:final update):
+        final toolCalls = Map<String, AcpToolCallState>.of(
+          sessionState.toolCalls,
+        );
+        toolCalls[update.toolCallId] =
+            toolCalls[update.toolCallId]?.merge(update) ??
+            AcpToolCallState.fromUpdate(update);
+        sessionState = sessionState.copyWith(toolCalls: toolCalls);
+        _attachToolCall(update.toolCallId);
+      case PlanUpdate(:final plan):
+        sessionState = sessionState.copyWith(plan: plan);
+      case AvailableCommandsSessionUpdate(:final update):
+        sessionState = sessionState.copyWith(
+          availableCommands: update.availableCommands,
+        );
+      case CurrentModeSessionUpdate(:final currentModeId):
+        final currentModes = sessionState.modes;
+        sessionState = sessionState.copyWith(
+          modes: SessionModeState(
+            currentModeId: currentModeId,
+            availableModes: currentModes?.availableModes ?? const [],
+            meta: currentModes?.meta,
+          ),
+        );
+      case ConfigOptionSessionUpdate(:final configOptions):
+        sessionState = sessionState.copyWith(configOptions: configOptions);
+      case SessionInfoSessionUpdate(:final title, :final updatedAt):
+        sessionState = sessionState.copyWith(
+          title: title ?? sessionState.title,
+          updatedAt: updatedAt ?? sessionState.updatedAt,
+        );
+        _updateRecentSessionInfo(
+          sessionState.sessionId,
+          title: title,
+          updatedAt: updatedAt,
+        );
+      case UsageSessionUpdate(
+        :final used,
+        :final size,
+        :final cost,
+        :final meta,
+      ):
+        final currentUsage = sessionState.usage;
+        sessionState = sessionState.copyWith(
+          usage: UsageUpdate(
+            used: used ?? currentUsage?.used,
+            size: size ?? currentUsage?.size,
+            cost: cost ?? currentUsage?.cost,
+            meta: meta.isEmpty ? currentUsage?.meta : meta,
+          ),
+        );
+      case _:
+        return;
+    }
+    _activeSessionState = sessionState;
+    if (publish) _publishState();
+  }
+
+  void _appendMessageChunk(AcpMessageRole role, ContentChunk chunk) {
+    int? index;
+    final turn = _activeTurn;
+    if (role == AcpMessageRole.assistant &&
+        turn != null &&
+        _isActiveTurn(turn)) {
+      index = _activeAssistantMessageIndex(turn, chunk.messageId);
+    } else if (chunk.messageId != null) {
+      for (var candidate = _messages.length - 1; candidate >= 0; candidate--) {
+        final message = _messages[candidate];
+        if (message.role == role && message.messageId == chunk.messageId) {
+          index = candidate;
+          break;
+        }
+      }
+    } else if (_messages.isNotEmpty &&
+        _messages.last.role == role &&
+        _messages.last.isStreaming) {
+      index = _messages.length - 1;
+    }
+
+    if (index == null) {
+      index = _messages.length;
+      _messages.add(
+        AcpChatMessage(
+          role: role,
+          text: '',
+          messageId: chunk.messageId,
+          isStreaming: true,
+        ),
+      );
+    }
+    final current = _messages[index];
+    final content = <ContentBlock>[...current.content, chunk.content];
+    _messages[index] = current.copyWith(
+      text: current.text + _extractText(chunk.content),
+      messageId: chunk.messageId ?? current.messageId,
+      content: List.unmodifiable(content),
+    );
+  }
+
+  void _appendThought(String text) {
+    final index = _assistantMessageIndex(create: true);
+    final current = _messages[index];
+    _messages[index] = current.copyWith(
+      thoughts: List.unmodifiable(<String>[...current.thoughts, text]),
+    );
+  }
+
+  void _attachToolCall(String toolCallId) {
+    final index = _assistantMessageIndex(create: true);
+    final current = _messages[index];
+    if (current.toolCallIds.contains(toolCallId)) return;
+    _messages[index] = current.copyWith(
+      toolCallIds: List.unmodifiable(<String>[
+        ...current.toolCallIds,
+        toolCallId,
+      ]),
+    );
+  }
+
+  int _assistantMessageIndex({required bool create}) {
+    final turn = _activeTurn;
+    if (turn != null && _isActiveTurn(turn)) {
+      return turn.currentAssistantIndex;
+    }
+    for (var index = _messages.length - 1; index >= 0; index--) {
+      if (_messages[index].role == AcpMessageRole.assistant) return index;
+    }
+    if (!create) return -1;
+    final index = _messages.length;
+    _messages.add(
+      const AcpChatMessage(
+        role: AcpMessageRole.assistant,
+        text: '',
+        isStreaming: true,
+      ),
+    );
+    return index;
+  }
+
+  int _activeAssistantMessageIndex(_ActiveTurn turn, String? messageId) {
+    if (messageId != null) {
+      for (
+        var index = _messages.length - 1;
+        index >= turn.assistantIndex;
+        index--
+      ) {
+        final message = _messages[index];
+        if (message.role == AcpMessageRole.assistant &&
+            message.messageId == messageId) {
+          turn.currentAssistantIndex = index;
+          return index;
+        }
+      }
+    }
+
+    final currentIndex = turn.currentAssistantIndex;
+    final current = _messages[currentIndex];
+    if (messageId == null ||
+        current.messageId == null ||
+        current.messageId == messageId) {
+      return currentIndex;
+    }
+
+    if (current.isStreaming) {
+      _messages[currentIndex] = current.copyWith(isStreaming: false);
+    }
+    final index = _messages.length;
+    _messages.add(
+      AcpChatMessage(
+        role: AcpMessageRole.assistant,
+        text: '',
+        messageId: messageId,
+        isStreaming: true,
+      ),
+    );
+    turn.currentAssistantIndex = index;
+    return index;
+  }
+
+  List<int> _turnAssistantMessageIndices(_ActiveTurn turn) {
+    return <int>[
+      for (var index = turn.assistantIndex; index < _messages.length; index++)
+        if (_messages[index].role == AcpMessageRole.assistant) index,
+    ];
+  }
+
+  void _updateRecentSessionInfo(
+    String sessionId, {
+    String? title,
+    String? updatedAt,
+  }) {
+    final current = state;
+    if (current is! AcpConnected) return;
+    state = current.copyWith(
+      recentSessions: current.recentSessions
+          .map((session) {
+            if (session.sessionId != sessionId) return session;
+            return SessionInfo(
+              sessionId: session.sessionId,
+              cwd: session.cwd,
+              additionalDirectories: session.additionalDirectories,
+              title: title ?? session.title,
+              updatedAt: updatedAt ?? session.updatedAt,
+              meta: session.meta,
+            );
+          })
+          .toList(growable: false),
+    );
+  }
+
+  AcpSessionSpec _canonicalizeSessionSpec({
+    required String cwd,
+    required List<String> additionalDirectories,
+    required List<McpServer> mcpServers,
+  }) {
+    final canonicalCwd = Directory(p.absolute(cwd)).resolveSymbolicLinksSync();
+    final directories = additionalDirectories
+        .map((directory) {
+          final requested = p.isAbsolute(directory)
+              ? directory
+              : p.join(canonicalCwd, directory);
+          return Directory(requested).resolveSymbolicLinksSync();
+        })
+        .toSet()
+        .where((directory) => !p.equals(directory, canonicalCwd))
+        .toList(growable: false);
+    return AcpSessionSpec(
+      cwd: canonicalCwd,
+      additionalDirectories: directories,
+      mcpServers: List.unmodifiable(mcpServers),
+    );
+  }
+
+  void _validateSessionSpec(
+    AcpSessionSpec spec,
+    AgentCapabilities capabilities,
+  ) {
+    if (spec.additionalDirectories.isNotEmpty &&
+        capabilities.sessionCapabilities?.additionalDirectories == null) {
+      throw StateError(
+        'The connected agent does not support additional session directories.',
+      );
+    }
+    final names = <String>{};
+    for (final server in spec.mcpServers) {
+      final name = server.name.trim();
+      if (name.isEmpty) {
+        throw StateError('MCP servers require a non-empty name.');
+      }
+      if (!names.add(name)) {
+        throw StateError('MCP server names must be unique: ${server.name}.');
+      }
+      switch (server) {
+        case McpServerHttp(:final url):
+          if (capabilities.mcpCapabilities?.http != true) {
+            throw StateError(
+              'The connected agent does not support HTTP MCP servers.',
+            );
+          }
+          _requireHttpUri(url, server.name);
+        case McpServerSse(:final url):
+          if (capabilities.mcpCapabilities?.sse != true) {
+            throw StateError(
+              'The connected agent does not support SSE MCP servers.',
+            );
+          }
+          _requireHttpUri(url, server.name);
+        case McpServerStdio(:final command):
+          if (command.trim().isEmpty || !p.isAbsolute(command)) {
+            throw StateError(
+              'MCP stdio server "${server.name}" requires an absolute executable path.',
+            );
+          }
+      }
+    }
+  }
+
+  void _requireHttpUri(String value, String serverName) {
+    final uri = Uri.tryParse(value);
+    if (uri == null ||
+        !uri.hasAuthority ||
+        (uri.scheme != 'http' && uri.scheme != 'https')) {
+      throw StateError(
+        'MCP server "$serverName" requires an absolute HTTP(S) URL.',
+      );
+    }
   }
 
   // ===========================================================================
@@ -612,16 +1431,13 @@ final class AcpAgentNotifier extends Notifier<AcpAgentState> {
 
   ClientRole _buildClientRole() {
     return ClientRole()
-        .handleCancellableRequest(RequestPermissionRequest.methodName, (
-          params,
-          ctx,
-          cancellation,
-        ) async {
-          final request = RequestPermissionRequest.fromJson(params);
+        .onRequestPermission((context, request, cancellation) async {
           _requireActiveSession(request.sessionId);
+          final toolCall = _mergePermissionToolCall(request.toolCall);
           final pending = _PendingPermission(
             id: 'permission-$_lifecycleGeneration-${_permissionCounter++}',
             request: request,
+            toolCall: toolCall,
           );
           _permissionQueue.add(pending);
           _publishState();
@@ -634,14 +1450,9 @@ final class AcpAgentNotifier extends Notifier<AcpAgentState> {
             pending.complete(const PermissionCancelled());
             _publishState();
           }
-          return outcome.toJson();
+          return RequestPermissionResponse(outcome: outcome);
         })
-        .handleCancellableRequest(ReadTextFileRequest.methodName, (
-          params,
-          ctx,
-          cancellation,
-        ) async {
-          final request = ReadTextFileRequest.fromJson(params);
+        .onReadTextFile((context, request, cancellation) async {
           _requireActiveSession(request.sessionId);
           if (request.line case final line? when line < 1) {
             throw _structuredError(
@@ -657,9 +1468,9 @@ final class AcpAgentNotifier extends Notifier<AcpAgentState> {
           }
 
           try {
-            final filePath = confinePathToRoot(
+            final filePath = confinePathToRoots(
               request.path,
-              _sessionRootCanonical!,
+              _sessionRootsCanonical,
             );
             final content = await readAcpTextFile(
               File(filePath),
@@ -669,7 +1480,7 @@ final class AcpAgentNotifier extends Notifier<AcpAgentState> {
                   cancellation.isCancelled ||
                   _session?.sessionId != request.sessionId,
             );
-            return ReadTextFileResponse(content: content).toJson();
+            return ReadTextFileResponse(content: content);
           } on _AcpRequestCancelled {
             throw _structuredError(
               ErrorCode.invalidRequest,
@@ -694,17 +1505,12 @@ final class AcpAgentNotifier extends Notifier<AcpAgentState> {
             );
           }
         })
-        .handleCancellableRequest(WriteTextFileRequest.methodName, (
-          params,
-          ctx,
-          cancellation,
-        ) async {
-          final request = WriteTextFileRequest.fromJson(params);
+        .onWriteTextFile((context, request, cancellation) async {
           _requireActiveSession(request.sessionId);
           try {
-            final filePath = confinePathToRoot(
+            final filePath = confinePathToRoots(
               request.path,
-              _sessionRootCanonical!,
+              _sessionRootsCanonical,
             );
             await writeAcpTextFileAtomically(
               File(filePath),
@@ -713,7 +1519,7 @@ final class AcpAgentNotifier extends Notifier<AcpAgentState> {
                   cancellation.isCancelled ||
                   _session?.sessionId != request.sessionId,
             );
-            return const WriteTextFileResponse().toJson();
+            return const WriteTextFileResponse();
           } on _AcpResourceLimitException catch (error) {
             throw _structuredError(
               ErrorCode.inaccessibleResource,
@@ -733,12 +1539,7 @@ final class AcpAgentNotifier extends Notifier<AcpAgentState> {
             );
           }
         })
-        .handleCancellableRequest(CreateTerminalRequest.methodName, (
-          params,
-          ctx,
-          cancellation,
-        ) async {
-          final request = CreateTerminalRequest.fromJson(params);
+        .onCreateTerminal((context, request, cancellation) async {
           _requireActiveSession(request.sessionId);
           if (request.outputByteLimit case final limit? when limit < 0) {
             throw _structuredError(
@@ -789,7 +1590,7 @@ final class AcpAgentNotifier extends Notifier<AcpAgentState> {
               _requireActiveSession(request.sessionId);
             }
             _terminals[terminal.id] = terminal;
-            return CreateTerminalResponse(terminalId: terminal.id).toJson();
+            return CreateTerminalResponse(terminalId: terminal.id);
           } on _AcpRequestCancelled {
             throw _structuredError(
               ErrorCode.invalidRequest,
@@ -804,22 +1605,16 @@ final class AcpAgentNotifier extends Notifier<AcpAgentState> {
             );
           }
         })
-        .handleRequest('terminal/output', (params, ctx) async {
-          final request = TerminalOutputRequest.fromJson(params);
+        .onTerminalOutput((context, request, cancellation) async {
           _requireActiveSession(request.sessionId);
           final terminal = _requireTerminal(request.terminalId);
           return TerminalOutputResponse(
             output: terminal.output,
             truncated: terminal.truncated,
             exitStatus: terminal.exitStatus,
-          ).toJson();
+          );
         })
-        .handleCancellableRequest(WaitForTerminalExitRequest.methodName, (
-          params,
-          ctx,
-          cancellation,
-        ) async {
-          final request = WaitForTerminalExitRequest.fromJson(params);
+        .onWaitForTerminalExit((context, request, cancellation) async {
           _requireActiveSession(request.sessionId);
           final terminal = _requireTerminal(request.terminalId);
           final exitCode = await Future.any<int?>([
@@ -827,20 +1622,18 @@ final class AcpAgentNotifier extends Notifier<AcpAgentState> {
             cancellation.whenCancelled.then((_) => null),
           ]);
           if (cancellation.isCancelled) {
-            return const WaitForTerminalExitResponse().toJson();
+            return const WaitForTerminalExitResponse();
           }
-          return WaitForTerminalExitResponse(exitCode: exitCode).toJson();
+          return WaitForTerminalExitResponse(exitCode: exitCode);
         })
-        .handleRequest('terminal/release', (params, ctx) async {
-          final request = ReleaseTerminalRequest.fromJson(params);
+        .onReleaseTerminal((context, request, cancellation) async {
           _requireActiveSession(request.sessionId);
           final terminal = _requireTerminal(request.terminalId);
           _terminals.remove(request.terminalId);
           await terminal.dispose();
-          return const ReleaseTerminalResponse().toJson();
+          return const ReleaseTerminalResponse();
         })
-        .handleRequest('terminal/kill', (params, ctx) async {
-          final request = KillTerminalRequest.fromJson(params);
+        .onKillTerminal((context, request, cancellation) async {
           _requireActiveSession(request.sessionId);
           final terminal = _requireTerminal(request.terminalId);
           if (!terminal.kill()) {
@@ -849,8 +1642,25 @@ final class AcpAgentNotifier extends Notifier<AcpAgentState> {
               'Failed to terminate terminal ${request.terminalId}.',
             );
           }
-          return const KillTerminalResponse().toJson();
+          return const KillTerminalResponse();
         });
+  }
+
+  AcpToolCallState _mergePermissionToolCall(ToolCallUpdate update) {
+    final session = _activeSessionState;
+    final existing = session?.toolCalls[update.toolCallId];
+    final merged = existing == null
+        ? AcpToolCallState.fromUpdate(update)
+        : existing.merge(update);
+    if (session != null) {
+      _activeSessionState = session.copyWith(
+        toolCalls: Map.unmodifiable({
+          ...session.toolCalls,
+          update.toolCallId: merged,
+        }),
+      );
+    }
+    return merged;
   }
 
   // ===========================================================================
@@ -873,14 +1683,15 @@ final class AcpAgentNotifier extends Notifier<AcpAgentState> {
   // ===========================================================================
 
   /// Resolves the terminal [requested] cwd to a path confined within the
-  /// active session root. Invalid or escaping paths are rejected rather than
+  /// active session roots. Invalid or escaping paths are rejected rather than
   /// silently running the command from a different directory.
   String _resolveTerminalCwd(String? requested) {
-    final root = _sessionRootCanonical;
-    if (root == null) {
+    if (_sessionRootsCanonical.isEmpty) {
       throw StateError('No active ACP session root.');
     }
-    return requested == null ? root : confinePathToRoot(requested, root);
+    return requested == null
+        ? _sessionRootsCanonical.first
+        : confinePathToRoots(requested, _sessionRootsCanonical);
   }
 
   _ManagedTerminal _requireTerminal(String terminalId) {
@@ -916,8 +1727,11 @@ final class AcpAgentNotifier extends Notifier<AcpAgentState> {
     _agentStderr.write(line);
     final overflow = _agentStderr.length - _maximumAgentStderrChars;
     if (overflow > 0) {
-      final cut = _agentStderr.toString().indexOf('\n', overflow);
-      final kept = cut >= 0 ? _agentStderr.toString().substring(cut + 1) : '';
+      final text = _agentStderr.toString();
+      final cut = text.indexOf('\n', overflow);
+      final kept = cut >= 0
+          ? text.substring(cut + 1)
+          : text.substring(text.length - _maximumAgentStderrChars);
       _agentStderr
         ..clear()
         ..write(kept);
@@ -937,6 +1751,12 @@ final class AcpAgentNotifier extends Notifier<AcpAgentState> {
     _agentProcess = null;
     _client = null;
     _session = null;
+    _defaultSessionSpec = null;
+    _activeSessionState = null;
+    _sessionRootsCanonical.clear();
+    _sessionUpdateSub?.dispose();
+    _sessionUpdateSub = null;
+    _clearPendingSession();
     _agentStderr.clear();
     _stderrSub?.cancel();
     _stderrSub = null;
@@ -968,6 +1788,12 @@ final class AcpAgentNotifier extends Notifier<AcpAgentState> {
     _agentProcess = null;
     _client = null;
     _session = null;
+    _defaultSessionSpec = null;
+    _activeSessionState = null;
+    _sessionRootsCanonical.clear();
+    _sessionUpdateSub?.dispose();
+    _sessionUpdateSub = null;
+    _clearPendingSession();
     _agentStderr.clear();
     _stderrSub?.cancel();
     _stderrSub = null;
@@ -1000,6 +1826,26 @@ final acpAgentProvider = NotifierProvider<AcpAgentNotifier, AcpAgentState>(
 // =============================================================================
 // Pure-logic functions (testable)
 // =============================================================================
+
+/// Resolves [path] within the primary session cwd or one advertised additional
+/// directory. Relative paths always use the primary cwd; absolute paths may
+/// target any advertised root.
+String confinePathToRoots(String path, List<String> roots) {
+  if (roots.isEmpty) {
+    throw const AcpPathEscapeException('No active ACP session roots.');
+  }
+  if (!p.isAbsolute(path)) return confinePathToRoot(path, roots.first);
+  for (final root in roots) {
+    try {
+      return confinePathToRoot(path, root);
+    } on AcpPathEscapeException {
+      // Try the next explicitly advertised root.
+    }
+  }
+  throw AcpPathEscapeException(
+    'Path "$path" resolves outside every active session root.',
+  );
+}
 
 /// Resolves [path] to a canonical absolute path confined within [root].
 ///
@@ -1262,15 +2108,46 @@ RpcError _structuredError(ErrorCode code, String message) =>
 // Internal helpers
 // =============================================================================
 
+List<SessionInfo> _mergeSessionLists(
+  List<SessionInfo> existing,
+  List<SessionInfo> incoming,
+) {
+  final merged = <String, SessionInfo>{
+    for (final session in existing) session.sessionId: session,
+    for (final session in incoming) session.sessionId: session,
+  };
+  return List<SessionInfo>.unmodifiable(merged.values);
+}
+
+Set<String> _selectOptionValues(SessionConfigSelectOptions options) {
+  return switch (options) {
+    SessionConfigUngroupedOptions(:final options) => {
+      for (final option in options) option.value,
+    },
+    SessionConfigGroupedOptions(:final groups) => {
+      for (final group in groups)
+        for (final option in group.options) option.value,
+    },
+  };
+}
+
+String _contentText(Iterable<ContentBlock> content) =>
+    content.whereType<TextContentBlock>().map((block) => block.text).join();
+
 /// A pending permission request awaiting user response.
 class _PendingPermission {
-  _PendingPermission({required this.id, required this.request});
+  _PendingPermission({
+    required this.id,
+    required this.request,
+    required this.toolCall,
+  });
 
   final String id;
   final RequestPermissionRequest request;
+  final AcpToolCallState toolCall;
   AcpPermissionPrompt get prompt => AcpPermissionPrompt(
     requestId: id,
-    toolCall: request.toolCall,
+    toolCall: toolCall,
     options: List.unmodifiable(request.options),
   );
 
@@ -1290,12 +2167,17 @@ final class _ActiveTurn {
   _ActiveTurn({
     required this.generation,
     required this.session,
+    required this.userIndex,
     required this.assistantIndex,
   });
 
   final int generation;
   final Session session;
+  final int userIndex;
   final int assistantIndex;
+  late int currentAssistantIndex = assistantIndex;
+  final List<ContentBlock> userEchoContent = [];
+  String? userEchoMessageId;
   Timer? cancelTimer;
 }
 
@@ -1491,7 +2373,115 @@ SessionUpdateNotification? _parseSessionUpdate(Object? params) {
   return null;
 }
 
+final class AcpPromptValidationException implements Exception {
+  const AcpPromptValidationException(this.message);
+
+  final String message;
+
+  @override
+  String toString() => message;
+}
+
+void _validatePromptContent(
+  List<ContentBlock> content,
+  AgentCapabilities capabilities,
+) {
+  if (content.isEmpty) {
+    throw const AcpPromptValidationException('A prompt cannot be empty.');
+  }
+  var hasMeaningfulContent = false;
+  for (final block in content) {
+    switch (block) {
+      case TextContentBlock(:final text):
+        hasMeaningfulContent |= text.trim().isNotEmpty;
+      case ImageContent(:final data, :final mimeType):
+        if (capabilities.promptCapabilities?.image != true) {
+          throw const AcpPromptValidationException(
+            'The connected agent does not support image prompts.',
+          );
+        }
+        if (!mimeType.startsWith('image/') || !_isValidBase64(data)) {
+          throw const AcpPromptValidationException(
+            'Image prompts require a valid image MIME type and base64 data.',
+          );
+        }
+        hasMeaningfulContent = true;
+      case AudioContent(:final data, :final mimeType):
+        if (capabilities.promptCapabilities?.audio != true) {
+          throw const AcpPromptValidationException(
+            'The connected agent does not support audio prompts.',
+          );
+        }
+        if (!mimeType.startsWith('audio/') || !_isValidBase64(data)) {
+          throw const AcpPromptValidationException(
+            'Audio prompts require a valid audio MIME type and base64 data.',
+          );
+        }
+        hasMeaningfulContent = true;
+      case ResourceLink(:final uri):
+        if (!(Uri.tryParse(uri)?.hasScheme ?? false)) {
+          throw const AcpPromptValidationException(
+            'Resource links require an absolute URI with a scheme.',
+          );
+        }
+        hasMeaningfulContent = true;
+      case EmbeddedResource(:final resource):
+        if (capabilities.promptCapabilities?.embeddedContext != true) {
+          throw const AcpPromptValidationException(
+            'The connected agent does not support embedded context.',
+          );
+        }
+        if (resource is BlobResourceContents &&
+            !_isValidBase64(resource.blob)) {
+          throw const AcpPromptValidationException(
+            'Embedded binary resources require valid base64 data.',
+          );
+        }
+        hasMeaningfulContent = true;
+    }
+  }
+  if (!hasMeaningfulContent) {
+    throw const AcpPromptValidationException(
+      'A prompt must contain text or an attachment.',
+    );
+  }
+  final payloadBytes = utf8
+      .encode(
+        jsonEncode(<Object?>[for (final block in content) block.toJson()]),
+      )
+      .length;
+  if (payloadBytes > _maximumPromptPayloadBytes) {
+    throw AcpPromptValidationException(
+      'The encoded prompt is ${_formatByteCount(payloadBytes)}. The ACP stdio '
+      'payload limit is ${_formatByteCount(_maximumPromptPayloadBytes)}.',
+    );
+  }
+}
+
+bool _isValidBase64(String value) {
+  if (value.isEmpty) return false;
+  try {
+    base64Decode(value);
+    return true;
+  } on FormatException {
+    return false;
+  }
+}
+
+String _formatByteCount(int bytes) {
+  if (bytes < 1024) return '$bytes B';
+  final kib = bytes / 1024;
+  if (kib < 1024) return '${kib.toStringAsFixed(1)} KiB';
+  return '${(kib / 1024).toStringAsFixed(1)} MiB';
+}
+
 String _extractText(ContentBlock block) {
   if (block is TextContentBlock) return block.text;
   return '';
 }
+
+bool _messageHasContent(AcpChatMessage message) =>
+    message.text.isNotEmpty ||
+    message.thoughts.isNotEmpty ||
+    message.toolCallIds.isNotEmpty ||
+    message.content.isNotEmpty;

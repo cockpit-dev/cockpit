@@ -1,6 +1,7 @@
 import 'dart:convert';
 
-import 'package:acpd/acpd.dart' show PermissionOption, PermissionOptionKind;
+import 'package:acpd/acpd.dart'
+    show PermissionOption, PermissionOptionKind, TextContentBlock;
 import 'package:cockpit_console/src/providers/acp_provider.dart';
 import 'package:cockpit_console/src/providers/agent_presets.dart';
 import 'package:cockpit_console/src/providers/core_providers.dart';
@@ -9,12 +10,15 @@ import 'package:cockpit_console/src/providers/preferences_store.dart';
 import 'package:cockpit_console/src/theme/console_control_style.dart';
 import 'package:cockpit_console/src/theme/console_shapes.dart';
 import 'package:cockpit_console/src/ui/navigation/console_nav.dart';
+import 'package:cockpit_console/src/ui/widgets/acp_connection_options.dart';
+import 'package:cockpit_console/src/ui/widgets/acp_prompt_composer.dart';
+import 'package:cockpit_console/src/ui/widgets/acp_session_controls.dart';
+import 'package:cockpit_console/src/ui/widgets/acp_tool_call_view.dart';
 import 'package:cockpit_console/src/ui/widgets/console_form_controls.dart';
 import 'package:cockpit_console/src/ui/widgets/screen_scaffold.dart';
 import 'package:cockpit_protocol/cockpit_protocol.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -102,15 +106,17 @@ final class _OnboardingView extends HookConsumerWidget {
     final theme = Theme.of(context);
     final prefsAsync = ref.watch(preferencesProvider);
     final selectedAgentId = useState<String?>(null);
-    final sessionCwd = useState<String?>(null);
+    final sessionCwdController = useTextEditingController();
     final customExecutableController = useTextEditingController();
     final customArgsController = useTextEditingController();
+    final connectionOptions = useState(const AcpConnectionOptions());
+    final sessionCwd = useValueListenable(sessionCwdController);
     final customExecutable = useValueListenable(customExecutableController);
     final preferencesLoaded = useRef(false);
     final isCustomAgent = selectedAgentId.value == _customAgentId;
     final selectedPreset = findAgentPreset(selectedAgentId.value);
     final canConnect =
-        sessionCwd.value != null &&
+        sessionCwd.text.trim().isNotEmpty &&
         (isCustomAgent
             ? customExecutable.text.trim().isNotEmpty
             : selectedPreset != null);
@@ -122,7 +128,9 @@ final class _OnboardingView extends HookConsumerWidget {
           if (preferencesLoaded.value) return;
           preferencesLoaded.value = true;
           selectedAgentId.value ??= prefs.lastAgentId;
-          sessionCwd.value ??= prefs.lastSessionCwd;
+          if (sessionCwdController.text.isEmpty) {
+            sessionCwdController.text = prefs.lastSessionCwd ?? '';
+          }
           customExecutableController.text = prefs.customAgentExecutable ?? '';
           customArgsController.text = prefs.customAgentArgs.join('\n');
         },
@@ -133,8 +141,8 @@ final class _OnboardingView extends HookConsumerWidget {
 
     Future<void> connect() async {
       final selectedId = selectedAgentId.value;
-      final cwd = sessionCwd.value;
-      if (selectedId == null || cwd == null) return;
+      final cwd = sessionCwdController.text.trim();
+      if (selectedId == null || cwd.isEmpty) return;
 
       final preset = findAgentPreset(selectedId);
       final String executable;
@@ -168,6 +176,9 @@ final class _OnboardingView extends HookConsumerWidget {
               command: executable,
               args: arguments,
               sessionCwd: cwd,
+              additionalDirectories:
+                  connectionOptions.value.additionalDirectories,
+              mcpServers: connectionOptions.value.mcpServers,
             ),
           );
     }
@@ -248,23 +259,25 @@ final class _OnboardingView extends HookConsumerWidget {
               const SizedBox(height: 24),
 
               // Directory picker.
-              Text(
-                'Working directory',
-                style: theme.textTheme.titleSmall?.copyWith(fontSize: 12),
-              ),
-              const SizedBox(height: 8),
               _DirectoryPicker(
-                path: sessionCwd.value,
+                controller: sessionCwdController,
+                enabled: !connecting,
                 onPick: () async {
                   final dir = await FilePicker.getDirectoryPath(
                     dialogTitle: 'Select working directory',
                   );
                   if (dir != null) {
-                    sessionCwd.value = dir;
+                    sessionCwdController.text = dir;
                   }
                 },
               ),
-              const SizedBox(height: 28),
+              const SizedBox(height: 16),
+              AcpConnectionOptionsEditor(
+                value: connectionOptions.value,
+                enabled: !connecting,
+                onChanged: (value) => connectionOptions.value = value,
+              ),
+              const SizedBox(height: 24),
 
               // Connect button.
               FilledButton.icon(
@@ -353,6 +366,7 @@ final class _AgentChip extends StatelessWidget {
       selected: selected,
       label: preset.name,
       hint: preset.description,
+      onTap: onTap,
       excludeSemantics: true,
       child: InkWell(
         onTap: onTap,
@@ -459,57 +473,33 @@ final class _CustomAgentFields extends StatelessWidget {
 }
 
 final class _DirectoryPicker extends StatelessWidget {
-  const _DirectoryPicker({required this.path, required this.onPick});
+  const _DirectoryPicker({
+    required this.controller,
+    required this.enabled,
+    required this.onPick,
+  });
 
-  final String? path;
+  final TextEditingController controller;
+  final bool enabled;
   final VoidCallback onPick;
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return SizedBox(
-      height: ConsoleControlStyle.height,
-      child: InkWell(
-        onTap: onPick,
-        customBorder: ConsoleShapes.border(radius: ConsoleShapes.controlRadius),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10),
-          decoration: ConsoleShapes.decoration(
-            color: theme.colorScheme.surfaceContainerLow,
-            borderColor: theme.dividerColor,
-            radius: ConsoleShapes.controlRadius,
-          ),
-          child: Row(
-            children: [
-              Icon(
-                LucideIcons.folderOpen,
-                size: 16,
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  path ?? 'Click to select a directory',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontFamily: path != null ? 'monospace' : null,
-                    color: path != null
-                        ? theme.colorScheme.onSurface
-                        : theme.colorScheme.onSurfaceVariant,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              Icon(
-                LucideIcons.chevronRight,
-                size: 14,
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ],
-          ),
-        ),
+    return ConsoleTextField(
+      controller: controller,
+      enabled: enabled,
+      label: 'Working directory',
+      autocorrect: false,
+      enableSuggestions: false,
+      hint: '/absolute/path/to/project',
+      prefixIcon: const Icon(LucideIcons.folderOpen, size: 16),
+      suffixIcon: IconButton(
+        onPressed: enabled ? onPick : null,
+        icon: const Icon(LucideIcons.folderSearch, size: 16),
+        tooltip: 'Browse directories',
+        style: ConsoleControlStyle.fieldIconButtonStyle(),
       ),
+      style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
     );
   }
 }
@@ -524,11 +514,7 @@ final class _ChatView extends HookConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final messages = connection.messages;
-    final inputController = useTextEditingController();
-    final input = useValueListenable(inputController);
-    final dispatching = useRef(false);
     final scrollCtrl = useScrollController();
-    final canSend = input.text.trim().isNotEmpty && !connection.isPrompting;
 
     useEffect(() {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -542,27 +528,6 @@ final class _ChatView extends HookConsumerWidget {
       });
       return null;
     }, [messages]);
-
-    Future<void> send() async {
-      final text = inputController.text.trim();
-      if (text.isEmpty || connection.isPrompting || dispatching.value) return;
-
-      dispatching.value = true;
-      try {
-        // sendPrompt returns true only when the turn was actually dispatched.
-        // Clearing on that boolean — rather than a post-dispatch state read —
-        // guarantees a rejected concurrent submit never discards the user's
-        // text.
-        final dispatched = await ref
-            .read(acpAgentProvider.notifier)
-            .sendPrompt(text);
-        if (dispatched) {
-          inputController.clear();
-        }
-      } finally {
-        dispatching.value = false;
-      }
-    }
 
     void sendToEditor(_ExtractedCockpitDocument document) {
       final workspaceId = ref.read(selectedWorkspaceIdProvider);
@@ -582,17 +547,18 @@ final class _ChatView extends HookConsumerWidget {
     }
 
     final pendingPermission = connection.pendingPermission;
-    return Column(
+    final conversation = Column(
       children: [
         Expanded(
           child: messages.isEmpty
-              ? _ChatEmpty()
+              ? _ChatEmpty(connection: connection)
               : ListView.builder(
                   controller: scrollCtrl,
                   padding: const EdgeInsets.symmetric(vertical: 16),
                   itemCount: messages.length,
                   itemBuilder: (context, index) => _MessageBubble(
                     message: messages[index],
+                    toolCalls: connection.activeSession?.toolCalls ?? const {},
                     onSendToEditor: sendToEditor,
                   ),
                 ),
@@ -610,14 +576,68 @@ final class _ChatView extends HookConsumerWidget {
           ),
         ],
         Container(height: 1, color: Theme.of(context).dividerColor),
-        _InputBar(
-          controller: inputController,
-          canSend: canSend,
-          isPrompting: connection.isPrompting,
-          onSend: send,
+        AcpPromptComposer(
+          connection: connection,
+          onSend: ref.read(acpAgentProvider.notifier).sendPromptContent,
           onCancel: () => ref.read(acpAgentProvider.notifier).cancelTurn(),
         ),
       ],
+    );
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxWidth >= 920) {
+          return Row(
+            children: [
+              Container(
+                width: 304,
+                color: Theme.of(context).colorScheme.surfaceContainerLowest,
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(16),
+                  child: AcpSessionControls(connection: connection),
+                ),
+              ),
+              Container(width: 1, color: Theme.of(context).dividerColor),
+              Expanded(child: conversation),
+            ],
+          );
+        }
+        return Column(
+          children: [
+            Material(
+              color: Theme.of(context).colorScheme.surfaceContainerLowest,
+              child: ExpansionTile(
+                initiallyExpanded: connection.activeSession == null,
+                leading: const Icon(LucideIcons.slidersHorizontal, size: 16),
+                title: Text(
+                  connection.activeSession?.title ??
+                      (connection.activeSession == null
+                          ? 'Agent setup'
+                          : 'Session controls'),
+                ),
+                subtitle: Text(
+                  connection.activeSession?.cwd ??
+                      _authStatusLabel(connection.authStatus),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                children: [
+                  ConstrainedBox(
+                    constraints: BoxConstraints(
+                      maxHeight: constraints.maxHeight * 0.58,
+                    ),
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                      child: AcpSessionControls(connection: connection),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Container(height: 1, color: Theme.of(context).dividerColor),
+            Expanded(child: conversation),
+          ],
+        );
+      },
     );
   }
 }
@@ -632,8 +652,10 @@ final class _PermissionSurface extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final toolCall = prompt.toolCall;
-    final rawInput = toolCall.rawInput?.trim() ?? '';
-    final hasRawInput = rawInput.isNotEmpty;
+    final rawInput = toolCall.rawInput == null
+        ? null
+        : _formatAcpRawValue(toolCall.rawInput!);
+    final hasRawInput = rawInput != null;
     final locations = toolCall.locations;
 
     return Container(
@@ -799,9 +821,33 @@ final class _PermissionSurface extends StatelessWidget {
 }
 
 final class _ChatEmpty extends StatelessWidget {
+  const _ChatEmpty({required this.connection});
+
+  final AcpConnected connection;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final (icon, title, description) = switch ((
+      connection.authStatus,
+      connection.activeSession,
+    )) {
+      (AcpAuthStatus.required, _) => (
+        LucideIcons.lockKeyhole,
+        'Sign in to continue',
+        'Choose an authentication method in Agent setup, then finish the agent sign-in flow.',
+      ),
+      (_, null) => (
+        LucideIcons.messageSquarePlus,
+        'Create or open a session',
+        'Use Agent setup to start a new session or resume recent work.',
+      ),
+      _ => (
+        LucideIcons.messageCircle,
+        'Start a conversation',
+        'Ask about your workspace, request a change, or describe a test scenario.',
+      ),
+    };
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(32),
@@ -809,18 +855,19 @@ final class _ChatEmpty extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
-              LucideIcons.messageCircle,
+              icon,
               size: 32,
               color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
             ),
             const SizedBox(height: 12),
             Text(
-              'Start a conversation',
+              title,
               style: theme.textTheme.titleSmall?.copyWith(fontSize: 14),
             ),
             const SizedBox(height: 4),
             Text(
-              'Ask about your workspace or describe a test scenario.',
+              description,
+              textAlign: TextAlign.center,
               style: theme.textTheme.bodySmall?.copyWith(fontSize: 12),
             ),
           ],
@@ -889,9 +936,14 @@ _ExtractedCockpitDocument? _extractCockpitDocument(String message) {
 }
 
 final class _MessageBubble extends StatelessWidget {
-  const _MessageBubble({required this.message, required this.onSendToEditor});
+  const _MessageBubble({
+    required this.message,
+    required this.toolCalls,
+    required this.onSendToEditor,
+  });
 
   final AcpChatMessage message;
+  final Map<String, AcpToolCallState> toolCalls;
   final void Function(_ExtractedCockpitDocument document) onSendToEditor;
 
   @override
@@ -900,6 +952,10 @@ final class _MessageBubble extends StatelessWidget {
     final isUser = message.role == AcpMessageRole.user;
     final isError = message.role == AcpMessageRole.error;
     final extractedDocument = _extractCockpitDocument(message.text);
+    final messageToolCalls = message.toolCallIds
+        .map((id) => toolCalls[id])
+        .whereType<AcpToolCallState>()
+        .toList(growable: false);
 
     final bg = isError
         ? theme.colorScheme.error.withValues(alpha: 0.06)
@@ -959,54 +1015,26 @@ final class _MessageBubble extends StatelessWidget {
                             ),
                           const SizedBox(height: 6),
                         ],
-                        SelectableText(
-                          message.text,
-                          style: TextStyle(
-                            fontSize: 13,
-                            height: 1.5,
-                            color: fg,
+                        if (message.text.isNotEmpty)
+                          SelectableText(
+                            message.text,
+                            style: TextStyle(
+                              fontSize: 13,
+                              height: 1.5,
+                              color: fg,
+                            ),
                           ),
-                        ),
-                        if (message.toolCalls.isNotEmpty) ...[
-                          const SizedBox(height: 6),
-                          Wrap(
-                            spacing: 4,
-                            runSpacing: 4,
-                            children: [
-                              for (final tc in message.toolCalls)
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 6,
-                                    vertical: 2,
-                                  ),
-                                  decoration: ConsoleShapes.decoration(
-                                    color: theme.colorScheme.surfaceContainer,
-                                    radius: 6,
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(
-                                        LucideIcons.wrench,
-                                        size: 10,
-                                        color:
-                                            theme.colorScheme.onSurfaceVariant,
-                                      ),
-                                      const SizedBox(width: 4),
-                                      Text(
-                                        tc,
-                                        style: TextStyle(
-                                          fontSize: 10,
-                                          color: theme
-                                              .colorScheme
-                                              .onSurfaceVariant,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                            ],
-                          ),
+                        if (message.content.any(
+                          (block) => block is! TextContentBlock,
+                        )) ...[
+                          if (message.text.isNotEmpty)
+                            const SizedBox(height: 8),
+                          AcpMessageContentView(content: message.content),
+                        ],
+                        if (messageToolCalls.isNotEmpty) ...[
+                          const SizedBox(height: 8),
+                          for (final toolCall in messageToolCalls)
+                            AcpToolCallView(toolCall: toolCall),
                         ],
                         if (!isUser && extractedDocument != null) ...[
                           const SizedBox(height: 8),
@@ -1135,87 +1163,20 @@ final class _Avatar extends StatelessWidget {
   }
 }
 
-final class _InputBar extends StatelessWidget {
-  const _InputBar({
-    required this.controller,
-    required this.canSend,
-    required this.isPrompting,
-    required this.onSend,
-    required this.onCancel,
-  });
+String _authStatusLabel(AcpAuthStatus status) => switch (status) {
+  AcpAuthStatus.unavailable => 'Ready',
+  AcpAuthStatus.available => 'Sign-in available',
+  AcpAuthStatus.required => 'Sign-in required',
+  AcpAuthStatus.authenticating => 'Signing in…',
+  AcpAuthStatus.authenticated => 'Signed in',
+  AcpAuthStatus.loggingOut => 'Signing out…',
+};
 
-  final TextEditingController controller;
-  final bool canSend;
-  final bool isPrompting;
-  final Future<void> Function() onSend;
-  final VoidCallback onCancel;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    void submit() {
-      if (canSend) onSend();
-    }
-
-    return Container(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
-      child: Row(
-        children: [
-          Expanded(
-            child: CallbackShortcuts(
-              bindings: <ShortcutActivator, VoidCallback>{
-                const SingleActivator(
-                  LogicalKeyboardKey.enter,
-                  includeRepeats: false,
-                ): submit,
-                const SingleActivator(
-                  LogicalKeyboardKey.numpadEnter,
-                  includeRepeats: false,
-                ): submit,
-              },
-              child: TextField(
-                controller: controller,
-                autofocus: true,
-                keyboardType: TextInputType.multiline,
-                textInputAction: TextInputAction.newline,
-                minLines: 1,
-                maxLines: 5,
-                decoration: const InputDecoration(
-                  hintText: 'Send a message...',
-                  isDense: true,
-                ),
-                style: TextStyle(
-                  fontSize: 13,
-                  color: theme.colorScheme.onSurface,
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          if (isPrompting)
-            IconButton.outlined(
-              onPressed: onCancel,
-              icon: const Icon(LucideIcons.square, size: 14),
-              tooltip: 'Stop response',
-            )
-          else
-            IconButton.filled(
-              onPressed: canSend ? submit : null,
-              icon: const Icon(LucideIcons.arrowUp, size: 16),
-              tooltip: canSend
-                  ? 'Send message (Enter)'
-                  : 'Type a message to enable send',
-              style: IconButton.styleFrom(
-                backgroundColor: theme.colorScheme.primary,
-                foregroundColor: theme.colorScheme.onPrimary,
-                disabledBackgroundColor:
-                    theme.colorScheme.surfaceContainerHighest,
-                disabledForegroundColor: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-        ],
-      ),
-    );
+String _formatAcpRawValue(Object value) {
+  if (value is String) return value;
+  try {
+    return const JsonEncoder.withIndent('  ').convert(value);
+  } on JsonUnsupportedObjectError {
+    return value.toString();
   }
 }

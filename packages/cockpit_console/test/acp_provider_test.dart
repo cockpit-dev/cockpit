@@ -10,7 +10,10 @@ import 'package:path/path.dart' as p;
 void main() {
   group('AcpPermissionPrompt', () {
     test('exposes toolCall and immutable options', () {
-      const toolCall = ToolCall(toolCallId: 'tc-1', title: 'Run command');
+      const toolCall = AcpToolCallState(
+        toolCallId: 'tc-1',
+        title: 'Run command',
+      );
       const options = [
         PermissionOption(
           optionId: 'allow',
@@ -57,8 +60,9 @@ void main() {
   group('AcpConnected contract', () {
     const state = AcpConnected(
       agentInfo: Implementation(name: 'test', version: '1.0'),
-      sessionId: 's1',
-      modes: [],
+      protocolVersion: ProtocolVersion.v1,
+      capabilities: AgentCapabilities(),
+      activeSession: AcpSessionState(sessionId: 's1', cwd: '/tmp'),
     );
 
     test('messages defaults to empty', () {
@@ -71,6 +75,65 @@ void main() {
 
     test('isPrompting defaults to false', () {
       expect(state.isPrompting, isFalse);
+    });
+  });
+
+  group('AcpToolCallState', () {
+    test(
+      'preserves arbitrary JSON raw values and explicit collection clears',
+      () {
+        final state = AcpToolCallState.fromToolCall(
+          const ToolCall(
+            toolCallId: 'tool-1',
+            title: 'Run command',
+            status: ToolCallStatus.inProgress,
+            content: [
+              ToolCallContentBlock(content: TextContentBlock(text: 'running')),
+            ],
+            rawInput: {
+              'command': 'dart',
+              'args': ['test'],
+            },
+          ),
+        );
+
+        final merged = state.merge(
+          const ToolCallUpdate(
+            toolCallId: 'tool-1',
+            status: ToolCallStatus.completed,
+            content: [],
+            rawOutput: {'exitCode': 0, 'passed': true},
+          ),
+        );
+
+        expect(merged.content, isEmpty);
+        expect(merged.rawInput, {
+          'command': 'dart',
+          'args': ['test'],
+        });
+        expect(merged.rawOutput, {'exitCode': 0, 'passed': true});
+      },
+    );
+
+    test('omitted status preserves the current tool-call status', () {
+      const state = AcpToolCallState(
+        toolCallId: 'tool-1',
+        title: 'Run command',
+        status: ToolCallStatus.inProgress,
+      );
+
+      final omitted = ToolCallUpdate.fromJson({'toolCallId': 'tool-1'});
+      final preserved = state.merge(omitted);
+      final completed = preserved.merge(
+        const ToolCallUpdate(
+          toolCallId: 'tool-1',
+          status: ToolCallStatus.completed,
+        ),
+      );
+
+      expect(omitted.status, isNull);
+      expect(preserved.status, ToolCallStatus.inProgress);
+      expect(completed.status, ToolCallStatus.completed);
     });
   });
 
@@ -263,6 +326,27 @@ void main() {
       );
 
       expect(resolved, project.resolveSymbolicLinksSync());
+    });
+
+    test('canonicalizes and deduplicates additional directories', () {
+      final root = Directory.systemTemp.createTempSync('acp_roots_');
+      addTearDown(() => root.deleteSync(recursive: true));
+      final project = Directory(p.join(root.path, 'project'))..createSync();
+      final sibling = Directory(p.join(root.path, 'shared'))..createSync();
+      final config = AcpConnectionConfig(
+        command: 'agent',
+        workingDirectory: root.path,
+        sessionCwd: project.path,
+        additionalDirectories: [sibling.path, sibling.path, project.path],
+      );
+
+      expect(
+        resolveAcpAdditionalDirectories(
+          config,
+          project.resolveSymbolicLinksSync(),
+        ),
+        [sibling.resolveSymbolicLinksSync()],
+      );
     });
   });
 
