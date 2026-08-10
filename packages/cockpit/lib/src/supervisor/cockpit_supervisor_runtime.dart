@@ -220,26 +220,10 @@ final class CockpitSupervisorRuntime
   );
 
   Future<CockpitCapabilityDocument> capabilities() async {
-    final workspaces = await resources.identity.workspaces.list();
-    final operations = <String, CockpitOperationDescriptor>{
-      for (final descriptor
-          in CockpitSupervisorOperationCatalog.supervisorOperations)
-        descriptor.kind: descriptor,
-    };
-    for (final workspace in workspaces.where(
-      (item) => item.state == CockpitWorkspaceState.active,
-    )) {
-      for (final descriptor in await workspaceOperations(
-        workspace.workspaceId,
-      )) {
-        operations[descriptor.kind] = descriptor;
-      }
-    }
     return CockpitCapabilityDocument(
       apiVersion: CockpitApiVersion(major: 2, minor: 0),
       features: cockpitSupervisorFeatures,
-      operations: operations.values.toList()
-        ..sort((a, b) => a.kind.compareTo(b.kind)),
+      operations: CockpitSupervisorOperationCatalog.allOperations,
       resources: cockpitSupervisorResourceDescriptors,
     );
   }

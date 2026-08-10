@@ -18,14 +18,15 @@ final class CockpitDaemonCommand extends Command<int> {
         configure: (parser) => parser.addFlag(
           'yolo',
           negatable: false,
-          help: 'Start this daemon process with unrestricted authorization.',
+          help:
+              'Require unrestricted authorization; otherwise preserve a running daemon mode.',
         ),
         action: (arguments) async {
           final client = await runtime.client();
           await client.lifecycle.start(
             authorizationMode: arguments.flag('yolo')
                 ? CockpitAuthorizationMode.yolo
-                : CockpitAuthorizationMode.restricted,
+                : null,
             timeout: runtime.remainingTimeout,
           );
           await runtime.success((await client.lifecycle.status()).toJson());
@@ -88,12 +89,10 @@ final class CockpitDaemonCommand extends Command<int> {
         ),
         action: (arguments) async {
           final client = await runtime.client();
-          final current = await client.lifecycle.status();
           await client.lifecycle.restart(
             authorizationMode: arguments.flag('yolo')
                 ? CockpitAuthorizationMode.yolo
-                : current.authorizationMode ??
-                      CockpitAuthorizationMode.restricted,
+                : null,
             timeout: runtime.remainingTimeout,
           );
           await runtime.success((await client.lifecycle.status()).toJson());

@@ -1,5 +1,23 @@
 # Changelog
 
+## 3.0.12
+
+- Serialized every daemon lifecycle transition under one bounded cross-process
+  lock. Concurrent reads no longer race an authorization change, lifecycle lock
+  waits honor each command timeout, and an unflagged `daemon start` or restart
+  preserves the authorization of an already running daemon instead of silently
+  downgrading yolo mode.
+- Made the global capability document a static Supervisor catalog, reducing a
+  real Console cold request from 3.89 seconds to 5 milliseconds without
+  launching or reconnecting workers from unrelated workspaces. Workspace-scoped
+  operation routes remain the exact live authority for a selected workspace.
+- Wait for Flutter's `app.started` event when a development session reconnects
+  after Supervisor replacement, preventing the first reload or restart from
+  being rejected while device initialization is still incomplete.
+- Select the iOS regression simulator from the newest runtime supported by the
+  active Xcode installation, so WebDriverAgent and `simctl` always address the
+  same compatible destination on moving GitHub runner images.
+
 ## 3.0.11
 
 - Fixed `cockpit update` to ask Pub for the current latest hosted release

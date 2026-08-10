@@ -463,6 +463,7 @@ final class CockpitWorkerDevelopmentSessionRuntime {
     }
     try {
       await client.waitForAppId();
+      await client.waitForAppStarted();
       return client;
     } on Object {
       await client.dispose();

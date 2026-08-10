@@ -139,9 +139,10 @@ cockpit daemon policy show
 ```
 
 本地需要显式全权 daemon 时，使用 `cockpit daemon start --yolo`（或
-`daemon restart --yolo`）。该模式只对本次 daemon 进程生效；不带开关启动会回到
-持久化受限策略。daemon 状态、attempt 和 suite 报告都会记录实际
-`auth`。
+`daemon restart --yolo`）。该模式只对本次 daemon 进程生效。daemon 已健康运行时，
+不带开关的 start/restart 会保留当前授权；daemon 未运行时则使用持久化受限策略
+启动。需要明确回到 restricted 时，先停止 daemon 再无开关启动。daemon 状态、
+attempt 和 suite 报告都会记录实际 `auth`。
 
 不带 `--restart` 时只能在 daemon 停止状态下应用。默认策略拒绝危险操作、敏感测试
 effect，以及 production/unknown target。

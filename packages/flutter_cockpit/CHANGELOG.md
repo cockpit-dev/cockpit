@@ -1,5 +1,11 @@
 # Changelog
 
+## 3.0.12
+
+- Synchronized the Flutter bridge release with Cockpit's daemon concurrency,
+  capability startup, and development-session reconnect corrections; public
+  bridge contracts are unchanged.
+
 ## 3.0.11
 
 - Synchronized the Flutter bridge with Cockpit's latest-release updater

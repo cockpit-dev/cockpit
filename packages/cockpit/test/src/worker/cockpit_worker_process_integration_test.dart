@@ -9,6 +9,7 @@ import 'package:cockpit/src/foundation/cockpit_permissions.dart';
 import 'package:cockpit/src/foundation/cockpit_storage_key.dart';
 import 'package:cockpit/src/session/cockpit_remote_session_handle.dart';
 import 'package:cockpit/src/supervisor/cockpit_local_worker_launcher.dart';
+import 'package:cockpit/src/supervisor/cockpit_supervisor_operation_catalog.dart';
 import 'package:cockpit/src/supervisor/cockpit_supervisor_run_projection.dart';
 import 'package:cockpit/src/supervisor/cockpit_worker_pool.dart';
 import 'package:cockpit/src/supervisor/cockpit_worker_resource_authority.dart';
@@ -184,6 +185,12 @@ cases:
           idempotencyKey: 'capabilities-workerA',
           deadline: _deadline(),
         ),
+      );
+      expect(
+        capabilities.operationKinds,
+        CockpitSupervisorOperationCatalog.workspaceOperations
+            .map((descriptor) => descriptor.kind)
+            .toList(growable: false),
       );
       expect(
         capabilities.operationKinds,

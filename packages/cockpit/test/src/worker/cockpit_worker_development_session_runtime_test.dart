@@ -193,6 +193,12 @@ void main() {
       await Future<void>.delayed(Duration.zero);
       expect(
         writes.any((payload) => payload.contains('"method":"app.restart"')),
+        isFalse,
+      );
+      stdoutController.add('[{"event":"app.started","params":{}}]');
+      await Future<void>.delayed(Duration.zero);
+      expect(
+        writes.any((payload) => payload.contains('"method":"app.restart"')),
         isTrue,
       );
       final reloaded = await reloadFuture;

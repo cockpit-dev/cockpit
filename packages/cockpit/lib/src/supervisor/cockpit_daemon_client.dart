@@ -88,50 +88,54 @@ final class CockpitDaemonLifecycleClient {
     directorySyncer: directorySyncer,
   );
 
-  Future<CockpitDaemonDiscovery> ensure({Duration? timeout}) =>
-      _EnsureLocks.run(paths.daemonEnsureLock, () async {
-        var launchAuthorizationMode = CockpitAuthorizationMode.restricted;
-        final first = await _usableDiscovery();
-        if (first != null) return first;
-        final lock = await File(
-          paths.daemonEnsureLock,
-        ).open(mode: FileMode.append);
-        try {
-          await permissionHardener.hardenFile(File(paths.daemonEnsureLock));
-          await lock.lock(FileLock.blockingExclusive);
-          final rechecked = await _usableDiscovery(
-            replaceIncompatibleEngine: true,
-            onEngineReplacement: (mode) => launchAuthorizationMode = mode,
-          );
-          if (rechecked != null) return rechecked;
-          final processId = await _startProcess(launchAuthorizationMode);
-          return _waitUntilReady(
-            startedProcessId: processId,
-            timeout: timeout ?? startTimeout,
-          );
-        } finally {
-          try {
-            await lock.unlock();
-          } finally {
-            await lock.close();
-          }
-        }
-      });
-
-  Future<CockpitDaemonDiscovery> start({
-    CockpitAuthorizationMode authorizationMode =
-        CockpitAuthorizationMode.restricted,
-    Duration? timeout,
-  }) async {
+  Future<CockpitDaemonDiscovery> ensure({Duration? timeout}) {
     final deadline = DateTime.now().toUtc().add(timeout ?? startTimeout);
-    final current = await status();
-    if (current.running && current.authorizationMode != authorizationMode) {
-      await stop(
-        mode: CockpitDaemonShutdownMode.drain,
+    return _withLifecycleLock(deadline, () async {
+      var launchAuthorizationMode = CockpitAuthorizationMode.restricted;
+      final discovery = await _usableDiscovery(
+        replaceIncompatibleEngine: true,
+        onEngineReplacement: (mode) => launchAuthorizationMode = mode,
+        deadline: deadline,
+      );
+      if (discovery != null) return discovery;
+      return _startAndWait(
+        launchAuthorizationMode,
         timeout: _remaining(deadline),
       );
-    }
-    return _ensureStarted(authorizationMode, timeout: _remaining(deadline));
+    });
+  }
+
+  Future<CockpitDaemonDiscovery> start({
+    CockpitAuthorizationMode? authorizationMode,
+    Duration? timeout,
+  }) {
+    final deadline = DateTime.now().toUtc().add(timeout ?? startTimeout);
+    return _withLifecycleLock(deadline, () async {
+      var launchAuthorizationMode =
+          authorizationMode ?? CockpitAuthorizationMode.restricted;
+      final discovery = await _usableDiscovery(
+        replaceIncompatibleEngine: true,
+        onEngineReplacement: (mode) {
+          if (authorizationMode == null) launchAuthorizationMode = mode;
+        },
+        deadline: deadline,
+      );
+      if (discovery != null) {
+        if (authorizationMode == null ||
+            discovery.authorizationMode == authorizationMode) {
+          return discovery;
+        }
+        await _stopDiscovery(
+          discovery,
+          mode: CockpitDaemonShutdownMode.drain,
+          timeout: _remaining(deadline),
+        );
+      }
+      return _startAndWait(
+        launchAuthorizationMode,
+        timeout: _remaining(deadline),
+      );
+    });
   }
 
   Future<CockpitDaemonStatus> status() async {
@@ -176,10 +180,17 @@ final class CockpitDaemonLifecycleClient {
   Future<void> stop({
     CockpitDaemonShutdownMode mode = CockpitDaemonShutdownMode.drain,
     Duration timeout = const Duration(seconds: 30),
-  }) async {
-    final discovery = await _store.read();
-    if (discovery == null) return;
-    await _stopDiscovery(discovery, mode: mode, timeout: timeout);
+  }) {
+    final deadline = DateTime.now().toUtc().add(timeout);
+    return _withLifecycleLock(deadline, () async {
+      final discovery = await _store.read();
+      if (discovery == null) return;
+      await _stopDiscovery(
+        discovery,
+        mode: mode,
+        timeout: _remaining(deadline),
+      );
+    });
   }
 
   Future<void> _stopDiscovery(
@@ -241,13 +252,28 @@ final class CockpitDaemonLifecycleClient {
   }
 
   Future<CockpitDaemonDiscovery> restart({
-    CockpitAuthorizationMode authorizationMode =
-        CockpitAuthorizationMode.restricted,
+    CockpitAuthorizationMode? authorizationMode,
     Duration? timeout,
-  }) async {
+  }) {
     final deadline = DateTime.now().toUtc().add(timeout ?? startTimeout);
-    await stop(timeout: _remaining(deadline));
-    return _ensureStarted(authorizationMode, timeout: _remaining(deadline));
+    return _withLifecycleLock(deadline, () async {
+      final discovery = await _store.read();
+      final launchAuthorizationMode =
+          authorizationMode ??
+          discovery?.authorizationMode ??
+          CockpitAuthorizationMode.restricted;
+      if (discovery != null) {
+        await _stopDiscovery(
+          discovery,
+          mode: CockpitDaemonShutdownMode.drain,
+          timeout: _remaining(deadline),
+        );
+      }
+      return _startAndWait(
+        launchAuthorizationMode,
+        timeout: _remaining(deadline),
+      );
+    });
   }
 
   /// Schedules a restart in an independent CLI process.
@@ -313,6 +339,7 @@ final class CockpitDaemonLifecycleClient {
   Future<CockpitDaemonDiscovery?> _usableDiscovery({
     bool replaceIncompatibleEngine = false,
     void Function(CockpitAuthorizationMode mode)? onEngineReplacement,
+    DateTime? deadline,
   }) async {
     CockpitDaemonDiscovery? discovery;
     try {
@@ -327,8 +354,18 @@ final class CockpitDaemonLifecycleClient {
     final identity = await const CockpitSystemProcessIdentityProbe()
         .readStartIdentity(discovery.processId);
     final server = identity == discovery.processStartIdentity
-        ? await _healthUntilReady(discovery)
-        : await _health(discovery);
+        ? await _healthUntilReady(
+            discovery,
+            timeout: deadline == null
+                ? const Duration(seconds: 8)
+                : _boundedRemaining(deadline, const Duration(seconds: 8)),
+          )
+        : await _health(
+            discovery,
+            timeout: deadline == null
+                ? const Duration(seconds: 2)
+                : _boundedRemaining(deadline, const Duration(seconds: 2)),
+          );
     if (identity == discovery.processStartIdentity) {
       if (server == null) {
         throw const CockpitDaemonException(
@@ -348,7 +385,9 @@ final class CockpitDaemonLifecycleClient {
         await _stopDiscovery(
           discovery,
           mode: CockpitDaemonShutdownMode.drain,
-          timeout: const Duration(seconds: 30),
+          timeout: deadline == null
+              ? const Duration(seconds: 30)
+              : _remaining(deadline),
         );
         return null;
       }
@@ -364,19 +403,20 @@ final class CockpitDaemonLifecycleClient {
     return null;
   }
 
-  Future<CockpitServerInfo?> _health(CockpitDaemonDiscovery discovery) async {
-    final client = HttpClient()..connectionTimeout = const Duration(seconds: 2);
+  Future<CockpitServerInfo?> _health(
+    CockpitDaemonDiscovery discovery, {
+    Duration timeout = const Duration(seconds: 2),
+  }) async {
+    final client = HttpClient()..connectionTimeout = timeout;
     try {
       final request = await client
           .getUrl(discovery.endpoint.resolve('/_cockpit/health'))
-          .timeout(const Duration(seconds: 2));
+          .timeout(timeout);
       request.headers.set(
         HttpHeaders.authorizationHeader,
         'Bearer ${discovery.bearerToken}',
       );
-      final response = await request.close().timeout(
-        const Duration(seconds: 2),
-      );
+      final response = await request.close().timeout(timeout);
       if (response.statusCode != HttpStatus.ok) {
         await response.drain<void>();
         return null;
@@ -388,7 +428,7 @@ final class CockpitDaemonLifecycleClient {
             }
             return all..addAll(chunk);
           })
-          .timeout(const Duration(seconds: 2));
+          .timeout(timeout);
       return CockpitServerInfo.fromJson(jsonDecode(utf8.decode(bytes)));
     } on Object {
       return null;
@@ -403,43 +443,78 @@ final class CockpitDaemonLifecycleClient {
   }) async {
     final deadline = DateTime.now().toUtc().add(timeout);
     while (true) {
-      final server = await _health(discovery);
-      if (server != null) return server;
       final remaining = deadline.difference(DateTime.now().toUtc());
       if (remaining <= Duration.zero) return null;
-      await Future<void>.delayed(
-        remaining < const Duration(milliseconds: 200)
+      final server = await _health(
+        discovery,
+        timeout: remaining < const Duration(seconds: 2)
             ? remaining
+            : const Duration(seconds: 2),
+      );
+      if (server != null) return server;
+      final delay = deadline.difference(DateTime.now().toUtc());
+      if (delay <= Duration.zero) return null;
+      await Future<void>.delayed(
+        delay < const Duration(milliseconds: 200)
+            ? delay
             : const Duration(milliseconds: 200),
       );
     }
   }
 
-  Future<CockpitDaemonDiscovery> _ensureStarted(
+  Future<CockpitDaemonDiscovery> _startAndWait(
     CockpitAuthorizationMode authorizationMode, {
-    Duration? timeout,
-  }) => _EnsureLocks.run(paths.daemonEnsureLock, () async {
-    final existing = await _usableDiscovery();
-    if (existing != null) return existing;
-    final lock = await File(paths.daemonEnsureLock).open(mode: FileMode.append);
-    try {
-      await permissionHardener.hardenFile(File(paths.daemonEnsureLock));
-      await lock.lock(FileLock.blockingExclusive);
-      final rechecked = await _usableDiscovery(replaceIncompatibleEngine: true);
-      if (rechecked != null) return rechecked;
-      final processId = await _startProcess(authorizationMode);
-      return _waitUntilReady(
-        startedProcessId: processId,
-        timeout: timeout ?? startTimeout,
-      );
-    } finally {
+    required Duration timeout,
+  }) async {
+    final processId = await _startProcess(authorizationMode);
+    return _waitUntilReady(startedProcessId: processId, timeout: timeout);
+  }
+
+  Future<T> _withLifecycleLock<T>(
+    DateTime deadline,
+    Future<T> Function() action,
+  ) => _EnsureLocks.run(
+    paths.daemonEnsureLock,
+    deadline: deadline,
+    action: () async {
+      final lock = await File(
+        paths.daemonEnsureLock,
+      ).open(mode: FileMode.append);
+      var acquired = false;
       try {
-        await lock.unlock();
+        await permissionHardener.hardenFile(File(paths.daemonEnsureLock));
+        await _acquireLifecycleFileLock(lock, deadline);
+        acquired = true;
+        return await action();
       } finally {
-        await lock.close();
+        try {
+          if (acquired) await lock.unlock();
+        } finally {
+          await lock.close();
+        }
       }
+    },
+  );
+
+  Future<void> _acquireLifecycleFileLock(
+    RandomAccessFile lock,
+    DateTime deadline,
+  ) async {
+    while (true) {
+      try {
+        await lock.lock(FileLock.exclusive);
+        return;
+      } on FileSystemException catch (error) {
+        if (!_isLifecycleLockContention(error)) rethrow;
+      }
+      final remaining = _remaining(deadline);
+      await Future<void>.delayed(
+        remaining < const Duration(milliseconds: 50)
+            ? remaining
+            : const Duration(milliseconds: 50),
+      );
     }
-  });
+  }
 
   Future<int> _startProcess([
     CockpitAuthorizationMode authorizationMode =
@@ -476,7 +551,7 @@ final class CockpitDaemonLifecycleClient {
     Object? lastError;
     while (DateTime.now().isBefore(deadline)) {
       try {
-        final discovery = await _usableDiscovery();
+        final discovery = await _usableDiscovery(deadline: deadline);
         if (discovery != null) return discovery;
       } on Object catch (error) {
         lastError = error;
@@ -500,12 +575,14 @@ final class CockpitDaemonLifecycleClient {
   Duration _remaining(DateTime deadline) {
     final remaining = deadline.difference(DateTime.now().toUtc());
     if (remaining <= Duration.zero) {
-      throw const CockpitDaemonException(
-        'daemonTimeout',
-        'Daemon lifecycle command exceeded its timeout.',
-      );
+      throw _daemonLifecycleTimeout();
     }
     return remaining;
+  }
+
+  Duration _boundedRemaining(DateTime deadline, Duration maximum) {
+    final remaining = _remaining(deadline);
+    return remaining < maximum ? remaining : maximum;
   }
 
   Future<bool> _isCanonicalRegular(String path) async {
@@ -579,16 +656,51 @@ String _limitDaemonLogLine(String line) {
 abstract final class _EnsureLocks {
   static final Map<String, Future<void>> _tails = <String, Future<void>>{};
 
-  static Future<T> run<T>(String path, Future<T> Function() action) async {
+  static Future<T> run<T>(
+    String path, {
+    required DateTime deadline,
+    required Future<T> Function() action,
+  }) async {
     final previous = _tails[path] ?? Future<void>.value();
     final turn = Completer<void>();
     _tails[path] = turn.future;
-    await previous;
+    var entered = false;
     try {
+      final remaining = deadline.difference(DateTime.now().toUtc());
+      if (remaining <= Duration.zero) throw _daemonLifecycleTimeout();
+      try {
+        await previous.timeout(remaining);
+      } on TimeoutException {
+        throw _daemonLifecycleTimeout();
+      }
+      entered = true;
       return await action();
     } finally {
-      turn.complete();
-      if (identical(_tails[path], turn.future)) _tails.remove(path);
+      if (entered) {
+        _release(path, turn);
+      } else {
+        unawaited(previous.whenComplete(() => _release(path, turn)));
+      }
     }
   }
+
+  static void _release(String path, Completer<void> turn) {
+    if (!turn.isCompleted) turn.complete();
+    if (identical(_tails[path], turn.future)) _tails.remove(path);
+  }
+}
+
+CockpitDaemonException _daemonLifecycleTimeout() =>
+    const CockpitDaemonException(
+      'daemonTimeout',
+      'Daemon lifecycle command exceeded its timeout.',
+    );
+
+bool _isLifecycleLockContention(FileSystemException error) {
+  final code = error.osError?.errorCode;
+  if (code == 11 || code == 13 || code == 33 || code == 35) return true;
+  final message = error.osError?.message.toLowerCase() ?? '';
+  return message.contains('would block') ||
+      message.contains('temporarily unavailable') ||
+      message.contains('lock violation');
 }
