@@ -58,7 +58,6 @@ void main() {
       'global',
       'activate',
       'cockpit',
-      '>=3.0.6',
     ]);
     expect(
       calls[1],
@@ -299,7 +298,13 @@ void main() {
       ),
     );
     expect(calls, hasLength(2));
-    expect(calls.first, contains('>=3.0.7'));
+    expect(calls.first, <String>[
+      Platform.isWindows ? 'dart.exe' : 'dart',
+      'pub',
+      'global',
+      'activate',
+      'cockpit',
+    ]);
   });
 }
 

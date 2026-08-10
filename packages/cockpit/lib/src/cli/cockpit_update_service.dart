@@ -57,7 +57,7 @@ final class CockpitUpdateService {
       onProgress?.call('Installing the latest Cockpit release...');
       final activation = await _invoke(
         dart,
-        <String>['pub', 'global', 'activate', 'cockpit', '>=$currentVersion'],
+        const <String>['pub', 'global', 'activate', 'cockpit'],
         deadline,
         failureCode: 'updateInstallFailed',
         failureMessage:
