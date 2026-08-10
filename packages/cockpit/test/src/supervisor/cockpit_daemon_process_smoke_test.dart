@@ -676,6 +676,7 @@ Future<void> main(List<String> arguments) async {
       expect(restarted.authorizationMode, CockpitAuthorizationMode.yolo);
       final staleDiscovery = await _waitForDiscovery(paths);
       await lifecycle.stop(mode: CockpitDaemonShutdownMode.emergency);
+      await _waitForProcessExit(staleDiscovery);
       await CockpitDaemonDiscoveryStore(
         paths: paths,
         permissionHardener: policy,
@@ -817,6 +818,17 @@ Future<CockpitDaemonStatus> _waitForReplacement(
     await Future<void>.delayed(const Duration(milliseconds: 50));
   }
   throw StateError('Detached restart did not publish a healthy replacement.');
+}
+
+Future<void> _waitForProcessExit(CockpitDaemonDiscovery discovery) async {
+  const probe = CockpitSystemProcessIdentityProbe();
+  final deadline = DateTime.now().add(const Duration(seconds: 10));
+  while (DateTime.now().isBefore(deadline)) {
+    final identity = await probe.readStartIdentity(discovery.processId);
+    if (identity != discovery.processStartIdentity) return;
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+  }
+  throw StateError('Stopped cockpitd process did not exit.');
 }
 
 Future<_Response> _get(
