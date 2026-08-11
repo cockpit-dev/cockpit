@@ -43,12 +43,12 @@ For each coherent edit:
 6. Capture a screenshot only for a visible claim.
 
 Prefer `minimal`; use `standard` for diagnosis and `full` only when the entire
-semantic object is required. Do not relaunch while reload and the authenticated
+response is required. Do not relaunch while reload and the authenticated
 bridge remain healthy.
 
 ## Mixed-Stack Boundaries
 
-Stay on Flutter semantic control for widgets, routes, focus, editing, scrolling,
+Stay on Flutter in-app control for widgets, routes, focus, editing, scrolling,
 logs, runtime errors, HTTP activity, and reload/restart. Screenshot routing is
 platform-aware: Android/iOS use system capture first; desktop/web use Flutter
 view capture first. Switch control to an advertised native/system plane only for:
@@ -58,6 +58,10 @@ view capture first. Switch control to an advertised native/system plane only for
 - platform views or WebViews without Flutter semantics;
 - a native desktop shell outside the Flutter view;
 - installed applications without the development bridge.
+
+Flutter in-app control walks the mounted Element/RenderObject tree and does not
+require application-authored Semantics. Use `dev inspect QUERY` for bounded target
+discovery. Use `dev tree` only for structural ambiguity; full output is path-based.
 
 Re-inspect after crossing a boundary. A native action is complete only after a
 Flutter or native observable postcondition proves the result. Do not use host

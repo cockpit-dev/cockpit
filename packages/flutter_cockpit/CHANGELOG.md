@@ -2,9 +2,15 @@
 
 ## 3.0.13
 
-- Synchronized the Flutter bridge release with Cockpit's Windows native-control
-  and system-capture performance corrections; public bridge contracts are
-  unchanged.
+- Added semantics-independent mounted Element and RenderObject tree capture
+  with minimal, standard, and full profiles. Full trees include bounded
+  Widget/Element/State/Render diagnostics and are exposed through verified
+  artifacts instead of oversized inline responses.
+- Preserved direct Widget text below `ExcludeSemantics`, normalized common key
+  spellings, and hardened lazy/nested scrolling by observing layout after
+  direct position jumps.
+- Wait for both an idle scheduler phase and any scheduled frame before
+  completing actions, preventing hidden desktop frames from exposing stale UI.
 
 ## 3.0.12
 

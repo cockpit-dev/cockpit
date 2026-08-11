@@ -676,6 +676,91 @@ void main() {
   );
 
   test(
+    'remote session client can download externalized widget tree artifacts',
+    () async {
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() async {
+        await server.close(force: true);
+      });
+
+      server.listen((request) async {
+        request.response.headers.contentType = ContentType.json;
+        switch ((request.method, request.uri.path)) {
+          case ('GET', '/snapshot'):
+            request.response.write(
+              jsonEncode(<String, Object?>{
+                'snapshot': CockpitSnapshot(
+                  routeName: '/tree',
+                  treeArtifactRef: const CockpitArtifactRef(
+                    role: 'widget-tree',
+                    relativePath: 'trees/current.json',
+                  ),
+                  tree: CockpitWidgetTree(
+                    profile: CockpitWidgetTreeProfile.full,
+                    total: 1,
+                    visible: 1,
+                    truncated: false,
+                    emitted: 1,
+                  ),
+                ).toJson(),
+                'artifactDownloads': const <Map<String, Object?>>[
+                  <String, Object?>{
+                    'artifact': <String, Object?>{
+                      'role': 'widget-tree',
+                      'relativePath': 'trees/current.json',
+                    },
+                    'downloadPath':
+                        '/artifacts/download?path=trees%2Fcurrent.json',
+                  },
+                ],
+              }),
+            );
+          case ('GET', '/artifacts/download'):
+            request.response.write(
+              jsonEncode(
+                CockpitWidgetTree(
+                  profile: CockpitWidgetTreeProfile.full,
+                  total: 1,
+                  visible: 1,
+                  truncated: false,
+                  nodes: <CockpitWidgetNode>[
+                    CockpitWidgetNode(
+                      node: 0,
+                      depth: 0,
+                      type: 'TextButton',
+                      text: 'Continue',
+                      visible: true,
+                      offstage: false,
+                    ),
+                  ],
+                ).toJson(),
+              ),
+            );
+          default:
+            request.response.statusCode = HttpStatus.notFound;
+            request.response.write(
+              jsonEncode(const <String, Object?>{'error': 'notFound'}),
+            );
+        }
+        await request.response.close();
+      });
+
+      final client = CockpitRemoteSessionClient(
+        baseUri: Uri.parse('http://127.0.0.1:${server.port}'),
+      );
+      final snapshot = await client.readSnapshot(
+        options: const CockpitSnapshotOptions(
+          tree: CockpitWidgetTreeOptions.full(),
+        ),
+        downloadDiagnosticsArtifacts: true,
+      );
+
+      expect(snapshot.treeArtifactRef?.relativePath, 'trees/current.json');
+      expect(snapshot.tree?.nodes.single.text, 'Continue');
+    },
+  );
+
+  test(
     'remote session client preserves base route prefix for requests and downloads',
     () async {
       final requestedPaths = <String>[];

@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:cockpit_protocol/cockpit_protocol.dart';
 
+import '../foundation/cockpit_version.dart';
 import '../registry/cockpit_registry_models.dart';
 import 'cockpit_supervisor_http_support.dart';
 import 'cockpit_supervisor_runtime.dart';
@@ -220,6 +221,10 @@ final class CockpitSupervisorHttpApi {
       );
       await support.json(request, HttpStatus.ok, workspace.toJson());
       return;
+    }
+    final workerBuildId = request.headers.value(cockpitWorkerBuildHeader);
+    if (workerBuildId != null) {
+      await runtime.selectWorkspaceWorkerBuild(workspaceId, workerBuildId);
     }
     if (path.length == 5 && path[4] == 'targets') {
       if (request.method != 'GET') {

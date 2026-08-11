@@ -73,6 +73,7 @@ workspace/target registration, the app process, ports, and bridge state:
 cockpit dev start cockpit/main.dart --platform macos
 cockpit dev status
 cockpit dev inspect "Save"
+cockpit dev tree
 cockpit dev tap "Save"
 cockpit dev wait
 cockpit dev screenshot
@@ -88,6 +89,14 @@ HANDLE` when identity needs confirmation or selection. Explicit `--session`
 targets one command without changing the saved active handle. `dev` starts its
 local Supervisor in process-scoped yolo mode. Cockpit does not read a keychain
 or secret store, and `--env` values are process-only.
+
+Flutter inspection walks mounted Elements and RenderObjects without requiring
+developer-authored `Semantics`. Use `dev inspect QUERY` for a bounded search;
+use `dev tree`, `dev tree --verbosity standard`, or
+`dev tree --verbosity full` only when structural context is necessary. Full
+trees are always written to an artifact, and stdout returns only its verified
+path. Actions accept `--path`; prefer IDs, exact text, keys, and types first,
+then copy `loc` from inspection when those signals remain ambiguous.
 
 ## Interactive Workspaces
 

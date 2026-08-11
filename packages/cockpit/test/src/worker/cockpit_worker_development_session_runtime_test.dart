@@ -9,9 +9,11 @@ import 'package:cockpit/src/development/cockpit_development_session_handle.dart'
 import 'package:cockpit/src/development/cockpit_development_session_machine_launcher.dart';
 import 'package:cockpit/src/development/cockpit_development_session_status.dart';
 import 'package:cockpit/src/development/cockpit_flutter_run_machine_client.dart';
+import 'package:cockpit/src/development/cockpit_vm_network_profiler.dart';
 import 'package:cockpit/src/foundation/cockpit_permissions.dart';
 import 'package:cockpit/src/session/cockpit_remote_session_handle.dart';
 import 'package:cockpit/src/worker/cockpit_worker_development_session_runtime.dart';
+import 'package:cockpit_protocol/cockpit_protocol.dart';
 import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 
@@ -162,8 +164,10 @@ void main() {
         'cockpit-worker-recovery-',
       );
       addTearDown(() => runtimeRoot.delete(recursive: true));
+      final networkProfiler = _RecordingNetworkProfiler();
       final runtime = CockpitWorkerDevelopmentSessionRuntime(
         appTempStore: _appTempStore(runtimeRoot),
+        networkProfiler: networkProfiler,
         machineClientAttacher: (handle, environment) async {
           attachCalls += 1;
           attachEnvironment = environment;
@@ -182,6 +186,9 @@ void main() {
       expect(recovered.handle.appId, 'old-machine-app');
       expect(recovered.handle.remoteSessionHandle?.appId, 'old-machine-app');
       expect(attachCalls, 0);
+      expect(networkProfiler.enableCalls, <String>[
+        'ds-persisted@ws://127.0.0.1:61234/direct/ws',
+      ]);
 
       final reloadFuture = runtime.reload(
         recovered.handle,
@@ -327,6 +334,25 @@ final class _NoopPermissionHardener implements CockpitPermissionHardener {
 
   @override
   Future<void> hardenFile(File file) async {}
+}
+
+final class _RecordingNetworkProfiler implements CockpitNetworkProfiler {
+  final List<String> enableCalls = <String>[];
+
+  @override
+  Future<void> enable({
+    required String sessionId,
+    required Uri vmServiceUri,
+  }) async {
+    enableCalls.add('$sessionId@$vmServiceUri');
+  }
+
+  @override
+  Future<CockpitVmNetworkBodies> readBodies({
+    required String sessionId,
+    required Uri vmServiceUri,
+    required CockpitNetworkEntry entry,
+  }) => throw UnimplementedError();
 }
 
 CockpitDevelopmentSessionHandle _persistedHandle({

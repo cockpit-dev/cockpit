@@ -91,7 +91,14 @@ const Map<String, Object?> _stringList = <String, Object?>{
 };
 const Map<String, Object?> _profile = <String, Object?>{
   'type': 'string',
-  'enum': <String>['minimal', 'locate', 'standard', 'inspect', 'evidence'],
+  'enum': <String>[
+    'minimal',
+    'locate',
+    'tree',
+    'standard',
+    'inspect',
+    'evidence',
+  ],
 };
 const Map<String, Object?> _sessionId = <String, Object?>{
   ..._id,

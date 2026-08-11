@@ -234,6 +234,12 @@ void main() {
           CockpitTestSafetyEffect.financial,
         },
       ),
+      _spec(
+        'workspaceA',
+        buildId: 'another-build',
+        allowedTargetEnvironments: baseline.allowedTargetEnvironments,
+        allowedSafetyEffects: baseline.allowedSafetyEffects,
+      ),
     ]) {
       expect(
         () => pool.connectionFor(changed),
@@ -275,6 +281,7 @@ void main() {
 
 CockpitWorkspaceWorkerSpec _spec(
   String workspaceId, {
+  String? buildId,
   Iterable<CockpitTestTargetEnvironment> allowedTargetEnvironments =
       const <CockpitTestTargetEnvironment>[],
   Iterable<CockpitTestSafetyEffect> allowedSafetyEffects =
@@ -285,6 +292,7 @@ CockpitWorkspaceWorkerSpec _spec(
     engineVersion: 'engineA',
   ),
   projectId: 'projectA',
+  buildId: buildId,
   workspaceRoot: '/workspace/$workspaceId',
   stateRoot: '/state/$workspaceId',
   supportedFeatures: const <String>[],

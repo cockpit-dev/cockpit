@@ -725,6 +725,7 @@ void _validateSnapshotOptions(Object? value, String path) {
     'runtimeQuery',
     'includeAccessibilitySummary',
     'maxAccessibilityEntries',
+    'tree',
   }, path);
   if (json['profile'] case final profile?) {
     final name = CockpitTestValueReader.string(profile, '$path.profile');
@@ -784,6 +785,39 @@ void _validateSnapshotOptions(Object? value, String path) {
       stringFields: const <String>{'messageContains'},
       boolFields: const <String>{'onlyErrors'},
     );
+  }
+  if (json.containsKey('tree')) {
+    final treePath = '$path.tree';
+    final tree = CockpitTestValueReader.object(json['tree'], treePath);
+    CockpitTestValueReader.keys(tree, const <String>{
+      'profile',
+      'maxNodes',
+      'maxProps',
+    }, treePath);
+    if (tree['profile'] case final profile?) {
+      final name = CockpitTestValueReader.string(profile, '$treePath.profile');
+      if (!const <String>{'minimal', 'standard', 'full'}.contains(name)) {
+        throw FormatException(
+          'Unsupported widget tree profile at $treePath.profile.',
+        );
+      }
+    }
+    if (tree.containsKey('maxNodes')) {
+      CockpitTestValueReader.integer(
+        tree['maxNodes'],
+        '$treePath.maxNodes',
+        minimum: 1,
+        maximum: 500000,
+      );
+    }
+    if (tree.containsKey('maxProps')) {
+      CockpitTestValueReader.integer(
+        tree['maxProps'],
+        '$treePath.maxProps',
+        minimum: 0,
+        maximum: 256,
+      );
+    }
   }
 }
 

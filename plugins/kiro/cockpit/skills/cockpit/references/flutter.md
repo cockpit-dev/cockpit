@@ -144,17 +144,31 @@ cockpit dev type "Ada" --into "Name" --key profile-name
 ```
 
 Execute a routine exact-text action without inspecting first. If it is
-ambiguous, run `cockpit dev inspect "Save"` once. It searches only semantic UI
-targets and returns `loc` (the shortest stable conditions) and `can` (known
-actions). Use all fields in `loc`; `text` is positional and the rest map to
-their same-named flags. Do not use internal paths or registration IDs.
+ambiguous, run `cockpit dev inspect "Save"` once. It searches mounted Flutter
+Element targets without requiring Semantics labels and returns `loc` (the shortest
+stable conditions) and `can` (known actions). Use all fields in `loc`; `text` is
+positional and the rest map to their same-named flags. Do not use registration IDs.
 
 Available narrowing conditions are `--id`, `--key`, `--type`, `--tip`,
-`--route`, ancestor widget type `--within`, and 0-based `--index`. Exact matching is the default;
-`--contains` and `--fuzzy` apply only when explicitly requested. Conditions
-never silently choose between equal candidates.
+`--route`, `--path`, ancestor widget type `--within`, and 0-based `--index`.
+Exact matching is the default; `--contains` and `--fuzzy` apply only when
+explicitly requested. Conditions never silently choose between equal candidates.
 
-The bridge exposes widget/semantics targets, route and focus state, framework
+Use the tree only when target inspection is insufficient:
+
+```bash
+cockpit dev tree
+cockpit dev tree --verbosity standard
+cockpit dev tree --verbosity full
+```
+
+Minimal returns actionable/content nodes and public ancestry. Standard returns the
+mounted public Widget structure. Full returns every mounted Element, including
+offstage/private nodes, and writes it to a verified artifact path instead of stdout.
+Semantics is supplementary; direct Widget text remains discoverable even below
+`ExcludeSemantics`.
+
+The bridge exposes Element/RenderObject targets, optional Semantics, route and focus state, framework
 and isolate errors, app logs, HTTP activity, rebuild signals, screenshots,
 recording, idle state, and typed command results. Cockpit reads these through
 the same handle.

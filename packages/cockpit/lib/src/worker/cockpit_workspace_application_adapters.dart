@@ -407,10 +407,12 @@ const Set<String> _remoteSystemActionPathKeys = <String>{
 };
 
 const Set<String> _flutterLaunchPathKeys = <String>{'dartDefineFromFiles'};
+const Set<String> _logicalUiPathKeys = <String>{'path'};
 
 Set<String> _allowedWorkerPathKeys(String operationKind) =>
     switch (operationKind) {
       'system.action' => _remoteSystemActionPathKeys,
+      'command.run' || 'command.batch' => _logicalUiPathKeys,
       'app.launch' ||
       'target.launch' ||
       'session.remote.launch' ||

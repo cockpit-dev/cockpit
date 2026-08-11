@@ -18,6 +18,14 @@ final Map<String, Object?> _runtimeQuery = _object(
   },
 );
 
+final Map<String, Object?> _widgetTreeOptions = _object(
+  properties: <String, Object?>{
+    'profile': _enum(<String>['minimal', 'standard', 'full']),
+    'maxNodes': _boundedInteger(1, 500000, value: 800),
+    'maxProps': _boundedInteger(0, 256, value: 0),
+  },
+);
+
 final Map<String, Object?> _snapshotOptions = _object(
   properties: <String, Object?>{
     'profile': _enum(<String>[
@@ -42,6 +50,7 @@ final Map<String, Object?> _snapshotOptions = _object(
     'runtimeQuery': _runtimeQuery,
     'includeAccessibilitySummary': _boolean,
     'maxAccessibilityEntries': _boundedInteger(0, 10000, value: 8),
+    'tree': _widgetTreeOptions,
   },
 );
 

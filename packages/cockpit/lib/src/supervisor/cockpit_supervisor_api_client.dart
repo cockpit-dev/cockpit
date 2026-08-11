@@ -913,7 +913,8 @@ final class CockpitSupervisorApiClient {
         HttpHeaders.authorizationHeader,
         'Bearer ${session.discovery.bearerToken}',
       )
-      ..set('Cockpit-API-Version', session.versionHeader);
+      ..set('Cockpit-API-Version', session.versionHeader)
+      ..set(cockpitWorkerBuildHeader, cockpitBuildId);
     if (requiredFeatures.isNotEmpty) {
       request.headers.set(
         'Cockpit-Required-Features',

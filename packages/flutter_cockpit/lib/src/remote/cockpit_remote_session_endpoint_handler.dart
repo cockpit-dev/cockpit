@@ -107,9 +107,14 @@ final class CockpitRemoteSessionEndpointResponse {
 }
 
 final class _RemoteArtifactEntry {
-  const _RemoteArtifactEntry({this.sourceFilePath, this.deleteOnClose = false});
+  const _RemoteArtifactEntry({
+    this.sourceFilePath,
+    this.bytes,
+    this.deleteOnClose = false,
+  });
 
   final String? sourceFilePath;
+  final List<int>? bytes;
   final bool deleteOnClose;
 }
 
@@ -375,6 +380,23 @@ final class CockpitRemoteSessionEndpointHandler {
       json['profile'] = profile;
     }
 
+    final treeProfile = queryParameters['treeProfile'];
+    if (treeProfile != null && treeProfile.isNotEmpty) {
+      final tree = <String, Object?>{'profile': treeProfile};
+      final treeMaxNodes = queryParameters['treeMaxNodes'];
+      if (treeMaxNodes != null && treeMaxNodes.isNotEmpty) {
+        tree['maxNodes'] = _parsePositiveQueryInt('treeMaxNodes', treeMaxNodes);
+      }
+      final treeMaxProps = queryParameters['treeMaxProps'];
+      if (treeMaxProps != null && treeMaxProps.isNotEmpty) {
+        tree['maxProps'] = _parseNonNegativeQueryInt(
+          'treeMaxProps',
+          treeMaxProps,
+        );
+      }
+      json['tree'] = tree;
+    }
+
     for (final key in <String>[
       'maxTargets',
       'maxAncestorsPerTarget',
@@ -480,6 +502,16 @@ final class CockpitRemoteSessionEndpointHandler {
     if (parsed == null || parsed < 0) {
       throw FormatException(
         'Query parameter "$key" must be a non-negative integer.',
+      );
+    }
+    return parsed;
+  }
+
+  int _parsePositiveQueryInt(String key, String value) {
+    final parsed = int.tryParse(value);
+    if (parsed == null || parsed <= 0) {
+      throw FormatException(
+        'Query parameter "$key" must be a positive integer.',
       );
     }
     return parsed;
@@ -635,40 +667,55 @@ final class CockpitRemoteSessionEndpointHandler {
     CockpitSnapshot snapshot, {
     required CockpitSnapshotOptions options,
   }) async {
-    if (!options.emitArtifactWhenLarge) {
+    final treeArtifact = options.tree != null && snapshot.tree != null;
+    final forceTreeArtifact =
+        treeArtifact && options.tree?.profile == CockpitWidgetTreeProfile.full;
+    if (!options.emitArtifactWhenLarge && !forceTreeArtifact) {
       return CockpitRemoteSnapshotResponse(snapshot: snapshot);
     }
-    final snapshotBytes = utf8.encode(
-      jsonEncode(_compactJsonValue(snapshot.toJson())),
+    final artifactBytes = utf8.encode(
+      jsonEncode(
+        _compactJsonValue(
+          treeArtifact ? snapshot.tree!.toJson() : snapshot.toJson(),
+        ),
+      ),
     );
-    if (snapshotBytes.length <= 16384) {
+    if (!forceTreeArtifact && artifactBytes.length <= 16384) {
       return CockpitRemoteSnapshotResponse(snapshot: snapshot);
     }
 
-    final artifactRef =
-        snapshot.diagnosticsArtifactRef ??
-        CockpitArtifactRef(
-          role: 'diagnostics',
-          relativePath:
-              'diagnostics/${cockpitSortableTimestampToken(DateTime.now())}_remote_snapshot.json',
-        );
+    final artifactRef = treeArtifact
+        ? snapshot.treeArtifactRef ??
+              CockpitArtifactRef(
+                role: 'widget-tree',
+                relativePath:
+                    'trees/${cockpitSortableTimestampToken(DateTime.now())}_widget_tree.json',
+              )
+        : snapshot.diagnosticsArtifactRef ??
+              CockpitArtifactRef(
+                role: 'diagnostics',
+                relativePath:
+                    'diagnostics/${cockpitSortableTimestampToken(DateTime.now())}_remote_snapshot.json',
+              );
     try {
       _downloadableArtifacts[artifactRef.relativePath] =
           await _persistArtifactBytes(
             cockpitSanitizeRemoteArtifactBasename(artifactRef.relativePath),
-            snapshotBytes,
+            artifactBytes,
           );
     } on Object {
-      // Browsers and other constrained runtimes may not support temp-file
-      // persistence for large diagnostics snapshots. Keep the session usable by
-      // returning the full snapshot inline instead of failing the request.
+      // Preserve ordinary diagnostics reads when an unexpected persistence
+      // failure occurs. Full tree requests never reach this fallback because
+      // _persistArtifactBytes retains an in-memory download when files are
+      // unavailable.
       return CockpitRemoteSnapshotResponse(snapshot: snapshot);
     }
 
     return CockpitRemoteSnapshotResponse(
-      snapshot: _summarizedSnapshot(
-        snapshot,
-      ).copyWith(diagnosticsArtifactRef: artifactRef),
+      snapshot: _summarizedSnapshot(snapshot).copyWith(
+        diagnosticsArtifactRef: treeArtifact ? null : artifactRef,
+        treeArtifactRef: treeArtifact ? artifactRef : null,
+      ),
       artifactDownloads: <CockpitRemoteArtifactDownload>[
         CockpitRemoteArtifactDownload(
           artifact: artifactRef,
@@ -698,8 +745,19 @@ final class CockpitRemoteSessionEndpointHandler {
           .toList(growable: false),
       diagnosticLevel: snapshot.diagnosticLevel,
       truncated: snapshot.truncated,
+      diagnosticsArtifactRef: snapshot.diagnosticsArtifactRef,
+      treeArtifactRef: snapshot.treeArtifactRef,
       summary: snapshot.summary,
       network: snapshot.network,
+      tree: snapshot.tree == null
+          ? null
+          : CockpitWidgetTree(
+              profile: snapshot.tree!.profile,
+              total: snapshot.tree!.total,
+              visible: snapshot.tree!.visible,
+              truncated: snapshot.tree!.truncated,
+              emitted: snapshot.tree!.emitted,
+            ),
       // Focus state is tiny and answers "is the keyboard up / which field is
       // active" without forcing a diagnostics artifact download.
       focus: snapshot.focus,
@@ -748,10 +806,17 @@ final class CockpitRemoteSessionEndpointHandler {
     if (bytes.isEmpty) {
       throw StateError('Cannot persist an empty artifact payload.');
     }
-    final file = await _artifactTempFileFactory(basename);
-    await file.parent.create(recursive: true);
-    await file.writeAsBytes(bytes, flush: true);
-    return _RemoteArtifactEntry(sourceFilePath: file.path, deleteOnClose: true);
+    try {
+      final file = await _artifactTempFileFactory(basename);
+      await file.parent.create(recursive: true);
+      await file.writeAsBytes(bytes, flush: true);
+      return _RemoteArtifactEntry(
+        sourceFilePath: file.path,
+        deleteOnClose: true,
+      );
+    } on Object {
+      return _RemoteArtifactEntry(bytes: List<int>.unmodifiable(bytes));
+    }
   }
 
   Future<CockpitRemoteSessionEndpointResponse> _artifactResponseFor(
@@ -771,6 +836,11 @@ final class CockpitRemoteSessionEndpointHandler {
         'error': 'artifactNotFound',
         'message': 'Unknown artifact path.',
       }, statusCode: HttpStatus.notFound);
+    }
+
+    final bytes = entry.bytes;
+    if (bytes != null && bytes.isNotEmpty) {
+      return CockpitRemoteSessionEndpointResponse.binary(bytes);
     }
 
     final sourceFilePath = entry.sourceFilePath;

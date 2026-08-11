@@ -161,6 +161,33 @@ void main() {
       returnsNormally,
     );
   });
+
+  test('logical UI paths are allowed without opening host path inputs', () {
+    expect(
+      () => rejectCockpitWorkerHostPathInputs(
+        const <String, Object?>{
+          'command': <String, Object?>{
+            'locator': <String, Object?>{
+              'path': '/scaffold/listview/textbutton',
+            },
+          },
+        },
+        allowedKeys: const <String>{'path'},
+      ),
+      returnsNormally,
+    );
+    expect(
+      () => rejectCockpitWorkerHostPathInputs(
+        const <String, Object?>{
+          'command': <String, Object?>{
+            'parameters': <String, Object?>{'sourcePath': '/tmp/private'},
+          },
+        },
+        allowedKeys: const <String>{'path'},
+      ),
+      throwsA(isA<FormatException>()),
+    );
+  });
 }
 
 final class _Fixture {

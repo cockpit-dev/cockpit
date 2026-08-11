@@ -1,6 +1,7 @@
 import '../network/cockpit_network_query.dart';
 import '../foundation/cockpit_foundation_value_reader.dart';
 import 'cockpit_runtime_query.dart';
+import 'cockpit_widget_tree.dart';
 
 enum CockpitSnapshotProfile {
   live('live'),
@@ -45,6 +46,7 @@ final class CockpitSnapshotOptions {
     this.runtimeQuery = const CockpitRuntimeQuery(),
     this.includeAccessibilitySummary = false,
     this.maxAccessibilityEntries = 8,
+    this.tree,
   });
 
   /// Creates a CockpitSnapshotOptions using the named constructor `live`.
@@ -115,6 +117,7 @@ final class CockpitSnapshotOptions {
   final CockpitRuntimeQuery runtimeQuery;
   final bool includeAccessibilitySummary;
   final int maxAccessibilityEntries;
+  final CockpitWidgetTreeOptions? tree;
 
   /// Encodes this CockpitSnapshotOptions as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
@@ -135,6 +138,7 @@ final class CockpitSnapshotOptions {
     'runtimeQuery': runtimeQuery.toJson(),
     'includeAccessibilitySummary': includeAccessibilitySummary,
     'maxAccessibilityEntries': maxAccessibilityEntries,
+    if (tree != null) 'tree': tree!.toJson(),
   };
 
   /// Decodes a CockpitSnapshotOptions from a JSON object.
@@ -157,6 +161,7 @@ final class CockpitSnapshotOptions {
       'runtimeQuery',
       'includeAccessibilitySummary',
       'maxAccessibilityEntries',
+      'tree',
     }, r'$');
     final networkQueryJson = json['networkQuery'] == null
         ? null
@@ -170,6 +175,9 @@ final class CockpitSnapshotOptions {
             json['runtimeQuery'],
             r'$.runtimeQuery',
           );
+    final treeJson = json['tree'] == null
+        ? null
+        : CockpitFoundationValueReader.object(json['tree'], r'$.tree');
     return CockpitSnapshotOptions(
       profile: json['profile'] == null
           ? CockpitSnapshotProfile.live
@@ -219,6 +227,11 @@ final class CockpitSnapshotOptions {
         8,
         maximum: 10000,
       ),
+      tree: treeJson == null
+          ? null
+          : CockpitWidgetTreeOptions.fromJson(
+              Map<String, Object?>.from(treeJson),
+            ),
     );
   }
 
@@ -241,6 +254,8 @@ final class CockpitSnapshotOptions {
     CockpitRuntimeQuery? runtimeQuery,
     bool? includeAccessibilitySummary,
     int? maxAccessibilityEntries,
+    CockpitWidgetTreeOptions? tree,
+    bool clearTree = false,
   }) {
     return CockpitSnapshotOptions(
       profile: profile ?? this.profile,
@@ -269,6 +284,7 @@ final class CockpitSnapshotOptions {
           includeAccessibilitySummary ?? this.includeAccessibilitySummary,
       maxAccessibilityEntries:
           maxAccessibilityEntries ?? this.maxAccessibilityEntries,
+      tree: clearTree ? null : tree ?? this.tree,
     );
   }
 
@@ -292,7 +308,8 @@ final class CockpitSnapshotOptions {
             other.maxRuntimeEntries == maxRuntimeEntries &&
             other.runtimeQuery == runtimeQuery &&
             other.includeAccessibilitySummary == includeAccessibilitySummary &&
-            other.maxAccessibilityEntries == maxAccessibilityEntries;
+            other.maxAccessibilityEntries == maxAccessibilityEntries &&
+            other.tree == tree;
   }
 
   @override
@@ -314,6 +331,7 @@ final class CockpitSnapshotOptions {
     runtimeQuery,
     includeAccessibilitySummary,
     maxAccessibilityEntries,
+    tree,
   );
 }
 

@@ -32,7 +32,7 @@ void cockpitAddCliOutputOptions(ArgParser parser) {
       defaultsTo: CockpitCliOutputDetail.minimal.name,
       help:
           'Response density: minimal for the next decision, standard for '
-          'diagnosis, full for the complete semantic response.',
+          'diagnosis, full for the complete response.',
     )
     ..addOption(
       'output',
@@ -150,11 +150,25 @@ final class CockpitCliOutputRenderer {
     final maximumBytes = detail == CockpitCliOutputDetail.minimal
         ? minimalMaximumBytes
         : standardMaximumBytes;
+    final isTree = command == 'dev.tree';
     final attempts = detail == CockpitCliOutputDetail.minimal
+        ? isTree
+              ? const <_ProjectionLimits>[
+                  _ProjectionLimits(8, 12, 384, 5),
+                  _ProjectionLimits(6, 10, 256, 5),
+                  _ProjectionLimits(4, 8, 160, 4),
+                ]
+              : const <_ProjectionLimits>[
+                  _ProjectionLimits(4, 10, 512, 5),
+                  _ProjectionLimits(2, 8, 256, 4),
+                  _ProjectionLimits(1, 6, 128, 3),
+                ]
+        : isTree
         ? const <_ProjectionLimits>[
-            _ProjectionLimits(4, 10, 512, 5),
-            _ProjectionLimits(2, 8, 256, 4),
-            _ProjectionLimits(1, 6, 128, 3),
+            _ProjectionLimits(24, 32, 1024, 7),
+            _ProjectionLimits(16, 24, 512, 6),
+            _ProjectionLimits(8, 16, 256, 5),
+            _ProjectionLimits(4, 10, 128, 4),
           ]
         : const <_ProjectionLimits>[
             _ProjectionLimits(16, 32, 1024, 7),
@@ -561,6 +575,10 @@ String? _primaryArtifactPath(String command, Object? data) {
         .where((path) => path.isNotEmpty)
         .toList(growable: false);
     return paths.length == 1 ? paths.single : null;
+  }
+  if (command == 'dev.tree') {
+    final path = evidence['tree'];
+    return path is String && path.isNotEmpty ? path : null;
   }
   if (command != 'dev.screenshot') return null;
   final actual = evidence['actual'];
@@ -1090,6 +1108,7 @@ Object? _compactDevState(
   return switch (action) {
     'status' || 'diagnose' => _compactDevStatus(state, standard: standard),
     'inspect' => _compactDevInspect(state, standard: standard),
+    'tree' => _compactDevTree(state, standard: standard),
     'tap' ||
     'type' ||
     'press' ||
@@ -1123,6 +1142,104 @@ Object? _compactDevState(
               'platform',
             ]),
   };
+}
+
+Map<String, Object?> _compactDevTree(
+  Map<Object?, Object?> state, {
+  required bool standard,
+}) {
+  final nodes = state['nodes'];
+  final orderedNodes = nodes is List<Object?>
+      ? _orderedDevTreeNodes(nodes, standard: standard)
+      : const <Map<Object?, Object?>>[];
+  return <String, Object?>{
+    ..._pick(state, const <String>[
+      'profile',
+      'total',
+      'visible',
+      'emitted',
+      'truncated',
+      'path',
+    ]),
+    if (orderedNodes.isNotEmpty)
+      'nodes': orderedNodes
+          .take(standard ? 40 : 12)
+          .map((node) => _compactDevTreeNode(node, standard: standard))
+          .toList(growable: false),
+  };
+}
+
+Map<String, Object?> _compactDevTreeNode(
+  Map<Object?, Object?> node, {
+  required bool standard,
+}) {
+  if (standard) {
+    return _pick(node, const <String>[
+      'node',
+      'loc',
+      'parent',
+      'depth',
+      'type',
+      'element',
+      'state',
+      'render',
+      'cockpitId',
+      'semanticId',
+      'key',
+      'text',
+      'tip',
+      'route',
+      'visible',
+      'offstage',
+      'bounds',
+      'scroll',
+      'actions',
+    ]);
+  }
+  final actions = node['actions'];
+  final hasStableIdentity =
+      node['cockpitId'] is String || node['key'] is String;
+  return <String, Object?>{
+    if (!hasStableIdentity && node['loc'] is String) 'loc': node['loc'],
+    ..._pick(node, const <String>['type', 'cockpitId', 'key', 'text', 'tip']),
+    if (actions is List<Object?> && actions.isNotEmpty)
+      'can': actions.whereType<String>().join('|'),
+  };
+}
+
+List<Map<Object?, Object?>> _orderedDevTreeNodes(
+  List<Object?> nodes, {
+  required bool standard,
+}) {
+  final indexed = nodes
+      .whereType<Map<Object?, Object?>>()
+      .toList(growable: false)
+      .indexed
+      .toList(growable: false);
+  if (standard) {
+    return indexed.map((entry) => entry.$2).toList(growable: false);
+  }
+  indexed.sort((left, right) {
+    final rank = _devTreeNodeRank(
+      right.$2,
+    ).compareTo(_devTreeNodeRank(left.$2));
+    return rank != 0 ? rank : left.$1.compareTo(right.$1);
+  });
+  return indexed.map((entry) => entry.$2).toList(growable: false);
+}
+
+int _devTreeNodeRank(Map<Object?, Object?> node) {
+  var rank = 0;
+  final actions = node['actions'];
+  if (actions is List<Object?> && actions.isNotEmpty) rank += 1000;
+  if (node['loc'] is String) rank += 400;
+  if (node['cockpitId'] is String) rank += 240;
+  if (node['key'] is String) rank += 200;
+  if (node['text'] is String) rank += 160;
+  if (node['tip'] is String) rank += 120;
+  if (node['visible'] == true) rank += 80;
+  if (node['offstage'] == true) rank -= 200;
+  return rank;
 }
 
 Map<String, Object?> _compactDevStatus(
@@ -1285,6 +1402,9 @@ Map<String, Object?> _compactDevEvidence(
       if (evidence[key] is String) key: evidence[key],
   };
   if (networkPaths.isNotEmpty) return networkPaths;
+  if (evidence['tree'] is String) {
+    return <String, Object?>{'tree': evidence['tree']};
+  }
   final actual = evidence['actual'];
   final baseline = evidence['baseline'];
   final diff = evidence['diff'];

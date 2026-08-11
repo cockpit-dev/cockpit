@@ -16,6 +16,7 @@ void main() {
         onlyErrors: true,
         messageContains: 'RenderFlex',
       ),
+      tree: const CockpitWidgetTreeOptions.full(),
     );
 
     expect(CockpitSnapshotOptions.fromJson(options.toJson()), options);
@@ -43,6 +44,12 @@ void main() {
     expect(
       () => CockpitSnapshotOptions.fromJson(const <String, Object?>{
         'includeRuntimeActivity': 'yes',
+      }),
+      throwsFormatException,
+    );
+    expect(
+      () => CockpitSnapshotOptions.fromJson(const <String, Object?>{
+        'tree': <String, Object?>{'maxNodes': 0},
       }),
       throwsFormatException,
     );

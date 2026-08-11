@@ -1580,8 +1580,6 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
           lastScrollStep = scrollStep;
           lastDirectionScrollStep = scrollStep;
           recordScrollableCandidate(scrollStep, reverse: currentReverse);
-          final canResolveStepTarget =
-              !scrollStep.targetVisibilityObserved || scrollStep.targetVisible;
           if (!hasExplicitScrollable) {
             final reportedCount = scrollStep.scrollableCandidateCount;
             if (reportedCount != null && reportedCount > 0) {
@@ -1597,17 +1595,15 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
             await _postActionSettler();
             scrollObservationDurationMs +=
                 observationStopwatch.elapsedMilliseconds;
-            if (canResolveStepTarget) {
-              final satisfied = _scrollLocatorResolution(command);
-              if (satisfied != null) {
-                final success = await buildScrollSatisfiedSuccess(satisfied);
-                if (success != null) {
-                  return success;
-                }
+            final satisfied = _scrollLocatorResolution(command);
+            if (satisfied != null) {
+              final success = await buildScrollSatisfiedSuccess(satisfied);
+              if (success != null) {
+                return success;
               }
             }
-            if (allowsGenericResolution && canResolveStepTarget) {
-              resolution = _resolve(command);
+            if (allowsGenericResolution) {
+              resolution = _resolveProbe(command);
               if (resolution.isSuccess) {
                 final success = await buildScrollSuccess(resolution);
                 if (success != null) {
@@ -1644,29 +1640,34 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
           scrollsPerformed += 1;
 
           final observationStopwatch = Stopwatch()..start();
-          await _postActionSettler();
-          if (scrollStep.targetMounted && !scrollStep.targetVisible) {
-            _liveSnapshot();
-          }
+          await _settleCoordinator.driveHiddenVisualFrames(
+            CockpitCommandType.scrollUntilVisible,
+          );
           await _waitForVisualContinuity(
             commandType: CockpitCommandType.scrollUntilVisible,
             routeChanged: false,
           );
+          await _postActionSettler();
+          if (scrollStep.targetMounted && !scrollStep.targetVisible) {
+            _liveSnapshot();
+          }
           scrollObservationDurationMs +=
               observationStopwatch.elapsedMilliseconds;
 
-          if (scrollStep.targetVisible) {
-            final satisfied = _scrollLocatorResolution(command);
-            if (satisfied != null) {
-              final success = await buildScrollSatisfiedSuccess(satisfied);
-              if (success != null) {
-                return success;
-              }
+          // A direct position jump can report the target state before Flutter
+          // lays out the newly exposed lazy children. Always observe again
+          // after settling instead of treating the step's pre-frame target
+          // flags as authoritative.
+          final satisfied = _scrollLocatorResolution(command);
+          if (satisfied != null) {
+            final success = await buildScrollSatisfiedSuccess(satisfied);
+            if (success != null) {
+              return success;
             }
           }
 
-          if (allowsGenericResolution && canResolveStepTarget) {
-            resolution = _resolve(command);
+          if (allowsGenericResolution) {
+            resolution = _resolveProbe(command);
             if (resolution.isSuccess) {
               final success = await buildScrollSuccess(resolution);
               if (success != null) {
@@ -1674,7 +1675,7 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
               }
             }
           }
-          if ((scrollStep.targetMounted || canResolveStepTarget) &&
+          if ((scrollStep.targetMounted || resolution.isSuccess) &&
               await _attemptEnsureVisible(
                 locator,
                 durationPerStep,
@@ -1700,9 +1701,8 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
               }
             }
           }
-          if (canResolveStepTarget &&
-              resolution.error?.code ==
-                  CockpitCommandError.ambiguousTargetCode) {
+          if (resolution.error?.code ==
+              CockpitCommandError.ambiguousTargetCode) {
             return _failureExecution(
               command: command,
               durationMs: stopwatch.elapsedMilliseconds,
@@ -4551,7 +4551,8 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
       return;
     }
     await Future<void>.microtask(() {});
-    if (schedulerBinding.schedulerPhase != SchedulerPhase.idle) {
+    if (schedulerBinding.schedulerPhase != SchedulerPhase.idle ||
+        widgetsBinding.hasScheduledFrame) {
       try {
         await widgetsBinding.endOfFrame.timeout(
           const Duration(milliseconds: 250),
@@ -5237,26 +5238,37 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
       return null;
     }
 
-    final snapshot = _liveSnapshot();
-    if (_isSimpleLocatorFor(locator, CockpitLocatorKind.text) &&
-        _visibleTargetsContainMeaningfullyVisibleText(
-          _registry.visibleTargets,
-          locator.value,
-          matchMode: locator.matchMode,
-        )) {
-      return CockpitLocatorResolution(
-        matchedKind: CockpitLocatorKind.text,
-        matchedValue: locator.value,
-        matchedSignals: locator.matchMode == CockpitTextMatchMode.exact
-            ? const <String, String>{}
-            : <String, String>{
-                'text': locator.value,
-                'matchMode': locator.matchMode.name,
-              },
-      );
+    if (_isSimpleLocatorFor(locator, CockpitLocatorKind.text)) {
+      final directProbe = _context.locatorProbe?.call(locator);
+      if (directProbe != null) {
+        return directProbe.isSuccess
+            ? directProbe.locatorResolution ??
+                  CockpitLocatorResolution(
+                    matchedKind: CockpitLocatorKind.text,
+                    matchedValue: locator.value,
+                  )
+            : null;
+      }
+      _liveSnapshot();
+      if (_visibleTargetsContainMeaningfullyVisibleText(
+        _registry.visibleTargets,
+        locator.value,
+        matchMode: locator.matchMode,
+      )) {
+        return CockpitLocatorResolution(
+          matchedKind: CockpitLocatorKind.text,
+          matchedValue: locator.value,
+          matchedSignals: locator.matchMode == CockpitTextMatchMode.exact
+              ? const <String, String>{}
+              : <String, String>{
+                  'text': locator.value,
+                  'matchMode': locator.matchMode.name,
+                },
+        );
+      }
     }
     if (_isSimpleLocatorFor(locator, CockpitLocatorKind.route) &&
-        snapshot.routeName == locator.value) {
+        _currentRouteName() == locator.value) {
       return CockpitLocatorResolution(
         matchedKind: CockpitLocatorKind.route,
         matchedValue: locator.value,

@@ -3,6 +3,7 @@ import 'package:args/args.dart';
 import '../cockpit_cli_runtime.dart';
 import '../cockpit_dev_runtime.dart';
 import '../cockpit_dev_screenshot.dart';
+import 'dev_command_options.dart';
 
 CockpitLeafCommand cockpitDevScreenshotCommand(
   CockpitCliRuntime runtime,
@@ -12,13 +13,15 @@ CockpitLeafCommand cockpitDevScreenshotCommand(
   name: 'screenshot',
   description: 'Capture and verify the current app screen as a local PNG.',
   example: 'cockpit dev screenshot --save /tmp/current.png',
-  configure: (parser) => parser
-    ..addOption('session', abbr: 's')
-    ..addOption('save')
-    ..addOption('compare')
-    ..addOption('diff')
-    ..addOption('pixel-tolerance', defaultsTo: '0')
-    ..addOption('max-changed-pixels', defaultsTo: '0'),
+  configure: (parser) {
+    cockpitAddDevSessionOption(parser);
+    parser
+      ..addOption('save')
+      ..addOption('compare')
+      ..addOption('diff')
+      ..addOption('pixel-tolerance', defaultsTo: '0')
+      ..addOption('max-changed-pixels', defaultsTo: '0');
+  },
   action: (arguments) async {
     final pixelTolerance = _integer(arguments, 'pixel-tolerance');
     final maximumChangedPixels = _integer(arguments, 'max-changed-pixels');

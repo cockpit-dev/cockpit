@@ -78,10 +78,28 @@ void main() {
               ),
             ]),
         throwsA(
-          isA<StateError>().having(
+          isA<CockpitVmNetworkBodyUnavailableException>().having(
             (error) => error.message,
             'message',
-            contains('ambiguous'),
+            contains('cannot uniquely match'),
+          ),
+        ),
+      );
+    });
+
+    test('reports requests that predate VM profiling as unavailable', () {
+      final entry = _networkEntry('39');
+
+      expect(
+        () => const CockpitVmNetworkRequestMatcher().match(
+          entry,
+          const <HttpProfileRequest>[],
+        ),
+        throwsA(
+          isA<CockpitVmNetworkBodyUnavailableException>().having(
+            (error) => error.message,
+            'message',
+            contains('did not retain network request 39'),
           ),
         ),
       );
@@ -326,6 +344,50 @@ void main() {
       expect(result.absent, <CockpitNetworkBodyPart>{
         CockpitNetworkBodyPart.response,
       });
+      expect(await directory.list().isEmpty, isTrue);
+    });
+
+    test('maps missing VM profile data to a recoverable error', () async {
+      final directory = await Directory.systemTemp.createTemp(
+        'cockpit_network_unavailable_body_test_',
+      );
+      addTearDown(() => directory.delete(recursive: true));
+      final entry = _networkEntry('45');
+      final service = CockpitReadNetworkBodyService(
+        readBodies:
+            ({
+              required sessionId,
+              required vmServiceUri,
+              required entry,
+            }) async => throw const CockpitVmNetworkBodyUnavailableException(
+              'The VM profiler did not retain network request 45.',
+            ),
+        fileFactory: (basename) async => File('${directory.path}/$basename'),
+        readSnapshot: (_, _) async => _snapshot(entry),
+      );
+
+      await expectLater(
+        service.read(
+          CockpitReadNetworkBodyRequest(
+            sessionId: 'session-1',
+            baseUri: Uri.parse('http://127.0.0.1:57331'),
+            vmServiceUri: Uri.parse('ws://127.0.0.1:8181/ws'),
+            requestId: '45',
+            parts: const <CockpitNetworkBodyPart>{
+              CockpitNetworkBodyPart.response,
+            },
+          ),
+        ),
+        throwsA(
+          isA<CockpitApplicationServiceException>()
+              .having((error) => error.code, 'code', 'networkBodyUnavailable')
+              .having(
+                (error) => error.message,
+                'message',
+                contains('did not retain network request 45'),
+              ),
+        ),
+      );
       expect(await directory.list().isEmpty, isTrue);
     });
 

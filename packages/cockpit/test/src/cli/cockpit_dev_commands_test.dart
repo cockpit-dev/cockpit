@@ -50,6 +50,7 @@ void main() {
         'use',
         'status',
         'inspect',
+        'tree',
         'tap',
         'type',
         'press',
@@ -95,6 +96,7 @@ void main() {
         'type',
         'tip',
         'route',
+        'path',
         'index',
         'within',
         'fuzzy',
@@ -188,6 +190,8 @@ void main() {
       'Save changes',
       '--route',
       '/editor',
+      '--path',
+      '/editor/dialog/textbutton',
       '--index',
       '1',
       '--within',
@@ -208,6 +212,7 @@ void main() {
         tooltip: 'Save changes',
         type: 'TextButton',
         route: '/editor',
+        path: '/editor/dialog/textbutton',
         index: 1,
         ancestor: CockpitLocator(type: 'Confirm'),
       ),
@@ -544,6 +549,49 @@ void main() {
       everyElement(isNot(contains('index'))),
     );
   });
+
+  test(
+    'dev locator advice uses path only after simpler signals stay equal',
+    () {
+      Map<String, Object?> target(String registrationId, String path) =>
+          <String, Object?>{
+            'registrationId': registrationId,
+            'text': 'Continue',
+            'typeName': 'TextButton',
+            'path': path,
+            'routeName': '/',
+            'supportedCommands': <Object?>['tap'],
+            'ancestors': const <Object?>[],
+          };
+
+      final result = cockpitBuildDevLocatorMatches(<String, Object?>{
+        'snapshot': <String, Object?>{
+          'visibleTargets': <Object?>[
+            target('first', '/scaffold/sidebar/textbutton'),
+            target('second', '/scaffold/dialog/textbutton'),
+          ],
+        },
+      }, 'Continue');
+      final locators = (result['matches']! as List<Object?>)
+          .cast<Map<String, Object?>>()
+          .map((match) => match['loc']! as Map<String, Object?>)
+          .toList(growable: false);
+
+      expect(
+        locators,
+        containsAll(<Map<String, Object?>>[
+          <String, Object?>{
+            'text': 'Continue',
+            'path': '/scaffold/sidebar/textbutton',
+          },
+          <String, Object?>{
+            'text': 'Continue',
+            'path': '/scaffold/dialog/textbutton',
+          },
+        ]),
+      );
+    },
+  );
 }
 
 File _cockpitPubspecFile() {

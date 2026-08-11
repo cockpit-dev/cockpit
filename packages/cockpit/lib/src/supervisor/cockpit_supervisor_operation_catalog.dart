@@ -614,7 +614,7 @@ _operationHelp = <String, ({String title, String description})>{
   ),
   'ui.inspect': (
     title: 'Inspect UI',
-    description: 'Inspect semantic UI with optional snapshot comparison.',
+    description: 'Inspect Flutter UI with optional snapshot comparison.',
   ),
   'surface.inspect': (
     title: 'Inspect surface',

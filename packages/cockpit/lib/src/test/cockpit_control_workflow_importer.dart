@@ -319,6 +319,7 @@ void _validateLegacySnapshotOptions(Object? value, String path) {
     'runtimeQuery',
     'includeAccessibilitySummary',
     'maxAccessibilityEntries',
+    'tree',
   });
   if (options['networkQuery'] != null) {
     final queryPath = '$path.networkQuery';
@@ -339,6 +340,14 @@ void _validateLegacySnapshotOptions(Object? value, String path) {
       _legacyMap(options['runtimeQuery'], queryPath),
       queryPath,
       const <String>{'onlyErrors', 'messageContains'},
+    );
+  }
+  if (options['tree'] != null) {
+    final treePath = '$path.tree';
+    _requireLegacyKeys(
+      _legacyMap(options['tree'], treePath),
+      treePath,
+      const <String>{'profile', 'maxNodes', 'maxProps'},
     );
   }
 }

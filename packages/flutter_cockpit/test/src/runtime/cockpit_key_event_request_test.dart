@@ -23,4 +23,15 @@ void main() {
     expect(request.logicalKey, LogicalKeyboardKey.tab);
     expect(request.physicalKey, isNotNull);
   });
+
+  test('accepts compact and separated logical key names', () {
+    for (final name in <String>['arrowLeft', 'arrow-left', 'arrow_left']) {
+      final request = CockpitKeyEventRequest.fromJson(<String, Object?>{
+        'logicalKey': name,
+      });
+
+      expect(request.logicalKey, LogicalKeyboardKey.arrowLeft);
+      expect(request.physicalKey, PhysicalKeyboardKey.arrowLeft);
+    }
+  });
 }

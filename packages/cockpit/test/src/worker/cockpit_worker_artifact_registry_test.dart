@@ -46,6 +46,7 @@ void main() {
             'visibleTargets': <Object?>[
               <String, Object?>{
                 'route': '/operations',
+                'loc': '/scaffold/textbutton',
                 'source': outsidePath,
                 'workspaceSource': p.join(workspace.path, 'lib', 'main.dart'),
               },
@@ -59,6 +60,7 @@ void main() {
         (snapshot['visibleTargets']! as List<Object?>).single!
             as Map<String, Object?>;
     expect(target['route'], '/operations');
+    expect(target['loc'], '/scaffold/textbutton');
     expect(target['source'], '<redacted-path>');
     expect(
       target['workspaceSource'],

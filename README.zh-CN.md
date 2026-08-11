@@ -43,7 +43,7 @@ Cockpit 是面向 AI 与 CI 的生产级应用开发、E2E 自动化与验证框
   JSON Schema 和 OpenAPI。
 - [`cockpit`](packages/cockpit)：Supervisor、worker、平台 driver、CLI、MCP、
   报告和 artifact。
-- [`flutter_cockpit`](packages/flutter_cockpit)：一等 Flutter 开发与语义验证
+- [`flutter_cockpit`](packages/flutter_cockpit)：一等 Flutter 开发、检查与控制
   适配器；纯黑盒用户无需接入。
 
 最低版本为 Dart 3.8.0、Flutter 3.32.0。CLI 只需全局安装一次：
@@ -100,6 +100,7 @@ Install Cockpit for the current AI host, including the CLI, complete cockpit Ski
 cockpit dev start cockpit/main.dart --platform macos
 cockpit dev status
 cockpit dev inspect "Save"
+cockpit dev tree
 cockpit dev tap "Save"
 cockpit dev wait
 cockpit dev screenshot
@@ -111,6 +112,13 @@ cockpit dev diagnose --verbosity standard
 verbosity 和默认 timeout。`dev` 会自动使用仅限本地进程的 yolo Supervisor；
 黑盒、CI、staging 和 production 仍可使用严格策略。Cockpit 不读取 keychain 或
 secret store，`--env` 只传给当前进程。
+
+Flutter 检查直接遍历已挂载的 Element 与 RenderObject 结构，不要求业务应用编写
+`Semantics` 标签。日常开发优先使用有界的 `dev inspect QUERY`；只有需要理解周边
+结构时才依次使用 `dev tree`、`dev tree --verbosity standard` 或
+`dev tree --verbosity full`。完整树会写入 artifact，stdout 只返回经过验证的路径。
+仅当更简单、稳定的字段仍无法消除歧义时，才把返回的 `loc` 复制到 action 的
+`--path`。
 
 ## 运行架构
 
@@ -132,7 +140,7 @@ flowchart TB
 
   Workers["隔离的 workspace worker<br/>A / B / … / N"]
   Router["每个 worker<br/>独立能力路由"]
-  Flutter["Flutter<br/>semantic · runtime"]
+  Flutter["Flutter<br/>Element · runtime"]
   Native["移动黑盒<br/>ADB · WDA"]
   Desktop["Web · 桌面<br/>browser · window"]
   Evidence["状态 · 事件 · 报告 · artifact"]

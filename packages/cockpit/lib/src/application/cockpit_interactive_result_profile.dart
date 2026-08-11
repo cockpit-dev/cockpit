@@ -7,6 +7,7 @@ import 'cockpit_application_service_exception.dart';
 enum CockpitInteractiveResultProfileName {
   minimal('minimal'),
   locate('locate'),
+  tree('tree'),
   standard('standard'),
   inspect('inspect'),
   evidence('evidence');
@@ -106,6 +107,18 @@ final class CockpitInteractiveResultProfile {
         ui: CockpitInteractiveUiLevel.snapshot,
         diagnostics: CockpitInteractiveDiagnosticsLevel.none,
         artifacts: CockpitInteractiveArtifactLevel.none,
+        includeDelta: false,
+        includeRuntimeSteps: false,
+        emitSnapshotRef: false,
+        snapshotProfile: CockpitSnapshotProfile.baseline,
+      );
+
+  const CockpitInteractiveResultProfile.tree()
+    : this(
+        name: CockpitInteractiveResultProfileName.tree,
+        ui: CockpitInteractiveUiLevel.snapshot,
+        diagnostics: CockpitInteractiveDiagnosticsLevel.none,
+        artifacts: CockpitInteractiveArtifactLevel.metadata,
         includeDelta: false,
         includeRuntimeSteps: false,
         emitSnapshotRef: false,
@@ -244,6 +257,8 @@ final class CockpitInteractiveResultProfile {
         const CockpitInteractiveResultProfile.minimal(),
       CockpitInteractiveResultProfileName.locate =>
         const CockpitInteractiveResultProfile.locate(),
+      CockpitInteractiveResultProfileName.tree =>
+        const CockpitInteractiveResultProfile.tree(),
       CockpitInteractiveResultProfileName.standard =>
         const CockpitInteractiveResultProfile.standard(),
       CockpitInteractiveResultProfileName.inspect =>

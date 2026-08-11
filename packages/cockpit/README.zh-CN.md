@@ -69,6 +69,7 @@ Install Cockpit for the current AI host, including the CLI, complete cockpit Ski
 cockpit dev start cockpit/main.dart --platform macos
 cockpit dev status
 cockpit dev inspect "Save"
+cockpit dev tree
 cockpit dev tap "Save"
 cockpit dev wait
 cockpit dev screenshot
@@ -82,6 +83,12 @@ cockpit dev diagnose --verbosity standard
 HANDLE` 和 `cockpit dev use HANDLE`。显式 `--session` 只选择当前命令，不会改变已保存
 的 active handle。`dev` 自动使用仅限本地进程的 yolo Supervisor。Cockpit 不读取
 keychain 或 secret store，`--env` 只传给当前进程。
+
+Flutter 检查会直接遍历已挂载的 Element 与 RenderObject，不要求开发者编写
+`Semantics`。有界搜索使用 `dev inspect QUERY`；只有确实需要结构上下文时才使用
+`dev tree`、`dev tree --verbosity standard` 或 `dev tree --verbosity full`。
+完整树始终写入 artifact，stdout 只返回经过验证的路径。action 支持 `--path`；
+应优先使用 ID、精确文本、key 和类型，仍有歧义时再复制检查结果中的 `loc`。
 
 ## 多项目交互
 

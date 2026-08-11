@@ -143,11 +143,19 @@ final class CockpitReadNetworkBodyService {
             'WebSocket frame metadata and text previews are included in the network entry.',
       );
     }
-    final bodies = await _readBodies(
-      sessionId: request.sessionId,
-      vmServiceUri: request.vmServiceUri,
-      entry: matches.single,
-    );
+    final CockpitVmNetworkBodies bodies;
+    try {
+      bodies = await _readBodies(
+        sessionId: request.sessionId,
+        vmServiceUri: request.vmServiceUri,
+        entry: matches.single,
+      );
+    } on CockpitVmNetworkBodyUnavailableException catch (error) {
+      throw CockpitApplicationServiceException(
+        code: 'networkBodyUnavailable',
+        message: error.message,
+      );
+    }
     final artifacts = <CockpitNetworkBodyPart, CockpitNetworkBodyArtifact>{};
     final absent = <CockpitNetworkBodyPart>{};
     var continuing = false;

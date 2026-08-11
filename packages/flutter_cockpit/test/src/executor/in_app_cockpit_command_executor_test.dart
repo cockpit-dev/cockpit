@@ -4337,6 +4337,65 @@ void main() {
     },
   );
 
+  test(
+    'scrollUntilVisible rechecks a lazy target after post-scroll settle',
+    () async {
+      final registry = CockpitTargetRegistry(routeName: '/settings');
+      var scrolled = false;
+      var registered = false;
+      var scrollCount = 0;
+      final executor = InAppCockpitCommandExecutor(
+        registry: registry,
+        snapshotProvider: ({options = const CockpitSnapshotOptions()}) =>
+            registry.snapshot(),
+        postActionSettler: () async {
+          if (!scrolled || registered) return;
+          registered = true;
+          registry.register(
+            const CockpitTarget(
+              registrationId: 'open-command-lab',
+              text: 'Open command lab',
+              routeName: '/settings',
+            ),
+          );
+        },
+        scrollStepHandler:
+            ({
+              required reverse,
+              required viewportFraction,
+              scrollableKey,
+              targetLocator,
+              scrollableLocator,
+              required duration,
+              required gestureProfile,
+              required continuous,
+              required postScrollEnsureVisible,
+            }) async {
+              scrollCount += 1;
+              scrolled = true;
+              return const CockpitScrollStepResult(
+                didScroll: true,
+                strategy: 'jumpTo',
+                targetVisibilityObserved: true,
+              );
+            },
+      );
+
+      final result = await executor.execute(
+        CockpitCommand(
+          commandId: 'scroll-open-command-lab',
+          commandType: CockpitCommandType.scrollUntilVisible,
+          locator: const CockpitLocator(text: 'Open command lab'),
+        ),
+      );
+
+      expect(result.success, isTrue);
+      expect(result.locatorResolution?.matchedKind, CockpitLocatorKind.text);
+      expect(result.locatorResolution?.matchedValue, 'Open command lab');
+      expect(scrollCount, 1);
+    },
+  );
+
   testWidgets('scrollUntilVisible includes after-action screenshot evidence', (
     tester,
   ) async {

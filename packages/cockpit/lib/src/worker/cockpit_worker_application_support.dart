@@ -283,7 +283,11 @@ final class CockpitWorkerResultSanitizer {
   final String workspaceRoot;
   final CockpitWorkerRuntimeRegistry registry;
   final CockpitWorkerArtifactRetainer artifactRetainer;
-  static const Set<String> _routeKeys = <String>{'route', 'routeName'};
+  static const Set<String> _logicalPathKeys = <String>{
+    'loc',
+    'route',
+    'routeName',
+  };
 
   Future<Map<String, Object?>> sanitize(
     Map<String, Object?> value, {
@@ -494,7 +498,7 @@ final class CockpitWorkerResultSanitizer {
     if (redacted != value) {
       return redacted;
     }
-    if (_routeKeys.contains(key)) return value;
+    if (_logicalPathKeys.contains(key)) return value;
     if (p.isAbsolute(value)) return '<redacted-path>';
     return value;
   }

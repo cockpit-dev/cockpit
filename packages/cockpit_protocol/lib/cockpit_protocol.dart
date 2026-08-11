@@ -102,6 +102,7 @@ export 'src/runtime/cockpit_surface_kind.dart';
 export 'src/runtime/cockpit_target.dart';
 export 'src/runtime/cockpit_target_geometry.dart';
 export 'src/runtime/cockpit_viewport.dart';
+export 'src/runtime/cockpit_widget_tree.dart';
 export 'src/runtime/cockpit_target_kind.dart';
 export 'src/runtime/cockpit_target_registry.dart';
 export 'src/runtime/cockpit_text_input_request.dart';

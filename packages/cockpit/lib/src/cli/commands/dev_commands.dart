@@ -1,4 +1,3 @@
-import 'package:args/args.dart';
 import 'package:args/command_runner.dart';
 
 import '../cockpit_cli_runtime.dart';
@@ -7,6 +6,7 @@ import '../cockpit_dev_network.dart';
 import '../cockpit_dev_runtime.dart';
 import '../cockpit_dev_start.dart';
 import '../cockpit_flutter_launch_configuration_cli.dart';
+import 'dev_command_options.dart';
 import 'dev_interaction_commands.dart';
 import 'dev_screenshot_command.dart';
 
@@ -17,6 +17,7 @@ final class CockpitDevCommand extends Command<int> {
     addSubcommand(_use(runtime, dev));
     addSubcommand(_read(runtime, dev, name: 'status'));
     addSubcommand(_inspect(runtime, dev));
+    addSubcommand(_tree(runtime, dev));
     addSubcommand(cockpitDevTapCommand(runtime, dev));
     addSubcommand(cockpitDevTypeCommand(runtime, dev));
     addSubcommand(cockpitDevPressCommand(runtime, dev));
@@ -52,7 +53,7 @@ CockpitLeafCommand _start(CockpitCliRuntime runtime) => CockpitLeafCommand(
   defaultTimeout: const Duration(minutes: 20),
   maximumTimeout: const Duration(minutes: 31),
   configure: (parser) {
-    _sessionOption(parser);
+    cockpitAddDevSessionOption(parser);
     parser
       ..addOption('platform')
       ..addOption('device')
@@ -114,7 +115,7 @@ CockpitLeafCommand _read(
       ? 'Read the current Flutter development session state.'
       : 'Collect bounded Flutter UI, log, error, and network diagnostics.',
   example: 'cockpit dev $name',
-  configure: _sessionOption,
+  configure: cockpitAddDevSessionOption,
   action: (arguments) async => dev.status(
     await runtime.resolveDevelopmentSession(arguments.option('session')),
     diagnose: name == 'diagnose',
@@ -125,11 +126,10 @@ CockpitLeafCommand _inspect(CockpitCliRuntime runtime, CockpitDevRuntime dev) =>
     CockpitLeafCommand(
       runtime: runtime,
       name: 'inspect',
-      description:
-          'Inspect the Flutter UI or search its current semantic state.',
+      description: 'Inspect or search the mounted Flutter Element state.',
       invocationSuffix: '[QUERY] [arguments]',
       example: 'cockpit dev inspect "Save changes"',
-      configure: _sessionOption,
+      configure: cockpitAddDevSessionOption,
       action: (arguments) async {
         if (arguments.rest.length > 1) {
           throw const FormatException('dev inspect accepts at most one query.');
@@ -137,6 +137,35 @@ CockpitLeafCommand _inspect(CockpitCliRuntime runtime, CockpitDevRuntime dev) =>
         return dev.inspect(
           await runtime.resolveDevelopmentSession(arguments.option('session')),
           query: arguments.rest.firstOrNull,
+        );
+      },
+    );
+
+CockpitLeafCommand _tree(CockpitCliRuntime runtime, CockpitDevRuntime dev) =>
+    CockpitLeafCommand(
+      runtime: runtime,
+      name: 'tree',
+      description: 'Read the mounted Flutter widget tree without Semantics.',
+      example: 'cockpit dev tree --verbosity full',
+      configure: (parser) {
+        cockpitAddDevSessionOption(parser);
+        parser.addOption(
+          'max-nodes',
+          help: 'Override the selected tree profile node limit.',
+        );
+      },
+      action: (arguments) async {
+        final rawMaxNodes = arguments.option('max-nodes');
+        final maxNodes = rawMaxNodes == null ? null : int.tryParse(rawMaxNodes);
+        if (rawMaxNodes != null &&
+            (maxNodes == null || maxNodes < 1 || maxNodes > 500000)) {
+          throw const FormatException(
+            '--max-nodes must be between 1 and 500000.',
+          );
+        }
+        return dev.tree(
+          await runtime.resolveDevelopmentSession(arguments.option('session')),
+          maxNodes: maxNodes,
         );
       },
     );
@@ -158,7 +187,7 @@ CockpitLeafCommand _lifecycle(
       ? const Duration(minutes: 5)
       : const Duration(minutes: 2),
   maximumTimeout: const Duration(minutes: 10),
-  configure: _sessionOption,
+  configure: cockpitAddDevSessionOption,
   action: (arguments) async => dev.lifecycle(
     await runtime.resolveDevelopmentSession(arguments.option('session')),
     action,
@@ -174,7 +203,7 @@ CockpitLeafCommand _viewport(
   description: 'Resize the Flutter viewport in logical pixels.',
   invocationSuffix: 'WIDTHxHEIGHT [arguments]',
   example: 'cockpit dev viewport 800x600',
-  configure: _sessionOption,
+  configure: cockpitAddDevSessionOption,
   action: (arguments) async {
     if (arguments.rest.length != 1) {
       throw const FormatException('dev viewport requires WIDTHxHEIGHT.');
@@ -212,27 +241,29 @@ CockpitLeafCommand _network(
   example: 'cockpit dev network 37 --body response',
   defaultTimeout: const Duration(minutes: 2),
   maximumTimeout: const Duration(minutes: 10),
-  configure: (parser) => parser
-    ..addOption(
-      'session',
-      abbr: 's',
-      help: 'Select an exact development session.',
-    )
-    ..addOption('before', help: 'Read requests older than this numeric ID.')
-    ..addOption('limit', defaultsTo: '12', help: 'Maximum recent rows.')
-    ..addFlag('failures', negatable: false, help: 'Show failed requests only.')
-    ..addOption('method', help: 'Filter by HTTP method.')
-    ..addOption('uri', help: 'Filter by URI substring.')
-    ..addOption(
-      'body',
-      allowed: const <String>['request', 'response', 'both'],
-      help: 'Save complete/current HTTP body files.',
-    )
-    ..addFlag(
-      'raw',
-      negatable: false,
-      help: 'Keep sensitive text and binary bytes in saved body files.',
-    ),
+  configure: (parser) {
+    cockpitAddDevSessionOption(parser);
+    parser
+      ..addOption('before', help: 'Read requests older than this numeric ID.')
+      ..addOption('limit', defaultsTo: '12', help: 'Maximum recent rows.')
+      ..addFlag(
+        'failures',
+        negatable: false,
+        help: 'Show failed requests only.',
+      )
+      ..addOption('method', help: 'Filter by HTTP method.')
+      ..addOption('uri', help: 'Filter by URI substring.')
+      ..addOption(
+        'body',
+        allowed: const <String>['request', 'response', 'both'],
+        help: 'Save complete/current HTTP body files.',
+      )
+      ..addFlag(
+        'raw',
+        negatable: false,
+        help: 'Keep sensitive text and binary bytes in saved body files.',
+      );
+  },
   action: (arguments) async {
     if (arguments.rest.length > 1) {
       throw const FormatException(
@@ -284,12 +315,6 @@ void _validateNetworkId(String? value, String name) {
     throw FormatException('$name must be a positive numeric request ID.');
   }
 }
-
-void _sessionOption(ArgParser parser) => parser.addOption(
-  'session',
-  abbr: 's',
-  help: 'Select an exact development session.',
-);
 
 int _integer(String value) {
   final parsed = int.tryParse(value);

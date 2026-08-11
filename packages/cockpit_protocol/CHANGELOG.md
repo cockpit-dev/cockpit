@@ -2,8 +2,12 @@
 
 ## 3.0.13
 
-- Synchronized the protocol package with Cockpit's Windows native-control and
-  system-capture performance release; public protocol contracts are unchanged.
+- Added typed minimal, standard, and full Flutter Widget tree contracts,
+  including bounded node properties, geometry, scroll ancestry, actionable
+  locator paths, and snapshot artifact references.
+- Added strict Widget tree options to snapshot and test-document schemas so
+  REST, CLI, E2E, and third-party clients share the same validated capture
+  contract.
 
 ## 3.0.12
 

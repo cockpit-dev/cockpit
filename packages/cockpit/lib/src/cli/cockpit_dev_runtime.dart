@@ -1,8 +1,13 @@
-import 'package:cockpit_protocol/cockpit_protocol.dart';
+import 'dart:io';
 
+import 'package:cockpit_protocol/cockpit_protocol.dart';
+import 'package:path/path.dart' as p;
+
+import '../foundation/cockpit_home.dart';
 import '../foundation/cockpit_ids.dart';
 import '../supervisor/cockpit_supervisor_api_client.dart';
 import 'cockpit_cli_runtime.dart';
+import 'cockpit_cli_output.dart';
 import 'cockpit_cli_session_handles.dart';
 import 'cockpit_dev_locator_advisor.dart';
 
@@ -12,6 +17,14 @@ typedef CockpitDevOperationInvoker =
       String kind,
       Map<String, Object?> input,
     );
+
+typedef CockpitDevArtifactDownloader =
+    Future<String> Function(
+      CockpitCliSessionHandle session, {
+      required String artifactId,
+      required String name,
+      required String mediaType,
+    });
 
 final class CockpitDevSessionResolution {
   const CockpitDevSessionResolution({
@@ -33,10 +46,13 @@ final class CockpitDevRuntime {
   CockpitDevRuntime(
     this.runtime, {
     CockpitDevOperationInvoker? operationInvoker,
-  }) : _operationInvoker = operationInvoker;
+    CockpitDevArtifactDownloader? artifactDownloader,
+  }) : _operationInvoker = operationInvoker,
+       _artifactDownloader = artifactDownloader;
 
   final CockpitCliRuntime runtime;
   final CockpitDevOperationInvoker? _operationInvoker;
+  final CockpitDevArtifactDownloader? _artifactDownloader;
   final Map<String, Future<List<CockpitOperationDescriptor>>>
   _workspaceDescriptors = <String, Future<List<CockpitOperationDescriptor>>>{};
 
@@ -629,6 +645,107 @@ final class CockpitDevRuntime {
     );
   }
 
+  Future<int> tree(CockpitCliSessionHandle session, {int? maxNodes}) async {
+    final resolution = await reconcile(session, allowRelaunch: false);
+    if (!resolution.ready) {
+      return writeUnavailable(action: 'tree', resolution: resolution);
+    }
+    session = resolution.session;
+    final detail = runtime.outputSelection.detail;
+    var treeOptions = switch (detail) {
+      CockpitCliOutputDetail.minimal =>
+        const CockpitWidgetTreeOptions.minimal(),
+      CockpitCliOutputDetail.standard =>
+        const CockpitWidgetTreeOptions.standard(),
+      CockpitCliOutputDetail.full => const CockpitWidgetTreeOptions.full(),
+    };
+    if (maxNodes != null) {
+      treeOptions = treeOptions.copyWith(maxNodes: maxNodes);
+    }
+    final result = await invoke(session, 'ui.inspect', <String, Object?>{
+      'sessionId': session.sessionId,
+      'profile': 'tree',
+      'snapshotOptions': CockpitSnapshotOptions(
+        profile: CockpitSnapshotProfile.baseline,
+        maxTargets: 1,
+        maxAncestorsPerTarget: 0,
+        emitArtifactWhenLarge: detail != CockpitCliOutputDetail.minimal,
+        tree: treeOptions,
+      ).toJson(),
+    });
+    if (!_operationSucceeded(result)) {
+      return writeOperation(
+        action: 'tree',
+        session: session,
+        result: result,
+        state: result.output,
+        changed: resolution.changed,
+      );
+    }
+
+    final output = result.output ?? const <String, Object?>{};
+    final snapshot = _objectMap(output['snapshot']);
+    final tree = _objectMap(snapshot?['tree']);
+    final artifact = _treeArtifact(output);
+    final path = artifact == null
+        ? null
+        : await (_artifactDownloader ?? _downloadTreeArtifact)(
+            session,
+            artifactId: artifact.artifactId,
+            name: artifact.name,
+            mediaType: artifact.mediaType,
+          );
+    final state = <String, Object?>{
+      'profile': tree?['profile'] ?? treeOptions.profile.jsonValue,
+      if (tree?['total'] != null) 'total': tree!['total'],
+      if (tree?['visible'] != null) 'visible': tree!['visible'],
+      if (tree?['emitted'] != null) 'emitted': tree!['emitted'],
+      if (tree?['truncated'] != null) 'truncated': tree!['truncated'],
+      'path': ?path,
+      if (path == null && tree != null) 'nodes': tree['nodes'],
+    };
+    return writeEnvelope(
+      action: 'tree',
+      session: session,
+      ok: true,
+      state: state,
+      changed: resolution.changed,
+      evidence: path == null ? null : <String, Object?>{'tree': path},
+    );
+  }
+
+  Future<String> _downloadTreeArtifact(
+    CockpitCliSessionHandle session, {
+    required String artifactId,
+    required String name,
+    required String mediaType,
+  }) async {
+    final home = CockpitHome.system();
+    final homePaths = await home.initialize();
+    final directory = Directory(
+      p.join(
+        homePaths.artifactsDirectory,
+        'development',
+        session.checkoutIdentity!.substring(0, 16),
+        session.handleId,
+        'trees',
+        CockpitSecureTokenGenerator().nextResourceIdToken(),
+      ),
+    );
+    await directory.create(recursive: true);
+    await home.permissionHardener.hardenDirectory(directory);
+    final destination = File(p.join(directory.path, p.basename(name)));
+    final receipt = await (await runtime.client())
+        .downloadDevelopmentArtifactToFile(
+          workspaceId: session.workspaceId,
+          sessionId: session.sessionId,
+          artifactId: artifactId,
+          mediaType: mediaType,
+          destination: destination,
+        );
+    return p.normalize(await receipt.file.resolveSymbolicLinks());
+  }
+
   Future<int> runCommand(
     CockpitCliSessionHandle session, {
     required String action,
@@ -1038,6 +1155,27 @@ Map<Object?, Object?>? _objectMap(Object? value) {
   if (value is Map<Object?, Object?>) return value;
   if (value is Map) return Map<Object?, Object?>.from(value);
   return null;
+}
+
+({String artifactId, String name, String mediaType})? _treeArtifact(
+  Object? value,
+) {
+  final output = _objectMap(value);
+  final snapshot = _objectMap(output?['snapshot']);
+  final treeArtifact = _objectMap(snapshot?['treeArtifactRef']);
+  final reference = _objectMap(treeArtifact?['artifactRef']);
+  final artifactId = reference?['artifactId'];
+  final name = reference?['name'];
+  final mediaType = reference?['mediaType'];
+  if (artifactId is! String ||
+      artifactId.isEmpty ||
+      name is! String ||
+      name.isEmpty ||
+      mediaType is! String ||
+      mediaType.isEmpty) {
+    return null;
+  }
+  return (artifactId: artifactId, name: name, mediaType: mediaType);
 }
 
 Map<String, Object?> _optionalMapEntry(String key, Object? value) =>

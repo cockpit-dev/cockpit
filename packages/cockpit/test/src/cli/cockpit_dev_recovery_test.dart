@@ -308,6 +308,93 @@ void main() {
     },
   );
 
+  test('full widget tree downloads one path-only artifact', () async {
+    final artifact = File(p.join(temporaryDirectory.path, 'tree.json'))
+      ..writeAsStringSync('{"tree":true}');
+    String? requestedProfile;
+    CockpitSnapshotOptions? requestedOptions;
+    final dev = CockpitDevRuntime(
+      runtime,
+      artifactDownloader:
+          (
+            session, {
+            required artifactId,
+            required name,
+            required mediaType,
+          }) async {
+            expect(session.sessionId, 'session-old');
+            expect(artifactId, 'artifact-tree');
+            expect(name, 'current_widget_tree.json');
+            expect(mediaType, 'application/json');
+            return artifact.path;
+          },
+      operationInvoker: (_, kind, input) async {
+        if (kind == 'session.development.get') {
+          return _result(
+            kind,
+            output: const <String, Object?>{
+              'sessionId': 'session-old',
+              'targetId': 'target-1',
+              'appId': 'app-old',
+              'status': <String, Object?>{
+                'state': 'ready',
+                'appReachable': true,
+                'remoteSessionReachable': true,
+              },
+            },
+          );
+        }
+        if (kind == 'ui.inspect') {
+          requestedProfile = input['profile'] as String?;
+          requestedOptions = CockpitSnapshotOptions.fromJson(
+            Map<String, Object?>.from(
+              input['snapshotOptions']! as Map<Object?, Object?>,
+            ),
+          );
+          return _result(
+            kind,
+            output: <String, Object?>{
+              'snapshot': const <String, Object?>{
+                'treeArtifactRef': <String, Object?>{
+                  'role': 'widget-tree',
+                  'artifactRef': <String, Object?>{
+                    'artifactId': 'artifact-tree',
+                    'kind': 'widget-tree',
+                    'name': 'current_widget_tree.json',
+                    'mediaType': 'application/json',
+                  },
+                },
+                'tree': <String, Object?>{
+                  'profile': 'full',
+                  'total': 240,
+                  'visible': 180,
+                  'emitted': 240,
+                  'truncated': false,
+                  'nodes': <Object?>[],
+                },
+              },
+            },
+          );
+        }
+        throw StateError('Unexpected operation $kind');
+      },
+    );
+    runtime.configureOutput(
+      command: 'dev.tree',
+      selection: const CockpitCliOutputSelection(
+        format: CockpitCliFormat.path,
+        detail: CockpitCliOutputDetail.full,
+      ),
+    );
+
+    expect(await dev.tree(session), cockpitSuccessExitCode);
+    expect(requestedProfile, 'tree');
+    expect(requestedOptions?.tree, const CockpitWidgetTreeOptions.full());
+    expect(requestedOptions?.maxTargets, 1);
+    expect(requestedOptions?.maxAncestorsPerTarget, 0);
+    expect(stdout.toString().trim(), artifact.resolveSymbolicLinksSync());
+  });
+
   test('status reuses the session query without diagnostic probes', () async {
     final calls = <String>[];
     final dev = CockpitDevRuntime(
