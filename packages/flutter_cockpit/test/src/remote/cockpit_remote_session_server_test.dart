@@ -15,7 +15,7 @@ void main() {
   tearDown(FlutterCockpit.dispose);
 
   test(
-    'remote endpoint keeps inline screenshot evidence when artifact persistence is unavailable',
+    'remote endpoint keeps screenshot evidence downloadable without files',
     () async {
       final handler = CockpitRemoteSessionEndpointHandler(
         configuration: const CockpitRemoteSessionConfiguration(
@@ -82,18 +82,19 @@ void main() {
 
       expect(response.statusCode, HttpStatus.ok);
       expect(commandResponse.result.success, isTrue);
-      expect(commandResponse.artifactDownloads, isEmpty);
-      expect(commandResponse.artifactPayloads, hasLength(1));
+      expect(commandResponse.artifactDownloads, hasLength(1));
+      expect(commandResponse.artifactPayloads, isEmpty);
       expect(
-        commandResponse.artifactPayloads.single.artifact.relativePath,
+        commandResponse.artifactDownloads.single.artifact.relativePath,
         'screenshots/inline.png',
       );
-      expect(commandResponse.artifactPayloads.single.bytes, <int>[
-        137,
-        80,
-        78,
-        71,
-      ]);
+      final downloadResponse = await handler.handle(
+        CockpitRemoteSessionEndpointRequest(
+          method: 'GET',
+          uri: Uri.parse(commandResponse.artifactDownloads.single.downloadPath),
+        ),
+      );
+      expect(downloadResponse.binaryBody, <int>[137, 80, 78, 71]);
     },
   );
 
@@ -1141,8 +1142,141 @@ void main() {
     },
   );
 
+  test('full and large standard widget trees are tree-only downloads', () async {
+    final tempDir = await Directory.systemTemp.createTemp(
+      'cockpit_remote_widget_tree',
+    );
+    addTearDown(() async {
+      if (tempDir.existsSync()) await tempDir.delete(recursive: true);
+    });
+    final artifactFile = File(p.join(tempDir.path, 'widget_tree.json'));
+    CockpitSnapshotOptions? capturedOptions;
+    final server = CockpitRemoteSessionServer(
+      configuration: const CockpitRemoteSessionConfiguration(
+        enabled: true,
+        autoStart: false,
+        port: 0,
+      ),
+      statusProvider: () async => CockpitRemoteSessionStatus(
+        sessionId: 'remote-widget-tree',
+        platform: 'macos',
+        transportType: 'remoteHttp',
+        currentRouteName: '/tree',
+        capabilities: CockpitCapabilities(
+          platform: 'macos',
+          transportType: 'remoteHttp',
+          supportsInAppControl: true,
+          supportsFlutterViewCapture: true,
+          supportsNativeScreenCapture: false,
+          supportsHostAutomation: false,
+          supportedCommands: const <CockpitCommandType>[
+            CockpitCommandType.collectSnapshot,
+          ],
+          supportedLocatorStrategies: CockpitLocatorKind.values,
+        ),
+        recordingCapabilities: CockpitRecordingCapabilities(
+          supportsNativeRecording: false,
+          preferredAcceptanceRecordingKind: CockpitRecordingKind.nativeScreen,
+        ),
+        snapshot: CockpitSnapshot(routeName: '/tree'),
+      ),
+      snapshotProvider: ({required options}) async {
+        capturedOptions = options;
+        final profile = options.tree?.profile ?? CockpitWidgetTreeProfile.full;
+        return CockpitSnapshot(
+          routeName: '/tree',
+          tree: CockpitWidgetTree(
+            profile: profile,
+            total: 1,
+            visible: 1,
+            truncated: false,
+            nodes: <CockpitWidgetNode>[
+              CockpitWidgetNode(
+                node: 0,
+                depth: 0,
+                type: 'TextButton',
+                text: profile == CockpitWidgetTreeProfile.standard
+                    ? 'x' * 20000
+                    : 'Continue',
+                visible: true,
+                offstage: false,
+              ),
+            ],
+          ),
+        );
+      },
+      commandExecutor: (_) async => CockpitCommandExecution(
+        result: CockpitCommandResult(
+          success: true,
+          commandId: 'noop',
+          commandType: CockpitCommandType.collectSnapshot,
+          durationMs: 0,
+        ),
+      ),
+      startRecording: (request) async => CockpitRecordingSession(
+        request: request,
+        state: CockpitRecordingState.recording,
+      ),
+      stopRecording: () async =>
+          CockpitRecordingResult(state: CockpitRecordingState.failed),
+      artifactTempFileFactory: (_) async => artifactFile,
+    );
+    await server.start();
+
+    final responseJson = await _readJson(
+      server.baseUri!.resolve(
+        '/snapshot?treeProfile=full&treeMaxNodes=100&treeMaxProps=4',
+      ),
+    );
+    expect(capturedOptions?.tree?.profile, CockpitWidgetTreeProfile.full);
+    expect(capturedOptions?.tree?.maxNodes, 100);
+    expect(capturedOptions?.tree?.maxProps, 4);
+    final snapshot = CockpitSnapshot.fromJson(
+      Map<String, Object?>.from(
+        responseJson['snapshot']! as Map<Object?, Object?>,
+      ),
+    );
+    expect(snapshot.treeArtifactRef?.role, 'widget-tree');
+    expect(snapshot.tree?.nodes, isEmpty);
+    expect(snapshot.tree?.emitted, 1);
+
+    final downloadPath =
+        ((responseJson['artifactDownloads']! as List<Object?>).single
+                as Map<Object?, Object?>)['downloadPath']!
+            as String;
+    final downloaded = CockpitWidgetTree.fromJson(
+      await _readJson(server.baseUri!.resolve(downloadPath)),
+    );
+    expect(downloaded.nodes.single.text, 'Continue');
+
+    final standardResponseJson = await _readJson(
+      server.baseUri!.resolve(
+        '/snapshot?treeProfile=standard&treeMaxNodes=100&treeMaxProps=0&emitArtifactWhenLarge=true',
+      ),
+    );
+    final standardSnapshot = CockpitSnapshot.fromJson(
+      Map<String, Object?>.from(
+        standardResponseJson['snapshot']! as Map<Object?, Object?>,
+      ),
+    );
+    expect(standardSnapshot.treeArtifactRef?.role, 'widget-tree');
+    expect(standardSnapshot.diagnosticsArtifactRef, isNull);
+    expect(standardSnapshot.tree?.nodes, isEmpty);
+    final standardDownloadPath =
+        ((standardResponseJson['artifactDownloads']! as List<Object?>).single
+                as Map<Object?, Object?>)['downloadPath']!
+            as String;
+    final standardTree = CockpitWidgetTree.fromJson(
+      await _readJson(server.baseUri!.resolve(standardDownloadPath)),
+    );
+    expect(standardTree.profile, CockpitWidgetTreeProfile.standard);
+    expect(standardTree.nodes.single.text?.length, greaterThan(19000));
+
+    await server.close();
+  });
+
   test(
-    'remote session snapshot falls back to inline payloads when large-artifact persistence is unavailable',
+    'large artifacts remain downloadable when file persistence is unavailable',
     () async {
       final server = CockpitRemoteSessionServer(
         configuration: const CockpitRemoteSessionConfiguration(
@@ -1222,11 +1356,28 @@ void main() {
         ),
       );
 
-      expect(responseJson.containsKey('artifactDownloads'), isFalse);
-      final snapshot = CockpitSnapshot.fromJson(responseJson);
-      expect(snapshot.diagnosticsArtifactRef, isNull);
+      final snapshot = CockpitSnapshot.fromJson(
+        Map<String, Object?>.from(
+          responseJson['snapshot']! as Map<Object?, Object?>,
+        ),
+      );
+      expect(snapshot.diagnosticsArtifactRef, isNotNull);
+      expect(snapshot.visibleTargets.single.diagnosticProperties, isEmpty);
+      final downloadPath =
+          ((responseJson['artifactDownloads']! as List<Object?>).single
+                  as Map<Object?, Object?>)['downloadPath']!
+              as String;
+      final downloaded = CockpitSnapshot.fromJson(
+        await _readJson(server.baseUri!.resolve(downloadPath)),
+      );
       expect(
-        snapshot.visibleTargets.single.diagnosticProperties.single.value.length,
+        downloaded
+            .visibleTargets
+            .single
+            .diagnosticProperties
+            .single
+            .value
+            .length,
         greaterThan(20000),
       );
 

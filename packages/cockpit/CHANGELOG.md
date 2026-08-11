@@ -2,6 +2,18 @@
 
 ## 3.0.13
 
+- Added `cockpit dev tree` with minimal, standard, and full Flutter structure
+  profiles. Routine output remains bounded LON; complete trees are retained as
+  verified artifacts and stdout returns only their paths.
+- Made `dev inspect` and action locators use mounted Flutter Element signals
+  without requiring application-authored Semantics, including structural
+  `--path` disambiguation when stable public signals are insufficient.
+- Replaced an existing app before relaunching the same target while preserving
+  every other target and session, preventing duplicate windows and commands
+  from binding to stale instances.
+- Removed terminal runs from the active-run registry so a completed run cannot
+  block a later worker refresh, and serialized per-workspace build selection
+  without affecting unrelated projects.
 - Replaced dynamically compiled PowerShell/C# automation on Windows with
   in-process Win32 FFI for window discovery, activation, focused-control
   inspection, and native input. Ambiguous application-ID matches now fail

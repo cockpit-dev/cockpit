@@ -9,6 +9,7 @@ import '../development/cockpit_development_session_status.dart';
 import '../application/cockpit_app_temp_store.dart';
 import '../development/cockpit_vm_network_profiler.dart';
 import '../foundation/cockpit_home.dart';
+import '../foundation/cockpit_version.dart';
 import '../foundation/cockpit_locked_json_store.dart';
 import '../foundation/cockpit_permissions.dart';
 import '../test/cockpit_test_safety_policy.dart';
@@ -45,6 +46,7 @@ final class CockpitWorkerRuntimeConfiguration {
     required this.workspaceId,
     required this.projectId,
     required this.engineVersion,
+    required this.buildId,
     required this.workspaceRoot,
     required this.stateRoot,
     required this.appTempRoot,
@@ -71,6 +73,12 @@ final class CockpitWorkerRuntimeConfiguration {
     workerId(workspaceId, r'$.workspaceId');
     workerId(projectId, r'$.projectId');
     workerId(engineVersion, r'$.engineVersion');
+    workerId(buildId, r'$.buildId');
+    if (buildId != cockpitBuildId) {
+      throw const FormatException(
+        'Worker executable does not match the requested build.',
+      );
+    }
     workerId(workerOwnerId, r'$.workerOwnerId');
     workerString(processStartIdentity, r'$.processStartIdentity', maximum: 512);
     _validateAbsolutePath(workspaceRoot, 'workspaceRoot');
@@ -101,6 +109,7 @@ final class CockpitWorkerRuntimeConfiguration {
       ..addOption('workspace-id', mandatory: true)
       ..addOption('project-id', mandatory: true)
       ..addOption('engine-version', mandatory: true)
+      ..addOption('build-id', mandatory: true)
       ..addOption('workspace-root', mandatory: true)
       ..addOption('state-root', mandatory: true)
       ..addOption('app-temp-root', mandatory: true)
@@ -120,6 +129,7 @@ final class CockpitWorkerRuntimeConfiguration {
       workspaceId: parsed.option('workspace-id')!,
       projectId: parsed.option('project-id')!,
       engineVersion: parsed.option('engine-version')!,
+      buildId: parsed.option('build-id')!,
       workspaceRoot: parsed.option('workspace-root')!,
       stateRoot: parsed.option('state-root')!,
       appTempRoot: parsed.option('app-temp-root')!,
@@ -146,6 +156,7 @@ final class CockpitWorkerRuntimeConfiguration {
   final String workspaceId;
   final String projectId;
   final String engineVersion;
+  final String buildId;
   final String workspaceRoot;
   final String stateRoot;
   final String appTempRoot;

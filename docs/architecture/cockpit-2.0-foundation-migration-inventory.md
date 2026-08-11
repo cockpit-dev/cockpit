@@ -34,7 +34,7 @@ Published executables from `cockpit`:
 | Supervisor | daemon discovery/authentication, authorization policy, roots, workspaces, admissions, leases, ports, worker lifecycle, run/event projections, artifacts, public HTTP/SSE |
 | root operation | project creation and package search |
 | workspace worker | documents, targets, apps, sessions, analysis, formatting, tests, LSP, package reads, shell/system control, capture, recording, case/suite execution, worker event truth |
-| Flutter bridge | semantic UI, route/runtime observation, remote Flutter automation, app-side capture and recording |
+| Flutter bridge | Element/widget UI, route/runtime observation, remote Flutter automation, app-side capture and recording |
 
 No resource has two authoritative owners. Every workspace operation carries a
 `workspaceId`; run, target, session, lease, and artifact references are checked

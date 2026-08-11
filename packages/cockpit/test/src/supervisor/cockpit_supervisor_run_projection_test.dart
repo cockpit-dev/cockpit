@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:cockpit/src/foundation/cockpit_locked_json_store.dart';
 import 'package:cockpit/src/foundation/cockpit_permissions.dart';
+import 'package:cockpit/src/foundation/cockpit_version.dart';
 import 'package:cockpit/src/infrastructure/cockpit_process_manager.dart';
 import 'package:cockpit/src/supervisor/cockpit_local_worker_launcher.dart';
 import 'package:cockpit/src/supervisor/cockpit_supervisor_run_projection.dart';
@@ -430,6 +431,7 @@ void main() {
     final appTempArgument = processes.startArguments!.singleWhere(
       (argument) => argument.startsWith('--app-temp-root='),
     );
+    expect(processes.startArguments, contains('--build-id=$cockpitBuildId'));
     final appTempRoot = appTempArgument.substring('--app-temp-root='.length);
     expect(appTempRoot, isNot(workerTemporaryPath));
     expect(

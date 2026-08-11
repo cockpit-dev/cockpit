@@ -184,7 +184,7 @@ void main() {
     },
   );
 
-  testWidgets('ensureLocatorVisible ignores labels excluded from semantics', (
+  testWidgets('ensureLocatorVisible reveals text excluded from semantics', (
     tester,
   ) async {
     final controller = ScrollController();
@@ -206,7 +206,7 @@ void main() {
                     const ExcludeSemantics(child: Text('Idempotency key')),
                     Semantics(
                       container: true,
-                      label: 'Idempotency key',
+                      label: 'Request identifier',
                       child: const SizedBox(height: 40, child: TextField()),
                     ),
                     const SizedBox(height: 320),

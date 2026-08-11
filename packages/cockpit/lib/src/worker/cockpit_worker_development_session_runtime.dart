@@ -41,7 +41,7 @@ final class CockpitWorkerDevelopmentSessionRuntime {
     CockpitFlutterExecutableVersionReader? flutterVersionReader,
     CockpitTokenGenerator? tokenGenerator,
     CockpitDevelopmentMachineDiagnosticLogger? logger,
-    CockpitVmNetworkProfiler? networkProfiler,
+    CockpitNetworkProfiler? networkProfiler,
     CockpitPlatformAppStopper? platformAppStopper,
     Future<CockpitFlutterRunMachineClient> Function(
       CockpitDevelopmentSessionHandle handle,
@@ -75,7 +75,7 @@ final class CockpitWorkerDevelopmentSessionRuntime {
   final CockpitFlutterExecutableVersionReader? _flutterVersionReader;
   final CockpitTokenGenerator _tokenGenerator;
   final CockpitDevelopmentMachineDiagnosticLogger? _logger;
-  final CockpitVmNetworkProfiler? _networkProfiler;
+  final CockpitNetworkProfiler? _networkProfiler;
   final CockpitPlatformAppStopper _platformAppStopper;
   final Future<CockpitFlutterRunMachineClient> Function(
     CockpitDevelopmentSessionHandle handle,
@@ -218,6 +218,7 @@ final class CockpitWorkerDevelopmentSessionRuntime {
         timeout: _remaining(deadline),
       );
       final snapshot = await _snapshot(supervisor);
+      await _enableNetworkProfiling(snapshot.handle);
       _sessions[developmentSessionId] = supervisor;
       _reloadsNeedingRelaunch.remove(developmentSessionId);
       return CockpitLaunchDevelopmentSessionResult(
@@ -412,6 +413,7 @@ final class CockpitWorkerDevelopmentSessionRuntime {
     try {
       await supervisor.start();
       await supervisor.waitForStartupRecovery();
+      await _enableNetworkProfiling((await _snapshot(supervisor)).handle);
       return supervisor;
     } on Object {
       _sessions.remove(handle.developmentSessionId);
@@ -468,6 +470,22 @@ final class CockpitWorkerDevelopmentSessionRuntime {
     } on Object {
       await client.dispose();
       rethrow;
+    }
+  }
+
+  Future<void> _enableNetworkProfiling(
+    CockpitDevelopmentSessionHandle handle,
+  ) async {
+    final profiler = _networkProfiler;
+    final vmServiceUri = handle.vmServiceUri;
+    if (profiler == null || vmServiceUri == null) return;
+    try {
+      await profiler.enable(
+        sessionId: handle.developmentSessionId,
+        vmServiceUri: vmServiceUri,
+      );
+    } on Object catch (error) {
+      await _logger?.call('VM network profiling unavailable: $error');
     }
   }
 

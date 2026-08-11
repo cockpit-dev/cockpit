@@ -17,6 +17,8 @@ Future<void> main(List<String> arguments) async {
     final destination = File(output);
     await destination.parent.create(recursive: true);
     final suffix = '$pid-${DateTime.now().microsecondsSinceEpoch}';
+    final buildId =
+        'src-${DateTime.now().microsecondsSinceEpoch.toRadixString(36)}-$pid';
     final staging = File('${destination.path}.install-$suffix');
     final backup = File('${destination.path}.backup-$suffix');
 
@@ -24,6 +26,7 @@ Future<void> main(List<String> arguments) async {
       final compiler = await Process.run(Platform.resolvedExecutable, <String>[
         'compile',
         'exe',
+        '-DCOCKPIT_BUILD_ID=$buildId',
         entrypoint.path,
         '-o',
         staging.path,

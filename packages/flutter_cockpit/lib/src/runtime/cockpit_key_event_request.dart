@@ -52,23 +52,24 @@ final class CockpitKeyEventRequest {
           LogicalKeyboardKey(raw.toInt());
     }
     if (raw is String) {
-      final normalized = raw.trim().toLowerCase();
-      if (normalized.isEmpty) {
+      final trimmed = raw.trim().toLowerCase();
+      if (trimmed.isEmpty) {
         return null;
       }
-      if (normalized.startsWith('0x')) {
-        final keyId = int.tryParse(normalized.substring(2), radix: 16);
+      if (trimmed.startsWith('0x')) {
+        final keyId = int.tryParse(trimmed.substring(2), radix: 16);
         if (keyId != null) {
           return LogicalKeyboardKey.findKeyByKeyId(keyId) ??
               LogicalKeyboardKey(keyId);
         }
       }
+      final normalized = _normalizeKeyName(trimmed);
       for (final key in LogicalKeyboardKey.knownLogicalKeys) {
-        final debugName = key.debugName?.trim().toLowerCase();
+        final debugName = _normalizeKeyName(key.debugName);
         if (debugName == normalized) {
           return key;
         }
-        final label = key.keyLabel.trim().toLowerCase();
+        final label = _normalizeKeyName(key.keyLabel);
         if (label.isNotEmpty && label == normalized) {
           return key;
         }
@@ -89,24 +90,29 @@ final class CockpitKeyEventRequest {
           PhysicalKeyboardKey(raw.toInt());
     }
     if (raw is String) {
-      final normalized = raw.trim().toLowerCase();
-      if (normalized.isEmpty) {
+      final trimmed = raw.trim().toLowerCase();
+      if (trimmed.isEmpty) {
         return null;
       }
-      if (normalized.startsWith('0x')) {
-        final usage = int.tryParse(normalized.substring(2), radix: 16);
+      if (trimmed.startsWith('0x')) {
+        final usage = int.tryParse(trimmed.substring(2), radix: 16);
         if (usage != null) {
           return PhysicalKeyboardKey.findKeyByCode(usage) ??
               PhysicalKeyboardKey(usage);
         }
       }
+      final normalized = _normalizeKeyName(trimmed);
       for (final key in PhysicalKeyboardKey.knownPhysicalKeys) {
-        final debugName = key.debugName?.trim().toLowerCase();
+        final debugName = _normalizeKeyName(key.debugName);
         if (debugName == normalized) {
           return key;
         }
       }
     }
     return null;
+  }
+
+  static String _normalizeKeyName(String? value) {
+    return value?.trim().toLowerCase().replaceAll(RegExp(r'[\s_-]+'), '') ?? '';
   }
 }

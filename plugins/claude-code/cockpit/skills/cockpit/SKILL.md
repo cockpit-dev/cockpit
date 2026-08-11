@@ -64,6 +64,7 @@ The normal loop is deliberately short:
 ```bash
 cockpit dev status
 cockpit dev inspect "Documents"
+cockpit dev tree
 cockpit dev tap "Documents"
 cockpit dev type "hello" --into "Message"
 cockpit dev press enter
@@ -170,9 +171,11 @@ retrying because the mutation may already have committed.
 
 Execute exact text or a stable locator directly. Do not add a pre-inspect round trip.
 For ambiguity or exploration, run the smallest `dev inspect QUERY`. It
-searches semantic UI targets only and returns `loc` with the shortest stable conditions
-plus known `can`. Locator fields map to the actual command options:
-`--id`, `--key`, `--type`, `--tip`, `--route`, `--within`, and `--index`.
+searches mounted Flutter Element targets, independent of developer-authored
+Semantics, and returns `loc` with the shortest stable conditions plus known `can`.
+Semantics remains one optional signal and action fallback. Locator fields map to the
+actual command options: `--id`, `--key`, `--type`, `--tip`, `--route`, `--path`,
+`--within`, and `--index`.
 `--contains` and `--fuzzy` deliberately relax text/tooltip matching; conditions
 intersect and equal matches fail. Lazy lists expose only visible rows; filter or
 `dev scroll` first.
@@ -189,6 +192,22 @@ cockpit dev type "hello" --into "Message" --contains
 cockpit dev scroll "Operations"
 ```
 
+Use `dev tree` only when bounded target inspection cannot explain the structure:
+
+```bash
+cockpit dev tree
+cockpit dev tree --verbosity standard
+cockpit dev tree --verbosity full
+```
+
+The default tree contains actionable/content nodes plus their public ancestors.
+`standard` includes the mounted public Widget structure. `full` includes every
+mounted Element, including private framework nodes and offstage content, with
+Widget/Element/State/Render types, geometry, scroll ancestry, and bounded diagnostic
+properties. A full tree is always written to an artifact; stdout reports only its
+verified absolute path. A large standard tree may also become a path automatically.
+Copy `loc` into `--path` only when simpler stable signals cannot disambiguate.
+
 `dev scroll TARGET` uses exact matching by default and automatically ranks visible
 scroll containers. Lazy targets are searched with independent forward and reverse
 budgets; once mounted, every scrollable ancestor is revealed from inner to outer and
@@ -199,11 +218,11 @@ and toward the start for negative values. Omit `--align nearest`, zero offset, d
 and default budgets.
 
 Prefer stable conditions in this order: `--id`, exact text/label, `--key`, a widget
-`--type` or ancestor `--within`, then state/route. Use `--index` last and only for a
-real ordered list. Copy every returned `loc` condition: combining conditions narrows
-the match; it does not create fallbacks. Re-inspect after list reorder, filtering,
-navigation, dialogs, sheets, or keyboard transitions. `type VALUE --into TARGET`
-replaces the field value; use `press enter` for a separate IME/key action.
+`--type` or ancestor `--within`, then route and `--path`. Use `--index` last and only
+for a real ordered list. Copy every returned `loc` condition: combining conditions
+narrows the match; it does not create fallbacks. Re-inspect after list reorder,
+filtering, navigation, dialogs, sheets, or keyboard transitions. `type VALUE --into
+TARGET` replaces the field value; use `press enter` for a separate IME/key action.
 
 `dev wait` is UI-only by default; add `--network` only for request-dependent
 assertions. `--timeout VALUE` accepts `ms`, `s`, `m`, or `h`; every command has a
@@ -260,7 +279,7 @@ cockpit dev network 37 --body both --raw
 ```
 
 Use `dev diagnose --verbosity standard` for bounded UI, error, log, and network
-health. Use `full` only when complete semantic data is needed; large response
+health. Use `full` only when the complete response is needed; large response
 bodies should be read from their reported paths. Start with `--failures`, `--method`,
 or `--uri` when the app generates heavy traffic.
 
@@ -291,7 +310,7 @@ source is ambiguous. Never invent fields: use `cockpit explain OPERATION` or the
 advertised schema first.
 
 Minimal output contains only the next-decision fields. Use `--verbosity standard`
-for diagnosis and `full` only for the complete semantic response. Do not request or
+for diagnosis and `full` only for the complete response. Do not request or
 print screenshots, file contents, Base64, data URIs, hashes, or decision-irrelevant
 byte counts. Stdout reports verified paths; read an artifact file only when its
 metadata proves it is the needed evidence.

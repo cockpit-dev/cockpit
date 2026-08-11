@@ -4,6 +4,7 @@ import 'dart:math';
 import 'package:cockpit_protocol/cockpit_protocol.dart';
 
 import '../test/cockpit_test_safety_policy.dart';
+import '../foundation/cockpit_version.dart';
 import '../worker/cockpit_worker_protocol_result.dart';
 import '../worker/cockpit_worker_value_reader.dart';
 
@@ -36,6 +37,7 @@ final class CockpitWorkspaceWorkerSpec {
   CockpitWorkspaceWorkerSpec({
     required this.key,
     required this.projectId,
+    String? buildId,
     required this.workspaceRoot,
     required this.stateRoot,
     required Iterable<String> supportedFeatures,
@@ -44,7 +46,8 @@ final class CockpitWorkspaceWorkerSpec {
         const <CockpitTestTargetEnvironment>[],
     Iterable<CockpitTestSafetyEffect> allowedSafetyEffects =
         const <CockpitTestSafetyEffect>[],
-  }) : supportedFeatures = List<String>.unmodifiable(supportedFeatures),
+  }) : buildId = buildId ?? cockpitBuildId,
+       supportedFeatures = List<String>.unmodifiable(supportedFeatures),
        allowedTargetEnvironments = _uniqueEnumSet(
          allowedTargetEnvironments,
          'allowedTargetEnvironments',
@@ -54,6 +57,7 @@ final class CockpitWorkspaceWorkerSpec {
          'allowedSafetyEffects',
        ) {
     workerId(projectId, r'$.projectId');
+    workerId(this.buildId, r'$.buildId');
     workerString(workspaceRoot, r'$.workspaceRoot', maximum: 32768);
     workerString(stateRoot, r'$.stateRoot', maximum: 32768);
     final unique = <String>{};
@@ -67,6 +71,7 @@ final class CockpitWorkspaceWorkerSpec {
 
   final CockpitWorkspaceWorkerKey key;
   final String projectId;
+  final String buildId;
   final String workspaceRoot;
   final String stateRoot;
   final List<String> supportedFeatures;
@@ -193,6 +198,7 @@ final class CockpitWorkerPool {
         );
       }
       if (existing.spec.projectId != spec.projectId ||
+          existing.spec.buildId != spec.buildId ||
           existing.spec.stateRoot != spec.stateRoot ||
           !_sameSet(
             existing.spec.allowedTargetEnvironments,

@@ -397,20 +397,23 @@ final class CockpitWorkerLifecycleOperations {
       deadline: context.deadline,
       launch: (port) => runWorkerApplicationOperation(
         context: context,
-        operation: () => _launchApp.launch(
-          CockpitLaunchAppRequest(
-            projectDir: target.projectDir,
-            target: target.launchEntrypoint,
-            flavor: target.registration.flavor,
-            platform: target.registration.platform,
-            deviceId: target.registration.deviceId,
-            sessionPort: port,
-            mode: mode,
-            launchTimeout: timeout,
-            allowSessionPortFallback: false,
-            launchConfiguration: launchConfiguration,
-          ),
-        ),
+        operation: () async {
+          await _stopExistingAppsForTarget(target.targetId);
+          return _launchApp.launch(
+            CockpitLaunchAppRequest(
+              projectDir: target.projectDir,
+              target: target.launchEntrypoint,
+              flavor: target.registration.flavor,
+              platform: target.registration.platform,
+              deviceId: target.registration.deviceId,
+              sessionPort: port,
+              mode: mode,
+              launchTimeout: timeout,
+              allowSessionPortFallback: false,
+              launchConfiguration: launchConfiguration,
+            ),
+          );
+        },
       ),
       commit: (result) => _recordLaunchedApp(
         result.app,
@@ -515,21 +518,24 @@ final class CockpitWorkerLifecycleOperations {
       deadline: context.deadline,
       launch: (port) => runWorkerApplicationOperation(
         context: context,
-        operation: () => _launchTarget.launch(
-          CockpitLaunchTargetRequest(
-            projectDir: target.projectDir,
-            target: target.launchEntrypoint,
-            flavor: target.registration.flavor,
-            platform: target.registration.platform,
-            deviceId: target.registration.deviceId,
-            sessionPort: port,
-            targetKind: target.registration.targetKind,
-            mode: mode,
-            launchTimeout: timeout,
-            allowSessionPortFallback: false,
-            launchConfiguration: launchConfiguration,
-          ),
-        ),
+        operation: () async {
+          await _stopExistingAppsForTarget(target.targetId);
+          return _launchTarget.launch(
+            CockpitLaunchTargetRequest(
+              projectDir: target.projectDir,
+              target: target.launchEntrypoint,
+              flavor: target.registration.flavor,
+              platform: target.registration.platform,
+              deviceId: target.registration.deviceId,
+              sessionPort: port,
+              targetKind: target.registration.targetKind,
+              mode: mode,
+              launchTimeout: timeout,
+              allowSessionPortFallback: false,
+              launchConfiguration: launchConfiguration,
+            ),
+          );
+        },
       ),
       commit: (result) async {
         final app = result.app;
@@ -605,6 +611,22 @@ final class CockpitWorkerLifecycleOperations {
       sessionId: sessionId,
       targetId: app.targetId,
     );
+  }
+
+  Future<void> _stopExistingAppsForTarget(String targetId) async {
+    final existingApps = (await _registry.listApps())
+        .where((app) => app.targetId == targetId)
+        .toList(growable: false);
+    for (final app in existingApps) {
+      final sessionId = await _registry.sessionIdForApp(app.appId);
+      final session = await _registry.requireSession(sessionId);
+      if (session.developmentHandle case final developmentHandle?) {
+        await _developmentRuntime.stop(developmentHandle);
+      } else {
+        await _stopApp.stop(CockpitStopAppRequest(app: app.handle));
+      }
+      await _registry.removeApp(app.appId);
+    }
   }
 
   Future<Map<String, Object?>> _launchDevelopmentSession(

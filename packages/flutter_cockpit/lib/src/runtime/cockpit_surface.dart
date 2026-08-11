@@ -30,6 +30,7 @@ import 'cockpit_target.dart';
 import 'cockpit_target_geometry.dart';
 import 'cockpit_target_geometry_resolver.dart';
 import 'cockpit_target_registry.dart';
+import 'cockpit_widget_tree_builder.dart';
 import 'flutter_cockpit.dart';
 
 final class CockpitSurface extends StatefulWidget {
@@ -77,6 +78,8 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
   final FlutterViewCapture _capture = const FlutterViewCapture();
   final CockpitDiagnosticBuilder _diagnosticBuilder =
       const CockpitDiagnosticBuilder();
+  final CockpitWidgetTreeBuilder _widgetTreeBuilder =
+      const CockpitWidgetTreeBuilder();
   SemanticsHandle? _semanticsHandle;
   late CockpitDiscoveryEngine _discoveryEngine = CockpitDiscoveryEngine(
     policy: widget.discoveryPolicy,
@@ -180,13 +183,26 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
   CockpitSnapshot snapshot({
     CockpitSnapshotOptions options = const CockpitSnapshotOptions(),
   }) {
-    final snapshot = _diagnosticBuilder
+    final visibleTargets = _registry.visibleTargets;
+    var snapshot = _diagnosticBuilder
         .build(
           routeName: _registry.routeName,
-          visibleTargets: _registry.visibleTargets,
+          visibleTargets: visibleTargets,
           options: options,
         )
         .snapshot;
+    final treeOptions = options.tree;
+    final rootContext = _boundaryKey.currentContext;
+    if (treeOptions != null && rootContext is Element) {
+      snapshot = snapshot.copyWith(
+        tree: _widgetTreeBuilder.build(
+          root: rootContext,
+          route: _registry.routeName,
+          targets: visibleTargets,
+          options: treeOptions,
+        ),
+      );
+    }
     if (!options.includeRebuildActivity || widget.rebuildTracker == null) {
       return snapshot.copyWith(focus: cockpitBuildFocusSnapshot());
     }
@@ -1243,11 +1259,7 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
   }
 
   String? _elementTextSignal(Element element) {
-    final text = _textPreviewForAncestor(element);
-    if (text == null || _isExcludedFromSemantics(element)) {
-      return null;
-    }
-    return text;
+    return _textPreviewForAncestor(element);
   }
 
   String? _elementSemanticSignal(Element element) {

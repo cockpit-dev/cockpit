@@ -47,8 +47,8 @@ It provides:
 - [`cockpit`](packages/cockpit) owns the Supervisor, workspace workers, drivers,
   CLI, MCP server, reports, and artifacts.
 - [`flutter_cockpit`](packages/flutter_cockpit) is the first-class in-app
-  Flutter development and semantic validation adapter. Pure black-box users do
-  not need it.
+  Flutter development, inspection, and control adapter. Pure black-box users
+  do not need it.
 
 Minimum versions are Dart 3.8.0 and Flutter 3.32.0. Install the host CLI once:
 
@@ -108,6 +108,7 @@ handle while checkout identity keeps concurrent projects isolated:
 cockpit dev start cockpit/main.dart --platform macos
 cockpit dev status
 cockpit dev inspect "Save"
+cockpit dev tree
 cockpit dev tap "Save"
 cockpit dev wait
 cockpit dev screenshot
@@ -121,6 +122,14 @@ timeout. `dev` automatically runs its local Supervisor in process-scoped yolo
 mode; strict policy remains available for black-box, CI, staging, and
 production workflows. Cockpit does not read a keychain or secret store, and
 `--env` values are process-only.
+
+Flutter inspection walks the mounted Element and RenderObject structure; it
+does not require application-authored `Semantics` labels. Use the bounded
+`dev inspect QUERY` result for normal work. Escalate to `dev tree`,
+`dev tree --verbosity standard`, or `dev tree --verbosity full` only when the
+surrounding structure is needed. Full trees are written to an artifact and
+stdout returns only its verified path. Copy a returned `loc` into an
+action's `--path` only when simpler stable fields cannot disambiguate a target.
 
 ## Runtime Model
 
@@ -143,7 +152,7 @@ flowchart TB
 
   Workers["Isolated workspace workers<br/>A / B / … / N"]
   Router["Capability router<br/>per worker"]
-  Flutter["Flutter<br/>semantic · runtime"]
+  Flutter["Flutter<br/>Element · runtime"]
   Native["Mobile black box<br/>ADB · WDA"]
   Desktop["Web · desktop<br/>browser · window"]
   Evidence["State · events · reports · artifacts"]

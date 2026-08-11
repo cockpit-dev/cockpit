@@ -50,6 +50,7 @@ final class _DevTarget {
       tip = value['tooltip'] as String?,
       type = value['typeName'] as String?,
       route = value['routeName'] as String?,
+      path = value['path'] as String?,
       can = (value['supportedCommands'] as List<Object?>? ?? const [])
           .whereType<String>()
           .toList(growable: false),
@@ -70,6 +71,7 @@ final class _DevTarget {
   final String? tip;
   final String? type;
   final String? route;
+  final String? path;
   final List<String> can;
   final List<String> within;
   final _Layout? layout;
@@ -97,6 +99,7 @@ final class _DevTarget {
       if (_exactText(value) != _exactText(text)) _Signal('tip', value),
     if (_value(type) case final value?) _Signal('type', value),
     if (_value(route) case final value?) _Signal('route', value),
+    if (_value(path) case final value?) _Signal('path', value),
   ];
 
   bool matchesQuery(String query) => <String?>[
@@ -106,6 +109,7 @@ final class _DevTarget {
     semanticId,
     key,
     type,
+    path,
   ].any((value) => _searchText(value)?.contains(query) ?? false);
 
   int compareForQuery(_DevTarget other, String query) {
@@ -303,6 +307,7 @@ bool _matches(_DevTarget target, Map<String, Object?> loc) {
       'tip' => _exactText(target.tip) == _exactText(expected),
       'type' => _type(target.type) == _type(expected),
       'route' => target.route == expected,
+      'path' => target.path == expected,
       'within' => target.within.any((type) => _type(type) == _type(expected)),
       _ => true,
     };

@@ -4,6 +4,7 @@ import 'package:cockpit_protocol/cockpit_protocol.dart';
 import '../cockpit_cli_runtime.dart';
 import '../cockpit_cli_timeout.dart';
 import '../cockpit_dev_runtime.dart';
+import 'dev_command_options.dart';
 
 CockpitLeafCommand cockpitDevTapCommand(
   CockpitCliRuntime runtime,
@@ -11,7 +12,7 @@ CockpitLeafCommand cockpitDevTapCommand(
 ) => CockpitLeafCommand(
   runtime: runtime,
   name: 'tap',
-  description: 'Tap one exact Flutter semantic target.',
+  description: 'Tap one exact mounted Flutter target.',
   invocationSuffix: '[TARGET] [arguments]',
   example: 'cockpit dev tap "Documents"',
   configure: _targetOptions,
@@ -68,7 +69,7 @@ CockpitLeafCommand cockpitDevPressCommand(
   description: 'Send one named Flutter logical key to the focused control.',
   invocationSuffix: 'KEY [arguments]',
   example: 'cockpit dev press enter',
-  configure: (parser) => parser.addOption('session', abbr: 's'),
+  configure: cockpitAddDevSessionOption,
   action: (arguments) async {
     if (arguments.rest.length != 1) {
       throw const FormatException('dev press requires exactly one key name.');
@@ -100,7 +101,7 @@ CockpitLeafCommand cockpitDevBackCommand(
   name: 'back',
   description: 'Go back through the current Flutter navigator.',
   example: 'cockpit dev back',
-  configure: (parser) => parser.addOption('session', abbr: 's'),
+  configure: cockpitAddDevSessionOption,
   action: (arguments) async => dev.runCommand(
     await runtime.resolveDevelopmentSession(arguments.option('session')),
     action: 'back',
@@ -119,7 +120,7 @@ CockpitLeafCommand cockpitDevDismissCommand(
   name: 'dismiss',
   description: 'Dismiss the current Flutter dialog, sheet, or barrier.',
   example: 'cockpit dev dismiss',
-  configure: (parser) => parser.addOption('session', abbr: 's'),
+  configure: cockpitAddDevSessionOption,
   action: (arguments) async => dev.runCommand(
     await runtime.resolveDevelopmentSession(arguments.option('session')),
     action: 'dismiss',
@@ -136,7 +137,7 @@ CockpitLeafCommand cockpitDevScrollCommand(
 ) => CockpitLeafCommand(
   runtime: runtime,
   name: 'scroll',
-  description: 'Find, fully reveal, and align one Flutter semantic target.',
+  description: 'Find, fully reveal, and align one mounted Flutter target.',
   invocationSuffix: '[TARGET] [arguments]',
   example: 'cockpit dev scroll "Operations" --align center --offset 12',
   configure: (parser) {
@@ -195,10 +196,12 @@ CockpitLeafCommand cockpitDevWaitCommand(
   name: 'wait',
   description: 'Wait for Flutter UI idle, optionally including network idle.',
   example: 'cockpit dev wait --network',
-  configure: (parser) => parser
-    ..addOption('session', abbr: 's')
-    ..addFlag('network', negatable: false)
-    ..addOption('quiet', defaultsTo: '500ms'),
+  configure: (parser) {
+    cockpitAddDevSessionOption(parser);
+    parser
+      ..addFlag('network', negatable: false)
+      ..addOption('quiet', defaultsTo: '500ms');
+  },
   defaultTimeout: const Duration(seconds: 30),
   maximumTimeout: const Duration(minutes: 5),
   action: (arguments) async {
@@ -259,6 +262,7 @@ CockpitLocator? cockpitReadDevLocator(
   final type = _option(arguments, 'type');
   final tip = _option(arguments, 'tip');
   final route = _option(arguments, 'route');
+  final path = _option(arguments, 'path');
   final within = _option(arguments, 'within');
   final index = _optionalIndex(arguments);
   if ((fuzzy || contains) && text == null && tip == null) {
@@ -273,6 +277,7 @@ CockpitLocator? cockpitReadDevLocator(
     tooltip: tip,
     type: type,
     route: route,
+    path: path,
     matchMode: fuzzy
         ? CockpitTextMatchMode.fuzzy
         : contains
@@ -289,7 +294,7 @@ CockpitLocator? cockpitReadDevLocator(
     }
     if (targetRequired) {
       throw const FormatException(
-        'Target text or one of --id/--key/--type/--tip/--route is required.',
+        'Target text or one of --id/--key/--type/--tip/--route/--path is required.',
       );
     }
     return null;
@@ -298,13 +303,14 @@ CockpitLocator? cockpitReadDevLocator(
 }
 
 void _targetOptions(ArgParser parser) {
+  cockpitAddDevSessionOption(parser);
   parser
-    ..addOption('session', abbr: 's', help: 'Select another session handle.')
     ..addOption('id', help: 'Require this Cockpit ID.')
     ..addOption('key', help: 'Require this Flutter key.')
     ..addOption('type', help: 'Require this Flutter widget type.')
     ..addOption('tip', help: 'Require this tooltip.')
     ..addOption('route', help: 'Require this route.')
+    ..addOption('path', help: 'Require this Flutter locator path.')
     ..addOption('index', help: 'Select a 0-based match after filtering.')
     ..addOption('within', help: 'Require this ancestor widget type.')
     ..addFlag(

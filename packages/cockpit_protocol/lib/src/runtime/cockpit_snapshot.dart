@@ -7,6 +7,7 @@ import 'cockpit_accessibility_summary.dart';
 import 'cockpit_rebuild_models.dart';
 import 'cockpit_snapshot_options.dart';
 import 'cockpit_runtime_snapshot.dart';
+import 'cockpit_widget_tree.dart';
 
 enum CockpitDiagnosticCategory {
   basic('basic'),
@@ -639,12 +640,14 @@ final class CockpitSnapshot {
     this.diagnosticLevel = CockpitSnapshotProfile.live,
     this.truncated = false,
     this.diagnosticsArtifactRef,
+    this.treeArtifactRef,
     this.summary,
     this.network,
     this.runtime,
     this.rebuild,
     this.accessibility,
     this.focus,
+    this.tree,
   }) : visibleTargets = List.unmodifiable(visibleTargets);
 
   final String? routeName;
@@ -652,12 +655,14 @@ final class CockpitSnapshot {
   final CockpitSnapshotProfile diagnosticLevel;
   final bool truncated;
   final CockpitArtifactRef? diagnosticsArtifactRef;
+  final CockpitArtifactRef? treeArtifactRef;
   final CockpitSnapshotSummary? summary;
   final CockpitNetworkSnapshot? network;
   final CockpitRuntimeSnapshot? runtime;
   final CockpitRebuildSnapshot? rebuild;
   final CockpitAccessibilitySummary? accessibility;
   final CockpitFocusSnapshot? focus;
+  final CockpitWidgetTree? tree;
 
   static const ListEquality<CockpitSnapshotTarget> _targetListEquality =
       ListEquality<CockpitSnapshotTarget>();
@@ -670,24 +675,28 @@ final class CockpitSnapshot {
     'truncated': truncated,
     if (diagnosticsArtifactRef != null)
       'diagnosticsArtifactRef': diagnosticsArtifactRef!.toJson(),
+    if (treeArtifactRef != null) 'treeArtifactRef': treeArtifactRef!.toJson(),
     if (summary != null) 'summary': summary!.toJson(),
     if (network != null) 'network': network!.toJson(),
     if (runtime != null) 'runtime': runtime!.toJson(),
     if (rebuild != null) 'rebuild': rebuild!.toJson(),
     if (accessibility != null) 'accessibility': accessibility!.toJson(),
     if (focus != null) 'focus': focus!.toJson(),
+    if (tree != null) 'tree': tree!.toJson(),
   };
 
   /// Decodes a CockpitSnapshot from a JSON object.
   factory CockpitSnapshot.fromJson(Map<String, Object?> json) {
     final diagnosticsArtifactJson =
         json['diagnosticsArtifactRef'] as Map<Object?, Object?>?;
+    final treeArtifactJson = json['treeArtifactRef'] as Map<Object?, Object?>?;
     final summaryJson = json['summary'] as Map<Object?, Object?>?;
     final networkJson = json['network'] as Map<Object?, Object?>?;
     final runtimeJson = json['runtime'] as Map<Object?, Object?>?;
     final rebuildJson = json['rebuild'] as Map<Object?, Object?>?;
     final accessibilityJson = json['accessibility'] as Map<Object?, Object?>?;
     final focusJson = json['focus'] as Map<Object?, Object?>?;
+    final treeJson = json['tree'] as Map<Object?, Object?>?;
     return CockpitSnapshot(
       routeName: json['routeName'] as String?,
       visibleTargets:
@@ -707,6 +716,11 @@ final class CockpitSnapshot {
           ? null
           : CockpitArtifactRef.fromJson(
               Map<String, Object?>.from(diagnosticsArtifactJson),
+            ),
+      treeArtifactRef: treeArtifactJson == null
+          ? null
+          : CockpitArtifactRef.fromJson(
+              Map<String, Object?>.from(treeArtifactJson),
             ),
       summary: summaryJson == null
           ? null
@@ -736,6 +750,9 @@ final class CockpitSnapshot {
       focus: focusJson == null
           ? null
           : CockpitFocusSnapshot.fromJson(Map<String, Object?>.from(focusJson)),
+      tree: treeJson == null
+          ? null
+          : CockpitWidgetTree.fromJson(Map<String, Object?>.from(treeJson)),
     );
   }
 
@@ -746,12 +763,14 @@ final class CockpitSnapshot {
     CockpitSnapshotProfile? diagnosticLevel,
     bool? truncated,
     CockpitArtifactRef? diagnosticsArtifactRef,
+    CockpitArtifactRef? treeArtifactRef,
     CockpitSnapshotSummary? summary,
     CockpitNetworkSnapshot? network,
     CockpitRuntimeSnapshot? runtime,
     CockpitRebuildSnapshot? rebuild,
     CockpitAccessibilitySummary? accessibility,
     CockpitFocusSnapshot? focus,
+    CockpitWidgetTree? tree,
   }) {
     return CockpitSnapshot(
       routeName: routeName ?? this.routeName,
@@ -760,12 +779,14 @@ final class CockpitSnapshot {
       truncated: truncated ?? this.truncated,
       diagnosticsArtifactRef:
           diagnosticsArtifactRef ?? this.diagnosticsArtifactRef,
+      treeArtifactRef: treeArtifactRef ?? this.treeArtifactRef,
       summary: summary ?? this.summary,
       network: network ?? this.network,
       runtime: runtime ?? this.runtime,
       rebuild: rebuild ?? this.rebuild,
       accessibility: accessibility ?? this.accessibility,
       focus: focus ?? this.focus,
+      tree: tree ?? this.tree,
     );
   }
 
@@ -777,12 +798,14 @@ final class CockpitSnapshot {
             other.diagnosticLevel == diagnosticLevel &&
             other.truncated == truncated &&
             other.diagnosticsArtifactRef == diagnosticsArtifactRef &&
+            other.treeArtifactRef == treeArtifactRef &&
             other.summary == summary &&
             other.network == network &&
             other.runtime == runtime &&
             other.rebuild == rebuild &&
             other.accessibility == accessibility &&
             other.focus == focus &&
+            other.tree == tree &&
             _targetListEquality.equals(other.visibleTargets, visibleTargets);
   }
 
@@ -792,12 +815,14 @@ final class CockpitSnapshot {
     diagnosticLevel,
     truncated,
     diagnosticsArtifactRef,
+    treeArtifactRef,
     summary,
     network,
     runtime,
     rebuild,
     accessibility,
     focus,
+    tree,
     _targetListEquality.hash(visibleTargets),
   );
 }

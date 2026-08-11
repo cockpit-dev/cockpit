@@ -1,4 +1,5 @@
 import 'package:cockpit/src/test/cockpit_test_safety_policy.dart';
+import 'package:cockpit/src/foundation/cockpit_version.dart';
 import 'package:cockpit/src/worker/cockpit_worker_runtime.dart';
 import 'package:cockpit_protocol/cockpit_protocol.dart';
 import 'package:test/test.dart';
@@ -46,12 +47,25 @@ void main() {
       );
     }
   });
+
+  test('rejects a worker executable from another source build', () {
+    expect(
+      () => CockpitWorkerRuntimeConfiguration.parse(<String>[
+        ..._baseArguments.where(
+          (argument) => !argument.startsWith('--build-id='),
+        ),
+        '--build-id=another-build',
+      ]),
+      throwsFormatException,
+    );
+  });
 }
 
 const List<String> _baseArguments = <String>[
   '--workspace-id=workspaceA',
   '--project-id=projectA',
   '--engine-version=engineA',
+  '--build-id=$cockpitBuildId',
   '--workspace-root=/workspace/workspaceA',
   '--state-root=/state/workspaceA',
   '--app-temp-root=/tmp/cockpit-app-workspaceA',

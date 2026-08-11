@@ -107,6 +107,11 @@ final class CockpitRemoteSessionClient {
       'maxNetworkEntries': options.maxNetworkEntries.toString(),
       'includeRuntimeActivity': options.includeRuntimeActivity.toString(),
       'maxRuntimeEntries': options.maxRuntimeEntries.toString(),
+      if (options.tree != null) ...<String, String>{
+        'treeProfile': options.tree!.profile.jsonValue,
+        'treeMaxNodes': options.tree!.maxNodes.toString(),
+        'treeMaxProps': options.tree!.maxProps.toString(),
+      },
       if (options.networkQuery.id != null)
         'networkId': options.networkQuery.id!,
       if (options.networkQuery.before != null)
@@ -135,7 +140,9 @@ final class CockpitRemoteSessionClient {
 
     final response = CockpitRemoteSnapshotResponse.fromJson(payload);
     final diagnosticsArtifactRef = response.snapshot.diagnosticsArtifactRef;
-    if (diagnosticsArtifactRef == null) {
+    final treeArtifactRef = response.snapshot.treeArtifactRef;
+    final artifactRef = diagnosticsArtifactRef ?? treeArtifactRef;
+    if (artifactRef == null) {
       return response;
     }
     if (!(downloadDiagnosticsArtifacts ?? _downloadDiagnosticsArtifacts)) {
@@ -143,8 +150,7 @@ final class CockpitRemoteSessionClient {
     }
     final download = response.artifactDownloads.firstWhere(
       (candidate) =>
-          candidate.artifact.relativePath ==
-          diagnosticsArtifactRef.relativePath,
+          candidate.artifact.relativePath == artifactRef.relativePath,
       orElse: () => const CockpitRemoteArtifactDownload(
         artifact: CockpitArtifactRef(role: '', relativePath: ''),
         downloadPath: '',
@@ -161,9 +167,16 @@ final class CockpitRemoteSessionClient {
         'Remote snapshot artifact must decode to a JSON object.',
       );
     }
-    final fullSnapshot = CockpitSnapshot.fromJson(
-      Map<String, Object?>.from(decoded),
-    ).copyWith(diagnosticsArtifactRef: diagnosticsArtifactRef);
+    final fullSnapshot = diagnosticsArtifactRef != null
+        ? CockpitSnapshot.fromJson(
+            Map<String, Object?>.from(decoded),
+          ).copyWith(diagnosticsArtifactRef: diagnosticsArtifactRef)
+        : response.snapshot.copyWith(
+            tree: CockpitWidgetTree.fromJson(
+              Map<String, Object?>.from(decoded),
+            ),
+            treeArtifactRef: treeArtifactRef,
+          );
     return response.copyWith(snapshot: fullSnapshot);
   }
 

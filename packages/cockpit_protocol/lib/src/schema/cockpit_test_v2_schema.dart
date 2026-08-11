@@ -978,6 +978,25 @@ const String cockpitTestV2SchemaJson = r'''
           "type": "integer",
           "minimum": 0,
           "maximum": 10000
+        },
+        "tree": {
+          "type": "object",
+          "properties": {
+            "profile": {
+              "enum": ["minimal", "standard", "full"]
+            },
+            "maxNodes": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 500000
+            },
+            "maxProps": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 256
+            }
+          },
+          "additionalProperties": false
         }
       },
       "additionalProperties": false

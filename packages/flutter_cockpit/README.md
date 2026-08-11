@@ -20,15 +20,15 @@
 </div>
 
 `flutter_cockpit` is Cockpit's first-class in-app adapter for AI-driven Flutter
-development and semantic application validation. It is independent from the
-black-box path used for installed production applications.
+development, inspection, and control. It is independent from the black-box
+path used for installed production applications.
 
 It provides:
 
 - runtime bootstrap through `FlutterCockpit.runApp` or `FlutterCockpitApp`
 - command execution for taps, text input, gestures, waits, assertions, screenshots, and snapshots
 - remote session serving over HTTP
-- structured widget/semantics, route, focus, log, runtime error, network, and rebuild state
+- structured Widget, Element, RenderObject, semantics, route, focus, log, runtime error, network, and rebuild state
 - snapshot, artifact, recording, and bundle models
 - target, plane, surface, and fallback-aware runtime models for AI-first summaries
 
@@ -55,8 +55,9 @@ The runtime package declares native plugin entries for Android, iOS, macOS,
 Linux, Windows, and web. That lets app-window screenshots and recording
 fallbacks register consistently whenever the cockpit entrypoint is compiled.
 Keep the integration isolated by importing it only from `cockpit/`, never from
-production `lib/` code. Flutter-view screenshots, semantic control, network signals,
-runtime diagnostics, and remote sessions work in-app. System dialogs,
+production `lib/` code. Flutter-view screenshots, Element-based inspection and
+control, network signals, runtime diagnostics, and remote sessions work in-app
+without requiring application-authored `Semantics`. System dialogs,
 notifications, host screenshots, and host recordings should still be driven by
 `cockpit` system actions so capability discovery and platform fallbacks remain
 truthful.
@@ -143,7 +144,7 @@ flutter run --target main.dart
 
 - low-intrusion root bootstrap
 - command routing and execution
-- UI snapshots with bounded diagnostics
+- UI snapshots plus minimal, standard, and full mounted Element trees
 - accessibility, network, runtime, and rebuild signals
 - screenshot and recording requests
 - remote session status and command endpoints
@@ -157,6 +158,6 @@ an evidence-producing CI run.
 
 Host-side orchestration, MCP, workspace tooling, and delivery validation live in [`cockpit`](https://pub.dev/packages/cockpit).
 The runtime bundle models now preserve `targetKind`, `primaryExecutionPlane`, `planesUsed`, `surfaceKindsUsed`, `fallbackCount`, plus per-step and per-observation plane metadata so host-side tooling can explain when Flutter control stayed on-plan versus when it had to degrade to another surface.
-On web, the runtime supports the Flutter semantic and Flutter-view control path directly, while the method channels are registered as explicit unavailable stubs so capability checks stay truthful instead of failing through missing-plugin noise. On mobile and desktop, native method-channel recording and capture register through the package plugin entries and are used as app-window evidence fallbacks; prefer system or host evidence through `cockpit` when the goal is to prove system dialogs, notifications, host windows, or cross-app behavior.
+On web, the runtime supports the Flutter Element and Flutter-view control path directly, while the method channels are registered as explicit unavailable stubs so capability checks stay truthful instead of failing through missing-plugin noise. On mobile and desktop, native method-channel recording and capture register through the package plugin entries and are used as app-window evidence fallbacks; prefer system or host evidence through `cockpit` when the goal is to prove system dialogs, notifications, host windows, or cross-app behavior.
 
 Package page: [pub.dev/packages/flutter_cockpit](https://pub.dev/packages/flutter_cockpit)

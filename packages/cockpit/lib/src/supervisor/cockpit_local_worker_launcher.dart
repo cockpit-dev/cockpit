@@ -129,6 +129,7 @@ final class CockpitLocalWorkerLauncher
           '--workspace-id=${spec.key.workspaceId}',
           '--project-id=${spec.projectId}',
           '--engine-version=${spec.key.engineVersion}',
+          '--build-id=${spec.buildId}',
           '--workspace-root=${spec.workspaceRoot}',
           '--state-root=${spec.stateRoot}',
           '--app-temp-root=$appTemporaryRoot',

@@ -42,6 +42,7 @@ void main() {
       includeStyleDetails: true,
       includeDiagnosticProperties: true,
       emitArtifactWhenLarge: true,
+      tree: const CockpitWidgetTreeOptions.full(),
       includeRebuildActivity: true,
       maxRebuildEntries: 12,
       includeNetworkActivity: true,
@@ -65,6 +66,37 @@ void main() {
       diagnosticsArtifactRef: const CockpitArtifactRef(
         role: 'diagnostics',
         relativePath: 'diagnostics/step-001.json',
+      ),
+      treeArtifactRef: const CockpitArtifactRef(
+        role: 'widget-tree',
+        relativePath: 'trees/step-001.json',
+      ),
+      tree: CockpitWidgetTree(
+        profile: CockpitWidgetTreeProfile.full,
+        total: 2,
+        visible: 1,
+        truncated: false,
+        nodes: <CockpitWidgetNode>[
+          CockpitWidgetNode(
+            node: 1,
+            loc: '/scaffold/textbutton',
+            parent: 0,
+            depth: 1,
+            type: 'TextButton',
+            element: 'StatefulElement',
+            render: 'RenderSemanticsAnnotations',
+            text: 'Submit',
+            visible: true,
+            offstage: false,
+            bounds: const CockpitWidgetBounds(
+              x: 16,
+              y: 320,
+              width: 120,
+              height: 48,
+            ),
+            actions: const <CockpitCommandType>[CockpitCommandType.tap],
+          ),
+        ],
       ),
       summary: const CockpitSnapshotSummary(
         visibleTargetCount: 3,
@@ -165,5 +197,7 @@ void main() {
       roundTrip.diagnosticsArtifactRef?.relativePath,
       'diagnostics/step-001.json',
     );
+    expect(roundTrip.treeArtifactRef?.relativePath, 'trees/step-001.json');
+    expect(roundTrip.tree?.nodes.single.text, 'Submit');
   });
 }

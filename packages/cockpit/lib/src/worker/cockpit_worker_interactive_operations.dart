@@ -60,7 +60,7 @@ final class CockpitWorkerInteractiveOperations {
     CockpitReadLogsService? readLogsService,
     CockpitReadNetworkService? readNetworkService,
     CockpitReadNetworkBodyService? readNetworkBodyService,
-    CockpitVmNetworkProfiler? networkProfiler,
+    CockpitNetworkProfiler? networkProfiler,
     CockpitReadErrorsService? readErrorsService,
     CockpitWorkerSessionLogsServiceFactory? sessionLogsServiceFactory,
     CockpitCaptureScreenshotService? captureScreenshotService,

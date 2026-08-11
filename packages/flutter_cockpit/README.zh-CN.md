@@ -19,7 +19,7 @@
   <p><a href="https://github.com/cockpit-dev/cockpit/blob/main/packages/flutter_cockpit/README.md">English</a> · <a href="https://github.com/cockpit-dev/cockpit/blob/main/packages/flutter_cockpit/README.zh-CN.md">简体中文</a></p>
 </div>
 
-`flutter_cockpit` 是 Cockpit 面向 AI 驱动 Flutter 源码开发与语义验证的一等应用内
+`flutter_cockpit` 是 Cockpit 面向 AI 驱动 Flutter 源码开发、检查与控制的一等应用内
 适配器，独立于已安装生产应用使用的黑盒路径。
 
 它提供：
@@ -27,7 +27,7 @@
 - 通过 `FlutterCockpit.runApp` 或 `FlutterCockpitApp` 做运行时 bootstrap
 - 点击、输入、手势、等待、断言、截图、快照等命令执行能力
 - 基于 HTTP 的远程会话服务
-- 结构化 widget/semantics、route、focus、log、runtime error、network 与 rebuild 状态
+- 结构化 Widget、Element、RenderObject、semantics、route、focus、log、runtime error、network 与 rebuild 状态
 - snapshot、artifact、recording 和 bundle 模型
 - 面向 AI 摘要的 target / plane / surface / fallback 运行时模型
 
@@ -49,8 +49,9 @@ Flutter 会使用宿主工程选择的集成方式，CocoaPods 工程无需迁�
 
 runtime 包会为 Android、iOS、macOS、Linux、Windows 和 web 声明原生插件入口。
 这样 cockpit 入口被编译时，应用窗口截图和录屏 fallback 可以稳定注册。接入代码
-必须放在 `cockpit/`，不要放进生产 `lib/` 代码。应用内的 Flutter-view
-截图、语义控制、网络信号、运行时诊断和远程会话都在 runtime 内完成。系统弹窗、通知、
+必须放在 `cockpit/`，不要放进生产 `lib/` 代码。应用内的 Flutter-view 截图、
+基于 Element 的检查与控制、网络信号、运行时诊断和远程会话都在 runtime 内完成，
+不要求业务应用编写 `Semantics`。系统弹窗、通知、
 宿主截图、宿主录屏等系统级证据仍应通过 `cockpit` 的 system action 驱动，这样能力发现
 和平台降级路径才保持真实。
 
@@ -132,7 +133,7 @@ flutter run --target main.dart
 
 - 低侵入根级 bootstrap
 - 命令路由与执行
-- 带有界诊断的 UI 快照
+- UI 快照以及 minimal、standard、full 三档已挂载 Element 树
 - accessibility、network、runtime、rebuild 信号
 - 截图和录屏请求
 - 远程会话状态与命令端点
@@ -144,6 +145,6 @@ HTTP 诊断默认移除凭据值，同时保留鉴权类型、Cookie 名、query
 
 宿主侧编排、MCP、workspace tooling 和交付验证在 [`cockpit`](https://pub.dev/packages/cockpit) 中。
 运行时 bundle 模型现在会保留 `targetKind`、`primaryExecutionPlane`、`planesUsed`、`surfaceKindsUsed`、`fallbackCount`，以及 step / observation 级别的 plane 元数据，方便宿主侧准确解释这次控制是按预期平面完成，还是发生了受控降级。
-在 web 上，runtime 直接支持 Flutter semantic 和 Flutter-view 控制路径；method channel 会注册为“显式不可用”的 stub，这样能力判断会保持真实，不会退化成缺少插件的噪音报错。移动端和桌面端的原生 method-channel 录屏与截图会通过包的插件入口注册，并作为应用窗口级证据 fallback 使用；如果目标是证明系统弹窗、通知、宿主窗口或跨应用行为，仍优先使用 `cockpit` 提供的 system/host 证据链路。
+在 web 上，runtime 直接支持 Flutter Element 与 Flutter-view 控制路径；method channel 会注册为“显式不可用”的 stub，这样能力判断会保持真实，不会退化成缺少插件的噪音报错。移动端和桌面端的原生 method-channel 录屏与截图会通过包的插件入口注册，并作为应用窗口级证据 fallback 使用；如果目标是证明系统弹窗、通知、宿主窗口或跨应用行为，仍优先使用 `cockpit` 提供的 system/host 证据链路。
 
 包地址：[pub.dev/packages/flutter_cockpit](https://pub.dev/packages/flutter_cockpit)

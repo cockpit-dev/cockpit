@@ -116,6 +116,8 @@ final class CockpitSupervisorRuntime
   final CockpitSupervisorRunAdmissionStore runAdmissions;
   final Map<String, CockpitSupervisorRunProjection> _projections;
   final Map<String, Future<void>> _workerInitialization = {};
+  final Map<String, String> _workerBuildIds = {};
+  final Map<String, Future<void>> _workerBuildSelections = {};
   final Map<String, _ActiveRun> _activeRuns = {};
   final Map<String, String> _validatedRunOwners = {};
   bool _draining = false;
@@ -462,11 +464,55 @@ final class CockpitSupervisorRuntime
       grace: Duration(milliseconds: request.drainTimeoutMs),
       force: request.force,
     );
+    _workerInitialization.remove(workspaceId);
+    _workerBuildIds.remove(workspaceId);
+    _workerBuildSelections.remove(workspaceId);
     return resources.identity.workspaces.unregister(
       workspaceId,
       policy: _removalPolicy(request.force),
       drainTimeout: Duration(milliseconds: request.drainTimeoutMs),
     );
+  }
+
+  Future<void> selectWorkspaceWorkerBuild(String workspaceId, String buildId) {
+    workerId(workspaceId, r'$.workspaceId');
+    workerId(buildId, r'$.workerBuildId');
+    final previous =
+        _workerBuildSelections[workspaceId] ?? Future<void>.value();
+    late final Future<void> selection;
+    selection = (() async {
+      try {
+        await previous;
+      } on Object {
+        // A failed prior refresh must not permanently block a later build.
+      }
+      final current = _workerBuildIds[workspaceId] ?? cockpitBuildId;
+      if (current == buildId) return;
+      if (_activeRuns.values.any(
+        (run) => run.workspaceId == workspaceId && !run.terminal,
+      )) {
+        throw _apiError(
+          CockpitErrorCode.resourceBusy,
+          CockpitErrorCategory.resource,
+          'Workspace worker refresh is waiting for its active run to finish.',
+        );
+      }
+      await workerPool.shutdownWorkspace(
+        CockpitWorkspaceWorkerKey(
+          workspaceId: workspaceId,
+          engineVersion: cockpitSupervisorEngineVersion,
+        ),
+        grace: const Duration(seconds: 10),
+      );
+      _workerInitialization.remove(workspaceId);
+      _workerBuildIds[workspaceId] = buildId;
+    })();
+    _workerBuildSelections[workspaceId] = selection;
+    return selection.whenComplete(() {
+      if (identical(_workerBuildSelections[workspaceId], selection)) {
+        _workerBuildSelections.remove(workspaceId);
+      }
+    });
   }
 
   Future<List<CockpitOperationDescriptor>> workspaceOperations(
@@ -944,6 +990,9 @@ final class CockpitSupervisorRuntime
       );
     } finally {
       run.terminal = true;
+      if (identical(_activeRuns[run.runId], run)) {
+        _activeRuns.remove(run.runId);
+      }
     }
   }
 
@@ -1406,6 +1455,7 @@ final class CockpitSupervisorRuntime
         engineVersion: cockpitSupervisorEngineVersion,
       ),
       projectId: workspace.projectId,
+      buildId: _workerBuildIds[workspaceId] ?? cockpitBuildId,
       workspaceRoot: workspace.canonicalPath,
       stateRoot: _workspaceStateRoot(workspaceId),
       supportedFeatures: cockpitSupervisorFeatures.map((item) => item.id),

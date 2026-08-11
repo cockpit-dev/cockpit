@@ -333,6 +333,52 @@ void main() {
     expect(value, isNot(contains('_meta')));
   });
 
+  test('dev tree minimal output prioritizes actionable locator nodes', () {
+    const renderer = CockpitCliOutputRenderer();
+    final value =
+        lon.decode(
+              renderer.renderAi(
+                command: 'dev.tree',
+                data: <String, Object?>{
+                  'ok': true,
+                  'action': 'tree',
+                  'session': '5',
+                  'state': <String, Object?>{
+                    'profile': 'minimal',
+                    'total': 100,
+                    'visible': 80,
+                    'emitted': 20,
+                    'truncated': false,
+                    'nodes': <Object?>[
+                      for (var index = 0; index < 8; index += 1)
+                        <String, Object?>{
+                          'node': '0.$index',
+                          'type': 'Container',
+                          'visible': true,
+                        },
+                      <String, Object?>{
+                        'node': '0.8',
+                        'loc': '/scaffold/textbutton',
+                        'type': 'TextButton',
+                        'text': 'New task',
+                        'visible': true,
+                        'actions': <Object?>['tap'],
+                      },
+                    ],
+                  },
+                },
+                detail: CockpitCliOutputDetail.minimal,
+              ),
+            )!
+            as Map<Object?, Object?>;
+
+    final state = value['state']! as Map<Object?, Object?>;
+    final nodes = state['nodes']! as List<Object?>;
+    expect(nodes, isNotEmpty);
+    expect(nodes.first, containsPair('loc', '/scaffold/textbutton'));
+    expect(nodes.first, containsPair('text', 'New task'));
+  });
+
   test(
     'dev screenshot exposes capture source only when diagnostic or degraded',
     () {
@@ -1262,6 +1308,7 @@ void main() {
                   'enum': <String>[
                     'minimal',
                     'locate',
+                    'tree',
                     'standard',
                     'inspect',
                     'evidence',
@@ -1282,7 +1329,10 @@ void main() {
       final fields = schema['fields']! as Map<String, Object?>;
       final profile = fields['profile']! as Map<String, Object?>;
 
-      expect(profile['values'], 'minimal|locate|standard|inspect|evidence');
+      expect(
+        profile['values'],
+        'minimal|locate|tree|standard|inspect|evidence',
+      );
       expect(value, isNot(contains('_meta')));
     });
 

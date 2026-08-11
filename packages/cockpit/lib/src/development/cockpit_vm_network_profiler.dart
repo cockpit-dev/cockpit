@@ -7,6 +7,25 @@ import 'package:vm_service/vm_service_io.dart';
 
 typedef CockpitVmServiceConnector = Future<VmService> Function(Uri uri);
 
+abstract interface class CockpitNetworkProfiler {
+  Future<void> enable({required String sessionId, required Uri vmServiceUri});
+
+  Future<CockpitVmNetworkBodies> readBodies({
+    required String sessionId,
+    required Uri vmServiceUri,
+    required CockpitNetworkEntry entry,
+  });
+}
+
+final class CockpitVmNetworkBodyUnavailableException implements Exception {
+  const CockpitVmNetworkBodyUnavailableException(this.message);
+
+  final String message;
+
+  @override
+  String toString() => message;
+}
+
 final class CockpitVmNetworkRequestMatcher {
   const CockpitVmNetworkRequestMatcher({
     this.tolerance = const Duration(seconds: 5),
@@ -28,15 +47,16 @@ final class CockpitVmNetworkRequestMatcher {
                 _distance(left, entry).compareTo(_distance(right, entry)),
           );
     if (candidates.isEmpty) {
-      throw StateError(
-        'No VM HTTP profile request matches ${entry.requestId}. The request '
-        'may have started before profiling was enabled.',
+      throw CockpitVmNetworkBodyUnavailableException(
+        'The VM profiler did not retain network request ${entry.requestId}. '
+        'Run the request again after the development session is ready.',
       );
     }
     if (candidates.length > 1 &&
         _distance(candidates[0], entry) == _distance(candidates[1], entry)) {
-      throw StateError(
-        'VM HTTP profile matching for ${entry.requestId} is ambiguous.',
+      throw CockpitVmNetworkBodyUnavailableException(
+        'The VM profiler cannot uniquely match network request '
+        '${entry.requestId}. Run the request again and retry with its new ID.',
       );
     }
     return candidates.first;
@@ -78,7 +98,7 @@ final class CockpitVmNetworkBodies {
   final CockpitVmNetworkBody response;
 }
 
-final class CockpitVmNetworkProfiler {
+final class CockpitVmNetworkProfiler implements CockpitNetworkProfiler {
   CockpitVmNetworkProfiler({
     CockpitVmServiceConnector? connect,
     this.connectionTimeout = const Duration(seconds: 3),
@@ -92,6 +112,7 @@ final class CockpitVmNetworkProfiler {
   final Duration connectionTimeout;
   final Map<String, Future<void>> _enablements = <String, Future<void>>{};
 
+  @override
   Future<void> enable({required String sessionId, required Uri vmServiceUri}) {
     final previous = _enablements[sessionId] ?? Future<void>.value();
     final next = previous
@@ -105,6 +126,7 @@ final class CockpitVmNetworkProfiler {
     });
   }
 
+  @override
   Future<CockpitVmNetworkBodies> readBodies({
     required String sessionId,
     required Uri vmServiceUri,
