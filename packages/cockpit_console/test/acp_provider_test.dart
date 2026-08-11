@@ -3,11 +3,19 @@ import 'dart:io';
 
 import 'package:acpd/acpd.dart';
 import 'package:cockpit_console/src/providers/acp_provider.dart';
+import 'package:cockpit_console/src/foundation/console_version.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
 void main() {
+  test('ACP client identity uses the Console release version', () {
+    expect(
+      const AcpConnectionConfig(command: 'agent').clientVersion,
+      consoleVersion,
+    );
+  });
+
   group('AcpPermissionPrompt', () {
     test('exposes toolCall and immutable options', () {
       const toolCall = AcpToolCallState(
