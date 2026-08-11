@@ -141,13 +141,13 @@ final class CockpitSystemControlActionService {
       );
     }
     if (capability.availability != CockpitSystemControlAvailability.available) {
+      final issue = _unavailableCapabilityIssue(request, describe, capability);
       return _notExecutable(
         request,
         availability: capability.availability,
-        recommendedNextStep: profile.recommendedNextStep,
-        errorCode: 'systemActionNotAvailable',
-        errorMessage:
-            '${request.action.name} is ${capability.availability.name} on ${profile.platform}.',
+        recommendedNextStep: issue.next,
+        errorCode: issue.code,
+        errorMessage: issue.message,
         strategy: capability.strategy,
         requires: capability.requires,
         limitations: capability.limitations,
@@ -1505,6 +1505,51 @@ final class CockpitSystemControlActionService {
       requires: requires,
       limitations: limitations,
     );
+  }
+
+  ({String code, String message, String next}) _unavailableCapabilityIssue(
+    CockpitSystemControlActionRequest request,
+    CockpitSystemControlDescribeResult describe,
+    CockpitSystemControlCapability capability,
+  ) {
+    if (request.platform.trim().toLowerCase() == 'android' &&
+        describe.metadata['androidDeviceReachable'] == false) {
+      final deviceId = request.deviceId?.trim();
+      final reason = _boundedFailureReason(
+        describe.metadata['androidDeviceFailureReason'],
+      );
+      final state = _boundedFailureReason(
+        describe.metadata['androidDeviceState'],
+      );
+      final detail =
+          reason ??
+          (state == null ? 'adb device not ready' : 'adb state $state');
+      return (
+        code: 'androidDeviceUnavailable',
+        message:
+            'Android device ${deviceId == null || deviceId.isEmpty ? '<unknown>' : deviceId} is unavailable: $detail.',
+        next: 'connectAndroidDevice',
+      );
+    }
+    return (
+      code: 'systemActionNotAvailable',
+      message:
+          '${request.action.name} is ${capability.availability.name} on ${describe.profile.platform}.',
+      next: describe.profile.recommendedNextStep,
+    );
+  }
+
+  String? _boundedFailureReason(Object? value) {
+    if (value is! String) {
+      return null;
+    }
+    final normalized = value.trim().replaceAll(RegExp(r'\s+'), ' ');
+    if (normalized.isEmpty) {
+      return null;
+    }
+    return normalized.length <= 160
+        ? normalized
+        : '${normalized.substring(0, 157)}...';
   }
 
   Future<CockpitSystemControlActionResult> _runMacroSteps(

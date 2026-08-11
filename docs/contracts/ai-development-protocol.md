@@ -3,7 +3,7 @@
 Use the authenticated Supervisor for both rapid development and release E2E.
 Do not call host application services directly. For Flutter source development,
 use a project-scoped numeric handle guarded by checkout identity and let Cockpit
-own internal resources.
+manage the project resources.
 
 ## Flutter Bootstrap
 
@@ -22,7 +22,7 @@ cockpit dev start --dart-define API_URL=https://example.test --env LOG_LEVEL=deb
 
 The bridge belongs in a development-only entrypoint; production Flutter code
 must not import `flutter_cockpit`. Cockpit discovers/registers the workspace,
-entrypoint, target, app, process, port, and runtime session internally. It
+entrypoint, target, app, process, port, and runtime session. It
 returns a short handle such as `1`; later commands infer the active handle for
 the canonical Flutter project. A monorepo may have independent active handles
 for multiple Flutter projects, and one project may keep several platform/target
@@ -67,10 +67,12 @@ independently protect worker state, process/port ownership, network state, mutat
 sequence, and artifact paths. Shared repository metadata or package names never make
 another project or checkout handle implicit.
 
-Normal output is bounded canonical LON at `--verbosity minimal`. Preserve
-`minimal|standard|full`, LON/JSON/YAML/JSONL, and `path|none`. Artifact and
+Normal output is bounded canonical LON at `--view brief`. Preserve
+`brief|more|full`, LON/JSON/YAML/JSONL, and `path|none`. Artifact and
 file output contains only the verified absolute path; never image/file bytes,
 Base64, data URIs, hashes, byte counts, or file contents.
+`more:N` is an omission count. Copy generated IDs exactly. Copy operation
+request names from `cockpit explain KIND` under `input.fields`.
 
 Use the advanced protocol only when no task command covers a live capability:
 
@@ -121,10 +123,10 @@ cockpit artifact read \
   --output /absolute/path/to/artifact
 ```
 
-Terminal output defaults to minimal canonical LON for agent loops. Omit default
+Terminal output defaults to brief canonical LON for agent loops. Omit default
 output options. Request `--format json` only with `jq`, a JSON-only consumer, or
-JSON wire inspection. Otherwise use `--verbosity full --output <file>.lon` to
-write the complete response and receive only its verified path. Verbosity
+JSON wire inspection. Otherwise use `--view full --output <file>.lon` to
+write the complete response and receive only its verified path. View
 changes information density, not operation accuracy.
 `artifact read` always writes verified bytes to a file and never emits Base64.
 Use `artifact list` as the authority for artifact identity and metadata.
@@ -140,17 +142,14 @@ faithful driver. A Flutter bridge target can switch between its semantic and
 secondary system drivers per step; inspect the reported capabilities before
 using `copyText`, `eraseText`, `pasteText`, `travel`, visual locators, or
 `assertScreenshot`.
-Read secondary native capabilities from the sanitized
-`target.inspect.output.systemControl` profile. Do not infer them from
-`app.get`; platform application and process identities are intentionally
-redacted outside the worker.
+Read secondary native capabilities from the `system` profile returned by
+`cockpit target inspect`.
 
 Visual templates and screenshot baselines must resolve inside the registered
 workspace. Screenshot assertions produce actual, baseline, and diff files in
 the report bundle. Express before/after behavior with suite fixtures, case
 `setup`/`finally`, step `evidence`, and explicit `startRecording`/
-`stopRecording` boundaries. Do not invent a client-only hook model that cannot
-round-trip through `cockpit.test/v2` and the canonical report.
+`stopRecording` boundaries.
 
 For a suite, download the complete report artifact set into one directory and
 preserve its relative paths. Read `summary.md` for a bounded terminal handoff,

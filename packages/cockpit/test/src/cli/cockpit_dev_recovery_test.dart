@@ -350,8 +350,7 @@ void main() {
       );
       expect(requestedProfile, 'locate');
       final output = lon.decode(stdout.toString())! as Map<Object?, Object?>;
-      final state = output['state']! as Map<Object?, Object?>;
-      final matches = state['matches']! as List<Object?>;
+      final matches = output['matches']! as List<Object?>;
       expect(matches, hasLength(1));
       expect(
         matches.single,
@@ -436,7 +435,7 @@ void main() {
       command: 'dev.tree',
       selection: const CockpitCliOutputSelection(
         format: CockpitCliFormat.path,
-        detail: CockpitCliOutputDetail.full,
+        view: CockpitCliOutputView.full,
       ),
     );
 
@@ -475,7 +474,7 @@ void main() {
     runtime.configureOutput(
       command: 'dev.status',
       selection: const CockpitCliOutputSelection(
-        detail: CockpitCliOutputDetail.full,
+        view: CockpitCliOutputView.full,
       ),
     );
 

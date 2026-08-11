@@ -4,6 +4,7 @@ import 'package:cockpit_protocol/cockpit_protocol.dart';
 import 'package:path/path.dart' as p;
 
 import '../infrastructure/cockpit_sdk_environment.dart';
+import '../foundation/cockpit_ids.dart';
 import '../remote/cockpit_android_port_forwarder.dart';
 import '../remote/cockpit_local_session_port_resolver.dart';
 import '../session/cockpit_flutter_launch_configuration.dart';
@@ -108,7 +109,7 @@ final class CockpitLaunchRemoteSessionService {
             workingDirectory: normalizedProjectDir,
           )
         : _flutterVersionForExecutableReader(flutterExecutable));
-    final launchId = _newRemoteLaunchId(request.platform);
+    final launchId = _newRemoteLaunchId();
     final prepared = await _prepareAppEnvironment(
       platform: request.platform,
       hostPort: resolvedSessionPort,
@@ -223,7 +224,6 @@ bool _needsManagedRemoteAppTemp({
   _ => false,
 };
 
-String _newRemoteLaunchId(String platform) {
-  final timestamp = DateTime.now().toUtc().microsecondsSinceEpoch;
-  return 'remote-$platform-$timestamp';
+String _newRemoteLaunchId() {
+  return CockpitSecureTokenGenerator().nextResourceId('r');
 }

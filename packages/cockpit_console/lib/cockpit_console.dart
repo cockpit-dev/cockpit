@@ -1,4 +1,4 @@
-/// Cockpit Console - desktop GUI client for Cockpit 3.0 E2E automation.
+/// Cockpit Console - desktop GUI client for Cockpit E2E automation.
 ///
 /// Provides a Linear / Vercel inspired interface for managing workspaces,
 /// targets, test documents (YAML / JSON), run execution, live event streams,

@@ -4,7 +4,7 @@ name: cockpit
 description: Use when Flutter development or black-box application testing needs live control, E2E execution, reports, or evidence.
 ---
 
-# Cockpit 3.0
+# Cockpit
 
 Use this steering note when Flutter development or black-box application
 testing needs live control, E2E execution, reports, or evidence.
@@ -19,7 +19,7 @@ Cockpit, Flutter debugging, UI automation, and E2E requests.
 cockpit session list
 cockpit dev status
 cockpit dev inspect "TARGET"
-cockpit dev diagnose --verbosity standard
+cockpit dev diagnose --view more
 ```
 
 Use a validated `cockpit.test/v2` case or suite for reusable E2E. Prefer the

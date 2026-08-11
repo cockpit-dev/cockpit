@@ -71,7 +71,7 @@ Future<int> runCockpitDaemon(
   );
   final startedAt = DateTime.now().toUtc();
   final serverInfo = runtime.serverInfo(
-    instanceId: 'in-${CockpitSecureTokenGenerator().nextIdToken()}',
+    instanceId: CockpitSecureTokenGenerator().nextResourceId('i'),
     startedAt: startedAt,
   );
   final api = CockpitSupervisorHttpApi(

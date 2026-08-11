@@ -236,7 +236,7 @@ final class CockpitDevStartService {
       <String, Object?>{
         'targetId': target.targetId,
         'mode': 'development',
-        'launchTimeoutMs': runtime.operationTimeout.inMilliseconds,
+        'launchTimeoutMs': request.launchTimeoutMilliseconds,
         'launchConfiguration': ?launchConfiguration,
       },
     );

@@ -40,7 +40,7 @@ void main() {
         final same = await fixture.roots.register(rootDirectory.path);
         expect(same.rootId, root.rootId);
         expect(root.filesystemIdentity, startsWith('posix:'));
-        expect(root.rootId, matches(r'^rt-[A-Za-z0-9]{16}$'));
+        expect(root.rootId, matches(r'^r[a-z0-9]{10}$'));
         await expectLater(
           fixture.roots.register(nested.path),
           throwsRegistry('rootOverlap'),

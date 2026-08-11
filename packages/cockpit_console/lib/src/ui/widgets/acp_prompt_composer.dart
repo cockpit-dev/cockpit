@@ -42,9 +42,9 @@ final class AcpPromptComposer extends HookWidget {
 
     Future<void> send() async {
       if (!canSend) return;
+      final text = controller.text.trim();
       final content = <ContentBlock>[
-        if (input.text.trim().isNotEmpty)
-          TextContentBlock(text: input.text.trim()),
+        if (text.isNotEmpty) TextContentBlock(text: text),
         for (final attachment in attachments.value) attachment.content,
       ];
       dispatching.value = true;
@@ -148,8 +148,23 @@ final class _ComposerSurface extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final commands = connection.activeSession?.availableCommands ?? const [];
     void submit() {
       if (canSend) onSend();
+    }
+
+    void selectCommand(AvailableCommand command) {
+      final current = controller.text.trimLeft();
+      final suffix = current.isNotEmpty
+          ? ' $current'
+          : command.input == null
+          ? ''
+          : ' ';
+      final text = '/${command.name}$suffix';
+      controller.value = TextEditingValue(
+        text: text,
+        selection: TextSelection.collapsed(offset: text.length),
+      );
     }
 
     return Container(
@@ -175,6 +190,14 @@ final class _ComposerSurface extends StatelessWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
+              if (commands.isNotEmpty) ...[
+                _CommandMenu(
+                  commands: commands,
+                  enabled: enabled && !connection.isPrompting,
+                  onSelected: selectCommand,
+                ),
+                const SizedBox(width: 8),
+              ],
               _AttachmentMenu(
                 capabilities: connection.capabilities.promptCapabilities,
                 enabled: enabled && !connection.isPrompting && !picking,
@@ -253,6 +276,74 @@ final class _ComposerSurface extends StatelessWidget {
               ),
             ),
           ],
+        ],
+      ),
+    );
+  }
+}
+
+final class _CommandMenu extends StatelessWidget {
+  const _CommandMenu({
+    required this.commands,
+    required this.enabled,
+    required this.onSelected,
+  });
+
+  final List<AvailableCommand> commands;
+  final bool enabled;
+  final ValueChanged<AvailableCommand> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox.square(
+      dimension: ConsoleControlStyle.height,
+      child: PopupMenuButton<AvailableCommand>(
+        enabled: enabled,
+        tooltip: 'Available commands',
+        onSelected: onSelected,
+        itemBuilder: (context) => [
+          for (final command in commands)
+            PopupMenuItem(
+              value: command,
+              child: _CommandMenuLabel(command: command),
+            ),
+        ],
+        icon: const Icon(LucideIcons.command, size: 16),
+      ),
+    );
+  }
+}
+
+final class _CommandMenuLabel extends StatelessWidget {
+  const _CommandMenuLabel({required this.command});
+
+  final AvailableCommand command;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 320),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '/${command.name}',
+            style: theme.textTheme.labelMedium?.copyWith(
+              fontFamily: 'monospace',
+              color: theme.colorScheme.primary,
+            ),
+          ),
+          Text(command.description, style: theme.textTheme.bodySmall),
+          if (command.input case final input?)
+            Text(
+              input.hint,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
         ],
       ),
     );

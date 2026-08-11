@@ -181,6 +181,16 @@ final class CockpitWorkerSystemActionParameters {
         idempotencyKey,
         parameters,
       ),
+      CockpitSystemControlAction.readUiTree ||
+      CockpitSystemControlAction.readProcessList ||
+      CockpitSystemControlAction.readWindows ||
+      CockpitSystemControlAction.readSystemState ||
+      CockpitSystemControlAction.readNotificationState ||
+      CockpitSystemControlAction.readSystemLogs => _captureTextOutput(
+        action,
+        idempotencyKey,
+        parameters,
+      ),
       _ => CockpitPreparedSystemActionParameters(
         parameters: Map<String, Object?>.unmodifiable(parameters),
       ),
@@ -371,6 +381,79 @@ final class CockpitWorkerSystemActionParameters {
     );
   }
 
+  CockpitPreparedSystemActionParameters _captureTextOutput(
+    CockpitSystemControlAction action,
+    String idempotencyKey,
+    Map<String, Object?> parameters,
+  ) {
+    final outputPath = _allocateOutput(
+      idempotencyKey: idempotencyKey,
+      actionName: action.name,
+      requestedName: null,
+      defaultName: switch (action) {
+        CockpitSystemControlAction.readUiTree => 'ui-tree.txt',
+        CockpitSystemControlAction.readProcessList => 'processes.txt',
+        CockpitSystemControlAction.readWindows => 'windows.txt',
+        CockpitSystemControlAction.readSystemState => 'system-state.txt',
+        CockpitSystemControlAction.readNotificationState => 'notifications.txt',
+        CockpitSystemControlAction.readSystemLogs => 'system.log',
+        _ => throw StateError('Unsupported text output action ${action.name}.'),
+      },
+    );
+    return CockpitPreparedSystemActionParameters(
+      parameters: Map<String, Object?>.unmodifiable(parameters),
+      producedPath: outputPath,
+      capturedStdoutRole: 'system.${action.name}',
+    );
+  }
+
+  Future<String> writeCapturedStdout(
+    CockpitPreparedSystemActionParameters prepared,
+    String stdout,
+  ) async {
+    final destinationPath = prepared.producedPath;
+    if (destinationPath == null || prepared.capturedStdoutRole == null) {
+      throw StateError('System action stdout capture was not prepared.');
+    }
+    final destination = File(destinationPath);
+    final bytes = utf8.encode(stdout);
+    final temporary = File(
+      '$destinationPath.${DateTime.now().microsecondsSinceEpoch}.$pid.tmp',
+    );
+    RandomAccessFile? handle;
+    try {
+      await temporary.create(exclusive: true);
+      handle = await temporary.open(mode: FileMode.write);
+      await handle.writeFrom(bytes);
+      await handle.flush();
+      await handle.close();
+      handle = null;
+      if (await destination.exists()) {
+        final current = await destination.readAsBytes();
+        if (!_sameBytes(current, bytes)) {
+          throw FileSystemException(
+            'System action output changed for the same idempotency key.',
+            destinationPath,
+          );
+        }
+      } else {
+        await temporary.rename(destinationPath);
+      }
+      final canonical = p.normalize(await destination.resolveSymbolicLinks());
+      if (!p.isWithin(_producerRoot, canonical) ||
+          await destination.length() != bytes.length) {
+        throw FileSystemException(
+          'System action output failed producer confinement verification.',
+          destinationPath,
+        );
+      }
+      return canonical;
+    } finally {
+      await handle?.close();
+      if (await temporary.exists()) await temporary.delete();
+    }
+  }
+
   Future<String> _resolveCapability(
     Map<String, Object?> parameters, {
     bool allowDirectory = false,
@@ -442,8 +525,18 @@ final class CockpitPreparedSystemActionParameters {
   CockpitPreparedSystemActionParameters({
     required Map<String, Object?> parameters,
     this.producedPath,
+    this.capturedStdoutRole,
   }) : parameters = Map<String, Object?>.unmodifiable(parameters);
 
   final Map<String, Object?> parameters;
   final String? producedPath;
+  final String? capturedStdoutRole;
+}
+
+bool _sameBytes(List<int> left, List<int> right) {
+  if (left.length != right.length) return false;
+  for (var index = 0; index < left.length; index += 1) {
+    if (left[index] != right[index]) return false;
+  }
+  return true;
 }

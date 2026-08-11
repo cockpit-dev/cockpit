@@ -1,5 +1,6 @@
 import 'package:cockpit_protocol/cockpit_protocol.dart';
 
+import '../foundation/cockpit_ids.dart';
 import 'cockpit_application_service_exception.dart';
 
 typedef CockpitInteractiveNow = DateTime Function();
@@ -30,18 +31,21 @@ final class CockpitInteractiveSnapshotStore {
     this.ttl = const Duration(minutes: 10),
     this.maxEntries = 32,
     CockpitInteractiveNow? now,
-  }) : _now = now ?? DateTime.now;
+    CockpitTokenGenerator? tokenGenerator,
+  }) : _now = now ?? DateTime.now,
+       _tokenGenerator = tokenGenerator ?? CockpitSecureTokenGenerator();
 
   final Duration ttl;
   final int maxEntries;
   final CockpitInteractiveNow _now;
+  final CockpitTokenGenerator _tokenGenerator;
   final Map<String, CockpitInteractiveStoredSnapshot> _entries =
       <String, CockpitInteractiveStoredSnapshot>{};
 
   String put({required String sessionKey, required CockpitSnapshot snapshot}) {
     _purgeExpired();
     final timestamp = _now().toUtc();
-    final ref = 'snapshot-${timestamp.microsecondsSinceEpoch}';
+    final ref = _tokenGenerator.nextResourceId('s');
     _entries[ref] = CockpitInteractiveStoredSnapshot(
       ref: ref,
       sessionKey: sessionKey,

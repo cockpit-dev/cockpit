@@ -7,6 +7,7 @@ import 'package:cockpit_protocol/cockpit_protocol.dart';
 import 'package:path/path.dart' as p;
 
 import '../application/cockpit_application_service_exception.dart';
+import '../foundation/cockpit_ids.dart';
 import 'cockpit_remote_command_timeout_budget.dart';
 
 typedef CockpitRemoteArtifactTempFileFactory =
@@ -198,8 +199,7 @@ final class CockpitRemoteSessionClient {
     try {
       final result = await execute(
         CockpitCommand(
-          commandId:
-              'wait-ui-idle-${DateTime.now().toUtc().microsecondsSinceEpoch}',
+          commandId: CockpitSecureTokenGenerator().nextResourceId('w'),
           commandType: CockpitCommandType.waitForUiIdle,
           parameters: <String, Object?>{
             'quietWindowMs': quietWindow.inMilliseconds,

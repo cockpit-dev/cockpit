@@ -30,7 +30,7 @@ void main() {
       expect(
         _relativeFiles(repositoryRoot, root),
         canonicalFiles,
-        reason: '$root must contain the complete deployable 3.0 skill.',
+        reason: '$root must contain the complete deployable 4.0 skill.',
       );
       for (final relativePath in canonicalFiles) {
         expect(
@@ -67,7 +67,7 @@ void main() {
       'cockpit dev',
       'Flutter Fast Path',
       'cockpit dev start',
-      'Public handles are numeric',
+      'Development handles are numeric',
       '--session HANDLE',
       'The selection persists',
       'cockpit dev status',
@@ -89,7 +89,7 @@ void main() {
       'Android/iOS capture the system screen first',
       'Desktop/Web capture Flutter first',
       'cockpit dev diagnose',
-      'reconciled internally',
+      'port changes keep the existing handle',
       'current screenshot',
       'Unexpected-State Recovery',
       'Do not repeat the\nfailed action blindly',
@@ -103,19 +103,17 @@ void main() {
       'Do not clear app data',
       'Prove recovery before resuming the original flow',
       'cockpit update',
-      'Minimal canonical LON',
+      'Brief canonical LON',
       'never request JSON merely because it is structured',
       'only on a pipeline that uses `jq`',
-      'JSON without one of those\nconsumers is a command-authoring error',
-      'equal projections, not equal defaults',
-      "cockpit dev status --format json | jq '.state.lifecycle'",
-      'installs and verifies the latest Pub\nrelease',
-      'a stale Pub index fails safely instead of downgrading Cockpit',
-      'restores one optimized AOT\nexecutable',
-      'Do not manually delete\nCockpit home data, Pub caches',
+      "cockpit dev status --format json | jq '.lifecycle'",
+      '`input.fields`',
+      'updates the CLI and Supervisor',
+      'Do not manually delete Cockpit home data',
       '--format',
-      '--verbosity',
-      'Every explicit option must change behavior',
+      '--view',
+      'Icon-only controls expose readable tooltips',
+      'Add an option only when it changes the requested\nbehavior',
       'references/flutter.md',
       'references/environments.md',
     ]) {
@@ -135,6 +133,7 @@ void main() {
     for (final retired in <String>[
       '--stdout-format',
       '--detail',
+      '--verbosity',
       '--input-json',
       '--inputs-json',
       'authorizationMode',
@@ -156,7 +155,7 @@ void main() {
       );
     }
     for (final redundantDefault in <String>[
-      '--verbosity minimal',
+      '--view brief',
       '--format lon',
       '--session s1',
       '--quiet-ms 500',
@@ -256,7 +255,7 @@ void main() {
     );
   });
 
-  test('skill bundles the authoritative 2.0 authoring schema', () {
+  test('skill bundles the authoritative authoring schema', () {
     final protocol = read('${_skillRoots.first}/references/protocol.md');
 
     for (final authority in <String>[

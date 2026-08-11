@@ -6,7 +6,8 @@ description: Use when application development or black-box E2E must inspect, con
 # Cockpit
 
 `cockpit dev` owns Flutter discovery, processes, ports, and Supervisor state.
-Public handles are numeric (`1`, `2`, ...). Use the globally installed `cockpit` executable
+Development handles are numeric (`1`, `2`, ...). Copy other generated IDs exactly;
+never replace them with paths. Use the globally installed `cockpit` executable
 everywhere. Live capabilities are authoritative.
 
 ## Flutter Preflight
@@ -43,10 +44,9 @@ Use the highest-level command that owns the task:
 | Learn an operation schema and its safer task command | `cockpit explain KIND` |
 | Execute an advertised operation without a task command | `cockpit op run KIND` |
 
-Do not build normal Flutter work from root/workspace/target IDs. `dev` resolves those
-internally. There is no top-level `test` command: `case` is one journey and `suite`
-is a durable campaign. There are no `raw` or `exec` aliases; `op` is the single
-advertised-operation escape hatch and is not a faster version of `dev`.
+Use `dev` for normal Flutter work; it resolves the required project resources.
+`case` runs one journey, `suite` runs a durable campaign, and `op` executes an
+advertised operation that has no task command.
 
 ## Flutter Fast Path
 
@@ -59,7 +59,7 @@ cockpit dev start --device emulator-5554
 cockpit dev start --flavor staging --dart-define API_URL=https://example.test
 ```
 
-The normal loop is deliberately short:
+Normal loop:
 
 ```bash
 cockpit dev status
@@ -91,7 +91,7 @@ Do not add polling, sleeps, or verbose flags just to prove that launch is active
 
 Reads never relaunch stopped apps. Mutations may recover one owned crash. Use
 `cockpit dev start` to explicitly relaunch a stopped or crashed app. Bridge and
-port changes are reconciled internally.
+port changes keep the existing handle.
 
 ## Unexpected-State Recovery
 
@@ -102,13 +102,13 @@ handle, then observe the current state once:
 
 ```bash
 cockpit dev status
-cockpit dev screenshot --verbosity standard
+cockpit dev screenshot --view more
 cockpit dev inspect
 ```
 
 Inspect the returned screenshot path with the host's local image tool when
 available. On Android/iOS, a system-sourced capture may reveal an OS prompt that
-cannot appear in the Flutter tree. Use `cockpit dev diagnose --verbosity standard`
+cannot appear in the Flutter tree. Use `cockpit dev diagnose --view more`
 only when status, screenshot, and bounded inspection do not explain the blocker.
 
 If a timed-out mutation already produced the expected anchor, treat it as committed
@@ -179,7 +179,7 @@ cockpit dev use 2
 cockpit dev status --session 2
 ```
 
-`session show` reports the Flutter project, checkout path and identity, workspace,
+`session show` reports the Flutter project, checkout path, workspace,
 entrypoint, platform/device, lifecycle, and current live state. Check it before a
 destructive mutation when concurrent apps look similar. Omitting `--session` is safe
 when running inside the intended project and its active handle is the intended
@@ -188,7 +188,7 @@ pass `--session HANDLE` on the exact command. From a common ancestor containing
 multiple active projects, Cockpit fails as ambiguous instead of guessing.
 
 `session list` is a fast, side-effect-free local index: it never starts a worker,
-attaches Flutter, reconnects, or relaunches an app. Its `lastState` is the last saved
+attaches Flutter, reconnects, or relaunches an app. Its `state` is the last saved
 state, not a live probe. Use `session show HANDLE` or `dev status --session HANDLE`
 only when current reachability is needed.
 
@@ -199,15 +199,11 @@ Reads do not relaunch an intentionally stopped app. A timed-out request cancels 
 request, not the owned app; check `dev status` before retrying. Cockpit does not read a
 keychain or secret store. `--env` values are process-only and are not persisted.
 
-Use `cockpit update` for normal upgrades. It installs and verifies the latest Pub
-release, but constrains resolution to a version at least as new as the running
-executable; a stale Pub index fails safely instead of downgrading Cockpit. It safely
-hands any source-installed native executable back to Pub, restores one optimized AOT
-executable, removes retired and temporary update payloads, and reconnects the
-Supervisor while preserving authorization and durable state. Do not manually delete
-Cockpit home data, Pub caches, sessions, executables, or ports.
+Use `cockpit update` for normal upgrades. It updates the CLI and Supervisor while
+preserving authorization and durable state. Do not manually delete Cockpit home data,
+Pub caches, sessions, executables, or ports.
 
-Manual daemon lifecycle is conservative. `cockpit daemon start` and an unflagged
+`cockpit daemon start` and an unflagged
 `daemon restart` preserve the authorization of a healthy running daemon; with no
 running daemon they start restricted. Add `--yolo` only to explicitly require yolo.
 To return to restricted, stop the daemon and start it without `--yolo`. Lifecycle
@@ -216,8 +212,7 @@ lock waits consume the command's own timeout instead of blocking indefinitely.
 ## Timeout Defaults
 
 Every executable command has `--timeout VALUE`; values accept `ms`, `s`, `m`, or `h`.
-Use the default first and override only a measured slow operation. The common defaults
-are deliberately generous:
+Use the default first and override only a measured slow operation. Common defaults:
 
 | Command | Default |
 | --- | ---: |
@@ -233,7 +228,7 @@ are deliberately generous:
 
 Do not add sleeps around Cockpit. `dev wait` waits for UI quiet; add `--network` only
 when the assertion depends on network completion. Its `--quiet` option changes the
-settle window, not response verbosity. After a mutation timeout, inspect state before
+settle window, not response view. After a mutation timeout, inspect state before
 retrying because the mutation may already have committed.
 
 ## UI And Evidence
@@ -245,7 +240,8 @@ Semantics, and returns `loc` with the shortest stable conditions plus known `can
 Semantics remains one optional signal and action fallback. Locator fields map to the
 actual command options: `--id`, `--key`, `--type`, `--tip`, `--route`, `--path`,
 `--within`, and `--index`.
-`--contains` and `--fuzzy` deliberately relax text/tooltip matching; conditions
+Icon-only controls expose readable tooltips.
+`--contains` and `--fuzzy` relax text/tooltip matching; conditions
 intersect and equal matches fail. Lazy lists expose only visible rows; filter or
 `dev scroll` first.
 
@@ -265,16 +261,16 @@ Use `dev tree` only when bounded target inspection cannot explain the structure:
 
 ```bash
 cockpit dev tree
-cockpit dev tree --verbosity standard
-cockpit dev tree --verbosity full
+cockpit dev tree --view more
+cockpit dev tree --view full
 ```
 
 The default tree contains actionable/content nodes plus their public ancestors.
-`standard` includes the mounted public Widget structure. `full` includes every
+`more` includes the mounted public Widget structure. `full` includes every
 mounted Element, including private framework nodes and offstage content, with
 Widget/Element/State/Render types, geometry, scroll ancestry, and bounded diagnostic
 properties. A full tree is always written to an artifact; stdout reports only its
-verified absolute path. A large standard tree may also become a path automatically.
+verified absolute path. A large `more` tree may also become a path automatically.
 Copy `loc` into `--path` only when simpler stable signals cannot disambiguate.
 
 `dev scroll TARGET` uses exact matching by default and automatically ranks visible
@@ -296,13 +292,13 @@ TARGET` replaces the field value; use `press enter` for a separate IME/key actio
 `dev wait` is UI-only by default; add `--network` only for request-dependent
 assertions. `--timeout VALUE` accepts `ms`, `s`, `m`, or `h`; every command has a
 generous operation-specific default, so override only when the app genuinely needs
-more time. `--quiet` on `wait` changes its settle window, not output verbosity.
+more time. `--quiet` on `wait` changes its settle window, not output view.
 
 Default screenshot routing follows what must be visible:
 
 - Android/iOS capture the system screen first for OS dialogs, then Flutter.
 - Desktop/Web capture Flutter first, then an available system fallback.
-- `--verbosity standard` shows the source; minimal still reports fallback.
+- `--view more` shows the source; brief still reports fallback.
 
 ```bash
 cockpit dev screenshot
@@ -316,7 +312,7 @@ Base64, data URIs, image contents, or hashes. RGBA comparison is exact unless a
 pixel tolerance is explicitly required. `--save` selects an exact output path;
 `--compare` accepts a baseline and `--diff` writes the diff. Do not compare captures
 from different sources or viewport sizes. Android/iOS system capture is essential for
-permissions and OS dialogs; Flutter fallback must be reported rather than hidden.
+permissions and OS dialogs; the response identifies Flutter fallback.
 
 ## Network And Diagnostics
 
@@ -332,11 +328,9 @@ values or binary bytes are required; raw data remains in the saved body file rat
 than stdout. Metadata and bounded previews remain safe and small.
 
 SSE and other unfinished HTTP responses remain `receiving`; repeated `dev network`
-reads show their current state and body artifact without pretending the response has
-ended. This is recorded continuation, not an unbounded terminal watch. WebSocket
+reads show their current state and body artifact until the response ends. WebSocket
 connections and frame activity are indexed. Text frames may be previewed; binary and
-unsafe payloads stay metadata or files. Unsupported raw socket interception remains
-unavailable rather than simulated.
+unsafe payloads stay metadata or files. Raw socket interception is unsupported.
 
 ```bash
 cockpit dev network
@@ -347,29 +341,28 @@ cockpit dev network 37 --body response
 cockpit dev network 37 --body both --raw
 ```
 
-Use `dev diagnose --verbosity standard` for bounded UI, error, log, and network
+Use `dev diagnose --view more` for bounded UI, error, log, and network
 health. Use `full` only when the complete response is needed; large response
 bodies should be read from their reported paths. Start with `--failures`, `--method`,
 or `--uri` when the app generates heavy traffic.
 
 ## Output And Input
 
-Minimal canonical LON is the default. For routine human or Agent reads, omit
+Brief canonical LON is the default. For routine human or Agent reads, omit
 `--format`; never request JSON merely because it is structured. Use `--format json`
 only on a pipeline that uses `jq`, when the next consumer/API explicitly requires
-JSON, or when inspecting JSON-specific wire behavior. JSON without one of those
-consumers is a command-authoring error: remove `--format json` and keep LON. Omit
-`--verbosity minimal`, `--format lon`, the current session, inferred input, and
-default wait/screenshot settings. Every explicit option must change behavior.
-Formats are `lon|json|yaml|jsonl|path|none`; LON, JSON, and YAML are first-class
-equal projections, not equal defaults. `path` prints one verified artifact/output
+JSON, or when inspecting JSON-specific wire behavior. Omit
+`--view brief`, `--format lon`, the current session, inferred input, and
+default wait/screenshot settings. Add an option only when it changes the requested
+behavior.
+Formats are `lon|json|yaml|jsonl|path|none`. `path` prints one verified artifact/output
 path, `none` is silent, and `--output` writes an atomic projection whose stdout is
 only its verified path.
 
 ```bash
-cockpit dev diagnose --verbosity standard
-cockpit dev diagnose --verbosity full --output /absolute/diagnose.lon
-cockpit dev status --format json | jq '.state.lifecycle'
+cockpit dev diagnose --view more
+cockpit dev diagnose --view full --output /absolute/diagnose.lon
+cockpit dev status --format json | jq '.lifecycle'
 cockpit op run viewport.set --input '{width:800 height:600}'
 ```
 
@@ -378,11 +371,15 @@ preferred because input format is inferred; specify an input format only when a
 source is ambiguous. Never invent fields: use `cockpit explain OPERATION` or the
 advertised schema first.
 
-Minimal output contains only the next-decision fields. Use `--verbosity standard`
+Brief output contains only the next-decision fields. Use `--view more`
 for diagnosis and `full` only for the complete response. Do not request or
-print screenshots, file contents, Base64, data URIs, hashes, or decision-irrelevant
+print screenshots, file contents, Base64, data URIs, hashes, or unneeded
 byte counts. Stdout reports verified paths; read an artifact file only when its
 metadata proves it is the needed evidence.
+
+`more:N` means N projected values were omitted; request `--view more` only when
+those values affect the next decision. Copy operation input
+names only from `explain` under `input.fields`.
 
 ## Flutter E2E And Black-Box E2E
 
@@ -421,8 +418,8 @@ Resume with the last sequence or event ID; sequence numbers are monotonic. Do no
 export `suite report` before terminal completion. `artifact list` returns metadata;
 `artifact read` verifies the artifact and writes only to the requested output path.
 
-Use real live capabilities only. Unsupported capability is `unavailable` or
-`blocked`, never simulated. Distinguish product failure, authoring failure,
+Use real live capabilities only. Report unsupported capabilities as `unavailable`
+or `blocked`. Distinguish product failure, authoring failure,
 environment block, and infrastructure failure in reports. A passing process exit is
 not sufficient: require terminal run state, expected assertions, no disqualifying
 runtime/network errors, and current evidence.
@@ -492,4 +489,4 @@ Read [flutter.md](references/flutter.md) for bridge shells,
 [protocol.md](references/protocol.md) for live operation contracts.
 
 A pass requires terminal UI/state, no disqualifying runtime/network error, and
-current evidence. Unsupported capability is unavailable, never simulated.
+current evidence. An unavailable required capability prevents a pass.

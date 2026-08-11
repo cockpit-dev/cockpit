@@ -7,6 +7,7 @@ import 'package:cockpit/src/application/cockpit_collect_remote_snapshot_service.
 import 'package:cockpit/src/development/cockpit_development_probe.dart';
 import 'package:cockpit/src/development/cockpit_development_session_handle.dart';
 import 'package:cockpit/src/development/cockpit_development_session_reference_resolver.dart';
+import 'package:cockpit/src/foundation/cockpit_ids.dart';
 import 'package:cockpit/src/session/cockpit_remote_session_handle.dart';
 import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
@@ -283,6 +284,7 @@ void main() {
           );
         },
         collectScreenshot: (_, _) async => null,
+        tokenGenerator: const _FixedTokenGenerator(),
       );
 
       final result = await service.collect(
@@ -304,6 +306,7 @@ void main() {
         contains('network query widened to include activity'),
       );
       expect(result.probe.profile, CockpitDevelopmentProbeProfile.interactive);
+      expect(result.probe.probeId, 'q0000000001');
       expect(result.probe.reason, CockpitDevelopmentProbeReason.postReload);
       expect(result.probe.checkpoint, 'after_reload');
       expect(result.probe.routeName, '/settings');
@@ -440,4 +443,11 @@ void main() {
       );
     },
   );
+}
+
+final class _FixedTokenGenerator implements CockpitTokenGenerator {
+  const _FixedTokenGenerator();
+
+  @override
+  String nextToken({int byteLength = 32}) => '0000000001';
 }

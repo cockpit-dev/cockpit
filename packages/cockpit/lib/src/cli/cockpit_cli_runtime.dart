@@ -221,13 +221,12 @@ final class CockpitCliRuntime {
   }
 
   Duration get operationTimeout {
-    final remaining = remainingTimeout.inMilliseconds;
-    final grace = remaining >= 10000
-        ? 1000
-        : remaining >= 1000
-        ? 100
-        : 1;
-    return Duration(milliseconds: remaining > grace ? remaining - grace : 1);
+    return _operationBudget(remainingTimeout);
+  }
+
+  Duration operationBudget({Duration? maximum}) {
+    final budget = _operationBudget(_commandTimeout);
+    return maximum != null && budget > maximum ? maximum : budget;
   }
 
   DateTime operationDeadline(CockpitOperationDescriptor descriptor) {
@@ -555,7 +554,7 @@ final class CockpitCliRuntime {
     if (explicit != null) return CockpitIdempotencyKey(explicit);
     if (descriptor.idempotency == CockpitIdempotencyBehavior.required) {
       return CockpitIdempotencyKey(
-        'cli-${CockpitSecureTokenGenerator().nextResourceIdToken()}',
+        CockpitSecureTokenGenerator().nextResourceId('c'),
       );
     }
     return null;
@@ -755,6 +754,18 @@ final class CockpitCliRuntime {
     }
     return Map<String, Object?>.from(value);
   }
+}
+
+Duration _operationBudget(Duration available) {
+  final milliseconds = available.inMilliseconds;
+  final grace = milliseconds >= 10000
+      ? 1000
+      : milliseconds >= 1000
+      ? 100
+      : 1;
+  return Duration(
+    milliseconds: milliseconds > grace ? milliseconds - grace : 1,
+  );
 }
 
 CockpitCliSessionHandle _requireDevelopmentHandle(

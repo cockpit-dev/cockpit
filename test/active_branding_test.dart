@@ -10,7 +10,7 @@ void main() {
     final logo = File('$root/assets/brand/cockpit-mark.svg');
     final rasterLogo = File('$root/assets/brand/cockpit-mark.png');
 
-    expect(readme, contains('<h1>Cockpit 3.0</h1>'));
+    expect(readme, contains('<h1>Cockpit</h1>'));
     expect(readme, contains('assets/brand/cockpit-mark.svg'));
     expect(readme, contains('packages/flutter_cockpit'));
     expect(readme, contains('docs/agent-integrations.md'));
@@ -28,6 +28,9 @@ void main() {
     final skillDir = Directory('$root/skills/cockpit');
     final legacySkillDir = Directory('$root/skills/flutter-pilot');
     final skill = File('$root/skills/cockpit/SKILL.md').readAsStringSync();
+    final agent = File(
+      '$root/skills/cockpit/agents/openai.yaml',
+    ).readAsStringSync();
     final contract = File(
       '$root/docs/contracts/cockpit-skill-contract.md',
     ).readAsStringSync();
@@ -36,9 +39,39 @@ void main() {
     expect(legacySkillDir.existsSync(), isFalse);
     expect(skill, contains('name: cockpit'));
     expect(skill, contains('# Cockpit'));
+    expect(agent, contains('display_name: "Cockpit"'));
     expect(skill, isNot(contains('name: flutter-pilot')));
-    expect(contract, contains('# Cockpit 3.0 Skill Contract'));
+    expect(contract, contains('# Cockpit Skill Contract'));
     expect(contract, isNot(contains('`flutter-pilot` skill')));
+  });
+
+  test('public Cockpit branding is release-version independent', () {
+    final publicFiles = <String>[
+      'README.md',
+      'README.zh-CN.md',
+      'packages/cockpit/README.md',
+      'packages/cockpit/README.zh-CN.md',
+      'packages/cockpit_protocol/README.md',
+      'packages/flutter_cockpit/README.md',
+      'packages/flutter_cockpit/README.zh-CN.md',
+      'skills/cockpit/SKILL.md',
+      'plugins/codex/cockpit/.codex-plugin/plugin.json',
+      'plugins/claude-code/cockpit/.claude-plugin/plugin.json',
+      'examples/cockpit_demo/cockpit/tool/verify.dart',
+      'examples/cockpit_demo/cockpit/e2e/suites/regression.suite.yaml',
+    ];
+    final versionedBrand = RegExp(
+      r'\bCockpit\s+v?\d+(?:\.\d+){1,2}\b',
+      caseSensitive: false,
+    );
+
+    for (final relativePath in publicFiles) {
+      expect(
+        File('$root/$relativePath').readAsStringSync(),
+        isNot(matches(versionedBrand)),
+        reason: '$relativePath binds permanent branding to a release version.',
+      );
+    }
   });
 
   test('active docs and launchers use flutter_cockpit dart defines', () {
@@ -101,7 +134,7 @@ void main() {
     expect(legacyPaths, isEmpty);
   });
 
-  test('root readmes teach the Cockpit 3.0 resource workflow', () {
+  test('root readmes teach the Cockpit resource workflow', () {
     final readme = File('$root/README.md').readAsStringSync();
     final readmeZh = File('$root/README.zh-CN.md').readAsStringSync();
 

@@ -16,7 +16,7 @@ import 'package:test/test.dart';
 
 void main() {
   group('secure identifiers', () {
-    test('use short typed Base62 resource tokens without collisions', () {
+    test('use short lowercase Base36 resource tokens without collisions', () {
       final idGenerator = CockpitSecureIdGenerator(random: Random(7));
       final identifiers = <String>{
         for (final kind in CockpitIdKind.values) idGenerator.next(kind),
@@ -25,7 +25,7 @@ void main() {
       for (final kind in CockpitIdKind.values) {
         expect(
           idGenerator.next(kind),
-          matches(RegExp('^${kind.prefix}-[A-Za-z0-9]{16}\$')),
+          matches(RegExp('^${kind.prefix}[a-z0-9]{10}\$')),
         );
       }
 
@@ -35,7 +35,7 @@ void main() {
           tokenGenerator.nextIdToken(),
       };
       expect(resourceIds, hasLength(4096));
-      expect(resourceIds, everyElement(matches(RegExp(r'^[A-Za-z0-9]{16}$'))));
+      expect(resourceIds, everyElement(matches(RegExp(r'^[a-z0-9]{10}$'))));
       expect(tokenGenerator.nextToken(), hasLength(43));
     });
   });

@@ -26,7 +26,7 @@ void main() {
       'probe',
       '--format',
       'json',
-      '--verbosity',
+      '--view',
       'full',
     ]);
 

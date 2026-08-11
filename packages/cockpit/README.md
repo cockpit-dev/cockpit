@@ -21,8 +21,7 @@
 
 `cockpit` is the authenticated host control plane for Flutter/Dart development
 and headless black-box E2E. It contains the Supervisor daemon, isolated
-workspace worker, resource-oriented CLI, and a thin MCP server. It does not
-bundle a GUI or a web dashboard.
+workspace worker, resource-oriented CLI, MCP server, and public REST/SSE API.
 
 ## Install
 
@@ -34,14 +33,8 @@ dart pub global activate cockpit any
 cockpit --help
 ```
 
-Run `cockpit update` to install and verify the latest release while requiring
-Pub to resolve a version at least as new as the running executable, so stale
-package indexes fail safely instead of downgrading Cockpit. It safely hands any
-source-installed native executable back to Pub, restores one optimized AOT
-executable, removes retired and temporary update payloads, and replaces an older
-running Supervisor while preserving its authorization mode and durable state.
-Dart Pub continues to own its shared download cache; Cockpit never deletes
-unrelated cached packages.
+Run `cockpit update` to update the CLI and running Supervisor to the latest
+verified Pub release while preserving local authorization and durable state.
 
 The package publishes four executables:
 
@@ -78,7 +71,7 @@ cockpit dev tap "Save"
 cockpit dev wait
 cockpit dev screenshot
 cockpit dev reload
-cockpit dev diagnose --verbosity standard
+cockpit dev diagnose --view more
 ```
 
 Omit the entrypoint and platform when they are inferable. Cockpit stores one
@@ -92,8 +85,8 @@ or secret store, and `--env` values are process-only.
 
 Flutter inspection walks mounted Elements and RenderObjects without requiring
 developer-authored `Semantics`. Use `dev inspect QUERY` for a bounded search;
-use `dev tree`, `dev tree --verbosity standard`, or
-`dev tree --verbosity full` only when structural context is necessary. Full
+use `dev tree`, `dev tree --view more`, or
+`dev tree --view full` only when structural context is necessary. Full
 trees are always written to an artifact, and stdout returns only its verified
 path. Actions accept `--path`; prefer IDs, exact text, keys, and types first,
 then copy `loc` from inspection when those signals remain ambiguous.
@@ -113,14 +106,11 @@ cockpit workspace list
 
 ## CLI Output
 
-The default is minimal canonical LON, so normal commands omit output options.
-`--verbosity standard|full` adds context without changing operation accuracy;
-`--format json|yaml|jsonl|path|none` changes encoding or delivery. Use
-`--verbosity full --output <file>.lon` for the complete object. Request JSON
-only for `jq`, a JSON-only consumer, or JSON wire inspection.
-`--output` prints only the verified path. `artifact read` requires `--output`;
-binary data, Base64, hashes, and decision-irrelevant byte counts never enter
-terminal output.
+The default is brief canonical LON. Use `--view more` for additional context and
+`--view full` for the complete response. `--format` supports
+`lon|json|yaml|jsonl|path|none`; JSON is intended for `jq`, JSON-only consumers,
+and wire inspection. `--output` and `artifact read` return the verified output
+path.
 
 Workspace commands accept `--workspace-id`. When it is omitted, Cockpit
 resolves the current directory against registered active workspaces and
@@ -134,8 +124,8 @@ cockpit case list
 ```
 
 `op run` accepts typed LON, JSON, or YAML and executes an advertised operation.
-The descriptor controls scope and idempotency; there is no arbitrary URL or
-HTTP method transport. Its advertised timeout is the default; pass `--timeout`
+The descriptor controls scope, idempotency, and transport. Its advertised timeout
+is the default; pass `--timeout`
 only for a deliberate override within the advertised maximum.
 
 ```bash
@@ -218,7 +208,7 @@ Use `resetAppData` only when the selected driver advertises it, and choose
 Fields in one locator are an intersection; `fallbacks` are ordered
 alternatives. Native black-box targets additionally support state, hierarchy,
 and spatial constraints when their inspected accessibility capability reports
-them. A runtime rejects unsupported constraints instead of dropping them.
+them. Unsupported constraints fail explicitly.
 Text and label matching defaults to `exact`; use an explicit `matchMode` of
 `contains`, typo-tolerant `fuzzy`, or `regex` for broader matching. A unique best candidate is selected
 by route and match quality. Equal best candidates fail as `ambiguousTarget`;
@@ -274,10 +264,8 @@ cockpit target register \
 
 Use `target list` and `target get` to recover registered resources, `target
 launch` to activate one, and `target inspect` to read its live capabilities.
-For a launched Flutter or mixed-stack target, the sanitized
-`output.systemControl` profile in the `target.inspect` operation result is the
-authority for its secondary native driver. Do not reconstruct it from
-`app.get`, which intentionally redacts platform app and process identities.
+For a launched Flutter or mixed-stack target, `cockpit target inspect` returns
+the secondary native driver profile as `system`.
 
 Flutter target launches accept repeatable `--dart-define`,
 `--dart-define-from-file`, `--flutter-arg`, and `--env KEY=VALUE` options plus a
@@ -315,8 +303,8 @@ delays. A visual locator names a workspace-confined template file; an
 `assertScreenshot` names a workspace-confined baseline and emits the actual,
 baseline, and deterministic diff files into the attempt evidence. Select each
 baseline by a stable platform/device/viewport, pixel-ratio, and orientation
-profile. Dimension mismatches are not auto-resized because they indicate a
-wrong profile or a layout regression. Use suite
+profile. Dimension mismatches indicate a wrong profile or a layout regression.
+Use suite
 fixtures, case `setup`/`finally`, step `evidence`, and explicit recording
 operations to express pre/post capture at the scope that owns it.
 
@@ -336,16 +324,6 @@ cockpitd \
 
 The submission contains the canonical case source, idempotency key, inputs,
 and required features. Foreground mode fills the registered `workspaceId`.
-
-The repository release gate runs formatting, analysis, every package and
-example test suite, publication dry-runs, and real Android, iOS, macOS, Linux,
-web, and Windows regressions in parallel. Android and iOS must prove native
-locator/action/assertion control rather than screenshot fallback. Publication requires every
-job to reach a successful terminal state. Each platform regression proves a
-business mutation, the complete Flutter gesture/text/keyboard/semantics command
-surface, suite control flow, evidence, and the offline report bundle through
-observable assertions. Wait for the complete matrix, then diagnose from its
-reports, events, artifacts, and daemon logs in one pass.
 
 ## API Discovery
 

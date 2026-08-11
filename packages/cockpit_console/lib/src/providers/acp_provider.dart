@@ -348,6 +348,8 @@ final class AcpAgentNotifier extends Notifier<AcpAgentState> {
       return false;
     }
 
+    clearLastError();
+
     final userIndex = _messages.length;
     _messages.add(
       AcpChatMessage(
@@ -986,6 +988,15 @@ final class AcpAgentNotifier extends Notifier<AcpAgentState> {
     if (_activeTurn != null) return;
     _messages.clear();
     _publishState();
+  }
+
+  /// Clears the latest recoverable ACP error without changing the connection
+  /// or active session.
+  void clearLastError() {
+    final current = state;
+    if (current is AcpConnected && current.lastError != null) {
+      state = current.copyWith(lastError: null);
+    }
   }
 
   // ===========================================================================

@@ -35,7 +35,7 @@ final class CockpitCommandRunner {
   }) : runtime = runtime ?? CockpitCliRuntime(),
        _runner = CommandRunner<int>(
          'cockpit',
-         'Authenticated Cockpit 3.0 development and E2E client.',
+         'Authenticated Cockpit development and E2E client.',
        ) {
     _runner.argParser.addFlag(
       'version',

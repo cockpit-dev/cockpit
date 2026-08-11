@@ -1,5 +1,11 @@
 # Changelog
 
+## 4.0.0
+
+- Added bounded descendant `textParts` to Flutter target and snapshot
+  contracts so clients can address composite controls by their exact visible
+  child text without requiring application-authored Semantics.
+
 ## 3.0.14
 
 - Synchronized the protocol package with Cockpit's stale development-session

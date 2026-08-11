@@ -74,7 +74,9 @@ CockpitLeafCommand _start(CockpitCliRuntime runtime) => CockpitLeafCommand(
         deviceId: arguments.option('device'),
         flavor: arguments.option('flavor'),
         launchConfiguration: cockpitReadFlutterLaunchConfiguration(arguments),
-        launchTimeoutMilliseconds: runtime.operationTimeout.inMilliseconds,
+        launchTimeoutMilliseconds: runtime
+            .operationBudget(maximum: const Duration(minutes: 30))
+            .inMilliseconds,
       ),
     );
   },
@@ -146,7 +148,7 @@ CockpitLeafCommand _tree(CockpitCliRuntime runtime, CockpitDevRuntime dev) =>
       runtime: runtime,
       name: 'tree',
       description: 'Read the mounted Flutter widget tree without Semantics.',
-      example: 'cockpit dev tree --verbosity full',
+      example: 'cockpit dev tree --view full',
       configure: (parser) {
         cockpitAddDevSessionOption(parser);
         parser.addOption(

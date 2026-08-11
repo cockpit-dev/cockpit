@@ -218,7 +218,7 @@ void main() {
     expect(versionExecutable, '/opt/flutter/bin/flutter');
     expect(capturedOptions?.flutterExecutable, '/opt/flutter/bin/flutter');
     expect(capturedOptions?.flutterVersion, '3.32.0');
-    expect(capturedOptions?.launchId, startsWith('remote-macos-'));
+    expect(capturedOptions?.launchId, matches(RegExp(r'^r[a-z0-9]{10}$')));
   });
 
   test(

@@ -2,7 +2,7 @@
   <a href="https://github.com/cockpit-dev/cockpit">
     <img src="assets/brand/cockpit-mark.svg" width="128" alt="Cockpit logo">
   </a>
-  <h1>Cockpit 3.0</h1>
+  <h1>Cockpit</h1>
   <p><strong>One control plane for Flutter development and black-box application E2E.</strong></p>
   <p>
     <a href="https://github.com/cockpit-dev/cockpit/actions/workflows/example-e2e.yml"><img src="https://github.com/cockpit-dev/cockpit/actions/workflows/example-e2e.yml/badge.svg?branch=main" alt="CI"></a>
@@ -63,13 +63,8 @@ Upgrade the installed runtime with one command:
 cockpit update
 ```
 
-It installs and verifies the latest release while requiring Pub to resolve a
-version at least as new as the running executable, so stale package indexes fail
-safely instead of downgrading Cockpit. It hands a source-installed native
-executable back to Pub, restores one optimized AOT executable, removes retired
-and temporary update payloads, and replaces an older running Supervisor while
-preserving its authorization mode and durable state. Dart Pub owns its shared
-download cache; Cockpit never deletes unrelated cached packages.
+It updates the CLI and running Supervisor to the latest verified Pub release
+while preserving local authorization and durable state.
 
 Flutter source development additionally uses the development-only bridge:
 
@@ -113,11 +108,11 @@ cockpit dev tap "Save"
 cockpit dev wait
 cockpit dev screenshot
 cockpit dev reload
-cockpit dev diagnose --verbosity standard
+cockpit dev diagnose --view more
 ```
 
 Omit the entrypoint and platform when Cockpit can infer them. Normal commands
-also omit the current handle, LON format, minimal verbosity, and operation
+also omit the current handle, LON format, brief view, and operation
 timeout. `dev` automatically runs its local Supervisor in process-scoped yolo
 mode; strict policy remains available for black-box, CI, staging, and
 production workflows. Cockpit does not read a keychain or secret store, and
@@ -126,7 +121,7 @@ production workflows. Cockpit does not read a keychain or secret store, and
 Flutter inspection walks the mounted Element and RenderObject structure; it
 does not require application-authored `Semantics` labels. Use the bounded
 `dev inspect QUERY` result for normal work. Escalate to `dev tree`,
-`dev tree --verbosity standard`, or `dev tree --verbosity full` only when the
+`dev tree --view more`, or `dev tree --view full` only when the
 surrounding structure is needed. Full trees are written to an artifact and
 stdout returns only its verified path. Copy a returned `loc` into an
 action's `--path` only when simpler stable fields cannot disambiguate a target.
@@ -184,14 +179,11 @@ cockpit workspace list
 
 ## CLI Output
 
-The default is minimal canonical LON. Omit default output options in normal
-commands. `--verbosity standard|full` adds context without changing operation
-accuracy; `--format json|yaml|jsonl|path|none` changes output encoding or delivery.
-Use `--verbosity full --output <file>.lon` for a complete response. Request JSON
-only for `jq`, a JSON-only consumer, or JSON wire inspection.
-When `--output` or an artifact command writes a file, stdout contains only its
-verified path. File bytes, Base64, hashes, and decision-irrelevant byte counts
-never enter terminal output.
+The default is brief canonical LON. Use `--view more` for additional context and
+`--view full` for the complete response. `--format` supports
+`lon|json|yaml|jsonl|path|none`; JSON is intended for `jq`, JSON-only consumers,
+and wire inspection. `--output` and artifact commands return the verified output
+path.
 
 ## Authorization
 
@@ -227,7 +219,6 @@ cannot change authority mid-run.
   "allowedTargetEnvironments": [
     "development",
     "test",
-    "staging",
     "production"
   ],
   "allowedSafetyEffects": [
@@ -286,8 +277,7 @@ cockpit target inspect --workspace-id <workspaceId> --target-id <targetId>
 Android uses ADB and native accessibility. iOS Simulator uses `simctl`; native
 iOS UI interaction uses a reachable WebDriverAgent endpoint. Physical iOS
 installation and lifecycle use `devicectl` where available. Cockpit reports
-unsupported or unavailable capabilities instead of claiming control it cannot
-prove.
+unsupported or unavailable capabilities explicitly.
 
 For an installed Flutter app or a native app embedding Flutter, register
 `targetKind: flutterApp` with an `appId` and no entrypoint, then author the case
@@ -342,21 +332,17 @@ Flutter session keeps the semantic driver and a secondary system driver for the
 same app/device, so one case can inspect Widgets and then cross a native screen,
 platform view, permission dialog, or visual-only surface without changing the
 application under test.
-The authoritative secondary capability profile is the sanitized
-`target.inspect` operation result at `output.systemControl`; clients must not
-reconstruct it from `app.get`, whose platform app and process identities are
-intentionally redacted.
+The secondary capability profile is available as `system` from
+`cockpit target inspect`.
 
 The shared action vocabulary includes `copyText`, `eraseText`, `pasteText`, and
 bounded `travel` routes in addition to gestures, editing, keyboard, wait,
 assertion, capture, recording, and system actions. Visual locators use a
 workspace-confined image file and an optional similarity threshold.
 `assertScreenshot` compares a live capture with a workspace-confined baseline
-and records actual, baseline, and diff images as offline artifacts; image bytes
-never enter terminal output. Baselines must be selected by a stable visual
-profile such as platform, device or viewport, pixel ratio, and orientation.
-A dimension mismatch is a profile mismatch or layout regression; Cockpit does
-not resize either image to manufacture a comparison.
+and records actual, baseline, and diff artifacts. Select baselines by a stable
+visual profile such as platform, device or viewport, pixel ratio, and orientation.
+A dimension mismatch is a profile mismatch or layout regression.
 
 ## Cases And Suites
 
@@ -388,7 +374,7 @@ campaign or attempt setup/teardown, case `setup`/`finally` for case ownership,
 step `evidence` for before/after/failure capture policy, and explicit
 `startRecording`/`stopRecording` steps around the exact interval that needs
 video. `if`, bounded `retry`/`loop`, and fragments compose normally inside
-these scopes, so a second generic pre/post hook model is unnecessary.
+these scopes.
 
 Every finalized suite publishes one portable report bundle. Export it with
 `suite report --output-dir cockpit-report`; the CLI downloads only the files
@@ -398,9 +384,6 @@ destination must not already exist. Open
 `index.html` offline to move from release summary and coverage through
 executions, evidence, diagnostics, and environment/files. Search, filters,
 deep links, and responsive/print layouts work without a server or network.
-The sections are task-oriented rather than persona-specific: developers,
-testers, product owners, and release leads inspect the same facts and evidence
-chain without role tabs hiding or duplicating information.
 `report.json` is the canonical single-file fact graph containing suite
 and case definitions, attempts, detailed steps, assertions, and evidence
 references. `manifest.json` declares every other file with semantic ownership,
@@ -423,9 +406,7 @@ MCP is a thin authenticated Supervisor client. It does not construct drivers or
 application services in-process. It exposes bounded roots, workspaces,
 operations, targets, documents, cases, suites, runs, and artifacts. Official
 and third-party GUI clients should use `/api/v2`, authenticated SSE run events,
-public foundation DTOs, and digest-checked artifact downloads. Cockpit 3.0
-intentionally ships no Flutter GUI and no embedded HTML dashboard; generated
-HTML reports are portable run artifacts.
+public foundation DTOs, and digest-checked artifact downloads.
 
 REST is the complete public command/resource control plane. Discover global and
 workspace operation descriptors, read their exact contracts from
@@ -468,33 +449,8 @@ self-contained AOT executable once before live validation:
 dart run tool/install_cockpit.dart
 ```
 
-It atomically replaces one native executable in Dart's global bin directory on
-every platform and removes the retired split launcher/payload layout.
-Compilation or launch verification failure restores the previous installation.
-Daily commands remain `cockpit ...`; they no longer pay the dependency
-resolution cost of a path-activated `dart pub global run` wrapper, and
-`cockpit update` can safely replace the development executable with the latest
-hosted release and compile it back to the same fast single-executable layout.
-Use `--output PATH` only when a different single-executable location is
-intentional.
-
-## Release Gate
-
-`.github/workflows/example-e2e.yml` is the required Cockpit 3.0 publication
-gate. Parallel jobs verify formatting, static analysis, repository contracts,
-every package and example test suite, dry-run publication for all three public
-packages, and real Android, iOS, macOS, Linux, web, and Windows regressions.
-Android and iOS must prove native locator/action/assertion control; screenshot
-fallback is not sufficient for either core platform. Each platform runs a complex suite
-covering fixtures, setup/finally, fragment calls, branches, bounded retry and
-loop control, per-step timeouts, matrix rows, bounded concurrency, a complete
-create/read/delete business flow, every Flutter gesture/text/keyboard/semantics
-command, screenshots, capability-aware recording, and offline bundle integrity.
-Each command is accepted only when its visible UI effect is asserted in the
-canonical report. A release is eligible only when the quality job and every
-platform job complete successfully with terminal reports and verified
-artifacts. Wait for the whole matrix before diagnosing failures; use the
-uploaded report, event stream, artifacts, and daemon log as authority.
+The installer builds and verifies the AOT executable, then places it in Dart's
+global bin directory. Use `--output PATH` to select another destination.
 
 ## Documentation
 
@@ -505,4 +461,3 @@ Detailed package and protocol documentation:
 - [`packages/cockpit_protocol/README.md`](packages/cockpit_protocol/README.md)
 - [`docs/agent-integrations.md`](docs/agent-integrations.md)
 - [`skills/cockpit/references/environments.md`](skills/cockpit/references/environments.md)
-- [`docs/architecture/cockpit-2.0-foundation-migration-inventory.md`](docs/architecture/cockpit-2.0-foundation-migration-inventory.md)

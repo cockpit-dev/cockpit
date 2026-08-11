@@ -19,9 +19,9 @@
   <p><a href="https://github.com/cockpit-dev/cockpit/blob/main/packages/cockpit/README.md">English</a> · <a href="https://github.com/cockpit-dev/cockpit/blob/main/packages/cockpit/README.zh-CN.md">简体中文</a></p>
 </div>
 
-`cockpit` 是 Cockpit 3.0 面向 Flutter/Dart 开发与无头黑盒 E2E 的认证宿主控制面，
-包含 Supervisor daemon、隔离 workspace worker、resource-oriented CLI 和轻量 MCP
-server，不内置 GUI 或 Web dashboard。
+`cockpit` 是面向 Flutter/Dart 开发与无头黑盒 E2E 的认证宿主控制面，
+包含 Supervisor daemon、隔离 workspace worker、resource-oriented CLI、MCP server
+和公开 REST/SSE API。
 
 ## 安装
 
@@ -33,12 +33,8 @@ dart pub global activate cockpit any
 cockpit --help
 ```
 
-使用 `cockpit update` 安装并验证最新版本，同时要求 Pub 解析出的版本不得低于当前
-executable；即使 Pub 版本索引尚未刷新，也会安全失败而不会把 Cockpit 降级。随后
-它会把源码安装的原生 executable 安全交还给 Pub，再恢复为单个优化后的 AOT
-executable，删除旧版与临时升级 payload，并在保留授权模式和持久化状态的前提下
-替换旧 Supervisor。Dart Pub 的共享下载缓存仍由 Pub 自己管理，Cockpit 不会删除
-其他包的缓存。
+使用 `cockpit update` 把 CLI 和正在运行的 Supervisor 更新到 Pub 上经过验证的最新
+版本，并保留本地授权与持久化状态。
 
 包发布四个 executable：
 
@@ -74,7 +70,7 @@ cockpit dev tap "Save"
 cockpit dev wait
 cockpit dev screenshot
 cockpit dev reload
-cockpit dev diagnose --verbosity standard
+cockpit dev diagnose --view more
 ```
 
 入口和平台可推断时直接省略。Cockpit 会按 canonical Flutter project 保存一个 active
@@ -86,7 +82,7 @@ keychain 或 secret store，`--env` 只传给当前进程。
 
 Flutter 检查会直接遍历已挂载的 Element 与 RenderObject，不要求开发者编写
 `Semantics`。有界搜索使用 `dev inspect QUERY`；只有确实需要结构上下文时才使用
-`dev tree`、`dev tree --verbosity standard` 或 `dev tree --verbosity full`。
+`dev tree`、`dev tree --view more` 或 `dev tree --view full`。
 完整树始终写入 artifact，stdout 只返回经过验证的路径。action 支持 `--path`；
 应优先使用 ID、精确文本、key 和类型，仍有歧义时再复制检查结果中的 `loc`。
 
@@ -105,13 +101,10 @@ cockpit workspace list
 
 ## CLI 输出
 
-默认输出是 minimal canonical LON，正常命令不写输出参数。
-`--verbosity standard|full` 只增加上下文，不改变操作准确性；
-`--format json|yaml|jsonl|path|none` 用于改变编码或输出方式。需要完整对象时使用
-`--verbosity full --output <file>.lon`；仅在配合 `jq`、JSON-only 消费者或检查 JSON
-线协议时才请求 JSON。`--output` 只返回已验证路径；
-`artifact read` 强制写文件，二进制、Base64、hash 和对决策无意义的字节数都不会
-进入终端输出。
+默认输出为 brief canonical LON。使用 `--view more` 获取更多上下文，使用
+`--view full` 获取完整响应。`--format` 支持
+`lon|json|yaml|jsonl|path|none`；JSON 适用于 `jq`、JSON-only 消费者和线协议检查。
+`--output` 与 `artifact read` 返回已验证的输出路径。
 
 workspace 命令可以显式传 `--workspace-id`。省略时，Cockpit 会用当前目录匹配已注册且
 active 的 workspace，并要求结果唯一；不会回退到全局 latest run、active session 或
@@ -125,8 +118,8 @@ cockpit case list
 
 `op run` 只接收类型化 LON、JSON 或 YAML，并且只能执行 Supervisor 已公开的
 operation。
-descriptor 决定 scope、idempotency 和默认 timeout，不提供任意 URL 或 HTTP method
-传输；只有需要在公开最大值内覆盖预算时才传 `--timeout`。
+descriptor 决定 scope、idempotency、transport 和默认 timeout；只有需要在公开
+最大值内覆盖预算时才传 `--timeout`。
 
 ```bash
 cockpit op run analyze.workspace \
@@ -189,7 +182,7 @@ fail-fast、恢复，以及 JSON/JUnit/HTML/Markdown 聚合报告。
 
 恢复会持久化 node/attempt 检查点和精确 fixture/row session 绑定。worker 退出时
 正在运行的 attempt 会变为 `interrupted`，只有 suite retry 策略允许时才继续；绑定
-session 丢失会明确返回环境失败，不会静默替换。
+session 丢失会返回环境失败。
 
 默认的 `restartApp` 隔离会在每个 case 的 attempt fixture 之前执行。只有驱动明确
 支持时才使用 `resetAppData`；仅当 suite 设计本身需要共享状态时才显式选择
@@ -197,7 +190,7 @@ session 丢失会明确返回环境失败，不会静默替换。
 
 同一个 locator 中的字段按交集匹配，`fallbacks` 是按顺序尝试的备选定位。原生黑盒
 target 在 accessibility 能力明确支持时还可以使用状态、层级和空间关系约束。运行时
-无法忠实执行某项约束时会明确拒绝，不会静默丢弃条件。
+不支持的约束会返回明确错误。
 `text` 和 `label` 默认使用 `matchMode: exact`；需要扩展匹配时必须显式选择
 `contains`、容忍拼写误差的 `fuzzy` 或 `regex`。多个候选会按当前 route 和匹配质量选择唯一最优项；最高分
 并列时返回 `ambiguousTarget`，可增加条件、关系约束或使用 0-based `index` 选择列表项。
@@ -250,9 +243,8 @@ cockpit target register \
 
 使用 `target list` 和 `target get` 恢复已注册资源，使用 `target launch` 激活 target，
 使用 `target inspect` 读取实时能力。
-已启动的 Flutter 或混合栈 target 以 `target.inspect` operation 结果中的
-`output.systemControl` 脱敏 profile 作为次级 native driver 的能力权威。不要从
-`app.get` 重建该 profile，其中的平台应用标识与进程标识会按设计隐藏。
+已启动的 Flutter 或混合栈 target 可通过 `cockpit target inspect` 返回的 `system`
+读取次级 native driver profile。
 
 Flutter target 启动支持重复的 `--dart-define`、`--dart-define-from-file`、
 `--flutter-arg`、`--env KEY=VALUE`，以及默认 20 分钟、最长 31 分钟的
@@ -302,13 +294,6 @@ cockpitd \
 
 submission 包含规范 case source、idempotency key、inputs 和 required features；
 foreground 模式负责填入注册后的 `workspaceId`。
-
-仓库发布门禁并行运行格式、分析、全部 package/示例测试、发布 dry-run，以及 Android、
-iOS、macOS、Linux、Web、Windows 真实回归。Android 与 iOS 必须证明原生
-locator/action/assertion 控制，截图回退不能通过核心平台门禁。只有所有 job 都到达成功终态
-才允许发布。每个平台回归都通过可见断言验证真实业务变更、完整 Flutter 手势/文本/键盘/
-语义命令面、suite 控制流、证据和离线报告 bundle。应等待完整矩阵结束后，再依据 report、
-event、artifact 和 daemon log 统一定位失败，不在执行中反复猜测。
 
 ## API Discovery
 

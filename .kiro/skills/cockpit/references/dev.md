@@ -24,14 +24,14 @@ cockpit dev status
 ```
 
 Use `cockpit session list` for an immediate local index. It performs no daemon,
-worker, Flutter attach, reconnect, or app launch work; `lastState` is only the
+worker, Flutter attach, reconnect, or app launch work; `state` is only the
 last saved state. Use `cockpit session show HANDLE` when live reachability is
 actually required.
 
 Interactive `dev start` prints bounded launch stages to stderr so a Flutter build
 does not look frozen. Machine-readable stdout remains a single clean projection;
 non-interactive and redirected runs emit no progress, and `--format none` is fully
-silent. The stages describe real boundaries rather than estimated percentages.
+silent. The stages correspond to real launch boundaries.
 
 For each coherent edit:
 
@@ -42,7 +42,7 @@ For each coherent edit:
 5. Run `cockpit dev wait`, then inspect current UI and diagnostics.
 6. Capture a screenshot only for a visible claim.
 
-Prefer `minimal`; use `standard` for diagnosis and `full` only when the entire
+Prefer `brief`; use `more` for diagnosis and `full` only when the entire
 response is required. Do not relaunch while reload and the authenticated
 bridge remain healthy.
 
@@ -74,8 +74,8 @@ not allowed to make a development session from another checkout implicit.
 
 ## Recovery
 
-Keep using the same numeric handle. Cockpit reconciles workspace, target, app, bridge,
-port, and runtime session internally.
+Keep using the same numeric handle while Cockpit reconciles the workspace, target,
+app, bridge, port, and runtime session.
 
 | State | Read command | Mutation command |
 | --- | --- | --- |
@@ -89,7 +89,7 @@ Use:
 
 ```bash
 cockpit dev status
-cockpit dev diagnose --verbosity standard
+cockpit dev diagnose --view more
 cockpit dev restart
 ```
 
@@ -100,7 +100,7 @@ should retry the same input. Preserve the original expected postcondition and us
 bounded observe-decide-prove loop:
 
 1. Read `cockpit dev status` without mutating the app.
-2. Capture `cockpit dev screenshot --verbosity standard`; inspect the returned path
+2. Capture `cockpit dev screenshot --view more`; inspect the returned path
    with the host's local image tool when available. The reported source distinguishes
    an Android/iOS system screen from the Flutter view.
 3. Run `cockpit dev inspect` for the mounted Flutter state. Use a focused query when

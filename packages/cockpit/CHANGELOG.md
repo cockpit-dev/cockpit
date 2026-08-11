@@ -1,5 +1,26 @@
 # Changelog
 
+## 4.0.0
+
+- **Breaking:** renamed `--verbosity minimal|standard|full` to
+  `--view brief|more|full`.
+- **Breaking:** shortened CLI projection fields and flattened development and
+  session status output. Operation input fields remain available through
+  `cockpit explain`.
+- **Breaking:** resource identifiers now use compact lowercase IDs.
+- Fixed WebSocket network projection to read the actual frame activity contract
+  (`sentFrames`, `receivedFrames`, recent frames, truncation, and byte metadata).
+- Made `cockpit dev inspect QUERY` recommend exact child-text locators for
+  composite Flutter controls and readable Tooltip locators for icon-only
+  controls.
+- Preserved slash-command UI labels such as `/inspect` while continuing to
+  redact real absolute paths from diagnostic output.
+- Fixed `cockpit dev scroll` timeouts when a visible field and its rendered
+  label both match the same query; mutation commands still require a uniquely
+  resolved target.
+- Prevented a proven Flutter text mutation from being reported as failed when
+  only optional post-action settling exhausts the remaining command deadline.
+
 ## 3.0.14
 
 - Fixed `cockpit dev start` recovery for stopped or crashed handles whose

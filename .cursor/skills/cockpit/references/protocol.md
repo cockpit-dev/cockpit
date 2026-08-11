@@ -1,4 +1,4 @@
-# Cockpit 3.0 Protocol Map
+# Cockpit Protocol Map
 
 This is the skill-local authority map. Do not resolve any contract through a
 Cockpit source checkout.
@@ -23,8 +23,7 @@ Cockpit source checkout.
 | Authorization | `daemon policy show` and `daemon status` |
 | Run truth | `run events`, `run get`, canonical report, verified artifacts |
 
-Static prose explains decisions; live descriptors decide what the installed
-version and current target can actually do.
+Use live descriptors for the installed version and current target.
 
 ## Command Map
 
@@ -43,7 +42,6 @@ version and current target can actually do.
 | MCP | `serve-mcp` or the installed `cockpit_mcp` executable |
 
 Run `cockpit help` when a command is absent or an option is unclear.
-Never infer flags from an older Cockpit release.
 
 ## Resource Model
 
@@ -92,24 +90,22 @@ is target-scoped so concurrent devices do not overwrite each other.
 
 The target has a default execution plane; a case step can select `semantic`,
 `native`, `visual`, or `coordinate`. A Flutter target may combine semantic and
-secondary native drivers. Read the sanitized secondary driver profile from
-`target inspect` output; never reconstruct redacted app/process identities.
+secondary native drivers. Read the secondary driver profile from
+`target inspect` output.
 
 ## Output Rules
 
-Minimal LON is the normal low-token output. Omit `--verbosity minimal` and
-`--format lon`; defaults never belong in normal commands. Command-specific
-presenters remove repeated identities and share collection field headers.
-LON, JSON, YAML, and JSONL all honor `--verbosity minimal|standard|full`;
-verbosity changes information density, not operation accuracy. Select `full`
+Brief LON is the normal low-token output. Omit `--view brief` and
+`--format lon` in normal commands.
+LON, JSON, YAML, and JSONL all honor `--view brief|more|full`;
+view changes information density, not operation accuracy. Select `full`
 only for the complete object. For a complete non-binary response, use
-`--verbosity full --output <path>.lon` so stdout is only the verified path.
+`--view full --output <path>.lon` so stdout is only the verified path.
 Request JSON only for `jq`, a JSON-only consumer, or JSON wire inspection.
 
-`artifact read` requires `--output`; it verifies media type, byte size, and
-SHA-256 internally before committing the file, but stdout contains only the
-path. Never place binary data, Base64, hashes, or decision-irrelevant byte
-counts in terminal output.
+`artifact read --output PATH` verifies media type, byte size, and SHA-256, writes
+the bytes, and prints the path. Never place binary data, Base64, hashes, or
+unneeded byte counts in terminal output.
 
 ## MCP And Third-Party Clients
 

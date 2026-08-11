@@ -307,6 +307,7 @@ final class CockpitTargetRegistry {
       semanticId: target.semanticId,
       keyValue: target.keyValue,
       text: target.text,
+      textParts: target.textParts.toList(growable: false),
       tooltip: target.tooltip,
       typeName: target.typeName,
       path: target.path,
@@ -502,6 +503,7 @@ final class CockpitTargetRegistry {
   ) {
     return <String?>[
       target.text,
+      ...target.textParts,
       target.displayLabel,
       target.tooltip,
     ].any((candidate) => _matchesTextSignal(candidate, expected, matchMode));

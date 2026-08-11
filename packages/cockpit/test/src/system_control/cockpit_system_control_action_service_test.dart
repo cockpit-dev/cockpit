@@ -1074,6 +1074,39 @@ void main() {
     ]);
   });
 
+  test('android action reports an unreachable adb device precisely', () async {
+    final processManager = _FakeProcessManager();
+    final service = CockpitSystemControlActionService(
+      processManager: processManager,
+      systemControlService: CockpitSystemControlService(
+        androidDeviceStateProbe: (_, {required timeout}) async {
+          return const CockpitAndroidDeviceProbeResult.blocked(
+            state: 'offline',
+            failureReason: 'device offline',
+          );
+        },
+      ),
+    );
+
+    final result = await service.run(
+      const CockpitSystemControlActionRequest(
+        platform: 'android',
+        deviceId: 'emulator-5554',
+        appId: 'dev.cockpit.example',
+        action: CockpitSystemControlAction.activateWindow,
+      ),
+    );
+
+    expect(result.success, isFalse);
+    expect(result.errorCode, 'androidDeviceUnavailable');
+    expect(
+      result.errorMessage,
+      'Android device emulator-5554 is unavailable: device offline.',
+    );
+    expect(result.recommendedNextStep, 'connectAndroidDevice');
+    expect(processManager.starts, isEmpty);
+  });
+
   test('android grantPermission accepts appId as the package id', () async {
     final processManager = _FakeProcessManager();
     final service = CockpitSystemControlActionService(

@@ -229,8 +229,7 @@ final class CockpitDurableWorkerArtifactPublisher
         }
         final existingResource = existingByPath[relativeToRun];
         final artifactId =
-            existingResource?.artifactId ??
-            'ar-${_tokenGenerator.nextResourceIdToken()}';
+            existingResource?.artifactId ?? _tokenGenerator.nextResourceId('a');
         if (existingResource == null && !artifactIds.add(artifactId)) {
           throw const FormatException(
             'Generated artifact id conflicts with the durable catalog.',
@@ -426,8 +425,7 @@ final class CockpitDurableWorkerArtifactPublisher
             .replaceAll('\\', '/');
         final existingResource = existingByPath[relativeToRun];
         final artifactId =
-            existingResource?.artifactId ??
-            'ar-${_tokenGenerator.nextResourceIdToken()}';
+            existingResource?.artifactId ?? _tokenGenerator.nextResourceId('a');
         if (existingResource == null && !artifactIds.add(artifactId)) {
           throw const FormatException(
             'Generated report artifact id conflicts with the durable catalog.',

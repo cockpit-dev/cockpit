@@ -1,5 +1,5 @@
 ---
-description: Use Cockpit 3.0 when Flutter or black-box application work needs live control, E2E execution, reports, or evidence.
+description: Use Cockpit when Flutter or black-box application work needs live control, E2E execution, reports, or evidence.
 alwaysApply: false
 ---
 

@@ -5,6 +5,7 @@ import 'package:cockpit_protocol/cockpit_protocol.dart';
 import '../development/cockpit_development_probe.dart';
 import '../development/cockpit_development_session_handle.dart';
 import '../development/cockpit_development_session_reference_resolver.dart';
+import '../foundation/cockpit_ids.dart';
 import '../remote/cockpit_remote_session_client.dart';
 import 'cockpit_collect_remote_snapshot_service.dart';
 
@@ -76,6 +77,7 @@ final class CockpitCollectDevelopmentProbeService {
     CockpitDevelopmentProbeSnapshotCollector? collectRemoteSnapshot,
     CockpitDevelopmentSessionReferenceResolver? sessionReferenceResolver,
     CockpitDevelopmentProbeScreenshotCollector? collectScreenshot,
+    CockpitTokenGenerator? tokenGenerator,
     DateTime Function()? now,
   }) : _collectRemoteSnapshot =
            collectRemoteSnapshot ??
@@ -84,12 +86,14 @@ final class CockpitCollectDevelopmentProbeService {
        _sessionReferenceResolver =
            sessionReferenceResolver ??
            const CockpitDevelopmentSessionReferenceResolver(),
-       _collectScreenshot = collectScreenshot ?? _defaultCollectScreenshot,
+       _collectScreenshot = collectScreenshot,
+       _tokenGenerator = tokenGenerator ?? CockpitSecureTokenGenerator(),
        _now = now ?? DateTime.now;
 
   final CockpitDevelopmentProbeSnapshotCollector _collectRemoteSnapshot;
   final CockpitDevelopmentSessionReferenceResolver _sessionReferenceResolver;
-  final CockpitDevelopmentProbeScreenshotCollector _collectScreenshot;
+  final CockpitDevelopmentProbeScreenshotCollector? _collectScreenshot;
+  final CockpitTokenGenerator _tokenGenerator;
   final DateTime Function() _now;
 
   Future<CockpitCollectDevelopmentProbeResult> collect(
@@ -105,7 +109,7 @@ final class CockpitCollectDevelopmentProbeService {
         options: _optionsForProfile(request.profile),
       ),
     );
-    final screenshot = await _collectScreenshot(
+    final screenshot = await (_collectScreenshot ?? _defaultCollectScreenshot)(
       resolved.sessionHandle!,
       request.profile,
     );
@@ -134,8 +138,7 @@ final class CockpitCollectDevelopmentProbeService {
     required CockpitDevelopmentProbeScreenshot? screenshot,
   }) {
     return CockpitDevelopmentProbe(
-      probeId:
-          'dev-probe-${sessionHandle.developmentSessionId}-${_now().toUtc().microsecondsSinceEpoch}',
+      probeId: _tokenGenerator.nextResourceId('q'),
       sessionId: sessionHandle.developmentSessionId,
       reloadGeneration: sessionHandle.reloadGeneration,
       capturedAt: _now().toUtc(),
@@ -294,15 +297,14 @@ final class CockpitCollectDevelopmentProbeService {
     }
   }
 
-  static Future<CockpitDevelopmentProbeScreenshot?> _defaultCollectScreenshot(
+  Future<CockpitDevelopmentProbeScreenshot?> _defaultCollectScreenshot(
     CockpitDevelopmentSessionHandle sessionHandle,
     CockpitDevelopmentProbeProfile profile,
   ) async {
     if (profile == CockpitDevelopmentProbeProfile.quick) {
       return null;
     }
-    final commandId =
-        'development-probe-screenshot-${DateTime.now().toUtc().microsecondsSinceEpoch}';
+    final commandId = _tokenGenerator.nextResourceId('q');
     final response =
         await CockpitRemoteSessionClient(
           baseUri: sessionHandle.baseUri,

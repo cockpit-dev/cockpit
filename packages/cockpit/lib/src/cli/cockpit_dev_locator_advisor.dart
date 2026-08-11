@@ -31,7 +31,7 @@ Map<String, Object?> cockpitBuildDevLocatorMatches(
     'query': query.trim(),
     'count': matches.length,
     'matches': visibleMatches
-        .map((target) => target.result(targets))
+        .map((target) => target.result(targets, normalizedQuery))
         .toList(growable: false),
     if (matches.length > visibleMatches.length)
       'more': matches.length - visibleMatches.length,
@@ -47,6 +47,9 @@ final class _DevTarget {
       semanticId = value['semanticId'] as String?,
       key = value['keyValue'] as String?,
       text = value['text'] as String?,
+      textParts = (value['textParts'] as List<Object?>? ?? const <Object?>[])
+          .whereType<String>()
+          .toList(growable: false),
       tip = value['tooltip'] as String?,
       type = value['typeName'] as String?,
       route = value['routeName'] as String?,
@@ -68,6 +71,7 @@ final class _DevTarget {
   final String? semanticId;
   final String? key;
   final String? text;
+  final List<String> textParts;
   final String? tip;
   final String? type;
   final String? route;
@@ -91,10 +95,10 @@ final class _DevTarget {
       _value(key) ??
       _value(type);
 
-  List<_Signal> get signals => <_Signal>[
+  List<_Signal> signalsFor(String query) => <_Signal>[
     if (_value(cockpitId) case final value?) _Signal('id', value),
     if (_value(key) case final value?) _Signal('key', value),
-    if (_value(text) case final value?) _Signal('text', value),
+    if (_value(_textFor(query)) case final value?) _Signal('text', value),
     if (_value(tip) case final value?)
       if (_exactText(value) != _exactText(text)) _Signal('tip', value),
     if (_value(type) case final value?) _Signal('type', value),
@@ -104,6 +108,7 @@ final class _DevTarget {
 
   bool matchesQuery(String query) => <String?>[
     text,
+    ...textParts,
     tip,
     cockpitId,
     semanticId,
@@ -125,6 +130,11 @@ final class _DevTarget {
   }
 
   int _queryRank(String query) {
+    for (final part in textParts) {
+      final value = _searchText(part);
+      if (value == query) return 0;
+      if (value?.startsWith(query) ?? false) return 10;
+    }
     final fields = <String?>[text, tip, cockpitId, semanticId, key, type];
     for (var index = 0; index < fields.length; index += 1) {
       final value = _searchText(fields[index]);
@@ -134,8 +144,18 @@ final class _DevTarget {
     return 20;
   }
 
-  Map<String, Object?> result(List<_DevTarget> targets) {
-    final advice = _advise(this, targets);
+  String? _textFor(String query) {
+    for (final part in textParts) {
+      if (_searchText(part) == query) return part;
+    }
+    for (final part in textParts) {
+      if (_searchText(part)?.contains(query) ?? false) return part;
+    }
+    return text;
+  }
+
+  Map<String, Object?> result(List<_DevTarget> targets, String query) {
+    final advice = _advise(this, targets, query);
     return <String, Object?>{
       'loc': advice.loc,
       if (!advice.loc.containsKey('text') && label != null) 'label': label,
@@ -182,13 +202,13 @@ final class _Layout {
   }
 }
 
-_Advice _advise(_DevTarget target, List<_DevTarget> targets) {
+_Advice _advise(_DevTarget target, List<_DevTarget> targets, String query) {
   final candidates = target.can.isEmpty
       ? targets
       : targets
             .where((candidate) => candidate.can.any(target.can.contains))
             .toList(growable: false);
-  final signals = target.signals;
+  final signals = target.signalsFor(query);
   final hasPrimarySignal = signals.any(
     (signal) =>
         const <String>{'id', 'key', 'text', 'tip'}.contains(signal.name),
@@ -301,6 +321,7 @@ bool _matches(_DevTarget target, Map<String, Object?> loc) {
       'key' => target.key == expected,
       'text' => <String?>[
         target.text,
+        ...target.textParts,
         target.displayLabel,
         target.tip,
       ].any((value) => _exactText(value) == _exactText(expected)),
@@ -371,6 +392,10 @@ int _locatorScore(_DevTarget target, Map<String, Object?> loc) {
   if (text is String) {
     if (_exactText(target.text) == _exactText(text)) {
       score += 10030;
+    } else if (target.textParts.any(
+      (part) => _exactText(part) == _exactText(text),
+    )) {
+      score += 10025;
     } else if (_exactText(target.displayLabel) == _exactText(text)) {
       score += 10020;
     } else if (_exactText(target.tip) == _exactText(text)) {
