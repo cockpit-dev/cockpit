@@ -91,6 +91,17 @@ void main() {
       'cockpit dev diagnose',
       'reconciled internally',
       'current screenshot',
+      'Unexpected-State Recovery',
+      'Do not repeat the\nfailed action blindly',
+      'cockpit dev dismiss',
+      'cockpit dev back',
+      'resolveBlockers',
+      'decision:dismiss',
+      'never launch a second app as recovery',
+      'treat it as committed',
+      'cockpit session show',
+      'Do not clear app data',
+      'Prove recovery before resuming the original flow',
       'cockpit update',
       'Minimal canonical LON',
       'never request JSON merely because it is structured',
@@ -328,6 +339,15 @@ void main() {
 
     expect(development, contains('cockpit dev start'));
     expect(development, contains('cockpit dev reload'));
+    expect(development, contains('Unexpected UI Or Flow Drift'));
+    expect(development, contains('bounded observe-decide-prove loop'));
+    expect(development, contains('cockpit dev dismiss'));
+    expect(development, contains('resolveBlockers'));
+    expect(development, contains('decision:dismiss'));
+    expect(development, contains('Do not chain speculative taps'));
+    expect(development, contains('Treat the mutation as committed'));
+    expect(development, contains('cockpit session show HANDLE'));
+    expect(development, contains('Do not clear app data'));
     expect(development, contains('never reads a keychain or secret store'));
     expect(development, isNot(contains('credential vault')));
     expect(development, isNot(contains('--session s1')));

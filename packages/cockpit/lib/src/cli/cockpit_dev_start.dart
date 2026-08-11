@@ -206,7 +206,7 @@ final class CockpitDevStartService {
       projectPath: projectDirectory,
       targetId: target.targetId,
     );
-    if (active != null && active.lifecycle != 'stopped') {
+    if (active != null && cockpitDevSessionRequiresStopBeforeLaunch(active)) {
       runtime.progress('Stopping session ${active.handleId} for relaunch...');
       final stopped = await dev.invoke(
         active,
@@ -608,6 +608,10 @@ bool cockpitMatchesDevelopmentTarget(
 bool _succeeded(CockpitOperationResult result) =>
     result.lifecycle == CockpitOperationLifecycle.completed &&
     result.outcome == CockpitOperationOutcome.succeeded;
+
+bool cockpitDevSessionRequiresStopBeforeLaunch(
+  CockpitCliSessionHandle session,
+) => session.lifecycle == 'connecting' || session.lifecycle == 'ready';
 
 Future<Map<String, Object?>?> cockpitResolveDevFlutterLaunchConfiguration(
   Map<String, Object?>? configuration, {

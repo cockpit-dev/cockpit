@@ -1,5 +1,19 @@
 # Changelog
 
+## 3.0.14
+
+- Fixed `cockpit dev start` recovery for stopped or crashed handles whose
+  worker-owned session no longer exists. Explicit relaunch now skips the stale
+  stop request, replaces the same target, and reuses the original numeric
+  handle instead of failing with `opaqueReferenceNotFound` or creating another
+  app instance.
+- Kept non-persisted custom-launch sessions stopped when their original launch
+  options are required, and now directs the caller back to `dev start` with
+  those options instead of suggesting an ineffective restart.
+- Added a bounded unexpected-state recovery workflow to every distributed
+  Cockpit Skill: observe the current UI, choose one safe recovery, preserve
+  session identity, and prove the expected postcondition before resuming.
+
 ## 3.0.13
 
 - Added `cockpit dev tree` with minimal, standard, and full Flutter structure

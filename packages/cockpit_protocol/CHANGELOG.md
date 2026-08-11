@@ -1,5 +1,10 @@
 # Changelog
 
+## 3.0.14
+
+- Synchronized the protocol package with Cockpit's stale development-session
+  recovery release; public protocol contracts are unchanged.
+
 ## 3.0.13
 
 - Added typed minimal, standard, and full Flutter Widget tree contracts,

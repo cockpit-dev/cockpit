@@ -208,9 +208,11 @@ final class CockpitDevRuntime {
     required Object? priorState,
   }) async {
     if (!previous.recoverable) {
-      final crashed = await _setLifecycle(previous, 'crashed');
+      final unavailable = previous.lifecycle == 'stopped'
+          ? previous
+          : await _setLifecycle(previous, 'crashed');
       return CockpitDevSessionResolution(
-        session: crashed,
+        session: unavailable,
         ready: false,
         changed: 'none',
         state: priorState,
@@ -218,9 +220,10 @@ final class CockpitDevRuntime {
           <String, Object?>{
             'code': 'explicitRestartRequired',
             'message':
-                'Custom Flutter launch values are never persisted. Run '
-                '`cockpit dev start --session ${previous.handleId}` again '
-                'with the required options.',
+                'This session used custom Flutter launch values, which are '
+                'not stored. Re-run `cockpit dev start --session '
+                '${previous.handleId}` with the original launch options; '
+                'Cockpit will reuse the same handle.',
           },
         ],
       );
@@ -926,22 +929,28 @@ final class CockpitDevRuntime {
   Future<int> writeUnavailable({
     required String action,
     required CockpitDevSessionResolution resolution,
-  }) => writeEnvelope(
-    action: action,
-    session: resolution.session,
-    ok: false,
-    state: resolution.state,
-    changed: resolution.changed,
-    errors: resolution.errors.isEmpty
+  }) {
+    final errors = resolution.errors.isEmpty
         ? const <Object?>[
             <String, Object?>{'code': 'developmentSessionUnavailable'},
           ]
-        : resolution.errors,
-    next: resolution.session.lifecycle == 'stopped'
-        ? 'cockpit dev start --session ${resolution.session.handleId}'
-        : 'cockpit dev restart --session ${resolution.session.handleId}',
-    failureExitCode: cockpitTemporaryExitCode,
-  );
+        : resolution.errors;
+    final launchOptionsRequired = errors.whereType<Map<Object?, Object?>>().any(
+      (error) => error['code'] == 'explicitRestartRequired',
+    );
+    return writeEnvelope(
+      action: action,
+      session: resolution.session,
+      ok: false,
+      state: resolution.state,
+      changed: resolution.changed,
+      errors: errors,
+      next: launchOptionsRequired || resolution.session.lifecycle == 'stopped'
+          ? 'cockpit dev start --session ${resolution.session.handleId}'
+          : 'cockpit dev restart --session ${resolution.session.handleId}',
+      failureExitCode: cockpitTemporaryExitCode,
+    );
+  }
 
   Future<int> writeOperation({
     required String action,
