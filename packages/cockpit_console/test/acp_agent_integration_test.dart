@@ -367,6 +367,12 @@ void main() {
       );
       expect(full.connected.lastError, contains('absolute URI'));
 
+      expect(
+        await full.notifier.sendPrompt('recover-after-validation-error'),
+        isTrue,
+      );
+      expect(full.connected.lastError, isNull);
+
       final oversizedBase64 = 'A' * (14 * 1024 * 1024);
       expect(
         await full.notifier.sendPromptContent([
@@ -378,13 +384,147 @@ void main() {
     },
     timeout: const Timeout(Duration(seconds: 45)),
   );
+
+  test(
+    'agent process exit surfaces an error and the same notifier reconnects',
+    () async {
+      final harness = await _AcpAgentHarness.start();
+      addTearDown(harness.dispose);
+
+      final errorFuture = harness.waitForState<AcpError>();
+      expect(await harness.notifier.sendPrompt('exit-agent'), isTrue);
+      final failed = await errorFuture;
+      expect(failed.message, contains('closed unexpectedly'));
+
+      await harness.connect();
+      expect(harness.connected.activeSession, isNotNull);
+      expect(await harness.notifier.sendPrompt('after-reconnect'), isTrue);
+      expect(harness.connected.messages.last.text, 'Second message');
+    },
+    timeout: const Timeout(Duration(seconds: 45)),
+  );
+
+  test(
+    'failed initial session creation keeps the connection recoverable',
+    () async {
+      final harness = await _AcpAgentHarness.start(
+        agentArgs: const ['--fail-first-new-session'],
+        requireActiveSession: false,
+      );
+      addTearDown(harness.dispose);
+
+      var connected = harness.connected;
+      expect(connected.activeSession, isNull);
+      expect(
+        connected.lastError,
+        contains('Fixture rejected the first session creation'),
+      );
+
+      expect(await harness.notifier.createSession(), isTrue);
+      connected = harness.connected;
+      expect(connected.activeSession, isNotNull);
+      expect(connected.lastError, isNull);
+    },
+    timeout: const Timeout(Duration(seconds: 30)),
+  );
+
+  test(
+    'failed session load preserves the active session and its messages',
+    () async {
+      final harness = await _AcpAgentHarness.start(
+        agentArgs: const ['--full-lifecycle'],
+        requireActiveSession: false,
+      );
+      addTearDown(harness.dispose);
+      expect(await harness.notifier.authenticate('local-auth'), isTrue);
+      expect(await harness.notifier.sendPrompt('before-failed-load'), isTrue);
+
+      final before = harness.connected.activeSession!;
+      final messages = before.messages;
+      expect(
+        await harness.notifier.loadSession(
+          SessionInfo(
+            sessionId: 'missing-session',
+            cwd: before.cwd,
+            additionalDirectories: before.additionalDirectories,
+          ),
+        ),
+        isFalse,
+      );
+
+      final after = harness.connected;
+      expect(after.activeSession?.sessionId, before.sessionId);
+      expect(after.messages, same(messages));
+      expect(after.lastError, contains('Unknown session'));
+      expect(await harness.notifier.sendPrompt('after-failed-load'), isTrue);
+      expect(harness.connected.lastError, isNull);
+    },
+    timeout: const Timeout(Duration(seconds: 45)),
+  );
+
+  test(
+    'permission cancellation completes the turn without leaving a blocker',
+    () async {
+      final harness = await _AcpAgentHarness.start();
+      addTearDown(harness.dispose);
+
+      final prompt = harness.notifier.sendPrompt('request-permission');
+      final awaitingPermission = await harness.waitFor(
+        (state) => state.pendingPermission != null,
+      );
+      final permission = awaitingPermission.pendingPermission!;
+      expect(
+        harness.notifier.respondToPermission(requestId: permission.requestId),
+        isTrue,
+      );
+      expect(await prompt, isTrue);
+
+      final connected = harness.connected;
+      expect(connected.pendingPermission, isNull);
+      expect(connected.isPrompting, isFalse);
+      expect(connected.messages.last.text, 'permission:cancelled');
+    },
+    timeout: const Timeout(Duration(seconds: 30)),
+  );
+
+  test(
+    'switching sessions clears old conversation and remains usable',
+    () async {
+      final harness = await _AcpAgentHarness.start(
+        agentArgs: const ['--full-lifecycle'],
+        requireActiveSession: false,
+      );
+      addTearDown(harness.dispose);
+      expect(await harness.notifier.authenticate('local-auth'), isTrue);
+      expect(await harness.notifier.sendPrompt('before-switch'), isTrue);
+      expect(harness.connected.messages, isNotEmpty);
+      expect(await harness.notifier.refreshSessions(), isTrue);
+      final archived = harness.connected.recentSessions.singleWhere(
+        (session) => session.sessionId == 'archived-1',
+      );
+
+      expect(await harness.notifier.loadSession(archived), isTrue);
+      expect(harness.connected.activeSession?.sessionId, 'archived-1');
+      expect(harness.connected.messages, isEmpty);
+      expect(await harness.notifier.sendPrompt('after-switch'), isTrue);
+      expect(harness.connected.messages.last.text, 'Second message');
+    },
+    timeout: const Timeout(Duration(seconds: 45)),
+  );
 }
 
 final class _AcpAgentHarness {
-  _AcpAgentHarness._(this.container, this.notifier);
+  _AcpAgentHarness._(
+    this.container,
+    this.notifier,
+    this.packageDirectory,
+    this.sessionCwd,
+  );
 
   final ProviderContainer container;
   final AcpAgentNotifier notifier;
+  final String packageDirectory;
+  final String sessionCwd;
 
   static Future<_AcpAgentHarness> start({
     String sessionCwd = '.',
@@ -397,20 +537,14 @@ final class _AcpAgentHarness {
         : p.join(currentDirectory, 'packages', 'cockpit_console');
     final container = ProviderContainer();
     final notifier = container.read(acpAgentProvider.notifier);
-    final harness = _AcpAgentHarness._(container, notifier);
+    final harness = _AcpAgentHarness._(
+      container,
+      notifier,
+      packageDirectory,
+      sessionCwd,
+    );
     try {
-      await notifier.connect(
-        AcpConnectionConfig(
-          command: Platform.isWindows ? 'dart.exe' : 'dart',
-          args: [
-            'run',
-            'test/fixtures/acp_message_stream_agent.dart',
-            ...agentArgs,
-          ],
-          workingDirectory: packageDirectory,
-          sessionCwd: sessionCwd,
-        ),
-      );
+      await harness.connect(agentArgs: agentArgs);
       final connectionState = container.read(acpAgentProvider);
       expect(
         connectionState,
@@ -429,6 +563,21 @@ final class _AcpAgentHarness {
       await harness.dispose();
       rethrow;
     }
+  }
+
+  Future<void> connect({List<String> agentArgs = const []}) {
+    return notifier.connect(
+      AcpConnectionConfig(
+        command: Platform.isWindows ? 'dart.exe' : 'dart',
+        args: [
+          'run',
+          'test/fixtures/acp_message_stream_agent.dart',
+          ...agentArgs,
+        ],
+        workingDirectory: packageDirectory,
+        sessionCwd: sessionCwd,
+      ),
+    );
   }
 
   AcpConnected get connected {
@@ -456,6 +605,26 @@ final class _AcpAgentHarness {
           !result.isCompleted) {
         result.complete(next);
       }
+    });
+    try {
+      return await result.future.timeout(timeout);
+    } finally {
+      subscription.close();
+    }
+  }
+
+  Future<T> waitForState<T extends AcpAgentState>({
+    Duration timeout = const Duration(seconds: 10),
+  }) async {
+    final current = container.read(acpAgentProvider);
+    if (current is T) return current;
+
+    final result = Completer<T>();
+    final subscription = container.listen<AcpAgentState>(acpAgentProvider, (
+      previous,
+      next,
+    ) {
+      if (next is T && !result.isCompleted) result.complete(next);
     });
     try {
       return await result.future.timeout(timeout);

@@ -158,13 +158,13 @@ Use the tree only when target inspection is insufficient:
 
 ```bash
 cockpit dev tree
-cockpit dev tree --verbosity standard
-cockpit dev tree --verbosity full
+cockpit dev tree --view more
+cockpit dev tree --view full
 ```
 
-Minimal returns actionable/content nodes and public ancestry. Standard returns the
-mounted public Widget structure. Full returns every mounted Element, including
-offstage/private nodes, and writes it to a verified artifact path instead of stdout.
+The default returns actionable/content nodes and public ancestry. `more` returns
+the mounted public Widget structure. `full` returns every mounted Element,
+including offstage/private nodes, and writes it to a verified artifact path.
 Semantics is supplementary; direct Widget text remains discoverable even below
 `ExcludeSemantics`.
 
@@ -178,8 +178,8 @@ the same handle.
 - macOS, Windows, and Linux resize the owning Flutter window content area and
   wait for settled Flutter metrics.
 - Web reports the managed browser viewport alternative.
-- Android and iOS report `fixedMobileViewport`; choose an advertised device or
-  orientation strategy instead of pretending resize succeeded.
+- Android and iOS report `fixedMobileViewport` with advertised device and
+  orientation options.
 - Android/iOS `--env` configures the Flutter build process. Use Dart defines or
   an application-owned configuration channel for mobile runtime values.
 - Screenshots use ADB/simctl/WDA first on Android/iOS so system dialogs are
@@ -214,7 +214,7 @@ Use the smallest read that answers the next question:
 ```bash
 cockpit dev status
 cockpit dev inspect "Expected text"
-cockpit dev diagnose --verbosity standard
+cockpit dev diagnose --view more
 ```
 
 Use `cockpit explain <operation>` only when a task command is

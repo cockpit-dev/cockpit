@@ -323,7 +323,7 @@ final class CockpitLeaseWorkerResourceAuthority
   }
 
   String _newId(String prefix) =>
-      '$prefix-${_tokenGenerator.nextResourceIdToken()}';
+      _tokenGenerator.nextResourceId(prefix.substring(0, 1));
 }
 
 final class _AuthorityGrant {

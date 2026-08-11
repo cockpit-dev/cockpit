@@ -275,6 +275,41 @@ void main() {
     },
   );
 
+  testWidgets('does not expose private-use icon glyphs as locator text', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      CockpitSurface(
+        routeName: '/commands',
+        child: MaterialApp(
+          home: Scaffold(
+            body: Center(
+              child: IconButton(
+                onPressed: () {},
+                tooltip: 'Available commands',
+                icon: const Icon(Icons.add),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final surfaceState = tester.state<CockpitSurfaceState>(
+      find.byType(CockpitSurface),
+    );
+    final target = surfaceState.registry.visibleTargets.singleWhere(
+      (target) =>
+          target.typeName == 'IconButton' &&
+          target.tooltip == 'Available commands',
+    );
+
+    expect(target.text, isNull);
+    expect(target.textParts, isEmpty);
+    expect(target.supportedCommands, contains(CockpitCommandType.tap));
+  });
+
   testWidgets('generates compact stable registration ids for native targets', (
     tester,
   ) async {
@@ -482,6 +517,51 @@ void main() {
         .toList(growable: false);
 
     expect(semanticTargets, isNotEmpty);
+  });
+
+  testWidgets('resolves an actionable composite control by exact child text', (
+    tester,
+  ) async {
+    var tapped = false;
+    await tester.pumpWidget(
+      CockpitSurface(
+        routeName: '/commands',
+        child: MaterialApp(
+          home: Scaffold(
+            body: InkWell(
+              onTap: () => tapped = true,
+              child: const Column(
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  Text('/inspect'),
+                  Text('Inspect the current project'),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final surfaceState = tester.state<CockpitSurfaceState>(
+      find.byType(CockpitSurface),
+    );
+    final resolution = surfaceState.registry.resolve(
+      const CockpitLocator(text: '/inspect'),
+      requiredCommand: CockpitCommandType.tap,
+    );
+
+    expect(resolution.isSuccess, isTrue);
+    expect(resolution.target?.typeName, 'InkWell');
+    expect(resolution.target?.textParts, contains('/inspect'));
+    resolution.target?.onTap?.call();
+    expect(tapped, isTrue);
+
+    final snapshotTarget = surfaceState.snapshot().visibleTargets.firstWhere(
+      (target) => target.typeName == 'InkWell',
+    );
+    expect(snapshotTarget.textParts, contains('/inspect'));
   });
 
   testWidgets('discovers long press and double tap handlers for native rows', (

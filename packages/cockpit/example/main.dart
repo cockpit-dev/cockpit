@@ -11,7 +11,7 @@ Future<void> main(List<String> args) async {
 
   stdout.writeln('Cockpit host tooling example');
   stdout.writeln('');
-  stdout.writeln('Cockpit 3.0 fast path:');
+  stdout.writeln('Cockpit fast path:');
   stdout.writeln('  cockpit dev start');
   stdout.writeln('  cockpit dev status');
   stdout.writeln('  cockpit dev inspect');

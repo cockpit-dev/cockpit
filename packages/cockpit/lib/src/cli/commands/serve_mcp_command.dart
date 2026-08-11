@@ -22,7 +22,7 @@ final class CockpitServeMcpCommand extends Command<int> {
   String get name => 'serve-mcp';
 
   @override
-  String get description => 'Serve the Cockpit 3.0 MCP transport over stdio.';
+  String get description => 'Serve the Cockpit MCP transport over stdio.';
 
   @override
   Future<int> run() async {

@@ -9,6 +9,7 @@ import 'cockpit_runtime_event.dart';
 import 'cockpit_runtime_observer.dart';
 import 'cockpit_runtime_query.dart';
 import 'cockpit_runtime_snapshot.dart';
+import 'cockpit_short_id.dart';
 
 typedef CockpitRuntimeCurrentRouteProvider = String? Function();
 typedef CockpitRuntimeCriticalEventHandler =
@@ -42,7 +43,6 @@ final class CockpitFlutterRuntimeObserver implements CockpitRuntimeObserver {
   FlutterExceptionHandler? _previousFlutterErrorHandler;
   ErrorCallback? _previousPlatformErrorHandler;
   DebugPrintCallback? _previousDebugPrint;
-  int _eventCounter = 0;
   bool _disposed = false;
   bool _installedDebugPrintOverride = false;
 
@@ -252,10 +252,7 @@ final class CockpitFlutterRuntimeObserver implements CockpitRuntimeObserver {
     return true;
   }
 
-  String _nextEventId() {
-    _eventCounter += 1;
-    return 'runtime-${DateTime.now().toUtc().microsecondsSinceEpoch}-$_eventCounter';
-  }
+  String _nextEventId() => cockpitShortId('e');
 
   Map<String, String> _boundedDetails(Map<String, String> details) {
     final bounded = <String, String>{};

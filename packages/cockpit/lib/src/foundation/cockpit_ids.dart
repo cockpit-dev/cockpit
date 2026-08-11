@@ -5,18 +5,17 @@ enum CockpitIdKind { root, workspace, checkout, project, lease, cleanup }
 
 extension CockpitIdKindPrefix on CockpitIdKind {
   String get prefix => switch (this) {
-    CockpitIdKind.root => 'rt',
-    CockpitIdKind.workspace => 'ws',
-    CockpitIdKind.checkout => 'co',
-    CockpitIdKind.project => 'pj',
-    CockpitIdKind.lease => 'le',
-    CockpitIdKind.cleanup => 'cl',
+    CockpitIdKind.root => 'r',
+    CockpitIdKind.workspace => 'w',
+    CockpitIdKind.checkout => 'c',
+    CockpitIdKind.project => 'p',
+    CockpitIdKind.lease => 'l',
+    CockpitIdKind.cleanup => 'x',
   };
 }
 
-const String _resourceIdAlphabet =
-    '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
-const int _resourceIdTokenLength = 16;
+const String _resourceIdAlphabet = '0123456789abcdefghijklmnopqrstuvwxyz';
+const int _resourceIdTokenLength = 10;
 
 String _nextResourceIdToken(Random random) {
   final codeUnits = List<int>.generate(
@@ -29,6 +28,14 @@ String _nextResourceIdToken(Random random) {
   return String.fromCharCodes(codeUnits);
 }
 
+String _nextUniqueResourceIdToken(Random random, Set<String> issued) {
+  for (var attempt = 0; attempt < 32; attempt += 1) {
+    final token = _nextResourceIdToken(random);
+    if (issued.add(token)) return token;
+  }
+  throw StateError('Could not generate a unique resource identifier.');
+}
+
 abstract interface class CockpitIdGenerator {
   String next(CockpitIdKind kind);
 }
@@ -38,10 +45,11 @@ final class CockpitSecureIdGenerator implements CockpitIdGenerator {
     : _random = random ?? Random.secure();
 
   final Random _random;
+  final Set<String> _issued = <String>{};
 
   @override
   String next(CockpitIdKind kind) {
-    return '${kind.prefix}-${_nextResourceIdToken(_random)}';
+    return '${kind.prefix}${_nextUniqueResourceIdToken(_random, _issued)}';
   }
 }
 
@@ -61,6 +69,15 @@ extension CockpitResourceIdTokens on CockpitTokenGenerator {
     }
     return generator.nextToken(byteLength: 16);
   }
+
+  String nextResourceId(String prefix) {
+    if (prefix.length != 1 ||
+        prefix.codeUnitAt(0) < 0x61 ||
+        prefix.codeUnitAt(0) > 0x7a) {
+      throw ArgumentError.value(prefix, 'prefix', 'Use one lowercase letter.');
+    }
+    return '$prefix${nextResourceIdToken()}';
+  }
 }
 
 final class CockpitSecureTokenGenerator
@@ -69,9 +86,10 @@ final class CockpitSecureTokenGenerator
     : _random = random ?? Random.secure();
 
   final Random _random;
+  final Set<String> _issuedIds = <String>{};
 
   @override
-  String nextIdToken() => _nextResourceIdToken(_random);
+  String nextIdToken() => _nextUniqueResourceIdToken(_random, _issuedIds);
 
   @override
   String nextToken({int byteLength = 32}) {

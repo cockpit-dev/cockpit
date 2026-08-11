@@ -1,7 +1,7 @@
-# Cockpit 3.0 Skill Contract
+# Cockpit Skill Contract
 
 The Cockpit skill guides an AI agent through live development and E2E
-verification using only Cockpit 3.0 public client surfaces.
+verification using Cockpit public client surfaces.
 
 ## Required Behavior
 
@@ -35,18 +35,11 @@ is read only when a claim requires it.
 
 Screenshot assertions retain actual, baseline, and diff files. Compose scoped
 before/after behavior from suite fixtures, case `setup`/`finally`, step
-`evidence`, and explicit recording boundaries; do not create a parallel hook
-syntax outside the published test protocol.
+`evidence`, and explicit recording boundaries.
 
 ## Failure Policy
 
 Do not replay non-idempotent work after an uncertain transport failure. Resume
 SSE from its last sequence, reuse submission idempotency keys, and read the run
 resource before deciding whether to retry. Report unsupported or unavailable
-capabilities as environment failures rather than faking success.
-
-## Client Boundary
-
-The skill must never recommend retired 1.x direct commands, embedded
-dashboards, legacy artifact layouts, or implicit global sessions. Those
-surfaces are not part of Cockpit 3.0.
+capabilities as environment failures.

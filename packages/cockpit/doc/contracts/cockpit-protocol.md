@@ -1,6 +1,6 @@
-# Cockpit 3.0 Protocol
+# Cockpit Protocol
 
-Cockpit 3.0 is a resource-oriented E2E automation protocol for arbitrary
+Cockpit is a resource-oriented E2E automation protocol for arbitrary
 applications, with an optional semantic bridge for Flutter. A per-user Supervisor owns authentication, workspace
 isolation, target authority, run admission, events, artifacts, and worker
 lifecycle. CLI, MCP, GUI, and third-party clients use the same public contract.
@@ -79,10 +79,8 @@ plane from its action and locator, propagate the effective plane through nested
 control flow, and record requested and actual planes. A Flutter development
 target may own both its semantic bridge driver and a secondary system driver
 for the same app/device so mixed Flutter/native stacks stay in one run.
-For a launched target, `target.inspect` computes the secondary driver profile
-inside the worker from its private app identity and returns only the sanitized
-profile as `output.systemControl`. Clients must treat that profile as
-authoritative instead of reconstructing it from redacted app resources.
+For a launched target, `target.inspect` returns the secondary driver profile as
+`output.systemControl`.
 
 The shared actions include semantic and native gestures, text and clipboard
 editing, waits, assertions, evidence, explicit recording lifecycles, system
@@ -90,15 +88,14 @@ control, bounded location travel, visual template location, and screenshot
 baseline comparison. Template and baseline paths are workspace-confined.
 Screenshot comparison publishes actual, baseline, and diff files rather than
 embedding binary data. Suite fixtures, case `setup`/`finally`, step evidence,
-and explicit recording boundaries are the lifecycle composition primitives;
-the protocol has no duplicate generic pre/post hook layer.
+and explicit recording boundaries compose the execution lifecycle.
 
 ## Report Bundle
 
 The immutable report fact graph is `run -> suite -> case -> attempt -> step ->
 assertion/evidence`. `report.json` is the canonical single-file rendering input
 and retains the effective suite and case definitions plus detailed execution
-results. Human views are projections of that graph, never separate facts:
+results. Derived views include:
 `index.html` provides offline Summary, Coverage, Executions, Evidence,
 Diagnostics, and Environment/files sections; `summary.md` and `junit.xml`
 provide portable summary and CI
@@ -113,10 +110,4 @@ Flutter apps, native mobile apps, desktop apps, browser pages, system surfaces,
 devices, and host workspaces share one target contract. App-like black-box
 targets require a platform app identifier. iOS WebDriverAgent endpoints are
 target-scoped so concurrent devices and workspaces cannot overwrite each
-other. Unsupported capabilities remain explicit rather than being simulated.
-
-## Compatibility
-
-There is no 1.x runtime client, embedded dashboard, legacy artifact layout, or
-global session store. The offline importer is the only supported migration
-surface and produces a canonical 2.0 case plus migration manifest.
+other. Unsupported capabilities return explicit errors.

@@ -1,5 +1,17 @@
 # Changelog
 
+## 4.0.0
+
+- Added bounded descendant text parts to mounted Flutter target discovery so
+  composite rows and controls expose their exact visible child labels.
+- Added readable Tooltip locators for icon-only controls.
+- Fixed `scrollUntilVisible` verification when repeated rendered labels make a
+  direct Element probe ambiguous but the intended target is visibly mounted.
+- Preserved successful text mutations when their exact `EditableText` value is
+  already committed but optional post-action settling reaches the command
+  deadline.
+- Runtime session and event identifiers now use compact lowercase IDs.
+
 ## 3.0.14
 
 - Synchronized the Flutter bridge with Cockpit's stale development-session

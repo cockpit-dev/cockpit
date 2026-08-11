@@ -780,7 +780,7 @@ final class CockpitWorkerDocumentIndex
 
   String get _indexPath => _paths.join(stateRoot, 'documents', 'index.json');
 
-  String _newDocumentId() => 'dc-${_tokenGenerator.nextResourceIdToken()}';
+  String _newDocumentId() => _tokenGenerator.nextResourceId('d');
 }
 
 bool _matchesKind(_IndexedDocument document, String? kind) {

@@ -12,7 +12,7 @@ import 'package:yaml/yaml.dart';
 
 void main() {
   group('CockpitCliOutputSelection', () {
-    test('defaults to AI minimal output', () {
+    test('defaults to AI brief output', () {
       final parser = ArgParser();
       cockpitAddCliOutputOptions(parser);
 
@@ -21,7 +21,7 @@ void main() {
       );
 
       expect(selection.format, CockpitCliFormat.lon);
-      expect(selection.detail, CockpitCliOutputDetail.minimal);
+      expect(selection.view, CockpitCliOutputView.brief);
       expect(parser.usage, contains('lon by default'));
       expect(
         parser.usage,
@@ -29,8 +29,21 @@ void main() {
       );
       expect(parser.usage, contains('--format'));
       expect(parser.usage, isNot(contains('--stdout-format')));
-      expect(parser.usage, contains('--verbosity'));
+      expect(parser.usage, contains('--view'));
+      expect(parser.usage, isNot(contains('--verbosity')));
       expect(parser.usage, isNot(contains('--detail')));
+      expect(
+        () => parser.parse(const <String>['--verbosity', 'full']),
+        throwsA(isA<ArgParserException>()),
+      );
+      expect(
+        () => parser.parse(const <String>['--view', 'minimal']),
+        throwsA(isA<ArgParserException>()),
+      );
+      expect(
+        () => parser.parse(const <String>['--view', 'standard']),
+        throwsA(isA<ArgParserException>()),
+      );
       expect(selection.outputPath, isNull);
     });
 
@@ -42,31 +55,25 @@ void main() {
         parser.parse(const <String>[
           '--format',
           'none',
-          '--verbosity',
-          'standard',
+          '--view',
+          'more',
           '--output',
           'result.json',
         ]),
       );
 
       expect(selection.format, CockpitCliFormat.none);
-      expect(selection.detail, CockpitCliOutputDetail.standard);
+      expect(selection.view, CockpitCliOutputView.more);
       expect(selection.outputPath, 'result.json');
     });
 
     test('pre-scans output controls before command parsing', () {
       final selection = CockpitCliOutputSelection.fromRawArguments(
-        const <String>[
-          'daemon',
-          'stop',
-          '--format=json',
-          '--verbosity',
-          'full',
-        ],
+        const <String>['daemon', 'stop', '--format=json', '--view', 'full'],
       );
 
       expect(selection.format, CockpitCliFormat.json);
-      expect(selection.detail, CockpitCliOutputDetail.full);
+      expect(selection.view, CockpitCliOutputView.full);
     });
   });
 
@@ -96,6 +103,21 @@ void main() {
           contains('--input and --input-file'),
         ),
       ),
+    );
+  });
+
+  test('operation examples omit empty input', () {
+    expect(
+      cockpitOperationCommandExample(
+        'target.discover',
+        null,
+        const <String, Object?>{
+          'type': 'object',
+          'properties': <String, Object?>{},
+        },
+        sessionAvailable: true,
+      ),
+      'cockpit op run target.discover',
     );
   });
 
@@ -167,14 +189,14 @@ void main() {
       renderer.renderAi(
         command: 'dev.status',
         data: data,
-        detail: CockpitCliOutputDetail.minimal,
+        view: CockpitCliOutputView.brief,
       ),
     );
     final jsonValue = jsonDecode(
       renderer.renderJson(
         command: 'dev.status',
         data: data,
-        detail: CockpitCliOutputDetail.minimal,
+        view: CockpitCliOutputView.brief,
       ),
     );
     final yamlValue = jsonDecode(
@@ -183,7 +205,7 @@ void main() {
           renderer.renderYaml(
             command: 'dev.status',
             data: data,
-            detail: CockpitCliOutputDetail.minimal,
+            view: CockpitCliOutputView.brief,
           ),
         ),
       ),
@@ -191,6 +213,74 @@ void main() {
 
     expect(jsonValue, lonValue);
     expect(yamlValue, lonValue);
+  });
+
+  test('failed operations share one concise brief error projection', () {
+    const renderer = CockpitCliOutputRenderer();
+    const data = <String, Object?>{
+      'operationId': 'operation-1',
+      'kind': 'target.launch',
+      'lifecycle': 'completed',
+      'outcome': 'failed',
+      'failure': <String, Object?>{
+        'code': 'androidDeviceUnavailable',
+        'message': 'Android device emulator-5554 is unavailable.',
+        'retryable': false,
+        'category': 'application',
+        'responsibleLayer': 'worker',
+      },
+    };
+
+    final lonValue = lon.decode(
+      renderer.renderAi(
+        command: 'target.launch',
+        data: data,
+        view: CockpitCliOutputView.brief,
+      ),
+    );
+    final jsonValue = jsonDecode(
+      renderer.renderJson(
+        command: 'target.launch',
+        data: data,
+        view: CockpitCliOutputView.brief,
+      ),
+    );
+    final yamlValue = jsonDecode(
+      jsonEncode(
+        loadYaml(
+          renderer.renderYaml(
+            command: 'target.launch',
+            data: data,
+            view: CockpitCliOutputView.brief,
+          ),
+        ),
+      ),
+    );
+
+    expect(lonValue, <Object?, Object?>{
+      'op': 'operation-1',
+      'error': <Object?, Object?>{
+        'code': 'androidDeviceUnavailable',
+        'message': 'Android device emulator-5554 is unavailable.',
+      },
+    });
+    expect(jsonValue, lonValue);
+    expect(yamlValue, lonValue);
+
+    final more =
+        lon.decode(
+              renderer.renderAi(
+                command: 'target.launch',
+                data: data,
+                view: CockpitCliOutputView.more,
+              ),
+            )!
+            as Map<Object?, Object?>;
+    final error = more['error']! as Map<Object?, Object?>;
+    expect(more['outcome'], 'failed');
+    expect(error['category'], 'application');
+    expect(error['layer'], 'worker');
+    expect(error, isNot(contains('retry')));
   });
 
   test('session output omits the internal checkout identity hash', () {
@@ -215,15 +305,15 @@ void main() {
                   ],
                   'totalCount': 1,
                 },
-                detail: CockpitCliOutputDetail.standard,
+                view: CockpitCliOutputView.more,
               ),
             )
             as Map<String, Object?>;
     final item =
         (value['items']! as List<Object?>).single as Map<String, Object?>;
 
-    expect(item['checkoutPath'], '/workspace');
-    expect(item, isNot(contains('checkout')));
+    expect(item['checkout'], '/workspace');
+    expect(item, isNot(contains('checkoutId')));
     expect(jsonEncode(value), isNot(contains(hash)));
   });
 
@@ -244,51 +334,46 @@ void main() {
                     'entrypoint': 'lib/main.dart',
                   },
                 },
-                detail: CockpitCliOutputDetail.minimal,
+                view: CockpitCliOutputView.brief,
               ),
             )!
             as Map<Object?, Object?>;
-    final state = value['state']! as Map<Object?, Object?>;
-
-    expect(state, isNot(contains('errors')));
-    expect(state, isNot(contains('netFailures')));
+    expect(value, isNot(contains('ok')));
+    expect(value, isNot(contains('state')));
+    expect(value, isNot(contains('errors')));
+    expect(value, isNot(contains('netFailures')));
   });
 
-  test(
-    'dev status reports diagnostic zeroes when diagnostics were collected',
-    () {
-      const renderer = CockpitCliOutputRenderer();
+  test('dev more status reports diagnostic zeroes when collected', () {
+    const renderer = CockpitCliOutputRenderer();
 
-      final value =
-          lon.decode(
-                renderer.renderAi(
-                  command: 'dev.status',
-                  data: const <String, Object?>{
-                    'ok': true,
-                    'action': 'status',
-                    'session': '1',
-                    'state': <String, Object?>{
-                      'lifecycle': 'ready',
-                      'runtimeErrors': <String, Object?>{
-                        'summary': <String, Object?>{'errorCount': 0},
-                      },
-                      'network': <String, Object?>{
-                        'summary': <String, Object?>{'failureCount': 0},
-                      },
+    final value =
+        lon.decode(
+              renderer.renderAi(
+                command: 'dev.status',
+                data: const <String, Object?>{
+                  'ok': true,
+                  'action': 'status',
+                  'session': '1',
+                  'state': <String, Object?>{
+                    'lifecycle': 'ready',
+                    'runtimeErrors': <String, Object?>{
+                      'summary': <String, Object?>{'errorCount': 0},
+                    },
+                    'network': <String, Object?>{
+                      'summary': <String, Object?>{'failureCount': 0},
                     },
                   },
-                  detail: CockpitCliOutputDetail.minimal,
-                ),
-              )!
-              as Map<Object?, Object?>;
-      final state = value['state']! as Map<Object?, Object?>;
+                },
+                view: CockpitCliOutputView.more,
+              ),
+            )!
+            as Map<Object?, Object?>;
+    expect(value['errors'], 0);
+    expect(value['netFailures'], 0);
+  });
 
-      expect(state['errors'], 0);
-      expect(state['netFailures'], 0);
-    },
-  );
-
-  test('dev minimal output keeps only decision fields', () {
+  test('dev brief output keeps only decision fields', () {
     const renderer = CockpitCliOutputRenderer();
     final value =
         lon.decode(
@@ -321,19 +406,20 @@ void main() {
                     },
                   },
                 },
-                detail: CockpitCliOutputDetail.minimal,
+                view: CockpitCliOutputView.brief,
               ),
             )!
             as Map<Object?, Object?>;
 
-    expect(value['ok'], isTrue);
-    expect(value['session'], '2');
+    expect(value, isNot(contains('ok')));
+    expect(value['session'], 2);
+    expect(value['changed'], 'observed');
     expect(value, isNot(contains('action')));
     expect(value, isNot(contains('state')));
     expect(value, isNot(contains('_meta')));
   });
 
-  test('dev tree minimal output prioritizes actionable locator nodes', () {
+  test('dev tree brief output prioritizes actionable locator nodes', () {
     const renderer = CockpitCliOutputRenderer();
     final value =
         lon.decode(
@@ -367,13 +453,12 @@ void main() {
                     ],
                   },
                 },
-                detail: CockpitCliOutputDetail.minimal,
+                view: CockpitCliOutputView.brief,
               ),
             )!
             as Map<Object?, Object?>;
 
-    final state = value['state']! as Map<Object?, Object?>;
-    final nodes = state['nodes']! as List<Object?>;
+    final nodes = value['nodes']! as List<Object?>;
     expect(nodes, isNotEmpty);
     expect(nodes.first, containsPair('loc', '/scaffold/textbutton'));
     expect(nodes.first, containsPair('text', 'New task'));
@@ -405,27 +490,29 @@ void main() {
                 renderer.renderAi(
                   command: 'dev.screenshot',
                   data: data,
-                  detail: CockpitCliOutputDetail.minimal,
+                  view: CockpitCliOutputView.brief,
                 ),
               )!
               as Map<Object?, Object?>;
-      final minimalState = minimal['state']! as Map<Object?, Object?>;
-      expect(minimalState, <Object?, Object?>{
-        'capture': 'flutterView',
-        'fallback': true,
-        'degraded': 'hostCaptureFailed',
-      });
+      expect(minimal['capture'], 'flutterView');
+      expect(minimal['fallback'], isTrue);
+      expect(minimal['degraded'], 'hostCaptureFailed');
+      expect(minimal['path'], '/tmp/current.png');
+      expect(minimal, isNot(contains('state')));
 
       final standard =
           lon.decode(
                 renderer.renderAi(
                   command: 'dev.screenshot',
                   data: data,
-                  detail: CockpitCliOutputDetail.standard,
+                  view: CockpitCliOutputView.more,
                 ),
               )!
               as Map<Object?, Object?>;
-      expect(standard['state'], data['state']);
+      expect(standard['capture'], 'flutterView');
+      expect(standard['plane'], 'flutterSemanticPlane');
+      expect(standard['width'], 800);
+      expect(standard['height'], 600);
     },
   );
 
@@ -481,7 +568,7 @@ void main() {
     final rendered = renderer.renderAi(
       command: 'dev.network',
       data: data,
-      detail: CockpitCliOutputDetail.minimal,
+      view: CockpitCliOutputView.brief,
     );
 
     expect(rendered, contains('id:"37"'));
@@ -504,11 +591,87 @@ void main() {
     final standard = renderer.renderAi(
       command: 'dev.network',
       data: data,
-      detail: CockpitCliOutputDetail.standard,
+      view: CockpitCliOutputView.more,
     );
     expect(standard, isNot(contains('responseHeaders')));
     expect(standard, isNot(contains('large preview')));
     expect(standard, isNot(contains('unused-digest')));
+  });
+
+  test('dev network summarizes real WebSocket frame activity', () {
+    const renderer = CockpitCliOutputRenderer();
+    const data = <String, Object?>{
+      'ok': true,
+      'action': 'network',
+      'session': '3',
+      'state': <String, Object?>{
+        'entries': <Object?>[
+          <String, Object?>{
+            'requestId': '9',
+            'method': 'GET',
+            'uri': 'wss://example.test/live',
+            'protocol': 'webSocket',
+            'state': 'open',
+            'requestBodyBytes': 12,
+            'responseBodyBytes': 28,
+            'webSocket': <String, Object?>{
+              'sentFrames': 2,
+              'receivedFrames': 1,
+              'sentBytes': 12,
+              'receivedBytes': 28,
+              'framesTruncated': true,
+              'recentFrames': <Object?>[
+                <String, Object?>{
+                  'sequence': 3,
+                  'direction': 'received',
+                  'kind': 'text',
+                  'at': '2026-08-11T00:00:00Z',
+                  'payloadBytes': 28,
+                  'finalFragment': true,
+                  'compressed': false,
+                  'preview': 'pong',
+                },
+              ],
+            },
+          },
+        ],
+      },
+    };
+
+    final brief =
+        lon.decode(
+              renderer.renderAi(
+                command: 'dev.network',
+                data: data,
+                view: CockpitCliOutputView.brief,
+              ),
+            )!
+            as Map<Object?, Object?>;
+    final briefEntry =
+        (brief['entries']! as List<Object?>).single as Map<Object?, Object?>;
+    final briefSocket = briefEntry['socket']! as Map<Object?, Object?>;
+    expect(briefSocket['sent'], 2);
+    expect(briefSocket['received'], 1);
+    expect(briefSocket['partial'], isTrue);
+    expect(briefSocket, isNot(contains('recvBytes')));
+    expect(briefSocket['last'], containsPair('preview', 'pong'));
+
+    final more =
+        lon.decode(
+              renderer.renderAi(
+                command: 'dev.network',
+                data: data,
+                view: CockpitCliOutputView.more,
+              ),
+            )!
+            as Map<Object?, Object?>;
+    final moreEntry =
+        (more['entries']! as List<Object?>).single as Map<Object?, Object?>;
+    final moreSocket = moreEntry['socket']! as Map<Object?, Object?>;
+    expect(moreEntry['reqBytes'], 12);
+    expect(moreEntry['resBytes'], 28);
+    expect(moreSocket['recvBytes'], 28);
+    expect(moreSocket['frames'], hasLength(1));
   });
 
   test('structured command flags do not encode JSON in their names', () {
@@ -616,7 +779,7 @@ void main() {
     }
   });
 
-  test('minimal target listings retain the entrypoint identity', () {
+  test('brief target listings retain the entrypoint identity', () {
     const renderer = CockpitCliOutputRenderer();
     final output = renderer.renderAi(
       command: 'target.list',
@@ -630,7 +793,7 @@ void main() {
           },
         ],
       },
-      detail: CockpitCliOutputDetail.minimal,
+      view: CockpitCliOutputView.brief,
     );
 
     expect(output, contains('cockpit/main.dart'));
@@ -668,33 +831,34 @@ void main() {
               renderer.renderAi(
                 command: 'target.inspect',
                 data: data,
-                detail: CockpitCliOutputDetail.minimal,
+                view: CockpitCliOutputView.brief,
               ),
             )!
             as Map<Object?, Object?>;
     expect(minimal['platform'], 'android');
     expect(minimal['route'], '/inbox');
     expect(minimal, isNot(contains('targetId')));
-    expect(minimal['capabilities'], containsPair('actionCount', 2));
-    expect(minimal['systemControl'], containsPair('blockedCount', 1));
+    expect(minimal['caps'], containsPair('actions', 2));
+    expect(minimal['system'], containsPair('blocked', 1));
 
     final standard =
         lon.decode(
               renderer.renderAi(
                 command: 'target.inspect',
                 data: data,
-                detail: CockpitCliOutputDetail.standard,
+                view: CockpitCliOutputView.more,
               ),
             )!
             as Map<Object?, Object?>;
-    expect(standard['targetId'], 'target-1');
+    expect(standard['target'], 'target-1');
+    expect(standard['targetType'], 'flutterApp');
     expect(
-      standard['capabilities'],
-      containsPair('actionCapabilities', <Object?>['tap', 'typeText']),
+      standard['caps'],
+      containsPair('actions', <Object?>['tap', 'typeText']),
     );
   });
 
-  test('standard listings omit digests that do not change the next action', () {
+  test('more and full listings omit integrity digests', () {
     const renderer = CockpitCliOutputRenderer();
     const data = <String, Object?>{
       'items': <Object?>[
@@ -710,18 +874,18 @@ void main() {
     final standard = renderer.renderAi(
       command: 'workspace.documents',
       data: data,
-      detail: CockpitCliOutputDetail.standard,
+      view: CockpitCliOutputView.more,
     );
-    expect(standard, contains('modifiedAt'));
+    expect(standard, contains('modified'));
     expect(standard, isNot(contains('sha256')));
     expect(standard, isNot(contains('unused-digest')));
     expect(
       renderer.renderJson(
         command: 'workspace.documents',
         data: data,
-        detail: CockpitCliOutputDetail.full,
+        view: CockpitCliOutputView.full,
       ),
-      contains('unused-digest'),
+      isNot(contains('unused-digest')),
     );
   });
 
@@ -743,7 +907,7 @@ void main() {
     final output = renderer.renderAi(
       command: 'artifact.list',
       data: data,
-      detail: CockpitCliOutputDetail.standard,
+      view: CockpitCliOutputView.more,
     );
 
     expect(output, contains('artifacts/screenshot.png'));
@@ -752,7 +916,7 @@ void main() {
     expect(output, isNot(contains('unused-digest')));
   });
 
-  test('run events keep terminal state and failures in minimal output', () {
+  test('run events keep terminal state and failures in brief output', () {
     const renderer = CockpitCliOutputRenderer();
     final data = <String, Object?>{
       'items': <Object?>[
@@ -801,7 +965,7 @@ void main() {
               renderer.renderAi(
                 command: 'run.events',
                 data: data,
-                detail: CockpitCliOutputDetail.minimal,
+                view: CockpitCliOutputView.brief,
               ),
             )!
             as Map<Object?, Object?>;
@@ -810,18 +974,18 @@ void main() {
     final finalEvent = value['final']! as Map<Object?, Object?>;
 
     expect(value['stream'], 'terminal');
-    expect(value['afterSequence'], 10);
-    expect(value['eventCount'], 10);
-    expect(failure['stepExecutionId'], 'main/capture');
+    expect(value['after'], 10);
+    expect(value['events'], 10);
+    expect(failure['step'], 'main/capture');
     expect(
-      (failure['failure']! as Map<Object?, Object?>)['code'],
+      (failure['error']! as Map<Object?, Object?>)['code'],
       'evidenceFailed',
     );
     expect(finalEvent['outcome'], 'failed');
     expect(value, isNot(contains('_meta')));
   });
 
-  test('streaming run events apply JSONL verbosity projection per line', () {
+  test('streaming run events apply JSONL view projection per line', () {
     final stdout = StringBuffer();
     final runtime =
         CockpitCliRuntime(stdoutSink: stdout, stderrSink: StringBuffer())
@@ -853,13 +1017,13 @@ void main() {
     final event = line['event']! as Map<String, Object?>;
     expect(line['type'], 'event');
     expect(event['sequence'], 7);
-    expect(event['artifactCount'], 1);
+    expect(event['artifacts'], 1);
     expect(stdout.toString(), isNot(contains('sha256')));
     expect(stdout.toString(), isNot(contains('unused-digest')));
     expect(stdout.toString(), isNot(contains('140965')));
   });
 
-  test('full streaming run events preserve the complete JSONL event', () {
+  test('full streaming run events omit integrity digests', () {
     final stdout = StringBuffer();
     final runtime =
         CockpitCliRuntime(stdoutSink: stdout, stderrSink: StringBuffer())
@@ -867,7 +1031,7 @@ void main() {
             command: 'run.events',
             selection: const CockpitCliOutputSelection(
               format: CockpitCliFormat.jsonl,
-              detail: CockpitCliOutputDetail.full,
+              view: CockpitCliOutputView.full,
             ),
           );
 
@@ -882,7 +1046,7 @@ void main() {
       },
     });
 
-    expect(stdout.toString(), contains('complete-digest'));
+    expect(stdout.toString(), isNot(contains('complete-digest')));
   });
 
   test('suite report exposes complete offline bundle export', () {
@@ -913,20 +1077,88 @@ void main() {
           'auth': 'yolo',
           'unused': null,
         },
-        detail: CockpitCliOutputDetail.minimal,
+        view: CockpitCliOutputView.brief,
       );
       final value = lon.decode(text)! as Map<Object?, Object?>;
 
-      expect(text, '{healthy:true running:true auth:yolo}');
-      expect(value['running'], isTrue);
-      expect(value['healthy'], isTrue);
+      expect(text, '{state:ready auth:yolo}');
+      expect(value['state'], 'ready');
       expect(value['auth'], 'yolo');
       expect(value, isNot(contains('unused')));
       expect(lon.encode(value), text);
     });
 
+    test('keeps root and workspace receipts focused', () {
+      const renderer = CockpitCliOutputRenderer();
+      final root = lon.decode(
+        renderer.renderAi(
+          command: 'root.add',
+          data: const <String, Object?>{
+            'rootId': 'r0000000001',
+            'state': 'active',
+            'canonicalPath': '/work',
+            'filesystemIdentity': 'posix:hash',
+            'registeredAt': '2026-08-11T00:00:00Z',
+          },
+          view: CockpitCliOutputView.brief,
+        ),
+      )!;
+      final workspace = lon.decode(
+        renderer.renderAi(
+          command: 'workspace.register',
+          data: const <String, Object?>{
+            'workspaceId': 'w0000000001',
+            'projectId': 'p0000000001',
+            'rootId': 'r0000000001',
+            'checkoutId': 'c0000000001',
+            'state': 'active',
+            'canonicalPath': '/work/app',
+            'filesystemIdentity': 'posix:hash',
+          },
+          view: CockpitCliOutputView.brief,
+        ),
+      )!;
+
+      expect(root, <Object?, Object?>{
+        'root': 'r0000000001',
+        'state': 'active',
+        'path': '/work',
+      });
+      expect(workspace, <Object?, Object?>{
+        'project': 'p0000000001',
+        'workspace': 'w0000000001',
+        'state': 'active',
+        'path': '/work/app',
+      });
+    });
+
+    test('flattens successful target task receipts', () {
+      const renderer = CockpitCliOutputRenderer();
+      final value = lon.decode(
+        renderer.renderAi(
+          command: 'target.register',
+          data: const <String, Object?>{
+            'operationId': 'o0000000001',
+            'workspaceId': 'w0000000001',
+            'kind': 'target.register',
+            'lifecycle': 'completed',
+            'outcome': 'succeeded',
+            'idempotencyKey': 'register-1',
+            'output': <String, Object?>{'targetId': 't0000000001'},
+            'submittedAt': '2026-08-11T00:00:00Z',
+          },
+          view: CockpitCliOutputView.brief,
+        ),
+      )!;
+
+      expect(value, <Object?, Object?>{
+        'op': 'o0000000001',
+        'target': 't0000000001',
+      });
+    });
+
     test('prioritizes failing report rows and reports omissions', () {
-      const renderer = CockpitCliOutputRenderer(standardMaximumBytes: 2400);
+      const renderer = CockpitCliOutputRenderer(moreMaximumBytes: 2400);
       final cases = <Map<String, Object?>>[
         <String, Object?>{
           'entryId': 'failed-entry',
@@ -984,24 +1216,22 @@ void main() {
           },
           'cases': cases,
         },
-        detail: CockpitCliOutputDetail.standard,
+        view: CockpitCliOutputView.more,
       );
 
       final value = lon.decode(text)! as Map<Object?, Object?>;
       final renderedCases = value['cases']! as List<Object?>;
-      final metadata = value['_meta']! as Map<Object?, Object?>;
 
       expect(text.length, lessThanOrEqualTo(2400));
       expect(
-        (renderedCases.first as Map<Object?, Object?>)['entryId'],
+        (renderedCases.first as Map<Object?, Object?>)['entry'],
         'failed-entry',
       );
-      expect(metadata['more'], isTrue);
-      expect(metadata['skipped'], isA<int>());
+      expect(value['more'], isA<int>());
       expect(lon.encode(value), text);
     });
 
-    test('renders exact JSON at full detail', () {
+    test('renders exact JSON at full view', () {
       const renderer = CockpitCliOutputRenderer();
       final data = <String, Object?>{
         'items': <Object?>[
@@ -1013,7 +1243,7 @@ void main() {
       final text = renderer.renderJson(
         command: 'artifact.list',
         data: data,
-        detail: CockpitCliOutputDetail.full,
+        view: CockpitCliOutputView.full,
       );
       final result = jsonDecode(text) as Map<String, Object?>;
 
@@ -1021,7 +1251,7 @@ void main() {
       expect(result, isNot(contains('_meta')));
     });
 
-    test('projects analysis for both AI text and JSON detail', () {
+    test('projects analysis for both AI text and JSON view', () {
       const renderer = CockpitCliOutputRenderer();
       final operation = <String, Object?>{
         'operationId': 'operation-1',
@@ -1061,7 +1291,7 @@ void main() {
       final ai = renderer.renderAi(
         command: 'op.run',
         data: operation,
-        detail: CockpitCliOutputDetail.minimal,
+        view: CockpitCliOutputView.brief,
       );
       final aiValue = lon.decode(ai)! as Map<Object?, Object?>;
       final json =
@@ -1069,13 +1299,13 @@ void main() {
                 renderer.renderJson(
                   command: 'op.run',
                   data: operation,
-                  detail: CockpitCliOutputDetail.minimal,
+                  view: CockpitCliOutputView.brief,
                 ),
               )
               as Map<String, Object?>;
 
       final aiOutput = aiValue['output']! as Map<Object?, Object?>;
-      final aiDiagnostics = aiOutput['diagnostics']! as List<Object?>;
+      final aiDiagnostics = aiOutput['diag']! as List<Object?>;
       expect(
         (aiDiagnostics.first as Map<Object?, Object?>)['code'],
         'undefined_identifier',
@@ -1083,12 +1313,12 @@ void main() {
       expect(ai, isNot(contains('documentationUrl')));
       expect(ai, isNot(contains('/private/workspace')));
       final output = json['output']! as Map<String, Object?>;
-      final diagnostics = output['diagnostics']! as List<Object?>;
+      final diagnostics = output['diag']! as List<Object?>;
       expect((diagnostics.first as Map<String, Object?>)['severity'], 'error');
       expect(output, isNot(contains('workspaceRoot')));
     });
 
-    test('preserves concise op session and replay receipts', () {
+    test('preserves concise op session receipts', () {
       const renderer = CockpitCliOutputRenderer();
       final text = renderer.renderAi(
         command: 'op.run',
@@ -1101,12 +1331,54 @@ void main() {
           'idempotencyKey': 'cli-operation-1',
           'output': <String, Object?>{'success': true},
         },
-        detail: CockpitCliOutputDetail.minimal,
+        view: CockpitCliOutputView.brief,
       );
       final value = lon.decode(text)! as Map<Object?, Object?>;
 
-      expect(value['session'], '1');
-      expect(value['idempotencyKey'], 'cli-operation-1');
+      expect(value['session'], 1);
+      expect(value, isNot(contains('idem')));
+      expect(value, isNot(contains('lifecycle')));
+      expect(value, isNot(contains('outcome')));
+      expect(text, isNot(contains('success')));
+    });
+
+    test('system action output exposes a path without inline stdout', () {
+      const renderer = CockpitCliOutputRenderer();
+      const operation = <String, Object?>{
+        'operationId': 'operation-system',
+        'kind': 'system.action',
+        'lifecycle': 'completed',
+        'outcome': 'succeeded',
+        'output': <String, Object?>{
+          'action': 'readUiTree',
+          'availability': 'available',
+          'success': true,
+          'path': '/tmp/ui-tree.txt',
+          'stdout': '<hierarchy>must-not-render</hierarchy>',
+          'recommendedNextStep': 'resolveNativeLocator',
+        },
+      };
+
+      for (final view in <CockpitCliOutputView>[
+        CockpitCliOutputView.brief,
+        CockpitCliOutputView.more,
+      ]) {
+        final value =
+            lon.decode(
+                  renderer.renderAi(
+                    command: 'op.run',
+                    data: operation,
+                    view: view,
+                  ),
+                )!
+                as Map<Object?, Object?>;
+        final output = value['output']! as Map<Object?, Object?>;
+        expect(output['action'], 'readUiTree');
+        expect(output['path'], '/tmp/ui-tree.txt');
+        expect(output, isNot(contains('stdout')));
+        expect(output, isNot(contains('success')));
+        expect(output, isNot(contains('availability')));
+      }
     });
 
     test('renders one exact operation without truncation metadata', () {
@@ -1129,7 +1401,7 @@ void main() {
             'safetyEffects': <Object?>[],
           },
         ],
-        detail: CockpitCliOutputDetail.minimal,
+        view: CockpitCliOutputView.brief,
       );
       final value = lon.decode(text)! as Map<Object?, Object?>;
 
@@ -1162,7 +1434,7 @@ void main() {
             ],
           },
         },
-        detail: CockpitCliOutputDetail.minimal,
+        view: CockpitCliOutputView.brief,
       );
 
       final value = lon.decode(text)! as Map<Object?, Object?>;
@@ -1172,7 +1444,7 @@ void main() {
       expect(RegExp('operation-logs').allMatches(text), hasLength(1));
       expect(lines, contains('line-19'));
       expect(lines, isNot(contains('line-0')));
-      expect((value['_meta'] as Map<Object?, Object?>)['more'], isTrue);
+      expect(value['more'], isA<int>());
     });
 
     test('emits LON without losing operation hierarchy', () {
@@ -1200,25 +1472,22 @@ void main() {
             },
           },
         },
-        detail: CockpitCliOutputDetail.standard,
+        view: CockpitCliOutputView.more,
       );
 
       final value = lon.decode(text)! as Map<Object?, Object?>;
       final output = value['output']! as Map<Object?, Object?>;
       final command = output['command']! as Map<Object?, Object?>;
-      final locator = command['locator']! as Map<Object?, Object?>;
+      final locator = command['loc']! as Map<Object?, Object?>;
 
-      expect(value['operationId'], 'op-1');
+      expect(value['op'], 'op-1');
       expect(output['plane'], 'flutterSemanticPlane');
       expect(output['next'], 'readPostActionState');
-      expect(command['commandId'], 'tap-save');
+      expect(command['id'], 'tap-save');
       expect(command['type'], 'tap');
-      expect(command['success'], isTrue);
+      expect(command, isNot(contains('success')));
       expect(command['ms'], 18);
-      expect(locator, <Object?, Object?>{
-        'matchedKind': 'text',
-        'matchedValue': 'Save',
-      });
+      expect(locator, <Object?, Object?>{'kind': 'text', 'value': 'Save'});
       expect(lon.encode(value), text);
     });
 
@@ -1234,13 +1503,33 @@ void main() {
 
       expect(
         text,
-        '{error:{code:operationDenied message:"Authorization is required." retryable:false layer:supervisor}}',
+        '{error:{code:operationDenied message:"Authorization is required."}}',
       );
       expect(lon.decode(text), <Object?, Object?>{
         'error': <Object?, Object?>{
           'code': 'operationDenied',
           'message': 'Authorization is required.',
-          'retryable': false,
+        },
+      });
+
+      final more =
+          lon.decode(
+                renderer.renderError(
+                  code: 'operationDenied',
+                  message: 'Authorization is required.',
+                  retryable: true,
+                  category: 'environment',
+                  responsibleLayer: 'supervisor',
+                  view: CockpitCliOutputView.more,
+                ),
+              )!
+              as Map<Object?, Object?>;
+      expect(more, <Object?, Object?>{
+        'error': <Object?, Object?>{
+          'code': 'operationDenied',
+          'message': 'Authorization is required.',
+          'retry': true,
+          'category': 'environment',
           'layer': 'supervisor',
         },
       });
@@ -1264,21 +1553,79 @@ void main() {
           'recommendedCommand': 'cockpit dev status',
           'op': "cockpit op run app.status --input '{}'",
         },
-        detail: CockpitCliOutputDetail.full,
+        view: CockpitCliOutputView.full,
       );
       final value = jsonDecode(text) as Map<String, Object?>;
       final input = value['input']! as Map<String, Object?>;
       final schema = input['schema']! as Map<String, Object?>;
       final properties = schema['properties']! as Map<String, Object?>;
 
-      expect(value['devCommand'], 'cockpit dev status');
+      expect(value['use'], 'cockpit dev status');
       expect(value['op'], "cockpit op run app.status --input '{}'");
       expect(input['ref'], 'cockpit://operations/schema#example');
       expect(properties, contains('maximumTimeoutMs'));
       expect(schema['required'], <Object?>['maximumTimeoutMs']);
     });
 
-    test('explain minimal output preserves input enum values', () {
+    test('uses one concise vocabulary across public output families', () {
+      const renderer = CockpitCliOutputRenderer();
+      final value =
+          jsonDecode(
+                renderer.renderJson(
+                  command: 'contract.sample',
+                  data: const <String, Object?>{
+                    'operationId': 'o123',
+                    'targetId': 't123',
+                    'targetKind': 'flutterApp',
+                    'appId': 'a123',
+                    'sessionId': 's123',
+                    'documentKind': 'suite',
+                    'requestedPlane': 'native',
+                    'actualPlane': 'flutter',
+                    'logicalWidth': 800,
+                    'logicalHeight': 600,
+                    'diagnosticsTruncated': true,
+                    'stderrPreview': 'failed',
+                    'runtimeSteps': <Object?>['tap'],
+                    'appReachable': true,
+                    'remoteSessionReachable': false,
+                    'failure': <String, Object?>{
+                      'code': 'blocked',
+                      'retryable': false,
+                    },
+                    'sha256': 'unused',
+                    'sourceSha256': 'also-unused',
+                    'screenshotDigest': 'still-unused',
+                    'sizeBytes': 999,
+                  },
+                  view: CockpitCliOutputView.full,
+                ),
+              )
+              as Map<String, Object?>;
+
+      expect(value['op'], 'o123');
+      expect(value['target'], 't123');
+      expect(value['targetType'], 'flutterApp');
+      expect(value['docType'], 'suite');
+      expect(value['app'], 'a123');
+      expect(value['runtime'], 's123');
+      expect(value['wanted'], 'native');
+      expect(value['plane'], 'flutter');
+      expect(value['logicalW'], 800);
+      expect(value['logicalH'], 600);
+      expect(value['diagPartial'], isTrue);
+      expect(value['stderr'], 'failed');
+      expect(value['steps'], <Object?>['tap']);
+      expect(value['appLive'], isTrue);
+      expect(value['bridgeLive'], isFalse);
+      expect(value['error'], containsPair('code', 'blocked'));
+      expect(value, isNot(contains('sha256')));
+      expect(value, isNot(contains('sourceSha256')));
+      expect(value, isNot(contains('screenshotDigest')));
+      expect(value, isNot(contains('bytes')));
+    });
+
+    test('explain brief output preserves input enum values', () {
       const renderer = CockpitCliOutputRenderer();
       final text = renderer.renderJson(
         command: 'explain',
@@ -1321,12 +1668,11 @@ void main() {
           },
           'recommendedCommand': 'cockpit dev tap "Exact text"',
         },
-        detail: CockpitCliOutputDetail.minimal,
+        view: CockpitCliOutputView.brief,
       );
       final value = jsonDecode(text) as Map<String, Object?>;
       final input = value['input']! as Map<String, Object?>;
-      final schema = input['schema']! as Map<String, Object?>;
-      final fields = schema['fields']! as Map<String, Object?>;
+      final fields = input['fields']! as Map<String, Object?>;
       final profile = fields['profile']! as Map<String, Object?>;
 
       expect(
@@ -1380,14 +1726,14 @@ void main() {
       },
       selection: CockpitCliOutputSelection(
         format: CockpitCliFormat.json,
-        detail: CockpitCliOutputDetail.full,
+        view: CockpitCliOutputView.full,
         outputPath: destination.path,
       ),
     );
 
     final persisted =
         jsonDecode(await destination.readAsString()) as Map<String, Object?>;
-    expect(persisted['runId'], 'run-1');
+    expect(persisted['run'], 'run-1');
     final receipt = jsonDecode(stdout.toString()) as Map<String, Object?>;
     expect(receipt, <String, Object?>{'path': destination.path});
   });
@@ -1414,17 +1760,13 @@ void main() {
           'state': 'ready',
         },
         selection: CockpitCliOutputSelection(
-          detail: CockpitCliOutputDetail.full,
+          view: CockpitCliOutputView.full,
           outputPath: destination.path,
         ),
       );
 
       final persisted = lon.decode(await destination.readAsString());
-      expect(persisted, <Object?, Object?>{
-        'ok': true,
-        'session': '1',
-        'state': 'ready',
-      });
+      expect(persisted, <Object?, Object?>{'session': 1, 'state': 'ready'});
       final receipt = lon.decode(stdout.toString())! as Map<Object?, Object?>;
       expect(receipt, <Object?, Object?>{'path': destination.path});
     },
@@ -1447,13 +1789,13 @@ void main() {
       data: const <String, Object?>{'sessionHandle': '1', 'lifecycle': 'ready'},
       selection: CockpitCliOutputSelection(
         format: CockpitCliFormat.yaml,
-        detail: CockpitCliOutputDetail.full,
+        view: CockpitCliOutputView.full,
         outputPath: destination.path,
       ),
     );
 
     final persisted = loadYaml(await destination.readAsString()) as YamlMap;
-    expect(persisted['session'], '1');
+    expect(persisted['session'], 1);
     final receipt = loadYaml(stdout.toString()) as YamlMap;
     expect(jsonDecode(jsonEncode(receipt)), <String, Object?>{
       'path': destination.path,
@@ -1502,6 +1844,28 @@ void main() {
     );
 
     expect(stdout.toString().trim(), await body.resolveSymbolicLinks());
+  });
+
+  test('path format prints one materialized system action artifact', () async {
+    final directory = await Directory.systemTemp.createTemp(
+      'cockpit-cli-system-action-path-',
+    );
+    addTearDown(() async => directory.delete(recursive: true));
+    final tree = File('${directory.path}/ui-tree.txt');
+    await tree.writeAsString('<hierarchy/>');
+    final stdout = StringBuffer();
+    final writer = CockpitCliOutputWriter(stdoutSink: stdout);
+
+    await writer.writeSuccess(
+      command: 'op.run',
+      data: <String, Object?>{
+        'kind': 'system.action',
+        'output': <String, Object?>{'path': tree.path},
+      },
+      selection: const CockpitCliOutputSelection(format: CockpitCliFormat.path),
+    );
+
+    expect(stdout.toString().trim(), await tree.resolveSymbolicLinks());
   });
 
   test(
@@ -1558,7 +1922,7 @@ void main() {
       data: const <String, Object?>{'runId': 'run-1'},
       selection: const CockpitCliOutputSelection(
         format: CockpitCliFormat.none,
-        detail: CockpitCliOutputDetail.full,
+        view: CockpitCliOutputView.full,
         outputPath: 'result.json',
       ),
     );

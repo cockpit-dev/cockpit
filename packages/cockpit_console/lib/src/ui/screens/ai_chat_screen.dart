@@ -1,7 +1,8 @@
 import 'dart:convert';
+import 'dart:math' as math;
 
 import 'package:acpd/acpd.dart'
-    show PermissionOption, PermissionOptionKind, TextContentBlock;
+    show ContentBlock, PermissionOption, PermissionOptionKind, TextContentBlock;
 import 'package:cockpit_console/src/providers/acp_provider.dart';
 import 'package:cockpit_console/src/providers/agent_presets.dart';
 import 'package:cockpit_console/src/providers/core_providers.dart';
@@ -48,6 +49,13 @@ final class AiChatScreen extends HookConsumerWidget {
       );
     }
 
+    void openSettingsDialog() {
+      showDialog<void>(
+        context: context,
+        builder: (context) => const _AcpSettingsDialog(),
+      );
+    }
+
     return ScreenScaffold(
       title: 'AI Assistant',
       subtitle: _subtitleFor(acpState),
@@ -56,16 +64,13 @@ final class AiChatScreen extends HookConsumerWidget {
         if (acpState is AcpConnected)
           IconButton(
             key: const ValueKey('ai-agent-settings'),
-            onPressed: () => showDialog<void>(
-              context: context,
-              builder: (context) => const _AcpSettingsDialog(),
-            ),
+            onPressed: openSettingsDialog,
             icon: const Icon(LucideIcons.settings2, size: 17),
             tooltip: 'Agent settings',
           ),
       ],
       body: acpState is AcpConnected
-          ? _ChatView(connection: acpState)
+          ? _ChatView(connection: acpState, onOpenSettings: openSettingsDialog)
           : _DisconnectedChatView(
               connecting: acpState is AcpConnecting,
               errorMessage: switch (acpState) {
@@ -359,7 +364,7 @@ final class _AcpSettingsDialog extends HookConsumerWidget {
                                       .read(acpAgentProvider.notifier)
                                       .clearMessages,
                             icon: const Icon(LucideIcons.eraser, size: 14),
-                            label: const Text('Clear conversation'),
+                            label: const Text('Clear chat view'),
                           );
                     final disconnectButton = OutlinedButton.icon(
                       onPressed: disconnecting.value ? null : disconnect,
@@ -804,27 +809,60 @@ final class _DirectoryPicker extends StatelessWidget {
 // ── Chat view ────────────────────────────────────────────────────────────
 
 final class _ChatView extends HookConsumerWidget {
-  const _ChatView({required this.connection});
+  const _ChatView({required this.connection, required this.onOpenSettings});
 
   final AcpConnected connection;
+  final VoidCallback onOpenSettings;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final messages = connection.messages;
     final scrollCtrl = useScrollController();
+    final followsLatest = useState(true);
+    final disableAnimations = MediaQuery.disableAnimationsOf(context);
 
-    useEffect(() {
+    void scrollToLatest({bool force = false}) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (context.mounted && scrollCtrl.hasClients) {
+        if (!context.mounted || !scrollCtrl.hasClients) return;
+        if (!force && !followsLatest.value) return;
+        final target = scrollCtrl.position.maxScrollExtent;
+        if (disableAnimations) {
+          scrollCtrl.jumpTo(target);
+        } else {
           scrollCtrl.animateTo(
-            scrollCtrl.position.maxScrollExtent,
-            duration: const Duration(milliseconds: 150),
-            curve: Curves.easeOut,
+            target,
+            duration: const Duration(milliseconds: 160),
+            curve: Curves.easeOutCubic,
           );
         }
       });
+    }
+
+    useEffect(() {
+      void updateTailState() {
+        if (!scrollCtrl.hasClients) return;
+        final position = scrollCtrl.position;
+        final next = position.maxScrollExtent - position.pixels <= 72;
+        if (next != followsLatest.value) followsLatest.value = next;
+      }
+
+      scrollCtrl.addListener(updateTailState);
+      return () => scrollCtrl.removeListener(updateTailState);
+    }, [scrollCtrl]);
+
+    useEffect(() {
+      scrollToLatest();
       return null;
-    }, [messages]);
+    }, [messages, followsLatest.value, disableAnimations]);
+
+    Future<bool> sendPrompt(List<ContentBlock> content) async {
+      followsLatest.value = true;
+      final result = ref
+          .read(acpAgentProvider.notifier)
+          .sendPromptContent(content);
+      scrollToLatest(force: true);
+      return result;
+    }
 
     void sendToEditor(_ExtractedCockpitDocument document) {
       final workspaceId = ref.read(selectedWorkspaceIdProvider);
@@ -847,18 +885,46 @@ final class _ChatView extends HookConsumerWidget {
     final conversation = Column(
       children: [
         Expanded(
-          child: messages.isEmpty
-              ? _ChatEmpty(connection: connection)
-              : ListView.builder(
-                  controller: scrollCtrl,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  itemCount: messages.length,
-                  itemBuilder: (context, index) => _MessageBubble(
-                    message: messages[index],
-                    toolCalls: connection.activeSession?.toolCalls ?? const {},
-                    onSendToEditor: sendToEditor,
+          child: Stack(
+            children: [
+              Positioned.fill(
+                child: messages.isEmpty
+                    ? _ChatEmpty(
+                        connection: connection,
+                        onOpenSettings: onOpenSettings,
+                      )
+                    : ListView.builder(
+                        controller: scrollCtrl,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        itemCount: messages.length,
+                        itemBuilder: (context, index) => _MessageBubble(
+                          message: messages[index],
+                          toolCalls:
+                              connection.activeSession?.toolCalls ?? const {},
+                          onSendToEditor: sendToEditor,
+                        ),
+                      ),
+              ),
+              if (!followsLatest.value && messages.isNotEmpty)
+                Positioned(
+                  right: 16,
+                  bottom: 12,
+                  child: FilledButton.tonalIcon(
+                    onPressed: () {
+                      followsLatest.value = true;
+                      scrollToLatest(force: true);
+                    },
+                    icon: const Icon(LucideIcons.arrowDown, size: 14),
+                    label: const Text('Latest'),
+                    style: FilledButton.styleFrom(
+                      minimumSize: const Size(0, 32),
+                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
                   ),
                 ),
+            ],
+          ),
         ),
         if (pendingPermission != null) ...[
           Container(height: 1, color: Theme.of(context).dividerColor),
@@ -872,15 +938,65 @@ final class _ChatView extends HookConsumerWidget {
                 ),
           ),
         ],
+        if (connection.lastError case final error?) ...[
+          Container(height: 1, color: Theme.of(context).dividerColor),
+          _AcpInlineError(
+            message: error,
+            onDismiss: ref.read(acpAgentProvider.notifier).clearLastError,
+          ),
+        ],
         Container(height: 1, color: Theme.of(context).dividerColor),
         AcpPromptComposer(
           connection: connection,
-          onSend: ref.read(acpAgentProvider.notifier).sendPromptContent,
+          onSend: sendPrompt,
           onCancel: () => ref.read(acpAgentProvider.notifier).cancelTurn(),
         ),
       ],
     );
     return conversation;
+  }
+}
+
+final class _AcpInlineError extends StatelessWidget {
+  const _AcpInlineError({required this.message, required this.onDismiss});
+
+  final String message;
+  final VoidCallback onDismiss;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      color: theme.colorScheme.error.withValues(alpha: 0.055),
+      padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Icon(
+              LucideIcons.circleAlert,
+              size: 14,
+              color: theme.colorScheme.error,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: SelectableText(
+              message,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.error,
+              ),
+            ),
+          ),
+          IconButton(
+            onPressed: onDismiss,
+            icon: const Icon(LucideIcons.x, size: 14),
+            tooltip: 'Dismiss error',
+          ),
+        ],
+      ),
+    );
   }
 }
 
@@ -1063,31 +1179,35 @@ final class _PermissionSurface extends StatelessWidget {
 }
 
 final class _ChatEmpty extends StatelessWidget {
-  const _ChatEmpty({required this.connection});
+  const _ChatEmpty({required this.connection, required this.onOpenSettings});
 
   final AcpConnected connection;
+  final VoidCallback onOpenSettings;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final (icon, title, description) = switch ((
+    final (icon, title, description, actionLabel) = switch ((
       connection.authStatus,
       connection.activeSession,
     )) {
       (AcpAuthStatus.required, _) => (
         LucideIcons.lockKeyhole,
         'Sign in to continue',
-        'Choose an authentication method in Agent setup, then finish the agent sign-in flow.',
+        'Choose an authentication method in agent settings, then finish the sign-in flow.',
+        'Open sign-in',
       ),
       (_, null) => (
         LucideIcons.messageSquarePlus,
         'Create or open a session',
-        'Use Agent setup to start a new session or resume recent work.',
+        'Use agent settings to start a new session or resume recent work.',
+        'Open session setup',
       ),
       _ => (
         LucideIcons.messageCircle,
         'Start a conversation',
         'Ask about your workspace, request a change, or describe a test scenario.',
+        null,
       ),
     };
     return Center(
@@ -1112,6 +1232,14 @@ final class _ChatEmpty extends StatelessWidget {
               textAlign: TextAlign.center,
               style: theme.textTheme.bodySmall?.copyWith(fontSize: 12),
             ),
+            if (actionLabel != null) ...[
+              const SizedBox(height: 14),
+              FilledButton.icon(
+                onPressed: onOpenSettings,
+                icon: const Icon(LucideIcons.settings2, size: 15),
+                label: Text(actionLabel),
+              ),
+            ],
           ],
         ),
       ),
@@ -1209,6 +1337,10 @@ final class _MessageBubble extends StatelessWidget {
         : isUser
         ? theme.colorScheme.onSurface
         : theme.colorScheme.onSurface;
+    final viewportWidth = MediaQuery.sizeOf(context).width;
+    final bubbleMaxWidth = viewportWidth < 720
+        ? math.max(240.0, viewportWidth - 96)
+        : math.min(720.0, viewportWidth * 0.72);
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
@@ -1224,9 +1356,7 @@ final class _MessageBubble extends StatelessWidget {
           ],
           Flexible(
             child: Container(
-              constraints: BoxConstraints(
-                maxWidth: MediaQuery.sizeOf(context).width * 0.6,
-              ),
+              constraints: BoxConstraints(maxWidth: bubbleMaxWidth),
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               decoration: ConsoleShapes.decoration(color: bg),
               child: message.isStreaming && message.text.isEmpty
@@ -1326,6 +1456,7 @@ final class _TypingIndicator extends StatefulWidget {
 final class _TypingIndicatorState extends State<_TypingIndicator>
     with TickerProviderStateMixin {
   late final AnimationController _ctrl;
+  bool? _disableAnimations;
 
   @override
   void initState() {
@@ -1333,7 +1464,22 @@ final class _TypingIndicatorState extends State<_TypingIndicator>
     _ctrl = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 900),
-    )..repeat();
+    );
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final disableAnimations = MediaQuery.disableAnimationsOf(context);
+    if (_disableAnimations == disableAnimations) return;
+    _disableAnimations = disableAnimations;
+    if (disableAnimations) {
+      _ctrl
+        ..stop()
+        ..value = 0;
+    } else {
+      _ctrl.repeat();
+    }
   }
 
   @override
@@ -1344,6 +1490,25 @@ final class _TypingIndicatorState extends State<_TypingIndicator>
 
   @override
   Widget build(BuildContext context) {
+    if (_disableAnimations ?? false) {
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: List.generate(
+          3,
+          (index) => Padding(
+            padding: EdgeInsets.only(right: index < 2 ? 3 : 0),
+            child: Container(
+              width: 6,
+              height: 6,
+              decoration: BoxDecoration(
+                color: widget.color.withValues(alpha: 0.62),
+                shape: BoxShape.circle,
+              ),
+            ),
+          ),
+        ),
+      );
+    }
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: List.generate(3, (i) {

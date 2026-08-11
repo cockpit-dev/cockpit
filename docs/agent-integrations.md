@@ -25,10 +25,9 @@ installation workflow.
 
 Host-native assets are included for Codex, Claude Code, Cursor, Gemini CLI,
 Kiro, OpenCode, Pi, Oh My Pi, and Cline. GitHub Copilot, Windsurf, and Roo Code
-use the shared Agent Skills convention. A host outside that list is supported
-when it can load a complete Agent Skill directory, launch a stdio MCP server,
-or execute the installed CLI. Cockpit does not claim compatibility with a host
-that exposes none of those extension surfaces.
+use the shared Agent Skills convention. Other hosts can use Cockpit when they
+load a complete Agent Skill directory, launch a stdio MCP server, or execute the
+installed CLI.
 
 ## Codex
 
@@ -96,7 +95,7 @@ claude mcp add --transport stdio cockpit -- cockpit_mcp
 
 ## Cursor
 
-Cursor uses project rules, project skills, and project MCP config rather than this repository's plugin manifest.
+Cursor uses project rules, project skills, and project MCP config.
 
 Repository asset:
 
@@ -175,7 +174,7 @@ MCP file follows Kiro's native local-server schema:
 }
 ```
 
-Kiro's workspace schema deliberately has no `type` field. Save the file to
+Kiro's workspace schema has no `type` field. Save the file to
 hot-reload the server, then confirm `cockpit` is connected in the MCP panel.
 
 `plugins/kiro/cockpit` is the current Agent Plugins Power bundle. Its required
@@ -183,9 +182,8 @@ hot-reload the server, then confirm `cockpit` is connected in the MCP panel.
 Skill, and its schema-qualified `mcp.json` uses `type: stdio` as required by
 the Agent Plugins format. In Kiro, open Powers, choose **Add Custom Power**,
 select **Import power from a folder**, and select that directory. Do not import
-the removed legacy `POWER.md` format. Kiro manages this MCP server internally;
-it is not copied into the user-level MCP configuration and activates with the
-Power.
+the Power server into the user-level MCP configuration. The Power activates its
+MCP server.
 
 Before either setup, install the executable and ensure Kiro inherits Dart's
 global executable directory on `PATH`:
@@ -219,9 +217,7 @@ opencode.json
 .agents/skills/cockpit
 ```
 
-The repo-local config exposes the local MCP server. OpenCode discovers
-`AGENTS.md` independently when a project tracks one, so this portable config
-does not depend on a repository-external instruction file:
+The repo-local config exposes the local MCP server:
 
 ```json
 {
@@ -235,8 +231,6 @@ does not depend on a repository-external instruction file:
   }
 }
 ```
-
-The skill body stays out of always-on instructions so OpenCode can load it only when a Cockpit task needs it.
 
 ## Pi
 
@@ -319,7 +313,7 @@ After installing any adapter:
 1. Restart or reload the host so it rescans plugins, skills, rules, or steering files.
 2. Ask the host to load the bundled self-contained `cockpit` skill.
 3. Run `cockpit daemon status`, then `cockpit target discover`.
-4. If MCP is configured, verify the host can see the Cockpit 3.0 workspace,
+4. If MCP is configured, verify the host can see the Cockpit workspace,
    target, operation, case, suite, run, and artifact resources.
 5. Keep app proof proportional: inspect, act through an advertised operation
    or validated test document, re-inspect, and read report-backed evidence.

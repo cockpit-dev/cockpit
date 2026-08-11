@@ -97,7 +97,7 @@ final class CockpitWorkerDevelopmentSessionRuntime {
       projectDir: projectDir,
       target: request.target,
     );
-    final developmentSessionId = 'ds-${_tokenGenerator.nextResourceIdToken()}';
+    final developmentSessionId = _tokenGenerator.nextResourceId('s');
     final flutterExecutable = _sdkEnvironment.flutterExecutable;
     final flutterVersion = await (_flutterVersionReader == null
         ? cockpitReadFlutterVersion(

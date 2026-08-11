@@ -92,8 +92,8 @@ final class CockpitLocalWorkerLauncher
   Future<CockpitWorkspaceWorkerConnection> launch(
     CockpitWorkspaceWorkerSpec spec,
   ) async {
-    final workerOwnerId = 'wk-${_tokenGenerator.nextResourceIdToken()}';
-    final processStartIdentity = 'pc-${_tokenGenerator.nextResourceIdToken()}';
+    final workerOwnerId = _tokenGenerator.nextResourceId('w');
+    final processStartIdentity = _tokenGenerator.nextResourceId('p');
     final events =
         _eventExchangeFactory?.call(spec) ??
         CockpitSupervisorRunProjection(
@@ -221,7 +221,7 @@ final class CockpitLocalWorkerLauncher
               params: <String, Object?>{
                 'protocolVersion': cockpitWorkerProtocolVersion,
                 'workspaceId': spec.key.workspaceId,
-                'idempotencyKey': 'er-${_tokenGenerator.nextResourceIdToken()}',
+                'idempotencyKey': _tokenGenerator.nextResourceId('e'),
                 'runId': runId,
                 'afterSequence': afterSequence,
               },

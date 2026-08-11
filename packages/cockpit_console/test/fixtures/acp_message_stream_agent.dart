@@ -8,9 +8,11 @@ Future<void> main(List<String> args) async {
   const sessionId = 'message-stream-session';
   final limitedPromptCapabilities = args.contains('--limited-prompts');
   final fullLifecycle = args.contains('--full-lifecycle');
+  final failFirstNewSession = args.contains('--fail-first-new-session');
   var authenticated = !fullLifecycle;
   var sessionCwd = Directory.current.path;
   var nextSessionNumber = 0;
+  var newSessionAttempts = 0;
   final sessions = <String, _FixtureSession>{};
   final cancelled = Completer<void>();
   final transport = StdioTransport.stdio();
@@ -72,6 +74,13 @@ Future<void> main(List<String> args) async {
       })
       .onNewSession((context, request, cancellation) {
         _requireAuthenticated(fullLifecycle, authenticated);
+        newSessionAttempts++;
+        if (failFirstNewSession && newSessionAttempts == 1) {
+          throw const RpcError(
+            code: -32603,
+            message: 'Fixture rejected the first session creation.',
+          );
+        }
         sessionCwd = request.cwd;
         if (fullLifecycle && sessions.isEmpty) {
           for (var index = 1; index <= 3; index++) {
@@ -183,6 +192,9 @@ Future<void> main(List<String> args) async {
       .onPrompt((context, request, cancellation) async {
         _requireAuthenticated(fullLifecycle, authenticated);
         final prompt = request.prompt.whereType<TextContentBlock>().first.text;
+        if (prompt == 'exit-agent') {
+          exit(23);
+        }
         if (prompt == 'wait-for-cancel') {
           await cancelled.future;
           context.sessionUpdate(

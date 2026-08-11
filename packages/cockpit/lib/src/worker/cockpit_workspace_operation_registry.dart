@@ -197,7 +197,7 @@ final class CockpitWorkspaceOperationRegistry
     required CockpitRpcCancellation cancellation,
   }) async {
     final submittedAt = _utcNow();
-    var operationId = 'op-${_tokenGenerator.nextResourceIdToken()}';
+    var operationId = _tokenGenerator.nextResourceId('o');
     final adapter = _adapters[invocation.kind];
     if (adapter == null) {
       return _failureResult(

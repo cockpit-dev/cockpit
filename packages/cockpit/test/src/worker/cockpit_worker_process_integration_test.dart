@@ -287,7 +287,7 @@ steps:
       );
       expect(registered.outcome, CockpitOperationOutcome.succeeded);
       final targetId = registered.output!['targetId']! as String;
-      expect(targetId, startsWith('tg-'));
+      expect(targetId, matches(RegExp(r'^t[a-z0-9]{10}$')));
       final listedTargets = await _callOperation(
         pool,
         spec,

@@ -128,6 +128,60 @@ void main() {
     },
   );
 
+  test('large system reads prepare stable managed text artifacts', () async {
+    final fixture = await _Fixture.create();
+    addTearDown(fixture.dispose);
+
+    for (final action in <CockpitSystemControlAction>[
+      CockpitSystemControlAction.readUiTree,
+      CockpitSystemControlAction.readProcessList,
+      CockpitSystemControlAction.readWindows,
+      CockpitSystemControlAction.readSystemState,
+      CockpitSystemControlAction.readNotificationState,
+      CockpitSystemControlAction.readSystemLogs,
+    ]) {
+      final prepared = await fixture.parameters.prepare(
+        action: action,
+        platform: 'android',
+        idempotencyKey: 'read-${action.name}',
+        parameters: action == CockpitSystemControlAction.readUiTree
+            ? const <String, Object?>{'maxDepth': 24, 'maxNodes': 3000}
+            : const <String, Object?>{},
+      );
+
+      expect(prepared.parameters, isNot(contains('outputPath')));
+      expect(prepared.capturedStdoutRole, 'system.${action.name}');
+      expect(p.isWithin(fixture.producerRoot, prepared.producedPath!), isTrue);
+    }
+  });
+
+  test('captured system stdout is atomic and idempotent', () async {
+    final fixture = await _Fixture.create();
+    addTearDown(fixture.dispose);
+    final prepared = await fixture.parameters.prepare(
+      action: CockpitSystemControlAction.readUiTree,
+      platform: 'android',
+      idempotencyKey: 'read-ui-tree',
+      parameters: const <String, Object?>{},
+    );
+
+    final first = await fixture.parameters.writeCapturedStdout(
+      prepared,
+      '<hierarchy/>',
+    );
+    final replay = await fixture.parameters.writeCapturedStdout(
+      prepared,
+      '<hierarchy/>',
+    );
+
+    expect(first, replay);
+    expect(await File(first).readAsString(), '<hierarchy/>');
+    await expectLater(
+      fixture.parameters.writeCapturedStdout(prepared, '<changed/>'),
+      throwsA(isA<FileSystemException>()),
+    );
+  });
+
   test('legacy and nested path-like keys fail closed', () {
     for (final key in <String>[
       'sourcePath',

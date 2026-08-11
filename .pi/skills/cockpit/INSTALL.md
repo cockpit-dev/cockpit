@@ -25,8 +25,7 @@ Use the manual guidance below only when the host cannot complete the request.
 
 ## Common Runtime
 
-Install the latest compatible release without embedding the current package
-version in host configuration:
+Install the runtime:
 
 ```bash
 dart pub global activate cockpit any
@@ -38,14 +37,8 @@ After the first installation, upgrade the runtime with:
 cockpit update
 ```
 
-It installs and verifies the latest release while requiring Pub to resolve a
-version at least as new as the running executable, so a stale index cannot
-downgrade Cockpit. It removes Cockpit's retired source-install payload, safely
-lets Pub replace a source-installed native executable, recompiles the hosted
-release to one optimized AOT executable, and reconnects the Supervisor while
-preserving its authorization mode and durable state. Temporary takeover files
-are removed automatically. Dart Pub owns its shared download cache; Cockpit does
-not delete unrelated cached packages.
+It updates the CLI and running Supervisor to the latest verified Pub release
+while preserving local authorization and durable state.
 
 Update the host-native plugin through that host's plugin manager. For a manual
 Skill installation, stage the complete new Skill directory, validate it, then
@@ -176,8 +169,7 @@ Dart's global executable directory without requiring an active app. After a
 Flutter project has the development shell described in `references/flutter.md`,
 run `cockpit dev start`, then `cockpit dev status` as the live CLI smoke. In
 Kiro's MCP resource browser, confirm the server can list Cockpit operations and
-read `cockpit://operations/schema`; this proves the complete live operation
-contract is available without guessing tool arguments.
+read `cockpit://operations/schema`.
 
 ## OpenCode
 
@@ -250,10 +242,7 @@ MCP settings, then reload the extension.
 
 For any host that supports the Agent Skills convention, install the complete
 directory at `.agents/skills/cockpit`. If it also supports stdio MCP, configure
-`cockpit_mcp` with no arguments. A host without either extension surface can
-still use the full Cockpit control and reporting API through the installed
-`cockpit` CLI; do not claim native Skill or MCP integration when the host does
-not expose it.
+`cockpit_mcp` with no arguments. Otherwise use the installed `cockpit` CLI.
 
 ## Verification
 

@@ -5295,6 +5295,70 @@ void main() {
   );
 
   testWidgets(
+    'scrollUntilVisible accepts visible text when the element probe is ambiguous',
+    (tester) async {
+      final registry = CockpitTargetRegistry(routeName: '/duplicate-labels');
+
+      await tester.pumpWidget(
+        WidgetsApp(
+          color: const Color(0xFFFFFFFF),
+          builder: (context, child) => CockpitSurface(
+            routeName: '/duplicate-labels',
+            registry: registry,
+            child: const Material(
+              child: Directionality(
+                textDirection: TextDirection.ltr,
+                child: Column(
+                  children: <Widget>[Text('Executable'), Text('Executable')],
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final surfaceState = tester.state<CockpitSurfaceState>(
+        find.byType(CockpitSurface),
+      );
+      final probe = surfaceState.probeVisibleLocator(
+        const CockpitLocator(text: 'Executable'),
+      );
+      expect(probe.error?.code, CockpitCommandError.ambiguousTargetCode);
+
+      final executor = InAppCockpitCommandExecutor(
+        registry: registry,
+        snapshotProvider: surfaceState.snapshot,
+        locatorProbe: surfaceState.probeVisibleLocator,
+        postActionSettler: tester.pump,
+        scrollStepHandler:
+            ({
+              required reverse,
+              required viewportFraction,
+              scrollableKey,
+              targetLocator,
+              scrollableLocator,
+              required duration,
+              required gestureProfile,
+              required continuous,
+              required postScrollEnsureVisible,
+            }) async => const CockpitScrollStepResult(didScroll: false),
+      );
+
+      final result = await executor.execute(
+        CockpitCommand(
+          commandId: 'scroll-ambiguous-visible-text',
+          commandType: CockpitCommandType.scrollUntilVisible,
+          locator: const CockpitLocator(text: 'Executable'),
+          parameters: const <String, Object?>{'maxScrolls': 1},
+        ),
+      );
+
+      expect(result.success, isTrue, reason: '${result.error?.details}');
+    },
+  );
+
+  testWidgets(
     'scrollUntilVisible does not treat text as visible when an overlay covers it',
     (tester) async {
       final registry = CockpitTargetRegistry(routeName: '/stack');
@@ -6693,6 +6757,86 @@ void main() {
     expect(erasedText, isEmpty);
     expect(controller.text, 'Cockpit edited');
   });
+
+  testWidgets(
+    'paste returns a warning when committed text outlives the settle budget',
+    (tester) async {
+      final registry = CockpitTargetRegistry(routeName: '/editor');
+      final controller = TextEditingController();
+      final stalledSettle = Completer<void>();
+      addTearDown(controller.dispose);
+      addTearDown(() {
+        if (!stalledSettle.isCompleted) {
+          stalledSettle.complete();
+        }
+      });
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        (call) async => call.method == 'Clipboard.getData'
+            ? <String, Object?>{'text': 'Cockpit edited'}
+            : null,
+      );
+      addTearDown(
+        () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          SystemChannels.platform,
+          null,
+        ),
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: CockpitSurface(
+            routeName: '/editor',
+            registry: registry,
+            child: Scaffold(
+              body: TextField(
+                key: const ValueKey<String>('editor'),
+                controller: controller,
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      var settleCalls = 0;
+      final executor = InAppCockpitCommandExecutor(
+        registry: registry,
+        snapshotProvider: tester
+            .state<CockpitSurfaceState>(find.byType(CockpitSurface))
+            .snapshot,
+        postActionSettler: () {
+          settleCalls += 1;
+          return settleCalls == 1 ? Future<void>.value() : stalledSettle.future;
+        },
+      );
+
+      final result = await tester.runAsync(
+        () => executor.execute(
+          CockpitCommand(
+            commandId: 'paste-editor-near-deadline',
+            commandType: CockpitCommandType.pasteText,
+            locator: const CockpitLocator(key: 'editor'),
+            timeoutMs: 700,
+          ),
+        ),
+      );
+      stalledSettle.complete();
+      await tester.pump();
+
+      final warnings =
+          (result?.snapshot?['warnings'] as List<Object?>?) ??
+          const <Object?>[];
+      expect(result?.success, isTrue, reason: '${result?.error?.details}');
+      expect(controller.text, 'Cockpit edited');
+      expect(settleCalls, 2);
+      expect(
+        warnings.whereType<Map<Object?, Object?>>().map((warning) {
+          return warning['code'];
+        }),
+        contains('postActionSettleIncomplete'),
+      );
+    },
+  );
 
   test(
     'captureScreenshot waits for post-action settling before capturing',

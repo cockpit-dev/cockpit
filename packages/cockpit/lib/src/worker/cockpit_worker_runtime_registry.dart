@@ -2242,7 +2242,7 @@ final class CockpitWorkerRuntimeRegistry
   }
 
   String _newId(String prefix) =>
-      '$prefix-${_tokenGenerator.nextResourceIdToken()}';
+      _tokenGenerator.nextResourceId(prefix.substring(0, 1));
 
   CockpitApplicationServiceException _unknownReference(
     String kind,

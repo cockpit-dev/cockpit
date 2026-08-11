@@ -18,6 +18,7 @@ import '../recording/cockpit_recording_request.dart';
 import '../recording/cockpit_recording_result.dart';
 import '../recording/cockpit_recording_session.dart';
 import '../recording/cockpit_recording_state.dart';
+import 'cockpit_short_id.dart';
 import '../session/cockpit_session_controller.dart';
 import 'flutter_cockpit_configuration.dart';
 import '../model/cockpit_observation.dart';
@@ -43,8 +44,7 @@ final class FlutterCockpitBinding {
       sessionController =
           configuration.sessionController ??
           CockpitSessionController(
-            sessionId:
-                'runtime-${DateTime.now().toUtc().microsecondsSinceEpoch}',
+            sessionId: cockpitShortId('s'),
             taskId: 'runtime-session',
             platform: defaultTargetPlatform.name,
           ),

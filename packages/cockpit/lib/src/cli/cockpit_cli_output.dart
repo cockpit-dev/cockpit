@@ -13,7 +13,7 @@ import '../application/cockpit_compact_json.dart';
 
 enum CockpitCliFormat { lon, json, yaml, jsonl, path, none }
 
-enum CockpitCliOutputDetail { minimal, standard, full }
+enum CockpitCliOutputView { brief, more, full }
 
 void cockpitAddCliOutputOptions(ArgParser parser) {
   parser
@@ -27,42 +27,40 @@ void cockpitAddCliOutputOptions(ArgParser parser) {
           'prints the primary artifact or --output path; none stays silent.',
     )
     ..addOption(
-      'verbosity',
-      allowed: CockpitCliOutputDetail.values.map((value) => value.name),
-      defaultsTo: CockpitCliOutputDetail.minimal.name,
+      'view',
+      allowed: CockpitCliOutputView.values.map((value) => value.name),
+      defaultsTo: CockpitCliOutputView.brief.name,
       help:
-          'Response density: minimal for the next decision, standard for '
-          'diagnosis, full for the complete response.',
+          'Response view: brief for the next decision, more for diagnosis, '
+          'full for the complete response.',
     )
     ..addOption(
       'output',
       help:
           'Atomically write the selected LON/JSON/YAML/JSONL projection. Stdout '
           'prints only the verified output path; none stays silent. Use '
-          '--verbosity full for the complete response.',
+          '--view full for the complete response.',
     );
 }
 
 final class CockpitCliOutputSelection {
   const CockpitCliOutputSelection({
     this.format = CockpitCliFormat.lon,
-    this.detail = CockpitCliOutputDetail.minimal,
+    this.view = CockpitCliOutputView.brief,
     this.outputPath,
   });
 
   factory CockpitCliOutputSelection.fromArguments(ArgResults arguments) {
     return CockpitCliOutputSelection(
       format: CockpitCliFormat.values.byName(arguments.option('format')!),
-      detail: CockpitCliOutputDetail.values.byName(
-        arguments.option('verbosity')!,
-      ),
+      view: CockpitCliOutputView.values.byName(arguments.option('view')!),
       outputPath: arguments.option('output'),
     );
   }
 
   factory CockpitCliOutputSelection.fromRawArguments(List<String> arguments) {
     CockpitCliFormat format = CockpitCliFormat.lon;
-    CockpitCliOutputDetail detail = CockpitCliOutputDetail.minimal;
+    CockpitCliOutputView view = CockpitCliOutputView.brief;
     String? optionValue(String name, int index) {
       final argument = arguments[index];
       final prefix = '--$name=';
@@ -82,52 +80,52 @@ final class CockpitCliOutputSelection {
                 .firstOrNull ??
             format;
       }
-      final detailValue = optionValue('verbosity', index);
-      if (detailValue != null) {
-        detail =
-            CockpitCliOutputDetail.values
-                .where((value) => value.name == detailValue)
+      final viewValue = optionValue('view', index);
+      if (viewValue != null) {
+        view =
+            CockpitCliOutputView.values
+                .where((value) => value.name == viewValue)
                 .firstOrNull ??
-            detail;
+            view;
       }
     }
-    return CockpitCliOutputSelection(format: format, detail: detail);
+    return CockpitCliOutputSelection(format: format, view: view);
   }
 
   final CockpitCliFormat format;
-  final CockpitCliOutputDetail detail;
+  final CockpitCliOutputView view;
   final String? outputPath;
 }
 
 final class CockpitCliOutputRenderer {
   const CockpitCliOutputRenderer({
-    this.minimalMaximumBytes = 2 * 1024,
-    this.standardMaximumBytes = 6 * 1024,
+    this.briefMaximumBytes = 2 * 1024,
+    this.moreMaximumBytes = 6 * 1024,
     this.presenter = const CockpitCliAiPresenter(),
-  }) : assert(minimalMaximumBytes > 0),
-       assert(standardMaximumBytes > 0);
+  }) : assert(briefMaximumBytes > 0),
+       assert(moreMaximumBytes > 0);
 
-  final int minimalMaximumBytes;
-  final int standardMaximumBytes;
+  final int briefMaximumBytes;
+  final int moreMaximumBytes;
   final CockpitCliAiPresenter presenter;
 
   String renderJson({
     required String command,
     required Object? data,
-    required CockpitCliOutputDetail detail,
+    required CockpitCliOutputView view,
   }) => cockpitCompactJsonText(
-    _semanticValue(command: command, data: data, detail: detail),
+    _semanticValue(command: command, data: data, view: view),
   );
 
   String renderYaml({
     required String command,
     required Object? data,
-    required CockpitCliOutputDetail detail,
+    required CockpitCliOutputView view,
   }) {
     final editor = YamlEditor('');
     editor.update(
       const <Object?>[],
-      _semanticValue(command: command, data: data, detail: detail),
+      _semanticValue(command: command, data: data, view: view),
     );
     return editor.toString();
   }
@@ -135,23 +133,22 @@ final class CockpitCliOutputRenderer {
   String renderAi({
     required String command,
     required Object? data,
-    required CockpitCliOutputDetail detail,
-  }) =>
-      lon.encode(_semanticValue(command: command, data: data, detail: detail));
+    required CockpitCliOutputView view,
+  }) => lon.encode(_semanticValue(command: command, data: data, view: view));
 
   Object? _semanticValue({
     required String command,
     required Object? data,
-    required CockpitCliOutputDetail detail,
+    required CockpitCliOutputView view,
   }) {
-    if (detail == CockpitCliOutputDetail.full) {
+    if (view == CockpitCliOutputView.full) {
       return cockpitCompactJsonValue(_conciseCliValue(data));
     }
-    final maximumBytes = detail == CockpitCliOutputDetail.minimal
-        ? minimalMaximumBytes
-        : standardMaximumBytes;
+    final maximumBytes = view == CockpitCliOutputView.brief
+        ? briefMaximumBytes
+        : moreMaximumBytes;
     final isTree = command == 'dev.tree';
-    final attempts = detail == CockpitCliOutputDetail.minimal
+    final attempts = view == CockpitCliOutputView.brief
         ? isTree
               ? const <_ProjectionLimits>[
                   _ProjectionLimits(8, 12, 384, 5),
@@ -182,12 +179,15 @@ final class CockpitCliOutputRenderer {
         command: command,
         data: data,
         projection: projection,
-        detail: detail,
+        view: view,
         path: r'$.data',
       );
       final value = cockpitCompactJsonValue(
         _conciseCliValue(
-          _withProjectionMetadata(projected, projection.omitted),
+          _withProjectionMetadata(
+            _withoutSuccessMarker(projected),
+            projection.omitted,
+          ),
         ),
       );
       if (utf8.encode(lon.encode(value)).length <= maximumBytes) return value;
@@ -209,60 +209,47 @@ final class CockpitCliOutputRenderer {
     String? category,
     String? responsibleLayer,
     Map<String, Object?> details = const <String, Object?>{},
-    CockpitCliOutputDetail detail = CockpitCliOutputDetail.standard,
+    CockpitCliOutputView view = CockpitCliOutputView.brief,
   }) {
-    final maximumMessageLength = switch (detail) {
-      CockpitCliOutputDetail.minimal => 512,
-      CockpitCliOutputDetail.standard => 1536,
-      CockpitCliOutputDetail.full => message.length,
-    };
-    final omitted = <String, int>{};
-    final renderedMessage = message.length <= maximumMessageLength
-        ? message
-        : '${message.substring(0, maximumMessageLength)}...';
-    if (renderedMessage.length != message.length) {
-      omitted[r'$.error.message'] = message.length - maximumMessageLength;
-    }
-    final projection = detail == CockpitCliOutputDetail.full
-        ? null
-        : _Projection(
-            detail == CockpitCliOutputDetail.minimal
-                ? const _ProjectionLimits(2, 8, 256, 3)
-                : const _ProjectionLimits(4, 12, 512, 4),
-          );
-    final renderedDetails = projection?.value(details, r'$.error.details');
-    if (projection != null) omitted.addAll(projection.omitted);
     return lon.encode(
-      _conciseCliValue(
-        _withProjectionMetadata(<String, Object?>{
+      _semanticValue(
+        command: 'error',
+        data: <String, Object?>{
           'error': <String, Object?>{
             'code': code,
-            'message': renderedMessage,
+            'message': message,
             'retryable': retryable,
             'category': ?category,
             'responsibleLayer': ?responsibleLayer,
-            if (details.isNotEmpty) 'details': renderedDetails ?? details,
+            if (details.isNotEmpty) 'details': details,
           },
-        }, omitted),
+        },
+        view: view,
       ),
     );
   }
 }
 
+Object? _withoutSuccessMarker(Object? value) {
+  if (value is! Map<Object?, Object?> || value['ok'] != true) return value;
+  return <String, Object?>{
+    for (final entry in value.entries)
+      if (entry.key is String && entry.key != 'ok')
+        entry.key! as String: entry.value,
+  };
+}
+
 Object? _withProjectionMetadata(Object? value, Map<String, int> omitted) {
   if (omitted.isEmpty) return value;
-  final metadata = <String, Object?>{
-    'more': true,
-    'skipped': omitted.values.fold<int>(0, (total, count) => total + count),
-  };
+  final skipped = omitted.values.fold<int>(0, (total, count) => total + count);
   return switch (value) {
     Map<Object?, Object?>() => <String, Object?>{
       for (final entry in value.entries)
         if (entry.key is String) entry.key! as String: entry.value,
-      '_meta': metadata,
+      'more': skipped,
     },
-    List<Object?>() => <String, Object?>{'items': value, '_meta': metadata},
-    _ => <String, Object?>{'value': value, '_meta': metadata},
+    List<Object?>() => <String, Object?>{'items': value, 'more': skipped},
+    _ => <String, Object?>{'value': value, 'more': skipped},
   };
 }
 
@@ -291,7 +278,7 @@ final class CockpitCliOutputWriter {
         command: command,
         data: data,
         format: selection.format,
-        detail: selection.detail,
+        view: selection.view,
         forFile: true,
       );
       receipt = await _writeFile(
@@ -305,7 +292,7 @@ final class CockpitCliOutputWriter {
         receipt: receipt,
         selection: CockpitCliOutputSelection(
           format: selection.format,
-          detail: CockpitCliOutputDetail.minimal,
+          view: CockpitCliOutputView.brief,
         ),
       );
       return;
@@ -336,7 +323,7 @@ final class CockpitCliOutputWriter {
           _renderer.renderJson(
             command: command,
             data: data,
-            detail: selection.detail,
+            view: selection.view,
           ),
         );
       case CockpitCliFormat.yaml:
@@ -344,7 +331,7 @@ final class CockpitCliOutputWriter {
           _renderer.renderYaml(
             command: command,
             data: data,
-            detail: selection.detail,
+            view: selection.view,
           ),
         );
       case CockpitCliFormat.lon:
@@ -352,7 +339,7 @@ final class CockpitCliOutputWriter {
           _renderer.renderAi(
             command: command,
             data: data,
-            detail: selection.detail,
+            view: selection.view,
           ),
         );
     }
@@ -369,11 +356,7 @@ final class CockpitCliOutputWriter {
     }
     _rejectInlineArtifactContent(data);
     stdoutSink.writeln(
-      _renderer.renderJson(
-        command: command,
-        data: data,
-        detail: selection.detail,
-      ),
+      _renderer.renderJson(command: command, data: data, view: selection.view),
     );
   }
 
@@ -403,7 +386,7 @@ final class CockpitCliOutputWriter {
           _renderer.renderJson(
             command: 'error',
             data: value,
-            detail: selection.detail,
+            view: selection.view,
           ),
         );
       case CockpitCliFormat.yaml:
@@ -411,7 +394,7 @@ final class CockpitCliOutputWriter {
           _renderer.renderYaml(
             command: 'error',
             data: value,
-            detail: selection.detail,
+            view: selection.view,
           ),
         );
       case CockpitCliFormat.lon ||
@@ -425,7 +408,7 @@ final class CockpitCliOutputWriter {
             category: category,
             responsibleLayer: responsibleLayer,
             details: details,
-            detail: selection.detail,
+            view: selection.view,
           ),
         );
     }
@@ -445,7 +428,7 @@ final class CockpitCliOutputWriter {
           _renderer.renderJson(
             command: 'output.receipt',
             data: receipt.toJson(),
-            detail: selection.detail,
+            view: selection.view,
           ),
         );
       case CockpitCliFormat.yaml:
@@ -453,7 +436,7 @@ final class CockpitCliOutputWriter {
           _renderer.renderYaml(
             command: 'output.receipt',
             data: receipt.toJson(),
-            detail: selection.detail,
+            view: selection.view,
           ),
         );
       case CockpitCliFormat.lon:
@@ -510,45 +493,29 @@ final class CockpitCliOutputWriter {
     required String command,
     required Object? data,
     required CockpitCliFormat format,
-    required CockpitCliOutputDetail detail,
+    required CockpitCliOutputView view,
     required bool forFile,
   }) {
     return switch (format) {
       CockpitCliFormat.lon => _CockpitEncodedOutput(
-        text: _renderer.renderAi(command: command, data: data, detail: detail),
+        text: _renderer.renderAi(command: command, data: data, view: view),
         mediaType: 'application/vnd.lon+text',
       ),
       CockpitCliFormat.json => _CockpitEncodedOutput(
-        text: _renderer.renderJson(
-          command: command,
-          data: data,
-          detail: detail,
-        ),
+        text: _renderer.renderJson(command: command, data: data, view: view),
         mediaType: 'application/json',
       ),
       CockpitCliFormat.jsonl => _CockpitEncodedOutput(
-        text: _renderer.renderJson(
-          command: command,
-          data: data,
-          detail: detail,
-        ),
+        text: _renderer.renderJson(command: command, data: data, view: view),
         mediaType: 'application/x-ndjson',
       ),
       CockpitCliFormat.yaml => _CockpitEncodedOutput(
-        text: _renderer.renderYaml(
-          command: command,
-          data: data,
-          detail: detail,
-        ),
+        text: _renderer.renderYaml(command: command, data: data, view: view),
         mediaType: 'application/yaml',
       ),
       CockpitCliFormat.path ||
       CockpitCliFormat.none when forFile => _CockpitEncodedOutput(
-        text: _renderer.renderJson(
-          command: command,
-          data: data,
-          detail: detail,
-        ),
+        text: _renderer.renderJson(command: command, data: data, view: view),
         mediaType: 'application/json',
       ),
       CockpitCliFormat.path || CockpitCliFormat.none => throw StateError(
@@ -567,6 +534,13 @@ final class _CockpitEncodedOutput {
 
 String? _primaryArtifactPath(String command, Object? data) {
   if (data is! Map<Object?, Object?>) return null;
+  if (command == 'op.run') {
+    final output = data['output'];
+    if (output is Map<Object?, Object?>) {
+      final path = output['path'];
+      if (path is String && path.isNotEmpty) return path;
+    }
+  }
   final evidence = data['evidence'];
   if (evidence is! Map<Object?, Object?>) return null;
   if (command == 'dev.network') {
@@ -729,24 +703,55 @@ final class CockpitCliAiPresenter {
     required String command,
     required Object? data,
     required _Projection projection,
-    required CockpitCliOutputDetail detail,
+    required CockpitCliOutputView view,
     required String path,
   }) {
-    if (command.startsWith('dev.') && data is Map<Object?, Object?>) {
+    if (command == 'error' && data is Map<Object?, Object?>) {
       return projection.value(
-        _compactDevEnvelope(
-          data,
-          standard: detail == CockpitCliOutputDetail.standard,
-        ),
+        _compactErrorEnvelope(data, more: view == CockpitCliOutputView.more),
         path,
       );
+    }
+    if (command.startsWith('dev.') && data is Map<Object?, Object?>) {
+      return projection.value(
+        _compactDevEnvelope(data, more: view == CockpitCliOutputView.more),
+        path,
+      );
+    }
+    if (command == 'root.add' && data is Map<Object?, Object?>) {
+      return projection.value(_compactRoot(data), path);
+    }
+    if (command == 'root.list' && data is List<Object?>) {
+      return projection.value(<String, Object?>{
+        'items': data
+            .whereType<Map<Object?, Object?>>()
+            .map(_compactRoot)
+            .toList(growable: false),
+        'totalCount': data.length,
+      }, path);
+    }
+    if (const <String>{
+          'workspace.register',
+          'workspace.rebind',
+        }.contains(command) &&
+        data is Map<Object?, Object?>) {
+      return projection.value(_compactWorkspace(data), path);
+    }
+    if (command == 'workspace.list' && data is List<Object?>) {
+      return projection.value(<String, Object?>{
+        'items': data
+            .whereType<Map<Object?, Object?>>()
+            .map(_compactWorkspace)
+            .toList(growable: false),
+        'totalCount': data.length,
+      }, path);
     }
     if (command == 'op.list' && data is List<Object?>) {
       if (data.length == 1 && data.single is Map<Object?, Object?>) {
         return projection.value(
           _pick(
             data.single! as Map<Object?, Object?>,
-            detail == CockpitCliOutputDetail.standard
+            view == CockpitCliOutputView.more
                 ? const <String>[
                     'kind',
                     'title',
@@ -788,7 +793,7 @@ final class CockpitCliAiPresenter {
               .whereType<String>()
               .toList(growable: false)
             ..sort();
-      if (detail == CockpitCliOutputDetail.standard) {
+      if (view == CockpitCliOutputView.more) {
         return projection.value(<String, Object?>{
           'operationCount': data.length,
           'items': <Map<String, Object?>>[
@@ -811,10 +816,7 @@ final class CockpitCliAiPresenter {
     }
     if (command == 'explain' && data is Map<Object?, Object?>) {
       return projection.value(
-        _compactExplain(
-          data,
-          standard: detail == CockpitCliOutputDetail.standard,
-        ),
+        _compactExplain(data, more: view == CockpitCliOutputView.more),
         path,
       );
     }
@@ -837,19 +839,27 @@ final class CockpitCliAiPresenter {
     }
     if (command == 'op.run' && data is Map<Object?, Object?>) {
       return projection.value(
-        _compactOperationResult(
+        _compactOperationResult(data, more: view == CockpitCliOutputView.more),
+        path,
+      );
+    }
+    if (const <String>{
+          'target.discover',
+          'target.register',
+          'target.launch',
+        }.contains(command) &&
+        data is Map<Object?, Object?>) {
+      return projection.value(
+        _compactTaskOperationResult(
           data,
-          standard: detail == CockpitCliOutputDetail.standard,
+          more: view == CockpitCliOutputView.more,
         ),
         path,
       );
     }
     if (command == 'session.show' && data is Map<Object?, Object?>) {
       return projection.value(
-        _compactSession(
-          data,
-          standard: detail == CockpitCliOutputDetail.standard,
-        ),
+        _compactSession(data, more: view == CockpitCliOutputView.more),
         path,
       );
     }
@@ -859,20 +869,19 @@ final class CockpitCliAiPresenter {
           'daemon.status',
           'daemon.restart',
         }.contains(command)) {
-      return projection.value(
-        _pick(
+      final running = data['running'] == true;
+      final healthy = data['healthy'] == true;
+      return projection.value(<String, Object?>{
+        'state': !running
+            ? 'stopped'
+            : healthy
+            ? 'ready'
+            : 'degraded',
+        ..._pick(
           data,
-          detail == CockpitCliOutputDetail.minimal
-              ? const <String>[
-                  'running',
-                  'healthy',
-                  'auth',
-                  'processId',
-                  'diagnostic',
-                ]
+          view == CockpitCliOutputView.brief
+              ? const <String>['auth', 'diagnostic']
               : const <String>[
-                  'running',
-                  'healthy',
                   'auth',
                   'processId',
                   'endpoint',
@@ -882,8 +891,7 @@ final class CockpitCliAiPresenter {
                   'diagnostic',
                 ],
         ),
-        path,
-      );
+      }, path);
     }
     if (data is Map<Object?, Object?> && command == 'target.inspect') {
       final output = data['output'];
@@ -891,27 +899,25 @@ final class CockpitCliAiPresenter {
         return projection.value(<String, Object?>{
           ..._compactTargetInspection(
             output,
-            standard: detail == CockpitCliOutputDetail.standard,
+            more: view == CockpitCliOutputView.more,
           ),
           if (data['outcome'] != null && data['outcome'] != 'succeeded')
             'outcome': data['outcome'],
           if (data['failure'] is Map<Object?, Object?>)
             'failure': _compactFailure(
               data['failure']! as Map<Object?, Object?>,
+              more: view == CockpitCliOutputView.more,
             ),
         }, path);
       }
       return projection.value(
-        _compactTargetInspection(
-          data,
-          standard: detail == CockpitCliOutputDetail.standard,
-        ),
+        _compactTargetInspection(data, more: view == CockpitCliOutputView.more),
         path,
       );
     }
     if (data is Map<Object?, Object?> && command == 'run.get') {
       return projection.value(
-        _compactRun(data, standard: detail == CockpitCliOutputDetail.standard),
+        _compactRun(data, more: view == CockpitCliOutputView.more),
         path,
       );
     }
@@ -919,19 +925,13 @@ final class CockpitCliAiPresenter {
         command == 'run.events' &&
         data['items'] is List<Object?>) {
       return projection.value(
-        _compactRunEvents(
-          data,
-          standard: detail == CockpitCliOutputDetail.standard,
-        ),
+        _compactRunEvents(data, more: view == CockpitCliOutputView.more),
         path,
       );
     }
     if (data is Map<Object?, Object?> && command == 'run.events') {
       return projection.value(
-        _compactRunStreamItem(
-          data,
-          standard: detail == CockpitCliOutputDetail.standard,
-        ),
+        _compactRunStreamItem(data, more: view == CockpitCliOutputView.more),
         path,
       );
     }
@@ -943,23 +943,20 @@ final class CockpitCliAiPresenter {
       );
     }
     if (data is Map<Object?, Object?> && data['items'] is List<Object?>) {
-      final compacted = _compactCollection(command, data, detail);
+      final compacted = _compactCollection(command, data, view);
       if (compacted != null) return projection.value(compacted, path);
     }
     if (data is List<Object?>) {
       final compacted = _compactCollection(command, <String, Object?>{
         'totalCount': data.length,
         'items': data,
-      }, detail);
+      }, view);
       if (compacted != null) return projection.value(compacted, path);
     }
     if ((command == 'case.validate' || command == 'suite.validate') &&
         data is Map<Object?, Object?>) {
       return projection.value(
-        _compactValidationResult(
-          data,
-          standard: detail == CockpitCliOutputDetail.standard,
-        ),
+        _compactValidationResult(data, more: view == CockpitCliOutputView.more),
         path,
       );
     }
@@ -984,12 +981,16 @@ final class CockpitCliAiPresenter {
 
 Map<String, Object?> _compactExplain(
   Map<Object?, Object?> value, {
-  required bool standard,
+  required bool more,
 }) {
   final operation = value['operation'];
+  final recommendedCommand = value['recommendedCommand'];
+  final safetyEffects = operation is Map<Object?, Object?>
+      ? operation['safetyEffects']
+      : null;
   return <String, Object?>{
     if (operation is Map<Object?, Object?>)
-      'operation': _pick(operation, const <String>[
+      ..._pick(operation, const <String>[
         'kind',
         'scope',
         'mutationClass',
@@ -997,61 +998,79 @@ Map<String, Object?> _compactExplain(
         'executionMode',
         'defaultTimeoutMs',
         'maximumTimeoutMs',
-        'safetyEffects',
       ]),
-    ..._pick(value, const <String>['resolvedScope', 'workspaceId', 'session']),
+    if (safetyEffects is List<Object?> && safetyEffects.isNotEmpty)
+      'safetyEffects': safetyEffects,
+    if (more)
+      ..._pick(value, const <String>[
+        'resolvedScope',
+        'workspaceId',
+        'session',
+      ]),
     if (value['inputContract'] is Map<Object?, Object?>)
       'inputContract': _compactExplainContract(
         value['inputContract']! as Map<Object?, Object?>,
-        standard: standard,
+        more: more,
       ),
-    if (value['outputContract'] is Map<Object?, Object?>)
+    if (more && value['outputContract'] is Map<Object?, Object?>)
       'outputContract': _compactExplainContract(
         value['outputContract']! as Map<Object?, Object?>,
-        standard: standard,
-        includeFields: standard,
+        more: more,
+        includeFields: more,
       ),
-    ..._pick(value, const <String>[
-      'recommendedCommand',
-      'op',
-      'opUnavailable',
-    ]),
+    'recommendedCommand': ?recommendedCommand,
+    if (more || recommendedCommand == null)
+      ..._pick(value, const <String>['op']),
+    ..._pick(value, const <String>['opUnavailable']),
   };
 }
 
 Map<String, Object?> _compactExplainContract(
   Map<Object?, Object?> value, {
-  required bool standard,
+  required bool more,
   bool includeFields = true,
 }) {
   final schema = value['schema'];
   final schemaMap = schema is Map<Object?, Object?> ? schema : null;
   final properties = schemaMap?['properties'];
+  final propertyMap = properties is Map<Object?, Object?> ? properties : null;
+  final injectedFields = <String>{
+    if (propertyMap != null)
+      for (final entry in propertyMap.entries)
+        if (entry.key is String &&
+            entry.value is Map<Object?, Object?> &&
+            (entry.value! as Map<Object?, Object?>).containsKey(
+              'x-cockpit-injected-by',
+            ))
+          entry.key! as String,
+  };
+  final required = schemaMap?['required'];
+  final visibleRequired = required is List<Object?>
+      ? required.where((field) => !injectedFields.contains(field)).toList()
+      : const <Object?>[];
   return <String, Object?>{
-    ..._pick(value, const <String>['available', 'schemaRef', 'precision']),
-    if (schemaMap != null)
-      'schema': <String, Object?>{
-        ..._pick(schemaMap, const <String>[
-          'type',
-          'required',
-          'additionalProperties',
-        ]),
-        if (includeFields && properties is Map<Object?, Object?>)
-          'fields': <String, Object?>{
-            for (final entry in properties.entries)
-              if (entry.key is String && entry.value is Map<Object?, Object?>)
-                entry.key! as String: _compactExplainField(
-                  entry.value! as Map<Object?, Object?>,
-                  standard: standard,
-                ),
-          },
+    if (more) ..._pick(value, const <String>['schemaRef', 'precision']),
+    if (more && schemaMap != null) ..._pick(schemaMap, const <String>['type']),
+    if (visibleRequired.isNotEmpty) 'required': visibleRequired,
+    if (more && schemaMap != null)
+      ..._pick(schemaMap, const <String>['additionalProperties']),
+    if (includeFields && propertyMap != null)
+      'fields': <String, Object?>{
+        for (final entry in propertyMap.entries)
+          if (entry.key is String &&
+              entry.value is Map<Object?, Object?> &&
+              (more || !injectedFields.contains(entry.key)))
+            entry.key! as String: _compactExplainField(
+              entry.value! as Map<Object?, Object?>,
+              more: more,
+            ),
       },
   };
 }
 
 Map<String, Object?> _compactExplainField(
   Map<Object?, Object?> value, {
-  required bool standard,
+  required bool more,
 }) {
   final enumValues = value['enum'];
   return <String, Object?>{
@@ -1067,18 +1086,18 @@ Map<String, Object?> _compactExplainField(
     ]),
     if (enumValues is List<Object?>)
       'values': enumValues.map((item) => '$item').join('|'),
-    if (standard) ..._pick(value, const <String>['description']),
+    if (more) ..._pick(value, const <String>['description']),
   };
 }
 
 Map<String, Object?> _compactDevEnvelope(
   Map<Object?, Object?> value, {
-  required bool standard,
+  required bool more,
 }) {
   final action = value['action'];
   final state = value['state'];
   final compactState = state is Map<Object?, Object?>
-      ? _compactDevState('$action', state, standard: standard)
+      ? _compactDevState('$action', state, more: more)
       : state;
   final changed = value['changed'];
   final evidence = value['evidence'];
@@ -1086,41 +1105,104 @@ Map<String, Object?> _compactDevEnvelope(
       action == 'network' &&
       compactState is Map<Object?, Object?> &&
       compactState['body'] is Map<Object?, Object?>;
+  final result = <String, Object?>{};
+  if (compactState is Map<Object?, Object?>) {
+    for (final entry in compactState.entries) {
+      if (entry.key is String && entry.value != null) {
+        result[entry.key! as String] = entry.value;
+      }
+    }
+  } else if (compactState != null) {
+    result['value'] = compactState;
+  }
+
+  if (!stateOwnsEvidence && evidence is Map<Object?, Object?>) {
+    final compactEvidence = _compactDevEvidence(evidence, more: more);
+    for (final entry in compactEvidence.entries) {
+      if (entry.value == null || result.values.contains(entry.value)) continue;
+      result.putIfAbsent(entry.key, () => entry.value);
+    }
+  }
+  if (changed != null && changed != 'none') result['changed'] = changed;
+
+  final errors = value['errors'];
+  if (value['ok'] == false) {
+    result['error'] = _compactDevError(
+      action: '$action',
+      state: compactState,
+      errors: errors is List<Object?> ? errors : const <Object?>[],
+    );
+  }
+  if (value['session'] case final session?) {
+    result['session'] = session is String
+        ? int.tryParse(session) ?? session
+        : session;
+  }
+  if (value['next'] != null) result['next'] = value['next'];
+  return result;
+}
+
+Map<String, Object?> _compactDevError({
+  required String action,
+  required Object? state,
+  required List<Object?> errors,
+}) {
+  final compact = _compactDevErrors(errors);
+  final primary = compact.firstOrNull;
+  if (primary is Map<Object?, Object?>) {
+    return <String, Object?>{
+      for (final entry in primary.entries)
+        if (entry.key is String) entry.key! as String: entry.value,
+      if (errors.length > 1) 'more': errors.length - 1,
+    };
+  }
+  if (primary != null) {
+    return <String, Object?>{
+      'message': '$primary',
+      if (errors.length > 1) 'more': errors.length - 1,
+    };
+  }
+  if (state is Map<Object?, Object?>) {
+    final stateError = state['error'];
+    if (stateError is Map<Object?, Object?>) {
+      return <String, Object?>{
+        for (final entry in stateError.entries)
+          if (entry.key is String) entry.key! as String: entry.value,
+      };
+    }
+    if (stateError != null) return <String, Object?>{'message': '$stateError'};
+    if (state['reason'] case final String reason
+        when reason.trim().isNotEmpty) {
+      return <String, Object?>{'code': reason};
+    }
+  }
   return <String, Object?>{
-    ..._pick(value, const <String>['ok', 'session']),
-    if (compactState != null &&
-        (compactState is! Map<Object?, Object?> || compactState.isNotEmpty))
-      'state': compactState,
-    if (changed != null && changed != 'none') 'changed': changed,
-    if (!stateOwnsEvidence && evidence is Map<Object?, Object?>)
-      'evidence': _compactDevEvidence(evidence, standard: standard),
-    if (value['errors'] is List<Object?>)
-      'errors': _compactDevErrors(value['errors']! as List<Object?>),
-    ..._pick(value, const <String>['next']),
+    'code': 'operationFailed',
+    'message': '$action failed.',
   };
 }
 
 Object? _compactDevState(
   String action,
   Map<Object?, Object?> state, {
-  required bool standard,
+  required bool more,
 }) {
   return switch (action) {
-    'status' || 'diagnose' => _compactDevStatus(state, standard: standard),
-    'inspect' => _compactDevInspect(state, standard: standard),
-    'tree' => _compactDevTree(state, standard: standard),
+    'status' || 'diagnose' => _compactDevStatus(state, more: more),
+    'inspect' => _compactDevInspect(state, more: more),
+    'tree' => _compactDevTree(state, more: more),
     'tap' ||
     'type' ||
     'press' ||
-    'scroll' => _compactDevCommand(state, standard: standard),
+    'scroll' => _compactDevCommand(state, more: more),
     'wait' => <String, Object?>{
       ..._pick(state, const <String>['idle']),
       if (state['includeNetworkIdle'] == true) 'network': true,
-      if (standard) ..._pick(state, const <String>['durationMs']),
+      if (more) ..._pick(state, const <String>['durationMs']),
     },
     'viewport' => <String, Object?>{
       ..._pick(state, const <String>['available', 'reason', 'alternatives']),
-      if (standard)
+      if (more)
         ..._pick(state, const <String>[
           'width',
           'height',
@@ -1129,10 +1211,10 @@ Object? _compactDevState(
         ]),
     },
     'reload' || 'restart' || 'stop' => _compactDevLifecycle(state),
-    'screenshot' => _compactDevScreenshot(state, standard: standard),
-    'network' => _compactDevNetwork(state, standard: standard),
+    'screenshot' => _compactDevScreenshot(state, more: more),
+    'network' => _compactDevNetwork(state, more: more),
     _ =>
-      standard
+      more
           ? Map<String, Object?>.from(state)
           : _pick(state, const [
               'lifecycle',
@@ -1146,11 +1228,11 @@ Object? _compactDevState(
 
 Map<String, Object?> _compactDevTree(
   Map<Object?, Object?> state, {
-  required bool standard,
+  required bool more,
 }) {
   final nodes = state['nodes'];
   final orderedNodes = nodes is List<Object?>
-      ? _orderedDevTreeNodes(nodes, standard: standard)
+      ? _orderedDevTreeNodes(nodes, more: more)
       : const <Map<Object?, Object?>>[];
   return <String, Object?>{
     ..._pick(state, const <String>[
@@ -1163,17 +1245,17 @@ Map<String, Object?> _compactDevTree(
     ]),
     if (orderedNodes.isNotEmpty)
       'nodes': orderedNodes
-          .take(standard ? 40 : 12)
-          .map((node) => _compactDevTreeNode(node, standard: standard))
+          .take(more ? 40 : 12)
+          .map((node) => _compactDevTreeNode(node, more: more))
           .toList(growable: false),
   };
 }
 
 Map<String, Object?> _compactDevTreeNode(
   Map<Object?, Object?> node, {
-  required bool standard,
+  required bool more,
 }) {
-  if (standard) {
+  if (more) {
     return _pick(node, const <String>[
       'node',
       'loc',
@@ -1209,14 +1291,14 @@ Map<String, Object?> _compactDevTreeNode(
 
 List<Map<Object?, Object?>> _orderedDevTreeNodes(
   List<Object?> nodes, {
-  required bool standard,
+  required bool more,
 }) {
   final indexed = nodes
       .whereType<Map<Object?, Object?>>()
       .toList(growable: false)
       .indexed
       .toList(growable: false);
-  if (standard) {
+  if (more) {
     return indexed.map((entry) => entry.$2).toList(growable: false);
   }
   indexed.sort((left, right) {
@@ -1244,12 +1326,16 @@ int _devTreeNodeRank(Map<Object?, Object?> node) {
 
 Map<String, Object?> _compactDevStatus(
   Map<Object?, Object?> state, {
-  required bool standard,
+  required bool more,
 }) {
   final ui = state['ui'];
   final target = state['target'];
   final network = state['network'];
   final errors = state['runtimeErrors'] ?? state['errors'];
+  final errorCount = errors == null ? 0 : _devErrorCount(errors);
+  final networkFailureCount = network == null
+      ? 0
+      : _devNetworkFailureCount(network);
   final result = <String, Object?>{
     ..._pick(state, const <String>[
       'lifecycle',
@@ -1259,30 +1345,35 @@ Map<String, Object?> _compactDevStatus(
       'deviceId',
       'flavor',
     ]),
-    if (standard) ..._pick(state, const <String>['checkoutPath']),
+    if (more) ..._pick(state, const <String>['checkoutPath']),
     if (ui is Map<Object?, Object?>) ..._pick(ui, const <String>['routeName']),
     if (target is Map<Object?, Object?>)
       ..._pick(target, const <String>['platform', 'targetKind']),
-    if (errors != null) 'errorCount': _devErrorCount(errors),
-    if (network != null)
-      'networkFailureCount': _devNetworkFailureCount(network),
+    if (more || errorCount > 0) 'errorCount': errorCount,
+    if (more || networkFailureCount > 0)
+      'networkFailureCount': networkFailureCount,
   };
-  if (standard) {
+  if (more) {
     result['ui'] = ui is Map<Object?, Object?>
-        ? _compactUiOutput(ui, standard: false)
+        ? _compactUiOutput(ui, more: false)
         : ui;
     result['target'] = target is Map<Object?, Object?>
-        ? _compactTargetInspection(target, standard: false)
+        ? _compactTargetInspection(target, more: false)
         : target;
-    result['errors'] = errors is Map<Object?, Object?>
-        ? _compactErrorsOutput(errors, standard: true)
-        : errors;
+    if (errors is Map<Object?, Object?>) {
+      final compactErrors = _compactErrorsOutput(errors, more: true);
+      if (compactErrors['errors'] is List<Object?>) {
+        result['issues'] = compactErrors['errors'];
+      }
+    } else if (errors is List<Object?> && errors.isNotEmpty) {
+      result['issues'] = errors;
+    }
     result['network'] = network is Map<Object?, Object?>
-        ? _compactNetworkOutput(network, standard: false)
+        ? _compactNetworkOutput(network, more: false)
         : network;
     final logs = state['logs'];
     if (logs is Map<Object?, Object?>) {
-      result['logs'] = _compactLogsOutput(logs, standard: true);
+      result['logs'] = _compactLogsOutput(logs, more: true);
     }
   }
   return result;
@@ -1290,11 +1381,11 @@ Map<String, Object?> _compactDevStatus(
 
 Map<String, Object?> _compactDevInspect(
   Map<Object?, Object?> state, {
-  required bool standard,
+  required bool more,
 }) {
   final summary = state['uiSummary'];
   if (summary is! Map<Object?, Object?>) {
-    return standard
+    return more
         ? Map<String, Object?>.from(state)
         : _pick(state, const <String>[
             'routeName',
@@ -1304,29 +1395,28 @@ Map<String, Object?> _compactDevInspect(
             'items',
           ]);
   }
+  final runtimeErrorCount = summary['runtimeErrorCount'];
+  final networkFailureCount = summary['networkFailureCount'];
+  final diagnostics = state['diagnostics'];
   return <String, Object?>{
     ..._pick(state, const <String>['routeName', 'truncated']),
-    ..._pick(summary, const <String>[
-      'visibleTargetCount',
-      'runtimeErrorCount',
-      'networkFailureCount',
-    ]),
+    ..._pick(summary, const <String>['visibleTargetCount']),
+    if (runtimeErrorCount is int && (more || runtimeErrorCount > 0))
+      'runtimeErrorCount': runtimeErrorCount,
+    if (networkFailureCount is int && (more || networkFailureCount > 0))
+      'networkFailureCount': networkFailureCount,
     if (summary['textPreviews'] is List<Object?>)
       'textPreviews': (summary['textPreviews']! as List<Object?>)
           .take(4)
           .toList(growable: false),
-    if (standard)
-      ..._pick(state, const <String>[
-        'diagnosticLevel',
-        'diagnostics',
-        'snapshotRef',
-      ]),
+    if (more && diagnostics is Map<Object?, Object?> && diagnostics.length > 1)
+      'diagnostics': diagnostics,
   };
 }
 
 Map<String, Object?> _compactDevCommand(
   Map<Object?, Object?> state, {
-  required bool standard,
+  required bool more,
 }) {
   final operation = state['command'];
   final nested = operation is Map<Object?, Object?>
@@ -1334,12 +1424,12 @@ Map<String, Object?> _compactDevCommand(
       : null;
   final result = nested is Map<Object?, Object?> ? nested : operation;
   if (result is! Map<Object?, Object?>) {
-    return standard ? Map<String, Object?>.from(state) : const {};
+    return more ? Map<String, Object?>.from(state) : const {};
   }
   final locator = result['locatorResolution'] ?? result['locator'];
   return <String, Object?>{
     if (result['error'] != null) 'error': result['error'],
-    if (standard) ...<String, Object?>{
+    if (more) ...<String, Object?>{
       ..._pick(result, const <String>[
         'commandType',
         'commandId',
@@ -1364,23 +1454,23 @@ Map<String, Object?> _compactDevLifecycle(Map<Object?, Object?> state) {
         'state',
         'reloadGeneration',
         'lastReloadMode',
-        'lastReloadSucceeded',
       ])
     else
       ..._pick(source, const <String>['state', 'lifecycle']),
+    if (statusMap?['lastReloadSucceeded'] == false) 'reload': false,
   };
 }
 
 Map<String, Object?> _compactDevScreenshot(
   Map<Object?, Object?> state, {
-  required bool standard,
+  required bool more,
 }) => <String, Object?>{
   if (state['comparison'] is Map<Object?, Object?>)
     'comparison': _pick(
       state['comparison']! as Map<Object?, Object?>,
       const <String>['matched', 'dimensionMismatch', 'changedPixelCount'],
     ),
-  if (standard)
+  if (more)
     ..._pick(state, const <String>[
       'capture',
       'fallback',
@@ -1395,7 +1485,7 @@ Map<String, Object?> _compactDevScreenshot(
 
 Map<String, Object?> _compactDevEvidence(
   Map<Object?, Object?> evidence, {
-  required bool standard,
+  required bool more,
 }) {
   final networkPaths = <String, Object?>{
     for (final key in const <String>['request', 'response'])
@@ -1410,17 +1500,16 @@ Map<String, Object?> _compactDevEvidence(
   final diff = evidence['diff'];
   return <String, Object?>{
     if (actual is Map<Object?, Object?>) 'path': actual['path'],
-    if (standard && baseline is Map<Object?, Object?>)
-      'baseline': baseline['path'],
-    if (standard && diff is Map<Object?, Object?>) 'diff': diff['path'],
+    if (more && baseline is Map<Object?, Object?>) 'baseline': baseline['path'],
+    if (more && diff is Map<Object?, Object?>) 'diff': diff['path'],
   };
 }
 
 Map<String, Object?> _compactDevNetwork(
   Map<Object?, Object?> state, {
-  required bool standard,
+  required bool more,
 }) => <String, Object?>{
-  ..._compactNetworkOutput(state, standard: standard),
+  ..._compactNetworkOutput(state, more: more),
   if (state['body'] is Map<Object?, Object?>)
     'body': Map<String, Object?>.from(state['body']! as Map<Object?, Object?>),
   if (state['absent'] is List<Object?>) 'absent': state['absent'],
@@ -1468,67 +1557,91 @@ Map<String, Object?> _pick(
 
 Map<String, Object?> _compactOperationResult(
   Map<Object?, Object?> value, {
-  required bool standard,
+  required bool more,
 }) {
   final output = value['output'];
   final kind = value['kind'];
+  final rawFailure = value['failure'];
+  final failure = rawFailure is Map<Object?, Object?> ? rawFailure : null;
   final startedAt = DateTime.tryParse('${value['startedAt'] ?? ''}');
   final finishedAt = DateTime.tryParse('${value['finishedAt'] ?? ''}');
   return <String, Object?>{
-    ..._pick(value, const <String>[
-      'operationId',
-      'kind',
-      'lifecycle',
-      'outcome',
-      'sessionHandle',
-      'idempotencyKey',
-    ]),
-    if (standard) ..._pick(value, const <String>['rootId', 'workspaceId']),
-    if (standard && startedAt != null && finishedAt != null)
+    ..._pick(value, const <String>['operationId', 'kind', 'sessionHandle']),
+    if (more && value['idempotencyKey'] != null)
+      'idempotencyKey': value['idempotencyKey'],
+    if (value['replayed'] == true) 'replayed': true,
+    if (value['lifecycle'] != null && value['lifecycle'] != 'completed')
+      'lifecycle': value['lifecycle'],
+    if ((more || failure == null) &&
+        value['outcome'] != null &&
+        value['outcome'] != 'succeeded')
+      'outcome': value['outcome'],
+    if (more) ..._pick(value, const <String>['rootId', 'workspaceId']),
+    if (more && startedAt != null && finishedAt != null)
       'durationMs': finishedAt.difference(startedAt).inMilliseconds,
     if (output is Map<Object?, Object?>)
       'output': _compactOperationPayload(
         kind is String ? kind : '',
         output,
         operation: value,
-        standard: standard,
+        more: more,
       )
     else
       'output': ?output,
-    if (value['failure'] is Map<Object?, Object?>)
-      'failure': _compactFailure(value['failure']! as Map<Object?, Object?>),
+    if (failure != null) 'failure': _compactFailure(failure, more: more),
   };
+}
+
+Map<String, Object?> _compactTaskOperationResult(
+  Map<Object?, Object?> value, {
+  required bool more,
+}) {
+  final result = _compactOperationResult(value, more: more)..remove('kind');
+  final output = result.remove('output');
+  if (output is! Map<Object?, Object?>) {
+    if (output != null) result['output'] = output;
+    return result;
+  }
+  for (final entry in output.entries) {
+    if (entry.key is! String || entry.value == null) continue;
+    final key = entry.key! as String;
+    if (result.containsKey(key) && result[key] != entry.value) {
+      result['output'] = output;
+      return result;
+    }
+    result[key] = entry.value;
+  }
+  return result;
 }
 
 Map<String, Object?> _compactOperationPayload(
   String kind,
   Map<Object?, Object?> output, {
   required Map<Object?, Object?> operation,
-  required bool standard,
+  required bool more,
 }) {
   final compacted = switch (kind) {
-    'analyze.files' => _compactAnalysisOutput(output, standard: standard),
+    'analyze.files' => _compactAnalysisOutput(output, more: more),
     'analyze.workspace' ||
     'fix.workspace' ||
     'format.workspace' ||
     'test.workspace' ||
     'package.pub' ||
-    'shell.run' => _compactProcessOutput(output, standard: standard),
-    'lsp.request' => _compactLspOutput(output, standard: standard),
-    'ui.inspect' => _compactUiOutput(output, standard: standard),
-    'surface.inspect' => _compactSurfaceOutput(output, standard: standard),
+    'shell.run' => _compactProcessOutput(output, more: more),
+    'lsp.request' => _compactLspOutput(output, more: more),
+    'ui.inspect' => _compactUiOutput(output, more: more),
+    'surface.inspect' => _compactSurfaceOutput(output, more: more),
     'logs.read' ||
-    'session.logs.read' => _compactLogsOutput(output, standard: standard),
-    'network.read' => _compactNetworkOutput(output, standard: standard),
-    'errors.read' => _compactErrorsOutput(output, standard: standard),
-    'command.run' || 'command.remote.execute' => _compactInteractiveOutput(
-      output,
-      standard: standard,
-    ),
+    'session.logs.read' => _compactLogsOutput(output, more: more),
+    'network.read' => _compactNetworkOutput(output, more: more),
+    'errors.read' => _compactErrorsOutput(output, more: more),
+    'command.run' ||
+    'command.remote.execute' => _compactInteractiveOutput(output, more: more),
     'command.batch' || 'command.remote.batch' => _compactInteractiveBatchOutput(
       output,
-      standard: standard,
+      more: more,
     ),
+    'system.action' => _compactSystemActionOutput(output, more: more),
     'app.reload' ||
     'app.restart' ||
     'session.development.launch' ||
@@ -1536,17 +1649,14 @@ Map<String, Object?> _compactOperationPayload(
     'session.development.reload' ||
     'session.development.stop' ||
     'app.launch' ||
-    'target.launch' => _compactDevelopmentOutput(output, standard: standard),
-    'development.probe.collect' => _compactProbeOutput(
-      output,
-      standard: standard,
-    ),
+    'target.launch' => _compactDevelopmentOutput(output, more: more),
+    'development.probe.collect' => _compactProbeOutput(output, more: more),
     'development.probe.compare' => _compactProbeComparisonOutput(
       output,
-      standard: standard,
+      more: more,
     ),
-    'lease.list' => _compactLeaseListOutput(output, standard: standard),
-    _ => _compactGenericOperationOutput(output, standard: standard),
+    'lease.list' => _compactLeaseListOutput(output, more: more),
+    _ => _compactGenericOperationOutput(output, more: more),
   };
   compacted.removeWhere(
     (key, child) => _repeatsOperationIdentity(key, child, operation),
@@ -1554,9 +1664,29 @@ Map<String, Object?> _compactOperationPayload(
   return compacted;
 }
 
+Map<String, Object?> _compactSystemActionOutput(
+  Map<Object?, Object?> output, {
+  required bool more,
+}) => <String, Object?>{
+  ..._pick(output, const <String>['action', 'path']),
+  if (output['availability'] != null && output['availability'] != 'available')
+    'availability': output['availability'],
+  if (more)
+    ..._pick(output, const <String>[
+      'strategy',
+      'requires',
+      'limitations',
+      'recommendedNextStep',
+      'command',
+      'exitCode',
+      'stderr',
+    ]),
+  ..._pick(output, const <String>['errorCode', 'errorMessage', 'errorDetails']),
+};
+
 Map<String, Object?> _compactAnalysisOutput(
   Map<Object?, Object?> output, {
-  required bool standard,
+  required bool more,
 }) {
   final rawDiagnostics = output['diagnostics'];
   final diagnostics = rawDiagnostics is List<Object?>
@@ -1576,19 +1706,18 @@ Map<String, Object?> _compactAnalysisOutput(
   return <String, Object?>{
     ..._pick(output, const <String>[
       'success',
-      'clean',
       'summary',
       'totalDiagnostics',
       'severityCounts',
-      'diagnosticsTruncated',
     ]),
-    if (standard) ..._pick(output, const <String>['toolchain', 'paths']),
+    if (output['diagnosticsTruncated'] == true) 'diagnosticsTruncated': true,
+    if (more) ..._pick(output, const <String>['toolchain', 'paths']),
     if (diagnostics.isNotEmpty)
       'diagnostics': <Map<String, Object?>>[
         for (final diagnostic in diagnostics)
           _pick(
             diagnostic,
-            standard
+            more
                 ? const <String>[
                     'severity',
                     'code',
@@ -1612,7 +1741,7 @@ Map<String, Object?> _compactAnalysisOutput(
       ],
     if (output['success'] != true)
       ..._pick(output, const <String>['stderrPreview', 'stdoutPreview']),
-    if (standard) ..._pick(output, const <String>['command', 'exitCode']),
+    if (more) ..._pick(output, const <String>['command', 'exitCode']),
   };
 }
 
@@ -1625,17 +1754,17 @@ int _diagnosticRank(Object? severity) => switch ('$severity'.toLowerCase()) {
 
 Map<String, Object?> _compactProcessOutput(
   Map<Object?, Object?> output, {
-  required bool standard,
+  required bool more,
 }) => <String, Object?>{
   ..._pick(output, const <String>['success', 'exitCode']),
-  if (standard) ..._pick(output, const <String>['command']),
+  if (more) ..._pick(output, const <String>['command']),
   if (_nonEmpty(output['stderr'])) 'stderr': output['stderr'],
   if (_nonEmpty(output['stdout'])) 'stdout': output['stdout'],
 };
 
 Map<String, Object?> _compactLspOutput(
   Map<Object?, Object?> output, {
-  required bool standard,
+  required bool more,
 }) => <String, Object?>{
   ..._pick(output, const <String>[
     'command',
@@ -1650,7 +1779,7 @@ Map<String, Object?> _compactLspOutput(
     'symbols',
     'items',
   ]),
-  if (standard)
+  if (more)
     for (final entry in output.entries)
       if (entry.key is String &&
           entry.key != 'workspaceRoot' &&
@@ -1660,7 +1789,7 @@ Map<String, Object?> _compactLspOutput(
 
 Map<String, Object?> _compactUiOutput(
   Map<Object?, Object?> output, {
-  required bool standard,
+  required bool more,
 }) => <String, Object?>{
   if (output['app'] is Map<Object?, Object?>)
     'app': _pick(output['app']! as Map<Object?, Object?>, const <String>[
@@ -1677,17 +1806,17 @@ Map<String, Object?> _compactUiOutput(
     'delta',
     'snapshotRef',
   ]),
-  if (standard) ..._pick(output, const <String>['diagnostics', 'snapshot']),
+  if (more) ..._pick(output, const <String>['diagnostics', 'snapshot']),
 };
 
 Map<String, Object?> _compactSurfaceOutput(
   Map<Object?, Object?> output, {
-  required bool standard,
+  required bool more,
 }) => <String, Object?>{
   if (output['target'] is Map<Object?, Object?>)
     'target': _pick(
       output['target']! as Map<Object?, Object?>,
-      standard
+      more
           ? const <String>[
               'targetId',
               'platform',
@@ -1712,18 +1841,18 @@ Map<String, Object?> _compactSurfaceOutput(
   if (output['capabilityProfile'] is Map<Object?, Object?>)
     'capabilities': _compactCapabilities(
       output['capabilityProfile']! as Map<Object?, Object?>,
-      standard: standard,
+      more: more,
     ),
-  if (standard) ..._pick(output, const <String>['diagnostics', 'snapshot']),
+  if (more) ..._pick(output, const <String>['diagnostics', 'snapshot']),
 };
 
 Map<String, Object?> _compactLogsOutput(
   Map<Object?, Object?> output, {
-  required bool standard,
+  required bool more,
 }) {
   final rawLines = output['lines'];
   final lines = rawLines is List<Object?> ? rawLines : const <Object?>[];
-  final maximum = standard ? 32 : 8;
+  final maximum = more ? 32 : 8;
   final start = max(0, lines.length - maximum);
   return <String, Object?>{
     ..._pick(output, const <String>[
@@ -1748,7 +1877,7 @@ Map<String, Object?> _compactLogsOutput(
 
 Map<String, Object?> _compactNetworkOutput(
   Map<Object?, Object?> output, {
-  required bool standard,
+  required bool more,
 }) {
   final entries = output['entries'];
   final failures = output['recentFailures'];
@@ -1763,7 +1892,7 @@ Map<String, Object?> _compactNetworkOutput(
         'failed': summary['failureCount'],
         'active': summary['inFlightCount'],
         if (summary['truncated'] == true) 'truncated': true,
-        if (standard && summary['query'] != null) 'query': summary['query'],
+        if (more && summary['query'] != null) 'query': summary['query'],
       },
     if (endpoints is List<Object?> && endpoints.isNotEmpty)
       'endpoints': <Object?>[
@@ -1776,29 +1905,29 @@ Map<String, Object?> _compactNetworkOutput(
               if ((endpoint['failureCount'] as num? ?? 0) > 0)
                 'failed': endpoint['failureCount'],
               'avgMs': endpoint['averageDurationMs'],
-              if (standard) 'status': endpoint['lastStatusCode'],
+              if (more) 'status': endpoint['lastStatusCode'],
             },
       ],
     if (entries is List<Object?> && entries.isNotEmpty)
       'entries': <Object?>[
         for (final entry in entries)
           if (entry is Map<Object?, Object?>)
-            _compactNetworkEntry(entry, standard: standard),
+            _compactNetworkEntry(entry, more: more),
       ]
     else if (failures is List<Object?> && failures.isNotEmpty)
       'failures': <Object?>[
         for (final entry in failures)
           if (entry is Map<Object?, Object?>)
-            _compactNetworkEntry(entry, standard: standard),
+            _compactNetworkEntry(entry, more: more),
       ],
-    if (standard)
+    if (more)
       ..._pick(output, const <String>['source', 'endpointSummariesTruncated']),
   };
 }
 
 Map<String, Object?> _compactNetworkEntry(
   Map<Object?, Object?> entry, {
-  required bool standard,
+  required bool more,
 }) {
   final webSocket = entry['webSocket'];
   return <String, Object?>{
@@ -1812,48 +1941,70 @@ Map<String, Object?> _compactNetworkEntry(
     if (entry['durationMs'] != null) 'ms': entry['durationMs'],
     if (entry['error'] != null) 'error': entry['error'],
     if (webSocket is Map<Object?, Object?>)
-      'socket': standard
-          ? Map<String, Object?>.from(webSocket)
-          : _pick(webSocket, const <String>[
-              'sentFrameCount',
-              'receivedFrameCount',
-              'sentBytes',
-              'receivedBytes',
-              'lastDirection',
-              'lastType',
-              'lastTextPreview',
-            ]),
-    if (standard)
+      'socket': _compactSocket(webSocket, more: more),
+    if (more)
       ..._pick(entry, const <String>[
         'startedAt',
         'updatedAt',
-        'requestBodyTruncated',
-        'responseBodyTruncated',
+        'requestBodyBytes',
+        'responseBodyBytes',
       ]),
+    if (entry['requestBodyTruncated'] == true) 'requestBodyTruncated': true,
+    if (entry['responseBodyTruncated'] == true) 'responseBodyTruncated': true,
   };
 }
 
+Map<String, Object?> _compactSocket(
+  Map<Object?, Object?> socket, {
+  required bool more,
+}) {
+  final recent = socket['recentFrames'];
+  final frames = recent is List<Object?>
+      ? recent.whereType<Map<Object?, Object?>>().toList(growable: false)
+      : const <Map<Object?, Object?>>[];
+  return <String, Object?>{
+    if ((socket['sentFrames'] as num? ?? 0) > 0) 'sent': socket['sentFrames'],
+    if ((socket['receivedFrames'] as num? ?? 0) > 0)
+      'received': socket['receivedFrames'],
+    if (more && (socket['sentBytes'] as num? ?? 0) > 0)
+      'sentBytes': socket['sentBytes'],
+    if (more && (socket['receivedBytes'] as num? ?? 0) > 0)
+      'receivedBytes': socket['receivedBytes'],
+    if (frames.isNotEmpty) 'last': _compactSocketFrame(frames.last, more: more),
+    if (more && frames.isNotEmpty)
+      'frames': <Map<String, Object?>>[
+        for (final frame in frames) _compactSocketFrame(frame, more: true),
+      ],
+    if (socket['framesTruncated'] == true) 'partial': true,
+  };
+}
+
+Map<String, Object?> _compactSocketFrame(
+  Map<Object?, Object?> frame, {
+  required bool more,
+}) => <String, Object?>{
+  ..._pick(frame, const <String>['sequence', 'direction', 'kind', 'preview']),
+  if (more) ..._pick(frame, const <String>['at', 'payloadBytes']),
+  if (more && frame['finalFragment'] == false) 'final': false,
+  if (more && frame['compressed'] == true) 'compressed': true,
+};
+
 Map<String, Object?> _compactErrorsOutput(
   Map<Object?, Object?> output, {
-  required bool standard,
+  required bool more,
 }) {
   final rawErrors = output['errors'];
   final errors = rawErrors is List<Object?> ? rawErrors : const <Object?>[];
   return <String, Object?>{
-    ..._pick(output, const <String>[
-      'appId',
-      'source',
-      'routeName',
-      'hasErrors',
-    ]),
-    'errorCount': errors.length,
+    ..._pick(output, const <String>['appId', 'source', 'routeName']),
+    if (more || errors.isNotEmpty) 'errorCount': errors.length,
     if (errors.isNotEmpty)
       'errors': <Object?>[
-        for (final error in errors.take(standard ? 20 : 4))
+        for (final error in errors.take(more ? 20 : 4))
           if (error is Map<Object?, Object?>)
             _pick(
               error,
-              standard
+              more
                   ? const <String>[
                       'kind',
                       'message',
@@ -1871,7 +2022,7 @@ Map<String, Object?> _compactErrorsOutput(
 
 Map<String, Object?> _compactInteractiveOutput(
   Map<Object?, Object?> output, {
-  required bool standard,
+  required bool more,
 }) {
   final command = output['command'];
   final commandMap = command is Map<Object?, Object?> ? command : null;
@@ -1882,7 +2033,7 @@ Map<String, Object?> _compactInteractiveOutput(
     if (commandMap != null)
       'command': _pick(
         commandMap,
-        standard
+        more
             ? const <String>[
                 'commandId',
                 'commandType',
@@ -1904,15 +2055,15 @@ Map<String, Object?> _compactInteractiveOutput(
               ],
       ),
     ..._pick(output, const <String>['selectedPlane']),
-    if (standard || usedFallback || !successful)
+    if (more || usedFallback || !successful)
       ..._pick(output, const <String>['fallbackTrail']),
     if (changed is bool) 'changed': changed,
     ..._pick(output, const <String>['whatMatters']),
-    if (standard || !successful) ..._pick(output, const <String>['uiSummary']),
+    if (more || !successful) ..._pick(output, const <String>['uiSummary']),
     if (_nonEmpty(output['delta'])) 'delta': output['delta'],
     ..._pick(output, const <String>['snapshotRef', 'recommendedNextStep']),
     if (_nonEmpty(output['artifacts'])) 'artifacts': output['artifacts'],
-    if (standard)
+    if (more)
       ..._pick(output, const <String>[
         'diagnostics',
         'runtimeSteps',
@@ -1923,7 +2074,7 @@ Map<String, Object?> _compactInteractiveOutput(
 
 Map<String, Object?> _compactInteractiveBatchOutput(
   Map<Object?, Object?> output, {
-  required bool standard,
+  required bool more,
 }) => <String, Object?>{
   ..._pick(output, const <String>[
     'summary',
@@ -1934,7 +2085,7 @@ Map<String, Object?> _compactInteractiveBatchOutput(
     'results': <Object?>[
       for (final result in output['results']! as List<Object?>)
         if (result is Map<Object?, Object?>)
-          _compactInteractiveOutput(result, standard: standard)
+          _compactInteractiveOutput(result, more: more)
         else
           result,
     ],
@@ -1942,7 +2093,7 @@ Map<String, Object?> _compactInteractiveBatchOutput(
 
 Map<String, Object?> _compactDevelopmentOutput(
   Map<Object?, Object?> output, {
-  required bool standard,
+  required bool more,
 }) {
   final result = <String, Object?>{
     ..._pick(output, const <String>[
@@ -1963,7 +2114,7 @@ Map<String, Object?> _compactDevelopmentOutput(
   if (status is Map<Object?, Object?>) {
     final compactStatus = _pick(
       status,
-      standard
+      more
           ? const <String>[
               'state',
               'developmentSessionId',
@@ -1985,14 +2136,16 @@ Map<String, Object?> _compactDevelopmentOutput(
             ],
     );
     _removeRepeatedDevelopmentIdentity(compactStatus, result);
-    if (compactStatus.isNotEmpty) result['status'] = compactStatus;
+    for (final entry in compactStatus.entries) {
+      result.putIfAbsent(entry.key, () => entry.value);
+    }
   }
   for (final key in const <String>['app', 'target', 'sessionHandle']) {
     final child = output[key];
     if (child is! Map<Object?, Object?>) continue;
     final compactChild = _pick(
       child,
-      standard
+      more
           ? const <String>[
               'appId',
               'sessionId',
@@ -2022,7 +2175,7 @@ Map<String, Object?> _compactDevelopmentOutput(
   if (output['capabilities'] is Map<Object?, Object?>) {
     result['capabilities'] = _compactCapabilities(
       output['capabilities']! as Map<Object?, Object?>,
-      standard: standard,
+      more: more,
     );
   }
   return result;
@@ -2049,12 +2202,12 @@ void _removeRepeatedDevelopmentIdentity(
 
 Map<String, Object?> _compactProbeOutput(
   Map<Object?, Object?> output, {
-  required bool standard,
+  required bool more,
 }) {
   final probe = output['probe'];
   return <String, Object?>{
     if (probe is Map<Object?, Object?>)
-      'probe': standard
+      'probe': more
           ? Map<String, Object?>.from(probe)
           : _pick(probe, const <String>[
               'probeId',
@@ -2074,20 +2227,20 @@ Map<String, Object?> _compactProbeOutput(
 
 Map<String, Object?> _compactProbeComparisonOutput(
   Map<Object?, Object?> output, {
-  required bool standard,
+  required bool more,
 }) => <String, Object?>{
   if (output['fromProbe'] is Map<Object?, Object?>)
     'fromProbeId': (output['fromProbe']! as Map<Object?, Object?>)['probeId'],
   if (output['toProbe'] is Map<Object?, Object?>)
     'toProbeId': (output['toProbe']! as Map<Object?, Object?>)['probeId'],
   ..._pick(output, const <String>['delta']),
-  if (standard) ..._pick(output, const <String>['fromProbe', 'toProbe']),
+  if (more) ..._pick(output, const <String>['fromProbe', 'toProbe']),
 };
 
 Map<String, Object?> _compactCapabilities(
   Map<Object?, Object?> capabilities, {
-  required bool standard,
-}) => standard
+  required bool more,
+}) => more
     ? _pick(capabilities, const <String>[
         'surfaceKinds',
         'supportedCommands',
@@ -2105,7 +2258,7 @@ Map<String, Object?> _compactCapabilities(
 
 Map<String, Object?> _compactLeaseListOutput(
   Map<Object?, Object?> output, {
-  required bool standard,
+  required bool more,
 }) {
   final rawItems = output['items'];
   final items = rawItems is List<Object?>
@@ -2132,7 +2285,7 @@ Map<String, Object?> _compactLeaseListOutput(
         for (final item in actionable)
           _pick(
             item,
-            standard
+            more
                 ? item.keys.whereType<String>()
                 : const <String>[
                     'leaseId',
@@ -2150,9 +2303,9 @@ Map<String, Object?> _compactLeaseListOutput(
 
 Map<String, Object?> _compactGenericOperationOutput(
   Map<Object?, Object?> output, {
-  required bool standard,
+  required bool more,
 }) {
-  if (standard) {
+  if (more) {
     return <String, Object?>{
       for (final entry in output.entries)
         if (entry.key is String && entry.value != null)
@@ -2200,27 +2353,27 @@ bool _repeatsOperationIdentity(
 
 Map<String, Object?> _compactTargetInspection(
   Map<Object?, Object?> value, {
-  required bool standard,
+  required bool more,
 }) {
   final capability = value['capabilityProfile'];
   final system = value['systemControl'];
   return <String, Object?>{
     ..._pick(value, <String>[
-      if (standard) 'targetId',
+      if (more) 'targetId',
       'platform',
       'targetKind',
       'foregroundSurface',
       'selectedPlane',
       'currentRouteName',
     ]),
-    if (standard && value['fallbackTrail'] != null)
+    if (more && value['fallbackTrail'] != null)
       'fallbackTrail': value['fallbackTrail'],
     if (capability is Map<Object?, Object?>)
-      'capabilities': _compactCapabilities(capability, standard: standard),
-    if (standard && value['uiSummary'] != null) 'uiSummary': value['uiSummary'],
+      'capabilities': _compactCapabilities(capability, more: more),
+    if (more && value['uiSummary'] != null) 'uiSummary': value['uiSummary'],
     if (value['whatMatters'] != null) 'whatMatters': value['whatMatters'],
     if (system is Map<Object?, Object?>)
-      'systemControl': standard
+      'systemControl': more
           ? _pick(system, const <String>[
               'adapter',
               'preferredPlane',
@@ -2235,9 +2388,9 @@ Map<String, Object?> _compactTargetInspection(
               'availableActionCount': _listLength(system['availableActions']),
               'blockedActionCount': _listLength(system['blockedActions']),
             },
-    if (standard && value['snapshotRef'] != null)
+    if (more && value['snapshotRef'] != null)
       'snapshotRef': value['snapshotRef'],
-    if (standard && value['snapshot'] != null) 'snapshot': value['snapshot'],
+    if (more && value['snapshot'] != null) 'snapshot': value['snapshot'],
     if (value['recommendedNextStep'] != null)
       'recommendedNextStep': value['recommendedNextStep'],
   };
@@ -2245,7 +2398,7 @@ Map<String, Object?> _compactTargetInspection(
 
 Map<String, Object?> _compactRun(
   Map<Object?, Object?> value, {
-  required bool standard,
+  required bool more,
 }) => <String, Object?>{
   ..._pick(value, const <String>[
     'runId',
@@ -2255,7 +2408,7 @@ Map<String, Object?> _compactRun(
     'outcome',
     'stability',
   ]),
-  if (standard)
+  if (more)
     ..._pick(value, const <String>[
       'workspaceId',
       'submittedAt',
@@ -2264,11 +2417,14 @@ Map<String, Object?> _compactRun(
       'caseIds',
       'activeAttemptIds',
     ]),
-  if (!standard) 'caseCount': _listLength(value['caseIds']),
-  if (!standard && _listLength(value['activeAttemptIds']) > 0)
+  if (!more) 'caseCount': _listLength(value['caseIds']),
+  if (!more && _listLength(value['activeAttemptIds']) > 0)
     'activeAttemptCount': _listLength(value['activeAttemptIds']),
   if (value['failure'] is Map<Object?, Object?>)
-    'failure': _compactFailure(value['failure']! as Map<Object?, Object?>),
+    'failure': _compactFailure(
+      value['failure']! as Map<Object?, Object?>,
+      more: more,
+    ),
 };
 
 int _listLength(Object? value) => value is List<Object?> ? value.length : 0;
@@ -2323,16 +2479,16 @@ int _leaseStateRank(Object? state) => switch (state) {
 Map<String, Object?>? _compactCollection(
   String command,
   Map<Object?, Object?> value,
-  CockpitCliOutputDetail detail,
+  CockpitCliOutputView view,
 ) {
-  final standard = detail == CockpitCliOutputDetail.standard;
+  final more = view == CockpitCliOutputView.more;
   final keys = switch (command) {
     'root.list' => <String>[
       'rootId',
       'state',
       'label',
       'canonicalPath',
-      if (standard) 'createdAt',
+      if (more) 'createdAt',
     ],
     'workspace.list' => <String>[
       'workspaceId',
@@ -2340,7 +2496,7 @@ Map<String, Object?>? _compactCollection(
       'rootId',
       'state',
       'canonicalPath',
-      if (standard) ...<String>['engineVersion', 'createdAt', 'updatedAt'],
+      if (more) ...<String>['engineVersion', 'createdAt', 'updatedAt'],
     ],
     'workspace.documents' || 'case.list' || 'suite.list' => <String>[
       'documentId',
@@ -2349,7 +2505,7 @@ Map<String, Object?>? _compactCollection(
       'authoredId',
       'caseId',
       'title',
-      if (standard) ...<String>['modifiedAt', 'cases'],
+      if (more) ...<String>['modifiedAt', 'cases'],
     ],
     'session.list' => <String>[
       'handleId',
@@ -2359,7 +2515,7 @@ Map<String, Object?>? _compactCollection(
       'deviceId',
       'flavor',
       'lastState',
-      if (standard) ...<String>[
+      if (more) ...<String>[
         'sessionId',
         'workspaceId',
         'targetId',
@@ -2378,7 +2534,7 @@ Map<String, Object?>? _compactCollection(
       'appId',
       'state',
       'entrypoint',
-      if (standard) ...<String>['flavor', 'wdaUrl'],
+      if (more) ...<String>['flavor', 'wdaUrl'],
     ],
     'artifact.list' => <String>[
       'artifactId',
@@ -2387,7 +2543,7 @@ Map<String, Object?>? _compactCollection(
       'kind',
       'relativePath',
       'mediaType',
-      if (standard) ...<String>['createdAt', 'role'],
+      if (more) ...<String>['createdAt', 'role'],
     ],
     'run.events' => <String>[
       'sequence',
@@ -2400,7 +2556,7 @@ Map<String, Object?>? _compactCollection(
       'stability',
       'requestedPlane',
       'actualPlane',
-      if (standard) ...<String>[
+      if (more) ...<String>[
         'timestamp',
         'message',
         'durationMs',
@@ -2431,6 +2587,7 @@ Map<String, Object?>? _compactCollection(
             if (item['failure'] is Map<Object?, Object?>)
               'failure': _compactFailure(
                 item['failure']! as Map<Object?, Object?>,
+                more: more,
               ),
           }
         else
@@ -2441,7 +2598,7 @@ Map<String, Object?>? _compactCollection(
 
 Map<String, Object?> _compactRunEvents(
   Map<Object?, Object?> value, {
-  required bool standard,
+  required bool more,
 }) {
   final rawItems = value['items']! as List<Object?>;
   final events = <Map<String, Object?>>[];
@@ -2450,10 +2607,7 @@ Map<String, Object?> _compactRunEvents(
     if (item is! Map<Object?, Object?>) continue;
     if (item['type'] == 'event' && item['event'] is Map<Object?, Object?>) {
       events.add(
-        _compactRunEvent(
-          item['event']! as Map<Object?, Object?>,
-          standard: standard,
-        ),
+        _compactRunEvent(item['event']! as Map<Object?, Object?>, more: more),
       );
       continue;
     }
@@ -2482,20 +2636,20 @@ Map<String, Object?> _compactRunEvents(
     if (failures.isNotEmpty) 'failures': failures,
     if (finalEvents.isNotEmpty) 'final': finalEvents.last,
     if (finalEvents.isEmpty && events.isNotEmpty) 'latest': events.last,
-    if (standard) 'items': <Object?>[...events, ...controls],
+    if (more) 'items': <Object?>[...events, ...controls],
   };
 }
 
 Map<String, Object?> _compactRunStreamItem(
   Map<Object?, Object?> item, {
-  required bool standard,
+  required bool more,
 }) {
   if (item['type'] == 'event' && item['event'] is Map<Object?, Object?>) {
     return <String, Object?>{
       'type': 'event',
       'event': _compactRunEvent(
         item['event']! as Map<Object?, Object?>,
-        standard: standard,
+        more: more,
       ),
     };
   }
@@ -2504,7 +2658,7 @@ Map<String, Object?> _compactRunStreamItem(
 
 Map<String, Object?> _compactRunEvent(
   Map<Object?, Object?> event, {
-  required bool standard,
+  required bool more,
 }) {
   final artifacts = event['artifacts'];
   return <String, Object?>{
@@ -2521,10 +2675,13 @@ Map<String, Object?> _compactRunEvent(
       'stability',
       'requestedPlane',
       'actualPlane',
-      if (standard) ...<String>['timestamp', 'targetId', 'durationMs'],
+      if (more) ...<String>['timestamp', 'targetId', 'durationMs'],
     ]),
     if (event['failure'] is Map<Object?, Object?>)
-      'failure': _compactFailure(event['failure']! as Map<Object?, Object?>),
+      'failure': _compactFailure(
+        event['failure']! as Map<Object?, Object?>,
+        more: more,
+      ),
     if (artifacts is List<Object?> && artifacts.isNotEmpty)
       'artifactCount': artifacts.length,
   };
@@ -2532,7 +2689,7 @@ Map<String, Object?> _compactRunEvent(
 
 Map<String, Object?> _compactSession(
   Map<Object?, Object?> value, {
-  required bool standard,
+  required bool more,
 }) {
   final live = value['live'];
   final liveMap = live is Map<Object?, Object?> ? live : null;
@@ -2540,7 +2697,7 @@ Map<String, Object?> _compactSession(
   final statusMap = status is Map<Object?, Object?> ? status : null;
   final runtime = liveMap?['runtime'];
   final runtimeMap = runtime is Map<Object?, Object?> ? runtime : null;
-  return <String, Object?>{
+  final result = <String, Object?>{
     ..._pick(value, const <String>[
       'handleId',
       'projectPath',
@@ -2551,16 +2708,7 @@ Map<String, Object?> _compactSession(
       'lifecycle',
       'reachable',
     ]),
-    if (statusMap != null)
-      'status': _pick(statusMap, const <String>[
-        'state',
-        'appReachable',
-        'remoteSessionReachable',
-        'reloadGeneration',
-        'lastReloadSucceeded',
-        'lastError',
-      ]),
-    if (standard) ...<String, Object?>{
+    if (more) ...<String, Object?>{
       ..._pick(value, const <String>[
         'sessionId',
         'workspaceId',
@@ -2573,33 +2721,76 @@ Map<String, Object?> _compactSession(
       if (value['errors'] != null) 'errors': value['errors'],
     },
   };
+  if (statusMap != null) {
+    final state = statusMap['state'];
+    if (state != null && state != result['lifecycle']) result['state'] = state;
+    if (statusMap['appReachable'] != null &&
+        (more || statusMap['appReachable'] == false)) {
+      result['appReachable'] = statusMap['appReachable'];
+    }
+    if (statusMap['remoteSessionReachable'] != null &&
+        (more || statusMap['remoteSessionReachable'] == false)) {
+      result['remoteSessionReachable'] = statusMap['remoteSessionReachable'];
+    }
+    if (more && statusMap['reloadGeneration'] != null) {
+      result['reloadGeneration'] = statusMap['reloadGeneration'];
+    }
+    if (statusMap['lastReloadSucceeded'] != null &&
+        (more || statusMap['lastReloadSucceeded'] == false)) {
+      result['lastReloadSucceeded'] = statusMap['lastReloadSucceeded'];
+    }
+    if (statusMap['lastError'] != null) {
+      result['error'] = statusMap['lastError'];
+    }
+  }
+  return result;
 }
 
-Map<String, Object?> _compactFailure(Map<Object?, Object?> failure) {
-  final primary = failure['primary'];
-  final source = primary is Map<Object?, Object?> ? primary : failure;
+Map<String, Object?> _compactErrorEnvelope(
+  Map<Object?, Object?> value, {
+  required bool more,
+}) {
+  final error = value['error'];
+  if (error is! Map<Object?, Object?>) return Map<String, Object?>.from(value);
   return <String, Object?>{
-    for (final key in const <String>[
-      'code',
-      'category',
-      'message',
-      'retryable',
-      'responsibleLayer',
-    ])
-      if (source[key] != null) key: source[key],
+    'error': _compactFailure(error, more: more, includeDetails: true),
   };
 }
 
+Map<String, Object?> _compactFailure(
+  Map<Object?, Object?> failure, {
+  required bool more,
+  bool includeDetails = false,
+}) {
+  final primary = failure['primary'];
+  final source = primary is Map<Object?, Object?> ? primary : failure;
+  return <String, Object?>{
+    ..._pick(source, const <String>['code', 'message']),
+    if (source['retryable'] == true) 'retryable': true,
+    if (more) ..._pick(source, const <String>['category', 'responsibleLayer']),
+    if (includeDetails && source['details'] != null)
+      'details': source['details'],
+  };
+}
+
+Map<String, Object?> _compactRoot(Map<Object?, Object?> value) =>
+    _pick(value, const <String>['rootId', 'state', 'label', 'canonicalPath']);
+
+Map<String, Object?> _compactWorkspace(Map<Object?, Object?> value) => _pick(
+  value,
+  const <String>['workspaceId', 'projectId', 'state', 'canonicalPath'],
+);
+
 Map<String, Object?> _compactValidationResult(
   Map<Object?, Object?> value, {
-  required bool standard,
+  required bool more,
 }) {
   final document = value['document'];
   final sourceMap = value['sourceMap'];
   return <String, Object?>{
-    if (value['valid'] != null) 'valid': value['valid'],
+    if (value['valid'] == false) 'valid': false,
     if (document is Map<Object?, Object?>)
-      'document': _compactValidatedDocument(document, standard: standard),
+      'document': _compactValidatedDocument(document, more: more),
     if (value['diagnostics'] != null) 'diagnostics': value['diagnostics'],
     if (sourceMap is List<Object?>) 'sourceMapEntries': sourceMap.length,
   };
@@ -2607,7 +2798,7 @@ Map<String, Object?> _compactValidationResult(
 
 Map<String, Object?> _compactValidatedDocument(
   Map<Object?, Object?> value, {
-  required bool standard,
+  required bool more,
 }) {
   int lengthOf(String key) => switch (value[key]) {
     List<Object?> items => items.length,
@@ -2622,7 +2813,7 @@ Map<String, Object?> _compactValidatedDocument(
       'kind',
       'id',
       'name',
-      if (standard) ...<String>[
+      if (more) ...<String>[
         'description',
         'tags',
         'target',
@@ -2695,14 +2886,70 @@ Object? _conciseCliValue(Object? value, {bool schema = false}) {
   }
   if (value is! Map<Object?, Object?>) return value;
   final result = <String, Object?>{};
+  final hasError = value['error'] != null || value['errors'] != null;
   for (final entry in value.entries) {
-    if (entry.key is! String) continue;
+    if (entry.key is! String || entry.value == null) continue;
     final original = entry.key! as String;
+    final normalized = original.toLowerCase();
+    if (const <String>{
+          'sha256',
+          'checksum',
+          'digest',
+          'contentDigest',
+          'checkoutIdentity',
+          'filesystemIdentity',
+          'clean',
+          'hasErrors',
+          'sizeBytes',
+        }.contains(original) ||
+        normalized.endsWith('sha256') ||
+        normalized.endsWith('checksum') ||
+        normalized.endsWith('digest')) {
+      continue;
+    }
+    if (entry.value == false &&
+        const <String>{
+          'truncated',
+          'diagnosticsTruncated',
+          'requestBodyTruncated',
+          'responseBodyTruncated',
+          'usedFallback',
+          'usedCaptureFallback',
+          'framesTruncated',
+          'endpointSummariesTruncated',
+          'dimensionMismatch',
+          'compressed',
+        }.contains(original)) {
+      continue;
+    }
+    if ((original == 'ok' && (entry.value == true || hasError)) ||
+        (original == 'success' && entry.value == true)) {
+      continue;
+    }
     final key = original.startsWith(r'$')
         ? _conciseCliPath(original)
         : _conciseCliFieldNames[original] ?? original;
-    result[key] = _conciseCliValue(entry.value, schema: original == 'schema');
+    final numericHandle =
+        const <String>{
+              'session',
+              'sessionHandle',
+              'handleId',
+            }.contains(original) &&
+            entry.value is String
+        ? int.tryParse(entry.value! as String)
+        : null;
+    final concise = _conciseCliValue(
+      numericHandle ?? entry.value,
+      schema: original == 'schema' || original == 'fields',
+    );
+    if (!result.containsKey(key) || result[key] == concise) {
+      result[key] = concise;
+    } else {
+      result[original] = concise;
+    }
   }
+  if (result['device'] == result['platform']) result.remove('device');
+  if (result['state'] == result['lifecycle']) result.remove('state');
   return result;
 }
 
@@ -2715,69 +2962,217 @@ String _conciseCliPath(String path) {
 }
 
 const Map<String, String> _conciseCliFieldNames = <String, String>{
+  'schemaVersion': 'schema',
   'authorizationMode': 'auth',
+  'allowedDangerousOperations': 'ops',
+  'allowedOperationSafetyEffects': 'opEffects',
+  'allowedTargetEnvironments': 'targetEnvs',
+  'allowedSafetyEffects': 'effects',
   'apiVersion': 'api',
   'engineVersion': 'engine',
+  'operationId': 'op',
+  'idempotencyKey': 'idem',
+  'idempotency': 'idem',
+  'projectId': 'project',
+  'workspaceId': 'workspace',
+  'rootId': 'root',
+  'runId': 'run',
+  'suiteId': 'suite',
+  'entryId': 'entry',
+  'authoredId': 'id',
+  'caseId': 'case',
+  'artifactId': 'artifact',
+  'documentId': 'doc',
+  'stepExecutionId': 'step',
+  'attemptId': 'attempt',
+  'targetId': 'target',
+  'appId': 'app',
+  'sessionId': 'runtime',
+  'leaseId': 'lease',
+  'probeId': 'probe',
+  'fromProbeId': 'from',
+  'toProbeId': 'to',
+  'eventId': 'event',
+  'resourceId': 'resource',
+  'ownerId': 'owner',
+  'registrationId': 'reg',
   'startedAt': 'started',
+  'createdAt': 'created',
+  'updatedAt': 'updated',
+  'registeredAt': 'registered',
+  'modifiedAt': 'modified',
+  'observedAt': 'observed',
+  'generatedAt': 'generated',
+  'completedAt': 'ended',
+  'finishedAt': 'ended',
+  'recordedAt': 'recorded',
+  'capturedAt': 'captured',
   'processId': 'pid',
   'routeName': 'route',
   'currentRouteName': 'route',
-  'targetKind': 'target',
+  'truncated': 'partial',
+  'diagnostics': 'diag',
+  'diagnosticLevel': 'level',
+  'snapshotRef': 'snapshot',
+  'targetKind': 'targetType',
+  'documentKind': 'docType',
+  'resourceKind': 'resourceType',
+  'entityKind': 'entityType',
   'errorCount': 'errors',
   'runtimeErrorCount': 'errors',
   'networkFailureCount': 'netFailures',
   'visibleTargetCount': 'visible',
   'textPreviews': 'text',
-  'reloadGeneration': 'generation',
+  'reloadGeneration': 'gen',
   'lastReloadMode': 'mode',
   'lastReloadSucceeded': 'reloadOk',
+  'lastStatusAt': 'checked',
   'includeNetworkIdle': 'network',
   'durationMs': 'ms',
+  'elapsedMs': 'ms',
   'commandType': 'type',
-  'detail': 'verbosity',
+  'commandId': 'id',
+  'matchedKind': 'kind',
+  'matchedValue': 'value',
+  'detail': 'view',
   'maximumBytes': 'maxBytes',
   'responsibleLayer': 'layer',
+  'retryable': 'retry',
+  'details': 'info',
+  'failure': 'error',
   'selectedPlane': 'plane',
-  'fallbackTrail': 'fallback',
+  'actualPlane': 'plane',
+  'requestedPlane': 'wanted',
+  'fallbackTrail': 'fallbacks',
   'recommendedNextStep': 'next',
   'whatMatters': 'note',
   'defaultTimeoutMs': 'timeoutMs',
   'maximumTimeoutMs': 'maxTimeoutMs',
-  'requestSchemaRef': 'inputSchema',
-  'responseSchemaRef': 'outputSchema',
+  'requestSchemaRef': 'inputRef',
+  'responseSchemaRef': 'outputRef',
   'requiredFeatures': 'requires',
+  'capabilities': 'caps',
+  'capabilityProfile': 'caps',
+  'actionCapabilities': 'actions',
+  'systemControl': 'system',
+  'foregroundSurface': 'surface',
+  'surfaceKind': 'surfaceType',
+  'preferredPlane': 'plane',
+  'surfaceKinds': 'surfaces',
+  'supportedCommands': 'commands',
+  'evidenceCapabilities': 'evidence',
+  'availableActions': 'available',
+  'blockedActions': 'blocked',
+  'actionGroups': 'groups',
+  'fallbackOrder': 'order',
+  'qualityFlags': 'quality',
+  'safetyEffects': 'effects',
   'resolvedScope': 'scope',
+  'mutationClass': 'mutation',
+  'executionMode': 'mode',
   'inputContract': 'input',
   'outputContract': 'output',
   'schemaRef': 'ref',
-  'recommendedCommand': 'devCommand',
+  'recommendedCommand': 'use',
+  'opUnavailable': 'unavailable',
   'sessionHandle': 'session',
   'handleId': 'session',
+  'lastState': 'state',
   'projectPath': 'path',
-  'checkoutPath': 'checkoutPath',
+  'relativePath': 'path',
+  'packageName': 'package',
+  'workspaceRoot': 'path',
+  'checkoutPath': 'checkout',
   'entrypoint': 'entry',
   'deviceId': 'device',
-  'developmentSessionId': 'runtimeId',
+  'developmentSessionId': 'runtime',
   'runtimeErrors': 'errors',
-  'requestedCaptureProfile': 'captureProfile',
-  'resolvedCaptureKind': 'captureKind',
-  'usedCaptureFallback': 'usedFallback',
+  'requestedCaptureProfile': 'wantCapture',
+  'captureProfile': 'capture',
+  'resolvedCaptureKind': 'source',
+  'usedCaptureFallback': 'fallback',
+  'usedFallback': 'fallback',
   'degradationReason': 'degraded',
-  'locatorResolution': 'locator',
-  'launchTimeoutMilliseconds': 'launchTimeoutMs',
-  'checkoutIdentity': 'checkout',
-  'omittedLineCount': 'omittedLines',
+  'locatorResolution': 'loc',
+  'launchTimeoutMilliseconds': 'launchMs',
+  'checkoutId': 'checkout',
+  'omittedLineCount': 'omitted',
   'operationCount': 'count',
-  'availableActionCount': 'availableCount',
-  'blockedActionCount': 'blockedCount',
+  'availableActionCount': 'available',
+  'blockedActionCount': 'blocked',
   'actionableCount': 'actionable',
+  'surfaceCount': 'surfaces',
+  'commandCount': 'commands',
+  'actionCount': 'actions',
+  'evidenceCount': 'evidence',
+  'activeAttemptCount': 'active',
+  'activeAttemptIds': 'active',
+  'afterSequence': 'after',
+  'eventCount': 'events',
+  'artifactCount': 'artifacts',
+  'sourceMapEntries': 'sources',
+  'referenceCounts': 'refs',
+  'finallySteps': 'finally',
+  'totalCount': 'total',
+  'failureCount': 'failures',
+  'attemptCount': 'attempts',
+  'totalDiagnostics': 'issues',
+  'severityCounts': 'counts',
+  'documentationUrl': 'docs',
+  'totalEntryCount': 'total',
+  'capturedEntryCount': 'captured',
+  'inFlightCount': 'active',
+  'requestCount': 'requests',
+  'averageDurationMs': 'avgMs',
+  'lastStatusCode': 'status',
+  'requestId': 'id',
+  'statusCode': 'status',
+  'uriPattern': 'uri',
+  'requestBodyBytes': 'reqBytes',
+  'responseBodyBytes': 'resBytes',
+  'requestBodyTruncated': 'reqPartial',
+  'responseBodyTruncated': 'resPartial',
+  'sentFrameCount': 'sent',
+  'receivedFrameCount': 'received',
+  'sentFrames': 'sent',
+  'receivedFrames': 'received',
+  'sentBytes': 'sentBytes',
+  'receivedBytes': 'recvBytes',
+  'framesTruncated': 'partial',
+  'recentFrames': 'frames',
+  'finalFragment': 'final',
+  'lastDirection': 'direction',
+  'lastTextPreview': 'text',
+  'payloadBytes': 'bytes',
   'dimensionMismatch': 'sizeMismatch',
-  'changedPixelCount': 'changedPixels',
+  'changedPixelCount': 'changed',
   'totalPixelCount': 'pixels',
   'pixelTolerance': 'tolerance',
-  'maximumChangedPixels': 'maxChangedPixels',
-  'mediaType': 'type',
+  'maximumChangedPixels': 'maxChanged',
+  'mediaType': 'media',
   'sizeBytes': 'bytes',
+  'logicalWidth': 'logicalW',
+  'logicalHeight': 'logicalH',
+  'alternatives': 'options',
+  'diagnosticsTruncated': 'diagPartial',
+  'stderrPreview': 'stderr',
+  'stdoutPreview': 'stdout',
+  'missingReason': 'reason',
+  'recentFailures': 'failures',
+  'endpointSummaries': 'endpoints',
+  'endpointSummariesTruncated': 'endpointsMore',
+  'runtimeSteps': 'steps',
+  'recordingResult': 'recording',
+  'finalSnapshot': 'snapshot',
+  'appReachable': 'appLive',
+  'remoteSessionReachable': 'bridgeLive',
+  'workspaceWorker': 'worker',
+  'operationKind': 'opKind',
+  'canonicalPath': 'path',
+  'requestedRelativePath': 'filter',
+  'uiSummary': 'ui',
+  'lineCount': 'lines',
+  'exitCode': 'exit',
 };
 
 int _priority(String key) {
@@ -2808,6 +3203,7 @@ int _priority(String key) {
     'counts',
     'failure',
     'error',
+    'code',
     'message',
     'output',
     'items',

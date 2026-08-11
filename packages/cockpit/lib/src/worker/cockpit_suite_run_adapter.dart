@@ -108,7 +108,7 @@ final class CockpitSuiteRunAdapterFactory {
         resolver: _documents,
         inputs: submission.inputs,
       );
-      final runId = 'rn-${context.requestId}';
+      final runId = context.requestId;
       final reservation = await _runStore.reserve(
         runId: runId,
         idempotencyKey: context.idempotencyKey,

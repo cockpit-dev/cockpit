@@ -2,9 +2,9 @@
   <img src="https://raw.githubusercontent.com/cockpit-dev/cockpit/main/assets/brand/cockpit-mark.svg" width="128" alt="Cockpit logo">
 </p>
 
-# Cockpit 3.0 Claude Code Plugin
+# Cockpit Claude Code Plugin
 
-This plugin exposes the Cockpit 3.0 skill and authenticated MCP control plane
+This plugin exposes the Cockpit skill and authenticated MCP control plane
 for cross-platform development and black-box application E2E.
 
 ## Install

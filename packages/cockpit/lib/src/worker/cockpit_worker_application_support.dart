@@ -288,6 +288,18 @@ final class CockpitWorkerResultSanitizer {
     'route',
     'routeName',
   };
+  static const Set<String> _logicalTextKeys = <String>{
+    'cockpitId',
+    'displayLabel',
+    'hint',
+    'keyValue',
+    'label',
+    'semanticId',
+    'text',
+    'textParts',
+    'textPreview',
+    'tooltip',
+  };
 
   Future<Map<String, Object?>> sanitize(
     Map<String, Object?> value, {
@@ -370,6 +382,7 @@ final class CockpitWorkerResultSanitizer {
             artifactPaths: artifactPaths,
             artifactContext: artifactContext,
             artifactRoot: artifactRoot,
+            key: key,
           ),
         ),
       ),
@@ -499,8 +512,17 @@ final class CockpitWorkerResultSanitizer {
       return redacted;
     }
     if (_logicalPathKeys.contains(key)) return value;
+    if (_logicalTextKeys.contains(key) && _looksLikeSlashCommand(value)) {
+      return value;
+    }
     if (p.isAbsolute(value)) return '<redacted-path>';
     return value;
+  }
+
+  bool _looksLikeSlashCommand(String value) {
+    return RegExp(
+      r'^/[A-Za-z0-9][A-Za-z0-9._:-]*(?:\s|$)',
+    ).hasMatch(value.trim());
   }
 }
 
@@ -550,7 +572,7 @@ String _artifactKind(Object? role, String name) {
   return switch (extension) {
     '.png' || '.jpg' || '.jpeg' || '.webp' => 'screenshot',
     '.mp4' || '.mov' || '.webm' => 'recording',
-    '.json' || '.jsonl' || '.log' || '.txt' => 'diagnostic',
+    '.json' || '.jsonl' || '.log' || '.txt' || '.xml' => 'diagnostic',
     _ => 'artifact',
   };
 }
@@ -564,6 +586,7 @@ String _artifactMediaType(String name) =>
       '.mov' => 'video/quicktime',
       '.webm' => 'video/webm',
       '.json' || '.jsonl' => 'application/json',
+      '.xml' => 'application/xml',
       '.log' || '.txt' || '.md' => 'text/plain',
       '.zip' => 'application/zip',
       _ => 'application/octet-stream',

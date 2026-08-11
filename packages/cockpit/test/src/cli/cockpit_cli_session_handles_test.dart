@@ -406,7 +406,8 @@ void main() {
 
     expect(exitCode, cockpitSuccessExitCode);
     expect(clientRequests, 0);
-    expect(item['lastState'], 'crashed');
+    expect(item['state'], 'crashed');
+    expect(item, isNot(contains('lastState')));
     expect(item, isNot(contains('lifecycle')));
     expect(item, isNot(contains('reachable')));
   });
@@ -421,7 +422,7 @@ void main() {
 
     final generated = runtime.operationIdempotencyKey(required, null);
 
-    expect(generated?.value, matches(RegExp(r'^cli-[A-Za-z0-9_-]+$')));
+    expect(generated?.value, matches(RegExp(r'^c[0-9a-z]{10}$')));
     expect(
       runtime.operationIdempotencyKey(required, 'caller-key')?.value,
       'caller-key',
@@ -463,6 +464,22 @@ void main() {
         ),
       ),
     );
+  });
+
+  test('keeps request operation budgets stable and bounded', () {
+    final runtime = CockpitCliRuntime(
+      stdoutSink: StringBuffer(),
+      stderrSink: StringBuffer(),
+    );
+
+    runtime.configureTimeout(const Duration(minutes: 20), explicit: false);
+
+    expect(runtime.operationBudget(), const Duration(minutes: 19, seconds: 59));
+    expect(
+      runtime.operationBudget(maximum: const Duration(minutes: 10)),
+      const Duration(minutes: 10),
+    );
+    expect(runtime.operationTimeout, lessThan(runtime.operationBudget()));
   });
 }
 

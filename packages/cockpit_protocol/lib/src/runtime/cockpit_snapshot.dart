@@ -450,6 +450,7 @@ final class CockpitSnapshotTarget {
     this.semanticId,
     this.keyValue,
     this.text,
+    List<String> textParts = const <String>[],
     this.tooltip,
     this.typeName,
     this.path,
@@ -464,7 +465,8 @@ final class CockpitSnapshotTarget {
     List<CockpitSnapshotAncestor> ancestors = const <CockpitSnapshotAncestor>[],
     List<CockpitDiagnosticProperty> diagnosticProperties =
         const <CockpitDiagnosticProperty>[],
-  }) : supportedCommands = List.unmodifiable(supportedCommands),
+  }) : textParts = List.unmodifiable(textParts),
+       supportedCommands = List.unmodifiable(supportedCommands),
        ancestors = List.unmodifiable(ancestors),
        diagnosticProperties = List.unmodifiable(diagnosticProperties);
 
@@ -473,6 +475,7 @@ final class CockpitSnapshotTarget {
   final String? semanticId;
   final String? keyValue;
   final String? text;
+  final List<String> textParts;
   final String? tooltip;
   final String? typeName;
   final String? path;
@@ -489,6 +492,8 @@ final class CockpitSnapshotTarget {
 
   static const ListEquality<CockpitCommandType> _commandListEquality =
       ListEquality<CockpitCommandType>();
+  static const ListEquality<String> _textPartListEquality =
+      ListEquality<String>();
   static const ListEquality<CockpitSnapshotAncestor> _ancestorListEquality =
       ListEquality<CockpitSnapshotAncestor>();
   static const ListEquality<CockpitDiagnosticProperty> _propertyListEquality =
@@ -504,6 +509,7 @@ final class CockpitSnapshotTarget {
     if (semanticId != null) 'semanticId': semanticId,
     if (keyValue != null) 'keyValue': keyValue,
     if (text != null) 'text': text,
+    if (textParts.isNotEmpty) 'textParts': textParts,
     if (tooltip != null) 'tooltip': tooltip,
     if (typeName != null) 'typeName': typeName,
     if (path != null) 'path': path,
@@ -534,6 +540,9 @@ final class CockpitSnapshotTarget {
       semanticId: json['semanticId'] as String?,
       keyValue: json['keyValue'] as String?,
       text: json['text'] as String?,
+      textParts: (json['textParts'] as List<Object?>? ?? const <Object?>[])
+          .whereType<String>()
+          .toList(growable: false),
       tooltip: json['tooltip'] as String?,
       typeName: json['typeName'] as String?,
       path: json['path'] as String?,
@@ -587,6 +596,7 @@ final class CockpitSnapshotTarget {
             other.semanticId == semanticId &&
             other.keyValue == keyValue &&
             other.text == text &&
+            _textPartListEquality.equals(other.textParts, textParts) &&
             other.tooltip == tooltip &&
             other.typeName == typeName &&
             other.path == path &&
@@ -615,6 +625,7 @@ final class CockpitSnapshotTarget {
     semanticId,
     keyValue,
     text,
+    _textPartListEquality.hash(textParts),
     tooltip,
     typeName,
     path,

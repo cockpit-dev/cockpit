@@ -1,10 +1,8 @@
-import 'dart:convert';
-
-import 'package:crypto/crypto.dart';
 import 'package:cockpit_protocol/cockpit_protocol.dart';
 import 'package:path/path.dart' as p;
 
 import '../foundation/cockpit_home.dart';
+import '../foundation/cockpit_ids.dart';
 import '../foundation/cockpit_locked_json_store.dart';
 import '../foundation/cockpit_permissions.dart';
 
@@ -133,8 +131,10 @@ final class CockpitSupervisorRunAdmissionStore {
     required CockpitHomePaths paths,
     required CockpitPermissionHardener permissionHardener,
     required CockpitDirectorySyncer directorySyncer,
+    CockpitTokenGenerator? tokenGenerator,
     this.maximumAdmissions = 10000,
-  }) : _store = CockpitLockedJsonStore<_AdmissionState>(
+  }) : _tokenGenerator = tokenGenerator ?? CockpitSecureTokenGenerator(),
+       _store = CockpitLockedJsonStore<_AdmissionState>(
          path: p.join(paths.runsDirectory, 'admissions.json'),
          codec: const _AdmissionStateCodec(),
          createInitial: _AdmissionState.empty,
@@ -148,6 +148,7 @@ final class CockpitSupervisorRunAdmissionStore {
   }
 
   final int maximumAdmissions;
+  final CockpitTokenGenerator _tokenGenerator;
   final CockpitLockedJsonStore<_AdmissionState> _store;
 
   Future<CockpitSupervisorRunAdmissionResult> admit({
@@ -177,25 +178,19 @@ final class CockpitSupervisorRunAdmissionStore {
     if (state.byKey.length >= maximumAdmissions) {
       throw const FormatException('Supervisor run admission bound exceeded.');
     }
-    final requestDigest = sha256
-        .convert(utf8.encode('$workspaceId\u0000$idempotencyKey'))
-        .toString();
-    final requestId = 'supervisor-run-${requestDigest.substring(0, 32)}';
+    final runId = _nextRunId(state);
     final admission = CockpitSupervisorRunAdmission(
       workspaceId: workspaceId,
       idempotencyKey: idempotencyKey,
       fingerprint: fingerprint,
-      runId: 'rn-$requestId',
-      requestId: requestId,
+      runId: runId,
+      requestId: runId,
       projectId: projectId,
       documentKind: documentKind,
       documentId: documentId,
       sourceSha256: sourceSha256,
       submittedAt: submittedAt,
     );
-    if (state.byRunId.containsKey(admission.runId)) {
-      throw const FormatException('Canonical run id collision.');
-    }
     final updated = state.copy();
     updated.byKey[key] = admission;
     updated.byRunId[admission.runId] = admission;
@@ -207,6 +202,14 @@ final class CockpitSupervisorRunAdmissionStore {
       ),
     );
   });
+
+  String _nextRunId(_AdmissionState state) {
+    for (var attempt = 0; attempt < 32; attempt += 1) {
+      final runId = _tokenGenerator.nextResourceId('r');
+      if (!state.byRunId.containsKey(runId)) return runId;
+    }
+    throw const FormatException('Could not allocate a unique run id.');
+  }
 
   Future<CockpitSupervisorRunAdmission?> findRun(String runId) async =>
       (await _store.read()).byRunId[runId];

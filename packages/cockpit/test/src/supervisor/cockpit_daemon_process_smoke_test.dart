@@ -81,7 +81,7 @@ environment:
         '--yolo',
         '--format',
         'json',
-        '--verbosity',
+        '--view',
         'full',
       ], environment: environment).timeout(const Duration(seconds: 20));
       expect(started.exitCode, 0, reason: '${started.stderr}');
@@ -97,7 +97,7 @@ environment:
         '--path',
         allowedRoot.path,
       ]);
-      final rootId = rootResult['rootId']! as String;
+      final rootId = rootResult['root']! as String;
       final workspaceResult = await _runAotCli(
         executable,
         environment,
@@ -110,7 +110,7 @@ environment:
           workspace.path,
         ],
       );
-      final workspaceId = workspaceResult['workspaceId']! as String;
+      final workspaceId = workspaceResult['workspace']! as String;
       final discovery = await _waitForDiscovery(
         CockpitHomePaths(environment['COCKPIT_HOME']!),
       );
@@ -780,7 +780,7 @@ Future<Map<String, Object?>> _runAotCli(
     ...arguments,
     '--format',
     'json',
-    '--verbosity',
+    '--view',
     'full',
   ], environment: environment).timeout(const Duration(seconds: 30));
   expect(result.exitCode, 0, reason: '${result.stderr}');

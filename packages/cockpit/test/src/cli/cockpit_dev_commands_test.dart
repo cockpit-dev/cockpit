@@ -454,6 +454,32 @@ void main() {
     );
   });
 
+  test('dev locator search uses exact text parts from composite controls', () {
+    final result = cockpitBuildDevLocatorMatches(<String, Object?>{
+      'snapshot': <String, Object?>{
+        'visibleTargets': <Object?>[
+          <String, Object?>{
+            'registrationId': 'command-item',
+            'text': '/inspect Inspect the current project',
+            'textParts': <Object?>['/inspect', 'Inspect the current project'],
+            'typeName': 'InkWell',
+            'routeName': '/',
+            'supportedCommands': <Object?>['tap'],
+            'ancestors': const <Object?>[],
+          },
+        ],
+      },
+    }, '/inspect');
+
+    expect(result['count'], 1);
+    expect(result['matches'], <Object?>[
+      <String, Object?>{
+        'loc': <String, Object?>{'text': '/inspect'},
+        'can': <String>['tap'],
+      },
+    ]);
+  });
+
   test('dev locator advice preserves exact text case', () {
     Map<String, Object?> target(String registrationId, String text) =>
         <String, Object?>{

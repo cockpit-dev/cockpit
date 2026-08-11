@@ -654,13 +654,11 @@ final class CockpitDevRuntime {
       return writeUnavailable(action: 'tree', resolution: resolution);
     }
     session = resolution.session;
-    final detail = runtime.outputSelection.detail;
-    var treeOptions = switch (detail) {
-      CockpitCliOutputDetail.minimal =>
-        const CockpitWidgetTreeOptions.minimal(),
-      CockpitCliOutputDetail.standard =>
-        const CockpitWidgetTreeOptions.standard(),
-      CockpitCliOutputDetail.full => const CockpitWidgetTreeOptions.full(),
+    final view = runtime.outputSelection.view;
+    var treeOptions = switch (view) {
+      CockpitCliOutputView.brief => const CockpitWidgetTreeOptions.minimal(),
+      CockpitCliOutputView.more => const CockpitWidgetTreeOptions.standard(),
+      CockpitCliOutputView.full => const CockpitWidgetTreeOptions.full(),
     };
     if (maxNodes != null) {
       treeOptions = treeOptions.copyWith(maxNodes: maxNodes);
@@ -672,7 +670,7 @@ final class CockpitDevRuntime {
         profile: CockpitSnapshotProfile.baseline,
         maxTargets: 1,
         maxAncestorsPerTarget: 0,
-        emitArtifactWhenLarge: detail != CockpitCliOutputDetail.minimal,
+        emitArtifactWhenLarge: view != CockpitCliOutputView.brief,
         tree: treeOptions,
       ).toJson(),
     });
@@ -1014,7 +1012,7 @@ final class CockpitDevRuntime {
     CockpitLocator? locator,
     Map<String, Object?> parameters = const <String, Object?>{},
   }) => CockpitCommand(
-    commandId: 'dev-${CockpitSecureTokenGenerator().nextResourceIdToken()}',
+    commandId: CockpitSecureTokenGenerator().nextResourceId('d'),
     commandType: type,
     locator: locator,
     parameters: parameters,

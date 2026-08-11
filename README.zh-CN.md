@@ -2,7 +2,7 @@
   <a href="https://github.com/cockpit-dev/cockpit">
     <img src="assets/brand/cockpit-mark.svg" width="128" alt="Cockpit logo">
   </a>
-  <h1>Cockpit 3.0</h1>
+  <h1>Cockpit</h1>
   <p><strong>统一完成 Flutter 快速开发验证与任意应用黑盒 E2E。</strong></p>
   <p>
     <a href="https://github.com/cockpit-dev/cockpit/actions/workflows/example-e2e.yml"><img src="https://github.com/cockpit-dev/cockpit/actions/workflows/example-e2e.yml/badge.svg?branch=main" alt="CI"></a>
@@ -35,7 +35,7 @@ Cockpit 是面向 AI 与 CI 的生产级应用开发、E2E 自动化与验证框
 - 持久事件、可恢复 suite 检查点、精确 session 亲和、取消、artifact，以及
   完整离线回归报告 bundle；
 - 每用户一个认证 Supervisor，每 workspace 一个隔离 worker；
-- 资源化 CLI、HTTP/SSE API 和 MCP，不内置 GUI。
+- 资源化 CLI、HTTP/SSE API 和 MCP。
 
 ## 包结构
 
@@ -59,11 +59,8 @@ cockpit --help
 cockpit update
 ```
 
-它会安装并验证最新版本，同时要求 Pub 解析出的版本不得低于当前 executable；即使
-Pub 版本索引尚未刷新，也会安全失败而不会把 Cockpit 降级。随后它会把源码安装的原生
-executable 安全交还给 Pub，再恢复为单个优化后的 AOT executable，删除旧版与临时
-升级 payload，并在保留授权模式和持久化状态的前提下替换旧 Supervisor。Dart Pub 的
-共享下载缓存仍由 Pub 自己管理，Cockpit 不会删除其他包的缓存。
+它会把 CLI 和正在运行的 Supervisor 更新到 Pub 上经过验证的最新版本，并保留本地
+授权与持久化状态。
 
 Flutter 源码开发额外使用仅限开发环境的 bridge：
 
@@ -105,18 +102,18 @@ cockpit dev tap "Save"
 cockpit dev wait
 cockpit dev screenshot
 cockpit dev reload
-cockpit dev diagnose --verbosity standard
+cockpit dev diagnose --view more
 ```
 
-能够推断入口和平台时直接省略。正常命令也无需重复当前 handle、LON、minimal
-verbosity 和默认 timeout。`dev` 会自动使用仅限本地进程的 yolo Supervisor；
+能够推断入口和平台时直接省略。正常命令也无需重复当前 handle、LON、brief
+view 和默认 timeout。`dev` 会自动使用仅限本地进程的 yolo Supervisor；
 黑盒、CI、staging 和 production 仍可使用严格策略。Cockpit 不读取 keychain 或
 secret store，`--env` 只传给当前进程。
 
 Flutter 检查直接遍历已挂载的 Element 与 RenderObject 结构，不要求业务应用编写
 `Semantics` 标签。日常开发优先使用有界的 `dev inspect QUERY`；只有需要理解周边
-结构时才依次使用 `dev tree`、`dev tree --verbosity standard` 或
-`dev tree --verbosity full`。完整树会写入 artifact，stdout 只返回经过验证的路径。
+结构时才依次使用 `dev tree`、`dev tree --view more` 或
+`dev tree --view full`。完整树会写入 artifact，stdout 只返回经过验证的路径。
 仅当更简单、稳定的字段仍无法消除歧义时，才把返回的 `loc` 复制到 action 的
 `--path`。
 
@@ -172,12 +169,10 @@ cockpit workspace list
 
 ## CLI 输出
 
-默认输出是 minimal canonical LON，正常命令不写默认输出参数。
-`--verbosity standard|full` 只增加上下文，不改变操作准确性；
-`--format json|yaml|jsonl|path|none` 用于改变编码或输出方式。需要完整响应时使用
-`--verbosity full --output <file>.lon`；仅在配合 `jq`、JSON-only 消费者或检查 JSON
-线协议时才请求 JSON。写入输出或 artifact 时，终端只
-返回已验证路径；文件内容、Base64、hash 和对决策无意义的字节数都不会进入输出。
+默认输出为 brief canonical LON。使用 `--view more` 获取更多上下文，使用
+`--view full` 获取完整响应。`--format` 支持
+`lon|json|yaml|jsonl|path|none`；JSON 适用于 `jq`、JSON-only 消费者和线协议检查。
+`--output` 与 artifact 命令返回已验证的输出路径。
 
 ## 生产授权
 
@@ -268,8 +263,7 @@ cockpit target inspect --workspace-id <workspaceId> --target-id <targetId>
 
 Android 使用 ADB 和原生 accessibility；iOS Simulator 使用 `simctl`，原生 iOS
 UI 操作使用可达的 WebDriverAgent；物理 iOS 设备在可用时通过 `devicectl` 管理
-安装和生命周期。环境不具备某项能力时，Cockpit 会返回 unsupported/blocked，
-不会伪造成功。
+安装和生命周期。环境不具备某项能力时，Cockpit 会返回 `unsupported` 或 `blocked`。
 
 已经安装的 Flutter 应用或原生壳内嵌 Flutter 的混合应用，应使用
 `targetKind: flutterApp`、真实 `appId` 且不绑定 entrypoint，并让 case 使用
@@ -313,17 +307,14 @@ case/suite 是持久化异步 job：提交后立即返回 `runId`，客户端再
 case plane。绑定 entrypoint 的 Flutter session 会同时保留语义 driver 和同一应用/设备的
 次级 system driver，因此一个 case 可以先检查 Widget，再跨越原生页面、platform view、
 权限弹窗或只能视觉识别的区域，无需修改被测业务应用。
-次级执行面的权威能力来自 `target.inspect` operation 结果中的
-`output.systemControl`；该 profile 已脱敏，客户端不得尝试从 `app.get` 重建，因为平台
-应用标识与进程标识会按设计隐藏。
+次级能力 profile 可通过 `cockpit target inspect` 返回的 `system` 获取。
 
 统一动作集合除手势、编辑、键盘、等待、断言、取证、录屏和 system action 外，还包括
 `copyText`、`eraseText`、`pasteText` 与有界 `travel` 轨迹。visual locator 使用
 workspace 内的图片文件和可选相似度阈值；`assertScreenshot` 将实时截图与 workspace
-内 baseline 对比，并把 actual、baseline、diff 图片作为离线 artifact 记录，图片字节
-不会进入终端输出。baseline 必须按平台、设备或 viewport、像素比和方向等稳定 visual
-profile 选择。尺寸不一致代表 profile 不匹配或布局回归，Cockpit 不会缩放图片来制造
-可比较结果。
+内 baseline 对比，并记录 actual、baseline、diff artifact。baseline 应按平台、设备或
+viewport、像素比和方向等稳定 visual profile 选择。尺寸不一致代表 profile 不匹配或
+布局回归。
 
 ## Case 与 Suite
 
@@ -352,8 +343,7 @@ worker 意外退出后，已完成节点不会重跑，执行中的 attempt 会�
 生命周期按已有最小作用域组合：suite fixture 负责 campaign/attempt 级 setup 与
 teardown，case `setup`/`finally` 负责 case 生命周期，step `evidence` 负责动作前后或
 失败取证，显式 `startRecording`/`stopRecording` 包围真正需要录屏的步骤区间。
-`if`、有界 `retry`/`loop` 和 fragment 可以在这些作用域内正常组合，因此无需再引入
-一套重复的通用 pre/post hook。
+`if`、有界 `retry`/`loop` 和 fragment 可以在这些作用域内正常组合。
 
 每个完成的 suite 都会发布一个可携带的报告 bundle。使用
 `suite report --output-dir cockpit-report` 导出；CLI 只下载 run manifest 声明的
@@ -361,8 +351,6 @@ teardown，case `setup`/`finally` 负责 case 生命周期，step `evidence` 负
 存在。离线打开
 `index.html` 即可按发布摘要、覆盖范围、执行过程、证据、诊断和环境/文件逐层查看；
 搜索、筛选、深链接、响应式布局和打印布局均不依赖服务或网络。
-这些入口按任务组织，而不是按角色复制或隐藏内容；开发、测试、产品和发布负责人查看的是
-同一份事实与证据链，只是从各自当前需要解决的问题进入。
 `report.json` 是唯一规范事实图，包含 suite/case 定义、attempt、详细步骤、断言和证据引用；
 `manifest.json` 记录其余每个文件的语义归属、大小、媒体类型和 SHA-256。
 `summary.md`、`junit.xml`、`run/events.jsonl`、语义化 case 目录以及截图、录屏、日志和
@@ -379,9 +367,8 @@ cockpit serve-mcp --profile dart
 
 MCP 只是认证 Supervisor 客户端，不会在进程内构造 driver 或应用服务。它提供有界的
 roots、workspaces、operations、targets、documents、cases、suites、runs 和 artifacts
-资源。官方或第三方 GUI 应使用 `/api/v2`、认证 SSE、公开 DTO 和带 digest 校验的
-artifact 下载。3.0 不提供 Flutter GUI，也不内置 HTML dashboard；HTML 只作为
-可移植回归报告 artifact 生成。
+资源。官方或第三方 GUI 使用 `/api/v2`、认证 SSE、公开 DTO 和带 digest 校验的
+artifact 下载。
 
 REST 是完整的公开命令与资源控制面。客户端先读取全局及 workspace operation
 descriptor，再从 `GET /api/v2/operations/schema` 获取精确的请求/响应契约，最后调用
@@ -418,25 +405,8 @@ cockpitd \
 dart run tool/install_cockpit.dart
 ```
 
-它会在所有平台把一个原生 executable 原子替换到 Dart 全局 bin 目录，并删除旧的
-launcher/payload 分离布局；编译或启动校验失败时恢复旧文件。日常命令仍然是
-`cockpit ...`，不再承担 path activation 下每次执行 `dart pub global run` 的依赖
-解析成本，之后可用 `cockpit update` 安全换成最新 hosted 版本并重新编译回同一个
-快速单 executable 布局。只有明确需要其他安装位置时才使用 `--output PATH`。
-
-## 发布门禁
-
-`.github/workflows/example-e2e.yml` 是 Cockpit 3.0 发布前的强制门禁。各个并行 job
-会验证格式、静态分析、仓库契约、所有 package 与示例测试、三个公开包的发布 dry-run，
-以及 Android、iOS、macOS、Linux、Web、Windows 真实回归。Android 与 iOS 必须证明
-原生 locator/action/assertion 控制，只有截图回退不能通过核心平台门禁。只有全部 job
-都成功终止，并产出可校验的终态报告
-和 artifact，版本才允许发布。每个平台都会运行一条复杂 suite，覆盖 fixture、
-setup/finally、fragment、分支、有限 retry/loop、逐步 timeout、matrix、有限并发、截图、
-完整的创建/读取/删除业务流程、全部 Flutter 手势/文本/键盘/语义命令、按能力执行的录屏
-和离线 bundle 完整性。每条命令都必须通过可见 UI 结果断言并进入规范报告，不能只凭命令
-返回成功。排查失败时先等待整个矩阵结束，再统一以上传的 report、event stream、artifact
-和 daemon log 为准，避免边运行边反复猜测。
+安装器会构建并验证 AOT executable，然后写入 Dart 全局 bin 目录。使用
+`--output PATH` 可以选择其他输出位置。
 
 ## 文档
 
@@ -447,4 +417,3 @@ setup/finally、fragment、分支、有限 retry/loop、逐步 timeout、matrix�
 - [`packages/cockpit_protocol/README.md`](packages/cockpit_protocol/README.md)
 - [`docs/agent-integrations.md`](docs/agent-integrations.md)
 - [`skills/cockpit/references/environments.md`](skills/cockpit/references/environments.md)
-- [`docs/architecture/cockpit-2.0-foundation-migration-inventory.md`](docs/architecture/cockpit-2.0-foundation-migration-inventory.md)

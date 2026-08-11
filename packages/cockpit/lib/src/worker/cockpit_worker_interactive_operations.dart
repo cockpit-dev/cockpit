@@ -922,7 +922,10 @@ final class CockpitWorkerInteractiveOperations {
       parameters:
           values.optionalObject('parameters') ?? const <String, Object?>{},
     );
+    final capturesStdout = preparedParameters.capturedStdoutRole != null;
     final sessionId = preparedParameters.producedPath == null
+        ? null
+        : capturesStdout && app == null
         ? null
         : await _requireArtifactOwnerSession(app);
     final result = await runWorkerApplicationOperation(
@@ -953,8 +956,25 @@ final class CockpitWorkerInteractiveOperations {
       ),
     );
     final json = result.toJson();
-    if (result.success && preparedParameters.producedPath != null) {
-      json.putIfAbsent('sourceFilePath', () => preparedParameters.producedPath);
+    var producedPath = preparedParameters.producedPath;
+    if (result.success && capturesStdout) {
+      if (sessionId == null) {
+        producedPath = null;
+      } else {
+        producedPath = await _systemActionParameters.writeCapturedStdout(
+          preparedParameters,
+          result.stdout ?? '',
+        );
+        json
+          ..remove('stdout')
+          ..['artifact'] = <String, Object?>{
+            'role': preparedParameters.capturedStdoutRole,
+            'relativePath': p.basename(producedPath),
+          };
+      }
+    }
+    if (result.success && producedPath != null) {
+      json.putIfAbsent('sourceFilePath', () => producedPath);
     }
     return sanitizer.sanitize(
       json,

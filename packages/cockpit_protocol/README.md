@@ -27,10 +27,6 @@ host tooling. Direct protocol consumers import
 dependency, so CLI, MCP, GUI, and third-party clients can share the same wire
 models.
 
-Version 3.0 is the current breaking release. It replaces no APIs through a
-compatibility forwarding package; the former `flutter_cockpit_protocol` name
-is not supported.
-
 ## Standalone E2E contract
 
 `cockpit.test/v2` is the stable, platform-neutral project, suite, fixture,
@@ -41,8 +37,7 @@ declarations. Suites own dependency-aware campaigns, scoped fixtures, matrix
 expansion, concurrency, retry, fail-fast, and report policy. The published JSON Schema is
 [`schema/cockpit.test.v2.schema.json`](schema/cockpit.test.v2.schema.json).
 
-The protocol deliberately separates authored templates from bound execution
-values:
+The protocol separates authored templates from bound execution values:
 
 - `CockpitTestProject`, `CockpitTestSuite`, `CockpitTestFixture`,
   `CockpitTestCase`, step/action/condition templates, locators, variables, and
@@ -57,10 +52,8 @@ values:
 - Secrets are authored as provider references. Resolved values are not part of
   any protocol object, JSON representation, result, diagnostic, or report.
 
-The package contains no parser, YAML, filesystem, Flutter, driver, service, or
-GUI dependency. Host execution belongs to `package:cockpit`; future official
-or third-party clients can parse these DTOs and consume the same result and
-bundle contracts independently.
+Parsing and host execution are provided by `package:cockpit`. Clients can use
+the protocol DTOs directly for wire data, results, events, and report bundles.
 
 `schemaVersion: cockpit.test/v2` accepts `kind: project`, `kind: suite`, and
 `kind: case`. Execution remains a host responsibility: the Supervisor and
@@ -72,9 +65,9 @@ pair. Signals on one locator (`text`, `label`, `nativeId`, `testId`, `role`,
 `type`, and `path`) must all match. Optional state, hierarchy, and spatial
 constraints further narrow native accessibility matches; `index` resolves an
 otherwise ambiguous match in UI order. `fallbacks` are attempted in order as
-explicit alternatives. Coordinate and visual locators are separate degraded
-modes and cannot be mixed with semantic constraints. Runtimes reject any
-constraint they cannot execute faithfully instead of silently weakening it.
+explicit alternatives. Coordinate and visual locators are separate modes and
+cannot be mixed with semantic constraints. Unsupported constraints fail
+validation.
 `text` and `label` default to `matchMode: exact`; opt into `contains`,
 typo-tolerant `fuzzy`, or `regex` explicitly. When several candidates match, the runtime selects only a
 unique highest-quality candidate (current route, exact text, then path
@@ -106,7 +99,7 @@ references, not encoded bytes. Hosts confine them to the workspace and publish
 actual, baseline, and diff images as digest-addressed bundle artifacts. Lifecycle
 work composes from suite fixtures, case `setup`/`finally`, per-step `evidence`,
 and explicit recording operations; control flow remains available inside each
-scope without a separate generic hook protocol.
+scope.
 
 ## Supervisor foundation contract
 

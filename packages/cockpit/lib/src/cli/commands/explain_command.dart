@@ -75,7 +75,7 @@ CockpitLeafCommand cockpitExplainCommand(CockpitCliRuntime runtime) =>
             // Explain remains available before a development session starts.
           }
         }
-        final op = _opExample(
+        final op = cockpitOperationCommandExample(
           kind,
           sessionReference == null ? null : effectiveSession?.handleId,
           requestSchema,
@@ -114,7 +114,7 @@ CockpitLeafCommand cockpitExplainCommand(CockpitCliRuntime runtime) =>
       },
     );
 
-String? _opExample(
+String? cockpitOperationCommandExample(
   String kind,
   String? session,
   Map<String, Object?> requestSchema, {
@@ -123,9 +123,11 @@ String? _opExample(
   if (!sessionAvailable) return null;
   final input = cockpitOperationInputExample(requestSchema);
   if (input == null) return null;
+  final command =
+      'cockpit op run $kind${session == null ? '' : ' --session $session'}';
+  if (input.isEmpty) return command;
   final encoded = lon.encode(input).replaceAll("'", "'\"'\"'");
-  return 'cockpit op run $kind${session == null ? '' : ' --session $session'} '
-      "--input '$encoded'";
+  return "$command --input '$encoded'";
 }
 
 bool _requestInjectsSession(Map<String, Object?> requestSchema) {

@@ -560,7 +560,7 @@ final class CockpitCaseRunAdapterFactory {
         idempotencyKey: context.idempotencyKey,
         requestFingerprint: _requestFingerprint(submission, compiled),
         caseId: compiled.testCase.id,
-        proposedRunId: 'rn-${context.requestId}',
+        proposedRunId: context.requestId,
         proposedAttemptId: _newId('at'),
         now: _utcNow(),
       );
@@ -1267,7 +1267,7 @@ final class CockpitCaseRunAdapterFactory {
   }
 
   String _newId(String prefix) =>
-      '$prefix-${_tokenGenerator.nextResourceIdToken()}';
+      _tokenGenerator.nextResourceId(prefix.substring(0, 1));
 
   Duration _resourceTtl(DateTime deadline) {
     final remaining = deadline.difference(_utcNow());

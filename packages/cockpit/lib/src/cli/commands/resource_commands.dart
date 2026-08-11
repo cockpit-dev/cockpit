@@ -95,7 +95,7 @@ final class CockpitRootCommand extends Command<int> {
             arguments.option('root-id')!,
             CockpitRootRemoval(
               force: arguments.flag('force'),
-              drainTimeoutMs: runtime.operationTimeout.inMilliseconds,
+              drainTimeoutMs: runtime.operationBudget().inMilliseconds,
             ),
           );
           await runtime.success(result.toJson());
@@ -253,7 +253,7 @@ final class CockpitWorkspaceCommand extends Command<int> {
             arguments.option('workspace-id')!,
             CockpitWorkspaceRemoval(
               force: arguments.flag('force'),
-              drainTimeoutMs: runtime.operationTimeout.inMilliseconds,
+              drainTimeoutMs: runtime.operationBudget().inMilliseconds,
             ),
           );
           await runtime.success(result.toJson());
@@ -367,7 +367,7 @@ final class CockpitTargetCommand extends Command<int> {
         defaultTimeout: const Duration(minutes: 2),
         maximumTimeout: const Duration(minutes: 10),
         action: (arguments) async {
-          final timeoutMs = runtime.operationTimeout.inMilliseconds;
+          final timeoutMs = runtime.operationBudget().inMilliseconds;
           final result = await (await runtime.client()).executeOperation(
             CockpitOperationInvocation(
               kind: 'target.discover',
@@ -524,7 +524,9 @@ final class CockpitTargetCommand extends Command<int> {
           final workspaceId = await runtime.workspaceId(
             arguments.option('workspace-id'),
           );
-          final timeoutMs = runtime.operationTimeout.inMilliseconds;
+          final timeoutMs = runtime
+              .operationBudget(maximum: const Duration(minutes: 30))
+              .inMilliseconds;
           final launchConfiguration = cockpitReadFlutterLaunchConfiguration(
             arguments,
           );

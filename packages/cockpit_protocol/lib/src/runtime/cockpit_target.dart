@@ -25,6 +25,7 @@ final class CockpitTarget {
     this.semanticId,
     this.keyValue,
     this.text,
+    this.textParts = const <String>{},
     this.tooltip,
     this.typeName,
     this.path,
@@ -57,6 +58,7 @@ final class CockpitTarget {
   final String? semanticId;
   final String? keyValue;
   final String? text;
+  final Set<String> textParts;
   final String? tooltip;
   final String? typeName;
   final String? path;
@@ -85,6 +87,7 @@ final class CockpitTarget {
 
   static const SetEquality<CockpitCommandType> _commandSetEquality =
       SetEquality<CockpitCommandType>();
+  static const SetEquality<String> _textPartSetEquality = SetEquality<String>();
 
   String? get displayLabel =>
       cockpitId ?? semanticId ?? text ?? tooltip ?? keyValue ?? typeName;
@@ -96,6 +99,7 @@ final class CockpitTarget {
       semanticId: semanticId,
       keyValue: keyValue,
       text: text,
+      textParts: textParts.toList(growable: false),
       tooltip: tooltip,
       typeName: typeName,
       path: path,
@@ -117,6 +121,7 @@ final class CockpitTarget {
             other.semanticId == semanticId &&
             other.keyValue == keyValue &&
             other.text == text &&
+            _textPartSetEquality.equals(other.textParts, textParts) &&
             other.tooltip == tooltip &&
             other.typeName == typeName &&
             other.path == path &&
@@ -139,6 +144,7 @@ final class CockpitTarget {
     semanticId,
     keyValue,
     text,
+    _textPartSetEquality.hash(textParts),
     tooltip,
     typeName,
     path,

@@ -47,6 +47,11 @@ void main() {
               <String, Object?>{
                 'route': '/operations',
                 'loc': '/scaffold/textbutton',
+                'text': '/inspect Inspect the current project',
+                'textParts': <String>[
+                  '/inspect',
+                  'Inspect the current project',
+                ],
                 'source': outsidePath,
                 'workspaceSource': p.join(workspace.path, 'lib', 'main.dart'),
               },
@@ -61,6 +66,11 @@ void main() {
             as Map<String, Object?>;
     expect(target['route'], '/operations');
     expect(target['loc'], '/scaffold/textbutton');
+    expect(target['text'], '/inspect Inspect the current project');
+    expect(target['textParts'], <String>[
+      '/inspect',
+      'Inspect the current project',
+    ]);
     expect(target['source'], '<redacted-path>');
     expect(
       target['workspaceSource'],

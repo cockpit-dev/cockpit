@@ -289,7 +289,7 @@ final class CockpitWorkerRunEventStore implements CockpitWorkerEventExchange {
     int sequence,
   ) {
     final event = CockpitRunEvent(
-      eventId: 'ev-${_tokenGenerator.nextResourceIdToken()}',
+      eventId: _tokenGenerator.nextResourceId('e'),
       sequence: sequence,
       timestamp: _utcNow().toUtc(),
       kind: draft.kind,
@@ -638,7 +638,7 @@ final class CockpitWorkerRunEventStore implements CockpitWorkerEventExchange {
       final request = CockpitWorkerPublishEventBatchRequest(
         protocolVersion: cockpitWorkerProtocolVersion,
         workspaceId: workspaceId,
-        requestId: 'ep-${_tokenGenerator.nextResourceIdToken()}',
+        requestId: _tokenGenerator.nextResourceId('e'),
         deadline: _utcNow().add(const Duration(seconds: 10)),
         idempotencyKey: 'event_${runId}_$cursor',
         runId: runId,

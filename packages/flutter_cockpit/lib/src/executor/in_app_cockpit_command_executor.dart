@@ -2199,18 +2199,21 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
     if (commit.failure != null) {
       return commit.failure!;
     }
-    await _stabilizeAfterAction(
-      previousRouteName,
+    final settleWarning = await _stabilizeAfterTextMutation(
+      command: command,
+      stopwatch: stopwatch,
+      previousRouteName: previousRouteName,
       commandType: CockpitCommandType.enterText,
       routeAlreadyCommitted: commit.routeCommitted,
       baselineTransientCallbackCount: commit.beforeActionTransientCallbackCount,
+      mutationCommitted: _textMutationCommitted(resolvedTarget, request),
     );
 
     return _buildSuccessWithOptionalCapture(
       command: command,
       resolution: resolution,
       durationMs: stopwatch.elapsedMilliseconds,
-      warnings: commit.warnings,
+      warnings: <Map<String, Object?>>[...commit.warnings, ?settleWarning],
       changed: _changedSince(commit),
     );
   }
@@ -2421,20 +2424,126 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
       activationPath: _ActionActivationPath.directTextInput,
     );
     if (commit.failure != null) return commit.failure!;
-    await _stabilizeAfterAction(
-      previousRouteName,
+    final settleWarning = await _stabilizeAfterTextMutation(
+      command: command,
+      stopwatch: stopwatch,
+      previousRouteName: previousRouteName,
       commandType: command.commandType,
       routeAlreadyCommitted: commit.routeCommitted,
       baselineTransientCallbackCount: commit.beforeActionTransientCallbackCount,
+      mutationCommitted: _textMutationCommitted(target, request),
     );
     return _buildSuccessWithOptionalCapture(
       command: command,
       resolution: resolution,
       durationMs: stopwatch.elapsedMilliseconds,
-      warnings: commit.warnings,
+      warnings: <Map<String, Object?>>[...commit.warnings, ?settleWarning],
       changed: _changedSince(commit),
     );
   }
+
+  Future<Map<String, Object?>?> _stabilizeAfterTextMutation({
+    required CockpitCommand command,
+    required Stopwatch stopwatch,
+    required String? previousRouteName,
+    required CockpitCommandType commandType,
+    required bool routeAlreadyCommitted,
+    required int? baselineTransientCallbackCount,
+    required bool mutationCommitted,
+  }) async {
+    Future<void> stabilize() => _stabilizeAfterAction(
+      previousRouteName,
+      commandType: commandType,
+      routeAlreadyCommitted: routeAlreadyCommitted,
+      baselineTransientCallbackCount: baselineTransientCallbackCount,
+    );
+    final timeoutMs = command.timeoutMs;
+    if (!mutationCommitted || timeoutMs == null || timeoutMs <= 0) {
+      await stabilize();
+      return null;
+    }
+
+    // Leave enough of the command deadline for the final live snapshot and
+    // transport response. The text controller is the authoritative mutation
+    // postcondition; settling after that point improves observation quality
+    // but must not turn a proven mutation into a hard timeout failure.
+    const completionReserveMs = 500;
+    final settleBudgetMs =
+        timeoutMs - stopwatch.elapsedMilliseconds - completionReserveMs;
+    if (settleBudgetMs <= 0) {
+      return _textMutationSettleWarning(
+        commandType: commandType,
+        timeoutMs: timeoutMs,
+        settleBudgetMs: 0,
+        elapsedMs: stopwatch.elapsedMilliseconds,
+      );
+    }
+
+    try {
+      await stabilize().timeout(Duration(milliseconds: settleBudgetMs));
+      return null;
+    } on TimeoutException {
+      return _textMutationSettleWarning(
+        commandType: commandType,
+        timeoutMs: timeoutMs,
+        settleBudgetMs: settleBudgetMs,
+        elapsedMs: stopwatch.elapsedMilliseconds,
+      );
+    }
+  }
+
+  bool _textMutationCommitted(
+    CockpitTarget target,
+    CockpitTextInputRequest request,
+  ) {
+    if (!request.hasEditingMutation) {
+      return false;
+    }
+    final value = _editableTextState(target)?.widget.controller.value;
+    if (value == null) {
+      return false;
+    }
+    final expectedText = request.text;
+    if (expectedText != null && value.text != expectedText) {
+      return false;
+    }
+    if (expectedText == null &&
+        request.clearExisting &&
+        value.text.isNotEmpty) {
+      return false;
+    }
+    final selectionBase = request.selectionBase;
+    if (selectionBase == null) {
+      return true;
+    }
+    if (!value.selection.isValid) {
+      return false;
+    }
+    final expectedBase = selectionBase.clamp(0, value.text.length);
+    final expectedExtent = (request.selectionExtent ?? selectionBase).clamp(
+      0,
+      value.text.length,
+    );
+    return value.selection.baseOffset == expectedBase &&
+        value.selection.extentOffset == expectedExtent;
+  }
+
+  Map<String, Object?> _textMutationSettleWarning({
+    required CockpitCommandType commandType,
+    required int timeoutMs,
+    required int settleBudgetMs,
+    required int elapsedMs,
+  }) => <String, Object?>{
+    'code': 'postActionSettleIncomplete',
+    'message':
+        'The text mutation committed, but optional post-action settling did not finish within the remaining command deadline.',
+    'details': <String, Object?>{
+      'commandType': commandType.name,
+      'timeoutMs': timeoutMs,
+      'settleBudgetMs': settleBudgetMs,
+      'elapsedMs': elapsedMs,
+    },
+  };
 
   EditableTextState? _editableTextState(CockpitTarget target) {
     final node = target.diagnosticNodeProvider?.call();
@@ -2722,17 +2831,20 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
     if (commit.failure != null) {
       return commit.failure!;
     }
-    await _stabilizeAfterAction(
-      previousRouteName,
+    final settleWarning = await _stabilizeAfterTextMutation(
+      command: command,
+      stopwatch: stopwatch,
+      previousRouteName: previousRouteName,
       commandType: requiredCommand,
       routeAlreadyCommitted: commit.routeCommitted,
       baselineTransientCallbackCount: commit.beforeActionTransientCallbackCount,
+      mutationCommitted: _textMutationCommitted(resolvedTarget, request),
     );
     return _buildSuccessWithOptionalCapture(
       command: command,
       resolution: resolution,
       durationMs: stopwatch.elapsedMilliseconds,
-      warnings: commit.warnings,
+      warnings: <Map<String, Object?>>[...commit.warnings, ?settleWarning],
       changed: _changedSince(commit),
     );
   }
@@ -5240,15 +5352,18 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
 
     if (_isSimpleLocatorFor(locator, CockpitLocatorKind.text)) {
       final directProbe = _context.locatorProbe?.call(locator);
-      if (directProbe != null) {
-        return directProbe.isSuccess
-            ? directProbe.locatorResolution ??
-                  CockpitLocatorResolution(
-                    matchedKind: CockpitLocatorKind.text,
-                    matchedValue: locator.value,
-                  )
-            : null;
+      if (directProbe?.isSuccess == true) {
+        return directProbe!.locatorResolution ??
+            CockpitLocatorResolution(
+              matchedKind: CockpitLocatorKind.text,
+              matchedValue: locator.value,
+            );
       }
+
+      // Scroll's postcondition is visibility, not unique mutability. A field
+      // and its rendered label may both match the same exact text, so an
+      // ambiguous Element probe must still fall through to the visible target
+      // set. Action commands continue to require one unambiguous target.
       _liveSnapshot();
       if (_visibleTargetsContainMeaningfullyVisibleText(
         _registry.visibleTargets,

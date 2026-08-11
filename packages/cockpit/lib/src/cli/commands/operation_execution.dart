@@ -1,6 +1,10 @@
+import 'dart:io';
+
 import 'package:args/args.dart';
 import 'package:cockpit_protocol/cockpit_protocol.dart';
+import 'package:path/path.dart' as p;
 
+import '../../foundation/cockpit_home.dart';
 import '../../supervisor/cockpit_supervisor_api_client.dart';
 import '../cockpit_cli_runtime.dart';
 import '../cockpit_cli_session_handles.dart';
@@ -140,13 +144,86 @@ Future<int> cockpitExecuteOperation(
       result,
       workspaceId: workspaceId,
     );
-    await runtime.success(
-      runtime.operationReceipt(
-        result,
-        sessionHandle: captured ?? sessionHandle,
-        idempotencyKey: idempotencyKey,
-      ),
+    final effectiveSession = captured ?? sessionHandle;
+    var receipt = runtime.operationReceipt(
+      result,
+      sessionHandle: effectiveSession,
+      idempotencyKey: idempotencyKey,
     );
+    if (kind == 'system.action' && effectiveSession != null) {
+      receipt = await _materializeSystemActionArtifact(
+        client,
+        receipt,
+        effectiveSession,
+      );
+    }
+    await runtime.success(receipt);
     return cockpitExitCodeForOperation(result);
   });
+}
+
+Future<Map<String, Object?>> _materializeSystemActionArtifact(
+  CockpitSupervisorApiClient client,
+  Map<String, Object?> receipt,
+  CockpitCliSessionHandle session,
+) async {
+  final output = _stringMap(receipt['output']);
+  final artifact = _stringMap(output?['artifact']);
+  final reference = _stringMap(artifact?['artifactRef']);
+  final artifactId = reference?['artifactId'];
+  final name = reference?['name'];
+  final mediaType = reference?['mediaType'];
+  if (output == null ||
+      artifactId is! String ||
+      artifactId.isEmpty ||
+      name is! String ||
+      name.isEmpty ||
+      mediaType is! String ||
+      mediaType.isEmpty) {
+    return receipt;
+  }
+  final home = CockpitHome.system();
+  final paths = await home.initialize();
+  final owner = session.checkoutIdentity ?? session.workspaceId;
+  final directory = Directory(
+    p.join(
+      paths.artifactsDirectory,
+      'development',
+      _safePathSegment(owner.length > 16 ? owner.substring(0, 16) : owner),
+      _safePathSegment(session.handleId),
+      'system',
+      _safePathSegment(artifactId),
+    ),
+  );
+  await directory.create(recursive: true);
+  await home.permissionHardener.hardenDirectory(directory);
+  final destination = File(p.join(directory.path, p.basename(name)));
+  final downloaded = await client.downloadDevelopmentArtifactToFile(
+    workspaceId: session.workspaceId,
+    sessionId: session.sessionId,
+    artifactId: artifactId,
+    mediaType: mediaType,
+    destination: destination,
+  );
+  final canonicalPath = p.normalize(
+    await downloaded.file.resolveSymbolicLinks(),
+  );
+  return <String, Object?>{
+    ...receipt,
+    'output': <String, Object?>{...output, 'path': canonicalPath}
+      ..remove('artifact'),
+  };
+}
+
+Map<String, Object?>? _stringMap(Object? value) {
+  if (value is! Map<Object?, Object?> ||
+      value.keys.any((key) => key is! String)) {
+    return null;
+  }
+  return Map<String, Object?>.from(value);
+}
+
+String _safePathSegment(String value) {
+  final safe = value.replaceAll(RegExp(r'[^A-Za-z0-9._-]+'), '_');
+  return safe.isEmpty ? 'session' : safe;
 }

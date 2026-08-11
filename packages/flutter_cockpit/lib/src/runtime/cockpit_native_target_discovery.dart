@@ -576,6 +576,7 @@ final class CockpitNativeTargetDiscovery {
         semanticId: metadata.semanticId,
         keyValue: metadata.keyValue,
         text: metadata.text,
+        textParts: _locatorTextParts(element, primaryText: metadata.text),
         tooltip: metadata.tooltip,
         typeName: typeName,
         path: _locatorPathForElement(element, session),
@@ -1435,16 +1436,18 @@ final class CockpitNativeTargetDiscovery {
 
   String? _textFromWidget(Widget widget) {
     if (widget is Text) {
-      return _normalizeText(widget.data ?? widget.textSpan?.toPlainText());
+      return _normalizeReadableText(
+        widget.data ?? widget.textSpan?.toPlainText(),
+      );
     }
     if (widget is RichText) {
-      return _normalizeText(widget.text.toPlainText());
+      return _normalizeReadableText(widget.text.toPlainText());
     }
     if (widget is EditableText) {
-      return _normalizeText(widget.controller.text);
+      return _normalizeReadableText(widget.controller.text);
     }
     if (widget is TextField) {
-      return _normalizeText(
+      return _normalizeReadableText(
         widget.controller?.text.isNotEmpty == true
             ? widget.controller?.text
             : widget.decoration?.labelText ?? widget.decoration?.hintText,
@@ -1452,7 +1455,7 @@ final class CockpitNativeTargetDiscovery {
     }
     if (widget is TextFormField) {
       final controllerText = widget.controller?.text;
-      return _normalizeText(
+      return _normalizeReadableText(
         controllerText != null && controllerText.isNotEmpty
             ? controllerText
             : widget.initialValue,
@@ -1720,7 +1723,22 @@ final class CockpitNativeTargetDiscovery {
   }
 
   String? _collectDescendantText(Element element) {
-    final values = <String>[];
+    final values = _collectDescendantTextParts(element);
+    return values.isEmpty ? null : values.join(' ');
+  }
+
+  Set<String> _locatorTextParts(
+    Element element, {
+    required String? primaryText,
+  }) {
+    final primary = _normalizeText(primaryText);
+    return _collectDescendantTextParts(
+      element,
+    ).where((part) => part != primary).toSet();
+  }
+
+  List<String> _collectDescendantTextParts(Element element) {
+    final values = <String>{};
 
     void visit(Element child) {
       if (values.length >= 3) {
@@ -1735,10 +1753,7 @@ final class CockpitNativeTargetDiscovery {
     }
 
     element.visitChildElements(visit);
-    if (values.isEmpty) {
-      return null;
-    }
-    return values.join(' ').trim();
+    return values.toList(growable: false);
   }
 
   String _registrationId({
@@ -1831,6 +1846,19 @@ final class CockpitNativeTargetDiscovery {
     final normalized = value.replaceAll(RegExp(r'\s+'), ' ').trim();
     return normalized.isEmpty ? null : normalized;
   }
+
+  String? _normalizeReadableText(String? value) {
+    if (value == null) return null;
+    final withoutIconGlyphs = String.fromCharCodes(
+      value.runes.where((rune) => !_isPrivateUseCodePoint(rune)),
+    );
+    return _normalizeText(withoutIconGlyphs);
+  }
+
+  bool _isPrivateUseCodePoint(int rune) =>
+      (rune >= 0xe000 && rune <= 0xf8ff) ||
+      (rune >= 0xf0000 && rune <= 0xffffd) ||
+      (rune >= 0x100000 && rune <= 0x10fffd);
 
   List<String> _pathSegments(String? value) {
     final normalized = _normalizeText(value);

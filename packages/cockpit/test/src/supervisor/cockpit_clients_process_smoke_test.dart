@@ -131,10 +131,7 @@ cases:
         '--file',
         authorizationFile.path,
       ]);
-      expect(
-        validatedPolicy['allowedTargetEnvironments'],
-        contains('production'),
-      );
+      expect(validatedPolicy['targetEnvs'], contains('production'));
       final appliedPolicy = await _cli(packageRoot, environment, <String>[
         'daemon',
         'policy',
@@ -165,7 +162,7 @@ cases:
         '--path',
         root.path,
       ]);
-      final rootId = registeredRoot['rootId']! as String;
+      final rootId = registeredRoot['root']! as String;
       final registeredWorkspace = await _cli(packageRoot, environment, <String>[
         'workspace',
         'register',
@@ -174,7 +171,7 @@ cases:
         '--path',
         workspace.path,
       ]);
-      final workspaceId = registeredWorkspace['workspaceId']! as String;
+      final workspaceId = registeredWorkspace['workspace']! as String;
       final explained = await _cli(packageRoot, environment, <String>[
         'explain',
         'viewport.set',
@@ -215,7 +212,7 @@ cases:
         reason: '$registeredTarget',
       );
       final targetId = registeredTarget['output']! as Map<String, Object?>;
-      final registeredTargetId = targetId['targetId']! as String;
+      final registeredTargetId = targetId['target']! as String;
       final targets = await _cli(packageRoot, environment, <String>[
         'target',
         'list',
@@ -224,7 +221,7 @@ cases:
       ]);
       expect(
         (targets['items']! as List<Object?>).cast<Map<String, Object?>>().map(
-          (target) => target['targetId'],
+          (target) => target['target'],
         ),
         contains(registeredTargetId),
       );
@@ -236,7 +233,7 @@ cases:
         '--target-id',
         registeredTargetId,
       ]);
-      expect(target['appId'], 'com.example.smoke');
+      expect(target['app'], 'com.example.smoke');
       final discovery =
           jsonDecode(
                 await File(p.join(home.path, 'daemon.json')).readAsString(),
@@ -276,7 +273,7 @@ cases:
       ]);
       expect(
         (cases['items']! as List<Object?>).cast<Map<String, Object?>>().map(
-          (item) => item['caseId'],
+          (item) => item['case'],
         ),
         contains('smokeCase'),
       );
@@ -289,13 +286,10 @@ cases:
       ]);
       expect(
         (suites['items']! as List<Object?>).cast<Map<String, Object?>>().map(
-          (item) => item['authoredId'],
+          (item) => item['id'],
         ),
         contains('smokeSuite'),
       );
-      final indexedSuite = (suites['items']! as List<Object?>)
-          .cast<Map<String, Object?>>()
-          .singleWhere((item) => item['authoredId'] == 'smokeSuite');
       final validatedSuite = await _cli(packageRoot, environment, <String>[
         'suite',
         'validate',
@@ -306,35 +300,23 @@ cases:
       ]);
       expect(validatedSuite['valid'], isTrue);
       final acceptedSuite = await _cli(packageRoot, environment, <String>[
-        'op',
+        'suite',
         'run',
-        'suite.run',
         '--workspace-id',
         workspaceId,
-        '--input',
-        jsonEncode(<String, Object?>{
-          'source': <String, Object?>{
-            'kind': 'indexed',
-            'reference': <String, Object?>{
-              'documentId': indexedSuite['documentId'],
-              'suiteId': indexedSuite['authoredId'],
-              'documentSha256': indexedSuite['sha256'],
-            },
-          },
-        }),
+        '--suite-id',
+        'smokeSuite',
         '--idempotency-key',
         'smoke-suite-run',
       ]);
-      expect(acceptedSuite['outcome'], 'succeeded');
-      final suiteRunId =
-          (acceptedSuite['output']! as Map<String, Object?>)['runId']!
-              as String;
+      final suiteRunId = acceptedSuite['run']! as String;
+      expect(suiteRunId, matches(RegExp(r'^r[0-9a-z]{10}$')));
       final suiteRun = await _waitForCompletedRun(
         packageRoot,
         environment,
         suiteRunId,
       );
-      expect(suiteRun['documentKind'], 'suite');
+      expect(suiteRun['docType'], 'suite');
       final reportDirectory = p.join(temporary.path, 'cockpit-report');
       final reportReceipt = await _cli(packageRoot, environment, <String>[
         'suite',
@@ -377,14 +359,15 @@ cases:
         '--idempotency-key',
         'smoke-case-run',
       ]);
-      final runId = accepted['runId']! as String;
+      final runId = accepted['run']! as String;
+      expect(runId, matches(RegExp(r'^r[0-9a-z]{10}$')));
       final run = await _cli(packageRoot, environment, <String>[
         'run',
         'get',
         '--run-id',
         runId,
       ]);
-      expect(run['runId'], runId);
+      expect(run['run'], runId);
 
       final events = await _cli(packageRoot, environment, <String>[
         'run',
@@ -406,7 +389,7 @@ cases:
         '--idempotency-key',
         'smoke-case-cancel',
       ]);
-      expect(cancellation['runId'], runId);
+      expect(cancellation['run'], runId);
       final listedArtifacts = await _cli(packageRoot, environment, <String>[
         'artifact',
         'list',
@@ -540,10 +523,7 @@ cases:
         '--force',
       ]);
       expect(workspaceRetirement['id'], workspaceId);
-      expect(
-        workspaceRetirement['referenceCounts'],
-        isA<Map<String, Object?>>(),
-      );
+      expect(workspaceRetirement['refs'], isA<Map<String, Object?>>());
       final rootRetirement = await _cli(packageRoot, environment, <String>[
         'root',
         'remove',
@@ -552,7 +532,7 @@ cases:
         '--force',
       ]);
       expect(rootRetirement['id'], rootId);
-      expect(rootRetirement['referenceCounts'], isA<Map<String, Object?>>());
+      expect(rootRetirement['refs'], isA<Map<String, Object?>>());
     },
     timeout: const Timeout(Duration(minutes: 5)),
   );
@@ -590,7 +570,7 @@ Future<Map<String, Object?>> _cli(
       ...arguments,
       '--format',
       'json',
-      '--verbosity',
+      '--view',
       'full',
     ],
     workingDirectory: packageRoot,

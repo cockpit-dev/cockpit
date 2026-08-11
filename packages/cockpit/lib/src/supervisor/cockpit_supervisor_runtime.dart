@@ -305,7 +305,7 @@ final class CockpitSupervisorRuntime
     }
     final finishedAt = DateTime.now().toUtc();
     return CockpitOperationResult(
-      operationId: 'op-${CockpitSecureTokenGenerator().nextIdToken()}',
+      operationId: CockpitSecureTokenGenerator().nextResourceId('o'),
       kind: invocation.kind,
       rootId: invocation.rootId,
       lifecycle: CockpitOperationLifecycle.completed,
@@ -559,7 +559,7 @@ final class CockpitSupervisorRuntime
     await _initializeWorker(spec);
     final key =
         invocation.idempotencyKey?.value ??
-        'ro-${CockpitSecureTokenGenerator().nextIdToken()}';
+        CockpitSecureTokenGenerator().nextResourceId('o');
     final submittedAt = DateTime.now().toUtc();
     final deadline = _resolveOperationDeadline(
       metadata.descriptor,
@@ -646,7 +646,7 @@ final class CockpitSupervisorRuntime
     final accepted = await submitRun(submission);
     final finishedAt = DateTime.now().toUtc();
     return CockpitOperationResult(
-      operationId: 'op-${CockpitSecureTokenGenerator().nextResourceIdToken()}',
+      operationId: CockpitSecureTokenGenerator().nextResourceId('o'),
       kind: invocation.kind,
       workspaceId: workspaceId,
       lifecycle: CockpitOperationLifecycle.completed,
@@ -972,8 +972,7 @@ final class CockpitSupervisorRuntime
         requestId: run.requestId,
         params: <String, Object?>{'invocation': invocation.toJson()},
       );
-      if (call.requestId != run.requestId ||
-          run.runId != 'rn-${call.requestId}') {
+      if (call.requestId != run.requestId || run.runId != call.requestId) {
         throw StateError('Worker request identity diverged from admission.');
       }
       operation = CockpitWorkerOperationResult.fromJson(

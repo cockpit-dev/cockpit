@@ -100,7 +100,7 @@ final class CockpitInMemoryWorkerOperationJournal
         replay: existing.result,
       );
     }
-    final operationId = 'op-${_tokenGenerator.nextResourceIdToken()}';
+    final operationId = _tokenGenerator.nextResourceId('o');
     _records[key] = _OperationRecord(
       idempotencyKey: key,
       fingerprint: fingerprint,
@@ -233,7 +233,7 @@ final class CockpitFileWorkerOperationJournal
       final record = _OperationRecord(
         idempotencyKey: key,
         fingerprint: fingerprint,
-        operationId: 'op-${_tokenGenerator.nextResourceIdToken()}',
+        operationId: _tokenGenerator.nextResourceId('o'),
         kind: invocation.kind,
         workspaceId: invocation.workspaceId!,
         submittedAt: submittedAt.toUtc(),
