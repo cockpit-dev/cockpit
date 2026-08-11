@@ -9,6 +9,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 
+import '../foundation/console_version.dart';
 import 'acp_state.dart';
 
 export 'acp_state.dart';
@@ -38,7 +39,7 @@ final class AcpConnectionConfig {
     this.env = const {},
     this.workingDirectory,
     this.clientName = 'cockpit-console',
-    this.clientVersion = '0.1.0',
+    this.clientVersion = consoleVersion,
     this.sessionCwd = '.',
     this.additionalDirectories = const [],
     this.mcpServers = const [],

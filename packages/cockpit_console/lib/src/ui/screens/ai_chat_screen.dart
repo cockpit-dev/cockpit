@@ -30,9 +30,10 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 /// 2. Select a working directory via the system folder picker.
 /// 3. Connect and start chatting with streaming responses.
 ///
-/// The default page shows agent selection + recent sessions. Once connected,
-/// it shows the chat conversation. Generated cockpit.test/v2 documents can
-/// be sent to the Documents editor.
+/// The default page shows agent selection. Once connected, the primary surface
+/// is deliberately only the conversation and composer; complete ACP controls
+/// remain available through one progressively disclosed settings dialog.
+/// Generated cockpit.test/v2 documents can be sent to the Documents editor.
 final class AiChatScreen extends HookConsumerWidget {
   const AiChatScreen({super.key});
 
@@ -40,35 +41,38 @@ final class AiChatScreen extends HookConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final acpState = ref.watch(acpAgentProvider);
 
+    void openConnectionDialog() {
+      showDialog<void>(
+        context: context,
+        builder: (context) => const _AcpConnectionDialog(),
+      );
+    }
+
     return ScreenScaffold(
       title: 'AI Assistant',
       subtitle: _subtitleFor(acpState),
-      stackActionsBelowWidth: 420,
+      stackActionsBelowWidth: 0,
       actions: [
-        if (acpState is AcpConnected) ...[
-          if (acpState.messages.isNotEmpty)
-            TextButton.icon(
-              onPressed: acpState.isPrompting
-                  ? null
-                  : () => ref.read(acpAgentProvider.notifier).clearMessages(),
-              icon: const Icon(LucideIcons.eraser, size: 13),
-              label: const Text('Clear'),
+        if (acpState is AcpConnected)
+          IconButton(
+            key: const ValueKey('ai-agent-settings'),
+            onPressed: () => showDialog<void>(
+              context: context,
+              builder: (context) => const _AcpSettingsDialog(),
             ),
-          TextButton.icon(
-            onPressed: () => ref.read(acpAgentProvider.notifier).disconnect(),
-            icon: const Icon(LucideIcons.logOut, size: 13),
-            label: const Text('Disconnect'),
+            icon: const Icon(LucideIcons.settings2, size: 17),
+            tooltip: 'Agent settings',
           ),
-        ],
       ],
       body: acpState is AcpConnected
           ? _ChatView(connection: acpState)
-          : _OnboardingView(
+          : _DisconnectedChatView(
               connecting: acpState is AcpConnecting,
               errorMessage: switch (acpState) {
                 AcpError(:final message) => message,
                 _ => null,
               },
+              onConnect: openConnectionDialog,
             ),
     );
   }
@@ -85,6 +89,320 @@ final class AiChatScreen extends HookConsumerWidget {
   }
 }
 
+/// Keeps first-run state inside the same familiar conversation structure used
+/// after connection. Agent selection is disclosed only when requested.
+final class _DisconnectedChatView extends StatelessWidget {
+  const _DisconnectedChatView({
+    required this.connecting,
+    required this.errorMessage,
+    required this.onConnect,
+  });
+
+  final bool connecting;
+  final String? errorMessage;
+  final VoidCallback onConnect;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(
+      children: [
+        Expanded(
+          child: Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(24),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 420),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 44,
+                      height: 44,
+                      decoration: ConsoleShapes.decoration(
+                        color: theme.colorScheme.primary.withValues(alpha: 0.1),
+                        radius: ConsoleShapes.surfaceRadius,
+                      ),
+                      child: Icon(
+                        LucideIcons.sparkles,
+                        size: 21,
+                        color: theme.colorScheme.primary,
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    Text(
+                      connecting
+                          ? 'Connecting to agent'
+                          : 'Start a conversation',
+                      textAlign: TextAlign.center,
+                      style: theme.textTheme.headlineSmall,
+                    ),
+                    const SizedBox(height: 5),
+                    Text(
+                      errorMessage ??
+                          'Connect an ACP-compatible agent, then ask questions or run development tasks here.',
+                      textAlign: TextAlign.center,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: errorMessage == null
+                            ? theme.colorScheme.onSurfaceVariant
+                            : theme.colorScheme.error,
+                      ),
+                    ),
+                    const SizedBox(height: 18),
+                    FilledButton.icon(
+                      onPressed: connecting ? null : onConnect,
+                      icon: connecting
+                          ? const SizedBox.square(
+                              dimension: 14,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(LucideIcons.plug, size: 16),
+                      label: Text(
+                        connecting ? 'Connecting...' : 'Connect agent',
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+        Container(height: 1, color: theme.dividerColor),
+        Container(
+          padding: const EdgeInsets.fromLTRB(16, 10, 16, 14),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Expanded(
+                child: TextField(
+                  readOnly: true,
+                  canRequestFocus: false,
+                  onTap: connecting ? null : onConnect,
+                  decoration: InputDecoration(
+                    hintText: connecting
+                        ? 'Connecting to agent...'
+                        : 'Connect an agent to start chatting',
+                    isDense: true,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              SizedBox.square(
+                dimension: ConsoleControlStyle.height,
+                child: IconButton.filled(
+                  onPressed: connecting ? null : onConnect,
+                  icon: connecting
+                      ? const SizedBox.square(
+                          dimension: 14,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(LucideIcons.plug, size: 16),
+                  tooltip: connecting ? 'Connecting to agent' : 'Connect agent',
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Complete connection setup shown only when the user asks to connect an
+/// agent. Keeping it modal preserves a quiet chat surface without removing any
+/// ACP capability.
+final class _AcpConnectionDialog extends ConsumerWidget {
+  const _AcpConnectionDialog();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final state = ref.watch(acpAgentProvider);
+    return Dialog(
+      insetPadding: const EdgeInsets.all(16),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 640, maxHeight: 760),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            SizedBox(
+              height: 58,
+              child: Padding(
+                padding: const EdgeInsets.only(left: 16, right: 8),
+                child: Row(
+                  children: [
+                    const Icon(LucideIcons.plug, size: 17),
+                    const SizedBox(width: 9),
+                    Expanded(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Connect AI agent',
+                            style: Theme.of(context).textTheme.titleMedium,
+                          ),
+                          Text(
+                            'Choose an agent and its working directory.',
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      icon: const Icon(LucideIcons.x, size: 16),
+                      tooltip: 'Close connection setup',
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            Divider(height: 1, color: Theme.of(context).dividerColor),
+            Flexible(
+              child: _OnboardingView(
+                connecting: state is AcpConnecting,
+                errorMessage: switch (state) {
+                  AcpError(:final message) => message,
+                  _ => null,
+                },
+                onConnected: () {
+                  if (context.mounted) Navigator.of(context).pop();
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Progressively disclosed ACP controls. The chat surface stays focused while
+/// authentication, session lifecycle, agent modes, MCP, and connection actions
+/// remain fully available when the operator needs them.
+final class _AcpSettingsDialog extends HookConsumerWidget {
+  const _AcpSettingsDialog();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final state = ref.watch(acpAgentProvider);
+    final connection = state is AcpConnected ? state : null;
+    final disconnecting = useState(false);
+
+    Future<void> disconnect() async {
+      if (disconnecting.value) return;
+      disconnecting.value = true;
+      await ref.read(acpAgentProvider.notifier).disconnect();
+      if (context.mounted) Navigator.of(context).pop();
+    }
+
+    return Dialog(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 520, maxHeight: 720),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            SizedBox(
+              height: 52,
+              child: Padding(
+                padding: const EdgeInsets.only(left: 16, right: 8),
+                child: Row(
+                  children: [
+                    const Icon(LucideIcons.settings2, size: 16),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Agent settings',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                    ),
+                    IconButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      icon: const Icon(LucideIcons.x, size: 16),
+                      tooltip: 'Close settings',
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            Divider(height: 1, color: Theme.of(context).dividerColor),
+            Flexible(
+              child: connection == null
+                  ? Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(24),
+                        child: Text(
+                          'The agent is no longer connected.',
+                          style: Theme.of(context).textTheme.bodyMedium,
+                        ),
+                      ),
+                    )
+                  : SingleChildScrollView(
+                      padding: const EdgeInsets.all(16),
+                      child: AcpSessionControls(connection: connection),
+                    ),
+            ),
+            if (connection != null) ...[
+              Divider(height: 1, color: Theme.of(context).dividerColor),
+              Padding(
+                padding: const EdgeInsets.all(12),
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final clearButton = connection.messages.isEmpty
+                        ? null
+                        : TextButton.icon(
+                            onPressed: connection.isPrompting
+                                ? null
+                                : ref
+                                      .read(acpAgentProvider.notifier)
+                                      .clearMessages,
+                            icon: const Icon(LucideIcons.eraser, size: 14),
+                            label: const Text('Clear conversation'),
+                          );
+                    final disconnectButton = OutlinedButton.icon(
+                      onPressed: disconnecting.value ? null : disconnect,
+                      icon: disconnecting.value
+                          ? const SizedBox.square(
+                              dimension: 14,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(LucideIcons.logOut, size: 14),
+                      label: const Text('Disconnect agent'),
+                    );
+
+                    if (constraints.maxWidth < 420) {
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          if (clearButton != null) ...[
+                            clearButton,
+                            const SizedBox(height: 8),
+                          ],
+                          disconnectButton,
+                        ],
+                      );
+                    }
+
+                    return Row(
+                      children: [
+                        ?clearButton,
+                        const Spacer(),
+                        disconnectButton,
+                      ],
+                    );
+                  },
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 const _customAgentId = 'custom';
 const _customAgentPreset = AgentPreset(
   id: _customAgentId,
@@ -97,13 +415,17 @@ const _customAgentPreset = AgentPreset(
 // ── Onboarding: agent selection + directory + recent ────────────────────
 
 final class _OnboardingView extends HookConsumerWidget {
-  const _OnboardingView({required this.connecting, this.errorMessage});
+  const _OnboardingView({
+    required this.connecting,
+    required this.onConnected,
+    this.errorMessage,
+  });
 
   final bool connecting;
+  final VoidCallback onConnected;
   final String? errorMessage;
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
     final prefsAsync = ref.watch(preferencesProvider);
     final selectedAgentId = useState<String?>(null);
     final sessionCwdController = useTextEditingController();
@@ -123,20 +445,26 @@ final class _OnboardingView extends HookConsumerWidget {
 
     // Load last-used agent and directory from prefs.
     useEffect(() {
+      var cancelled = false;
       prefsAsync.maybeWhen(
         data: (prefs) {
           if (preferencesLoaded.value) return;
-          preferencesLoaded.value = true;
-          selectedAgentId.value ??= prefs.lastAgentId;
-          if (sessionCwdController.text.isEmpty) {
-            sessionCwdController.text = prefs.lastSessionCwd ?? '';
-          }
-          customExecutableController.text = prefs.customAgentExecutable ?? '';
-          customArgsController.text = prefs.customAgentArgs.join('\n');
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (cancelled || !context.mounted || preferencesLoaded.value) {
+              return;
+            }
+            preferencesLoaded.value = true;
+            selectedAgentId.value ??= prefs.lastAgentId;
+            if (sessionCwdController.text.isEmpty) {
+              sessionCwdController.text = prefs.lastSessionCwd ?? '';
+            }
+            customExecutableController.text = prefs.customAgentExecutable ?? '';
+            customArgsController.text = prefs.customAgentArgs.join('\n');
+          });
         },
         orElse: () {},
       );
-      return null;
+      return () => cancelled = true;
     }, [prefsAsync]);
 
     Future<void> connect() async {
@@ -181,6 +509,9 @@ final class _OnboardingView extends HookConsumerWidget {
               mcpServers: connectionOptions.value.mcpServers,
             ),
           );
+      if (context.mounted && ref.read(acpAgentProvider) is AcpConnected) {
+        onConnected();
+      }
     }
 
     return SingleChildScrollView(
@@ -191,45 +522,11 @@ final class _OnboardingView extends HookConsumerWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // Hero.
-              const SizedBox(height: 20),
-              Align(
-                child: Container(
-                  width: 56,
-                  height: 56,
-                  decoration: ConsoleShapes.decoration(
-                    color: theme.colorScheme.primary.withValues(alpha: 0.1),
-                    radius: ConsoleShapes.dialogRadius,
-                  ),
-                  child: Icon(
-                    LucideIcons.sparkles,
-                    size: 26,
-                    color: theme.colorScheme.primary,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 14),
-              Text(
-                'Choose an AI agent',
-                textAlign: TextAlign.center,
-                style: theme.textTheme.headlineSmall?.copyWith(fontSize: 18),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'Select an agent and a working directory to start a conversation. '
-                'Any ACP-compatible agent is supported.',
-                textAlign: TextAlign.center,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  fontSize: 12,
-                  height: 1.5,
-                ),
-              ),
-              const SizedBox(height: 28),
-
-              // Agent grid.
               Text(
                 'Agent',
-                style: theme.textTheme.titleSmall?.copyWith(fontSize: 12),
+                style: Theme.of(
+                  context,
+                ).textTheme.titleSmall?.copyWith(fontSize: 12),
               ),
               const SizedBox(height: 8),
               Wrap(
@@ -583,62 +880,7 @@ final class _ChatView extends HookConsumerWidget {
         ),
       ],
     );
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        if (constraints.maxWidth >= 920) {
-          return Row(
-            children: [
-              Container(
-                width: 304,
-                color: Theme.of(context).colorScheme.surfaceContainerLowest,
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.all(16),
-                  child: AcpSessionControls(connection: connection),
-                ),
-              ),
-              Container(width: 1, color: Theme.of(context).dividerColor),
-              Expanded(child: conversation),
-            ],
-          );
-        }
-        return Column(
-          children: [
-            Material(
-              color: Theme.of(context).colorScheme.surfaceContainerLowest,
-              child: ExpansionTile(
-                initiallyExpanded: connection.activeSession == null,
-                leading: const Icon(LucideIcons.slidersHorizontal, size: 16),
-                title: Text(
-                  connection.activeSession?.title ??
-                      (connection.activeSession == null
-                          ? 'Agent setup'
-                          : 'Session controls'),
-                ),
-                subtitle: Text(
-                  connection.activeSession?.cwd ??
-                      _authStatusLabel(connection.authStatus),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                children: [
-                  ConstrainedBox(
-                    constraints: BoxConstraints(
-                      maxHeight: constraints.maxHeight * 0.58,
-                    ),
-                    child: SingleChildScrollView(
-                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                      child: AcpSessionControls(connection: connection),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Container(height: 1, color: Theme.of(context).dividerColor),
-            Expanded(child: conversation),
-          ],
-        );
-      },
-    );
+    return conversation;
   }
 }
 
@@ -1162,15 +1404,6 @@ final class _Avatar extends StatelessWidget {
     );
   }
 }
-
-String _authStatusLabel(AcpAuthStatus status) => switch (status) {
-  AcpAuthStatus.unavailable => 'Ready',
-  AcpAuthStatus.available => 'Sign-in available',
-  AcpAuthStatus.required => 'Sign-in required',
-  AcpAuthStatus.authenticating => 'Signing in…',
-  AcpAuthStatus.authenticated => 'Signed in',
-  AcpAuthStatus.loggingOut => 'Signing out…',
-};
 
 String _formatAcpRawValue(Object value) {
   if (value is String) return value;
