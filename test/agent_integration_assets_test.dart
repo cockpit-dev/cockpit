@@ -65,7 +65,7 @@ void main() {
       'plugins/codex/cockpit/.codex-plugin/plugin.json',
     );
     expect(manifest['name'], 'cockpit');
-    expect(manifest['version'], matches(RegExp(r'^\d+\.\d+\.\d+$')));
+    expect(manifest['version'], '3.0.14');
     expect(manifest['skills'], './skills/');
     expect(manifest['mcpServers'], './.mcp.json');
     expect(manifest['interface'], isA<Map<String, Object?>>());
@@ -144,7 +144,7 @@ void main() {
       'https://agent-plugins.org/schemas/1.0.0/plugin.schema.json',
     );
     expect(kiroPower['name'], 'cockpit');
-    expect(kiroPower['version'], '3.0.13');
+    expect(kiroPower['version'], '3.0.14');
     expect(
       kiroPower['keywords'],
       containsAll(<Object?>['cockpit', 'flutter', 'e2e']),

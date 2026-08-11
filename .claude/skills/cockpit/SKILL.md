@@ -93,6 +93,75 @@ Reads never relaunch stopped apps. Mutations may recover one owned crash. Use
 `cockpit dev start` to explicitly relaunch a stopped or crashed app. Bridge and
 port changes are reconciled internally.
 
+## Unexpected-State Recovery
+
+Treat a missing target, failed postcondition, wait timeout, unexpected route or
+overlay, changed screenshot, and disconnect as a state change. Do not repeat the
+failed action blindly. Preserve the intended postcondition and the same session
+handle, then observe the current state once:
+
+```bash
+cockpit dev status
+cockpit dev screenshot --verbosity standard
+cockpit dev inspect
+```
+
+Inspect the returned screenshot path with the host's local image tool when
+available. On Android/iOS, a system-sourced capture may reveal an OS prompt that
+cannot appear in the Flutter tree. Use `cockpit dev diagnose --verbosity standard`
+only when status, screenshot, and bounded inspection do not explain the blocker.
+
+If a timed-out mutation already produced the expected anchor, treat it as committed
+and continue without repeating it. If the screen does not belong to the intended app,
+project, or target, inspect the handle returned by status with `cockpit session show
+HANDLE` and select the correct session before any mutation; never repair the wrong app.
+
+Apply exactly one matching recovery:
+
+- For a transient, non-interactive animation, toast, or loading state, run
+  `cockpit dev wait` once and re-observe; do not tap or dismiss it speculatively.
+- For an expected prompt, perform the scenario's explicit action with an exact
+  locator.
+- For an unexpected Flutter dialog, sheet, banner, or upgrade notice, prefer its
+  explicit safe action such as Later, Not now, Skip, Cancel, or Close. If evidence
+  proves it is a dismissible Flutter overlay without a stable safe button, run
+  `cockpit dev dismiss`.
+- For an unintended child route, run `cockpit dev back` once only when the current
+  state proves that returning is correct.
+- When a system-sourced capture proves that the keyboard, system UI, or an OS dialog
+  blocks the app, first require the advertised `system.action` capability. For an
+  incidental blocker, use `resolveBlockers` with `decision:dismiss`; use
+  `decision:accept` only when the intended scenario explicitly requires it:
+
+  ```bash
+  cockpit op list --kind system.action
+  cockpit explain system.action
+  cockpit op run system.action --input '{action:resolveBlockers parameters:{decision:dismiss}}'
+  ```
+- For a runtime exception or failed request, diagnose and fix the cause, then use
+  `cockpit dev reload`. For a stopped or crashed owned app, use `cockpit dev start`
+  so Cockpit reconciles the existing handle; never launch a second app as recovery.
+
+Do not generically accept an upgrade, installation, permission, sign-in, payment,
+deletion, or external navigation. Do not loop taps, dismissals, Back, reload, or
+restart. Do not clear app data, reinstall the app, reset a simulator/emulator, kill
+unrelated processes, or create a second session as generic recovery. If the same
+blocker survives one targeted recovery, collect standard diagnostics and fix the app
+or environment cause instead of trying random actions. After any mutation timeout,
+read status and inspect the expected anchor before retrying because it may have committed.
+
+Prove recovery before resuming the original flow:
+
+```bash
+cockpit dev wait
+cockpit dev inspect "EXPECTED_ANCHOR"
+cockpit dev screenshot
+```
+
+Resume the original action once only after the expected anchor is present. Re-read
+[dev.md](references/dev.md) when the blocker crosses Flutter/native boundaries or
+the same state returns.
+
 ## Sessions And Isolation
 
 The short handle is the only routine session selector. Cockpit stores one active

@@ -93,6 +93,55 @@ cockpit dev diagnose --verbosity standard
 cockpit dev restart
 ```
 
+### Unexpected UI Or Flow Drift
+
+A missing locator or failed assertion often means the UI changed, not that Cockpit
+should retry the same input. Preserve the original expected postcondition and use a
+bounded observe-decide-prove loop:
+
+1. Read `cockpit dev status` without mutating the app.
+2. Capture `cockpit dev screenshot --verbosity standard`; inspect the returned path
+   with the host's local image tool when available. The reported source distinguishes
+   an Android/iOS system screen from the Flutter view.
+3. Run `cockpit dev inspect` for the mounted Flutter state. Use a focused query when
+   the screenshot exposes a likely label. Use `dev tree` only for structural ambiguity.
+4. If the screen identity is unclear, inspect the handle returned by status with
+   `cockpit session show HANDLE`. Select the intended session before any mutation.
+5. Run one recovery from the table below.
+6. Run `cockpit dev wait`, inspect the original expected anchor, capture current evidence,
+   then resume the interrupted action once.
+
+| Observed state | Recovery |
+| --- | --- |
+| Original expected anchor is already present after a timeout | Treat the mutation as committed and continue; do not repeat it. |
+| Screen belongs to another app, checkout, or target | Select the correct session; do not mutate, restart, or stop the observed app. |
+| Transient non-interactive animation, toast, or loading state | Run `cockpit dev wait` once, then re-observe instead of tapping or dismissing it. |
+| Expected product prompt | Execute its explicit expected action with an exact locator. |
+| Incidental Flutter dialog/sheet/banner/upgrade notice | Prefer an explicit neutral action such as Later, Not now, Skip, Cancel, or Close; otherwise use `cockpit dev dismiss` only when inspection proves the overlay is dismissible. |
+| Unintended temporary route | Use `cockpit dev back` once only when current state proves the parent route is the intended destination. |
+| Android/iOS system capture shows OS dialog, keyboard, or system UI | Require `system.action`; run `resolveBlockers` with `decision:dismiss` for an incidental blocker. Accept only when the scenario requires that exact decision. |
+| Runtime exception or failed request | Read standard diagnostics, fix the cause, then hot reload and prove the expected anchor. |
+| App crashed or stopped unexpectedly | Use `cockpit dev start` to reconcile and relaunch the owned app under the same handle. |
+| Port/bridge changed | Use `cockpit dev start` to reconnect the owned app; do not create another session. |
+
+Discover the native action before using it; live availability and schema remain
+authoritative:
+
+```bash
+cockpit op list --kind system.action
+cockpit explain system.action
+cockpit op run system.action --input '{action:resolveBlockers parameters:{decision:dismiss}}'
+```
+
+Unknown prompts default to the safe negative/neutral path. Never generically accept
+upgrades, installations, permissions, authentication, payments, deletion, or external
+navigation. Do not chain speculative taps, repeated Back presses, dismiss loops, or
+restart loops. Do not clear app data, reinstall the app, reset a simulator/emulator,
+kill unrelated processes, or create a second session as generic recovery. If one
+targeted recovery does not change the state, collect standard diagnostics and fix the
+application or environment cause. A missing native capability is `unavailable` or
+`blocked`, not permission to simulate success.
+
 Never recover by package name, working directory, or port alone. A reconnect
 must remain bound to the same canonical checkout identity and target. Launch
 recovery never reads a keychain or secret store. Values passed through `--env`

@@ -5,6 +5,7 @@ import 'package:cockpit/src/cli/cockpit_cli_runtime.dart';
 import 'package:cockpit/src/cli/cockpit_cli_output.dart';
 import 'package:cockpit/src/cli/cockpit_cli_session_handles.dart';
 import 'package:cockpit/src/cli/cockpit_dev_runtime.dart';
+import 'package:cockpit/src/cli/cockpit_dev_start.dart';
 import 'package:cockpit/src/development/cockpit_checkout_identity.dart';
 import 'package:cockpit/src/foundation/cockpit_locked_json_store.dart';
 import 'package:cockpit/src/foundation/cockpit_permissions.dart';
@@ -225,6 +226,58 @@ void main() {
     expect(
       resolved.errors.toString(),
       contains('cockpit dev start --session ${session.handleId}'),
+    );
+  });
+
+  test(
+    'stopped custom launch stays stopped and points back to start',
+    () async {
+      final checkout = await runtime.checkoutIdentity();
+      session = await runtime.bindDevelopmentSession(
+        checkout: checkout,
+        projectPath: checkout.canonicalRoot,
+        workspaceId: 'workspace-1',
+        sessionId: 'session-custom-stopped',
+        targetId: 'target-1',
+        appId: 'app-custom-stopped',
+        lifecycle: 'stopped',
+        recoverable: false,
+      );
+      final dev = CockpitDevRuntime(runtime);
+
+      final resolved = await dev.relaunch(session);
+
+      expect(resolved.ready, isFalse);
+      expect(resolved.session.lifecycle, 'stopped');
+      runtime.configureOutput(
+        command: 'dev.start',
+        selection: const CockpitCliOutputSelection(),
+      );
+      expect(
+        await dev.writeUnavailable(action: 'start', resolution: resolved),
+        cockpitTemporaryExitCode,
+      );
+      final output = lon.decode(stdout.toString())! as Map<Object?, Object?>;
+      expect(output['next'], 'cockpit dev start --session ${session.handleId}');
+    },
+  );
+
+  test('only live session states require stop before target launch', () {
+    CockpitCliSessionHandle handle(String lifecycle) =>
+        session.copyWith(lifecycle: lifecycle);
+
+    expect(
+      cockpitDevSessionRequiresStopBeforeLaunch(handle('connecting')),
+      isTrue,
+    );
+    expect(cockpitDevSessionRequiresStopBeforeLaunch(handle('ready')), isTrue);
+    expect(
+      cockpitDevSessionRequiresStopBeforeLaunch(handle('crashed')),
+      isFalse,
+    );
+    expect(
+      cockpitDevSessionRequiresStopBeforeLaunch(handle('stopped')),
+      isFalse,
     );
   });
 

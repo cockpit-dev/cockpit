@@ -1,5 +1,10 @@
 # Changelog
 
+## 3.0.14
+
+- Synchronized the Flutter bridge with Cockpit's stale development-session
+  recovery and Agent workflow release; bridge behavior is unchanged.
+
 ## 3.0.13
 
 - Added semantics-independent mounted Element and RenderObject tree capture
