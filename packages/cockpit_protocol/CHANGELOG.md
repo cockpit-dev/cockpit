@@ -1,5 +1,10 @@
 # Changelog
 
+## 3.0.13
+
+- Synchronized the protocol package with Cockpit's Windows native-control and
+  system-capture performance release; public protocol contracts are unchanged.
+
 ## 3.0.12
 
 - Synchronized the protocol package with Cockpit's daemon concurrency,

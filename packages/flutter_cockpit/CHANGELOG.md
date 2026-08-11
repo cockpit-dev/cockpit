@@ -1,5 +1,11 @@
 # Changelog
 
+## 3.0.13
+
+- Synchronized the Flutter bridge release with Cockpit's Windows native-control
+  and system-capture performance corrections; public bridge contracts are
+  unchanged.
+
 ## 3.0.12
 
 - Synchronized the Flutter bridge release with Cockpit's daemon concurrency,
