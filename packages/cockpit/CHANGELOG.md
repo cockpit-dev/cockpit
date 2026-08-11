@@ -1,5 +1,16 @@
 # Changelog
 
+## 3.0.13
+
+- Replaced dynamically compiled PowerShell/C# automation on Windows with
+  in-process Win32 FFI for window discovery, activation, focused-control
+  inspection, and native input. Ambiguous application-ID matches now fail
+  explicitly instead of risking control of another project or checkout.
+- Captured Windows system screenshots in process through Win32 GDI with Dart
+  PNG encoding. The Windows regression path dropped from roughly 28 seconds to
+  407 milliseconds while retaining real system-screen evidence for native
+  dialogs and operating-system UI.
+
 ## 3.0.12
 
 - Serialized every daemon lifecycle transition under one bounded cross-process
