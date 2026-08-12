@@ -143,9 +143,16 @@ Apply exactly one matching recovery:
 
   ```bash
   cockpit dev recover
-  cockpit dev recover --decision accept
+  cockpit dev recover --dialog dismiss
+  cockpit dev recover --dialog accept
   cockpit dev recover --keyboard
   ```
+  This task command owns the advertised `resolveBlockers` operation; do not
+  build a generic `op run` payload for routine recovery. Omit `--dialog` for
+  permission-free focus recovery; add it only when a native dialog is proven.
+  On macOS, `macosSessionLocked` means the login window or screen saver owns
+  the foreground. Unlock the desktop and retry the same session once; do not
+  grant Accessibility permission, restart the app, or create another session.
   From a common ancestor with several active Flutter projects, append the exact
   `--session HANDLE`; never recover an implicitly selected neighboring app.
 - For a runtime exception or failed request, diagnose and fix the cause, then use

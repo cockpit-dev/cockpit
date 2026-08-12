@@ -142,11 +142,10 @@ CockpitLeafCommand cockpitDevRecoverCommand(
   configure: (parser) {
     cockpitAddDevSessionOption(parser);
     parser.addOption(
-      'decision',
+      'dialog',
       allowed: const <String>['dismiss', 'accept'],
-      defaultsTo: 'dismiss',
       help:
-          'System-dialog decision; accept only when the scenario requires it.',
+          'Handle a proven native dialog; accept only when the scenario requires it.',
     );
     parser.addFlag(
       'keyboard',
@@ -158,7 +157,7 @@ CockpitLeafCommand cockpitDevRecoverCommand(
   maximumTimeout: const Duration(minutes: 10),
   action: (arguments) => dev.recoverSystemBlockers(
     runtime.resolveDevelopmentSession(arguments.option('session')),
-    decision: arguments.option('decision')!,
+    dialog: arguments.option('dialog'),
     dismissKeyboard: arguments.flag('keyboard'),
     timeoutMilliseconds: runtime.operationTimeout.inMilliseconds,
   ),

@@ -678,8 +678,14 @@ void main() {
         resolveBlockers?.availability,
         CockpitSystemControlAvailability.available,
       );
-      expect(resolveBlockers?.strategy, 'macro.ax-dialog+activate');
-      expect(resolveBlockers?.requires, contains('Accessibility permission'));
+      expect(
+        resolveBlockers?.strategy,
+        'NSWorkspace.focus+NSRunningApplication.activate',
+      );
+      expect(
+        resolveBlockers?.requires,
+        isNot(contains('Accessibility permission')),
+      );
       expect(
         resolveBlockers?.requires,
         isNot(contains('Automation permission for System Events')),

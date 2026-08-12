@@ -841,55 +841,140 @@ void main() {
     expect(stdout.toString(), isNot(contains('command')));
   });
 
-  test(
-    'system recovery defaults to a dismiss decision for one session',
-    () async {
-      final calls = <String>[];
-      final dev = CockpitDevRuntime(
-        runtime,
-        operationInvoker: (_, kind, input) async {
-          calls.add(kind);
-          expect(kind, 'system.action');
-          expect(input, <String, Object?>{
-            'sessionId': 'session-old',
+  test('system recovery defaults to focus-only for one session', () async {
+    final calls = <String>[];
+    final dev = CockpitDevRuntime(
+      runtime,
+      operationInvoker: (_, kind, input) async {
+        calls.add(kind);
+        expect(kind, 'system.action');
+        expect(input, <String, Object?>{
+          'sessionId': 'session-old',
+          'action': 'resolveBlockers',
+          'parameters': <String, Object?>{},
+          'timeoutMs': 120000,
+        });
+        return _result(
+          kind,
+          output: const <String, Object?>{
             'action': 'resolveBlockers',
-            'parameters': <String, Object?>{'decision': 'dismiss'},
-            'timeoutMs': 120000,
-          });
-          return _result(
-            kind,
-            output: const <String, Object?>{
-              'action': 'resolveBlockers',
-              'availability': 'available',
-              'success': true,
-              'changed': false,
-              'strategy': 'test.resolveBlockers',
-            },
-          );
-        },
-      );
-      runtime.configureOutput(
-        command: 'dev.recover',
-        selection: const CockpitCliOutputSelection(),
-      );
+            'availability': 'available',
+            'success': true,
+            'changed': false,
+            'strategy': 'test.resolveBlockers',
+          },
+        );
+      },
+    );
+    runtime.configureOutput(
+      command: 'dev.recover',
+      selection: const CockpitCliOutputSelection(),
+    );
 
-      expect(
-        await dev.recoverSystemBlockers(
-          Future<CockpitCliSessionHandle>.value(session),
-          decision: 'dismiss',
-          dismissKeyboard: false,
-          timeoutMilliseconds: 120000,
-        ),
-        cockpitSuccessExitCode,
-      );
-      expect(calls, <String>['system.action']);
-      final output = lon.decode(stdout.toString())! as Map<Object?, Object?>;
-      expect(output['decision'], 'dismiss');
-      expect(output['changed'], isFalse);
-      expect(output['session'], 1);
-      expect(stdout.toString(), isNot(contains('success')));
-    },
-  );
+    expect(
+      await dev.recoverSystemBlockers(
+        Future<CockpitCliSessionHandle>.value(session),
+        dialog: null,
+        dismissKeyboard: false,
+        timeoutMilliseconds: 120000,
+      ),
+      cockpitSuccessExitCode,
+    );
+    expect(calls, <String>['system.action']);
+    final output = lon.decode(stdout.toString())! as Map<Object?, Object?>;
+    expect(output.containsKey('dialog'), isFalse);
+    expect(output['changed'], isFalse);
+    expect(output['session'], 1);
+    expect(stdout.toString(), isNot(contains('success')));
+  });
+
+  test('system recovery forwards an explicit native dialog decision', () async {
+    final dev = CockpitDevRuntime(
+      runtime,
+      operationInvoker: (_, kind, input) async {
+        expect(input, <String, Object?>{
+          'sessionId': 'session-old',
+          'action': 'resolveBlockers',
+          'parameters': <String, Object?>{'decision': 'accept'},
+          'timeoutMs': 120000,
+        });
+        return _result(
+          kind,
+          output: const <String, Object?>{
+            'action': 'resolveBlockers',
+            'availability': 'available',
+            'success': true,
+            'changed': true,
+          },
+        );
+      },
+    );
+    runtime.configureOutput(
+      command: 'dev.recover',
+      selection: const CockpitCliOutputSelection(),
+    );
+
+    expect(
+      await dev.recoverSystemBlockers(
+        Future<CockpitCliSessionHandle>.value(session),
+        dialog: 'accept',
+        dismissKeyboard: false,
+        timeoutMilliseconds: 120000,
+      ),
+      cockpitSuccessExitCode,
+    );
+    final output = lon.decode(stdout.toString())! as Map<Object?, Object?>;
+    expect(output['dialog'], 'accept');
+    expect(output['changed'], isTrue);
+  });
+
+  test('failed system recovery does not claim that state changed', () async {
+    final dev = CockpitDevRuntime(
+      runtime,
+      operationInvoker: (_, kind, input) async {
+        final now = DateTime.utc(2026, 8, 4);
+        return CockpitOperationResult(
+          operationId: 'operation-recover-failed',
+          kind: kind,
+          workspaceId: 'workspace-1',
+          lifecycle: CockpitOperationLifecycle.completed,
+          outcome: CockpitOperationOutcome.failed,
+          submittedAt: now,
+          startedAt: now,
+          finishedAt: now,
+          failure: CockpitFailure(
+            primary: CockpitApiError(
+              code: 'macosSessionLocked',
+              category: CockpitErrorCategory.application,
+              message: 'Unlock the macOS session.',
+              retryable: false,
+              responsibleLayer: CockpitResponsibleLayer.worker,
+              redactedDetails: const <String, Object?>{
+                'next': 'unlockMacosSession',
+              },
+            ),
+          ),
+        );
+      },
+    );
+    runtime.configureOutput(
+      command: 'dev.recover',
+      selection: const CockpitCliOutputSelection(),
+    );
+
+    expect(
+      await dev.recoverSystemBlockers(
+        Future<CockpitCliSessionHandle>.value(session),
+        dialog: null,
+        dismissKeyboard: false,
+        timeoutMilliseconds: 120000,
+      ),
+      cockpitUnavailableExitCode,
+    );
+    final output = lon.decode(stdout.toString())! as Map<Object?, Object?>;
+    expect(output.containsKey('changed'), isFalse);
+    expect(output['next'], 'unlockMacosSession');
+  });
 }
 
 CockpitOperationResult _result(

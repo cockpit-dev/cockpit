@@ -266,19 +266,17 @@ final class CockpitDesktopSystemControlAdapter
               availability: hasInputTarget
                   ? CockpitSystemControlAvailability.available
                   : CockpitSystemControlAvailability.blocked,
-              strategy: 'macro.ax-dialog+activate',
+              strategy: 'NSWorkspace.focus+NSRunningApplication.activate',
               requires: <String>[
-                'Accessibility permission',
                 ..._activationRequires,
                 if (!hasInputTarget) 'app id or process id',
               ],
               limitations: <String>[
                 ...limitations,
-                'Only a real target-owned accessible sheet or modal dialog is changed; no dialog is a safe no-op.',
+                'Recovers application foreground focus without restarting it; explicit native dialog actions remain separate capabilities.',
               ],
               parameters: CockpitSystemControlParameterSets.resolveBlockers,
               fallbackActions: const <CockpitSystemControlAction>[
-                CockpitSystemControlAction.dismissSystemDialog,
                 CockpitSystemControlAction.recoverToApp,
               ],
             ),
@@ -2168,6 +2166,21 @@ function run(argv) {
   if (!app) throw new Error(`No running macOS application found for ${targetKind}:${targetValue}`)
   if (!app.activateWithOptions($.NSApplicationActivateIgnoringOtherApps)) {
     throw new Error(`Unable to activate macOS application ${targetKind}:${targetValue}`)
+  }
+  const activationDeadline = Date.now() + 1000
+  while (!app.active && Date.now() < activationDeadline) delay(0.01)
+  const frontmost = $.NSWorkspace.sharedWorkspace.frontmostApplication
+  if (
+    !app.active ||
+    !frontmost ||
+    Number(frontmost.processIdentifier) !== Number(app.processIdentifier)
+  ) {
+    const frontmostAppId = frontmost && frontmost.bundleIdentifier
+      ? ObjC.unwrap(frontmost.bundleIdentifier)
+      : 'unknown'
+    throw new Error(
+      `macOS application did not become frontmost; current foreground is ${frontmostAppId}`,
+    )
   }
 }
 ''';

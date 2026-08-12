@@ -1203,7 +1203,7 @@ Object? _compactDevState(
     },
     'open' => _compactDevOpen(state, more: more),
     'recover' => <String, Object?>{
-      ..._pick(state, const <String>['decision']),
+      ..._pick(state, const <String>['dialog']),
       if (more && state['system'] is Map<Object?, Object?>)
         ..._pick(state['system']! as Map<Object?, Object?>, const <String>[
           'availability',

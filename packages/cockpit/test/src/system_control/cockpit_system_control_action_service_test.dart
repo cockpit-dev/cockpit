@@ -1667,6 +1667,30 @@ void main() {
     },
   );
 
+  test('android resolveBlockers rejects invalid recovery parameters', () async {
+    final processManager = _FakeProcessManager(
+      androidFocusOutput:
+          'mCurrentFocus=Window{1 u0 dev.cockpit.example/.MainActivity}',
+    );
+    final service = CockpitSystemControlActionService(
+      processManager: processManager,
+    );
+
+    final result = await service.run(
+      const CockpitSystemControlActionRequest(
+        platform: 'android',
+        deviceId: 'emulator-5554',
+        appId: 'dev.cockpit.example',
+        action: CockpitSystemControlAction.resolveBlockers,
+        parameters: <String, Object?>{'dismissKeyboard': 'sometimes'},
+      ),
+    );
+
+    expect(result.success, isFalse);
+    expect(result.errorCode, 'invalidSystemActionParameter');
+    expect(processManager.starts, isEmpty);
+  });
+
   test(
     'android resolveBlockers dismisses a proven keyboard only on opt-in',
     () async {
@@ -2295,20 +2319,61 @@ void main() {
     expect(result.command, containsAllInOrder(<String>['processId', '4242']));
     expect(result.command, contains('JavaScript'));
     expect(result.command.join('\n'), contains('NSRunningApplication'));
+    expect(result.command.join('\n'), contains('frontmostApplication'));
+    expect(result.command.join('\n'), contains('did not become frontmost'));
     expect(result.command.join('\n'), isNot(contains('System Events')));
   });
 
-  test('macos resolveBlockers only handles the target dialog and app', () async {
+  test('macos focus probe uses AppKit without System Events', () async {
+    final processManager = _ResultProcessManager(
+      ProcessResult(
+        0,
+        0,
+        '{"targetFrontmost":true,"frontmostProcessId":4242,"frontmostAppId":"dev.cockpit.example"}\n',
+        '',
+      ),
+    );
+
+    final focus = await cockpitReadMacosApplicationFocus(
+      processId: 4242,
+      timeout: const Duration(seconds: 1),
+      processManager: processManager,
+    );
+
+    expect(focus.targetFrontmost, isTrue);
+    expect(focus.frontmostProcessId, 4242);
+    expect(focus.frontmostAppId, 'dev.cockpit.example');
+    expect(focus.sessionLocked, isFalse);
+    expect(processManager.executable, 'osascript');
+    expect(
+      processManager.arguments,
+      containsAllInOrder(<String>['-l', 'JavaScript', '-e']),
+    );
+    expect(processManager.arguments.join('\n'), contains('NSWorkspace'));
+    expect(
+      processManager.arguments.join('\n'),
+      isNot(contains('System Events')),
+    );
+    expect(processManager.arguments.last, '4242');
+  }, skip: !Platform.isMacOS);
+
+  test('macos resolveBlockers only activates the exact target app', () async {
     final processManager = _FakeProcessManager();
-    String? capturedDecision;
+    var dialogChecks = 0;
     final service = CockpitSystemControlActionService(
       processManager: processManager,
       macosSystemDialogHandler:
           ({required processId, required decision, required timeout}) async {
-            expect(processId, 4242);
-            capturedDecision = decision;
+            dialogChecks += 1;
             return 'dismissSystemDialog decision=$decision handled=false reason=noDialog';
           },
+      macosApplicationFocusReader:
+          ({required processId, required timeout}) async =>
+              const CockpitMacosApplicationFocus(
+                targetFrontmost: false,
+                frontmostProcessId: 42,
+                frontmostAppId: 'com.apple.Finder',
+              ),
     );
 
     final result = await service.run(
@@ -2322,7 +2387,7 @@ void main() {
 
     expect(result.success, isTrue);
     expect(result.changed, isTrue);
-    expect(capturedDecision, 'dismiss');
+    expect(dialogChecks, 0);
     expect(processManager.starts, hasLength(1));
     expect(processManager.starts.single.executable, 'osascript');
     expect(processManager.starts.single.arguments.join('\n'), contains('4242'));
@@ -2330,6 +2395,118 @@ void main() {
       processManager.starts.single.arguments.join('\n'),
       isNot(contains('System Events')),
     );
+  });
+
+  test(
+    'macos resolveBlockers avoids native recovery when the target is frontmost',
+    () async {
+      final processManager = _FakeProcessManager();
+      var dialogChecks = 0;
+      final service = CockpitSystemControlActionService(
+        processManager: processManager,
+        macosSystemDialogHandler:
+            ({required processId, required decision, required timeout}) async {
+              dialogChecks += 1;
+              return 'dismissSystemDialog decision=$decision handled=false reason=noDialog';
+            },
+        macosApplicationFocusReader:
+            ({required processId, required timeout}) async {
+              expect(processId, 4242);
+              return const CockpitMacosApplicationFocus(
+                targetFrontmost: true,
+                frontmostProcessId: 4242,
+                frontmostAppId: 'dev.cockpit.example',
+              );
+            },
+      );
+
+      final result = await service.run(
+        const CockpitSystemControlActionRequest(
+          platform: 'macos',
+          appId: 'dev.cockpit.example',
+          processId: 4242,
+          action: CockpitSystemControlAction.resolveBlockers,
+        ),
+      );
+
+      expect(result.success, isTrue);
+      expect(result.changed, isFalse);
+      expect(dialogChecks, 0);
+      expect(processManager.starts, isEmpty);
+    },
+  );
+
+  test('macos resolveBlockers reports a locked desktop without AX', () async {
+    final processManager = _FakeProcessManager();
+    var dialogChecks = 0;
+    final service = CockpitSystemControlActionService(
+      processManager: processManager,
+      macosSystemDialogHandler:
+          ({required processId, required decision, required timeout}) async {
+            dialogChecks += 1;
+            return 'dismissSystemDialog decision=$decision handled=false';
+          },
+      macosApplicationFocusReader:
+          ({required processId, required timeout}) async =>
+              const CockpitMacosApplicationFocus(
+                targetFrontmost: false,
+                frontmostProcessId: 478,
+                frontmostAppId: 'com.apple.loginwindow',
+              ),
+    );
+
+    final result = await service.run(
+      const CockpitSystemControlActionRequest(
+        platform: 'macos',
+        appId: 'dev.cockpit.example',
+        processId: 4242,
+        action: CockpitSystemControlAction.resolveBlockers,
+      ),
+    );
+
+    expect(result.success, isFalse);
+    expect(result.availability, CockpitSystemControlAvailability.blocked);
+    expect(result.errorCode, 'macosSessionLocked');
+    expect(result.recommendedNextStep, 'unlockMacosSession');
+    expect(result.changed, isNull);
+    expect(dialogChecks, 0);
+    expect(processManager.starts, isEmpty);
+  });
+
+  test('macos resolveBlockers never invokes AX dialog handling', () async {
+    final processManager = _FakeProcessManager();
+    var dialogChecks = 0;
+    final service = CockpitSystemControlActionService(
+      processManager: processManager,
+      macosSystemDialogHandler:
+          ({required processId, required decision, required timeout}) async {
+            dialogChecks += 1;
+            return 'dismissSystemDialog decision=$decision handled=true';
+          },
+      macosApplicationFocusReader:
+          ({required processId, required timeout}) async =>
+              const CockpitMacosApplicationFocus(
+                targetFrontmost: false,
+                frontmostProcessId: 42,
+                frontmostAppId: 'com.apple.Finder',
+              ),
+    );
+
+    final result = await service.run(
+      const CockpitSystemControlActionRequest(
+        platform: 'macos',
+        appId: 'dev.cockpit.example',
+        processId: 4242,
+        action: CockpitSystemControlAction.resolveBlockers,
+        parameters: <String, Object?>{'decision': 'dismiss'},
+      ),
+    );
+
+    expect(result.success, isTrue);
+    expect(result.changed, isTrue);
+    expect(dialogChecks, 0);
+    expect(processManager.starts, hasLength(1));
+    expect(processManager.starts.single.arguments.join('\n'), contains('4242'));
   });
 
   test('macos resolveBlockers rejects global keyboard dismissal', () async {
@@ -2350,6 +2527,38 @@ void main() {
 
     expect(result.success, isFalse);
     expect(result.errorCode, 'unsupportedSystemActionParameter');
+    expect(processManager.starts, isEmpty);
+  });
+
+  test('macos resolveBlockers rejects invalid recovery parameters', () async {
+    final processManager = _FakeProcessManager();
+    var focusChecks = 0;
+    final service = CockpitSystemControlActionService(
+      processManager: processManager,
+      macosApplicationFocusReader:
+          ({required processId, required timeout}) async {
+            focusChecks += 1;
+            return const CockpitMacosApplicationFocus(
+              targetFrontmost: false,
+              frontmostProcessId: 42,
+              frontmostAppId: 'com.apple.Finder',
+            );
+          },
+    );
+
+    final result = await service.run(
+      const CockpitSystemControlActionRequest(
+        platform: 'macos',
+        appId: 'dev.cockpit.example',
+        processId: 4242,
+        action: CockpitSystemControlAction.resolveBlockers,
+        parameters: <String, Object?>{'decision': 'maybe'},
+      ),
+    );
+
+    expect(result.success, isFalse);
+    expect(result.errorCode, 'invalidSystemActionParameter');
+    expect(focusChecks, 0);
     expect(processManager.starts, isEmpty);
   });
 
@@ -3512,6 +3721,7 @@ void main() {
     expect(result.success, isTrue);
     expect(result.command, isEmpty);
     expect(result.stdout, contains('handled=false reason=noDialog'));
+    expect(result.changed, isFalse);
     expect(result.recommendedNextStep, 'readPostActionState');
     expect(result.strategy, 'AXUIElement dialog action');
     expect(result.requires, <String>['Accessibility permission']);
@@ -3542,6 +3752,7 @@ void main() {
       );
 
       expect(result.success, isTrue);
+      expect(result.changed, isTrue);
       expect(capturedDecision, 'accept');
     },
   );
@@ -4777,6 +4988,41 @@ final class _FakeProcessManager implements CockpitProcessManager {
     );
     return _FakeManagedProcess();
   }
+}
+
+final class _ResultProcessManager implements CockpitProcessManager {
+  _ResultProcessManager(this.result);
+
+  final ProcessResult result;
+  String? executable;
+  List<String> arguments = const <String>[];
+
+  @override
+  Future<ProcessResult> run(
+    String executable,
+    List<String> arguments, {
+    String? workingDirectory,
+    Map<String, String>? environment,
+    bool includeParentEnvironment = true,
+    bool runInShell = false,
+    Encoding? stdoutEncoding,
+    Encoding? stderrEncoding,
+  }) async {
+    this.executable = executable;
+    this.arguments = List<String>.unmodifiable(arguments);
+    return result;
+  }
+
+  @override
+  Future<Process> start(
+    String executable,
+    List<String> arguments, {
+    String? workingDirectory,
+    Map<String, String>? environment,
+    bool includeParentEnvironment = true,
+    bool runInShell = false,
+    ProcessStartMode mode = ProcessStartMode.normal,
+  }) => throw UnimplementedError();
 }
 
 final class _StartedProcess {

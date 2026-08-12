@@ -789,7 +789,7 @@ final class CockpitDevRuntime {
 
   Future<int> recoverSystemBlockers(
     Future<CockpitCliSessionHandle> sessionFuture, {
-    required String decision,
+    required String? dialog,
     required bool dismissKeyboard,
     required int timeoutMilliseconds,
   }) async {
@@ -798,7 +798,7 @@ final class CockpitDevRuntime {
       'sessionId': session.sessionId,
       'action': 'resolveBlockers',
       'parameters': <String, Object?>{
-        'decision': decision,
+        'decision': ?dialog,
         if (dismissKeyboard) 'dismissKeyboard': true,
       },
       'timeoutMs': timeoutMilliseconds,
@@ -808,10 +808,11 @@ final class CockpitDevRuntime {
       session: session,
       result: result,
       state: <String, Object?>{
-        'decision': decision,
+        'dialog': ?dialog,
         'system': _devSystemActionState(result.output),
       },
-      changed: result.output?['changed'] ?? true,
+      changed: result.output?['changed'],
+      nextOnFailure: _operationRecommendedNextStep(result),
       failureExitCode: cockpitUnavailableExitCode,
     );
   }
@@ -964,6 +965,7 @@ final class CockpitDevRuntime {
     required CockpitOperationResult result,
     required Object? state,
     required Object? changed,
+    String? nextOnFailure,
     int failureExitCode = cockpitDataExitCode,
   }) {
     final ok = _operationSucceeded(result);
@@ -974,7 +976,10 @@ final class CockpitDevRuntime {
       state: state,
       changed: changed,
       errors: _operationErrors(<CockpitOperationResult>[result]),
-      next: ok ? null : 'cockpit dev diagnose --session ${session.handleId}',
+      next: ok
+          ? null
+          : nextOnFailure ??
+                'cockpit dev diagnose --session ${session.handleId}',
       failureExitCode: failureExitCode,
     );
   }
@@ -1043,6 +1048,20 @@ Map<String, Object?> _devSystemActionState(Map<String, Object?>? output) =>
       ])
         if (output?[key] != null) key: output![key],
     };
+
+String? _operationRecommendedNextStep(CockpitOperationResult result) {
+  final output = result.output;
+  final outputNext = output?['recommendedNextStep'];
+  if (outputNext is String && outputNext.trim().isNotEmpty) {
+    return outputNext;
+  }
+  final details = result.failure?.primary.redactedDetails;
+  for (final key in const <String>['next', 'recommendedNextStep']) {
+    final value = details?[key];
+    if (value is String && value.trim().isNotEmpty) return value;
+  }
+  return null;
+}
 
 ({
   String code,
