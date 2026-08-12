@@ -1,5 +1,13 @@
 # Changelog
 
+## 4.0.6
+
+- Externalized large Flutter snapshots while keeping a bounded transport
+  summary, so complex mounted Widget trees remain fully inspectable without
+  exceeding worker message limits.
+- Preserved complete target data in downloadable artifacts while bounding
+  inline target count and text size for responsive AI-driven inspection.
+
 ## 4.0.5
 
 - Synchronized the Flutter bridge package with the Cockpit 4.0.5 release.

@@ -1,5 +1,16 @@
 # Changelog
 
+## 4.0.12
+
+- Reduced complete Flutter snapshot artifacts inside workspace workers and
+  returned only bounded locator results, preventing complex UI inspection from
+  exceeding the worker message limit.
+- Applied the same complete multi-condition locator ranking to public
+  `ui.inspect` and `surface.inspect` operations while keeping structural trees
+  path-only.
+- Externalized evidence UI payloads without losing diagnostic or artifact
+  metadata, and cleaned temporary locator artifacts after in-process parsing.
+
 ## 4.0.11
 
 - Restored Flutter development sessions without waiting for every retained E2E
