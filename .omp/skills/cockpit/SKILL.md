@@ -238,10 +238,12 @@ For ambiguity or exploration, run the smallest `dev inspect QUERY`. It
 searches mounted Flutter Element targets, independent of developer-authored
 Semantics, and returns the shortest stable `sel` plus compact known `can` actions.
 Copy `sel` exactly into `tap`, `type --into`, or `scroll`; every selector condition
-intersects and equal matches fail instead of guessing. Semantics remains one optional
-signal and action fallback. Icon-only controls expose readable tooltips. Lazy lists
-expose only mounted rows; pass an off-screen target directly to `dev scroll`, which
-owns mounting and reveal.
+intersects and equal matches fail instead of guessing. `inspect` prefers the shortest
+unique stable selector: identity or exact text, then an ancestor scope, then path,
+with `:nth()` reserved for truly ordered peers. Semantics remains one optional signal
+and action fallback. Icon-only controls expose readable tooltips. Lazy lists expose
+only mounted rows; pass an off-screen target directly to `dev scroll`, which owns
+mounting and reveal.
 
 Selector quick reference:
 
@@ -253,6 +255,7 @@ Selector quick reference:
 | Type + text | `FilledButton["Save"]` |
 | Multiple conditions | `#save[type="FilledButton"][route="/edit"]` |
 | Ancestor scope | `Dialog >> FilledButton["Continue"]` |
+| Keyed row scope | `@task-row >> FilledButton["Open"]` |
 | Contains / fuzzy text | `[*="Save"]` / `[~="Svae"]` |
 | Contains / fuzzy tooltip | `[tip*="Save"]` / `[tip~="Svae"]` |
 | Stable ordered item, last resort | `Button["Item"]:nth(2)` |
