@@ -8,6 +8,7 @@ void main() {
   <node text="Form" class="android.view.View" bounds="[0,0][400,700]">
     <node text="Cancel" role="button" enabled="true" clickable="true" bounds="[10,200][90,250]" />
     <node text="Save" content-desc="Save task" resource-id="save-button" role="button" enabled="true" clickable="true" bounds="[120,200][220,250]" />
+    <node text="Save task" role="button" enabled="true" clickable="true" bounds="[230,140][390,190]" />
     <node text="Save task permanently" role="button" enabled="true" clickable="true" bounds="[230,200][390,250]" />
     <node text="Task 1" role="text" enabled="true" bounds="[10,300][100,350]" />
     <node text="Task 2" role="text" enabled="true" bounds="[110,300][200,350]" />
@@ -100,6 +101,14 @@ void main() {
       CockpitTestLocator(text: 'Svae', matchMode: CockpitTextMatchMode.fuzzy),
     );
     expect(fuzzy.node?.textValues, contains('Save'));
+
+    final fuzzyPhrase = snapshot.resolve(
+      CockpitTestLocator(
+        text: 'Svae task',
+        matchMode: CockpitTextMatchMode.fuzzy,
+      ),
+    );
+    expect(fuzzyPhrase.node?.textValues, contains('Save task'));
   });
 
   test('returns ambiguity for tied regex matches and supports list index', () {

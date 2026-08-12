@@ -1,5 +1,12 @@
 # Changelog
 
+## 4.0.3
+
+- Unified exact, contains, fuzzy, and regex text matching and ranking across
+  Flutter target discovery, mounted Element control, and native black-box E2E.
+- Made misspelled fuzzy phrases prefer the tightest matching label consistently
+  across every execution plane.
+
 ## 4.0.2
 
 - Added compact conjunctive Flutter selectors with exact, contains, fuzzy,

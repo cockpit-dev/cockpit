@@ -43,6 +43,74 @@ enum CockpitTextMatchMode {
 
 const double cockpitFuzzyTextMatchThreshold = 0.72;
 
+bool cockpitTextMatches(
+  String actual,
+  String expected,
+  CockpitTextMatchMode matchMode,
+) {
+  final normalizedActual = cockpitNormalizeText(actual);
+  final normalizedExpected = cockpitNormalizeText(expected);
+  if (normalizedActual.isEmpty || normalizedExpected.isEmpty) return false;
+  return switch (matchMode) {
+    CockpitTextMatchMode.exact => normalizedActual == normalizedExpected,
+    CockpitTextMatchMode.contains => normalizedActual.contains(
+      normalizedExpected,
+    ),
+    CockpitTextMatchMode.fuzzy => cockpitFuzzyTextMatches(
+      normalizedActual,
+      normalizedExpected,
+    ),
+    CockpitTextMatchMode.regex => RegExp(
+      expected.trim(),
+    ).hasMatch(normalizedActual),
+  };
+}
+
+int cockpitTextMatchScore(
+  String actual,
+  String expected,
+  CockpitTextMatchMode matchMode, {
+  int sourceScore = 0,
+}) {
+  final normalizedActual = cockpitNormalizeText(actual);
+  final normalizedExpected = cockpitNormalizeText(expected);
+  if (!cockpitTextMatches(actual, expected, matchMode)) return 0;
+  if (normalizedActual == normalizedExpected) {
+    return (matchMode == CockpitTextMatchMode.fuzzy ? 1100000 : 10000) +
+        sourceScore;
+  }
+  if (matchMode == CockpitTextMatchMode.contains) {
+    return 5000 +
+        sourceScore +
+        (1000 - (normalizedActual.length - normalizedExpected.length))
+            .clamp(0, 1000)
+            .toInt();
+  }
+  if (matchMode == CockpitTextMatchMode.fuzzy) {
+    final similarityScore =
+        (cockpitFuzzyTextSimilarity(normalizedActual, normalizedExpected) *
+                10000)
+            .round();
+    final lengthCloseness =
+        (99 -
+                (normalizedActual.length - normalizedExpected.length)
+                    .abs()
+                    .clamp(0, 99))
+            .toInt();
+    return similarityScore * 100 + lengthCloseness + sourceScore;
+  }
+  final match = RegExp(expected.trim()).firstMatch(normalizedActual)!;
+  final fullMatch = match.start == 0 && match.end == normalizedActual.length;
+  return (fullMatch ? 8000 : 6000) +
+      sourceScore +
+      (1000 - (normalizedActual.length - match.group(0)!.length))
+          .clamp(0, 1000)
+          .toInt();
+}
+
+String cockpitNormalizeText(String value) =>
+    value.replaceAll(RegExp(r'\s+'), ' ').trim();
+
 bool cockpitFuzzyTextMatches(String actual, String expected) {
   final normalizedExpected = _normalizeFuzzyText(expected);
   if (normalizedExpected.isEmpty) return false;

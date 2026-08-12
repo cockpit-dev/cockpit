@@ -2299,57 +2299,15 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
     String? candidate,
     String expected,
     CockpitTextMatchMode matchMode,
-  ) {
-    final normalizedCandidate = _normalizeText(candidate);
-    final normalizedExpected = _normalizeText(expected);
-    if (normalizedCandidate == null) {
-      return false;
-    }
-    return switch (matchMode) {
-      CockpitTextMatchMode.exact =>
-        normalizedExpected != null && normalizedCandidate == normalizedExpected,
-      CockpitTextMatchMode.contains =>
-        normalizedExpected != null &&
-            normalizedCandidate.contains(normalizedExpected),
-      CockpitTextMatchMode.fuzzy =>
-        normalizedExpected != null &&
-            cockpitFuzzyTextMatches(normalizedCandidate, normalizedExpected),
-      CockpitTextMatchMode.regex => RegExp(
-        expected.trim(),
-      ).hasMatch(normalizedCandidate),
-    };
-  }
+  ) => candidate != null && cockpitTextMatches(candidate, expected, matchMode);
 
   int _textMatchPriorityScore(
     String? candidate,
     String expected,
     CockpitTextMatchMode matchMode,
-  ) {
-    final normalizedCandidate = _normalizeText(candidate);
-    if (normalizedCandidate == null ||
-        !_matchesTextSignal(candidate, expected, matchMode)) {
-      return 0;
-    }
-    final normalizedExpected = _normalizeText(expected);
-    if (normalizedExpected != null &&
-        normalizedCandidate == normalizedExpected) {
-      return 10000;
-    }
-    if (matchMode == CockpitTextMatchMode.contains &&
-        normalizedExpected != null) {
-      return 5000 +
-          (1000 - (normalizedCandidate.length - normalizedExpected.length))
-              .clamp(0, 1000)
-              .toInt();
-    }
-    final match = RegExp(expected.trim()).firstMatch(normalizedCandidate)!;
-    final fullMatch =
-        match.start == 0 && match.end == normalizedCandidate.length;
-    return (fullMatch ? 8000 : 6000) +
-        (1000 - (normalizedCandidate.length - match.group(0)!.length))
-            .clamp(0, 1000)
-            .toInt();
-  }
+  ) => candidate == null
+      ? 0
+      : cockpitTextMatchScore(candidate, expected, matchMode);
 
   bool _matchesTypeSignal(String? candidate, String expected) {
     final normalizedCandidate = _normalizeTypeName(candidate);

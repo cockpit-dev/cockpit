@@ -605,23 +605,7 @@ final class CockpitNativeUiSnapshot {
     String actual,
     String expected,
     CockpitTextMatchMode matchMode,
-  ) {
-    final normalizedActual = _normalizeText(actual);
-    final normalizedExpected = _normalizeText(expected);
-    return switch (matchMode) {
-      CockpitTextMatchMode.exact => normalizedActual == normalizedExpected,
-      CockpitTextMatchMode.contains => normalizedActual.contains(
-        normalizedExpected,
-      ),
-      CockpitTextMatchMode.fuzzy => cockpitFuzzyTextMatches(
-        normalizedActual,
-        normalizedExpected,
-      ),
-      CockpitTextMatchMode.regex => RegExp(
-        expected.trim(),
-      ).hasMatch(normalizedActual),
-    };
-  }
+  ) => cockpitTextMatches(actual, expected, matchMode);
 
   int _textValuesPriorityScore(
     Iterable<String> values,
@@ -630,40 +614,10 @@ final class CockpitNativeUiSnapshot {
   ) {
     var bestScore = 0;
     for (final value in values) {
-      if (!_textMatches(value, expected, matchMode)) continue;
-      final normalizedActual = _normalizeText(value);
-      final normalizedExpected = _normalizeText(expected);
-      int score;
-      if (normalizedActual == normalizedExpected) {
-        score = 10000;
-      } else if (matchMode == CockpitTextMatchMode.contains) {
-        score =
-            5000 +
-            (1000 - (normalizedActual.length - normalizedExpected.length))
-                .clamp(0, 1000)
-                .toInt();
-      } else if (matchMode == CockpitTextMatchMode.fuzzy) {
-        score =
-            (cockpitFuzzyTextSimilarity(normalizedActual, normalizedExpected) *
-                    10000)
-                .round();
-      } else {
-        final match = RegExp(expected.trim()).firstMatch(normalizedActual)!;
-        final fullMatch =
-            match.start == 0 && match.end == normalizedActual.length;
-        score =
-            (fullMatch ? 8000 : 6000) +
-            (1000 - (normalizedActual.length - match.group(0)!.length))
-                .clamp(0, 1000)
-                .toInt();
-      }
+      final score = cockpitTextMatchScore(value, expected, matchMode);
       if (score > bestScore) bestScore = score;
     }
     return bestScore;
-  }
-
-  String _normalizeText(String value) {
-    return value.replaceAll(RegExp(r'\s+'), ' ').trim();
   }
 }
 
