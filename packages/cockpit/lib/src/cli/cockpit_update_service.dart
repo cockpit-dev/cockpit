@@ -53,7 +53,8 @@ final class CockpitUpdateService {
     final deadline = DateTime.now().toUtc().add(timeout);
     final dart = _windows ? 'dart.exe' : 'dart';
     onProgress?.call('Checking for Cockpit updates...');
-    if (await _canSkipInstall(currentVersion, deadline)) {
+    final targetVersion = await _targetVersion(currentVersion, deadline);
+    if (targetVersion == currentVersion) {
       await _cleanupLegacySourcePayload();
       onProgress?.call('Reconnecting the Cockpit Supervisor...');
       await _reconnectSupervisor(_resolvedExecutable, deadline);
@@ -81,13 +82,11 @@ final class CockpitUpdateService {
 
     try {
       onProgress?.call('Installing the latest Cockpit release...');
-      final activation = await _invoke(
+      final activation = await _activate(
         dart,
-        const <String>['pub', 'global', 'activate', 'cockpit'],
+        targetVersion,
         deadline,
-        failureCode: 'updateInstallFailed',
-        failureMessage:
-            'Dart Pub could not install the latest Cockpit release.',
+        onProgress: onProgress,
       );
       _requireSuccess(
         activation,
@@ -144,15 +143,75 @@ final class CockpitUpdateService {
     }
   }
 
-  Future<bool> _canSkipInstall(String currentVersion, DateTime deadline) async {
+  Future<String?> _targetVersion(
+    String currentVersion,
+    DateTime deadline,
+  ) async {
     try {
-      if (!await _hostedInstallProbe(currentVersion)) return false;
+      if (!await _hostedInstallProbe(currentVersion)) return null;
       final latestText = await _latestVersionLookup(_remaining(deadline));
       final current = Version.parse(currentVersion);
       final latest = Version.parse(latestText);
-      return latest < current || latestText == currentVersion;
+      return latest <= current ? currentVersion : latestText;
     } on Object {
-      return false;
+      return null;
+    }
+  }
+
+  Future<ProcessResult> _activate(
+    String dart,
+    String? targetVersion,
+    DateTime deadline, {
+    required void Function(String message)? onProgress,
+  }) async {
+    final arguments = <String>[
+      'pub',
+      'global',
+      'activate',
+      'cockpit',
+      ?targetVersion,
+    ];
+    final refreshed = <String>{};
+    while (true) {
+      final activation = await _invoke(
+        dart,
+        arguments,
+        deadline,
+        failureCode: 'updateInstallFailed',
+        failureMessage:
+            'Dart Pub could not install the latest Cockpit release.',
+      );
+      if (activation.exitCode == 0 || targetVersion == null) {
+        return activation;
+      }
+      final stale = cockpitStaleHostedDependency(activation);
+      if (stale == null ||
+          !refreshed.add(stale.package) ||
+          refreshed.length > 8) {
+        return activation;
+      }
+      onProgress?.call('Refreshing ${stale.package} package metadata...');
+      final refresh = await _invoke(
+        dart,
+        <String>[
+          'pub',
+          'cache',
+          'add',
+          stale.package,
+          '--version',
+          stale.constraint,
+        ],
+        deadline,
+        failureCode: 'updateInstallFailed',
+        failureMessage:
+            'Dart Pub could not refresh ${stale.package} package metadata.',
+      );
+      _requireSuccess(
+        refresh,
+        code: 'updateInstallFailed',
+        message:
+            'Dart Pub could not refresh ${stale.package} package metadata.',
+      );
     }
   }
 
