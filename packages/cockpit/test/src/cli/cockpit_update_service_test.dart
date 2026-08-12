@@ -32,6 +32,36 @@ void main() {
     expect(request.url.queryParameters['_'], isNotEmpty);
   });
 
+  test('reads the stale dependency reported by Dart Pub', () {
+    final result = ProcessResult(
+      1,
+      1,
+      '',
+      'Because cockpit >=4.0.5 depends on cockpit_protocol ^4.0.5 which '
+          "doesn't match any versions, cockpit >=4.0.5 is forbidden.\n",
+    );
+
+    expect(cockpitStaleHostedDependency(result), (
+      package: 'cockpit_protocol',
+      constraint: '^4.0.5',
+    ));
+  });
+
+  test('reads a stale root package reported by Dart Pub', () {
+    final result = ProcessResult(
+      1,
+      1,
+      '',
+      'Because pub global activate depends on cockpit 4.0.5 which '
+          "doesn't match any versions, version solving failed.\n",
+    );
+
+    expect(cockpitStaleHostedDependency(result), (
+      package: 'cockpit',
+      constraint: '4.0.5',
+    ));
+  });
+
   test('normalizes update cleanup paths before boundary checks', () {
     final root = '${Directory.systemTemp.path}/cockpit-update-boundary';
     expect(cockpitPathIsWithin('$root/child', root), isTrue);
@@ -158,6 +188,72 @@ void main() {
     );
     expect(await executable.readAsString(), 'new aot');
   });
+
+  test(
+    'refreshes a stale dependency index before retrying activation',
+    () async {
+      final pubCache = await Directory.systemTemp.createTemp(
+        'cockpit-update-stale-dependency-',
+      );
+      addTearDown(() async {
+        if (await pubCache.exists()) await pubCache.delete(recursive: true);
+      });
+      await _writeActivatedPackage(pubCache, version: '4.0.4');
+      final executable = File('${pubCache.path}/bin/cockpit');
+      await executable.create(recursive: true);
+      await executable.writeAsString('current aot');
+      final calls = <List<String>>[];
+      var activationAttempts = 0;
+      final service = CockpitUpdateService(
+        environment: <String, String>{'PUB_CACHE': pubCache.path},
+        resolvedExecutable: executable.path,
+        windows: false,
+        latestVersionLookup: (_) async => '4.0.5',
+        processRunner: (command, arguments, timeout) async {
+          calls.add(<String>[command, ...arguments]);
+          if (arguments.contains('activate')) {
+            activationAttempts += 1;
+            if (activationAttempts == 1) {
+              return ProcessResult(
+                calls.length,
+                1,
+                '',
+                'Because cockpit >=4.0.5 depends on cockpit_protocol ^4.0.5 '
+                    "which doesn't match any versions, cockpit is forbidden.\n",
+              );
+            }
+            await _writeActivatedPackage(pubCache, version: '4.0.5');
+          }
+          if (arguments.contains('compile')) {
+            final output = arguments[arguments.indexOf('-o') + 1];
+            await File(output).writeAsString('new aot');
+          }
+          if (arguments.last == '--version') {
+            return ProcessResult(calls.length, 0, 'cockpit 4.0.5\n', '');
+          }
+          return ProcessResult(calls.length, 0, '', '');
+        },
+      );
+
+      final result = await service.update(
+        currentVersion: '4.0.4',
+        timeout: const Duration(minutes: 1),
+      );
+
+      expect(result.version, '4.0.5');
+      expect(activationAttempts, 2);
+      expect(calls[0], containsAllInOrder(<String>['cockpit', '4.0.5']));
+      expect(calls[1], <String>[
+        'dart',
+        'pub',
+        'cache',
+        'add',
+        'cockpit_protocol',
+        '--version',
+        '^4.0.5',
+      ]);
+    },
+  );
 
   test(
     'reinstalls a source activation even when its version is current',

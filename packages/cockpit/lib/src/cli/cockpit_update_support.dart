@@ -133,6 +133,20 @@ String? cockpitUpdateDiagnostic(ProcessResult result) {
   return null;
 }
 
+({String package, String constraint})? cockpitStaleHostedDependency(
+  ProcessResult result,
+) {
+  final output = '${result.stderr}\n${result.stdout}';
+  final match = RegExp(
+    r"depends on\s+([A-Za-z0-9_]+)\s+(.+?)\s+which doesn't match any versions",
+  ).firstMatch(output);
+  if (match == null) return null;
+  final package = match.group(1)!.trim();
+  final constraint = match.group(2)!.trim();
+  if (package.isEmpty || constraint.isEmpty) return null;
+  return (package: package, constraint: constraint);
+}
+
 String cockpitBoundUpdateText(String value) =>
     value.length <= 800 ? value : '${value.substring(0, 797)}...';
 
