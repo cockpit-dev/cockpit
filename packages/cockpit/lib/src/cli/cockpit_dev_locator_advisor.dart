@@ -27,8 +27,12 @@ Map<String, Object?> cockpitBuildDevLocatorMatches(
   }
   final matches = selector == null
       ? (targets
-            .where((target) => target.matchesQuery(normalizedQuery))
-            .toList(growable: false)
+            .where(
+              (target) =>
+                  target.matchesQuery(normalizedQuery) &&
+                  !_isRedundantTextCandidate(target, targets),
+            )
+            .toList()
           ..sort((left, right) => left.compareForQuery(right, normalizedQuery)))
       : targets;
   final visibleMatches = matches.take(limit).toList(growable: false);
@@ -75,10 +79,13 @@ Map<String, Object?> cockpitBuildDevTargetIndex(
   if (values is! List<Object?>) {
     throw StateError('ui.inspect locate output did not contain UI targets.');
   }
-  final targets = values
+  final allTargets = values
       .whereType<Map<Object?, Object?>>()
       .map(_DevTarget.new)
       .where((target) => target.hasUsefulSignal)
+      .toList(growable: false);
+  final targets = allTargets
+      .where((target) => !_isRedundantTextCandidate(target, allTargets))
       .toList(growable: false);
   final ranked = List<_DevTarget>.of(targets)..sort(_compareForOverview);
   final visible = ranked.take(limit).toList(growable: false);
@@ -113,6 +120,7 @@ final class _DevTarget {
       type = value['typeName'] as String?,
       route = value['routeName'] as String?,
       path = value['path'] as String?,
+      scrollablePath = value['scrollablePath'] as String?,
       can = (value['supportedCommands'] as List<Object?>? ?? const [])
           .whereType<String>()
           .toList(growable: false),
@@ -135,6 +143,7 @@ final class _DevTarget {
   final String? type;
   final String? route;
   final String? path;
+  final String? scrollablePath;
   final List<String> can;
   final List<String> within;
   final _Layout? layout;
@@ -147,6 +156,12 @@ final class _DevTarget {
         text,
         tip,
       ].any((value) => _value(value) != null);
+
+  bool get hasStableIdentity => <String?>[
+    cockpitId,
+    semanticId,
+    key,
+  ].any((value) => _value(value) != null);
 
   String get searchSeed => _searchText(label) ?? '';
 
@@ -303,6 +318,42 @@ final class _DevTarget {
         ? null
         : signal.value;
   }
+}
+
+bool _isRedundantTextCandidate(_DevTarget target, List<_DevTarget> candidates) {
+  if (target.hasStableIdentity ||
+      !const <String>{'Text', 'RichText'}.contains(target.type) ||
+      _value(target.text) == null ||
+      target.layout == null) {
+    return false;
+  }
+  return candidates.any(
+    (candidate) =>
+        !identical(candidate, target) &&
+        candidate.hasStableIdentity &&
+        _exactText(candidate.text) == _exactText(target.text) &&
+        candidate.route == target.route &&
+        candidate.scrollablePath == target.scrollablePath &&
+        _sameActions(candidate.can, target.can) &&
+        _sameVerticalBand(candidate.layout, target.layout),
+  );
+}
+
+bool _sameActions(List<String> left, List<String> right) {
+  if (left.length != right.length) return false;
+  return left.toSet().containsAll(right);
+}
+
+bool _sameVerticalBand(_Layout? left, _Layout? right) {
+  if (left == null || right == null) return false;
+  final top = left.dy > right.dy ? left.dy : right.dy;
+  final bottom = left.dy + left.height < right.dy + right.height
+      ? left.dy + left.height
+      : right.dy + right.height;
+  final overlap = bottom - top;
+  if (overlap <= 0) return false;
+  final shorter = left.height < right.height ? left.height : right.height;
+  return shorter > 0 && overlap >= shorter * 0.8;
 }
 
 final class _Signal {
