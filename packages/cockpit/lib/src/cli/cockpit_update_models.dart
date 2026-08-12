@@ -11,6 +11,8 @@ typedef CockpitLatestVersionLookup = Future<String> Function(Duration timeout);
 
 typedef CockpitHostedInstallProbe = Future<bool> Function(String version);
 
+typedef CockpitUpdateDelay = Future<void> Function(Duration duration);
+
 final class CockpitUpdateException implements Exception {
   const CockpitUpdateException(
     this.code,
