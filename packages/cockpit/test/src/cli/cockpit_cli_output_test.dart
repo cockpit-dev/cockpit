@@ -450,6 +450,42 @@ void main() {
     ]);
   });
 
+  test('dev tree brief output counts every omitted target', () {
+    const renderer = CockpitCliOutputRenderer();
+    final value =
+        lon.decode(
+              renderer.renderAi(
+                command: 'dev.tree',
+                data: <String, Object?>{
+                  'ok': true,
+                  'action': 'tree',
+                  'session': '5',
+                  'state': <String, Object?>{
+                    'profile': 'brief',
+                    'route': '/home',
+                    'count': 24,
+                    'targets': <Object?>[
+                      for (var index = 0; index < 12; index += 1)
+                        <String, Object?>{
+                          'sel': '#target-$index',
+                          'label': 'Target $index',
+                          'can': 'tap',
+                        },
+                    ],
+                    'more': 12,
+                    'partial': true,
+                  },
+                },
+                view: CockpitCliOutputView.brief,
+              ),
+            )!
+            as Map<Object?, Object?>;
+    final targets = value['targets']! as List<Object?>;
+
+    expect(value['count'], 24);
+    expect(value['more'], 24 - targets.length);
+  });
+
   test(
     'dev screenshot exposes capture source only when diagnostic or degraded',
     () {
