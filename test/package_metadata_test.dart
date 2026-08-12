@@ -26,7 +26,7 @@ void main() {
     expect(devtoolsPubspec, contains('name: cockpit'));
     expect(runtimeVersion, '4.0.5');
     expect(protocolVersion, '4.0.5');
-    expect(devtoolsVersion, '4.0.6');
+    expect(devtoolsVersion, '4.0.7');
     expect(runtimePubspec, contains('cockpit_protocol: ^4.0.5'));
     expect(devtoolsPubspec, contains('cockpit_protocol: ^4.0.5'));
     expect(

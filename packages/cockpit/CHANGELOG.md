@@ -1,5 +1,11 @@
 # Changelog
 
+## 4.0.7
+
+- Made compact output preserve pre-existing omission counts when the final
+  token projection removes additional values, so `more` always reports the
+  complete number of hidden results.
+
 ## 4.0.6
 
 - Made `cockpit update` pin the Pub release discovered by its uncached lookup
