@@ -1,5 +1,11 @@
 # Changelog
 
+## 4.0.10
+
+- Made `cockpit update` wait within its command timeout when Pub package APIs
+  expose a new Cockpit release before Dart Pub's solver index can resolve it,
+  avoiding a transient first-update failure immediately after publication.
+
 ## 4.0.9
 
 - Made Flutter inspection prefer stable ancestor-scoped selectors before
