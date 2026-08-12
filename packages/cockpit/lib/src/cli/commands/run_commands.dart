@@ -84,13 +84,19 @@ final class CockpitCaseCommand extends Command<int> {
       CockpitLeafCommand(
         runtime: runtime,
         name: 'run',
-        description: 'Run an indexed case with canonical source identity.',
+        description: 'Run an indexed case or one validated local file.',
         defaultTimeout: const Duration(minutes: 30),
         maximumTimeout: const Duration(hours: 6),
         configure: (parser) => parser
           ..addOption('workspace-id')
           ..addOption('document-id')
-          ..addOption('case-id', mandatory: true)
+          ..addOption('case-id', help: 'Run one indexed case ID.')
+          ..addOption('file', help: 'Validate and run one local case file.')
+          ..addOption(
+            'input-format',
+            allowed: CockpitDocumentFormat.values.map((value) => value.name),
+            help: 'Local document format; inferred from the file, then JSON.',
+          )
           ..addOption('idempotency-key', mandatory: true)
           ..addOption('inputs', help: 'Case inputs as LON, JSON, or YAML.')
           ..addOption('inputs-file', help: 'LON, JSON, or YAML case inputs.')
@@ -104,40 +110,73 @@ final class CockpitCaseCommand extends Command<int> {
             help: 'Select a non-development or explicitly registered target.',
           ),
         action: (arguments) async {
+          _validateRunSourceSelection(
+            arguments,
+            idOption: 'case-id',
+            documentKind: 'case',
+          );
           final workspaceId = await runtime.workspaceId(
             arguments.option('workspace-id'),
           );
-          final documents = await (await runtime.client()).documents(
-            workspaceId,
-            kind: CockpitIndexedDocumentKind.testCase,
-          );
-          final requestedDocument = arguments.option('document-id');
-          final caseId = arguments.option('case-id')!;
-          final matches = documents.where(
-            (document) =>
-                (requestedDocument == null ||
-                    document.documentId == requestedDocument) &&
-                document.cases.any((testCase) => testCase.caseId == caseId),
-          );
-          if (matches.length != 1) {
-            throw CockpitSupervisorClientException(
-              code: matches.isEmpty ? 'caseNotFound' : 'caseAmbiguous',
-              message: matches.isEmpty
-                  ? 'Indexed case $caseId was not found.'
-                  : 'Case $caseId exists in multiple documents; pass --document-id.',
+          final client = await runtime.client();
+          final filePath = arguments.option('file');
+          late final CockpitCaseSubmissionSource source;
+          if (filePath != null) {
+            final result = await _validateLocalDocument(
+              client,
+              runtime: runtime,
+              workspaceId: workspaceId,
+              filePath: filePath,
+              inputFormat: arguments.option('input-format'),
+            );
+            if (!result.valid) {
+              await runtime.success(result.toJson());
+              return cockpitDataExitCode;
+            }
+            final document = result.document;
+            if (document is! CockpitTestCase) {
+              throw const FormatException(
+                'The selected file must contain one case document.',
+              );
+            }
+            source = CockpitInlineCaseSource(
+              testCase: document,
+              sourceSha256: result.sourceSha256,
+            );
+          } else {
+            final documents = await client.documents(
+              workspaceId,
+              kind: CockpitIndexedDocumentKind.testCase,
+            );
+            final requestedDocument = arguments.option('document-id');
+            final caseId = arguments.option('case-id')!;
+            final matches = documents.where(
+              (document) =>
+                  (requestedDocument == null ||
+                      document.documentId == requestedDocument) &&
+                  document.cases.any((testCase) => testCase.caseId == caseId),
+            );
+            if (matches.length != 1) {
+              throw CockpitSupervisorClientException(
+                code: matches.isEmpty ? 'caseNotFound' : 'caseAmbiguous',
+                message: matches.isEmpty
+                    ? 'Indexed case $caseId was not found.'
+                    : 'Case $caseId exists in multiple documents; pass --document-id.',
+              );
+            }
+            final document = matches.single;
+            source = CockpitIndexedCaseSource(
+              reference: CockpitIndexedCaseReference(
+                documentId: document.documentId,
+                caseId: caseId,
+                documentSha256: document.sha256,
+              ),
             );
           }
-          final document = matches.single;
-          final accepted = await (await runtime.client()).submitRun(
+          final accepted = await client.submitRun(
             CockpitRunSubmission(
               workspaceId: workspaceId,
-              source: CockpitIndexedCaseSource(
-                reference: CockpitIndexedCaseReference(
-                  documentId: document.documentId,
-                  caseId: caseId,
-                  documentSha256: document.sha256,
-                ),
-              ),
+              source: source,
               idempotencyKey: CockpitIdempotencyKey(
                 arguments.option('idempotency-key')!,
               ),
@@ -248,13 +287,19 @@ final class CockpitSuiteCommand extends Command<int> {
       CockpitLeafCommand(
         runtime: runtime,
         name: 'run',
-        description: 'Run an indexed suite as one durable campaign.',
+        description: 'Run an indexed suite or one validated local file.',
         defaultTimeout: const Duration(hours: 2),
         maximumTimeout: const Duration(hours: 24),
         configure: (parser) => parser
           ..addOption('workspace-id')
           ..addOption('document-id')
-          ..addOption('suite-id', mandatory: true)
+          ..addOption('suite-id', help: 'Run one indexed suite ID.')
+          ..addOption('file', help: 'Validate and run one local suite file.')
+          ..addOption(
+            'input-format',
+            allowed: CockpitDocumentFormat.values.map((value) => value.name),
+            help: 'Local document format; inferred from the file, then JSON.',
+          )
           ..addOption('idempotency-key', mandatory: true)
           ..addOption('inputs', help: 'Suite inputs as LON, JSON, or YAML.')
           ..addOption('inputs-file', help: 'LON, JSON, or YAML suite inputs.')
@@ -268,43 +313,76 @@ final class CockpitSuiteCommand extends Command<int> {
             help: 'Select a non-development or explicitly registered target.',
           ),
         action: (arguments) async {
+          _validateRunSourceSelection(
+            arguments,
+            idOption: 'suite-id',
+            documentKind: 'suite',
+          );
           final workspaceId = await runtime.workspaceId(
             arguments.option('workspace-id'),
           );
-          final suiteId = arguments.option('suite-id')!;
-          final requestedDocument = arguments.option('document-id');
-          final documents =
-              (await (await runtime.client()).documents(
-                    workspaceId,
-                    kind: CockpitIndexedDocumentKind.suite,
-                  ))
-                  .where(
-                    (document) =>
-                        document.kind == CockpitIndexedDocumentKind.suite &&
-                        document.authoredId == suiteId &&
-                        (requestedDocument == null ||
-                            document.documentId == requestedDocument),
-                  )
-                  .toList(growable: false);
-          if (documents.length != 1) {
-            throw CockpitSupervisorClientException(
-              code: documents.isEmpty ? 'suiteNotFound' : 'suiteAmbiguous',
-              message: documents.isEmpty
-                  ? 'Indexed suite $suiteId was not found.'
-                  : 'Suite $suiteId exists in multiple documents; pass --document-id.',
+          final client = await runtime.client();
+          final filePath = arguments.option('file');
+          late final CockpitSuiteSubmissionSource source;
+          if (filePath != null) {
+            final result = await _validateLocalDocument(
+              client,
+              runtime: runtime,
+              workspaceId: workspaceId,
+              filePath: filePath,
+              inputFormat: arguments.option('input-format'),
+            );
+            if (!result.valid) {
+              await runtime.success(result.toJson());
+              return cockpitDataExitCode;
+            }
+            final document = result.document;
+            if (document is! CockpitTestSuite) {
+              throw const FormatException(
+                'The selected file must contain one suite document.',
+              );
+            }
+            source = CockpitInlineSuiteSource(
+              suite: document,
+              sourceSha256: result.sourceSha256,
+            );
+          } else {
+            final suiteId = arguments.option('suite-id')!;
+            final requestedDocument = arguments.option('document-id');
+            final documents =
+                (await client.documents(
+                      workspaceId,
+                      kind: CockpitIndexedDocumentKind.suite,
+                    ))
+                    .where(
+                      (document) =>
+                          document.kind == CockpitIndexedDocumentKind.suite &&
+                          document.authoredId == suiteId &&
+                          (requestedDocument == null ||
+                              document.documentId == requestedDocument),
+                    )
+                    .toList(growable: false);
+            if (documents.length != 1) {
+              throw CockpitSupervisorClientException(
+                code: documents.isEmpty ? 'suiteNotFound' : 'suiteAmbiguous',
+                message: documents.isEmpty
+                    ? 'Indexed suite $suiteId was not found.'
+                    : 'Suite $suiteId exists in multiple documents; pass --document-id.',
+              );
+            }
+            final document = documents.single;
+            source = CockpitIndexedSuiteSource(
+              reference: CockpitIndexedSuiteReference(
+                documentId: document.documentId,
+                suiteId: suiteId,
+                documentSha256: document.sha256,
+              ),
             );
           }
-          final document = documents.single;
-          final accepted = await (await runtime.client()).submitRun(
+          final accepted = await client.submitRun(
             CockpitRunSubmission(
               workspaceId: workspaceId,
-              source: CockpitIndexedSuiteSource(
-                reference: CockpitIndexedSuiteReference(
-                  documentId: document.documentId,
-                  suiteId: suiteId,
-                  documentSha256: document.sha256,
-                ),
-              ),
+              source: source,
               idempotencyKey: CockpitIdempotencyKey(
                 arguments.option('idempotency-key')!,
               ),
@@ -581,6 +659,55 @@ CockpitDocumentFormat _documentFormat(String? requested, String path) {
     '.yaml' || '.yml' => CockpitDocumentFormat.yaml,
     _ => CockpitDocumentFormat.json,
   };
+}
+
+void _validateRunSourceSelection(
+  ArgResults arguments, {
+  required String idOption,
+  required String documentKind,
+}) {
+  final id = arguments.option(idOption);
+  final file = arguments.option('file');
+  if ((id == null) == (file == null)) {
+    throw FormatException('Pass exactly one of --$idOption or --file.');
+  }
+  if (file != null && arguments.option('document-id') != null) {
+    throw FormatException(
+      '--document-id applies only to an indexed $documentKind.',
+    );
+  }
+  if (file == null && arguments.option('input-format') != null) {
+    throw const FormatException('--input-format requires --file.');
+  }
+}
+
+Future<CockpitDocumentValidationResult> _validateLocalDocument(
+  CockpitSupervisorApiClient client, {
+  required CockpitCliRuntime runtime,
+  required String workspaceId,
+  required String filePath,
+  required String? inputFormat,
+}) async {
+  final resolved = p.normalize(
+    p.isAbsolute(filePath)
+        ? filePath
+        : p.join(runtime.workingDirectory, filePath),
+  );
+  final file = File(resolved);
+  if (!await file.exists()) {
+    throw FormatException('Document file does not exist: $resolved');
+  }
+  if (await file.length() > cockpitSupervisorMaximumResponseBytes) {
+    throw const FormatException('Document exceeds 1 MiB.');
+  }
+  return client.validateCaseDocument(
+    workspaceId,
+    CockpitDocumentValidationRequest(
+      format: _documentFormat(inputFormat, resolved),
+      sourceText: await file.readAsString(),
+      relativePath: p.basename(resolved),
+    ),
+  );
 }
 
 Future<String?> _runTargetId(

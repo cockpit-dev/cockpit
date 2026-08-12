@@ -166,14 +166,18 @@ released after verified cleanup.
 
 ## Canonical Case Replay
 
-Validate a case document, then submit an indexed case using its canonical
-document digest. Replays use explicit workspace, document, case, and
-idempotency identities.
+Validate a case document. Run the local file directly while developing it, or
+submit an indexed case using its canonical document digest for durable shared
+and CI replay.
 
 ```bash
 cockpit case validate \
   --workspace-id <workspaceId> \
   --file example/cases/flutter_login.yaml
+
+cockpit case run \
+  --file example/cases/flutter_login.yaml \
+  --idempotency-key local-login-001
 
 cockpit case run \
   --workspace-id <workspaceId> \
@@ -217,6 +221,9 @@ use more signals, a relation, or 0-based `index` to select a list item.
 ```bash
 cockpit suite validate --file example/suites/regression.yaml
 cockpit suite run \
+  --file example/suites/regression.yaml \
+  --idempotency-key local-regression-001
+cockpit suite run \
   --workspace-id <workspaceId> \
   --document-id <documentId> \
   --suite-id regression \
@@ -224,6 +231,8 @@ cockpit suite run \
 cockpit suite report --run-id <runId> \
   --output-dir cockpit-report
 ```
+
+The local `--file` and indexed `--suite-id` forms are mutually exclusive.
 
 Register installed native applications and other system-controlled surfaces as
 workspace-owned targets. Put the stable platform app/package id on the target;

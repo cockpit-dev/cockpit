@@ -138,7 +138,11 @@ final class CockpitUpdateInstallation {
         pubCache,
       ).uri.resolve(_windows ? 'bin/cockpit.exe' : 'bin/cockpit'),
     );
-    if (!_samePath(_resolvedExecutable, native.path) ||
+    if (!cockpitPathsMatch(
+          _resolvedExecutable,
+          native.path,
+          windows: _windows,
+        ) ||
         !await native.exists()) {
       return;
     }
@@ -411,7 +415,8 @@ final class CockpitUpdateInstallation {
           !entity.uri.pathSegments
               .lastWhere((segment) => segment.isNotEmpty)
               .startsWith(_updateWorkspacePrefix) ||
-          _samePath(entity.path, except)) {
+          (except != null &&
+              cockpitPathsMatch(entity.path, except, windows: _windows))) {
         continue;
       }
       try {
@@ -461,13 +466,6 @@ Duration _remaining(DateTime deadline) {
     );
   }
   return remaining;
-}
-
-bool _samePath(String? left, String? right) {
-  if (left == null || right == null) return false;
-  final a = File(left).absolute.path;
-  final b = File(right).absolute.path;
-  return Platform.isWindows ? a.toLowerCase() == b.toLowerCase() : a == b;
 }
 
 String _unixFallback(String executable) {

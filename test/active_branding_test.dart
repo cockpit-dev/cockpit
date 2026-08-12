@@ -57,11 +57,12 @@ void main() {
       'skills/cockpit/SKILL.md',
       'plugins/codex/cockpit/.codex-plugin/plugin.json',
       'plugins/claude-code/cockpit/.claude-plugin/plugin.json',
+      '.github/workflows/example-e2e.yml',
       'examples/cockpit_demo/cockpit/tool/verify.dart',
       'examples/cockpit_demo/cockpit/e2e/suites/regression.suite.yaml',
     ];
     final versionedBrand = RegExp(
-      r'\bCockpit\s+v?\d+(?:\.\d+){1,2}\b',
+      r'\bCockpit(?:[\s_-]+v?)\d+(?:\.\d+){0,2}\b',
       caseSensitive: false,
     );
 

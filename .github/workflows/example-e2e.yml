@@ -624,7 +624,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: cockpit-3-${{ matrix.platform }}-regression
+          name: cockpit-${{ matrix.platform }}-regression
           retention-days: 14
           if-no-files-found: warn
           path: |

@@ -147,7 +147,7 @@ void main() {
     final service = CockpitCaptureScreenshotService(
       captureStrategyResolver: CockpitCaptureStrategyResolver(
         remoteAdapterFactory: (_) => remoteAdapter,
-        adbAdapterFactory: (_) => throw StateError('adb not expected'),
+        adbAdapterFactory: (_, _) => throw StateError('adb not expected'),
         simctlAdapterFactory: (_) => throw StateError('simctl not expected'),
         macosAdapterFactory: (_, {processId}) => hostAdapter,
       ),
@@ -203,7 +203,7 @@ void main() {
       final service = CockpitCaptureScreenshotService(
         captureStrategyResolver: CockpitCaptureStrategyResolver(
           remoteAdapterFactory: (_) => remoteAdapter,
-          adbAdapterFactory: (_) => throw StateError('adb not expected'),
+          adbAdapterFactory: (_, _) => throw StateError('adb not expected'),
           simctlAdapterFactory: (_) => throw StateError('simctl not expected'),
           macosAdapterFactory: (_, {processId}) => hostAdapter,
         ),
@@ -236,6 +236,12 @@ void main() {
             durationMs: 12,
             requestedCaptureProfile: CockpitCaptureProfile.acceptance,
             resolvedCaptureKind: CockpitCaptureKind.hostSystem,
+            surface: const <String, Object?>{
+              'relation': 'differentApp',
+              'app': 'dev.cockpit.demo',
+              'front': 'com.example.other',
+            },
+            degradationReason: 'systemSurfaceMismatch',
           ),
         ),
       );
@@ -243,7 +249,7 @@ void main() {
       final service = CockpitCaptureScreenshotService(
         captureStrategyResolver: CockpitCaptureStrategyResolver(
           remoteAdapterFactory: (_) => remoteAdapter,
-          adbAdapterFactory: (_) => throw StateError('adb not expected'),
+          adbAdapterFactory: (_, _) => throw StateError('adb not expected'),
           simctlAdapterFactory: (_) => throw StateError('simctl not expected'),
           macosAdapterFactory: (_, {processId}) => hostAdapter,
         ),
@@ -308,7 +314,7 @@ void main() {
       final service = CockpitCaptureScreenshotService(
         captureStrategyResolver: CockpitCaptureStrategyResolver(
           remoteAdapterFactory: (_) => remoteAdapter,
-          adbAdapterFactory: (_) => throw StateError('adb not expected'),
+          adbAdapterFactory: (_, _) => throw StateError('adb not expected'),
           simctlAdapterFactory: (_) => throw StateError('simctl not expected'),
           macosAdapterFactory: (_, {processId}) => hostAdapter,
         ),
@@ -367,7 +373,7 @@ void main() {
       final service = CockpitCaptureScreenshotService(
         captureStrategyResolver: CockpitCaptureStrategyResolver(
           remoteAdapterFactory: (_) => remoteAdapter,
-          adbAdapterFactory: (_) => throw StateError('adb not expected'),
+          adbAdapterFactory: (_, _) => throw StateError('adb not expected'),
           simctlAdapterFactory: (_) => throw StateError('simctl not expected'),
           macosAdapterFactory: (_, {processId}) => hostAdapter,
         ),
@@ -409,6 +415,12 @@ void main() {
             ],
             requestedCaptureProfile: CockpitCaptureProfile.acceptance,
             resolvedCaptureKind: CockpitCaptureKind.hostSystem,
+            surface: const <String, Object?>{
+              'relation': 'differentApp',
+              'app': 'dev.cockpit.demo',
+              'front': 'com.example.other',
+            },
+            degradationReason: 'systemSurfaceMismatch',
           ),
         ),
       );
@@ -442,8 +454,9 @@ void main() {
             capturedRemoteBaseUri = client.baseUri;
             return remoteAdapter;
           },
-          adbAdapterFactory: (deviceId) {
+          adbAdapterFactory: (deviceId, platformAppId) {
             expect(deviceId, 'emulator-5554');
+            expect(platformAppId, isNull);
             return hostAdapter;
           },
           simctlAdapterFactory: (_) => throw StateError('simctl not expected'),
@@ -464,6 +477,8 @@ void main() {
       expect(capturedRemoteBaseUri?.host, '127.0.0.1');
       expect(capturedRemoteBaseUri?.port, 61331);
       expect(result.command.resolvedCaptureKind, 'hostSystem');
+      expect(result.command.degradationReason, 'systemSurfaceMismatch');
+      expect(result.command.surface?['relation'], 'differentApp');
       expect(
         result.artifacts.single.relativePath,
         'screenshots/android_system.png',
@@ -511,7 +526,7 @@ void main() {
       final service = CockpitCaptureScreenshotService(
         captureStrategyResolver: CockpitCaptureStrategyResolver(
           remoteAdapterFactory: (_) => remoteAdapter,
-          adbAdapterFactory: (_) => throw StateError('adb not expected'),
+          adbAdapterFactory: (_, _) => throw StateError('adb not expected'),
           simctlAdapterFactory: (deviceId) {
             expect(deviceId, '6FD25DED-11E9-4AE9-B4B5-EDF4601981DC');
             return hostAdapter;
@@ -580,7 +595,7 @@ void main() {
     final service = CockpitCaptureScreenshotService(
       captureStrategyResolver: CockpitCaptureStrategyResolver(
         remoteAdapterFactory: (_) => remoteAdapter,
-        adbAdapterFactory: (_) => throw StateError('adb not expected'),
+        adbAdapterFactory: (_, _) => throw StateError('adb not expected'),
         simctlAdapterFactory: (_) => throw StateError('simctl not expected'),
         macosAdapterFactory: (appId, {processId}) {
           expect(appId, 'com.google.Chrome');

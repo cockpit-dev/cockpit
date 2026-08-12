@@ -1,8 +1,105 @@
+import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
+import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as p;
+import 'package:yaml/yaml.dart';
 
 import '../infrastructure/cockpit_process_manager.dart';
+
+const Duration _latestVersionLookupLimit = Duration(seconds: 3);
+
+Future<String> cockpitLookupLatestVersion(Duration timeout) async {
+  final effectiveTimeout = timeout < _latestVersionLookupLimit
+      ? timeout
+      : _latestVersionLookupLimit;
+  if (effectiveTimeout <= Duration.zero) {
+    throw TimeoutException('Cockpit version lookup exceeded its timeout.');
+  }
+  final client = http.Client();
+  try {
+    final response = await client
+        .get(
+          Uri.https('pub.dev', '/api/packages/cockpit'),
+          headers: const <String, String>{'accept': 'application/json'},
+        )
+        .timeout(effectiveTimeout);
+    if (response.statusCode != HttpStatus.ok) {
+      throw HttpException(
+        'Pub returned status ${response.statusCode}.',
+        uri: response.request?.url,
+      );
+    }
+    final body = jsonDecode(response.body) as Map<Object?, Object?>;
+    final latest = body['latest'] as Map<Object?, Object?>?;
+    final version = latest?['version'];
+    if (version is! String || version.trim().isEmpty) {
+      throw const FormatException('Pub returned an invalid latest version.');
+    }
+    return version.trim();
+  } finally {
+    client.close();
+  }
+}
+
+Future<bool> cockpitHasCanonicalHostedInstall({
+  required Map<String, String> environment,
+  required bool windows,
+  required String resolvedExecutable,
+  required String version,
+}) async {
+  try {
+    final pubCache = cockpitPubCacheRoot(environment, windows: windows);
+    if (pubCache == null) return false;
+    final cache = Directory(pubCache);
+    final executable = File.fromUri(
+      cache.uri.resolve(windows ? 'bin/cockpit.exe' : 'bin/cockpit'),
+    );
+    if (!cockpitPathsMatch(
+          resolvedExecutable,
+          executable.path,
+          windows: windows,
+        ) ||
+        !await executable.exists()) {
+      return false;
+    }
+
+    final config = File.fromUri(
+      cache.uri.resolve(
+        'global_packages/cockpit/.dart_tool/package_config.json',
+      ),
+    );
+    if (!await config.exists()) return false;
+    final decoded = jsonDecode(await config.readAsString());
+    final packages = (decoded as Map<Object?, Object?>)['packages'];
+    if (packages is! List<Object?>) return false;
+    final entries = packages.whereType<Map<Object?, Object?>>().where(
+      (entry) => entry['name'] == 'cockpit',
+    );
+    if (entries.length != 1) return false;
+    final rootValue = entries.single['rootUri'];
+    if (rootValue is! String || rootValue.isEmpty) return false;
+    final packageRoot = Directory.fromUri(config.uri.resolve(rootValue));
+    final hostedRoot = Directory.fromUri(cache.uri.resolve('hosted/'));
+    final resolvedPackageRoot = await packageRoot.resolveSymbolicLinks();
+    final resolvedHostedRoot = await hostedRoot.resolveSymbolicLinks();
+    if (!cockpitPathIsWithin(resolvedPackageRoot, resolvedHostedRoot)) {
+      return false;
+    }
+
+    final pubspec = File.fromUri(packageRoot.uri.resolve('pubspec.yaml'));
+    final entrypoint = File.fromUri(
+      packageRoot.uri.resolve('bin/cockpit.dart'),
+    );
+    if (!await pubspec.exists() || !await entrypoint.exists()) return false;
+    final manifest = loadYaml(await pubspec.readAsString());
+    if (manifest is! YamlMap) return false;
+    return manifest['name'] == 'cockpit' && manifest['version'] == version;
+  } on Object {
+    return false;
+  }
+}
 
 Future<ProcessResult> cockpitRunUpdateProcess(
   String executable,
@@ -82,4 +179,18 @@ bool cockpitPathIsWithin(String path, String directory) {
   final normalizedDirectory = p.normalize(p.absolute(directory));
   return normalizedPath == normalizedDirectory ||
       p.isWithin(normalizedDirectory, normalizedPath);
+}
+
+bool cockpitPathsMatch(String left, String right, {required bool windows}) {
+  final a = _resolvedPath(left);
+  final b = _resolvedPath(right);
+  return windows ? a.toLowerCase() == b.toLowerCase() : a == b;
+}
+
+String _resolvedPath(String path) {
+  try {
+    return File(path).resolveSymbolicLinksSync();
+  } on FileSystemException {
+    return p.normalize(p.absolute(path));
+  }
 }

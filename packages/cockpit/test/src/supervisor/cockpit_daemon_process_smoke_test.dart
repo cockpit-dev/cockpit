@@ -551,6 +551,96 @@ Future<void> main(List<String> arguments) async {
     timeout: const Timeout(Duration(seconds: 30)),
   );
 
+  test('an older compatible client reuses a newer engine', () async {
+    final temporary = await Directory.systemTemp.createTemp(
+      'cockpitd-newer-engine-',
+    );
+    final paths = CockpitHomePaths(await temporary.resolveSymbolicLinks());
+    final policy = Platform.isWindows
+        ? const CockpitWindowsAclPermissionHardener()
+        : const CockpitPosixPermissionHardener();
+    final syncer = CockpitSystemDirectorySyncer(
+      Platform.isWindows
+          ? CockpitHostPlatform.windows
+          : Platform.isMacOS
+          ? CockpitHostPlatform.macos
+          : CockpitHostPlatform.linux,
+    );
+    final store = CockpitDaemonDiscoveryStore(
+      paths: paths,
+      permissionHardener: policy,
+      directorySyncer: syncer,
+    );
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    final startedAt = DateTime.now().toUtc();
+    final discovery = CockpitDaemonDiscovery(
+      instanceId: 'daemon-newer-engine',
+      processId: pid,
+      processStartIdentity: await const CockpitSystemProcessIdentityProbe()
+          .current(),
+      endpoint: Uri(
+        scheme: 'http',
+        host: InternetAddress.loopbackIPv4.address,
+        port: server.port,
+      ),
+      bearerToken: List<String>.filled(32, 'n').join(),
+      apiMajor: 2,
+      apiMinor: 0,
+      engineVersion: '4.1.0',
+      startedAt: startedAt,
+      authorizationMode: CockpitAuthorizationMode.yolo,
+    );
+    await store.write(discovery);
+    var shutdownCount = 0;
+    server.listen((request) async {
+      if (request.uri.path == '/_cockpit/health') {
+        request.response.headers.contentType = ContentType.json;
+        request.response.write(
+          jsonEncode(
+            CockpitServerInfo(
+              instanceId: discovery.instanceId,
+              apiVersion: CockpitApiVersion(major: 2, minor: 0),
+              engineVersion: discovery.engineVersion,
+              startedAt: startedAt,
+            ).toJson(),
+          ),
+        );
+        await request.response.close();
+        return;
+      }
+      if (request.uri.path == '/_cockpit/lifecycle') {
+        shutdownCount += 1;
+        request.response.statusCode = HttpStatus.accepted;
+        await request.response.close();
+        return;
+      }
+      request.response.statusCode = HttpStatus.notFound;
+      await request.response.close();
+    });
+    addTearDown(() async {
+      await store.deleteIfMatches(discovery);
+      await server.close(force: true);
+      if (await temporary.exists()) await temporary.delete(recursive: true);
+    });
+
+    final lifecycle = CockpitDaemonLifecycleClient(
+      paths: paths,
+      executable: Platform.resolvedExecutable,
+      daemonArguments: const <String>['unused'],
+      restartArguments: const <String>['unused'],
+      permissionHardener: policy,
+      directorySyncer: syncer,
+      requiredEngineVersion: '4.0.0',
+    );
+
+    expect((await lifecycle.status()).diagnostic, isNull);
+    final reused = await lifecycle.ensure(timeout: const Duration(seconds: 5));
+
+    expect(reused.instanceId, discovery.instanceId);
+    expect(reused.authorizationMode, CockpitAuthorizationMode.yolo);
+    expect(shutdownCount, 0);
+  });
+
   test(
     'cockpitd discovery auth route and ensure process smoke',
     () async {

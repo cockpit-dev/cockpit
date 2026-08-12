@@ -1464,24 +1464,37 @@ Map<String, Object?> _compactDevLifecycle(Map<Object?, Object?> state) {
 Map<String, Object?> _compactDevScreenshot(
   Map<Object?, Object?> state, {
   required bool more,
-}) => <String, Object?>{
-  if (state['comparison'] is Map<Object?, Object?>)
-    'comparison': _pick(
-      state['comparison']! as Map<Object?, Object?>,
-      const <String>['matched', 'dimensionMismatch', 'changedPixelCount'],
-    ),
-  if (more)
-    ..._pick(state, const <String>[
-      'capture',
-      'fallback',
-      'degraded',
-      'plane',
-      'width',
-      'height',
-    ])
-  else if (state['fallback'] == true)
-    ..._pick(state, const <String>['capture', 'fallback', 'degraded']),
-};
+}) {
+  final surface = state['surface'];
+  final unexpectedSurface =
+      surface is Map<Object?, Object?> && surface['relation'] != 'app';
+  return <String, Object?>{
+    if (state['comparison'] is Map<Object?, Object?>)
+      'comparison': _pick(
+        state['comparison']! as Map<Object?, Object?>,
+        const <String>['matched', 'dimensionMismatch', 'changedPixelCount'],
+      ),
+    if (more)
+      ..._pick(state, const <String>[
+        'capture',
+        'fallback',
+        'degraded',
+        'surface',
+        'plane',
+        'width',
+        'height',
+      ])
+    else if (state['fallback'] == true ||
+        state['degraded'] != null ||
+        unexpectedSurface)
+      ..._pick(state, <String>[
+        'capture',
+        'fallback',
+        'degraded',
+        if (unexpectedSurface) 'surface',
+      ]),
+  };
+}
 
 Map<String, Object?> _compactDevEvidence(
   Map<Object?, Object?> evidence, {
@@ -2042,6 +2055,7 @@ Map<String, Object?> _compactInteractiveOutput(
                 'locatorResolution',
                 'usedCaptureFallback',
                 'degradationReason',
+                'surface',
                 'changed',
                 'error',
               ]
@@ -2051,6 +2065,7 @@ Map<String, Object?> _compactInteractiveOutput(
                 'durationMs',
                 if (usedFallback) 'usedCaptureFallback',
                 'degradationReason',
+                if (_unexpectedCommandSurface(commandMap)) 'surface',
                 'error',
               ],
       ),
@@ -2070,6 +2085,11 @@ Map<String, Object?> _compactInteractiveOutput(
         'snapshot',
       ]),
   };
+}
+
+bool _unexpectedCommandSurface(Map<Object?, Object?> command) {
+  final surface = command['surface'];
+  return surface is Map<Object?, Object?> && surface['relation'] != 'app';
 }
 
 Map<String, Object?> _compactInteractiveBatchOutput(

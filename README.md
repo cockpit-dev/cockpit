@@ -351,18 +351,26 @@ submitting them, and use stable idempotency keys for replay:
 
 ```bash
 cockpit case validate --workspace-id <workspaceId> --file cases/login.yaml
+cockpit case run --file cases/login.yaml \
+  --idempotency-key login-local-2026-07-24
 cockpit case run --workspace-id <workspaceId> \
   --document-id <documentId> --case-id login \
   --idempotency-key login-2026-07-24 \
   --timeout 30m
 
 cockpit suite validate --workspace-id <workspaceId> --file suites/regression.yaml
+cockpit suite run --file suites/regression.yaml \
+  --idempotency-key regression-local-2026-07-24
 cockpit suite run --workspace-id <workspaceId> \
   --document-id <documentId> --suite-id regression \
   --idempotency-key regression-2026-07-24
 cockpit suite report --run-id <runId> \
   --output-dir cockpit-report
 ```
+
+The `--file` form validates and submits one local document directly. Use the
+indexed ID form for a durable shared or CI document; the two forms are mutually
+exclusive.
 
 After worker termination, completed nodes stay complete, an active attempt
 becomes `interrupted`, and the suite continues only when its retry policy allows

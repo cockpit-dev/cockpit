@@ -474,8 +474,13 @@ void main() {
         'session': '1',
         'state': <String, Object?>{
           'capture': 'flutterView',
-          'fallback': true,
-          'degraded': 'hostCaptureFailed',
+          'fallback': false,
+          'degraded': 'systemSurfaceMismatch',
+          'surface': <String, Object?>{
+            'relation': 'differentApp',
+            'app': 'dev.cockpit.demo',
+            'front': 'com.example.other',
+          },
           'plane': 'flutterSemanticPlane',
           'width': 800,
           'height': 600,
@@ -495,8 +500,9 @@ void main() {
               )!
               as Map<Object?, Object?>;
       expect(minimal['capture'], 'flutterView');
-      expect(minimal['fallback'], isTrue);
-      expect(minimal['degraded'], 'hostCaptureFailed');
+      expect(minimal['fallback'], isFalse);
+      expect(minimal['degraded'], 'systemSurfaceMismatch');
+      expect(minimal['surface'], containsPair('relation', 'differentApp'));
       expect(minimal['path'], '/tmp/current.png');
       expect(minimal, isNot(contains('state')));
 
@@ -510,6 +516,7 @@ void main() {
               )!
               as Map<Object?, Object?>;
       expect(standard['capture'], 'flutterView');
+      expect(standard['surface'], containsPair('front', 'com.example.other'));
       expect(standard['plane'], 'flutterSemanticPlane');
       expect(standard['width'], 800);
       expect(standard['height'], 600);
@@ -706,11 +713,11 @@ void main() {
 
     for (final commandName in <String>['case', 'suite']) {
       final command = runner.commands[commandName]!;
-      expect(command.subcommands['run']!.argParser.options, contains('inputs'));
-      expect(
-        command.subcommands['run']!.argParser.options,
-        isNot(contains('inputs-json')),
-      );
+      final runOptions = command.subcommands['run']!.argParser.options;
+      expect(runOptions, contains('inputs'));
+      expect(runOptions, contains('file'));
+      expect(runOptions, contains('input-format'));
+      expect(runOptions, isNot(contains('inputs-json')));
       expect(
         command.subcommands['validate']!.argParser.options,
         contains('input-format'),

@@ -21,10 +21,12 @@ final class CockpitCommandResult {
     this.resolvedCaptureKind,
     this.usedCaptureFallback = false,
     this.degradationReason,
+    Map<String, Object?>? surface,
     this.changed,
     this.error,
   }) : artifacts = List.unmodifiable(artifacts),
-       snapshot = snapshot == null ? null : Map.unmodifiable(snapshot);
+       snapshot = snapshot == null ? null : Map.unmodifiable(snapshot),
+       surface = surface == null ? null : Map.unmodifiable(surface);
 
   final bool success;
   final String commandId;
@@ -37,6 +39,7 @@ final class CockpitCommandResult {
   final CockpitCaptureKind? resolvedCaptureKind;
   final bool usedCaptureFallback;
   final String? degradationReason;
+  final Map<String, Object?>? surface;
   final bool? changed;
   final CockpitCommandError? error;
 
@@ -61,6 +64,7 @@ final class CockpitCommandResult {
       'resolvedCaptureKind': resolvedCaptureKind!.name,
     'usedCaptureFallback': usedCaptureFallback,
     if (degradationReason != null) 'degradationReason': degradationReason,
+    if (surface != null) 'surface': surface,
     if (changed != null) 'changed': changed,
     if (error != null) 'error': error!.toJson(),
   };
@@ -71,6 +75,7 @@ final class CockpitCommandResult {
         json['locatorResolution'] as Map<Object?, Object?>?;
     final errorJson = json['error'] as Map<Object?, Object?>?;
     final snapshotJson = json['snapshot'] as Map<Object?, Object?>?;
+    final surfaceJson = json['surface'] as Map<Object?, Object?>?;
     final requestedCaptureProfile = json['requestedCaptureProfile'];
     final resolvedCaptureKind = json['resolvedCaptureKind'];
 
@@ -102,6 +107,9 @@ final class CockpitCommandResult {
           : CockpitCaptureKind.fromJson(resolvedCaptureKind),
       usedCaptureFallback: json['usedCaptureFallback'] as bool? ?? false,
       degradationReason: json['degradationReason'] as String?,
+      surface: surfaceJson == null
+          ? null
+          : Map<String, Object?>.from(surfaceJson),
       changed: json['changed'] as bool?,
       error: errorJson == null
           ? null
@@ -124,6 +132,7 @@ final class CockpitCommandResult {
             other.resolvedCaptureKind == resolvedCaptureKind &&
             other.usedCaptureFallback == usedCaptureFallback &&
             other.degradationReason == degradationReason &&
+            _mapEquality.equals(other.surface, surface) &&
             other.changed == changed &&
             other.error == error;
   }
@@ -141,6 +150,7 @@ final class CockpitCommandResult {
     resolvedCaptureKind,
     usedCaptureFallback,
     degradationReason,
+    surface == null ? null : _mapEquality.hash(surface!),
     changed,
     error,
   );

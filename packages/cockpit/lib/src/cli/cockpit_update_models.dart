@@ -7,6 +7,10 @@ typedef CockpitUpdateProcessRunner =
       Duration timeout,
     );
 
+typedef CockpitLatestVersionLookup = Future<String> Function(Duration timeout);
+
+typedef CockpitHostedInstallProbe = Future<bool> Function(String version);
+
 final class CockpitUpdateException implements Exception {
   const CockpitUpdateException(
     this.code,

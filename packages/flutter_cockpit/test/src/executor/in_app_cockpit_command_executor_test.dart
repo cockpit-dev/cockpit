@@ -6289,6 +6289,223 @@ void main() {
     },
   );
 
+  testWidgets(
+    'tap resolves an ExcludeSemantics button from the mounted Element plane',
+    (tester) async {
+      final registry = CockpitTargetRegistry(routeName: '/terms');
+      var accepted = false;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: CockpitSurface(
+            routeName: '/terms',
+            registry: registry,
+            child: Scaffold(
+              body: Center(
+                child: ExcludeSemantics(
+                  child: FilledButton(
+                    key: const ValueKey<String>('terms-accept'),
+                    onPressed: () => accepted = true,
+                    child: const Text('Accept terms'),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final surface = tester.state<CockpitSurfaceState>(
+        find.byType(CockpitSurface),
+      );
+      final executor = InAppCockpitCommandExecutor(
+        registry: registry,
+        locatorProbe: surface.probeVisibleLocator,
+        snapshotProvider: surface.snapshot,
+        postActionSettler: tester.pump,
+      );
+      final result = await executor.execute(
+        CockpitCommand(
+          commandId: 'tap-terms-accept',
+          commandType: CockpitCommandType.tap,
+          locator: const CockpitLocator(
+            key: 'terms-accept',
+            text: 'Accept terms',
+            type: 'FilledButton',
+            route: '/terms',
+            ancestor: CockpitLocator(type: 'Scaffold'),
+          ),
+        ),
+      );
+
+      expect(result.success, isTrue, reason: '${result.error?.details}');
+      expect(accepted, isTrue);
+      expect(
+        result.locatorResolution?.matchedSignals,
+        containsPair('key', 'terms-accept'),
+      );
+      expect(
+        result.locatorResolution?.matchedSignals,
+        containsPair('type', 'FilledButton'),
+      );
+    },
+  );
+
+  testWidgets('tap uses the closest actionable descendant of a keyed wrapper', (
+    tester,
+  ) async {
+    final registry = CockpitTargetRegistry(routeName: '/account');
+    var reset = false;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: CockpitSurface(
+          routeName: '/account',
+          registry: registry,
+          child: Scaffold(
+            body: Center(
+              child: Container(
+                key: const ValueKey<String>('password-reset-row'),
+                child: InkWell(
+                  onTap: () => reset = true,
+                  child: const Padding(
+                    padding: EdgeInsets.all(24),
+                    child: Text('Reset password'),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final surface = tester.state<CockpitSurfaceState>(
+      find.byType(CockpitSurface),
+    );
+    final executor = InAppCockpitCommandExecutor(
+      registry: registry,
+      locatorProbe: surface.probeVisibleLocator,
+      snapshotProvider: surface.snapshot,
+      postActionSettler: tester.pump,
+    );
+    final result = await executor.execute(
+      CockpitCommand(
+        commandId: 'tap-reset-wrapper',
+        commandType: CockpitCommandType.tap,
+        locator: const CockpitLocator(key: 'password-reset-row'),
+      ),
+    );
+
+    expect(result.success, isTrue, reason: '${result.error?.details}');
+    expect(reset, isTrue);
+  });
+
+  testWidgets(
+    'assertVisible preserves a matched container with multiple action descendants',
+    (tester) async {
+      final registry = CockpitTargetRegistry(routeName: '/launch');
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: CockpitSurface(
+            routeName: '/launch',
+            registry: registry,
+            child: Scaffold(
+              body: Center(
+                child: Container(
+                  key: const ValueKey<String>('launch-configuration'),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: <Widget>[
+                      TextButton(onPressed: () {}, child: const Text('Edit')),
+                      TextButton(onPressed: () {}, child: const Text('Reset')),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final surface = tester.state<CockpitSurfaceState>(
+        find.byType(CockpitSurface),
+      );
+      final executor = InAppCockpitCommandExecutor(
+        registry: registry,
+        locatorProbe: surface.probeVisibleLocator,
+        snapshotProvider: surface.snapshot,
+        postActionSettler: tester.pump,
+      );
+
+      final assertion = await executor.execute(
+        CockpitCommand(
+          commandId: 'assert-launch-configuration',
+          commandType: CockpitCommandType.assertVisible,
+          locator: const CockpitLocator(key: 'launch-configuration'),
+        ),
+      );
+      final tap = await executor.execute(
+        CockpitCommand(
+          commandId: 'tap-launch-configuration',
+          commandType: CockpitCommandType.tap,
+          locator: const CockpitLocator(key: 'launch-configuration'),
+        ),
+      );
+
+      expect(assertion.success, isTrue, reason: '${assertion.error?.details}');
+      expect(tap.success, isFalse);
+      expect(tap.error?.code, CockpitCommandError.ambiguousTargetCode);
+    },
+  );
+
+  testWidgets('tap does not treat a passive keyed widget as actionable', (
+    tester,
+  ) async {
+    final registry = CockpitTargetRegistry(routeName: '/account');
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: CockpitSurface(
+          routeName: '/account',
+          registry: registry,
+          child: const Scaffold(
+            body: Center(
+              child: Text(
+                'Account summary',
+                key: ValueKey<String>('account-summary'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final surface = tester.state<CockpitSurfaceState>(
+      find.byType(CockpitSurface),
+    );
+    final executor = InAppCockpitCommandExecutor(
+      registry: registry,
+      locatorProbe: surface.probeVisibleLocator,
+      snapshotProvider: surface.snapshot,
+    );
+    final result = await executor.execute(
+      CockpitCommand(
+        commandId: 'tap-passive-summary',
+        commandType: CockpitCommandType.tap,
+        locator: const CockpitLocator(key: 'account-summary'),
+      ),
+    );
+
+    expect(result.success, isFalse);
+    expect(result.error?.code, CockpitCommandError.unsupportedCapabilityCode);
+  });
+
   testWidgets('tap warns but continues when hitTestMissPolicy is warn', (
     tester,
   ) async {

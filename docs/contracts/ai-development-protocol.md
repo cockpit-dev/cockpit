@@ -104,11 +104,16 @@ indexing or running:
 ```bash
 cockpit case validate --file case.yaml
 cockpit suite validate --file suite.yaml
+cockpit case run --file case.yaml --idempotency-key <uniqueKey>
+cockpit suite run --file suite.yaml --idempotency-key <uniqueKey>
 cockpit case list
 cockpit suite list
 cockpit case run --case-id <caseId> --idempotency-key <uniqueKey>
 cockpit suite run --suite-id <suiteId> --idempotency-key <uniqueKey>
 ```
+
+Use `--file` for a validated local document under active development. Use the
+indexed ID form for a durable shared or CI document; do not combine both forms.
 
 Observe and collect the terminal result:
 
