@@ -105,6 +105,7 @@ cockpit dev status
 cockpit dev inspect "Save"
 cockpit dev tree
 cockpit dev tap "Save"
+cockpit dev open "myapp://tasks/42"
 cockpit dev wait
 cockpit dev screenshot
 cockpit dev reload
@@ -126,6 +127,9 @@ widget paths. `dev tree` returns a compact selector index.
 Escalate to `dev tree --view more` or `dev tree --view full` only when the
 surrounding structure is needed; both write the tree to an artifact and stdout
 returns only its verified path.
+Use `dev open URI` to test a custom deep link, Android app link, iOS universal
+link, or HTTP(S) URL through the selected target, then verify the expected route
+or anchor with `dev wait` and `dev inspect`.
 
 ## Runtime Model
 

@@ -73,6 +73,7 @@ void main() {
       'cockpit dev status',
       'cockpit dev inspect',
       'cockpit dev tree',
+      'cockpit dev open',
       'Do not add a pre-inspect round trip',
       'mounted Flutter Element targets',
       'independent of developer-authored\nSemantics',

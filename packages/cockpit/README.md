@@ -68,6 +68,7 @@ cockpit dev status
 cockpit dev inspect "Save"
 cockpit dev tree
 cockpit dev tap "Save"
+cockpit dev open "myapp://tasks/42"
 cockpit dev wait
 cockpit dev screenshot
 cockpit dev reload
@@ -90,6 +91,9 @@ it returns a directly executable `sel`, for example `#save` or
 fail instead of guessing. `dev tree` returns a compact selector index; use
 `dev tree --view more` or `dev tree --view full` only for structural context.
 Both structural views write the tree to an artifact and print only its verified path.
+Use `dev open URI` to test a custom deep link, Android app link, iOS universal
+link, or HTTP(S) URL through the selected target, then verify the expected route
+or anchor with `dev wait` and `dev inspect`.
 
 ## Interactive Workspaces
 

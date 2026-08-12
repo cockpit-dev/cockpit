@@ -69,6 +69,7 @@ cockpit dev tap "Documents"
 cockpit dev type "hello" --into "Message"
 cockpit dev press enter
 cockpit dev scroll "Operations"
+cockpit dev open "myapp://tasks/42"
 cockpit dev wait
 cockpit dev viewport 800x600
 cockpit dev screenshot
@@ -83,6 +84,12 @@ the exact interaction, `dev wait`, a focused `dev inspect`, then a current scree
 for visible claims. Use `restart` only when reload cannot apply the change. Do not
 start a second app to recover a healthy session, and never restart or stop sessions
 other than the selected handle.
+
+Use `dev open URI` for a custom-scheme deep link, Android app link, iOS
+universal link, or ordinary HTTP(S) URL. It targets the selected session's
+platform and does not print the URI. After opening, run `dev wait` and inspect
+the expected route or anchor; command success proves platform dispatch, not
+application routing.
 
 On a human terminal, `dev start` reports its real launch stages on stderr while
 Flutter builds and the bridge becomes ready. Structured stdout remains clean;

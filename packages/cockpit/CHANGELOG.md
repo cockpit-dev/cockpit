@@ -17,6 +17,10 @@
   its Flutter UI summary focused while the dedicated readers collect details.
 - Flattened the diagnostic UI summary into short decision fields instead of
   repeating route, profile, snapshot, and nested summary data.
+- Added `cockpit dev open URI` for direct deep-link, universal-link, app-link,
+  and URL testing through the selected development session.
+- Made failed native system actions return a failed operation consistently to
+  CLI, REST, and MCP clients instead of a successful receipt with an error body.
 
 ## 4.0.11
 

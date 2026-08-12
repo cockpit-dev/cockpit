@@ -776,6 +776,70 @@ void main() {
     );
     expect(calls, <String>['session.development.get', 'command.run']);
   });
+
+  test('open URI reuses the exact session through system control', () async {
+    final calls = <String>[];
+    final dev = CockpitDevRuntime(
+      runtime,
+      operationInvoker: (_, kind, input) async {
+        calls.add(kind);
+        if (kind == 'session.development.get') {
+          return _result(
+            kind,
+            output: const <String, Object?>{
+              'sessionId': 'session-old',
+              'targetId': 'target-1',
+              'appId': 'app-old',
+              'status': <String, Object?>{
+                'state': 'ready',
+                'appReachable': true,
+                'remoteSessionReachable': true,
+              },
+            },
+          );
+        }
+        expect(kind, 'system.action');
+        expect(input, <String, Object?>{
+          'sessionId': 'session-old',
+          'action': 'openUrl',
+          'parameters': <String, Object?>{'url': 'cockpit-demo://tasks/42'},
+          'timeoutMs': 60000,
+        });
+        return _result(
+          kind,
+          output: const <String, Object?>{
+            'action': 'openUrl',
+            'availability': 'available',
+            'success': true,
+            'strategy': 'test.openUrl',
+          },
+        );
+      },
+    );
+    runtime.configureOutput(
+      command: 'dev.open',
+      selection: const CockpitCliOutputSelection(
+        view: CockpitCliOutputView.full,
+      ),
+    );
+
+    expect(
+      await dev.openUri(
+        session,
+        uri: 'cockpit-demo://tasks/42',
+        scheme: 'cockpit-demo',
+        timeoutMilliseconds: 60000,
+      ),
+      cockpitSuccessExitCode,
+    );
+    expect(calls, <String>['session.development.get', 'system.action']);
+    final output = lon.decode(stdout.toString())! as Map<Object?, Object?>;
+    final state = output['state']! as Map<Object?, Object?>;
+    expect(state['scheme'], 'cockpit-demo');
+    expect(output['session'], 1);
+    expect(stdout.toString(), isNot(contains('tasks/42')));
+    expect(stdout.toString(), isNot(contains('command')));
+  });
 }
 
 CockpitOperationResult _result(

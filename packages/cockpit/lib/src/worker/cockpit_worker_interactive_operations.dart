@@ -980,6 +980,18 @@ final class CockpitWorkerInteractiveOperations {
         ),
       ),
     );
+    if (!result.success) {
+      throw CockpitApplicationServiceException(
+        code: result.errorCode ?? 'systemActionFailed',
+        message: result.errorMessage ?? '${action.name} failed.',
+        details: <String, Object?>{
+          'action': action.name,
+          'availability': result.availability.name,
+          if (result.strategy != null) 'strategy': result.strategy,
+          'recommendedNextStep': result.recommendedNextStep,
+        },
+      );
+    }
     final json = result.toJson();
     var producedPath = preparedParameters.producedPath;
     if (result.success && capturesStdout) {

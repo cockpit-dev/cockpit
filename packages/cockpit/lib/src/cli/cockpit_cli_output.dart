@@ -1201,6 +1201,7 @@ Object? _compactDevState(
       if (state['includeNetworkIdle'] == true) 'network': true,
       if (more) ..._pick(state, const <String>['durationMs']),
     },
+    'open' => _compactDevOpen(state, more: more),
     'viewport' => <String, Object?>{
       ..._pick(state, const <String>['available', 'reason', 'alternatives']),
       if (more)
@@ -1224,6 +1225,24 @@ Object? _compactDevState(
               'reused',
               'platform',
             ]),
+  };
+}
+
+Map<String, Object?> _compactDevOpen(
+  Map<Object?, Object?> state, {
+  required bool more,
+}) {
+  final system = state['system'];
+  return <String, Object?>{
+    ..._pick(state, const <String>['scheme']),
+    if (more && system is Map<Object?, Object?>)
+      ..._pick(system, const <String>[
+        'availability',
+        'strategy',
+        'requires',
+        'limitations',
+        'recommendedNextStep',
+      ]),
   };
 }
 

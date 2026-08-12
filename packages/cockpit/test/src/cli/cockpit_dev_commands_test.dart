@@ -56,6 +56,7 @@ void main() {
         'press',
         'back',
         'dismiss',
+        'open',
         'scroll',
         'wait',
         'screenshot',
@@ -79,6 +80,10 @@ void main() {
     expect(
       dev.subcommands['viewport']!.invocation,
       'cockpit dev viewport WIDTHxHEIGHT [arguments]',
+    );
+    expect(
+      dev.subcommands['open']!.invocation,
+      'cockpit dev open URI [arguments]',
     );
     expect(
       dev.subcommands['status']!.description,
@@ -128,6 +133,10 @@ void main() {
     expect(
       dev.subcommands['wait']!.argParser.options['timeout']!.defaultsTo,
       '30s',
+    );
+    expect(
+      dev.subcommands['open']!.argParser.options['timeout']!.defaultsTo,
+      '1m',
     );
     expect(
       dev.subcommands['screenshot']!.argParser.options.keys,
@@ -250,6 +259,29 @@ void main() {
     expect(exitCode, cockpitDataExitCode);
     final error = jsonDecode(stderr.toString()) as Map<String, Object?>;
     expect((error['error']! as Map<String, Object?>)['code'], 'invalidInput');
+  });
+
+  test('dev open rejects a relative URI before resolving a session', () async {
+    final stderr = StringBuffer();
+    final runner = CockpitCommandRunner(
+      runtime: CockpitCliRuntime(
+        stdoutSink: StringBuffer(),
+        stderrSink: stderr,
+      ),
+    );
+
+    final exitCode = await runner.run(const <String>[
+      'dev',
+      'open',
+      '/tasks/42',
+      '--format',
+      'json',
+    ]);
+
+    expect(exitCode, cockpitDataExitCode);
+    final error = jsonDecode(stderr.toString()) as Map<String, Object?>;
+    expect((error['error']! as Map<String, Object?>)['code'], 'invalidInput');
+    expect(stderr.toString(), contains('include a scheme'));
   });
 
   test('dev network rejects body retrieval without a request ID', () async {
