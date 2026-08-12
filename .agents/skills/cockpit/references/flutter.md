@@ -138,21 +138,22 @@ Target conditions are conjunctive. Keep the common command short, then add
 only the condition needed to resolve ambiguity:
 
 ```bash
-cockpit dev tap "Save" --id save-button
-cockpit dev tap "Save" --type TextButton --within Dialog
-cockpit dev type "Ada" --into "Name" --key profile-name
+cockpit dev tap '#save-button'
+cockpit dev tap 'Dialog >> TextButton["Save"]'
+cockpit dev type "Ada" --into '@profile-name'
 ```
 
 Execute a routine exact-text action without inspecting first. If it is
 ambiguous, run `cockpit dev inspect "Save"` once. It searches mounted Flutter
-Element targets without requiring Semantics labels and returns `loc` (the shortest
-stable conditions) and `can` (known actions). Use all fields in `loc`; `text` is
-positional and the rest map to their same-named flags. Do not use registration IDs.
+Element targets without requiring Semantics labels and returns `sel` (the shortest
+stable selector) and `can` (known actions). Copy `sel` exactly; do not use
+registration IDs.
 
-Available narrowing conditions are `--id`, `--key`, `--type`, `--tip`,
-`--route`, `--path`, ancestor widget type `--within`, and 0-based `--index`.
-Exact matching is the default; `--contains` and `--fuzzy` apply only when
-explicitly requested. Conditions never silently choose between equal candidates.
+Selectors are conjunctive: `#id`, `@key`, `Type["text"]`, named filters such as
+`[tip="Save"][route="/edit"]`, and ancestor chains such as
+`Dialog >> TextButton["Continue"]`. `[*="text"]` and `[~="text"]` opt into
+contains and fuzzy matching. `:nth(2)` is 1-based and only for stable ordered
+items. Equal candidates remain ambiguous.
 
 Use the tree only when target inspection is insufficient:
 
@@ -162,9 +163,10 @@ cockpit dev tree --view more
 cockpit dev tree --view full
 ```
 
-The default returns actionable/content nodes and public ancestry. `more` returns
-the mounted public Widget structure. `full` returns every mounted Element,
-including offstage/private nodes, and writes it to a verified artifact path.
+The default returns a compact actionable selector index. `more` writes the mounted
+public Widget structure to a verified artifact path. `full` writes every mounted
+Element, including offstage/private nodes. Structural tree stdout contains only the
+path.
 Semantics is supplementary; direct Widget text remains discoverable even below
 `ExcludeSemantics`.
 

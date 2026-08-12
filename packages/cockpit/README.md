@@ -85,11 +85,11 @@ or secret store, and `--env` values are process-only.
 
 Flutter inspection walks mounted Elements and RenderObjects without requiring
 developer-authored `Semantics`. Use `dev inspect QUERY` for a bounded search;
-use `dev tree`, `dev tree --view more`, or
-`dev tree --view full` only when structural context is necessary. Full
-trees are always written to an artifact, and stdout returns only its verified
-path. Actions accept `--path`; prefer IDs, exact text, keys, and types first,
-then copy `loc` from inspection when those signals remain ambiguous.
+it returns a directly executable `sel`, for example `#save` or
+`Dialog >> FilledButton["Continue"]`. Conditions intersect, and ambiguous targets
+fail instead of guessing. `dev tree` returns a compact selector index; use
+`dev tree --view more` or `dev tree --view full` only for structural context.
+Both structural views write the tree to an artifact and print only its verified path.
 
 ## Interactive Workspaces
 

@@ -374,6 +374,15 @@ final class CockpitRemoteSessionEndpointHandler {
     }
 
     final json = <String, Object?>{};
+    final query = queryParameters['query'];
+    if (query != null) {
+      if (query.trim().isEmpty || query.length > 512) {
+        throw const FormatException(
+          'Query parameter "query" must be a non-empty string of at most 512 characters.',
+        );
+      }
+      json['query'] = query;
+    }
     final profile = queryParameters['profile'];
     if (profile != null && profile.isNotEmpty) {
       _validateSnapshotProfileQueryValue(profile);
@@ -426,7 +435,6 @@ final class CockpitRemoteSessionEndpointHandler {
     for (final key in <String>[
       'includeStyleDetails',
       'includeDiagnosticProperties',
-      'emitArtifactWhenLarge',
       'includeRebuildActivity',
       'includeAccessibilitySummary',
       'includeNetworkActivity',
@@ -439,6 +447,11 @@ final class CockpitRemoteSessionEndpointHandler {
         continue;
       }
       json[key] = _parseQueryBool(key, rawValue);
+    }
+
+    final artifact = queryParameters['artifact'];
+    if (artifact != null && artifact.isNotEmpty) {
+      json['artifact'] = artifact;
     }
 
     final networkQuery = <String, Object?>{};
@@ -670,7 +683,8 @@ final class CockpitRemoteSessionEndpointHandler {
     final treeArtifact = options.tree != null && snapshot.tree != null;
     final forceTreeArtifact =
         treeArtifact && options.tree?.profile == CockpitWidgetTreeProfile.full;
-    if (!options.emitArtifactWhenLarge && !forceTreeArtifact) {
+    if (options.artifact == CockpitSnapshotArtifactMode.inline &&
+        !forceTreeArtifact) {
       return CockpitRemoteSnapshotResponse(snapshot: snapshot);
     }
     final artifactBytes = utf8.encode(
@@ -680,7 +694,9 @@ final class CockpitRemoteSessionEndpointHandler {
         ),
       ),
     );
-    if (!forceTreeArtifact && artifactBytes.length <= 16384) {
+    if (options.artifact != CockpitSnapshotArtifactMode.always &&
+        !forceTreeArtifact &&
+        artifactBytes.length <= 16384) {
       return CockpitRemoteSnapshotResponse(snapshot: snapshot);
     }
 
@@ -697,19 +713,11 @@ final class CockpitRemoteSessionEndpointHandler {
                 relativePath:
                     'diagnostics/${cockpitSortableTimestampToken(DateTime.now())}_remote_snapshot.json',
               );
-    try {
-      _downloadableArtifacts[artifactRef.relativePath] =
-          await _persistArtifactBytes(
-            cockpitSanitizeRemoteArtifactBasename(artifactRef.relativePath),
-            artifactBytes,
-          );
-    } on Object {
-      // Preserve ordinary diagnostics reads when an unexpected persistence
-      // failure occurs. Full tree requests never reach this fallback because
-      // _persistArtifactBytes retains an in-memory download when files are
-      // unavailable.
-      return CockpitRemoteSnapshotResponse(snapshot: snapshot);
-    }
+    _downloadableArtifacts[artifactRef.relativePath] =
+        await _persistArtifactBytes(
+          cockpitSanitizeRemoteArtifactBasename(artifactRef.relativePath),
+          artifactBytes,
+        );
 
     return CockpitRemoteSnapshotResponse(
       snapshot: _summarizedSnapshot(snapshot).copyWith(

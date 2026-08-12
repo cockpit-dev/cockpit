@@ -197,7 +197,9 @@ void main() {
 
       final status = await client.readStatus();
       final snapshot = await client.readSnapshot(
-        options: const CockpitSnapshotOptions.investigate(),
+        options: const CockpitSnapshotOptions.investigate().copyWith(
+          query: 'Documents',
+        ),
       );
       final execution = await client.executeDetailed(
         CockpitCommand(
@@ -222,6 +224,7 @@ void main() {
         snapshotRequestUri?.queryParameters['profile'],
         CockpitSnapshotProfile.investigate.jsonValue,
       );
+      expect(snapshotRequestUri?.queryParameters['query'], 'Documents');
       expect(
         snapshotRequestUri?.queryParameters['includeNetworkActivity'],
         'true',

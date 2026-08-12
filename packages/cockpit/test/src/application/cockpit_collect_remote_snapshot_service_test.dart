@@ -60,10 +60,13 @@ void main() {
 
       expect(capturedBaseUri, handle.baseUri);
       expect(capturedOptions?.profile, CockpitSnapshotProfile.forensic);
-      expect(capturedOptions?.emitArtifactWhenLarge, isTrue);
+      expect(capturedOptions?.artifact, CockpitSnapshotArtifactMode.large);
       expect(result.snapshot.routeName, '/inbox');
       expect(result.effectiveOptions.profile, CockpitSnapshotProfile.forensic);
-      expect(result.effectiveOptions.emitArtifactWhenLarge, isTrue);
+      expect(
+        result.effectiveOptions.artifact,
+        CockpitSnapshotArtifactMode.large,
+      );
       expect(result.sessionHandle?.toJson(), handle.toJson());
       expect(result.warnings, isEmpty);
     },

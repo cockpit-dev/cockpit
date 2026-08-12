@@ -66,6 +66,93 @@ void main() {
     },
   );
 
+  testWidgets('deduplicating passive text does not mark snapshots partial', (
+    tester,
+  ) async {
+    final rootKey = GlobalKey<CockpitSurfaceState>();
+
+    await tester.pumpWidget(
+      Directionality(
+        textDirection: TextDirection.ltr,
+        child: CockpitSurface(
+          key: rootKey,
+          routeName: '/deduplication',
+          child: const Column(
+            children: <Widget>[Text('Repeated'), Text('Repeated')],
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final snapshot = rootKey.currentState!.snapshot(
+      options: const CockpitSnapshotOptions(
+        profile: CockpitSnapshotProfile.baseline,
+        maxTargets: 20,
+      ),
+    );
+
+    expect(snapshot.visibleTargets, hasLength(1));
+    expect(snapshot.truncated, isFalse);
+  });
+
+  testWidgets('query filters targets before applying the snapshot limit', (
+    tester,
+  ) async {
+    final rootKey = GlobalKey<CockpitSurfaceState>();
+    final registry = CockpitTargetRegistry(routeName: '/large');
+    for (var index = 0; index < 200; index += 1) {
+      registry.register(
+        CockpitTarget(
+          registrationId: 'large.noise.$index',
+          cockpitId: 'noise-$index',
+          semanticId: 'semantic-noise-$index',
+          keyValue: 'noise-key-$index',
+          text: 'Noise $index',
+          tooltip: 'Noise tooltip $index',
+          routeName: '/large',
+          supportedCommands: const <CockpitCommandType>{CockpitCommandType.tap},
+        ),
+      );
+    }
+    registry.register(
+      const CockpitTarget(
+        registrationId: 'large.save',
+        keyValue: 'save-key',
+        text: 'Save changes',
+        typeName: 'FilledButton',
+        routeName: '/large',
+        supportedCommands: <CockpitCommandType>{CockpitCommandType.tap},
+      ),
+    );
+
+    await tester.pumpWidget(
+      Directionality(
+        textDirection: TextDirection.ltr,
+        child: CockpitSurface(
+          key: rootKey,
+          routeName: '/large',
+          registry: registry,
+          child: const SizedBox.shrink(),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final snapshot = rootKey.currentState!.snapshot(
+      options: const CockpitSnapshotOptions(
+        profile: CockpitSnapshotProfile.baseline,
+        query: 'SAVE-KEY',
+        maxTargets: 1,
+      ),
+    );
+
+    expect(snapshot.visibleTargets, hasLength(1));
+    expect(snapshot.visibleTargets.single.keyValue, 'save-key');
+    expect(snapshot.truncated, isFalse);
+    expect(snapshot.summary?.visibleTargetCount, 1);
+  });
+
   testWidgets('investigate profile includes bounded diagnostic properties', (
     tester,
   ) async {

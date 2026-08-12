@@ -70,7 +70,7 @@ void main() {
     expect(dev.subcommands['tap']!.usage, contains('cockpit dev tap'));
     expect(
       dev.subcommands['tap']!.invocation,
-      'cockpit dev tap [TARGET] [arguments]',
+      'cockpit dev tap SELECTOR [arguments]',
     );
     expect(
       dev.subcommands['start']!.invocation,
@@ -90,18 +90,20 @@ void main() {
     );
     expect(
       dev.subcommands['tap']!.argParser.options.keys,
-      containsAll(<String>{
-        'id',
-        'key',
-        'type',
-        'tip',
-        'route',
-        'path',
-        'index',
-        'within',
-        'fuzzy',
-        'contains',
-      }),
+      isNot(
+        containsAll(<String>[
+          'id',
+          'key',
+          'type',
+          'tip',
+          'route',
+          'path',
+          'index',
+          'within',
+          'fuzzy',
+          'contains',
+        ]),
+      ),
     );
     expect(
       dev.subcommands['wait']!.argParser.options['quiet']!.defaultsTo,
@@ -170,7 +172,7 @@ void main() {
     expect(update.argParser.options['format']!.defaultsTo, 'lon');
   });
 
-  test('dev combines optional target conditions in one exact locator', () {
+  test('dev compiles a multi-condition selector into one exact locator', () {
     final runner = CockpitCommandRunner(
       runtime: CockpitCliRuntime(
         stdoutSink: StringBuffer(),
@@ -179,28 +181,14 @@ void main() {
     );
     final tap = runner.commands['dev']!.subcommands['tap']!;
     final arguments = tap.argParser.parse(const <String>[
-      'Save',
-      '--id',
-      'save-button',
-      '--key',
-      'save-key',
-      '--type',
-      'TextButton',
-      '--tip',
-      'Save changes',
-      '--route',
-      '/editor',
-      '--path',
-      '/editor/dialog/textbutton',
-      '--index',
-      '1',
-      '--within',
-      'Confirm',
+      'Confirm >> TextButton#save-button@save-key["Save"]'
+          '[tip="Save changes"][route="/editor"]'
+          '[path="/editor/dialog/textbutton"]:nth(2)',
     ]);
 
     final locator = cockpitReadDevLocator(
       arguments,
-      text: arguments.rest.single,
+      selector: arguments.rest.single,
     );
 
     expect(
@@ -219,7 +207,7 @@ void main() {
     );
   });
 
-  test('dev target scope and index cannot replace a target condition', () {
+  test('dev requires one target selector', () {
     final runner = CockpitCommandRunner(
       runtime: CockpitCliRuntime(
         stdoutSink: StringBuffer(),
@@ -227,20 +215,15 @@ void main() {
       ),
     );
     final tap = runner.commands['dev']!.subcommands['tap']!;
-    final arguments = tap.argParser.parse(const <String>[
-      '--within',
-      'Dialog',
-      '--index',
-      '0',
-    ]);
+    final arguments = tap.argParser.parse(const <String>[]);
 
     expect(
-      () => cockpitReadDevLocator(arguments, text: null),
+      () => cockpitReadDevLocator(arguments, selector: null),
       throwsA(
         isA<FormatException>().having(
           (error) => error.message,
           'message',
-          contains('requires at least one target condition'),
+          'Target is required.',
         ),
       ),
     );
@@ -373,13 +356,10 @@ void main() {
       expect(result['count'], 3);
       final matches = (result['matches']! as List<Object?>)
           .cast<Map<String, Object?>>();
-      expect(matches[0]['loc'], <String, Object?>{'text': 'Documents'});
-      expect(matches[0]['can'], <String>['tap']);
-      expect(matches[1]['loc'], <String, Object?>{
-        'text': 'Documents',
-        'type': 'RichText',
-      });
-      expect(matches[2]['loc'], <String, Object?>{'id': 'documents.nav'});
+      expect(matches[0]['sel'], 'Documents');
+      expect(matches[0]['can'], 'tap');
+      expect(matches[1]['sel'], 'RichText["Documents"]');
+      expect(matches[2]['sel'], '#documents.nav');
       expect(matches[2]['label'], 'Open documents');
       final encoded = jsonEncode(result);
       expect(encoded, isNot(contains('network')));
@@ -389,6 +369,137 @@ void main() {
       expect(encoded, isNot(contains('path')));
     },
   );
+
+  test('dev target index returns only compact actionable selectors', () {
+    final result = cockpitBuildDevTargetIndex(<String, Object?>{
+      'snapshot': <String, Object?>{
+        'route': '/edit',
+        'visibleTargets': <Object?>[
+          <String, Object?>{
+            'registrationId': 'internal-save',
+            'cockpitId': 'save',
+            'text': 'Save',
+            'typeName': 'FilledButton',
+            'routeName': '/edit',
+            'supportedCommands': <Object?>['tap'],
+            'ancestors': const <Object?>[],
+          },
+          <String, Object?>{
+            'registrationId': 'internal-title',
+            'keyValue': 'title',
+            'text': 'Title',
+            'typeName': 'TextField',
+            'routeName': '/edit',
+            'supportedCommands': <Object?>['enterText', 'sendKeyEvent'],
+            'ancestors': const <Object?>[],
+          },
+        ],
+        'network': <String, Object?>{
+          'entries': <Object?>[
+            <String, Object?>{'sha256': 'must-not-escape'},
+          ],
+        },
+      },
+    });
+
+    expect(result['route'], '/edit');
+    expect(result['count'], 2);
+    expect(result['targets'], <Object?>[
+      <String, Object?>{'sel': '#save', 'label': 'Save', 'can': 'tap'},
+      <String, Object?>{'sel': '@title', 'label': 'Title', 'can': 'type'},
+    ]);
+    final encoded = jsonEncode(result);
+    expect(encoded, isNot(contains('registrationId')));
+    expect(encoded, isNot(contains('sha256')));
+    expect(encoded, isNot(contains('network')));
+  });
+
+  test('dev locator search can return a semantic ID selector', () {
+    final result = cockpitBuildDevLocatorMatches(<String, Object?>{
+      'snapshot': <String, Object?>{
+        'visibleTargets': <Object?>[
+          <String, Object?>{
+            'registrationId': 'internal',
+            'semanticId': 'checkout.submit',
+            'typeName': 'GestureDetector',
+            'routeName': '/checkout',
+            'supportedCommands': <Object?>['tap', 'longPress'],
+            'ancestors': const <Object?>[],
+          },
+        ],
+      },
+    }, 'checkout.submit');
+
+    expect(result['matches'], <Object?>[
+      <String, Object?>{
+        'sel': '[sem="checkout.submit"]',
+        'label': 'checkout.submit',
+        'can': 'tap',
+      },
+    ]);
+  });
+
+  test('dev locator search prefers native keys over copied identities', () {
+    final result = cockpitBuildDevLocatorMatches(<String, Object?>{
+      'snapshot': <String, Object?>{
+        'summary': <String, Object?>{'visibleTargetCount': 1},
+        'visibleTargets': <Object?>[
+          <String, Object?>{
+            'registrationId': 'native.editor.textfield.task-title.1',
+            'cockpitId': 'task-title-field',
+            'keyValue': 'task-title-field',
+            'text': 'Task title',
+            'typeName': 'TextField',
+            'routeName': '/editor',
+            'supportedCommands': <Object?>['tap', 'enterText'],
+            'ancestors': <Object?>[],
+          },
+        ],
+      },
+    }, 'Task title');
+
+    expect(result['matches'], <Object?>[
+      <String, Object?>{
+        'sel': '@task-title-field',
+        'label': 'Task title',
+        'can': 'tap|type',
+      },
+    ]);
+  });
+
+  test('dev locator search reports partial only when matches are omitted', () {
+    Map<String, Object?> snapshot({
+      required int count,
+      bool truncated = false,
+    }) => <String, Object?>{
+      'snapshot': <String, Object?>{
+        'truncated': truncated,
+        'summary': <String, Object?>{'visibleTargetCount': count},
+        'visibleTargets': <Object?>[
+          <String, Object?>{
+            'registrationId': 'save',
+            'text': 'Save',
+            'typeName': 'TextButton',
+            'routeName': '/',
+            'supportedCommands': <Object?>['tap'],
+            'ancestors': <Object?>[],
+          },
+        ],
+      },
+    };
+
+    final complete = cockpitBuildDevLocatorMatches(
+      snapshot(count: 1, truncated: true),
+      'Save',
+    );
+    final incomplete = cockpitBuildDevLocatorMatches(
+      snapshot(count: 2),
+      'Save',
+    );
+
+    expect(complete, isNot(contains('partial')));
+    expect(incomplete['partial'], isTrue);
+  });
 
   test('dev locator search uses ancestor and deterministic index last', () {
     Map<String, Object?> target(String registrationId, double dy) =>
@@ -414,13 +525,13 @@ void main() {
         'visibleTargets': <Object?>[target('second', 80), target('first', 20)],
       },
     }, 'Continue');
-    final indexedLocators = (indexed['matches']! as List<Object?>)
+    final indexedSelectors = (indexed['matches']! as List<Object?>)
         .cast<Map<String, Object?>>()
-        .map((match) => match['loc']! as Map<String, Object?>)
+        .map((match) => match['sel']! as String)
         .toList();
     expect(
-      indexedLocators.map((loc) => loc['index']),
-      containsAll(<int>[0, 1]),
+      indexedSelectors,
+      containsAll(<String>['["Continue"]:nth(1)', '["Continue"]:nth(2)']),
     );
 
     final scoped = cockpitBuildDevLocatorMatches(<String, Object?>{
@@ -436,22 +547,12 @@ void main() {
         ],
       },
     }, 'Continue');
-    final scopedLocators = (scoped['matches']! as List<Object?>)
+    final scopedSelectors = (scoped['matches']! as List<Object?>)
         .cast<Map<String, Object?>>()
-        .map((match) => match['loc']! as Map<String, Object?>)
+        .map((match) => match['sel']! as String)
         .toList();
-    expect(
-      scopedLocators,
-      anyElement(
-        equals(<String, Object?>{'text': 'Continue', 'within': 'Dialog'}),
-      ),
-    );
-    expect(
-      scopedLocators,
-      anyElement(
-        equals(<String, Object?>{'text': 'Continue', 'within': 'Sidebar'}),
-      ),
-    );
+    expect(scopedSelectors, contains('Dialog >> Continue'));
+    expect(scopedSelectors, contains('Sidebar >> Continue'));
   });
 
   test('dev locator search uses exact text parts from composite controls', () {
@@ -473,10 +574,7 @@ void main() {
 
     expect(result['count'], 1);
     expect(result['matches'], <Object?>[
-      <String, Object?>{
-        'loc': <String, Object?>{'text': '/inspect'},
-        'can': <String>['tap'],
-      },
+      <String, Object?>{'sel': '/inspect', 'can': 'tap'},
     ]);
   });
 
@@ -499,18 +597,12 @@ void main() {
         ],
       },
     }, 'save');
-    final locators = (result['matches']! as List<Object?>)
+    final selectors = (result['matches']! as List<Object?>)
         .cast<Map<String, Object?>>()
-        .map((match) => match['loc'])
+        .map((match) => match['sel'])
         .toList(growable: false);
 
-    expect(
-      locators,
-      containsAll(<Map<String, Object?>>[
-        <String, Object?>{'text': 'Save'},
-        <String, Object?>{'text': 'save'},
-      ]),
-    );
+    expect(selectors, containsAll(<String>['Save', 'save']));
   });
 
   test('dev locator search does not recall every target from its route', () {
@@ -539,9 +631,7 @@ void main() {
 
     expect(result['count'], 1);
     expect(result['matches'], <Object?>[
-      <String, Object?>{
-        'loc': <String, Object?>{'text': 'Inbox'},
-      },
+      <String, Object?>{'sel': 'Inbox'},
     ]);
   });
 
@@ -571,8 +661,8 @@ void main() {
 
     expect(matches, everyElement(containsPair('ambiguous', true)));
     expect(
-      matches.map((match) => match['loc']! as Map<String, Object?>),
-      everyElement(isNot(contains('index'))),
+      matches.map((match) => match['sel']! as String),
+      everyElement(isNot(contains(':nth('))),
     );
   });
 
@@ -598,22 +688,16 @@ void main() {
           ],
         },
       }, 'Continue');
-      final locators = (result['matches']! as List<Object?>)
+      final selectors = (result['matches']! as List<Object?>)
           .cast<Map<String, Object?>>()
-          .map((match) => match['loc']! as Map<String, Object?>)
+          .map((match) => match['sel']! as String)
           .toList(growable: false);
 
       expect(
-        locators,
-        containsAll(<Map<String, Object?>>[
-          <String, Object?>{
-            'text': 'Continue',
-            'path': '/scaffold/sidebar/textbutton',
-          },
-          <String, Object?>{
-            'text': 'Continue',
-            'path': '/scaffold/dialog/textbutton',
-          },
+        selectors,
+        containsAll(<String>[
+          '["Continue"][path="/scaffold/sidebar/textbutton"]',
+          '["Continue"][path="/scaffold/dialog/textbutton"]',
         ]),
       );
     },

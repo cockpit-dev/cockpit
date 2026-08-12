@@ -1,5 +1,19 @@
 # Changelog
 
+## 4.0.2
+
+- Replaced legacy locator flags with one compact selector accepted directly by
+  Flutter development actions.
+- Made `dev inspect QUERY` push bounded search into Flutter before target
+  limits, return concise reusable selectors, and report partial only when
+  matching targets are actually omitted.
+- Preferred stable Flutter keys over duplicated native discovery identities in
+  locator advice while preserving explicit Cockpit IDs.
+- Made `dev tree --view more|full` write complete structure to a verified
+  artifact and print only its path.
+- Expanded the distributed Cockpit skill with the canonical selector,
+  unexpected-state recovery, and AI-first Flutter workflow guidance.
+
 ## 4.0.1
 
 - Added direct execution of validated local case and suite documents through

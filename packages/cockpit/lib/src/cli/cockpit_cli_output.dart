@@ -1237,6 +1237,11 @@ Map<String, Object?> _compactDevTree(
   return <String, Object?>{
     ..._pick(state, const <String>[
       'profile',
+      'route',
+      'count',
+      'targets',
+      'more',
+      'partial',
       'total',
       'visible',
       'emitted',
@@ -1388,11 +1393,13 @@ Map<String, Object?> _compactDevInspect(
     return more
         ? Map<String, Object?>.from(state)
         : _pick(state, const <String>[
-            'routeName',
-            'diagnosticLevel',
-            'truncated',
+            'route',
+            'query',
+            'count',
+            'targets',
             'matches',
-            'items',
+            'more',
+            'partial',
           ]);
   }
   final runtimeErrorCount = summary['runtimeErrorCount'];

@@ -13,8 +13,8 @@ CockpitLeafCommand cockpitDevTapCommand(
   runtime: runtime,
   name: 'tap',
   description: 'Tap one exact mounted Flutter target.',
-  invocationSuffix: '[TARGET] [arguments]',
-  example: 'cockpit dev tap "Documents"',
+  invocationSuffix: 'SELECTOR [arguments]',
+  example: 'cockpit dev tap \'Dialog >> FilledButton["Continue"]\'',
   configure: _targetOptions,
   action: (arguments) => _targetAction(
     runtime,
@@ -35,7 +35,7 @@ CockpitLeafCommand cockpitDevTypeCommand(
   invocationSuffix: 'TEXT [arguments]',
   example: 'cockpit dev type "hello" --into "Message"',
   configure: (parser) {
-    parser.addOption('into', help: 'Exact text of the input target.');
+    parser.addOption('into', help: 'Target selector.');
     _targetOptions(parser);
   },
   action: (arguments) async {
@@ -51,7 +51,7 @@ CockpitLeafCommand cockpitDevTypeCommand(
         timeout: runtime.operationTimeout,
         locator: cockpitReadDevLocator(
           arguments,
-          text: target,
+          selector: target,
           targetRequired: false,
         ),
         parameters: <String, Object?>{'text': arguments.rest.single},
@@ -138,7 +138,7 @@ CockpitLeafCommand cockpitDevScrollCommand(
   runtime: runtime,
   name: 'scroll',
   description: 'Find, fully reveal, and align one mounted Flutter target.',
-  invocationSuffix: '[TARGET] [arguments]',
+  invocationSuffix: 'SELECTOR [arguments]',
   example: 'cockpit dev scroll "Operations" --align center --offset 12',
   configure: (parser) {
     _targetOptions(parser);
@@ -241,7 +241,7 @@ Future<int> _targetAction(
     command: dev.command(
       type: type,
       timeout: runtime.operationTimeout,
-      locator: cockpitReadDevLocator(arguments, text: text),
+      locator: cockpitReadDevLocator(arguments, selector: text),
       parameters: parameters,
     ),
   );
@@ -249,100 +249,19 @@ Future<int> _targetAction(
 
 CockpitLocator? cockpitReadDevLocator(
   ArgResults arguments, {
-  required String? text,
+  required String? selector,
   bool targetRequired = true,
 }) {
-  final fuzzy = arguments.flag('fuzzy');
-  final contains = arguments.flag('contains');
-  if (fuzzy && contains) {
-    throw const FormatException('Use only one of --fuzzy and --contains.');
-  }
-  final id = _option(arguments, 'id');
-  final key = _option(arguments, 'key');
-  final type = _option(arguments, 'type');
-  final tip = _option(arguments, 'tip');
-  final route = _option(arguments, 'route');
-  final path = _option(arguments, 'path');
-  final within = _option(arguments, 'within');
-  final index = _optionalIndex(arguments);
-  if ((fuzzy || contains) && text == null && tip == null) {
-    throw const FormatException(
-      '--fuzzy/--contains requires target text or --tip.',
-    );
-  }
-  final locator = CockpitLocator(
-    cockpitId: id,
-    key: key,
-    text: text,
-    tooltip: tip,
-    type: type,
-    route: route,
-    path: path,
-    matchMode: fuzzy
-        ? CockpitTextMatchMode.fuzzy
-        : contains
-        ? CockpitTextMatchMode.contains
-        : CockpitTextMatchMode.exact,
-    index: index,
-    ancestor: within == null ? null : CockpitLocator(type: within),
-  );
-  if (locator.signals.isEmpty) {
-    if (within != null || index != null) {
-      throw const FormatException(
-        '--within/--index requires at least one target condition.',
-      );
-    }
-    if (targetRequired) {
-      throw const FormatException(
-        'Target text or one of --id/--key/--type/--tip/--route/--path is required.',
-      );
-    }
+  final normalized = selector?.trim();
+  if (normalized == null || normalized.isEmpty) {
+    if (targetRequired) throw const FormatException('Target is required.');
     return null;
   }
-  return locator;
+  return CockpitSelector.parse(normalized);
 }
 
 void _targetOptions(ArgParser parser) {
   cockpitAddDevSessionOption(parser);
-  parser
-    ..addOption('id', help: 'Require this Cockpit ID.')
-    ..addOption('key', help: 'Require this Flutter key.')
-    ..addOption('type', help: 'Require this Flutter widget type.')
-    ..addOption('tip', help: 'Require this tooltip.')
-    ..addOption('route', help: 'Require this route.')
-    ..addOption('path', help: 'Require this Flutter locator path.')
-    ..addOption('index', help: 'Select a 0-based match after filtering.')
-    ..addOption('within', help: 'Require this ancestor widget type.')
-    ..addFlag(
-      'fuzzy',
-      negatable: false,
-      help: 'Use typo-tolerant text and tooltip matching.',
-    )
-    ..addFlag(
-      'contains',
-      negatable: false,
-      help: 'Use substring text and tooltip matching.',
-    );
-}
-
-String? _option(ArgResults arguments, String name) {
-  final value = arguments.option(name);
-  if (value == null) return null;
-  final normalized = value.trim();
-  if (normalized.isEmpty) {
-    throw FormatException('--$name cannot be empty.');
-  }
-  return normalized;
-}
-
-int? _optionalIndex(ArgResults arguments) {
-  final raw = arguments.option('index');
-  if (raw == null) return null;
-  final index = int.tryParse(raw);
-  if (index == null || index < 0) {
-    throw const FormatException('--index must be a non-negative integer.');
-  }
-  return index;
 }
 
 int _integer(ArgResults arguments, String name) {

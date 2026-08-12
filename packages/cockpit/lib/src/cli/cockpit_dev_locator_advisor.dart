@@ -1,3 +1,5 @@
+import 'package:cockpit_protocol/cockpit_protocol.dart';
+
 Map<String, Object?> cockpitBuildDevLocatorMatches(
   Map<String, Object?> output,
   String query, {
@@ -26,6 +28,7 @@ Map<String, Object?> cockpitBuildDevLocatorMatches(
           .toList(growable: false)
         ..sort((left, right) => left.compareForQuery(right, normalizedQuery));
   final visibleMatches = matches.take(limit).toList(growable: false);
+  final queryTargetCount = _snapshotTargetCount(snapshot);
 
   return <String, Object?>{
     'query': query.trim(),
@@ -35,6 +38,51 @@ Map<String, Object?> cockpitBuildDevLocatorMatches(
         .toList(growable: false),
     if (matches.length > visibleMatches.length)
       'more': matches.length - visibleMatches.length,
+    if (queryTargetCount != null && queryTargetCount > targets.length)
+      'partial': true,
+  };
+}
+
+int? _snapshotTargetCount(Map<Object?, Object?> snapshot) {
+  final summary = snapshot['summary'];
+  if (summary is! Map<Object?, Object?>) return null;
+  return switch (summary['visibleTargetCount'] ?? summary['visible']) {
+    final int value => value,
+    _ => null,
+  };
+}
+
+Map<String, Object?> cockpitBuildDevTargetIndex(
+  Map<String, Object?> output, {
+  int limit = 12,
+}) {
+  final snapshot = output['snapshot'];
+  if (snapshot is! Map<Object?, Object?>) {
+    throw StateError('ui.inspect locate output did not contain a snapshot.');
+  }
+  final values = snapshot['visibleTargets'];
+  if (values is! List<Object?>) {
+    throw StateError('ui.inspect locate output did not contain UI targets.');
+  }
+  final targets = values
+      .whereType<Map<Object?, Object?>>()
+      .map(_DevTarget.new)
+      .where((target) => target.hasUsefulSignal)
+      .toList(growable: false);
+  final ranked = List<_DevTarget>.of(targets)..sort(_compareForOverview);
+  final visible = ranked.take(limit).toList(growable: false);
+  final route =
+      _value(snapshot['route'] as String?) ??
+      _value(output['route'] as String?) ??
+      visible.map((target) => _value(target.route)).nonNulls.firstOrNull;
+  return <String, Object?>{
+    'route': ?route,
+    'count': targets.length,
+    'targets': visible
+        .map((target) => target.result(targets, target.searchSeed))
+        .toList(growable: false),
+    if (targets.length > visible.length)
+      'more': targets.length - visible.length,
     if (snapshot['truncated'] == true || output['truncated'] == true)
       'partial': true,
   };
@@ -80,10 +128,22 @@ final class _DevTarget {
   final List<String> within;
   final _Layout? layout;
 
+  bool get hasUsefulSignal =>
+      can.isNotEmpty ||
+      <String?>[
+        cockpitId,
+        key,
+        text,
+        tip,
+      ].any((value) => _value(value) != null);
+
+  String get searchSeed => _searchText(label) ?? '';
+
   String? get label =>
       _value(text) ??
       _value(tip) ??
       _value(cockpitId) ??
+      _value(semanticId) ??
       _value(key) ??
       _value(type);
 
@@ -96,15 +156,21 @@ final class _DevTarget {
       _value(type);
 
   List<_Signal> signalsFor(String query) => <_Signal>[
-    if (_value(cockpitId) case final value?) _Signal('id', value),
+    if (!_hasSyntheticCockpitId)
+      if (_value(cockpitId) case final value?) _Signal('id', value),
     if (_value(key) case final value?) _Signal('key', value),
     if (_value(_textFor(query)) case final value?) _Signal('text', value),
     if (_value(tip) case final value?)
       if (_exactText(value) != _exactText(text)) _Signal('tip', value),
+    if (_value(semanticId) case final value?) _Signal('sem', value),
     if (_value(type) case final value?) _Signal('type', value),
     if (_value(route) case final value?) _Signal('route', value),
     if (_value(path) case final value?) _Signal('path', value),
   ];
+
+  bool get _hasSyntheticCockpitId =>
+      registrationId.startsWith('native.') &&
+      (cockpitId == key || cockpitId == semanticId);
 
   bool matchesQuery(String query) => <String?>[
     text,
@@ -156,10 +222,11 @@ final class _DevTarget {
 
   Map<String, Object?> result(List<_DevTarget> targets, String query) {
     final advice = _advise(this, targets, query);
+    final actions = _compactActions(can);
     return <String, Object?>{
-      'loc': advice.loc,
+      'sel': CockpitSelector.format(_locator(advice.loc)),
       if (!advice.loc.containsKey('text') && label != null) 'label': label,
-      if (can.isNotEmpty) 'can': can,
+      'can': ?actions,
       if (advice.ambiguous) 'ambiguous': true,
     };
   }
@@ -211,7 +278,7 @@ _Advice _advise(_DevTarget target, List<_DevTarget> targets, String query) {
   final signals = target.signalsFor(query);
   final hasPrimarySignal = signals.any(
     (signal) =>
-        const <String>{'id', 'key', 'text', 'tip'}.contains(signal.name),
+        const <String>{'id', 'sem', 'key', 'text', 'tip'}.contains(signal.name),
   );
   for (var size = 1; size <= signals.length; size += 1) {
     for (final combination in _combinations(signals, size)) {
@@ -219,6 +286,7 @@ _Advice _advise(_DevTarget target, List<_DevTarget> targets, String query) {
           !combination.any(
             (signal) => const <String>{
               'id',
+              'sem',
               'key',
               'text',
               'tip',
@@ -318,6 +386,7 @@ bool _matches(_DevTarget target, Map<String, Object?> loc) {
     if (expected is! String) continue;
     final matched = switch (entry.key) {
       'id' => target.cockpitId == expected,
+      'sem' => target.semanticId == expected,
       'key' => target.key == expected,
       'text' => <String?>[
         target.text,
@@ -426,3 +495,62 @@ String? _searchText(String? value) => _exactText(value)?.toLowerCase();
 
 String? _type(String? value) =>
     _searchText(value)?.replaceAll(RegExp(r'[^a-z0-9]+'), '');
+
+int _compareForOverview(_DevTarget left, _DevTarget right) {
+  var compared = right.can.isNotEmpty == left.can.isNotEmpty
+      ? 0
+      : right.can.isNotEmpty
+      ? 1
+      : -1;
+  if (compared != 0) return compared;
+  compared = _overviewRank(right).compareTo(_overviewRank(left));
+  if (compared != 0) return compared;
+  final leftLayout = left.layout;
+  final rightLayout = right.layout;
+  if (leftLayout != null && rightLayout != null) {
+    compared = leftLayout.dy.compareTo(rightLayout.dy);
+    if (compared != 0) return compared;
+    compared = leftLayout.dx.compareTo(rightLayout.dx);
+    if (compared != 0) return compared;
+  }
+  return (left.label ?? '').compareTo(right.label ?? '');
+}
+
+int _overviewRank(_DevTarget target) {
+  var rank = 0;
+  if (_value(target.cockpitId) != null) rank += 80;
+  if (_value(target.key) != null) rank += 60;
+  if (_value(target.text) != null) rank += 40;
+  if (_value(target.tip) != null) rank += 20;
+  return rank;
+}
+
+CockpitLocator _locator(Map<String, Object?> loc) => CockpitLocator(
+  cockpitId: loc['id'] as String?,
+  semanticId: loc['sem'] as String?,
+  key: loc['key'] as String?,
+  text: loc['text'] as String?,
+  tooltip: loc['tip'] as String?,
+  type: loc['type'] as String?,
+  route: loc['route'] as String?,
+  path: loc['path'] as String?,
+  index: loc['index'] as int?,
+  ancestor: loc['within'] is String
+      ? CockpitLocator(type: loc['within']! as String)
+      : null,
+);
+
+String? _compactActions(List<String> actions) {
+  final compact = <String>[];
+  for (final action in actions) {
+    final value = switch (action) {
+      'tap' => 'tap',
+      'enterText' || 'setTextEditingValue' || 'focusTextInput' => 'type',
+      'scrollUntilVisible' || 'showOnScreen' => 'scroll',
+      _ => null,
+    };
+    if (value == null) continue;
+    if (!compact.contains(value)) compact.add(value);
+  }
+  return compact.isEmpty ? null : compact.join('|');
+}

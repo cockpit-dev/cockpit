@@ -236,24 +236,37 @@ retrying because the mutation may already have committed.
 Execute exact text or a stable locator directly. Do not add a pre-inspect round trip.
 For ambiguity or exploration, run the smallest `dev inspect QUERY`. It
 searches mounted Flutter Element targets, independent of developer-authored
-Semantics, and returns `loc` with the shortest stable conditions plus known `can`.
-Semantics remains one optional signal and action fallback. Locator fields map to the
-actual command options: `--id`, `--key`, `--type`, `--tip`, `--route`, `--path`,
-`--within`, and `--index`.
-Icon-only controls expose readable tooltips.
-`--contains` and `--fuzzy` relax text/tooltip matching; conditions
-intersect and equal matches fail. Lazy lists expose only visible rows; filter or
-`dev scroll` first.
+Semantics, and returns the shortest stable `sel` plus compact known `can` actions.
+Copy `sel` exactly into `tap`, `type --into`, or `scroll`; every selector condition
+intersects and equal matches fail instead of guessing. Semantics remains one optional
+signal and action fallback. Icon-only controls expose readable tooltips. Lazy lists
+expose only mounted rows; pass an off-screen target directly to `dev scroll`, which
+owns mounting and reveal.
 
-`inspect` accepts one discovery query, not locator flags. Copy its returned `loc`
-fields into the action command. An off-screen lazy target may have no inspect match;
-pass that target directly to `dev scroll`, which owns mounting and reveal.
+Selector quick reference:
+
+| Need | Selector |
+| --- | --- |
+| Exact text | `Save` |
+| Cockpit ID | `#save` |
+| Flutter Key | `@save-key` |
+| Type + text | `FilledButton["Save"]` |
+| Multiple conditions | `#save[type="FilledButton"][route="/edit"]` |
+| Ancestor scope | `Dialog >> FilledButton["Continue"]` |
+| Contains / fuzzy text | `[*="Save"]` / `[~="Svae"]` |
+| Contains / fuzzy tooltip | `[tip*="Save"]` / `[tip~="Svae"]` |
+| Stable ordered item, last resort | `Button["Item"]:nth(2)` |
+
+Selector string values use JSON quoting and `:nth()` is 1-based. Plain positional
+text is exact. Prefer `#id`, exact text, `@key`, type/ancestor, route, then path;
+use `:nth()` only for a real ordered list. Do not invent selector syntax: use the
+table or copy `sel` from `inspect`.
 
 ```bash
 cockpit dev inspect "Save changes"
-cockpit dev tap --id save-button
-cockpit dev tap "Save" --within FilledButton
-cockpit dev type "hello" --into "Message" --contains
+cockpit dev tap '#save-button'
+cockpit dev tap 'Dialog >> FilledButton["Save"]'
+cockpit dev type "hello" --into '@message'
 cockpit dev scroll "Operations"
 ```
 
@@ -265,28 +278,23 @@ cockpit dev tree --view more
 cockpit dev tree --view full
 ```
 
-The default tree contains actionable/content nodes plus their public ancestors.
-`more` includes the mounted public Widget structure. `full` includes every
-mounted Element, including private framework nodes and offstage content, with
+The default tree is a compact actionable target index with reusable `sel`, not a
+partial raw tree. `more` writes the mounted public Widget structure to an artifact;
+`full` writes every mounted Element, including private/offstage nodes, with
 Widget/Element/State/Render types, geometry, scroll ancestry, and bounded diagnostic
-properties. A full tree is always written to an artifact; stdout reports only its
-verified absolute path. A large `more` tree may also become a path automatically.
-Copy `loc` into `--path` only when simpler stable signals cannot disambiguate.
+properties. Both structural views print only the verified absolute artifact path.
 
 `dev scroll TARGET` uses exact matching by default and automatically ranks visible
 scroll containers. Lazy targets are searched with independent forward and reverse
 budgets; once mounted, every scrollable ancestor is revealed from inner to outer and
-the target must be fully visible through all ancestor viewports. Add `--contains` only
+the target must be fully visible through all ancestor viewports. Use `[*="text"]` only
 when exact text is insufficient. Use `--align start|center|end` only for deliberate
 placement; `--offset PX` moves the target toward the viewport end for positive values
 and toward the start for negative values. Omit `--align nearest`, zero offset, direction,
 and default budgets.
 
-Prefer stable conditions in this order: `--id`, exact text/label, `--key`, a widget
-`--type` or ancestor `--within`, then route and `--path`. Use `--index` last and only
-for a real ordered list. Copy every returned `loc` condition: combining conditions
-narrows the match; it does not create fallbacks. Re-inspect after list reorder,
-filtering, navigation, dialogs, sheets, or keyboard transitions. `type VALUE --into
+Re-inspect after list reorder, filtering, navigation, dialogs, sheets, or keyboard
+transitions. `type VALUE --into
 TARGET` replaces the field value; use `press enter` for a separate IME/key action.
 
 `dev wait` is UI-only by default; add `--network` only for request-dependent

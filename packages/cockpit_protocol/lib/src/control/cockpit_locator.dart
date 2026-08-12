@@ -61,15 +61,29 @@ double cockpitFuzzyTextSimilarity(String actual, String expected) {
 
   final actualRunes = normalizedActual.runes.toList(growable: false);
   final expectedRunes = normalizedExpected.runes.toList(growable: false);
+  final fullSimilarity = _fuzzyRuneSimilarity(actualRunes, expectedRunes);
+  if (expectedRunes.length < 5 || actualRunes.length <= expectedRunes.length) {
+    return fullSimilarity;
+  }
+  final substringDistance = _fuzzySubstringDistance(actualRunes, expectedRunes);
+  final substringSimilarity = (1 - (substringDistance / expectedRunes.length))
+      .clamp(0, 1)
+      .toDouble();
+  return substringSimilarity > fullSimilarity
+      ? substringSimilarity
+      : fullSimilarity;
+}
+
+double _fuzzyRuneSimilarity(List<int> actualRunes, List<int> expectedRunes) {
   final shorterLength = actualRunes.length < expectedRunes.length
       ? actualRunes.length
       : expectedRunes.length;
   final longerLength = actualRunes.length > expectedRunes.length
       ? actualRunes.length
       : expectedRunes.length;
-  final contains =
-      normalizedActual.contains(normalizedExpected) ||
-      normalizedExpected.contains(normalizedActual);
+  final actual = String.fromCharCodes(actualRunes);
+  final expected = String.fromCharCodes(expectedRunes);
+  final contains = actual.contains(expected) || expected.contains(actual);
   if (contains) {
     return 0.80 + (0.19 * shorterLength / longerLength);
   }
@@ -112,6 +126,39 @@ int _damerauLevenshteinDistance(List<int> left, List<int> right) {
     }
   }
   return rows[left.length][right.length];
+}
+
+int _fuzzySubstringDistance(List<int> actual, List<int> expected) {
+  var previous = List<int>.filled(actual.length + 1, 0);
+  var beforePrevious = previous;
+  for (
+    var expectedIndex = 1;
+    expectedIndex <= expected.length;
+    expectedIndex += 1
+  ) {
+    final current = List<int>.filled(actual.length + 1, 0);
+    current[0] = expectedIndex;
+    for (var actualIndex = 1; actualIndex <= actual.length; actualIndex += 1) {
+      final substitutionCost =
+          expected[expectedIndex - 1] == actual[actualIndex - 1] ? 0 : 1;
+      var distance = <int>[
+        previous[actualIndex] + 1,
+        current[actualIndex - 1] + 1,
+        previous[actualIndex - 1] + substitutionCost,
+      ].reduce((minimum, value) => value < minimum ? value : minimum);
+      if (expectedIndex > 1 &&
+          actualIndex > 1 &&
+          expected[expectedIndex - 1] == actual[actualIndex - 2] &&
+          expected[expectedIndex - 2] == actual[actualIndex - 1]) {
+        final transposed = beforePrevious[actualIndex - 2] + 1;
+        if (transposed < distance) distance = transposed;
+      }
+      current[actualIndex] = distance;
+    }
+    beforePrevious = previous;
+    previous = current;
+  }
+  return previous.reduce((minimum, value) => value < minimum ? value : minimum);
 }
 
 final class CockpitLocator {

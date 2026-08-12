@@ -4,6 +4,7 @@ import 'package:test/test.dart';
 void main() {
   test('snapshot options decode the exact published contract', () {
     final options = const CockpitSnapshotOptions.forensic().copyWith(
+      query: 'Save',
       networkQuery: const CockpitNetworkQuery(
         id: '37',
         before: '36',
@@ -20,6 +21,7 @@ void main() {
     );
 
     expect(CockpitSnapshotOptions.fromJson(options.toJson()), options);
+    expect(options.copyWith(clearQuery: true).query, isNull);
   });
 
   test('snapshot options reject unknown, mistyped, and unbounded input', () {
@@ -44,6 +46,12 @@ void main() {
     expect(
       () => CockpitSnapshotOptions.fromJson(const <String, Object?>{
         'includeRuntimeActivity': 'yes',
+      }),
+      throwsFormatException,
+    );
+    expect(
+      () => CockpitSnapshotOptions.fromJson(const <String, Object?>{
+        'query': '   ',
       }),
       throwsFormatException,
     );

@@ -419,7 +419,7 @@ void main() {
     expect(value, isNot(contains('_meta')));
   });
 
-  test('dev tree brief output prioritizes actionable locator nodes', () {
+  test('dev tree brief output keeps the compact selector index', () {
     const renderer = CockpitCliOutputRenderer();
     final value =
         lon.decode(
@@ -430,26 +430,11 @@ void main() {
                   'action': 'tree',
                   'session': '5',
                   'state': <String, Object?>{
-                    'profile': 'minimal',
-                    'total': 100,
-                    'visible': 80,
-                    'emitted': 20,
-                    'truncated': false,
-                    'nodes': <Object?>[
-                      for (var index = 0; index < 8; index += 1)
-                        <String, Object?>{
-                          'node': '0.$index',
-                          'type': 'Container',
-                          'visible': true,
-                        },
-                      <String, Object?>{
-                        'node': '0.8',
-                        'loc': '/scaffold/textbutton',
-                        'type': 'TextButton',
-                        'text': 'New task',
-                        'visible': true,
-                        'actions': <Object?>['tap'],
-                      },
+                    'profile': 'brief',
+                    'route': '/home',
+                    'count': 1,
+                    'targets': <Object?>[
+                      <String, Object?>{'sel': '#new-task', 'can': 'tap'},
                     ],
                   },
                 },
@@ -458,10 +443,11 @@ void main() {
             )!
             as Map<Object?, Object?>;
 
-    final nodes = value['nodes']! as List<Object?>;
-    expect(nodes, isNotEmpty);
-    expect(nodes.first, containsPair('loc', '/scaffold/textbutton'));
-    expect(nodes.first, containsPair('text', 'New task'));
+    expect(value['route'], '/home');
+    expect(value['count'], 1);
+    expect(value['targets'], <Object?>[
+      <String, Object?>{'sel': '#new-task', 'can': 'tap'},
+    ]);
   });
 
   test(

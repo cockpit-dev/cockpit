@@ -620,24 +620,19 @@ final class CockpitDevRuntime {
     }
     session = resolution.session;
     final normalizedQuery = query?.trim();
+    final hasQuery = normalizedQuery != null && normalizedQuery.isNotEmpty;
     final result = await invoke(session, 'ui.inspect', <String, Object?>{
       'sessionId': session.sessionId,
-      'profile': normalizedQuery == null || normalizedQuery.isEmpty
-          ? 'inspect'
-          : 'locate',
-      if (normalizedQuery != null && normalizedQuery.isNotEmpty)
-        'snapshotOptions': const CockpitSnapshotOptions(
-          profile: CockpitSnapshotProfile.baseline,
-          maxTargets: 160,
-          maxAncestorsPerTarget: 8,
-        ).toJson(),
+      'profile': 'locate',
+      'snapshotOptions': CockpitSnapshotOptions(
+        profile: CockpitSnapshotProfile.baseline,
+        maxTargets: hasQuery ? 10000 : 160,
+        maxAncestorsPerTarget: 8,
+      ).copyWith(query: normalizedQuery).toJson(),
     });
     final output = result.output ?? const <String, Object?>{};
-    final state =
-        normalizedQuery == null ||
-            normalizedQuery.isEmpty ||
-            !_operationSucceeded(result)
-        ? output
+    final state = !hasQuery || !_operationSucceeded(result)
+        ? cockpitBuildDevTargetIndex(output)
         : cockpitBuildDevLocatorMatches(output, normalizedQuery);
     return writeOperation(
       action: 'inspect',
@@ -655,8 +650,32 @@ final class CockpitDevRuntime {
     }
     session = resolution.session;
     final view = runtime.outputSelection.view;
+    if (view == CockpitCliOutputView.brief) {
+      final result = await invoke(session, 'ui.inspect', <String, Object?>{
+        'sessionId': session.sessionId,
+        'profile': 'locate',
+        'snapshotOptions': const CockpitSnapshotOptions(
+          profile: CockpitSnapshotProfile.baseline,
+          maxTargets: 160,
+          maxAncestorsPerTarget: 8,
+        ).toJson(),
+      });
+      final output = result.output ?? const <String, Object?>{};
+      return writeOperation(
+        action: 'tree',
+        session: session,
+        result: result,
+        state: _operationSucceeded(result)
+            ? <String, Object?>{
+                'profile': 'brief',
+                ...cockpitBuildDevTargetIndex(output),
+              }
+            : output,
+        changed: resolution.changed,
+      );
+    }
     var treeOptions = switch (view) {
-      CockpitCliOutputView.brief => const CockpitWidgetTreeOptions.minimal(),
+      CockpitCliOutputView.brief => throw StateError('Unreachable tree view.'),
       CockpitCliOutputView.more => const CockpitWidgetTreeOptions.standard(),
       CockpitCliOutputView.full => const CockpitWidgetTreeOptions.full(),
     };
@@ -670,7 +689,7 @@ final class CockpitDevRuntime {
         profile: CockpitSnapshotProfile.baseline,
         maxTargets: 1,
         maxAncestorsPerTarget: 0,
-        emitArtifactWhenLarge: view != CockpitCliOutputView.brief,
+        artifact: CockpitSnapshotArtifactMode.always,
         tree: treeOptions,
       ).toJson(),
     });
@@ -688,22 +707,35 @@ final class CockpitDevRuntime {
     final snapshot = _objectMap(output['snapshot']);
     final tree = _objectMap(snapshot?['tree']);
     final artifact = _treeArtifact(output);
-    final path = artifact == null
-        ? null
-        : await (_artifactDownloader ?? _downloadTreeArtifact)(
-            session,
-            artifactId: artifact.artifactId,
-            name: artifact.name,
-            mediaType: artifact.mediaType,
-          );
+    if (artifact == null) {
+      return writeEnvelope(
+        action: 'tree',
+        session: session,
+        ok: false,
+        state: const <String, Object?>{'reason': 'treeArtifactUnavailable'},
+        changed: resolution.changed,
+        errors: const <Object?>[
+          <String, Object?>{
+            'code': 'treeArtifactUnavailable',
+            'message': 'Flutter did not return the requested tree artifact.',
+          },
+        ],
+        next: 'cockpit dev diagnose --session ${session.handleId}',
+      );
+    }
+    final path = await (_artifactDownloader ?? _downloadTreeArtifact)(
+      session,
+      artifactId: artifact.artifactId,
+      name: artifact.name,
+      mediaType: artifact.mediaType,
+    );
     final state = <String, Object?>{
       'profile': tree?['profile'] ?? treeOptions.profile.jsonValue,
       if (tree?['total'] != null) 'total': tree!['total'],
       if (tree?['visible'] != null) 'visible': tree!['visible'],
       if (tree?['emitted'] != null) 'emitted': tree!['emitted'],
       if (tree?['truncated'] != null) 'truncated': tree!['truncated'],
-      'path': ?path,
-      if (path == null && tree != null) 'nodes': tree['nodes'],
+      'path': path,
     };
     return writeEnvelope(
       action: 'tree',
@@ -711,7 +743,7 @@ final class CockpitDevRuntime {
       ok: true,
       state: state,
       changed: resolution.changed,
-      evidence: path == null ? null : <String, Object?>{'tree': path},
+      evidence: <String, Object?>{'tree': path},
     );
   }
 

@@ -285,6 +285,7 @@ void main() {
     'inspect uses the UI-only locate profile and returns concise locators',
     () async {
       String? requestedProfile;
+      String? requestedQuery;
       final dev = CockpitDevRuntime(
         runtime,
         operationInvoker: (_, kind, input) async {
@@ -312,7 +313,8 @@ void main() {
             );
             expect(options.includeNetworkActivity, isFalse);
             expect(options.includeRuntimeActivity, isFalse);
-            expect(options.maxTargets, 160);
+            expect(options.maxTargets, 10000);
+            requestedQuery = options.query;
             return _result(
               kind,
               output: const <String, Object?>{
@@ -327,6 +329,7 @@ void main() {
                       'ancestors': <Object?>[],
                     },
                   ],
+                  'summary': <String, Object?>{'visibleTargetCount': 1},
                   'network': <String, Object?>{
                     'entries': <Object?>[
                       <String, Object?>{'sha256': 'not-public'},
@@ -349,13 +352,11 @@ void main() {
         cockpitSuccessExitCode,
       );
       expect(requestedProfile, 'locate');
+      expect(requestedQuery, 'Documents');
       final output = lon.decode(stdout.toString())! as Map<Object?, Object?>;
       final matches = output['matches']! as List<Object?>;
       expect(matches, hasLength(1));
-      expect(
-        matches.single,
-        containsPair('loc', <String, Object?>{'text': 'Documents'}),
-      );
+      expect(matches.single, containsPair('sel', 'Documents'));
       expect(stdout.toString(), isNot(contains('not-public')));
     },
   );
@@ -444,8 +445,134 @@ void main() {
     expect(requestedOptions?.tree, const CockpitWidgetTreeOptions.full());
     expect(requestedOptions?.maxTargets, 1);
     expect(requestedOptions?.maxAncestorsPerTarget, 0);
+    expect(requestedOptions?.artifact, CockpitSnapshotArtifactMode.always);
     expect(stdout.toString().trim(), artifact.resolveSymbolicLinksSync());
   });
+
+  test('structural tree fails when the required artifact is absent', () async {
+    final dev = CockpitDevRuntime(
+      runtime,
+      operationInvoker: (_, kind, input) async {
+        if (kind == 'session.development.get') {
+          return _result(
+            kind,
+            output: const <String, Object?>{
+              'sessionId': 'session-old',
+              'targetId': 'target-1',
+              'appId': 'app-old',
+              'status': <String, Object?>{
+                'state': 'ready',
+                'appReachable': true,
+                'remoteSessionReachable': true,
+              },
+            },
+          );
+        }
+        if (kind == 'ui.inspect') {
+          return _result(
+            kind,
+            output: const <String, Object?>{
+              'snapshot': <String, Object?>{
+                'tree': <String, Object?>{
+                  'profile': 'standard',
+                  'total': 1,
+                  'visible': 1,
+                  'emitted': 1,
+                  'truncated': false,
+                  'nodes': <Object?>[
+                    <String, Object?>{'type': 'Text'},
+                  ],
+                },
+              },
+            },
+          );
+        }
+        throw StateError('Unexpected operation $kind');
+      },
+    );
+    runtime.configureOutput(
+      command: 'dev.tree',
+      selection: const CockpitCliOutputSelection(
+        view: CockpitCliOutputView.more,
+      ),
+    );
+
+    expect(await dev.tree(session), cockpitDataExitCode);
+    expect(stdout.toString(), contains('treeArtifactUnavailable'));
+    expect(stdout.toString(), isNot(contains('nodes')));
+    expect(stdout.toString(), isNot(contains('Text')));
+  });
+
+  test(
+    'brief tree returns a compact selector index without building a tree',
+    () async {
+      String? requestedProfile;
+      CockpitSnapshotOptions? requestedOptions;
+      final dev = CockpitDevRuntime(
+        runtime,
+        operationInvoker: (_, kind, input) async {
+          if (kind == 'session.development.get') {
+            return _result(
+              kind,
+              output: const <String, Object?>{
+                'sessionId': 'session-old',
+                'targetId': 'target-1',
+                'appId': 'app-old',
+                'status': <String, Object?>{
+                  'state': 'ready',
+                  'appReachable': true,
+                  'remoteSessionReachable': true,
+                },
+              },
+            );
+          }
+          if (kind == 'ui.inspect') {
+            requestedProfile = input['profile'] as String?;
+            requestedOptions = CockpitSnapshotOptions.fromJson(
+              Map<String, Object?>.from(
+                input['snapshotOptions']! as Map<Object?, Object?>,
+              ),
+            );
+            return _result(
+              kind,
+              output: const <String, Object?>{
+                'snapshot': <String, Object?>{
+                  'route': '/home',
+                  'visibleTargets': <Object?>[
+                    <String, Object?>{
+                      'registrationId': 'not-public',
+                      'cockpitId': 'save',
+                      'text': 'Save',
+                      'typeName': 'FilledButton',
+                      'routeName': '/home',
+                      'supportedCommands': <Object?>['tap'],
+                      'ancestors': <Object?>[],
+                    },
+                  ],
+                },
+              },
+            );
+          }
+          throw StateError('Unexpected operation $kind');
+        },
+      );
+      runtime.configureOutput(
+        command: 'dev.tree',
+        selection: const CockpitCliOutputSelection(),
+      );
+
+      expect(await dev.tree(session), cockpitSuccessExitCode);
+      expect(requestedProfile, 'locate');
+      expect(requestedOptions?.tree, isNull);
+      final output = lon.decode(stdout.toString())! as Map<Object?, Object?>;
+      expect(output['profile'], 'brief');
+      expect(output['route'], '/home');
+      expect(output['targets'], <Object?>[
+        <String, Object?>{'sel': '#save', 'label': 'Save', 'can': 'tap'},
+      ]);
+      expect(stdout.toString(), isNot(contains('not-public')));
+    },
+  );
 
   test('status reuses the session query without diagnostic probes', () async {
     final calls = <String>[];

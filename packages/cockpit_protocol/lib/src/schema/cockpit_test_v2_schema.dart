@@ -915,6 +915,11 @@ const String cockpitTestV2SchemaJson = r'''
         "profile": {
           "enum": ["live", "baseline", "investigate", "forensic"]
         },
+        "query": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
         "maxTargets": {
           "type": "integer",
           "minimum": 1,
@@ -932,7 +937,7 @@ const String cockpitTestV2SchemaJson = r'''
         },
         "includeStyleDetails": {"type": "boolean"},
         "includeDiagnosticProperties": {"type": "boolean"},
-        "emitArtifactWhenLarge": {"type": "boolean"},
+        "artifact": {"enum": ["inline", "large", "always"]},
         "includeRebuildActivity": {"type": "boolean"},
         "maxRebuildEntries": {
           "type": "integer",

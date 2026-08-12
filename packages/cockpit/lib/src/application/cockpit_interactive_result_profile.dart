@@ -295,8 +295,7 @@ final class CockpitInteractiveResultProfile {
       includeDiagnosticProperties:
           override.includeDiagnosticProperties ||
           base.includeDiagnosticProperties,
-      emitArtifactWhenLarge:
-          override.emitArtifactWhenLarge || base.emitArtifactWhenLarge,
+      artifact: _artifactMode(override.artifact, base.artifact),
       includeRebuildActivity:
           override.includeRebuildActivity || base.includeRebuildActivity,
       maxRebuildEntries: math.max(
@@ -438,3 +437,11 @@ CockpitApplicationServiceException _invalidProfile(
     details: <String, Object?>{if (value != null) 'value': value.toString()},
   );
 }
+
+CockpitSnapshotArtifactMode _artifactMode(
+  CockpitSnapshotArtifactMode left,
+  CockpitSnapshotArtifactMode right,
+) =>
+    CockpitSnapshotArtifactMode.values[left.index > right.index
+        ? left.index
+        : right.index];

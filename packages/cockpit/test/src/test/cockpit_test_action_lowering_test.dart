@@ -60,7 +60,7 @@ void main() {
         'maxPropertiesPerTarget': 0,
         'includeStyleDetails': false,
         'includeDiagnosticProperties': false,
-        'emitArtifactWhenLarge': false,
+        'artifact': 'inline',
         'includeRebuildActivity': false,
         'maxRebuildEntries': 8,
         'includeNetworkActivity': false,

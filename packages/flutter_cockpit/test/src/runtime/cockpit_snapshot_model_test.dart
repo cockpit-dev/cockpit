@@ -24,24 +24,26 @@ void main() {
   test('CockpitSnapshotOptions preserves defaults and overrides', () {
     const live = CockpitSnapshotOptions();
     expect(live.profile, CockpitSnapshotProfile.live);
+    expect(live.query, isNull);
     expect(live.maxTargets, 25);
     expect(live.maxAncestorsPerTarget, 0);
     expect(live.maxPropertiesPerTarget, 0);
     expect(live.includeStyleDetails, isFalse);
     expect(live.includeDiagnosticProperties, isFalse);
-    expect(live.emitArtifactWhenLarge, isFalse);
+    expect(live.artifact, CockpitSnapshotArtifactMode.inline);
     expect(live.includeRebuildActivity, isFalse);
     expect(live.maxRebuildEntries, 8);
     expect(live.networkQuery, const CockpitNetworkQuery());
 
     final forensic = CockpitSnapshotOptions(
       profile: CockpitSnapshotProfile.forensic,
+      query: 'Submit',
       maxTargets: 5,
       maxAncestorsPerTarget: 4,
       maxPropertiesPerTarget: 10,
       includeStyleDetails: true,
       includeDiagnosticProperties: true,
-      emitArtifactWhenLarge: true,
+      artifact: CockpitSnapshotArtifactMode.large,
       tree: const CockpitWidgetTreeOptions.full(),
       includeRebuildActivity: true,
       maxRebuildEntries: 12,
