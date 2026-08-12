@@ -177,7 +177,17 @@ Map<String, Object?> _captureState(Object? output) {
     if (command['degradationReason'] != null)
       'degraded': command['degradationReason'],
     if (output['selectedPlane'] != null) 'plane': output['selectedPlane'],
+    'surface': ?_surfaceState(output),
   };
+}
+
+Map<String, Object?>? _surfaceState(Map<Object?, Object?> output) {
+  final command = output['command'];
+  if (command is! Map<Object?, Object?>) return null;
+  final surface = command['surface'];
+  return surface is Map<Object?, Object?>
+      ? Map<String, Object?>.from(surface)
+      : null;
 }
 
 ({String artifactId, String mediaType})? _pngArtifact(Object? value) {

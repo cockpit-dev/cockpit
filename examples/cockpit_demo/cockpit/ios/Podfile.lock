@@ -1,6 +1,6 @@
 PODS:
   - Flutter (1.0.0)
-  - flutter_cockpit (4.0.0):
+  - flutter_cockpit (4.0.1):
     - Flutter
   - integration_test (0.0.1):
     - Flutter
@@ -58,7 +58,7 @@ EXTERNAL SOURCES:
 
 SPEC CHECKSUMS:
   Flutter: cabc95a1d2626b1b06e7179b784ebcf0c0cde467
-  flutter_cockpit: 153c0db068dfc2621a7ce7159a6d40ca6f3b1fd0
+  flutter_cockpit: 33ca198506d3085dfd265c3cfe26fa6ebee9e238
   integration_test: 4a889634ef21a45d28d50d622cf412dc6d9f586e
   path_provider_foundation: 080d55be775b7414fd5a5ef3ac137b97b097e564
   sqlite3: a51c07cf16e023d6c48abd5e5791a61a47354921

@@ -10,9 +10,13 @@ void main() {
       CockpitCaptureKind.flutterView,
     );
     final adbAdapter = _SuccessfulCaptureAdapter(CockpitCaptureKind.hostSystem);
+    String? capturedPlatformAppId;
     final resolver = CockpitCaptureStrategyResolver(
       remoteAdapterFactory: (client) => remoteAdapter,
-      adbAdapterFactory: (deviceId) => adbAdapter,
+      adbAdapterFactory: (deviceId, platformAppId) {
+        capturedPlatformAppId = platformAppId;
+        return adbAdapter;
+      },
       simctlAdapterFactory: (deviceId) => _FakeCaptureAdapter(),
     );
 
@@ -22,6 +26,7 @@ void main() {
         baseUri: Uri.parse('http://127.0.0.1:47331'),
       ),
       androidDeviceId: 'emulator-5554',
+      platformAppId: 'dev.cockpit.demo',
     );
 
     final execution = await adapter.capture(_acceptanceScreenshot());
@@ -29,6 +34,7 @@ void main() {
     expect(execution.result.resolvedCaptureKind, CockpitCaptureKind.hostSystem);
     expect(adbAdapter.captureCount, 1);
     expect(remoteAdapter.captureCount, 0);
+    expect(capturedPlatformAppId, 'dev.cockpit.demo');
   });
 
   test('prefers simctl system capture on an iOS simulator', () async {
@@ -40,7 +46,7 @@ void main() {
     );
     final resolver = CockpitCaptureStrategyResolver(
       remoteAdapterFactory: (client) => remoteAdapter,
-      adbAdapterFactory: (deviceId) => _FakeCaptureAdapter(),
+      adbAdapterFactory: (deviceId, platformAppId) => _FakeCaptureAdapter(),
       simctlAdapterFactory: (deviceId) => simctlAdapter,
     );
 
@@ -66,7 +72,7 @@ void main() {
     final wdaAdapter = _SuccessfulCaptureAdapter(CockpitCaptureKind.hostSystem);
     final resolver = CockpitCaptureStrategyResolver(
       remoteAdapterFactory: (client) => remoteAdapter,
-      adbAdapterFactory: (deviceId) => _FakeCaptureAdapter(),
+      adbAdapterFactory: (deviceId, platformAppId) => _FakeCaptureAdapter(),
       simctlAdapterFactory: (deviceId) => _FakeCaptureAdapter(),
       wdaAdapterFactory: (baseUri) {
         expect(baseUri, Uri.parse('http://127.0.0.1:8100'));
@@ -93,7 +99,7 @@ void main() {
     final remoteAdapter = _FakeCaptureAdapter();
     final resolver = CockpitCaptureStrategyResolver(
       remoteAdapterFactory: (client) => remoteAdapter,
-      adbAdapterFactory: (deviceId) => _FakeCaptureAdapter(),
+      adbAdapterFactory: (deviceId, platformAppId) => _FakeCaptureAdapter(),
       simctlAdapterFactory: (deviceId) => _FakeCaptureAdapter(),
     );
 
@@ -113,7 +119,7 @@ void main() {
     final macosAdapter = _FakeCaptureAdapter();
     final resolver = CockpitCaptureStrategyResolver(
       remoteAdapterFactory: (client) => remoteAdapter,
-      adbAdapterFactory: (deviceId) => _FakeCaptureAdapter(),
+      adbAdapterFactory: (deviceId, platformAppId) => _FakeCaptureAdapter(),
       simctlAdapterFactory: (deviceId) => _FakeCaptureAdapter(),
       macosAdapterFactory: (appId, {processId}) => macosAdapter,
     );
@@ -147,7 +153,7 @@ void main() {
     int? capturedProcessId;
     final resolver = CockpitCaptureStrategyResolver(
       remoteAdapterFactory: (client) => remoteAdapter,
-      adbAdapterFactory: (deviceId) => _FakeCaptureAdapter(),
+      adbAdapterFactory: (deviceId, platformAppId) => _FakeCaptureAdapter(),
       simctlAdapterFactory: (deviceId) => _FakeCaptureAdapter(),
       macosAdapterFactory: (appId, {processId}) => _FakeCaptureAdapter(),
       windowsAdapterFactory: (appId, {processId}) {
@@ -191,7 +197,7 @@ void main() {
       int? capturedProcessId;
       final resolver = CockpitCaptureStrategyResolver(
         remoteAdapterFactory: (client) => remoteAdapter,
-        adbAdapterFactory: (deviceId) => _FakeCaptureAdapter(),
+        adbAdapterFactory: (deviceId, platformAppId) => _FakeCaptureAdapter(),
         simctlAdapterFactory: (deviceId) => _FakeCaptureAdapter(),
         windowsAdapterFactory: (appId, {processId}) {
           capturedAppId = appId;
@@ -234,7 +240,7 @@ void main() {
     int? capturedProcessId;
     final resolver = CockpitCaptureStrategyResolver(
       remoteAdapterFactory: (client) => remoteAdapter,
-      adbAdapterFactory: (deviceId) => _FakeCaptureAdapter(),
+      adbAdapterFactory: (deviceId, platformAppId) => _FakeCaptureAdapter(),
       simctlAdapterFactory: (deviceId) => _FakeCaptureAdapter(),
       macosAdapterFactory: (appId, {processId}) => _FakeCaptureAdapter(),
       linuxAdapterFactory: (appId, {processId}) {
@@ -278,7 +284,7 @@ void main() {
       int? capturedProcessId;
       final resolver = CockpitCaptureStrategyResolver(
         remoteAdapterFactory: (client) => remoteAdapter,
-        adbAdapterFactory: (deviceId) => _FakeCaptureAdapter(),
+        adbAdapterFactory: (deviceId, platformAppId) => _FakeCaptureAdapter(),
         simctlAdapterFactory: (deviceId) => _FakeCaptureAdapter(),
         linuxAdapterFactory: (appId, {processId}) {
           capturedAppId = appId;
@@ -323,7 +329,7 @@ void main() {
       int? capturedProcessId;
       final resolver = CockpitCaptureStrategyResolver(
         remoteAdapterFactory: (client) => remoteAdapter,
-        adbAdapterFactory: (deviceId) => _FakeCaptureAdapter(),
+        adbAdapterFactory: (deviceId, platformAppId) => _FakeCaptureAdapter(),
         simctlAdapterFactory: (deviceId) => _FakeCaptureAdapter(),
         macosAdapterFactory: (appId, {processId}) {
           capturedAppId = appId;
@@ -381,7 +387,7 @@ void main() {
       int? capturedProcessId;
       final resolver = CockpitCaptureStrategyResolver(
         remoteAdapterFactory: (client) => remoteAdapter,
-        adbAdapterFactory: (deviceId) => _FakeCaptureAdapter(),
+        adbAdapterFactory: (deviceId, platformAppId) => _FakeCaptureAdapter(),
         simctlAdapterFactory: (deviceId) => _FakeCaptureAdapter(),
         linuxAdapterFactory: (appId, {processId}) {
           capturedAppId = appId;
@@ -410,7 +416,7 @@ void main() {
     final remoteAdapter = _FakeCaptureAdapter();
     final resolver = CockpitCaptureStrategyResolver(
       remoteAdapterFactory: (client) => remoteAdapter,
-      adbAdapterFactory: (deviceId) => _FakeCaptureAdapter(),
+      adbAdapterFactory: (deviceId, platformAppId) => _FakeCaptureAdapter(),
       simctlAdapterFactory: (deviceId) => _FakeCaptureAdapter(),
       browserHostAppIdResolver: (deviceId) => null,
     );
@@ -442,7 +448,7 @@ void main() {
     final remoteAdapter = _FakeCaptureAdapter();
     final resolver = CockpitCaptureStrategyResolver(
       remoteAdapterFactory: (client) => remoteAdapter,
-      adbAdapterFactory: (deviceId) => _FakeCaptureAdapter(),
+      adbAdapterFactory: (deviceId, platformAppId) => _FakeCaptureAdapter(),
       simctlAdapterFactory: (deviceId) => _FakeCaptureAdapter(),
       macosAdapterFactory: (appId, {processId}) => _FakeCaptureAdapter(),
       browserHostAppIdResolver: cockpitResolveBrowserHostAppId,
@@ -467,7 +473,7 @@ void main() {
     );
     final resolver = CockpitCaptureStrategyResolver(
       remoteAdapterFactory: (client) => remoteAdapter,
-      adbAdapterFactory: (deviceId) => _FakeCaptureAdapter(),
+      adbAdapterFactory: (deviceId, platformAppId) => _FakeCaptureAdapter(),
       simctlAdapterFactory: (deviceId) => _FakeCaptureAdapter(),
       macosAdapterFactory: (appId, {processId}) => hostAdapter,
     );

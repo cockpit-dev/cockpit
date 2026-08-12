@@ -1,5 +1,21 @@
 # Changelog
 
+## 4.0.1
+
+- Added direct execution of validated local case and suite documents through
+  `case run --file` and `suite run --file`, while retaining durable indexed
+  identities for shared and CI workflows.
+- Reused API-compatible newer Supervisors from older clients and replaced only
+  genuinely older or malformed daemon engines, preserving authorization mode.
+- Added Android foreground-surface diagnostics to system screenshots so app,
+  operating-system overlay, and different-app captures cannot be mistaken for
+  the same Flutter state.
+- Preserved screenshot surface metadata through fallback, remote automation,
+  visual comparison, and concise CLI projections.
+- Avoided reinstalling an already-current canonical hosted AOT executable during
+  `cockpit update`, while still reconnecting the Supervisor and cleaning retired
+  source payloads.
+
 ## 4.0.0
 
 - **Breaking:** renamed `--verbosity minimal|standard|full` to

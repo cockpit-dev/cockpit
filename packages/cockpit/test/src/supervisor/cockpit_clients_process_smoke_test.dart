@@ -349,6 +349,18 @@ cases:
         ]),
       );
 
+      final inlineSuite = await _cli(packageRoot, environment, <String>[
+        'suite',
+        'run',
+        '--workspace-id',
+        workspaceId,
+        '--file',
+        suiteFile.path,
+        '--idempotency-key',
+        'smoke-suite-inline',
+      ]);
+      expect(inlineSuite['run'], matches(RegExp(r'^r[0-9a-z]{10}$')));
+
       final accepted = await _cli(packageRoot, environment, <String>[
         'case',
         'run',
@@ -368,6 +380,18 @@ cases:
         runId,
       ]);
       expect(run['run'], runId);
+
+      final inlineCase = await _cli(packageRoot, environment, <String>[
+        'case',
+        'run',
+        '--workspace-id',
+        workspaceId,
+        '--file',
+        p.join(workspace.path, 'smoke_case.yaml'),
+        '--idempotency-key',
+        'smoke-case-inline',
+      ]);
+      expect(inlineCase['run'], matches(RegExp(r'^r[0-9a-z]{10}$')));
 
       final events = await _cli(packageRoot, environment, <String>[
         'run',

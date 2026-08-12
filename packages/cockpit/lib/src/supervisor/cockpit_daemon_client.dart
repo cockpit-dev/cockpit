@@ -4,6 +4,7 @@ import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:cockpit_protocol/cockpit_protocol.dart';
+import 'package:pub_semver/pub_semver.dart';
 import '../foundation/cockpit_home.dart';
 import '../foundation/cockpit_locked_json_store.dart';
 import '../foundation/cockpit_permissions.dart';
@@ -171,7 +172,7 @@ final class CockpitDaemonLifecycleClient {
           ? 'healthUnavailable'
           : server.apiVersion.major != requiredApiMajor
           ? 'upgradeRequired'
-          : server.engineVersion != requiredEngineVersion
+          : _requiresEngineReplacement(server.engineVersion)
           ? 'upgradeRequired'
           : null,
     );
@@ -379,7 +380,7 @@ final class CockpitDaemonLifecycleClient {
           'An active daemon uses an incompatible API major.',
         );
       }
-      if (server.engineVersion != requiredEngineVersion) {
+      if (_requiresEngineReplacement(server.engineVersion)) {
         if (!replaceIncompatibleEngine) return null;
         onEngineReplacement?.call(discovery.authorizationMode);
         await _stopDiscovery(
@@ -401,6 +402,16 @@ final class CockpitDaemonLifecycleClient {
     }
     await _store.deleteIfMatches(discovery);
     return null;
+  }
+
+  bool _requiresEngineReplacement(String engineVersion) {
+    if (engineVersion == requiredEngineVersion) return false;
+    try {
+      return Version.parse(engineVersion) <
+          Version.parse(requiredEngineVersion);
+    } on FormatException {
+      return true;
+    }
   }
 
   Future<CockpitServerInfo?> _health(

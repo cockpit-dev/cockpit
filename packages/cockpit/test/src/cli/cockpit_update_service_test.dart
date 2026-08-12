@@ -11,6 +11,224 @@ void main() {
     expect(cockpitPathIsWithin('$root/../outside', root), isFalse);
   });
 
+  test('matches executable paths through filesystem aliases', () async {
+    if (Platform.isWindows) return;
+    final root = await Directory.systemTemp.createTemp('cockpit-path-alias-');
+    addTearDown(() async {
+      if (await root.exists()) await root.delete(recursive: true);
+    });
+    final executable = File('${root.path}/cockpit');
+    await executable.writeAsString('aot');
+    final alias = Link('${root.path}/cockpit-alias');
+    await alias.create(executable.path);
+
+    expect(
+      cockpitPathsMatch(executable.path, alias.path, windows: false),
+      isTrue,
+    );
+  });
+
+  test('skips reinstall for a current canonical hosted AOT install', () async {
+    final pubCache = await Directory.systemTemp.createTemp(
+      'cockpit-update-current-',
+    );
+    addTearDown(() async {
+      if (await pubCache.exists()) await pubCache.delete(recursive: true);
+    });
+    await _writeActivatedPackage(pubCache, version: '3.0.7');
+    final executable = File('${pubCache.path}/bin/cockpit');
+    await executable.create(recursive: true);
+    await executable.writeAsString('current aot');
+    final legacy = Directory('${pubCache.path}/cockpit-aot');
+    await legacy.create();
+    final calls = <List<String>>[];
+    var lookups = 0;
+    final service = CockpitUpdateService(
+      environment: <String, String>{'PUB_CACHE': pubCache.path},
+      resolvedExecutable: executable.path,
+      windows: false,
+      latestVersionLookup: (timeout) async {
+        lookups += 1;
+        expect(timeout, greaterThan(Duration.zero));
+        return '3.0.7';
+      },
+      processRunner: (executable, arguments, timeout) async {
+        calls.add(<String>[executable, ...arguments]);
+        return ProcessResult(1, 0, '', '');
+      },
+    );
+
+    final result = await service.update(
+      currentVersion: '3.0.7',
+      timeout: const Duration(minutes: 1),
+    );
+
+    expect(result.toJson(), <String, Object?>{
+      'version': '3.0.7',
+      'updated': false,
+      'supervisor': 'ready',
+    });
+    expect(lookups, 1);
+    expect(calls, hasLength(1));
+    expect(
+      calls.single,
+      containsAllInOrder(<String>[
+        executable.path,
+        'server',
+        '--format',
+        'none',
+        '--timeout',
+      ]),
+    );
+    expect(await executable.readAsString(), 'current aot');
+    expect(await legacy.exists(), isFalse);
+    expect(await _updateWorkspaces(pubCache), isEmpty);
+  });
+
+  test('installs a newer hosted release after the fast check', () async {
+    final pubCache = await Directory.systemTemp.createTemp(
+      'cockpit-update-newer-',
+    );
+    addTearDown(() async {
+      if (await pubCache.exists()) await pubCache.delete(recursive: true);
+    });
+    await _writeActivatedPackage(pubCache, version: '3.0.7');
+    final executable = File('${pubCache.path}/bin/cockpit');
+    await executable.create(recursive: true);
+    await executable.writeAsString('current aot');
+    final calls = <List<String>>[];
+    final service = CockpitUpdateService(
+      environment: <String, String>{'PUB_CACHE': pubCache.path},
+      resolvedExecutable: executable.path,
+      windows: false,
+      latestVersionLookup: (_) async => '3.0.8',
+      processRunner: (command, arguments, timeout) async {
+        calls.add(<String>[command, ...arguments]);
+        if (arguments.contains('activate')) {
+          await _writeActivatedPackage(pubCache, version: '3.0.8');
+        }
+        if (arguments.contains('compile')) {
+          final output = arguments[arguments.indexOf('-o') + 1];
+          await File(output).writeAsString('new aot');
+        }
+        if (arguments.last == '--version') {
+          return ProcessResult(calls.length, 0, 'cockpit 3.0.8\n', '');
+        }
+        return ProcessResult(calls.length, 0, '', '');
+      },
+    );
+
+    final result = await service.update(
+      currentVersion: '3.0.7',
+      timeout: const Duration(minutes: 1),
+    );
+
+    expect(result.version, '3.0.8');
+    expect(calls, hasLength(6));
+    expect(
+      calls.first,
+      containsAllInOrder(<String>['pub', 'global', 'activate']),
+    );
+    expect(await executable.readAsString(), 'new aot');
+  });
+
+  test(
+    'reinstalls a source activation even when its version is current',
+    () async {
+      final pubCache = await Directory.systemTemp.createTemp(
+        'cockpit-update-source-',
+      );
+      addTearDown(() async {
+        if (await pubCache.exists()) await pubCache.delete(recursive: true);
+      });
+      await _writeActivatedPackage(pubCache, version: '3.0.7', hosted: false);
+      final executable = File('${pubCache.path}/bin/cockpit');
+      await executable.create(recursive: true);
+      await executable.writeAsString('source aot');
+      final calls = <List<String>>[];
+      var lookups = 0;
+      final service = CockpitUpdateService(
+        environment: <String, String>{'PUB_CACHE': pubCache.path},
+        resolvedExecutable: executable.path,
+        windows: false,
+        latestVersionLookup: (_) async {
+          lookups += 1;
+          return '3.0.7';
+        },
+        processRunner: (command, arguments, timeout) async {
+          calls.add(<String>[command, ...arguments]);
+          if (arguments.contains('activate')) {
+            await _writeActivatedPackage(pubCache, version: '3.0.7');
+          }
+          if (arguments.contains('compile')) {
+            final output = arguments[arguments.indexOf('-o') + 1];
+            await File(output).writeAsString('hosted aot');
+          }
+          if (arguments.last == '--version') {
+            return ProcessResult(calls.length, 0, 'cockpit 3.0.7\n', '');
+          }
+          return ProcessResult(calls.length, 0, '', '');
+        },
+      );
+
+      await service.update(
+        currentVersion: '3.0.7',
+        timeout: const Duration(minutes: 1),
+      );
+
+      expect(lookups, 0);
+      expect(calls, hasLength(6));
+      expect(
+        calls.first,
+        containsAllInOrder(<String>['pub', 'global', 'activate']),
+      );
+      expect(await executable.readAsString(), 'hosted aot');
+    },
+  );
+
+  test('falls back to the full update when the latest lookup fails', () async {
+    final pubCache = await Directory.systemTemp.createTemp(
+      'cockpit-update-lookup-failure-',
+    );
+    addTearDown(() async {
+      if (await pubCache.exists()) await pubCache.delete(recursive: true);
+    });
+    await _writeActivatedPackage(pubCache, version: '3.0.7');
+    final executable = File('${pubCache.path}/bin/cockpit');
+    await executable.create(recursive: true);
+    await executable.writeAsString('current aot');
+    final calls = <List<String>>[];
+    final service = CockpitUpdateService(
+      environment: <String, String>{'PUB_CACHE': pubCache.path},
+      resolvedExecutable: executable.path,
+      windows: false,
+      latestVersionLookup: (_) async => throw const SocketException('offline'),
+      processRunner: (command, arguments, timeout) async {
+        calls.add(<String>[command, ...arguments]);
+        if (arguments.contains('compile')) {
+          final output = arguments[arguments.indexOf('-o') + 1];
+          await File(output).writeAsString('rebuilt aot');
+        }
+        if (arguments.last == '--version') {
+          return ProcessResult(calls.length, 0, 'cockpit 3.0.7\n', '');
+        }
+        return ProcessResult(calls.length, 0, '', '');
+      },
+    );
+
+    await service.update(
+      currentVersion: '3.0.7',
+      timeout: const Duration(minutes: 1),
+    );
+
+    expect(calls, hasLength(6));
+    expect(
+      calls.first,
+      containsAllInOrder(<String>['pub', 'global', 'activate']),
+    );
+    expect(await executable.readAsString(), 'rebuilt aot');
+  });
+
   test('updates, verifies, reconciles, and removes retired payload', () async {
     final pubCache = await Directory.systemTemp.createTemp(
       'cockpit-update-service-',
@@ -311,11 +529,19 @@ void main() {
 Future<void> _writeActivatedPackage(
   Directory pubCache, {
   required String version,
+  bool hosted = true,
 }) async {
-  final package = Directory('${pubCache.path}/hosted/cockpit-$version');
+  final package = Directory(
+    hosted
+        ? '${pubCache.path}/hosted/pub.dev/cockpit-$version'
+        : '${pubCache.path}/source/cockpit',
+  );
   final entrypoint = File('${package.path}/bin/cockpit.dart');
   await entrypoint.create(recursive: true);
   await entrypoint.writeAsString('void main() {}\n');
+  await File(
+    '${package.path}/pubspec.yaml',
+  ).writeAsString('name: cockpit\nversion: $version\n');
   final config = File(
     '${pubCache.path}/global_packages/cockpit/.dart_tool/package_config.json',
   );

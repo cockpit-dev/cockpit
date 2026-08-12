@@ -383,13 +383,17 @@ names only from `explain` under `input.fields`.
 
 ## Flutter E2E And Black-Box E2E
 
-Validate documents before running them, then use the indexed case/suite identity.
+Validate documents before running them. During local development, run the same
+validated file directly; use the indexed identity when the document is a durable
+shared workspace asset or CI source.
 Run IDs are durable; observe bounded events and export the finalized report bundle
 only after the run reaches a terminal state.
 
 ```bash
 cockpit case validate --file /absolute/case.lon
 cockpit suite validate --file /absolute/suite.yaml
+cockpit case run --file /absolute/case.lon --idempotency-key KEY
+cockpit suite run --file /absolute/suite.yaml --idempotency-key KEY
 cockpit case list --id CASE
 cockpit suite list --id SUITE
 cockpit case run --case-id CASE --idempotency-key KEY
@@ -403,7 +407,8 @@ cockpit artifact read --run-id RUN --artifact-id ARTIFACT --output /absolute/art
 
 `.lon`, `.json`, `.yaml`, and `.yml` documents infer their input format, so omit
 `--input-format`. Run inputs accept LON, JSON, or YAML through `--inputs` or
-`--inputs-file`. A submission idempotency key identifies one logical run: reuse it
+`--inputs-file`. `--file` and the indexed `--case-id`/`--suite-id` form are
+mutually exclusive. A submission idempotency key identifies one logical run: reuse it
 after transport uncertainty and never invent a new key until `run get` proves the
 first submission does not exist.
 

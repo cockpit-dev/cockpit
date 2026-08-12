@@ -137,6 +137,8 @@ final class CockpitRemoteAutomationAdapter
           resolvedCaptureKind: capture.result.resolvedCaptureKind,
           usedCaptureFallback: capture.result.usedCaptureFallback,
           degradationReason: capture.result.degradationReason,
+          surface: capture.result.surface,
+          changed: capture.result.changed,
           error: capture.result.error,
         ),
         artifactPayloads: capture.artifactPayloads,
@@ -243,6 +245,8 @@ final class CockpitRemoteAutomationAdapter
           resolvedCaptureKind: capture.result.resolvedCaptureKind,
           usedCaptureFallback: capture.result.usedCaptureFallback,
           degradationReason: capture.result.degradationReason,
+          surface: capture.result.surface,
+          changed: capture.result.changed,
           error: comparison.matched
               ? null
               : CockpitCommandError.assertionFailed(

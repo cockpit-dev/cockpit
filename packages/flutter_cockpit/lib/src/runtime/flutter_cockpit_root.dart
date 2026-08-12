@@ -440,11 +440,17 @@ final class FlutterCockpitRootState extends State<FlutterCockpitRoot> {
       registry: FlutterCockpit.binding.registry,
       captureHandler: captureScreenshot,
       snapshotProvider: snapshot,
-      locatorProbe: (locator) {
+      locatorProbe: (locator, {requiredCommand}) {
         final surface = _surfaceStateOrNull;
         return surface == null
-            ? FlutterCockpit.binding.registry.resolve(locator)
-            : surface.probeVisibleLocator(locator);
+            ? FlutterCockpit.binding.registry.resolve(
+                locator,
+                requiredCommand: requiredCommand,
+              )
+            : surface.probeVisibleLocator(
+                locator,
+                requiredCommand: requiredCommand,
+              );
       },
       routeNameSynchronizer: FlutterCockpit.binding.setDiscoveredRouteName,
       scrollStepProbesTarget: true,

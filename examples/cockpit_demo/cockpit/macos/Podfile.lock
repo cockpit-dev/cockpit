@@ -1,5 +1,5 @@
 PODS:
-  - flutter_cockpit (4.0.0):
+  - flutter_cockpit (4.0.1):
     - FlutterMacOS
   - FlutterMacOS (1.0.0)
   - path_provider_foundation (0.0.1):
@@ -52,7 +52,7 @@ EXTERNAL SOURCES:
     :path: Flutter/ephemeral/.symlinks/plugins/sqlite3_flutter_libs/darwin
 
 SPEC CHECKSUMS:
-  flutter_cockpit: 6a1e1b287f8405cd7cbf8ec1c76977ed27ca46a7
+  flutter_cockpit: 9f3f3b5b56654ae168ce8faf53eb0165f69936e7
   FlutterMacOS: d0db08ddef1a9af05a5ec4b724367152bb0500b1
   path_provider_foundation: 080d55be775b7414fd5a5ef3ac137b97b097e564
   sqlite3: a51c07cf16e023d6c48abd5e5791a61a47354921

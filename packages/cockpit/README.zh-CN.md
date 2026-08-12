@@ -153,13 +153,17 @@ quarantined lease 默认持续阻塞资源。先通过公开的 `lease.list` 获
 
 ## 规范用例回放
 
-先校验文档，再用文档摘要标识的 indexed case 提交执行。回放必须显式提供 workspace、
-document、case 和 idempotency identity。
+先校验文档。开发中的本地文档可直接运行文件；持久共享和 CI 回放再使用文档摘要标识
+的 indexed case。
 
 ```bash
 cockpit case validate \
   --workspace-id <workspaceId> \
   --file example/cases/flutter_login.yaml
+
+cockpit case run \
+  --file example/cases/flutter_login.yaml \
+  --idempotency-key local-login-001
 
 cockpit case run \
   --workspace-id <workspaceId> \
@@ -198,6 +202,9 @@ target 在 accessibility 能力明确支持时还可以使用状态、层级和�
 ```bash
 cockpit suite validate --file example/suites/regression.yaml
 cockpit suite run \
+  --file example/suites/regression.yaml \
+  --idempotency-key local-regression-001
+cockpit suite run \
   --workspace-id <workspaceId> \
   --document-id <documentId> \
   --suite-id regression \
@@ -205,6 +212,8 @@ cockpit suite run \
 cockpit suite report --run-id <runId> \
   --output-dir cockpit-report
 ```
+
+本地 `--file` 与 indexed `--suite-id` 两种形式不能同时使用。
 
 已安装原生应用和其他 system-controlled surface 通过 workspace target 注册；稳定的
 平台 app/package id 直接放在 target 上，必要时 case 的 target requirements 可以覆盖。

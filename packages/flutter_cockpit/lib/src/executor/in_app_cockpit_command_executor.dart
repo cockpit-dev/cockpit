@@ -453,7 +453,10 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
         ),
       );
     }
-    final resolution = await _resolveWithRetry(command);
+    final resolution = await _resolveWithRetry(
+      command,
+      requiredCommand: CockpitCommandType.tap,
+    );
     if (!resolution.isSuccess) {
       return _failureExecution(
         command: command,
@@ -518,6 +521,20 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
     if (activation != _TapActivation.semantic &&
         target.supportedCommands.contains(CockpitCommandType.tap) &&
         target.onTap != null) {
+      final preflight = _preflightTargetHitTest(
+        command: command,
+        commandType: CockpitCommandType.tap,
+        target: target,
+      );
+      if (preflight?.error != null) {
+        return _failureExecution(
+          command: command,
+          durationMs: stopwatch.elapsedMilliseconds,
+          locatorResolution: resolution.locatorResolution,
+          snapshot: _liveSnapshot().toJson(),
+          error: preflight!.error!,
+        );
+      }
       await _prepareForAction(command, commandType: CockpitCommandType.tap);
       final commit = await _invokeActionAndAwaitCommit(
         command: command,
@@ -573,7 +590,10 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
         command: command,
         resolution: resolution,
         durationMs: stopwatch.elapsedMilliseconds,
-        warnings: commit.warnings,
+        warnings: <Map<String, Object?>>[
+          ...commit.warnings,
+          if (preflight?.warning != null) preflight!.warning!,
+        ],
         changed: _changedSince(commit),
       );
     }
@@ -753,7 +773,10 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
         ),
       );
     }
-    final resolution = await _resolveWithRetry(command);
+    final resolution = await _resolveWithRetry(
+      command,
+      requiredCommand: CockpitCommandType.longPress,
+    );
     if (!resolution.isSuccess) {
       return _failureExecution(
         command: command,
@@ -798,6 +821,20 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
     }
     if (target.supportedCommands.contains(CockpitCommandType.longPress) &&
         target.onLongPress != null) {
+      final preflight = _preflightTargetHitTest(
+        command: command,
+        commandType: CockpitCommandType.longPress,
+        target: target,
+      );
+      if (preflight?.error != null) {
+        return _failureExecution(
+          command: command,
+          durationMs: stopwatch.elapsedMilliseconds,
+          locatorResolution: resolution.locatorResolution,
+          snapshot: _liveSnapshot().toJson(),
+          error: preflight!.error!,
+        );
+      }
       await _prepareForAction(
         command,
         commandType: CockpitCommandType.longPress,
@@ -825,7 +862,10 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
         command: command,
         resolution: resolution,
         durationMs: stopwatch.elapsedMilliseconds,
-        warnings: commit.warnings,
+        warnings: <Map<String, Object?>>[
+          ...commit.warnings,
+          if (preflight?.warning != null) preflight!.warning!,
+        ],
         changed: _changedSince(commit),
       );
     }
@@ -881,7 +921,10 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
         ),
       );
     }
-    final resolution = await _resolveWithRetry(command);
+    final resolution = await _resolveWithRetry(
+      command,
+      requiredCommand: CockpitCommandType.doubleTap,
+    );
     if (!resolution.isSuccess) {
       return _failureExecution(
         command: command,
@@ -893,6 +936,20 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
     final target = resolution.target!;
     if (target.supportedCommands.contains(CockpitCommandType.doubleTap) &&
         target.onDoubleTap != null) {
+      final preflight = _preflightTargetHitTest(
+        command: command,
+        commandType: CockpitCommandType.doubleTap,
+        target: target,
+      );
+      if (preflight?.error != null) {
+        return _failureExecution(
+          command: command,
+          durationMs: stopwatch.elapsedMilliseconds,
+          locatorResolution: resolution.locatorResolution,
+          snapshot: _liveSnapshot().toJson(),
+          error: preflight!.error!,
+        );
+      }
       await _prepareForAction(
         command,
         commandType: CockpitCommandType.doubleTap,
@@ -920,7 +977,10 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
         command: command,
         resolution: resolution,
         durationMs: stopwatch.elapsedMilliseconds,
-        warnings: commit.warnings,
+        warnings: <Map<String, Object?>>[
+          ...commit.warnings,
+          if (preflight?.warning != null) preflight!.warning!,
+        ],
         changed: _changedSince(commit),
       );
     }
@@ -4258,6 +4318,44 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
     });
   }
 
+  _CockpitGesturePreflightResult? _preflightTargetHitTest({
+    required CockpitCommand command,
+    required CockpitCommandType commandType,
+    required CockpitTarget target,
+  }) {
+    final policy = _hitTestMissPolicy(command);
+    if (policy == CockpitHitTestMissPolicy.ignore) {
+      return null;
+    }
+    final result = CockpitTargetHitTestInspector.inspect(target);
+    if (result == null || result.hit) {
+      return null;
+    }
+    final details = <String, Object?>{
+      'commandType': commandType.name,
+      'target': target.registrationId,
+      if (target.displayLabel != null) 'targetLabel': target.displayLabel,
+      'routeName': target.routeName,
+      'hitTest': result.toJson(),
+      'hitTestMissPolicy': policy.name,
+    };
+    if (policy == CockpitHitTestMissPolicy.fail) {
+      return _CockpitGesturePreflightResult.error(
+        CockpitCommandError.targetNotHittable(
+          message:
+              'The resolved target is visible but is not hittable because it is covered or outside the active viewport.',
+          details: details,
+        ),
+      );
+    }
+    return _CockpitGesturePreflightResult.warning(<String, Object?>{
+      'code': 'hitTestMiss',
+      'message':
+          'The resolved target did not win hit testing; execution continued because hitTestMissPolicy=warn.',
+      'details': details,
+    });
+  }
+
   Offset? _gestureProbePosition(
     CockpitGestureAction action,
     CockpitTarget? target,
@@ -4295,7 +4393,11 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
         ),
       );
     }
-    return _registry.resolve(locator, requiredCommand: requiredCommand);
+    return _context.locatorProbe?.call(
+          locator,
+          requiredCommand: requiredCommand,
+        ) ??
+        _registry.resolve(locator, requiredCommand: requiredCommand);
   }
 
   Future<CockpitTargetResolutionResult> _resolveWithRetry(

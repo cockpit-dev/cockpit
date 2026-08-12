@@ -18,7 +18,7 @@ import 'cockpit_windows_capture_adapter.dart';
 typedef CockpitRemoteCaptureAdapterFactory =
     CockpitCaptureAdapter Function(CockpitRemoteSessionClient client);
 typedef CockpitAdbCaptureAdapterFactory =
-    CockpitCaptureAdapter Function(String deviceId);
+    CockpitCaptureAdapter Function(String deviceId, String? platformAppId);
 typedef CockpitSimctlCaptureAdapterFactory =
     CockpitCaptureAdapter Function(String deviceId);
 typedef CockpitWdaCaptureAdapterFactory =
@@ -75,6 +75,7 @@ final class CockpitCaptureStrategyResolver {
         remoteAdapter: remoteAdapter,
         hostAcceptanceAdapter: _adbAdapter(
           androidDeviceId,
+          platformAppId ?? sessionHandle?.effectivePlatformAppId,
           artifactTempFileFactory,
         ),
         client: client,
@@ -189,11 +190,13 @@ final class CockpitCaptureStrategyResolver {
 
   CockpitCaptureAdapter _adbAdapter(
     String deviceId,
+    String? platformAppId,
     CockpitCaptureTempFileFactory? artifactTempFileFactory,
   ) =>
-      adbAdapterFactory?.call(deviceId) ??
+      adbAdapterFactory?.call(deviceId, platformAppId) ??
       CockpitAdbCaptureAdapter(
         deviceId: deviceId,
+        platformAppId: platformAppId,
         tempFileFactory:
             artifactTempFileFactory ?? cockpitCreateCaptureTempFile,
       );

@@ -13,15 +13,29 @@ export 'cockpit_update_models.dart';
 final class CockpitUpdateService {
   CockpitUpdateService({
     CockpitUpdateProcessRunner? processRunner,
+    CockpitLatestVersionLookup? latestVersionLookup,
+    CockpitHostedInstallProbe? hostedInstallProbe,
     Map<String, String>? environment,
     bool? windows,
     String? resolvedExecutable,
   }) : _processRunner = processRunner ?? _runProcess,
+       _latestVersionLookup = latestVersionLookup ?? cockpitLookupLatestVersion,
        _environment = environment ?? Platform.environment,
        _windows = windows ?? Platform.isWindows,
-       _resolvedExecutable = resolvedExecutable ?? Platform.resolvedExecutable;
+       _resolvedExecutable = resolvedExecutable ?? Platform.resolvedExecutable,
+       _hostedInstallProbe =
+           hostedInstallProbe ??
+           ((version) => cockpitHasCanonicalHostedInstall(
+             environment: environment ?? Platform.environment,
+             windows: windows ?? Platform.isWindows,
+             resolvedExecutable:
+                 resolvedExecutable ?? Platform.resolvedExecutable,
+             version: version,
+           ));
 
   final CockpitUpdateProcessRunner _processRunner;
+  final CockpitLatestVersionLookup _latestVersionLookup;
+  final CockpitHostedInstallProbe _hostedInstallProbe;
   final Map<String, String> _environment;
   final bool _windows;
   final String _resolvedExecutable;
@@ -36,6 +50,16 @@ final class CockpitUpdateService {
     }
     final deadline = DateTime.now().toUtc().add(timeout);
     final dart = _windows ? 'dart.exe' : 'dart';
+    onProgress?.call('Checking for Cockpit updates...');
+    if (await _canSkipInstall(currentVersion, deadline)) {
+      await _cleanupLegacySourcePayload();
+      onProgress?.call('Reconnecting the Cockpit Supervisor...');
+      await _reconnectSupervisor(_resolvedExecutable, deadline);
+      return CockpitUpdateResult(
+        previousVersion: currentVersion,
+        version: currentVersion,
+      );
+    }
     late final CockpitUpdateInstallation installation;
     try {
       installation = await CockpitUpdateInstallation.prepare(
@@ -95,44 +119,9 @@ final class CockpitUpdateService {
         deadline: deadline,
       );
 
-      try {
-        await _removeLegacySourcePayload();
-      } on Object catch (error) {
-        throw CockpitUpdateException(
-          'updateCleanupFailed',
-          'Cockpit was updated, but its retired source payload could not be '
-              'removed. ${cockpitBoundUpdateText('$error')}',
-        );
-      }
+      await _cleanupLegacySourcePayload();
       onProgress?.call('Reconnecting the Cockpit Supervisor...');
-      final executable = installation.executablePath;
-      if (executable == null) {
-        throw const CockpitUpdateException(
-          'updateSupervisorFailed',
-          'Cockpit was updated, but its installed executable could not be '
-              'located.',
-        );
-      }
-      final remaining = _remaining(deadline);
-      final supervisor = await _invoke(
-        executable,
-        <String>[
-          'server',
-          '--format',
-          'none',
-          '--timeout',
-          '${remaining.inMilliseconds}ms',
-        ],
-        deadline,
-        failureCode: 'updateSupervisorFailed',
-        failureMessage:
-            'Cockpit was updated, but the Supervisor could not reconnect.',
-      );
-      _requireSuccess(
-        supervisor,
-        code: 'updateSupervisorFailed',
-        message: 'Cockpit was updated, but the Supervisor could not reconnect.',
-      );
+      await _reconnectSupervisor(installation.executablePath, deadline);
       try {
         await installation.finish();
       } on Object catch (error) {
@@ -151,6 +140,49 @@ final class CockpitUpdateService {
     } finally {
       if (!completed) await installation.abort();
     }
+  }
+
+  Future<bool> _canSkipInstall(String currentVersion, DateTime deadline) async {
+    try {
+      if (!await _hostedInstallProbe(currentVersion)) return false;
+      final latestText = await _latestVersionLookup(_remaining(deadline));
+      final current = Version.parse(currentVersion);
+      final latest = Version.parse(latestText);
+      return latest < current || latestText == currentVersion;
+    } on Object {
+      return false;
+    }
+  }
+
+  Future<void> _reconnectSupervisor(
+    String? executable,
+    DateTime deadline,
+  ) async {
+    if (executable == null) {
+      throw const CockpitUpdateException(
+        'updateSupervisorFailed',
+        'The installed Cockpit executable could not be located.',
+      );
+    }
+    final remaining = _remaining(deadline);
+    final supervisor = await _invoke(
+      executable,
+      <String>[
+        'server',
+        '--format',
+        'none',
+        '--timeout',
+        '${remaining.inMilliseconds}ms',
+      ],
+      deadline,
+      failureCode: 'updateSupervisorFailed',
+      failureMessage: 'Cockpit could not reconnect its Supervisor.',
+    );
+    _requireSuccess(
+      supervisor,
+      code: 'updateSupervisorFailed',
+      message: 'Cockpit could not reconnect its Supervisor.',
+    );
   }
 
   Future<ProcessResult> _invoke(
@@ -223,12 +255,20 @@ final class CockpitUpdateService {
     );
   }
 
-  Future<void> _removeLegacySourcePayload() async {
-    await cockpitRemoveLegacySourcePayload(
-      environment: _environment,
-      windows: _windows,
-      resolvedExecutable: _resolvedExecutable,
-    );
+  Future<void> _cleanupLegacySourcePayload() async {
+    try {
+      await cockpitRemoveLegacySourcePayload(
+        environment: _environment,
+        windows: _windows,
+        resolvedExecutable: _resolvedExecutable,
+      );
+    } on Object catch (error) {
+      throw CockpitUpdateException(
+        'updateCleanupFailed',
+        'Cockpit could not remove its retired source payload. '
+            '${cockpitBoundUpdateText('$error')}',
+      );
+    }
   }
 }
 

@@ -292,6 +292,8 @@ final class CockpitRemoteSessionClient {
       resolvedCaptureKind: result.resolvedCaptureKind,
       usedCaptureFallback: result.usedCaptureFallback,
       degradationReason: result.degradationReason,
+      surface: result.surface,
+      changed: result.changed,
       error: result.error,
     );
   }

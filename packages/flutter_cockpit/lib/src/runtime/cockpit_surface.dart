@@ -93,7 +93,10 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
 
   CockpitTargetRegistry get registry => _registry;
 
-  CockpitTargetResolutionResult probeVisibleLocator(CockpitLocator locator) {
+  CockpitTargetResolutionResult probeVisibleLocator(
+    CockpitLocator locator, {
+    CockpitCommandType? requiredCommand,
+  }) {
     final rootContext = _boundaryKey.currentContext;
     if (rootContext is! Element) {
       return CockpitTargetResolutionResult.failure(
@@ -134,25 +137,25 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
       }
       final element = probe.element;
       if (element != null) {
+        final targetResolution = _probeTargetForElement(
+          element,
+          requiredCommand: requiredCommand,
+        );
+        if (!targetResolution.isSuccess) {
+          return targetResolution;
+        }
         return CockpitTargetResolutionResult.success(
-          target: _probeTargetForElement(element),
+          target: targetResolution.target!,
           locatorResolution: CockpitLocatorResolution(
             matchedKind: candidate.kind,
             matchedValue: candidate.value,
             matchedSignals: _matchedLocatorSignals(candidate),
           ),
+          matches: targetResolution.matches,
         );
       }
     }
-    if (_requiresLogicalTargetResolution(locator)) {
-      return _registry.resolve(locator);
-    }
-    return CockpitTargetResolutionResult.failure(
-      error: CockpitCommandError.targetNotFound(
-        message: 'No visible Flutter element matched the locator.',
-        details: <String, Object?>{'requestedLocator': locator.toJson()},
-      ),
-    );
+    return _registry.resolve(locator, requiredCommand: requiredCommand);
   }
 
   @override
@@ -1074,10 +1077,13 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
     );
   }
 
-  CockpitTarget _probeTargetForElement(Element element) {
+  CockpitTargetResolutionResult _probeTargetForElement(
+    Element element, {
+    CockpitCommandType? requiredCommand,
+  }) {
     final semanticId = _elementSemanticSignal(element);
     final keyValue = _stableKeyValue(element.widget.key);
-    return CockpitTarget(
+    final probeTarget = CockpitTarget(
       registrationId: 'probe:${identityHashCode(element)}',
       cockpitId: semanticId ?? keyValue,
       semanticId: semanticId,
@@ -1091,6 +1097,134 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
       diagnosticNodeProvider: () => element,
       geometryProvider: () =>
           CockpitTargetGeometryResolver.maybeFromElement(element),
+    );
+    if (requiredCommand == null) {
+      return CockpitTargetResolutionResult.success(target: probeTarget);
+    }
+    final relatedTargets = _relatedActionTargets(
+      element,
+      requiredCommand: requiredCommand,
+    );
+    if (relatedTargets.isEmpty) {
+      return CockpitTargetResolutionResult.success(target: probeTarget);
+    }
+
+    final closestDistance = relatedTargets.first.distance;
+    final closest = relatedTargets
+        .takeWhile((candidate) => candidate.distance == closestDistance)
+        .map((candidate) => candidate.target)
+        .toList(growable: false);
+    if (closest.length > 1) {
+      return CockpitTargetResolutionResult.failure(
+        error: CockpitCommandError.ambiguousTarget(
+          message:
+              'Multiple actionable Flutter controls are equally related to the matched element.',
+          details: <String, Object?>{
+            'candidateCount': closest.length,
+            'candidates': closest
+                .map((target) => target.registrationId)
+                .toList(growable: false),
+          },
+        ),
+        matches: closest,
+      );
+    }
+
+    final actionTarget = closest.single;
+    return CockpitTargetResolutionResult.success(
+      target: _mergeProbeIdentity(probeTarget, actionTarget),
+      matches: closest,
+    );
+  }
+
+  List<({CockpitTarget target, int distance})> _relatedActionTargets(
+    Element element, {
+    required CockpitCommandType requiredCommand,
+  }) {
+    final candidates = <({CockpitTarget target, int distance})>[];
+    final seenElements = <Element>{};
+    for (final target in _registry.visibleTargets) {
+      if (!target.supportedCommands.contains(requiredCommand)) {
+        continue;
+      }
+      final targetElement = target.diagnosticNodeProvider?.call();
+      if (targetElement is! Element ||
+          !targetElement.mounted ||
+          !seenElements.add(targetElement)) {
+        continue;
+      }
+      final distance = _relatedElementDistance(element, targetElement);
+      if (distance != null) {
+        candidates.add((target: target, distance: distance));
+      }
+    }
+    candidates.sort((left, right) {
+      final distanceCompare = left.distance.compareTo(right.distance);
+      if (distanceCompare != 0) return distanceCompare;
+      return left.target.registrationId.compareTo(right.target.registrationId);
+    });
+    return candidates;
+  }
+
+  int? _relatedElementDistance(Element matched, Element candidate) {
+    if (identical(matched, candidate)) return 0;
+
+    var distance = 0;
+    int? result;
+    candidate.visitAncestorElements((ancestor) {
+      distance += 1;
+      if (identical(ancestor, matched)) {
+        result = distance;
+        return false;
+      }
+      return true;
+    });
+    if (result != null) return result;
+
+    distance = 0;
+    matched.visitAncestorElements((ancestor) {
+      distance += 1;
+      if (identical(ancestor, candidate)) {
+        result = distance;
+        return false;
+      }
+      return true;
+    });
+    return result;
+  }
+
+  CockpitTarget _mergeProbeIdentity(CockpitTarget probe, CockpitTarget action) {
+    return CockpitTarget(
+      registrationId: action.registrationId,
+      cockpitId: probe.cockpitId ?? action.cockpitId,
+      semanticId: probe.semanticId ?? action.semanticId,
+      keyValue: probe.keyValue ?? action.keyValue,
+      text: probe.text ?? action.text,
+      textParts: <String>{...probe.textParts, ...action.textParts},
+      tooltip: probe.tooltip ?? action.tooltip,
+      typeName: probe.typeName ?? action.typeName,
+      path: probe.path ?? action.path,
+      scrollablePath: action.scrollablePath,
+      scrollableKeyValue: action.scrollableKeyValue,
+      scrollableTypeName: action.scrollableTypeName,
+      routeName: action.routeName,
+      supportedCommands: action.supportedCommands,
+      locatorAncestors: probe.locatorAncestors,
+      onTap: action.onTap,
+      onLongPress: action.onLongPress,
+      onDoubleTap: action.onDoubleTap,
+      onEnterText: action.onEnterText,
+      onTextInput: action.onTextInput,
+      onSemanticTap: action.onSemanticTap,
+      onSemanticLongPress: action.onSemanticLongPress,
+      onSemanticEnterText: action.onSemanticEnterText,
+      onSemanticTextInput: action.onSemanticTextInput,
+      onSemanticShowOnScreen: action.onSemanticShowOnScreen,
+      onSemanticIncrease: action.onSemanticIncrease,
+      onSemanticDecrease: action.onSemanticDecrease,
+      onSemanticDismiss: action.onSemanticDismiss,
+      diagnosticNodeProvider: action.diagnosticNodeProvider,
+      geometryProvider: action.geometryProvider,
     );
   }
 

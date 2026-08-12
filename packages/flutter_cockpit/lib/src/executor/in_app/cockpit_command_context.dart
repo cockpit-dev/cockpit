@@ -17,7 +17,10 @@ typedef CockpitCaptureHandler =
 typedef CockpitSnapshotProvider =
     CockpitSnapshot Function({CockpitSnapshotOptions options});
 typedef CockpitLocatorProbe =
-    CockpitTargetResolutionResult Function(CockpitLocator locator);
+    CockpitTargetResolutionResult Function(
+      CockpitLocator locator, {
+      CockpitCommandType? requiredCommand,
+    });
 typedef CockpitPostActionSettler = Future<void> Function();
 typedef CockpitScrollStepHandler =
     Future<CockpitScrollStepResult> Function({

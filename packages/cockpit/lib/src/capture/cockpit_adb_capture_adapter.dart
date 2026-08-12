@@ -10,18 +10,21 @@ import 'cockpit_host_capture_adapter.dart';
 final class CockpitAdbCaptureAdapter implements CockpitHostCaptureAdapter {
   CockpitAdbCaptureAdapter({
     required String deviceId,
+    String? platformAppId,
     String executable = 'adb',
     CockpitCaptureProcessStarter processStarter = cockpitStartIsolatedProcess,
     CockpitCaptureTempFileFactory tempFileFactory =
         cockpitCreateCaptureTempFile,
     Duration timeout = const Duration(seconds: 5),
   }) : _deviceId = deviceId,
+       _platformAppId = platformAppId?.trim(),
        _executable = executable,
        _processStarter = processStarter,
        _tempFileFactory = tempFileFactory,
        _timeout = timeout;
 
   final String _deviceId;
+  final String? _platformAppId;
   final String _executable;
   final CockpitCaptureProcessStarter _processStarter;
   final CockpitCaptureTempFileFactory _tempFileFactory;
@@ -97,13 +100,39 @@ final class CockpitAdbCaptureAdapter implements CockpitHostCaptureAdapter {
           },
         );
       }
-      return cockpitValidateHostCaptureOutput(
+      final execution = await cockpitValidateHostCaptureOutput(
         command: command,
         artifact: artifact,
         durationMs: stopwatch.elapsedMilliseconds,
         outputFile: outputFile,
         captureDescription: 'adb screencap',
         details: <String, Object?>{'deviceId': _deviceId},
+      );
+      if (!execution.result.success) return execution;
+      final surface = await _readSurfaceRelation();
+      if (surface == null) return execution;
+      final result = execution.result;
+      return CockpitCommandExecution(
+        result: CockpitCommandResult(
+          success: result.success,
+          commandId: result.commandId,
+          commandType: result.commandType,
+          locatorResolution: result.locatorResolution,
+          durationMs: result.durationMs,
+          artifacts: result.artifacts,
+          requestedCaptureProfile: result.requestedCaptureProfile,
+          resolvedCaptureKind: result.resolvedCaptureKind,
+          usedCaptureFallback: result.usedCaptureFallback,
+          degradationReason: surface['relation'] == 'differentApp'
+              ? 'systemSurfaceMismatch'
+              : result.degradationReason,
+          surface: surface,
+          changed: result.changed,
+          error: result.error,
+        ),
+        artifactPayloads: execution.artifactPayloads,
+        artifactSourcePaths: execution.artifactSourcePaths,
+        runtimeSteps: execution.runtimeSteps,
       );
     } on TimeoutException {
       process.kill(ProcessSignal.sigkill);
@@ -134,6 +163,80 @@ final class CockpitAdbCaptureAdapter implements CockpitHostCaptureAdapter {
       );
     }
   }
+
+  Future<Map<String, Object?>?> _readSurfaceRelation() async {
+    final expectedPackage = _platformAppId;
+    if (expectedPackage == null || expectedPackage.isEmpty) return null;
+    try {
+      final process = await _processStarter(_executable, <String>[
+        '-s',
+        _deviceId,
+        'shell',
+        'dumpsys',
+        'window',
+      ]);
+      final stdoutCollector = CockpitProcessOutputCollector(process.stdout);
+      final stderrCollector = CockpitProcessOutputCollector(process.stderr);
+      final exitCode = await process.exitCode.timeout(
+        const Duration(milliseconds: 750),
+        onTimeout: () {
+          process.kill(ProcessSignal.sigkill);
+          return -1;
+        },
+      );
+      final output = await Future.wait(<Future<String>>[
+        stdoutCollector.collectText(),
+        stderrCollector.collectText(),
+      ]);
+      if (exitCode != 0) {
+        return <String, Object?>{'relation': 'unknown', 'app': expectedPackage};
+      }
+      final focusLine = output.first
+          .split('\n')
+          .map((line) => line.trim())
+          .firstWhere(
+            (line) =>
+                line.contains('mCurrentFocus=') ||
+                line.contains('mFocusedWindow='),
+            orElse: () => '',
+          );
+      final focusedPackage = _focusedPackage(focusLine);
+      final relation = focusedPackage == null
+          ? 'unknown'
+          : focusedPackage == expectedPackage
+          ? 'app'
+          : _isAndroidSystemPackage(focusedPackage)
+          ? 'systemOverlay'
+          : 'differentApp';
+      return <String, Object?>{
+        'relation': relation,
+        if (relation != 'app') 'app': expectedPackage,
+        if (focusedPackage != null && relation != 'app')
+          'front': focusedPackage,
+      };
+    } on Object {
+      return <String, Object?>{'relation': 'unknown', 'app': expectedPackage};
+    }
+  }
+}
+
+String? _focusedPackage(String line) {
+  if (line.isEmpty) return null;
+  final component = RegExp(
+    r'([A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)+)/[A-Za-z0-9_.$]+',
+  ).firstMatch(line);
+  return component?.group(1);
+}
+
+bool _isAndroidSystemPackage(String packageId) {
+  return const <String>{
+    'android',
+    'com.android.systemui',
+    'com.android.permissioncontroller',
+    'com.google.android.permissioncontroller',
+    'com.android.packageinstaller',
+    'com.google.android.packageinstaller',
+  }.contains(packageId);
 }
 
 // Drain pending stdout after process exit: keep reading while data is still

@@ -1,5 +1,16 @@
 # Changelog
 
+## 4.0.1
+
+- Made mounted Flutter Element discovery independent of developer-authored
+  Semantics for key, text, type, route, path, and ancestor conditions.
+- Associated wrapper locators with the nearest command-capable descendant or
+  ancestor while keeping equal actionable matches explicitly ambiguous.
+- Kept read-only assertions bound to the matched Element itself, preventing
+  nearby controls from making `assertVisible` ambiguous.
+- Added gesture hit-test preflight so covered or off-viewport targets fail or
+  warn according to the requested policy instead of reporting false success.
+
 ## 4.0.0
 
 - Added bounded descendant text parts to mounted Flutter target discovery so

@@ -1,5 +1,11 @@
 # Changelog
 
+## 4.0.1
+
+- Added bounded foreground-surface metadata to command results so system
+  captures can identify the expected app, an operating-system overlay, a
+  different foreground app, or an unknown surface.
+
 ## 4.0.0
 
 - Added bounded descendant `textParts` to Flutter target and snapshot

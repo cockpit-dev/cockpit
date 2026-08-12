@@ -323,18 +323,25 @@ idempotency key 提交：
 
 ```bash
 cockpit case validate --workspace-id <workspaceId> --file cases/login.yaml
+cockpit case run --file cases/login.yaml \
+  --idempotency-key login-local-2026-07-24
 cockpit case run --workspace-id <workspaceId> \
   --document-id <documentId> --case-id login \
   --idempotency-key login-2026-07-24 \
   --timeout 30m
 
 cockpit suite validate --workspace-id <workspaceId> --file suites/regression.yaml
+cockpit suite run --file suites/regression.yaml \
+  --idempotency-key regression-local-2026-07-24
 cockpit suite run --workspace-id <workspaceId> \
   --document-id <documentId> --suite-id regression \
   --idempotency-key regression-2026-07-24
 cockpit suite report --run-id <runId> \
   --output-dir cockpit-report
 ```
+
+`--file` 会直接校验并提交一个本地文档；持久共享文档或 CI 文档使用 indexed ID
+形式，两种形式不能同时使用。
 
 worker 意外退出后，已完成节点不会重跑，执行中的 attempt 会变为 `interrupted`，
 只有 suite retry 策略允许时才继续。持久化的 fixture/row session 必须恢复为同一
