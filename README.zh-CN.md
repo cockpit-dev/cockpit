@@ -112,7 +112,8 @@ secret store，`--env` 只传给当前进程。
 
 Flutter 检查直接遍历已挂载的 Element 与 RenderObject 结构，不要求业务应用编写
 `Semantics` 标签。日常开发优先使用有界的 `dev inspect QUERY`，其 `sel` 可以直接
-执行，多个条件取交集。`dev tree` 返回紧凑的 selector 索引；只有需要理解周边
+执行，多个条件取交集，并优先用稳定祖先范围而不是 widget path。`dev tree` 返回
+紧凑的 selector 索引；只有需要理解周边
 结构时才使用 `dev tree --view more` 或 `dev tree --view full`，两者都会把树写入
 artifact，stdout 只返回经过验证的路径。
 

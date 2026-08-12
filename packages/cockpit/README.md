@@ -210,7 +210,9 @@ Use `resetAppData` only when the selected driver advertises it, and choose
 `sharedSession` explicitly only when state sharing is part of the suite design.
 
 Fields in one locator are an intersection; `fallbacks` are ordered
-alternatives. Native black-box targets additionally support state, hierarchy,
+alternatives. Flutter `dev inspect` emits the shortest unique stable selector,
+preferring identity or exact text, then ancestor scope, path, and finally a
+stable ordered index. Native black-box targets additionally support state, hierarchy,
 and spatial constraints when their inspected accessibility capability reports
 them. Unsupported constraints fail explicitly.
 Text and label matching defaults to `exact`; use an explicit `matchMode` of

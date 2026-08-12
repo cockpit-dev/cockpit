@@ -120,8 +120,9 @@ production workflows. Cockpit does not read a keychain or secret store, and
 
 Flutter inspection walks the mounted Element and RenderObject structure; it
 does not require application-authored `Semantics` labels. Use the bounded
-`dev inspect QUERY` result for normal work; its `sel` is directly executable and
-multiple conditions intersect. `dev tree` returns a compact selector index.
+`dev inspect QUERY` result for normal work; its `sel` is directly executable,
+multiple conditions intersect, and stable ancestor scopes are preferred over
+widget paths. `dev tree` returns a compact selector index.
 Escalate to `dev tree --view more` or `dev tree --view full` only when the
 surrounding structure is needed; both write the tree to an artifact and stdout
 returns only its verified path.
