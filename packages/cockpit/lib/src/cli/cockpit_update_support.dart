@@ -24,7 +24,9 @@ Future<String> cockpitLookupLatestVersion(
   try {
     final response = await effectiveClient
         .get(
-          Uri.https('pub.dev', '/api/packages/cockpit'),
+          Uri.https('pub.dev', '/api/packages/cockpit', <String, String>{
+            '_': DateTime.now().toUtc().microsecondsSinceEpoch.toString(),
+          }),
           headers: const <String, String>{
             'accept': 'application/json',
             'cache-control': 'no-cache',
