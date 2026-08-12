@@ -1,5 +1,11 @@
 # Changelog
 
+## 4.0.4
+
+- Made focused Flutter inspection execute the same conjunctive selector
+  matching as actions, including key, type, route, ancestor, and index signals.
+- Kept free-text inspection queries as bounded exploratory searches.
+
 ## 4.0.3
 
 - Made mounted Flutter Element probes use the same deterministic text matching
