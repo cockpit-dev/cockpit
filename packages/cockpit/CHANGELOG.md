@@ -1,5 +1,11 @@
 # Changelog
 
+## 4.0.11
+
+- Restored Flutter development sessions without waiting for every retained E2E
+  event stream to replay, keeping cold inspect and control commands responsive
+  while durable recovery continues in the background.
+
 ## 4.0.10
 
 - Made `cockpit update` wait within its command timeout when Pub package APIs
