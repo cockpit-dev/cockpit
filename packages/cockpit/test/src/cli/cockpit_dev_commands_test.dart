@@ -3,7 +3,7 @@ import 'dart:io';
 
 import 'package:cockpit/src/cli/cockpit_cli_runtime.dart';
 import 'package:cockpit/src/cli/cockpit_command_runner.dart';
-import 'package:cockpit/src/cli/cockpit_dev_locator_advisor.dart';
+import 'package:cockpit/src/application/cockpit_ui_locator_advisor.dart';
 import 'package:cockpit/src/cli/commands/dev_interaction_commands.dart';
 import 'package:cockpit/src/foundation/cockpit_locked_json_store.dart';
 import 'package:cockpit/src/foundation/cockpit_version.dart';
@@ -311,7 +311,7 @@ void main() {
   test(
     'dev locator search is UI-only and returns shortest stable locators',
     () {
-      final result = cockpitBuildDevLocatorMatches(<String, Object?>{
+      final result = cockpitBuildUiLocatorMatchesFromOutput(<String, Object?>{
         'snapshot': <String, Object?>{
           'visibleTargets': <Object?>[
             <String, Object?>{
@@ -371,7 +371,7 @@ void main() {
   );
 
   test('dev target index returns only compact actionable selectors', () {
-    final result = cockpitBuildDevTargetIndex(<String, Object?>{
+    final result = cockpitBuildUiTargetIndexFromOutput(<String, Object?>{
       'snapshot': <String, Object?>{
         'route': '/edit',
         'visibleTargets': <Object?>[
@@ -415,7 +415,7 @@ void main() {
   });
 
   test('dev locator search can return a semantic ID selector', () {
-    final result = cockpitBuildDevLocatorMatches(<String, Object?>{
+    final result = cockpitBuildUiLocatorMatchesFromOutput(<String, Object?>{
       'snapshot': <String, Object?>{
         'visibleTargets': <Object?>[
           <String, Object?>{
@@ -436,7 +436,7 @@ void main() {
   });
 
   test('dev locator search prefers native keys over copied identities', () {
-    final result = cockpitBuildDevLocatorMatches(<String, Object?>{
+    final result = cockpitBuildUiLocatorMatchesFromOutput(<String, Object?>{
       'snapshot': <String, Object?>{
         'summary': <String, Object?>{'visibleTargetCount': 1},
         'visibleTargets': <Object?>[
@@ -464,7 +464,7 @@ void main() {
   });
 
   test('dev inspect preserves a verified explicit selector', () {
-    final result = cockpitBuildDevLocatorMatches(<String, Object?>{
+    final result = cockpitBuildUiLocatorMatchesFromOutput(<String, Object?>{
       'snapshot': <String, Object?>{
         'summary': <String, Object?>{'visibleTargetCount': 1},
         'visibleTargets': <Object?>[
@@ -512,11 +512,11 @@ void main() {
       },
     };
 
-    final complete = cockpitBuildDevLocatorMatches(
+    final complete = cockpitBuildUiLocatorMatchesFromOutput(
       snapshot(count: 1, truncated: true),
       'Save',
     );
-    final incomplete = cockpitBuildDevLocatorMatches(
+    final incomplete = cockpitBuildUiLocatorMatchesFromOutput(
       snapshot(count: 2),
       'Save',
     );
@@ -544,7 +544,7 @@ void main() {
           },
         };
 
-    final indexed = cockpitBuildDevLocatorMatches(<String, Object?>{
+    final indexed = cockpitBuildUiLocatorMatchesFromOutput(<String, Object?>{
       'snapshot': <String, Object?>{
         'visibleTargets': <Object?>[target('second', 80), target('first', 20)],
       },
@@ -558,7 +558,7 @@ void main() {
       containsAll(<String>['["Continue"]:nth(1)', '["Continue"]:nth(2)']),
     );
 
-    final scoped = cockpitBuildDevLocatorMatches(<String, Object?>{
+    final scoped = cockpitBuildUiLocatorMatchesFromOutput(<String, Object?>{
       'snapshot': <String, Object?>{
         'visibleTargets': <Object?>[
           target('dialog', 20),
@@ -604,7 +604,7 @@ void main() {
       ],
     };
 
-    final result = cockpitBuildDevLocatorMatches(<String, Object?>{
+    final result = cockpitBuildUiLocatorMatchesFromOutput(<String, Object?>{
       'snapshot': <String, Object?>{
         'visibleTargets': <Object?>[
           target(
@@ -660,7 +660,7 @@ void main() {
       ],
     };
 
-    final result = cockpitBuildDevLocatorMatches(<String, Object?>{
+    final result = cockpitBuildUiLocatorMatchesFromOutput(<String, Object?>{
       'snapshot': <String, Object?>{
         'visibleTargets': <Object?>[
           target(
@@ -691,7 +691,7 @@ void main() {
   });
 
   test('dev locator search uses exact text parts from composite controls', () {
-    final result = cockpitBuildDevLocatorMatches(<String, Object?>{
+    final result = cockpitBuildUiLocatorMatchesFromOutput(<String, Object?>{
       'snapshot': <String, Object?>{
         'visibleTargets': <Object?>[
           <String, Object?>{
@@ -714,7 +714,7 @@ void main() {
   });
 
   test('dev target index omits aggregated descendant text labels', () {
-    final result = cockpitBuildDevTargetIndex(<String, Object?>{
+    final result = cockpitBuildUiTargetIndexFromOutput(<String, Object?>{
       'snapshot': <String, Object?>{
         'route': '/inbox',
         'visibleTargets': <Object?>[
@@ -775,7 +775,7 @@ void main() {
       },
     };
 
-    final result = cockpitBuildDevLocatorMatches(<String, Object?>{
+    final result = cockpitBuildUiLocatorMatchesFromOutput(<String, Object?>{
       'snapshot': <String, Object?>{
         'visibleTargets': <Object?>[
           target(
@@ -843,7 +843,7 @@ void main() {
       },
     };
 
-    final result = cockpitBuildDevLocatorMatches(<String, Object?>{
+    final result = cockpitBuildUiLocatorMatchesFromOutput(<String, Object?>{
       'snapshot': <String, Object?>{
         'visibleTargets': <Object?>[
           target(
@@ -889,7 +889,7 @@ void main() {
           'ancestors': const <Object?>[],
         };
 
-    final result = cockpitBuildDevLocatorMatches(<String, Object?>{
+    final result = cockpitBuildUiLocatorMatchesFromOutput(<String, Object?>{
       'snapshot': <String, Object?>{
         'visibleTargets': <Object?>[
           target('upper', 'Save'),
@@ -906,7 +906,7 @@ void main() {
   });
 
   test('dev locator search does not recall every target from its route', () {
-    final result = cockpitBuildDevLocatorMatches(<String, Object?>{
+    final result = cockpitBuildUiLocatorMatchesFromOutput(<String, Object?>{
       'snapshot': <String, Object?>{
         'visibleTargets': <Object?>[
           <String, Object?>{
@@ -951,7 +951,7 @@ void main() {
       },
     };
 
-    final result = cockpitBuildDevLocatorMatches(<String, Object?>{
+    final result = cockpitBuildUiLocatorMatchesFromOutput(<String, Object?>{
       'snapshot': <String, Object?>{
         'visibleTargets': <Object?>[target('first'), target('second')],
       },
@@ -980,7 +980,7 @@ void main() {
             'ancestors': const <Object?>[],
           };
 
-      final result = cockpitBuildDevLocatorMatches(<String, Object?>{
+      final result = cockpitBuildUiLocatorMatchesFromOutput(<String, Object?>{
         'snapshot': <String, Object?>{
           'visibleTargets': <Object?>[
             target('first', '/scaffold/sidebar/textbutton'),

@@ -335,20 +335,34 @@ final class CockpitWorkerInteractiveOperations {
       sessionId: pair.binding.sessionId,
       snapshotRef: pair.input.optionalId('compareAgainstSnapshotRef'),
     );
+    final profile = pair.input.profile(
+      defaultName: CockpitInteractiveResultProfileName.inspect,
+    );
+    final requestedSnapshotOptions = pair.input.optionalSnapshotOptions();
+    final snapshotOptions =
+        profile.name == CockpitInteractiveResultProfileName.locate ||
+            profile.name == CockpitInteractiveResultProfileName.evidence
+        ? (requestedSnapshotOptions ??
+                  CockpitSnapshotOptions(profile: profile.snapshotProfile))
+              .copyWith(artifact: CockpitSnapshotArtifactMode.large)
+        : requestedSnapshotOptions;
     final result = await runWorkerApplicationOperation(
       context: context,
       operation: () => _inspectUi.inspect(
         CockpitInspectUiRequest(
           app: app.handle,
-          resultProfile: pair.input.profile(
-            defaultName: CockpitInteractiveResultProfileName.inspect,
-          ),
-          snapshotOptions: pair.input.optionalSnapshotOptions(),
+          resultProfile: profile,
+          snapshotOptions: snapshotOptions,
           compareAgainstSnapshotRef: compareAgainstSnapshotRef,
         ),
       ),
     );
-    return _sanitize(result.toJson(), pair.binding, sanitizer);
+    final output = cockpitWorkerInspectUiOutput(
+      result,
+      externalizeSnapshot:
+          profile.name == CockpitInteractiveResultProfileName.evidence,
+    );
+    return _sanitize(output, pair.binding, sanitizer);
   }
 
   Future<Map<String, Object?>> _inspectSurfaceOperation(
@@ -378,20 +392,31 @@ final class CockpitWorkerInteractiveOperations {
       sessionId: pair.binding.sessionId,
       snapshotRef: pair.input.optionalId('compareAgainstSnapshotRef'),
     );
+    final profile = pair.input.profile(
+      defaultName: CockpitInteractiveResultProfileName.inspect,
+    );
+    final requestedSnapshotOptions = pair.input.optionalSnapshotOptions();
+    final snapshotOptions =
+        (requestedSnapshotOptions ??
+                CockpitSnapshotOptions(profile: profile.snapshotProfile))
+            .copyWith(artifact: CockpitSnapshotArtifactMode.large);
     final result = await runWorkerApplicationOperation(
       context: context,
       operation: () => _inspectSurface.inspect(
         CockpitInspectSurfaceRequest(
           target: handle,
-          resultProfile: pair.input.profile(
-            defaultName: CockpitInteractiveResultProfileName.inspect,
-          ),
-          snapshotOptions: pair.input.optionalSnapshotOptions(),
+          resultProfile: profile,
+          snapshotOptions: snapshotOptions,
           compareAgainstSnapshotRef: compareAgainstSnapshotRef,
         ),
       ),
     );
-    return _sanitize(result.toJson(), pair.binding, sanitizer);
+    final output = cockpitWorkerInspectSurfaceOutput(
+      result,
+      externalizeSnapshot:
+          profile.name == CockpitInteractiveResultProfileName.evidence,
+    );
+    return _sanitize(output, pair.binding, sanitizer);
   }
 
   Future<Map<String, Object?>> _readLogsOperation(
@@ -1319,6 +1344,33 @@ final class CockpitWorkerInteractiveOperations {
     targetId: session.targetId,
     recordingId: recordingId,
   );
+}
+
+Map<String, Object?> cockpitWorkerInspectUiOutput(
+  CockpitInspectUiResult result, {
+  bool externalizeSnapshot = false,
+}) => _boundedInspectOutput(
+  result.toJson(),
+  locator: result.locator,
+  externalizeSnapshot: externalizeSnapshot,
+);
+
+Map<String, Object?> cockpitWorkerInspectSurfaceOutput(
+  CockpitInspectSurfaceResult result, {
+  bool externalizeSnapshot = false,
+}) => _boundedInspectOutput(
+  result.toJson(),
+  locator: result.locator,
+  externalizeSnapshot: externalizeSnapshot,
+);
+
+Map<String, Object?> _boundedInspectOutput(
+  Map<String, Object?> output, {
+  required Map<String, Object?>? locator,
+  required bool externalizeSnapshot,
+}) {
+  if (locator != null || externalizeSnapshot) output.remove('snapshot');
+  return output;
 }
 
 final class _SessionInput {

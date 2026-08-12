@@ -63,7 +63,10 @@ final class CockpitInspectSurfaceResult {
     this.diagnostics,
     this.delta,
     this.snapshotRef,
+    this.artifactDownloads = const <CockpitRemoteArtifactDownload>[],
+    this.artifactSourcePaths = const <String, String>{},
     this.effectiveSnapshotOptions,
+    this.locator,
   });
 
   final CockpitTargetHandle target;
@@ -79,7 +82,10 @@ final class CockpitInspectSurfaceResult {
   final Map<String, Object?>? diagnostics;
   final CockpitInteractiveSnapshotDelta? delta;
   final String? snapshotRef;
+  final List<CockpitRemoteArtifactDownload> artifactDownloads;
+  final Map<String, String> artifactSourcePaths;
   final CockpitSnapshotOptions? effectiveSnapshotOptions;
+  final Map<String, Object?>? locator;
 
   Map<String, Object?> toJson() => <String, Object?>{
     'target': target.toJson(),
@@ -95,8 +101,15 @@ final class CockpitInspectSurfaceResult {
     if (diagnostics != null) 'diagnostics': diagnostics,
     if (delta != null) 'delta': delta!.toJson(),
     if (snapshotRef != null) 'snapshotRef': snapshotRef,
+    if (artifactDownloads.isNotEmpty)
+      'artifactDownloads': artifactDownloads
+          .map((download) => download.toJson())
+          .toList(growable: false),
+    if (artifactSourcePaths.isNotEmpty)
+      'artifactSourcePaths': artifactSourcePaths,
     if (effectiveSnapshotOptions != null)
       'effectiveSnapshotOptions': effectiveSnapshotOptions!.toJson(),
+    if (locator != null) 'locator': locator,
   };
 }
 
@@ -324,7 +337,10 @@ final class CockpitInspectSurfaceService {
         diagnostics: inspectResult.diagnostics,
         delta: inspectResult.delta,
         snapshotRef: inspectResult.snapshotRef,
+        artifactDownloads: inspectResult.artifactDownloads,
+        artifactSourcePaths: inspectResult.artifactSourcePaths,
         effectiveSnapshotOptions: inspectResult.effectiveSnapshotOptions,
+        locator: inspectResult.locator,
       );
     } on Object catch (error) {
       if (target.targetKind == CockpitTargetKind.flutterApp ||

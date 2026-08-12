@@ -318,23 +318,12 @@ void main() {
             return _result(
               kind,
               output: const <String, Object?>{
-                'snapshot': <String, Object?>{
-                  'visibleTargets': <Object?>[
-                    <String, Object?>{
-                      'registrationId': 'not-public',
-                      'text': 'Documents',
-                      'typeName': 'TextButton',
-                      'routeName': '/',
-                      'supportedCommands': <Object?>['tap'],
-                      'ancestors': <Object?>[],
-                    },
+                'locator': <String, Object?>{
+                  'query': 'Documents',
+                  'count': 1,
+                  'matches': <Object?>[
+                    <String, Object?>{'sel': 'Documents', 'can': 'tap'},
                   ],
-                  'summary': <String, Object?>{'visibleTargetCount': 1},
-                  'network': <String, Object?>{
-                    'entries': <Object?>[
-                      <String, Object?>{'sha256': 'not-public'},
-                    ],
-                  },
                 },
               },
             );
@@ -536,17 +525,14 @@ void main() {
             return _result(
               kind,
               output: const <String, Object?>{
-                'snapshot': <String, Object?>{
+                'locator': <String, Object?>{
                   'route': '/home',
-                  'visibleTargets': <Object?>[
+                  'count': 1,
+                  'targets': <Object?>[
                     <String, Object?>{
-                      'registrationId': 'not-public',
-                      'cockpitId': 'save',
-                      'text': 'Save',
-                      'typeName': 'FilledButton',
-                      'routeName': '/home',
-                      'supportedCommands': <Object?>['tap'],
-                      'ancestors': <Object?>[],
+                      'sel': '#save',
+                      'label': 'Save',
+                      'can': 'tap',
                     },
                   ],
                 },

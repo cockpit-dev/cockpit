@@ -1144,6 +1144,113 @@ void main() {
     },
   );
 
+  test('large snapshot transport keeps a bounded target summary', () async {
+    final artifactFile = File(
+      '${Directory.systemTemp.path}/cockpit-bounded-snapshot.json',
+    );
+    addTearDown(() async {
+      if (await artifactFile.exists()) await artifactFile.delete();
+    });
+    final server = CockpitRemoteSessionServer(
+      configuration: const CockpitRemoteSessionConfiguration(
+        enabled: true,
+        host: '127.0.0.1',
+        port: 0,
+      ),
+      statusProvider: () async => CockpitRemoteSessionStatus(
+        sessionId: 'bounded-snapshot',
+        platform: 'android',
+        transportType: 'remoteHttp',
+        currentRouteName: '/large',
+        capabilities: CockpitCapabilities(
+          platform: 'android',
+          transportType: 'remoteHttp',
+          supportsInAppControl: true,
+          supportsFlutterViewCapture: true,
+          supportsNativeScreenCapture: false,
+          supportsHostAutomation: false,
+          supportedCommands: const <CockpitCommandType>[
+            CockpitCommandType.collectSnapshot,
+          ],
+          supportedLocatorStrategies: CockpitLocatorKind.values,
+        ),
+        recordingCapabilities: CockpitRecordingCapabilities(
+          supportsNativeRecording: false,
+          preferredAcceptanceRecordingKind: CockpitRecordingKind.nativeScreen,
+        ),
+        snapshot: CockpitSnapshot(routeName: '/large'),
+      ),
+      snapshotProvider: ({required options}) async => CockpitSnapshot(
+        routeName: '/large',
+        diagnosticLevel: options.profile,
+        visibleTargets: List<CockpitSnapshotTarget>.generate(
+          200,
+          (index) => CockpitSnapshotTarget(
+            registrationId: 'target-$index',
+            text: 'Target $index ${'x' * 8000}',
+            routeName: '/large',
+            supportedCommands: const <CockpitCommandType>[
+              CockpitCommandType.tap,
+            ],
+          ),
+        ),
+        summary: const CockpitSnapshotSummary(
+          visibleTargetCount: 200,
+          targetsWithCockpitIdCount: 0,
+          targetsWithTextCount: 200,
+          styleDetailsIncluded: false,
+          diagnosticPropertiesIncluded: false,
+          ancestorSummariesIncluded: false,
+          rebuildSummaryIncluded: false,
+          accessibilitySummaryIncluded: false,
+        ),
+      ),
+      commandExecutor: (_) async => CockpitCommandExecution(
+        result: CockpitCommandResult(
+          success: true,
+          commandId: 'noop',
+          commandType: CockpitCommandType.collectSnapshot,
+          durationMs: 0,
+        ),
+      ),
+      startRecording: (request) async => CockpitRecordingSession(
+        request: request,
+        state: CockpitRecordingState.recording,
+      ),
+      stopRecording: () async =>
+          CockpitRecordingResult(state: CockpitRecordingState.failed),
+      artifactTempFileFactory: (_) async => artifactFile,
+    );
+    await server.start();
+
+    final responseJson = await _readJson(
+      server.baseUri!.resolve(
+        '/snapshot?profile=baseline&maxTargets=200&artifact=large',
+      ),
+    );
+    final snapshot = CockpitSnapshot.fromJson(
+      Map<String, Object?>.from(
+        responseJson['snapshot']! as Map<Object?, Object?>,
+      ),
+    );
+
+    expect(snapshot.visibleTargets, hasLength(24));
+    expect(snapshot.visibleTargets.first.text?.length, 513);
+    expect(snapshot.summary?.visibleTargetCount, 200);
+    expect(snapshot.truncated, isTrue);
+    expect(jsonEncode(responseJson).length, lessThan(50000));
+    final downloadPath =
+        ((responseJson['artifactDownloads']! as List<Object?>).single
+                as Map<Object?, Object?>)['downloadPath']!
+            as String;
+    final complete = CockpitSnapshot.fromJson(
+      await _readJson(server.baseUri!.resolve(downloadPath)),
+    );
+    expect(complete.visibleTargets, hasLength(200));
+
+    await server.close();
+  });
+
   test('full and large standard widget trees are tree-only downloads', () async {
     final tempDir = await Directory.systemTemp.createTemp(
       'cockpit_remote_widget_tree',

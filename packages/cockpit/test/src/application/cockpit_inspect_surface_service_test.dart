@@ -47,6 +47,13 @@ void main() {
           routeName: '/desktop-home',
           diagnosticLevel: 'inspect',
           truncated: false,
+          locator: <String, Object?>{
+            'query': 'Documents',
+            'count': 1,
+            'matches': <Object?>[
+              <String, Object?>{'sel': 'Documents', 'can': 'tap'},
+            ],
+          },
         ),
       );
 
@@ -75,6 +82,7 @@ void main() {
         contains(CockpitSurfaceKind.flutterSemantic),
       );
       expect(result.recommendedNextStep, 'runNextCommand');
+      expect(result.locator?['count'], 1);
     },
   );
 

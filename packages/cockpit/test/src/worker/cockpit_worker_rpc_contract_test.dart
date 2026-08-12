@@ -3,10 +3,13 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:cockpit/src/application/cockpit_application_service_exception.dart';
+import 'package:cockpit/src/application/cockpit_inspect_surface_service.dart';
+import 'package:cockpit/src/application/cockpit_inspect_ui_service.dart';
 import 'package:cockpit/src/foundation/cockpit_locked_json_store.dart';
 import 'package:cockpit/src/foundation/cockpit_permissions.dart';
 import 'package:cockpit/src/supervisor/cockpit_supervisor_worker_endpoint.dart';
 import 'package:cockpit/src/supervisor/cockpit_worker_resource_authority.dart';
+import 'package:cockpit/src/targets/cockpit_target_handle.dart';
 import 'package:cockpit/src/worker/cockpit_json_rpc_message.dart';
 import 'package:cockpit/src/worker/cockpit_json_rpc_peer.dart';
 import 'package:cockpit/src/worker/cockpit_worker_case_run_store.dart';
@@ -18,6 +21,7 @@ import 'package:cockpit/src/worker/cockpit_worker_protocol_schema.dart';
 import 'package:cockpit/src/worker/cockpit_worker_resource_grant.dart';
 import 'package:cockpit/src/worker/cockpit_worker_server.dart';
 import 'package:cockpit/src/worker/cockpit_worker_value_reader.dart';
+import 'package:cockpit/src/worker/cockpit_worker_interactive_operations.dart';
 import 'package:cockpit/src/worker/cockpit_workspace_application_adapters.dart';
 import 'package:cockpit/src/worker/cockpit_workspace_operation_registry.dart';
 import 'package:cockpit_protocol/cockpit_protocol.dart';
@@ -1507,6 +1511,148 @@ void main() {
       expect(authority.releaseCount, 1);
     },
   );
+
+  test('bounded locator output never crosses the worker frame limit', () {
+    final snapshot = CockpitSnapshot(
+      routeName: '/large',
+      visibleTargets: List<CockpitSnapshotTarget>.generate(
+        2000,
+        (index) => CockpitSnapshotTarget(
+          registrationId: 'target-$index',
+          text: 'Target $index ${'x' * 800}',
+          routeName: '/large',
+          supportedCommands: const <CockpitCommandType>[CockpitCommandType.tap],
+        ),
+      ),
+    );
+    final output = cockpitWorkerInspectUiOutput(
+      CockpitInspectUiResult(
+        routeName: '/large',
+        diagnosticLevel: 'baseline',
+        truncated: false,
+        snapshot: snapshot,
+        locator: const <String, Object?>{
+          'query': 'Target 1999',
+          'count': 1,
+          'matches': <Object?>[
+            <String, Object?>{'sel': 'Target 1999', 'can': 'tap'},
+          ],
+        },
+      ),
+    );
+
+    expect(output, isNot(contains('snapshot')));
+    expect(output['locator'], isA<Map<Object?, Object?>>());
+    expect(
+      utf8.encode(jsonEncode(output)).length,
+      lessThan(cockpitWorkerMaximumPayloadBytes),
+    );
+  });
+
+  test('surface locator output also omits its complete snapshot', () {
+    final output = cockpitWorkerInspectSurfaceOutput(
+      CockpitInspectSurfaceResult(
+        target: CockpitTargetHandle(
+          targetId: 'target-1',
+          targetKind: CockpitTargetKind.flutterApp,
+          platform: 'android',
+          deviceId: 'emulator-5554',
+          projectDir: '/workspace/a/app',
+          target: 'cockpit/main.dart',
+          connection: const CockpitTargetConnection(
+            baseUrl: 'http://127.0.0.1:61331',
+          ),
+          launchedAt: DateTime.utc(2026, 8, 12),
+        ),
+        capabilityProfile: CockpitCapabilityProfile(
+          targetKind: CockpitTargetKind.flutterApp,
+        ),
+        surfaceKind: CockpitSurfaceKind.flutterSemantic,
+        selectedPlane: CockpitPlaneKind.flutterSemanticPlane,
+        recommendedNextStep: 'runNextCommand',
+        diagnosticLevel: 'baseline',
+        truncated: false,
+        snapshot: CockpitSnapshot(
+          routeName: '/large',
+          visibleTargets: List<CockpitSnapshotTarget>.generate(
+            2000,
+            (index) => CockpitSnapshotTarget(
+              registrationId: 'target-$index',
+              text: 'Target $index ${'x' * 800}',
+              routeName: '/large',
+            ),
+          ),
+        ),
+        locator: const <String, Object?>{
+          'query': 'Target 1999',
+          'count': 1,
+          'matches': <Object?>[
+            <String, Object?>{'sel': 'Target 1999'},
+          ],
+        },
+      ),
+    );
+
+    expect(output, isNot(contains('snapshot')));
+    expect(output['locator'], isA<Map<Object?, Object?>>());
+    expect(
+      utf8.encode(jsonEncode(output)).length,
+      lessThan(cockpitWorkerMaximumPayloadBytes),
+    );
+  });
+
+  test('evidence output externalizes UI but preserves full diagnostics', () {
+    final result = CockpitInspectUiResult(
+      routeName: '/failure',
+      diagnosticLevel: 'forensic',
+      truncated: false,
+      snapshot: CockpitSnapshot(
+        routeName: '/failure',
+        visibleTargets: <CockpitSnapshotTarget>[
+          CockpitSnapshotTarget(
+            registrationId: 'failure-target',
+            text: 'Failure target ${'x' * 800000}',
+            routeName: '/failure',
+          ),
+        ],
+      ),
+      diagnostics: <String, Object?>{
+        'level': 'full',
+        'runtime': <String, Object?>{
+          'totalEntryCount': 1,
+          'errorCount': 1,
+          'entries': <Object?>[
+            <String, Object?>{'message': 'Complete runtime evidence'},
+          ],
+        },
+      },
+      artifactDownloads: const <CockpitRemoteArtifactDownload>[
+        CockpitRemoteArtifactDownload(
+          artifact: CockpitArtifactRef(
+            role: 'diagnostics',
+            relativePath: 'diagnostics/evidence.json',
+          ),
+          downloadPath: '/artifacts/evidence.json',
+        ),
+      ],
+    );
+
+    final output = cockpitWorkerInspectUiOutput(
+      result,
+      externalizeSnapshot: true,
+    );
+
+    expect(output, isNot(contains('snapshot')));
+    expect(
+      output['diagnostics'].toString(),
+      contains('Complete runtime evidence'),
+    );
+    expect(output['artifactDownloads'], isA<List<Object?>>());
+    expect(
+      utf8.encode(jsonEncode(output)).length,
+      lessThan(cockpitWorkerMaximumPayloadBytes),
+    );
+  });
 }
 
 Future<void> _initialize(
