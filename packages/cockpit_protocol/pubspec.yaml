@@ -1,6 +1,6 @@
 name: cockpit_protocol
 description: Platform-neutral Cockpit test, Supervisor API, client, runtime, and driver contracts.
-version: 4.0.4
+version: 4.0.5
 homepage: https://github.com/cockpit-dev/cockpit
 repository: https://github.com/cockpit-dev/cockpit
 issue_tracker: https://github.com/cockpit-dev/cockpit/issues

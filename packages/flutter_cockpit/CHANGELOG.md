@@ -1,5 +1,9 @@
 # Changelog
 
+## 4.0.5
+
+- Synchronized the Flutter bridge package with the Cockpit 4.0.5 release.
+
 ## 4.0.4
 
 - Made focused Flutter inspection execute the same conjunctive selector

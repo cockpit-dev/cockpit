@@ -1,5 +1,13 @@
 # Changelog
 
+## 4.0.5
+
+- Added a unique Pub metadata query to `cockpit update` so a newly published
+  release is discoverable without waiting for the shared CDN cache to expire.
+- Compacted Flutter target output by omitting labels already represented by a
+  stable selector and collapsing duplicate text candidates from the same
+  logical control during free-text inspection.
+
 ## 4.0.4
 
 - Made `dev inspect` preserve and verify explicit Flutter selectors before
