@@ -140,8 +140,12 @@ void main() {
       '1m',
     );
     expect(
-      dev.subcommands['recover']!.argParser.options['decision']!.defaultsTo,
-      'dismiss',
+      dev.subcommands['recover']!.argParser.options['dialog']!.defaultsTo,
+      isNull,
+    );
+    expect(
+      dev.subcommands['recover']!.argParser.options.keys,
+      isNot(contains('decision')),
     );
     expect(
       dev.subcommands['recover']!.argParser.options['timeout']!.defaultsTo,

@@ -62,6 +62,7 @@ final class CockpitSystemControlActionService {
     CockpitMacosAccessibilityTreeReader? macosAccessibilityTreeReader,
     CockpitMacosSystemDialogHandler? macosSystemDialogHandler,
     CockpitMacosApplicationProcessIdResolver? macosApplicationProcessIdResolver,
+    CockpitMacosApplicationFocusReader? macosApplicationFocusReader,
     CockpitWindowsNativeInputExecutor? windowsNativeInputExecutor,
     CockpitWindowsFocusStateReader? windowsFocusStateReader,
   }) : _processManager = processManager ?? const LocalCockpitProcessManager(),
@@ -97,6 +98,15 @@ final class CockpitSystemControlActionService {
                  processManager:
                      processManager ?? const LocalCockpitProcessManager(),
                )),
+       _macosApplicationFocusReader =
+           macosApplicationFocusReader ??
+           (({required processId, required timeout}) =>
+               cockpitReadMacosApplicationFocus(
+                 processId: processId,
+                 timeout: timeout,
+                 processManager:
+                     processManager ?? const LocalCockpitProcessManager(),
+               )),
        _windowsNativeInputExecutor =
            windowsNativeInputExecutor ?? cockpitExecuteWindowsNativeInput,
        _windowsFocusStateReader =
@@ -113,6 +123,7 @@ final class CockpitSystemControlActionService {
   final CockpitMacosSystemDialogHandler _macosSystemDialogHandler;
   final CockpitMacosApplicationProcessIdResolver
   _macosApplicationProcessIdResolver;
+  final CockpitMacosApplicationFocusReader _macosApplicationFocusReader;
   final CockpitWindowsNativeInputExecutor _windowsNativeInputExecutor;
   final CockpitWindowsFocusStateReader _windowsFocusStateReader;
 
@@ -573,6 +584,7 @@ final class CockpitSystemControlActionService {
         success: true,
         stdout: stdout,
         recommendedNextStep: 'readPostActionState',
+        changed: _macosDialogWasHandled(stdout),
         strategy: capability.strategy,
         requires: capability.requires,
         limitations: capability.limitations,
@@ -753,6 +765,19 @@ final class CockpitSystemControlActionService {
       request.parameters,
       'dismissKeyboard',
     );
+    if (decision.isInvalid || dismissKeyboard.isInvalid) {
+      return _notExecutable(
+        request,
+        availability: capability.availability,
+        recommendedNextStep: 'fixActionPayload',
+        errorCode: 'invalidSystemActionParameter',
+        errorMessage:
+            'Android recovery accepts decision as accept or dismiss and dismissKeyboard as a boolean.',
+        strategy: capability.strategy,
+        requires: capability.requires,
+        limitations: capability.limitations,
+      );
+    }
     final requestAppId = request.appId?.trim();
     final target = requestAppId != null && requestAppId.isNotEmpty
         ? CockpitSystemControlStringParameter.valid(requestAppId)
@@ -849,52 +874,237 @@ final class CockpitSystemControlActionService {
     CockpitSystemControlActionRequest request,
     CockpitSystemControlProfile profile,
     CockpitSystemControlCapability capability,
-  ) {
+  ) async {
+    final stopwatch = Stopwatch()..start();
+    Duration remaining() {
+      final value = request.timeout - stopwatch.elapsed;
+      if (value <= Duration.zero) {
+        throw TimeoutException('macOS recovery deadline elapsed.');
+      }
+      return value;
+    }
+
+    final dismissKeyboard = cockpitReadSystemControlBoolParameter(
+      request.parameters,
+      'dismissKeyboard',
+    );
     final decision = cockpitReadSystemControlStringParameter(
       request.parameters,
       'decision',
       allowedValues: const <String>['accept', 'dismiss'],
     );
-    final dismissKeyboard = cockpitReadSystemControlBoolParameter(
-      request.parameters,
-      'dismissKeyboard',
-    );
+    if (decision.isInvalid || dismissKeyboard.isInvalid) {
+      return _notExecutable(
+        request,
+        availability: capability.availability,
+        recommendedNextStep: 'fixActionPayload',
+        errorCode: 'invalidSystemActionParameter',
+        errorMessage:
+            'macOS recovery accepts decision as accept or dismiss and dismissKeyboard as a boolean.',
+        strategy: capability.strategy,
+        requires: capability.requires,
+        limitations: capability.limitations,
+      );
+    }
     if (dismissKeyboard.value == true) {
-      return Future<CockpitSystemControlActionResult>.value(
-        _notExecutable(
+      return _notExecutable(
+        request,
+        availability: capability.availability,
+        recommendedNextStep: 'useFlutterFocusControl',
+        errorCode: 'unsupportedSystemActionParameter',
+        errorMessage:
+            'macOS recovery does not use a global keyboard dismissal action.',
+        strategy: capability.strategy,
+        requires: capability.requires,
+        limitations: capability.limitations,
+      );
+    }
+    try {
+      final processId =
+          request.processId ??
+          await _macosApplicationProcessIdResolver(
+            appId: request.appId!,
+            timeout: remaining(),
+          );
+      final focus = await _macosApplicationFocusReader(
+        processId: processId,
+        timeout: remaining(),
+      );
+      if (focus.targetFrontmost && !decision.isPresent) {
+        return _macosRecoveryResult(
           request,
-          availability: capability.availability,
-          recommendedNextStep: 'useFlutterFocusControl',
-          errorCode: 'unsupportedSystemActionParameter',
+          capability,
+          processId: processId,
+          success: true,
+          changed: false,
+          steps: const <CockpitSystemControlActionResult>[],
+        );
+      }
+      if (focus.targetFrontmost) {
+        final dialogRequest = CockpitSystemControlActionRequest(
+          platform: request.platform,
+          deviceId: request.deviceId,
+          appId: request.appId,
+          processId: processId,
+          metadata: request.metadata,
+          action: CockpitSystemControlAction.dismissSystemDialog,
+          parameters: <String, Object?>{'decision': decision.value!},
+          timeout: remaining(),
+        );
+        final dialogCapability = profile.capabilityFor(
+          CockpitSystemControlAction.dismissSystemDialog,
+        )!;
+        final dialogCommand = _registry
+            .resolve(request.platform)
+            .resolveCommand(dialogRequest);
+        final dialogResult = await _runResolvedCommand(
+          dialogRequest,
+          dialogCapability,
+          dialogCommand,
+        );
+        return _macosRecoveryResult(
+          request,
+          capability,
+          processId: processId,
+          success: dialogResult.success,
+          changed: dialogResult.success ? dialogResult.changed : null,
+          steps: <CockpitSystemControlActionResult>[dialogResult],
+          availability: dialogResult.availability,
+          recommendedNextStep: dialogResult.success
+              ? null
+              : dialogResult.recommendedNextStep,
+          errorCode: dialogResult.errorCode,
+          errorMessage: dialogResult.errorMessage,
+        );
+      }
+      if (focus.sessionLocked) {
+        return _notExecutable(
+          request,
+          availability: CockpitSystemControlAvailability.blocked,
+          recommendedNextStep: 'unlockMacosSession',
+          errorCode: 'macosSessionLocked',
           errorMessage:
-              'macOS recovery does not use a global keyboard dismissal action.',
+              'The macOS login window or screen saver owns the foreground; unlock the session before native recovery.',
           strategy: capability.strategy,
           requires: capability.requires,
           limitations: capability.limitations,
-        ),
+        );
+      }
+      final activationRequest = CockpitSystemControlActionRequest(
+        platform: request.platform,
+        deviceId: request.deviceId,
+        appId: request.appId,
+        processId: processId,
+        metadata: request.metadata,
+        action: CockpitSystemControlAction.recoverToApp,
+        parameters: _macroTargetParameters(request),
+        timeout: remaining(),
+      );
+      final activationCapability = profile.capabilityFor(
+        CockpitSystemControlAction.recoverToApp,
+      )!;
+      final activationCommand = _registry
+          .resolve(request.platform)
+          .resolveCommand(activationRequest);
+      final activationResult = await _runResolvedCommand(
+        activationRequest,
+        activationCapability,
+        activationCommand,
+      );
+      return _macosRecoveryResult(
+        request,
+        capability,
+        processId: processId,
+        success: activationResult.success,
+        changed: activationResult.success ? true : null,
+        steps: <CockpitSystemControlActionResult>[activationResult],
+        availability: activationResult.availability,
+        recommendedNextStep: activationResult.success
+            ? null
+            : activationResult.recommendedNextStep,
+        errorCode: activationResult.errorCode,
+        errorMessage: activationResult.errorMessage,
+      );
+    } on TimeoutException {
+      return _notExecutable(
+        request,
+        availability: capability.availability,
+        recommendedNextStep: 'inspectMacosRecovery',
+        errorCode: 'systemActionTimedOut',
+        errorMessage:
+            'macOS recovery timed out after ${request.timeout.inMilliseconds}ms.',
+        strategy: capability.strategy,
+        requires: capability.requires,
+        limitations: capability.limitations,
+      );
+    } on CockpitMacosAccessibilityException catch (error) {
+      return _notExecutable(
+        request,
+        availability: capability.availability,
+        recommendedNextStep: 'inspectMacosRecovery',
+        errorCode: error.code,
+        errorMessage: error.message,
+        strategy: capability.strategy,
+        requires: capability.requires,
+        limitations: capability.limitations,
+      );
+    } on Object catch (error) {
+      return _notExecutable(
+        request,
+        availability: capability.availability,
+        recommendedNextStep: 'inspectMacosRecovery',
+        errorCode: 'macosRecoveryFailed',
+        errorMessage: 'macOS recovery failed: $error',
+        strategy: capability.strategy,
+        requires: capability.requires,
+        limitations: capability.limitations,
       );
     }
-    return _runMacroSteps(
-      request,
-      profile,
-      capability,
-      steps: <_SystemMacroStep>[
-        _SystemMacroStep(
-          action: CockpitSystemControlAction.dismissSystemDialog,
-          parameters: <String, Object?>{
-            'decision': decision.value ?? 'dismiss',
-          },
-          optional: true,
-        ),
-        _SystemMacroStep(
-          action: CockpitSystemControlAction.recoverToApp,
-          parameters: _macroTargetParameters(request),
-        ),
-      ],
-      recommendedNextStepOnSuccess: 'readPostActionState',
-      changed: true,
-    );
   }
+
+  CockpitSystemControlActionResult _macosRecoveryResult(
+    CockpitSystemControlActionRequest request,
+    CockpitSystemControlCapability capability, {
+    required int processId,
+    required bool success,
+    required bool? changed,
+    required List<CockpitSystemControlActionResult> steps,
+    CockpitSystemControlAvailability? availability,
+    String? recommendedNextStep,
+    String? errorCode,
+    String? errorMessage,
+  }) => CockpitSystemControlActionResult(
+    platform: request.platform,
+    deviceId: request.deviceId,
+    appId: request.appId,
+    processId: processId,
+    action: request.action,
+    availability: availability ?? capability.availability,
+    success: success,
+    stdout: jsonEncode(<String, Object?>{
+      'steps': steps
+          .map(
+            (step) => <String, Object?>{
+              'action': step.action.name,
+              'success': step.success,
+              if (step.stdout != null && step.stdout!.isNotEmpty)
+                'stdout': step.stdout,
+              if (step.errorCode != null) 'errorCode': step.errorCode,
+              if (step.errorMessage != null) 'errorMessage': step.errorMessage,
+            },
+          )
+          .toList(growable: false),
+    }),
+    recommendedNextStep:
+        recommendedNextStep ??
+        (success ? 'readPostActionState' : 'inspectSystemMacroFailure'),
+    changed: changed,
+    strategy: capability.strategy,
+    requires: capability.requires,
+    limitations: capability.limitations,
+    errorCode: errorCode,
+    errorMessage: errorMessage,
+  );
 
   Future<_AndroidBlockerProbe> _probeAndroidBlockers(
     CockpitSystemControlActionRequest request, {
@@ -2044,6 +2254,9 @@ bool _isAndroidSystemDialogPackage(String? packageName) {
 
 bool _isAndroidSystemUiPackage(String? packageName) =>
     packageName == 'com.android.systemui';
+
+bool _macosDialogWasHandled(String? output) =>
+    output != null && RegExp(r'\bhandled=true\b').hasMatch(output);
 
 int _processAttemptLimit(CockpitSystemControlActionRequest request) {
   if (request.platform != 'ios') {

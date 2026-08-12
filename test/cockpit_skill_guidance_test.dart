@@ -98,7 +98,7 @@ void main() {
       'cockpit dev dismiss',
       'cockpit dev back',
       'resolveBlockers',
-      'decision:dismiss',
+      'cockpit dev recover --dialog dismiss',
       'never launch a second app as recovery',
       'treat it as committed',
       'cockpit session show',
@@ -344,7 +344,9 @@ void main() {
     expect(development, contains('bounded observe-decide-prove loop'));
     expect(development, contains('cockpit dev dismiss'));
     expect(development, contains('resolveBlockers'));
-    expect(development, contains('decision:dismiss'));
+    expect(development, contains('macosSessionLocked'));
+    expect(development, contains('Unlock the desktop'));
+    expect(development, contains('cockpit dev recover --dialog dismiss'));
     expect(development, contains('Do not chain speculative taps'));
     expect(development, contains('Treat the mutation as committed'));
     expect(development, contains('cockpit session show HANDLE'));

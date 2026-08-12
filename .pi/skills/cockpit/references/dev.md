@@ -133,7 +133,8 @@ bounded observe-decide-prove loop:
 | Expected product prompt | Execute its explicit expected action with an exact locator. |
 | Incidental Flutter dialog/sheet/banner/upgrade notice | Prefer an explicit neutral action such as Later, Not now, Skip, Cancel, or Close; otherwise use `cockpit dev dismiss` only when inspection proves the overlay is dismissible. |
 | Unintended temporary route | Use `cockpit dev back` once only when current state proves the parent route is the intended destination. |
-| Android/iOS system capture shows OS dialog, keyboard, or system UI | Run `cockpit dev recover` for the exact session. Use `--decision accept` or `--keyboard` only when the scenario or capture proves it is required. |
+| Android/iOS system capture shows OS dialog, keyboard, or system UI | Run `cockpit dev recover` for the exact session. Use `--dialog accept` or `--keyboard` only when the scenario or capture proves it is required. |
+| macOS recovery reports `macosSessionLocked` | Unlock the desktop, then retry the same session once. Do not request Accessibility permission or relaunch the app. |
 | Runtime exception or failed request | Read standard diagnostics, fix the cause, then hot reload and prove the expected anchor. |
 | App crashed or stopped unexpectedly | Use `cockpit dev start` to reconcile and relaunch the owned app under the same handle. |
 | Port/bridge changed | Use `cockpit dev start` to reconnect the owned app; do not create another session. |
@@ -142,9 +143,14 @@ Use the task command for routine recovery:
 
 ```bash
 cockpit dev recover
-cockpit dev recover --decision accept
+cockpit dev recover --dialog dismiss
+cockpit dev recover --dialog accept
 cockpit dev recover --keyboard
 ```
+
+`dev recover` owns the advertised `resolveBlockers` operation. Use the short
+task command instead of constructing a generic operation payload. Omit
+`--dialog` for focus-only recovery; add it only for a proven native dialog.
 
 Unknown prompts default to the safe negative/neutral path. Never generically accept
 upgrades, installations, permissions, authentication, payments, deletion, or external

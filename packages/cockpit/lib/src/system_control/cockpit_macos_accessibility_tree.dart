@@ -32,6 +32,28 @@ typedef CockpitMacosAccessibilityElementPresser =
 typedef CockpitMacosApplicationProcessIdResolver =
     Future<int> Function({required String appId, required Duration timeout});
 
+typedef CockpitMacosApplicationFocusReader =
+    Future<CockpitMacosApplicationFocus> Function({
+      required int processId,
+      required Duration timeout,
+    });
+
+final class CockpitMacosApplicationFocus {
+  const CockpitMacosApplicationFocus({
+    required this.targetFrontmost,
+    required this.frontmostProcessId,
+    required this.frontmostAppId,
+  });
+
+  final bool targetFrontmost;
+  final int? frontmostProcessId;
+  final String? frontmostAppId;
+
+  bool get sessionLocked =>
+      frontmostAppId == 'com.apple.loginwindow' ||
+      frontmostAppId == 'com.apple.ScreenSaver.Engine';
+}
+
 typedef CockpitMacosSystemDialogHandler =
     Future<String> Function({
       required int processId,
@@ -90,6 +112,63 @@ Future<int> cockpitResolveMacosApplicationProcessId({
     );
   }
   return processId;
+}
+
+Future<CockpitMacosApplicationFocus> cockpitReadMacosApplicationFocus({
+  required int processId,
+  required Duration timeout,
+  CockpitProcessManager processManager = const LocalCockpitProcessManager(),
+}) async {
+  if (!Platform.isMacOS) {
+    throw UnsupportedError('macOS focus inspection requires macOS.');
+  }
+  if (processId <= 0) {
+    throw const CockpitMacosAccessibilityException(
+      code: 'invalidMacosApplicationProcess',
+      message: 'A positive macOS application process id is required.',
+    );
+  }
+  final result = await processManager
+      .run(
+        'osascript',
+        <String>[
+          '-l',
+          'JavaScript',
+          '-e',
+          _frontmostApplicationProcessScript,
+          '$processId',
+        ],
+        stdoutEncoding: utf8,
+        stderrEncoding: utf8,
+      )
+      .timeout(timeout);
+  if (result.exitCode != 0) {
+    throw CockpitMacosAccessibilityException(
+      code: 'macosApplicationFocusProbeFailed',
+      message: '${result.stderr}'.trim().isEmpty
+          ? 'Unable to inspect the frontmost macOS application.'
+          : '${result.stderr}'.trim(),
+    );
+  }
+  try {
+    final value = jsonDecode('${result.stdout}'.trim());
+    if (value is! Map<String, Object?> ||
+        value['targetFrontmost'] is! bool ||
+        value['frontmostProcessId'] is! int ||
+        value['frontmostAppId'] is! String) {
+      throw const FormatException('invalid macOS focus response');
+    }
+    return CockpitMacosApplicationFocus(
+      targetFrontmost: value['targetFrontmost']! as bool,
+      frontmostProcessId: value['frontmostProcessId']! as int,
+      frontmostAppId: value['frontmostAppId']! as String,
+    );
+  } on FormatException catch (error) {
+    throw CockpitMacosAccessibilityException(
+      code: 'macosApplicationFocusProbeFailed',
+      message: 'Unable to decode the frontmost macOS application: $error',
+    );
+  }
 }
 
 Future<String> cockpitReadMacosAccessibilityTree({
@@ -1306,5 +1385,25 @@ function run(argv) {
     )
   }
   return String(Number(apps.objectAtIndex(0).processIdentifier))
+}
+''';
+
+const String _frontmostApplicationProcessScript = r'''
+ObjC.import('AppKit')
+
+function run(argv) {
+  const processId = Number(argv[0])
+  const application = $.NSWorkspace.sharedWorkspace.frontmostApplication
+  const frontmostProcessId = application
+    ? Number(application.processIdentifier)
+    : 0
+  const frontmostAppId = application && application.bundleIdentifier
+    ? ObjC.unwrap(application.bundleIdentifier)
+    : ''
+  return JSON.stringify({
+    targetFrontmost: frontmostProcessId === processId,
+    frontmostProcessId,
+    frontmostAppId,
+  })
 }
 ''';
