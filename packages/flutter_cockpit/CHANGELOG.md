@@ -1,5 +1,10 @@
 # Changelog
 
+## 4.0.12
+
+- Aligned the Flutter bridge with the Cockpit CLI and protocol release while
+  retaining the bounded large-snapshot transport introduced in 4.0.6.
+
 ## 4.0.6
 
 - Externalized large Flutter snapshots while keeping a bounded transport
