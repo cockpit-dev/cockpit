@@ -150,13 +150,30 @@ final class _DevTarget {
 
   String get searchSeed => _searchText(label) ?? '';
 
-  String? get label =>
-      _value(text) ??
-      _value(tip) ??
-      _value(cockpitId) ??
-      _value(semanticId) ??
-      _value(key) ??
-      _value(type);
+  String? get label => _labelSignal?.value;
+
+  _Signal? get _labelSignal {
+    final textValue = _value(text);
+    if (textValue != null && !_hasCompositeText) {
+      return _Signal('text', textValue);
+    }
+    if (_value(tip) case final value?) return _Signal('tip', value);
+    if (_value(semanticId) case final value?) return _Signal('sem', value);
+    if (_value(cockpitId) case final value?) return _Signal('id', value);
+    if (_value(key) case final value?) return _Signal('key', value);
+    final parts = textParts.map(_value).nonNulls.toList(growable: false)
+      ..sort((left, right) => left.length.compareTo(right.length));
+    if (parts.firstOrNull case final value?) return _Signal('text', value);
+    if (_value(type) case final value?) return _Signal('type', value);
+    return null;
+  }
+
+  bool get _hasCompositeText {
+    final primary = _exactText(text);
+    if (primary == null) return false;
+    final parts = textParts.map(_exactText).nonNulls.toSet();
+    return parts.length > 1 && parts.every(primary.contains);
+  }
 
   String? get displayLabel =>
       _value(cockpitId) ??
@@ -228,15 +245,25 @@ final class _DevTarget {
     for (final part in textParts) {
       if (_searchText(part)?.contains(query) ?? false) return part;
     }
+    if (_hasCompositeText &&
+        <String?>[
+          cockpitId,
+          semanticId,
+          key,
+          tip,
+        ].any((value) => _value(value) != null)) {
+      return null;
+    }
     return text;
   }
 
   Map<String, Object?> result(List<_DevTarget> targets, String query) {
     final advice = _advise(this, targets, query);
     final actions = _compactActions(can);
+    final label = _labelForAdvice(advice.loc);
     return <String, Object?>{
       'sel': CockpitSelector.format(_locator(advice.loc)),
-      if (!advice.loc.containsKey('text') && label != null) 'label': label,
+      'label': ?label,
       'can': ?actions,
       if (advice.ambiguous) 'ambiguous': true,
     };
@@ -245,12 +272,36 @@ final class _DevTarget {
   Map<String, Object?> selectorResult(CockpitLocator locator) {
     final selector = CockpitSelector.format(locator);
     final actions = _compactActions(can);
-    return <String, Object?>{
-      'sel': selector,
-      if (label case final value?)
-        if (selector != value) 'label': value,
-      'can': ?actions,
+    final label = _labelForLocator(locator);
+    return <String, Object?>{'sel': selector, 'label': ?label, 'can': ?actions};
+  }
+
+  String? _labelForAdvice(Map<String, Object?> loc) {
+    final signal = _labelSignal;
+    if (signal == null) return null;
+    final selected = loc[signal.name];
+    if (selected is String &&
+        _exactText(selected) == _exactText(signal.value)) {
+      return null;
+    }
+    return signal.value;
+  }
+
+  String? _labelForLocator(CockpitLocator locator) {
+    final signal = _labelSignal;
+    if (signal == null) return null;
+    final selected = switch (signal.name) {
+      'id' => locator.cockpitId,
+      'sem' => locator.semanticId,
+      'key' => locator.key,
+      'text' => locator.text,
+      'tip' => locator.tooltip,
+      'type' => locator.type,
+      _ => null,
     };
+    return _exactText(selected) == _exactText(signal.value)
+        ? null
+        : signal.value;
   }
 }
 

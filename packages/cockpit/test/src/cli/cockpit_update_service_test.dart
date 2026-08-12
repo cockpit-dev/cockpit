@@ -29,6 +29,7 @@ void main() {
     expect(version, '4.0.4');
     expect(request.headers['cache-control'], 'no-cache');
     expect(request.headers['pragma'], 'no-cache');
+    expect(request.url.queryParameters['_'], isNotEmpty);
   });
 
   test('normalizes update cleanup paths before boundary checks', () {

@@ -431,11 +431,7 @@ void main() {
     }, 'checkout.submit');
 
     expect(result['matches'], <Object?>[
-      <String, Object?>{
-        'sel': '[sem="checkout.submit"]',
-        'label': 'checkout.submit',
-        'can': 'tap',
-      },
+      <String, Object?>{'sel': '[sem="checkout.submit"]', 'can': 'tap'},
     ]);
   });
 
@@ -603,6 +599,36 @@ void main() {
     expect(result['count'], 1);
     expect(result['matches'], <Object?>[
       <String, Object?>{'sel': '/inspect', 'can': 'tap'},
+    ]);
+  });
+
+  test('dev target index omits aggregated descendant text labels', () {
+    final result = cockpitBuildDevTargetIndex(<String, Object?>{
+      'snapshot': <String, Object?>{
+        'route': '/inbox',
+        'visibleTargets': <Object?>[
+          <String, Object?>{
+            'registrationId': 'task-row',
+            'semanticId': 'Open task Selector proof',
+            'text':
+                'Complete task Selector proof Open task Selector proof '
+                'MEDIUM Pending sync Selector proof Open for notes, due date, '
+                'and next actions. Open',
+            'textParts': <Object?>['MEDIUM', 'Pending sync'],
+            'typeName': 'Wrap',
+            'routeName': '/inbox',
+            'supportedCommands': <Object?>['tap'],
+            'ancestors': const <Object?>[],
+          },
+        ],
+      },
+    });
+
+    expect(result['targets'], <Object?>[
+      <String, Object?>{
+        'sel': '[sem="Open task Selector proof"]',
+        'can': 'tap',
+      },
     ]);
   });
 
