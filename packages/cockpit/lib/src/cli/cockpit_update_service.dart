@@ -15,6 +15,7 @@ final class CockpitUpdateService {
     CockpitUpdateProcessRunner? processRunner,
     CockpitLatestVersionLookup? latestVersionLookup,
     CockpitHostedInstallProbe? hostedInstallProbe,
+    CockpitUpdateDelay? delay,
     Map<String, String>? environment,
     bool? windows,
     String? resolvedExecutable,
@@ -23,6 +24,7 @@ final class CockpitUpdateService {
            latestVersionLookup ??
            ((timeout) => cockpitLookupLatestVersion(timeout)),
        _environment = environment ?? Platform.environment,
+       _delay = delay ?? Future<void>.delayed,
        _windows = windows ?? Platform.isWindows,
        _resolvedExecutable = resolvedExecutable ?? Platform.resolvedExecutable,
        _hostedInstallProbe =
@@ -38,6 +40,7 @@ final class CockpitUpdateService {
   final CockpitUpdateProcessRunner _processRunner;
   final CockpitLatestVersionLookup _latestVersionLookup;
   final CockpitHostedInstallProbe _hostedInstallProbe;
+  final CockpitUpdateDelay _delay;
   final Map<String, String> _environment;
   final bool _windows;
   final String _resolvedExecutable;
@@ -172,6 +175,7 @@ final class CockpitUpdateService {
       ?targetVersion,
     ];
     final refreshed = <String>{};
+    var rootPublicationRefreshed = false;
     while (true) {
       final activation = await _invoke(
         dart,
@@ -185,26 +189,25 @@ final class CockpitUpdateService {
         return activation;
       }
       final stale = cockpitStaleHostedDependency(activation);
-      if (stale == null ||
-          !refreshed.add(stale.package) ||
-          refreshed.length > 8) {
+      if (stale == null || refreshed.length > 8) {
+        return activation;
+      }
+      final waitsForRootPublication =
+          stale.package == 'cockpit' && stale.constraint == targetVersion;
+      if (waitsForRootPublication && rootPublicationRefreshed) {
+        return activation;
+      }
+      if (!waitsForRootPublication && !refreshed.add(stale.package)) {
         return activation;
       }
       onProgress?.call('Refreshing ${stale.package} package metadata...');
-      final refresh = await _invoke(
+      final refresh = await _refreshHostedPackage(
         dart,
-        <String>[
-          'pub',
-          'cache',
-          'add',
-          stale.package,
-          '--version',
-          stale.constraint,
-        ],
-        deadline,
-        failureCode: 'updateInstallFailed',
-        failureMessage:
-            'Dart Pub could not refresh ${stale.package} package metadata.',
+        package: stale.package,
+        constraint: stale.constraint,
+        targetVersion: waitsForRootPublication ? targetVersion : null,
+        deadline: deadline,
+        onProgress: onProgress,
       );
       _requireSuccess(
         refresh,
@@ -212,7 +215,57 @@ final class CockpitUpdateService {
         message:
             'Dart Pub could not refresh ${stale.package} package metadata.',
       );
+      if (waitsForRootPublication) rootPublicationRefreshed = true;
     }
+  }
+
+  Future<ProcessResult> _refreshHostedPackage(
+    String dart, {
+    required String package,
+    required String constraint,
+    required String? targetVersion,
+    required DateTime deadline,
+    required void Function(String message)? onProgress,
+  }) async {
+    var attempts = 0;
+    while (true) {
+      attempts += 1;
+      final result = await _invoke(
+        dart,
+        <String>['pub', 'cache', 'add', package, '--version', constraint],
+        deadline,
+        failureCode: 'updateInstallFailed',
+        failureMessage: 'Dart Pub could not refresh $package package metadata.',
+      );
+      if (result.exitCode == 0 ||
+          targetVersion == null ||
+          !cockpitHostedVersionUnavailable(
+            result,
+            package: package,
+            version: targetVersion,
+          )) {
+        return result;
+      }
+      onProgress?.call(
+        'Dart Pub is still indexing cockpit $targetVersion; retrying...',
+      );
+      await _waitForPubIndex(attempts, deadline);
+    }
+  }
+
+  Future<void> _waitForPubIndex(int attempt, DateTime deadline) async {
+    final seconds = attempt <= 4 ? 1 << (attempt - 1) : 15;
+    final remaining = _remaining(deadline);
+    const reserve = Duration(seconds: 1);
+    if (remaining <= reserve) {
+      throw const CockpitUpdateException(
+        'updateTimeout',
+        'Cockpit update exceeded its timeout while waiting for Dart Pub.',
+      );
+    }
+    final available = remaining - reserve;
+    final requested = Duration(seconds: seconds);
+    await _delay(requested < available ? requested : available);
   }
 
   Future<void> _reconnectSupervisor(

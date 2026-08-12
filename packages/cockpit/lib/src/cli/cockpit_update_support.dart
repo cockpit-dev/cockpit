@@ -148,6 +148,19 @@ String? cockpitUpdateDiagnostic(ProcessResult result) {
   return (package: package, constraint: constraint);
 }
 
+bool cockpitHostedVersionUnavailable(
+  ProcessResult result, {
+  required String package,
+  required String version,
+}) {
+  final output = '${result.stderr}\n${result.stdout}';
+  return RegExp(
+    'Package\\s+${RegExp.escape(package)}\\s+has no versions that match\\s+'
+    '${RegExp.escape(version)}(?:\\s|\\.|\$)',
+    caseSensitive: false,
+  ).hasMatch(output);
+}
+
 String cockpitBoundUpdateText(String value) =>
     value.length <= 800 ? value : '${value.substring(0, 797)}...';
 

@@ -63,6 +63,38 @@ void main() {
     ));
   });
 
+  test('recognizes a newly published version missing from Dart Pub', () {
+    final unavailable = ProcessResult(
+      1,
+      1,
+      '',
+      'Package cockpit has no versions that match 4.0.9.\n',
+    );
+    final unrelated = ProcessResult(
+      2,
+      1,
+      '',
+      'Package cockpit has no versions that match 4.0.8.\n',
+    );
+
+    expect(
+      cockpitHostedVersionUnavailable(
+        unavailable,
+        package: 'cockpit',
+        version: '4.0.9',
+      ),
+      isTrue,
+    );
+    expect(
+      cockpitHostedVersionUnavailable(
+        unrelated,
+        package: 'cockpit',
+        version: '4.0.9',
+      ),
+      isFalse,
+    );
+  });
+
   test('normalizes update cleanup paths before boundary checks', () {
     final root = '${Directory.systemTemp.path}/cockpit-update-boundary';
     expect(cockpitPathIsWithin('$root/child', root), isTrue);
@@ -255,6 +287,81 @@ void main() {
       ]);
     },
   );
+
+  test('waits for a newly published root package within the timeout', () async {
+    final pubCache = await Directory.systemTemp.createTemp(
+      'cockpit-update-publishing-',
+    );
+    addTearDown(() async {
+      if (await pubCache.exists()) await pubCache.delete(recursive: true);
+    });
+    await _writeActivatedPackage(pubCache, version: '4.0.8');
+    final executable = File('${pubCache.path}/bin/cockpit');
+    await executable.create(recursive: true);
+    await executable.writeAsString('current aot');
+    final calls = <List<String>>[];
+    final waits = <Duration>[];
+    final progress = <String>[];
+    var activationAttempts = 0;
+    var refreshAttempts = 0;
+    final service = CockpitUpdateService(
+      environment: <String, String>{'PUB_CACHE': pubCache.path},
+      resolvedExecutable: executable.path,
+      windows: false,
+      latestVersionLookup: (_) async => '4.0.9',
+      delay: (duration) async => waits.add(duration),
+      processRunner: (command, arguments, timeout) async {
+        calls.add(<String>[command, ...arguments]);
+        if (arguments.contains('activate')) {
+          activationAttempts += 1;
+          if (activationAttempts == 1) {
+            return ProcessResult(
+              calls.length,
+              1,
+              '',
+              'Because pub global activate depends on cockpit 4.0.9 which '
+                  "doesn't match any versions, version solving failed.\n",
+            );
+          }
+          await _writeActivatedPackage(pubCache, version: '4.0.9');
+        }
+        if (arguments.contains('cache')) {
+          refreshAttempts += 1;
+          if (refreshAttempts < 3) {
+            return ProcessResult(
+              calls.length,
+              1,
+              '',
+              'Package cockpit has no versions that match 4.0.9.\n',
+            );
+          }
+        }
+        if (arguments.contains('compile')) {
+          final output = arguments[arguments.indexOf('-o') + 1];
+          await File(output).writeAsString('new aot');
+        }
+        if (arguments.last == '--version') {
+          return ProcessResult(calls.length, 0, 'cockpit 4.0.9\n', '');
+        }
+        return ProcessResult(calls.length, 0, '', '');
+      },
+    );
+
+    final result = await service.update(
+      currentVersion: '4.0.8',
+      timeout: const Duration(minutes: 1),
+      onProgress: progress.add,
+    );
+
+    expect(result.version, '4.0.9');
+    expect(activationAttempts, 2);
+    expect(refreshAttempts, 3);
+    expect(waits, const <Duration>[Duration(seconds: 1), Duration(seconds: 2)]);
+    expect(
+      progress.where((message) => message.contains('still indexing')),
+      hasLength(2),
+    );
+  });
 
   test(
     'reinstalls a source activation even when its version is current',
