@@ -29,6 +29,7 @@ Future<String> cockpitLookupLatestVersion(
           }),
           headers: const <String, String>{
             'accept': 'application/json',
+            'accept-encoding': 'identity',
             'cache-control': 'no-cache',
             'pragma': 'no-cache',
           },
