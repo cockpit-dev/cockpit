@@ -1,5 +1,10 @@
 # Changelog
 
+## 4.0.3
+
+- Made mounted Flutter Element probes use the same deterministic text matching
+  and ranking semantics as registry-backed actions and assertions.
+
 ## 4.0.2
 
 - Filtered snapshot targets before limits so focused inspection cannot miss a

@@ -1,5 +1,10 @@
 # Changelog
 
+## 4.0.3
+
+- Unified fuzzy target ranking between Flutter development commands and native
+  black-box E2E so the same locator selects the same closest text candidate.
+
 ## 4.0.2
 
 - Replaced legacy locator flags with one compact selector accepted directly by

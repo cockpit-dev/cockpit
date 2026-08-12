@@ -100,4 +100,42 @@ void main() {
     expect(first.target?.keyValue, 'upper-button');
     expect(second.target?.keyValue, 'lower-button');
   });
+
+  testWidgets('fuzzy probes prefer the tightest matching element', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      WidgetsApp(
+        color: const Color(0xFFFFFFFF),
+        builder: (context, child) => CockpitSurface(
+          routeName: '/fuzzy',
+          child: const Material(
+            child: Directionality(
+              textDirection: TextDirection.ltr,
+              child: Column(
+                children: <Widget>[
+                  Text('Save task'),
+                  Text('Save task permanently'),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final surface = tester.state<CockpitSurfaceState>(
+      find.byType(CockpitSurface),
+    );
+    final result = surface.probeVisibleLocator(
+      const CockpitLocator(
+        text: 'Svae task',
+        matchMode: CockpitTextMatchMode.fuzzy,
+      ),
+    );
+
+    expect(result.isSuccess, isTrue, reason: '${result.error?.details}');
+    expect(result.target?.text, 'Save task');
+  });
 }

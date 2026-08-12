@@ -40,6 +40,20 @@ void main() {
       isTrue,
     );
     expect(
+      cockpitTextMatchScore(
+        'Save task',
+        'Svae task',
+        CockpitTextMatchMode.fuzzy,
+      ),
+      greaterThan(
+        cockpitTextMatchScore(
+          'Save task permanently',
+          'Svae task',
+          CockpitTextMatchMode.fuzzy,
+        ),
+      ),
+    );
+    expect(
       cockpitFuzzyTextMatches('Delete account', 'Create profile'),
       isFalse,
     );
