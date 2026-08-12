@@ -1,5 +1,11 @@
 # Changelog
 
+## 4.0.6
+
+- Made `cockpit update` pin the Pub release discovered by its uncached lookup
+  and recover stale Dart Pub dependency indexes through the official package
+  cache command before retrying installation.
+
 ## 4.0.5
 
 - Added a unique Pub metadata query to `cockpit update` so a newly published

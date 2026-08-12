@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:test/test.dart';
 
 void main() {
-  test('published packages share one Cockpit release version', () {
+  test('published packages expose compatible release versions', () {
     final runtimePubspec = File(
       'packages/flutter_cockpit/pubspec.yaml',
     ).readAsStringSync();
@@ -26,7 +26,7 @@ void main() {
     expect(devtoolsPubspec, contains('name: cockpit'));
     expect(runtimeVersion, '4.0.5');
     expect(protocolVersion, '4.0.5');
-    expect(devtoolsVersion, '4.0.5');
+    expect(devtoolsVersion, '4.0.6');
     expect(runtimePubspec, contains('cockpit_protocol: ^4.0.5'));
     expect(devtoolsPubspec, contains('cockpit_protocol: ^4.0.5'));
     expect(
