@@ -1,5 +1,10 @@
 # Changelog
 
+## 4.0.4
+
+- Added canonical detection for explicit compact selectors so inspection can
+  distinguish reusable selector syntax from free-text exploration queries.
+
 ## 4.0.3
 
 - Unified exact, contains, fuzzy, and regex text matching and ranking across

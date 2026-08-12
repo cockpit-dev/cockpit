@@ -1,5 +1,14 @@
 # Changelog
 
+## 4.0.4
+
+- Made `dev inspect` preserve and verify explicit Flutter selectors before
+  returning them for direct action reuse.
+- Bypassed cached Pub metadata during `cockpit update` so newly published
+  versions become discoverable immediately.
+- Removed an acceptance-only full-screen semantics wrapper that distorted the
+  macOS native accessibility tree and blocked native Back actions.
+
 ## 4.0.3
 
 - Unified fuzzy target ranking between Flutter development commands and native
