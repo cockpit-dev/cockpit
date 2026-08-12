@@ -1,5 +1,11 @@
 # Changelog
 
+## 4.0.8
+
+- Made the update version lookup request the identity-encoded Pub metadata
+  representation so a stale compressed CDN variant cannot hide a newly
+  published release.
+
 ## 4.0.7
 
 - Made compact output preserve pre-existing omission counts when the final
