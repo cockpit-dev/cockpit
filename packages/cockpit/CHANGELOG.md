@@ -1,5 +1,13 @@
 # Changelog
 
+## 4.0.9
+
+- Made Flutter inspection prefer stable ancestor-scoped selectors before
+  widget paths and use ancestor keys, text, tooltips, and types as exact
+  intersecting signals.
+- Collapsed derived text proxies when their stable logical control covers the
+  same actions, avoiding fragile indexed selectors for repeated Flutter rows.
+
 ## 4.0.8
 
 - Made the update version lookup request the identity-encoded Pub metadata
