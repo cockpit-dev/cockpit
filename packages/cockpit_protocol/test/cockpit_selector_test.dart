@@ -40,6 +40,18 @@ void main() {
     );
   });
 
+  test(
+    'distinguishes explicit selectors from free-text inspection queries',
+    () {
+      expect(CockpitSelector.isExplicit('Save changes'), isFalse);
+      expect(CockpitSelector.isExplicit('Release notes [draft]'), isFalse);
+      expect(CockpitSelector.isExplicit('@save-key'), isTrue);
+      expect(CockpitSelector.isExplicit('#save'), isTrue);
+      expect(CockpitSelector.isExplicit('FilledButton["Save"]'), isTrue);
+      expect(CockpitSelector.isExplicit('Dialog >> Continue'), isTrue);
+    },
+  );
+
   test('formats canonical selectors which round trip', () {
     const locator = CockpitLocator(
       cockpitId: 'save',

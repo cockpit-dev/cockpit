@@ -10,19 +10,26 @@ import '../infrastructure/cockpit_process_manager.dart';
 
 const Duration _latestVersionLookupLimit = Duration(seconds: 3);
 
-Future<String> cockpitLookupLatestVersion(Duration timeout) async {
+Future<String> cockpitLookupLatestVersion(
+  Duration timeout, {
+  http.Client? client,
+}) async {
   final effectiveTimeout = timeout < _latestVersionLookupLimit
       ? timeout
       : _latestVersionLookupLimit;
   if (effectiveTimeout <= Duration.zero) {
     throw TimeoutException('Cockpit version lookup exceeded its timeout.');
   }
-  final client = http.Client();
+  final effectiveClient = client ?? http.Client();
   try {
-    final response = await client
+    final response = await effectiveClient
         .get(
           Uri.https('pub.dev', '/api/packages/cockpit'),
-          headers: const <String, String>{'accept': 'application/json'},
+          headers: const <String, String>{
+            'accept': 'application/json',
+            'cache-control': 'no-cache',
+            'pragma': 'no-cache',
+          },
         )
         .timeout(effectiveTimeout);
     if (response.statusCode != HttpStatus.ok) {
@@ -39,7 +46,7 @@ Future<String> cockpitLookupLatestVersion(Duration timeout) async {
     }
     return version.trim();
   } finally {
-    client.close();
+    if (client == null) effectiveClient.close();
   }
 }
 

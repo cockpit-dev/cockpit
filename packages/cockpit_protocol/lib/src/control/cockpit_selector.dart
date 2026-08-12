@@ -9,6 +9,22 @@ final class CockpitSelector {
   static const int maxLength = 4096;
   static const int maxDepth = 16;
 
+  /// Whether [source] uses unambiguous selector syntax rather than free text.
+  static bool isExplicit(String source) {
+    final normalized = source.trim();
+    if (normalized.isEmpty) return false;
+    if (normalized.startsWith('#') ||
+        normalized.startsWith('@') ||
+        normalized.startsWith('[') ||
+        normalized.contains('>>') ||
+        normalized.contains(':nth(')) {
+      return true;
+    }
+    return RegExp(
+      r'^[A-Za-z_$][A-Za-z0-9_.$]*\s*(?:#|@|\[(?:"|(?:id|sem|key|text|tip|type|route|path)\s*(?:=|\*=|~=)))',
+    ).hasMatch(normalized);
+  }
+
   /// Parses a selector into the typed locator used by every Cockpit executor.
   static CockpitLocator parse(String source) {
     final normalized = source.trim();

@@ -79,14 +79,7 @@ Widget buildCockpitDemoDevelopmentApp() {
       keyValue: 'cockpit-launch-configuration',
       tooltip: launchConfigurationLabel,
       typeName: 'LaunchConfiguration',
-      child: Semantics(
-        key: const ValueKey<String>('cockpit-launch-configuration'),
-        container: true,
-        explicitChildNodes: true,
-        label: launchConfigurationLabel,
-        textDirection: TextDirection.ltr,
-        child: child,
-      ),
+      child: child,
     );
   }
   return FlutterCockpitApp(

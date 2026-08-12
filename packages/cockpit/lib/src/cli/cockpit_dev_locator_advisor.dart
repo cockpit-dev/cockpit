@@ -18,15 +18,19 @@ Map<String, Object?> cockpitBuildDevLocatorMatches(
       .whereType<Map<Object?, Object?>>()
       .map(_DevTarget.new)
       .toList(growable: false);
+  final selector = CockpitSelector.isExplicit(query)
+      ? CockpitSelector.parse(query)
+      : null;
   final normalizedQuery = _searchText(query);
   if (normalizedQuery == null) {
     throw const FormatException('dev inspect query cannot be empty.');
   }
-  final matches =
-      targets
-          .where((target) => target.matchesQuery(normalizedQuery))
-          .toList(growable: false)
-        ..sort((left, right) => left.compareForQuery(right, normalizedQuery));
+  final matches = selector == null
+      ? (targets
+            .where((target) => target.matchesQuery(normalizedQuery))
+            .toList(growable: false)
+          ..sort((left, right) => left.compareForQuery(right, normalizedQuery)))
+      : targets;
   final visibleMatches = matches.take(limit).toList(growable: false);
   final queryTargetCount = _snapshotTargetCount(snapshot);
 
@@ -34,7 +38,14 @@ Map<String, Object?> cockpitBuildDevLocatorMatches(
     'query': query.trim(),
     'count': matches.length,
     'matches': visibleMatches
-        .map((target) => target.result(targets, normalizedQuery))
+        .map(
+          (target) => selector != null && matches.length == 1
+              ? target.selectorResult(selector)
+              : target.result(
+                  matches,
+                  selector == null ? normalizedQuery : target.searchSeed,
+                ),
+        )
         .toList(growable: false),
     if (matches.length > visibleMatches.length)
       'more': matches.length - visibleMatches.length,
@@ -228,6 +239,17 @@ final class _DevTarget {
       if (!advice.loc.containsKey('text') && label != null) 'label': label,
       'can': ?actions,
       if (advice.ambiguous) 'ambiguous': true,
+    };
+  }
+
+  Map<String, Object?> selectorResult(CockpitLocator locator) {
+    final selector = CockpitSelector.format(locator);
+    final actions = _compactActions(can);
+    return <String, Object?>{
+      'sel': selector,
+      if (label case final value?)
+        if (selector != value) 'label': value,
+      'can': ?actions,
     };
   }
 }

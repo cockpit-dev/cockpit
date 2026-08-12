@@ -79,10 +79,10 @@ void main() {
     );
   });
 
-  test('example macOS project uses SwiftPM without CocoaPods integration', () {
+  test('example macOS project ships SwiftPM and CocoaPods integration', () {
     final macosRoot = Directory('$root/examples/cockpit_demo/macos');
 
-    expect(File('${macosRoot.path}/Podfile').existsSync(), isFalse);
+    expect(File('${macosRoot.path}/Podfile').existsSync(), isTrue);
     expect(File('${macosRoot.path}/Podfile.lock').existsSync(), isFalse);
 
     final shellMacosRoot = Directory(
@@ -94,6 +94,12 @@ void main() {
     for (final relativePath in <String>[
       'Flutter/Flutter-Debug.xcconfig',
       'Flutter/Flutter-Release.xcconfig',
+    ]) {
+      final source = File('${macosRoot.path}/$relativePath').readAsStringSync();
+      expect(source, contains('#include? "Pods/Target Support Files/'));
+    }
+
+    for (final relativePath in <String>[
       'Runner.xcworkspace/contents.xcworkspacedata',
       'Runner.xcodeproj/project.pbxproj',
     ]) {
@@ -109,10 +115,10 @@ void main() {
     expect(project, contains('FlutterGeneratedPluginSwiftPackage'));
   });
 
-  test('example iOS project uses SwiftPM without CocoaPods integration', () {
+  test('example iOS project ships SwiftPM and CocoaPods integration', () {
     final iosRoot = Directory('$root/examples/cockpit_demo/ios');
 
-    expect(File('${iosRoot.path}/Podfile').existsSync(), isFalse);
+    expect(File('${iosRoot.path}/Podfile').existsSync(), isTrue);
     expect(File('${iosRoot.path}/Podfile.lock').existsSync(), isFalse);
 
     final shellIosRoot = Directory('$root/examples/cockpit_demo/cockpit/ios');
@@ -133,6 +139,12 @@ void main() {
     for (final relativePath in <String>[
       'Flutter/Debug.xcconfig',
       'Flutter/Release.xcconfig',
+    ]) {
+      final source = File('${iosRoot.path}/$relativePath').readAsStringSync();
+      expect(source, contains('#include? "Pods/Target Support Files/'));
+    }
+
+    for (final relativePath in <String>[
       'Runner.xcworkspace/contents.xcworkspacedata',
       'Runner.xcodeproj/project.pbxproj',
     ]) {
