@@ -153,6 +153,58 @@ void main() {
     expect(snapshot.summary?.visibleTargetCount, 1);
   });
 
+  testWidgets('explicit selector queries intersect Flutter target signals', (
+    tester,
+  ) async {
+    final rootKey = GlobalKey<CockpitSurfaceState>();
+    final registry = CockpitTargetRegistry(routeName: '/editor')
+      ..register(
+        const CockpitTarget(
+          registrationId: 'editor.title',
+          keyValue: 'task-title-field',
+          text: 'Task title',
+          typeName: 'TextField',
+          routeName: '/editor',
+          supportedCommands: <CockpitCommandType>{CockpitCommandType.enterText},
+        ),
+      )
+      ..register(
+        const CockpitTarget(
+          registrationId: 'editor.notes',
+          keyValue: 'task-notes-field',
+          text: 'Notes',
+          typeName: 'TextField',
+          routeName: '/editor',
+        ),
+      );
+
+    await tester.pumpWidget(
+      Directionality(
+        textDirection: TextDirection.ltr,
+        child: CockpitSurface(
+          key: rootKey,
+          routeName: '/editor',
+          registry: registry,
+          child: const SizedBox.shrink(),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final snapshot = rootKey.currentState!.snapshot(
+      options: const CockpitSnapshotOptions(
+        profile: CockpitSnapshotProfile.baseline,
+        query: 'TextField@task-title-field[route="/editor"]',
+        maxTargets: 1,
+      ),
+    );
+
+    expect(snapshot.visibleTargets, hasLength(1));
+    expect(snapshot.visibleTargets.single.keyValue, 'task-title-field');
+    expect(snapshot.summary?.visibleTargetCount, 1);
+    expect(snapshot.truncated, isFalse);
+  });
+
   testWidgets('investigate profile includes bounded diagnostic properties', (
     tester,
   ) async {

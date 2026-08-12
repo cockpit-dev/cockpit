@@ -208,12 +208,22 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
   CockpitSnapshot snapshot({
     CockpitSnapshotOptions options = const CockpitSnapshotOptions(),
   }) {
-    final visibleTargets = _registry.visibleTargets;
+    var visibleTargets = _registry.visibleTargets;
+    var diagnosticOptions = options;
+    final query = options.query?.trim();
+    if (query != null &&
+        query.isNotEmpty &&
+        CockpitSelector.isExplicit(query)) {
+      visibleTargets = _registry.matchingVisibleTargets(
+        CockpitSelector.parse(query),
+      );
+      diagnosticOptions = options.copyWith(clearQuery: true);
+    }
     var snapshot = _diagnosticBuilder
         .build(
           routeName: _registry.routeName,
           visibleTargets: visibleTargets,
-          options: options,
+          options: diagnosticOptions,
         )
         .snapshot;
     final treeOptions = options.tree;

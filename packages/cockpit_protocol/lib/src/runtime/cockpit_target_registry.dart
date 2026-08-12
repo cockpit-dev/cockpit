@@ -80,6 +80,29 @@ final class CockpitTargetRegistry {
     ]);
   });
 
+  /// Returns visible targets satisfying every condition in [locator].
+  ///
+  /// Results use visual order. A requested locator index reduces the result to
+  /// that one target, while an out-of-range index returns an empty list.
+  List<CockpitTarget> matchingVisibleTargets(CockpitLocator locator) {
+    return _withDiscoveryCache(() {
+      final matches = _preferCurrentRouteMatches(
+        visibleTargets
+            .where((target) => _matches(target, locator))
+            .toList(growable: false),
+      );
+      if (locator.index != null) {
+        final selected = _selectIndexedMatch(matches, locator);
+        return selected == null
+            ? const <CockpitTarget>[]
+            : <CockpitTarget>[selected];
+      }
+      return List<CockpitTarget>.unmodifiable(
+        _orderedMatches(matches, locator),
+      );
+    });
+  }
+
   bool get hasRouteReadyVisibleTargets {
     return _withDiscoveryCache(() {
       if (_explicitVisibleTargets(allowRouteFallback: false).isNotEmpty) {

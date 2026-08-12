@@ -19,7 +19,9 @@ final class CockpitUpdateService {
     bool? windows,
     String? resolvedExecutable,
   }) : _processRunner = processRunner ?? _runProcess,
-       _latestVersionLookup = latestVersionLookup ?? cockpitLookupLatestVersion,
+       _latestVersionLookup =
+           latestVersionLookup ??
+           ((timeout) => cockpitLookupLatestVersion(timeout)),
        _environment = environment ?? Platform.environment,
        _windows = windows ?? Platform.isWindows,
        _resolvedExecutable = resolvedExecutable ?? Platform.resolvedExecutable,

@@ -467,6 +467,34 @@ void main() {
     ]);
   });
 
+  test('dev inspect preserves a verified explicit selector', () {
+    final result = cockpitBuildDevLocatorMatches(<String, Object?>{
+      'snapshot': <String, Object?>{
+        'summary': <String, Object?>{'visibleTargetCount': 1},
+        'visibleTargets': <Object?>[
+          <String, Object?>{
+            'registrationId': 'native.editor.textfield.task-title.1',
+            'keyValue': 'task-title-field',
+            'text': 'Task title',
+            'typeName': 'TextField',
+            'routeName': '/editor',
+            'supportedCommands': <Object?>['tap', 'enterText'],
+            'ancestors': <Object?>[],
+          },
+        ],
+      },
+    }, 'TextField@task-title-field[route="/editor"]');
+
+    expect(result['count'], 1);
+    expect(result['matches'], <Object?>[
+      <String, Object?>{
+        'sel': 'TextField@task-title-field[route="/editor"]',
+        'label': 'Task title',
+        'can': 'tap|type',
+      },
+    ]);
+  });
+
   test('dev locator search reports partial only when matches are omitted', () {
     Map<String, Object?> snapshot({
       required int count,

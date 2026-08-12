@@ -1,10 +1,36 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:cockpit/src/cli/cockpit_update_service.dart';
 import 'package:cockpit/src/cli/cockpit_update_support.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:test/test.dart';
 
 void main() {
+  test('latest-version lookup bypasses cached Pub metadata', () async {
+    late http.Request request;
+    final client = MockClient((candidate) async {
+      request = candidate;
+      return http.Response(
+        jsonEncode(<String, Object?>{
+          'latest': <String, Object?>{'version': '4.0.4'},
+        }),
+        HttpStatus.ok,
+        request: candidate,
+      );
+    });
+
+    final version = await cockpitLookupLatestVersion(
+      const Duration(seconds: 1),
+      client: client,
+    );
+
+    expect(version, '4.0.4');
+    expect(request.headers['cache-control'], 'no-cache');
+    expect(request.headers['pragma'], 'no-cache');
+  });
+
   test('normalizes update cleanup paths before boundary checks', () {
     final root = '${Directory.systemTemp.path}/cockpit-update-boundary';
     expect(cockpitPathIsWithin('$root/child', root), isTrue);
