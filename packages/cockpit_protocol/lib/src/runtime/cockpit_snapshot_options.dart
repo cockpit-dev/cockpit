@@ -26,16 +26,34 @@ enum CockpitSnapshotProfile {
   }
 }
 
+enum CockpitSnapshotArtifactMode {
+  inline,
+  large,
+  always;
+
+  static CockpitSnapshotArtifactMode fromJson(Object? json) {
+    return values.firstWhere(
+      (mode) => mode.name == json,
+      orElse: () => throw ArgumentError.value(
+        json,
+        'json',
+        'Artifact mode must be inline, large, or always.',
+      ),
+    );
+  }
+}
+
 final class CockpitSnapshotOptions {
   /// Creates a CockpitSnapshotOptions.
   const CockpitSnapshotOptions({
     this.profile = CockpitSnapshotProfile.live,
+    this.query,
     this.maxTargets = 25,
     this.maxAncestorsPerTarget = 0,
     this.maxPropertiesPerTarget = 0,
     this.includeStyleDetails = false,
     this.includeDiagnosticProperties = false,
-    this.emitArtifactWhenLarge = false,
+    this.artifact = CockpitSnapshotArtifactMode.inline,
     this.includeRebuildActivity = false,
     this.maxRebuildEntries = 8,
     this.includeNetworkActivity = false,
@@ -88,7 +106,7 @@ final class CockpitSnapshotOptions {
         maxPropertiesPerTarget: 24,
         includeStyleDetails: true,
         includeDiagnosticProperties: true,
-        emitArtifactWhenLarge: true,
+        artifact: CockpitSnapshotArtifactMode.large,
         includeRebuildActivity: true,
         maxRebuildEntries: 16,
         includeNetworkActivity: true,
@@ -101,12 +119,13 @@ final class CockpitSnapshotOptions {
       );
 
   final CockpitSnapshotProfile profile;
+  final String? query;
   final int maxTargets;
   final int maxAncestorsPerTarget;
   final int maxPropertiesPerTarget;
   final bool includeStyleDetails;
   final bool includeDiagnosticProperties;
-  final bool emitArtifactWhenLarge;
+  final CockpitSnapshotArtifactMode artifact;
   final bool includeRebuildActivity;
   final int maxRebuildEntries;
   final bool includeNetworkActivity;
@@ -122,12 +141,13 @@ final class CockpitSnapshotOptions {
   /// Encodes this CockpitSnapshotOptions as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
     'profile': profile.jsonValue,
+    if (query != null) 'query': query,
     'maxTargets': maxTargets,
     'maxAncestorsPerTarget': maxAncestorsPerTarget,
     'maxPropertiesPerTarget': maxPropertiesPerTarget,
     'includeStyleDetails': includeStyleDetails,
     'includeDiagnosticProperties': includeDiagnosticProperties,
-    'emitArtifactWhenLarge': emitArtifactWhenLarge,
+    'artifact': artifact.name,
     'includeRebuildActivity': includeRebuildActivity,
     'maxRebuildEntries': maxRebuildEntries,
     'includeNetworkActivity': includeNetworkActivity,
@@ -145,12 +165,13 @@ final class CockpitSnapshotOptions {
   factory CockpitSnapshotOptions.fromJson(Map<String, Object?> json) {
     CockpitFoundationValueReader.keys(json, const <String>{
       'profile',
+      'query',
       'maxTargets',
       'maxAncestorsPerTarget',
       'maxPropertiesPerTarget',
       'includeStyleDetails',
       'includeDiagnosticProperties',
-      'emitArtifactWhenLarge',
+      'artifact',
       'includeRebuildActivity',
       'maxRebuildEntries',
       'includeNetworkActivity',
@@ -182,6 +203,13 @@ final class CockpitSnapshotOptions {
       profile: json['profile'] == null
           ? CockpitSnapshotProfile.live
           : CockpitSnapshotProfile.fromJson(json['profile']),
+      query: json['query'] == null
+          ? null
+          : CockpitFoundationValueReader.string(
+              json['query'],
+              r'$.query',
+              maximum: 512,
+            ),
       maxTargets: _integer(json, 'maxTargets', 25, maximum: 100000),
       maxAncestorsPerTarget: _integer(
         json,
@@ -200,7 +228,9 @@ final class CockpitSnapshotOptions {
         json,
         'includeDiagnosticProperties',
       ),
-      emitArtifactWhenLarge: _boolean(json, 'emitArtifactWhenLarge'),
+      artifact: json['artifact'] == null
+          ? CockpitSnapshotArtifactMode.inline
+          : CockpitSnapshotArtifactMode.fromJson(json['artifact']),
       includeRebuildActivity: _boolean(json, 'includeRebuildActivity'),
       maxRebuildEntries: _integer(json, 'maxRebuildEntries', 8, maximum: 10000),
       includeNetworkActivity: _boolean(json, 'includeNetworkActivity'),
@@ -238,12 +268,14 @@ final class CockpitSnapshotOptions {
   /// Returns a copy of this CockpitSnapshotOptions with supplied fields replaced.
   CockpitSnapshotOptions copyWith({
     CockpitSnapshotProfile? profile,
+    String? query,
+    bool clearQuery = false,
     int? maxTargets,
     int? maxAncestorsPerTarget,
     int? maxPropertiesPerTarget,
     bool? includeStyleDetails,
     bool? includeDiagnosticProperties,
-    bool? emitArtifactWhenLarge,
+    CockpitSnapshotArtifactMode? artifact,
     bool? includeRebuildActivity,
     int? maxRebuildEntries,
     bool? includeNetworkActivity,
@@ -259,6 +291,7 @@ final class CockpitSnapshotOptions {
   }) {
     return CockpitSnapshotOptions(
       profile: profile ?? this.profile,
+      query: clearQuery ? null : query ?? this.query,
       maxTargets: maxTargets ?? this.maxTargets,
       maxAncestorsPerTarget:
           maxAncestorsPerTarget ?? this.maxAncestorsPerTarget,
@@ -267,8 +300,7 @@ final class CockpitSnapshotOptions {
       includeStyleDetails: includeStyleDetails ?? this.includeStyleDetails,
       includeDiagnosticProperties:
           includeDiagnosticProperties ?? this.includeDiagnosticProperties,
-      emitArtifactWhenLarge:
-          emitArtifactWhenLarge ?? this.emitArtifactWhenLarge,
+      artifact: artifact ?? this.artifact,
       includeRebuildActivity:
           includeRebuildActivity ?? this.includeRebuildActivity,
       maxRebuildEntries: maxRebuildEntries ?? this.maxRebuildEntries,
@@ -293,12 +325,13 @@ final class CockpitSnapshotOptions {
     return identical(this, other) ||
         other is CockpitSnapshotOptions &&
             other.profile == profile &&
+            other.query == query &&
             other.maxTargets == maxTargets &&
             other.maxAncestorsPerTarget == maxAncestorsPerTarget &&
             other.maxPropertiesPerTarget == maxPropertiesPerTarget &&
             other.includeStyleDetails == includeStyleDetails &&
             other.includeDiagnosticProperties == includeDiagnosticProperties &&
-            other.emitArtifactWhenLarge == emitArtifactWhenLarge &&
+            other.artifact == artifact &&
             other.includeRebuildActivity == includeRebuildActivity &&
             other.maxRebuildEntries == maxRebuildEntries &&
             other.includeNetworkActivity == includeNetworkActivity &&
@@ -315,12 +348,13 @@ final class CockpitSnapshotOptions {
   @override
   int get hashCode => Object.hash(
     profile,
+    query,
     maxTargets,
     maxAncestorsPerTarget,
     maxPropertiesPerTarget,
     includeStyleDetails,
     includeDiagnosticProperties,
-    emitArtifactWhenLarge,
+    artifact,
     includeRebuildActivity,
     maxRebuildEntries,
     includeNetworkActivity,

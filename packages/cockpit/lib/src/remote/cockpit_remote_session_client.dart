@@ -92,6 +92,7 @@ final class CockpitRemoteSessionClient {
   }) async {
     final queryParameters = <String, String>{
       'profile': options.profile.jsonValue,
+      if (options.query != null) 'query': options.query!,
       'maxTargets': options.maxTargets.toString(),
       'maxAncestorsPerTarget': options.maxAncestorsPerTarget.toString(),
       'maxPropertiesPerTarget': options.maxPropertiesPerTarget.toString(),
@@ -100,7 +101,7 @@ final class CockpitRemoteSessionClient {
       'includeStyleDetails': options.includeStyleDetails.toString(),
       'includeDiagnosticProperties': options.includeDiagnosticProperties
           .toString(),
-      'emitArtifactWhenLarge': options.emitArtifactWhenLarge.toString(),
+      'artifact': options.artifact.name,
       'includeRebuildActivity': options.includeRebuildActivity.toString(),
       'includeAccessibilitySummary': options.includeAccessibilitySummary
           .toString(),

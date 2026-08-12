@@ -747,14 +747,15 @@ void main() {
 
       await _readJson(
         baseUri!.resolve(
-          '/snapshot?profile=forensic&includeNetworkActivity=true&maxNetworkEntries=15&emitArtifactWhenLarge=true&networkOnlyFailures=true&networkMethod=POST&networkUriContains=%2Fsync&networkStatusCodeAtLeast=500',
+          '/snapshot?profile=forensic&query=Save&includeNetworkActivity=true&maxNetworkEntries=15&artifact=large&networkOnlyFailures=true&networkMethod=POST&networkUriContains=%2Fsync&networkStatusCodeAtLeast=500',
         ),
       );
 
       expect(capturedOptions?.profile, CockpitSnapshotProfile.forensic);
+      expect(capturedOptions?.query, 'Save');
       expect(capturedOptions?.includeNetworkActivity, isTrue);
       expect(capturedOptions?.maxNetworkEntries, 15);
-      expect(capturedOptions?.emitArtifactWhenLarge, isTrue);
+      expect(capturedOptions?.artifact, CockpitSnapshotArtifactMode.large);
       expect(capturedOptions?.networkQuery.onlyFailures, isTrue);
       expect(capturedOptions?.networkQuery.method, 'POST');
       expect(capturedOptions?.networkQuery.uriContains, '/sync');
@@ -935,6 +936,7 @@ void main() {
 
       for (final invalidPath in <String>[
         '/snapshot?profile=deep',
+        '/snapshot?query=%20%20%20',
         '/snapshot?maxTargets=abc',
         '/snapshot?maxNetworkEntries=-1',
         '/snapshot?includeNetworkActivity=yes',
@@ -1098,7 +1100,7 @@ void main() {
 
       final responseJson = await _readJson(
         Uri.parse(
-          '${server.baseUri}/snapshot?profile=forensic&includeDiagnosticProperties=true&emitArtifactWhenLarge=true',
+          '${server.baseUri}/snapshot?profile=forensic&includeDiagnosticProperties=true&artifact=large',
         ),
       );
 
@@ -1251,7 +1253,7 @@ void main() {
 
     final standardResponseJson = await _readJson(
       server.baseUri!.resolve(
-        '/snapshot?treeProfile=standard&treeMaxNodes=100&treeMaxProps=0&emitArtifactWhenLarge=true',
+        '/snapshot?treeProfile=standard&treeMaxNodes=100&treeMaxProps=0&artifact=large',
       ),
     );
     final standardSnapshot = CockpitSnapshot.fromJson(
@@ -1352,7 +1354,7 @@ void main() {
 
       final responseJson = await _readJson(
         server.baseUri!.resolve(
-          '/snapshot?profile=forensic&includeDiagnosticProperties=true&emitArtifactWhenLarge=true',
+          '/snapshot?profile=forensic&includeDiagnosticProperties=true&artifact=large',
         ),
       );
 

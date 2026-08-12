@@ -1,6 +1,6 @@
 {
   "name": "cockpit",
-  "version": "4.0.1",
+  "version": "4.0.2",
   "description": "AI-first Flutter development, cross-platform E2E execution, and regression evidence through Cockpit.",
   "author": {
     "name": "Cockpit Dev"

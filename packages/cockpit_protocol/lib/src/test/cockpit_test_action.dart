@@ -709,12 +709,13 @@ void _validateSnapshotOptions(Object? value, String path) {
   final json = CockpitTestValueReader.object(value, path);
   CockpitTestValueReader.keys(json, const <String>{
     'profile',
+    'query',
     'maxTargets',
     'maxAncestorsPerTarget',
     'maxPropertiesPerTarget',
     'includeStyleDetails',
     'includeDiagnosticProperties',
-    'emitArtifactWhenLarge',
+    'artifact',
     'includeRebuildActivity',
     'maxRebuildEntries',
     'includeNetworkActivity',
@@ -727,6 +728,9 @@ void _validateSnapshotOptions(Object? value, String path) {
     'maxAccessibilityEntries',
     'tree',
   }, path);
+  if (json.containsKey('query')) {
+    CockpitTestValueReader.string(json['query'], '$path.query', maximum: 512);
+  }
   if (json['profile'] case final profile?) {
     final name = CockpitTestValueReader.string(profile, '$path.profile');
     if (!const <String>{
@@ -736,6 +740,12 @@ void _validateSnapshotOptions(Object? value, String path) {
       'forensic',
     }.contains(name)) {
       throw FormatException('Unsupported snapshot profile at $path.profile.');
+    }
+  }
+  if (json['artifact'] case final artifact?) {
+    final name = CockpitTestValueReader.string(artifact, '$path.artifact');
+    if (!const <String>{'inline', 'large', 'always'}.contains(name)) {
+      throw FormatException('Unsupported artifact mode at $path.artifact.');
     }
   }
   for (final name in const <String>{
@@ -759,7 +769,6 @@ void _validateSnapshotOptions(Object? value, String path) {
   for (final name in const <String>{
     'includeStyleDetails',
     'includeDiagnosticProperties',
-    'emitArtifactWhenLarge',
     'includeRebuildActivity',
     'includeNetworkActivity',
     'includeRuntimeActivity',

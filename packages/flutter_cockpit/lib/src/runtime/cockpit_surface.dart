@@ -106,6 +106,28 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
       );
     }
     for (final candidate in _flatten(locator)) {
+      if (requiredCommand != null || candidate.index != null) {
+        final registryResolution = _registry.resolve(
+          candidate,
+          requiredCommand: requiredCommand,
+        );
+        final resolvedTargetSupportsCommand =
+            requiredCommand != null &&
+            registryResolution.target?.supportedCommands.contains(
+                  requiredCommand,
+                ) ==
+                true;
+        final hasCommandMatches =
+            requiredCommand != null &&
+            registryResolution.matches.any(
+              (target) => target.supportedCommands.contains(requiredCommand),
+            );
+        if ((requiredCommand == null && candidate.index != null) ||
+            resolvedTargetSupportsCommand ||
+            hasCommandMatches) {
+          return registryResolution;
+        }
+      }
       var probe = _probeForLocator(rootContext, candidate, visibleOnly: true);
       if (probe.element == null && !probe.ambiguous) {
         final text = candidate.text;

@@ -519,6 +519,44 @@ void main() {
     expect(semanticTargets, isNotEmpty);
   });
 
+  testWidgets('explicit semantic children do not inherit container identity', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      CockpitSurface(
+        routeName: '/inbox',
+        child: Semantics(
+          label: 'Launch configuration',
+          tooltip: 'Launch configuration details',
+          container: true,
+          explicitChildNodes: true,
+          textDirection: TextDirection.ltr,
+          child: MaterialApp(
+            home: Scaffold(
+              body: TextField(
+                key: const ValueKey<String>('task-title-field'),
+                decoration: const InputDecoration(labelText: 'Task title'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final surfaceState = tester.state<CockpitSurfaceState>(
+      find.byType(CockpitSurface),
+    );
+    final field = surfaceState.registry.visibleTargets.singleWhere(
+      (target) => target.keyValue == 'task-title-field',
+    );
+
+    expect(field.text, 'Task title');
+    expect(field.semanticId, isNull);
+    expect(field.cockpitId, 'task-title-field');
+    expect(field.tooltip, isNull);
+  });
+
   testWidgets('resolves an actionable composite control by exact child text', (
     tester,
   ) async {

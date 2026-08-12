@@ -303,12 +303,13 @@ void _validateLegacySnapshotOptions(Object? value, String path) {
   final options = _legacyMap(value, path);
   _requireLegacyKeys(options, path, const <String>{
     'profile',
+    'query',
     'maxTargets',
     'maxAncestorsPerTarget',
     'maxPropertiesPerTarget',
     'includeStyleDetails',
     'includeDiagnosticProperties',
-    'emitArtifactWhenLarge',
+    'artifact',
     'includeRebuildActivity',
     'maxRebuildEntries',
     'includeNetworkActivity',

@@ -1111,6 +1111,9 @@ final class CockpitTargetRegistry {
     final normalizedExpected = _normalizeText(expected);
     if (normalizedExpected != null &&
         normalizedCandidate == normalizedExpected) {
+      if (matchMode == CockpitTextMatchMode.fuzzy) {
+        return 1100000 + sourceScore;
+      }
       return 10000 + sourceScore;
     }
     if (matchMode == CockpitTextMatchMode.contains &&
@@ -1122,13 +1125,17 @@ final class CockpitTargetRegistry {
               .toInt();
     }
     if (matchMode == CockpitTextMatchMode.fuzzy && normalizedExpected != null) {
-      return (cockpitFuzzyTextSimilarity(
-                    normalizedCandidate,
-                    normalizedExpected,
-                  ) *
+      final similarityScore =
+          (cockpitFuzzyTextSimilarity(normalizedCandidate, normalizedExpected) *
                   10000)
-              .round() +
-          sourceScore;
+              .round();
+      final lengthCloseness =
+          (99 -
+                  (normalizedCandidate.length - normalizedExpected.length)
+                      .abs()
+                      .clamp(0, 99))
+              .toInt();
+      return similarityScore * 100 + lengthCloseness + sourceScore;
     }
     final match = RegExp(expected.trim()).firstMatch(normalizedCandidate)!;
     final fullMatch =

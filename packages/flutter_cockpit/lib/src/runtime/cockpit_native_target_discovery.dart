@@ -1575,6 +1575,9 @@ final class CockpitNativeTargetDiscovery {
     final pendingChain = <Element>[element];
     String? resolved;
     element.visitAncestorElements((ancestor) {
+      if (_separatesSemanticChildren(ancestor.widget)) {
+        return false;
+      }
       if (session.semanticIds.containsKey(ancestor)) {
         resolved = session.semanticIds[ancestor];
         return false;
@@ -1622,6 +1625,9 @@ final class CockpitNativeTargetDiscovery {
     final pendingChain = <Element>[element];
     String? resolved;
     element.visitAncestorElements((ancestor) {
+      if (_separatesSemanticChildren(ancestor.widget)) {
+        return false;
+      }
       if (session.tooltips.containsKey(ancestor)) {
         resolved = session.tooltips[ancestor];
         return false;
@@ -1650,6 +1656,9 @@ final class CockpitNativeTargetDiscovery {
     }
     return _stableKeyValue(element.widget.key);
   }
+
+  bool _separatesSemanticChildren(Widget widget) =>
+      widget is Semantics && widget.explicitChildNodes;
 
   String? _tooltipFromWidget(Widget widget) {
     if (widget is Tooltip) {

@@ -128,7 +128,7 @@ CockpitLeafCommand _inspect(CockpitCliRuntime runtime, CockpitDevRuntime dev) =>
     CockpitLeafCommand(
       runtime: runtime,
       name: 'inspect',
-      description: 'Inspect or search the mounted Flutter Element state.',
+      description: 'List or search mounted Flutter targets with selectors.',
       invocationSuffix: '[QUERY] [arguments]',
       example: 'cockpit dev inspect "Save changes"',
       configure: cockpitAddDevSessionOption,
@@ -147,7 +147,7 @@ CockpitLeafCommand _tree(CockpitCliRuntime runtime, CockpitDevRuntime dev) =>
     CockpitLeafCommand(
       runtime: runtime,
       name: 'tree',
-      description: 'Read the mounted Flutter widget tree without Semantics.',
+      description: 'List targets or export the mounted Flutter widget tree.',
       example: 'cockpit dev tree --view full',
       configure: (parser) {
         cockpitAddDevSessionOption(parser);
@@ -163,6 +163,23 @@ CockpitLeafCommand _tree(CockpitCliRuntime runtime, CockpitDevRuntime dev) =>
             (maxNodes == null || maxNodes < 1 || maxNodes > 500000)) {
           throw const FormatException(
             '--max-nodes must be between 1 and 500000.',
+          );
+        }
+        if (maxNodes != null &&
+            runtime.outputSelection.view == CockpitCliOutputView.brief) {
+          throw const FormatException(
+            '--max-nodes requires --view more or --view full.',
+          );
+        }
+        if (runtime.outputSelection.view != CockpitCliOutputView.brief &&
+            !arguments.wasParsed('format') &&
+            !arguments.wasParsed('output')) {
+          runtime.configureOutput(
+            command: 'dev.tree',
+            selection: CockpitCliOutputSelection(
+              format: CockpitCliFormat.path,
+              view: runtime.outputSelection.view,
+            ),
           );
         }
         return dev.tree(

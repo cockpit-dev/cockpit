@@ -29,10 +29,21 @@ final class CockpitDiagnosticBuilder {
     required CockpitSnapshotOptions options,
   }) {
     var truncated = false;
-    final boundedTargets = _prioritizeTargets(
-      visibleTargets,
-    ).take(options.maxTargets).toList(growable: false);
-    if (visibleTargets.length > boundedTargets.length) {
+    final query = options.query?.trim().toLowerCase();
+    final hasQuery = query != null && query.isNotEmpty;
+    final matchingTargets = !hasQuery
+        ? visibleTargets
+        : visibleTargets
+              .where((target) => _matchesQuery(target, query))
+              .toList(growable: false);
+    final prioritizedTargets = _prioritizeTargets(
+      matchingTargets,
+    ).toList(growable: false);
+    final summaryTargets = hasQuery ? prioritizedTargets : visibleTargets;
+    final boundedTargets = prioritizedTargets
+        .take(options.maxTargets)
+        .toList(growable: false);
+    if (prioritizedTargets.length > boundedTargets.length) {
       truncated = true;
     }
 
@@ -58,11 +69,11 @@ final class CockpitDiagnosticBuilder {
         diagnosticLevel: options.profile,
         truncated: truncated,
         summary: CockpitSnapshotSummary(
-          visibleTargetCount: visibleTargets.length,
-          targetsWithCockpitIdCount: visibleTargets
+          visibleTargetCount: summaryTargets.length,
+          targetsWithCockpitIdCount: summaryTargets
               .where((target) => target.cockpitId != null)
               .length,
-          targetsWithTextCount: visibleTargets
+          targetsWithTextCount: summaryTargets
               .where((target) => target.text != null && target.text!.isNotEmpty)
               .length,
           styleDetailsIncluded: options.includeStyleDetails,
@@ -76,6 +87,18 @@ final class CockpitDiagnosticBuilder {
       ),
     );
   }
+
+  bool _matchesQuery(CockpitTarget target, String query) => <String?>[
+    target.cockpitId,
+    target.semanticId,
+    target.keyValue,
+    target.text,
+    ...target.textParts,
+    target.tooltip,
+    target.typeName,
+    target.routeName,
+    target.path,
+  ].any((value) => value?.toLowerCase().contains(query) ?? false);
 
   Iterable<CockpitTarget> _prioritizeTargets(
     List<CockpitTarget> visibleTargets,

@@ -1,5 +1,16 @@
 # Changelog
 
+## 4.0.2
+
+- Filtered snapshot targets before limits so focused inspection cannot miss a
+  matching mounted Flutter element on large pages.
+- Preserved `Semantics(explicitChildNodes: true)` isolation so container labels
+  no longer overwrite descendant control identities.
+- Made action resolution intersect every selector condition and rank indexed
+  matches by visual geometry.
+- Kept structural Widget trees in verified path-only artifacts for detailed
+  inspection without expanding routine output.
+
 ## 4.0.1
 
 - Made mounted Flutter Element discovery independent of developer-authored

@@ -18,6 +18,7 @@ export 'src/control/cockpit_execution_policy.dart';
 export 'src/control/cockpit_locator.dart';
 export 'src/control/cockpit_locator_resolution.dart';
 export 'src/control/cockpit_screenshot_request.dart';
+export 'src/control/cockpit_selector.dart';
 export 'src/errors/cockpit_command_error.dart';
 export 'src/executor/cockpit_command_executor.dart';
 export 'src/foundation/cockpit_api_error.dart';

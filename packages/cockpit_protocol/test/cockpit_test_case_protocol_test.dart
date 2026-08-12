@@ -35,6 +35,14 @@ void main() {
 
     expect(locator.matchMode, CockpitTextMatchMode.fuzzy);
     expect(cockpitFuzzyTextMatches('Save task', locator.text!), isTrue);
+    expect(
+      cockpitFuzzyTextMatches('Open task Selector proof', 'Selctor proof'),
+      isTrue,
+    );
+    expect(
+      cockpitFuzzyTextMatches('Delete account', 'Create profile'),
+      isFalse,
+    );
     expect(cockpitFuzzyTextMatches('OK', 'KO'), isFalse);
   });
 

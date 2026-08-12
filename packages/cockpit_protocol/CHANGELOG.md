@@ -1,5 +1,14 @@
 # Changelog
 
+## 4.0.2
+
+- Added compact conjunctive Flutter selectors with exact, contains, fuzzy,
+  ancestor, route, path, and deterministic index conditions.
+- Added bounded snapshot queries so large mounted Flutter pages filter targets
+  before applying output limits.
+- Improved fuzzy matching for misspelled text fragments within longer UI
+  labels without weakening short-text safeguards.
+
 ## 4.0.1
 
 - Added bounded foreground-surface metadata to command results so system
