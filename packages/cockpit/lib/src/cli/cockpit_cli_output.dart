@@ -1360,9 +1360,7 @@ Map<String, Object?> _compactDevStatus(
       'networkFailureCount': networkFailureCount,
   };
   if (more) {
-    result['ui'] = ui is Map<Object?, Object?>
-        ? _compactUiOutput(ui, more: false)
-        : ui;
+    result['ui'] = ui is Map<Object?, Object?> ? _compactDevUiSummary(ui) : ui;
     result['target'] = target is Map<Object?, Object?>
         ? _compactTargetInspection(target, more: false)
         : target;
@@ -1383,6 +1381,44 @@ Map<String, Object?> _compactDevStatus(
     }
   }
   return result;
+}
+
+Map<String, Object?> _compactDevUiSummary(Map<Object?, Object?> ui) {
+  final rawSummary = ui['uiSummary'];
+  final summary = rawSummary is Map<Object?, Object?> ? rawSummary : ui;
+  final focus = summary['focus'];
+  final compactFocus = focus is Map<Object?, Object?>
+      ? _compactDevFocus(focus)
+      : const <String, Object?>{};
+  final rebuilds = summary['totalRebuildCount'];
+  final textPreviews = summary['textPreviews'];
+  return <String, Object?>{
+    ..._pick(ui, const <String>['diagnosticLevel', 'truncated']),
+    ..._pick(summary, const <String>['visibleTargetCount']),
+    if (summary['targetsWithCockpitIdCount'] != null)
+      'cockpitIds': summary['targetsWithCockpitIdCount'],
+    if (summary['targetsWithTextCount'] != null)
+      'textTargets': summary['targetsWithTextCount'],
+    if (summary['accessibilityTargetCount'] != null)
+      'a11y': summary['accessibilityTargetCount'],
+    if (summary['accessibilityTraversalCount'] != null)
+      'a11yOrder': summary['accessibilityTraversalCount'],
+    if (rebuilds is num && rebuilds > 0) 'rebuilds': rebuilds,
+    if (textPreviews is List<Object?> && textPreviews.isNotEmpty)
+      'text': textPreviews.take(4).toList(growable: false),
+    if (compactFocus.isNotEmpty) 'focus': compactFocus,
+  };
+}
+
+Map<String, Object?> _compactDevFocus(Map<Object?, Object?> focus) {
+  if (focus['isTextInputFocus'] != true) return const <String, Object?>{};
+  return <String, Object?>{
+    'input': true,
+    if (_nonEmpty(focus['primaryFocusWidgetType']))
+      'widget': focus['primaryFocusWidgetType'],
+    if (_nonEmpty(focus['primaryFocusLabel']))
+      'label': focus['primaryFocusLabel'],
+  };
 }
 
 Map<String, Object?> _compactDevInspect(
