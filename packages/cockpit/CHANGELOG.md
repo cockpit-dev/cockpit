@@ -13,6 +13,10 @@
 - Kept `dev diagnose` aligned with bounded inspection by reading the compact UI
   summary plus dedicated runtime, network, and log diagnostics instead of
   treating an intentionally externalized locator snapshot as an empty screen.
+- Avoided duplicate runtime and network collection in `dev diagnose`, keeping
+  its Flutter UI summary focused while the dedicated readers collect details.
+- Flattened the diagnostic UI summary into short decision fields instead of
+  repeating route, profile, snapshot, and nested summary data.
 
 ## 4.0.11
 

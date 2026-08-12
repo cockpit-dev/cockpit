@@ -620,15 +620,15 @@ void main() {
               },
             ),
             'ui.inspect' => () {
-              expect(input['profile'], 'inspect');
+              expect(input['profile'], 'standard');
               final options = CockpitSnapshotOptions.fromJson(
                 Map<String, Object?>.from(
                   input['snapshotOptions']! as Map<Object?, Object?>,
                 ),
               );
               expect(options.profile, CockpitSnapshotProfile.investigate);
-              expect(options.includeNetworkActivity, isTrue);
-              expect(options.includeRuntimeActivity, isTrue);
+              expect(options.includeNetworkActivity, isFalse);
+              expect(options.includeRuntimeActivity, isFalse);
               expect(options.includeRebuildActivity, isTrue);
               expect(options.includeAccessibilitySummary, isTrue);
               return _result(
@@ -708,8 +708,14 @@ void main() {
       ]);
       final output = lon.decode(stdout.toString())! as Map<Object?, Object?>;
       final ui = output['ui']! as Map<Object?, Object?>;
-      final summary = ui['ui']! as Map<Object?, Object?>;
-      expect(summary['visible'], 25);
+      expect(ui['visible'], 25);
+      expect(ui['cockpitIds'], 11);
+      expect(ui['textTargets'], 19);
+      expect(ui['a11y'], 14);
+      expect(ui['a11yOrder'], 8);
+      expect(ui, isNot(contains('ui')));
+      expect(ui, isNot(contains('route')));
+      expect(ui, isNot(contains('snapshot')));
       expect(output['errors'], 1);
       expect(output['netFailures'], 1);
     },
