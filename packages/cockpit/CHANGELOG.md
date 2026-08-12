@@ -10,6 +10,9 @@
   path-only.
 - Externalized evidence UI payloads without losing diagnostic or artifact
   metadata, and cleaned temporary locator artifacts after in-process parsing.
+- Kept `dev diagnose` aligned with bounded inspection by reading the compact UI
+  summary plus dedicated runtime, network, and log diagnostics instead of
+  treating an intentionally externalized locator snapshot as an empty screen.
 
 ## 4.0.11
 

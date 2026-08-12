@@ -603,6 +603,118 @@ void main() {
     });
   });
 
+  test(
+    'diagnose uses compact UI summary and dedicated diagnostic reads',
+    () async {
+      final calls = <String>[];
+      final dev = CockpitDevRuntime(
+        runtime,
+        operationInvoker: (_, kind, input) async {
+          calls.add(kind);
+          return switch (kind) {
+            'target.inspect' => _result(
+              kind,
+              output: const <String, Object?>{
+                'targetKind': 'flutterApp',
+                'currentRouteName': '/inbox',
+              },
+            ),
+            'ui.inspect' => () {
+              expect(input['profile'], 'inspect');
+              final options = CockpitSnapshotOptions.fromJson(
+                Map<String, Object?>.from(
+                  input['snapshotOptions']! as Map<Object?, Object?>,
+                ),
+              );
+              expect(options.profile, CockpitSnapshotProfile.investigate);
+              expect(options.includeNetworkActivity, isTrue);
+              expect(options.includeRuntimeActivity, isTrue);
+              expect(options.includeRebuildActivity, isTrue);
+              expect(options.includeAccessibilitySummary, isTrue);
+              return _result(
+                kind,
+                output: const <String, Object?>{
+                  'routeName': '/inbox',
+                  'diagnosticLevel': 'investigate',
+                  'truncated': true,
+                  'uiSummary': <String, Object?>{
+                    'routeName': '/inbox',
+                    'diagnosticLevel': 'investigate',
+                    'truncated': true,
+                    'visibleTargetCount': 25,
+                    'targetsWithCockpitIdCount': 11,
+                    'targetsWithTextCount': 19,
+                    'networkEntryCount': 2,
+                    'networkFailureCount': 1,
+                    'runtimeEntryCount': 1,
+                    'runtimeErrorCount': 1,
+                    'rebuildEntryCount': 0,
+                    'totalRebuildCount': 0,
+                    'accessibilityTargetCount': 14,
+                    'accessibilityTraversalCount': 8,
+                    'textPreviews': <Object?>['New task'],
+                  },
+                  'snapshotRef': 'snapshot-1',
+                },
+              );
+            }(),
+            'errors.read' => _result(
+              kind,
+              output: const <String, Object?>{
+                'source': 'app_snapshot',
+                'routeName': '/inbox',
+                'errors': <Object?>[
+                  <String, Object?>{'message': 'build failed'},
+                ],
+              },
+            ),
+            'network.read' => _result(
+              kind,
+              output: const <String, Object?>{
+                'available': true,
+                'routeName': '/inbox',
+                'summary': <String, Object?>{'failureCount': 1},
+              },
+            ),
+            'logs.read' => _result(
+              kind,
+              output: const <String, Object?>{
+                'source': 'app_snapshot',
+                'routeName': '/inbox',
+                'lines': <Object?>['error: build failed'],
+              },
+            ),
+            _ => throw StateError('Unexpected operation $kind'),
+          };
+        },
+      );
+      runtime.configureOutput(
+        command: 'dev.diagnose',
+        selection: const CockpitCliOutputSelection(
+          view: CockpitCliOutputView.more,
+        ),
+      );
+
+      expect(
+        await dev.status(session, diagnose: true),
+        cockpitTemporaryExitCode,
+      );
+      expect(calls, <String>[
+        'target.inspect',
+        'ui.inspect',
+        'errors.read',
+        'network.read',
+        'logs.read',
+      ]);
+      final output = lon.decode(stdout.toString())! as Map<Object?, Object?>;
+      final ui = output['ui']! as Map<Object?, Object?>;
+      final summary = ui['ui']! as Map<Object?, Object?>;
+      expect(summary['visible'], 25);
+      expect(output['errors'], 1);
+      expect(output['netFailures'], 1);
+    },
+  );
+
   test('command actions keep one post-action commit snapshot', () async {
     final calls = <String>[];
     final dev = CockpitDevRuntime(
