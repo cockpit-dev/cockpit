@@ -126,10 +126,8 @@ final class _DevTarget {
           .toList(growable: false),
       within = (value['ancestors'] as List<Object?>? ?? const [])
           .whereType<Map<Object?, Object?>>()
-          .map((ancestor) => ancestor['typeName'])
-          .whereType<String>()
-          .where((type) => type.trim().isNotEmpty)
-          .toSet()
+          .map(_DevAncestor.new)
+          .where((ancestor) => ancestor.hasUsefulSignal)
           .toList(growable: false),
       layout = _Layout.from(value['layout']);
 
@@ -145,7 +143,7 @@ final class _DevTarget {
   final String? path;
   final String? scrollablePath;
   final List<String> can;
-  final List<String> within;
+  final List<_DevAncestor> within;
   final _Layout? layout;
 
   bool get hasUsefulSignal =>
@@ -334,15 +332,13 @@ bool _isRedundantTextCandidate(_DevTarget target, List<_DevTarget> candidates) {
         _exactText(candidate.text) == _exactText(target.text) &&
         candidate.route == target.route &&
         candidate.scrollablePath == target.scrollablePath &&
-        _sameActions(candidate.can, target.can) &&
+        _coversActions(candidate.can, target.can) &&
         _sameVerticalBand(candidate.layout, target.layout),
   );
 }
 
-bool _sameActions(List<String> left, List<String> right) {
-  if (left.length != right.length) return false;
-  return left.toSet().containsAll(right);
-}
+bool _coversActions(List<String> stable, List<String> proxy) =>
+    stable.toSet().containsAll(proxy);
 
 bool _sameVerticalBand(_Layout? left, _Layout? right) {
   if (left == null || right == null) return false;
@@ -360,6 +356,43 @@ final class _Signal {
   const _Signal(this.name, this.value);
   final String name;
   final String value;
+}
+
+final class _DevAncestor {
+  _DevAncestor(Map<Object?, Object?> value)
+    : cockpitId = value['cockpitId'] as String?,
+      semanticId = value['semanticId'] as String?,
+      key = value['keyValue'] as String?,
+      text = value['textPreview'] as String?,
+      tip = value['tooltip'] as String?,
+      type = value['typeName'] as String?,
+      route = value['routeName'] as String?,
+      path = value['path'] as String?;
+
+  final String? cockpitId;
+  final String? semanticId;
+  final String? key;
+  final String? text;
+  final String? tip;
+  final String? type;
+  final String? route;
+  final String? path;
+
+  bool get hasUsefulSignal => signals(includePath: true).isNotEmpty;
+
+  List<_Signal> signals({required bool includePath}) => <_Signal>[
+    if (_value(cockpitId) case final value?)
+      if (value != _value(key) && value != _value(semanticId))
+        _Signal('id', value),
+    if (_value(key) case final value?) _Signal('key', value),
+    if (_value(text) case final value?) _Signal('text', value),
+    if (_value(tip) case final value?)
+      if (_exactText(value) != _exactText(text)) _Signal('tip', value),
+    if (_value(semanticId) case final value?) _Signal('sem', value),
+    if (_value(type) case final value?) _Signal('type', value),
+    if (includePath)
+      if (_value(path) case final value?) _Signal('path', value),
+  ];
 }
 
 final class _Advice {
@@ -400,40 +433,22 @@ _Advice _advise(_DevTarget target, List<_DevTarget> targets, String query) {
             .where((candidate) => candidate.can.any(target.can.contains))
             .toList(growable: false);
   final signals = target.signalsFor(query);
-  final hasPrimarySignal = signals.any(
-    (signal) =>
-        const <String>{'id', 'sem', 'key', 'text', 'tip'}.contains(signal.name),
+  final stableSignals = signals
+      .where((signal) => signal.name != 'path')
+      .toList(growable: false);
+  final direct = _directAdvice(target, candidates, stableSignals);
+  if (direct != null) return direct;
+
+  final scoped = _scopedAdvice(target, candidates, stableSignals);
+  if (scoped != null) return scoped;
+
+  final pathAware = _directAdvice(
+    target,
+    candidates,
+    signals,
+    requirePath: true,
   );
-  for (var size = 1; size <= signals.length; size += 1) {
-    for (final combination in _combinations(signals, size)) {
-      if (hasPrimarySignal &&
-          !combination.any(
-            (signal) => const <String>{
-              'id',
-              'sem',
-              'key',
-              'text',
-              'tip',
-            }.contains(signal.name),
-          )) {
-        continue;
-      }
-      final loc = <String, Object?>{
-        for (final signal in combination) signal.name: signal.value,
-      };
-      if (_uniquelyMatches(target, candidates, loc)) return _Advice(loc);
-    }
-    if (size < 2) continue;
-    for (final ancestor in target.within) {
-      for (final combination in _combinations(signals, size - 1)) {
-        final loc = <String, Object?>{
-          for (final signal in combination) signal.name: signal.value,
-          'within': ancestor,
-        };
-        if (_uniquelyMatches(target, candidates, loc)) return _Advice(loc);
-      }
-    }
-  }
+  if (pathAware != null) return pathAware;
 
   final indexed = _indexedAdvice(target, candidates, signals);
   return indexed ??
@@ -444,6 +459,104 @@ _Advice _advise(_DevTarget target, List<_DevTarget> targets, String query) {
         ambiguous: true,
       );
 }
+
+_Advice? _directAdvice(
+  _DevTarget target,
+  List<_DevTarget> candidates,
+  List<_Signal> signals, {
+  bool requirePath = false,
+}) {
+  final hasPrimarySignal = signals.any(_isPrimarySignal);
+  for (var size = 1; size <= signals.length; size += 1) {
+    for (final combination in _combinations(signals, size)) {
+      if (hasPrimarySignal && !combination.any(_isPrimarySignal)) continue;
+      if (requirePath && !combination.any((signal) => signal.name == 'path')) {
+        continue;
+      }
+      final loc = _signalMap(combination);
+      if (_uniquelyMatches(target, candidates, loc)) return _Advice(loc);
+    }
+  }
+  return null;
+}
+
+_Advice? _scopedAdvice(
+  _DevTarget target,
+  List<_DevTarget> candidates,
+  List<_Signal> directSignals,
+) {
+  if (directSignals.isEmpty || target.within.isEmpty) return null;
+  final hasPrimarySignal = directSignals.any(_isPrimarySignal);
+  var checks = 0;
+  const maxChecks = 512;
+  for (var totalSize = 2; totalSize <= 4; totalSize += 1) {
+    final maxDirectSize = directSignals.length < 2 ? directSignals.length : 2;
+    for (var directSize = 1; directSize <= maxDirectSize; directSize += 1) {
+      final scopeSize = totalSize - directSize;
+      if (scopeSize < 1 || scopeSize > 2) continue;
+      for (final direct in _combinations(directSignals, directSize)) {
+        if (hasPrimarySignal && !direct.any(_isPrimarySignal)) continue;
+        final directLoc = _signalMap(direct);
+        final directMatches = candidates
+            .where((candidate) => _matches(candidate, directLoc))
+            .toList(growable: false);
+        if (!directMatches.any((candidate) => identical(candidate, target))) {
+          continue;
+        }
+        for (final scope in _ancestorScopes(
+          target.within,
+          conditions: scopeSize,
+        )) {
+          checks += 1;
+          if (checks > maxChecks) return null;
+          final loc = <String, Object?>{..._signalMap(direct), 'within': scope};
+          final matches = directMatches.where(
+            (candidate) => _matchesAncestorChain(candidate.within, scope),
+          );
+          if (matches.length == 1 && identical(matches.single, target)) {
+            return _Advice(loc);
+          }
+        }
+      }
+    }
+  }
+  return null;
+}
+
+Iterable<Map<String, Object?>> _ancestorScopes(
+  List<_DevAncestor> ancestors, {
+  required int conditions,
+}) sync* {
+  final signals = ancestors
+      .map((ancestor) => ancestor.signals(includePath: false))
+      .toList(growable: false);
+  for (final values in signals) {
+    if (values.length < conditions) continue;
+    for (final combination in _combinations(values, conditions)) {
+      yield _signalMap(combination);
+    }
+  }
+  if (conditions != 2) return;
+  for (var inner = 0; inner < signals.length; inner += 1) {
+    for (var outer = inner + 1; outer < signals.length; outer += 1) {
+      for (final innerSignal in signals[inner]) {
+        for (final outerSignal in signals[outer]) {
+          yield <String, Object?>{
+            innerSignal.name: innerSignal.value,
+            'within': <String, Object?>{outerSignal.name: outerSignal.value},
+          };
+        }
+      }
+    }
+  }
+}
+
+Map<String, Object?> _signalMap(List<_Signal> signals) => <String, Object?>{
+  for (final signal in signals) signal.name: signal.value,
+};
+
+bool _isPrimarySignal(_Signal signal) =>
+    const <String>{'id', 'sem', 'key', 'text', 'tip'}.contains(signal.name);
 
 List<List<_Signal>> _combinations(List<_Signal> values, int size) {
   final result = <List<_Signal>>[];
@@ -507,6 +620,13 @@ _Advice? _indexedAdvice(
 bool _matches(_DevTarget target, Map<String, Object?> loc) {
   for (final entry in loc.entries) {
     final expected = entry.value;
+    if (entry.key == 'within') {
+      if (expected is! Map<String, Object?> ||
+          !_matchesAncestorChain(target.within, expected)) {
+        return false;
+      }
+      continue;
+    }
     if (expected is! String) continue;
     final matched = switch (entry.key) {
       'id' => target.cockpitId == expected,
@@ -521,8 +641,48 @@ bool _matches(_DevTarget target, Map<String, Object?> loc) {
       'tip' => _exactText(target.tip) == _exactText(expected),
       'type' => _type(target.type) == _type(expected),
       'route' => target.route == expected,
-      'path' => target.path == expected,
-      'within' => target.within.any((type) => _type(type) == _type(expected)),
+      'path' => _pathMatches(target.path, expected),
+      _ => true,
+    };
+    if (!matched) return false;
+  }
+  return true;
+}
+
+bool _matchesAncestorChain(
+  List<_DevAncestor> ancestors,
+  Map<String, Object?> loc,
+) {
+  for (var index = 0; index < ancestors.length; index += 1) {
+    if (!_matchesAncestor(ancestors[index], loc)) continue;
+    final parent = loc['within'];
+    if (parent == null) return true;
+    if (parent is Map<String, Object?> &&
+        _matchesAncestorChain(ancestors.sublist(index + 1), parent)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+bool _matchesAncestor(_DevAncestor ancestor, Map<String, Object?> loc) {
+  for (final entry in loc.entries) {
+    if (entry.key == 'within') continue;
+    final expected = entry.value;
+    if (expected is! String) continue;
+    final matched = switch (entry.key) {
+      'id' => ancestor.cockpitId == expected,
+      'sem' =>
+        ancestor.semanticId == expected || ancestor.cockpitId == expected,
+      'key' => ancestor.key == expected || ancestor.cockpitId == expected,
+      'text' => <String?>[
+        ancestor.text,
+        ancestor.tip,
+      ].any((value) => _exactText(value) == _exactText(expected)),
+      'tip' => _exactText(ancestor.tip) == _exactText(expected),
+      'type' => _type(ancestor.type) == _type(expected),
+      'route' => ancestor.route == expected,
+      'path' => _pathMatches(ancestor.path, expected),
       _ => true,
     };
     if (!matched) return false;
@@ -620,6 +780,31 @@ String? _searchText(String? value) => _exactText(value)?.toLowerCase();
 String? _type(String? value) =>
     _searchText(value)?.replaceAll(RegExp(r'[^a-z0-9]+'), '');
 
+bool _pathMatches(String? candidate, String expected) {
+  final candidateSegments = _pathSegments(candidate);
+  final expectedSegments = _pathSegments(expected);
+  if (candidateSegments.isEmpty || expectedSegments.isEmpty) return false;
+  if (_endsWith(candidateSegments, expectedSegments)) return true;
+  var expectedIndex = 0;
+  for (final segment in candidateSegments) {
+    if (segment == expectedSegments[expectedIndex]) expectedIndex += 1;
+    if (expectedIndex == expectedSegments.length) return true;
+  }
+  return false;
+}
+
+List<String> _pathSegments(String? value) =>
+    (value ?? '').split('/').where((segment) => segment.isNotEmpty).toList();
+
+bool _endsWith(List<String> value, List<String> suffix) {
+  if (suffix.length > value.length) return false;
+  final offset = value.length - suffix.length;
+  for (var index = 0; index < suffix.length; index += 1) {
+    if (value[offset + index] != suffix[index]) return false;
+  }
+  return true;
+}
+
 int _compareForOverview(_DevTarget left, _DevTarget right) {
   var compared = right.can.isNotEmpty == left.can.isNotEmpty
       ? 0
@@ -659,9 +844,10 @@ CockpitLocator _locator(Map<String, Object?> loc) => CockpitLocator(
   route: loc['route'] as String?,
   path: loc['path'] as String?,
   index: loc['index'] as int?,
-  ancestor: loc['within'] is String
-      ? CockpitLocator(type: loc['within']! as String)
-      : null,
+  ancestor: switch (loc['within']) {
+    final Map<String, Object?> value => _locator(value),
+    _ => null,
+  },
 );
 
 String? _compactActions(List<String> actions) {

@@ -579,6 +579,117 @@ void main() {
     expect(scopedSelectors, contains('Sidebar >> Continue'));
   });
 
+  test('dev locator search prefers a stable ancestor over a widget path', () {
+    Map<String, Object?> target({
+      required String registrationId,
+      required String key,
+      required String path,
+      required String ancestorKey,
+    }) => <String, Object?>{
+      'registrationId': registrationId,
+      'keyValue': key,
+      'text': 'Open',
+      'typeName': 'TextButton',
+      'path': path,
+      'routeName': '/tasks',
+      'supportedCommands': <Object?>['tap'],
+      'ancestors': <Object?>[
+        <String, Object?>{
+          'typeName': 'Card',
+          'cockpitId': ancestorKey,
+          'keyValue': ancestorKey,
+          'routeName': '/tasks',
+          'path': '/scaffold/listview/card',
+        },
+      ],
+    };
+
+    final result = cockpitBuildDevLocatorMatches(<String, Object?>{
+      'snapshot': <String, Object?>{
+        'visibleTargets': <Object?>[
+          target(
+            registrationId: 'first',
+            key: 'open',
+            path: '/scaffold/listview/card/textbutton',
+            ancestorKey: 'task-a',
+          ),
+          target(
+            registrationId: 'second',
+            key: 'open',
+            path: '/scaffold/listview/card/textbutton',
+            ancestorKey: 'task-b',
+          ),
+        ],
+      },
+    }, 'Open');
+
+    expect(result['matches'], <Object?>[
+      <String, Object?>{
+        'sel': '@task-a >> @open',
+        'label': 'Open',
+        'can': 'tap',
+      },
+      <String, Object?>{
+        'sel': '@task-b >> @open',
+        'label': 'Open',
+        'can': 'tap',
+      },
+    ]);
+  });
+
+  test('dev locator search combines ancestor conditions before path', () {
+    Map<String, Object?> target({
+      required String registrationId,
+      required String section,
+      required String route,
+      required String path,
+    }) => <String, Object?>{
+      'registrationId': registrationId,
+      'text': 'Continue',
+      'typeName': 'TextButton',
+      'path': path,
+      'routeName': route,
+      'supportedCommands': <Object?>['tap'],
+      'ancestors': <Object?>[
+        <String, Object?>{
+          'typeName': 'Card',
+          'textPreview': section,
+          'routeName': route,
+          'path': '/scaffold/listview/card',
+        },
+      ],
+    };
+
+    final result = cockpitBuildDevLocatorMatches(<String, Object?>{
+      'snapshot': <String, Object?>{
+        'visibleTargets': <Object?>[
+          target(
+            registrationId: 'first',
+            section: 'Billing',
+            route: '/settings',
+            path: '/scaffold/listview/card/textbutton',
+          ),
+          target(
+            registrationId: 'second',
+            section: 'Profile',
+            route: '/settings',
+            path: '/scaffold/listview/card/textbutton',
+          ),
+        ],
+      },
+    }, 'Continue');
+
+    final selectors = (result['matches']! as List<Object?>)
+        .cast<Map<String, Object?>>()
+        .map((match) => match['sel'])
+        .toList(growable: false);
+    expect(selectors, <Object?>[
+      '["Billing"] >> Continue',
+      '["Profile"] >> Continue',
+    ]);
+    expect(selectors, everyElement(isNot(contains('[path='))));
+  });
+
   test('dev locator search uses exact text parts from composite controls', () {
     final result = cockpitBuildDevLocatorMatches(<String, Object?>{
       'snapshot': <String, Object?>{
@@ -692,6 +803,76 @@ void main() {
     expect(result['matches'], <Object?>[
       <String, Object?>{
         'sel': '[sem="Open task Selector proof"]',
+        'can': 'tap',
+      },
+    ]);
+  });
+
+  test('dev inspect folds a text proxy into a stable action superset', () {
+    Map<String, Object?> target({
+      required String registrationId,
+      required String type,
+      required double dx,
+      required double dy,
+      required double width,
+      required double height,
+      required List<Object?> commands,
+      String? semanticId,
+    }) => <String, Object?>{
+      'registrationId': registrationId,
+      'semanticId': ?semanticId,
+      'text':
+          'Complete task Android CLI verification '
+          'Open task Android CLI verification MEDIUM Pending sync '
+          'Android CLI verification Open',
+      'textParts': <Object?>[
+        'MEDIUM',
+        'Pending sync',
+        'Android CLI verification',
+      ],
+      'typeName': type,
+      'routeName': '/inbox',
+      'scrollablePath': '/inbox/listview',
+      'supportedCommands': commands,
+      'ancestors': const <Object?>[],
+      'layout': <String, Object?>{
+        'dx': dx,
+        'dy': dy,
+        'width': width,
+        'height': height,
+      },
+    };
+
+    final result = cockpitBuildDevLocatorMatches(<String, Object?>{
+      'snapshot': <String, Object?>{
+        'visibleTargets': <Object?>[
+          target(
+            registrationId: 'row',
+            type: 'InkWell',
+            semanticId: 'Open task Android CLI verification',
+            dx: 93,
+            dy: 672,
+            width: 264,
+            height: 134,
+            commands: <Object?>['tap', 'longPress', 'doubleTap'],
+          ),
+          target(
+            registrationId: 'label',
+            type: 'Text',
+            dx: 369,
+            dy: 692,
+            width: 34,
+            height: 16,
+            commands: <Object?>['tap', 'longPress'],
+          ),
+        ],
+      },
+    }, 'Open');
+
+    expect(result['count'], 1);
+    expect(result['matches'], <Object?>[
+      <String, Object?>{
+        'sel': '[sem="Open task Android CLI verification"]',
         'can': 'tap',
       },
     ]);

@@ -83,7 +83,8 @@ keychain 或 secret store，`--env` 只传给当前进程。
 Flutter 检查会直接遍历已挂载的 Element 与 RenderObject，不要求开发者编写
 `Semantics`。有界搜索使用 `dev inspect QUERY`，它会返回可直接执行的 `sel`，例如
 `#save` 或 `Dialog >> FilledButton["Continue"]`。多个条件取交集，存在歧义时明确
-失败而不是猜测。`dev tree` 返回紧凑的 selector 索引；只有确实需要结构上下文时
+失败而不是猜测；定位建议依次优先稳定身份或精确文本、祖先范围、path，最后才是
+稳定序号。`dev tree` 返回紧凑的 selector 索引；只有确实需要结构上下文时
 才使用 `dev tree --view more` 或 `dev tree --view full`。两种结构视图都会把树写入
 artifact，stdout 只返回经过验证的路径。
 
@@ -193,8 +194,10 @@ session 丢失会返回环境失败。
 支持时才使用 `resetAppData`；仅当 suite 设计本身需要共享状态时才显式选择
 `sharedSession`。
 
-同一个 locator 中的字段按交集匹配，`fallbacks` 是按顺序尝试的备选定位。原生黑盒
-target 在 accessibility 能力明确支持时还可以使用状态、层级和空间关系约束。运行时
+同一个 locator 中的字段按交集匹配，`fallbacks` 是按顺序尝试的备选定位。Flutter
+`dev inspect` 会输出最短且唯一的稳定 selector，依次优先身份或精确文本、祖先范围、
+path，最后才是稳定列表序号。原生黑盒 target 在 accessibility 能力明确支持时还可以
+使用状态、层级和空间关系约束。运行时
 不支持的约束会返回明确错误。
 `text` 和 `label` 默认使用 `matchMode: exact`；需要扩展匹配时必须显式选择
 `contains`、容忍拼写误差的 `fuzzy` 或 `regex`。多个候选会按当前 route 和匹配质量选择唯一最优项；最高分
