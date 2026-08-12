@@ -1,5 +1,17 @@
 # Changelog
 
+## 4.0.13
+
+- Added `cockpit dev recover` for exact-session native blocker recovery with
+  safe dismiss defaults, explicit keyboard handling, and fast no-op detection
+  when the Android app already has focus.
+- Bundled and verified Android UI Automation drivers beside AOT installations,
+  including atomic updates and a version-checked hosted-package handoff path.
+- Preserved Flutter apps when the Supervisor detaches, preventing daemon restarts
+  from terminating or relaunching unrelated development sessions.
+- Improved Android dialog handling so an absent matching dialog never sends a
+  speculative global Back action.
+
 ## 4.0.12
 
 - Reduced complete Flutter snapshot artifacts inside workspace workers and

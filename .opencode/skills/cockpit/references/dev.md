@@ -133,18 +133,17 @@ bounded observe-decide-prove loop:
 | Expected product prompt | Execute its explicit expected action with an exact locator. |
 | Incidental Flutter dialog/sheet/banner/upgrade notice | Prefer an explicit neutral action such as Later, Not now, Skip, Cancel, or Close; otherwise use `cockpit dev dismiss` only when inspection proves the overlay is dismissible. |
 | Unintended temporary route | Use `cockpit dev back` once only when current state proves the parent route is the intended destination. |
-| Android/iOS system capture shows OS dialog, keyboard, or system UI | Require `system.action`; run `resolveBlockers` with `decision:dismiss` for an incidental blocker. Accept only when the scenario requires that exact decision. |
+| Android/iOS system capture shows OS dialog, keyboard, or system UI | Run `cockpit dev recover` for the exact session. Use `--decision accept` or `--keyboard` only when the scenario or capture proves it is required. |
 | Runtime exception or failed request | Read standard diagnostics, fix the cause, then hot reload and prove the expected anchor. |
 | App crashed or stopped unexpectedly | Use `cockpit dev start` to reconcile and relaunch the owned app under the same handle. |
 | Port/bridge changed | Use `cockpit dev start` to reconnect the owned app; do not create another session. |
 
-Discover the native action before using it; live availability and schema remain
-authoritative:
+Use the task command for routine recovery:
 
 ```bash
-cockpit op list --kind system.action
-cockpit explain system.action
-cockpit op run system.action --input '{action:resolveBlockers parameters:{decision:dismiss}}'
+cockpit dev recover
+cockpit dev recover --decision accept
+cockpit dev recover --keyboard
 ```
 
 Unknown prompts default to the safe negative/neutral path. Never generically accept
@@ -222,7 +221,8 @@ handle, while checkout identity keeps every runtime resource isolated:
 One monorepo may therefore run several Flutter projects without cross-selecting
 sessions. A command from a common ancestor resolves one active descendant project;
 if several match, it fails as ambiguous and requires running inside the project or
-passing `--session HANDLE`.
+passing `--session HANDLE`. Generic capability recovery must use that same handle
+for `op list`, `explain`, and `op run` so all three resolve one workspace and app.
 
 Different worktrees of one repository may run concurrently and must remain
 isolated even when they share a Git common directory and package name. Do not

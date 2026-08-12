@@ -290,10 +290,29 @@ final class CockpitOpCommand extends Command<int> {
             'workspace-id',
             help: 'Select a registered workspace; current checkout by default.',
           )
+          ..addOption(
+            'session',
+            abbr: 's',
+            help: 'Select the workspace through one development session.',
+          )
           ..addOption('kind', help: 'Return one exact operation descriptor.'),
         action: (arguments) async {
+          final sessionReference = arguments.option('session');
+          if (arguments.option('scope') == 'supervisor' &&
+              sessionReference != null) {
+            throw const FormatException(
+              '--session is only valid for workspace operations.',
+            );
+          }
+          final session = sessionReference == null
+              ? null
+              : await runtime.resolveSessionHandle(
+                  sessionReference,
+                  explicitWorkspaceId: arguments.option('workspace-id'),
+                );
           final workspaceId = arguments.option('scope') == 'workspace'
-              ? await runtime.workspaceId(arguments.option('workspace-id'))
+              ? session?.workspaceId ??
+                    await runtime.workspaceId(arguments.option('workspace-id'))
               : null;
           var operations = await (await runtime.client()).operations(
             workspaceId: workspaceId,

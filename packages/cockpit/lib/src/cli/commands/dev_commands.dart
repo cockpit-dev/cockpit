@@ -23,6 +23,7 @@ final class CockpitDevCommand extends Command<int> {
     addSubcommand(cockpitDevPressCommand(runtime, dev));
     addSubcommand(cockpitDevBackCommand(runtime, dev));
     addSubcommand(cockpitDevDismissCommand(runtime, dev));
+    addSubcommand(cockpitDevRecoverCommand(runtime, dev));
     addSubcommand(cockpitDevOpenCommand(runtime, dev));
     addSubcommand(cockpitDevScrollCommand(runtime, dev));
     addSubcommand(cockpitDevWaitCommand(runtime, dev));

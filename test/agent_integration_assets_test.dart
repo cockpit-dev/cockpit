@@ -65,7 +65,7 @@ void main() {
       'plugins/codex/cockpit/.codex-plugin/plugin.json',
     );
     expect(manifest['name'], 'cockpit');
-    expect(manifest['version'], '4.0.12');
+    expect(manifest['version'], '4.0.13');
     expect(manifest['skills'], './skills/');
     expect(manifest['mcpServers'], './.mcp.json');
     expect(manifest['interface'], isA<Map<String, Object?>>());
@@ -78,6 +78,7 @@ void main() {
     final skill = read('plugins/codex/cockpit/skills/cockpit/SKILL.md');
     expect(skill, contains('name: cockpit'));
     expect(skill, contains('globally installed `cockpit` executable'));
+    expect(skill, contains('cockpit dev recover'));
   });
 
   test('Claude Code plugin exposes the skill and MCP server', () {
@@ -109,6 +110,7 @@ void main() {
     final skill = read('plugins/claude-code/cockpit/skills/cockpit/SKILL.md');
     expect(skill, contains('name: cockpit'));
     expect(skill, contains('globally installed `cockpit` executable'));
+    expect(skill, contains('cockpit dev recover'));
   });
 
   test('repo-local agent adapters point to the canonical skill', () {
@@ -144,7 +146,7 @@ void main() {
       'https://agent-plugins.org/schemas/1.0.0/plugin.schema.json',
     );
     expect(kiroPower['name'], 'cockpit');
-    expect(kiroPower['version'], '4.0.12');
+    expect(kiroPower['version'], '4.0.13');
     expect(
       kiroPower['keywords'],
       containsAll(<Object?>['cockpit', 'flutter', 'e2e']),
@@ -169,6 +171,7 @@ void main() {
     final sharedSkill = read('.agents/skills/cockpit/SKILL.md');
     expect(sharedSkill, contains('name: cockpit'));
     expect(sharedSkill, contains('globally installed `cockpit` executable'));
+    expect(sharedSkill, contains('cockpit dev recover'));
     final piSkill = read('.pi/skills/cockpit/SKILL.md');
     expect(piSkill, contains('name: cockpit'));
     expect(piSkill, contains('globally installed `cockpit` executable'));

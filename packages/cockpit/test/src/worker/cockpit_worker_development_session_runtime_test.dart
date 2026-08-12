@@ -228,7 +228,7 @@ void main() {
         writes.any((payload) => payload.contains('"method":"app.detach"')),
         isTrue,
       );
-      expect(closeProcessCalls, 1);
+      expect(closeProcessCalls, 0);
       expect(await Directory(appTempPath).exists(), isTrue);
     },
   );

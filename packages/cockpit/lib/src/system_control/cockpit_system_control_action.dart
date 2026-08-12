@@ -39,6 +39,7 @@ final class CockpitSystemControlActionResult {
     this.errorCode,
     this.errorMessage,
     this.errorDetails = const <String, Object?>{},
+    this.changed,
     this.strategy,
     this.requires = const <String>[],
     this.limitations = const <String>[],
@@ -62,6 +63,7 @@ final class CockpitSystemControlActionResult {
   final String? errorCode;
   final String? errorMessage;
   final Map<String, Object?> errorDetails;
+  final bool? changed;
   final String recommendedNextStep;
   final String? strategy;
   final List<String> requires;
@@ -87,6 +89,7 @@ final class CockpitSystemControlActionResult {
     if (errorCode != null) 'errorCode': errorCode,
     if (errorMessage != null) 'errorMessage': errorMessage,
     if (errorDetails.isNotEmpty) 'errorDetails': errorDetails,
+    if (changed != null) 'changed': changed,
     if (strategy != null) 'strategy': strategy,
     if (requires.isNotEmpty) 'requires': requires,
     if (limitations.isNotEmpty) 'limitations': limitations,

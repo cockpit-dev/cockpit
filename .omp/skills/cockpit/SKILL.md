@@ -136,15 +136,18 @@ Apply exactly one matching recovery:
 - For an unintended child route, run `cockpit dev back` once only when the current
   state proves that returning is correct.
 - When a system-sourced capture proves that the keyboard, system UI, or an OS dialog
-  blocks the app, first require the advertised `system.action` capability. For an
-  incidental blocker, use `resolveBlockers` with `decision:dismiss`; use
-  `decision:accept` only when the intended scenario explicitly requires it:
+  blocks the app, use the selected development session's recovery command. It is a
+  safe no-op when the app already has focus. Incidental blockers default to dismiss;
+  accept only when the scenario explicitly requires it, and request keyboard
+  dismissal only when the capture proves the keyboard is the blocker:
 
   ```bash
-  cockpit op list --kind system.action
-  cockpit explain system.action
-  cockpit op run system.action --input '{action:resolveBlockers parameters:{decision:dismiss}}'
+  cockpit dev recover
+  cockpit dev recover --decision accept
+  cockpit dev recover --keyboard
   ```
+  From a common ancestor with several active Flutter projects, append the exact
+  `--session HANDLE`; never recover an implicitly selected neighboring app.
 - For a runtime exception or failed request, diagnose and fix the cause, then use
   `cockpit dev reload`. For a stopped or crashed owned app, use `cockpit dev start`
   so Cockpit reconciles the existing handle; never launch a second app as recovery.
@@ -459,7 +462,9 @@ cockpit op run viewport.set --input '{width:800 height:600}'
 ```
 
 Use `--scope supervisor` only for a Supervisor-scoped operation. Workspace scope is
-the default and resolves the current checkout. Pass `--root-id` only when the live
+the default and resolves the current checkout. From a common ancestor with several
+active Flutter projects, pass the same `--session HANDLE` to `op list`, `explain`,
+and `op run`. Pass `--root-id` only when the live
 descriptor declares root scope. `--session` injects the canonical runtime session only
 when the schema declares it; do not put `sessionId` into input manually. Cockpit
 generates an idempotency key only where the descriptor allows it. `op run` adopts the

@@ -187,6 +187,10 @@ final class CockpitSystemControlActionService {
         request.action == CockpitSystemControlAction.resolveBlockers) {
       return _resolveAndroidBlockers(effectiveRequest, profile, capability);
     }
+    if (request.platform.trim().toLowerCase() == 'macos' &&
+        request.action == CockpitSystemControlAction.resolveBlockers) {
+      return _resolveMacosBlockers(effectiveRequest, profile, capability);
+    }
     if (request.action == CockpitSystemControlAction.stabilizeForScreenshot) {
       return _stabilizeForScreenshot(effectiveRequest, profile, capability);
     }
@@ -739,7 +743,7 @@ final class CockpitSystemControlActionService {
     CockpitSystemControlActionRequest request,
     CockpitSystemControlProfile profile,
     CockpitSystemControlCapability capability,
-  ) {
+  ) async {
     final decision = cockpitReadSystemControlStringParameter(
       request.parameters,
       'decision',
@@ -757,17 +761,113 @@ final class CockpitSystemControlActionService {
             const <String>['packageId', 'appId'],
           );
     if (!target.isValid) {
+      return _notExecutable(
+        request,
+        availability: capability.availability,
+        recommendedNextStep: 'fixActionPayload',
+        errorCode: target.isInvalid
+            ? 'invalidSystemActionParameter'
+            : 'missingSystemActionParameter',
+        errorMessage: target.isInvalid
+            ? 'resolveBlockers requires a string packageId or appId.'
+            : 'resolveBlockers requires --app-id, packageId, or appId.',
+        strategy: capability.strategy,
+        requires: capability.requires,
+        limitations: capability.limitations,
+      );
+    }
+    final probe = await _probeAndroidBlockers(
+      request,
+      includeKeyboard: dismissKeyboard.value ?? false,
+    );
+    final keyboardRequested = dismissKeyboard.value ?? false;
+    final shouldDismissKeyboard =
+        keyboardRequested &&
+        (!probe.reliable || probe.keyboardVisible != false);
+    final appFocused = probe.focusPackage == target.value;
+    if (probe.reliable && appFocused && !shouldDismissKeyboard) {
+      return CockpitSystemControlActionResult(
+        platform: request.platform,
+        deviceId: request.deviceId,
+        appId: request.appId,
+        processId: request.processId,
+        action: request.action,
+        availability: capability.availability,
+        success: true,
+        stdout: const JsonEncoder.withIndent(
+          '  ',
+        ).convert(<String, Object?>{'focus': 'app', 'steps': <Object?>[]}),
+        recommendedNextStep: 'readPostActionState',
+        changed: false,
+        strategy: capability.strategy,
+        requires: capability.requires,
+        limitations: capability.limitations,
+      );
+    }
+    final shouldProbeDialog =
+        !probe.reliable || _isAndroidSystemDialogPackage(probe.focusPackage);
+    final shouldCollapse =
+        !probe.reliable ||
+        !appFocused ||
+        _isAndroidSystemUiPackage(probe.focusPackage);
+    final shouldRecover = !probe.reliable || !appFocused;
+    return _runMacroSteps(
+      request,
+      profile,
+      capability,
+      steps: <_SystemMacroStep>[
+        if (shouldProbeDialog)
+          _SystemMacroStep(
+            action: CockpitSystemControlAction.dismissSystemDialog,
+            parameters: <String, Object?>{
+              'decision': decision.value ?? 'dismiss',
+            },
+            optional: true,
+          ),
+        if (shouldDismissKeyboard)
+          const _SystemMacroStep(
+            action: CockpitSystemControlAction.dismissKeyboard,
+            optional: true,
+          ),
+        if (shouldCollapse)
+          const _SystemMacroStep(
+            action: CockpitSystemControlAction.collapseSystemUi,
+            optional: true,
+          ),
+        if (shouldRecover)
+          _SystemMacroStep(
+            action: CockpitSystemControlAction.recoverToApp,
+            parameters: <String, Object?>{'packageId': target.value!},
+          ),
+      ],
+      recommendedNextStepOnSuccess: 'readPostActionState',
+      changed: true,
+    );
+  }
+
+  Future<CockpitSystemControlActionResult> _resolveMacosBlockers(
+    CockpitSystemControlActionRequest request,
+    CockpitSystemControlProfile profile,
+    CockpitSystemControlCapability capability,
+  ) {
+    final decision = cockpitReadSystemControlStringParameter(
+      request.parameters,
+      'decision',
+      allowedValues: const <String>['accept', 'dismiss'],
+    );
+    final dismissKeyboard = cockpitReadSystemControlBoolParameter(
+      request.parameters,
+      'dismissKeyboard',
+    );
+    if (dismissKeyboard.value == true) {
       return Future<CockpitSystemControlActionResult>.value(
         _notExecutable(
           request,
           availability: capability.availability,
-          recommendedNextStep: 'fixActionPayload',
-          errorCode: target.isInvalid
-              ? 'invalidSystemActionParameter'
-              : 'missingSystemActionParameter',
-          errorMessage: target.isInvalid
-              ? 'resolveBlockers requires a string packageId or appId.'
-              : 'resolveBlockers requires --app-id, packageId, or appId.',
+          recommendedNextStep: 'useFlutterFocusControl',
+          errorCode: 'unsupportedSystemActionParameter',
+          errorMessage:
+              'macOS recovery does not use a global keyboard dismissal action.',
           strategy: capability.strategy,
           requires: capability.requires,
           limitations: capability.limitations,
@@ -781,25 +881,71 @@ final class CockpitSystemControlActionService {
       steps: <_SystemMacroStep>[
         _SystemMacroStep(
           action: CockpitSystemControlAction.dismissSystemDialog,
-          parameters: <String, Object?>{'decision': decision.value ?? 'accept'},
-          optional: true,
-        ),
-        if (dismissKeyboard.value ?? true)
-          const _SystemMacroStep(
-            action: CockpitSystemControlAction.dismissKeyboard,
-            optional: true,
-          ),
-        const _SystemMacroStep(
-          action: CockpitSystemControlAction.collapseSystemUi,
+          parameters: <String, Object?>{
+            'decision': decision.value ?? 'dismiss',
+          },
           optional: true,
         ),
         _SystemMacroStep(
           action: CockpitSystemControlAction.recoverToApp,
-          parameters: <String, Object?>{'packageId': target.value!},
+          parameters: _macroTargetParameters(request),
         ),
       ],
       recommendedNextStepOnSuccess: 'readPostActionState',
+      changed: true,
     );
+  }
+
+  Future<_AndroidBlockerProbe> _probeAndroidBlockers(
+    CockpitSystemControlActionRequest request, {
+    required bool includeKeyboard,
+  }) async {
+    final deviceId = request.deviceId;
+    if (deviceId == null || deviceId.trim().isEmpty) {
+      return const _AndroidBlockerProbe.unavailable();
+    }
+    final timeout = request.timeout < const Duration(seconds: 3)
+        ? request.timeout
+        : const Duration(seconds: 3);
+    try {
+      final results = await Future.wait(<Future<ProcessResult>>[
+        _processManager.run('adb', <String>[
+          '-s',
+          deviceId,
+          'shell',
+          'dumpsys',
+          'window',
+        ]),
+        if (includeKeyboard)
+          _processManager.run('adb', <String>[
+            '-s',
+            deviceId,
+            'shell',
+            'dumpsys',
+            'input_method',
+          ]),
+      ]).timeout(timeout);
+      final windowResult = results.first;
+      if (windowResult.exitCode != 0) {
+        return const _AndroidBlockerProbe.unavailable();
+      }
+      final windowOutput = _systemProcessOutputText(windowResult.stdout);
+      final inputMethodOutput = includeKeyboard && results.length > 1
+          ? _systemProcessOutputText(results[1].stdout)
+          : '';
+      final focusPackage = _androidFocusedPackage(windowOutput);
+      return _AndroidBlockerProbe(
+        reliable: focusPackage != null,
+        focusPackage: focusPackage,
+        keyboardVisible: includeKeyboard
+            ? RegExp(
+                r'(?:mInputShown|InputShown)\s*=\s*true',
+              ).hasMatch(inputMethodOutput)
+            : null,
+      );
+    } on Object {
+      return const _AndroidBlockerProbe.unavailable();
+    }
   }
 
   Future<CockpitSystemControlActionResult> _stabilizeForScreenshot(
@@ -1558,6 +1704,7 @@ final class CockpitSystemControlActionService {
     CockpitSystemControlCapability capability, {
     required List<_SystemMacroStep> steps,
     required String recommendedNextStepOnSuccess,
+    bool? changed,
   }) async {
     final stepResults = <Map<String, Object?>>[];
     var success = true;
@@ -1691,6 +1838,7 @@ final class CockpitSystemControlActionService {
       recommendedNextStep: success
           ? recommendedNextStepOnSuccess
           : 'inspectSystemMacroFailure',
+      changed: success ? changed : null,
       strategy: capability.strategy,
       requires: capability.requires,
       limitations: _macroLimitations(capability.limitations, stepResults),
@@ -1709,6 +1857,12 @@ final class CockpitSystemControlActionService {
     }
     if (command.executable == cockpitAndroidUiAutomationCommandExecutable) {
       return _runAndroidUiAutomationCommand(request, capability, command);
+    }
+    if (command.executable == cockpitMacosAccessibilityCommandExecutable) {
+      return _runMacosAccessibilityTreeCommand(request, capability, command);
+    }
+    if (command.executable == cockpitMacosSystemDialogCommandExecutable) {
+      return _runMacosSystemDialogCommand(request, capability, command);
     }
     if (command.executable == cockpitWindowsNativeInputCommandExecutable) {
       return _runWindowsNativeInputCommand(request, capability, command);
@@ -1831,6 +1985,65 @@ final class CockpitSystemControlActionService {
     );
   }
 }
+
+final class _AndroidBlockerProbe {
+  const _AndroidBlockerProbe({
+    required this.reliable,
+    required this.focusPackage,
+    required this.keyboardVisible,
+  });
+
+  const _AndroidBlockerProbe.unavailable()
+    : reliable = false,
+      focusPackage = null,
+      keyboardVisible = null;
+
+  final bool reliable;
+  final String? focusPackage;
+  final bool? keyboardVisible;
+}
+
+String _systemProcessOutputText(Object? output) {
+  if (output == null) return '';
+  if (output is String) return output;
+  if (output is List<int>) {
+    return utf8.decode(output, allowMalformed: true);
+  }
+  return '$output';
+}
+
+String? _androidFocusedPackage(String output) {
+  for (final line in const LineSplitter().convert(output)) {
+    if (!line.contains('mCurrentFocus') &&
+        !line.contains('mFocusedWindow') &&
+        !line.contains('mFocusedApp')) {
+      continue;
+    }
+    final component = RegExp(
+      r'\b([A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)+)/(?:[^\s}\]]+)',
+    ).firstMatch(line);
+    if (component != null) return component.group(1);
+    final app = RegExp(
+      r'\b([A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)+)\b',
+    ).allMatches(line).map((match) => match.group(1)).whereType<String>();
+    for (final candidate in app) {
+      if (candidate != 'android.app') return candidate;
+    }
+  }
+  return null;
+}
+
+bool _isAndroidSystemDialogPackage(String? packageName) {
+  if (packageName == null) return false;
+  return packageName == 'android' ||
+      packageName == 'com.android.permissioncontroller' ||
+      packageName == 'com.google.android.permissioncontroller' ||
+      packageName == 'com.android.packageinstaller' ||
+      packageName == 'com.google.android.packageinstaller';
+}
+
+bool _isAndroidSystemUiPackage(String? packageName) =>
+    packageName == 'com.android.systemui';
 
 int _processAttemptLimit(CockpitSystemControlActionRequest request) {
   if (request.platform != 'ios') {

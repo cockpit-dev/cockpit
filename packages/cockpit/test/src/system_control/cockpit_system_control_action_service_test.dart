@@ -1601,12 +1601,13 @@ void main() {
   );
 
   test(
-    'android resolveBlockers accepts dialogs and restores app focus',
+    'android resolveBlockers safely dismisses dialogs and restores app focus',
     () async {
-      final processManager = _FakeProcessManager();
-      final androidUiAutomation = _FakeAndroidUiAutomation(
-        dialogError: StateError('No matching system dialog'),
+      final processManager = _FakeProcessManager(
+        androidFocusOutput:
+            'mCurrentFocus=Window{1 u0 com.android.permissioncontroller/com.android.permissioncontroller.permission.ui.GrantPermissionsActivity}',
       );
+      final androidUiAutomation = _FakeAndroidUiAutomation();
       final service = CockpitSystemControlActionService(
         processManager: processManager,
         androidUiAutomation: androidUiAutomation,
@@ -1623,14 +1624,83 @@ void main() {
 
       expect(result.success, isTrue);
       expect(androidUiAutomation.lastAction, 'dismissSystemDialog');
-      expect(processManager.starts, hasLength(3));
+      expect(androidUiAutomation.decision, 'dismiss');
+      expect(processManager.starts, hasLength(2));
       expect(
         processManager.starts.last.arguments.last,
         contains('dev.cockpit.example'),
       );
       expect(result.stdout, contains('dismissSystemDialog'));
-      expect(result.stdout, contains('systemActionProcessFailed'));
+      expect(result.stdout, isNot(contains('dismissKeyboard')));
       expect(result.stdout, contains('recoverToApp'));
+      expect(result.changed, isTrue);
+    },
+  );
+
+  test(
+    'android resolveBlockers is a fast no-op when the app has focus',
+    () async {
+      final processManager = _FakeProcessManager(
+        androidFocusOutput:
+            'mCurrentFocus=Window{1 u0 dev.cockpit.example/.MainActivity}',
+      );
+      final androidUiAutomation = _FakeAndroidUiAutomation();
+      final service = CockpitSystemControlActionService(
+        processManager: processManager,
+        androidUiAutomation: androidUiAutomation,
+      );
+
+      final result = await service.run(
+        const CockpitSystemControlActionRequest(
+          platform: 'android',
+          deviceId: 'emulator-5554',
+          appId: 'dev.cockpit.example',
+          action: CockpitSystemControlAction.resolveBlockers,
+        ),
+      );
+
+      expect(result.success, isTrue);
+      expect(result.changed, isFalse);
+      expect(result.stdout, contains('"focus": "app"'));
+      expect(androidUiAutomation.lastAction, isNull);
+      expect(processManager.starts, isEmpty);
+    },
+  );
+
+  test(
+    'android resolveBlockers dismisses a proven keyboard only on opt-in',
+    () async {
+      final processManager = _FakeProcessManager(
+        androidFocusOutput:
+            'mCurrentFocus=Window{1 u0 dev.cockpit.example/.MainActivity}\n'
+            'inputMethod=\nmInputShown=true',
+      );
+      final androidUiAutomation = _FakeAndroidUiAutomation();
+      final service = CockpitSystemControlActionService(
+        processManager: processManager,
+        androidUiAutomation: androidUiAutomation,
+      );
+
+      final result = await service.run(
+        const CockpitSystemControlActionRequest(
+          platform: 'android',
+          deviceId: 'emulator-5554',
+          appId: 'dev.cockpit.example',
+          action: CockpitSystemControlAction.resolveBlockers,
+          parameters: <String, Object?>{'dismissKeyboard': true},
+        ),
+      );
+
+      expect(result.success, isTrue);
+      expect(result.changed, isTrue);
+      expect(androidUiAutomation.lastAction, isNull);
+      expect(processManager.starts, hasLength(1));
+      expect(
+        processManager.starts.single.arguments,
+        containsAllInOrder(<String>['input', 'keyevent', 'KEYCODE_BACK']),
+      );
+      expect(result.stdout, contains('dismissKeyboard'));
+      expect(result.stdout, isNot(contains('recoverToApp')));
     },
   );
 
@@ -2226,6 +2296,61 @@ void main() {
     expect(result.command, contains('JavaScript'));
     expect(result.command.join('\n'), contains('NSRunningApplication'));
     expect(result.command.join('\n'), isNot(contains('System Events')));
+  });
+
+  test('macos resolveBlockers only handles the target dialog and app', () async {
+    final processManager = _FakeProcessManager();
+    String? capturedDecision;
+    final service = CockpitSystemControlActionService(
+      processManager: processManager,
+      macosSystemDialogHandler:
+          ({required processId, required decision, required timeout}) async {
+            expect(processId, 4242);
+            capturedDecision = decision;
+            return 'dismissSystemDialog decision=$decision handled=false reason=noDialog';
+          },
+    );
+
+    final result = await service.run(
+      const CockpitSystemControlActionRequest(
+        platform: 'macos',
+        appId: 'dev.cockpit.example',
+        processId: 4242,
+        action: CockpitSystemControlAction.resolveBlockers,
+      ),
+    );
+
+    expect(result.success, isTrue);
+    expect(result.changed, isTrue);
+    expect(capturedDecision, 'dismiss');
+    expect(processManager.starts, hasLength(1));
+    expect(processManager.starts.single.executable, 'osascript');
+    expect(processManager.starts.single.arguments.join('\n'), contains('4242'));
+    expect(
+      processManager.starts.single.arguments.join('\n'),
+      isNot(contains('System Events')),
+    );
+  });
+
+  test('macos resolveBlockers rejects global keyboard dismissal', () async {
+    final processManager = _FakeProcessManager();
+    final service = CockpitSystemControlActionService(
+      processManager: processManager,
+    );
+
+    final result = await service.run(
+      const CockpitSystemControlActionRequest(
+        platform: 'macos',
+        appId: 'dev.cockpit.example',
+        processId: 4242,
+        action: CockpitSystemControlAction.resolveBlockers,
+        parameters: <String, Object?>{'dismissKeyboard': true},
+      ),
+    );
+
+    expect(result.success, isFalse);
+    expect(result.errorCode, 'unsupportedSystemActionParameter');
+    expect(processManager.starts, isEmpty);
   });
 
   test('desktop dismissKeyboard reports unsupported truthfully', () async {
@@ -4536,9 +4661,6 @@ final class _FailingRecordingAdapter implements CockpitRecordingAdapter {
 }
 
 final class _FakeAndroidUiAutomation implements CockpitAndroidUiAutomation {
-  _FakeAndroidUiAutomation({this.dialogError});
-
-  final Object? dialogError;
   String? lastAction;
   String? deviceId;
   String? decision;
@@ -4555,8 +4677,6 @@ final class _FakeAndroidUiAutomation implements CockpitAndroidUiAutomation {
     lastAction = 'dismissSystemDialog';
     this.deviceId = deviceId;
     this.decision = decision;
-    final error = dialogError;
-    if (error != null) throw error;
     return 'dismissSystemDialog decision=$decision handled=true';
   }
 
@@ -4590,6 +4710,9 @@ final class _FakeAndroidUiAutomation implements CockpitAndroidUiAutomation {
 const String _macosUiTree = '{"platform":"macos","nodeCount":1,"windows":[]}';
 
 final class _FakeProcessManager implements CockpitProcessManager {
+  _FakeProcessManager({this.androidFocusOutput});
+
+  final String? androidFocusOutput;
   final starts = <_StartedProcess>[];
 
   @override
@@ -4608,6 +4731,28 @@ final class _FakeProcessManager implements CockpitProcessManager {
         arguments[0] == '-s' &&
         arguments[2] == 'get-state') {
       return Future<ProcessResult>.value(ProcessResult(0, 0, 'device\n', ''));
+    }
+    if (executable == 'adb' &&
+        arguments.length == 5 &&
+        arguments[0] == '-s' &&
+        arguments[2] == 'shell' &&
+        arguments[3] == 'dumpsys' &&
+        arguments[4] == 'window' &&
+        androidFocusOutput != null) {
+      return Future<ProcessResult>.value(
+        ProcessResult(0, 0, androidFocusOutput!, ''),
+      );
+    }
+    if (executable == 'adb' &&
+        arguments.length == 5 &&
+        arguments[0] == '-s' &&
+        arguments[2] == 'shell' &&
+        arguments[3] == 'dumpsys' &&
+        arguments[4] == 'input_method' &&
+        androidFocusOutput != null) {
+      return Future<ProcessResult>.value(
+        ProcessResult(0, 0, androidFocusOutput!, ''),
+      );
     }
     throw UnimplementedError(
       'Unexpected run: $executable ${arguments.join(' ')}',

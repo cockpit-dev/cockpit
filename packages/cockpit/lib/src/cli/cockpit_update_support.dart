@@ -7,6 +7,7 @@ import 'package:path/path.dart' as p;
 import 'package:yaml/yaml.dart';
 
 import '../infrastructure/cockpit_process_manager.dart';
+import '../infrastructure/cockpit_runtime_resources.dart';
 
 const Duration _latestVersionLookupLimit = Duration(seconds: 3);
 
@@ -105,7 +106,13 @@ Future<bool> cockpitHasCanonicalHostedInstall({
     if (!await pubspec.exists() || !await entrypoint.exists()) return false;
     final manifest = loadYaml(await pubspec.readAsString());
     if (manifest is! YamlMap) return false;
-    return manifest['name'] == 'cockpit' && manifest['version'] == version;
+    return manifest['name'] == 'cockpit' &&
+        manifest['version'] == version &&
+        await cockpitHasValidRuntimeResources(
+          executablePath: executable.path,
+          version: version,
+          windows: windows,
+        );
   } on Object {
     return false;
   }

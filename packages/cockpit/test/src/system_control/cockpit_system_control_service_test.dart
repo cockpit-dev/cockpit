@@ -671,6 +671,19 @@ void main() {
         recoverToApp?.requires,
         isNot(contains('Automation permission for System Events')),
       );
+      final resolveBlockers = withTarget.profile.capabilityFor(
+        CockpitSystemControlAction.resolveBlockers,
+      );
+      expect(
+        resolveBlockers?.availability,
+        CockpitSystemControlAvailability.available,
+      );
+      expect(resolveBlockers?.strategy, 'macro.ax-dialog+activate');
+      expect(resolveBlockers?.requires, contains('Accessibility permission'));
+      expect(
+        resolveBlockers?.requires,
+        isNot(contains('Automation permission for System Events')),
+      );
       expect(
         withTarget.profile
             .capabilityFor(CockpitSystemControlAction.captureScreenshot)
