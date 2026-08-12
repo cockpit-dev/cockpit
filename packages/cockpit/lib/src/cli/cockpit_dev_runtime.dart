@@ -9,7 +9,6 @@ import '../supervisor/cockpit_supervisor_api_client.dart';
 import 'cockpit_cli_runtime.dart';
 import 'cockpit_cli_output.dart';
 import 'cockpit_cli_session_handles.dart';
-import 'cockpit_dev_locator_advisor.dart';
 
 typedef CockpitDevOperationInvoker =
     Future<CockpitOperationResult> Function(
@@ -628,12 +627,11 @@ final class CockpitDevRuntime {
         profile: CockpitSnapshotProfile.baseline,
         maxTargets: hasQuery ? 10000 : 160,
         maxAncestorsPerTarget: 8,
+        artifact: CockpitSnapshotArtifactMode.large,
       ).copyWith(query: normalizedQuery).toJson(),
     });
     final output = result.output ?? const <String, Object?>{};
-    final state = !hasQuery || !_operationSucceeded(result)
-        ? cockpitBuildDevTargetIndex(output)
-        : cockpitBuildDevLocatorMatches(output, normalizedQuery);
+    final state = _operationSucceeded(result) ? _locatorResult(output) : output;
     return writeOperation(
       action: 'inspect',
       session: session,
@@ -658,18 +656,17 @@ final class CockpitDevRuntime {
           profile: CockpitSnapshotProfile.baseline,
           maxTargets: 160,
           maxAncestorsPerTarget: 8,
+          artifact: CockpitSnapshotArtifactMode.large,
         ).toJson(),
       });
       final output = result.output ?? const <String, Object?>{};
+      final targetIndex = _locatorResult(output);
       return writeOperation(
         action: 'tree',
         session: session,
         result: result,
         state: _operationSucceeded(result)
-            ? <String, Object?>{
-                'profile': 'brief',
-                ...cockpitBuildDevTargetIndex(output),
-              }
+            ? <String, Object?>{'profile': 'brief', ...targetIndex}
             : output,
         changed: resolution.changed,
       );
@@ -1194,6 +1191,14 @@ Map<Object?, Object?>? _objectMap(Object? value) {
   if (value is Map<Object?, Object?>) return value;
   if (value is Map) return Map<Object?, Object?>.from(value);
   return null;
+}
+
+Map<String, Object?> _locatorResult(Map<String, Object?> output) {
+  final locator = output['locator'];
+  if (locator is! Map<Object?, Object?>) {
+    throw StateError('ui.inspect did not return bounded locator results.');
+  }
+  return Map<String, Object?>.from(locator);
 }
 
 ({String artifactId, String name, String mediaType})? _treeArtifact(

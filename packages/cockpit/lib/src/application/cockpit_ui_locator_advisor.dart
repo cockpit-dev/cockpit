@@ -1,21 +1,75 @@
 import 'package:cockpit_protocol/cockpit_protocol.dart';
 
-Map<String, Object?> cockpitBuildDevLocatorMatches(
+Map<String, Object?> cockpitBuildUiLocatorMatchesFromOutput(
   Map<String, Object?> output,
   String query, {
   int limit = 12,
-}) {
-  final snapshot = output['snapshot'];
-  if (snapshot is! Map<Object?, Object?>) {
+}) => cockpitBuildUiLocatorMatches(
+  _snapshotFromInspectOutput(output),
+  query,
+  limit: limit,
+);
+
+Map<String, Object?> cockpitBuildUiTargetIndexFromOutput(
+  Map<String, Object?> output, {
+  int limit = 12,
+}) =>
+    cockpitBuildUiTargetIndex(_snapshotFromInspectOutput(output), limit: limit);
+
+CockpitSnapshot _snapshotFromInspectOutput(Map<String, Object?> output) {
+  final value = output['snapshot'];
+  if (value is! Map<Object?, Object?>) {
     throw StateError('ui.inspect locate output did not contain a snapshot.');
   }
-  final values = snapshot['visibleTargets'];
-  if (values is! List<Object?>) {
+  final targets = value['visibleTargets'];
+  if (targets is! List<Object?>) {
     throw StateError('ui.inspect locate output did not contain UI targets.');
   }
+  final summary = value['summary'];
+  final summaryMap = summary is Map<Object?, Object?> ? summary : null;
+  final visibleTargetCount =
+      summaryMap?['visibleTargetCount'] ?? summaryMap?['visible'];
+  return CockpitSnapshot(
+    routeName:
+        value['routeName'] as String? ??
+        value['route'] as String? ??
+        output['routeName'] as String? ??
+        output['route'] as String?,
+    visibleTargets: targets
+        .whereType<Map<Object?, Object?>>()
+        .map(
+          (target) =>
+              CockpitSnapshotTarget.fromJson(Map<String, Object?>.from(target)),
+        )
+        .toList(growable: false),
+    truncated: value['truncated'] == true || output['truncated'] == true,
+    summary: visibleTargetCount is int
+        ? CockpitSnapshotSummary(
+            visibleTargetCount: visibleTargetCount,
+            targetsWithCockpitIdCount:
+                summaryMap?['targetsWithCockpitIdCount'] as int? ?? 0,
+            targetsWithTextCount:
+                summaryMap?['targetsWithTextCount'] as int? ?? 0,
+            styleDetailsIncluded: summaryMap?['styleDetailsIncluded'] == true,
+            diagnosticPropertiesIncluded:
+                summaryMap?['diagnosticPropertiesIncluded'] == true,
+            ancestorSummariesIncluded:
+                summaryMap?['ancestorSummariesIncluded'] == true,
+            rebuildSummaryIncluded:
+                summaryMap?['rebuildSummaryIncluded'] == true,
+            accessibilitySummaryIncluded:
+                summaryMap?['accessibilitySummaryIncluded'] == true,
+          )
+        : null,
+  );
+}
 
-  final targets = values
-      .whereType<Map<Object?, Object?>>()
+Map<String, Object?> cockpitBuildUiLocatorMatches(
+  CockpitSnapshot snapshot,
+  String query, {
+  int limit = 12,
+}) {
+  final targets = snapshot.visibleTargets
       .map(_DevTarget.new)
       .toList(growable: false);
   final selector = CockpitSelector.isExplicit(query)
@@ -36,7 +90,7 @@ Map<String, Object?> cockpitBuildDevLocatorMatches(
           ..sort((left, right) => left.compareForQuery(right, normalizedQuery)))
       : targets;
   final visibleMatches = matches.take(limit).toList(growable: false);
-  final queryTargetCount = _snapshotTargetCount(snapshot);
+  final queryTargetCount = snapshot.summary?.visibleTargetCount;
 
   return <String, Object?>{
     'query': query.trim(),
@@ -58,29 +112,11 @@ Map<String, Object?> cockpitBuildDevLocatorMatches(
   };
 }
 
-int? _snapshotTargetCount(Map<Object?, Object?> snapshot) {
-  final summary = snapshot['summary'];
-  if (summary is! Map<Object?, Object?>) return null;
-  return switch (summary['visibleTargetCount'] ?? summary['visible']) {
-    final int value => value,
-    _ => null,
-  };
-}
-
-Map<String, Object?> cockpitBuildDevTargetIndex(
-  Map<String, Object?> output, {
+Map<String, Object?> cockpitBuildUiTargetIndex(
+  CockpitSnapshot snapshot, {
   int limit = 12,
 }) {
-  final snapshot = output['snapshot'];
-  if (snapshot is! Map<Object?, Object?>) {
-    throw StateError('ui.inspect locate output did not contain a snapshot.');
-  }
-  final values = snapshot['visibleTargets'];
-  if (values is! List<Object?>) {
-    throw StateError('ui.inspect locate output did not contain UI targets.');
-  }
-  final allTargets = values
-      .whereType<Map<Object?, Object?>>()
+  final allTargets = snapshot.visibleTargets
       .map(_DevTarget.new)
       .where((target) => target.hasUsefulSignal)
       .toList(growable: false);
@@ -90,8 +126,7 @@ Map<String, Object?> cockpitBuildDevTargetIndex(
   final ranked = List<_DevTarget>.of(targets)..sort(_compareForOverview);
   final visible = ranked.take(limit).toList(growable: false);
   final route =
-      _value(snapshot['route'] as String?) ??
-      _value(output['route'] as String?) ??
+      _value(snapshot.routeName) ??
       visible.map((target) => _value(target.route)).nonNulls.firstOrNull;
   return <String, Object?>{
     'route': ?route,
@@ -101,35 +136,31 @@ Map<String, Object?> cockpitBuildDevTargetIndex(
         .toList(growable: false),
     if (targets.length > visible.length)
       'more': targets.length - visible.length,
-    if (snapshot['truncated'] == true || output['truncated'] == true)
-      'partial': true,
+    if (snapshot.truncated) 'partial': true,
   };
 }
 
 final class _DevTarget {
-  _DevTarget(Map<Object?, Object?> value)
-    : registrationId = value['registrationId'] as String? ?? '',
-      cockpitId = value['cockpitId'] as String?,
-      semanticId = value['semanticId'] as String?,
-      key = value['keyValue'] as String?,
-      text = value['text'] as String?,
-      textParts = (value['textParts'] as List<Object?>? ?? const <Object?>[])
-          .whereType<String>()
+  _DevTarget(CockpitSnapshotTarget value)
+    : registrationId = value.registrationId,
+      cockpitId = value.cockpitId,
+      semanticId = value.semanticId,
+      key = value.keyValue,
+      text = value.text,
+      textParts = value.textParts,
+      tip = value.tooltip,
+      type = value.typeName,
+      route = value.routeName,
+      path = value.path,
+      scrollablePath = value.scrollablePath,
+      can = value.supportedCommands
+          .map((command) => command.name)
           .toList(growable: false),
-      tip = value['tooltip'] as String?,
-      type = value['typeName'] as String?,
-      route = value['routeName'] as String?,
-      path = value['path'] as String?,
-      scrollablePath = value['scrollablePath'] as String?,
-      can = (value['supportedCommands'] as List<Object?>? ?? const [])
-          .whereType<String>()
-          .toList(growable: false),
-      within = (value['ancestors'] as List<Object?>? ?? const [])
-          .whereType<Map<Object?, Object?>>()
+      within = value.ancestors
           .map(_DevAncestor.new)
           .where((ancestor) => ancestor.hasUsefulSignal)
           .toList(growable: false),
-      layout = _Layout.from(value['layout']);
+      layout = _Layout.from(value.layout);
 
   final String registrationId;
   final String? cockpitId;
@@ -359,15 +390,15 @@ final class _Signal {
 }
 
 final class _DevAncestor {
-  _DevAncestor(Map<Object?, Object?> value)
-    : cockpitId = value['cockpitId'] as String?,
-      semanticId = value['semanticId'] as String?,
-      key = value['keyValue'] as String?,
-      text = value['textPreview'] as String?,
-      tip = value['tooltip'] as String?,
-      type = value['typeName'] as String?,
-      route = value['routeName'] as String?,
-      path = value['path'] as String?;
+  _DevAncestor(CockpitSnapshotAncestor value)
+    : cockpitId = value.cockpitId,
+      semanticId = value.semanticId,
+      key = value.keyValue,
+      text = value.textPreview,
+      tip = value.tooltip,
+      type = value.typeName,
+      route = value.routeName,
+      path = value.path;
 
   final String? cockpitId;
   final String? semanticId;
@@ -408,22 +439,9 @@ final class _Layout {
   final double width;
   final double height;
 
-  static _Layout? from(Object? value) {
-    if (value is! Map<Object?, Object?>) return null;
-    final dx = value['dx'];
-    final dy = value['dy'];
-    final width = value['width'];
-    final height = value['height'];
-    if (dx is! num || dy is! num || width is! num || height is! num) {
-      return null;
-    }
-    return _Layout(
-      dx.toDouble(),
-      dy.toDouble(),
-      width.toDouble(),
-      height.toDouble(),
-    );
-  }
+  static _Layout? from(CockpitSnapshotLayout? value) => value == null
+      ? null
+      : _Layout(value.dx, value.dy, value.width, value.height);
 }
 
 _Advice _advise(_DevTarget target, List<_DevTarget> targets, String query) {

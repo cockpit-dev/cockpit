@@ -48,6 +48,8 @@ const Duration _defaultCommandExecutionTimeout = Duration(seconds: 30);
 // Strictly larger than the executor's 250ms hard-timeout grace so the
 // executor's diagnostic-rich timeout always wins over this generic one.
 const Duration _commandExecutionTimeoutGrace = Duration(milliseconds: 600);
+const int _snapshotTransportTargetLimit = 24;
+const int _snapshotTransportTextLimit = 512;
 
 final class CockpitRemoteSessionEndpointRequest {
   const CockpitRemoteSessionEndpointRequest({
@@ -734,25 +736,29 @@ final class CockpitRemoteSessionEndpointHandler {
   }
 
   CockpitSnapshot _summarizedSnapshot(CockpitSnapshot snapshot) {
+    final visibleTargets = snapshot.visibleTargets
+        .take(_snapshotTransportTargetLimit)
+        .map(
+          (target) => CockpitSnapshotTarget(
+            registrationId: target.registrationId,
+            cockpitId: target.cockpitId,
+            semanticId: target.semanticId,
+            keyValue: target.keyValue,
+            text: _boundedTransportText(target.text),
+            tooltip: _boundedTransportText(target.tooltip),
+            typeName: target.typeName,
+            routeName: target.routeName,
+            supportedCommands: target.supportedCommands,
+          ),
+        )
+        .toList(growable: false);
     return CockpitSnapshot(
       routeName: snapshot.routeName,
-      visibleTargets: snapshot.visibleTargets
-          .map(
-            (target) => CockpitSnapshotTarget(
-              registrationId: target.registrationId,
-              cockpitId: target.cockpitId,
-              semanticId: target.semanticId,
-              keyValue: target.keyValue,
-              text: target.text,
-              tooltip: target.tooltip,
-              typeName: target.typeName,
-              routeName: target.routeName,
-              supportedCommands: target.supportedCommands,
-            ),
-          )
-          .toList(growable: false),
+      visibleTargets: visibleTargets,
       diagnosticLevel: snapshot.diagnosticLevel,
-      truncated: snapshot.truncated,
+      truncated:
+          snapshot.truncated ||
+          visibleTargets.length < snapshot.visibleTargets.length,
       diagnosticsArtifactRef: snapshot.diagnosticsArtifactRef,
       treeArtifactRef: snapshot.treeArtifactRef,
       summary: snapshot.summary,
@@ -770,6 +776,13 @@ final class CockpitRemoteSessionEndpointHandler {
       // active" without forcing a diagnostics artifact download.
       focus: snapshot.focus,
     );
+  }
+
+  String? _boundedTransportText(String? value) {
+    if (value == null || value.length <= _snapshotTransportTextLimit) {
+      return value;
+    }
+    return '${value.substring(0, _snapshotTransportTextLimit)}…';
   }
 
   Future<_RemoteArtifactEntry?> _artifactEntryFor(

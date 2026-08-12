@@ -6,6 +6,7 @@ import 'cockpit_interactive_result_data.dart';
 import 'cockpit_interactive_result_profile.dart';
 import 'cockpit_read_remote_snapshot_service.dart';
 import 'cockpit_session_registry.dart';
+import 'cockpit_ui_locator_advisor.dart';
 
 final class CockpitInspectUiRequest {
   const CockpitInspectUiRequest({
@@ -43,6 +44,7 @@ final class CockpitInspectUiResult {
     this.artifactDownloads = const <CockpitRemoteArtifactDownload>[],
     this.artifactSourcePaths = const <String, String>{},
     this.effectiveSnapshotOptions,
+    this.locator,
   });
 
   final CockpitAppHandle? app;
@@ -57,6 +59,7 @@ final class CockpitInspectUiResult {
   final List<CockpitRemoteArtifactDownload> artifactDownloads;
   final Map<String, String> artifactSourcePaths;
   final CockpitSnapshotOptions? effectiveSnapshotOptions;
+  final Map<String, Object?>? locator;
 
   Map<String, Object?> toJson() => <String, Object?>{
     if (app != null) 'app': app!.toJson(),
@@ -76,6 +79,7 @@ final class CockpitInspectUiResult {
       'artifactSourcePaths': artifactSourcePaths,
     if (effectiveSnapshotOptions != null)
       'effectiveSnapshotOptions': effectiveSnapshotOptions!.toJson(),
+    if (locator != null) 'locator': locator,
   };
 }
 
@@ -95,6 +99,9 @@ final class CockpitInspectUiService {
   Future<CockpitInspectUiResult> inspect(
     CockpitInspectUiRequest request,
   ) async {
+    final locate =
+        request.resultProfile.name ==
+        CockpitInteractiveResultProfileName.locate;
     final resolved = await _appReferenceResolver.resolve(
       appId: request.appId,
       app: request.app,
@@ -109,8 +116,15 @@ final class CockpitInspectUiService {
         resultProfile: request.resultProfile,
         snapshotOptions: request.snapshotOptions,
         compareAgainstSnapshotRef: request.compareAgainstSnapshotRef,
+        retainArtifacts: !locate,
       ),
     );
+    final locatorQuery = request.snapshotOptions?.query?.trim();
+    final locator = result.completeSnapshot == null || !locate
+        ? null
+        : locatorQuery == null || locatorQuery.isEmpty
+        ? cockpitBuildUiTargetIndex(result.completeSnapshot!)
+        : cockpitBuildUiLocatorMatches(result.completeSnapshot!, locatorQuery);
     return CockpitInspectUiResult(
       app: resolved.app,
       routeName: result.routeName,
@@ -124,6 +138,7 @@ final class CockpitInspectUiService {
       artifactDownloads: result.artifactDownloads,
       artifactSourcePaths: result.artifactSourcePaths,
       effectiveSnapshotOptions: result.effectiveSnapshotOptions,
+      locator: locator,
     );
   }
 }

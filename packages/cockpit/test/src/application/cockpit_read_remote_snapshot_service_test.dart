@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
 
 import 'package:cockpit_protocol/cockpit_protocol.dart';
 import 'package:cockpit/src/application/cockpit_interactive_result_profile.dart';
@@ -112,6 +114,70 @@ void main() {
         expect(result.toJson()['artifactDownloads'], isA<List<Object?>>());
       },
     );
+
+    test('resolves complete evidence diagnostics from its artifact', () async {
+      final temporary = await Directory.systemTemp.createTemp(
+        'cockpit-evidence-snapshot-',
+      );
+      addTearDown(() => temporary.delete(recursive: true));
+      final artifact = File('${temporary.path}/snapshot.json');
+      final complete = CockpitSnapshot(
+        routeName: '/failure',
+        runtime: CockpitRuntimeSnapshot(
+          totalEntryCount: 1,
+          errorCount: 1,
+          warningCount: 0,
+          capturedEntryCount: 1,
+          entries: <CockpitRuntimeEvent>[
+            CockpitRuntimeEvent(
+              eventId: 'runtime-error',
+              kind: CockpitRuntimeEventKind.flutterError,
+              severity: CockpitRuntimeEventSeverity.error,
+              message: 'Complete runtime evidence',
+              recordedAt: DateTime.utc(2026, 8, 13),
+            ),
+          ],
+        ),
+      );
+      await artifact.writeAsString(jsonEncode(complete.toJson()));
+      const artifactRef = CockpitArtifactRef(
+        role: 'diagnostics',
+        relativePath: 'diagnostics/evidence.json',
+      );
+      final service = CockpitReadRemoteSnapshotService(
+        readSnapshot: (_, _) async => CockpitRemoteSnapshotResponse(
+          snapshot: CockpitSnapshot(
+            routeName: '/failure',
+            diagnosticsArtifactRef: artifactRef,
+          ),
+          artifactDownloads: const <CockpitRemoteArtifactDownload>[
+            CockpitRemoteArtifactDownload(
+              artifact: artifactRef,
+              downloadPath: '/artifacts/evidence.json',
+            ),
+          ],
+        ),
+        downloadArtifacts: (_, _) async => <String, String>{
+          artifactRef.relativePath: artifact.path,
+        },
+      );
+
+      final result = await service.read(
+        CockpitReadRemoteSnapshotRequest(
+          sessionHandle: _sessionHandle(),
+          resultProfile: const CockpitInteractiveResultProfile.evidence(),
+        ),
+      );
+
+      expect(
+        result.diagnostics?['runtime'].toString(),
+        contains('Complete runtime evidence'),
+      );
+      expect(result.snapshot?.visibleTargets, isEmpty);
+      expect(result.completeSnapshot?.runtime?.entries, hasLength(1));
+      expect(result.artifactDownloads, hasLength(1));
+      expect(await artifact.exists(), isTrue);
+    });
 
     test('retries transient empty snapshots before returning', () async {
       var readCount = 0;

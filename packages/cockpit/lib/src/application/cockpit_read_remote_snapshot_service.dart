@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
 
 export 'cockpit_application_service_exception.dart';
 
@@ -7,6 +9,7 @@ import 'package:cockpit_protocol/cockpit_protocol.dart';
 import '../remote/cockpit_remote_read_budget.dart';
 import '../remote/cockpit_remote_session_client.dart';
 import '../session/cockpit_remote_session_handle.dart';
+import 'cockpit_application_service_exception.dart';
 import 'cockpit_interactive_result_data.dart';
 import 'cockpit_interactive_result_profile.dart';
 import 'cockpit_interactive_snapshot_store.dart';
@@ -42,6 +45,7 @@ final class CockpitReadRemoteSnapshotRequest {
     this.snapshotOptions,
     this.compareAgainstSnapshotRef,
     this.deadline,
+    this.retainArtifacts = true,
   });
 
   final Uri? baseUri;
@@ -53,6 +57,7 @@ final class CockpitReadRemoteSnapshotRequest {
   final CockpitSnapshotOptions? snapshotOptions;
   final String? compareAgainstSnapshotRef;
   final DateTime? deadline;
+  final bool retainArtifacts;
 }
 
 final class CockpitReadRemoteSnapshotResult {
@@ -62,6 +67,7 @@ final class CockpitReadRemoteSnapshotResult {
     required this.truncated,
     this.uiSummary,
     this.snapshot,
+    this.completeSnapshot,
     this.diagnostics,
     this.delta,
     this.snapshotRef,
@@ -76,6 +82,7 @@ final class CockpitReadRemoteSnapshotResult {
   final bool truncated;
   final CockpitInteractiveSnapshotSummary? uiSummary;
   final CockpitSnapshot? snapshot;
+  final CockpitSnapshot? completeSnapshot;
   final Map<String, Object?>? diagnostics;
   final CockpitInteractiveSnapshotDelta? delta;
   final String? snapshotRef;
@@ -158,12 +165,27 @@ final class CockpitReadRemoteSnapshotService {
     final snapshot = snapshotResponse.snapshot;
     final downloader = _downloadArtifacts;
     final artifactSourcePaths =
-        request.resultProfile.artifacts ==
-                CockpitInteractiveArtifactLevel.metadata &&
+        (request.resultProfile.artifacts ==
+                    CockpitInteractiveArtifactLevel.metadata ||
+                (request.resultProfile.emitsInlineSnapshot &&
+                    snapshot.diagnosticsArtifactRef != null)) &&
             snapshotResponse.artifactDownloads.isNotEmpty &&
             downloader != null
         ? await downloader(resolved.baseUri, snapshotResponse.artifactDownloads)
         : const <String, String>{};
+    final mustResolveSnapshot =
+        request.resultProfile.emitsInlineSnapshot &&
+        (!request.retainArtifacts || artifactSourcePaths.isNotEmpty);
+    late final CockpitSnapshot resolvedSnapshot;
+    try {
+      resolvedSnapshot = mustResolveSnapshot
+          ? await _resolveInlineSnapshot(snapshot, artifactSourcePaths)
+          : snapshot;
+    } finally {
+      if (!request.retainArtifacts) {
+        await _deleteSnapshotArtifacts(artifactSourcePaths.values);
+      }
+    }
     final sessionKey = resolved.baseUri.toString();
     final baseline = request.compareAgainstSnapshotRef == null
         ? null
@@ -172,30 +194,82 @@ final class CockpitReadRemoteSnapshotService {
             sessionKey: sessionKey,
           );
     final snapshotRef = request.resultProfile.emitsSnapshotRef
-        ? _snapshotStore.put(sessionKey: sessionKey, snapshot: snapshot)
+        ? _snapshotStore.put(sessionKey: sessionKey, snapshot: resolvedSnapshot)
         : null;
 
     return CockpitReadRemoteSnapshotResult(
-      routeName: snapshot.routeName,
-      diagnosticLevel: snapshot.diagnosticLevel.jsonValue,
-      truncated: snapshot.truncated,
+      routeName: resolvedSnapshot.routeName,
+      diagnosticLevel: resolvedSnapshot.diagnosticLevel.jsonValue,
+      truncated: resolvedSnapshot.truncated,
       uiSummary: request.resultProfile.emitsUiSummary
-          ? cockpitInteractiveSummarizeSnapshot(snapshot)
+          ? cockpitInteractiveSummarizeSnapshot(resolvedSnapshot)
           : null,
       snapshot: request.resultProfile.emitsInlineSnapshot ? snapshot : null,
+      completeSnapshot: request.resultProfile.emitsInlineSnapshot
+          ? resolvedSnapshot
+          : null,
       diagnostics: cockpitInteractiveDiagnosticsFromSnapshot(
-        snapshot,
+        resolvedSnapshot,
         request.resultProfile.diagnostics,
       ),
       delta: baseline == null
           ? null
-          : cockpitInteractiveDiffSnapshots(baseline.snapshot, snapshot),
+          : cockpitInteractiveDiffSnapshots(
+              baseline.snapshot,
+              resolvedSnapshot,
+            ),
       snapshotRef: snapshotRef,
-      artifactDownloads: snapshotResponse.artifactDownloads,
-      artifactSourcePaths: artifactSourcePaths,
+      artifactDownloads: request.retainArtifacts
+          ? snapshotResponse.artifactDownloads
+          : const <CockpitRemoteArtifactDownload>[],
+      artifactSourcePaths: request.retainArtifacts
+          ? artifactSourcePaths
+          : const <String, String>{},
       sessionHandle: resolved.sessionHandle,
       effectiveSnapshotOptions: effectiveSnapshotOptions,
     );
+  }
+
+  Future<CockpitSnapshot> _resolveInlineSnapshot(
+    CockpitSnapshot snapshot,
+    Map<String, String> artifactSourcePaths,
+  ) async {
+    final artifactRef = snapshot.diagnosticsArtifactRef;
+    if (artifactRef == null) return snapshot;
+    final sourcePath = artifactSourcePaths[artifactRef.relativePath];
+    if (sourcePath == null || sourcePath.isEmpty) {
+      throw const CockpitApplicationServiceException(
+        code: 'snapshotArtifactUnavailable',
+        message: 'The complete remote snapshot artifact is unavailable.',
+      );
+    }
+    try {
+      final decoded = jsonDecode(await File(sourcePath).readAsString());
+      if (decoded is! Map<Object?, Object?>) {
+        throw const FormatException('Snapshot artifact is not an object.');
+      }
+      return CockpitSnapshot.fromJson(
+        Map<String, Object?>.from(decoded),
+      ).copyWith(diagnosticsArtifactRef: artifactRef);
+    } on Object catch (error) {
+      throw CockpitApplicationServiceException(
+        code: 'snapshotArtifactInvalid',
+        message: 'The complete remote snapshot artifact is invalid.',
+        details: <String, Object?>{'cause': error.runtimeType.toString()},
+      );
+    }
+  }
+
+  Future<void> _deleteSnapshotArtifacts(Iterable<String> paths) async {
+    for (final path in paths) {
+      try {
+        final file = File(path);
+        if (await file.exists()) await file.delete();
+      } on FileSystemException {
+        // Worker-owned temporary files are cleaned up best-effort after the
+        // complete snapshot has been reduced to a bounded locator result.
+      }
+    }
   }
 }
 
