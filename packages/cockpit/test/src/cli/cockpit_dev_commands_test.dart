@@ -632,6 +632,71 @@ void main() {
     ]);
   });
 
+  test('dev inspect collapses an identityless text duplicate in one row', () {
+    Map<String, Object?> target({
+      required String registrationId,
+      required String type,
+      required double dx,
+      required double dy,
+      required double width,
+      required double height,
+      String? semanticId,
+    }) => <String, Object?>{
+      'registrationId': registrationId,
+      'semanticId': ?semanticId,
+      'text':
+          'Complete task Selector proof Open task Selector proof MEDIUM '
+          'Pending sync Selector proof Open for notes, due date, and next '
+          'actions. Open',
+      'textParts': type == 'Text'
+          ? <Object?>['Open']
+          : <Object?>['MEDIUM', 'Pending sync'],
+      'typeName': type,
+      'routeName': '/inbox',
+      'scrollablePath': '/list',
+      'supportedCommands': <Object?>['tap', 'longPress'],
+      'ancestors': const <Object?>[],
+      'layout': <String, Object?>{
+        'dx': dx,
+        'dy': dy,
+        'width': width,
+        'height': height,
+      },
+    };
+
+    final result = cockpitBuildDevLocatorMatches(<String, Object?>{
+      'snapshot': <String, Object?>{
+        'visibleTargets': <Object?>[
+          target(
+            registrationId: 'task-row',
+            type: 'Wrap',
+            semanticId: 'Open task Selector proof',
+            dx: 93,
+            dy: 822,
+            width: 161,
+            height: 28,
+          ),
+          target(
+            registrationId: 'open-label',
+            type: 'Text',
+            dx: 368,
+            dy: 827,
+            width: 34,
+            height: 16,
+          ),
+        ],
+      },
+    }, 'Selector proof');
+
+    expect(result['count'], 1);
+    expect(result['matches'], <Object?>[
+      <String, Object?>{
+        'sel': '[sem="Open task Selector proof"]',
+        'can': 'tap',
+      },
+    ]);
+  });
+
   test('dev locator advice preserves exact text case', () {
     Map<String, Object?> target(String registrationId, String text) =>
         <String, Object?>{
