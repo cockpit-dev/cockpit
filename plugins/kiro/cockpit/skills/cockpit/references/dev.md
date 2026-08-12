@@ -59,6 +59,20 @@ view capture first. Switch control to an advertised native/system plane only for
 - a native desktop shell outside the Flutter view;
 - installed applications without the development bridge.
 
+Open a deep link, Android app link, iOS universal link, or ordinary URL through
+the current target without constructing a generic operation payload:
+
+```bash
+cockpit dev open "myapp://tasks/42"
+cockpit dev wait
+cockpit dev inspect "EXPECTED_ANCHOR"
+```
+
+`dev open` dispatches through the selected session's platform adapter. A zero
+exit proves the OS accepted the URI; the focused app and expected route remain
+the required postcondition. If another application owns the URI, observe that
+state instead of forcing Cockpit back to the original app.
+
 Flutter in-app control walks the mounted Element/RenderObject tree and does not
 require application-authored Semantics. Use `dev inspect QUERY` for bounded target
 discovery. Use `dev tree` only for structural ambiguity; full output is path-based.

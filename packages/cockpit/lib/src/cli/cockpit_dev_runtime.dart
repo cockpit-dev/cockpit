@@ -757,6 +757,36 @@ final class CockpitDevRuntime {
     );
   }
 
+  Future<int> openUri(
+    CockpitCliSessionHandle session, {
+    required String uri,
+    required String scheme,
+    required int timeoutMilliseconds,
+  }) async {
+    final resolution = await reconcile(session, allowRelaunch: true);
+    if (!resolution.ready) {
+      return writeUnavailable(action: 'open', resolution: resolution);
+    }
+    session = resolution.session;
+    final result = await invoke(session, 'system.action', <String, Object?>{
+      'sessionId': session.sessionId,
+      'action': 'openUrl',
+      'parameters': <String, Object?>{'url': uri},
+      'timeoutMs': timeoutMilliseconds,
+    });
+    return writeOperation(
+      action: 'open',
+      session: session,
+      result: result,
+      state: <String, Object?>{
+        'scheme': scheme,
+        'system': _devSystemActionState(result.output),
+      },
+      changed: resolution.changed,
+      failureExitCode: cockpitUnavailableExitCode,
+    );
+  }
+
   Future<int> resizeViewport(
     CockpitCliSessionHandle session, {
     required int width,
@@ -970,6 +1000,20 @@ final class CockpitDevRuntime {
   );
 }
 
+Map<String, Object?> _devSystemActionState(Map<String, Object?>? output) =>
+    <String, Object?>{
+      for (final key in const <String>[
+        'availability',
+        'strategy',
+        'requires',
+        'limitations',
+        'recommendedNextStep',
+        'errorCode',
+        'errorMessage',
+      ])
+        if (output?[key] != null) key: output![key],
+    };
+
 ({
   String code,
   String message,
@@ -1079,6 +1123,16 @@ List<Object?> _operationErrors(Iterable<CockpitOperationResult> results) =>
 
 Map<String, Object?> _productFailure(CockpitOperationResult result) {
   final output = result.output;
+  final errorCode = output?['errorCode'];
+  final errorMessage = output?['errorMessage'];
+  if (errorCode is String && errorCode.isNotEmpty) {
+    return <String, Object?>{
+      'code': errorCode,
+      if (errorMessage is String && errorMessage.isNotEmpty)
+        'message': errorMessage,
+      'operation': result.kind,
+    };
+  }
   final command = output?['command'];
   if (command is Map<Object?, Object?>) {
     final error = command['error'];

@@ -131,6 +131,39 @@ CockpitLeafCommand cockpitDevDismissCommand(
   ),
 );
 
+CockpitLeafCommand cockpitDevOpenCommand(
+  CockpitCliRuntime runtime,
+  CockpitDevRuntime dev,
+) => CockpitLeafCommand(
+  runtime: runtime,
+  name: 'open',
+  description: 'Open a deep link, universal link, app link, or URL.',
+  invocationSuffix: 'URI [arguments]',
+  example: 'cockpit dev open "myapp://tasks/42"',
+  configure: cockpitAddDevSessionOption,
+  defaultTimeout: const Duration(minutes: 1),
+  maximumTimeout: const Duration(minutes: 2),
+  action: (arguments) async {
+    if (arguments.rest.length != 1) {
+      throw const FormatException('dev open requires exactly one URI.');
+    }
+    final value = arguments.rest.single.trim();
+    if (value.length > 8192) {
+      throw const FormatException('URI must not exceed 8192 characters.');
+    }
+    final uri = Uri.tryParse(value);
+    if (uri == null || !uri.hasScheme) {
+      throw const FormatException('URI must be absolute and include a scheme.');
+    }
+    return dev.openUri(
+      await runtime.resolveDevelopmentSession(arguments.option('session')),
+      uri: value,
+      scheme: uri.scheme,
+      timeoutMilliseconds: runtime.operationTimeout.inMilliseconds,
+    );
+  },
+);
+
 CockpitLeafCommand cockpitDevScrollCommand(
   CockpitCliRuntime runtime,
   CockpitDevRuntime dev,

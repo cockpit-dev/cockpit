@@ -67,6 +67,7 @@ cockpit dev status
 cockpit dev inspect "Save"
 cockpit dev tree
 cockpit dev tap "Save"
+cockpit dev open "myapp://tasks/42"
 cockpit dev wait
 cockpit dev screenshot
 cockpit dev reload
@@ -87,6 +88,9 @@ Flutter 检查会直接遍历已挂载的 Element 与 RenderObject，不要求�
 稳定序号。`dev tree` 返回紧凑的 selector 索引；只有确实需要结构上下文时
 才使用 `dev tree --view more` 或 `dev tree --view full`。两种结构视图都会把树写入
 artifact，stdout 只返回经过验证的路径。
+使用 `dev open URI` 可以通过当前 target 测试自定义 deep link、Android app link、
+iOS universal link 或 HTTP(S) URL；之后用 `dev wait` 和 `dev inspect` 验证预期路由
+或锚点。
 
 ## 多项目交互
 
