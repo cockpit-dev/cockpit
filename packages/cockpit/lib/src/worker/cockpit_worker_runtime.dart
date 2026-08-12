@@ -450,8 +450,23 @@ final class CockpitWorkerRuntime {
       operations: router,
       events: eventStore,
       artifacts: registry,
-      onInitialized: () async {
-        await eventStore.resume();
+      onInitialized: () {
+        unawaited(
+          Future<void>.delayed(Duration.zero)
+              .then((_) => eventStore.resume())
+              .catchError((Object error, StackTrace stackTrace) {
+                _logger.log(
+                  'error',
+                  'Worker event recovery failed.',
+                  fields: <String, Object?>{
+                    'workspaceId': configuration.workspaceId,
+                    'errorType': error.runtimeType.toString(),
+                    'error': '$error',
+                    'stackTrace': '$stackTrace',
+                  },
+                );
+              }),
+        );
         unawaited(
           Future<void>.delayed(Duration.zero)
               .then((_) => artifactPublisher.resume())
