@@ -787,6 +787,35 @@ final class CockpitDevRuntime {
     );
   }
 
+  Future<int> recoverSystemBlockers(
+    Future<CockpitCliSessionHandle> sessionFuture, {
+    required String decision,
+    required bool dismissKeyboard,
+    required int timeoutMilliseconds,
+  }) async {
+    final session = await sessionFuture;
+    final result = await invoke(session, 'system.action', <String, Object?>{
+      'sessionId': session.sessionId,
+      'action': 'resolveBlockers',
+      'parameters': <String, Object?>{
+        'decision': decision,
+        if (dismissKeyboard) 'dismissKeyboard': true,
+      },
+      'timeoutMs': timeoutMilliseconds,
+    });
+    return writeOperation(
+      action: 'recover',
+      session: session,
+      result: result,
+      state: <String, Object?>{
+        'decision': decision,
+        'system': _devSystemActionState(result.output),
+      },
+      changed: result.output?['changed'] ?? true,
+      failureExitCode: cockpitUnavailableExitCode,
+    );
+  }
+
   Future<int> resizeViewport(
     CockpitCliSessionHandle session, {
     required int width,
@@ -1008,6 +1037,7 @@ Map<String, Object?> _devSystemActionState(Map<String, Object?>? output) =>
         'requires',
         'limitations',
         'recommendedNextStep',
+        'changed',
         'errorCode',
         'errorMessage',
       ])

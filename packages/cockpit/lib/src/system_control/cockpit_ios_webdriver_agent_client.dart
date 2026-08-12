@@ -493,9 +493,9 @@ final class CockpitIosWebDriverAgentClient {
           return 'tapNotification text=$matchText x=${point.x} y=${point.y}';
         case CockpitIosWdaAction.resolveBlockers:
           final decision =
-              _optionalString(command.parameters, 'decision') ?? 'accept';
+              _optionalString(command.parameters, 'decision') ?? 'dismiss';
           final dismissKeyboard =
-              _optionalBool(command.parameters, 'dismissKeyboard') ?? true;
+              _optionalBool(command.parameters, 'dismissKeyboard') ?? false;
           await _dismissAlertIfPresent(
             client,
             session,

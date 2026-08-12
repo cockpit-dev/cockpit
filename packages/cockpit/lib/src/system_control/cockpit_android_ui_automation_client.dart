@@ -1,8 +1,8 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:isolate';
 
 import '../infrastructure/cockpit_process_manager.dart';
+import '../infrastructure/cockpit_runtime_resources.dart';
 
 const String cockpitAndroidUiAutomationCommandExecutable =
     '__cockpit_android_ui_automation';
@@ -36,11 +36,11 @@ final class CockpitAndroidUiAutomationClient
     CockpitProcessManager? processManager,
     CockpitAndroidDriverAssetResolver? assetResolver,
   }) : _processManager = processManager ?? const LocalCockpitProcessManager(),
-       _assetResolver = assetResolver ?? Isolate.resolvePackageUri;
+       _assetResolver = assetResolver ?? cockpitResolveRuntimePackageAsset;
 
   static const String _driverPackage = 'dev.cockpit.driver';
   static const String _testPackage = 'dev.cockpit.driver.test';
-  static const int _driverVersionCode = 3;
+  static const int _driverVersionCode = 5;
   static const int _testDriverVersionCode = 0;
   static const String _runner = 'androidx.test.runner.AndroidJUnitRunner';
   static const String _testClass = 'dev.cockpit.driver.CockpitDriverTest';
@@ -85,10 +85,21 @@ final class CockpitAndroidUiAutomationClient
   }) async {
     final deadline = DateTime.now().add(timeout);
     await _ensureInstalled(deviceId, deadline);
-    await _runInstrumentation(deviceId, 'tapSystemDialog', <String, String>{
-      'decision': decision,
-    }, deadline);
-    return 'dismissSystemDialog decision=$decision handled=true';
+    final output = await _runInstrumentation(
+      deviceId,
+      'tapSystemDialog',
+      <String, String>{'decision': decision},
+      deadline,
+    );
+    final handled = RegExp(
+      r'INSTRUMENTATION_STATUS: cockpitHandled=(true|false)',
+    ).firstMatch(output)?.group(1);
+    if (handled == null) {
+      throw StateError(
+        'Android UI Automation did not report whether a system dialog was handled.',
+      );
+    }
+    return 'dismissSystemDialog decision=$decision handled=$handled';
   }
 
   @override
@@ -116,7 +127,7 @@ final class CockpitAndroidUiAutomationClient
     return 'tapNotification text=$text handled=true';
   }
 
-  Future<void> _runInstrumentation(
+  Future<String> _runInstrumentation(
     String deviceId,
     String method,
     Map<String, String> parameters,
@@ -149,6 +160,7 @@ final class CockpitAndroidUiAutomationClient
         ),
       );
     }
+    return output;
   }
 
   Future<void> _ensureInstalled(String deviceId, DateTime deadline) async {

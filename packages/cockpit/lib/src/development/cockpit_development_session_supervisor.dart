@@ -345,7 +345,9 @@ final class CockpitDevelopmentSessionSupervisor {
       }
     }
     _controlPlaneClosed = true;
-    await _disposeResources(terminateMachineProcess: detached);
+    await _disposeResources(
+      terminateMachineProcess: machineClient != null && appId.isEmpty,
+    );
     if (!_doneCompleter.isCompleted) {
       _doneCompleter.complete();
     }
@@ -604,13 +606,14 @@ final class CockpitDevelopmentSessionSupervisor {
             var terminateMachineProcess = appId == null || appId.isEmpty;
             if (appId != null && appId.isNotEmpty) {
               try {
-                final result = await client
+                await client
                     .detach(appId: appId)
                     .timeout(const Duration(seconds: 2));
-                terminateMachineProcess = result == true;
+                terminateMachineProcess = false;
               } on Object {
                 // The supervisor is already closing; preserve the app and
                 // abandon only this replacement control connection.
+                terminateMachineProcess = false;
               }
             }
             await client.dispose(terminateProcess: terminateMachineProcess);

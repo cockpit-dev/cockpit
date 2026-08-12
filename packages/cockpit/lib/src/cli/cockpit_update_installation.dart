@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import '../foundation/cockpit_internal_process.dart';
+import '../infrastructure/cockpit_runtime_resources.dart';
 import 'cockpit_update_models.dart';
 import 'cockpit_update_support.dart';
 
@@ -79,8 +80,12 @@ final class CockpitUpdateInstallation {
       ).uri.resolve('global_packages/cockpit/.dart_tool/package_config.json'),
     );
     final entrypoint = await _activatedEntrypoint(packageConfig);
+    final packageRoot = entrypoint.parent.parent;
     final staged = File.fromUri(
       workspace.uri.resolve(_windows ? 'cockpit-next.exe' : 'cockpit-next'),
+    );
+    final stagedResources = Directory.fromUri(
+      workspace.uri.resolve('cockpit-resources-next/'),
     );
     final dart = _windows ? 'dart.exe' : 'dart';
     final compile = await _run(
@@ -103,7 +108,12 @@ final class CockpitUpdateInstallation {
       message: 'The hosted Cockpit release could not be compiled to AOT.',
     );
     await _requireVersion(staged, version, deadline);
-    await _installAot(staged, version, deadline);
+    await cockpitWriteRuntimeResources(
+      packageRoot: packageRoot,
+      destination: stagedResources,
+      version: version,
+    );
+    await _installAot(staged, stagedResources, version, deadline);
     _aotInstalled = true;
   }
 
@@ -236,6 +246,7 @@ final class CockpitUpdateInstallation {
 
   Future<void> _installAot(
     File staged,
+    Directory stagedResources,
     String version,
     DateTime deadline,
   ) async {
@@ -249,19 +260,50 @@ final class CockpitUpdateInstallation {
     final hostedBackup = File.fromUri(
       (await _ensureWorkspace()).uri.resolve('cockpit-hosted-launcher'),
     );
+    final resourceDestination = Directory(
+      cockpitRuntimeResourceDirectoryPath(destination.path, windows: _windows),
+    );
+    final resourceBackup = Directory.fromUri(
+      (await _ensureWorkspace()).uri.resolve('cockpit-resources-previous/'),
+    );
     final replacedHosted = await destination.exists();
+    final replacedResources = await resourceDestination.exists();
     if (replacedHosted) await destination.rename(hostedBackup.path);
+    if (replacedResources) {
+      await resourceDestination.rename(resourceBackup.path);
+    }
     try {
       await staged.rename(destination.path);
+      await stagedResources.rename(resourceDestination.path);
       await _requireVersion(destination, version, deadline);
+      if (!await cockpitHasValidRuntimeResources(
+        executablePath: destination.path,
+        version: version,
+        windows: _windows,
+      )) {
+        throw const CockpitUpdateException(
+          'updateVerificationFailed',
+          'The installed Cockpit runtime resources could not be verified.',
+          retryable: false,
+        );
+      }
     } on Object {
       if (await destination.exists()) await destination.delete();
+      if (await resourceDestination.exists()) {
+        await resourceDestination.delete(recursive: true);
+      }
       if (replacedHosted && await hostedBackup.exists()) {
         await hostedBackup.rename(destination.path);
+      }
+      if (replacedResources && await resourceBackup.exists()) {
+        await resourceBackup.rename(resourceDestination.path);
       }
       rethrow;
     }
     if (await hostedBackup.exists()) await hostedBackup.delete();
+    if (await resourceBackup.exists()) {
+      await resourceBackup.delete(recursive: true);
+    }
   }
 
   Future<void> _requireVersion(

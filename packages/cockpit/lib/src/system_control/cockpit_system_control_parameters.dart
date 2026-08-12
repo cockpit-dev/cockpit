@@ -339,13 +339,13 @@ final class CockpitSystemControlParameterSets {
       valueType: CockpitSystemControlParameterType.string,
       allowedValues: <String>['accept', 'dismiss'],
       description:
-          'Preferred system dialog decision before recovering the app; default is accept.',
+          'Preferred system dialog decision before recovering the app; default is dismiss.',
     ),
     CockpitSystemControlParameter(
       name: 'dismissKeyboard',
       valueType: CockpitSystemControlParameterType.boolean,
       description:
-          'Whether to dismiss the keyboard before app recovery. Defaults to true.',
+          'Whether to dismiss the keyboard before app recovery. Defaults to false.',
     ),
   ];
 

@@ -71,6 +71,7 @@ cockpit dev tap "Save"
 cockpit dev open "myapp://tasks/42"
 cockpit dev wait
 cockpit dev screenshot
+cockpit dev recover
 cockpit dev reload
 cockpit dev diagnose --view more
 ```
@@ -94,6 +95,8 @@ Both structural views write the tree to an artifact and print only its verified 
 Use `dev open URI` to test a custom deep link, Android app link, iOS universal
 link, or HTTP(S) URL through the selected target, then verify the expected route
 or anchor with `dev wait` and `dev inspect`.
+Use `dev recover` only after a system capture proves a native blocker. It safely
+does nothing when the selected app already has focus.
 
 ## Interactive Workspaces
 
@@ -119,12 +122,15 @@ path.
 Workspace commands accept `--workspace-id`. When it is omitted, Cockpit
 resolves the current directory against registered active workspaces and
 requires exactly one match. It never selects a global latest run, active
-session, or unrelated checkout.
+session, or unrelated checkout. From a common ancestor with several Flutter
+projects, `op list --session HANDLE` resolves the exact session's workspace
+without requiring a long workspace ID.
 
 ```bash
 cd /work/projects/app-a
 cockpit op list
 cockpit case list
+cockpit op list --kind system.action --session 2
 ```
 
 `op run` accepts typed LON, JSON, or YAML and executes an advertised operation.

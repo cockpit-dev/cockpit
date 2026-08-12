@@ -1755,7 +1755,7 @@ final class CockpitIosSystemControlAdapter
           'appId': appId.value!,
           if (request.deviceId != null) 'deviceId': request.deviceId,
           if (decision.value != null) 'decision': decision.value,
-          'dismissKeyboard': dismissKeyboard.value ?? true,
+          'dismissKeyboard': dismissKeyboard.value ?? false,
         },
         timeout: request.timeout,
       ),

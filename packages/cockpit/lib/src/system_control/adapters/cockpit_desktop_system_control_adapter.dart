@@ -259,6 +259,29 @@ final class CockpitDesktopSystemControlAdapter
             ],
             parameters: CockpitSystemControlParameterSets.recoverToApp,
           ),
+          if (platform == 'macos')
+            CockpitSystemControlCapability(
+              action: CockpitSystemControlAction.resolveBlockers,
+              plane: CockpitPlaneKind.nativeUiPlane,
+              availability: hasInputTarget
+                  ? CockpitSystemControlAvailability.available
+                  : CockpitSystemControlAvailability.blocked,
+              strategy: 'macro.ax-dialog+activate',
+              requires: <String>[
+                'Accessibility permission',
+                ..._activationRequires,
+                if (!hasInputTarget) 'app id or process id',
+              ],
+              limitations: <String>[
+                ...limitations,
+                'Only a real target-owned accessible sheet or modal dialog is changed; no dialog is a safe no-op.',
+              ],
+              parameters: CockpitSystemControlParameterSets.resolveBlockers,
+              fallbackActions: const <CockpitSystemControlAction>[
+                CockpitSystemControlAction.dismissSystemDialog,
+                CockpitSystemControlAction.recoverToApp,
+              ],
+            ),
           _hostFileCapability(CockpitSystemControlAction.pushFile),
           _hostFileCapability(CockpitSystemControlAction.pullFile),
           CockpitSystemControlCapability(

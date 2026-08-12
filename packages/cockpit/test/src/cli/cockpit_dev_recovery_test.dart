@@ -840,6 +840,56 @@ void main() {
     expect(stdout.toString(), isNot(contains('tasks/42')));
     expect(stdout.toString(), isNot(contains('command')));
   });
+
+  test(
+    'system recovery defaults to a dismiss decision for one session',
+    () async {
+      final calls = <String>[];
+      final dev = CockpitDevRuntime(
+        runtime,
+        operationInvoker: (_, kind, input) async {
+          calls.add(kind);
+          expect(kind, 'system.action');
+          expect(input, <String, Object?>{
+            'sessionId': 'session-old',
+            'action': 'resolveBlockers',
+            'parameters': <String, Object?>{'decision': 'dismiss'},
+            'timeoutMs': 120000,
+          });
+          return _result(
+            kind,
+            output: const <String, Object?>{
+              'action': 'resolveBlockers',
+              'availability': 'available',
+              'success': true,
+              'changed': false,
+              'strategy': 'test.resolveBlockers',
+            },
+          );
+        },
+      );
+      runtime.configureOutput(
+        command: 'dev.recover',
+        selection: const CockpitCliOutputSelection(),
+      );
+
+      expect(
+        await dev.recoverSystemBlockers(
+          Future<CockpitCliSessionHandle>.value(session),
+          decision: 'dismiss',
+          dismissKeyboard: false,
+          timeoutMilliseconds: 120000,
+        ),
+        cockpitSuccessExitCode,
+      );
+      expect(calls, <String>['system.action']);
+      final output = lon.decode(stdout.toString())! as Map<Object?, Object?>;
+      expect(output['decision'], 'dismiss');
+      expect(output['changed'], isFalse);
+      expect(output['session'], 1);
+      expect(stdout.toString(), isNot(contains('success')));
+    },
+  );
 }
 
 CockpitOperationResult _result(

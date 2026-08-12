@@ -1,5 +1,8 @@
 import 'dart:io';
 
+import 'package:cockpit/src/foundation/cockpit_version.dart';
+import 'package:cockpit/src/infrastructure/cockpit_runtime_resources.dart';
+
 Future<void> main(List<String> arguments) async {
   try {
     final output = _outputPath(arguments);
@@ -21,6 +24,15 @@ Future<void> main(List<String> arguments) async {
         'src-${DateTime.now().microsecondsSinceEpoch.toRadixString(36)}-$pid';
     final staging = File('${destination.path}.install-$suffix');
     final backup = File('${destination.path}.backup-$suffix');
+    final resourceDestination = Directory(
+      cockpitRuntimeResourceDirectoryPath(destination.path),
+    );
+    final resourceStaging = Directory(
+      '${resourceDestination.path}.install-$suffix',
+    );
+    final resourceBackup = Directory(
+      '${resourceDestination.path}.backup-$suffix',
+    );
 
     try {
       final compiler = await Process.run(Platform.resolvedExecutable, <String>[
@@ -53,35 +65,66 @@ Future<void> main(List<String> arguments) async {
         );
       }
 
+      await cockpitWriteRuntimeResources(
+        packageRoot: Directory.fromUri(root.uri.resolve('packages/cockpit/')),
+        destination: resourceStaging,
+        version: cockpitVersion,
+      );
+
       final replaced = await destination.exists();
+      final resourcesReplaced = await resourceDestination.exists();
       if (replaced) await destination.rename(backup.path);
+      if (resourcesReplaced) {
+        await resourceDestination.rename(resourceBackup.path);
+      }
       try {
         await staging.rename(destination.path);
+        await resourceStaging.rename(resourceDestination.path);
         final probe = await Process.run(destination.path, const <String>[
           '--help',
         ]);
-        if (probe.exitCode != 0) {
+        if (probe.exitCode != 0 ||
+            !await cockpitHasValidRuntimeResources(
+              executablePath: destination.path,
+              version: cockpitVersion,
+            )) {
           throw ProcessException(
             destination.path,
             const <String>['--help'],
-            'Installed Cockpit executable did not start successfully.',
+            'Installed Cockpit executable or runtime resources could not be verified.',
             probe.exitCode,
           );
         }
       } on Object {
         if (await destination.exists()) await destination.delete();
+        if (await resourceDestination.exists()) {
+          await resourceDestination.delete(recursive: true);
+        }
         if (replaced && await backup.exists()) {
           await backup.rename(destination.path);
+        }
+        if (resourcesReplaced && await resourceBackup.exists()) {
+          await resourceBackup.rename(resourceDestination.path);
         }
         rethrow;
       }
       if (await backup.exists()) await backup.delete();
+      if (await resourceBackup.exists()) {
+        await resourceBackup.delete(recursive: true);
+      }
       if (arguments.isEmpty) await _deleteLegacyPayload(destination);
       stdout.writeln(destination.path);
     } finally {
       if (await staging.exists()) await staging.delete();
+      if (await resourceStaging.exists()) {
+        await resourceStaging.delete(recursive: true);
+      }
       if (await backup.exists() && !await destination.exists()) {
         await backup.rename(destination.path);
+      }
+      if (await resourceBackup.exists() &&
+          !await resourceDestination.exists()) {
+        await resourceBackup.rename(resourceDestination.path);
       }
     }
   } on FormatException catch (error) {

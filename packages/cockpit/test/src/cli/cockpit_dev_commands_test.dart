@@ -56,6 +56,7 @@ void main() {
         'press',
         'back',
         'dismiss',
+        'recover',
         'open',
         'scroll',
         'wait',
@@ -139,6 +140,14 @@ void main() {
       '1m',
     );
     expect(
+      dev.subcommands['recover']!.argParser.options['decision']!.defaultsTo,
+      'dismiss',
+    );
+    expect(
+      dev.subcommands['recover']!.argParser.options['timeout']!.defaultsTo,
+      '2m',
+    );
+    expect(
       dev.subcommands['screenshot']!.argParser.options.keys,
       containsAll(<String>{
         'save',
@@ -179,6 +188,21 @@ void main() {
     expect(update!.description, 'Update Cockpit and reconnect its Supervisor.');
     expect(update.argParser.options['timeout']!.defaultsTo, '10m');
     expect(update.argParser.options['format']!.defaultsTo, 'lon');
+  });
+
+  test('operation discovery accepts an exact development session', () {
+    final runner = CockpitCommandRunner(
+      runtime: CockpitCliRuntime(
+        stdoutSink: StringBuffer(),
+        stderrSink: StringBuffer(),
+      ),
+    );
+    final list = runner.commands['op']!.subcommands['list']!;
+
+    expect(
+      list.argParser.parse(const <String>['-s', '9']).option('session'),
+      '9',
+    );
   });
 
   test('dev compiles a multi-condition selector into one exact locator', () {

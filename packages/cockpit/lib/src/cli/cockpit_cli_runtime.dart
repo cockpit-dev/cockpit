@@ -677,15 +677,6 @@ final class CockpitCliRuntime {
       }
       return explicit;
     }
-    final active = await maybeActiveDevelopmentSession();
-    if (active != null &&
-        workspaces.any(
-          (workspace) =>
-              workspace.workspaceId == active.workspaceId &&
-              workspace.state == CockpitWorkspaceState.active,
-        )) {
-      return active.workspaceId;
-    }
     final canonicalCwd = p.normalize(
       await Directory(workingDirectory).resolveSymbolicLinks(),
     );

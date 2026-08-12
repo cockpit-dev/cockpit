@@ -1202,6 +1202,17 @@ Object? _compactDevState(
       if (more) ..._pick(state, const <String>['durationMs']),
     },
     'open' => _compactDevOpen(state, more: more),
+    'recover' => <String, Object?>{
+      ..._pick(state, const <String>['decision']),
+      if (more && state['system'] is Map<Object?, Object?>)
+        ..._pick(state['system']! as Map<Object?, Object?>, const <String>[
+          'availability',
+          'strategy',
+          'requires',
+          'limitations',
+          'recommendedNextStep',
+        ]),
+    },
     'viewport' => <String, Object?>{
       ..._pick(state, const <String>['available', 'reason', 'alternatives']),
       if (more)
@@ -1744,7 +1755,7 @@ Map<String, Object?> _compactSystemActionOutput(
   Map<Object?, Object?> output, {
   required bool more,
 }) => <String, Object?>{
-  ..._pick(output, const <String>['action', 'path']),
+  ..._pick(output, const <String>['action', 'changed', 'path']),
   if (output['availability'] != null && output['availability'] != 'available')
     'availability': output['availability'],
   if (more)

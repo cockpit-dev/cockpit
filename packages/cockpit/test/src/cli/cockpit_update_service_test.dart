@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:cockpit/src/cli/cockpit_update_service.dart';
 import 'package:cockpit/src/cli/cockpit_update_support.dart';
+import 'package:cockpit/src/infrastructure/cockpit_runtime_resources.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:test/test.dart';
@@ -773,6 +774,29 @@ Future<void> _writeActivatedPackage(
   await File(
     '${package.path}/pubspec.yaml',
   ).writeAsString('name: cockpit\nversion: $version\n');
+  final androidResources = Directory(
+    '${package.path}/lib/src/system_control/resources/android',
+  );
+  await androidResources.create(recursive: true);
+  await File(
+    '${androidResources.path}/cockpit-driver.apk',
+  ).writeAsBytes(<int>[1, 2, 3], flush: true);
+  await File(
+    '${androidResources.path}/cockpit-driver-test.apk',
+  ).writeAsBytes(<int>[4, 5, 6], flush: true);
+  final installedResources = Directory(
+    cockpitRuntimeResourceDirectoryPath(
+      '${pubCache.path}/bin/${Platform.isWindows ? 'cockpit.exe' : 'cockpit'}',
+    ),
+  );
+  if (await installedResources.exists()) {
+    await installedResources.delete(recursive: true);
+  }
+  await cockpitWriteRuntimeResources(
+    packageRoot: package,
+    destination: installedResources,
+    version: version,
+  );
   final config = File(
     '${pubCache.path}/global_packages/cockpit/.dart_tool/package_config.json',
   );

@@ -131,6 +131,39 @@ CockpitLeafCommand cockpitDevDismissCommand(
   ),
 );
 
+CockpitLeafCommand cockpitDevRecoverCommand(
+  CockpitCliRuntime runtime,
+  CockpitDevRuntime dev,
+) => CockpitLeafCommand(
+  runtime: runtime,
+  name: 'recover',
+  description: 'Dismiss incidental system blockers and return to the app.',
+  example: 'cockpit dev recover',
+  configure: (parser) {
+    cockpitAddDevSessionOption(parser);
+    parser.addOption(
+      'decision',
+      allowed: const <String>['dismiss', 'accept'],
+      defaultsTo: 'dismiss',
+      help:
+          'System-dialog decision; accept only when the scenario requires it.',
+    );
+    parser.addFlag(
+      'keyboard',
+      negatable: false,
+      help: 'Also dismiss a system keyboard proven to block the app.',
+    );
+  },
+  defaultTimeout: const Duration(minutes: 2),
+  maximumTimeout: const Duration(minutes: 10),
+  action: (arguments) => dev.recoverSystemBlockers(
+    runtime.resolveDevelopmentSession(arguments.option('session')),
+    decision: arguments.option('decision')!,
+    dismissKeyboard: arguments.flag('keyboard'),
+    timeoutMilliseconds: runtime.operationTimeout.inMilliseconds,
+  ),
+);
+
 CockpitLeafCommand cockpitDevOpenCommand(
   CockpitCliRuntime runtime,
   CockpitDevRuntime dev,

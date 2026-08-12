@@ -997,7 +997,7 @@ void main() {
   );
 
   test(
-    'supervisor detach preserves app state and closes the detached machine control process',
+    'supervisor detach preserves app and leaves its machine process alive',
     () async {
       final harness = _MachineHarness();
       addTearDown(harness.dispose);
@@ -1025,7 +1025,7 @@ void main() {
         (await supervisor.currentStatus()).state,
         CockpitDevelopmentSessionState.ready,
       );
-      expect(harness.closeProcessCallCount, 1);
+      expect(harness.closeProcessCallCount, 0);
       expect(harness.stoppedAppIds, isEmpty);
     },
   );

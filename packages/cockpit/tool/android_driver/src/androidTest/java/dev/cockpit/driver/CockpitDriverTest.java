@@ -2,7 +2,6 @@ package dev.cockpit.driver;
 
 import static org.junit.Assert.assertTrue;
 
-import android.accessibilityservice.AccessibilityService;
 import android.accessibilityservice.AccessibilityServiceInfo;
 import android.app.Instrumentation;
 import android.app.UiAutomation;
@@ -86,10 +85,10 @@ public final class CockpitDriverTest {
                 false,
                 1000
         );
-        boolean handled = match == null
-                ? dismiss && automation.performGlobalAction(AccessibilityService.GLOBAL_ACTION_BACK)
-                : click(match);
-        assertTrue("No matching Android system dialog action was available", handled);
+        boolean handled = match != null && click(match);
+        Bundle result = new Bundle();
+        result.putString("cockpitHandled", Boolean.toString(handled));
+        instrumentation.sendStatus(0, result);
     }
 
     @Test

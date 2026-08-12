@@ -70,6 +70,7 @@ cockpit dev tap "Save"
 cockpit dev open "myapp://tasks/42"
 cockpit dev wait
 cockpit dev screenshot
+cockpit dev recover
 cockpit dev reload
 cockpit dev diagnose --view more
 ```
@@ -91,6 +92,8 @@ artifact，stdout 只返回经过验证的路径。
 使用 `dev open URI` 可以通过当前 target 测试自定义 deep link、Android app link、
 iOS universal link 或 HTTP(S) URL；之后用 `dev wait` 和 `dev inspect` 验证预期路由
 或锚点。
+只有系统截图已经证明存在原生阻塞时才使用 `dev recover`；所选应用已经正常获得焦点时，
+该命令不会执行任何修改。
 
 ## 多项目交互
 
@@ -114,12 +117,15 @@ cockpit workspace list
 
 workspace 命令可以显式传 `--workspace-id`。省略时，Cockpit 会用当前目录匹配已注册且
 active 的 workspace，并要求结果唯一；不会回退到全局 latest run、active session 或
-其他 checkout。
+其他 checkout。在包含多个 Flutter 项目的共同祖先目录中，可使用
+`op list --session HANDLE` 通过短 handle 精确解析该 session 的 workspace，无需传递较长的
+workspace ID。
 
 ```bash
 cd /work/projects/app-a
 cockpit op list
 cockpit case list
+cockpit op list --kind system.action --session 2
 ```
 
 `op run` 只接收类型化 LON、JSON 或 YAML，并且只能执行 Supervisor 已公开的
