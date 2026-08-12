@@ -1,5 +1,9 @@
 # Changelog
 
+## 4.0.5
+
+- Synchronized the protocol package with the Cockpit 4.0.5 release.
+
 ## 4.0.4
 
 - Added canonical detection for explicit compact selectors so inspection can
