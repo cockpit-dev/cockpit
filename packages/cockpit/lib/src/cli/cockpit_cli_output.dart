@@ -245,8 +245,9 @@ Object? _withProjectionMetadata(Object? value, Map<String, int> omitted) {
   return switch (value) {
     Map<Object?, Object?>() => <String, Object?>{
       for (final entry in value.entries)
-        if (entry.key is String) entry.key! as String: entry.value,
-      'more': skipped,
+        if (entry.key is String && entry.key != 'more')
+          entry.key! as String: entry.value,
+      'more': (value['more'] as int? ?? 0) + skipped,
     },
     List<Object?>() => <String, Object?>{'items': value, 'more': skipped},
     _ => <String, Object?>{'value': value, 'more': skipped},
