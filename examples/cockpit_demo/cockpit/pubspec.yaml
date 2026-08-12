@@ -16,7 +16,7 @@ dependencies:
 
 dev_dependencies:
   args: ^2.7.0
-  cockpit: ^4.0.8
+  cockpit: ^4.0.9
   cockpit_protocol: ^4.0.5
   crypto: ^3.0.7
   drift: ">=2.29.0 <2.30.0"
