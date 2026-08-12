@@ -422,14 +422,14 @@ final class CockpitDevRuntime {
 
   Future<int> _diagnose(CockpitCliSessionHandle session) async {
     var results = await _diagnosticReads(session);
-    if (!results.every(_operationSucceeded)) {
+    if (!results.every(_diagnosticReadSucceeded)) {
       final resolution = await reconcile(session, allowRelaunch: false);
       if (!resolution.ready) {
         return writeUnavailable(action: 'diagnose', resolution: resolution);
       }
       session = resolution.session;
       results = await _diagnosticReads(session);
-      if (!results.every(_operationSucceeded)) {
+      if (!results.every(_diagnosticReadSucceeded)) {
         return writeEnvelope(
           action: 'diagnose',
           session: session,
@@ -440,7 +440,7 @@ final class CockpitDevRuntime {
             'ui': results[1].output,
           },
           changed: resolution.changed,
-          errors: _operationErrors(results),
+          errors: _diagnosticReadErrors(results),
           next: 'cockpit dev diagnose --session ${session.handleId}',
           failureExitCode: cockpitTemporaryExitCode,
         );
@@ -485,7 +485,7 @@ final class CockpitDevRuntime {
     }),
     invoke(session, 'ui.inspect', <String, Object?>{
       'sessionId': session.sessionId,
-      'profile': 'locate',
+      'profile': 'inspect',
       'snapshotOptions': const CockpitSnapshotOptions(
         profile: CockpitSnapshotProfile.investigate,
         maxTargets: 32,
@@ -497,7 +497,24 @@ final class CockpitDevRuntime {
         includeRuntimeActivity: true,
         maxRuntimeEntries: 120,
         runtimeQuery: CockpitRuntimeQuery(),
+        includeRebuildActivity: true,
+        maxRebuildEntries: 32,
+        includeAccessibilitySummary: true,
+        maxAccessibilityEntries: 32,
       ).toJson(),
+    }),
+    invoke(session, 'errors.read', <String, Object?>{
+      'sessionId': session.sessionId,
+      'maxErrors': 32,
+    }),
+    invoke(session, 'network.read', <String, Object?>{
+      'sessionId': session.sessionId,
+      'onlyFailures': false,
+      'maxEntries': 64,
+    }),
+    invoke(session, 'logs.read', <String, Object?>{
+      'sessionId': session.sessionId,
+      'maxLines': 120,
     }),
   ]);
 
@@ -506,109 +523,18 @@ final class CockpitDevRuntime {
     List<CockpitOperationResult> results,
   ) {
     final uiOutput = results[1].output ?? const <String, Object?>{};
-    final snapshot = _objectMap(uiOutput['snapshot']);
-    final networkSnapshot = _objectMap(snapshot?['network']);
-    final runtimeSnapshot = _objectMap(snapshot?['runtime']);
-    final summary = _objectMap(snapshot?['summary']);
-    final route = snapshot?['route'] ?? uiOutput['route'];
-    final uiSummary = <String, Object?>{
-      ..._optionalMapEntry('routeName', route),
-      ..._optionalMapEntry('diagnosticLevel', snapshot?['diagnosticLevel']),
-      if (snapshot?['truncated'] != null) 'truncated': snapshot!['truncated'],
-      'visibleTargetCount': summary?['visibleTargetCount'] ?? 0,
-      'targetsWithCockpitIdCount': summary?['targetsWithCockpitIdCount'] ?? 0,
-      'targetsWithTextCount': summary?['targetsWithTextCount'] ?? 0,
-      'networkEntryCount': networkSnapshot?['totalEntryCount'] ?? 0,
-      'networkFailureCount': networkSnapshot?['failureCount'] ?? 0,
-      'runtimeEntryCount': runtimeSnapshot?['totalEntryCount'] ?? 0,
-      'runtimeErrorCount': runtimeSnapshot?['errorCount'] ?? 0,
-      'rebuildEntryCount': 0,
-      'totalRebuildCount': 0,
-      'accessibilityTargetCount': 0,
-      'accessibilityTraversalCount': 0,
-      if (_objectList(snapshot?['visibleTargets']).isNotEmpty)
-        'textPreviews': _objectList(snapshot?['visibleTargets'])
-            .map(_objectMap)
-            .whereType<Map<Object?, Object?>>()
-            .map((target) => target['text'])
-            .whereType<String>()
-            .where((text) => text.isNotEmpty)
-            .take(8)
-            .toList(growable: false),
-      if (snapshot?['focus'] is Map<Object?, Object?>)
-        'focus': snapshot!['focus'],
-    };
-    final ui = <String, Object?>{
-      ...uiOutput,
-      ..._optionalMapEntry('routeName', route),
-      ..._optionalMapEntry('diagnosticLevel', snapshot?['diagnosticLevel']),
-      if (snapshot?['truncated'] != null) 'truncated': snapshot!['truncated'],
-      'uiSummary': uiSummary,
-    };
-    final runtimeEntries = _objectList(runtimeSnapshot?['entries']);
-    final errors = runtimeEntries
-        .map(_objectMap)
-        .whereType<Map<Object?, Object?>>()
-        .where((entry) => entry['severity'] == 'error')
-        .map(
-          (entry) => <String, Object?>{
-            'source': 'app_snapshot',
-            if (entry['message'] != null) 'message': entry['message'],
-            if (entry['kind'] != null) 'kind': entry['kind'],
-            if (entry['route'] != null) 'routeName': entry['route'],
-            if (entry['recorded'] != null) 'recordedAt': entry['recorded'],
-          },
-        )
-        .toList(growable: false);
-    final networkEntries = _objectList(networkSnapshot?['entries']);
-    final network = <String, Object?>{
-      'appId': session.appId,
-      'source': 'app_snapshot',
-      'available': true,
-      ..._optionalMapEntry('routeName', route),
-      'summary': <String, Object?>{
-        'totalEntryCount': networkSnapshot?['totalEntryCount'] ?? 0,
-        'failureCount': networkSnapshot?['failureCount'] ?? 0,
-        'capturedEntryCount': networkSnapshot?['capturedEntryCount'] ?? 0,
-        'inFlightCount': networkSnapshot?['inFlightCount'] ?? 0,
-        'truncated': networkSnapshot?['truncated'] ?? false,
-        'query': networkSnapshot?['query'] ?? const <String, Object?>{},
-      },
-      'endpointSummaries':
-          networkSnapshot?['endpointSummaries'] ?? const <Object?>[],
-      'endpointSummariesTruncated': false,
-      'recentFailures': networkEntries
-          .map(_objectMap)
-          .whereType<Map<Object?, Object?>>()
-          .where(_networkEntryIsFailure)
-          .toList(growable: false),
-    };
-    final logs = <String, Object?>{
-      'appId': session.appId,
-      'source': 'app_snapshot',
-      'available': true,
-      ..._optionalMapEntry('routeName', route),
-      'lines': runtimeEntries
-          .map(_objectMap)
-          .whereType<Map<Object?, Object?>>()
-          .map(_runtimeLogLine)
-          .toList(growable: false),
-      'truncated': runtimeSnapshot?['truncated'] ?? false,
-    };
+    final route = uiOutput['routeName'];
     return <String, Object?>{
       'lifecycle': session.lifecycle,
       ..._sessionIdentity(session),
       'target': results[0].output,
-      'ui': ui,
-      'runtimeErrors': <String, Object?>{
-        'appId': session.appId,
-        'source': 'app_snapshot',
+      'ui': <String, Object?>{
+        ...uiOutput,
         ..._optionalMapEntry('routeName', route),
-        'hasErrors': errors.isNotEmpty,
-        'errors': errors,
       },
-      'network': network,
-      'logs': logs,
+      'runtimeErrors': results[2].output,
+      'network': results[3].output,
+      'logs': results[4].output,
     };
   }
 
@@ -1109,6 +1035,18 @@ bool _operationSucceeded(CockpitOperationResult result) =>
     !_containsFalseOutcome(result.output) &&
     !_containsDisqualifyingState(result);
 
+bool _diagnosticReadSucceeded(CockpitOperationResult result) =>
+    result.lifecycle == CockpitOperationLifecycle.completed &&
+    result.outcome == CockpitOperationOutcome.succeeded &&
+    !_containsFalseOutcome(result.output);
+
+List<Object?> _diagnosticReadErrors(Iterable<CockpitOperationResult> results) =>
+    <Object?>[
+      for (final result in results)
+        if (!_diagnosticReadSucceeded(result))
+          result.failure?.toJson() ?? _productFailure(result),
+    ];
+
 bool _containsDisqualifyingState(CockpitOperationResult result) {
   final output = result.output;
   if (output == null) return false;
@@ -1224,26 +1162,6 @@ Map<String, Object?> _locatorResult(Map<String, Object?> output) {
 
 Map<String, Object?> _optionalMapEntry(String key, Object? value) =>
     value == null ? const <String, Object?>{} : <String, Object?>{key: value};
-
-List<Object?> _objectList(Object? value) =>
-    value is List<Object?> ? value : const <Object?>[];
-
-bool _networkEntryIsFailure(Map<Object?, Object?> entry) {
-  if (entry['error'] != null) return true;
-  final status = entry['statusCode'];
-  return status is num && status >= 400;
-}
-
-String _runtimeLogLine(Map<Object?, Object?> entry) {
-  final parts = <String>[
-    if (entry['severity'] is String) entry['severity']! as String,
-    if (entry['kind'] is String) entry['kind']! as String,
-    if (entry['source'] is String && (entry['source']! as String).isNotEmpty)
-      entry['source']! as String,
-  ];
-  final message = entry['message'] is String ? entry['message']! as String : '';
-  return '${parts.join(' ')}: $message';
-}
 
 int _diagnosticErrorCount(Object? value) {
   final map = _objectMap(value);
