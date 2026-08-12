@@ -19,6 +19,12 @@ void main() {
     final runtimeVersion = _readPackageVersion('packages/flutter_cockpit');
     final protocolVersion = _readPackageVersion('packages/cockpit_protocol');
     final devtoolsVersion = _readPackageVersion('packages/cockpit');
+    final iosDevelopmentPodLock = File(
+      'examples/cockpit_demo/cockpit/ios/Podfile.lock',
+    ).readAsStringSync();
+    final macosDevelopmentPodLock = File(
+      'examples/cockpit_demo/cockpit/macos/Podfile.lock',
+    ).readAsStringSync();
 
     expect(runtimePubspec, contains('name: flutter_cockpit'));
     expect(runtimePubspec, isNot(contains('name: flutter_pilot')));
@@ -29,6 +35,12 @@ void main() {
     expect(devtoolsVersion, '4.0.12');
     expect(runtimePubspec, contains('cockpit_protocol: ^4.0.12'));
     expect(devtoolsPubspec, contains('cockpit_protocol: ^4.0.12'));
+    for (final podLock in <String>[
+      iosDevelopmentPodLock,
+      macosDevelopmentPodLock,
+    ]) {
+      expect(podLock, contains('flutter_cockpit ($runtimeVersion)'));
+    }
     expect(
       supervisorRuntime,
       contains('const cockpitSupervisorEngineVersion = cockpitVersion;'),
