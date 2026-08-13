@@ -1,5 +1,9 @@
 # Changelog
 
+## 4.0.15
+
+- Synchronized the Flutter bridge package with the current Cockpit release.
+
 ## 4.0.14
 
 - Synchronized the Flutter bridge package with the Cockpit 4.0.14 release.

@@ -13,12 +13,14 @@ import '../development/cockpit_development_session_status.dart';
 import '../development/cockpit_development_session_supervisor.dart';
 import '../development/cockpit_flutter_run_machine_client.dart';
 import '../development/cockpit_vm_network_profiler.dart';
+import '../platform/android/cockpit_android_device_readiness.dart';
 import '../foundation/cockpit_ids.dart';
 import '../infrastructure/cockpit_sdk_environment.dart';
 import '../remote/cockpit_android_port_forwarder.dart';
 import '../remote/cockpit_remote_session_client.dart';
 import '../session/cockpit_remote_session_launcher.dart';
 import '../session/cockpit_flutter_launch_configuration.dart';
+import '../session/cockpit_session_process_runner.dart';
 
 final class CockpitWorkerDevelopmentSessionSnapshot {
   const CockpitWorkerDevelopmentSessionSnapshot({
@@ -41,6 +43,8 @@ final class CockpitWorkerDevelopmentSessionRuntime {
     CockpitFlutterExecutableVersionReader? flutterVersionReader,
     CockpitTokenGenerator? tokenGenerator,
     CockpitDevelopmentMachineDiagnosticLogger? logger,
+    CockpitAndroidDeviceProbeRunner androidDeviceProbeRunner =
+        cockpitRunProcessWithTimeout,
     CockpitNetworkProfiler? networkProfiler,
     CockpitPlatformAppStopper? platformAppStopper,
     Future<CockpitFlutterRunMachineClient> Function(
@@ -56,12 +60,14 @@ final class CockpitWorkerDevelopmentSessionRuntime {
            CockpitDevelopmentSessionMachineLauncher(
              portForwarder: portForwarder,
              diagnosticLogger: logger,
+             probeAndroidDevice: false,
            ),
        _entrypointResolver = entrypointResolver ?? CockpitEntrypointResolver(),
        _sdkEnvironment = sdkEnvironment ?? CockpitSdkEnvironment.current(),
        _flutterVersionReader = flutterVersionReader,
        _tokenGenerator = tokenGenerator ?? CockpitSecureTokenGenerator(),
        _logger = logger,
+       _androidDeviceProbeRunner = androidDeviceProbeRunner,
        _networkProfiler = networkProfiler,
        _platformAppStopper = platformAppStopper ?? CockpitPlatformAppStopper(),
        _machineClientAttacher = machineClientAttacher,
@@ -75,6 +81,7 @@ final class CockpitWorkerDevelopmentSessionRuntime {
   final CockpitFlutterExecutableVersionReader? _flutterVersionReader;
   final CockpitTokenGenerator _tokenGenerator;
   final CockpitDevelopmentMachineDiagnosticLogger? _logger;
+  final CockpitAndroidDeviceProbeRunner _androidDeviceProbeRunner;
   final CockpitNetworkProfiler? _networkProfiler;
   final CockpitPlatformAppStopper _platformAppStopper;
   final Future<CockpitFlutterRunMachineClient> Function(
@@ -105,6 +112,22 @@ final class CockpitWorkerDevelopmentSessionRuntime {
             workingDirectory: projectDir,
           )
         : _flutterVersionReader(flutterExecutable));
+    if (request.platform == 'android') {
+      try {
+        await cockpitRequireAndroidDeviceReady(
+          deviceId: request.deviceId,
+          timeout: request.launchTimeout < const Duration(seconds: 8)
+              ? request.launchTimeout
+              : const Duration(seconds: 8),
+          processRunner: _androidDeviceProbeRunner,
+        );
+      } on CockpitAndroidDeviceReadinessException catch (error) {
+        throw CockpitApplicationServiceException(
+          code: error.code,
+          message: error.message,
+        );
+      }
+    }
     final hostPort = request.platform == 'android'
         ? await _portForwarder.ensureForwarded(
             deviceId: request.deviceId,
@@ -624,6 +647,12 @@ final class CockpitWorkerDevelopmentSessionRuntime {
         error is CockpitDevelopmentSessionFallbackException ||
         error is TimeoutException) {
       return error;
+    }
+    if (error is CockpitAndroidDeviceReadinessException) {
+      return CockpitApplicationServiceException(
+        code: error.code,
+        message: error.message,
+      );
     }
     if (error is StateError ||
         error is ProcessException ||

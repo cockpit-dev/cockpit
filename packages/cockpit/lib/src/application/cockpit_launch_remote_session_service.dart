@@ -5,6 +5,7 @@ import 'package:path/path.dart' as p;
 
 import '../infrastructure/cockpit_sdk_environment.dart';
 import '../foundation/cockpit_ids.dart';
+import '../platform/android/cockpit_android_device_readiness.dart';
 import '../remote/cockpit_android_port_forwarder.dart';
 import '../remote/cockpit_local_session_port_resolver.dart';
 import '../session/cockpit_flutter_launch_configuration.dart';
@@ -12,6 +13,7 @@ import '../session/cockpit_remote_session_handle.dart';
 import '../session/cockpit_remote_session_launch_options.dart';
 import '../session/cockpit_remote_session_launcher.dart';
 import 'cockpit_app_temp_store.dart';
+import 'cockpit_application_service_exception.dart';
 import 'cockpit_entrypoint_resolver.dart';
 import 'cockpit_compact_json.dart';
 
@@ -135,6 +137,15 @@ final class CockpitLaunchRemoteSessionService {
       );
     } on Object catch (error, stackTrace) {
       await _releaseAfterFailedLaunch(prepared.key);
+      if (error is CockpitAndroidDeviceReadinessException) {
+        Error.throwWithStackTrace(
+          CockpitApplicationServiceException(
+            code: error.code,
+            message: error.message,
+          ),
+          stackTrace,
+        );
+      }
       Error.throwWithStackTrace(error, stackTrace);
     }
     final health = await _statusReader(sessionHandle.baseUri);

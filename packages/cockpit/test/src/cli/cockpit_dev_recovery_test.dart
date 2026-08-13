@@ -262,6 +262,34 @@ void main() {
     },
   );
 
+  test(
+    'crashed sessions point back to start for handle-preserving recovery',
+    () async {
+      final crashed = session.copyWith(lifecycle: 'crashed');
+      final dev = CockpitDevRuntime(runtime);
+      final resolution = CockpitDevSessionResolution(
+        session: crashed,
+        ready: false,
+        changed: 'none',
+        state: const <String, Object?>{'lifecycle': 'crashed'},
+        errors: const <Object?>[
+          <String, Object?>{'code': 'developmentSessionCrashed'},
+        ],
+      );
+
+      runtime.configureOutput(
+        command: 'dev.status',
+        selection: const CockpitCliOutputSelection(),
+      );
+      expect(
+        await dev.writeUnavailable(action: 'status', resolution: resolution),
+        cockpitTemporaryExitCode,
+      );
+      final output = lon.decode(stdout.toString())! as Map<Object?, Object?>;
+      expect(output['next'], 'cockpit dev start --session ${session.handleId}');
+    },
+  );
+
   test('only live session states require stop before target launch', () {
     CockpitCliSessionHandle handle(String lifecycle) =>
         session.copyWith(lifecycle: lifecycle);

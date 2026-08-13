@@ -2,7 +2,7 @@
 
 import 'dart:io';
 
-import '../infrastructure/cockpit_process_manager.dart';
+import '../session/cockpit_session_process_runner.dart';
 
 typedef CockpitProcessRunner =
     Future<ProcessResult> Function(String executable, List<String> arguments);
@@ -11,7 +11,7 @@ typedef CockpitHostPortAvailabilityChecker = Future<bool> Function(int port);
 
 class CockpitAndroidPortForwarder {
   const CockpitAndroidPortForwarder({
-    CockpitProcessRunner processRunner = cockpitRunIsolatedProcess,
+    CockpitProcessRunner processRunner = _runAdbProcess,
     CockpitHostPortAllocator hostPortAllocator = _allocateHostPort,
     CockpitHostPortAvailabilityChecker hostPortAvailabilityChecker =
         _isHostPortAvailable,
@@ -147,3 +147,12 @@ class CockpitAndroidPortForwarder {
     }
   }
 }
+
+Future<ProcessResult> _runAdbProcess(
+  String executable,
+  List<String> arguments,
+) => cockpitRunProcessWithTimeout(
+  executable,
+  arguments,
+  timeout: const Duration(seconds: 8),
+);

@@ -11,6 +11,7 @@ import 'package:cockpit/src/development/cockpit_development_session_status.dart'
 import 'package:cockpit/src/development/cockpit_flutter_run_machine_client.dart';
 import 'package:cockpit/src/development/cockpit_vm_network_profiler.dart';
 import 'package:cockpit/src/foundation/cockpit_permissions.dart';
+import 'package:cockpit/src/remote/cockpit_android_port_forwarder.dart';
 import 'package:cockpit/src/session/cockpit_remote_session_handle.dart';
 import 'package:cockpit/src/worker/cockpit_worker_development_session_runtime.dart';
 import 'package:cockpit_protocol/cockpit_protocol.dart';
@@ -18,6 +19,48 @@ import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 
 void main() {
+  test('Android launch fails fast when ADB shell is unresponsive', () async {
+    final project = await Directory.systemTemp.createTemp(
+      'cockpit-worker-android-unresponsive-',
+    );
+    addTearDown(() => project.delete(recursive: true));
+    final entrypoint = File(p.join(project.path, 'cockpit', 'main.dart'));
+    await entrypoint.parent.create(recursive: true);
+    await entrypoint.writeAsString('void main() {}');
+    var forwarded = false;
+    final runtime = CockpitWorkerDevelopmentSessionRuntime(
+      appTempStore: _appTempStore(project),
+      portForwarder: _WorkerRecordingPortForwarder(() => forwarded = true),
+      flutterVersionReader: (_) async => '3.44.0',
+      androidDeviceProbeRunner: (executable, arguments, {required timeout}) =>
+          Future<ProcessResult>.error(
+            TimeoutException('adb getprop timed out'),
+          ),
+    );
+
+    await expectLater(
+      runtime.launch(
+        CockpitLaunchDevelopmentSessionRequest(
+          projectDir: project.path,
+          target: 'cockpit/main.dart',
+          platform: 'android',
+          deviceId: 'emulator-5554',
+          sessionPort: 47331,
+        ),
+      ),
+      throwsA(
+        isA<CockpitApplicationServiceException>()
+            .having((error) => error.code, 'code', 'androidDeviceUnresponsive')
+            .having(
+              (error) => error.message,
+              'message',
+              contains('same development session'),
+            ),
+      ),
+    );
+    expect(forwarded, isFalse);
+  });
+
   test('launch exposes the Flutter machine failure', () async {
     final project = await Directory.systemTemp.createTemp(
       'cockpit-worker-launch-failure-',
@@ -316,6 +359,22 @@ void main() {
       );
     },
   );
+}
+
+final class _WorkerRecordingPortForwarder extends CockpitAndroidPortForwarder {
+  const _WorkerRecordingPortForwarder(this.onForward);
+
+  final void Function() onForward;
+
+  @override
+  Future<int> ensureForwarded({
+    required String deviceId,
+    required int preferredHostPort,
+    required int devicePort,
+  }) async {
+    onForward();
+    return preferredHostPort;
+  }
 }
 
 CockpitAppTempStore _appTempStore(Directory root) => CockpitAppTempStore(

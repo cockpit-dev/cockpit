@@ -1,5 +1,16 @@
 # Changelog
 
+## 4.0.15
+
+- Made Android development launches fail within a bounded readiness probe when
+  ADB is missing, unauthorized, offline, not booted, or unresponsive instead
+  of appearing stuck inside Flutter device discovery.
+- Bounded Android port-forward operations so a stalled ADB connection cannot
+  consume the complete development command timeout.
+- Directed stopped, crashed, and unreachable development sessions back to
+  `dev start` with the same handle, preserving project and target isolation
+  without creating another application instance.
+
 ## 4.0.14
 
 - Added live Linux AT-SPI D-Bus tree inspection with runtime capability

@@ -4,6 +4,8 @@ import 'dart:io';
 import 'package:cockpit_protocol/cockpit_protocol.dart';
 import 'package:cockpit/src/application/cockpit_app_temp_store.dart';
 import 'package:cockpit/src/application/cockpit_launch_remote_session_service.dart';
+import 'package:cockpit/src/application/cockpit_application_service_exception.dart';
+import 'package:cockpit/src/platform/android/cockpit_android_device_readiness.dart';
 import 'package:cockpit/src/application/cockpit_entrypoint_resolver.dart';
 import 'package:cockpit/src/foundation/cockpit_permissions.dart';
 import 'package:cockpit/src/infrastructure/cockpit_sdk_environment.dart';
@@ -15,6 +17,46 @@ import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 
 void main() {
+  test('maps Android readiness failures to structured launch errors', () async {
+    final project = await Directory.systemTemp.createTemp(
+      'cockpit-remote-android-readiness-',
+    );
+    addTearDown(() => project.delete(recursive: true));
+    final entrypoint = File(p.join(project.path, 'cockpit', 'main.dart'));
+    await entrypoint.parent.create(recursive: true);
+    await entrypoint.writeAsString('void main() {}');
+    final service = CockpitLaunchRemoteSessionService(
+      launcher: _ThrowingLauncher(
+        const CockpitAndroidDeviceReadinessException(
+          'androidDeviceUnresponsive',
+          'Android device emulator-5554 is unresponsive.',
+        ),
+      ),
+      flutterVersionForExecutableReader: (_) async => '3.44.0',
+      sessionPortAvailabilityChecker: (_) async => true,
+    );
+
+    await expectLater(
+      service.launch(
+        CockpitLaunchRemoteSessionRequest(
+          projectDir: project.path,
+          platform: 'android',
+          deviceId: 'emulator-5554',
+          sessionPort: 47331,
+        ),
+      ),
+      throwsA(
+        isA<CockpitApplicationServiceException>()
+            .having((error) => error.code, 'code', 'androidDeviceUnresponsive')
+            .having(
+              (error) => error.message,
+              'message',
+              'Android device emulator-5554 is unresponsive.',
+            ),
+      ),
+    );
+  });
+
   test(
     'launch service returns a reusable session handle, health, and optional persisted json',
     () async {
@@ -471,6 +513,17 @@ final class _ThrowingRemoteSessionLauncher
   Future<CockpitRemoteSessionHandle> launch(
     CockpitRemoteSessionLaunchOptions options,
   ) => throw StateError('launch failed');
+}
+
+final class _ThrowingLauncher implements CockpitRemoteSessionLauncher {
+  const _ThrowingLauncher(this.error);
+
+  final Object error;
+
+  @override
+  Future<CockpitRemoteSessionHandle> launch(
+    CockpitRemoteSessionLaunchOptions options,
+  ) => Future<CockpitRemoteSessionHandle>.error(error);
 }
 
 final class _NoopPermissionHardener implements CockpitPermissionHardener {

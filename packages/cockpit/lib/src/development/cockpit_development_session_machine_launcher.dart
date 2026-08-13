@@ -5,6 +5,7 @@ import 'package:cockpit_protocol/cockpit_protocol.dart'
     show CockpitRemoteSessionStatus;
 
 import '../remote/cockpit_android_port_forwarder.dart';
+import '../platform/android/cockpit_android_device_readiness.dart';
 import '../platform/ios/cockpit_ios_device_connection.dart';
 import '../session/cockpit_apple_bundle_support.dart';
 import '../session/cockpit_flutter_launch_configuration.dart';
@@ -122,6 +123,8 @@ final class CockpitDevelopmentSessionMachineLauncher {
     CockpitPlatformAppIdResolver platformAppIdResolver =
         cockpitResolvePlatformAppId,
     CockpitDevelopmentMachineDiagnosticLogger? diagnosticLogger,
+    CockpitAndroidDeviceProbeRunner? androidDeviceProbeRunner,
+    bool probeAndroidDevice = true,
     Future<void> Function(Duration duration)? delay,
     DateTime Function()? now,
   }) : _machineClientStarter =
@@ -136,6 +139,12 @@ final class CockpitDevelopmentSessionMachineLauncher {
        _iosFallbackAppBundlePathResolver = iosFallbackAppBundlePathResolver,
        _platformAppIdResolver = platformAppIdResolver,
        _diagnosticLogger = diagnosticLogger,
+       _androidDeviceProbeRunner = !probeAndroidDevice
+           ? null
+           : androidDeviceProbeRunner ??
+                 (machineClientStarter == null
+                     ? cockpitRunProcessWithTimeout
+                     : null),
        _delay = delay ?? Future<void>.delayed,
        _now = now ?? DateTime.now;
 
@@ -149,6 +158,7 @@ final class CockpitDevelopmentSessionMachineLauncher {
   _iosFallbackAppBundlePathResolver;
   final CockpitPlatformAppIdResolver _platformAppIdResolver;
   final CockpitDevelopmentMachineDiagnosticLogger? _diagnosticLogger;
+  final CockpitAndroidDeviceProbeRunner? _androidDeviceProbeRunner;
   final Future<void> Function(Duration duration) _delay;
   final DateTime Function() _now;
 
@@ -238,7 +248,15 @@ final class CockpitDevelopmentSessionMachineLauncher {
   Future<CockpitFlutterRunMachineClient> startMachineClient(
     CockpitLaunchDevelopmentMachineSessionRequest request, {
     required CockpitResolvedRemoteSessionEndpoint endpoint,
-  }) {
+  }) async {
+    final androidDeviceProbeRunner = _androidDeviceProbeRunner;
+    if (request.platform == 'android' && androidDeviceProbeRunner != null) {
+      await cockpitRequireAndroidDeviceReady(
+        deviceId: request.deviceId,
+        timeout: _capTimeout(request.launchTimeout, const Duration(seconds: 8)),
+        processRunner: androidDeviceProbeRunner,
+      );
+    }
     return _machineClientStarter(
       projectDir: request.projectDir,
       target: request.target,

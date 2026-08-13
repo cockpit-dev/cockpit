@@ -96,7 +96,7 @@ app, bridge, port, and runtime session.
 | Healthy | Read current state | Execute normally |
 | Port or bridge changed | Authenticated reconnect | Reconnect, then execute |
 | Unexpected process exit | Report crashed | Relaunch once from the stored non-secret launch configuration |
-| Intentionally stopped | Report stopped | Require `cockpit dev start` or `restart` |
+| Intentionally stopped | Report stopped | Require `cockpit dev start` |
 | Ownership mismatch | Fail without adoption | Fail without signaling or launching the candidate |
 
 Use:
@@ -104,7 +104,7 @@ Use:
 ```bash
 cockpit dev status
 cockpit dev diagnose --view more
-cockpit dev restart
+cockpit dev start
 ```
 
 ### Unexpected UI Or Flow Drift
