@@ -4,7 +4,7 @@ import 'package:test/test.dart';
 
 void main() {
   test(
-    'web platform driver reports browser DOM inspection but not device shell',
+    'web launch profile defers generic DOM actions to live CDP discovery',
     () async {
       final driver = CockpitWebPlatformDriver(deviceId: 'chrome');
 
@@ -26,7 +26,7 @@ void main() {
       );
       expect(
         profile.evidenceCapabilities,
-        contains(CockpitEvidenceCapability.domSnapshot),
+        isNot(contains(CockpitEvidenceCapability.domSnapshot)),
       );
       expect(
         profile.evidenceCapabilities,

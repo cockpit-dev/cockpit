@@ -4,9 +4,11 @@ import '../../platform/windows/cockpit_windows_native_input.dart';
 import '../../platform/windows/cockpit_windows_powershell.dart';
 import '../../platform/windows/cockpit_windows_window_target.dart';
 import '../cockpit_macos_accessibility_tree.dart';
+import '../cockpit_linux_at_spi_tree.dart';
 import '../cockpit_system_control_action.dart';
 import '../cockpit_system_control_adapter.dart';
 import '../cockpit_system_control_parameters.dart';
+import '../cockpit_web_cdp_client.dart';
 import '../cockpit_system_control_profile.dart';
 
 final class CockpitDesktopSystemControlAdapter
@@ -327,7 +329,7 @@ final class CockpitDesktopSystemControlAdapter
             hasWindowTarget: hasEvidenceTarget,
             extraRequires: const <String>['active recording session'],
           ),
-          _uiTreeCapability(hasInputTarget: hasInputTarget),
+          _uiTreeCapability(target, hasInputTarget: hasInputTarget),
           CockpitSystemControlCapability(
             action: CockpitSystemControlAction.readProcessList,
             plane: CockpitPlaneKind.hostPlane,
@@ -659,7 +661,7 @@ final class CockpitDesktopSystemControlAdapter
     return switch (platform) {
       'macos' => const <String>['Accessibility permission'],
       'windows' => const <String>['PowerShell', 'UI Automation'],
-      'linux' => const <String>['AT-SPI tree dump helper'],
+      'linux' => const <String>['AT-SPI accessibility bus'],
       _ => const <String>['native accessibility tree helper'],
     };
   }
@@ -1220,12 +1222,7 @@ final class CockpitDesktopSystemControlAdapter
         'url',
         (url) => CockpitResolvedSystemControlCommand('xdg-open', <String>[url]),
       ),
-      CockpitSystemControlAction.readUiTree =>
-        const CockpitResolvedSystemControlCommand.error(
-          code: 'systemActionBlocked',
-          message:
-              'Linux readUiTree requires an AT-SPI tree dump helper for the active desktop session.',
-        ),
+      CockpitSystemControlAction.readUiTree => _linuxReadUiTreeCommand(request),
       CockpitSystemControlAction.readProcessList =>
         CockpitResolvedSystemControlCommand('ps', const <String>[
           '-axo',
@@ -1500,6 +1497,23 @@ final class CockpitDesktopSystemControlAdapter
       ...target,
       ...xdotoolArgs,
     ]);
+  }
+
+  CockpitResolvedSystemControlCommand _linuxReadUiTreeCommand(
+    CockpitSystemControlActionRequest request,
+  ) {
+    if (_targetArgs(request) == null) {
+      return const CockpitResolvedSystemControlCommand.error(
+        code: 'missingSystemActionTarget',
+        message: 'This Linux action requires --app-id or --process-id.',
+      );
+    }
+    final limits = _uiTreeReadLimits(request);
+    if (limits.error != null) return limits.error!;
+    return CockpitResolvedSystemControlCommand(
+      cockpitLinuxAtSpiCommandExecutable,
+      limits.values,
+    );
   }
 
   CockpitResolvedSystemControlCommand _linuxTerminateCommand(
@@ -2026,10 +2040,13 @@ final class CockpitDesktopSystemControlAdapter
     );
   }
 
-  CockpitSystemControlCapability _uiTreeCapability({
+  CockpitSystemControlCapability _uiTreeCapability(
+    CockpitSystemControlTargetContext target, {
     required bool hasInputTarget,
   }) {
-    final isSupported = platform == 'macos' || platform == 'windows';
+    final atSpiAvailable = target.metadata['linuxAtSpiAvailable'] == true;
+    final isSupported =
+        platform == 'macos' || platform == 'windows' || atSpiAvailable;
     return CockpitSystemControlCapability(
       action: CockpitSystemControlAction.readUiTree,
       plane: CockpitPlaneKind.nativeUiPlane,
@@ -2039,6 +2056,8 @@ final class CockpitDesktopSystemControlAdapter
       strategy: _uiTreeStrategy,
       requires: <String>[
         ..._uiTreeRequires,
+        if (platform == 'linux' && !atSpiAvailable)
+          'reachable AT-SPI accessibility bus',
         if (!hasInputTarget) 'app id or process id',
       ],
       limitations: limitations,
@@ -2605,6 +2624,14 @@ final class CockpitWebSystemControlAdapter
     CockpitSystemControlTargetContext target,
   ) {
     final hasEvidenceTarget = target.hasWindowTarget;
+    final cdpAvailable = target.metadata['webCdpAvailable'] == true;
+    final cdpAvailability = cdpAvailable
+        ? CockpitSystemControlAvailability.available
+        : CockpitSystemControlAvailability.blocked;
+    final cdpRequires = <String>[
+      'exact registered Chromium page CDP endpoint',
+      if (!cdpAvailable) 'reachable cdpUrl',
+    ];
     return CockpitSystemControlProfile(
       platform: platform,
       deviceId: target.deviceId,
@@ -2623,49 +2650,49 @@ final class CockpitWebSystemControlAdapter
           CockpitSystemControlCapability(
             action: CockpitSystemControlAction.tap,
             plane: CockpitPlaneKind.nativeUiPlane,
-            availability: CockpitSystemControlAvailability.blocked,
+            availability: cdpAvailability,
             strategy: 'browser.dom.click',
-            requires: <String>['browser driver or bridge'],
+            requires: cdpRequires,
             parameters: CockpitSystemControlParameterSets.coordinate,
           ),
           CockpitSystemControlCapability(
             action: CockpitSystemControlAction.longPress,
             plane: CockpitPlaneKind.nativeUiPlane,
-            availability: CockpitSystemControlAvailability.blocked,
+            availability: cdpAvailability,
             strategy: 'browser.dom.pointer.longPress',
-            requires: <String>['browser driver or bridge'],
+            requires: cdpRequires,
             parameters: CockpitSystemControlParameterSets.longPress,
           ),
           CockpitSystemControlCapability(
             action: CockpitSystemControlAction.drag,
             plane: CockpitPlaneKind.nativeUiPlane,
-            availability: CockpitSystemControlAvailability.blocked,
+            availability: cdpAvailability,
             strategy: 'browser.dom.pointer.drag',
-            requires: <String>['browser driver or bridge'],
+            requires: cdpRequires,
             parameters: CockpitSystemControlParameterSets.drag,
           ),
           CockpitSystemControlCapability(
             action: CockpitSystemControlAction.typeText,
             plane: CockpitPlaneKind.nativeUiPlane,
-            availability: CockpitSystemControlAvailability.blocked,
+            availability: cdpAvailability,
             strategy: 'browser.dom.input',
-            requires: <String>['browser driver or bridge'],
+            requires: cdpRequires,
             parameters: CockpitSystemControlParameterSets.text,
           ),
           CockpitSystemControlCapability(
             action: CockpitSystemControlAction.pressKey,
             plane: CockpitPlaneKind.nativeUiPlane,
-            availability: CockpitSystemControlAvailability.blocked,
+            availability: cdpAvailability,
             strategy: 'browser.keyboard.press',
-            requires: <String>['browser driver or bridge'],
+            requires: cdpRequires,
             parameters: CockpitSystemControlParameterSets.key,
           ),
           CockpitSystemControlCapability(
             action: CockpitSystemControlAction.pressBack,
             plane: CockpitPlaneKind.hostPlane,
-            availability: CockpitSystemControlAvailability.blocked,
+            availability: cdpAvailability,
             strategy: 'browser.navigation.back',
-            requires: <String>['browser driver or bridge'],
+            requires: cdpRequires,
           ),
           CockpitSystemControlCapability(
             action: CockpitSystemControlAction.pressHome,
@@ -2706,46 +2733,46 @@ final class CockpitWebSystemControlAdapter
           CockpitSystemControlCapability(
             action: CockpitSystemControlAction.activateWindow,
             plane: CockpitPlaneKind.hostPlane,
-            availability: CockpitSystemControlAvailability.blocked,
+            availability: cdpAvailability,
             strategy: 'browser.window.focus',
-            requires: <String>['browser driver or bridge'],
+            requires: cdpRequires,
           ),
           CockpitSystemControlCapability(
             action: CockpitSystemControlAction.terminateApp,
             plane: CockpitPlaneKind.hostPlane,
-            availability: CockpitSystemControlAvailability.blocked,
+            availability: cdpAvailability,
             strategy: 'browser.context.close',
-            requires: <String>['browser driver or bridge'],
+            requires: cdpRequires,
           ),
           CockpitSystemControlCapability(
             action: CockpitSystemControlAction.dismissSystemDialog,
             plane: CockpitPlaneKind.nativeUiPlane,
-            availability: CockpitSystemControlAvailability.blocked,
+            availability: cdpAvailability,
             strategy: 'browser.dialog.dismiss',
-            requires: <String>['browser driver or bridge'],
+            requires: cdpRequires,
           ),
           CockpitSystemControlCapability(
             action: CockpitSystemControlAction.dismissKeyboard,
             plane: CockpitPlaneKind.nativeUiPlane,
-            availability: CockpitSystemControlAvailability.blocked,
+            availability: cdpAvailability,
             strategy: 'browser.keyboard.escape-or-blur',
-            requires: <String>['browser driver or bridge'],
+            requires: cdpRequires,
           ),
           CockpitSystemControlCapability(
             action: CockpitSystemControlAction.grantPermission,
             plane: CockpitPlaneKind.hostPlane,
             availability: CockpitSystemControlAvailability.blocked,
             strategy: 'browser.context.permissions',
-            requires: <String>['browser driver or bridge'],
+            requires: <String>['browser permission control is unavailable'],
             parameters:
                 CockpitSystemControlParameterSets.browserGrantPermission,
           ),
           CockpitSystemControlCapability(
             action: CockpitSystemControlAction.openUrl,
             plane: CockpitPlaneKind.hostPlane,
-            availability: CockpitSystemControlAvailability.blocked,
+            availability: cdpAvailability,
             strategy: 'browser.page.goto',
-            requires: <String>['browser driver or bridge'],
+            requires: cdpRequires,
             parameters: CockpitSystemControlParameterSets.url,
           ),
           CockpitSystemControlCapability(
@@ -2762,7 +2789,7 @@ final class CockpitWebSystemControlAdapter
             plane: CockpitPlaneKind.hostPlane,
             availability: CockpitSystemControlAvailability.blocked,
             strategy: 'browser.context.emulateMedia',
-            requires: <String>['browser driver or bridge'],
+            requires: <String>['browser media emulation is unavailable'],
             parameters: CockpitSystemControlParameterSets.hostAppearance,
           ),
           CockpitSystemControlCapability(
@@ -2770,7 +2797,7 @@ final class CockpitWebSystemControlAdapter
             plane: CockpitPlaneKind.hostPlane,
             availability: CockpitSystemControlAvailability.blocked,
             strategy: 'browser.viewport-or-accessibility-emulation',
-            requires: <String>['browser driver or bridge'],
+            requires: <String>['browser viewport emulation is unavailable'],
             parameters: CockpitSystemControlParameterSets.hostContentSize,
           ),
           CockpitSystemControlCapability(
@@ -2942,9 +2969,9 @@ final class CockpitWebSystemControlAdapter
           CockpitSystemControlCapability(
             action: CockpitSystemControlAction.readUiTree,
             plane: CockpitPlaneKind.nativeUiPlane,
-            availability: CockpitSystemControlAvailability.blocked,
-            strategy: 'browser.accessibility.snapshot',
-            requires: <String>['browser driver or bridge'],
+            availability: cdpAvailability,
+            strategy: 'browser.dom.snapshot',
+            requires: cdpRequires,
             parameters: CockpitSystemControlParameterSets.readUiTree,
           ),
           CockpitSystemControlCapability(
@@ -2959,16 +2986,16 @@ final class CockpitWebSystemControlAdapter
           CockpitSystemControlCapability(
             action: CockpitSystemControlAction.readWindows,
             plane: CockpitPlaneKind.hostPlane,
-            availability: CockpitSystemControlAvailability.blocked,
+            availability: cdpAvailability,
             strategy: 'browser.context.pages',
-            requires: <String>['browser driver or bridge'],
+            requires: cdpRequires,
           ),
           CockpitSystemControlCapability(
             action: CockpitSystemControlAction.readSystemState,
             plane: CockpitPlaneKind.hostPlane,
-            availability: CockpitSystemControlAvailability.blocked,
+            availability: cdpAvailability,
             strategy: 'browser.context.state',
-            requires: <String>['browser driver or bridge'],
+            requires: cdpRequires,
           ),
           CockpitSystemControlCapability(
             action: CockpitSystemControlAction.runShell,
@@ -2994,11 +3021,38 @@ final class CockpitWebSystemControlAdapter
   CockpitResolvedSystemControlCommand resolveCommand(
     CockpitSystemControlActionRequest request,
   ) {
-    return const CockpitResolvedSystemControlCommand.error(
-      code: 'systemActionBlocked',
-      message:
-          'Browser system actions require an active browser bridge; use Flutter or browser-specific target tools.',
-    );
+    if (request.metadata['webCdpAvailable'] != true ||
+        request.metadata['cdpWebSocketUrl'] is! String) {
+      return const CockpitResolvedSystemControlCommand.error(
+        code: 'systemActionBlocked',
+        message:
+            'Browser DOM actions require the registered Chromium page CDP endpoint.',
+      );
+    }
+    return switch (request.action) {
+      CockpitSystemControlAction.tap ||
+      CockpitSystemControlAction.longPress ||
+      CockpitSystemControlAction.drag ||
+      CockpitSystemControlAction.typeText ||
+      CockpitSystemControlAction.pressKey ||
+      CockpitSystemControlAction.pressBack ||
+      CockpitSystemControlAction.activateWindow ||
+      CockpitSystemControlAction.terminateApp ||
+      CockpitSystemControlAction.dismissSystemDialog ||
+      CockpitSystemControlAction.dismissKeyboard ||
+      CockpitSystemControlAction.openUrl ||
+      CockpitSystemControlAction.readUiTree ||
+      CockpitSystemControlAction.readWindows ||
+      CockpitSystemControlAction.readSystemState =>
+        const CockpitResolvedSystemControlCommand(
+          cockpitWebCdpCommandExecutable,
+          <String>[],
+        ),
+      _ => const CockpitResolvedSystemControlCommand.error(
+        code: 'unsupportedSystemAction',
+        message: 'This browser action is not implemented by the CDP driver.',
+      ),
+    };
   }
 }
 

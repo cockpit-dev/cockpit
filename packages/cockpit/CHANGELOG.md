@@ -1,5 +1,22 @@
 # Changelog
 
+## 4.0.14
+
+- Added live Linux AT-SPI D-Bus tree inspection with runtime capability
+  probing, bounded traversal, native state and geometry signals, and explicit
+  blocked results when the accessibility bus or target is unavailable.
+- Added target-scoped Chromium CDP automation for generic browser pages,
+  including bounded DOM trees, nested same-origin iframe coordinates, input,
+  pointer, navigation, dialog, window, and state operations.
+- Carried exact Chromium CDP endpoints through CLI, MCP, Supervisor schemas,
+  target persistence, lifecycle operations, and compact target inspection
+  without scanning browser ports or attaching to unrelated profiles.
+- Unified native role matching across platform naming conventions and marked
+  system scroll gestures explicitly so browser wheel input does not degrade
+  into drag input.
+- Kept Flutter Web development on the in-app Element/RenderObject bridge while
+  advertising generic DOM actions only after a live CDP probe succeeds.
+
 ## 4.0.13
 
 - Added `cockpit dev recover` for exact-session native blocker recovery with

@@ -484,6 +484,10 @@ final class CockpitTargetCommand extends Command<int> {
             'wda-url',
             help: 'WebDriverAgent endpoint assigned to this iOS target.',
           )
+          ..addOption(
+            'cdp-url',
+            help: 'Exact Chromium CDP HTTP(S) or page WebSocket endpoint.',
+          )
           ..addOption('idempotency-key', mandatory: true),
         action: (arguments) async {
           final workspaceId = await runtime.workspaceId(
@@ -512,6 +516,8 @@ final class CockpitTargetCommand extends Command<int> {
                   'appId': arguments.option('app-id'),
                 if (arguments.option('wda-url') != null)
                   'wdaUrl': arguments.option('wda-url'),
+                if (arguments.option('cdp-url') != null)
+                  'cdpUrl': arguments.option('cdp-url'),
               },
               deadline: runtime.commandDeadline,
             ),

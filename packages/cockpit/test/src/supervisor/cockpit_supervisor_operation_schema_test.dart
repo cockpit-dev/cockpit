@@ -256,6 +256,26 @@ void main() {
       }).isValid,
       isFalse,
     );
+    expect(
+      schema.validate(<String, Object?>{
+        'platform': 'web',
+        'deviceId': 'chrome',
+        'targetKind': 'browserPage',
+        'appId': 'Google Chrome',
+        'cdpUrl': 'ws://127.0.0.1:9222/devtools/page/1',
+      }).isValid,
+      isTrue,
+    );
+    expect(
+      schema.validate(<String, Object?>{
+        'platform': 'web',
+        'deviceId': 'chrome',
+        'targetKind': 'browserPage',
+        'appId': 'Google Chrome',
+        'cdpUrl': 'ftp://127.0.0.1/page/1',
+      }).isValid,
+      isFalse,
+    );
   });
 
   test('run operation schema keeps envelope identities out of input', () {

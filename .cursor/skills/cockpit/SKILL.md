@@ -216,6 +216,14 @@ Reads do not relaunch an intentionally stopped app. A timed-out request cancels 
 request, not the owned app; check `dev status` before retrying. Cockpit does not read a
 keychain or secret store. `--env` values are process-only and are not persisted.
 
+For black-box platform targets, use only capabilities returned by `target inspect`.
+Android uses ADB/UiAutomator, iOS uses simctl or target-scoped WDA, macOS uses
+Accessibility, Windows uses UI Automation, and Linux probes AT-SPI. Flutter Web
+keeps the in-app Flutter tree. A generic Chromium page needs an explicit target
+`--cdp-url`; Cockpit never scans a default port or attaches to another browser
+profile. Read [environments.md](references/environments.md) before registering a
+browser page or repairing a blocked platform driver.
+
 Use `cockpit update` for normal upgrades. It updates the CLI and Supervisor while
 preserving authorization and durable state. Do not manually delete Cockpit home data,
 Pub caches, sessions, executables, or ports.

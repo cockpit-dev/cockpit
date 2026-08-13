@@ -335,6 +335,7 @@ final Map<String, Map<String, Object?>> _applicationRequestSchemas =
           'flavor': _boundedString(128),
           'appId': <String, Object?>{..._boundedString(512), 'pattern': r'\S'},
           'wdaUrl': _absoluteHttpUrl,
+          'cdpUrl': _absoluteWebSocketOrHttpUrl,
           'targetKind': _enum(<String>[
             'flutterApp',
             'nativeApp',

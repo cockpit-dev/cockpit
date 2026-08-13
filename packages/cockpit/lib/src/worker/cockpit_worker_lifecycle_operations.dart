@@ -273,6 +273,8 @@ final class CockpitWorkerLifecycleOperations {
             metadata: <String, Object?>{
               if (binding.registration.wdaUrl != null)
                 'wdaUrl': binding.registration.wdaUrl,
+              if (binding.registration.cdpUrl != null)
+                'cdpUrl': binding.registration.cdpUrl,
             },
           ),
         ),
@@ -322,6 +324,8 @@ final class CockpitWorkerLifecycleOperations {
             metadata: <String, Object?>{
               if (binding.registration.wdaUrl != null)
                 'wdaUrl': binding.registration.wdaUrl,
+              if (binding.registration.cdpUrl != null)
+                'cdpUrl': binding.registration.cdpUrl,
             },
           ),
         ),
@@ -460,6 +464,8 @@ final class CockpitWorkerLifecycleOperations {
               metadata: <String, Object?>{
                 if (target.registration.wdaUrl != null)
                   'wdaUrl': target.registration.wdaUrl,
+                if (target.registration.cdpUrl != null)
+                  'cdpUrl': target.registration.cdpUrl,
               },
               action: CockpitSystemControlAction.activateWindow,
               timeout: _launchTimeout(
@@ -1115,6 +1121,8 @@ final class CockpitWorkerLifecycleOperations {
         metadata: <String, Object?>{
           if (target.registration.wdaUrl != null)
             'wdaUrl': target.registration.wdaUrl,
+          if (target.registration.cdpUrl != null)
+            'cdpUrl': target.registration.cdpUrl,
         },
         action: CockpitSystemControlAction.terminateApp,
       ),

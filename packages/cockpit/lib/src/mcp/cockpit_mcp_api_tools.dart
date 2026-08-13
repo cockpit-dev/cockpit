@@ -252,6 +252,7 @@ List<CockpitMcpTool> _executionTools(
         'flavor': _boundedString(128),
         'appId': _nonBlankString(maximum: 512),
         'wdaUrl': _absoluteHttpUrlSchema(),
+        'cdpUrl': _absoluteWebSocketOrHttpUrlSchema(),
         'timeoutMs': _integer(minimum: 1000, maximum: 900000),
         'idempotencyKey': _string(),
       },
@@ -291,6 +292,7 @@ List<CockpitMcpTool> _executionTools(
         'flavor',
         'appId',
         'wdaUrl',
+        'cdpUrl',
         'timeoutMs',
         'idempotencyKey',
       });
@@ -329,6 +331,8 @@ List<CockpitMcpTool> _executionTools(
             'appId': ?appId,
             if (_optionalString(arguments, 'wdaUrl') != null)
               'wdaUrl': _requiredString(arguments, 'wdaUrl'),
+            if (_optionalString(arguments, 'cdpUrl') != null)
+              'cdpUrl': _requiredString(arguments, 'cdpUrl'),
           },
           deadline: DateTime.now().toUtc().add(
             Duration(milliseconds: timeoutMs),
@@ -823,6 +827,13 @@ Map<String, Object?> _absoluteHttpUrlSchema() => <String, Object?>{
   ..._boundedString(2048),
   'format': 'uri',
   'pattern': r'^[Hh][Tt][Tt][Pp][Ss]?://[^/?#\s]+(?:[/?#].*)?$',
+};
+
+Map<String, Object?> _absoluteWebSocketOrHttpUrlSchema() => <String, Object?>{
+  ..._boundedString(2048),
+  'format': 'uri',
+  'pattern':
+      r'^(?:[Hh][Tt][Tt][Pp][Ss]?|[Ww][Ss][Ss]?)://[^/?#\s]+(?:[/?#].*)?$',
 };
 
 Map<String, Object?> _enumString(List<String> values) => <String, Object?>{

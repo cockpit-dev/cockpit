@@ -234,6 +234,8 @@ cockpit suite report --run-id <runId> \
 Android 使用 ADB accessibility 与设备控制，iOS 使用 WebDriverAgent 完成
 accessibility 和交互。多设备或多 workspace 并发时，应为每个 target 分配独立 WDA
 endpoint。
+Linux 树检查使用当前桌面的 AT-SPI accessibility bus。通用 Chromium 页面使用
+target 独占的 CDP endpoint；Flutter Web 开发继续使用应用内 Flutter 树。
 
 已安装 Flutter 应用或原生/Flutter 混合栈使用 `targetKind: flutterApp`、真实
 `appId`、不绑定 entrypoint，并让 case 运行在 `native` plane。Cockpit 通过 system
@@ -262,6 +264,16 @@ cockpit target register \
   --environment test \
   --mode automation \
   --idempotency-key ios-target-001
+
+cockpit target register \
+  --workspace-id <workspaceId> \
+  --platform web \
+  --device-id chrome \
+  --target-kind browserPage \
+  --cdp-url ws://127.0.0.1:<port>/devtools/page/<pageId> \
+  --environment test \
+  --mode automation \
+  --idempotency-key web-target-001
 ```
 
 使用 `target list` 和 `target get` 恢复已注册资源，使用 `target launch` 激活 target，

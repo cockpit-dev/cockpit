@@ -6,6 +6,8 @@ import '../infrastructure/cockpit_process_manager.dart';
 import 'cockpit_system_control_profile.dart';
 import 'cockpit_system_control_adapter.dart';
 import 'cockpit_ios_webdriver_agent_client.dart';
+import 'cockpit_linux_at_spi_tree.dart';
+import 'cockpit_web_cdp_client.dart';
 import 'cockpit_system_control_registry.dart';
 
 export 'cockpit_system_control_action.dart';
@@ -127,18 +129,32 @@ final class CockpitSystemControlService {
         const CockpitSystemControlRegistry(),
     CockpitIosWdaEndpointProbe iosWdaEndpointProbe = cockpitProbeIosWdaEndpoint,
     CockpitAndroidDeviceStateProbe? androidDeviceStateProbe,
+    CockpitLinuxAtSpiProbe linuxAtSpiProbe = cockpitProbeLinuxAtSpi,
+    CockpitWebCdpProbe webCdpProbe = cockpitProbeWebCdp,
+    bool? linuxHost,
     Map<String, String>? environment,
   }) : _processManager = processManager ?? const LocalCockpitProcessManager(),
        _registry = registry,
        _iosWdaEndpointProbe = iosWdaEndpointProbe,
        _androidDeviceStateProbe = androidDeviceStateProbe,
+       _linuxAtSpiProbe = linuxAtSpiProbe,
+       _webCdpProbe = webCdpProbe,
+       _linuxHost = linuxHost ?? Platform.isLinux,
        _environment = environment ?? Platform.environment;
 
   final CockpitProcessManager _processManager;
   final CockpitSystemControlRegistry _registry;
   final CockpitIosWdaEndpointProbe _iosWdaEndpointProbe;
   final CockpitAndroidDeviceStateProbe? _androidDeviceStateProbe;
+  final CockpitLinuxAtSpiProbe _linuxAtSpiProbe;
+  final CockpitWebCdpProbe _webCdpProbe;
+  final bool _linuxHost;
   final Map<String, String> _environment;
+  CockpitLinuxAtSpiProbeResult? _linuxAtSpiProbeCache;
+  DateTime? _linuxAtSpiProbeCachedAt;
+  final Map<String, ({CockpitWebCdpProbeResult result, DateTime at})>
+  _webCdpProbeCache =
+      <String, ({CockpitWebCdpProbeResult result, DateTime at})>{};
 
   Future<CockpitSystemControlDescribeResult> describe(
     CockpitSystemControlDescribeRequest request,
@@ -167,6 +183,12 @@ final class CockpitSystemControlService {
     if (request.platform.trim().toLowerCase() == 'android') {
       return _resolveAndroidMetadata(metadata, request.deviceId);
     }
+    if (request.platform.trim().toLowerCase() == 'linux') {
+      return _resolveLinuxMetadata(metadata);
+    }
+    if (request.platform.trim().toLowerCase() == 'web') {
+      return _resolveWebMetadata(metadata);
+    }
     if (request.platform.trim().toLowerCase() != 'ios') {
       return metadata;
     }
@@ -180,6 +202,73 @@ final class CockpitSystemControlService {
       wdaUrl = configured;
     }
     return _resolveExplicitWdaMetadata(metadata, wdaUrl.trim());
+  }
+
+  Future<Map<String, Object?>> _resolveLinuxMetadata(
+    Map<String, Object?> metadata,
+  ) async {
+    if (!_linuxHost) {
+      metadata['linuxAtSpiAvailable'] = false;
+      metadata['linuxAtSpiFailureReason'] = 'linuxHostRequired';
+      return metadata;
+    }
+    final now = DateTime.now();
+    final cached = _linuxAtSpiProbeCache;
+    final cachedAt = _linuxAtSpiProbeCachedAt;
+    final cacheValid =
+        cached != null &&
+        cachedAt != null &&
+        now.difference(cachedAt) <
+            (cached.available
+                ? const Duration(seconds: 5)
+                : const Duration(seconds: 2));
+    final result = cacheValid
+        ? cached
+        : await _linuxAtSpiProbe(timeout: const Duration(milliseconds: 750));
+    _linuxAtSpiProbeCache = result;
+    _linuxAtSpiProbeCachedAt = now;
+    metadata['linuxAtSpiAvailable'] = result.available;
+    if (result.failureReason case final reason?) {
+      metadata['linuxAtSpiFailureReason'] = reason;
+    }
+    return metadata;
+  }
+
+  Future<Map<String, Object?>> _resolveWebMetadata(
+    Map<String, Object?> metadata,
+  ) async {
+    final rawUrl = metadata['cdpUrl'];
+    if (rawUrl is! String || rawUrl.trim().isEmpty) {
+      metadata['webCdpAvailable'] = false;
+      metadata['webCdpFailureReason'] = 'cdpEndpointNotConfigured';
+      return metadata;
+    }
+    final key = rawUrl.trim();
+    final now = DateTime.now();
+    final cached = _webCdpProbeCache[key];
+    final valid =
+        cached != null &&
+        now.difference(cached.at) <
+            (cached.result.available
+                ? const Duration(seconds: 5)
+                : const Duration(seconds: 2));
+    final result = valid
+        ? cached.result
+        : await _webCdpProbe(
+            cdpUrl: rawUrl.trim(),
+            timeout: const Duration(seconds: 1),
+          );
+    _webCdpProbeCache[key] = (result: result, at: now);
+    metadata['webCdpAvailable'] = result.available;
+    if (result.webSocketUrl case final value?) {
+      metadata['cdpWebSocketUrl'] = value;
+    }
+    if (result.pageId case final value?) metadata['cdpPageId'] = value;
+    if (result.pageUrl case final value?) metadata['cdpPageUrl'] = value;
+    if (result.failureReason case final value?) {
+      metadata['webCdpFailureReason'] = value;
+    }
+    return metadata;
   }
 
   Future<Map<String, Object?>> _resolveAndroidMetadata(

@@ -19,6 +19,42 @@ import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 
 void main() {
+  test('persists a target-scoped Chromium CDP endpoint', () async {
+    final temporary = await Directory.systemTemp.createTemp(
+      'cockpit-worker-cdp-target-',
+    );
+    addTearDown(() => temporary.delete(recursive: true));
+    final workspaceRoot = await temporary.resolveSymbolicLinks();
+    final stateRoot = await Directory(p.join(workspaceRoot, 'state')).create();
+    final store = CockpitInMemoryWorkerRuntimeStateStore();
+    final registry = CockpitWorkerRuntimeRegistry(
+      workspaceId: 'workspaceA',
+      workspaceRoot: workspaceRoot,
+      stateRoot: stateRoot.path,
+      stateStore: store,
+    );
+    final targetId = await registry.registerTarget(
+      const CockpitWorkerTargetRegistration(
+        workspaceId: 'workspaceA',
+        platform: 'web',
+        deviceId: 'chrome',
+        targetKind: CockpitTargetKind.browserPage,
+        cdpUrl: 'ws://127.0.0.1:9222/devtools/page/1',
+      ),
+    );
+
+    final reopened = CockpitWorkerRuntimeRegistry(
+      workspaceId: 'workspaceA',
+      workspaceRoot: workspaceRoot,
+      stateRoot: stateRoot.path,
+      stateStore: store,
+    );
+    final target = await reopened.readTarget(targetId);
+
+    expect(target.registration.appId, isNull);
+    expect(target.registration.cdpUrl, 'ws://127.0.0.1:9222/devtools/page/1');
+  });
+
   test(
     'development refresh keeps target and app runtime identities aligned',
     () async {

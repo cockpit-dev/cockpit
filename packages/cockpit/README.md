@@ -252,6 +252,9 @@ a case may override it in its target requirements when necessary. Android uses
 ADB accessibility and device controls. iOS uses WebDriverAgent for
 accessibility and interaction; assign a distinct WDA endpoint when multiple
 devices or workspaces run concurrently.
+Linux tree inspection uses the active AT-SPI accessibility bus. Generic
+Chromium pages use a target-scoped CDP endpoint; Flutter Web development keeps
+using its in-app Flutter tree.
 
 An installed Flutter app or native/Flutter mixed stack uses `targetKind:
 flutterApp`, a real `appId`, no entrypoint, and a `native`-plane case. It is
@@ -281,6 +284,16 @@ cockpit target register \
   --environment test \
   --mode automation \
   --idempotency-key ios-target-001
+
+cockpit target register \
+  --workspace-id <workspaceId> \
+  --platform web \
+  --device-id chrome \
+  --target-kind browserPage \
+  --cdp-url ws://127.0.0.1:<port>/devtools/page/<pageId> \
+  --environment test \
+  --mode automation \
+  --idempotency-key web-target-001
 ```
 
 Use `target list` and `target get` to recover registered resources, `target
