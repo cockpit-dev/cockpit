@@ -102,6 +102,10 @@ final class CockpitInspectUiService {
     final locate =
         request.resultProfile.name ==
         CockpitInteractiveResultProfileName.locate;
+    final locatorQuery = locate ? request.snapshotOptions?.query?.trim() : null;
+    final snapshotOptions = locatorQuery == null || locatorQuery.isEmpty
+        ? request.snapshotOptions
+        : request.snapshotOptions!.copyWith(clearQuery: true);
     final resolved = await _appReferenceResolver.resolve(
       appId: request.appId,
       app: request.app,
@@ -114,12 +118,11 @@ final class CockpitInspectUiService {
         baseUri: resolved.baseUri,
         sessionHandle: resolved.app?.remoteSession,
         resultProfile: request.resultProfile,
-        snapshotOptions: request.snapshotOptions,
+        snapshotOptions: snapshotOptions,
         compareAgainstSnapshotRef: request.compareAgainstSnapshotRef,
         retainArtifacts: !locate,
       ),
     );
-    final locatorQuery = request.snapshotOptions?.query?.trim();
     final locator = result.completeSnapshot == null || !locate
         ? null
         : locatorQuery == null || locatorQuery.isEmpty

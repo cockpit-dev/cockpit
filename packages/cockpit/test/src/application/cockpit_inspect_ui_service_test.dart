@@ -141,6 +141,53 @@ void main() {
     },
   );
 
+  test(
+    'locator miss reads one unfiltered snapshot and returns mounted context',
+    () async {
+      CockpitSnapshotOptions? capturedOptions;
+      final service = CockpitInspectUiService(
+        appReferenceResolver: CockpitAppReferenceResolver(),
+        snapshotService: CockpitReadRemoteSnapshotService(
+          readSnapshot: (_, options) async {
+            capturedOptions = options;
+            return CockpitRemoteSnapshotResponse(
+              snapshot: CockpitSnapshot(
+                routeName: '/upgrade',
+                visibleTargets: <CockpitSnapshotTarget>[
+                  for (var index = 0; index < 6; index += 1)
+                    CockpitSnapshotTarget(
+                      registrationId: 'action-$index',
+                      cockpitId: 'action-$index',
+                      text: 'Action $index',
+                      routeName: '/upgrade',
+                      supportedCommands: const <CockpitCommandType>[
+                        CockpitCommandType.tap,
+                      ],
+                    ),
+                ],
+              ),
+            );
+          },
+        ),
+      );
+
+      final result = await service.inspect(
+        CockpitInspectUiRequest(
+          baseUri: Uri.parse('http://127.0.0.1:61331'),
+          resultProfile: const CockpitInteractiveResultProfile.locate(),
+          snapshotOptions: const CockpitSnapshotOptions.baseline().copyWith(
+            query: 'Missing target',
+          ),
+        ),
+      );
+
+      expect(capturedOptions?.query, isNull);
+      expect(result.locator?['count'], 0);
+      expect(result.locator?['route'], '/upgrade');
+      expect(result.locator?['mounted'], hasLength(4));
+    },
+  );
+
   test('locator inspection removes an invalid temporary artifact', () async {
     final temporary = await Directory.systemTemp.createTemp(
       'cockpit-invalid-locator-snapshot-',

@@ -34,11 +34,15 @@ dart pub global activate cockpit any
 After the first installation, upgrade the runtime with:
 
 ```bash
+cockpit update --check
 cockpit update
+cockpit skill
 ```
 
 It updates the CLI and running Supervisor to the latest verified Pub release
-while preserving local authorization and durable state.
+while preserving local authorization and durable state. `cockpit update --check`
+only checks Pub. After updating, `cockpit skill` prints the stable prompt for
+refreshing the current host's complete Skill, native adapter, and MCP integration.
 
 Update the host-native plugin through that host's plugin manager. For a manual
 Skill installation, stage the complete new Skill directory, validate it, then

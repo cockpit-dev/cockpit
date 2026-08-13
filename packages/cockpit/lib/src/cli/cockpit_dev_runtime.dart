@@ -6,6 +6,7 @@ import 'package:path/path.dart' as p;
 import '../foundation/cockpit_home.dart';
 import '../foundation/cockpit_ids.dart';
 import '../supervisor/cockpit_supervisor_api_client.dart';
+import '../supervisor/cockpit_supervisor_operation_catalog.dart';
 import 'cockpit_cli_runtime.dart';
 import 'cockpit_cli_output.dart';
 import 'cockpit_cli_session_handles.dart';
@@ -336,21 +337,27 @@ final class CockpitDevRuntime {
   ) async {
     final injected = _operationInvoker;
     if (injected != null) return injected(session, kind, input);
-    var client = await runtime.client();
-    final descriptors = await _workspaceDescriptors.putIfAbsent(
-      session.workspaceId,
-      () => client.operations(workspaceId: session.workspaceId),
-    );
-    final matches = descriptors.where((item) => item.kind == kind).toList();
-    if (matches.length != 1) {
+    final metadata = CockpitSupervisorOperationCatalog.require(kind);
+    final descriptor = metadata.descriptor;
+    if (descriptor.scope != CockpitOperationScope.workspace) {
       throw CockpitSupervisorClientException(
         code: CockpitErrorCode.unsupportedOperation,
         message: 'Required development capability $kind is not advertised.',
       );
     }
-    final descriptor = matches.single;
+    var client = await runtime.client();
     if (descriptor.mutationClass == CockpitMutationClass.mutating) {
       client = await runtime.developmentClient();
+    }
+    final descriptors = await _workspaceDescriptors.putIfAbsent(
+      session.workspaceId,
+      () => client.operations(workspaceId: session.workspaceId),
+    );
+    if (!descriptors.any((item) => item.kind == kind)) {
+      throw CockpitSupervisorClientException(
+        code: CockpitErrorCode.unsupportedOperation,
+        message: 'Required development capability $kind is not advertised.',
+      );
     }
     return client.executeAdvertisedOperation(
       CockpitOperationInvocation(

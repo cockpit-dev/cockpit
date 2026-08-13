@@ -14,6 +14,7 @@ import 'commands/dev_commands.dart';
 import 'commands/explain_command.dart';
 import 'commands/resource_commands.dart';
 import 'commands/session_commands.dart';
+import 'commands/skill_command.dart';
 import 'commands/run_commands.dart';
 import 'commands/serve_mcp_command.dart';
 import 'commands/update_command.dart';
@@ -49,6 +50,7 @@ final class CockpitCommandRunner {
       ..addCommand(cockpitExplainCommand(this.runtime))
       ..addCommand(CockpitOpCommand(this.runtime))
       ..addCommand(CockpitSessionCommand(this.runtime))
+      ..addCommand(cockpitSkillCommand(this.runtime))
       ..addCommand(CockpitServerCommand(this.runtime))
       ..addCommand(CockpitRootCommand(this.runtime))
       ..addCommand(CockpitWorkspaceCommand(this.runtime))
