@@ -1443,10 +1443,34 @@ Future<CockpitWorkspaceWorkerConnection> _waitForWorkerRestart(
 }
 
 Future<void> _expectTreeExcludes(Directory root, String value) async {
-  await for (final entity in root.list(recursive: true, followLinks: false)) {
-    if (entity is! File) continue;
-    final text = utf8.decode(await entity.readAsBytes(), allowMalformed: true);
-    expect(text, isNot(contains(value)), reason: entity.path);
+  final deadline = DateTime.now().add(const Duration(seconds: 5));
+  while (true) {
+    var changed = false;
+    try {
+      await for (final entity in root.list(
+        recursive: true,
+        followLinks: false,
+      )) {
+        if (entity is! File) continue;
+        try {
+          final text = utf8.decode(
+            await entity.readAsBytes(),
+            allowMalformed: true,
+          );
+          expect(text, isNot(contains(value)), reason: entity.path);
+        } on PathNotFoundException {
+          changed = true;
+          break;
+        }
+      }
+    } on PathNotFoundException {
+      changed = true;
+    }
+    if (!changed) return;
+    if (!DateTime.now().isBefore(deadline)) {
+      throw StateError('Worker state tree did not stabilize for inspection.');
+    }
+    await Future<void>.delayed(const Duration(milliseconds: 10));
   }
 }
 
