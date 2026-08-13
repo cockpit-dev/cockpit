@@ -903,7 +903,8 @@ void main() {
         return _result(
           kind,
           output: const <String, Object?>{
-            'command': <String, Object?>{'success': true},
+            'command': <String, Object?>{'success': true, 'changed': true},
+            'changed': true,
             'uiSummary': <String, Object?>{'routeName': '/'},
           },
         );
@@ -927,6 +928,9 @@ void main() {
       cockpitSuccessExitCode,
     );
     expect(calls, <String>['session.development.get', 'command.run']);
+    final output = lon.decode(stdout.toString())! as Map<Object?, Object?>;
+    expect(output['changed'], isTrue);
+    expect(output['session'], 1);
   });
 
   test(

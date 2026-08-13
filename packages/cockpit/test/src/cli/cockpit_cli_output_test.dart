@@ -536,6 +536,30 @@ void main() {
     expect(value, isNot(contains('_meta')));
   });
 
+  test('dev scroll brief output confirms that the target is visible', () {
+    const renderer = CockpitCliOutputRenderer();
+    final value =
+        lon.decode(
+              renderer.renderAi(
+                command: 'dev.scroll',
+                data: const <String, Object?>{
+                  'ok': true,
+                  'action': 'scroll',
+                  'session': '5',
+                  'state': <String, Object?>{},
+                },
+                view: CockpitCliOutputView.brief,
+              ),
+            )!
+            as Map<Object?, Object?>;
+
+    expect(value['visible'], isTrue);
+    expect(value['session'], 5);
+    expect(value, isNot(contains('ok')));
+    expect(value, isNot(contains('action')));
+    expect(value, isNot(contains('state')));
+  });
+
   test('dev tree brief output keeps the compact selector index', () {
     const renderer = CockpitCliOutputRenderer();
     final value =

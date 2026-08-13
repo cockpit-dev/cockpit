@@ -2259,6 +2259,7 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
     if (commit.failure != null) {
       return commit.failure!;
     }
+    final mutationCommitted = _textMutationCommitted(resolvedTarget, request);
     final settleWarning = await _stabilizeAfterTextMutation(
       command: command,
       stopwatch: stopwatch,
@@ -2266,7 +2267,7 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
       commandType: CockpitCommandType.enterText,
       routeAlreadyCommitted: commit.routeCommitted,
       baselineTransientCallbackCount: commit.beforeActionTransientCallbackCount,
-      mutationCommitted: _textMutationCommitted(resolvedTarget, request),
+      mutationCommitted: mutationCommitted,
     );
 
     return _buildSuccessWithOptionalCapture(
@@ -2274,7 +2275,7 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
       resolution: resolution,
       durationMs: stopwatch.elapsedMilliseconds,
       warnings: <Map<String, Object?>>[...commit.warnings, ?settleWarning],
-      changed: _changedSince(commit),
+      changed: mutationCommitted ? true : _changedSince(commit),
     );
   }
 
@@ -2484,6 +2485,7 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
       activationPath: _ActionActivationPath.directTextInput,
     );
     if (commit.failure != null) return commit.failure!;
+    final mutationCommitted = _textMutationCommitted(target, request);
     final settleWarning = await _stabilizeAfterTextMutation(
       command: command,
       stopwatch: stopwatch,
@@ -2491,14 +2493,14 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
       commandType: command.commandType,
       routeAlreadyCommitted: commit.routeCommitted,
       baselineTransientCallbackCount: commit.beforeActionTransientCallbackCount,
-      mutationCommitted: _textMutationCommitted(target, request),
+      mutationCommitted: mutationCommitted,
     );
     return _buildSuccessWithOptionalCapture(
       command: command,
       resolution: resolution,
       durationMs: stopwatch.elapsedMilliseconds,
       warnings: <Map<String, Object?>>[...commit.warnings, ?settleWarning],
-      changed: _changedSince(commit),
+      changed: mutationCommitted ? true : _changedSince(commit),
     );
   }
 
@@ -2891,6 +2893,7 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
     if (commit.failure != null) {
       return commit.failure!;
     }
+    final mutationCommitted = _textMutationCommitted(resolvedTarget, request);
     final settleWarning = await _stabilizeAfterTextMutation(
       command: command,
       stopwatch: stopwatch,
@@ -2898,14 +2901,14 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
       commandType: requiredCommand,
       routeAlreadyCommitted: commit.routeCommitted,
       baselineTransientCallbackCount: commit.beforeActionTransientCallbackCount,
-      mutationCommitted: _textMutationCommitted(resolvedTarget, request),
+      mutationCommitted: mutationCommitted,
     );
     return _buildSuccessWithOptionalCapture(
       command: command,
       resolution: resolution,
       durationMs: stopwatch.elapsedMilliseconds,
       warnings: <Map<String, Object?>>[...commit.warnings, ?settleWarning],
-      changed: _changedSince(commit),
+      changed: mutationCommitted ? true : _changedSince(commit),
     );
   }
 
