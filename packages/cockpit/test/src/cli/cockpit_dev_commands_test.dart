@@ -5,6 +5,7 @@ import 'package:cockpit/src/cli/cockpit_cli_runtime.dart';
 import 'package:cockpit/src/cli/cockpit_command_runner.dart';
 import 'package:cockpit/src/application/cockpit_ui_locator_advisor.dart';
 import 'package:cockpit/src/cli/commands/dev_interaction_commands.dart';
+import 'package:cockpit/src/cli/commands/skill_command.dart';
 import 'package:cockpit/src/foundation/cockpit_locked_json_store.dart';
 import 'package:cockpit/src/foundation/cockpit_version.dart';
 import 'package:cockpit_protocol/cockpit_protocol.dart';
@@ -177,6 +178,36 @@ void main() {
       dev.subcommands['network']!.argParser.options['limit']!.defaultsTo,
       '12',
     );
+  });
+
+  test('skill exposes one bounded AI installation prompt', () async {
+    final stdout = StringBuffer();
+    final runner = CockpitCommandRunner(
+      runtime: CockpitCliRuntime(
+        stdoutSink: stdout,
+        stderrSink: StringBuffer(),
+        clientProvider: () async =>
+            throw StateError('skill must not connect to the Supervisor.'),
+      ),
+    );
+
+    final exitCode = await runner.run(const <String>['skill']);
+
+    expect(exitCode, cockpitSuccessExitCode);
+    expect(runner.commands, contains('skill'));
+    expect(stdout.toString(), contains(cockpitSkillPrompt));
+    expect(stdout.toString(), contains(cockpitSkillInstallUrl));
+  });
+
+  test('update exposes a side-effect-free version check', () {
+    final runner = CockpitCommandRunner(
+      runtime: CockpitCliRuntime(
+        stdoutSink: StringBuffer(),
+        stderrSink: StringBuffer(),
+      ),
+    );
+
+    expect(runner.commands['update']!.argParser.options, contains('check'));
   });
 
   test('update exposes one bounded runtime upgrade command', () {
@@ -429,6 +460,61 @@ void main() {
       expect(encoded, isNot(contains('path')));
     },
   );
+
+  test(
+    'dev locator miss returns bounded mounted context from one snapshot',
+    () {
+      final result = cockpitBuildUiLocatorMatchesFromOutput(<String, Object?>{
+        'snapshot': <String, Object?>{
+          'route': '/upgrade',
+          'visibleTargets': <Object?>[
+            for (var index = 0; index < 6; index += 1)
+              <String, Object?>{
+                'registrationId': 'action-$index',
+                'cockpitId': 'action-$index',
+                'text': 'Action $index',
+                'typeName': 'FilledButton',
+                'routeName': '/upgrade',
+                'supportedCommands': <Object?>['tap'],
+                'ancestors': const <Object?>[],
+              },
+          ],
+        },
+      }, 'Missing target');
+
+      expect(result['count'], 0);
+      expect(result['matches'], isEmpty);
+      expect(result['route'], '/upgrade');
+      final mounted = (result['mounted']! as List<Object?>)
+          .cast<Map<String, Object?>>();
+      expect(mounted, hasLength(4));
+      expect(mounted, everyElement(containsPair('can', 'tap')));
+      expect(jsonEncode(result), isNot(contains('registrationId')));
+    },
+  );
+
+  test('dev locator hit omits mounted fallback context', () {
+    final result = cockpitBuildUiLocatorMatchesFromOutput(<String, Object?>{
+      'snapshot': <String, Object?>{
+        'route': '/edit',
+        'visibleTargets': <Object?>[
+          <String, Object?>{
+            'registrationId': 'save',
+            'cockpitId': 'save',
+            'text': 'Save',
+            'typeName': 'FilledButton',
+            'routeName': '/edit',
+            'supportedCommands': <Object?>['tap'],
+            'ancestors': const <Object?>[],
+          },
+        ],
+      },
+    }, 'Save');
+
+    expect(result['count'], 1);
+    expect(result, isNot(contains('route')));
+    expect(result, isNot(contains('mounted')));
+  });
 
   test('dev target index returns only compact actionable selectors', () {
     final result = cockpitBuildUiTargetIndexFromOutput(<String, Object?>{

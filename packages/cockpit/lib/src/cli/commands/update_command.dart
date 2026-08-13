@@ -14,8 +14,31 @@ CockpitLeafCommand cockpitUpdateCommand(
   defaultTimeout: const Duration(minutes: 10),
   maximumTimeout: const Duration(minutes: 30),
   actionManagesTimeout: true,
-  action: (_) async {
+  configure: (parser) {
+    parser.addFlag(
+      'check',
+      negatable: false,
+      help: 'Check for a newer Cockpit release without installing it.',
+    );
+  },
+  action: (arguments) async {
     final updater = service ?? CockpitUpdateService();
+    if (arguments.flag('check')) {
+      try {
+        final result = await updater.check(timeout: runtime.remainingTimeout);
+        await runtime.success(result.toJson());
+        return cockpitSuccessExitCode;
+      } on CockpitUpdateException catch (error) {
+        runtime.error(
+          code: error.code,
+          message: error.message,
+          retryable: error.retryable,
+        );
+        return error.retryable
+            ? cockpitTemporaryExitCode
+            : cockpitUnavailableExitCode;
+      }
+    }
     runtime.progress('Current Cockpit version: $cockpitVersion.');
     final heartbeat = Timer.periodic(
       const Duration(seconds: 10),
@@ -26,7 +49,10 @@ CockpitLeafCommand cockpitUpdateCommand(
         timeout: runtime.remainingTimeout,
         onProgress: runtime.progress,
       );
-      await runtime.success(result.toJson());
+      await runtime.success(<String, Object?>{
+        ...result.toJson(),
+        'skill': 'cockpit skill',
+      });
       return cockpitSuccessExitCode;
     } on CockpitUpdateException catch (error) {
       runtime.error(

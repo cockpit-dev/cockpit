@@ -91,6 +91,10 @@ Map<String, Object?> cockpitBuildUiLocatorMatches(
       : targets;
   final visibleMatches = matches.take(limit).toList(growable: false);
   final queryTargetCount = snapshot.summary?.visibleTargetCount;
+  final mounted = matches.isEmpty
+      ? cockpitBuildUiTargetIndex(snapshot, limit: 4)
+      : null;
+  final mountedTargets = mounted?['targets'];
 
   return <String, Object?>{
     'query': query.trim(),
@@ -105,6 +109,9 @@ Map<String, Object?> cockpitBuildUiLocatorMatches(
                 ),
         )
         .toList(growable: false),
+    if (mounted?['route'] != null) 'route': mounted!['route'],
+    if (mountedTargets is List<Object?> && mountedTargets.isNotEmpty)
+      'mounted': mountedTargets,
     if (matches.length > visibleMatches.length)
       'more': matches.length - visibleMatches.length,
     if (queryTargetCount != null && queryTargetCount > targets.length)

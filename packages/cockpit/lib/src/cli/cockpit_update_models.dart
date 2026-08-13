@@ -44,3 +44,18 @@ final class CockpitUpdateResult {
     'supervisor': 'ready',
   };
 }
+
+final class CockpitUpdateCheckResult {
+  const CockpitUpdateCheckResult({required this.version, required this.latest});
+
+  final String version;
+  final String? latest;
+
+  bool get available => latest != null && latest != version;
+
+  Map<String, Object?> toJson() => <String, Object?>{
+    'version': version,
+    if (available) 'latest': latest,
+    if (available) 'next': 'cockpit update',
+  };
+}

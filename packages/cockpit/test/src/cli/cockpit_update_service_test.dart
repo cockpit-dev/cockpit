@@ -9,6 +9,53 @@ import 'package:http/testing.dart';
 import 'package:test/test.dart';
 
 void main() {
+  test(
+    'update check returns only a useful next step for a newer release',
+    () async {
+      final service = CockpitUpdateService(
+        latestVersionLookup: (_) async => '4.0.19',
+      );
+
+      final result = await service.check(currentVersion: '4.0.18');
+
+      expect(result.toJson(), <String, Object?>{
+        'version': '4.0.18',
+        'latest': '4.0.19',
+        'next': 'cockpit update',
+      });
+    },
+  );
+
+  test(
+    'update check stays compact when the current release is latest',
+    () async {
+      final service = CockpitUpdateService(
+        latestVersionLookup: (_) async => '4.0.18',
+      );
+
+      final result = await service.check(currentVersion: '4.0.18');
+
+      expect(result.toJson(), <String, Object?>{'version': '4.0.18'});
+    },
+  );
+
+  test('update check reports lookup failures instead of hiding them', () async {
+    final service = CockpitUpdateService(
+      latestVersionLookup: (_) => throw const SocketException('offline'),
+    );
+
+    await expectLater(
+      service.check(currentVersion: '4.0.18'),
+      throwsA(
+        isA<CockpitUpdateException>().having(
+          (error) => error.code,
+          'code',
+          'updateCheckFailed',
+        ),
+      ),
+    );
+  });
+
   test('latest-version lookup bypasses cached Pub metadata', () async {
     late http.Request request;
     final client = MockClient((candidate) async {

@@ -45,6 +45,30 @@ final class CockpitUpdateService {
   final bool _windows;
   final String _resolvedExecutable;
 
+  Future<CockpitUpdateCheckResult> check({
+    String currentVersion = cockpitVersion,
+    Duration timeout = const Duration(seconds: 10),
+  }) async {
+    if (timeout <= Duration.zero) {
+      throw ArgumentError.value(timeout, 'timeout');
+    }
+    try {
+      final latestText = await _latestVersionLookup(timeout);
+      final current = Version.parse(currentVersion);
+      final latest = Version.parse(latestText);
+      return CockpitUpdateCheckResult(
+        version: currentVersion,
+        latest: latest > current ? latestText : null,
+      );
+    } on Object catch (error) {
+      throw CockpitUpdateException(
+        'updateCheckFailed',
+        'Cockpit could not check the latest Pub release. '
+            '${cockpitBoundUpdateText('$error')}',
+      );
+    }
+  }
+
   Future<CockpitUpdateResult> update({
     String currentVersion = cockpitVersion,
     Duration timeout = const Duration(minutes: 10),

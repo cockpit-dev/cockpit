@@ -35,6 +35,8 @@ Use the highest-level command that owns the task:
 
 | Need | Command |
 | --- | --- |
+| Install or refresh the current AI host integration | `cockpit skill` |
+| Check for a newer CLI release without changing anything | `cockpit update --check` |
 | Update the installed CLI and running Supervisor | `cockpit update` |
 | Start, inspect, control, debug, resize, capture, or reload Flutter | `cockpit dev` |
 | Validate or run reusable Flutter/black-box tests | `cockpit case` / `cockpit suite` |
@@ -229,9 +231,12 @@ keeps the in-app Flutter tree. A generic Chromium page needs an explicit target
 profile. Read [environments.md](references/environments.md) before registering a
 browser page or repairing a blocked platform driver.
 
-Use `cockpit update` for normal upgrades. It updates the CLI and Supervisor while
-preserving authorization and durable state. Do not manually delete Cockpit home data,
-Pub caches, sessions, executables, or ports.
+Use `cockpit update --check` for a side-effect-free release check. Use `cockpit
+update` for normal upgrades; it updates the CLI and Supervisor while preserving
+authorization and durable state. Then run `cockpit skill` and give its prompt to
+the current AI host so the complete Skill, native adapter, and MCP integration can
+be refreshed. Do not manually delete Cockpit home data, Pub caches, sessions,
+executables, or ports.
 
 `cockpit daemon start` and an unflagged
 `daemon restart` preserve the authorization of a healthy running daemon; with no
@@ -269,7 +274,10 @@ confirm an already-known action. If an action returns `unsupportedCapability`,
 `ambiguousTarget`, `targetNotFound`, or `targetNotHittable`, do not guess that a
 nearby control owns passive text. Run the exact `next` command once; it performs
 a bounded inspect of the same query. Copy the returned actionable `sel` and retry
-the original action once.
+the original action once. If bounded inspect returns `count:0`, use its current
+`route` and bounded `mounted` targets to identify a wrong route or visible blocker;
+do not repeat the missing locator or load a full tree. Capture the current screen
+only when those mounted targets do not explain the state.
 For ambiguity or exploration, run the smallest `dev inspect QUERY`. It
 searches mounted Flutter Element targets, independent of developer-authored
 Semantics, and returns the shortest stable `sel` plus compact known `can` actions.

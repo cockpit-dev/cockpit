@@ -1,5 +1,17 @@
 # Changelog
 
+## 4.0.19
+
+- Added `cockpit skill` to print one stable prompt and authoritative path for
+  installing or refreshing the current AI host's complete Cockpit integration.
+- Added `cockpit update --check` for a fast, side-effect-free Pub release check,
+  and point completed runtime upgrades to the Skill refresh command.
+- Returned the current route and a bounded mounted-target index when focused
+  Flutter inspection finds no match, without loading or printing a broad tree.
+- Relaunched stopped development handles through the requested yolo Supervisor
+  before workspace capability discovery, eliminating a redundant daemon/worker
+  cycle and preventing relaunch requests from appearing stuck.
+
 ## 4.0.18
 
 - Applied exact bounded-inspection recovery to locator failures returned inside
