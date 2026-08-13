@@ -1125,6 +1125,7 @@ Map<String, Object?> _compactDevEnvelope(
     }
   }
   if (changed != null && changed != 'none') result['changed'] = changed;
+  if (action == 'scroll' && value['ok'] == true) result['visible'] = true;
 
   final errors = value['errors'];
   if (value['ok'] == false) {

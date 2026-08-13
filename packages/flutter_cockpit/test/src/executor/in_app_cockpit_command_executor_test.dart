@@ -6751,6 +6751,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(result.success, isTrue);
+      expect(result.changed, isTrue);
       expect(firstFocus.hasFocus, isFalse);
       expect(secondFocus.hasFocus, isTrue);
       expect(find.text('Alpha'), findsOneWidget);

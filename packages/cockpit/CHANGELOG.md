@@ -1,5 +1,12 @@
 # Changelog
 
+## 4.0.21
+
+- Report successful Flutter text mutations as `changed:true` even when the
+  mounted element structure is unchanged.
+- Confirm successful scroll actions with compact `visible:true` output so an
+  agent can continue without an extra inspection command.
+
 ## 4.0.20
 
 - Kept Skill refresh guidance AI-ready and token-efficient: `cockpit skill`

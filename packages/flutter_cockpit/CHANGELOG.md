@@ -1,5 +1,10 @@
 # Changelog
 
+## 4.0.21
+
+- Report committed Flutter text mutations independently of structural widget
+  changes.
+
 ## 4.0.20
 
 - Synchronized the Flutter bridge package with the current Cockpit release.
