@@ -13,6 +13,8 @@ import '../session/cockpit_remote_session_handle.dart';
 
 typedef CockpitRemoteReachabilityProbe = Future<bool> Function(Uri baseUri);
 typedef CockpitRemoteControlReadinessProbe = Future<bool> Function(Uri baseUri);
+typedef CockpitDevelopmentAppReachabilityProbe =
+    Future<bool?> Function(CockpitDevelopmentSessionHandle handle);
 typedef CockpitAppStopper = Future<void> Function(String appId);
 typedef CockpitMachineClientConnector =
     Future<CockpitFlutterRunMachineClient> Function();
@@ -29,6 +31,7 @@ final class CockpitDevelopmentSessionSupervisor {
     required CockpitFlutterRunMachineClient? machineClient,
     required CockpitRemoteReachabilityProbe remoteReachabilityProbe,
     CockpitRemoteControlReadinessProbe? remoteControlReadinessProbe,
+    CockpitDevelopmentAppReachabilityProbe? appReachabilityProbe,
     CockpitMachineClientConnector? machineClientConnector,
     CockpitAppStopper? appStopper,
     CockpitSupervisorLogger? logger,
@@ -47,6 +50,7 @@ final class CockpitDevelopmentSessionSupervisor {
        _remoteReachabilityProbe = remoteReachabilityProbe,
        _remoteControlReadinessProbe =
            remoteControlReadinessProbe ?? remoteReachabilityProbe,
+       _appReachabilityProbe = appReachabilityProbe,
        _machineClientConnector = machineClientConnector,
        _appStopper = appStopper,
        _logger = logger,
@@ -74,6 +78,7 @@ final class CockpitDevelopmentSessionSupervisor {
   CockpitFlutterRunMachineClient? _machineClient;
   final CockpitRemoteReachabilityProbe _remoteReachabilityProbe;
   final CockpitRemoteControlReadinessProbe _remoteControlReadinessProbe;
+  final CockpitDevelopmentAppReachabilityProbe? _appReachabilityProbe;
   final CockpitMachineClientConnector? _machineClientConnector;
   final CockpitAppStopper? _appStopper;
   final CockpitSupervisorLogger? _logger;
@@ -99,6 +104,7 @@ final class CockpitDevelopmentSessionSupervisor {
   bool _detachRequested = false;
   bool _controlPlaneClosed = false;
   bool _resourcesDisposed = false;
+  bool _appStartedObserved = false;
 
   Future<void> start() async {
     if (_handle.platform == 'web') {
@@ -142,10 +148,38 @@ final class CockpitDevelopmentSessionSupervisor {
 
   Future<void> get done => _doneCompleter.future;
 
-  Future<CockpitDevelopmentSessionStatus> waitForStartupRecovery() async {
+  Future<CockpitDevelopmentSessionStatus> waitForStartupRecovery({
+    Duration? maximumWait,
+  }) async {
     final pending = _pendingStartupSettle;
     if (pending != null) {
-      await pending;
+      if (maximumWait == null) {
+        await pending;
+      } else {
+        await Future.any<void>(<Future<void>>[
+          pending.then((_) {}),
+          Future<void>.delayed(maximumWait),
+        ]);
+      }
+    }
+    return _status;
+  }
+
+  Future<CockpitDevelopmentSessionStatus> refreshStartupRecovery({
+    Duration maximumWait = Duration.zero,
+  }) async {
+    if (_status.state == CockpitDevelopmentSessionState.starting &&
+        _pendingStartupSettle == null) {
+      _beginStartupRecovery();
+    }
+    if (maximumWait <= Duration.zero) return _status;
+    return waitForStartupRecovery(maximumWait: maximumWait);
+  }
+
+  Future<CockpitDevelopmentSessionStatus> refreshAppReachability() async {
+    final reachable = await _probeAppReachability();
+    if (reachable == true && !_status.appReachable) {
+      _setStatus(_status.copyWith(appReachable: true));
     }
     return _status;
   }
@@ -273,7 +307,9 @@ final class CockpitDevelopmentSessionSupervisor {
         _status.copyWith(
           state: appStillReady
               ? CockpitDevelopmentSessionState.ready
-              : CockpitDevelopmentSessionState.failed,
+              : _status.state == CockpitDevelopmentSessionState.failed
+              ? CockpitDevelopmentSessionState.failed
+              : CockpitDevelopmentSessionState.starting,
           lastReloadMode: mode,
           lastReloadSucceeded: false,
           lastError: error is StateError ? error.message : '$error',
@@ -356,6 +392,7 @@ final class CockpitDevelopmentSessionSupervisor {
   void _handleMachineEvent(CockpitFlutterRunMachineEvent event) {
     switch (event.kind) {
       case CockpitFlutterRunMachineEventKind.appStart:
+        _appStartedObserved = true;
         final startedAppId = event.params?['appId'] as String?;
         if (startedAppId != null && startedAppId.isNotEmpty) {
           _bindMachineAppId(startedAppId);
@@ -375,6 +412,7 @@ final class CockpitDevelopmentSessionSupervisor {
         }
         _log('machine event app.debugPort ws_uri=${wsUri ?? ''}');
       case CockpitFlutterRunMachineEventKind.appStarted:
+        _appStartedObserved = true;
         _log('machine event app.started');
         _beginStartupRecovery();
       case CockpitFlutterRunMachineEventKind.appStop:
@@ -510,21 +548,32 @@ final class CockpitDevelopmentSessionSupervisor {
         lastReloadAt: _now().toUtc(),
       );
     }
+    final appReachability = ready ? true : await _probeAppReachability();
+    final appReachable = appReachability == true;
+    final appExited = appReachability == false;
     _setStatus(
       _status.copyWith(
         state: ready
             ? CockpitDevelopmentSessionState.ready
-            : CockpitDevelopmentSessionState.failed,
-        appReachable: ready,
+            : appExited
+            ? CockpitDevelopmentSessionState.failed
+            : CockpitDevelopmentSessionState.starting,
+        appReachable: ready || appReachable,
         remoteSessionReachable: remoteReachable,
         reloadGeneration: _handle.reloadGeneration,
         lastReloadMode: lastReloadMode ?? _status.lastReloadMode,
         lastReloadSucceeded: ready,
         lastError: ready
             ? null
+            : appExited
+            ? 'Application process is not running.'
+            : appReachable
+            ? remoteReachable && !remoteControlReady
+                  ? 'Application is running and the Cockpit bridge is reachable, but control readiness is still reconnecting.'
+                  : 'Application is running while the Cockpit bridge reconnects.'
             : remoteReachable && !remoteControlReady
-            ? 'Remote session is reachable but cockpit control readiness did not recover.'
-            : 'Remote session did not recover to a reachable ready state.',
+            ? 'Cockpit bridge is reachable but control readiness is still reconnecting.'
+            : 'Cockpit bridge is reconnecting; application reachability is not confirmed.',
       ),
     );
     _log(
@@ -536,6 +585,21 @@ final class CockpitDevelopmentSessionSupervisor {
     );
     _pendingStartupSettle = null;
     return ready;
+  }
+
+  Future<bool?> _probeAppReachability() async {
+    final machineClient = _machineClient;
+    if (machineClient?.lastExitCode != null) return false;
+    final probe = _appReachabilityProbe;
+    if (probe != null) {
+      try {
+        final result = await probe(_handle).timeout(_settleProbeTimeout);
+        if (result != null) return result;
+      } on Object catch (error) {
+        _log('app reachability probe failed error=$error');
+      }
+    }
+    return _appStartedObserved ? true : null;
   }
 
   Future<bool> _runSettleProbe({
@@ -629,7 +693,7 @@ final class CockpitDevelopmentSessionSupervisor {
           if (updateStatusOnFailure) {
             _setStatus(
               _status.copyWith(
-                state: CockpitDevelopmentSessionState.failed,
+                state: CockpitDevelopmentSessionState.starting,
                 lastError: '$error',
               ),
             );
@@ -646,6 +710,7 @@ final class CockpitDevelopmentSessionSupervisor {
     }
     final currentAppId = client.currentAppId;
     if (currentAppId != null && currentAppId.isNotEmpty) {
+      _appStartedObserved = true;
       _bindMachineAppId(currentAppId);
     }
     final currentVmServiceUri = client.currentVmServiceUri;

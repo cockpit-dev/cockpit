@@ -866,6 +866,82 @@ void main() {
       expect(backend.grantCountByKind['session.remote.status'], 0);
       expect(backend.grantCountByKind['app.list'], 0);
       expect(backend.grantCountByKind['development.probe.compare'], 0);
+      final screenshotRequests = authority.requests.where(
+        (request) =>
+            request.wait != null &&
+            (request.resourceKind == CockpitLeaseResourceKind.device ||
+                request.resourceKind == CockpitLeaseResourceKind.capture),
+      );
+      expect(screenshotRequests, hasLength(2));
+      expect(
+        screenshotRequests.map((request) => request.wait),
+        everyElement(const Duration(seconds: 3)),
+      );
+    },
+  );
+
+  test(
+    'resource authority failures preserve Supervisor error details',
+    () async {
+      final authority = _RejectingResourceAuthority();
+      final registry = CockpitWorkspaceOperationRegistry(
+        workspaceId: workspaceId,
+        workspaceRoot: workspaceRoot,
+        adapters: <CockpitWorkspaceOperationAdapter>[
+          CockpitWorkspaceOperationAdapter(
+            kind: 'device.busy',
+            mutationClass: CockpitMutationClass.mutating,
+            resourceKinds: const <String>['workspace.device'],
+            prepare: (context, input) => CockpitPreparedWorkspaceOperation(
+              resources: <CockpitWorkerResourceRequest>[
+                CockpitWorkerResourceRequest(
+                  resourceKind: CockpitLeaseResourceKind.device,
+                  resourceId: 'device_resource_A',
+                  wait: const Duration(seconds: 3),
+                ),
+              ],
+              execute: (_) async => const <String, Object?>{},
+            ),
+          ),
+        ],
+        resourceAuthority: authority,
+        operationJournal: CockpitInMemoryWorkerOperationJournal(),
+        terminateUnsafeWorker: () async {},
+      );
+      final server = CockpitWorkerServer(
+        workspaceId: workspaceId,
+        engineVersion: engineVersion,
+        workspaceRoot: workspaceRoot,
+        supportedFeatures: const <String>[],
+        operations: registry,
+        events: CockpitWorkerMemoryEventExchange(),
+      );
+      final harness = _PeerHarness(server.handle);
+      server.bindPeer(harness.server);
+      harness.start();
+      addTearDown(harness.close);
+      await _initialize(
+        harness.client,
+        workspaceId: workspaceId,
+        engineVersion: engineVersion,
+        workspaceRoot: workspaceRoot,
+        supportedFeatures: const <String>[],
+      );
+
+      final result = await _callOperation(
+        harness.client,
+        _applicationInvocation('device.busy', 'device-busy'),
+      );
+
+      expect(result.outcome, CockpitOperationOutcome.failed);
+      expect(result.failure?.primary.code, CockpitErrorCode.resourceBusy);
+      expect(result.failure?.primary.category, CockpitErrorCategory.resource);
+      expect(
+        result.failure?.primary.responsibleLayer,
+        CockpitResponsibleLayer.supervisor,
+      );
+      expect(result.failure?.primary.retryable, isTrue);
+      expect(result.failure?.primary.redactedDetails['lease'], isNotNull);
     },
   );
 
@@ -2353,6 +2429,8 @@ final class _ReadMutationResourceResolver
 
 final class _ExclusiveSessionResourceAuthority
     implements CockpitWorkerResourceAuthorityClient {
+  final List<CockpitWorkerResourceRequest> requests =
+      <CockpitWorkerResourceRequest>[];
   final List<String> sessionAcquisitions = <String>[];
   final Map<String, Completer<void>> _activeSessions =
       <String, Completer<void>>{};
@@ -2368,6 +2446,7 @@ final class _ExclusiveSessionResourceAuthority
     required String idempotencyKey,
     required DateTime deadline,
   }) async {
+    requests.add(request);
     if (request.resourceKind == CockpitLeaseResourceKind.session) {
       while (true) {
         final active = _activeSessions[request.resourceId];
@@ -2475,6 +2554,35 @@ final class _RecordingResourceAuthority
     releaseCount += 1;
     releaseCancellations.add(cancel);
   }
+}
+
+final class _RejectingResourceAuthority
+    implements CockpitWorkerResourceAuthorityClient {
+  @override
+  Future<CockpitWorkerResourceGrant> acquire(
+    CockpitWorkerResourceRequest request, {
+    required String workspaceId,
+    required String holderId,
+    required String idempotencyKey,
+    required DateTime deadline,
+  }) {
+    throw const CockpitWorkerResourceException(
+      code: CockpitErrorCode.resourceBusy,
+      message: 'Lease wait timeout expired.',
+      details: <String, Object?>{
+        'lease': <String, Object?>{'resourceKind': 'device'},
+      },
+    );
+  }
+
+  @override
+  Future<void> heartbeat(CockpitWorkerResourceGrant grant) async {}
+
+  @override
+  Future<void> release(
+    CockpitWorkerResourceGrant grant, {
+    required bool cancel,
+  }) async {}
 }
 
 final class _HeartbeatFailureAuthority

@@ -92,16 +92,25 @@ final class CockpitRpcResourceAuthorityClient
       idempotencyKey: CockpitIdempotencyKey(idempotencyKey),
       deadline: deadline,
     );
-    final raw = await _peer.call(
-      method: 'operation',
-      params: <String, Object?>{
-        'protocolVersion': cockpitWorkerProtocolVersion,
-        'workspaceId': workspaceId,
-        'idempotencyKey': idempotencyKey,
-        'invocation': invocation.toJson(),
-      },
-      deadline: deadline,
-    );
+    late final Object? raw;
+    try {
+      raw = await _peer.call(
+        method: 'operation',
+        params: <String, Object?>{
+          'protocolVersion': cockpitWorkerProtocolVersion,
+          'workspaceId': workspaceId,
+          'idempotencyKey': idempotencyKey,
+          'invocation': invocation.toJson(),
+        },
+        deadline: deadline,
+      );
+    } on CockpitJsonRpcRemoteException catch (error) {
+      throw CockpitWorkerResourceException(
+        code: error.error.workerCode,
+        message: error.error.message,
+        details: error.error.details,
+      );
+    }
     final result = CockpitWorkerOperationResult.fromJson(raw).result;
     if (result.outcome != CockpitOperationOutcome.succeeded ||
         result.output == null) {

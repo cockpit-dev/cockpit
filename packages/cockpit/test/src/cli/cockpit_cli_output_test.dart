@@ -317,6 +317,67 @@ void main() {
     expect(jsonEncode(value), isNot(contains(hash)));
   });
 
+  test('session brief distinguishes app liveness from bridge readiness', () {
+    const renderer = CockpitCliOutputRenderer();
+    final value =
+        lon.decode(
+              renderer.renderAi(
+                command: 'session.show',
+                data: const <String, Object?>{
+                  'handleId': '9',
+                  'lifecycle': 'connecting',
+                  'ready': false,
+                  'reachable': false,
+                  'live': <String, Object?>{
+                    'status': <String, Object?>{
+                      'state': 'starting',
+                      'appReachable': true,
+                      'remoteSessionReachable': false,
+                    },
+                  },
+                },
+                view: CockpitCliOutputView.brief,
+              ),
+            )!
+            as Map<Object?, Object?>;
+
+    expect(value['session'], 9);
+    expect(value['lifecycle'], 'connecting');
+    expect(value['ready'], isFalse);
+    expect(value['state'], 'starting');
+    expect(value['appLive'], isTrue);
+    expect(value['bridgeLive'], isFalse);
+    expect(value, isNot(contains('reachable')));
+  });
+
+  test('dev status brief preserves reconnecting app and bridge state', () {
+    const renderer = CockpitCliOutputRenderer();
+    final value =
+        lon.decode(
+              renderer.renderAi(
+                command: 'dev.status',
+                data: const <String, Object?>{
+                  'action': 'status',
+                  'session': '9',
+                  'state': <String, Object?>{
+                    'status': <String, Object?>{
+                      'state': 'starting',
+                      'appReachable': true,
+                      'remoteSessionReachable': false,
+                    },
+                  },
+                },
+                view: CockpitCliOutputView.brief,
+              ),
+            )!
+            as Map<Object?, Object?>;
+
+    expect(value['session'], 9);
+    expect(value['state'], 'starting');
+    expect(value['appLive'], isTrue);
+    expect(value['bridgeLive'], isFalse);
+  });
+
   test('dev status does not invent diagnostics that were not collected', () {
     const renderer = CockpitCliOutputRenderer();
 

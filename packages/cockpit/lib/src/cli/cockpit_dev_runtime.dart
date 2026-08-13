@@ -91,6 +91,25 @@ final class CockpitDevRuntime {
           state: queried.output,
         );
       }
+      if (resolved.lifecycle == 'connecting') {
+        return CockpitDevSessionResolution(
+          session: resolved,
+          ready: false,
+          changed: _identitiesChanged(session, resolved)
+              ? 'reconnected'
+              : 'none',
+          state: queried.output,
+          errors: const <Object?>[
+            <String, Object?>{
+              'code': 'developmentSessionReconnecting',
+              'message':
+                  'The Flutter application has not been proven stopped; '
+                  'Cockpit is reconnecting its control bridge.',
+              'retryable': true,
+            },
+          ],
+        );
+      }
       if (!allowRelaunch) {
         return CockpitDevSessionResolution(
           session: resolved,
@@ -111,16 +130,24 @@ final class CockpitDevRuntime {
 
     final rebound = await _rebindLatestTargetSession(session);
     if (rebound != null) return rebound;
-    if (allowRelaunch) {
-      return _relaunch(session, priorState: queried.output);
-    }
-    final crashed = await _setLifecycle(session, 'crashed');
+    final connecting = session.lifecycle == 'connecting'
+        ? session
+        : await _setLifecycle(session, 'connecting');
     return CockpitDevSessionResolution(
-      session: crashed,
+      session: connecting,
       ready: false,
       changed: 'none',
       state: queried.output,
-      errors: _operationErrors(<CockpitOperationResult>[queried]),
+      errors: <Object?>[
+        ..._operationErrors(<CockpitOperationResult>[queried]),
+        const <String, Object?>{
+          'code': 'developmentSessionReconnecting',
+          'message':
+              'The workspace worker or Flutter bridge is temporarily '
+              'unavailable; the application has not been proven stopped.',
+          'retryable': true,
+        },
+      ],
     );
   }
 
@@ -135,11 +162,14 @@ final class CockpitDevRuntime {
         state == 'ready' &&
         statusMap?['appReachable'] == true &&
         statusMap?['remoteSessionReachable'] == true;
+    final appReachable = statusMap?['appReachable'] == true;
     final lifecycle = ready
         ? 'ready'
         : state == 'stopped'
         ? 'stopped'
-        : 'crashed';
+        : state == 'failed' && !appReachable
+        ? 'crashed'
+        : 'connecting';
     final sessionId = output?['sessionId'] as String? ?? previous.sessionId;
     final targetId = output?['targetId'] as String? ?? previous.targetId!;
     final appId = output?['appId'] as String? ?? previous.appId!;
@@ -193,7 +223,21 @@ final class CockpitDevRuntime {
     );
     if (!_operationSucceeded(queried)) return null;
     final resolved = await _bindQueriedSession(rebound, queried.output);
-    if (resolved.lifecycle != 'ready') return null;
+    if (resolved.lifecycle != 'ready') {
+      return CockpitDevSessionResolution(
+        session: resolved,
+        ready: false,
+        changed: 'reconnected',
+        state: queried.output,
+        errors: const <Object?>[
+          <String, Object?>{
+            'code': 'developmentSessionReconnecting',
+            'message': 'Cockpit found the latest bridge and is reconnecting.',
+            'retryable': true,
+          },
+        ],
+      );
+    }
     return CockpitDevSessionResolution(
       session: resolved,
       ready: true,
@@ -942,6 +986,7 @@ final class CockpitDevRuntime {
             <String, Object?>{'code': 'developmentSessionUnavailable'},
           ]
         : resolution.errors;
+    final reconnecting = resolution.session.lifecycle == 'connecting';
     return writeEnvelope(
       action: action,
       session: resolution.session,
@@ -949,9 +994,24 @@ final class CockpitDevRuntime {
       state: resolution.state,
       changed: resolution.changed,
       errors: errors,
-      next: 'cockpit dev start --session ${resolution.session.handleId}',
+      next: reconnecting
+          ? _reconnectingNext(resolution)
+          : 'cockpit dev start --session ${resolution.session.handleId}',
       failureExitCode: cockpitTemporaryExitCode,
     );
+  }
+
+  String _reconnectingNext(CockpitDevSessionResolution resolution) {
+    final state = resolution.state;
+    final stateMap = state is Map<Object?, Object?> ? state : null;
+    final status = stateMap?['status'];
+    final statusMap = status is Map<Object?, Object?> ? status : null;
+    final handle = resolution.session.handleId;
+    if (statusMap?['appReachable'] == true &&
+        statusMap?['remoteSessionReachable'] == false) {
+      return 'cockpit dev recover --session $handle';
+    }
+    return 'cockpit dev status --session $handle';
   }
 
   Future<int> writeOperation({

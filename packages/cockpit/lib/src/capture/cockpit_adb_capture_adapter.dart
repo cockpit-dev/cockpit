@@ -200,8 +200,11 @@ final class CockpitAdbCaptureAdapter implements CockpitHostCaptureAdapter {
                 line.contains('mFocusedWindow='),
             orElse: () => '',
           );
-      final focusedPackage = _focusedPackage(focusLine);
-      final relation = focusedPackage == null
+      final focusedSurface = _focusedSurface(focusLine);
+      final focusedPackage = focusedSurface.packageId;
+      final relation = focusedSurface.systemOverlay
+          ? 'systemOverlay'
+          : focusedPackage == null
           ? 'unknown'
           : focusedPackage == expectedPackage
           ? 'app'
@@ -220,12 +223,19 @@ final class CockpitAdbCaptureAdapter implements CockpitHostCaptureAdapter {
   }
 }
 
-String? _focusedPackage(String line) {
-  if (line.isEmpty) return null;
+({String? packageId, bool systemOverlay}) _focusedSurface(String line) {
+  if (line.isEmpty) return (packageId: null, systemOverlay: false);
+  final systemError = RegExp(
+    r'(?:Application Not Responding|Application Error):\s*'
+    r'([A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)+)',
+  ).firstMatch(line);
+  if (systemError != null) {
+    return (packageId: systemError.group(1), systemOverlay: true);
+  }
   final component = RegExp(
     r'([A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)+)/[A-Za-z0-9_.$]+',
   ).firstMatch(line);
-  return component?.group(1);
+  return (packageId: component?.group(1), systemOverlay: false);
 }
 
 bool _isAndroidSystemPackage(String packageId) {

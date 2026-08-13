@@ -200,7 +200,12 @@ cockpit dev status --session 2
 entrypoint, platform/device, lifecycle, and current live state. Check it before a
 destructive mutation when concurrent apps look similar. Omitting `--session` is safe
 when running inside the intended project and its active handle is the intended
-target. With concurrent targets for that project, select once with `dev use`, or
+target. Read readiness as two independent signals: `appLive:true` with
+`bridgeLive:false` means the application still runs but its control bridge is
+blocked or reconnecting. Never run `dev start` for that state; follow `next`, normally
+`cockpit dev recover --session HANDLE`, then read status once. Only an explicit stopped
+or crashed state with `appLive:false` justifies `dev start`.
+With concurrent targets for that project, select once with `dev use`, or
 pass `--session HANDLE` on the exact command. From a common ancestor containing
 multiple active projects, Cockpit fails as ambiguous instead of guessing.
 
