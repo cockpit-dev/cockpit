@@ -33,11 +33,7 @@ final class CockpitSystemWindowsDirectoryAuthorityProbe
         stderr: '',
       );
     } on FileSystemException catch (error) {
-      return CockpitWindowsFileIdentityProbeResult(
-        exitCode: error.osError?.errorCode ?? 1,
-        stdout: '',
-        stderr: error.message,
-      );
+      return CockpitWindowsFileIdentityProbeResult.failure(error);
     } finally {
       lease?.close();
     }
@@ -54,7 +50,10 @@ final class CockpitWindowsDirectoryAuthorityProvider {
   Future<CockpitDirectoryAuthoritySnapshot> inspect(
     String canonicalPath,
   ) async {
-    final result = await probe.inspect(canonicalPath);
+    var result = await probe.inspect(canonicalPath);
+    if (_shouldRetry(result)) {
+      result = await probe.inspect(canonicalPath);
+    }
     if (result.exitCode != 0) {
       throw FileSystemException(
         'Could not verify Windows directory authority: '
@@ -92,6 +91,9 @@ final class CockpitWindowsDirectoryAuthorityProvider {
     );
   }
 }
+
+bool _shouldRetry(CockpitWindowsFileIdentityProbeResult result) =>
+    result.exitCode != 0 || result.stdout.trim().isEmpty;
 
 String _boundedDiagnostic(String value) {
   final text = value.trim();

@@ -13,6 +13,21 @@ final class CockpitWindowsFileIdentityProbeResult {
     required this.stderr,
   });
 
+  factory CockpitWindowsFileIdentityProbeResult.failure(
+    FileSystemException error,
+  ) {
+    final osError = error.osError;
+    final errorCode = osError?.errorCode;
+    final diagnostic = osError == null
+        ? error.message
+        : '${error.message} ${osError.message} (${osError.errorCode})'.trim();
+    return CockpitWindowsFileIdentityProbeResult(
+      exitCode: errorCode == null || errorCode == 0 ? 1 : errorCode,
+      stdout: '',
+      stderr: diagnostic,
+    );
+  }
+
   final int exitCode;
   final String stdout;
   final String stderr;
@@ -41,11 +56,7 @@ final class CockpitNativeWindowsFileIdentityProbe
         stderr: '',
       );
     } on FileSystemException catch (error) {
-      return CockpitWindowsFileIdentityProbeResult(
-        exitCode: error.osError?.errorCode ?? 1,
-        stdout: '',
-        stderr: error.message,
-      );
+      return CockpitWindowsFileIdentityProbeResult.failure(error);
     } finally {
       lease.close();
     }
