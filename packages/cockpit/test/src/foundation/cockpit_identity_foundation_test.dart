@@ -402,6 +402,20 @@ void main() {
   });
 
   group('Windows filesystem identity', () {
+    test('native probe failures never report a successful exit code', () {
+      final result = CockpitWindowsFileIdentityProbeResult.failure(
+        const FileSystemException(
+          'Could not verify Windows directory ACL.',
+          r'C:\Work\App',
+          OSError('GetNamedSecurityInfoW failed.', 0),
+        ),
+      );
+
+      expect(result.exitCode, 1);
+      expect(result.stdout, isEmpty);
+      expect(result.stderr, contains('GetNamedSecurityInfoW failed. (0)'));
+    });
+
     test('parses fixed-width volume and 128-bit file identifiers', () async {
       final probe = _FakeWindowsFileIdentityProbe(
         const CockpitWindowsFileIdentityProbeResult(
@@ -573,6 +587,95 @@ void main() {
         expect(probe.paths, <String>[r'C:\Work\App']);
       },
     );
+
+    test('combined authority retries one failed native probe result', () async {
+      final probe = _FakeWindowsDirectoryAuthorityProbe.sequence(
+        const <CockpitWindowsFileIdentityProbeResult>[
+          CockpitWindowsFileIdentityProbeResult(
+            exitCode: 1,
+            stdout: '',
+            stderr: 'GetNamedSecurityInfoW failed. (0)',
+          ),
+          CockpitWindowsFileIdentityProbeResult(
+            exitCode: 0,
+            stdout:
+                '0123456789ABCDEF|00112233445566778899AABBCCDDEEFF|'
+                'true|true|false',
+            stderr: '',
+          ),
+        ],
+      );
+
+      final snapshot = await CockpitWindowsDirectoryAuthorityProvider(
+        probe: probe,
+      ).inspect(r'C:\Work\App');
+
+      expect(snapshot.security.ownerVerified, isTrue);
+      expect(probe.paths, <String>[r'C:\Work\App', r'C:\Work\App']);
+    });
+
+    test('combined authority retries one empty successful result', () async {
+      final probe = _FakeWindowsDirectoryAuthorityProbe.sequence(
+        const <CockpitWindowsFileIdentityProbeResult>[
+          CockpitWindowsFileIdentityProbeResult(
+            exitCode: 0,
+            stdout: '',
+            stderr: '',
+          ),
+          CockpitWindowsFileIdentityProbeResult(
+            exitCode: 0,
+            stdout:
+                '0123456789ABCDEF|00112233445566778899AABBCCDDEEFF|'
+                'true|true|false',
+            stderr: '',
+          ),
+        ],
+      );
+
+      final snapshot = await CockpitWindowsDirectoryAuthorityProvider(
+        probe: probe,
+      ).inspect(r'C:\Work\App');
+
+      expect(snapshot.security.ownerVerified, isTrue);
+      expect(probe.paths, <String>[r'C:\Work\App', r'C:\Work\App']);
+    });
+
+    test('combined authority preserves the final failed probe', () async {
+      final probe = _FakeWindowsDirectoryAuthorityProbe.sequence(
+        const <CockpitWindowsFileIdentityProbeResult>[
+          CockpitWindowsFileIdentityProbeResult(
+            exitCode: 5,
+            stdout: '',
+            stderr: 'first failure',
+          ),
+          CockpitWindowsFileIdentityProbeResult(
+            exitCode: 32,
+            stdout: '',
+            stderr: 'sharing violation',
+          ),
+        ],
+      );
+
+      await expectLater(
+        CockpitWindowsDirectoryAuthorityProvider(
+          probe: probe,
+        ).inspect(r'C:\Work\App'),
+        throwsA(
+          isA<FileSystemException>()
+              .having(
+                (error) => error.message,
+                'message',
+                contains('sharing violation'),
+              )
+              .having(
+                (error) => error.message,
+                'message',
+                isNot(contains('first failure')),
+              ),
+        ),
+      );
+      expect(probe.paths, <String>[r'C:\Work\App', r'C:\Work\App']);
+    });
 
     test(
       'combined authority probe holds a native no-delete-share lease',
@@ -787,9 +890,15 @@ final class _FakeWindowsFileIdentityProbe
 
 final class _FakeWindowsDirectoryAuthorityProbe
     implements CockpitWindowsDirectoryAuthorityProbe {
-  _FakeWindowsDirectoryAuthorityProbe(this.result);
+  _FakeWindowsDirectoryAuthorityProbe(
+    CockpitWindowsFileIdentityProbeResult result,
+  ) : _results = <CockpitWindowsFileIdentityProbeResult>[result];
 
-  final CockpitWindowsFileIdentityProbeResult result;
+  _FakeWindowsDirectoryAuthorityProbe.sequence(
+    Iterable<CockpitWindowsFileIdentityProbeResult> results,
+  ) : _results = List<CockpitWindowsFileIdentityProbeResult>.of(results);
+
+  final List<CockpitWindowsFileIdentityProbeResult> _results;
   final List<String> paths = <String>[];
 
   @override
@@ -797,7 +906,7 @@ final class _FakeWindowsDirectoryAuthorityProbe
     String canonicalPath,
   ) async {
     paths.add(canonicalPath);
-    return result;
+    return _results.length == 1 ? _results.single : _results.removeAt(0);
   }
 }
 

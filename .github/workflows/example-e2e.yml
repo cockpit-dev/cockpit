@@ -319,6 +319,7 @@ jobs:
             os: windows-2022
             visual_args: --visual-profile windows-1028x681
             platform_tests: >-
+              test/src/foundation/cockpit_identity_foundation_test.dart
               test/src/platform/windows
               test/src/capture/cockpit_windows_capture_adapter_test.dart
               test/src/recording/cockpit_windows_recording_adapter_test.dart

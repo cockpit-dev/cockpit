@@ -20,6 +20,8 @@
   for platform tree reads while preserving the fast Flutter semantic path.
 - Kept native and mixed-plane acceptance retries from replaying mutations that
   already reached their expected UI state.
+- Retried one transient Windows directory-authority probe and preserved
+  native filesystem diagnostics instead of misclassifying failures as success.
 
 ## 4.0.12
 
