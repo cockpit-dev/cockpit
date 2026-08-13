@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter/scheduler.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
@@ -32,6 +31,7 @@ import 'cockpit_tap_feedback_overlay.dart';
 import 'cockpit_capabilities.dart';
 import 'cockpit_native_semantics.dart';
 import 'cockpit_process_id.dart';
+import 'cockpit_pending_frame_waiter.dart';
 import 'cockpit_native_viewport.dart';
 import 'cockpit_runtime_query.dart';
 import 'cockpit_remote_session_platform.dart';
@@ -150,11 +150,11 @@ final class FlutterCockpitRootState extends State<FlutterCockpitRoot> {
     if (_isTestBinding(binding)) {
       return snapshot(options: options);
     }
-    if (binding.schedulerPhase == SchedulerPhase.idle &&
-        !binding.hasScheduledFrame) {
-      binding.scheduleWarmUpFrame();
-    }
-    await binding.endOfFrame.timeout(const Duration(seconds: 2));
+    await waitForPendingCockpitFrame(
+      phase: binding.schedulerPhase,
+      hasScheduledFrame: binding.hasScheduledFrame,
+      waitForEndOfFrame: () => binding.endOfFrame,
+    );
     return snapshot(options: options);
   }
 

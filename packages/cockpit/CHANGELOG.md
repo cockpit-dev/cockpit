@@ -1,5 +1,12 @@
 # Changelog
 
+## 4.0.23
+
+- Added complete direct Flutter control for public Cupertino widgets without
+  requiring application-authored semantics or exposing internal widget noise.
+- Prevented remote inspect, scroll, and tree reads from failing with a generic
+  server timeout while Flutter is paused, backgrounded, or between routes.
+
 ## 4.0.22
 
 - Report successful Flutter selection and value mutations as `changed:true`

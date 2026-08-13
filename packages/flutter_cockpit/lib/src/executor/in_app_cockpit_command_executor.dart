@@ -2,6 +2,7 @@
 
 import 'dart:async';
 
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -5391,7 +5392,18 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
     if (diagnosticNode is! Element || !diagnosticNode.mounted) {
       return null;
     }
-    final widget = diagnosticNode.widget;
+    var state = _widgetInteractionState(diagnosticNode.widget);
+    if (state != null) {
+      return state;
+    }
+    diagnosticNode.visitAncestorElements((ancestor) {
+      state = _widgetInteractionState(ancestor.widget);
+      return state == null;
+    });
+    return state;
+  }
+
+  String? _widgetInteractionState(Widget widget) {
     if (widget is ChoiceChip) {
       return 'selected:${widget.selected}';
     }
@@ -5413,10 +5425,19 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
     if (widget is SwitchListTile) {
       return 'checked:${widget.value}';
     }
+    if (widget is CupertinoCheckbox) {
+      return 'checked:${widget.value}';
+    }
+    if (widget is CupertinoSwitch) {
+      return 'checked:${widget.value}';
+    }
     if (widget is Radio) {
       return 'selected:${widget.groupValue == widget.value}';
     }
     if (widget is RadioListTile) {
+      return 'selected:${widget.groupValue == widget.value}';
+    }
+    if (widget is CupertinoRadio) {
       return 'selected:${widget.groupValue == widget.value}';
     }
     if (widget is ToggleButtons) {
@@ -5425,11 +5446,26 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
           .join();
       return 'selected:$selection';
     }
+    if (widget is SegmentedButton) {
+      final selection =
+          widget.selected.map((value) => '$value').toList(growable: false)
+            ..sort();
+      return 'selected:${selection.join('|')}';
+    }
     if (widget is Slider) {
       return 'value:${widget.value}';
     }
     if (widget is RangeSlider) {
       return 'value:${widget.values.start}:${widget.values.end}';
+    }
+    if (widget is CupertinoSlider) {
+      return 'value:${widget.value}';
+    }
+    if (widget is CupertinoSegmentedControl) {
+      return 'selected:${widget.groupValue}';
+    }
+    if (widget is CupertinoSlidingSegmentedControl) {
+      return 'selected:${widget.groupValue}';
     }
     if (widget is Semantics) {
       final properties = widget.properties;

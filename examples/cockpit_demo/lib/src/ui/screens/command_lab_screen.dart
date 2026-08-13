@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -23,6 +24,8 @@ final class _CommandLabScreenState extends State<CommandLabScreen> {
   String _submitted = 'none';
   bool _dismissCardVisible = true;
   double _sliderValue = 0.5;
+  bool _cupertinoEnabled = false;
+  int _cupertinoLayout = 0;
 
   Offset _panTotal = Offset.zero;
   double _lastScale = 1;
@@ -30,6 +33,8 @@ final class _CommandLabScreenState extends State<CommandLabScreen> {
   int _maxConcurrentPointers = 0;
 
   final TextEditingController _textController = TextEditingController();
+  final TextEditingController _cupertinoTextController =
+      TextEditingController();
   final FocusNode _textFocusNode = FocusNode(debugLabel: 'lab-text-field');
   final FocusNode _keyPadFocusNode = FocusNode(debugLabel: 'lab-key-pad');
 
@@ -37,6 +42,7 @@ final class _CommandLabScreenState extends State<CommandLabScreen> {
   void initState() {
     super.initState();
     _textController.addListener(_onTextChanged);
+    _cupertinoTextController.addListener(_onTextChanged);
     _textFocusNode.addListener(_onFocusChanged);
     _keyPadFocusNode.addListener(_onFocusChanged);
   }
@@ -44,9 +50,11 @@ final class _CommandLabScreenState extends State<CommandLabScreen> {
   @override
   void dispose() {
     _textController.removeListener(_onTextChanged);
+    _cupertinoTextController.removeListener(_onTextChanged);
     _textFocusNode.removeListener(_onFocusChanged);
     _keyPadFocusNode.removeListener(_onFocusChanged);
     _textController.dispose();
+    _cupertinoTextController.dispose();
     _textFocusNode.dispose();
     _keyPadFocusNode.dispose();
     super.dispose();
@@ -287,6 +295,53 @@ final class _CommandLabScreenState extends State<CommandLabScreen> {
                 hintText: 'Type into the lab',
               ),
               onSubmitted: (value) => setState(() => _submitted = value),
+            ),
+            const SizedBox(height: 20),
+            _statusText(
+              'lab-cupertino-status',
+              'cupertino:${_cupertinoEnabled ? 'on' : 'off'}:'
+                  '${_cupertinoLayout == 0 ? 'grid' : 'list'}:'
+                  '${_cupertinoTextController.text}',
+              theme,
+            ),
+            _pad(
+              key: 'lab-cupertino-pad',
+              label: 'Cupertino controls',
+              color: theme.colorScheme.surfaceContainerHighest,
+              child: Column(
+                children: <Widget>[
+                  CupertinoSwitch(
+                    key: const Key('lab-cupertino-switch'),
+                    value: _cupertinoEnabled,
+                    onChanged: (value) =>
+                        setState(() => _cupertinoEnabled = value),
+                  ),
+                  const SizedBox(height: 12),
+                  CupertinoTextField(
+                    key: const Key('lab-cupertino-text'),
+                    controller: _cupertinoTextController,
+                    placeholder: 'Cupertino message',
+                  ),
+                  const SizedBox(height: 12),
+                  CupertinoSlidingSegmentedControl<int>(
+                    key: const Key('lab-cupertino-layout'),
+                    groupValue: _cupertinoLayout,
+                    children: const <int, Widget>{
+                      0: Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 12),
+                        child: Text('Grid'),
+                      ),
+                      1: Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 12),
+                        child: Text('List'),
+                      ),
+                    },
+                    onValueChanged: (value) => setState(
+                      () => _cupertinoLayout = value ?? _cupertinoLayout,
+                    ),
+                  ),
+                ],
+              ),
             ),
             const SizedBox(height: 20),
             _statusText('lab-key-status', 'key:$_key', theme),

@@ -1,5 +1,14 @@
 # Changelog
 
+## 4.0.23
+
+- Added direct, semantics-independent discovery and control for public
+  Cupertino buttons, rows, selection controls, sliders, and text fields.
+- Exposed stable option targets for Cupertino segmented controls and report
+  only committed selection changes.
+- Kept remote snapshots responsive when Flutter has no pending frame or a
+  backgrounded engine cannot finish one.
+
 ## 4.0.22
 
 - Report committed selection and value changes for Flutter controls even when
