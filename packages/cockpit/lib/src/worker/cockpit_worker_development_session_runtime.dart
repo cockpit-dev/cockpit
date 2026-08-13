@@ -9,6 +9,7 @@ import '../application/cockpit_launch_development_session_service.dart';
 import '../application/cockpit_platform_app_stopper.dart';
 import '../development/cockpit_development_session_handle.dart';
 import '../development/cockpit_development_session_machine_launcher.dart';
+import '../development/cockpit_platform_app_reachability.dart';
 import '../development/cockpit_development_session_status.dart';
 import '../development/cockpit_development_session_supervisor.dart';
 import '../development/cockpit_flutter_run_machine_client.dart';
@@ -47,6 +48,7 @@ final class CockpitWorkerDevelopmentSessionRuntime {
         cockpitRunProcessWithTimeout,
     CockpitNetworkProfiler? networkProfiler,
     CockpitPlatformAppStopper? platformAppStopper,
+    CockpitDevelopmentAppReachabilityProbe? appReachabilityProbe,
     Future<CockpitFlutterRunMachineClient> Function(
       CockpitDevelopmentSessionHandle handle,
       Map<String, String>? environment,
@@ -70,6 +72,8 @@ final class CockpitWorkerDevelopmentSessionRuntime {
        _androidDeviceProbeRunner = androidDeviceProbeRunner,
        _networkProfiler = networkProfiler,
        _platformAppStopper = platformAppStopper ?? CockpitPlatformAppStopper(),
+       _appReachabilityProbe =
+           appReachabilityProbe ?? const CockpitPlatformAppReachability().probe,
        _machineClientAttacher = machineClientAttacher,
        _utcNow = utcNow ?? (() => DateTime.now().toUtc());
 
@@ -84,6 +88,7 @@ final class CockpitWorkerDevelopmentSessionRuntime {
   final CockpitAndroidDeviceProbeRunner _androidDeviceProbeRunner;
   final CockpitNetworkProfiler? _networkProfiler;
   final CockpitPlatformAppStopper _platformAppStopper;
+  final CockpitDevelopmentAppReachabilityProbe _appReachabilityProbe;
   final Future<CockpitFlutterRunMachineClient> Function(
     CockpitDevelopmentSessionHandle handle,
     Map<String, String>? environment,
@@ -208,6 +213,7 @@ final class CockpitWorkerDevelopmentSessionRuntime {
         baseUri: baseUri,
         readiness: true,
       ),
+      appReachabilityProbe: _appReachabilityProbe,
       logger: _logger == null
           ? null
           : (message) async {
@@ -270,7 +276,11 @@ final class CockpitWorkerDevelopmentSessionRuntime {
 
   Future<CockpitWorkerDevelopmentSessionSnapshot> query(
     CockpitDevelopmentSessionHandle handle,
-  ) async => _snapshot(await _require(handle));
+  ) async {
+    final supervisor = await _require(handle);
+    await supervisor.refreshStartupRecovery();
+    return _snapshot(supervisor);
+  }
 
   Future<CockpitWorkerDevelopmentSessionSnapshot> reload(
     CockpitDevelopmentSessionHandle handle,
@@ -408,6 +418,7 @@ final class CockpitWorkerDevelopmentSessionRuntime {
           _probeHandle(handle, baseUri: baseUri, readiness: false),
       remoteControlReadinessProbe: (baseUri) =>
           _probeHandle(handle, baseUri: baseUri, readiness: true),
+      appReachabilityProbe: _appReachabilityProbe,
       logger: _logger == null
           ? null
           : (message) async {
@@ -425,7 +436,7 @@ final class CockpitWorkerDevelopmentSessionRuntime {
         );
       },
       bindControlPlane: false,
-      startupSettleTimeout: const Duration(seconds: 5),
+      startupSettleTimeout: const Duration(seconds: 15),
     );
     _sessions[handle.developmentSessionId] = supervisor;
     if (handle.reloadRecoverable) {
@@ -435,8 +446,17 @@ final class CockpitWorkerDevelopmentSessionRuntime {
     }
     try {
       await supervisor.start();
-      await supervisor.waitForStartupRecovery();
-      await _enableNetworkProfiling((await _snapshot(supervisor)).handle);
+      final appReachability = supervisor.refreshAppReachability();
+      final startup = await supervisor.refreshStartupRecovery(
+        maximumWait: const Duration(milliseconds: 1500),
+      );
+      if (startup.state != CockpitDevelopmentSessionState.ready) {
+        await appReachability;
+      } else {
+        unawaited(appReachability);
+      }
+      final recoveredHandle = (await _snapshot(supervisor)).handle;
+      unawaited(_enableNetworkProfiling(recoveredHandle));
       return supervisor;
     } on Object {
       _sessions.remove(handle.developmentSessionId);

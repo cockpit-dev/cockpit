@@ -1368,6 +1368,10 @@ Map<String, Object?> _compactDevStatus(
   final target = state['target'];
   final network = state['network'];
   final errors = state['runtimeErrors'] ?? state['errors'];
+  final sessionStatus = state['status'];
+  final sessionStatusMap = sessionStatus is Map<Object?, Object?>
+      ? sessionStatus
+      : null;
   final errorCount = errors == null ? 0 : _devErrorCount(errors);
   final networkFailureCount = network == null
       ? 0
@@ -1385,6 +1389,13 @@ Map<String, Object?> _compactDevStatus(
     if (ui is Map<Object?, Object?>) ..._pick(ui, const <String>['routeName']),
     if (target is Map<Object?, Object?>)
       ..._pick(target, const <String>['platform', 'targetKind']),
+    if (sessionStatusMap != null) ...<String, Object?>{
+      if (sessionStatusMap['state'] != null) 'state': sessionStatusMap['state'],
+      if (sessionStatusMap['appReachable'] is bool)
+        'appReachable': sessionStatusMap['appReachable'],
+      if (sessionStatusMap['remoteSessionReachable'] is bool)
+        'remoteSessionReachable': sessionStatusMap['remoteSessionReachable'],
+    },
     if (more || errorCount > 0) 'errorCount': errorCount,
     if (more || networkFailureCount > 0)
       'networkFailureCount': networkFailureCount,
@@ -2800,7 +2811,7 @@ Map<String, Object?> _compactSession(
       'deviceId',
       'flavor',
       'lifecycle',
-      'reachable',
+      'ready',
     ]),
     if (more) ...<String, Object?>{
       ..._pick(value, const <String>[
@@ -2818,12 +2829,11 @@ Map<String, Object?> _compactSession(
   if (statusMap != null) {
     final state = statusMap['state'];
     if (state != null && state != result['lifecycle']) result['state'] = state;
-    if (statusMap['appReachable'] != null &&
-        (more || statusMap['appReachable'] == false)) {
+    if (statusMap['appReachable'] != null && (more || value['ready'] != true)) {
       result['appReachable'] = statusMap['appReachable'];
     }
     if (statusMap['remoteSessionReachable'] != null &&
-        (more || statusMap['remoteSessionReachable'] == false)) {
+        (more || value['ready'] != true)) {
       result['remoteSessionReachable'] = statusMap['remoteSessionReachable'];
     }
     if (more && statusMap['reloadGeneration'] != null) {

@@ -611,7 +611,7 @@ bool _succeeded(CockpitOperationResult result) =>
 
 bool cockpitDevSessionRequiresStopBeforeLaunch(
   CockpitCliSessionHandle session,
-) => session.lifecycle == 'connecting' || session.lifecycle == 'ready';
+) => session.lifecycle != 'stopped';
 
 Future<Map<String, Object?>?> cockpitResolveDevFlutterLaunchConfiguration(
   Map<String, Object?>? configuration, {

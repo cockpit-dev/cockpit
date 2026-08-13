@@ -536,7 +536,7 @@ void main() {
   );
 
   test(
-    'settle failure reports unreachable remote recovery instead of UI idle',
+    'settle timeout keeps a running app reconnecting instead of failed',
     () async {
       final harness = _MachineHarness();
       addTearDown(harness.dispose);
@@ -562,12 +562,14 @@ void main() {
       );
       harness.stdoutController.add('[{"event":"app.started","params":{}}]');
 
-      await supervisor.waitForState(CockpitDevelopmentSessionState.failed);
+      await supervisor.waitForStartupRecovery();
       final status = await supervisor.currentStatus();
-      expect(status.state, CockpitDevelopmentSessionState.failed);
+      expect(status.state, CockpitDevelopmentSessionState.starting);
+      expect(status.appReachable, isTrue);
+      expect(status.remoteSessionReachable, isFalse);
       expect(
         status.lastError,
-        'Remote session did not recover to a reachable ready state.',
+        'Application is running while the Cockpit bridge reconnects.',
       );
     },
   );
@@ -866,7 +868,7 @@ void main() {
     expect(connectorCalls, 0);
     expect(
       (await supervisor.currentStatus()).state,
-      CockpitDevelopmentSessionState.failed,
+      CockpitDevelopmentSessionState.starting,
     );
   });
 

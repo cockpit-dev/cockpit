@@ -44,12 +44,18 @@ final class CockpitDevScreenshotService {
           'profile': 'standard',
         });
     if (!dev.operationSucceeded(capture)) {
+      final busy =
+          capture.failure?.primary.code == CockpitErrorCode.resourceBusy;
       return dev.writeOperation(
         action: 'screenshot',
         session: session,
         result: capture,
         state: capture.output,
         changed: 'none',
+        nextOnFailure: busy
+            ? 'cockpit dev screenshot --session ${session.handleId}'
+            : null,
+        failureExitCode: busy ? cockpitTemporaryExitCode : cockpitDataExitCode,
       );
     }
     final reference = _pngArtifact(capture.output);

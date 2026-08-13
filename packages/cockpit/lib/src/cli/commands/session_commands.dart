@@ -39,7 +39,7 @@ final class CockpitSessionCommand extends Command<int> {
             arguments.rest.isEmpty ? null : arguments.rest.single,
           );
           Object? liveState;
-          var reachable = false;
+          var ready = false;
           var errors = const <Object?>[];
           if (handle.isDevelopment && handle.lifecycle != 'stopped') {
             final resolution = await CockpitDevRuntime(
@@ -47,12 +47,12 @@ final class CockpitSessionCommand extends Command<int> {
             ).reconcile(handle, allowRelaunch: false);
             handle = resolution.session;
             liveState = resolution.state;
-            reachable = resolution.ready;
+            ready = resolution.ready;
             errors = resolution.errors;
           }
           await runtime.success(<String, Object?>{
             ...handle.toJson(),
-            'reachable': reachable,
+            'ready': ready,
             'live': ?liveState,
             if (errors.isNotEmpty) 'errors': errors,
           });

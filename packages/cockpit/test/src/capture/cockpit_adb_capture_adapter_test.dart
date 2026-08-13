@@ -100,6 +100,24 @@ void main() {
           degraded: null,
         ),
         (
+          name: 'identifies an ANR system overlay for the expected app',
+          focus:
+              'mCurrentFocus=Window{42 u0 Application Not Responding: '
+              'dev.cockpit.demo}',
+          relation: 'systemOverlay',
+          front: 'dev.cockpit.demo',
+          degraded: null,
+        ),
+        (
+          name: 'identifies an application error system overlay',
+          focus:
+              'mFocusedWindow=Window{42 u0 Application Error: '
+              'com.example.other}',
+          relation: 'systemOverlay',
+          front: 'com.example.other',
+          degraded: null,
+        ),
+        (
           name: 'identifies a different foreground app',
           focus: 'mCurrentFocus=Window{42 u0 com.example.other/.MainActivity}',
           relation: 'differentApp',

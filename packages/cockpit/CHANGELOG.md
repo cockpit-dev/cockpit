@@ -1,5 +1,22 @@
 # Changelog
 
+## 4.0.16
+
+- Kept live Flutter applications in a reconnecting state when their control
+  bridge is temporarily unavailable, instead of misreporting them as crashed
+  or launching a duplicate application instance.
+- Added platform process reachability checks for Android, iOS simulators,
+  macOS, Linux, and Windows, while treating unavailable platform probes as
+  inconclusive rather than proof that an application exited.
+- Clarified compact session and status output with independent `ready`,
+  `appLive`, and `bridgeLive` fields, and direct safe-recovery guidance for a
+  live Android application whose bridge is blocked in the background.
+- Bounded interactive screenshot resource waits and preserved structured
+  `resourceBusy` failures so concurrent sessions fail quickly without crossing
+  project, checkout, device, or capture ownership boundaries.
+- Recognized Android ANR and application-error overlays as system-sourced
+  screenshot surfaces so AI agents can diagnose blockers outside Flutter.
+
 ## 4.0.15
 
 - Made Android development launches fail within a bounded readiness probe when

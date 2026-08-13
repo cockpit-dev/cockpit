@@ -508,6 +508,50 @@ void main() {
     expect(heartbeats, 2);
   });
 
+  test('resource client preserves a remote resource rejection', () async {
+    final harness = _PeerHarness((request, _) {
+      throw CockpitJsonRpcRemoteException(
+        CockpitJsonRpcError(
+          code: -32000,
+          message: 'Lease wait timeout expired.',
+          workerCode: CockpitErrorCode.resourceBusy,
+          details: const <String, Object?>{
+            'lease': <String, Object?>{'resourceKind': 'device'},
+          },
+        ),
+      );
+    });
+    harness.start();
+    addTearDown(harness.close);
+    final authority = CockpitRpcResourceAuthorityClient(
+      workspaceId: 'workspaceA',
+      peer: harness.client,
+    );
+
+    await expectLater(
+      authority.acquire(
+        CockpitWorkerResourceRequest(
+          resourceKind: CockpitLeaseResourceKind.device,
+          resourceId: 'deviceA',
+          wait: const Duration(seconds: 3),
+        ),
+        workspaceId: 'workspaceA',
+        holderId: 'operationA',
+        idempotencyKey: 'device-busy',
+        deadline: _deadline(),
+      ),
+      throwsA(
+        isA<CockpitWorkerResourceException>()
+            .having(
+              (error) => error.code,
+              'code',
+              CockpitErrorCode.resourceBusy,
+            )
+            .having((error) => error.details['lease'], 'lease', isNotNull),
+      ),
+    );
+  });
+
   test('does not evict in-flight idempotency entries at capacity', () async {
     final allEntered = Completer<void>();
     final release = Completer<void>();

@@ -213,6 +213,7 @@ final class CockpitWorkspaceApplicationAdapters {
       CockpitLeaseResourceKind.capture,
       idField: 'sessionId',
       includeDeviceLease: true,
+      resourceWait: _interactiveResourceWait,
     ),
     const _OperationSpec.mutate(
       'command.run',
@@ -235,6 +236,7 @@ final class CockpitWorkspaceApplicationAdapters {
       'system.action',
       'workspace.target',
       CockpitLeaseResourceKind.device,
+      resourceWait: _interactiveResourceWait,
     ),
     const _OperationSpec.mutate(
       'app.reload',
@@ -311,11 +313,13 @@ final class CockpitWorkspaceApplicationAdapters {
                         resourceKind: CockpitLeaseResourceKind.device,
                         resourceId: resourcePlan.deviceResourceId!,
                         ttl: _grantTtl(context),
+                        wait: spec.resourceWait,
                       ),
                     CockpitWorkerResourceRequest(
                       resourceKind: spec.leaseKind!,
                       resourceId: resourcePlan.primaryResourceId,
                       ttl: _grantTtl(context),
+                      wait: spec.resourceWait,
                     ),
                   ],
             execute: (grants) => _backend.execute(
@@ -353,7 +357,8 @@ final class _OperationSpec {
     : mutationClass = CockpitMutationClass.readOnly,
       leaseKind = null,
       requiresPort = false,
-      includeDeviceLease = false;
+      includeDeviceLease = false,
+      resourceWait = null;
 
   const _OperationSpec.mutate(
     this.kind,
@@ -362,6 +367,7 @@ final class _OperationSpec {
     this.idField,
     this.requiresPort = false,
     this.includeDeviceLease = false,
+    this.resourceWait,
   }) : mutationClass = CockpitMutationClass.mutating;
 
   final String kind;
@@ -371,7 +377,10 @@ final class _OperationSpec {
   final String? idField;
   final bool requiresPort;
   final bool includeDeviceLease;
+  final Duration? resourceWait;
 }
+
+const Duration _interactiveResourceWait = Duration(seconds: 3);
 
 const Set<String> _pathInputSegments = <String>{
   'path',

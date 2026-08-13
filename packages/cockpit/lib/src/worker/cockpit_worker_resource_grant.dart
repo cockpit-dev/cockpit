@@ -8,6 +8,7 @@ final class CockpitWorkerResourceRequest {
     required this.resourceId,
     this.requiresPort = false,
     this.ttl = const Duration(seconds: 30),
+    this.wait,
   }) {
     workerString(resourceId, r'$.resourceId', maximum: 512);
     if (ttl < const Duration(seconds: 1) ||
@@ -18,19 +19,40 @@ final class CockpitWorkerResourceRequest {
         resourceKind != CockpitLeaseResourceKind.forwardedPort) {
       throw const FormatException('Only a forwarded-port grant has a port.');
     }
+    if (wait case final value?
+        when value.isNegative || value > const Duration(minutes: 5)) {
+      throw const FormatException('Worker resource wait is invalid.');
+    }
   }
 
   final CockpitLeaseResourceKind resourceKind;
   final String resourceId;
   final bool requiresPort;
   final Duration ttl;
+  final Duration? wait;
 
   Map<String, Object?> toJson() => <String, Object?>{
     'resourceKind': resourceKind.name,
     'resourceId': resourceId,
     'requiresPort': requiresPort,
     'ttlMs': ttl.inMilliseconds,
+    if (wait != null) 'waitMs': wait!.inMilliseconds,
   };
+}
+
+final class CockpitWorkerResourceException implements Exception {
+  const CockpitWorkerResourceException({
+    required this.code,
+    required this.message,
+    this.details = const <String, Object?>{},
+  });
+
+  final String code;
+  final String message;
+  final Map<String, Object?> details;
+
+  @override
+  String toString() => 'CockpitWorkerResourceException($code): $message';
 }
 
 final class CockpitWorkerResourceGrant {

@@ -600,6 +600,20 @@ CockpitFailure _operationFailure(
       ),
     );
   }
+  if (error is CockpitWorkerResourceException) {
+    return CockpitFailure(
+      primary: CockpitApiError(
+        code: error.code,
+        category: CockpitErrorCategory.resource,
+        message: redactor.redact(error.message) as String,
+        retryable: error.code == CockpitErrorCode.resourceBusy,
+        responsibleLayer: CockpitResponsibleLayer.supervisor,
+        redactedDetails: Map<String, Object?>.from(
+          redactor.redact(error.details) as Map<String, Object?>,
+        ),
+      ),
+    );
+  }
   if (cancelled || error is CockpitRpcCancelledException) {
     return CockpitFailure(
       primary: CockpitApiError(

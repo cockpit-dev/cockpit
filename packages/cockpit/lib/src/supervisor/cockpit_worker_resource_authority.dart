@@ -81,6 +81,7 @@ final class CockpitLeaseWorkerResourceAuthority
         'resourceId',
         'requiresPort',
         'ttlMs',
+        'waitMs',
         'holderId',
       },
       r'$.input',
@@ -109,6 +110,14 @@ final class CockpitLeaseWorkerResourceAuthority
       input['requiresPort'],
       r'$.input.requiresPort',
     );
+    final waitMs = input['waitMs'] == null
+        ? null
+        : workerInteger(
+            input['waitMs'],
+            r'$.input.waitMs',
+            minimum: 0,
+            maximum: 300000,
+          );
     final key = invocation.idempotencyKey;
     if (key == null) {
       throw const FormatException('Resource acquisition requires idempotency.');
@@ -134,7 +143,7 @@ final class CockpitLeaseWorkerResourceAuthority
           resourceId: resourceId,
           holderId: holderId,
           idempotencyKey: key,
-          waitTimeoutMs: _waitTimeout(invocation.deadline),
+          waitTimeoutMs: _waitTimeout(invocation.deadline, requestedMs: waitMs),
           ttlMs: ttlMs,
         ),
       );
@@ -317,9 +326,14 @@ final class CockpitLeaseWorkerResourceAuthority
     return matches.single;
   }
 
-  int _waitTimeout(DateTime? deadline) {
+  int _waitTimeout(DateTime? deadline, {int? requestedMs}) {
     if (deadline == null) return 0;
-    return deadline.difference(_utcNow()).inMilliseconds.clamp(0, 300000);
+    final remaining = deadline
+        .difference(_utcNow())
+        .inMilliseconds
+        .clamp(0, 300000);
+    if (requestedMs == null) return remaining;
+    return requestedMs < remaining ? requestedMs : remaining;
   }
 
   String _newId(String prefix) =>

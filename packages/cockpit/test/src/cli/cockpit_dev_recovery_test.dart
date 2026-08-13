@@ -161,7 +161,69 @@ void main() {
     final resolved = await dev.reconcile(session, allowRelaunch: false);
 
     expect(resolved.ready, isFalse);
+    expect(resolved.session.lifecycle, 'connecting');
+    expect(
+      resolved.errors,
+      contains(containsPair('code', 'developmentSessionReconnecting')),
+    );
     expect(calls.where((kind) => kind == 'target.launch'), isEmpty);
+  });
+
+  test(
+    'reconnecting status retries the same handle instead of starting',
+    () async {
+      final dev = CockpitDevRuntime(
+        runtime,
+        operationInvoker: (_, kind, _) async =>
+            _result(kind, output: const <String, Object?>{'ok': false}),
+      );
+      runtime.configureOutput(
+        command: 'dev.status',
+        selection: const CockpitCliOutputSelection(),
+      );
+
+      final resolution = await dev.reconcile(session, allowRelaunch: false);
+      expect(
+        await dev.writeUnavailable(action: 'status', resolution: resolution),
+        cockpitTemporaryExitCode,
+      );
+
+      final output = lon.decode(stdout.toString())! as Map<Object?, Object?>;
+      expect(output['session'], int.parse(session.handleId));
+      expect(
+        output['next'],
+        'cockpit dev status --session ${session.handleId}',
+      );
+    },
+  );
+
+  test('live app with a disconnected bridge points to safe recovery', () async {
+    final dev = CockpitDevRuntime(
+      runtime,
+      operationInvoker: (_, kind, _) async => _result(
+        kind,
+        output: const <String, Object?>{
+          'status': <String, Object?>{
+            'state': 'starting',
+            'appReachable': true,
+            'remoteSessionReachable': false,
+          },
+        },
+      ),
+    );
+    runtime.configureOutput(
+      command: 'dev.status',
+      selection: const CockpitCliOutputSelection(),
+    );
+
+    final resolution = await dev.reconcile(session, allowRelaunch: false);
+    expect(
+      await dev.writeUnavailable(action: 'status', resolution: resolution),
+      cockpitTemporaryExitCode,
+    );
+
+    final output = lon.decode(stdout.toString())! as Map<Object?, Object?>;
+    expect(output['next'], 'cockpit dev recover --session ${session.handleId}');
   });
 
   test(
@@ -182,7 +244,19 @@ void main() {
               },
             );
           }
-          return _result(kind, output: const <String, Object?>{'ok': false});
+          if (kind == 'session.development.get') {
+            return _result(
+              kind,
+              output: const <String, Object?>{
+                'status': <String, Object?>{
+                  'state': 'failed',
+                  'appReachable': false,
+                  'remoteSessionReachable': false,
+                },
+              },
+            );
+          }
+          throw StateError('Unexpected operation $kind');
         },
       );
 
@@ -211,7 +285,19 @@ void main() {
       runtime,
       operationInvoker: (_, kind, _) async {
         calls.add(kind);
-        return _result(kind, output: const <String, Object?>{'ok': false});
+        if (kind == 'session.development.get') {
+          return _result(
+            kind,
+            output: const <String, Object?>{
+              'status': <String, Object?>{
+                'state': 'failed',
+                'appReachable': false,
+                'remoteSessionReachable': false,
+              },
+            },
+          );
+        }
+        throw StateError('Unexpected operation $kind');
       },
     );
 
@@ -301,7 +387,7 @@ void main() {
     expect(cockpitDevSessionRequiresStopBeforeLaunch(handle('ready')), isTrue);
     expect(
       cockpitDevSessionRequiresStopBeforeLaunch(handle('crashed')),
-      isFalse,
+      isTrue,
     );
     expect(
       cockpitDevSessionRequiresStopBeforeLaunch(handle('stopped')),
