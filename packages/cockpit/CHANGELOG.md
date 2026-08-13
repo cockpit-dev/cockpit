@@ -1,5 +1,11 @@
 # Changelog
 
+## 4.0.18
+
+- Applied exact bounded-inspection recovery to locator failures returned inside
+  completed Flutter command results, matching the real hosted development path
+  as well as operation-level failures.
+
 ## 4.0.17
 
 - Directed failed Flutter locator actions to a bounded inspection of the exact

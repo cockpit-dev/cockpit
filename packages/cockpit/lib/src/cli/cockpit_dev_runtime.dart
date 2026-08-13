@@ -1024,7 +1024,10 @@ final class CockpitDevRuntime {
     required CockpitCommand command,
     required CockpitCliSessionHandle session,
   }) {
-    final code = result.failure?.primary.code;
+    final errors = _operationErrors(<CockpitOperationResult>[result]);
+    final code = errors.isEmpty
+        ? null
+        : _firstCliFailureMap(errors.first)?['code'] as String?;
     if (!_locatorFailureCodes.contains(code) || command.locator == null) {
       return null;
     }
