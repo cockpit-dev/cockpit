@@ -45,7 +45,7 @@ final class CockpitHomeResolver {
     }
     return switch (platform) {
       CockpitHostPlatform.linux => _linuxDefault(),
-      CockpitHostPlatform.macos => p.join(
+      CockpitHostPlatform.macos => p.posix.join(
         _requiredUserHome(),
         'Library',
         'Application Support',
@@ -61,12 +61,12 @@ final class CockpitHomeResolver {
   String _linuxDefault() {
     final xdgStateHome = environment['XDG_STATE_HOME'];
     if (xdgStateHome != null && xdgStateHome.isNotEmpty) {
-      return p.join(
+      return p.posix.join(
         _absoluteNormalized(xdgStateHome, variable: 'XDG_STATE_HOME'),
         'cockpit',
       );
     }
-    return p.join(_requiredUserHome(), '.local', 'state', 'cockpit');
+    return p.posix.join(_requiredUserHome(), '.local', 'state', 'cockpit');
   }
 
   String _requiredUserHome() =>
