@@ -46,6 +46,7 @@ final class DeterministicCaseDelegate implements CockpitCaseExecutionDelegate {
   final Map<String, Completer<CockpitTestKernelOperationResult>>
   hangingActions = <String, Completer<CockpitTestKernelOperationResult>>{};
   final Map<String, Duration> actionTimeouts = <String, Duration>{};
+  final Map<String, Duration> conditionTimeouts = <String, Duration>{};
   CockpitTestError? residualError;
 
   @override
@@ -85,6 +86,7 @@ final class DeterministicCaseDelegate implements CockpitCaseExecutionDelegate {
     required CockpitCaseOperationLease lease,
   }) {
     events.add('condition:${node.stepId}:${cleanup ? 'cleanup' : 'primary'}');
+    conditionTimeouts[node.stepId] = timeout;
     final hanging = hangingConditions[node.stepId];
     if (hanging != null) return hanging.future;
     return Future<CockpitTestKernelConditionResult>.value(

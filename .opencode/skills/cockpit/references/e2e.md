@@ -121,6 +121,15 @@ Use bounded control flow only. Cleanup gets a separate `cleanupTimeoutMs` and
 individual step budgets. Do not add another pre/post DSL outside these
 canonical primitives because it would be absent from the report fact graph.
 
+`retry` always restarts its complete nested sequence. Keep non-idempotent
+mutations such as taps, submissions, saves, purchases, deletes, and navigation
+separate from their postconditions: execute the mutation once, then retry only
+read-only observation of the expected route, target, text, or state. If a
+mutation times out, observe its expected postcondition before deciding whether
+it is safe to issue again; a transport timeout does not prove that the mutation
+was not committed. In `finally`, inspect the current route or target first and
+apply only the cleanup action proven necessary by that evidence.
+
 ## Variables And Secrets
 
 Case variables may be constants, run inputs, or secret references. Use
