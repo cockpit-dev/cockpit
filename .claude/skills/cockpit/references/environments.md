@@ -104,6 +104,11 @@ adb wait-for-device
 adb shell getprop sys.boot_completed
 ```
 
+`cockpit dev start` performs this readiness check with a short bounded probe
+before Flutter build or port forwarding. If it reports missing platform tools,
+unauthorized/offline state, incomplete boot, or an unresponsive shell, repair
+that exact device and retry the same development session handle.
+
 On Linux CI, enable KVM access or use another supported hypervisor. On a
 physical device, enable Developer options and USB debugging, unlock the device,
 accept the host RSA prompt, and require `adb devices -l` to show `device`, not

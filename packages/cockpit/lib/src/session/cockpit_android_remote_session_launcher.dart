@@ -5,6 +5,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import '../remote/cockpit_android_port_forwarder.dart';
+import '../platform/android/cockpit_android_device_readiness.dart';
 import 'cockpit_flutter_launch_configuration.dart';
 import 'cockpit_remote_session_handle.dart';
 import 'cockpit_remote_session_launch_options.dart';
@@ -52,6 +53,7 @@ final class CockpitAndroidRemoteSessionLauncher
         cockpitReadActiveFlutterVersion,
     CockpitFlutterExecutableVersionReader? flutterVersionForExecutableReader,
     DateTime Function()? now,
+    CockpitAndroidDeviceProbeRunner? androidDeviceProbeRunner,
   }) : _processRunner = processRunner ?? _runProcess,
        _useKillableProcessRunner = processRunner == null,
        _portForwarder = portForwarder,
@@ -65,6 +67,9 @@ final class CockpitAndroidRemoteSessionLauncher
              processRunner: (executable, arguments) =>
                  (processRunner ?? _runProcess)(executable, arguments),
            )),
+       _androidDeviceProbeRunner =
+           androidDeviceProbeRunner ??
+           (processRunner == null ? cockpitRunProcessWithTimeout : null),
        _now = now ?? DateTime.now;
 
   final CockpitWorkingDirectoryProcessRunner _processRunner;
@@ -75,6 +80,7 @@ final class CockpitAndroidRemoteSessionLauncher
   final CockpitFlutterVersionReader _flutterVersionReader;
   final CockpitFlutterExecutableVersionReader
   _flutterVersionForExecutableReader;
+  final CockpitAndroidDeviceProbeRunner? _androidDeviceProbeRunner;
   final DateTime Function() _now;
 
   @override
@@ -88,6 +94,14 @@ final class CockpitAndroidRemoteSessionLauncher
     }
 
     final deadline = _now().add(options.launchTimeout);
+    final androidDeviceProbeRunner = _androidDeviceProbeRunner;
+    if (androidDeviceProbeRunner != null) {
+      await cockpitRequireAndroidDeviceReady(
+        deviceId: options.deviceId,
+        timeout: _capTimeout(_remaining(deadline), const Duration(seconds: 8)),
+        processRunner: androidDeviceProbeRunner,
+      );
+    }
     final flutterExecutable =
         options.flutterExecutable ?? cockpitFlutterExecutable();
     final flutterVersion = await cockpitResolveFlutterVersionForLaunch(
@@ -277,6 +291,10 @@ final class CockpitAndroidRemoteSessionLauncher
       );
     }
     return remaining;
+  }
+
+  Duration _capTimeout(Duration value, Duration max) {
+    return value < max ? value : max;
   }
 
   static Future<ProcessResult> _runProcess(

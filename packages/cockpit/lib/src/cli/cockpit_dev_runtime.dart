@@ -942,9 +942,6 @@ final class CockpitDevRuntime {
             <String, Object?>{'code': 'developmentSessionUnavailable'},
           ]
         : resolution.errors;
-    final launchOptionsRequired = errors.whereType<Map<Object?, Object?>>().any(
-      (error) => error['code'] == 'explicitRestartRequired',
-    );
     return writeEnvelope(
       action: action,
       session: resolution.session,
@@ -952,9 +949,7 @@ final class CockpitDevRuntime {
       state: resolution.state,
       changed: resolution.changed,
       errors: errors,
-      next: launchOptionsRequired || resolution.session.lifecycle == 'stopped'
-          ? 'cockpit dev start --session ${resolution.session.handleId}'
-          : 'cockpit dev restart --session ${resolution.session.handleId}',
+      next: 'cockpit dev start --session ${resolution.session.handleId}',
       failureExitCode: cockpitTemporaryExitCode,
     );
   }
