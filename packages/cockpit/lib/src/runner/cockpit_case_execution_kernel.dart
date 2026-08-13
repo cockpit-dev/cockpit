@@ -8,6 +8,9 @@ import 'cockpit_case_execution_control.dart';
 import 'cockpit_case_operation_lease.dart';
 
 const Duration _commandReturnSettlementGrace = Duration(milliseconds: 250);
+const Duration _semanticConditionTimeout = Duration(milliseconds: 500);
+const Duration _externalConditionTimeout =
+    cockpitRemoteCommandMinimumTransportTimeout;
 
 final class CockpitTestKernelOperationResult {
   const CockpitTestKernelOperationResult.success({
@@ -514,6 +517,7 @@ final class CockpitCaseExecutionKernel {
         final conditionResult = await _evaluateCondition(
           node,
           operation.condition,
+          plane: cockpitRequestedPlane(node, plan.target.plane),
           control: control,
           cleanupControl: cleanupControl,
           deadline: deadline,
@@ -580,6 +584,7 @@ final class CockpitCaseExecutionKernel {
           final conditionResult = await _evaluateCondition(
             node,
             operation.condition,
+            plane: cockpitRequestedPlane(node, plan.target.plane),
             control: control,
             cleanupControl: cleanupControl,
             deadline: deadline,
@@ -625,6 +630,7 @@ final class CockpitCaseExecutionKernel {
   Future<CockpitTestKernelConditionResult> _evaluateCondition(
     CockpitTestExecutionNode node,
     CockpitTestCondition condition, {
+    required CockpitTestPlane plane,
     required CockpitCaseExecutionControl control,
     required CockpitCaseCleanupControl? cleanupControl,
     required CockpitMonotonicDeadline deadline,
@@ -632,14 +638,15 @@ final class CockpitCaseExecutionKernel {
     if (deadline.isExpired) {
       throw const CockpitDeadlineExceeded();
     }
-    final commandTimeout = _controlConditionTimeout(deadline.remaining);
-    final probeDeadline = CockpitMonotonicDeadline.after(
-      _clock,
-      _controlConditionProbeTimeout(
-        remaining: deadline.remaining,
-        commandTimeout: commandTimeout,
-      ),
+    final commandTimeout = _controlConditionTimeout(
+      plane: plane,
+      remaining: deadline.remaining,
     );
+    final probeTimeout = _controlConditionProbeTimeout(
+      remaining: deadline.remaining,
+      commandTimeout: commandTimeout,
+    );
+    final probeDeadline = CockpitMonotonicDeadline.after(_clock, probeTimeout);
     try {
       return await _controlled(
         (lease) => _delegate.evaluateCondition(
@@ -664,11 +671,9 @@ final class CockpitCaseExecutionKernel {
             message: 'Condition probe did not return within its guard budget.',
             stepId: node.stepId,
             details: <String, Object?>{
+              'plane': plane.name,
               'commandTimeoutMs': commandTimeout.inMilliseconds,
-              'probeTimeoutMs': _controlConditionProbeTimeout(
-                remaining: deadline.remaining,
-                commandTimeout: commandTimeout,
-              ).inMilliseconds,
+              'probeTimeoutMs': probeTimeout.inMilliseconds,
             },
           ),
         ),
@@ -676,8 +681,16 @@ final class CockpitCaseExecutionKernel {
     }
   }
 
-  Duration _controlConditionTimeout(Duration remaining) {
-    const maximum = Duration(milliseconds: 500);
+  Duration _controlConditionTimeout({
+    required CockpitTestPlane plane,
+    required Duration remaining,
+  }) {
+    final maximum = switch (plane) {
+      CockpitTestPlane.semantic => _semanticConditionTimeout,
+      CockpitTestPlane.native ||
+      CockpitTestPlane.visual ||
+      CockpitTestPlane.coordinate => _externalConditionTimeout,
+    };
     return remaining < maximum ? remaining : maximum;
   }
 
@@ -685,8 +698,8 @@ final class CockpitCaseExecutionKernel {
     required Duration remaining,
     required Duration commandTimeout,
   }) {
-    const transportHeadroom = Duration(milliseconds: 4500);
-    final requested = commandTimeout + transportHeadroom;
+    final requested =
+        commandTimeout + cockpitRemoteCommandPlainTransportHeadroom;
     return requested < remaining ? requested : remaining;
   }
 

@@ -123,15 +123,150 @@ void main() {
       );
 
       await _pump();
-      clock.elapse(const Duration(seconds: 5));
+      expect(
+        delegate.conditionTimeouts['stalledIf'],
+        const Duration(milliseconds: 500),
+      );
+      clock.elapse(const Duration(milliseconds: 6500));
       final result = await future;
 
       expect(result.primaryError?.code, CockpitTestErrorCode.conditionError);
-      expect(clock.elapsed, const Duration(seconds: 5));
+      expect(clock.elapsed, const Duration(milliseconds: 6500));
       expect(delegate.events, isNot(contains('action:stalledThen:primary')));
       expect(delegate.events, isNot(contains('action:stalledElse:primary')));
     },
   );
+
+  test('condition probe timeout follows the requested plane', () async {
+    final clock = ManualCockpitClock();
+    final delegate = DeterministicCaseDelegate()
+      ..conditionResults.addAll(
+        List<CockpitTestKernelConditionResult>.filled(
+          5,
+          const CockpitTestKernelConditionResult(
+            evaluation: CockpitTestConditionEvaluation.matched(),
+          ),
+        ),
+      );
+    final recorder = CockpitTestAttemptRecorder(clock: clock);
+    final result = await _kernel(clock, delegate, recorder).run(
+      plan: testExecutionPlan(
+        steps: <CockpitTestExecutionNode>[
+          _ifNode('semanticIf', 'semanticThen', 'semanticElse'),
+          _controlNode(
+            'nativeIf',
+            CockpitTestIfPlanOperation(
+              condition: _visibleCondition(),
+              thenSteps: const <CockpitTestExecutionNode>[],
+              elseSteps: const <CockpitTestExecutionNode>[],
+            ),
+            plane: CockpitTestPlane.native,
+            timeoutMs: 30000,
+          ),
+          _controlNode(
+            'visualIf',
+            CockpitTestIfPlanOperation(
+              condition: _visibleCondition(),
+              thenSteps: const <CockpitTestExecutionNode>[],
+              elseSteps: const <CockpitTestExecutionNode>[],
+            ),
+            plane: CockpitTestPlane.visual,
+            timeoutMs: 30000,
+          ),
+          _controlNode(
+            'coordinateIf',
+            CockpitTestIfPlanOperation(
+              condition: _visibleCondition(),
+              thenSteps: const <CockpitTestExecutionNode>[],
+              elseSteps: const <CockpitTestExecutionNode>[],
+            ),
+            plane: CockpitTestPlane.coordinate,
+            timeoutMs: 30000,
+          ),
+          _controlNode(
+            'boundedNativeIf',
+            CockpitTestIfPlanOperation(
+              condition: _visibleCondition(),
+              thenSteps: const <CockpitTestExecutionNode>[],
+              elseSteps: const <CockpitTestExecutionNode>[],
+            ),
+            plane: CockpitTestPlane.native,
+            timeoutMs: 8000,
+          ),
+        ],
+      ),
+      control: CockpitCaseExecutionControl(),
+    );
+
+    expect(result.outcome, CockpitTestOutcome.passed);
+    expect(
+      delegate.conditionTimeouts,
+      containsPair('semanticIf', const Duration(milliseconds: 500)),
+    );
+    for (final id in <String>['nativeIf', 'visualIf', 'coordinateIf']) {
+      expect(
+        delegate.conditionTimeouts,
+        containsPair(id, const Duration(seconds: 15)),
+      );
+    }
+    expect(
+      delegate.conditionTimeouts,
+      containsPair('boundedNativeIf', const Duration(seconds: 8)),
+    );
+  });
+
+  test('stalled native condition remains bounded by its guard', () async {
+    final clock = ManualCockpitClock();
+    final delegate = DeterministicCaseDelegate();
+    delegate.hangingConditions['stalledNativeIf'] =
+        Completer<CockpitTestKernelConditionResult>();
+    final recorder = CockpitTestAttemptRecorder(clock: clock);
+    final future = _kernel(clock, delegate, recorder).run(
+      plan: testExecutionPlan(
+        steps: <CockpitTestExecutionNode>[
+          _controlNode(
+            'stalledNativeIf',
+            CockpitTestIfPlanOperation(
+              condition: _visibleCondition(),
+              thenSteps: <CockpitTestExecutionNode>[
+                actionNode('stalledNativeThen', 'main'),
+              ],
+              elseSteps: <CockpitTestExecutionNode>[
+                actionNode('stalledNativeElse', 'main'),
+              ],
+            ),
+            plane: CockpitTestPlane.native,
+            timeoutMs: 30000,
+          ),
+        ],
+      ),
+      control: CockpitCaseExecutionControl(),
+    );
+
+    await _pump();
+    expect(
+      delegate.conditionTimeouts['stalledNativeIf'],
+      const Duration(seconds: 15),
+    );
+    clock.elapse(const Duration(seconds: 21));
+    final result = await future;
+
+    expect(result.primaryError?.code, CockpitTestErrorCode.conditionError);
+    expect(result.primaryError?.details, <String, Object?>{
+      'plane': 'native',
+      'commandTimeoutMs': 15000,
+      'probeTimeoutMs': 21000,
+    });
+    expect(clock.elapsed, const Duration(seconds: 21));
+    expect(
+      delegate.events,
+      isNot(contains('action:stalledNativeThen:primary')),
+    );
+    expect(
+      delegate.events,
+      isNot(contains('action:stalledNativeElse:primary')),
+    );
+  });
 
   test(
     'action timeout result wins after the logical command deadline',
@@ -383,11 +518,13 @@ CockpitTestExecutionNode _loopNode() => _controlNode(
 CockpitTestExecutionNode _controlNode(
   String id,
   CockpitTestPlanOperation operation, {
+  CockpitTestPlane? plane,
   int timeoutMs = 1000,
 }) => CockpitTestExecutionNode(
   stepId: id,
   executionId: 'main/$id',
   section: 'main',
+  plane: plane,
   timeoutMs: timeoutMs,
   evidence: const CockpitTestEvidencePolicy(
     screenshot: CockpitTestEvidenceMode.none,

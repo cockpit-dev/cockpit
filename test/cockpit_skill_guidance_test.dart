@@ -284,6 +284,19 @@ void main() {
     );
   });
 
+  test('skill keeps E2E mutation retries state-safe', () {
+    final guidance = read('${_skillRoots.first}/references/e2e.md');
+
+    for (final contract in <String>[
+      '`retry` always restarts its complete nested sequence',
+      'execute the mutation once, then retry only\nread-only observation',
+      'a transport timeout does not prove that the mutation\nwas not committed',
+      'inspect the current route or target first',
+    ]) {
+      expect(guidance, contains(contract), reason: contract);
+    }
+  });
+
   test('skill includes an executable Flutter development-shell workflow', () {
     final flutter = read('${_skillRoots.first}/references/flutter.md');
 

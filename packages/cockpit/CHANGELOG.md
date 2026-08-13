@@ -16,6 +16,10 @@
   recovery changed application state.
 - Verified macOS activation reaches the foreground instead of treating an
   accepted activation request as completed recovery.
+- Gave native, visual, and coordinate E2E condition probes enough bounded time
+  for platform tree reads while preserving the fast Flutter semantic path.
+- Kept native and mixed-plane acceptance retries from replaying mutations that
+  already reached their expected UI state.
 
 ## 4.0.12
 
