@@ -912,25 +912,17 @@ void main() {
               },
             );
           }
-          final now = DateTime.utc(2026, 8, 13);
-          return CockpitOperationResult(
-            operationId: 'operation-command-failed',
-            kind: kind,
-            workspaceId: 'workspace-1',
-            lifecycle: CockpitOperationLifecycle.completed,
-            outcome: CockpitOperationOutcome.failed,
-            submittedAt: now,
-            startedAt: now,
-            finishedAt: now,
-            failure: CockpitFailure(
-              primary: CockpitApiError(
-                code: CockpitCommandError.unsupportedCapabilityCode,
-                category: CockpitErrorCategory.locator,
-                message: 'The matched text is not actionable.',
-                retryable: false,
-                responsibleLayer: CockpitResponsibleLayer.application,
-              ),
-            ),
+          return _result(
+            kind,
+            output: const <String, Object?>{
+              'command': <String, Object?>{
+                'success': false,
+                'error': <String, Object?>{
+                  'code': CockpitCommandError.targetNotFoundCode,
+                  'message': 'No visible target matched the locator.',
+                },
+              },
+            },
           );
         },
       );

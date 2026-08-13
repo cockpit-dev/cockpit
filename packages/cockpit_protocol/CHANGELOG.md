@@ -1,5 +1,9 @@
 # Changelog
 
+## 4.0.18
+
+- Synchronized the public protocol package with the current Cockpit release.
+
 ## 4.0.17
 
 - Synchronized the public protocol package with the current Cockpit release.
