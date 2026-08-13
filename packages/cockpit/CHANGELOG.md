@@ -1,5 +1,17 @@
 # Changelog
 
+## 4.0.20
+
+- Kept Skill refresh guidance AI-ready and token-efficient: `cockpit skill`
+  prints one complete installation/update prompt, release checks return the
+  executable update step, and completed updates point to `cockpit skill`.
+- Preserved unknown platform-app reachability instead of reporting an offline
+  or unavailable device as a stopped Flutter application, and direct agents to
+  target discovery rather than repeated status polling.
+- Included up to four mounted actionable targets in default zero-match Flutter
+  inspection output, eliminating an extra diagnostic command while keeping
+  successful inspection output unchanged.
+
 ## 4.0.19
 
 - Added `cockpit skill` to print one stable prompt and authoritative path for

@@ -93,6 +93,7 @@ final class CockpitDevRuntime {
         );
       }
       if (resolved.lifecycle == 'connecting') {
+        final reachability = _appReachability(queried.output);
         return CockpitDevSessionResolution(
           session: resolved,
           ready: false,
@@ -100,12 +101,17 @@ final class CockpitDevRuntime {
               ? 'reconnected'
               : 'none',
           state: queried.output,
-          errors: const <Object?>[
+          errors: <Object?>[
             <String, Object?>{
-              'code': 'developmentSessionReconnecting',
-              'message':
-                  'The Flutter application has not been proven stopped; '
-                  'Cockpit is reconnecting its control bridge.',
+              'code': reachability == null
+                  ? 'developmentTargetUnavailable'
+                  : 'developmentSessionReconnecting',
+              'message': reachability == null
+                  ? 'The selected device or platform target is unavailable; '
+                        'Cockpit cannot determine whether the Flutter '
+                        'application is still running.'
+                  : 'The Flutter application is running while Cockpit '
+                        'reconnects its control bridge.',
               'retryable': true,
             },
           ],
@@ -163,12 +169,12 @@ final class CockpitDevRuntime {
         state == 'ready' &&
         statusMap?['appReachable'] == true &&
         statusMap?['remoteSessionReachable'] == true;
-    final appReachable = statusMap?['appReachable'] == true;
+    final appReachable = statusMap?['appReachable'];
     final lifecycle = ready
         ? 'ready'
         : state == 'stopped'
         ? 'stopped'
-        : state == 'failed' && !appReachable
+        : appReachable == false
         ? 'crashed'
         : 'connecting';
     final sessionId = output?['sessionId'] as String? ?? previous.sessionId;
@@ -1023,7 +1029,20 @@ final class CockpitDevRuntime {
         statusMap?['remoteSessionReachable'] == false) {
       return 'cockpit dev recover --session $handle';
     }
+    if (statusMap?.containsKey('appReachable') == true &&
+        statusMap?['appReachable'] == null) {
+      return 'cockpit target discover';
+    }
     return 'cockpit dev status --session $handle';
+  }
+
+  bool? _appReachability(Map<String, Object?>? output) {
+    final status = output?['status'];
+    if (status is! Map<Object?, Object?> ||
+        !status.containsKey('appReachable')) {
+      return null;
+    }
+    return status['appReachable'] as bool?;
   }
 
   String? _commandFailureNext({

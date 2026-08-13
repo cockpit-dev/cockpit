@@ -1468,17 +1468,24 @@ Map<String, Object?> _compactDevInspect(
 }) {
   final summary = state['uiSummary'];
   if (summary is! Map<Object?, Object?>) {
+    final count = state['count'];
     return more
         ? Map<String, Object?>.from(state)
-        : _pick(state, const <String>[
-            'route',
-            'query',
-            'count',
-            'targets',
-            'matches',
-            'more',
-            'partial',
-          ]);
+        : <String, Object?>{
+            ..._pick(state, const <String>[
+              'route',
+              'query',
+              'count',
+              'targets',
+              'matches',
+              'more',
+              'partial',
+            ]),
+            if (count == 0 && state['mounted'] is List<Object?>)
+              'mounted': (state['mounted']! as List<Object?>)
+                  .take(4)
+                  .toList(growable: false),
+          };
   }
   final runtimeErrorCount = summary['runtimeErrorCount'];
   final networkFailureCount = summary['networkFailureCount'];

@@ -63,6 +63,10 @@ final class CockpitQueryDevelopmentSessionService {
   }
 
   String _recommendedNextStep(CockpitDevelopmentSessionStatus status) {
+    if (status.state == CockpitDevelopmentSessionState.starting &&
+        status.appReachable == null) {
+      return 'discover_platform_target';
+    }
     return switch (status.state) {
       CockpitDevelopmentSessionState.ready => 'ready_for_incremental_probe',
       CockpitDevelopmentSessionState.starting ||

@@ -49,10 +49,7 @@ CockpitLeafCommand cockpitUpdateCommand(
         timeout: runtime.remainingTimeout,
         onProgress: runtime.progress,
       );
-      await runtime.success(<String, Object?>{
-        ...result.toJson(),
-        'skill': 'cockpit skill',
-      });
+      await runtime.success(result.toJson());
       return cockpitSuccessExitCode;
     } on CockpitUpdateException catch (error) {
       runtime.error(

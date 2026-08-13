@@ -119,6 +119,9 @@ Inspect the returned screenshot path with the host's local image tool when
 available. On Android/iOS, a system-sourced capture may reveal an OS prompt that
 cannot appear in the Flutter tree. Use `cockpit dev diagnose --view more`
 only when status, screenshot, and bounded inspection do not explain the blocker.
+If status returns `developmentTargetUnavailable`, do not poll status: run its
+`next`, normally `cockpit target discover`, and restore or select the intended
+device before reusing the same session handle.
 
 If a timed-out mutation already produced the expected anchor, treat it as committed
 and continue without repeating it. If the screen does not belong to the intended app,
@@ -275,7 +278,7 @@ confirm an already-known action. If an action returns `unsupportedCapability`,
 nearby control owns passive text. Run the exact `next` command once; it performs
 a bounded inspect of the same query. Copy the returned actionable `sel` and retry
 the original action once. If bounded inspect returns `count:0`, use its current
-`route` and bounded `mounted` targets to identify a wrong route or visible blocker;
+`route` and default bounded `mounted` targets to identify a wrong route or visible blocker;
 do not repeat the missing locator or load a full tree. Capture the current screen
 only when those mounted targets do not explain the state.
 For ambiguity or exploration, run the smallest `dev inspect QUERY`. It

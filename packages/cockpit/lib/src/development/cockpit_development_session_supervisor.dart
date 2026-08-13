@@ -68,7 +68,7 @@ final class CockpitDevelopmentSessionSupervisor {
        _status = CockpitDevelopmentSessionStatus(
          developmentSessionId: initialHandle.developmentSessionId,
          state: CockpitDevelopmentSessionState.starting,
-         appReachable: false,
+         appReachable: null,
          remoteSessionReachable: false,
          reloadGeneration: initialHandle.reloadGeneration,
          lastStatusAt: (now ?? DateTime.now)().toUtc(),
@@ -178,8 +178,23 @@ final class CockpitDevelopmentSessionSupervisor {
 
   Future<CockpitDevelopmentSessionStatus> refreshAppReachability() async {
     final reachable = await _probeAppReachability();
-    if (reachable == true && !_status.appReachable) {
-      _setStatus(_status.copyWith(appReachable: true));
+    final resolved =
+        _status.state == CockpitDevelopmentSessionState.ready &&
+            _status.remoteSessionReachable
+        ? true
+        : reachable;
+    final exited = resolved == false && !_status.remoteSessionReachable;
+    if (resolved != _status.appReachable ||
+        (exited && _status.state != CockpitDevelopmentSessionState.failed)) {
+      _setStatus(
+        _status.copyWith(
+          state: exited ? CockpitDevelopmentSessionState.failed : _status.state,
+          appReachable: resolved,
+          lastError: exited
+              ? 'Application process is not running.'
+              : _status.lastError,
+        ),
+      );
     }
     return _status;
   }
@@ -301,7 +316,7 @@ final class CockpitDevelopmentSessionSupervisor {
       _log('reload failed mode=${mode.jsonValue} error=$error');
       final appStillReady =
           machineClient.lastExitCode == null &&
-          _status.appReachable &&
+          _status.appReachable == true &&
           _status.remoteSessionReachable;
       _setStatus(
         _status.copyWith(
@@ -558,7 +573,7 @@ final class CockpitDevelopmentSessionSupervisor {
             : appExited
             ? CockpitDevelopmentSessionState.failed
             : CockpitDevelopmentSessionState.starting,
-        appReachable: ready || appReachable,
+        appReachable: ready ? true : appReachability,
         remoteSessionReachable: remoteReachable,
         reloadGeneration: _handle.reloadGeneration,
         lastReloadMode: lastReloadMode ?? _status.lastReloadMode,

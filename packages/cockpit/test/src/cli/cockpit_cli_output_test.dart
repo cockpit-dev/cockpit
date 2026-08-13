@@ -378,6 +378,62 @@ void main() {
     expect(value['bridgeLive'], isFalse);
   });
 
+  test('dev status brief omits unknown app reachability', () {
+    const renderer = CockpitCliOutputRenderer();
+    final value =
+        lon.decode(
+              renderer.renderAi(
+                command: 'dev.status',
+                data: const <String, Object?>{
+                  'action': 'status',
+                  'session': '9',
+                  'state': <String, Object?>{
+                    'status': <String, Object?>{
+                      'state': 'starting',
+                      'appReachable': null,
+                      'remoteSessionReachable': false,
+                    },
+                  },
+                },
+                view: CockpitCliOutputView.brief,
+              ),
+            )!
+            as Map<Object?, Object?>;
+
+    expect(value, isNot(contains('appLive')));
+    expect(value['bridgeLive'], isFalse);
+  });
+
+  test('dev inspect brief keeps bounded mounted context only on a miss', () {
+    const renderer = CockpitCliOutputRenderer();
+    final value =
+        lon.decode(
+              renderer.renderAi(
+                command: 'dev.inspect',
+                data: const <String, Object?>{
+                  'action': 'inspect',
+                  'session': '5',
+                  'state': <String, Object?>{
+                    'route': '/editor',
+                    'query': 'missing',
+                    'count': 0,
+                    'matches': <Object?>[],
+                    'mounted': <Object?>[
+                      <String, Object?>{'sel': '@title', 'can': 'tap|type'},
+                      <String, Object?>{'sel': 'Save', 'can': 'tap'},
+                    ],
+                    'partial': true,
+                  },
+                },
+                view: CockpitCliOutputView.brief,
+              ),
+            )!
+            as Map<Object?, Object?>;
+
+    expect(value['count'], 0);
+    expect(value['mounted'], hasLength(2));
+  });
+
   test('dev status does not invent diagnostics that were not collected', () {
     const renderer = CockpitCliOutputRenderer();
 

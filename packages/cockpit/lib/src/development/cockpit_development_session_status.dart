@@ -59,7 +59,12 @@ final class CockpitDevelopmentSessionStatus {
 
   final String developmentSessionId;
   final CockpitDevelopmentSessionState state;
-  final bool appReachable;
+
+  /// Whether the platform application process is currently reachable.
+  ///
+  /// `null` means the selected device or platform target could not be probed;
+  /// it must not be treated as proof that the application exited.
+  final bool? appReachable;
   final bool remoteSessionReachable;
   final int reloadGeneration;
   final CockpitDevelopmentReloadMode? lastReloadMode;
@@ -83,7 +88,7 @@ final class CockpitDevelopmentSessionStatus {
     return CockpitDevelopmentSessionStatus(
       developmentSessionId: json['developmentSessionId']! as String,
       state: CockpitDevelopmentSessionState.fromJson(json['state']),
-      appReachable: json['appReachable'] as bool? ?? false,
+      appReachable: json['appReachable'] as bool?,
       remoteSessionReachable: json['remoteSessionReachable'] as bool? ?? false,
       reloadGeneration: json['reloadGeneration'] as int? ?? 0,
       lastReloadMode: json['lastReloadMode'] == null
@@ -98,7 +103,7 @@ final class CockpitDevelopmentSessionStatus {
   CockpitDevelopmentSessionStatus copyWith({
     String? developmentSessionId,
     CockpitDevelopmentSessionState? state,
-    bool? appReachable,
+    Object? appReachable = _cockpitUnsetField,
     bool? remoteSessionReachable,
     int? reloadGeneration,
     Object? lastReloadMode = _cockpitUnsetField,
@@ -109,7 +114,9 @@ final class CockpitDevelopmentSessionStatus {
     return CockpitDevelopmentSessionStatus(
       developmentSessionId: developmentSessionId ?? this.developmentSessionId,
       state: state ?? this.state,
-      appReachable: appReachable ?? this.appReachable,
+      appReachable: identical(appReachable, _cockpitUnsetField)
+          ? this.appReachable
+          : appReachable as bool?,
       remoteSessionReachable:
           remoteSessionReachable ?? this.remoteSessionReachable,
       reloadGeneration: reloadGeneration ?? this.reloadGeneration,

@@ -1,4 +1,4 @@
-const String cockpitVersion = '4.0.19';
+const String cockpitVersion = '4.0.20';
 const String cockpitBuildId = String.fromEnvironment(
   'COCKPIT_BUILD_ID',
   defaultValue: cockpitVersion,

@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:cockpit/src/cli/cockpit_cli_runtime.dart';
 import 'package:cockpit/src/cli/cockpit_command_runner.dart';
+import 'package:cockpit/src/cli/cockpit_update_service.dart';
 import 'package:cockpit/src/application/cockpit_ui_locator_advisor.dart';
 import 'package:cockpit/src/cli/commands/dev_interaction_commands.dart';
 import 'package:cockpit/src/cli/commands/skill_command.dart';
@@ -195,20 +196,34 @@ void main() {
 
     expect(exitCode, cockpitSuccessExitCode);
     expect(runner.commands, contains('skill'));
-    expect(stdout.toString(), contains(cockpitSkillPrompt));
-    expect(stdout.toString(), contains(cockpitSkillInstallUrl));
+    expect(stdout.toString(), '{prompt:"$cockpitSkillPrompt"}\n');
+    expect(cockpitSkillPrompt, contains(cockpitSkillInstallUrl));
   });
 
-  test('update exposes a side-effect-free version check', () {
-    final runner = CockpitCommandRunner(
-      runtime: CockpitCliRuntime(
-        stdoutSink: StringBuffer(),
-        stderrSink: StringBuffer(),
-      ),
-    );
+  test(
+    'update checks for a release and returns the executable next step',
+    () async {
+      final stdout = StringBuffer();
+      final runner = CockpitCommandRunner(
+        runtime: CockpitCliRuntime(
+          stdoutSink: stdout,
+          stderrSink: StringBuffer(),
+        ),
+        updateService: CockpitUpdateService(
+          latestVersionLookup: (_) async => '99.0.0',
+        ),
+      );
 
-    expect(runner.commands['update']!.argParser.options, contains('check'));
-  });
+      final exitCode = await runner.run(const <String>['update', '--check']);
+
+      expect(exitCode, cockpitSuccessExitCode);
+      expect(runner.commands['update']!.argParser.options, contains('check'));
+      expect(
+        stdout.toString(),
+        '{version:$cockpitVersion latest:99.0.0 next:"cockpit update"}\n',
+      );
+    },
+  );
 
   test('update exposes one bounded runtime upgrade command', () {
     final runner = CockpitCommandRunner(

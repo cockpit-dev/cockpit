@@ -42,6 +42,7 @@ final class CockpitUpdateResult {
     'updated': previousVersion != version,
     if (previousVersion != version) 'previous': previousVersion,
     'supervisor': 'ready',
+    'next': 'cockpit skill',
   };
 }
 

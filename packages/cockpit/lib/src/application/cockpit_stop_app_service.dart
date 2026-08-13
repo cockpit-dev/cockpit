@@ -72,7 +72,7 @@ final class CockpitAppStopStatus {
 
   final CockpitAppMode mode;
   final String state;
-  final bool appReachable;
+  final bool? appReachable;
   final bool remoteSessionReachable;
   final String? lastError;
 
