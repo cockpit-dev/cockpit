@@ -1,5 +1,12 @@
 # Changelog
 
+## 4.0.24
+
+- Kept direct Cupertino discovery while preventing type-only container matches
+  from suppressing their real actionable descendants.
+- Preserved public semantics-owned slider and dropdown targets without relying
+  on a global interactive-widget type boundary.
+
 ## 4.0.23
 
 - Added direct, semantics-independent discovery and control for public

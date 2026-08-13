@@ -1,24 +1,52 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_cockpit/flutter_cockpit_flutter.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  testWidgets('material preset recognizes standard Material controls', (
+  testWidgets('default policy does not create type-based action boundaries', (
     tester,
   ) async {
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
-          body: FilledButton(onPressed: () {}, child: const Text('Create')),
+          body: ListTile(onTap: () {}, title: const Text('Open task')),
         ),
       ),
     );
     await tester.pump();
 
-    final element = tester.element(find.byType(FilledButton));
+    final element = tester.element(find.byType(ListTile));
+
+    expect(
+      const CockpitDiscoveryPolicy().matchesInteractiveWidget(element),
+      isFalse,
+    );
+  });
+
+  testWidgets('material preset recognizes standard Flutter controls', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Column(
+            children: <Widget>[
+              FilledButton(onPressed: () {}, child: const Text('Create')),
+              CupertinoButton(onPressed: () {}, child: const Text('Continue')),
+            ],
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final materialElement = tester.element(find.byType(FilledButton));
+    final cupertinoElement = tester.element(find.byType(CupertinoButton));
     final policy = CockpitDiscoveryPolicy.material();
 
-    expect(policy.matchesInteractiveWidget(element), isTrue);
+    expect(policy.matchesInteractiveWidget(materialElement), isTrue);
+    expect(policy.matchesInteractiveWidget(cupertinoElement), isTrue);
   });
 
   testWidgets('copyWith extends discovery behavior without dropping preset', (
