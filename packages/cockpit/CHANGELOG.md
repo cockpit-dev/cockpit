@@ -22,6 +22,8 @@
   already reached their expected UI state.
 - Retried one transient Windows directory-authority probe and preserved
   native filesystem diagnostics instead of misclassifying failures as success.
+- Made Linux and macOS home resolution use target-platform path semantics even
+  when Cockpit runs on a Windows host.
 
 ## 4.0.12
 
