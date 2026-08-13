@@ -48,6 +48,32 @@ void main() {
       expect(result.recommendedNextStep, 'ready_for_incremental_probe');
     },
   );
+
+  test(
+    'query service directs unknown platform reachability to discovery',
+    () async {
+      final handle = _handle();
+      final service = CockpitQueryDevelopmentSessionService(
+        statusReader: (_) async => CockpitDevelopmentSessionSupervisorResponse(
+          status: CockpitDevelopmentSessionStatus(
+            developmentSessionId: handle.developmentSessionId,
+            state: CockpitDevelopmentSessionState.starting,
+            appReachable: null,
+            remoteSessionReachable: false,
+            reloadGeneration: handle.reloadGeneration,
+            lastStatusAt: DateTime.utc(2026, 8, 14),
+          ),
+          sessionHandle: handle,
+        ),
+      );
+
+      final result = await service.query(
+        CockpitQueryDevelopmentSessionRequest(sessionHandle: handle),
+      );
+
+      expect(result.recommendedNextStep, 'discover_platform_target');
+    },
+  );
 }
 
 CockpitDevelopmentSessionHandle _handle() {

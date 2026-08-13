@@ -205,6 +205,7 @@ void main() {
       'version': '3.0.7',
       'updated': false,
       'supervisor': 'ready',
+      'next': 'cockpit skill',
     });
     expect(lookups, 1);
     expect(calls, hasLength(1));
@@ -547,6 +548,7 @@ void main() {
       'updated': true,
       'previous': '3.0.6',
       'supervisor': 'ready',
+      'next': 'cockpit skill',
     });
     expect(calls, hasLength(6));
     expect(calls[0], <String>[

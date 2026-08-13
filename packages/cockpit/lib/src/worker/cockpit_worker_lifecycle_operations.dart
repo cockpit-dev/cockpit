@@ -991,14 +991,20 @@ final class CockpitWorkerLifecycleOperations {
 
   String _recommendedDevelopmentNextStep(
     CockpitDevelopmentSessionStatus status,
-  ) => switch (status.state) {
-    CockpitDevelopmentSessionState.ready => 'ready_for_incremental_probe',
-    CockpitDevelopmentSessionState.starting ||
-    CockpitDevelopmentSessionState.reloading ||
-    CockpitDevelopmentSessionState.restarting => 'wait_for_ready',
-    CockpitDevelopmentSessionState.stopped => 'launch_development_session',
-    CockpitDevelopmentSessionState.failed => 'relaunch_development_session',
-  };
+  ) {
+    if (status.state == CockpitDevelopmentSessionState.starting &&
+        status.appReachable == null) {
+      return 'discover_platform_target';
+    }
+    return switch (status.state) {
+      CockpitDevelopmentSessionState.ready => 'ready_for_incremental_probe',
+      CockpitDevelopmentSessionState.starting ||
+      CockpitDevelopmentSessionState.reloading ||
+      CockpitDevelopmentSessionState.restarting => 'wait_for_ready',
+      CockpitDevelopmentSessionState.stopped => 'launch_development_session',
+      CockpitDevelopmentSessionState.failed => 'relaunch_development_session',
+    };
+  }
 
   CockpitDevelopmentSessionHandle _developmentHandle(
     CockpitWorkerSessionBinding session,

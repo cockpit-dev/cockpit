@@ -14,10 +14,7 @@ CockpitLeafCommand cockpitSkillCommand(CockpitCliRuntime runtime) =>
       name: 'skill',
       description: 'Show the AI prompt to install or update the Cockpit Skill.',
       action: (_) async {
-        await runtime.success(<String, Object?>{
-          'prompt': cockpitSkillPrompt,
-          'docs': cockpitSkillInstallUrl,
-        });
+        await runtime.success(<String, Object?>{'prompt': cockpitSkillPrompt});
         return cockpitSuccessExitCode;
       },
     );

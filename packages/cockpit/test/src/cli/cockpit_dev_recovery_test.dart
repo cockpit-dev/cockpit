@@ -197,6 +197,44 @@ void main() {
     },
   );
 
+  test(
+    'unavailable platform target does not recommend status polling',
+    () async {
+      final dev = CockpitDevRuntime(
+        runtime,
+        operationInvoker: (_, kind, _) async => _result(
+          kind,
+          output: const <String, Object?>{
+            'status': <String, Object?>{
+              'state': 'starting',
+              'appReachable': null,
+              'remoteSessionReachable': false,
+            },
+          },
+        ),
+      );
+      runtime.configureOutput(
+        command: 'dev.status',
+        selection: const CockpitCliOutputSelection(),
+      );
+
+      final resolution = await dev.reconcile(session, allowRelaunch: false);
+      expect(
+        resolution.errors,
+        contains(containsPair('code', 'developmentTargetUnavailable')),
+      );
+      expect(
+        await dev.writeUnavailable(action: 'status', resolution: resolution),
+        cockpitTemporaryExitCode,
+      );
+
+      final output = lon.decode(stdout.toString())! as Map<Object?, Object?>;
+      expect(output, isNot(contains('appLive')));
+      expect(output['bridgeLive'], isFalse);
+      expect(output['next'], 'cockpit target discover');
+    },
+  );
+
   test('live app with a disconnected bridge points to safe recovery', () async {
     final dev = CockpitDevRuntime(
       runtime,

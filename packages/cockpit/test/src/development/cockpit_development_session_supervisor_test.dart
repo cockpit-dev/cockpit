@@ -574,6 +574,61 @@ void main() {
     },
   );
 
+  test('settle timeout preserves inconclusive platform reachability', () async {
+    final harness = _MachineHarness();
+    addTearDown(harness.dispose);
+
+    var now = DateTime.utc(2026, 8, 13);
+    final supervisor = CockpitDevelopmentSessionSupervisor(
+      initialHandle: harness.handle,
+      machineClient: null,
+      remoteReachabilityProbe: (_) async => false,
+      appReachabilityProbe: (_) async => null,
+      now: () {
+        final current = now;
+        now = now.add(const Duration(milliseconds: 250));
+        return current;
+      },
+      settleTimeout: const Duration(seconds: 1),
+      settlePollInterval: const Duration(milliseconds: 1),
+      bindControlPlane: false,
+    );
+    addTearDown(supervisor.dispose);
+
+    await supervisor.start();
+    await supervisor.bindRemoteSession(harness.handle.remoteSessionHandle!);
+    await supervisor.waitForStartupRecovery();
+    final status = await supervisor.currentStatus();
+
+    expect(status.state, CockpitDevelopmentSessionState.starting);
+    expect(status.appReachable, isNull);
+    expect(status.remoteSessionReachable, isFalse);
+    expect(
+      status.lastError,
+      'Cockpit bridge is reconnecting; application reachability is not confirmed.',
+    );
+  });
+
+  test('refresh reachability marks a confirmed exited app failed', () async {
+    final harness = _MachineHarness();
+    addTearDown(harness.dispose);
+    final supervisor = CockpitDevelopmentSessionSupervisor(
+      initialHandle: harness.handle,
+      machineClient: null,
+      remoteReachabilityProbe: (_) async => false,
+      appReachabilityProbe: (_) async => false,
+      bindControlPlane: false,
+    );
+    addTearDown(supervisor.dispose);
+
+    await supervisor.start();
+    final status = await supervisor.refreshAppReachability();
+
+    expect(status.state, CockpitDevelopmentSessionState.failed);
+    expect(status.appReachable, isFalse);
+    expect(status.lastError, 'Application process is not running.');
+  });
+
   test(
     'web hot restart reports ready after remote reachability recovers',
     () async {
