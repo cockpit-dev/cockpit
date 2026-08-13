@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -343,6 +344,107 @@ void main() {
     expect(result.success, isTrue, reason: result.error?.message);
     expect(result.changed, isTrue);
     expect(selected, isTrue);
+  });
+
+  testWidgets('tap reports a CupertinoSwitch mutation as changed', (
+    tester,
+  ) async {
+    var enabled = false;
+
+    await tester.pumpWidget(
+      CockpitSurface(
+        routeName: '/settings',
+        child: CupertinoApp(
+          home: CupertinoPageScaffold(
+            child: StatefulBuilder(
+              builder: (context, setState) => CupertinoSwitch(
+                key: const ValueKey<String>('notifications'),
+                value: enabled,
+                onChanged: (value) => setState(() => enabled = value),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final surfaceState = tester.state<CockpitSurfaceState>(
+      find.byType(CockpitSurface),
+    );
+    final executor = InAppCockpitCommandExecutor(
+      registry: surfaceState.registry,
+      waitTickHandler: tester.pump,
+    );
+    final result = await executor.execute(
+      CockpitCommand(
+        commandId: 'enable-notifications',
+        commandType: CockpitCommandType.tap,
+        locator: const CockpitLocator(key: 'notifications'),
+      ),
+    );
+    await tester.pump();
+
+    expect(result.success, isTrue, reason: result.error?.message);
+    expect(result.changed, isTrue);
+    expect(enabled, isTrue);
+  });
+
+  testWidgets('tap reports only real Cupertino segmented selection changes', (
+    tester,
+  ) async {
+    var selected = 0;
+
+    await tester.pumpWidget(
+      CockpitSurface(
+        routeName: '/settings',
+        child: CupertinoApp(
+          home: CupertinoPageScaffold(
+            child: StatefulBuilder(
+              builder: (context, setState) =>
+                  CupertinoSlidingSegmentedControl<int>(
+                    key: const ValueKey<String>('layout-mode'),
+                    children: const <int, Widget>{
+                      0: Text('Grid'),
+                      1: Text('List'),
+                    },
+                    groupValue: selected,
+                    onValueChanged: (value) =>
+                        setState(() => selected = value ?? selected),
+                  ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final surfaceState = tester.state<CockpitSurfaceState>(
+      find.byType(CockpitSurface),
+    );
+    final executor = InAppCockpitCommandExecutor(
+      registry: surfaceState.registry,
+      waitTickHandler: tester.pump,
+    );
+    Future<CockpitCommandResult> selectList(String commandId) async {
+      return executor.execute(
+        CockpitCommand(
+          commandId: commandId,
+          commandType: CockpitCommandType.tap,
+          locator: const CockpitLocator(text: 'List'),
+        ),
+      );
+    }
+
+    final first = await selectList('select-list');
+    expect(first.success, isTrue, reason: first.error?.message);
+    expect(first.changed, isTrue);
+    expect(selected, 1);
+
+    final repeated = await selectList('select-list-again');
+    expect(repeated.success, isTrue, reason: repeated.error?.message);
+    expect(repeated.changed, isNull);
+    expect(selected, 1);
   });
 
   test('executes tap against a target located by cockpitId', () async {

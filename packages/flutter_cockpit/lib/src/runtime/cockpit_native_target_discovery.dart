@@ -1,5 +1,6 @@
 // ignore_for_file: deprecated_member_use
 
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 
@@ -233,7 +234,9 @@ final class CockpitNativeTargetDiscovery {
     final deduplicated = <CockpitTarget>[];
     for (final target in targets) {
       final duplicateIndex = deduplicated.indexWhere(
-        (existing) => _isDuplicatePassiveTarget(existing, target),
+        (existing) =>
+            _isDuplicatePassiveTarget(existing, target) ||
+            _isDuplicateCupertinoSegmentTarget(existing, target),
       );
       if (duplicateIndex == -1) {
         deduplicated.add(target);
@@ -245,6 +248,75 @@ final class CockpitNativeTargetDiscovery {
       );
     }
     return deduplicated;
+  }
+
+  bool _isDuplicateCupertinoSegmentTarget(
+    CockpitTarget left,
+    CockpitTarget right,
+  ) {
+    if (left.typeName != 'CupertinoSegment' ||
+        right.typeName != 'CupertinoSegment' ||
+        left.routeName != right.routeName ||
+        !_sameNonEmptySignal(left.text, right.text)) {
+      return false;
+    }
+    final leftControl = _cupertinoSegmentAncestor(left);
+    final rightControl = _cupertinoSegmentAncestor(right);
+    if (leftControl == null || rightControl == null) {
+      return false;
+    }
+    if (leftControl.keyValue != rightControl.keyValue ||
+        leftControl.path != rightControl.path) {
+      return false;
+    }
+    final leftElement = left.diagnosticNodeProvider?.call();
+    final rightElement = right.diagnosticNodeProvider?.call();
+    if (leftElement is Element &&
+        rightElement is Element &&
+        _areRelatedElements(leftElement, rightElement)) {
+      return true;
+    }
+    final leftGeometry = CockpitTargetGeometryResolver.maybeFromTarget(left);
+    final rightGeometry = CockpitTargetGeometryResolver.maybeFromTarget(right);
+    if (leftGeometry == null || rightGeometry == null) {
+      return false;
+    }
+    final leftRect = Rect.fromLTWH(
+      leftGeometry.left,
+      leftGeometry.top,
+      leftGeometry.width,
+      leftGeometry.height,
+    );
+    final rightRect = Rect.fromLTWH(
+      rightGeometry.left,
+      rightGeometry.top,
+      rightGeometry.width,
+      rightGeometry.height,
+    );
+    final intersection = leftRect.intersect(rightRect);
+    if (intersection.isEmpty) {
+      return false;
+    }
+    final leftArea = (leftRect.width * leftRect.height).clamp(
+      1.0,
+      double.infinity,
+    );
+    final rightArea = (rightRect.width * rightRect.height).clamp(
+      1.0,
+      double.infinity,
+    );
+    final smallerArea = leftArea < rightArea ? leftArea : rightArea;
+    return intersection.width * intersection.height >= smallerArea * 0.9;
+  }
+
+  CockpitSnapshotAncestor? _cupertinoSegmentAncestor(CockpitTarget target) {
+    for (final ancestor in target.locatorAncestors.reversed) {
+      if (ancestor.typeName.startsWith('CupertinoSegmentedControl') ||
+          ancestor.typeName.startsWith('CupertinoSlidingSegmentedControl')) {
+        return ancestor;
+      }
+    }
+    return null;
   }
 
   bool _isDuplicatePassiveTarget(CockpitTarget left, CockpitTarget right) {
@@ -537,7 +609,7 @@ final class CockpitNativeTargetDiscovery {
       },
       if (semantics != null) ...semantics.supportedCommands,
     };
-    final typeName = _publicTypeNameForWidget(element.widget);
+    final typeName = _publicTypeNameForElement(element);
 
     if (insideActionableTarget) {
       return null;
@@ -1070,7 +1142,7 @@ final class CockpitNativeTargetDiscovery {
   ) {
     final widget = element.widget;
     final typeName = widget.runtimeType.toString();
-    if (typeName.startsWith('_')) {
+    if (typeName.startsWith('_') || _isFrameworkMirroredKeyedSubtree(widget)) {
       return true;
     }
     if (widget is InheritedWidget ||
@@ -1097,10 +1169,24 @@ final class CockpitNativeTargetDiscovery {
     return semantics != null;
   }
 
+  bool _isFrameworkMirroredKeyedSubtree(Widget widget) {
+    if (widget is! KeyedSubtree) {
+      return false;
+    }
+    final key = widget.key;
+    return key is ValueKey<Object?> && key.value is Key;
+  }
+
   CockpitTapHandler? _tapHandlerForElement(Element element) {
     final customHandler = policy.tapHandlerForElement?.call(element);
     if (customHandler != null) {
       return customHandler;
+    }
+    final cupertinoSegmentHandler = _cupertinoSegmentTapHandlerForElement(
+      element,
+    );
+    if (cupertinoSegmentHandler != null) {
+      return cupertinoSegmentHandler;
     }
     final widget = element.widget;
     if (widget is ButtonStyleButton) {
@@ -1123,6 +1209,12 @@ final class CockpitNativeTargetDiscovery {
     }
     if (widget is ActionChip) {
       return widget.onPressed;
+    }
+    if (widget is CupertinoButton) {
+      return widget.onPressed;
+    }
+    if (widget is CupertinoListTile) {
+      return widget.onTap;
     }
     if (widget is ChoiceChip && widget.onSelected != null) {
       return () => widget.onSelected!.call(!widget.selected);
@@ -1154,6 +1246,14 @@ final class CockpitNativeTargetDiscovery {
     if (widget is SwitchListTile && widget.onChanged != null) {
       return () => widget.onChanged!.call(!widget.value);
     }
+    if (widget is CupertinoCheckbox && widget.onChanged != null) {
+      return () => widget.onChanged!.call(
+        _nextCheckboxValue(widget.value, tristate: widget.tristate),
+      );
+    }
+    if (widget is CupertinoSwitch && widget.onChanged != null) {
+      return () => widget.onChanged!.call(!widget.value);
+    }
     if (widget is Radio) {
       // Reading the generic ValueChanged<T?> through Radio<dynamic> trips
       // Dart's covariant-generics soundness check, so go through dynamic.
@@ -1172,12 +1272,83 @@ final class CockpitNativeTargetDiscovery {
         toggleable: widget.toggleable,
       );
     }
+    if (widget is CupertinoRadio) {
+      return _radioTapHandler(
+        onChanged: (widget as dynamic).onChanged as Function?,
+        value: widget.value,
+        groupValue: widget.groupValue,
+        toggleable: widget.toggleable,
+      );
+    }
     final editableState = _editableTextStateForElement(element);
     if (editableState != null) {
       final state = editableState;
       return () => state.widget.focusNode.requestFocus();
     }
     return null;
+  }
+
+  CockpitTapHandler? _cupertinoSegmentTapHandlerForElement(Element element) {
+    final control = _cupertinoSegmentControlAncestor(element);
+    if (control == null) {
+      return null;
+    }
+    final controlWidget = control.widget;
+    final children = switch (controlWidget) {
+      CupertinoSegmentedControl(:final children) => children,
+      CupertinoSlidingSegmentedControl(:final children) => children,
+      _ => const <Object, Widget>{},
+    };
+    final matches = children.entries
+        .where((entry) => _elementContainsWidget(element, entry.value))
+        .toList(growable: false);
+    if (matches.length != 1) {
+      return null;
+    }
+    final value = matches.single.key;
+    if (controlWidget is CupertinoSegmentedControl) {
+      if (controlWidget.disabledChildren.contains(value)) {
+        return null;
+      }
+      final callback = (controlWidget as dynamic).onValueChanged as Function;
+      return () {
+        if (controlWidget.groupValue != value) {
+          Function.apply(callback, <Object?>[value]);
+        }
+      };
+    }
+    if (controlWidget is CupertinoSlidingSegmentedControl) {
+      if (controlWidget.disabledChildren.contains(value)) {
+        return null;
+      }
+      final callback = (controlWidget as dynamic).onValueChanged as Function;
+      return () {
+        if (controlWidget.groupValue != value) {
+          Function.apply(callback, <Object?>[value]);
+        }
+      };
+    }
+    return null;
+  }
+
+  bool _elementContainsWidget(Element element, Widget widget) {
+    if (identical(element.widget, widget)) {
+      return true;
+    }
+    var found = false;
+    void visit(Element child) {
+      if (found || !child.mounted) {
+        return;
+      }
+      if (identical(child.widget, widget)) {
+        found = true;
+        return;
+      }
+      child.visitChildElements(visit);
+    }
+
+    element.visitChildElements(visit);
+    return found;
   }
 
   bool? _nextCheckboxValue(bool? value, {required bool tristate}) {
@@ -1304,6 +1475,9 @@ final class CockpitNativeTargetDiscovery {
     if (widget is ListTile) {
       return widget.onLongPress;
     }
+    if (widget is CupertinoButton) {
+      return widget.onLongPress;
+    }
     return null;
   }
 
@@ -1330,6 +1504,8 @@ final class CockpitNativeTargetDiscovery {
     final widget = element.widget;
     if (widget is! TextField &&
         widget is! TextFormField &&
+        widget is! CupertinoTextField &&
+        widget is! CupertinoSearchTextField &&
         widget is! EditableText) {
       return null;
     }
@@ -1461,6 +1637,20 @@ final class CockpitNativeTargetDiscovery {
             : widget.initialValue,
       );
     }
+    if (widget is CupertinoTextField) {
+      return _normalizeReadableText(
+        widget.controller?.text.isNotEmpty == true
+            ? widget.controller?.text
+            : widget.placeholder,
+      );
+    }
+    if (widget is CupertinoSearchTextField) {
+      return _normalizeReadableText(
+        widget.controller?.text.isNotEmpty == true
+            ? widget.controller?.text
+            : widget.placeholder ?? 'Search',
+      );
+    }
     return null;
   }
 
@@ -1487,6 +1677,12 @@ final class CockpitNativeTargetDiscovery {
       return _normalizeText(
         widget.decoration?.labelText ?? widget.decoration?.hintText,
       );
+    }
+    if (widget is CupertinoTextField) {
+      return _normalizeText(widget.placeholder);
+    }
+    if (widget is CupertinoSearchTextField) {
+      return _normalizeText(widget.placeholder ?? 'Search');
     }
     return null;
   }
@@ -1670,7 +1866,8 @@ final class CockpitNativeTargetDiscovery {
     return null;
   }
 
-  String _publicTypeNameForWidget(Widget widget) {
+  String _publicTypeNameForElement(Element element) {
+    final widget = element.widget;
     if (widget is TextButton) {
       return 'TextButton';
     }
@@ -1698,6 +1895,12 @@ final class CockpitNativeTargetDiscovery {
     if (widget is ActionChip) {
       return 'ActionChip';
     }
+    if (widget is CupertinoButton) {
+      return 'CupertinoButton';
+    }
+    if (widget is CupertinoListTile) {
+      return 'CupertinoListTile';
+    }
     if (widget is ChoiceChip) {
       return 'ChoiceChip';
     }
@@ -1719,6 +1922,33 @@ final class CockpitNativeTargetDiscovery {
     if (widget is Switch) {
       return 'Switch';
     }
+    if (widget is CupertinoCheckbox) {
+      return 'CupertinoCheckbox';
+    }
+    if (widget is CupertinoSwitch) {
+      return 'CupertinoSwitch';
+    }
+    if (widget is CupertinoRadio) {
+      return 'CupertinoRadio';
+    }
+    if (widget is CupertinoSlider) {
+      return 'CupertinoSlider';
+    }
+    if (widget is CupertinoTextField) {
+      return 'CupertinoTextField';
+    }
+    if (widget is CupertinoSearchTextField) {
+      return 'CupertinoSearchTextField';
+    }
+    if (widget is CupertinoSegmentedControl) {
+      return 'CupertinoSegmentedControl';
+    }
+    if (widget is CupertinoSlidingSegmentedControl) {
+      return 'CupertinoSlidingSegmentedControl';
+    }
+    if (_cupertinoSegmentControlAncestor(element) != null) {
+      return 'CupertinoSegment';
+    }
     if (widget is TextField) {
       return 'TextField';
     }
@@ -1729,6 +1959,20 @@ final class CockpitNativeTargetDiscovery {
       return 'EditableText';
     }
     return widget.runtimeType.toString();
+  }
+
+  Element? _cupertinoSegmentControlAncestor(Element element) {
+    Element? result;
+    element.visitAncestorElements((ancestor) {
+      final widget = ancestor.widget;
+      if (widget is CupertinoSegmentedControl ||
+          widget is CupertinoSlidingSegmentedControl) {
+        result = ancestor;
+        return false;
+      }
+      return true;
+    });
+    return result;
   }
 
   String? _collectDescendantText(Element element) {

@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
 import 'cockpit_target.dart';
@@ -48,9 +49,7 @@ final class CockpitDiscoveryPolicy {
     CockpitTextInputHandlerResolver? textInputHandlerForElement,
   }) {
     return CockpitDiscoveryPolicy(
-      isInteractiveWidget: (element) =>
-          _matchesMaterialInteractiveWidget(element) ||
-          (isInteractiveWidget?.call(element) ?? false),
+      isInteractiveWidget: isInteractiveWidget,
       shouldStopTraversal: shouldStopTraversal,
       isIgnoredSubtree: isIgnoredSubtree,
       isScrollableBoundary: isScrollableBoundary,
@@ -117,7 +116,8 @@ final class CockpitDiscoveryPolicy {
   }
 
   bool matchesInteractiveWidget(Element element) {
-    return isInteractiveWidget?.call(element) ?? false;
+    return _matchesStandardFlutterInteractiveWidget(element) ||
+        (isInteractiveWidget?.call(element) ?? false);
   }
 
   bool stopsTraversal(Element element) {
@@ -133,7 +133,7 @@ final class CockpitDiscoveryPolicy {
   }
 }
 
-bool _matchesMaterialInteractiveWidget(Element element) {
+bool _matchesStandardFlutterInteractiveWidget(Element element) {
   final widget = element.widget;
   return widget is ButtonStyleButton ||
       widget is IconButton ||
@@ -151,10 +151,24 @@ bool _matchesMaterialInteractiveWidget(Element element) {
       widget is SwitchListTile ||
       widget is Radio ||
       widget is RadioListTile ||
+      widget is Slider ||
+      widget is RangeSlider ||
+      widget is ToggleButtons ||
+      widget is SegmentedButton<Object?> ||
       widget is TextField ||
       widget is TextFormField ||
       widget is EditableText ||
       widget is PopupMenuButton<Object?> ||
       widget is DropdownButton<Object?> ||
-      widget is DropdownButtonFormField<Object?>;
+      widget is DropdownButtonFormField<Object?> ||
+      widget is CupertinoButton ||
+      widget is CupertinoListTile ||
+      widget is CupertinoCheckbox ||
+      widget is CupertinoSwitch ||
+      widget is CupertinoRadio<Object?> ||
+      widget is CupertinoSlider ||
+      widget is CupertinoTextField ||
+      widget is CupertinoSearchTextField ||
+      widget is CupertinoSegmentedControl<Object> ||
+      widget is CupertinoSlidingSegmentedControl<Object>;
 }

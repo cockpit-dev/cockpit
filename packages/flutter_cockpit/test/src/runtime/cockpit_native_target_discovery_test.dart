@@ -1,8 +1,165 @@
+// ignore_for_file: deprecated_member_use
+
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_cockpit/flutter_cockpit_flutter.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  testWidgets(
+    'discovers public Cupertino controls without internal target noise',
+    (tester) async {
+      var checked = false;
+      var toggled = false;
+      var selectedRadio = 0;
+      var selectedSegment = 0;
+      var selectedSlidingSegment = 0;
+      final controller = TextEditingController();
+      addTearDown(controller.dispose);
+
+      await tester.pumpWidget(
+        CockpitSurface(
+          routeName: '/cupertino',
+          child: CupertinoApp(
+            home: CupertinoPageScaffold(
+              child: StatefulBuilder(
+                builder: (context, setState) => ListView(
+                  children: <Widget>[
+                    CupertinoButton(
+                      key: const ValueKey<String>('continue'),
+                      onPressed: () {},
+                      child: const Text('Continue'),
+                    ),
+                    CupertinoListTile(
+                      key: const ValueKey<String>('settings'),
+                      title: const Text('Settings'),
+                      onTap: () {},
+                    ),
+                    CupertinoCheckbox(
+                      key: const ValueKey<String>('checked'),
+                      value: checked,
+                      onChanged: (value) =>
+                          setState(() => checked = value ?? false),
+                    ),
+                    CupertinoSwitch(
+                      key: const ValueKey<String>('enabled'),
+                      value: toggled,
+                      onChanged: (value) => setState(() => toggled = value),
+                    ),
+                    CupertinoRadio<int>(
+                      key: const ValueKey<String>('radio-editor'),
+                      value: 1,
+                      groupValue: selectedRadio,
+                      onChanged: (value) =>
+                          setState(() => selectedRadio = value ?? 0),
+                    ),
+                    CupertinoTextField(
+                      key: const ValueKey<String>('message'),
+                      controller: controller,
+                      placeholder: 'Message',
+                    ),
+                    CupertinoSlider(
+                      key: const ValueKey<String>('volume'),
+                      value: 0.25,
+                      onChanged: (_) {},
+                    ),
+                    CupertinoSegmentedControl<int>(
+                      key: const ValueKey<String>('display-mode'),
+                      children: const <int, Widget>{
+                        0: Text('One'),
+                        1: Text('Two'),
+                      },
+                      groupValue: selectedSegment,
+                      onValueChanged: (value) =>
+                          setState(() => selectedSegment = value),
+                    ),
+                    CupertinoSlidingSegmentedControl<int>(
+                      key: const ValueKey<String>('layout-mode'),
+                      children: const <int, Widget>{
+                        0: Text('Grid'),
+                        1: Text('List'),
+                      },
+                      groupValue: selectedSlidingSegment,
+                      onValueChanged: (value) =>
+                          setState(() => selectedSlidingSegment = value ?? 0),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final state = tester.state<CockpitSurfaceState>(
+        find.byType(CockpitSurface),
+      );
+      CockpitTarget targetForKey(String key) {
+        final resolution = state.registry.resolve(CockpitLocator(key: key));
+        expect(resolution.isSuccess, isTrue, reason: resolution.error?.message);
+        return resolution.target!;
+      }
+
+      expect(targetForKey('continue').typeName, 'CupertinoButton');
+      expect(targetForKey('settings').typeName, 'CupertinoListTile');
+      expect(targetForKey('checked').typeName, 'CupertinoCheckbox');
+      expect(targetForKey('enabled').typeName, 'CupertinoSwitch');
+      expect(targetForKey('radio-editor').typeName, 'CupertinoRadio');
+      final input = targetForKey('message');
+      expect(input.typeName, 'CupertinoTextField');
+      expect(input.supportedCommands, contains(CockpitCommandType.enterText));
+      expect(targetForKey('volume').typeName, 'CupertinoSlider');
+      expect(
+        targetForKey('volume').supportedCommands,
+        containsAll(<CockpitCommandType>[
+          CockpitCommandType.increase,
+          CockpitCommandType.decrease,
+        ]),
+      );
+
+      input.onEnterText?.call('Hello');
+      targetForKey('checked').onTap?.call();
+      targetForKey('enabled').onTap?.call();
+      targetForKey('radio-editor').onTap?.call();
+      state.registry
+          .resolve(const CockpitLocator(text: 'Two'))
+          .target!
+          .onTap
+          ?.call();
+      state.registry
+          .resolve(const CockpitLocator(text: 'List'))
+          .target!
+          .onTap
+          ?.call();
+      await tester.pumpAndSettle();
+
+      expect(controller.text, 'Hello');
+      expect(checked, isTrue);
+      expect(toggled, isTrue);
+      expect(selectedRadio, 1);
+      expect(selectedSegment, 1);
+      expect(selectedSlidingSegment, 1);
+      expect(
+        state.registry.visibleTargets
+            .where((target) => target.typeName == 'CupertinoSegment')
+            .map((target) => target.text),
+        containsAllInOrder(<String>['One', 'Two', 'Grid', 'List']),
+      );
+      expect(
+        state.registry.visibleTargets,
+        isNot(
+          contains(
+            predicate<CockpitTarget>((target) {
+              final key = target.keyValue;
+              return key != null && key.startsWith("[<'");
+            }),
+          ),
+        ),
+      );
+    },
+  );
+
   testWidgets('discovers enterText support for a keyed TextField', (
     tester,
   ) async {
