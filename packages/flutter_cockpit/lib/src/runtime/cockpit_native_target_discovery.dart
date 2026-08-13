@@ -1107,6 +1107,9 @@ final class CockpitNativeTargetDiscovery {
     if (policy.matchesInteractiveWidget(element)) {
       return false;
     }
+    if (_ownsSupportedSemanticsActions(widget, semantics)) {
+      return false;
+    }
     // RadioGroup-managed radios expose activation only through semantics, so
     // keep the public widget addressable instead of deferring to internals.
     if (widget is Radio || widget is RadioListTile) {
@@ -1133,6 +1136,27 @@ final class CockpitNativeTargetDiscovery {
     ].where((value) => value != null && value.isNotEmpty);
 
     return selfSignals.isEmpty;
+  }
+
+  bool _ownsSupportedSemanticsActions(
+    Widget widget,
+    CockpitSemanticsTargetInfo? semantics,
+  ) {
+    if (semantics == null) {
+      return false;
+    }
+    if (widget is Slider ||
+        widget is RangeSlider ||
+        widget is CupertinoSlider) {
+      return semantics.supports(SemanticsAction.increase) ||
+          semantics.supports(SemanticsAction.decrease);
+    }
+    if (widget is PopupMenuButton<Object?> ||
+        widget is DropdownButton<Object?> ||
+        widget is DropdownButtonFormField<Object?>) {
+      return semantics.supports(SemanticsAction.tap);
+    }
+    return false;
   }
 
   bool _shouldDeferPassiveCandidate(

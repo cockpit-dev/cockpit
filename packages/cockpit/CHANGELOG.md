@@ -1,5 +1,10 @@
 # Changelog
 
+## 4.0.24
+
+- Restored reliable Flutter locator and action discovery for nested controls
+  while retaining direct Cupertino support.
+
 ## 4.0.23
 
 - Added complete direct Flutter control for public Cupertino widgets without

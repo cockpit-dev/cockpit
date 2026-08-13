@@ -49,7 +49,9 @@ final class CockpitDiscoveryPolicy {
     CockpitTextInputHandlerResolver? textInputHandlerForElement,
   }) {
     return CockpitDiscoveryPolicy(
-      isInteractiveWidget: isInteractiveWidget,
+      isInteractiveWidget: (element) =>
+          _matchesStandardFlutterInteractiveWidget(element) ||
+          (isInteractiveWidget?.call(element) ?? false),
       shouldStopTraversal: shouldStopTraversal,
       isIgnoredSubtree: isIgnoredSubtree,
       isScrollableBoundary: isScrollableBoundary,
@@ -116,8 +118,7 @@ final class CockpitDiscoveryPolicy {
   }
 
   bool matchesInteractiveWidget(Element element) {
-    return _matchesStandardFlutterInteractiveWidget(element) ||
-        (isInteractiveWidget?.call(element) ?? false);
+    return isInteractiveWidget?.call(element) ?? false;
   }
 
   bool stopsTraversal(Element element) {

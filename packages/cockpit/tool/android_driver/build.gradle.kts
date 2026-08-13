@@ -10,8 +10,8 @@ android {
         applicationId = "dev.cockpit.driver"
         minSdk = 24
         targetSdk = 36
-        versionCode = 9
-        versionName = "4.0.23"
+        versionCode = 10
+        versionName = "4.0.24"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
