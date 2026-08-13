@@ -1,5 +1,10 @@
 # Changelog
 
+## 4.0.22
+
+- Report successful Flutter selection and value mutations as `changed:true`
+  without adding control state to the default compact output.
+
 ## 4.0.21
 
 - Report successful Flutter text mutations as `changed:true` even when the
