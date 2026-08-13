@@ -762,6 +762,11 @@ final class CockpitDevRuntime {
         result: result,
         state: result.output,
         changed: null,
+        nextOnFailure: _commandFailureNext(
+          result: result,
+          command: command,
+          session: session,
+        ),
       );
     }
     return writeEnvelope(
@@ -1014,6 +1019,20 @@ final class CockpitDevRuntime {
     return 'cockpit dev status --session $handle';
   }
 
+  String? _commandFailureNext({
+    required CockpitOperationResult result,
+    required CockpitCommand command,
+    required CockpitCliSessionHandle session,
+  }) {
+    final code = result.failure?.primary.code;
+    if (!_locatorFailureCodes.contains(code) || command.locator == null) {
+      return null;
+    }
+    final selector = CockpitSelector.format(command.locator!);
+    return 'cockpit dev inspect ${_shellArgument(selector)} '
+        '--session ${session.handleId}';
+  }
+
   Future<int> writeOperation({
     required String action,
     required CockpitCliSessionHandle session,
@@ -1087,6 +1106,21 @@ final class CockpitDevRuntime {
     capturePolicy: CockpitCapturePolicy.onFailure,
     timeoutMs: (timeout ?? runtime.commandTimeout).inMilliseconds,
   );
+}
+
+const Set<String?> _locatorFailureCodes = <String?>{
+  CockpitCommandError.targetNotFoundCode,
+  CockpitCommandError.ambiguousTargetCode,
+  CockpitCommandError.unsupportedCapabilityCode,
+  CockpitCommandError.targetNotHittableCode,
+  CockpitErrorCode.locatorNotFound,
+};
+
+String _shellArgument(String value) {
+  if (Platform.isWindows) {
+    return "'${value.replaceAll("'", "''")}'";
+  }
+  return "'${value.replaceAll("'", "'\"'\"'")}'";
 }
 
 Map<String, Object?> _devSystemActionState(Map<String, Object?>? output) =>

@@ -1,5 +1,13 @@
 # Changelog
 
+## 4.0.17
+
+- Directed failed Flutter locator actions to a bounded inspection of the exact
+  selector so agents can copy a verified actionable target instead of loading
+  broad diagnostics or guessing a nearby control.
+- Clarified the bundled agent skill so passive text is never implicitly mapped
+  to an adjacent action and the original mutation is retried at most once.
+
 ## 4.0.16
 
 - Kept live Flutter applications in a reconnecting state when their control
