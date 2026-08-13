@@ -736,6 +736,8 @@ final class CockpitWorkerInteractiveOperations {
         metadata: <String, Object?>{
           if (target.registration.wdaUrl != null)
             'wdaUrl': target.registration.wdaUrl,
+          if (target.registration.cdpUrl != null)
+            'cdpUrl': target.registration.cdpUrl,
         },
       ),
     );
@@ -964,6 +966,8 @@ final class CockpitWorkerInteractiveOperations {
           metadata: <String, Object?>{
             if (target.registration.wdaUrl != null)
               'wdaUrl': target.registration.wdaUrl,
+            if (target.registration.cdpUrl != null)
+              'cdpUrl': target.registration.cdpUrl,
           },
           action: action,
           parameters: preparedParameters.parameters,

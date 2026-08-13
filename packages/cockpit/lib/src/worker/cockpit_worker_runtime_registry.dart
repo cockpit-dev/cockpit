@@ -70,6 +70,7 @@ final class CockpitWorkerTargetRegistration {
     this.flavor,
     this.appId,
     this.wdaUrl,
+    this.cdpUrl,
     this.targetKind = CockpitTargetKind.flutterApp,
     this.mode = CockpitAppMode.development,
     this.environment = CockpitTestTargetEnvironment.unknown,
@@ -83,6 +84,7 @@ final class CockpitWorkerTargetRegistration {
   final String? flavor;
   final String? appId;
   final String? wdaUrl;
+  final String? cdpUrl;
   final CockpitTargetKind targetKind;
   final CockpitAppMode mode;
   final CockpitTestTargetEnvironment environment;
@@ -1237,6 +1239,8 @@ final class CockpitWorkerRuntimeRegistry
       metadata: <String, Object?>{
         if (binding.registration.wdaUrl != null)
           'wdaUrl': binding.registration.wdaUrl,
+        if (binding.registration.cdpUrl != null)
+          'cdpUrl': binding.registration.cdpUrl,
       },
     );
     final automation = CockpitSystemTestAutomationAdapter(
@@ -1327,6 +1331,8 @@ final class CockpitWorkerRuntimeRegistry
         metadata: <String, Object?>{
           if (candidate.registration.wdaUrl != null)
             'wdaUrl': candidate.registration.wdaUrl,
+          if (candidate.registration.cdpUrl != null)
+            'cdpUrl': candidate.registration.cdpUrl,
         },
       );
       final automation = CockpitSystemTestAutomationAdapter(
@@ -1713,6 +1719,18 @@ final class CockpitWorkerRuntimeRegistry
         throw const CockpitApplicationServiceException(
           code: 'targetWdaUrlInvalid',
           message: 'Target wdaUrl must be an absolute HTTP(S) URL.',
+        );
+      }
+    }
+    if (registration.cdpUrl case final cdpUrl?) {
+      workerString(cdpUrl, r'$.cdpUrl', maximum: 2048);
+      final uri = Uri.tryParse(cdpUrl);
+      if (uri == null ||
+          !const <String>{'http', 'https', 'ws', 'wss'}.contains(uri.scheme) ||
+          uri.host.isEmpty) {
+        throw const CockpitApplicationServiceException(
+          code: 'targetCdpUrlInvalid',
+          message: 'Target cdpUrl must be an absolute HTTP(S) or WS(S) URL.',
         );
       }
     }
@@ -2349,6 +2367,7 @@ final class CockpitWorkerRuntimeRegistry
           'flavor',
           'appId',
           'wdaUrl',
+          'cdpUrl',
           'targetKind',
           'mode',
           'environment',
@@ -2401,6 +2420,11 @@ final class CockpitWorkerRuntimeRegistry
         wdaUrl: _optionalString(
           registrationJson['wdaUrl'],
           '$path.registration.wdaUrl',
+          maximum: 2048,
+        ),
+        cdpUrl: _optionalString(
+          registrationJson['cdpUrl'],
+          '$path.registration.cdpUrl',
           maximum: 2048,
         ),
         targetKind: CockpitTargetKind.fromJson(
@@ -3303,6 +3327,8 @@ Map<String, Object?> _encodeTarget(
     if (binding.registration.appId != null) 'appId': binding.registration.appId,
     if (binding.registration.wdaUrl != null)
       'wdaUrl': binding.registration.wdaUrl,
+    if (binding.registration.cdpUrl != null)
+      'cdpUrl': binding.registration.cdpUrl,
     'targetKind': binding.registration.targetKind.name,
     'mode': binding.registration.mode.jsonValue,
     'environment': binding.registration.environment.name,
@@ -3366,9 +3392,8 @@ const Set<String> _targetResourceKinds = <String>{
 };
 
 bool _targetKindRequiresAppId(CockpitTargetKind kind) => switch (kind) {
-  CockpitTargetKind.nativeApp ||
-  CockpitTargetKind.desktopApp ||
-  CockpitTargetKind.browserPage => true,
+  CockpitTargetKind.nativeApp || CockpitTargetKind.desktopApp => true,
+  CockpitTargetKind.browserPage ||
   CockpitTargetKind.systemSurface ||
   CockpitTargetKind.device ||
   CockpitTargetKind.hostWorkspace ||

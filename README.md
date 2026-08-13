@@ -284,6 +284,11 @@ iOS UI interaction uses a reachable WebDriverAgent endpoint. Physical iOS
 installation and lifecycle use `devicectl` where available. Cockpit reports
 unsupported or unavailable capabilities explicitly.
 
+Linux desktop tree inspection uses the active AT-SPI accessibility bus.
+Generic Chromium black-box pages use an explicitly registered `--cdp-url`;
+Flutter Web development still prefers the in-app Flutter tree. Cockpit never
+scans a default debugging port or attaches to an unrelated browser profile.
+
 For an installed Flutter app or a native app embedding Flutter, register
 `targetKind: flutterApp` with an `appId` and no entrypoint, then author the case
 on the `native` plane. Cockpit launches it through system control and drives the

@@ -36,6 +36,36 @@ void main() {
     expect(result.node?.textValues, contains('Save'));
   });
 
+  test('resolves normalized Chromium DOM nodes with the same locator', () {
+    final dom = CockpitNativeUiSnapshot.parse('''
+{"tree":{"role":"html","type":"html","frame":{"x":0,"y":0,"width":800,"height":600},"visible":true,"enabled":true,"children":[{"role":"main","type":"main","name":"Message form","frame":{"x":20,"y":20,"width":400,"height":100},"visible":true,"enabled":true,"children":[{"role":"button","type":"button","text":"Send","id":"send","testid":"send-button","frame":{"x":200,"y":40,"width":80,"height":40},"visible":true,"enabled":true,"clickable":true,"children":[]}] }]}}
+''');
+
+    final result = dom.resolve(
+      CockpitTestLocator(
+        text: 'Send',
+        nativeId: 'send',
+        testId: 'send-button',
+        role: 'button',
+        enabled: true,
+        clickable: true,
+        ancestor: CockpitTestLocator(label: 'Message form'),
+      ),
+    );
+
+    expect(result.found, isTrue);
+    expect(result.centerX, 240);
+    expect(result.centerY, 60);
+  });
+
+  test('normalizes native role separators for cross-platform locators', () {
+    final linux = CockpitNativeUiSnapshot.parse('''
+{"tree":{"role":"check box","frame":{"x":0,"y":0,"width":120,"height":40},"visible":true,"enabled":true,"children":[]}}
+''');
+
+    expect(linux.resolve(CockpitTestLocator(role: 'checkbox')).found, isTrue);
+  });
+
   test('resolves direct child and descendant constraints', () {
     final result = snapshot.resolve(
       CockpitTestLocator(

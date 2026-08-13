@@ -245,6 +245,9 @@ permission change; do not infer success from the Settings toggle alone.
 Native desktop control needs an active display. X11 supports common Cockpit
 tooling directly; native Wayland security may restrict global tree/input and
 capture, so use an advertised portal/driver or an isolated X11/Xvfb CI session.
+AT-SPI tree inspection additionally requires the desktop accessibility bus;
+Cockpit probes it at runtime and reports the tree capability blocked when the
+bus or target application is not reachable.
 
 Typical Debian/Ubuntu dependencies include `xvfb`, `x11-utils`, `xdotool`,
 `ffmpeg`, GTK development/runtime libraries, `clang`, `cmake`, `ninja-build`,
@@ -284,6 +287,25 @@ headed interaction needs a display server. Treat browser-driver, origin,
 certificate, popup, download, and sandbox restrictions as environment facts.
 Do not substitute coordinate clicks when the requested browser/semantic
 capability is unavailable unless the target explicitly advertises that plane.
+
+Flutter Web development keeps using the in-app Flutter Element/RenderObject
+bridge. Generic Chromium pages need an automation-owned browser and an explicit
+`--cdp-url`. An HTTP(S) endpoint is accepted only when it exposes one page;
+otherwise pass the selected page's `ws://.../devtools/page/...` URL. Cockpit
+never scans a default debugging port or attaches to another browser profile.
+Safari, Firefox, and unreachable endpoints remain blocked.
+
+```bash
+cockpit target register \
+  --workspace-id <workspaceId> \
+  --platform web \
+  --device-id chrome \
+  --target-kind browserPage \
+  --cdp-url ws://127.0.0.1:<port>/devtools/page/<pageId> \
+  --environment test \
+  --mode automation \
+  --idempotency-key web-target-001
+```
 
 ## Parallel Projects And Devices
 

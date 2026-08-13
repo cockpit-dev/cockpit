@@ -790,6 +790,7 @@ final class CockpitSystemTestAutomationAdapter
           'durationMs': command.parameters['durationMs'] is int
               ? command.parameters['durationMs']
               : 300,
+          'gesture': 'drag',
         }, deadline);
     return _fromAction(
       command,
@@ -850,6 +851,7 @@ final class CockpitSystemTestAutomationAdapter
             'endX': x,
             'endY': endY,
             'durationMs': command.parameters['durationMs'] as int? ?? 350,
+            'gesture': 'scroll',
           }, deadline);
       if (!result.success) {
         return _fromAction(

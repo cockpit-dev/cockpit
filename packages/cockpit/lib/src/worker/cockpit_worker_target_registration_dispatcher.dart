@@ -160,6 +160,7 @@ final class CockpitWorkerTargetRegistrationDispatcher
         'flavor',
         'appId',
         'wdaUrl',
+        'cdpUrl',
         'targetKind',
         'mode',
         'environment',
@@ -202,6 +203,9 @@ final class CockpitWorkerTargetRegistrationDispatcher
       wdaUrl: input['wdaUrl'] == null
           ? null
           : workerString(input['wdaUrl'], r'$.input.wdaUrl', maximum: 2048),
+      cdpUrl: input['cdpUrl'] == null
+          ? null
+          : workerString(input['cdpUrl'], r'$.input.cdpUrl', maximum: 2048),
       targetKind: _enumeration(
         input['targetKind'],
         CockpitTargetKind.values,

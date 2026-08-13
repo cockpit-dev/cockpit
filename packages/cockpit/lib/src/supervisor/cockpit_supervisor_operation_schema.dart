@@ -76,6 +76,14 @@ const Map<String, Object?> _absoluteHttpUrl = <String, Object?>{
   'format': 'uri',
   'pattern': r'^[Hh][Tt][Tt][Pp][Ss]?://[^/?#\s]+(?:[/?#].*)?$',
 };
+const Map<String, Object?> _absoluteWebSocketOrHttpUrl = <String, Object?>{
+  'type': 'string',
+  'minLength': 8,
+  'maxLength': 2048,
+  'format': 'uri',
+  'pattern':
+      r'^(?:[Hh][Tt][Tt][Pp][Ss]?|[Ww][Ss][Ss]?)://[^/?#\s]+(?:[/?#].*)?$',
+};
 const Map<String, Object?> _sha256 = <String, Object?>{
   'type': 'string',
   'pattern': r'^[a-f0-9]{64}$',

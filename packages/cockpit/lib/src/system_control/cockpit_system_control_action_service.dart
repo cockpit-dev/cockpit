@@ -24,6 +24,8 @@ import 'cockpit_android_ui_automation_client.dart';
 import 'cockpit_macos_accessibility_tree.dart';
 import 'cockpit_system_control_adapter.dart';
 import 'cockpit_ios_webdriver_agent_client.dart';
+import 'cockpit_linux_at_spi_tree.dart';
+import 'cockpit_web_cdp_client.dart';
 import 'cockpit_system_control_parameters.dart';
 import 'cockpit_system_control_service.dart';
 
@@ -60,6 +62,8 @@ final class CockpitSystemControlActionService {
     CockpitAndroidUiAutomation? androidUiAutomation,
     CockpitIosWdaRunner? iosWdaRunner,
     CockpitMacosAccessibilityTreeReader? macosAccessibilityTreeReader,
+    CockpitLinuxAtSpiTreeReader? linuxAtSpiTreeReader,
+    CockpitWebCdpActionRunner? webCdpActionRunner,
     CockpitMacosSystemDialogHandler? macosSystemDialogHandler,
     CockpitMacosApplicationProcessIdResolver? macosApplicationProcessIdResolver,
     CockpitMacosApplicationFocusReader? macosApplicationFocusReader,
@@ -87,6 +91,9 @@ final class CockpitSystemControlActionService {
        _iosWdaRunner = iosWdaRunner ?? CockpitIosWebDriverAgentClient().run,
        _macosAccessibilityTreeReader =
            macosAccessibilityTreeReader ?? cockpitReadMacosAccessibilityTree,
+       _linuxAtSpiTreeReader =
+           linuxAtSpiTreeReader ?? cockpitReadLinuxAtSpiTree,
+       _webCdpActionRunner = webCdpActionRunner ?? cockpitRunWebCdpAction,
        _macosSystemDialogHandler =
            macosSystemDialogHandler ?? cockpitDismissMacosSystemDialog,
        _macosApplicationProcessIdResolver =
@@ -120,6 +127,8 @@ final class CockpitSystemControlActionService {
   final CockpitAndroidUiAutomation _androidUiAutomation;
   final CockpitIosWdaRunner _iosWdaRunner;
   final CockpitMacosAccessibilityTreeReader _macosAccessibilityTreeReader;
+  final CockpitLinuxAtSpiTreeReader _linuxAtSpiTreeReader;
+  final CockpitWebCdpActionRunner _webCdpActionRunner;
   final CockpitMacosSystemDialogHandler _macosSystemDialogHandler;
   final CockpitMacosApplicationProcessIdResolver
   _macosApplicationProcessIdResolver;
@@ -230,6 +239,12 @@ final class CockpitSystemControlActionService {
     }
     if (command.executable == cockpitMacosAccessibilityCommandExecutable) {
       return _runMacosAccessibilityTreeCommand(request, capability, command);
+    }
+    if (command.executable == cockpitLinuxAtSpiCommandExecutable) {
+      return _runLinuxAtSpiTreeCommand(effectiveRequest, capability, command);
+    }
+    if (command.executable == cockpitWebCdpCommandExecutable) {
+      return _runWebCdpCommand(effectiveRequest, capability);
     }
     if (command.executable == cockpitMacosSystemDialogCommandExecutable) {
       return _runMacosSystemDialogCommand(
@@ -535,6 +550,171 @@ final class CockpitSystemControlActionService {
         errorCode: 'macosAccessibilityFailed',
         errorMessage: 'macOS accessibility failed: $error',
         recommendedNextStep: 'inspectMacosAccessibility',
+        strategy: capability.strategy,
+        requires: capability.requires,
+        limitations: capability.limitations,
+      );
+    }
+  }
+
+  Future<CockpitSystemControlActionResult> _runLinuxAtSpiTreeCommand(
+    CockpitSystemControlActionRequest request,
+    CockpitSystemControlCapability capability,
+    CockpitResolvedSystemControlCommand command,
+  ) async {
+    try {
+      if (command.arguments.length != 2) {
+        throw const CockpitLinuxAtSpiException(
+          'invalidLinuxAtSpiRequest',
+          'Linux AT-SPI command arguments are invalid.',
+        );
+      }
+      final stdout = await _linuxAtSpiTreeReader(
+        appId: request.appId,
+        processId: request.processId,
+        maxDepth: int.parse(command.arguments[0]),
+        maxNodes: int.parse(command.arguments[1]),
+        timeout: request.timeout,
+      ).timeout(request.timeout);
+      return CockpitSystemControlActionResult(
+        platform: request.platform,
+        deviceId: request.deviceId,
+        appId: request.appId,
+        processId: request.processId,
+        action: request.action,
+        availability: capability.availability,
+        success: true,
+        stdout: stdout,
+        recommendedNextStep: 'resolveNativeLocator',
+        strategy: capability.strategy,
+        requires: capability.requires,
+        limitations: capability.limitations,
+      );
+    } on TimeoutException {
+      return CockpitSystemControlActionResult(
+        platform: request.platform,
+        deviceId: request.deviceId,
+        appId: request.appId,
+        processId: request.processId,
+        action: request.action,
+        availability: capability.availability,
+        success: false,
+        errorCode: 'systemActionTimedOut',
+        errorMessage:
+            'Linux AT-SPI timed out after ${request.timeout.inMilliseconds}ms.',
+        recommendedNextStep: 'inspectLinuxAtSpi',
+        strategy: capability.strategy,
+        requires: capability.requires,
+        limitations: capability.limitations,
+      );
+    } on CockpitLinuxAtSpiException catch (error) {
+      return CockpitSystemControlActionResult(
+        platform: request.platform,
+        deviceId: request.deviceId,
+        appId: request.appId,
+        processId: request.processId,
+        action: request.action,
+        availability: capability.availability,
+        success: false,
+        errorCode: error.code,
+        errorMessage: error.message,
+        recommendedNextStep: 'inspectLinuxAtSpi',
+        strategy: capability.strategy,
+        requires: capability.requires,
+        limitations: capability.limitations,
+      );
+    } on Object catch (error) {
+      return CockpitSystemControlActionResult(
+        platform: request.platform,
+        deviceId: request.deviceId,
+        appId: request.appId,
+        processId: request.processId,
+        action: request.action,
+        availability: capability.availability,
+        success: false,
+        errorCode: 'linuxAtSpiReadFailed',
+        errorMessage: 'Linux AT-SPI failed: $error',
+        recommendedNextStep: 'inspectLinuxAtSpi',
+        strategy: capability.strategy,
+        requires: capability.requires,
+        limitations: capability.limitations,
+      );
+    }
+  }
+
+  Future<CockpitSystemControlActionResult> _runWebCdpCommand(
+    CockpitSystemControlActionRequest request,
+    CockpitSystemControlCapability capability,
+  ) async {
+    final webSocketUrl = request.metadata['cdpWebSocketUrl'];
+    if (webSocketUrl is! String || webSocketUrl.trim().isEmpty) {
+      return _notExecutable(
+        request,
+        availability: CockpitSystemControlAvailability.blocked,
+        recommendedNextStep: 'configureCdpEndpoint',
+        errorCode: 'cdpEndpointUnavailable',
+        errorMessage:
+            'The selected browser page has no reachable CDP endpoint.',
+        strategy: capability.strategy,
+        requires: capability.requires,
+        limitations: capability.limitations,
+      );
+    }
+    try {
+      final result = await _webCdpActionRunner(
+        webSocketUrl: webSocketUrl,
+        action: request.action,
+        parameters: request.parameters,
+        timeout: request.timeout,
+      ).timeout(request.timeout);
+      return CockpitSystemControlActionResult(
+        platform: request.platform,
+        deviceId: request.deviceId,
+        appId: request.appId,
+        processId: request.processId,
+        action: request.action,
+        availability: capability.availability,
+        success: true,
+        stdout: result.stdout,
+        changed: result.changed,
+        recommendedNextStep:
+            request.action == CockpitSystemControlAction.readUiTree
+            ? 'resolveNativeLocator'
+            : 'readSystemState',
+        strategy: capability.strategy,
+        requires: capability.requires,
+        limitations: capability.limitations,
+      );
+    } on TimeoutException {
+      return _notExecutable(
+        request,
+        availability: capability.availability,
+        recommendedNextStep: 'inspectCdpEndpoint',
+        errorCode: 'systemActionTimedOut',
+        errorMessage:
+            'Chromium CDP action timed out after ${request.timeout.inMilliseconds}ms.',
+        strategy: capability.strategy,
+        requires: capability.requires,
+        limitations: capability.limitations,
+      );
+    } on CockpitWebCdpException catch (error) {
+      return _notExecutable(
+        request,
+        availability: capability.availability,
+        recommendedNextStep: 'inspectCdpEndpoint',
+        errorCode: error.code,
+        errorMessage: error.message,
+        strategy: capability.strategy,
+        requires: capability.requires,
+        limitations: capability.limitations,
+      );
+    } on Object catch (error) {
+      return _notExecutable(
+        request,
+        availability: capability.availability,
+        recommendedNextStep: 'inspectCdpEndpoint',
+        errorCode: 'webCdpActionFailed',
+        errorMessage: 'Chromium CDP action failed: $error',
         strategy: capability.strategy,
         requires: capability.requires,
         limitations: capability.limitations,
@@ -2070,6 +2250,12 @@ final class CockpitSystemControlActionService {
     }
     if (command.executable == cockpitMacosAccessibilityCommandExecutable) {
       return _runMacosAccessibilityTreeCommand(request, capability, command);
+    }
+    if (command.executable == cockpitLinuxAtSpiCommandExecutable) {
+      return _runLinuxAtSpiTreeCommand(request, capability, command);
+    }
+    if (command.executable == cockpitWebCdpCommandExecutable) {
+      return _runWebCdpCommand(request, capability);
     }
     if (command.executable == cockpitMacosSystemDialogCommandExecutable) {
       return _runMacosSystemDialogCommand(request, capability, command);

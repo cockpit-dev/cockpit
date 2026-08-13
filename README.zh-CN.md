@@ -269,6 +269,10 @@ Android 使用 ADB 和原生 accessibility；iOS Simulator 使用 `simctl`，原
 UI 操作使用可达的 WebDriverAgent；物理 iOS 设备在可用时通过 `devicectl` 管理
 安装和生命周期。环境不具备某项能力时，Cockpit 会返回 `unsupported` 或 `blocked`。
 
+Linux 桌面树检查使用当前会话的 AT-SPI accessibility bus。通用 Chromium 黑盒页面
+需要显式注册 `--cdp-url`；Flutter Web 开发仍优先使用应用内 Flutter 树。Cockpit
+不会扫描默认调试端口，也不会附加到无关浏览器 profile。
+
 已经安装的 Flutter 应用或原生壳内嵌 Flutter 的混合应用，应使用
 `targetKind: flutterApp`、真实 `appId` 且不绑定 entrypoint，并让 case 使用
 `native` plane。Cockpit 会通过 system control 启动应用并无侵入操作完整原生

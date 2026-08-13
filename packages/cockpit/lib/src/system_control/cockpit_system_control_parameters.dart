@@ -151,6 +151,13 @@ final class CockpitSystemControlParameterSets {
       minimum: 1,
       description: 'Drag duration in milliseconds; default is 300.',
     ),
+    CockpitSystemControlParameter(
+      name: 'gesture',
+      valueType: CockpitSystemControlParameterType.string,
+      allowedValues: <String>['drag', 'scroll'],
+      description:
+          'Gesture intent; system automation defaults to drag and scroll search uses scroll.',
+    ),
   ];
 
   static const text = <CockpitSystemControlParameter>[

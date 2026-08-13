@@ -2628,7 +2628,7 @@ Map<String, Object?>? _compactCollection(
       'appId',
       'state',
       'entrypoint',
-      if (more) ...<String>['flavor', 'wdaUrl'],
+      if (more) ...<String>['flavor', 'wdaUrl', 'cdpUrl'],
     ],
     'artifact.list' => <String>[
       'artifactId',

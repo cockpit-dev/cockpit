@@ -4,7 +4,9 @@ import 'dart:io';
 import 'package:cockpit_protocol/cockpit_protocol.dart';
 import 'package:cockpit/src/infrastructure/cockpit_process_manager.dart';
 import 'package:cockpit/src/system_control/cockpit_system_control_adapter.dart';
+import 'package:cockpit/src/system_control/cockpit_linux_at_spi_tree.dart';
 import 'package:cockpit/src/system_control/cockpit_system_control_service.dart';
+import 'package:cockpit/src/system_control/cockpit_web_cdp_client.dart';
 import 'package:test/test.dart';
 
 void main() {
@@ -180,6 +182,69 @@ void main() {
     expect(probe.state, isNull);
     expect(probe.failureReason, "error: device 'emulator-5554' not found");
   });
+
+  test(
+    'linux exposes AT-SPI tree only after a successful runtime probe',
+    () async {
+      var probes = 0;
+      final service = CockpitSystemControlService(
+        linuxHost: true,
+        linuxAtSpiProbe: ({required timeout}) async {
+          probes += 1;
+          expect(timeout, const Duration(milliseconds: 750));
+          return const CockpitLinuxAtSpiProbeResult.available();
+        },
+      );
+
+      final first = await service.describe(
+        const CockpitSystemControlDescribeRequest(
+          platform: 'linux',
+          appId: 'cockpit_demo',
+          metadata: <String, Object?>{'linuxAtSpiAvailable': false},
+        ),
+      );
+      final blockedService = CockpitSystemControlService(
+        linuxHost: true,
+        linuxAtSpiProbe: ({required timeout}) async {
+          probes += 1;
+          return const CockpitLinuxAtSpiProbeResult.blocked('atSpiUnavailable');
+        },
+      );
+      final second = await blockedService.describe(
+        const CockpitSystemControlDescribeRequest(
+          platform: 'linux',
+          appId: 'cockpit_demo',
+          metadata: <String, Object?>{'linuxAtSpiAvailable': true},
+        ),
+      );
+
+      expect(
+        first.profile.availableActions,
+        contains(CockpitSystemControlAction.readUiTree),
+      );
+      expect(
+        first.profile
+            .capabilityFor(CockpitSystemControlAction.readUiTree)
+            ?.requires,
+        <String>['AT-SPI accessibility bus'],
+      );
+      expect(
+        second.profile.blockedActions,
+        contains(CockpitSystemControlAction.readUiTree),
+      );
+      expect(
+        second.profile
+            .capabilityFor(CockpitSystemControlAction.readUiTree)
+            ?.requires,
+        contains('reachable AT-SPI accessibility bus'),
+      );
+      expect(
+        probes,
+        2,
+        reason: 'live probe results override caller-supplied availability',
+      );
+    },
+  );
 
   test('ios physical profile reports WDA and devicectl capabilities', () async {
     final service = CockpitSystemControlService(
@@ -510,42 +575,79 @@ void main() {
     expect(result.recommendedNextStep, 'useFlutterOrHostFallback');
   });
 
-  test(
-    'web profile blocks browser bridge actions until bridge is wired',
-    () async {
-      final service = CockpitSystemControlService();
+  test('web profile blocks DOM actions until CDP is configured', () async {
+    final service = CockpitSystemControlService();
 
-      final result = await service.describe(
-        const CockpitSystemControlDescribeRequest(
-          platform: 'web',
-          deviceId: 'chrome',
-        ),
-      );
+    final result = await service.describe(
+      const CockpitSystemControlDescribeRequest(
+        platform: 'web',
+        deviceId: 'chrome',
+      ),
+    );
 
-      expect(result.profile.adapter, 'browser.dom+host-recording');
-      expect(result.profile.availableActions, isEmpty);
-      expect(
-        result.profile.blockedActions,
-        containsAll(<CockpitSystemControlAction>[
-          CockpitSystemControlAction.tap,
-          CockpitSystemControlAction.typeText,
-          CockpitSystemControlAction.captureScreenshot,
-          CockpitSystemControlAction.startRecording,
-          CockpitSystemControlAction.stopRecording,
-        ]),
-      );
-      expect(
-        result.profile.capabilityFor(CockpitSystemControlAction.tap)?.requires,
-        contains('browser driver or bridge'),
-      );
-      expect(
-        result.profile
-            .capabilityFor(CockpitSystemControlAction.captureScreenshot)
-            ?.requires,
-        contains('app id or process id'),
-      );
-    },
-  );
+    expect(result.profile.adapter, 'browser.dom+host-recording');
+    expect(result.profile.availableActions, isEmpty);
+    expect(
+      result.profile.blockedActions,
+      containsAll(<CockpitSystemControlAction>[
+        CockpitSystemControlAction.tap,
+        CockpitSystemControlAction.typeText,
+        CockpitSystemControlAction.captureScreenshot,
+        CockpitSystemControlAction.startRecording,
+        CockpitSystemControlAction.stopRecording,
+      ]),
+    );
+    expect(
+      result.profile.capabilityFor(CockpitSystemControlAction.tap)?.requires,
+      contains('reachable cdpUrl'),
+    );
+    expect(
+      result.profile
+          .capabilityFor(CockpitSystemControlAction.captureScreenshot)
+          ?.requires,
+      contains('app id or process id'),
+    );
+  });
+
+  test('web profile exposes only actions backed by reachable CDP', () async {
+    final service = CockpitSystemControlService(
+      webCdpProbe: ({required cdpUrl, required timeout}) async =>
+          const CockpitWebCdpProbeResult(
+            available: true,
+            webSocketUrl: 'ws://127.0.0.1:9222/devtools/page/1',
+            pageId: '1',
+            pageUrl: 'https://example.test/',
+          ),
+    );
+
+    final result = await service.describe(
+      const CockpitSystemControlDescribeRequest(
+        platform: 'web',
+        deviceId: 'chrome',
+        appId: 'Google Chrome',
+        metadata: <String, Object?>{'cdpUrl': 'http://127.0.0.1:9222'},
+      ),
+    );
+
+    expect(
+      result.profile.availableActions,
+      containsAll(<CockpitSystemControlAction>[
+        CockpitSystemControlAction.tap,
+        CockpitSystemControlAction.typeText,
+        CockpitSystemControlAction.readUiTree,
+        CockpitSystemControlAction.openUrl,
+        CockpitSystemControlAction.readSystemState,
+      ]),
+    );
+    expect(
+      result.profile.availableActions,
+      isNot(contains(CockpitSystemControlAction.grantPermission)),
+    );
+    expect(
+      result.metadata['cdpWebSocketUrl'],
+      'ws://127.0.0.1:9222/devtools/page/1',
+    );
+  });
 
   test(
     'web profile enables host-window evidence with a browser window target',

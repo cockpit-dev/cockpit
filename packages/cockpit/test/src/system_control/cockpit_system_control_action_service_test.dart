@@ -10,12 +10,56 @@ import 'package:cockpit_protocol/cockpit_protocol.dart';
 import 'package:cockpit/src/adapters/cockpit_capture_adapter.dart';
 import 'package:cockpit/src/adapters/cockpit_recording_adapter.dart';
 import 'package:cockpit/src/system_control/cockpit_ios_webdriver_agent_client.dart';
+import 'package:cockpit/src/system_control/cockpit_linux_at_spi_tree.dart';
 import 'package:cockpit/src/system_control/cockpit_macos_accessibility_tree.dart';
 import 'package:cockpit/src/system_control/cockpit_system_control_action_service.dart';
 import 'package:cockpit/src/system_control/cockpit_system_control_service.dart';
+import 'package:cockpit/src/system_control/cockpit_web_cdp_client.dart';
 import 'package:test/test.dart';
 
 void main() {
+  test('web DOM action executes only after the exact CDP probe', () async {
+    CockpitSystemControlAction? capturedAction;
+    Map<String, Object?>? capturedParameters;
+    final control = CockpitSystemControlService(
+      webCdpProbe: ({required cdpUrl, required timeout}) async =>
+          const CockpitWebCdpProbeResult(
+            available: true,
+            webSocketUrl: 'ws://127.0.0.1:9222/devtools/page/1',
+          ),
+    );
+    final service = CockpitSystemControlActionService(
+      systemControlService: control,
+      webCdpActionRunner:
+          ({
+            required webSocketUrl,
+            required action,
+            required parameters,
+            required timeout,
+          }) async {
+            expect(webSocketUrl, 'ws://127.0.0.1:9222/devtools/page/1');
+            capturedAction = action;
+            capturedParameters = parameters;
+            return const CockpitWebCdpActionResult(changed: true);
+          },
+    );
+
+    final result = await service.run(
+      const CockpitSystemControlActionRequest(
+        platform: 'web',
+        deviceId: 'chrome',
+        appId: 'Google Chrome',
+        metadata: <String, Object?>{'cdpUrl': 'http://127.0.0.1:9222'},
+        action: CockpitSystemControlAction.tap,
+        parameters: <String, Object?>{'x': 10, 'y': 20},
+      ),
+    );
+
+    expect(result.success, isTrue);
+    expect(capturedAction, CockpitSystemControlAction.tap);
+    expect(capturedParameters, <String, Object?>{'x': 10, 'y': 20});
+  });
+
   test('android tap executes through adb shell input tap', () async {
     final processManager = _FakeProcessManager();
     final service = CockpitSystemControlActionService(
@@ -3838,6 +3882,56 @@ void main() {
     expect(resolvedMaxNodes, 2000);
   });
 
+  test('linux readUiTree uses the bounded AT-SPI reader', () async {
+    String? capturedAppId;
+    int? capturedProcessId;
+    int? capturedDepth;
+    int? capturedNodes;
+    final service = CockpitSystemControlActionService(
+      processManager: _FakeProcessManager(),
+      systemControlService: CockpitSystemControlService(
+        linuxHost: true,
+        linuxAtSpiProbe: ({required timeout}) async =>
+            const CockpitLinuxAtSpiProbeResult.available(),
+      ),
+      linuxAtSpiTreeReader:
+          ({
+            appId,
+            processId,
+            required maxDepth,
+            required maxNodes,
+            required timeout,
+          }) async {
+            capturedAppId = appId;
+            capturedProcessId = processId;
+            capturedDepth = maxDepth;
+            capturedNodes = maxNodes;
+            expect(timeout, greaterThan(Duration.zero));
+            return _linuxUiTree;
+          },
+    );
+
+    final result = await service.run(
+      const CockpitSystemControlActionRequest(
+        platform: 'linux',
+        appId: 'cockpit_demo',
+        processId: 4242,
+        metadata: <String, Object?>{'linuxAtSpiAvailable': true},
+        action: CockpitSystemControlAction.readUiTree,
+        parameters: <String, Object?>{'maxDepth': 3, 'maxNodes': 40},
+      ),
+    );
+
+    expect(result.success, isTrue);
+    expect(result.stdout, _linuxUiTree);
+    expect(result.command, isEmpty);
+    expect(result.strategy, 'AT-SPI tree walker');
+    expect(capturedAppId, 'cockpit_demo');
+    expect(capturedProcessId, 4242);
+    expect(capturedDepth, 3);
+    expect(capturedNodes, 40);
+  });
+
   test('macos stale accessibility permission is blocked explicitly', () async {
     final service = CockpitSystemControlActionService(
       processManager: _FakeProcessManager(),
@@ -4919,6 +5013,8 @@ final class _FakeAndroidUiAutomation implements CockpitAndroidUiAutomation {
 }
 
 const String _macosUiTree = '{"platform":"macos","nodeCount":1,"windows":[]}';
+const String _linuxUiTree =
+    '{"platform":"linux","nodeCount":1,"tree":{"role":"application","frame":{"x":0,"y":0,"width":800,"height":600}}}';
 
 final class _FakeProcessManager implements CockpitProcessManager {
   _FakeProcessManager({this.androidFocusOutput});

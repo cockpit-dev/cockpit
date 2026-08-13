@@ -793,7 +793,14 @@ String _jsonElementName(String value) {
 bool _typeMatches(String actual, String expected) {
   final normalizedActual = actual.toLowerCase();
   final normalizedExpected = expected.toLowerCase();
+  final compactActual = normalizedActual.replaceAll(RegExp(r'[^a-z0-9]+'), '');
+  final compactExpected = normalizedExpected.replaceAll(
+    RegExp(r'[^a-z0-9]+'),
+    '',
+  );
   return normalizedActual == normalizedExpected ||
       normalizedActual.endsWith(normalizedExpected) ||
-      normalizedActual.endsWith('type$normalizedExpected');
+      normalizedActual.endsWith('type$normalizedExpected') ||
+      compactActual == compactExpected ||
+      compactActual.endsWith(compactExpected);
 }
