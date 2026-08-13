@@ -30,11 +30,11 @@ void main() {
     expect(runtimePubspec, isNot(contains('name: flutter_pilot')));
     expect(protocolPubspec, contains('name: cockpit_protocol'));
     expect(devtoolsPubspec, contains('name: cockpit'));
-    expect(runtimeVersion, '4.0.16');
-    expect(protocolVersion, '4.0.16');
-    expect(devtoolsVersion, '4.0.16');
-    expect(runtimePubspec, contains('cockpit_protocol: ^4.0.16'));
-    expect(devtoolsPubspec, contains('cockpit_protocol: ^4.0.16'));
+    expect(runtimeVersion, '4.0.17');
+    expect(protocolVersion, '4.0.17');
+    expect(devtoolsVersion, '4.0.17');
+    expect(runtimePubspec, contains('cockpit_protocol: ^4.0.17'));
+    expect(devtoolsPubspec, contains('cockpit_protocol: ^4.0.17'));
     for (final podLock in <String>[
       iosDevelopmentPodLock,
       macosDevelopmentPodLock,
@@ -566,7 +566,7 @@ void main() {
     expect(kiroSteering, contains('.kiro/skills/cockpit/SKILL.md'));
     expect(kiroSteering, isNot(contains('dart run cockpit')));
     expect(kiroPlugin, contains('agent-plugins.org/schemas/1.0.0'));
-    expect(kiroPlugin, contains('"version": "4.0.16"'));
+    expect(kiroPlugin, contains('"version": "4.0.17"'));
 
     for (final path in <String>[
       'plugins/codex/cockpit/README.md',

@@ -263,7 +263,13 @@ retrying because the mutation may already have committed.
 
 ## UI And Evidence
 
-Execute exact text or a stable locator directly. Do not add a pre-inspect round trip.
+Execute exact text directly only when that text names the intended actionable
+target, or use a stable locator. Do not add a pre-inspect round trip merely to
+confirm an already-known action. If an action returns `unsupportedCapability`,
+`ambiguousTarget`, `targetNotFound`, or `targetNotHittable`, do not guess that a
+nearby control owns passive text. Run the exact `next` command once; it performs
+a bounded inspect of the same query. Copy the returned actionable `sel` and retry
+the original action once.
 For ambiguity or exploration, run the smallest `dev inspect QUERY`. It
 searches mounted Flutter Element targets, independent of developer-authored
 Semantics, and returns the shortest stable `sel` plus compact known `can` actions.

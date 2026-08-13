@@ -891,6 +891,77 @@ void main() {
     expect(calls, <String>['session.development.get', 'command.run']);
   });
 
+  test(
+    'locator failures point to a bounded inspect of the same target',
+    () async {
+      final dev = CockpitDevRuntime(
+        runtime,
+        operationInvoker: (_, kind, _) async {
+          if (kind == 'session.development.get') {
+            return _result(
+              kind,
+              output: const <String, Object?>{
+                'sessionId': 'session-old',
+                'targetId': 'target-1',
+                'appId': 'app-old',
+                'status': <String, Object?>{
+                  'state': 'ready',
+                  'appReachable': true,
+                  'remoteSessionReachable': true,
+                },
+              },
+            );
+          }
+          final now = DateTime.utc(2026, 8, 13);
+          return CockpitOperationResult(
+            operationId: 'operation-command-failed',
+            kind: kind,
+            workspaceId: 'workspace-1',
+            lifecycle: CockpitOperationLifecycle.completed,
+            outcome: CockpitOperationOutcome.failed,
+            submittedAt: now,
+            startedAt: now,
+            finishedAt: now,
+            failure: CockpitFailure(
+              primary: CockpitApiError(
+                code: CockpitCommandError.unsupportedCapabilityCode,
+                category: CockpitErrorCategory.locator,
+                message: 'The matched text is not actionable.',
+                retryable: false,
+                responsibleLayer: CockpitResponsibleLayer.application,
+              ),
+            ),
+          );
+        },
+      );
+      runtime.configureOutput(
+        command: 'dev.tap',
+        selection: const CockpitCliOutputSelection(),
+      );
+
+      expect(
+        await dev.runCommand(
+          session,
+          action: 'tap',
+          command: dev.command(
+            type: CockpitCommandType.tap,
+            locator: const CockpitLocator(text: "Owner's task"),
+          ),
+        ),
+        cockpitDataExitCode,
+      );
+
+      final output = lon.decode(stdout.toString())! as Map<Object?, Object?>;
+      final quoted = Platform.isWindows
+          ? "'Owner''s task'"
+          : "'Owner'\"'\"'s task'";
+      expect(
+        output['next'],
+        'cockpit dev inspect $quoted --session ${session.handleId}',
+      );
+    },
+  );
+
   test('open URI reuses the exact session through system control', () async {
     final calls = <String>[];
     final dev = CockpitDevRuntime(
