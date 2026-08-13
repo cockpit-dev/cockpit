@@ -4,10 +4,10 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter/widgets.dart';
 
 import '../capture/cockpit_capture_kind.dart';
 import '../capture/cockpit_capture_profile.dart';
@@ -4874,10 +4874,30 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
 
   bool? _changedSince(_ActionCommitResult commit) {
     final before = commit.beforeActionFingerprint;
-    if (before == null || _actionCommitFingerprint() == before) {
-      return null;
+    if (before != null && _actionCommitFingerprint() != before) {
+      return true;
     }
-    return true;
+    final target = commit.interactedTarget;
+    final beforeTargetState = commit.beforeTargetInteractionState;
+    if (target != null && beforeTargetState != null) {
+      final currentTargetState = _targetInteractionState(
+        _currentTargetFor(target) ?? target,
+      );
+      if (currentTargetState != null &&
+          currentTargetState != beforeTargetState) {
+        return true;
+      }
+    }
+    return null;
+  }
+
+  CockpitTarget? _currentTargetFor(CockpitTarget previous) {
+    for (final target in _registry.routeReadyVisibleTargets) {
+      if (target.registrationId == previous.registrationId) {
+        return target;
+      }
+    }
+    return null;
   }
 
   Future<_ActionCommitResult> _invokeActionAndAwaitCommit({
@@ -4890,6 +4910,10 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
     CockpitTargetResolutionResult? resolution,
   }) async {
     final beforeActionFingerprint = _actionCommitFingerprint();
+    final interactedTarget = resolution?.target;
+    final beforeTargetInteractionState = interactedTarget == null
+        ? null
+        : _targetInteractionState(interactedTarget);
     final beforeActionTransientCallbackCount = _transientCallbackCount();
     final routeNameBeforeAction = _currentRouteName();
     FutureOr<void> result;
@@ -4909,6 +4933,8 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
     if (result is! Future<void>) {
       return _ActionCommitResult(
         beforeActionFingerprint: beforeActionFingerprint,
+        interactedTarget: interactedTarget,
+        beforeTargetInteractionState: beforeTargetInteractionState,
         beforeActionTransientCallbackCount: beforeActionTransientCallbackCount,
         diagnostics: _actionDiagnostics(
           command: command,
@@ -4974,6 +5000,8 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
         commitOutcome == _ActionCommitOutcome.uiCommitted) {
       return _ActionCommitResult(
         beforeActionFingerprint: beforeActionFingerprint,
+        interactedTarget: interactedTarget,
+        beforeTargetInteractionState: beforeTargetInteractionState,
         beforeActionTransientCallbackCount: beforeActionTransientCallbackCount,
         routeCommitted: routeCommitted,
         diagnostics: _actionDiagnostics(
@@ -4993,6 +5021,8 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
     }
     return _ActionCommitResult(
       beforeActionFingerprint: beforeActionFingerprint,
+      interactedTarget: interactedTarget,
+      beforeTargetInteractionState: beforeTargetInteractionState,
       beforeActionTransientCallbackCount: beforeActionTransientCallbackCount,
       diagnostics: _actionDiagnostics(
         command: command,
@@ -5354,6 +5384,66 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
       _currentRouteName(),
       targets.join('\u001e'),
     ].whereType<String>().join('\u001d');
+  }
+
+  String? _targetInteractionState(CockpitTarget target) {
+    final diagnosticNode = target.diagnosticNodeProvider?.call();
+    if (diagnosticNode is! Element || !diagnosticNode.mounted) {
+      return null;
+    }
+    final widget = diagnosticNode.widget;
+    if (widget is ChoiceChip) {
+      return 'selected:${widget.selected}';
+    }
+    if (widget is FilterChip) {
+      return 'selected:${widget.selected}';
+    }
+    if (widget is InputChip) {
+      return 'selected:${widget.selected}';
+    }
+    if (widget is Checkbox) {
+      return 'checked:${widget.value}';
+    }
+    if (widget is CheckboxListTile) {
+      return 'checked:${widget.value}';
+    }
+    if (widget is Switch) {
+      return 'checked:${widget.value}';
+    }
+    if (widget is SwitchListTile) {
+      return 'checked:${widget.value}';
+    }
+    if (widget is Radio) {
+      return 'selected:${widget.groupValue == widget.value}';
+    }
+    if (widget is RadioListTile) {
+      return 'selected:${widget.groupValue == widget.value}';
+    }
+    if (widget is ToggleButtons) {
+      final selection = widget.isSelected
+          .map((value) => value ? '1' : '0')
+          .join();
+      return 'selected:$selection';
+    }
+    if (widget is Slider) {
+      return 'value:${widget.value}';
+    }
+    if (widget is RangeSlider) {
+      return 'value:${widget.values.start}:${widget.values.end}';
+    }
+    if (widget is Semantics) {
+      final properties = widget.properties;
+      final states = <String?>[
+        if (properties.checked != null) 'checked:${properties.checked}',
+        if (properties.mixed != null) 'mixed:${properties.mixed}',
+        if (properties.selected != null) 'selected:${properties.selected}',
+        if (properties.toggled != null) 'toggled:${properties.toggled}',
+        if (properties.value case final value? when value.isNotEmpty)
+          'value:$value',
+      ].whereType<String>().join('|');
+      return states.isEmpty ? null : states;
+    }
+    return null;
   }
 
   String _observableUiFingerprint() {
@@ -6381,6 +6471,8 @@ final class _ActionCommitResult {
     this.routeCommitted = false,
     this.diagnostics = const <String, Object?>{},
     this.beforeActionFingerprint,
+    this.interactedTarget,
+    this.beforeTargetInteractionState,
     this.beforeActionTransientCallbackCount,
   });
 
@@ -6391,6 +6483,8 @@ final class _ActionCommitResult {
         routeCommitted: false,
         diagnostics: const <String, Object?>{},
         beforeActionFingerprint: null,
+        interactedTarget: null,
+        beforeTargetInteractionState: null,
         beforeActionTransientCallbackCount: null,
       );
 
@@ -6399,5 +6493,7 @@ final class _ActionCommitResult {
   final bool routeCommitted;
   final Map<String, Object?> diagnostics;
   final String? beforeActionFingerprint;
+  final CockpitTarget? interactedTarget;
+  final String? beforeTargetInteractionState;
   final int? beforeActionTransientCallbackCount;
 }

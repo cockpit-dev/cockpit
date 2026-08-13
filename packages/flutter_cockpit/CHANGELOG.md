@@ -1,5 +1,10 @@
 # Changelog
 
+## 4.0.22
+
+- Report committed selection and value changes for Flutter controls even when
+  their mounted element structure and visible text remain unchanged.
+
 ## 4.0.21
 
 - Report committed Flutter text mutations independently of structural widget

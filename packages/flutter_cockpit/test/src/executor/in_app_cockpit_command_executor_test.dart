@@ -241,6 +241,7 @@ void main() {
     await tester.pump();
 
     expect(result.success, isTrue, reason: result.error?.message);
+    expect(result.changed, isTrue);
     expect(selected, 'editor');
   });
 
@@ -297,7 +298,51 @@ void main() {
     await tester.pump();
 
     expect(result.success, isTrue, reason: result.error?.message);
+    expect(result.changed, isTrue);
     expect(selected, 'editor');
+  });
+
+  testWidgets('tap reports a ChoiceChip selection as changed', (tester) async {
+    var selected = false;
+
+    await tester.pumpWidget(
+      CockpitSurface(
+        routeName: '/editor',
+        child: MaterialApp(
+          home: Scaffold(
+            body: StatefulBuilder(
+              builder: (context, setState) => ChoiceChip(
+                key: const ValueKey<String>('priority-high'),
+                label: const Text('HIGH'),
+                selected: selected,
+                onSelected: (next) => setState(() => selected = next),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final surfaceState = tester.state<CockpitSurfaceState>(
+      find.byType(CockpitSurface),
+    );
+    final executor = InAppCockpitCommandExecutor(
+      registry: surfaceState.registry,
+      waitTickHandler: tester.pump,
+    );
+    final result = await executor.execute(
+      CockpitCommand(
+        commandId: 'select-high-priority',
+        commandType: CockpitCommandType.tap,
+        locator: const CockpitLocator(key: 'priority-high'),
+      ),
+    );
+    await tester.pump();
+
+    expect(result.success, isTrue, reason: result.error?.message);
+    expect(result.changed, isTrue);
+    expect(selected, isTrue);
   });
 
   test('executes tap against a target located by cockpitId', () async {
