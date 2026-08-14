@@ -176,6 +176,11 @@ final class ConsoleSupervisorClient {
   Future<Map<String, Object?>> getRun(String runId) async =>
       (await _api.run(runId)).toJson();
 
+  Future<List<CockpitRunResource>> runs(
+    String workspaceId, {
+    int limit = 12,
+  }) async => (await _api.runs(workspaceId, limit: limit)).items;
+
   /// Cancels a run via the typed cancellation request.
   Future<Map<String, Object?>> cancelRun(
     String runId, {

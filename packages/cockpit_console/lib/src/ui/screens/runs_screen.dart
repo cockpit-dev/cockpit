@@ -142,6 +142,11 @@ final class RunsScreen extends HookConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final workspaceId = ref.watch(selectedWorkspaceIdProvider);
     final rawRunsState = ref.watch(runsProvider);
+    final recentRunsAsync = workspaceId == null
+        ? const AsyncValue<List<CockpitRunResource>>.data(
+            <CockpitRunResource>[],
+          )
+        : ref.watch(recentRunsForWorkspaceProvider(workspaceId));
     final documentsAsync = workspaceId != null
         ? ref.watch(documentsForWorkspaceProvider(workspaceId))
         : const AsyncValue<List<CockpitDocumentResource>>.loading();
@@ -161,6 +166,14 @@ final class RunsScreen extends HookConsumerWidget {
     final runsState = rawRunsState.workspaceId == workspaceId
         ? rawRunsState
         : RunsState(workspaceId: workspaceId);
+    final recentRuns = recentRunsAsync.value ?? const <CockpitRunResource>[];
+
+    void refreshRecentRunsAfterTerminal() {
+      final selectedWorkspaceId = workspaceId;
+      if (selectedWorkspaceId == null) return;
+      final provider = recentRunsForWorkspaceProvider(selectedWorkspaceId);
+      if (!ref.read(provider).isLoading) ref.invalidate(provider);
+    }
 
     useEffect(() {
       var canceled = false;
@@ -230,7 +243,14 @@ final class RunsScreen extends HookConsumerWidget {
             .events
             .any((event) => event.kind == 'terminal');
         if (resource?['lifecycle'] == 'completed' && hasTerminalEvent) return;
-        await _observeStream(context, ref, runId, streamSub, runResource);
+        await _observeStream(
+          context,
+          ref,
+          runId,
+          streamSub,
+          runResource,
+          refreshRecentRunsAfterTerminal,
+        );
       });
       return () {
         canceled = true;
@@ -248,16 +268,18 @@ final class RunsScreen extends HookConsumerWidget {
       return null;
     }, []);
 
-    final documents = documentsAsync.maybeWhen(
-      data: (items) => items
-          .where(
-            (document) =>
-                document.kind == CockpitIndexedDocumentKind.testCase ||
-                document.kind == CockpitIndexedDocumentKind.suite,
-          )
-          .toList(growable: false),
-      orElse: () => const <CockpitDocumentResource>[],
-    );
+    final documents =
+        (documentsAsync.value ?? const <CockpitDocumentResource>[])
+            .where(
+              (document) =>
+                  document.kind == CockpitIndexedDocumentKind.testCase ||
+                  document.kind == CockpitIndexedDocumentKind.suite,
+            )
+            .toList(growable: false);
+    final documentsLoading = documentsAsync.isLoading && documents.isEmpty;
+    final documentsError = documentsAsync.hasError
+        ? documentsAsync.error.toString()
+        : null;
     final selectedDoc = documents
         .where((document) => document.documentId == selectedDocId.value)
         .firstOrNull;
@@ -280,8 +302,7 @@ final class RunsScreen extends HookConsumerWidget {
       final selectedDocument = document;
 
       try {
-        ref.invalidate(documentsForWorkspaceProvider(workspaceId));
-        final freshDocuments = await ref.read(
+        final freshDocuments = await ref.refresh(
           documentsForWorkspaceProvider(workspaceId).future,
         );
         if (!context.mounted ||
@@ -366,6 +387,7 @@ final class RunsScreen extends HookConsumerWidget {
         return;
       }
 
+      ref.invalidate(recentRunsForWorkspaceProvider(workspaceId));
       idempotencyCtrl.text = _newIdempotencyKey('run');
     }
 
@@ -398,30 +420,84 @@ final class RunsScreen extends HookConsumerWidget {
       }
     }
 
-    Future<void> loadArtifacts() async {
+    Future<void> refreshRun() async {
       final runId = runsState.currentRunId;
       if (runId == null) return;
       try {
-        artifacts.value = await ref
-            .read(runsProvider.notifier)
-            .artifacts(runId);
+        final notifier = ref.read(runsProvider.notifier);
+        final resource = await notifier.getRun(runId);
+        if (!context.mounted || !notifier.isCurrentRun(runId)) return;
+        final refreshedArtifacts = resource['lifecycle'] == 'completed'
+            ? await notifier.artifacts(runId)
+            : const <CockpitArtifactResource>[];
+        if (!context.mounted || !notifier.isCurrentRun(runId)) return;
+        runResource.value = resource;
+        artifacts.value = refreshedArtifacts;
+        ref.invalidate(recentRunsForWorkspaceProvider(workspaceId!));
       } on Object catch (e) {
         if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Failed to load artifacts: $e')),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text('Failed to refresh run: $e')));
         }
       }
     }
 
-    Future<void> startNewRun() async {
+    Future<void> refreshRecentRuns() async {
+      try {
+        final refresh = ref.refresh(
+          recentRunsForWorkspaceProvider(workspaceId!).future,
+        );
+        await refresh;
+      } on Object {
+        // The provider retains the precise error for the retry affordance.
+      }
+    }
+
+    Future<void> selectRun(String selectedRunId) async {
+      if (selectedRunId == runsState.currentRunId) return;
+      final selectedWorkspaceId = workspaceId!;
       await streamSub.value?.cancel();
+      if (!context.mounted ||
+          ref.read(selectedWorkspaceIdProvider) != selectedWorkspaceId) {
+        return;
+      }
       streamSub.value = null;
       artifacts.value = const [];
       runResource.value = null;
       ref
           .read(runsProvider.notifier)
-          .setCurrentRun(workspaceId: workspaceId!, runId: null);
+          .setCurrentRun(
+            workspaceId: selectedWorkspaceId,
+            runId: selectedRunId,
+          );
+    }
+
+    Future<void> startNewRun() async {
+      final selectedWorkspaceId = workspaceId!;
+      await streamSub.value?.cancel();
+      if (!context.mounted ||
+          ref.read(selectedWorkspaceIdProvider) != selectedWorkspaceId) {
+        return;
+      }
+      streamSub.value = null;
+      artifacts.value = const [];
+      runResource.value = null;
+      ref
+          .read(runsProvider.notifier)
+          .setCurrentRun(workspaceId: selectedWorkspaceId, runId: null);
+    }
+
+    Future<void> retryDocuments() async {
+      try {
+        final refresh = ref.refresh(
+          documentsForWorkspaceProvider(workspaceId!).future,
+        );
+        await refresh;
+      } on Object {
+        // The provider keeps the precise failure and the existing document
+        // choices. The inline recovery state remains the single UI response.
+      }
     }
 
     if (workspaceId == null) {
@@ -457,13 +533,15 @@ final class RunsScreen extends HookConsumerWidget {
       onSubmit: submitRun,
       onOpenTests: () =>
           ref.read(navProvider.notifier).go(ConsoleNavDestination.documents),
+      documentsLoading: documentsLoading,
+      documentsError: documentsError,
+      onRetryDocuments: retryDocuments,
       submitting: runsState.submitting,
       error: runsState.error,
     );
     final runId = runsState.currentRunId;
 
-    _RunDetail runDetail({int flex = 1}) => _RunDetail(
-      flex: flex,
+    _RunDetail runDetail() => _RunDetail(
       runId: runId!,
       events: runsState.events,
       runResource: runResource.value,
@@ -472,7 +550,11 @@ final class RunsScreen extends HookConsumerWidget {
       downloadingId: downloadingId.value,
       onCancel: cancelRun,
       onNewRun: startNewRun,
-      onRefreshArtifacts: loadArtifacts,
+      recentRuns: recentRuns,
+      recentRunsLoading: recentRunsAsync.isLoading,
+      recentRunsError: recentRunsAsync.hasError,
+      onSelectRun: selectRun,
+      onRefresh: refreshRun,
       onDownload: (artifact) => _downloadArtifact(
         context: context,
         ref: ref,
@@ -484,18 +566,27 @@ final class RunsScreen extends HookConsumerWidget {
     return ScreenScaffold(
       title: 'Test runs',
       subtitle: 'Run a test case or suite and follow its result',
+      actions: runId == null
+          ? <Widget>[
+              if (recentRuns.isNotEmpty)
+                _RecentRunMenu(runs: recentRuns, onSelected: selectRun),
+              IconButton(
+                onPressed: recentRunsAsync.isLoading ? null : refreshRecentRuns,
+                icon: recentRunsAsync.isLoading
+                    ? const SizedBox.square(
+                        dimension: 14,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(LucideIcons.refreshCw, size: 15),
+                tooltip: recentRunsAsync.hasError
+                    ? 'Retry recent runs'
+                    : 'Refresh recent runs',
+              ),
+            ]
+          : null,
       body: runId == null
           ? SingleChildScrollView(child: submissionBar)
-          : Column(
-              children: [
-                Expanded(
-                  flex: 2,
-                  child: SingleChildScrollView(child: submissionBar),
-                ),
-                Container(height: 1, color: Theme.of(context).dividerColor),
-                runDetail(flex: 3),
-              ],
-            ),
+          : runDetail(),
     );
   }
 
@@ -537,6 +628,7 @@ final class RunsScreen extends HookConsumerWidget {
     String runId,
     ObjectRef<StreamSubscription<String>?> subRef,
     ValueNotifier<Map<String, Object?>?> runResource,
+    VoidCallback onTerminal,
   ) async {
     await subRef.value?.cancel();
     if (!context.mounted) return;
@@ -593,19 +685,6 @@ final class RunsScreen extends HookConsumerWidget {
                 timestamp: DateTime.now(),
               ),
             );
-            if (kind == 'terminal') {
-              try {
-                await refreshRunResource();
-              } on Object catch (error) {
-                record(
-                  RunEvent(
-                    kind: 'error',
-                    message: 'Failed to load run status: $error',
-                    timestamp: DateTime.now(),
-                  ),
-                );
-              }
-            }
             return;
           }
 
@@ -630,13 +709,6 @@ final class RunsScreen extends HookConsumerWidget {
               sequence: sequence,
             ),
           );
-          if (outcome != null) {
-            try {
-              await refreshRunResource();
-            } on Object {
-              // Status refresh is best-effort; the event is already recorded.
-            }
-          }
         } on Object catch (error) {
           record(
             RunEvent(
@@ -651,6 +723,7 @@ final class RunsScreen extends HookConsumerWidget {
         if (!isActive()) return;
         try {
           await refreshRunResource();
+          if (isActive()) onTerminal();
         } on Object catch (error) {
           record(
             RunEvent(
@@ -692,6 +765,9 @@ final class _SubmissionBar extends StatelessWidget {
     required this.timeoutCtrl,
     required this.onSubmit,
     required this.onOpenTests,
+    required this.documentsLoading,
+    required this.documentsError,
+    required this.onRetryDocuments,
     required this.submitting,
     required this.error,
   });
@@ -707,6 +783,9 @@ final class _SubmissionBar extends StatelessWidget {
   final TextEditingController timeoutCtrl;
   final Future<void> Function() onSubmit;
   final VoidCallback onOpenTests;
+  final bool documentsLoading;
+  final String? documentsError;
+  final Future<void> Function() onRetryDocuments;
   final bool submitting;
   final String? error;
 
@@ -726,7 +805,11 @@ final class _SubmissionBar extends StatelessWidget {
         selectedDocument != null &&
         (isSuite || selectedCase != null) &&
         !submitting;
-    final guidance = documents.isEmpty
+    final guidance = documentsLoading
+        ? 'Loading test files...'
+        : documentsError != null && documents.isEmpty
+        ? 'Test files are temporarily unavailable.'
+        : documents.isEmpty
         ? 'Create a test file before starting a run.'
         : selectedDocument == null
         ? 'Select a test file to continue.'
@@ -908,12 +991,25 @@ final class _SubmissionBar extends StatelessWidget {
                       ),
                     ],
                   );
-                  if (documents.isEmpty) {
-                    final action = TextButton.icon(
-                      onPressed: onOpenTests,
-                      icon: const Icon(LucideIcons.filePlus2, size: 14),
-                      label: const Text('Open tests'),
-                    );
+                  if (documentsLoading ||
+                      documentsError != null ||
+                      documents.isEmpty) {
+                    final action = documentsLoading
+                        ? const SizedBox.square(
+                            dimension: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : documentsError != null
+                        ? TextButton.icon(
+                            onPressed: () => unawaited(onRetryDocuments()),
+                            icon: const Icon(LucideIcons.refreshCw, size: 14),
+                            label: const Text('Retry tests'),
+                          )
+                        : TextButton.icon(
+                            onPressed: onOpenTests,
+                            icon: const Icon(LucideIcons.filePlus2, size: 14),
+                            label: const Text('Open tests'),
+                          );
                     if (constraints.maxWidth < 520) {
                       return Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -931,6 +1027,17 @@ final class _SubmissionBar extends StatelessWidget {
                 },
               ),
             ),
+            if (documentsError != null)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+                child: _InlineRunNotice(
+                  icon: LucideIcons.triangleAlert,
+                  message: documents.isEmpty
+                      ? 'Cockpit could not load the current test index. Retry when the project worker is available.'
+                      : 'Cockpit could not refresh the test index. Existing choices remain available.',
+                  color: context.consoleColors.warning,
+                ),
+              ),
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
               child: LayoutBuilder(
@@ -1030,9 +1137,51 @@ final class _SubmissionBar extends StatelessWidget {
   }
 }
 
+final class _InlineRunNotice extends StatelessWidget {
+  const _InlineRunNotice({
+    required this.icon,
+    required this.message,
+    required this.color,
+  });
+
+  final IconData icon;
+  final String message;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: ConsoleShapes.decoration(
+        color: color.withValues(alpha: 0.08),
+        borderColor: color.withValues(alpha: 0.32),
+        radius: ConsoleShapes.smallRadius,
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(top: 1),
+            child: Icon(icon, size: 14, color: color),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              message,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 final class _RunDetail extends HookWidget {
   const _RunDetail({
-    this.flex = 1,
     required this.runId,
     required this.events,
     required this.runResource,
@@ -1041,11 +1190,14 @@ final class _RunDetail extends HookWidget {
     required this.downloadingId,
     required this.onCancel,
     required this.onNewRun,
-    required this.onRefreshArtifacts,
+    required this.recentRuns,
+    required this.recentRunsLoading,
+    required this.recentRunsError,
+    required this.onSelectRun,
+    required this.onRefresh,
     required this.onDownload,
   });
 
-  final int flex;
   final String runId;
   final List<RunEvent> events;
   final Map<String, Object?>? runResource;
@@ -1054,13 +1206,18 @@ final class _RunDetail extends HookWidget {
   final String? downloadingId;
   final Future<void> Function() onCancel;
   final Future<void> Function() onNewRun;
-  final Future<void> Function() onRefreshArtifacts;
+  final List<CockpitRunResource> recentRuns;
+  final bool recentRunsLoading;
+  final bool recentRunsError;
+  final Future<void> Function(String runId) onSelectRun;
+  final Future<void> Function() onRefresh;
   final Future<void> Function(CockpitArtifactResource) onDownload;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scrollCtrl = useScrollController();
+    final loading = runResource == null;
     final terminal = runResource?['lifecycle'] == 'completed';
     final failure = runResource?['failure'];
     final failureMessage = _runFailureMessage(failure);
@@ -1073,138 +1230,267 @@ final class _RunDetail extends HookWidget {
       return null;
     }, [events.length]);
 
-    return Expanded(
-      flex: flex,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            decoration: BoxDecoration(
-              color: theme.colorScheme.surfaceContainerLow,
-              border: Border(bottom: BorderSide(color: theme.dividerColor)),
-            ),
-            child: Wrap(
-              spacing: 12,
-              runSpacing: 4,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                Icon(
-                  LucideIcons.radio,
-                  size: 13,
-                  color: theme.colorScheme.primary,
-                ),
-                Text(
-                  runId,
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontFamily: 'monospace',
-                    color: theme.colorScheme.onSurface,
-                  ),
-                ),
-                if (runResource != null) ...[
-                  _LifecycleChip(
-                    lifecycle:
-                        runResource!['lifecycle'] as String? ?? 'unknown',
-                    outcome: runResource!['outcome'] as String?,
-                  ),
-                ],
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 6,
-                    vertical: 1,
-                  ),
-                  decoration: ConsoleShapes.decoration(
-                    color: theme.colorScheme.primary.withValues(alpha: 0.1),
-                    radius: 6,
-                  ),
-                  child: Text(
-                    '${events.length} events',
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w600,
-                      color: theme.colorScheme.primary,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                TextButton.icon(
-                  onPressed: onRefreshArtifacts,
-                  icon: const Icon(LucideIcons.download, size: 12),
-                  label: const Text('Refresh artifacts'),
-                ),
-                if (terminal)
-                  TextButton.icon(
-                    onPressed: onNewRun,
-                    icon: const Icon(LucideIcons.plus, size: 12),
-                    label: const Text('New run'),
-                  ),
-                if (!terminal)
-                  TextButton.icon(
-                    onPressed: canceling ? null : onCancel,
-                    icon: canceling
-                        ? const SizedBox(
-                            width: 12,
-                            height: 12,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(LucideIcons.x, size: 12),
-                    label: const Text('Cancel run'),
-                    style: TextButton.styleFrom(
-                      foregroundColor: theme.colorScheme.error,
-                    ),
-                  ),
-              ],
-            ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          decoration: BoxDecoration(
+            color: theme.colorScheme.surfaceContainerLow,
+            border: Border(bottom: BorderSide(color: theme.dividerColor)),
           ),
-          if (failureMessage != null)
-            _RunFailureBanner(message: failureMessage, code: failureCode),
-          Expanded(
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                final eventList = Container(
-                  color: theme.colorScheme.surfaceContainerLowest,
-                  child: ListView.builder(
-                    controller: scrollCtrl,
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    itemCount: events.length,
-                    itemBuilder: (context, index) =>
-                        _EventRow(event: events[index]),
+          child: Wrap(
+            spacing: 12,
+            runSpacing: 4,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              _RecentRunMenu(
+                runs: recentRuns,
+                currentRunId: runId,
+                onSelected: onSelectRun,
+              ),
+              if (recentRunsLoading)
+                const SizedBox.square(
+                  dimension: 13,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              if (recentRunsError)
+                Tooltip(
+                  message: 'Recent runs are temporarily unavailable',
+                  child: Icon(
+                    LucideIcons.triangleAlert,
+                    size: 13,
+                    color: context.consoleColors.warning,
                   ),
-                );
-                final artifactList = _ArtifactList(
-                  artifacts: artifacts,
-                  downloadingId: downloadingId,
-                  onDownload: onDownload,
-                );
-                if (constraints.maxWidth < 720) {
-                  return Column(
-                    children: [
-                      Expanded(flex: 3, child: eventList),
-                      if (artifacts.isNotEmpty) ...[
-                        Container(height: 1, color: theme.dividerColor),
-                        Expanded(flex: 2, child: artifactList),
-                      ],
-                    ],
-                  );
-                }
-                return Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                ),
+              if (loading) ...[
+                const SizedBox.square(
+                  dimension: 13,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+                Text('Loading run', style: theme.textTheme.labelSmall),
+              ],
+              if (runResource != null) ...[
+                _LifecycleChip(
+                  lifecycle: runResource!['lifecycle'] as String? ?? 'unknown',
+                  outcome: runResource!['outcome'] as String?,
+                ),
+              ],
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                decoration: ConsoleShapes.decoration(
+                  color: theme.colorScheme.primary.withValues(alpha: 0.1),
+                  radius: 6,
+                ),
+                child: Text(
+                  '${events.length} events',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    color: theme.colorScheme.primary,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              TextButton.icon(
+                onPressed: onRefresh,
+                icon: const Icon(LucideIcons.refreshCw, size: 12),
+                label: const Text('Refresh'),
+              ),
+              if (!loading && terminal)
+                TextButton.icon(
+                  onPressed: onNewRun,
+                  icon: const Icon(LucideIcons.plus, size: 12),
+                  label: const Text('New run'),
+                ),
+              if (!loading && !terminal)
+                TextButton.icon(
+                  onPressed: canceling ? null : onCancel,
+                  icon: canceling
+                      ? const SizedBox(
+                          width: 12,
+                          height: 12,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(LucideIcons.x, size: 12),
+                  label: const Text('Cancel run'),
+                  style: TextButton.styleFrom(
+                    foregroundColor: theme.colorScheme.error,
+                  ),
+                ),
+            ],
+          ),
+        ),
+        if (failureMessage != null)
+          _RunFailureBanner(message: failureMessage, code: failureCode),
+        Expanded(
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final eventList = Container(
+                color: theme.colorScheme.surfaceContainerLowest,
+                child: ListView.builder(
+                  controller: scrollCtrl,
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  itemCount: events.length,
+                  itemBuilder: (context, index) =>
+                      _EventRow(event: events[index]),
+                ),
+              );
+              final artifactList = _ArtifactList(
+                artifacts: artifacts,
+                downloadingId: downloadingId,
+                onDownload: onDownload,
+              );
+              if (constraints.maxWidth < 720) {
+                return Column(
                   children: [
-                    Expanded(child: eventList),
+                    Expanded(flex: 3, child: eventList),
                     if (artifacts.isNotEmpty) ...[
-                      Container(width: 1, color: theme.dividerColor),
-                      SizedBox(width: 280, child: artifactList),
+                      Container(height: 1, color: theme.dividerColor),
+                      Expanded(flex: 2, child: artifactList),
                     ],
                   ],
                 );
-              },
+              }
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Expanded(child: eventList),
+                  if (artifacts.isNotEmpty) ...[
+                    Container(width: 1, color: theme.dividerColor),
+                    SizedBox(width: 280, child: artifactList),
+                  ],
+                ],
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+final class _RecentRunMenu extends StatelessWidget {
+  const _RecentRunMenu({
+    required this.runs,
+    required this.onSelected,
+    this.currentRunId,
+  });
+
+  final List<CockpitRunResource> runs;
+  final String? currentRunId;
+  final Future<void> Function(String runId) onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return MenuAnchor(
+      menuChildren: [
+        for (final run in runs)
+          MenuItemButton(
+            onPressed: () => unawaited(onSelected(run.runId)),
+            child: SizedBox(
+              width: 280,
+              child: Row(
+                children: [
+                  Container(
+                    width: 7,
+                    height: 7,
+                    decoration: BoxDecoration(
+                      color: _runStateColor(context, run),
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          run.documentId,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.labelMedium,
+                        ),
+                        Text(
+                          '${run.runId} · ${_runTime(run.submittedAt)}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            fontFamily: 'monospace',
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    _runStateLabel(run),
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: _runStateColor(context, run),
+                    ),
+                  ),
+                  if (run.runId == currentRunId) ...[
+                    const SizedBox(width: 8),
+                    Icon(
+                      LucideIcons.check,
+                      size: 13,
+                      color: theme.colorScheme.primary,
+                    ),
+                  ],
+                ],
+              ),
             ),
           ),
-        ],
+      ],
+      builder: (context, controller, child) => OutlinedButton.icon(
+        onPressed: runs.isEmpty
+            ? null
+            : () => controller.isOpen ? controller.close() : controller.open(),
+        icon: const Icon(LucideIcons.history, size: 13),
+        label: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 150),
+          child: Text(
+            currentRunId ?? 'Recent runs',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontFamily: currentRunId == null ? null : 'monospace',
+            ),
+          ),
+        ),
       ),
     );
   }
+}
+
+String _runStateLabel(CockpitRunResource run) =>
+    (run.outcome?.name ?? run.lifecycle.name).replaceAll(
+      'internalError',
+      'error',
+    );
+
+Color _runStateColor(BuildContext context, CockpitRunResource run) {
+  final theme = Theme.of(context);
+  return switch (run.outcome) {
+    CockpitRunOutcome.passed => context.consoleColors.success,
+    CockpitRunOutcome.failed => theme.colorScheme.error,
+    CockpitRunOutcome.blocked => context.consoleColors.warning,
+    CockpitRunOutcome.cancelled ||
+    CockpitRunOutcome.interrupted ||
+    CockpitRunOutcome.internalError => theme.colorScheme.onSurfaceVariant,
+    null => theme.colorScheme.primary,
+    _ => theme.colorScheme.onSurfaceVariant,
+  };
+}
+
+String _runTime(DateTime value) {
+  final local = value.toLocal();
+  String two(int part) => part.toString().padLeft(2, '0');
+  return '${two(local.month)}/${two(local.day)} '
+      '${two(local.hour)}:${two(local.minute)}';
 }
 
 final class _RunFailureBanner extends StatelessWidget {
