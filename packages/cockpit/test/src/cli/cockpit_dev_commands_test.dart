@@ -627,7 +627,7 @@ void main() {
   test('dev inspect preserves a verified explicit selector', () {
     final result = cockpitBuildUiLocatorMatchesFromOutput(<String, Object?>{
       'snapshot': <String, Object?>{
-        'summary': <String, Object?>{'visibleTargetCount': 1},
+        'summary': <String, Object?>{'visibleTargetCount': 3},
         'visibleTargets': <Object?>[
           <String, Object?>{
             'registrationId': 'native.editor.textfield.task-title.1',
@@ -635,6 +635,24 @@ void main() {
             'text': 'Task title',
             'typeName': 'TextField',
             'routeName': '/editor',
+            'supportedCommands': <Object?>['tap', 'enterText'],
+            'ancestors': <Object?>[],
+          },
+          <String, Object?>{
+            'registrationId': 'native.editor.textfield.task-body.1',
+            'keyValue': 'task-body-field',
+            'text': 'Task body',
+            'typeName': 'TextField',
+            'routeName': '/editor',
+            'supportedCommands': <Object?>['tap', 'enterText'],
+            'ancestors': <Object?>[],
+          },
+          <String, Object?>{
+            'registrationId': 'native.settings.textfield.task-title.1',
+            'keyValue': 'task-title-field',
+            'text': 'Task title',
+            'typeName': 'TextField',
+            'routeName': '/settings',
             'supportedCommands': <Object?>['tap', 'enterText'],
             'ancestors': <Object?>[],
           },
