@@ -552,7 +552,7 @@ void main() {
       '/api/v2/workspaces/{workspaceId}/documents/validate': <String>{'post'},
       '/api/v2/workspaces/{workspaceId}/cases': <String>{'get'},
       '/api/v2/workspaces/{workspaceId}/operations': <String>{'get', 'post'},
-      '/api/v2/workspaces/{workspaceId}/runs': <String>{'post'},
+      '/api/v2/workspaces/{workspaceId}/runs': <String>{'get', 'post'},
       '/api/v2/runs/{runId}': <String>{'get'},
       '/api/v2/runs/{runId}/cancel': <String>{'post'},
       '/api/v2/runs/{runId}/events': <String>{'get'},

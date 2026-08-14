@@ -38,6 +38,13 @@ void main() {
         matchMode: CockpitTextMatchMode.fuzzy,
       ),
     );
+    expect(
+      CockpitSelector.parse('[sem*="Dashboard"]'),
+      const CockpitLocator(
+        semanticId: 'Dashboard',
+        matchMode: CockpitTextMatchMode.contains,
+      ),
+    );
   });
 
   test(
@@ -78,6 +85,16 @@ void main() {
     const locator = CockpitLocator(text: 'Continue', index: 1);
 
     expect(CockpitSelector.format(locator), '["Continue"]:nth(2)');
+    expect(CockpitSelector.parse(CockpitSelector.format(locator)), locator);
+  });
+
+  test('formats semantic match modes without losing their meaning', () {
+    const locator = CockpitLocator(
+      semanticId: 'Dashboard',
+      matchMode: CockpitTextMatchMode.fuzzy,
+    );
+
+    expect(CockpitSelector.format(locator), '[sem~="Dashboard"]');
     expect(CockpitSelector.parse(CockpitSelector.format(locator)), locator);
   });
 

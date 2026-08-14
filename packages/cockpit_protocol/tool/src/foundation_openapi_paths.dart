@@ -238,6 +238,14 @@ Map<String, Object?> buildFoundationApiPaths() => <String, Object?>{
   },
   '/api/v2/workspaces/{workspaceId}/runs': <String, Object?>{
     'parameters': <Object?>[_pathParameter('workspaceId')],
+    'get': negotiatedOperation(
+      operationId: 'listRuns',
+      summary: 'List recent durable runs for one workspace',
+      parameters: _pageParameters(),
+      responses: <String, Object?>{
+        '200': jsonResponse('Recent workspace runs.', 'RunPage'),
+      },
+    ),
     'post': negotiatedOperation(
       operationId: 'submitRun',
       summary: 'Submit one inline or indexed case or suite',

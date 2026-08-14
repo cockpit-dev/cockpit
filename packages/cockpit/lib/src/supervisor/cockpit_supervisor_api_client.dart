@@ -408,6 +408,28 @@ final class CockpitSupervisorApiClient {
     );
   }
 
+  Future<CockpitPage<CockpitRunResource>> runs(
+    String workspaceId, {
+    int limit = 12,
+    String? cursor,
+  }) async {
+    final page = CockpitPageRequest(limit: limit, cursor: cursor);
+    final session = await _ensureSession();
+    final uri = Uri(
+      path: '/api/v2/workspaces/${_segment(workspaceId)}/runs',
+      queryParameters: <String, String>{
+        'limit': '${page.limit}',
+        'cursor': ?page.cursor,
+      },
+    );
+    return CockpitPage.fromJson<CockpitRunResource>(
+      await _jsonRequest(session, 'GET', uri.toString()),
+      (value, path, policy) =>
+          CockpitRunResource.fromJson(value, path: path, decodePolicy: policy),
+      decodePolicy: session.decodePolicy,
+    );
+  }
+
   Future<CockpitRunResource> run(String runId) async {
     final session = await _ensureSession();
     return CockpitRunResource.fromJson(
@@ -913,8 +935,7 @@ final class CockpitSupervisorApiClient {
         HttpHeaders.authorizationHeader,
         'Bearer ${session.discovery.bearerToken}',
       )
-      ..set('Cockpit-API-Version', session.versionHeader)
-      ..set(cockpitWorkerBuildHeader, cockpitBuildId);
+      ..set('Cockpit-API-Version', session.versionHeader);
     if (requiredFeatures.isNotEmpty) {
       request.headers.set(
         'Cockpit-Required-Features',

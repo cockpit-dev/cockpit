@@ -1,10 +1,10 @@
 import 'package:flutter/gestures.dart';
-import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
 
 import '../../control/cockpit_command.dart';
 import '../../control/cockpit_command_type.dart';
 import '../../runtime/cockpit_ui_idle_waiter.dart';
+import '../../runtime/cockpit_visual_frame_driver.dart';
 import 'cockpit_command_context.dart';
 
 typedef CockpitRouteTargetsWaiter =
@@ -12,9 +12,6 @@ typedef CockpitRouteTargetsWaiter =
 typedef CockpitUsesTestBindingProbe = bool Function();
 
 const Duration _hiddenVisualFrameBudget = Duration(milliseconds: 640);
-const Duration _hiddenVisualFrameInterval = Duration(milliseconds: 16);
-const Duration _hiddenVisualTransitionDuration = Duration(milliseconds: 320);
-const int _hiddenVisualMinimumFrameCount = 2;
 
 final class CockpitPostActionSettleCoordinator {
   CockpitPostActionSettleCoordinator({
@@ -39,14 +36,11 @@ final class CockpitPostActionSettleCoordinator {
   }
 
   Future<void> settleBeforeObservation() async {
-    if (isHiddenVisualSurface) {
-      await Future<void>.microtask(() {});
-      return;
-    }
     await waitForCockpitUiIdle(
       quietWindow: _context.interactionPolicy.uiIdleQuietWindow,
       timeout: _context.interactionPolicy.uiIdleTimeout,
       waitTick: _context.waitTickHandler,
+      ensureVisualFrame: ensureVisualFrame,
       includeNetworkIdle: false,
     );
   }
@@ -59,6 +53,7 @@ final class CockpitPostActionSettleCoordinator {
       timeout: _context.interactionPolicy.uiIdleTimeout,
       waitTick: _context.waitTickHandler,
       waitForNetworkIdle: _context.waitForNetworkIdleHandler,
+      ensureVisualFrame: ensureVisualFrame,
       includeNetworkIdle: includeNetworkIdle,
     );
   }
@@ -193,100 +188,21 @@ final class CockpitPostActionSettleCoordinator {
         : _context.interactionPolicy.actionVisualDelay;
   }
 
-  /// Advances a bounded synthetic frame timeline when a hidden desktop or web
-  /// surface cannot receive ordinary vsync callbacks.
-  Future<void> driveHiddenVisualFrames(
-    CockpitCommandType? commandType, {
-    int? baselineTransientCallbackCount,
-  }) async {
-    if (!_isVisualMutation(commandType) || !isHiddenVisualSurface) {
-      return;
-    }
-    WidgetsBinding binding;
-    try {
-      binding = WidgetsBinding.instance;
-    } on Object {
-      return;
-    }
+  Future<void> driveHiddenVisualFrames(CockpitCommandType? commandType) async {
+    if (!_isVisualMutation(commandType)) return;
+    await ensureVisualFrame(mayAnimate: _mayStartVisualTransition(commandType));
+  }
+
+  Future<bool> ensureVisualFrame({bool mayAnimate = false}) {
     final budget = _minDuration(
       _hiddenVisualFrameBudget,
       _context.interactionPolicy.actionCommitTimeout,
     );
-    final frameOffsets = _hiddenFrameOffsets(commandType, budget);
-    final minimumFrameCount = _minimumHiddenFrameCount(
-      commandType,
-      frameOffsets.length,
+    return ensureCockpitVisualFrame(
+      platform: _context.platform,
+      mayAnimate: mayAnimate,
+      budget: budget,
     );
-    final rawTimeOrigin = binding.currentSystemFrameTimeStamp;
-    var forcedFrameCount = 0;
-    try {
-      while (forcedFrameCount < frameOffsets.length) {
-        final callbacks = binding.transientCallbackCount;
-        final returnedToBaseline = baselineTransientCallbackCount == null
-            ? callbacks == 0
-            : callbacks <= baselineTransientCallbackCount;
-        if (binding.framesEnabled ||
-            (forcedFrameCount >= minimumFrameCount && returnedToBaseline)) {
-          return;
-        }
-        if (binding.schedulerPhase != SchedulerPhase.idle) {
-          return;
-        }
-
-        final frameOffset = frameOffsets[forcedFrameCount];
-        forcedFrameCount += 1;
-        binding.handleBeginFrame(rawTimeOrigin + frameOffset);
-        await Future<void>.microtask(() {});
-        binding.handleDrawFrame();
-        await Future<void>.microtask(() {});
-      }
-    } finally {
-      if (forcedFrameCount > 0) {
-        binding.resetEpoch();
-      }
-    }
-  }
-
-  int _minimumHiddenFrameCount(
-    CockpitCommandType? commandType,
-    int availableFrameCount,
-  ) {
-    final desired = _mayStartVisualTransition(commandType)
-        ? 3
-        : _hiddenVisualMinimumFrameCount;
-    return desired < availableFrameCount ? desired : availableFrameCount;
-  }
-
-  List<Duration> _hiddenFrameOffsets(
-    CockpitCommandType? commandType,
-    Duration budget,
-  ) {
-    final offsets = <Duration>[];
-
-    void addOffset(Duration offset) {
-      final bounded = _minDuration(offset, budget);
-      if (bounded <= Duration.zero ||
-          (offsets.isNotEmpty && bounded <= offsets.last)) {
-        return;
-      }
-      offsets.add(bounded);
-    }
-
-    addOffset(_hiddenVisualFrameInterval);
-    if (_mayStartVisualTransition(commandType)) {
-      addOffset(_hiddenVisualTransitionDuration);
-      addOffset(_hiddenVisualTransitionDuration + _hiddenVisualFrameInterval);
-    } else {
-      addOffset(_hiddenVisualFrameInterval * _hiddenVisualMinimumFrameCount);
-    }
-    var nextOffset = offsets.isEmpty
-        ? _hiddenVisualFrameInterval
-        : offsets.last + _hiddenVisualFrameInterval;
-    while (nextOffset <= budget) {
-      offsets.add(nextOffset);
-      nextOffset += _hiddenVisualFrameInterval;
-    }
-    return offsets;
   }
 
   bool _mayStartVisualTransition(CockpitCommandType? commandType) {
@@ -311,12 +227,8 @@ final class CockpitPostActionSettleCoordinator {
     };
   }
 
-  bool _supportsHiddenFrameDriving() {
-    return switch (_context.platform.trim().toLowerCase()) {
-      'macos' || 'windows' || 'linux' || 'web' => true,
-      _ => false,
-    };
-  }
+  bool _supportsHiddenFrameDriving() =>
+      cockpitSupportsSyntheticVisualFrames(_context.platform);
 
   bool _isVisualMutation(CockpitCommandType? commandType) {
     return switch (commandType) {

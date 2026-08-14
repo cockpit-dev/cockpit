@@ -4767,6 +4767,29 @@
       ],
       "additionalProperties": false
     },
+    "RunPage": {
+      "type": "object",
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/RunResource"
+          },
+          "maxItems": 100
+        },
+        "nextCursor": {
+          "$ref": "#/$defs/Cursor"
+        },
+        "totalCount": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "items"
+      ],
+      "additionalProperties": false
+    },
     "RunCasePage": {
       "type": "object",
       "properties": {

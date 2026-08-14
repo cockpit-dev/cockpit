@@ -1,5 +1,18 @@
 # Changelog
 
+## 4.0.26
+
+- Added bounded newest-first lease pagination so large durable registries remain
+  fast and usable from CLI, Console, REST, and MCP.
+- Added recent durable run listing with resumable workspace pagination and
+  preserved run reconstruction across Supervisor and worker restarts.
+- Replaced macOS JXA activation with native application activation, avoiding
+  unnecessary System Events Automation permission prompts.
+- Stabilized screenshot and native-system capture immediately after E2E runs by
+  allowing genuine device/capture contention to settle within the command budget.
+- Improved Flutter label lowering, network body artifacts, compact run output,
+  and recovery behavior for concurrent and interrupted development sessions.
+
 ## 4.0.25
 
 - Made explicit Flutter selectors use the same conjunctive route, ancestor,

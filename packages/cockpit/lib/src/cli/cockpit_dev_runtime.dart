@@ -59,6 +59,9 @@ final class CockpitDevRuntime {
   bool operationSucceeded(CockpitOperationResult result) =>
       _operationSucceeded(result);
 
+  bool diagnosticReadSucceeded(CockpitOperationResult result) =>
+      _diagnosticReadSucceeded(result);
+
   List<Object?> operationErrors(Iterable<CockpitOperationResult> results) =>
       _operationErrors(results);
 

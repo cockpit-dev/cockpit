@@ -214,6 +214,39 @@ final class CockpitSupervisorRunAdmissionStore {
   Future<CockpitSupervisorRunAdmission?> findRun(String runId) async =>
       (await _store.read()).byRunId[runId];
 
+  Future<({List<CockpitSupervisorRunAdmission> items, int totalCount})>
+  listWorkspace({
+    required String workspaceId,
+    required int offset,
+    required int limit,
+  }) async {
+    if (!_id.hasMatch(workspaceId)) {
+      throw const FormatException('workspaceId is invalid.');
+    }
+    if (offset < 0 || limit < 1 || limit > 100) {
+      throw const FormatException('Run admission page is invalid.');
+    }
+    final state = await _store.read();
+    final matches =
+        state.byRunId.values
+            .where((admission) => admission.workspaceId == workspaceId)
+            .toList(growable: false)
+          ..sort((left, right) {
+            final time = right.submittedAt.compareTo(left.submittedAt);
+            return time != 0 ? time : right.runId.compareTo(left.runId);
+          });
+    if (offset > matches.length) {
+      throw const FormatException('Run admission page offset is stale.');
+    }
+    final end = (offset + limit).clamp(0, matches.length);
+    return (
+      items: List<CockpitSupervisorRunAdmission>.unmodifiable(
+        matches.sublist(offset, end),
+      ),
+      totalCount: matches.length,
+    );
+  }
+
   Future<void> validateOwner({
     required String workspaceId,
     required String runId,

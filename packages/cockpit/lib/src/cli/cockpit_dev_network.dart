@@ -42,7 +42,7 @@ final class CockpitDevNetworkService {
       'uriContains': ?uriContains,
       if (failuresOnly) 'onlyFailures': true,
     });
-    if (!dev.operationSucceeded(network)) {
+    if (!dev.diagnosticReadSucceeded(network)) {
       return dev.writeOperation(
         action: 'network',
         session: session,
@@ -72,6 +72,15 @@ final class CockpitDevNetworkService {
       );
     }
     if (body == null) {
+      if (!dev.operationSucceeded(network)) {
+        return dev.writeOperation(
+          action: 'network',
+          session: session,
+          result: network,
+          state: networkState,
+          changed: 'none',
+        );
+      }
       return dev.writeEnvelope(
         action: 'network',
         session: session,

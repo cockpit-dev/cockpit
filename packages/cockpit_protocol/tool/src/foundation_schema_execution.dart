@@ -198,6 +198,7 @@ Map<String, Object?> foundationExecutionDefinitions() => <String, Object?>{
   }),
   'LeaseResource': _leaseResourceSchema(),
   'OperationPage': pageSchema('OperationDescriptor'),
+  'RunPage': pageSchema('RunResource'),
   'RunCasePage': pageSchema('RunCaseResource'),
   'RunEventPage': pageSchema('RunEvent'),
   'LeasePage': pageSchema('LeaseResource'),

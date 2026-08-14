@@ -322,9 +322,7 @@ final class CockpitSupervisorRunProjection
   }) async {
     _validateRequestIdentity(workspaceId, runId);
     workerInteger(afterSequence, r'$.afterSequence', minimum: 0);
-    if (maximumEvents < 1 || maximumEvents > 4096) {
-      throw const FormatException('Supervisor replay page bound is invalid.');
-    }
+    _validateReplayBound(maximumEvents);
     final projection = _decodeProjection(
       await _store.read(),
       expectedWorkspaceId: workspaceId,
@@ -332,7 +330,53 @@ final class CockpitSupervisorRunProjection
       maximumEventOwners: maximumEventOwners,
       maximumArtifacts: maximumArtifacts,
     );
-    final run = projection.runs[runId];
+    return _eventReplay(
+      projection.runs[runId],
+      afterSequence: afterSequence,
+      maximumEvents: maximumEvents,
+    );
+  }
+
+  Future<Map<String, CockpitSupervisorEventReplay>> readEventsForRuns(
+    Iterable<String> runIds, {
+    required int afterSequence,
+    int maximumEvents = 256,
+  }) async {
+    workerInteger(afterSequence, r'$.afterSequence', minimum: 0);
+    _validateReplayBound(maximumEvents);
+    final ids = runIds.toSet();
+    for (final runId in ids) {
+      _validateRequestIdentity(workspaceId, runId);
+    }
+    if (ids.isEmpty) return const <String, CockpitSupervisorEventReplay>{};
+    final projection = _decodeProjection(
+      await _store.read(),
+      expectedWorkspaceId: workspaceId,
+      maximumRuns: maximumRuns,
+      maximumEventOwners: maximumEventOwners,
+      maximumArtifacts: maximumArtifacts,
+    );
+    return Map<String, CockpitSupervisorEventReplay>.unmodifiable({
+      for (final runId in ids)
+        runId: _eventReplay(
+          projection.runs[runId],
+          afterSequence: afterSequence,
+          maximumEvents: maximumEvents,
+        ),
+    });
+  }
+
+  void _validateReplayBound(int maximumEvents) {
+    if (maximumEvents < 1 || maximumEvents > 4096) {
+      throw const FormatException('Supervisor replay page bound is invalid.');
+    }
+  }
+
+  CockpitSupervisorEventReplay _eventReplay(
+    _ProjectedRun? run, {
+    required int afterSequence,
+    required int maximumEvents,
+  }) {
     if (run == null || run.highestSequence == 0) {
       return const CockpitSupervisorEventReplay(
         boundary: null,
@@ -561,6 +605,15 @@ final class CockpitSupervisorRunProjection
 
   Future<bool> containsRun(String runId) async {
     _validateRequestIdentity(workspaceId, runId);
+    return (await containedRunIds(<String>[runId])).isNotEmpty;
+  }
+
+  Future<Set<String>> containedRunIds(Iterable<String> runIds) async {
+    final ids = runIds.toSet();
+    for (final runId in ids) {
+      _validateRequestIdentity(workspaceId, runId);
+    }
+    if (ids.isEmpty) return const <String>{};
     final projection = _decodeProjection(
       await _store.read(),
       expectedWorkspaceId: workspaceId,
@@ -568,7 +621,7 @@ final class CockpitSupervisorRunProjection
       maximumEventOwners: maximumEventOwners,
       maximumArtifacts: maximumArtifacts,
     );
-    return projection.runs.containsKey(runId);
+    return Set<String>.unmodifiable(ids.where(projection.runs.containsKey));
   }
 
   @override

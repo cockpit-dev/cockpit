@@ -81,6 +81,7 @@ Map<String, Object?> buildFoundationOpenApi() => <String, Object?>{
         'CasePage',
         'RunSubmission',
         'RunAccepted',
+        'RunPage',
         'RunResource',
         'RunCancellationRequest',
         'RunCancellation',

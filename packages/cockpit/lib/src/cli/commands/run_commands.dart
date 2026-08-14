@@ -468,6 +468,29 @@ final class CockpitRunCommand extends Command<int> {
     addSubcommand(
       CockpitLeafCommand(
         runtime: runtime,
+        name: 'list',
+        description: 'List recent durable runs for a workspace.',
+        configure: (parser) => parser
+          ..addOption('workspace-id')
+          ..addOption('limit', defaultsTo: '12')
+          ..addOption('cursor'),
+        action: (arguments) async {
+          final workspaceId = await runtime.workspaceId(
+            arguments.option('workspace-id'),
+          );
+          final page = await (await runtime.client()).runs(
+            workspaceId,
+            limit: _integer(arguments, 'limit', minimum: 1, maximum: 100),
+            cursor: arguments.option('cursor'),
+          );
+          await runtime.success(page.toJson((run) => run.toJson()));
+          return cockpitSuccessExitCode;
+        },
+      ),
+    );
+    addSubcommand(
+      CockpitLeafCommand(
+        runtime: runtime,
         name: 'get',
         description: 'Read a run resource.',
         configure: (parser) => parser.addOption('run-id', mandatory: true),
@@ -574,7 +597,7 @@ final class CockpitRunCommand extends Command<int> {
   String get name => 'run';
 
   @override
-  String get description => 'Read, cancel, and observe runs.';
+  String get description => 'List, read, cancel, and observe runs.';
 }
 
 final class CockpitArtifactCommand extends Command<int> {

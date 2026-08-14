@@ -148,12 +148,19 @@ final class CockpitCliOutputRenderer {
         ? briefMaximumBytes
         : moreMaximumBytes;
     final isTree = command == 'dev.tree';
+    final isRunList = command == 'run.list';
     final attempts = view == CockpitCliOutputView.brief
         ? isTree
               ? const <_ProjectionLimits>[
                   _ProjectionLimits(8, 12, 384, 5),
                   _ProjectionLimits(6, 10, 256, 5),
                   _ProjectionLimits(4, 8, 160, 4),
+                ]
+              : isRunList
+              ? const <_ProjectionLimits>[
+                  _ProjectionLimits(12, 8, 160, 3),
+                  _ProjectionLimits(8, 8, 128, 3),
+                  _ProjectionLimits(4, 6, 96, 3),
                 ]
               : const <_ProjectionLimits>[
                   _ProjectionLimits(4, 10, 512, 5),
@@ -919,6 +926,14 @@ final class CockpitCliAiPresenter {
     if (data is Map<Object?, Object?> && command == 'run.get') {
       return projection.value(
         _compactRun(data, more: view == CockpitCliOutputView.more),
+        path,
+      );
+    }
+    if (data is Map<Object?, Object?> &&
+        command == 'run.list' &&
+        data['items'] is List<Object?>) {
+      return projection.value(
+        _compactRunList(data, more: view == CockpitCliOutputView.more),
         path,
       );
     }
@@ -2391,6 +2406,7 @@ Map<String, Object?> _compactLeaseListOutput(
       return '${right['requestedAt']}'.compareTo('${left['requestedAt']}');
     });
   return <String, Object?>{
+    ..._pick(output, const <String>['total', 'next']),
     'counts': counts,
     'actionableCount': actionable.length,
     if (actionable.isNotEmpty)
@@ -2705,6 +2721,41 @@ Map<String, Object?>? _compactCollection(
           }
         else
           item,
+    ],
+  };
+}
+
+Map<String, Object?> _compactRunList(
+  Map<Object?, Object?> value, {
+  required bool more,
+}) {
+  final rawItems = value['items']! as List<Object?>;
+  return <String, Object?>{
+    ..._pick(value, const <String>['totalCount', 'nextCursor']),
+    'items': <Map<String, Object?>>[
+      for (final item in rawItems.whereType<Map<Object?, Object?>>())
+        <String, Object?>{
+          ..._pick(item, const <String>['runId', 'documentId']),
+          if (item['outcome'] != null)
+            'state': item['outcome']
+          else if (item['lifecycle'] != null)
+            'state': item['lifecycle'],
+          if (item['submittedAt'] != null) 'submitted': item['submittedAt'],
+          if (more)
+            ..._pick(item, const <String>[
+              'documentKind',
+              'stability',
+              'startedAt',
+              'finishedAt',
+              'caseIds',
+              'activeAttemptIds',
+            ]),
+          if (more && item['failure'] is Map<Object?, Object?>)
+            'failure': _compactFailure(
+              item['failure']! as Map<Object?, Object?>,
+              more: true,
+            ),
+        },
     ],
   };
 }

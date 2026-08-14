@@ -119,6 +119,58 @@ final class CockpitLeaseRegistry implements CockpitRegistryReferenceOwner {
     ],
   );
 
+  Future<({List<CockpitLeaseResource> items, int total, String? next})>
+  listPage({
+    String? workspaceId,
+    CockpitLeaseResourceKind? resourceKind,
+    String? resourceId,
+    CockpitLeaseState? leaseState,
+    required int limit,
+    String? before,
+  }) => _readCurrentState((state) {
+    CockpitLeaseRecord? boundary;
+    if (before != null) {
+      boundary = state.leases
+          .where((record) => record.leaseId == before)
+          .firstOrNull;
+      if (boundary == null ||
+          workspaceId != null && boundary.workspaceId != workspaceId ||
+          resourceKind != null && boundary.resourceKind != resourceKind ||
+          resourceId != null && boundary.resourceId != resourceId) {
+        throw const CockpitLeaseException(
+          code: 'leasePageInvalid',
+          message: 'Lease page cursor is invalid for these filters.',
+        );
+      }
+    }
+
+    final matches = state.leases.where(
+      (record) =>
+          (workspaceId == null || record.workspaceId == workspaceId) &&
+          (resourceKind == null || record.resourceKind == resourceKind) &&
+          (resourceId == null || record.resourceId == resourceId) &&
+          (leaseState == null || record.state == leaseState),
+    );
+    final total = matches.length;
+    final page =
+        matches
+            .where(
+              (record) =>
+                  boundary == null || record.sequence < boundary.sequence,
+            )
+            .toList(growable: false)
+          ..sort((left, right) => right.sequence.compareTo(left.sequence));
+    final hasMore = page.length > limit;
+    final records = page.take(limit).toList(growable: false);
+    return (
+      items: <CockpitLeaseResource>[
+        for (final record in records) _resource(state, record),
+      ],
+      total: total,
+      next: hasMore ? records.last.leaseId : null,
+    );
+  });
+
   @override
   Future<int> activeReferenceCount(String workspaceId) => _readCurrentState(
     (state) => state.leases

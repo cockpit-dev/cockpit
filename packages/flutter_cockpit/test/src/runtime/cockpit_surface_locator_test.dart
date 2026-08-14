@@ -138,4 +138,47 @@ void main() {
     expect(result.isSuccess, isTrue, reason: '${result.error?.details}');
     expect(result.target?.text, 'Save task');
   });
+
+  testWidgets('semantic label probes do not depend on a Tooltip widget', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      WidgetsApp(
+        color: const Color(0xFFFFFFFF),
+        builder: (context, child) => CockpitSurface(
+          routeName: '/dashboard',
+          child: Material(
+            child: Directionality(
+              textDirection: TextDirection.ltr,
+              child: Semantics(
+                label: 'Open Dashboard navigation',
+                button: true,
+                child: InkWell(
+                  key: const ValueKey<String>('dashboard-navigation'),
+                  onTap: () {},
+                  child: const Text('Dashboard'),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final surface = tester.state<CockpitSurfaceState>(
+      find.byType(CockpitSurface),
+    );
+    final result = surface.probeVisibleLocator(
+      const CockpitLocator(
+        semanticId: 'Dashboard navigation',
+        matchMode: CockpitTextMatchMode.contains,
+      ),
+      requiredCommand: CockpitCommandType.tap,
+    );
+
+    expect(result.isSuccess, isTrue, reason: '${result.error?.details}');
+    expect(result.target?.keyValue, 'dashboard-navigation');
+    expect(result.target?.tooltip, isNull);
+  });
 }

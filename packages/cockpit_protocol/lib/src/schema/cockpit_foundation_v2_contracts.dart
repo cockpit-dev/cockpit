@@ -4770,6 +4770,29 @@ const String cockpitFoundationV2SchemaJson = r'''
       ],
       "additionalProperties": false
     },
+    "RunPage": {
+      "type": "object",
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/RunResource"
+          },
+          "maxItems": 100
+        },
+        "nextCursor": {
+          "$ref": "#/$defs/Cursor"
+        },
+        "totalCount": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "items"
+      ],
+      "additionalProperties": false
+    },
     "RunCasePage": {
       "type": "object",
       "properties": {
@@ -6264,6 +6287,69 @@ const String cockpitV2OpenApiJson = r'''
           }
         }
       ],
+      "get": {
+        "operationId": "listRuns",
+        "summary": "List recent durable runs for one workspace",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ApiVersion"
+          },
+          {
+            "$ref": "#/components/parameters/RequiredFeatures"
+          },
+          {
+            "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "$ref": "#/components/parameters/Cursor"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Recent workspace runs.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/TooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMedia"
+          },
+          "422": {
+            "$ref": "#/components/responses/Unprocessable"
+          },
+          "426": {
+            "$ref": "#/components/responses/UpgradeRequired"
+          },
+          "429": {
+            "$ref": "#/components/responses/ResourceBusy"
+          },
+          "500": {
+            "$ref": "#/components/responses/Internal"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        }
+      },
       "post": {
         "operationId": "submitRun",
         "summary": "Submit one inline or indexed case or suite",
@@ -7001,6 +7087,9 @@ const String cockpitV2OpenApiJson = r'''
       },
       "RunAccepted": {
         "$ref": "../schema/cockpit.foundation.v2.schema.json#/$defs/RunAccepted"
+      },
+      "RunPage": {
+        "$ref": "../schema/cockpit.foundation.v2.schema.json#/$defs/RunPage"
       },
       "RunResource": {
         "$ref": "../schema/cockpit.foundation.v2.schema.json#/$defs/RunResource"

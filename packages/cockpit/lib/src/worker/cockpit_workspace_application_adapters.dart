@@ -380,7 +380,7 @@ final class _OperationSpec {
   final Duration? resourceWait;
 }
 
-const Duration _interactiveResourceWait = Duration(seconds: 3);
+const Duration _interactiveResourceWait = Duration(seconds: 30);
 
 const Set<String> _pathInputSegments = <String>{
   'path',

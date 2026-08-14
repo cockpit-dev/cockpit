@@ -9,12 +9,17 @@ typedef CockpitUiIdleNetworkWaiter =
       required Duration quietWindow,
       required Duration timeout,
     });
+typedef CockpitUiIdleVisualFrameEnsurer = Future<bool> Function();
+typedef CockpitUiIdleStateProbe = bool Function();
+typedef CockpitUiIdleClock = DateTime Function();
+typedef CockpitUiIdleScheduledFrameWaiter = Future<void> Function();
 
 Future<bool> waitForCockpitUiIdle({
   required Duration quietWindow,
   required Duration timeout,
   required CockpitUiIdleTickHandler waitTick,
   CockpitUiIdleNetworkWaiter? waitForNetworkIdle,
+  CockpitUiIdleVisualFrameEnsurer? ensureVisualFrame,
   bool includeNetworkIdle = true,
 }) async {
   final deadline = DateTime.now().add(timeout);
@@ -23,6 +28,7 @@ Future<bool> waitForCockpitUiIdle({
     deadline: deadline,
     quietWindow: quietWindow,
     waitTick: waitTick,
+    ensureVisualFrame: ensureVisualFrame,
   );
   if (!schedulerSettled) {
     return false;
@@ -49,6 +55,7 @@ Future<bool> waitForCockpitUiIdle({
     deadline: deadline,
     quietWindow: quietWindow,
     waitTick: waitTick,
+    ensureVisualFrame: ensureVisualFrame,
   );
 }
 
@@ -56,6 +63,7 @@ Future<bool> _waitForSchedulerQuiet({
   required DateTime deadline,
   required Duration quietWindow,
   required CockpitUiIdleTickHandler waitTick,
+  required CockpitUiIdleVisualFrameEnsurer? ensureVisualFrame,
 }) async {
   SchedulerBinding schedulerBinding;
   WidgetsBinding widgetsBinding;
@@ -70,20 +78,46 @@ Future<bool> _waitForSchedulerQuiet({
     return true;
   }
 
-  DateTime? quietSince;
-  while (DateTime.now().isBefore(deadline)) {
-    await Future<void>.microtask(() {});
-    final isIdle =
+  return waitForCockpitSchedulerQuiet(
+    deadline: deadline,
+    quietWindow: quietWindow,
+    waitTick: waitTick,
+    isIdle: () =>
         schedulerBinding.schedulerPhase == SchedulerPhase.idle &&
-        !schedulerBinding.hasScheduledFrame;
-    if (isIdle) {
-      quietSince ??= DateTime.now();
-      if (DateTime.now().difference(quietSince) >= quietWindow) {
-        return true;
+        !schedulerBinding.hasScheduledFrame,
+    ensureVisualFrame: ensureVisualFrame,
+    waitForScheduledFrame: () =>
+        _awaitFrameIfScheduled(schedulerBinding, widgetsBinding),
+  );
+}
+
+Future<bool> waitForCockpitSchedulerQuiet({
+  required DateTime deadline,
+  required Duration quietWindow,
+  required CockpitUiIdleTickHandler waitTick,
+  required CockpitUiIdleStateProbe isIdle,
+  CockpitUiIdleVisualFrameEnsurer? ensureVisualFrame,
+  CockpitUiIdleScheduledFrameWaiter? waitForScheduledFrame,
+  CockpitUiIdleClock clock = DateTime.now,
+}) async {
+  DateTime? quietSince;
+  while (clock().isBefore(deadline)) {
+    await Future<void>.microtask(() {});
+    if (isIdle()) {
+      quietSince ??= clock();
+      if (clock().difference(quietSince) >= quietWindow) {
+        await ensureVisualFrame?.call();
+        await Future<void>.microtask(() {});
+        if (isIdle()) return true;
+        quietSince = null;
       }
     } else {
       quietSince = null;
-      await _awaitFrameIfScheduled(schedulerBinding, widgetsBinding);
+      if (ensureVisualFrame != null) {
+        await ensureVisualFrame();
+      } else {
+        await waitForScheduledFrame?.call();
+      }
     }
     await waitTick(const Duration(milliseconds: 16));
   }

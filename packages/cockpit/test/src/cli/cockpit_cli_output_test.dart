@@ -1086,6 +1086,54 @@ void main() {
     expect(output, isNot(contains('unused-digest')));
   });
 
+  test('run listings keep the bounded page compact and scannable', () {
+    const renderer = CockpitCliOutputRenderer();
+    final data = <String, Object?>{
+      'items': <Object?>[
+        for (var index = 0; index < 7; index += 1)
+          <String, Object?>{
+            'runId': 'r$index',
+            'documentId': 'case-$index',
+            'lifecycle': 'completed',
+            'outcome': index == 1 ? 'failed' : 'passed',
+            'stability': 'stable',
+            'submittedAt': '2026-08-14T04:0$index:00Z',
+            if (index == 1)
+              'failure': <String, Object?>{
+                'primary': <String, Object?>{
+                  'code': 'assertionFailed',
+                  'message': 'A deliberately verbose failure message.',
+                },
+              },
+          },
+      ],
+      'totalCount': 7,
+    };
+
+    final value =
+        lon.decode(
+              renderer.renderAi(
+                command: 'run.list',
+                data: data,
+                view: CockpitCliOutputView.brief,
+              ),
+            )!
+            as Map<Object?, Object?>;
+    final items = value['items']! as List<Object?>;
+
+    expect(items, hasLength(7));
+    expect(items.first, <Object?, Object?>{
+      'run': 'r0',
+      'doc': 'case-0',
+      'state': 'passed',
+      'submitted': '2026-08-14T04:00:00Z',
+    });
+    expect(value['total'], 7);
+    expect(value, isNot(contains('failure')));
+    expect(value, isNot(contains('error')));
+    expect(value, isNot(contains('more')));
+  });
+
   test('run events keep terminal state and failures in brief output', () {
     const renderer = CockpitCliOutputRenderer();
     final data = <String, Object?>{
@@ -1549,6 +1597,40 @@ void main() {
         expect(output, isNot(contains('success')));
         expect(output, isNot(contains('availability')));
       }
+    });
+
+    test('lease list output preserves bounded pagination metadata', () {
+      const renderer = CockpitCliOutputRenderer();
+      final text = renderer.renderAi(
+        command: 'op.run',
+        data: const <String, Object?>{
+          'operationId': 'operation-leases',
+          'kind': 'lease.list',
+          'lifecycle': 'completed',
+          'outcome': 'succeeded',
+          'output': <String, Object?>{
+            'items': <Object?>[
+              <String, Object?>{
+                'leaseId': 'lease-50',
+                'resourceKind': 'device',
+                'resourceId': 'android:emulator-5554',
+                'state': 'active',
+                'requestedAt': '2026-08-14T00:00:00.000Z',
+              },
+            ],
+            'total': 3113,
+            'next': 'lease-50',
+          },
+        },
+        view: CockpitCliOutputView.brief,
+      );
+      final value = lon.decode(text)! as Map<Object?, Object?>;
+      final output = value['output']! as Map<Object?, Object?>;
+
+      expect(output['total'], 3113);
+      expect(output['next'], 'lease-50');
+      expect(output['counts'], <Object?, Object?>{'active': 1});
+      expect(output['actionable'], 1);
     });
 
     test('renders one exact operation without truncation metadata', () {

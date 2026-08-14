@@ -10,6 +10,7 @@ void main() {
     'captureExplicit waits for observation readiness and applies default snapshot options',
     () async {
       var settleCount = 0;
+      var idleWaitCount = 0;
       bool? includeNetworkIdle;
       CockpitScreenshotRequest? capturedRequest;
       final inspector = _RecordingScreenshotInspector();
@@ -34,6 +35,7 @@ void main() {
         },
         bestEffortWaitForUiIdle:
             ({required bool includeNetworkIdleValue}) async {
+              idleWaitCount += 1;
               includeNetworkIdle = includeNetworkIdleValue;
             },
         defaultSnapshotOptionsForReason: (reason) {
@@ -57,7 +59,8 @@ void main() {
       );
 
       expect(outcome, isNotNull);
-      expect(settleCount, 2);
+      expect(settleCount, 0);
+      expect(idleWaitCount, 1);
       expect(includeNetworkIdle, isTrue);
       expect(
         capturedRequest?.snapshotOptions,

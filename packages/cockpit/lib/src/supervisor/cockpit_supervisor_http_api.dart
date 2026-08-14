@@ -2,7 +2,6 @@ import 'dart:io';
 
 import 'package:cockpit_protocol/cockpit_protocol.dart';
 
-import '../foundation/cockpit_version.dart';
 import '../registry/cockpit_registry_models.dart';
 import 'cockpit_supervisor_http_support.dart';
 import 'cockpit_supervisor_runtime.dart';
@@ -222,10 +221,6 @@ final class CockpitSupervisorHttpApi {
       await support.json(request, HttpStatus.ok, workspace.toJson());
       return;
     }
-    final workerBuildId = request.headers.value(cockpitWorkerBuildHeader);
-    if (workerBuildId != null) {
-      await runtime.selectWorkspaceWorkerBuild(workspaceId, workerBuildId);
-    }
     if (path.length == 5 && path[4] == 'targets') {
       if (request.method != 'GET') {
         return _methodNotAllowed(request, const <String>['GET']);
@@ -391,18 +386,43 @@ final class CockpitSupervisorHttpApi {
       return _methodNotAllowed(request, const <String>['GET', 'POST']);
     }
     if (path.length == 5 && path[4] == 'runs') {
-      if (request.method != 'POST') {
-        return _methodNotAllowed(request, const <String>['POST']);
+      if (request.method == 'GET') {
+        final scope = 'workspace-runs:$workspaceId';
+        final page = support.pageRequest(request, scope);
+        final offset = page.cursor == null
+            ? 0
+            : support.decodeCursor(page.cursor!, scope);
+        final runs = await runtime.runs(
+          workspaceId,
+          offset: offset,
+          limit: page.limit,
+        );
+        final nextOffset = offset + runs.items.length;
+        await support.json(
+          request,
+          HttpStatus.ok,
+          CockpitPage<CockpitRunResource>(
+            items: runs.items,
+            nextCursor: nextOffset < runs.totalCount
+                ? support.encodeCursor(scope, nextOffset)
+                : null,
+            totalCount: runs.totalCount,
+          ).toJson((run) => run.toJson()),
+        );
+        return;
       }
-      final submission = CockpitRunSubmission.fromJson(
-        await support.readJson(request),
-      );
-      if (submission.workspaceId != workspaceId) {
-        throw const FormatException('Run submission workspace mismatch.');
+      if (request.method == 'POST') {
+        final submission = CockpitRunSubmission.fromJson(
+          await support.readJson(request),
+        );
+        if (submission.workspaceId != workspaceId) {
+          throw const FormatException('Run submission workspace mismatch.');
+        }
+        final accepted = await runtime.submitRun(submission);
+        await support.json(request, HttpStatus.accepted, accepted.toJson());
+        return;
       }
-      final accepted = await runtime.submitRun(submission);
-      await support.json(request, HttpStatus.accepted, accepted.toJson());
-      return;
+      return _methodNotAllowed(request, const <String>['GET', 'POST']);
     }
     await _notFound(request);
   }

@@ -553,8 +553,6 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
         previousRouteName,
         commandType: CockpitCommandType.tap,
         routeAlreadyCommitted: commit.routeCommitted,
-        baselineTransientCallbackCount:
-            commit.beforeActionTransientCallbackCount,
       );
       final routeExpectationFailure = await _validateExpectedRouteAfterAction(
         command: command,
@@ -618,8 +616,6 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
         previousRouteName,
         commandType: CockpitCommandType.tap,
         routeAlreadyCommitted: commit.routeCommitted,
-        baselineTransientCallbackCount:
-            commit.beforeActionTransientCallbackCount,
       );
       final routeExpectationFailure = await _validateExpectedRouteAfterAction(
         command: command,
@@ -809,8 +805,6 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
         previousRouteName,
         commandType: CockpitCommandType.longPress,
         routeAlreadyCommitted: commit.routeCommitted,
-        baselineTransientCallbackCount:
-            commit.beforeActionTransientCallbackCount,
       );
       return _buildSuccessWithOptionalCapture(
         command: command,
@@ -856,8 +850,6 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
         previousRouteName,
         commandType: CockpitCommandType.longPress,
         routeAlreadyCommitted: commit.routeCommitted,
-        baselineTransientCallbackCount:
-            commit.beforeActionTransientCallbackCount,
       );
       return _buildSuccessWithOptionalCapture(
         command: command,
@@ -971,8 +963,6 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
         previousRouteName,
         commandType: CockpitCommandType.doubleTap,
         routeAlreadyCommitted: commit.routeCommitted,
-        baselineTransientCallbackCount:
-            commit.beforeActionTransientCallbackCount,
       );
       return _buildSuccessWithOptionalCapture(
         command: command,
@@ -2093,6 +2083,7 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
       timeout: timeout,
       waitTick: _waitTickHandler,
       waitForNetworkIdle: _waitForNetworkIdleHandler,
+      ensureVisualFrame: _settleCoordinator.ensureVisualFrame,
       includeNetworkIdle: includeNetworkIdle,
     );
     if (!didGoIdle) {
@@ -2267,7 +2258,6 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
       previousRouteName: previousRouteName,
       commandType: CockpitCommandType.enterText,
       routeAlreadyCommitted: commit.routeCommitted,
-      baselineTransientCallbackCount: commit.beforeActionTransientCallbackCount,
       mutationCommitted: mutationCommitted,
     );
 
@@ -2493,7 +2483,6 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
       previousRouteName: previousRouteName,
       commandType: command.commandType,
       routeAlreadyCommitted: commit.routeCommitted,
-      baselineTransientCallbackCount: commit.beforeActionTransientCallbackCount,
       mutationCommitted: mutationCommitted,
     );
     return _buildSuccessWithOptionalCapture(
@@ -2511,14 +2500,12 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
     required String? previousRouteName,
     required CockpitCommandType commandType,
     required bool routeAlreadyCommitted,
-    required int? baselineTransientCallbackCount,
     required bool mutationCommitted,
   }) async {
     Future<void> stabilize() => _stabilizeAfterAction(
       previousRouteName,
       commandType: commandType,
       routeAlreadyCommitted: routeAlreadyCommitted,
-      baselineTransientCallbackCount: baselineTransientCallbackCount,
     );
     final timeoutMs = command.timeoutMs;
     if (!mutationCommitted || timeoutMs == null || timeoutMs <= 0) {
@@ -2901,7 +2888,6 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
       previousRouteName: previousRouteName,
       commandType: requiredCommand,
       routeAlreadyCommitted: commit.routeCommitted,
-      baselineTransientCallbackCount: commit.beforeActionTransientCallbackCount,
       mutationCommitted: mutationCommitted,
     );
     return _buildSuccessWithOptionalCapture(
@@ -3116,7 +3102,6 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
     await _stabilizeAfterAction(
       previousRouteName,
       commandType: requiredCommand,
-      baselineTransientCallbackCount: commit.beforeActionTransientCallbackCount,
     );
     return _buildSuccessWithOptionalCapture(
       command: command,
@@ -4844,24 +4829,12 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
     return label.isEmpty ? null : label;
   }
 
-  int? _transientCallbackCount() {
-    try {
-      return WidgetsBinding.instance.transientCallbackCount;
-    } on Object {
-      return null;
-    }
-  }
-
   Future<void> _stabilizeAfterAction(
     String? previousRouteName, {
     CockpitCommandType? commandType,
     bool routeAlreadyCommitted = false,
-    int? baselineTransientCallbackCount,
   }) async {
-    await _settleCoordinator.driveHiddenVisualFrames(
-      commandType,
-      baselineTransientCallbackCount: baselineTransientCallbackCount,
-    );
+    await _settleCoordinator.driveHiddenVisualFrames(commandType);
     await _postActionSettler();
     await _waitForGestureCommit(commandType);
     final routeChanged =
@@ -4915,7 +4888,6 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
     final beforeTargetInteractionState = interactedTarget == null
         ? null
         : _targetInteractionState(interactedTarget);
-    final beforeActionTransientCallbackCount = _transientCallbackCount();
     final routeNameBeforeAction = _currentRouteName();
     FutureOr<void> result;
     try {
@@ -4936,7 +4908,6 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
         beforeActionFingerprint: beforeActionFingerprint,
         interactedTarget: interactedTarget,
         beforeTargetInteractionState: beforeTargetInteractionState,
-        beforeActionTransientCallbackCount: beforeActionTransientCallbackCount,
         diagnostics: _actionDiagnostics(
           command: command,
           commandType: commandType,
@@ -5003,7 +4974,6 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
         beforeActionFingerprint: beforeActionFingerprint,
         interactedTarget: interactedTarget,
         beforeTargetInteractionState: beforeTargetInteractionState,
-        beforeActionTransientCallbackCount: beforeActionTransientCallbackCount,
         routeCommitted: routeCommitted,
         diagnostics: _actionDiagnostics(
           command: command,
@@ -5024,7 +4994,6 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
       beforeActionFingerprint: beforeActionFingerprint,
       interactedTarget: interactedTarget,
       beforeTargetInteractionState: beforeTargetInteractionState,
-      beforeActionTransientCallbackCount: beforeActionTransientCallbackCount,
       diagnostics: _actionDiagnostics(
         command: command,
         commandType: commandType,
@@ -6509,7 +6478,6 @@ final class _ActionCommitResult {
     this.beforeActionFingerprint,
     this.interactedTarget,
     this.beforeTargetInteractionState,
-    this.beforeActionTransientCallbackCount,
   });
 
   const _ActionCommitResult.failure(CockpitCommandExecution failure)
@@ -6521,7 +6489,6 @@ final class _ActionCommitResult {
         beforeActionFingerprint: null,
         interactedTarget: null,
         beforeTargetInteractionState: null,
-        beforeActionTransientCallbackCount: null,
       );
 
   final List<Map<String, Object?>> warnings;
@@ -6531,5 +6498,4 @@ final class _ActionCommitResult {
   final String? beforeActionFingerprint;
   final CockpitTarget? interactedTarget;
   final String? beforeTargetInteractionState;
-  final int? beforeActionTransientCallbackCount;
 }

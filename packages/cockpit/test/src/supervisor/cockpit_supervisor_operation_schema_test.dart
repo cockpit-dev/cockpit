@@ -83,6 +83,72 @@ void main() {
     }
   });
 
+  test('lease listing schema keeps every response page bounded', () {
+    final definitions = Map<String, Object?>.from(
+      CockpitSupervisorOperationSchema.document()[r'$defs']!
+          as Map<Object?, Object?>,
+    );
+    final request = Map<String, Object?>.from(
+      definitions['lease.list.request']! as Map<Object?, Object?>,
+    );
+    final response = Map<String, Object?>.from(
+      definitions['lease.list.response']! as Map<Object?, Object?>,
+    );
+    final properties = Map<String, Object?>.from(
+      request['properties']! as Map<Object?, Object?>,
+    );
+    final state = Map<String, Object?>.from(
+      properties['state']! as Map<Object?, Object?>,
+    );
+    final limit = Map<String, Object?>.from(
+      properties['limit']! as Map<Object?, Object?>,
+    );
+
+    expect(
+      (state['enum']! as List<Object?>).cast<String>(),
+      CockpitLeaseState.values.map((value) => value.name),
+    );
+    expect(limit['default'], 50);
+    expect(limit['maximum'], 200);
+    expect(
+      JsonSchema.create(request).validate(<String, Object?>{}).isValid,
+      isTrue,
+    );
+    expect(
+      JsonSchema.create(request).validate(<String, Object?>{
+        'state': 'queued',
+        'limit': 200,
+        'before': 'lease-1',
+      }).isValid,
+      isTrue,
+    );
+    expect(
+      JsonSchema.create(
+        request,
+      ).validate(<String, Object?>{'limit': 201}).isValid,
+      isFalse,
+    );
+    expect(
+      JsonSchema.create(response).validate(<String, Object?>{
+        'items': <Object?>[
+          for (var index = 0; index < 200; index += 1) <String, Object?>{},
+        ],
+        'total': 3113,
+        'next': 'lease-200',
+      }).isValid,
+      isTrue,
+    );
+    expect(
+      JsonSchema.create(response).validate(<String, Object?>{
+        'items': <Object?>[
+          for (var index = 0; index < 201; index += 1) <String, Object?>{},
+        ],
+        'total': 3113,
+      }).isValid,
+      isFalse,
+    );
+  });
+
   test('snapshot options schema matches the public protocol model', () {
     final definitions = Map<String, Object?>.from(
       CockpitSupervisorOperationSchema.document()[r'$defs']!

@@ -189,6 +189,33 @@ void main() {
     );
   });
 
+  test('resolves semantic labels with explicit text matching modes', () {
+    final registry = CockpitTargetRegistry(routeName: '/dashboard');
+    registry.register(
+      const CockpitTarget(
+        registrationId: 'dashboard-navigation',
+        semanticId: 'Open Dashboard navigation',
+        routeName: '/dashboard',
+        supportedCommands: {CockpitCommandType.tap},
+      ),
+    );
+
+    final resolution = registry.resolve(
+      const CockpitLocator(
+        semanticId: 'Dashboard navigation',
+        matchMode: CockpitTextMatchMode.contains,
+      ),
+      requiredCommand: CockpitCommandType.tap,
+    );
+
+    expect(resolution.isSuccess, isTrue, reason: '${resolution.error}');
+    expect(resolution.target?.registrationId, 'dashboard-navigation');
+    expect(
+      resolution.locatorResolution?.matchedKind,
+      CockpitLocatorKind.semanticId,
+    );
+  });
+
   test('caps live snapshots and prioritizes actionable keyed targets', () {
     final registry = CockpitTargetRegistry(routeName: '/inbox');
 
