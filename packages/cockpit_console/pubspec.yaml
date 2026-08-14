@@ -1,7 +1,7 @@
 name: cockpit_console
 description: Desktop GUI client for Cockpit E2E automation with AI and declarative modes.
 publish_to: none
-version: 1.0.0
+version: 1.0.1
 
 environment:
   sdk: '>=3.8.0 <4.0.0'
