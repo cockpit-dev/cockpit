@@ -1,5 +1,9 @@
 # Changelog
 
+## 4.0.27
+
+- Synchronized the Flutter bridge package with the current Cockpit release.
+
 ## 4.0.26
 
 - Kept Flutter control, idle waits, and screenshots responsive when desktop or
