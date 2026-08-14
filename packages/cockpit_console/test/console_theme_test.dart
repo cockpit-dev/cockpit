@@ -47,19 +47,23 @@ void main() {
 
       expect(
         filled.backgroundColor?.resolve(const <WidgetState>{}),
-        colors.accent,
+        colors.action,
       );
       expect(
         filled.backgroundColor?.resolve(const <WidgetState>{
           WidgetState.hovered,
         }),
-        colors.accentHover,
+        colors.actionHover,
       );
       expect(
         filled.backgroundColor?.resolve(const <WidgetState>{
           WidgetState.pressed,
         }),
-        colors.accentActive,
+        colors.actionActive,
+      );
+      expect(
+        filled.foregroundColor?.resolve(const <WidgetState>{}),
+        colors.actionFg,
       );
       expect(
         outlined.side?.resolve(const <WidgetState>{WidgetState.focused}),
@@ -99,7 +103,17 @@ void main() {
       expect(
         _contrast(colors.accent, colors.accentFg),
         greaterThanOrEqualTo(4.5),
+        reason: '$brightness accent foreground',
+      );
+      expect(
+        _contrast(colors.action, colors.actionFg),
+        greaterThanOrEqualTo(4.5),
         reason: '$brightness primary action',
+      );
+      expect(
+        _contrast(colors.actionHover, colors.actionFg),
+        greaterThanOrEqualTo(4.5),
+        reason: '$brightness hovered primary action',
       );
     }
   });
@@ -206,18 +220,20 @@ void main() {
     }
   });
 
-  testWidgets('filled icon buttons keep the primary action foreground', (
+  testWidgets('primary icon buttons share the filled action palette', (
     tester,
   ) async {
     for (final brightness in Brightness.values) {
       final theme = ConsoleTheme.build(brightness);
+      final colors = ConsoleColors(brightness);
       await tester.pumpWidget(
         MaterialApp(
           theme: theme,
           home: Scaffold(
-            body: IconButton.filled(
+            body: ConsolePrimaryIconButton(
               onPressed: () {},
               icon: const Icon(Icons.power),
+              tooltip: 'Power',
             ),
           ),
         ),
@@ -226,8 +242,13 @@ void main() {
 
       expect(
         IconTheme.of(tester.element(find.byIcon(Icons.power))).color,
-        theme.colorScheme.onPrimary,
+        colors.actionFg,
         reason: '$brightness filled icon button',
+      );
+      final button = tester.widget<IconButton>(find.byType(IconButton));
+      expect(
+        button.style?.backgroundColor?.resolve(const <WidgetState>{}),
+        colors.action,
       );
     }
   });

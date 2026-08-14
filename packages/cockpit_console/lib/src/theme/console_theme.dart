@@ -355,8 +355,8 @@ final class ConsoleTheme {
     return FilledButtonThemeData(
       style:
           FilledButton.styleFrom(
-            backgroundColor: colors.accent,
-            foregroundColor: colors.accentFg,
+            backgroundColor: colors.action,
+            foregroundColor: colors.actionFg,
             disabledBackgroundColor: colors.surface3,
             disabledForegroundColor: colors.inkDisabled,
             elevation: 0,
@@ -371,12 +371,12 @@ final class ConsoleTheme {
                 return colors.surface3;
               }
               if (states.contains(WidgetState.pressed)) {
-                return colors.accentActive;
+                return colors.actionActive;
               }
               if (states.contains(WidgetState.hovered)) {
-                return colors.accentHover;
+                return colors.actionHover;
               }
-              return colors.accent;
+              return colors.action;
             }),
             side: WidgetStateProperty.resolveWith((states) {
               if (states.contains(WidgetState.focused)) {

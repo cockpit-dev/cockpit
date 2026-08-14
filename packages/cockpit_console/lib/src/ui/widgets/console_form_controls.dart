@@ -1,4 +1,6 @@
 import 'package:cockpit_console/src/theme/console_control_style.dart';
+import 'package:cockpit_console/src/theme/console_colors.dart';
+import 'package:cockpit_console/src/theme/console_shapes.dart';
 import 'package:flutter/material.dart';
 
 /// Canonical single-line form controls for Cockpit Console.
@@ -261,6 +263,58 @@ final class ConsoleFieldIconButton extends StatelessWidget {
       onPressed: onPressed,
       icon: icon,
       style: ConsoleControlStyle.fieldIconButtonStyle(),
+    );
+  }
+}
+
+/// A primary 40px icon action aligned with a Console form control.
+final class ConsolePrimaryIconButton extends StatelessWidget {
+  const ConsolePrimaryIconButton({
+    super.key,
+    required this.icon,
+    required this.tooltip,
+    required this.onPressed,
+  });
+
+  final Widget icon;
+  final String tooltip;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.consoleColors;
+    return SizedBox.square(
+      dimension: ConsoleControlStyle.height,
+      child: IconButton.filled(
+        tooltip: tooltip,
+        onPressed: onPressed,
+        icon: icon,
+        style:
+            IconButton.styleFrom(
+              backgroundColor: colors.action,
+              foregroundColor: colors.actionFg,
+              disabledBackgroundColor: colors.surface3,
+              disabledForegroundColor: colors.inkDisabled,
+              minimumSize: const Size.square(ConsoleControlStyle.height),
+              maximumSize: const Size.square(ConsoleControlStyle.height),
+              padding: EdgeInsets.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              shape: ConsoleShapes.border(radius: ConsoleShapes.controlRadius),
+            ).copyWith(
+              backgroundColor: WidgetStateProperty.resolveWith((states) {
+                if (states.contains(WidgetState.disabled)) {
+                  return colors.surface3;
+                }
+                if (states.contains(WidgetState.pressed)) {
+                  return colors.actionActive;
+                }
+                if (states.contains(WidgetState.hovered)) {
+                  return colors.actionHover;
+                }
+                return colors.action;
+              }),
+            ),
+      ),
     );
   }
 }

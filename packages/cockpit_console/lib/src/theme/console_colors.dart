@@ -52,6 +52,11 @@ extension type const ConsoleColors(Brightness brightness) {
   Color get accentSubtleFg =>
       isDark ? ConsolePalette.accentSubtleFg : const Color(0xFF3867BD);
 
+  Color get action => ConsolePalette.action;
+  Color get actionHover => ConsolePalette.actionHover;
+  Color get actionActive => ConsolePalette.actionActive;
+  Color get actionFg => ConsolePalette.actionFg;
+
   // ── Status ───────────────────────────────────────────────────────────
   Color get success =>
       isDark ? ConsolePalette.success : const Color(0xFF287D56);

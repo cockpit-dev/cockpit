@@ -193,18 +193,15 @@ final class _DisconnectedChatView extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 8),
-              SizedBox.square(
-                dimension: ConsoleControlStyle.height,
-                child: IconButton.filled(
-                  onPressed: connecting ? null : onConnect,
-                  icon: connecting
-                      ? const SizedBox.square(
-                          dimension: 14,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(LucideIcons.plug, size: 16),
-                  tooltip: connecting ? 'Connecting to agent' : 'Connect agent',
-                ),
+              ConsolePrimaryIconButton(
+                onPressed: connecting ? null : onConnect,
+                icon: connecting
+                    ? const SizedBox.square(
+                        dimension: 14,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(LucideIcons.plug, size: 16),
+                tooltip: connecting ? 'Connecting to agent' : 'Connect agent',
               ),
             ],
           ),
