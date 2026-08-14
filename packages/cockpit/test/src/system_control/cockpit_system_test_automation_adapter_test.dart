@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:cockpit/src/adapters/cockpit_capture_adapter.dart';
 import 'package:cockpit/src/infrastructure/cockpit_process_manager.dart';
 import 'package:cockpit/src/system_control/cockpit_android_ui_automation_client.dart';
+import 'package:cockpit/src/system_control/cockpit_ios_webdriver_agent_client.dart';
 import 'package:cockpit/src/system_control/cockpit_macos_accessibility_tree.dart';
 import 'package:cockpit/src/system_control/cockpit_system_control_action_service.dart';
 import 'package:cockpit/src/system_control/cockpit_system_control_service.dart';
@@ -201,6 +202,65 @@ void main() {
       '384',
       '246',
     ]);
+  });
+
+  test('iOS native tap preserves the resolved WDA element path', () async {
+    final commands = <CockpitIosWdaCommand>[];
+    final controls = CockpitSystemControlService(
+      iosWdaEndpointProbe: (baseUri, {required timeout}) async => true,
+    );
+    final adapter = CockpitSystemTestAutomationAdapter(
+      target: CockpitSystemTestTarget(
+        platform: 'ios',
+        deviceId: 'D3884373-E926-49AF-92E6-7A241C50B64C',
+        appId: 'dev.cockpit.demo',
+        metadata: const <String, Object?>{
+          'wdaUrl': 'http://127.0.0.1:8100',
+          'wdaReachable': true,
+        },
+      ),
+      controlService: controls,
+      actionService: CockpitSystemControlActionService(
+        systemControlService: controls,
+        iosWdaRunner: (command, {required timeout}) async {
+          commands.add(command);
+          return command.action == CockpitIosWdaAction.readUiTree
+              ? _iosNewTaskTree
+              : 'tap element';
+        },
+      ),
+      workspaceRoot: Directory.current.path,
+      delay: (_) async {},
+    );
+
+    final execution = await adapter.execute(
+      CockpitCommand(
+        commandId: 'tap-new-task',
+        commandType: CockpitCommandType.tap,
+        parameters: <String, Object?>{
+          'cockpitTestLocator': <String, Object?>{'label': 'New task'},
+        },
+        timeoutMs: 1000,
+      ),
+    );
+
+    expect(
+      execution.result.success,
+      isTrue,
+      reason:
+          '${execution.result.error?.code} '
+          '${execution.result.error?.message} '
+          '${execution.result.error?.details}',
+    );
+    final tap = commands.singleWhere(
+      (command) => command.action == CockpitIosWdaAction.tap,
+    );
+    expect(tap.parameters['x'], 292);
+    expect(tap.parameters['y'], 99);
+    expect(
+      tap.parameters['nativePath'],
+      '/XCUIElementTypeApplication[0]/XCUIElementTypeWindow[0]/XCUIElementTypeButton[0]',
+    );
   });
 
   test('macOS native tap presses the resolved accessibility element', () async {
@@ -447,6 +507,13 @@ const _settledBackTree = '''<?xml version="1.0" encoding="UTF-8"?>
 <hierarchy bounds="[0,0][1200,800]">
   <node content-desc="Back" class="Button" enabled="true" clickable="true" bounds="[356,218][412,274]" />
 </hierarchy>''';
+
+const _iosNewTaskTree = '''<?xml version="1.0" encoding="UTF-8"?>
+<XCUIElementTypeApplication type="XCUIElementTypeApplication" x="0" y="0" width="402" height="874">
+  <XCUIElementTypeWindow type="XCUIElementTypeWindow" x="0" y="0" width="402" height="874">
+    <XCUIElementTypeButton type="XCUIElementTypeButton" name="New task" label="New task" enabled="true" visible="true" accessible="true" x="233" y="75" width="117" height="48" />
+  </XCUIElementTypeWindow>
+</XCUIElementTypeApplication>''';
 
 const _macosBackTree = '''{
   "platform": "macos",

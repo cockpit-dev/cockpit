@@ -67,6 +67,49 @@ void main() {
     expect(payload, <String, Object?>{'x': 120, 'y': 240});
   });
 
+  test('tap uses the resolved native element when its tree path is known', () async {
+    final requests = <http.Request>[];
+    final client = clientWithSession((request) async {
+      requests.add(request);
+      if (request.url.path == '/session/session-1/element') {
+        return http.Response(
+          jsonEncode(<String, Object?>{
+            'value': <String, Object?>{
+              'element-6066-11e4-a52e-4f735466cecf': 'element-42',
+            },
+          }),
+          200,
+        );
+      }
+      return http.Response(jsonEncode(<String, Object?>{'value': null}), 200);
+    });
+
+    final result = await CockpitIosWebDriverAgentClient(httpClient: client).run(
+      CockpitIosWdaCommand(
+        baseUri: baseUri,
+        action: CockpitIosWdaAction.tap,
+        parameters: const <String, Object?>{
+          'x': 292,
+          'y': 99,
+          'nativePath':
+              '/XCUIElementTypeApplication[0]/XCUIElementTypeWindow[0]/XCUIElementTypeButton[1]',
+        },
+      ),
+      timeout: const Duration(seconds: 2),
+    );
+
+    expect(result, 'tap element');
+    expect(requests, hasLength(2));
+    expect(requests[0].url.path, '/session/session-1/element');
+    expect(jsonDecode(requests[0].body), <String, Object?>{
+      'using': 'xpath',
+      'value':
+          '/XCUIElementTypeApplication[1]/XCUIElementTypeWindow[1]/XCUIElementTypeButton[2]',
+    });
+    expect(requests[1].url.path, '/session/session-1/element/element-42/click');
+    expect(jsonDecode(requests[1].body), <String, Object?>{});
+  });
+
   test('creates a session when status has no session id', () async {
     final requests = <http.Request>[];
     final client = MockClient((request) async {
