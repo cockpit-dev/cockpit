@@ -999,7 +999,7 @@ final class _IdempotencyField extends StatelessWidget {
                   color: theme.colorScheme.onSurface,
                 ),
                 label: 'Idempotency key',
-                hint: required ? 'Generated on invoke' : 'Optional',
+                hint: required ? 'Generated when run' : 'Optional',
                 prefixIcon: const Icon(LucideIcons.keyRound, size: 14),
               ),
             ),
@@ -1014,7 +1014,7 @@ final class _IdempotencyField extends StatelessWidget {
         const SizedBox(height: 4),
         Text(
           required
-              ? 'Required for this mutating operation.'
+              ? 'Required because this action can change state.'
               : 'Optional; omitted when blank.',
           style: theme.textTheme.bodySmall,
         ),
@@ -1145,7 +1145,7 @@ final class _InvokeControl extends ConsumerWidget {
       );
     }
 
-    final invokeButton = FilledButton.icon(
+    final runButton = FilledButton.icon(
       onPressed: submitting ? null : onInvoke,
       icon: submitting
           ? const SizedBox(
@@ -1159,18 +1159,18 @@ final class _InvokeControl extends ConsumerWidget {
                   : LucideIcons.play,
               size: 14,
             ),
-      label: Text(
-        descriptor.mutationClass == CockpitMutationClass.mutating
-            ? 'Invoke (mutating)'
-            : 'Invoke',
-      ),
+      label: Text(submitting ? 'Running...' : 'Run action'),
     );
+    final actionButton =
+        descriptor.mutationClass == CockpitMutationClass.mutating
+        ? Tooltip(message: 'This action can change state.', child: runButton)
+        : runButton;
     final scopeLabel = Text(
       availability.rootId != null
-          ? 'Scoped to the selected root.'
+          ? 'Runs for the selected allowed folder.'
           : availability.workspaceId != null
-          ? 'Scoped to the selected workspace.'
-          : 'Invoked globally (no root or workspace).',
+          ? 'Runs for the selected project.'
+          : 'Runs in Supervisor scope; no project required.',
       style: scopeStyle,
     );
     return LayoutBuilder(
@@ -1178,12 +1178,12 @@ final class _InvokeControl extends ConsumerWidget {
         if (constraints.maxWidth < 520) {
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
-            children: [invokeButton, const SizedBox(height: 8), scopeLabel],
+            children: [actionButton, const SizedBox(height: 8), scopeLabel],
           );
         }
         return Row(
           children: [
-            invokeButton,
+            actionButton,
             const SizedBox(width: 12),
             Flexible(child: scopeLabel),
           ],

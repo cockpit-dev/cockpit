@@ -526,6 +526,15 @@ final casesForWorkspaceProvider =
       return client.cases(workspaceId);
     });
 
+final recentRunsForWorkspaceProvider =
+    FutureProvider.family<List<CockpitRunResource>, String>((
+      ref,
+      workspaceId,
+    ) async {
+      final client = await ref.read(supervisorProvider.notifier).ensureClient();
+      return client.runs(workspaceId);
+    });
+
 final class DocumentValidation {
   const DocumentValidation({
     required this.valid,
@@ -1226,6 +1235,7 @@ final class OperationInvocationNotifier
         resultRootId: rootId,
         resultWorkspaceId: workspaceId,
         error: failure,
+        clearError: failure == null,
       );
     } on CockpitSupervisorClientException catch (error) {
       if (generation != _selectionGeneration) return;

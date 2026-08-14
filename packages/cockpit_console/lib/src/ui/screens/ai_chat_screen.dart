@@ -222,61 +222,67 @@ final class _AcpConnectionDialog extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(acpAgentProvider);
+    final dialogHeight = math.min(
+      760.0,
+      math.max(0.0, MediaQuery.sizeOf(context).height - 32),
+    );
     return Dialog(
       insetPadding: const EdgeInsets.all(16),
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 640, maxHeight: 760),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            SizedBox(
-              height: 58,
-              child: Padding(
-                padding: const EdgeInsets.only(left: 16, right: 8),
-                child: Row(
-                  children: [
-                    const Icon(LucideIcons.plug, size: 17),
-                    const SizedBox(width: 9),
-                    Expanded(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Connect AI agent',
-                            style: Theme.of(context).textTheme.titleMedium,
-                          ),
-                          Text(
-                            'Choose an agent and its working directory.',
-                            style: Theme.of(context).textTheme.bodySmall,
-                          ),
-                        ],
+        constraints: const BoxConstraints(maxWidth: 640),
+        child: SizedBox(
+          height: dialogHeight,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              SizedBox(
+                height: 58,
+                child: Padding(
+                  padding: const EdgeInsets.only(left: 16, right: 8),
+                  child: Row(
+                    children: [
+                      const Icon(LucideIcons.plug, size: 17),
+                      const SizedBox(width: 9),
+                      Expanded(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Connect AI agent',
+                              style: Theme.of(context).textTheme.titleMedium,
+                            ),
+                            Text(
+                              'Choose an agent and its working directory.',
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-                    IconButton(
-                      onPressed: () => Navigator.of(context).pop(),
-                      icon: const Icon(LucideIcons.x, size: 16),
-                      tooltip: 'Close connection setup',
-                    ),
-                  ],
+                      IconButton(
+                        onPressed: () => Navigator.of(context).pop(),
+                        icon: const Icon(LucideIcons.x, size: 16),
+                        tooltip: 'Close connection setup',
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ),
-            Divider(height: 1, color: Theme.of(context).dividerColor),
-            Flexible(
-              child: _OnboardingView(
-                connecting: state is AcpConnecting,
-                errorMessage: switch (state) {
-                  AcpError(:final message) => message,
-                  _ => null,
-                },
-                onConnected: () {
-                  if (context.mounted) Navigator.of(context).pop();
-                },
+              Divider(height: 1, color: Theme.of(context).dividerColor),
+              Expanded(
+                child: _OnboardingView(
+                  connecting: state is AcpConnecting,
+                  errorMessage: switch (state) {
+                    AcpError(:final message) => message,
+                    _ => null,
+                  },
+                  onConnected: () {
+                    if (context.mounted) Navigator.of(context).pop();
+                  },
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -442,6 +448,7 @@ final class _OnboardingView extends HookConsumerWidget {
     final preferencesLoaded = useRef(false);
     final isCustomAgent = selectedAgentId.value == _customAgentId;
     final selectedPreset = findAgentPreset(selectedAgentId.value);
+    final selectedAgent = isCustomAgent ? _customAgentPreset : selectedPreset;
     final canConnect =
         sessionCwd.text.trim().isNotEmpty &&
         (isCustomAgent
@@ -519,217 +526,133 @@ final class _OnboardingView extends HookConsumerWidget {
       }
     }
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
-      child: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 560),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(
-                'Agent',
-                style: Theme.of(
-                  context,
-                ).textTheme.titleSmall?.copyWith(fontSize: 12),
-              ),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  for (final preset in agentPresets)
-                    _AgentChip(
-                      preset: preset,
-                      selected: selectedAgentId.value == preset.id,
-                      onTap: () => selectedAgentId.value = preset.id,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Expanded(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(24, 24, 24, 16),
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 560),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    ConsoleDropdownField<String>(
+                      key: ValueKey(selectedAgentId.value),
+                      initialValue: selectedAgentId.value,
+                      label: 'Agent',
+                      hintText: 'Choose an AI agent',
+                      prefixIcon: const Icon(LucideIcons.bot, size: 16),
+                      supportingText: selectedAgent?.description,
+                      items: <AgentPreset>[...agentPresets, _customAgentPreset]
+                          .map(
+                            (preset) => DropdownMenuItem<String>(
+                              value: preset.id,
+                              child: Text(preset.name),
+                            ),
+                          )
+                          .toList(growable: false),
+                      onChanged: connecting
+                          ? null
+                          : (value) => selectedAgentId.value = value,
                     ),
-                  _AgentChip(
-                    preset: _customAgentPreset,
-                    selected: selectedAgentId.value == _customAgentId,
-                    onTap: () => selectedAgentId.value = _customAgentId,
-                  ),
-                ],
-              ),
-              if (isCustomAgent) ...[
-                const SizedBox(height: 12),
-                _CustomAgentFields(
-                  executableController: customExecutableController,
-                  argsController: customArgsController,
-                ),
-              ],
-              const SizedBox(height: 24),
-
-              // Directory picker.
-              _DirectoryPicker(
-                controller: sessionCwdController,
-                enabled: !connecting,
-                onPick: () async {
-                  final dir = await FilePicker.getDirectoryPath(
-                    dialogTitle: 'Select working directory',
-                  );
-                  if (dir != null) {
-                    sessionCwdController.text = dir;
-                  }
-                },
-              ),
-              const SizedBox(height: 16),
-              AcpConnectionOptionsEditor(
-                value: connectionOptions.value,
-                enabled: !connecting,
-                onChanged: (value) => connectionOptions.value = value,
-              ),
-              const SizedBox(height: 24),
-
-              // Connect button.
-              FilledButton.icon(
-                onPressed: connecting || !canConnect ? null : connect,
-                icon: connecting
-                    ? const SizedBox(
-                        width: 14,
-                        height: 14,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(LucideIcons.arrowRight, size: 16),
-                label: Text(connecting ? 'Connecting...' : 'Start session'),
-              ),
-              if (errorMessage != null) ...[
-                const SizedBox(height: 16),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 8,
-                  ),
-                  decoration: ConsoleShapes.decoration(
-                    color: Theme.of(
-                      context,
-                    ).colorScheme.error.withValues(alpha: 0.06),
-                    borderColor: Theme.of(
-                      context,
-                    ).colorScheme.error.withValues(alpha: 0.2),
-                  ),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Icon(
-                        LucideIcons.alertCircle,
-                        size: 14,
-                        color: Theme.of(context).colorScheme.error,
+                    if (isCustomAgent) ...[
+                      const SizedBox(height: 12),
+                      _CustomAgentFields(
+                        executableController: customExecutableController,
+                        argsController: customArgsController,
                       ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          errorMessage!,
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Theme.of(context).colorScheme.error,
-                            height: 1.4,
-                          ),
+                    ],
+                    const SizedBox(height: 24),
+
+                    // Directory picker.
+                    _DirectoryPicker(
+                      controller: sessionCwdController,
+                      enabled: !connecting,
+                      onPick: () async {
+                        final dir = await FilePicker.getDirectoryPath(
+                          dialogTitle: 'Select working directory',
+                        );
+                        if (dir != null) {
+                          sessionCwdController.text = dir;
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    AcpConnectionOptionsEditor(
+                      value: connectionOptions.value,
+                      enabled: !connecting,
+                      onChanged: (value) => connectionOptions.value = value,
+                    ),
+                    if (errorMessage != null) ...[
+                      const SizedBox(height: 16),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
+                        decoration: ConsoleShapes.decoration(
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.error.withValues(alpha: 0.06),
+                          borderColor: Theme.of(
+                            context,
+                          ).colorScheme.error.withValues(alpha: 0.2),
+                        ),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Icon(
+                              LucideIcons.alertCircle,
+                              size: 14,
+                              color: Theme.of(context).colorScheme.error,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                errorMessage!,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Theme.of(context).colorScheme.error,
+                                  height: 1.4,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ],
-                  ),
+                  ],
                 ),
-              ],
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-final class _AgentChip extends StatelessWidget {
-  const _AgentChip({
-    required this.preset,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final AgentPreset preset;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final bg = selected
-        ? theme.colorScheme.primary.withValues(alpha: 0.1)
-        : theme.colorScheme.surfaceContainerLow;
-    final border = selected
-        ? theme.colorScheme.primary.withValues(alpha: 0.4)
-        : theme.dividerColor;
-    final fg = selected
-        ? theme.colorScheme.primary
-        : theme.colorScheme.onSurface;
-
-    return Semantics(
-      button: true,
-      selected: selected,
-      label: preset.name,
-      hint: preset.description,
-      onTap: onTap,
-      excludeSemantics: true,
-      child: InkWell(
-        onTap: onTap,
-        customBorder: ConsoleShapes.border(),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          decoration: ConsoleShapes.decoration(color: bg, borderColor: border),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(_iconFor(preset.icon), size: 15, color: fg),
-              const SizedBox(width: 8),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    preset.name,
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: fg,
-                    ),
-                  ),
-                  Text(
-                    preset.description,
-                    style: TextStyle(
-                      fontSize: 10,
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                ],
               ),
-            ],
+            ),
           ),
         ),
-      ),
+        Divider(height: 1, color: Theme.of(context).dividerColor),
+        Padding(
+          padding: const EdgeInsets.all(12),
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 560),
+              child: SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: connecting || !canConnect ? null : connect,
+                  icon: connecting
+                      ? const SizedBox.square(
+                          dimension: 14,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(LucideIcons.arrowRight, size: 16),
+                  label: Text(connecting ? 'Connecting...' : 'Start session'),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
     );
-  }
-
-  IconData _iconFor(String name) {
-    return switch (name) {
-      'brain' => LucideIcons.brain,
-      'sparkles' => LucideIcons.sparkles,
-      'mouse-pointer-click' => LucideIcons.mousePointerClick,
-      'bird' => LucideIcons.bird,
-      'rocket' => LucideIcons.rocket,
-      'gem' => LucideIcons.gem,
-      'github' => LucideIcons.gitBranch,
-      'terminal' => LucideIcons.terminal,
-      'code' => LucideIcons.code,
-      'pi' => LucideIcons.pi,
-      'braces' => LucideIcons.braces,
-      'hand' => LucideIcons.hand,
-      'zap' => LucideIcons.zap,
-      'moon' => LucideIcons.moon,
-      'cpu' => LucideIcons.cpu,
-      'wind' => LucideIcons.wind,
-      'factory' => LucideIcons.factory,
-      'box' => LucideIcons.box,
-      _ => LucideIcons.bot,
-    };
   }
 }
 
@@ -748,7 +671,6 @@ final class _CustomAgentFields extends StatelessWidget {
       children: [
         ConsoleTextField(
           controller: executableController,
-          autofocus: true,
           autocorrect: false,
           enableSuggestions: false,
           textInputAction: TextInputAction.next,
