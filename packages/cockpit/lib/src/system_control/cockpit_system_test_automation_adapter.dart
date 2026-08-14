@@ -49,6 +49,8 @@ final class CockpitSystemTestAutomationAdapter
   bool get _flutterAwareNative =>
       _target.targetKind == CockpitTargetKind.flutterApp;
 
+  bool get _isIos => _target.platform.trim().toLowerCase() == 'ios';
+
   @override
   Future<CockpitCapabilities> describeCapabilities() async {
     final describe = await _controlService.describe(
@@ -326,15 +328,11 @@ final class CockpitSystemTestAutomationAdapter
         );
       }
     }
-    final treePath = point.treePath;
     final result = await _runAction(
       CockpitSystemControlAction.tap,
       <String, Object?>{'x': point.x, 'y': point.y},
       deadline,
-      metadata:
-          _target.platform.trim().toLowerCase() == 'ios' && treePath != null
-          ? <String, Object?>{cockpitIosResolvedNativePathMetadataKey: treePath}
-          : null,
+      metadata: _iosTapMetadata(point),
     );
     return _fromAction(
       command,
@@ -435,6 +433,7 @@ final class CockpitSystemTestAutomationAdapter
         CockpitSystemControlAction.tap,
         <String, Object?>{'x': point.x, 'y': point.y},
         deadline,
+        metadata: _iosTapMetadata(point),
       );
       if (!result.success) {
         return _fromAction(
@@ -481,6 +480,7 @@ final class CockpitSystemTestAutomationAdapter
         CockpitSystemControlAction.tap,
         <String, Object?>{'x': point.x, 'y': point.y},
         deadline,
+        metadata: _iosTapMetadata(point),
       );
       if (!focus.success) {
         return _fromAction(
@@ -540,6 +540,7 @@ final class CockpitSystemTestAutomationAdapter
         CockpitSystemControlAction.tap,
         <String, Object?>{'x': point.x, 'y': point.y},
         deadline,
+        metadata: _iosTapMetadata(point),
       );
       if (!focus.success) {
         return _fromAction(
@@ -650,6 +651,7 @@ final class CockpitSystemTestAutomationAdapter
         CockpitSystemControlAction.tap,
         <String, Object?>{'x': point.x, 'y': point.y},
         deadline,
+        metadata: _iosTapMetadata(point),
       );
       if (!focus.success) {
         return _fromAction(
@@ -1287,11 +1289,30 @@ final class CockpitSystemTestAutomationAdapter
           match.templateSourcePath,
         );
         if (!match.matched) continue;
+        var x = match.x + match.width ~/ 2;
+        var y = match.y + match.height ~/ 2;
+        var viewportWidth = match.screenshotWidth;
+        var viewportHeight = match.screenshotHeight;
+        if (_isIos) {
+          snapshot ??= await _readSnapshot(deadline);
+          x = _scaleCoordinate(
+            x,
+            sourceExtent: match.screenshotWidth,
+            targetExtent: snapshot.viewportWidth,
+          );
+          y = _scaleCoordinate(
+            y,
+            sourceExtent: match.screenshotHeight,
+            targetExtent: snapshot.viewportHeight,
+          );
+          viewportWidth = snapshot.viewportWidth;
+          viewportHeight = snapshot.viewportHeight;
+        }
         return _ResolvedPoint(
-          x: match.x + match.width ~/ 2,
-          y: match.y + match.height ~/ 2,
-          viewportWidth: match.screenshotWidth,
-          viewportHeight: match.screenshotHeight,
+          x: x,
+          y: y,
+          viewportWidth: viewportWidth,
+          viewportHeight: viewportHeight,
           resolution: CockpitLocatorResolution(
             matchedKind: CockpitLocatorKind.visual,
             matchedValue: candidate.visual!,
@@ -1407,6 +1428,19 @@ final class CockpitSystemTestAutomationAdapter
       artifactSourcePaths: previous.artifactSourcePaths,
     );
   }
+
+  Map<String, Object?>? _iosTapMetadata(_ResolvedPoint point) {
+    final treePath = point.treePath;
+    if (!_isIos || treePath == null) return null;
+    return <String, Object?>{cockpitIosResolvedNativePathMetadataKey: treePath};
+  }
+
+  int _scaleCoordinate(
+    int value, {
+    required int sourceExtent,
+    required int targetExtent,
+  }) =>
+      (value * targetExtent / sourceExtent).round().clamp(0, targetExtent - 1);
 
   bool _requiresStablePoint(_ResolvedPoint point) =>
       switch (point.resolution?.matchedKind) {
