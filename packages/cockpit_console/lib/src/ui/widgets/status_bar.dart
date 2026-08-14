@@ -76,7 +76,7 @@ final class StatusBar extends ConsumerWidget {
             'Cockpit Console',
             style: TextStyle(
               fontSize: 11,
-              color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
+              color: context.consoleColors.inkTertiary,
               height: 1,
             ),
           ),

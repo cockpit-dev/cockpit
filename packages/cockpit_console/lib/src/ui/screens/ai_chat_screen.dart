@@ -8,6 +8,7 @@ import 'package:cockpit_console/src/providers/agent_presets.dart';
 import 'package:cockpit_console/src/providers/core_providers.dart';
 import 'package:cockpit_console/src/providers/data_providers.dart';
 import 'package:cockpit_console/src/providers/preferences_store.dart';
+import 'package:cockpit_console/src/theme/console_colors.dart';
 import 'package:cockpit_console/src/theme/console_control_style.dart';
 import 'package:cockpit_console/src/theme/console_shapes.dart';
 import 'package:cockpit_console/src/ui/navigation/console_nav.dart';
@@ -1138,11 +1139,7 @@ final class _ChatEmpty extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              icon,
-              size: 32,
-              color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
-            ),
+            Icon(icon, size: 32, color: context.consoleColors.inkTertiary),
             const SizedBox(height: 12),
             Text(
               title,

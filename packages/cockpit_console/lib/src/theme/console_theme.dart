@@ -469,46 +469,16 @@ final class ConsoleTheme {
 
   static IconButtonThemeData _iconButton(ConsoleColors colors) {
     return IconButtonThemeData(
-      style:
-          IconButton.styleFrom(
-            foregroundColor: colors.inkSecondary,
-            disabledForegroundColor: colors.inkDisabled,
-            elevation: 0,
-            highlightColor: Colors.transparent,
-            minimumSize: const Size.square(
-              ConsoleControlStyle.iconButtonMinSize,
-            ),
-            maximumSize: const Size.square(
-              ConsoleControlStyle.iconButtonMaxSize,
-            ),
-            iconSize: ConsoleControlStyle.iconSize,
-            padding: EdgeInsets.zero,
-            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            shape: ConsoleShapes.border(radius: ConsoleShapes.smallRadius),
-          ).copyWith(
-            overlayColor: WidgetStateProperty.resolveWith((states) {
-              if (states.contains(WidgetState.pressed)) {
-                return colors.surface3;
-              }
-              if (states.contains(WidgetState.focused)) {
-                return colors.accentSubtle;
-              }
-              if (states.contains(WidgetState.hovered)) {
-                return colors.surfaceHover;
-              }
-              return null;
-            }),
-            foregroundColor: WidgetStateProperty.resolveWith((states) {
-              if (states.contains(WidgetState.disabled)) {
-                return colors.inkDisabled;
-              }
-              if (states.contains(WidgetState.focused) ||
-                  states.contains(WidgetState.hovered)) {
-                return colors.inkPrimary;
-              }
-              return colors.inkSecondary;
-            }),
-          ),
+      style: IconButton.styleFrom(
+        disabledForegroundColor: colors.inkDisabled,
+        elevation: 0,
+        minimumSize: const Size.square(ConsoleControlStyle.iconButtonMinSize),
+        maximumSize: const Size.square(ConsoleControlStyle.iconButtonMaxSize),
+        iconSize: ConsoleControlStyle.iconSize,
+        padding: EdgeInsets.zero,
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        shape: ConsoleShapes.border(radius: ConsoleShapes.smallRadius),
+      ),
     );
   }
 
