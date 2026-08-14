@@ -1713,6 +1713,9 @@ final class CockpitIosSystemControlAdapter
       CockpitIosWdaCommand(
         baseUri: baseUri,
         action: action,
+        stabilitySnapshot:
+            action == CockpitIosWdaAction.readUiTree &&
+            request.metadata[cockpitIosUiStabilitySnapshotMetadataKey] == true,
         parameters: parameters,
       ),
     );

@@ -11,6 +11,8 @@ const String cockpitIosWdaCommandExecutable =
     '__flutter_cockpit_ios_webdriver_agent';
 const String cockpitIosResolvedNativePathMetadataKey =
     'cockpit.ios.resolvedNativePath';
+const String cockpitIosUiStabilitySnapshotMetadataKey =
+    'cockpit.ios.uiStabilitySnapshot';
 
 typedef CockpitIosWdaHttpClientFactory = http.Client Function();
 typedef CockpitIosWdaEndpointProbe =
@@ -153,6 +155,7 @@ final class CockpitIosWebDriverAgentClient {
     return CockpitIosWdaCommand(
       baseUri: Uri.parse(json['baseUrl']! as String),
       action: CockpitIosWdaAction.values.byName(json['action']! as String),
+      stabilitySnapshot: json['stabilitySnapshot'] == true,
       parameters:
           (json['parameters'] as Map<Object?, Object?>?)
               ?.cast<String, Object?>() ??
@@ -165,6 +168,7 @@ final class CockpitIosWebDriverAgentClient {
       jsonEncode(<String, Object?>{
         'baseUrl': command.baseUri.toString(),
         'action': command.action.name,
+        if (command.stabilitySnapshot) 'stabilitySnapshot': true,
         if (command.parameters.isNotEmpty) 'parameters': command.parameters,
       }),
     ];
@@ -384,6 +388,11 @@ final class CockpitIosWebDriverAgentClient {
             client,
             session,
             'source',
+            queryParameters: command.stabilitySnapshot
+                ? const <String, String>{
+                    'excluded_attributes': 'visible,accessible',
+                  }
+                : const <String, String>{},
             timeout: timeout,
           );
           final decoded = _decodeObject(response.body);
@@ -655,6 +664,7 @@ final class CockpitIosWebDriverAgentClient {
     http.Client client,
     CockpitIosWdaSession session,
     String path, {
+    Map<String, String> queryParameters = const <String, String>{},
     required Duration timeout,
   }) async {
     final response = await client
@@ -662,6 +672,7 @@ final class CockpitIosWebDriverAgentClient {
           _resolve(
             session.baseUri,
             '/session/${Uri.encodeComponent(session.sessionId)}/$path',
+            queryParameters: queryParameters,
           ),
         )
         .timeout(timeout);
@@ -702,11 +713,19 @@ final class CockpitIosWebDriverAgentClient {
     }
   }
 
-  Uri _resolve(Uri baseUri, String path) {
+  Uri _resolve(
+    Uri baseUri,
+    String path, {
+    Map<String, String> queryParameters = const <String, String>{},
+  }) {
     final basePath = baseUri.path.endsWith('/')
         ? baseUri.path.substring(0, baseUri.path.length - 1)
         : baseUri.path;
-    return baseUri.replace(path: '$basePath$path');
+    return baseUri.replace(
+      path: '$basePath$path',
+      queryParameters: queryParameters,
+      fragment: '',
+    );
   }
 
   Map<String, Object?> _decodeObject(String body) {
@@ -1060,11 +1079,13 @@ final class CockpitIosWdaCommand {
   const CockpitIosWdaCommand({
     required this.baseUri,
     required this.action,
+    this.stabilitySnapshot = false,
     this.parameters = const <String, Object?>{},
   });
 
   final Uri baseUri;
   final CockpitIosWdaAction action;
+  final bool stabilitySnapshot;
   final Map<String, Object?> parameters;
 }
 
