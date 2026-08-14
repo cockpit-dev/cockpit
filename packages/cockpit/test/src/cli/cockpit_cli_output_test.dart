@@ -490,6 +490,151 @@ void main() {
     expect(value['netFailures'], 0);
   });
 
+  test('dev diagnose more omits routine healthy projection noise', () {
+    const renderer = CockpitCliOutputRenderer();
+
+    final value =
+        lon.decode(
+              renderer.renderAi(
+                command: 'dev.diagnose',
+                data: const <String, Object?>{
+                  'ok': true,
+                  'action': 'diagnose',
+                  'session': '4',
+                  'state': <String, Object?>{
+                    'lifecycle': 'ready',
+                    'platform': 'macos',
+                    'ui': <String, Object?>{
+                      'diagnosticLevel': 'investigate',
+                      'truncated': true,
+                      'uiSummary': <String, Object?>{
+                        'visibleTargetCount': 32,
+                        'targetsWithCockpitIdCount': 14,
+                        'targetsWithTextCount': 20,
+                        'accessibilityTargetCount': 22,
+                        'accessibilityTraversalCount': 22,
+                        'textPreviews': <String>['Dashboard'],
+                      },
+                    },
+                    'target': <String, Object?>{
+                      'platform': 'macos',
+                      'targetKind': 'flutterApp',
+                      'foregroundSurface': 'desktopWindow',
+                      'selectedPlane': 'flutterSemanticPlane',
+                      'currentRouteName': '/',
+                      'whatMatters': 'Current route is /.',
+                      'recommendedNextStep': 'runNextCommand',
+                      'capabilityProfile': <String, Object?>{
+                        'surfaceKinds': <String>['flutterSemantic'],
+                        'supportedCommands': <String>[],
+                        'actionCapabilities': <String>['tap'],
+                        'evidenceCapabilities': <String>['screenshot'],
+                        'qualityFlags': <String>[],
+                      },
+                    },
+                    'runtimeErrors': <String, Object?>{
+                      'summary': <String, Object?>{'errorCount': 0},
+                    },
+                    'network': <String, Object?>{
+                      'available': true,
+                      'summary': <String, Object?>{
+                        'totalEntryCount': 56,
+                        'capturedEntryCount': 56,
+                        'failureCount': 0,
+                        'inFlightCount': 0,
+                      },
+                      'endpointSummaries': <Object?>[
+                        <String, Object?>{
+                          'method': 'GET',
+                          'uriPattern': '/healthy',
+                          'requestCount': 56,
+                        },
+                      ],
+                    },
+                    'logs': <String, Object?>{
+                      'appId': 'internal-app-id',
+                      'available': true,
+                      'lines': <Object?>[],
+                    },
+                  },
+                },
+                view: CockpitCliOutputView.more,
+              ),
+            )!
+            as Map<Object?, Object?>;
+
+    final ui = value['ui']! as Map<Object?, Object?>;
+    final target = value['target']! as Map<Object?, Object?>;
+    final capabilities = target['caps']! as Map<Object?, Object?>;
+    expect(ui, isNot(contains('profile')));
+    expect(ui, isNot(contains('partial')));
+    expect(ui, isNot(contains('a11yOrder')));
+    expect(target, isNot(contains('route')));
+    expect(target, isNot(contains('note')));
+    expect(target, isNot(contains('next')));
+    expect(capabilities, isNot(contains('commands')));
+    expect(capabilities, isNot(contains('quality')));
+    expect(value, isNot(contains('network')));
+    expect(value, isNot(contains('logs')));
+  });
+
+  test('dev diagnose more keeps actionable health evidence', () {
+    const renderer = CockpitCliOutputRenderer();
+
+    final value =
+        lon.decode(
+              renderer.renderAi(
+                command: 'dev.diagnose',
+                data: const <String, Object?>{
+                  'action': 'diagnose',
+                  'session': '4',
+                  'state': <String, Object?>{
+                    'target': <String, Object?>{
+                      'currentRouteName': '/loading',
+                      'whatMatters': 'No visible Flutter targets were found.',
+                      'recommendedNextStep': 'captureScreenshot',
+                    },
+                    'runtimeErrors': <String, Object?>{
+                      'summary': <String, Object?>{'errorCount': 0},
+                    },
+                    'network': <String, Object?>{
+                      'available': true,
+                      'summary': <String, Object?>{
+                        'failureCount': 1,
+                        'inFlightCount': 1,
+                      },
+                      'recentFailures': <Object?>[
+                        <String, Object?>{
+                          'requestId': 9,
+                          'method': 'GET',
+                          'uri': '/failed',
+                          'statusCode': 500,
+                          'state': 'completed',
+                        },
+                      ],
+                    },
+                    'logs': <String, Object?>{
+                      'available': true,
+                      'lines': <String>['A useful warning'],
+                    },
+                  },
+                },
+                view: CockpitCliOutputView.more,
+              ),
+            )!
+            as Map<Object?, Object?>;
+
+    final target = value['target']! as Map<Object?, Object?>;
+    final network = value['network']! as Map<Object?, Object?>;
+    final logs = value['logs']! as Map<Object?, Object?>;
+    expect(target['note'], 'No visible Flutter targets were found.');
+    expect(target['next'], 'captureScreenshot');
+    expect(network['failures'], 1);
+    expect(network['active'], 1);
+    expect(network['recent'], hasLength(1));
+    expect(logs['lines'], <Object?>['A useful warning']);
+  });
+
   test('dev brief output keeps only decision fields', () {
     const renderer = CockpitCliOutputRenderer();
     final value =
