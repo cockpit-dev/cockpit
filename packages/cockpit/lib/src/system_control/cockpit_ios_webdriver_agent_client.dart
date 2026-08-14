@@ -187,26 +187,9 @@ final class CockpitIosWebDriverAgentClient {
         case CockpitIosWdaAction.tap:
           final x = _requiredInt(command.parameters, 'x');
           final y = _requiredInt(command.parameters, 'y');
-          await _postSession(client, session, 'actions', <String, Object?>{
-            'actions': <Object?>[
-              <String, Object?>{
-                'type': 'pointer',
-                'id': 'cockpit-finger',
-                'parameters': <String, Object?>{'pointerType': 'touch'},
-                'actions': <Object?>[
-                  <String, Object?>{
-                    'type': 'pointerMove',
-                    'duration': 0,
-                    'origin': 'viewport',
-                    'x': x,
-                    'y': y,
-                  },
-                  <String, Object?>{'type': 'pointerDown', 'button': 0},
-                  <String, Object?>{'type': 'pause', 'duration': 100},
-                  <String, Object?>{'type': 'pointerUp', 'button': 0},
-                ],
-              },
-            ],
+          await _postSession(client, session, 'wda/tap', <String, Object?>{
+            'x': x,
+            'y': y,
           }, timeout: timeout);
           return 'tap x=$x y=$y';
         case CockpitIosWdaAction.longPress:
@@ -821,25 +804,9 @@ final class CockpitIosWebDriverAgentClient {
     _WdaPoint point, {
     required Duration timeout,
   }) async {
-    await _postSession(client, session, 'actions', <String, Object?>{
-      'actions': <Object?>[
-        <String, Object?>{
-          'type': 'pointer',
-          'id': 'cockpit-notification-tap',
-          'parameters': <String, Object?>{'pointerType': 'touch'},
-          'actions': <Object?>[
-            <String, Object?>{
-              'type': 'pointerMove',
-              'duration': 0,
-              'origin': 'viewport',
-              'x': point.x,
-              'y': point.y,
-            },
-            <String, Object?>{'type': 'pointerDown', 'button': 0},
-            <String, Object?>{'type': 'pointerUp', 'button': 0},
-          ],
-        },
-      ],
+    await _postSession(client, session, 'wda/tap', <String, Object?>{
+      'x': point.x,
+      'y': point.y,
     }, timeout: timeout);
   }
 

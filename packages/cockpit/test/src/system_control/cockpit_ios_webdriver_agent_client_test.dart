@@ -46,7 +46,7 @@ void main() {
     expect(requests.single.url.path, '/wda/homescreen');
   });
 
-  test('tap posts W3C touch actions to the session', () async {
+  test('tap uses the native WDA coordinate endpoint', () async {
     final requests = <http.Request>[];
     final client = clientWithSession((request) async {
       requests.add(request);
@@ -62,23 +62,9 @@ void main() {
       timeout: const Duration(seconds: 2),
     );
 
-    expect(requests.single.url.path, '/session/session-1/actions');
+    expect(requests.single.url.path, '/session/session-1/wda/tap');
     final payload = jsonDecode(requests.single.body) as Map<String, Object?>;
-    final actions = payload['actions']! as List<Object?>;
-    final pointer = actions.single! as Map<String, Object?>;
-    expect(pointer['type'], 'pointer');
-    expect(
-      (pointer['parameters']! as Map<Object?, Object?>)['pointerType'],
-      'touch',
-    );
-    final steps = (pointer['actions']! as List<Object?>)
-        .cast<Map<Object?, Object?>>();
-    expect(steps.first['x'], 120);
-    expect(steps.first['y'], 240);
-    expect(
-      steps[2],
-      equals(<String, Object?>{'type': 'pause', 'duration': 100}),
-    );
+    expect(payload, <String, Object?>{'x': 120, 'y': 240});
   });
 
   test('creates a session when status has no session id', () async {
