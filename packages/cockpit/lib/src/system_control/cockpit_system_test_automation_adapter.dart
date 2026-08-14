@@ -7,6 +7,7 @@ import 'package:crypto/crypto.dart';
 import 'package:path/path.dart' as p;
 
 import '../adapters/cockpit_automation_adapter.dart';
+import 'cockpit_ios_webdriver_agent_client.dart';
 import 'cockpit_macos_accessibility_tree.dart';
 import 'cockpit_native_ui_snapshot.dart';
 import 'cockpit_system_control_action_service.dart';
@@ -325,10 +326,15 @@ final class CockpitSystemTestAutomationAdapter
         );
       }
     }
+    final treePath = point.treePath;
     final result = await _runAction(
       CockpitSystemControlAction.tap,
       <String, Object?>{'x': point.x, 'y': point.y},
       deadline,
+      metadata:
+          _target.platform.trim().toLowerCase() == 'ios' && treePath != null
+          ? <String, Object?>{cockpitIosResolvedNativePathMetadataKey: treePath}
+          : null,
     );
     return _fromAction(
       command,
@@ -1333,6 +1339,7 @@ final class CockpitSystemTestAutomationAdapter
         viewportWidth: snapshot.viewportWidth,
         viewportHeight: snapshot.viewportHeight,
         nativePath: resolution.node?.attributes['nativepath'],
+        treePath: resolution.node?.path,
         textLength: resolution.node?.textValues
             .map((value) => value.length)
             .maxOrNull,
@@ -1420,6 +1427,7 @@ final class CockpitSystemTestAutomationAdapter
     return (leftX - rightX).abs() <= 1 &&
         (leftY - rightY).abs() <= 1 &&
         left.nativePath == right.nativePath &&
+        left.treePath == right.treePath &&
         left.resolution?.matchedKind == right.resolution?.matchedKind &&
         left.resolution?.matchedValue == right.resolution?.matchedValue;
   }
@@ -1525,8 +1533,9 @@ final class CockpitSystemTestAutomationAdapter
   Future<CockpitSystemControlActionResult> _runAction(
     CockpitSystemControlAction action,
     Map<String, Object?> parameters,
-    DateTime deadline,
-  ) {
+    DateTime deadline, {
+    Map<String, Object?>? metadata,
+  }) {
     final remaining = deadline.difference(_utcNow());
     if (remaining <= Duration.zero) throw TimeoutException('deadline elapsed');
     return _actionService.run(
@@ -1535,7 +1544,7 @@ final class CockpitSystemTestAutomationAdapter
         deviceId: _target.deviceId,
         appId: _target.appId,
         processId: _target.processId,
-        metadata: _target.metadata,
+        metadata: <String, Object?>{..._target.metadata, ...?metadata},
         action: action,
         parameters: parameters,
         timeout: remaining,
@@ -1637,6 +1646,7 @@ final class _ResolvedPoint {
     required this.viewportWidth,
     required this.viewportHeight,
     this.nativePath,
+    this.treePath,
     this.textLength,
     required this.resolution,
     List<CockpitArtifactRef> artifacts = const <CockpitArtifactRef>[],
@@ -1660,6 +1670,7 @@ final class _ResolvedPoint {
        x = null,
        y = null,
        nativePath = null,
+       treePath = null,
        textLength = null,
        resolution = null;
 
@@ -1668,6 +1679,7 @@ final class _ResolvedPoint {
   final int? viewportWidth;
   final int? viewportHeight;
   final String? nativePath;
+  final String? treePath;
   final int? textLength;
   final CockpitLocatorResolution? resolution;
   final List<CockpitArtifactRef> artifacts;
