@@ -322,9 +322,7 @@ final class _RootTile extends HookConsumerWidget {
                   style: TextStyle(
                     fontSize: 11,
                     fontFamily: 'monospace',
-                    color: theme.colorScheme.onSurfaceVariant.withValues(
-                      alpha: 0.6,
-                    ),
+                    color: context.consoleColors.inkTertiary,
                   ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,

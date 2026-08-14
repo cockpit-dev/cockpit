@@ -1,3 +1,4 @@
+import 'package:cockpit_console/src/theme/console_colors.dart';
 import 'package:flutter/material.dart';
 
 /// Empty / loading / error state view with icon, title, description, action.
@@ -55,9 +56,7 @@ final class EmptyStateView extends StatelessWidget {
                     Icon(
                       icon,
                       size: 36,
-                      color: theme.colorScheme.onSurfaceVariant.withValues(
-                        alpha: 0.5,
-                      ),
+                      color: context.consoleColors.inkTertiary,
                     ),
                   const SizedBox(height: 14),
                   Text(

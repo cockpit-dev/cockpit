@@ -72,6 +72,38 @@ void main() {
     }
   });
 
+  test('semantic text colors stay readable in light and dark themes', () {
+    for (final brightness in Brightness.values) {
+      final colors = ConsoleColors(brightness);
+
+      expect(
+        _contrast(colors.inkPrimary, colors.surface1),
+        greaterThanOrEqualTo(4.5),
+        reason: '$brightness primary text',
+      );
+      expect(
+        _contrast(colors.inkSecondary, colors.surface1),
+        greaterThanOrEqualTo(4.5),
+        reason: '$brightness secondary text',
+      );
+      expect(
+        _contrast(colors.inkTertiary, colors.surface1),
+        greaterThanOrEqualTo(4.5),
+        reason: '$brightness tertiary and placeholder text',
+      );
+      expect(
+        _contrast(colors.inkDisabled, colors.surface3),
+        greaterThanOrEqualTo(3),
+        reason: '$brightness disabled control content',
+      );
+      expect(
+        _contrast(colors.accent, colors.accentFg),
+        greaterThanOrEqualTo(4.5),
+        reason: '$brightness primary action',
+      );
+    }
+  });
+
   testWidgets('single-line form controls use the shared control height', (
     tester,
   ) async {
@@ -174,6 +206,32 @@ void main() {
     }
   });
 
+  testWidgets('filled icon buttons keep the primary action foreground', (
+    tester,
+  ) async {
+    for (final brightness in Brightness.values) {
+      final theme = ConsoleTheme.build(brightness);
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: theme,
+          home: Scaffold(
+            body: IconButton.filled(
+              onPressed: () {},
+              icon: const Icon(Icons.power),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        IconTheme.of(tester.element(find.byIcon(Icons.power))).color,
+        theme.colorScheme.onPrimary,
+        reason: '$brightness filled icon button',
+      );
+    }
+  });
+
   testWidgets('multiline fields can grow beyond the single-line height', (
     tester,
   ) async {
@@ -199,3 +257,17 @@ void main() {
     );
   });
 }
+
+double _contrast(Color first, Color second) {
+  final firstLuminance = _luminance(first);
+  final secondLuminance = _luminance(second);
+  final lighter = firstLuminance > secondLuminance
+      ? firstLuminance
+      : secondLuminance;
+  final darker = firstLuminance > secondLuminance
+      ? secondLuminance
+      : firstLuminance;
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
+double _luminance(Color color) => color.computeLuminance();

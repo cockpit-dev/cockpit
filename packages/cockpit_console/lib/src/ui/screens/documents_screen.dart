@@ -512,9 +512,7 @@ final class _Editor extends HookConsumerWidget {
                 hintStyle: TextStyle(
                   fontFamily: 'monospace',
                   fontSize: 13,
-                  color: theme.colorScheme.onSurfaceVariant.withValues(
-                    alpha: 0.4,
-                  ),
+                  color: context.consoleColors.inkTertiary,
                 ),
               ),
             ),

@@ -19,8 +19,8 @@ final class ConsolePalette {
   // ── Dark ink ─────────────────────────────────────────────────────────
   static const Color darkInkPrimary = Color(0xFFEDEDEF);
   static const Color darkInkSecondary = Color(0xFF9B9DA3);
-  static const Color darkInkTertiary = Color(0xFF7B7D83);
-  static const Color darkInkDisabled = Color(0xFF4A4C52);
+  static const Color darkInkTertiary = Color(0xFF7F8187);
+  static const Color darkInkDisabled = Color(0xFF797B82);
 
   // ── Dark borders ─────────────────────────────────────────────────────
   static const Color darkBorder = Color(0xFF26272B);
@@ -38,8 +38,8 @@ final class ConsolePalette {
   // ── Light ink ────────────────────────────────────────────────────────
   static const Color lightInkPrimary = Color(0xFF1A1A1C);
   static const Color lightInkSecondary = Color(0xFF5F6168);
-  static const Color lightInkTertiary = Color(0xFF707279);
-  static const Color lightInkDisabled = Color(0xFFB5B7BD);
+  static const Color lightInkTertiary = Color(0xFF6A6C73);
+  static const Color lightInkDisabled = Color(0xFF74767D);
 
   // ── Light borders ────────────────────────────────────────────────────
   static const Color lightBorder = Color(0xFFE0E0E3);

@@ -1611,9 +1611,7 @@ final class _EventRow extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 10,
                   fontFamily: 'monospace',
-                  color: theme.colorScheme.onSurfaceVariant.withValues(
-                    alpha: 0.5,
-                  ),
+                  color: context.consoleColors.inkTertiary,
                 ),
               ),
             ),
@@ -1644,7 +1642,7 @@ final class _EventRow extends StatelessWidget {
             style: TextStyle(
               fontSize: 10,
               fontFamily: 'monospace',
-              color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
+              color: context.consoleColors.inkTertiary,
             ),
           ),
         ],
