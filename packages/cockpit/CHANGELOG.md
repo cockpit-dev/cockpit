@@ -2,8 +2,9 @@
 
 ## 4.0.27
 
-- Made iOS native-tree taps execute the uniquely resolved WebDriverAgent
-  element instead of accepting a coordinate event that produced no UI change.
+- Made iOS native-tree taps, repeated taps, and text focus execute the uniquely
+  resolved WebDriverAgent element, and mapped visual screenshot pixels into the
+  WebDriverAgent viewport before coordinate gestures.
 - Kept healthy `dev diagnose --view more` output focused by omitting snapshot
   profile noise, routine next steps, empty logs, and non-failing endpoint rows.
 

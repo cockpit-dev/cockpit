@@ -12,6 +12,7 @@ import 'package:cockpit/src/system_control/cockpit_system_control_service.dart';
 import 'package:cockpit/src/system_control/cockpit_system_test_automation_adapter.dart';
 import 'package:cockpit/src/system_control/cockpit_system_test_target.dart';
 import 'package:cockpit_protocol/cockpit_protocol.dart';
+import 'package:image/image.dart' as img;
 import 'package:test/test.dart';
 
 void main() {
@@ -263,6 +264,167 @@ void main() {
     );
   });
 
+  test(
+    'iOS repeated and focus taps preserve the resolved WDA element path',
+    () async {
+      final commands = <CockpitIosWdaCommand>[];
+      final controls = CockpitSystemControlService(
+        iosWdaEndpointProbe: (baseUri, {required timeout}) async => true,
+      );
+      final adapter = CockpitSystemTestAutomationAdapter(
+        target: CockpitSystemTestTarget(
+          platform: 'ios',
+          deviceId: 'D3884373-E926-49AF-92E6-7A241C50B64C',
+          appId: 'dev.cockpit.demo',
+          metadata: const <String, Object?>{
+            'wdaUrl': 'http://127.0.0.1:8100',
+            'wdaReachable': true,
+          },
+        ),
+        controlService: controls,
+        actionService: CockpitSystemControlActionService(
+          systemControlService: controls,
+          iosWdaRunner: (command, {required timeout}) async {
+            commands.add(command);
+            return command.action == CockpitIosWdaAction.readUiTree
+                ? _iosNewTaskTree
+                : 'ok';
+          },
+        ),
+        workspaceRoot: Directory.current.path,
+        delay: (_) async {},
+      );
+      const nativePath =
+          '/XCUIElementTypeApplication[0]/XCUIElementTypeWindow[0]/XCUIElementTypeButton[0]';
+      final cases = <(CockpitCommandType, Map<String, Object?>, int)>[
+        (
+          CockpitCommandType.doubleTap,
+          <String, Object?>{
+            'cockpitTestLocator': <String, Object?>{'label': 'New task'},
+          },
+          2,
+        ),
+        (
+          CockpitCommandType.enterText,
+          <String, Object?>{
+            'cockpitTestLocator': <String, Object?>{'label': 'New task'},
+            'text': 'Hello',
+          },
+          1,
+        ),
+        (
+          CockpitCommandType.eraseText,
+          <String, Object?>{
+            'cockpitTestLocator': <String, Object?>{'label': 'New task'},
+            'characters': 1,
+          },
+          1,
+        ),
+      ];
+
+      for (final (type, parameters, expectedTapCount) in cases) {
+        commands.clear();
+        final execution = await adapter.execute(
+          CockpitCommand(
+            commandId: type.name,
+            commandType: type,
+            parameters: parameters,
+            timeoutMs: 1000,
+          ),
+        );
+
+        expect(execution.result.success, isTrue, reason: type.name);
+        final taps = commands
+            .where((command) => command.action == CockpitIosWdaAction.tap)
+            .toList(growable: false);
+        expect(taps, hasLength(expectedTapCount), reason: type.name);
+        for (final tap in taps) {
+          expect(tap.parameters['nativePath'], nativePath, reason: type.name);
+        }
+      }
+    },
+  );
+
+  test('iOS visual taps scale screenshot pixels to the WDA viewport', () async {
+    final workspace = await Directory.systemTemp.createTemp(
+      'cockpit-ios-visual-',
+    );
+    addTearDown(() => workspace.delete(recursive: true));
+    final template = img.Image(width: 8, height: 8, numChannels: 4);
+    for (var y = 0; y < template.height; y += 1) {
+      for (var x = 0; x < template.width; x += 1) {
+        template.setPixelRgba(
+          x,
+          y,
+          (x * 29 + y * 7) % 256,
+          (x * 11 + y * 31) % 256,
+          (x * 17 + y * 13) % 256,
+          255,
+        );
+      }
+    }
+    final screenshot = img.Image(width: 90, height: 180, numChannels: 4);
+    img.fill(screenshot, color: img.ColorRgba8(12, 18, 24, 255));
+    _copyImage(template, screenshot, x: 54, y: 30);
+    await _writePng(workspace, 'assets/target.png', template);
+    final screenshotFile = await _writePng(
+      workspace,
+      'captures/screen.png',
+      screenshot,
+    );
+    final commands = <CockpitIosWdaCommand>[];
+    final controls = CockpitSystemControlService(
+      iosWdaEndpointProbe: (baseUri, {required timeout}) async => true,
+    );
+    final adapter = CockpitSystemTestAutomationAdapter(
+      target: CockpitSystemTestTarget(
+        platform: 'ios',
+        deviceId: 'D3884373-E926-49AF-92E6-7A241C50B64C',
+        appId: 'dev.cockpit.demo',
+        metadata: const <String, Object?>{
+          'wdaUrl': 'http://127.0.0.1:8100',
+          'wdaReachable': true,
+        },
+      ),
+      controlService: controls,
+      actionService: CockpitSystemControlActionService(
+        systemControlService: controls,
+        captureAdapterFactory: (_) =>
+            _ScreenshotCaptureAdapter(screenshotFile.path),
+        iosWdaRunner: (command, {required timeout}) async {
+          commands.add(command);
+          return command.action == CockpitIosWdaAction.readUiTree
+              ? _iosVisualViewportTree
+              : 'ok';
+        },
+      ),
+      workspaceRoot: workspace.path,
+      delay: (_) async {},
+    );
+
+    final execution = await adapter.execute(
+      CockpitCommand(
+        commandId: 'tap-visual-target',
+        commandType: CockpitCommandType.tap,
+        parameters: <String, Object?>{
+          'cockpitTestLocator': <String, Object?>{
+            'visual': 'assets/target.png',
+            'threshold': 0.99,
+          },
+        },
+        timeoutMs: 3000,
+      ),
+    );
+
+    expect(execution.result.success, isTrue);
+    final tap = commands.singleWhere(
+      (command) => command.action == CockpitIosWdaAction.tap,
+    );
+    expect(tap.parameters['nativePath'], isNull);
+    expect(tap.parameters['x'], 19);
+    expect(tap.parameters['y'], 11);
+  });
+
   test('macOS native tap presses the resolved accessibility element', () async {
     final processes = _TransientUiTreeProcessManager(failFirst: false);
     final controls = CockpitSystemControlService(processManager: processes);
@@ -376,6 +538,58 @@ final class _ScreenRecordingDeniedAdapter implements CockpitCaptureAdapter {
           ),
         ),
       );
+}
+
+final class _ScreenshotCaptureAdapter implements CockpitCaptureAdapter {
+  const _ScreenshotCaptureAdapter(this.sourcePath);
+
+  final String sourcePath;
+
+  @override
+  Future<CockpitCommandExecution> capture(CockpitCommand command) async {
+    const artifact = CockpitArtifactRef(
+      role: 'systemScreenshot',
+      relativePath: 'screenshots/system.png',
+    );
+    return CockpitCommandExecution(
+      result: CockpitCommandResult(
+        success: true,
+        commandId: command.commandId,
+        commandType: command.commandType,
+        durationMs: 1,
+        artifacts: const <CockpitArtifactRef>[artifact],
+      ),
+      artifactSourcePaths: <String, String>{artifact.relativePath: sourcePath},
+    );
+  }
+}
+
+Future<File> _writePng(
+  Directory workspace,
+  String relativePath,
+  img.Image image,
+) async {
+  final file = File('${workspace.path}/$relativePath');
+  await file.parent.create(recursive: true);
+  await file.writeAsBytes(img.encodePng(image), flush: true);
+  return file;
+}
+
+void _copyImage(
+  img.Image source,
+  img.Image destination, {
+  required int x,
+  required int y,
+}) {
+  for (var sourceY = 0; sourceY < source.height; sourceY += 1) {
+    for (var sourceX = 0; sourceX < source.width; sourceX += 1) {
+      destination.setPixel(
+        x + sourceX,
+        y + sourceY,
+        source.getPixel(sourceX, sourceY),
+      );
+    }
+  }
 }
 
 final class _TransientUiTreeProcessManager
@@ -513,6 +727,11 @@ const _iosNewTaskTree = '''<?xml version="1.0" encoding="UTF-8"?>
   <XCUIElementTypeWindow type="XCUIElementTypeWindow" x="0" y="0" width="402" height="874">
     <XCUIElementTypeButton type="XCUIElementTypeButton" name="New task" label="New task" enabled="true" visible="true" accessible="true" x="233" y="75" width="117" height="48" />
   </XCUIElementTypeWindow>
+</XCUIElementTypeApplication>''';
+
+const _iosVisualViewportTree = '''<?xml version="1.0" encoding="UTF-8"?>
+<XCUIElementTypeApplication type="XCUIElementTypeApplication" x="0" y="0" width="30" height="60">
+  <XCUIElementTypeWindow type="XCUIElementTypeWindow" x="0" y="0" width="30" height="60" />
 </XCUIElementTypeApplication>''';
 
 const _macosBackTree = '''{
