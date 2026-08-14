@@ -193,7 +193,7 @@ final class _DisconnectedChatView extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 8),
-              ConsolePrimaryIconButton(
+              ConsoleFieldIconButton(
                 onPressed: connecting ? null : onConnect,
                 icon: connecting
                     ? const SizedBox.square(
