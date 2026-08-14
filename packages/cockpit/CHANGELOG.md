@@ -12,6 +12,8 @@
   allowing genuine device/capture contention to settle within the command budget.
 - Improved Flutter label lowering, network body artifacts, compact run output,
   and recovery behavior for concurrent and interrupted development sessions.
+- Allowed `suite report` to atomically export into pre-created empty
+  directories while preserving any destination populated during export.
 
 ## 4.0.25
 
