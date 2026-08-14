@@ -41,6 +41,7 @@ import 'cockpit_snapshot.dart';
 import 'cockpit_snapshot_options.dart';
 import 'cockpit_surface.dart';
 import 'cockpit_ui_idle_waiter.dart';
+import 'cockpit_visual_frame_driver.dart';
 
 final class FlutterCockpitRoot extends StatefulWidget {
   const FlutterCockpitRoot({required this.child, super.key});
@@ -150,6 +151,12 @@ final class FlutterCockpitRootState extends State<FlutterCockpitRoot> {
     if (_isTestBinding(binding)) {
       return snapshot(options: options);
     }
+    await ensureCockpitVisualFrame(
+      platform: resolveCockpitRemoteSessionPlatform(
+        isWeb: kIsWeb,
+        targetPlatform: defaultTargetPlatform,
+      ),
+    );
     await waitForPendingCockpitFrame(
       phase: binding.schedulerPhase,
       hasScheduledFrame: binding.hasScheduledFrame,
@@ -170,6 +177,12 @@ final class FlutterCockpitRootState extends State<FlutterCockpitRoot> {
       timeout: timeout ?? interactionPolicy.uiIdleTimeout,
       waitTick: (duration) => Future<void>.delayed(duration),
       waitForNetworkIdle: FlutterCockpit.binding.networkObserver?.waitForIdle,
+      ensureVisualFrame: () => ensureCockpitVisualFrame(
+        platform: resolveCockpitRemoteSessionPlatform(
+          isWeb: kIsWeb,
+          targetPlatform: defaultTargetPlatform,
+        ),
+      ),
       includeNetworkIdle:
           includeNetworkIdle ??
           interactionPolicy.waitForNetworkIdleDuringAcceptanceCapture,
@@ -180,6 +193,7 @@ final class FlutterCockpitRootState extends State<FlutterCockpitRoot> {
     CockpitScreenshotRequest request, {
     CockpitCaptureProfile? profile,
     bool? allowFallback,
+    bool waitForIdle = true,
   }) async {
     final effectiveProfile =
         profile ?? request.profile ?? _defaultProfileFor(request);
@@ -191,7 +205,8 @@ final class FlutterCockpitRootState extends State<FlutterCockpitRoot> {
         : request;
     final surfaceState = _requireSurfaceState();
 
-    if (effectiveRequest.reason == CockpitScreenshotReason.acceptance) {
+    if (waitForIdle &&
+        effectiveRequest.reason == CockpitScreenshotReason.acceptance) {
       try {
         await waitForUiIdle();
       } on Object {
@@ -438,7 +453,8 @@ final class FlutterCockpitRootState extends State<FlutterCockpitRoot> {
   InAppCockpitCommandExecutor _buildRemoteCommandExecutor(String platform) {
     return InAppCockpitCommandExecutor(
       registry: FlutterCockpit.binding.registry,
-      captureHandler: captureScreenshot,
+      captureHandler: (request) =>
+          captureScreenshot(request, waitForIdle: false),
       snapshotProvider: snapshot,
       locatorProbe: (locator, {requiredCommand}) {
         final surface = _surfaceStateOrNull;

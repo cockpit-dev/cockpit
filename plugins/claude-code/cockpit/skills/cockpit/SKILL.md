@@ -456,6 +456,7 @@ cockpit case list --id CASE
 cockpit suite list --id SUITE
 cockpit case run --case-id CASE --idempotency-key KEY
 cockpit suite run --suite-id SUITE --idempotency-key KEY
+cockpit run list
 cockpit run get --run-id RUN
 cockpit run events --run-id RUN
 cockpit suite report --run-id RUN --output-dir /absolute/report
@@ -480,6 +481,8 @@ two selectors are mutually exclusive. Use `list --id ID` for exact lookup and ad
 Resume with the last sequence or event ID; sequence numbers are monotonic. Do not
 export `suite report` before terminal completion. `artifact list` returns metadata;
 `artifact read` verifies the artifact and writes only to the requested output path.
+Use `run list` to recover or switch to a recent durable run in the current workspace;
+add `--cursor` only when the first bounded page does not contain the needed run.
 
 Use real live capabilities only. Report unsupported capabilities as `unavailable`
 or `blocked`. Distinguish product failure, authoring failure,
@@ -498,10 +501,12 @@ cockpit explain viewport.set
 cockpit op run viewport.set --input '{width:800 height:600}'
 ```
 
-Use `--scope supervisor` only for a Supervisor-scoped operation. Workspace scope is
-the default and resolves the current checkout. From a common ancestor with several
-active Flutter projects, pass the same `--session HANDLE` to `op list`, `explain`,
-and `op run`. Pass `--root-id` only when the live
+`--scope` belongs only to `op list`; use `op list --scope supervisor` when
+discovering a Supervisor operation. `explain KIND` and `op run KIND` resolve the
+advertised scope automatically and do not accept `--scope`. Workspace discovery
+resolves the current checkout by default. From a common ancestor with several active
+Flutter projects, pass the same `--session HANDLE` to `op list`, `explain`, and
+`op run`. Pass `--root-id` only when the live
 descriptor declares root scope. `--session` injects the canonical runtime session only
 when the schema declares it; do not put `sessionId` into input manually. Cockpit
 generates an idempotency key only where the descriptor allows it. `op run` adopts the

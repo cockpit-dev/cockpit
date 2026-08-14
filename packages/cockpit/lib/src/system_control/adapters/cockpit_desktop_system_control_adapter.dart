@@ -3,6 +3,7 @@ import 'package:cockpit_protocol/cockpit_protocol.dart';
 import '../../platform/windows/cockpit_windows_native_input.dart';
 import '../../platform/windows/cockpit_windows_powershell.dart';
 import '../../platform/windows/cockpit_windows_window_target.dart';
+import '../../platform/macos/cockpit_macos_application_activation.dart';
 import '../cockpit_macos_accessibility_tree.dart';
 import '../cockpit_linux_at_spi_tree.dart';
 import '../cockpit_system_control_action.dart';
@@ -841,11 +842,8 @@ final class CockpitDesktopSystemControlAdapter
         request,
         _macosPressBackScript,
       ),
-      CockpitSystemControlAction.activateWindow => _macosJxaWithTarget(
-        request,
-        _macosActivateTargetScript,
-        const <String>[],
-      ),
+      CockpitSystemControlAction.activateWindow =>
+        _macosApplicationActivationCommand(request),
       CockpitSystemControlAction.terminateApp => _macosAppleScriptWithTarget(
         request,
         _macosTerminateTargetScript,
@@ -919,11 +917,8 @@ final class CockpitDesktopSystemControlAdapter
             <String>['-e', _macosPostNotificationScript, title, body],
           ),
         ),
-      CockpitSystemControlAction.recoverToApp => _macosJxaWithTarget(
-        request,
-        _macosActivateTargetScript,
-        const <String>[],
-      ),
+      CockpitSystemControlAction.recoverToApp =>
+        _macosApplicationActivationCommand(request),
       CockpitSystemControlAction.pushFile ||
       CockpitSystemControlAction.pullFile => _posixHostFileCommand(request),
       CockpitSystemControlAction.addMedia => _posixHostAddMediaCommand(request),
@@ -1402,6 +1397,22 @@ final class CockpitDesktopSystemControlAdapter
       ...target,
       ...extraArgs,
     ]);
+  }
+
+  CockpitResolvedSystemControlCommand _macosApplicationActivationCommand(
+    CockpitSystemControlActionRequest request,
+  ) {
+    final target = _targetArgs(request);
+    if (target == null) {
+      return const CockpitResolvedSystemControlCommand.error(
+        code: 'missingSystemActionTarget',
+        message: 'This macOS action requires --app-id or --process-id.',
+      );
+    }
+    return CockpitResolvedSystemControlCommand(
+      cockpitMacosApplicationActivationCommandExecutable,
+      target,
+    );
   }
 
   CockpitResolvedSystemControlCommand _macosAppleScriptWithTarget(
@@ -2166,41 +2177,6 @@ function run(argv) {
     delay(0.05)
   }
   post(mouseUp, endX, endY)
-}
-''';
-
-  static const String _macosActivateTargetScript = r'''
-ObjC.import('AppKit')
-
-function run(argv) {
-  const targetKind = argv[0]
-  const targetValue = argv[1]
-  let app = null
-  if (targetKind === 'processId') {
-    app = $.NSRunningApplication.runningApplicationWithProcessIdentifier(Number(targetValue))
-  } else {
-    const apps = $.NSRunningApplication.runningApplicationsWithBundleIdentifier(targetValue)
-    if (apps.count > 0) app = apps.objectAtIndex(0)
-  }
-  if (!app) throw new Error(`No running macOS application found for ${targetKind}:${targetValue}`)
-  if (!app.activateWithOptions($.NSApplicationActivateIgnoringOtherApps)) {
-    throw new Error(`Unable to activate macOS application ${targetKind}:${targetValue}`)
-  }
-  const activationDeadline = Date.now() + 1000
-  while (!app.active && Date.now() < activationDeadline) delay(0.01)
-  const frontmost = $.NSWorkspace.sharedWorkspace.frontmostApplication
-  if (
-    !app.active ||
-    !frontmost ||
-    Number(frontmost.processIdentifier) !== Number(app.processIdentifier)
-  ) {
-    const frontmostAppId = frontmost && frontmost.bundleIdentifier
-      ? ObjC.unwrap(frontmost.bundleIdentifier)
-      : 'unknown'
-    throw new Error(
-      `macOS application did not become frontmost; current foreground is ${frontmostAppId}`,
-    )
-  }
 }
 ''';
 

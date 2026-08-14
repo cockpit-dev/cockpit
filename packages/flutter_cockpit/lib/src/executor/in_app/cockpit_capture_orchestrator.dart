@@ -88,11 +88,11 @@ final class CockpitCaptureOrchestrator {
     }
 
     await _postActionSettler();
-    await _settleBeforeObservation();
     if (request.includeSnapshot) {
       await _bestEffortWaitForUiIdle(
         includeNetworkIdleValue: waitForNetworkIdleDuringAcceptanceCapture,
       );
+    } else {
       await _settleBeforeObservation();
     }
 

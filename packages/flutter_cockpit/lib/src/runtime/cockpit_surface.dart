@@ -1345,8 +1345,12 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
         locator.matchMode,
       );
     }
-    if (locator.semanticId != null && _elementSemanticSignal(element) != null) {
-      score += 4;
+    if (locator.semanticId case final expectedSemanticId?) {
+      score += _textMatchPriorityScore(
+        _elementSemanticSignal(element),
+        expectedSemanticId,
+        locator.matchMode,
+      );
     }
     if (locator.ancestor != null) {
       score += 2;
@@ -1393,7 +1397,7 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
       CockpitLocatorKind.semanticId => _matchesTextSignal(
         _elementSemanticSignal(element),
         value,
-        CockpitTextMatchMode.exact,
+        matchMode,
       ),
       CockpitLocatorKind.key => _stableKeyValue(element.widget.key) == value,
       CockpitLocatorKind.text => _matchesTextSignal(
@@ -2264,8 +2268,16 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
       final matched = switch (signal.kind) {
         CockpitLocatorKind.cockpitId => ancestor.cockpitId == signal.value,
         CockpitLocatorKind.semanticId =>
-          ancestor.semanticId == signal.value ||
-              ancestor.cockpitId == signal.value,
+          _matchesTextSignal(
+                ancestor.semanticId,
+                signal.value,
+                locator.matchMode,
+              ) ||
+              _matchesTextSignal(
+                ancestor.cockpitId,
+                signal.value,
+                locator.matchMode,
+              ),
         CockpitLocatorKind.key =>
           ancestor.keyValue == signal.value ||
               ancestor.cockpitId == signal.value,

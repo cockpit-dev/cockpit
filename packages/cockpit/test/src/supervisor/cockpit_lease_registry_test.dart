@@ -727,6 +727,85 @@ void main() {
     });
   });
 
+  group('lease pagination', () {
+    test('lists newest leases with a stable bounded cursor', () async {
+      final fixture = await CockpitLeaseTestFixture.create();
+      addTearDown(fixture.dispose);
+      final leases = <CockpitLeaseResource>[];
+      for (var index = 0; index < 5; index += 1) {
+        leases.add(
+          await fixture.registry.acquire(
+            leaseRequest(
+              key: 'page.$index',
+              resourceId: 'device-$index',
+              holderId: 'run$index',
+              waitTimeoutMs: 0,
+            ),
+          ),
+        );
+      }
+
+      final first = await fixture.registry.listPage(
+        leaseState: CockpitLeaseState.active,
+        limit: 2,
+      );
+      expect(first.items.map((lease) => lease.leaseId), <String>[
+        leases[4].leaseId,
+        leases[3].leaseId,
+      ]);
+      expect(first.total, 5);
+      expect(first.next, leases[3].leaseId);
+
+      await fixture.registry.release(
+        leases[3].leaseId,
+        holderId: leases[3].holderId,
+      );
+      final second = await fixture.registry.listPage(
+        leaseState: CockpitLeaseState.active,
+        limit: 2,
+        before: first.next,
+      );
+      expect(second.items.map((lease) => lease.leaseId), <String>[
+        leases[2].leaseId,
+        leases[1].leaseId,
+      ]);
+      expect(second.total, 4);
+      expect(second.next, leases[1].leaseId);
+
+      final last = await fixture.registry.listPage(
+        leaseState: CockpitLeaseState.active,
+        limit: 2,
+        before: second.next,
+      );
+      expect(last.items.map((lease) => lease.leaseId), <String>[
+        leases[0].leaseId,
+      ]);
+      expect(last.total, 4);
+      expect(last.next, isNull);
+    });
+
+    test('rejects a cursor outside the selected lease scope', () async {
+      final fixture = await CockpitLeaseTestFixture.create();
+      addTearDown(fixture.dispose);
+      final lease = await fixture.registry.acquire(
+        leaseRequest(
+          key: 'page.scope',
+          resourceId: 'device-a',
+          waitTimeoutMs: 0,
+        ),
+      );
+
+      await expectLater(
+        fixture.registry.listPage(
+          workspaceId: 'workspaceB',
+          limit: 50,
+          before: lease.leaseId,
+        ),
+        throwsLease('leasePageInvalid'),
+      );
+    });
+  });
+
   group('lease persistence validation', () {
     test(
       'rejects unknown and semantically conflicting durable state',

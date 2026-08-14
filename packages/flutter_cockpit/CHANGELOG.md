@@ -1,5 +1,14 @@
 # Changelog
 
+## 4.0.26
+
+- Kept Flutter control, idle waits, and screenshots responsive when desktop or
+  web frame delivery stalls, while retaining normal vsync as the primary path.
+- Applied exact, contains, fuzzy, and regex matching consistently to semantic
+  identifiers used by Flutter-first multi-condition selectors.
+- Removed redundant screenshot settling and preserved correct post-action frame
+  commits without requiring application-authored Semantics.
+
 ## 4.0.25
 
 - Synchronized the Flutter bridge package with the current Cockpit release.

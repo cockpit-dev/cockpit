@@ -438,7 +438,7 @@ _operationHelp = <String, ({String title, String description})>{
   ),
   'lease.list': (
     title: 'List leases',
-    description: 'List resource leases with optional ownership filters.',
+    description: 'List the newest resource leases with bounded pagination.',
   ),
   'lease.recover': (
     title: 'Recover lease',

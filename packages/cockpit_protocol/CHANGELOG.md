@@ -1,5 +1,12 @@
 # Changelog
 
+## 4.0.26
+
+- Added the public paginated workspace run-list resource to the foundation
+  schema and OpenAPI contract.
+- Added semantic-identifier match modes and ranking to the shared conjunctive
+  selector contract used by Flutter and native execution planes.
+
 ## 4.0.25
 
 - Synchronized the public protocol package with the current Cockpit release.

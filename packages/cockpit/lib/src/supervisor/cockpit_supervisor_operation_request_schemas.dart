@@ -135,171 +135,186 @@ Map<String, Object?> _runRequest(String documentKind, int maximumTimeoutMs) =>
       ],
     );
 
-final Map<String, Map<String, Object?>>
-_requestSchemas = <String, Map<String, Object?>>{
-  'target.discover': _object(
-    properties: <String, Object?>{'timeoutMs': _boundedInteger(1, 300000)},
-  ),
-  'lease.list': _object(
-    properties: <String, Object?>{
-      'workspaceId': _id,
-      'resourceKind': _boundedString(64),
-      'resourceId': _boundedString(512),
-      'state': _enum(<String>['active', 'released', 'expired', 'quarantined']),
-    },
-  ),
-  'lease.recover': _object(
-    properties: <String, Object?>{
-      'leaseId': _id,
-      'workspaceId': _id,
-      'resourceKind': _boundedString(64),
-      'resourceId': _boundedString(512),
-      'holderId': _id,
-      'forceRelease': _boolean,
-    },
-    required: const <String>[
-      'leaseId',
-      'workspaceId',
-      'resourceKind',
-      'resourceId',
-      'holderId',
-      'forceRelease',
-    ],
-  ),
-  'system.capabilities': _object(
-    properties: <String, Object?>{
-      'platform': _boundedString(64),
-      'deviceId': _boundedString(256),
-      'appId': _boundedString(512),
-      'processId': _boundedInteger(1, 0x7fffffff),
-      'metadata': _jsonObject,
-    },
-    required: const <String>['platform'],
-    precision: 'structural',
-  ),
-  'system.diagnostics': _object(),
-  'project.create': _object(
-    properties: <String, Object?>{
-      'parentDirectory': _boundedString(32768),
-      'projectName': <String, Object?>{
-        'type': 'string',
-        'pattern': r'^[a-z][a-z0-9_]{0,127}$',
-      },
-      'template': _enum(<String>['dartCli', 'flutterApp']),
-      'organization': _boundedString(256),
-      'platforms': _array(_boundedString(64), maximum: 16, unique: true),
-      'timeoutMs': _boundedInteger(1, 600000),
-    },
-    required: const <String>['projectName', 'template'],
-  ),
-  'package.search': _object(
-    properties: <String, Object?>{
-      'query': _boundedString(32768),
-      'maxResults': _boundedInteger(1, 50),
-      'timeoutMs': _boundedInteger(1, 120000),
-    },
-    required: const <String>['query'],
-  ),
-  'document.index': _object(
-    properties: <String, Object?>{
-      'kind': _enum(<String>['source', 'case', 'suite', 'project']),
-      'relativePath': _boundedString(32768),
-    },
-  ),
-  'document.list': _object(
-    properties: <String, Object?>{
-      'kind': _enum(<String>['source', 'case', 'suite', 'project', 'authored']),
-      'relativePath': _boundedString(32768),
-      'offset': _boundedInteger(0, 10000),
-      'limit': _boundedInteger(1, 100),
-    },
-    required: const <String>['offset', 'limit'],
-  ),
-  'case.validate': _object(
-    properties: <String, Object?>{
-      'format': _enum(<String>['lon', 'json', 'yaml']),
-      'sourceText': _boundedString(1048576),
-      'relativePath': _boundedString(32768),
-    },
-    required: const <String>['format', 'sourceText'],
-  ),
-  'case.run': _runRequest('case', 21600000),
-  'suite.run': _runRequest('suite', 86400000),
-  'analyze.files': _object(
-    properties: <String, Object?>{
-      'documentIds': _array(_id, maximum: 512, unique: true),
-      'maxDiagnostics': _boundedInteger(1, 1000),
-      'maxOutputChars': _boundedInteger(100, 20000),
-    },
-    required: const <String>['documentIds'],
-  ),
-  'analyze.workspace': _object(),
-  'fix.workspace': _object(),
-  'format.workspace': _object(
-    properties: <String, Object?>{
-      'documentIds': _array(_id, maximum: 512, unique: true),
-    },
-  ),
-  'test.workspace': _object(
-    properties: <String, Object?>{
-      'paths': _array(_boundedString(32768), maximum: 512),
-      'name': _boundedString(1024),
-    },
-  ),
-  'package.pub': _object(
-    properties: <String, Object?>{
-      'command': _enum(<String>[
-        'add',
-        'deps',
-        'get',
-        'outdated',
-        'remove',
-        'upgrade',
-      ]),
-      'packages': _array(_boundedString(256), maximum: 100),
-      'maxOutputChars': _boundedInteger(100, 20000),
-    },
-    required: const <String>['command', 'packages'],
-  ),
-  'lsp.request': _object(
-    properties: <String, Object?>{
-      'command': _enum(<String>[
-        'hover',
-        'definition',
-        'signatureHelp',
-        'documentSymbols',
-        'workspaceSymbols',
-      ]),
-      'documentId': _id,
-      'line': _integer,
-      'column': _integer,
-      'query': _boundedString(512),
-      'maxResults': _boundedInteger(1, 1000),
-      'maxChars': _boundedInteger(100, 20000),
-    },
-    required: const <String>['command'],
-  ),
-  'package.uris.read': _object(
-    properties: <String, Object?>{
-      'uri': _boundedString(4096),
-      'maxPreviewChars': _boundedInteger(100, 20000),
-      'maxEntries': _boundedInteger(1, 1000),
-      'includeFullText': _boolean,
-    },
-    required: const <String>['uri'],
-  ),
-  'package.uris.grep': _object(
-    properties: <String, Object?>{
-      'packageNames': _array(_id, maximum: 100, unique: true),
-      'query': _boundedString(1024),
-      'useRegex': _boolean,
-      'caseSensitive': _boolean,
-      'maxMatches': _boundedInteger(1, 1000),
-    },
-    required: const <String>['packageNames', 'query'],
-  ),
-  ..._applicationRequestSchemas,
-};
+final Map<String, Map<String, Object?>> _requestSchemas =
+    <String, Map<String, Object?>>{
+      'target.discover': _object(
+        properties: <String, Object?>{'timeoutMs': _boundedInteger(1, 300000)},
+      ),
+      'lease.list': _object(
+        properties: <String, Object?>{
+          'workspaceId': _id,
+          'resourceKind': _boundedString(64),
+          'resourceId': _boundedString(512),
+          'state': _enum(<String>[
+            'queued',
+            'active',
+            'releasing',
+            'released',
+            'expired',
+            'quarantined',
+          ]),
+          'limit': _boundedInteger(1, 200, value: 50),
+          'before': _id,
+        },
+      ),
+      'lease.recover': _object(
+        properties: <String, Object?>{
+          'leaseId': _id,
+          'workspaceId': _id,
+          'resourceKind': _boundedString(64),
+          'resourceId': _boundedString(512),
+          'holderId': _id,
+          'forceRelease': _boolean,
+        },
+        required: const <String>[
+          'leaseId',
+          'workspaceId',
+          'resourceKind',
+          'resourceId',
+          'holderId',
+          'forceRelease',
+        ],
+      ),
+      'system.capabilities': _object(
+        properties: <String, Object?>{
+          'platform': _boundedString(64),
+          'deviceId': _boundedString(256),
+          'appId': _boundedString(512),
+          'processId': _boundedInteger(1, 0x7fffffff),
+          'metadata': _jsonObject,
+        },
+        required: const <String>['platform'],
+        precision: 'structural',
+      ),
+      'system.diagnostics': _object(),
+      'project.create': _object(
+        properties: <String, Object?>{
+          'parentDirectory': _boundedString(32768),
+          'projectName': <String, Object?>{
+            'type': 'string',
+            'pattern': r'^[a-z][a-z0-9_]{0,127}$',
+          },
+          'template': _enum(<String>['dartCli', 'flutterApp']),
+          'organization': _boundedString(256),
+          'platforms': _array(_boundedString(64), maximum: 16, unique: true),
+          'timeoutMs': _boundedInteger(1, 600000),
+        },
+        required: const <String>['projectName', 'template'],
+      ),
+      'package.search': _object(
+        properties: <String, Object?>{
+          'query': _boundedString(32768),
+          'maxResults': _boundedInteger(1, 50),
+          'timeoutMs': _boundedInteger(1, 120000),
+        },
+        required: const <String>['query'],
+      ),
+      'document.index': _object(
+        properties: <String, Object?>{
+          'kind': _enum(<String>['source', 'case', 'suite', 'project']),
+          'relativePath': _boundedString(32768),
+        },
+      ),
+      'document.list': _object(
+        properties: <String, Object?>{
+          'kind': _enum(<String>[
+            'source',
+            'case',
+            'suite',
+            'project',
+            'authored',
+          ]),
+          'relativePath': _boundedString(32768),
+          'offset': _boundedInteger(0, 10000),
+          'limit': _boundedInteger(1, 100),
+        },
+        required: const <String>['offset', 'limit'],
+      ),
+      'case.validate': _object(
+        properties: <String, Object?>{
+          'format': _enum(<String>['lon', 'json', 'yaml']),
+          'sourceText': _boundedString(1048576),
+          'relativePath': _boundedString(32768),
+        },
+        required: const <String>['format', 'sourceText'],
+      ),
+      'case.run': _runRequest('case', 21600000),
+      'suite.run': _runRequest('suite', 86400000),
+      'analyze.files': _object(
+        properties: <String, Object?>{
+          'documentIds': _array(_id, maximum: 512, unique: true),
+          'maxDiagnostics': _boundedInteger(1, 1000),
+          'maxOutputChars': _boundedInteger(100, 20000),
+        },
+        required: const <String>['documentIds'],
+      ),
+      'analyze.workspace': _object(),
+      'fix.workspace': _object(),
+      'format.workspace': _object(
+        properties: <String, Object?>{
+          'documentIds': _array(_id, maximum: 512, unique: true),
+        },
+      ),
+      'test.workspace': _object(
+        properties: <String, Object?>{
+          'paths': _array(_boundedString(32768), maximum: 512),
+          'name': _boundedString(1024),
+        },
+      ),
+      'package.pub': _object(
+        properties: <String, Object?>{
+          'command': _enum(<String>[
+            'add',
+            'deps',
+            'get',
+            'outdated',
+            'remove',
+            'upgrade',
+          ]),
+          'packages': _array(_boundedString(256), maximum: 100),
+          'maxOutputChars': _boundedInteger(100, 20000),
+        },
+        required: const <String>['command', 'packages'],
+      ),
+      'lsp.request': _object(
+        properties: <String, Object?>{
+          'command': _enum(<String>[
+            'hover',
+            'definition',
+            'signatureHelp',
+            'documentSymbols',
+            'workspaceSymbols',
+          ]),
+          'documentId': _id,
+          'line': _integer,
+          'column': _integer,
+          'query': _boundedString(512),
+          'maxResults': _boundedInteger(1, 1000),
+          'maxChars': _boundedInteger(100, 20000),
+        },
+        required: const <String>['command'],
+      ),
+      'package.uris.read': _object(
+        properties: <String, Object?>{
+          'uri': _boundedString(4096),
+          'maxPreviewChars': _boundedInteger(100, 20000),
+          'maxEntries': _boundedInteger(1, 1000),
+          'includeFullText': _boolean,
+        },
+        required: const <String>['uri'],
+      ),
+      'package.uris.grep': _object(
+        properties: <String, Object?>{
+          'packageNames': _array(_id, maximum: 100, unique: true),
+          'query': _boundedString(1024),
+          'useRegex': _boolean,
+          'caseSensitive': _boolean,
+          'maxMatches': _boundedInteger(1, 1000),
+        },
+        required: const <String>['packageNames', 'query'],
+      ),
+      ..._applicationRequestSchemas,
+    };
 
 final Map<String, Map<String, Object?>> _applicationRequestSchemas =
     <String, Map<String, Object?>>{

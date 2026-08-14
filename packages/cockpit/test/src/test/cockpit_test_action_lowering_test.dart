@@ -220,10 +220,31 @@ void main() {
 
     expect(result.value?.command.locator?.signalMap, <String, String>{
       'key': 'save-button',
+      'semanticId': 'Save task',
       'text': 'Save',
-      'tooltip': 'Save task',
       'type': 'FilledButton',
     });
+  });
+
+  test('Flutter label lowering preserves semantic match modes over wire', () {
+    final result = flutterLowerer.lower(
+      action: CockpitTestAction(
+        kind: CockpitTestActionKind.tap,
+        locator: CockpitTestLocator(
+          label: 'Open dashboard',
+          matchMode: CockpitTextMatchMode.contains,
+        ),
+      ),
+      commandId: 'semantic-label',
+      timeoutMs: 1000,
+      requestedPlane: CockpitTestPlane.semantic,
+      capabilities: capabilities,
+    );
+
+    final locator = result.value!.command.locator!;
+    expect(locator.signalMap, <String, String>{'semanticId': 'Open dashboard'});
+    expect(locator.matchMode, CockpitTextMatchMode.contains);
+    expect(CockpitLocator.fromJson(locator.toJson()), locator);
   });
 }
 

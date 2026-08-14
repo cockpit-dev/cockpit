@@ -53,6 +53,35 @@ void main() {
     },
   );
 
+  test(
+    'reads and locates multiple runs from one projection snapshot',
+    () async {
+      final projection = _projection(stateRoot);
+      await projection.publish(
+        _publish('runA', afterSequence: 0, events: [_event('runA', 1)]),
+      );
+      await projection.publish(
+        _publish('runB', afterSequence: 0, events: [_event('runB', 1)]),
+      );
+
+      final replays = await projection.readEventsForRuns(const <String>[
+        'runA',
+        'runB',
+        'runMissing',
+      ], afterSequence: 0);
+      final contained = await projection.containedRunIds(const <String>[
+        'runA',
+        'runB',
+        'runMissing',
+      ]);
+
+      expect(replays['runA']!.events.single.runId, 'runA');
+      expect(replays['runB']!.events.single.runId, 'runB');
+      expect(replays['runMissing']!.events, isEmpty);
+      expect(contained, <String>{'runA', 'runB'});
+    },
+  );
+
   test('rejects a global event id conflict across runs', () async {
     final projection = _projection(stateRoot);
     await projection.publish(

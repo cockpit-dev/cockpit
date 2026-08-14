@@ -1418,6 +1418,69 @@
           }
         }
       ],
+      "get": {
+        "operationId": "listRuns",
+        "summary": "List recent durable runs for one workspace",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ApiVersion"
+          },
+          {
+            "$ref": "#/components/parameters/RequiredFeatures"
+          },
+          {
+            "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "$ref": "#/components/parameters/Cursor"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Recent workspace runs.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/TooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMedia"
+          },
+          "422": {
+            "$ref": "#/components/responses/Unprocessable"
+          },
+          "426": {
+            "$ref": "#/components/responses/UpgradeRequired"
+          },
+          "429": {
+            "$ref": "#/components/responses/ResourceBusy"
+          },
+          "500": {
+            "$ref": "#/components/responses/Internal"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        }
+      },
       "post": {
         "operationId": "submitRun",
         "summary": "Submit one inline or indexed case or suite",
@@ -2155,6 +2218,9 @@
       },
       "RunAccepted": {
         "$ref": "../schema/cockpit.foundation.v2.schema.json#/$defs/RunAccepted"
+      },
+      "RunPage": {
+        "$ref": "../schema/cockpit.foundation.v2.schema.json#/$defs/RunPage"
       },
       "RunResource": {
         "$ref": "../schema/cockpit.foundation.v2.schema.json#/$defs/RunResource"

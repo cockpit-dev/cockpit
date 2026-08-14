@@ -875,7 +875,7 @@ void main() {
       expect(screenshotRequests, hasLength(2));
       expect(
         screenshotRequests.map((request) => request.wait),
-        everyElement(const Duration(seconds: 3)),
+        everyElement(const Duration(seconds: 30)),
       );
     },
   );

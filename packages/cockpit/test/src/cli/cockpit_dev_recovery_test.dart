@@ -88,6 +88,23 @@ void main() {
     expect(stderr.toString(), isNot(contains('--format path requires')));
   });
 
+  test('diagnostic network reads remain readable when requests failed', () {
+    final dev = CockpitDevRuntime(runtime);
+    final result = _result(
+      'network.read',
+      output: const <String, Object?>{
+        'available': true,
+        'summary': <String, Object?>{'failureCount': 1},
+        'entries': <Object?>[
+          <String, Object?>{'requestId': '10', 'statusCode': 503},
+        ],
+      },
+    );
+
+    expect(dev.diagnosticReadSucceeded(result), isTrue);
+    expect(dev.operationSucceeded(result), isFalse);
+  });
+
   test(
     'rebinds the latest same-target bridge while retaining its handle',
     () async {

@@ -27,8 +27,12 @@ final Map<String, Map<String, Object?>> _responseSchemas =
         precision: 'structural',
       ),
       'lease.list': _object(
-        properties: <String, Object?>{'items': _array(_jsonObject)},
-        required: const <String>['items'],
+        properties: <String, Object?>{
+          'items': _array(_jsonObject, maximum: 200),
+          'total': _integer,
+          'next': _id,
+        },
+        required: const <String>['items', 'total'],
         precision: 'structural',
       ),
       'lease.recover': _object(

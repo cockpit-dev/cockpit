@@ -263,8 +263,7 @@ final class _SegmentParser {
         fields.set('cockpitId', value);
         return;
       case 'sem':
-        _exactOnly(name, mode);
-        fields.set('semanticId', value);
+        fields.setText('semanticId', value, mode);
         return;
       case 'key':
         _exactOnly(name, mode);
@@ -388,10 +387,12 @@ final class _Fields {
       throw FormatException('Selector field "$name" is repeated.');
     }
     final alreadyHasText =
-        values.containsKey('text') || values.containsKey('tooltip');
+        values.containsKey('semanticId') ||
+        values.containsKey('text') ||
+        values.containsKey('tooltip');
     if (alreadyHasText && matchMode != mode) {
       throw const FormatException(
-        'Text and tooltip filters must use the same match operator.',
+        'Semantic, text, and tooltip filters must use the same match operator.',
       );
     }
     matchMode = mode;
@@ -452,7 +453,9 @@ String _formatSegment(CockpitLocator locator, {required bool ancestor}) {
     parts.add(_filter('id', cockpitId));
   }
   final semanticId = signals[CockpitLocatorKind.semanticId.name];
-  if (semanticId != null) parts.add(_filter('sem', semanticId));
+  if (semanticId != null) {
+    parts.add(_filter('sem', semanticId, mode: locator.matchMode));
+  }
   if (key != null && (cockpitId != null || !_simpleToken.hasMatch(key))) {
     parts.add(_filter('key', key));
   }

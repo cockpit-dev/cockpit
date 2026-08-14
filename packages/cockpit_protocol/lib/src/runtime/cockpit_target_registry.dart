@@ -499,7 +499,11 @@ final class CockpitTargetRegistry {
   ) {
     return switch (kind) {
       CockpitLocatorKind.cockpitId => target.cockpitId == value,
-      CockpitLocatorKind.semanticId => target.semanticId == value,
+      CockpitLocatorKind.semanticId => _matchesTextSignal(
+        target.semanticId,
+        value,
+        matchMode,
+      ),
       CockpitLocatorKind.key => target.keyValue == value,
       CockpitLocatorKind.text => _matchesTextLocator(target, value, matchMode),
       CockpitLocatorKind.tooltip => _matchesTextSignal(
@@ -836,6 +840,16 @@ final class CockpitTargetRegistry {
         sourceScore: 20,
       );
     }
+    final semanticIdSignal =
+        locator.signalMap[CockpitLocatorKind.semanticId.name];
+    if (semanticIdSignal != null) {
+      score += _textSignalPriorityScore(
+        target.semanticId,
+        semanticIdSignal,
+        locator.matchMode,
+        sourceScore: 24,
+      );
+    }
     final pathSignal = locator.signalMap[CockpitLocatorKind.path.name];
     if (pathSignal != null) {
       score += _pathMatchPriorityScore(target.path, pathSignal);
@@ -907,8 +921,16 @@ final class CockpitTargetRegistry {
       final matched = switch (signal.kind) {
         CockpitLocatorKind.cockpitId => ancestor.cockpitId == signal.value,
         CockpitLocatorKind.semanticId =>
-          ancestor.semanticId == signal.value ||
-              ancestor.cockpitId == signal.value,
+          _matchesTextSignal(
+                ancestor.semanticId,
+                signal.value,
+                locator.matchMode,
+              ) ||
+              _matchesTextSignal(
+                ancestor.cockpitId,
+                signal.value,
+                locator.matchMode,
+              ),
         CockpitLocatorKind.key =>
           ancestor.keyValue == signal.value ||
               ancestor.cockpitId == signal.value,

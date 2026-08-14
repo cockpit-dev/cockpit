@@ -357,23 +357,25 @@ final class CockpitLocator {
         ? CockpitTextMatchMode.exact
         : CockpitTextMatchMode.fromJson(json['matchMode']);
     final text = json['text'] as String?;
+    final semanticId = json['semanticId'] as String?;
     final tooltip = json['tooltip'] as String?;
     if (matchMode != CockpitTextMatchMode.exact &&
         text == null &&
+        semanticId == null &&
         tooltip == null) {
       throw const FormatException(
-        'Locator matchMode requires a text or tooltip signal.',
+        'Locator matchMode requires a semanticId, text, or tooltip signal.',
       );
     }
     if (matchMode == CockpitTextMatchMode.regex) {
-      for (final pattern in <String?>[text, tooltip]) {
+      for (final pattern in <String?>[semanticId, text, tooltip]) {
         if (pattern != null) RegExp(pattern);
       }
     }
 
     return CockpitLocator(
       cockpitId: json['cockpitId'] as String?,
-      semanticId: json['semanticId'] as String?,
+      semanticId: semanticId,
       key: json['key'] as String?,
       text: text,
       tooltip: tooltip,

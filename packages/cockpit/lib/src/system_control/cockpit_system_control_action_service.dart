@@ -15,6 +15,7 @@ import '../capture/cockpit_wda_capture_adapter.dart';
 import '../infrastructure/cockpit_process_manager.dart';
 import '../platform/windows/cockpit_windows_native_input.dart';
 import '../platform/windows/cockpit_windows_window_target.dart';
+import '../platform/macos/cockpit_macos_application_activation.dart';
 import '../recording/cockpit_adb_recording_adapter.dart';
 import '../recording/cockpit_linux_recording_adapter.dart';
 import '../recording/cockpit_macos_recording_adapter.dart';
@@ -67,6 +68,7 @@ final class CockpitSystemControlActionService {
     CockpitMacosSystemDialogHandler? macosSystemDialogHandler,
     CockpitMacosApplicationProcessIdResolver? macosApplicationProcessIdResolver,
     CockpitMacosApplicationFocusReader? macosApplicationFocusReader,
+    CockpitMacosApplicationActivator? macosApplicationActivator,
     CockpitWindowsNativeInputExecutor? windowsNativeInputExecutor,
     CockpitWindowsFocusStateReader? windowsFocusStateReader,
   }) : _processManager = processManager ?? const LocalCockpitProcessManager(),
@@ -114,6 +116,16 @@ final class CockpitSystemControlActionService {
                  processManager:
                      processManager ?? const LocalCockpitProcessManager(),
                )),
+       _macosApplicationActivator =
+           macosApplicationActivator ??
+           (({required appId, required processId, required timeout}) =>
+               cockpitActivateMacosApplication(
+                 appId: appId,
+                 processId: processId,
+                 timeout: timeout,
+                 processManager:
+                     processManager ?? const LocalCockpitProcessManager(),
+               )),
        _windowsNativeInputExecutor =
            windowsNativeInputExecutor ?? cockpitExecuteWindowsNativeInput,
        _windowsFocusStateReader =
@@ -133,6 +145,7 @@ final class CockpitSystemControlActionService {
   final CockpitMacosApplicationProcessIdResolver
   _macosApplicationProcessIdResolver;
   final CockpitMacosApplicationFocusReader _macosApplicationFocusReader;
+  final CockpitMacosApplicationActivator _macosApplicationActivator;
   final CockpitWindowsNativeInputExecutor _windowsNativeInputExecutor;
   final CockpitWindowsFocusStateReader _windowsFocusStateReader;
 
@@ -231,44 +244,7 @@ final class CockpitSystemControlActionService {
       );
     }
 
-    if (command.executable == cockpitIosWdaCommandExecutable) {
-      return _runIosWebDriverAgentCommand(request, capability, command);
-    }
-    if (command.executable == cockpitAndroidUiAutomationCommandExecutable) {
-      return _runAndroidUiAutomationCommand(request, capability, command);
-    }
-    if (command.executable == cockpitMacosAccessibilityCommandExecutable) {
-      return _runMacosAccessibilityTreeCommand(request, capability, command);
-    }
-    if (command.executable == cockpitLinuxAtSpiCommandExecutable) {
-      return _runLinuxAtSpiTreeCommand(effectiveRequest, capability, command);
-    }
-    if (command.executable == cockpitWebCdpCommandExecutable) {
-      return _runWebCdpCommand(effectiveRequest, capability);
-    }
-    if (command.executable == cockpitMacosSystemDialogCommandExecutable) {
-      return _runMacosSystemDialogCommand(
-        effectiveRequest,
-        capability,
-        command,
-      );
-    }
-    if (command.executable == cockpitWindowsNativeInputCommandExecutable) {
-      return _runWindowsNativeInputCommand(
-        effectiveRequest,
-        capability,
-        command,
-      );
-    }
-    if (command.executable == cockpitWindowsFocusStateCommandExecutable) {
-      return _runWindowsFocusStateCommand(
-        effectiveRequest,
-        capability,
-        command,
-      );
-    }
-
-    return _runProcessCommand(effectiveRequest, capability, command);
+    return _runResolvedCommand(effectiveRequest, capability, command);
   }
 
   Future<CockpitSystemControlActionResult> _runWindowsFocusStateCommand(
@@ -2242,6 +2218,10 @@ final class CockpitSystemControlActionService {
     CockpitSystemControlCapability capability,
     CockpitResolvedSystemControlCommand command,
   ) async {
+    if (command.executable ==
+        cockpitMacosApplicationActivationCommandExecutable) {
+      return _runMacosApplicationActivation(request, capability);
+    }
     if (command.executable == cockpitIosWdaCommandExecutable) {
       return _runIosWebDriverAgentCommand(request, capability, command);
     }
@@ -2267,6 +2247,86 @@ final class CockpitSystemControlActionService {
       return _runWindowsFocusStateCommand(request, capability, command);
     }
     return _runProcessCommand(request, capability, command);
+  }
+
+  Future<CockpitSystemControlActionResult> _runMacosApplicationActivation(
+    CockpitSystemControlActionRequest request,
+    CockpitSystemControlCapability capability,
+  ) async {
+    try {
+      final activation = await _macosApplicationActivator(
+        appId: request.appId,
+        processId: request.processId,
+        timeout: request.timeout,
+      ).timeout(request.timeout);
+      return CockpitSystemControlActionResult(
+        platform: request.platform,
+        deviceId: request.deviceId,
+        appId: activation.appId,
+        processId: activation.processId,
+        action: request.action,
+        availability: capability.availability,
+        success: true,
+        command: activation.changed
+            ? <String>['open', activation.bundlePath]
+            : const <String>[],
+        recommendedNextStep: _recommendedNextStepAfterSuccess(request.action),
+        changed: activation.changed,
+        strategy: capability.strategy,
+        requires: capability.requires,
+        limitations: capability.limitations,
+      );
+    } on TimeoutException {
+      return CockpitSystemControlActionResult(
+        platform: request.platform,
+        deviceId: request.deviceId,
+        appId: request.appId,
+        processId: request.processId,
+        action: request.action,
+        availability: capability.availability,
+        success: false,
+        recommendedNextStep: 'inspectMacosFocus',
+        strategy: capability.strategy,
+        requires: capability.requires,
+        limitations: capability.limitations,
+        errorCode: 'systemActionTimedOut',
+        errorMessage:
+            'macOS application activation timed out after '
+            '${request.timeout.inMilliseconds}ms.',
+      );
+    } on CockpitMacosApplicationActivationException catch (error) {
+      return CockpitSystemControlActionResult(
+        platform: request.platform,
+        deviceId: request.deviceId,
+        appId: request.appId,
+        processId: request.processId,
+        action: request.action,
+        availability: capability.availability,
+        success: false,
+        recommendedNextStep: 'inspectMacosFocus',
+        strategy: capability.strategy,
+        requires: capability.requires,
+        limitations: capability.limitations,
+        errorCode: error.code,
+        errorMessage: error.message,
+      );
+    } on Object catch (error) {
+      return CockpitSystemControlActionResult(
+        platform: request.platform,
+        deviceId: request.deviceId,
+        appId: request.appId,
+        processId: request.processId,
+        action: request.action,
+        availability: capability.availability,
+        success: false,
+        recommendedNextStep: 'inspectMacosFocus',
+        strategy: capability.strategy,
+        requires: capability.requires,
+        limitations: capability.limitations,
+        errorCode: 'macosApplicationActivationFailed',
+        errorMessage: 'macOS application activation failed: $error',
+      );
+    }
   }
 
   Future<CockpitSystemControlActionResult> _runProcessCommand(

@@ -116,10 +116,9 @@ final class CockpitSupervisorRuntime
   final CockpitSupervisorRunAdmissionStore runAdmissions;
   final Map<String, CockpitSupervisorRunProjection> _projections;
   final Map<String, Future<void>> _workerInitialization = {};
-  final Map<String, String> _workerBuildIds = {};
-  final Map<String, Future<void>> _workerBuildSelections = {};
   final Map<String, _ActiveRun> _activeRuns = {};
   final Map<String, String> _validatedRunOwners = {};
+  final Map<String, Future<void>> _runOwnerValidations = {};
   bool _draining = false;
 
   static Future<CockpitSupervisorRuntime> initialize({
@@ -323,21 +322,30 @@ final class CockpitSupervisorRuntime
       'resourceKind',
       'resourceId',
       'state',
+      'limit',
+      'before',
     });
     final workspaceId = _optionalString(input, 'workspaceId');
     final resourceKind = _optionalLeaseResourceKind(input, 'resourceKind');
     final resourceId = _optionalString(input, 'resourceId');
     final state = _optionalLeaseState(input, 'state');
-    final leases = await resources.leases.list(
+    final limit =
+        _optionalInteger(input, 'limit', minimum: 1, maximum: 200) ?? 50;
+    final before = input['before'] == null
+        ? null
+        : _requiredLeaseId(input, 'before');
+    final page = await resources.leases.listPage(
       workspaceId: workspaceId,
       resourceKind: resourceKind,
       resourceId: resourceId,
+      leaseState: state,
+      limit: limit,
+      before: before,
     );
     return <String, Object?>{
-      'items': <Object?>[
-        for (final lease in leases)
-          if (state == null || lease.state == state) lease.toJson(),
-      ],
+      'items': <Object?>[for (final lease in page.items) lease.toJson()],
+      'total': page.total,
+      if (page.next != null) 'next': page.next,
     };
   }
 
@@ -465,54 +473,11 @@ final class CockpitSupervisorRuntime
       force: request.force,
     );
     _workerInitialization.remove(workspaceId);
-    _workerBuildIds.remove(workspaceId);
-    _workerBuildSelections.remove(workspaceId);
     return resources.identity.workspaces.unregister(
       workspaceId,
       policy: _removalPolicy(request.force),
       drainTimeout: Duration(milliseconds: request.drainTimeoutMs),
     );
-  }
-
-  Future<void> selectWorkspaceWorkerBuild(String workspaceId, String buildId) {
-    workerId(workspaceId, r'$.workspaceId');
-    workerId(buildId, r'$.workerBuildId');
-    final previous =
-        _workerBuildSelections[workspaceId] ?? Future<void>.value();
-    late final Future<void> selection;
-    selection = (() async {
-      try {
-        await previous;
-      } on Object {
-        // A failed prior refresh must not permanently block a later build.
-      }
-      final current = _workerBuildIds[workspaceId] ?? cockpitBuildId;
-      if (current == buildId) return;
-      if (_activeRuns.values.any(
-        (run) => run.workspaceId == workspaceId && !run.terminal,
-      )) {
-        throw _apiError(
-          CockpitErrorCode.resourceBusy,
-          CockpitErrorCategory.resource,
-          'Workspace worker refresh is waiting for its active run to finish.',
-        );
-      }
-      await workerPool.shutdownWorkspace(
-        CockpitWorkspaceWorkerKey(
-          workspaceId: workspaceId,
-          engineVersion: cockpitSupervisorEngineVersion,
-        ),
-        grace: const Duration(seconds: 10),
-      );
-      _workerInitialization.remove(workspaceId);
-      _workerBuildIds[workspaceId] = buildId;
-    })();
-    _workerBuildSelections[workspaceId] = selection;
-    return selection.whenComplete(() {
-      if (identical(_workerBuildSelections[workspaceId], selection)) {
-        _workerBuildSelections.remove(workspaceId);
-      }
-    });
   }
 
   Future<List<CockpitOperationDescriptor>> workspaceOperations(
@@ -1070,7 +1035,6 @@ final class CockpitSupervisorRuntime
 
   @override
   Future<CockpitRunResource> run(String runId) async {
-    final active = _activeRuns[runId];
     final admission = await runAdmissions.findRun(runId);
     if (admission == null) {
       throw _apiError(
@@ -1079,15 +1043,63 @@ final class CockpitSupervisorRuntime
         'Run was not found.',
       );
     }
+    return _runResource(admission);
+  }
+
+  Future<({List<CockpitRunResource> items, int totalCount})> runs(
+    String workspaceId, {
+    required int offset,
+    required int limit,
+  }) async {
+    await _activeWorkspace(workspaceId);
+    final page = await runAdmissions.listWorkspace(
+      workspaceId: workspaceId,
+      offset: offset,
+      limit: limit,
+    );
+    if (page.items.isEmpty) {
+      return (items: const <CockpitRunResource>[], totalCount: page.totalCount);
+    }
+    await _validateProjectedOwners(page.items);
+    final events = await _projection(workspaceId).readEventsForRuns(
+      page.items.map((admission) => admission.runId),
+      afterSequence: 0,
+      maximumEvents: 4096,
+    );
+    return (
+      items: List<CockpitRunResource>.unmodifiable(
+        await Future.wait(
+          page.items.map(
+            (admission) => _runResource(
+              admission,
+              ownerValidated: true,
+              replay: events[admission.runId],
+            ),
+          ),
+        ),
+      ),
+      totalCount: page.totalCount,
+    );
+  }
+
+  Future<CockpitRunResource> _runResource(
+    CockpitSupervisorRunAdmission admission, {
+    bool ownerValidated = false,
+    CockpitSupervisorEventReplay? replay,
+  }) async {
+    final runId = admission.runId;
+    final active = _activeRuns[runId];
     if (active != null && active.workspaceId != admission.workspaceId) {
       throw StateError('Active run ownership conflicts with admission truth.');
     }
     final owner = admission.workspaceId;
-    await _validateProjectedOwner(runId, owner);
-    final replay = await _projection(
-      owner,
-    ).readEvents(runId, afterSequence: 0, maximumEvents: 4096);
-    final events = replay.events;
+    if (!ownerValidated) await _ensureProjectedOwner(runId, owner);
+    final resolvedReplay =
+        replay ??
+        await _projection(
+          owner,
+        ).readEvents(runId, afterSequence: 0, maximumEvents: 4096);
+    final events = resolvedReplay.events;
     final terminal = events
         .where(
           (event) =>
@@ -1454,7 +1466,6 @@ final class CockpitSupervisorRuntime
         engineVersion: cockpitSupervisorEngineVersion,
       ),
       projectId: workspace.projectId,
-      buildId: _workerBuildIds[workspaceId] ?? cockpitBuildId,
       workspaceRoot: workspace.canonicalPath,
       stateRoot: _workspaceStateRoot(workspaceId),
       supportedFeatures: cockpitSupervisorFeatures.map((item) => item.id),
@@ -1537,8 +1548,7 @@ final class CockpitSupervisorRuntime
         'Run was not found.',
       );
     }
-    await _validateProjectedOwner(runId, admission.workspaceId);
-    _validatedRunOwners[runId] = admission.workspaceId;
+    await _ensureProjectedOwner(runId, admission.workspaceId);
     return admission.workspaceId;
   }
 
@@ -1554,6 +1564,115 @@ final class CockpitSupervisorRuntime
           );
         }
       }
+    }
+  }
+
+  Future<void> _validateProjectedOwners(
+    Iterable<CockpitSupervisorRunAdmission> admissions,
+  ) async {
+    final byRunId = <String, CockpitSupervisorRunAdmission>{
+      for (final admission in admissions) admission.runId: admission,
+    };
+    final waiting = <Future<void>>[];
+    final pending = <String, CockpitSupervisorRunAdmission>{};
+    for (final entry in byRunId.entries) {
+      final validatedOwner = _validatedRunOwners[entry.key];
+      if (validatedOwner != null) {
+        if (validatedOwner != entry.value.workspaceId) {
+          throw StateError(
+            'Projected run ownership conflicts with admission truth.',
+          );
+        }
+        continue;
+      }
+      final active = _runOwnerValidations[entry.key];
+      if (active != null) {
+        waiting.add(active);
+      } else {
+        pending[entry.key] = entry.value;
+      }
+    }
+
+    Future<void>? batch;
+    if (pending.isNotEmpty) {
+      batch = _validateProjectedOwnerBatch(pending);
+      for (final runId in pending.keys) {
+        _runOwnerValidations[runId] = batch;
+      }
+      waiting.add(batch);
+    }
+    try {
+      await Future.wait(waiting);
+    } finally {
+      if (batch != null) {
+        for (final runId in pending.keys) {
+          if (identical(_runOwnerValidations[runId], batch)) {
+            _runOwnerValidations.remove(runId);
+          }
+        }
+      }
+    }
+    for (final entry in byRunId.entries) {
+      if (_validatedRunOwners[entry.key] != entry.value.workspaceId) {
+        throw StateError(
+          'Projected run ownership conflicts with admission truth.',
+        );
+      }
+    }
+  }
+
+  Future<void> _ensureProjectedOwner(String runId, String admittedOwner) async {
+    final validatedOwner = _validatedRunOwners[runId];
+    if (validatedOwner != null) {
+      if (validatedOwner != admittedOwner) {
+        throw StateError(
+          'Projected run ownership conflicts with admission truth.',
+        );
+      }
+      return;
+    }
+    final active = _runOwnerValidations[runId];
+    if (active != null) {
+      await active;
+      if (_validatedRunOwners[runId] != admittedOwner) {
+        throw StateError(
+          'Projected run ownership conflicts with admission truth.',
+        );
+      }
+      return;
+    }
+    late final Future<void> validation;
+    validation = (() async {
+      await _validateProjectedOwner(runId, admittedOwner);
+      _validatedRunOwners[runId] = admittedOwner;
+    })();
+    _runOwnerValidations[runId] = validation;
+    try {
+      await validation;
+    } finally {
+      if (identical(_runOwnerValidations[runId], validation)) {
+        _runOwnerValidations.remove(runId);
+      }
+    }
+  }
+
+  Future<void> _validateProjectedOwnerBatch(
+    Map<String, CockpitSupervisorRunAdmission> admissions,
+  ) async {
+    for (final workspace in await resources.identity.workspaces.list()) {
+      final contained = await _projection(
+        workspace.workspaceId,
+      ).containedRunIds(admissions.keys);
+      for (final runId in contained) {
+        if (workspace.workspaceId != admissions[runId]!.workspaceId) {
+          throw StateError(
+            'Projected run ownership conflicts with admission truth.',
+          );
+        }
+      }
+    }
+    for (final admission in admissions.values) {
+      _validatedRunOwners[admission.runId] = admission.workspaceId;
     }
   }
 

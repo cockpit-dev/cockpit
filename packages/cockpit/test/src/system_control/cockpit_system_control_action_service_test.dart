@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:cockpit/src/infrastructure/cockpit_process_manager.dart';
+import 'package:cockpit/src/platform/macos/cockpit_macos_application_activation.dart';
 import 'package:cockpit/src/platform/windows/cockpit_windows_native_input.dart';
 import 'package:cockpit/src/platform/windows/cockpit_windows_window_target.dart';
 import 'package:cockpit/src/system_control/cockpit_android_ui_automation_client.dart';
@@ -134,6 +135,109 @@ void main() {
       '88',
       '0',
     ]);
+  });
+
+  test(
+    'macos activateWindow uses exact application bundle activation',
+    () async {
+      final processManager = _FakeProcessManager();
+      String? capturedAppId;
+      int? capturedProcessId;
+      Duration? capturedTimeout;
+      final service = CockpitSystemControlActionService(
+        processManager: processManager,
+        macosApplicationActivator:
+            ({required appId, required processId, required timeout}) async {
+              capturedAppId = appId;
+              capturedProcessId = processId;
+              capturedTimeout = timeout;
+              return const CockpitMacosApplicationActivation(
+                processId: 4101,
+                appId: 'dev.cockpit.example',
+                bundlePath: '/workspace/build/Cockpit Example.app',
+                changed: true,
+              );
+            },
+      );
+
+      final result = await service.run(
+        const CockpitSystemControlActionRequest(
+          platform: 'macos',
+          appId: 'dev.cockpit.example',
+          processId: 4101,
+          action: CockpitSystemControlAction.activateWindow,
+          timeout: Duration(seconds: 7),
+        ),
+      );
+
+      expect(result.success, isTrue);
+      expect(result.changed, isTrue);
+      expect(result.processId, 4101);
+      expect(result.command, <String>[
+        'open',
+        '/workspace/build/Cockpit Example.app',
+      ]);
+      expect(capturedAppId, 'dev.cockpit.example');
+      expect(capturedProcessId, 4101);
+      expect(capturedTimeout, const Duration(seconds: 7));
+      expect(processManager.starts, isEmpty);
+    },
+  );
+
+  test('macos activateWindow is idempotent when already frontmost', () async {
+    final service = CockpitSystemControlActionService(
+      processManager: _FakeProcessManager(),
+      macosApplicationActivator:
+          ({required appId, required processId, required timeout}) async {
+            return const CockpitMacosApplicationActivation(
+              processId: 4101,
+              appId: 'dev.cockpit.example',
+              bundlePath: '/workspace/build/Cockpit Example.app',
+              changed: false,
+            );
+          },
+    );
+
+    final result = await service.run(
+      const CockpitSystemControlActionRequest(
+        platform: 'macos',
+        appId: 'dev.cockpit.example',
+        processId: 4101,
+        action: CockpitSystemControlAction.activateWindow,
+      ),
+    );
+
+    expect(result.success, isTrue);
+    expect(result.changed, isFalse);
+    expect(result.command, isEmpty);
+  });
+
+  test('macos activateWindow preserves precise activation failure', () async {
+    final service = CockpitSystemControlActionService(
+      processManager: _FakeProcessManager(),
+      macosApplicationActivator:
+          ({required appId, required processId, required timeout}) async {
+            throw const CockpitMacosApplicationActivationException(
+              code: 'macosApplicationActivationFailed',
+              message:
+                  'macOS application did not become frontmost; current foreground is dev.other.app (99).',
+            );
+          },
+    );
+
+    final result = await service.run(
+      const CockpitSystemControlActionRequest(
+        platform: 'macos',
+        appId: 'dev.cockpit.example',
+        processId: 4101,
+        action: CockpitSystemControlAction.activateWindow,
+      ),
+    );
+
+    expect(result.success, isFalse);
+    expect(result.errorCode, 'macosApplicationActivationFailed');
+    expect(result.errorMessage, contains('dev.other.app (99)'));
+    expect(result.recommendedNextStep, 'inspectMacosFocus');
   });
 
   test('android pressKey batches repeated keys in one process', () async {
@@ -2347,6 +2451,15 @@ void main() {
     final processManager = _FakeProcessManager();
     final service = CockpitSystemControlActionService(
       processManager: processManager,
+      macosApplicationActivator:
+          ({required appId, required processId, required timeout}) async {
+            return const CockpitMacosApplicationActivation(
+              processId: 4242,
+              appId: 'dev.cockpit.example',
+              bundlePath: '/workspace/build/Cockpit Example.app',
+              changed: true,
+            );
+          },
     );
 
     final result = await service.run(
@@ -2359,13 +2472,11 @@ void main() {
     );
 
     expect(result.success, isTrue);
-    expect(result.command.first, 'osascript');
-    expect(result.command, containsAllInOrder(<String>['processId', '4242']));
-    expect(result.command, contains('JavaScript'));
-    expect(result.command.join('\n'), contains('NSRunningApplication'));
-    expect(result.command.join('\n'), contains('frontmostApplication'));
-    expect(result.command.join('\n'), contains('did not become frontmost'));
-    expect(result.command.join('\n'), isNot(contains('System Events')));
+    expect(result.command, <String>[
+      'open',
+      '/workspace/build/Cockpit Example.app',
+    ]);
+    expect(processManager.starts, isEmpty);
   });
 
   test('macos focus probe uses AppKit without System Events', () async {
@@ -2404,6 +2515,7 @@ void main() {
   test('macos resolveBlockers only activates the exact target app', () async {
     final processManager = _FakeProcessManager();
     var dialogChecks = 0;
+    int? activatedProcessId;
     final service = CockpitSystemControlActionService(
       processManager: processManager,
       macosSystemDialogHandler:
@@ -2418,6 +2530,16 @@ void main() {
                 frontmostProcessId: 42,
                 frontmostAppId: 'com.apple.Finder',
               ),
+      macosApplicationActivator:
+          ({required appId, required processId, required timeout}) async {
+            activatedProcessId = processId;
+            return const CockpitMacosApplicationActivation(
+              processId: 4242,
+              appId: 'dev.cockpit.example',
+              bundlePath: '/workspace/build/Cockpit Example.app',
+              changed: true,
+            );
+          },
     );
 
     final result = await service.run(
@@ -2432,13 +2554,8 @@ void main() {
     expect(result.success, isTrue);
     expect(result.changed, isTrue);
     expect(dialogChecks, 0);
-    expect(processManager.starts, hasLength(1));
-    expect(processManager.starts.single.executable, 'osascript');
-    expect(processManager.starts.single.arguments.join('\n'), contains('4242'));
-    expect(
-      processManager.starts.single.arguments.join('\n'),
-      isNot(contains('System Events')),
-    );
+    expect(activatedProcessId, 4242);
+    expect(processManager.starts, isEmpty);
   });
 
   test(
@@ -2520,6 +2637,7 @@ void main() {
   test('macos resolveBlockers never invokes AX dialog handling', () async {
     final processManager = _FakeProcessManager();
     var dialogChecks = 0;
+    int? activatedProcessId;
     final service = CockpitSystemControlActionService(
       processManager: processManager,
       macosSystemDialogHandler:
@@ -2534,6 +2652,16 @@ void main() {
                 frontmostProcessId: 42,
                 frontmostAppId: 'com.apple.Finder',
               ),
+      macosApplicationActivator:
+          ({required appId, required processId, required timeout}) async {
+            activatedProcessId = processId;
+            return const CockpitMacosApplicationActivation(
+              processId: 4242,
+              appId: 'dev.cockpit.example',
+              bundlePath: '/workspace/build/Cockpit Example.app',
+              changed: true,
+            );
+          },
     );
 
     final result = await service.run(
@@ -2549,8 +2677,8 @@ void main() {
     expect(result.success, isTrue);
     expect(result.changed, isTrue);
     expect(dialogChecks, 0);
-    expect(processManager.starts, hasLength(1));
-    expect(processManager.starts.single.arguments.join('\n'), contains('4242'));
+    expect(activatedProcessId, 4242);
+    expect(processManager.starts, isEmpty);
   });
 
   test('macos resolveBlockers rejects global keyboard dismissal', () async {
