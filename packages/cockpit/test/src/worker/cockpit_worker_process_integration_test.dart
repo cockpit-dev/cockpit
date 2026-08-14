@@ -113,11 +113,15 @@ cases:
       final completionCrashControl = File(
         p.join(temporary.path, 'completion-crash-control.json'),
       );
-      final workerEntrypoint = p.join(
+      final workerSource = p.join(
         packageRoot,
         'test',
         'support',
         'cockpit_worker_completion_probe.dart',
+      );
+      final workerEntrypoint = await _compileWorkerProbe(
+        source: workerSource,
+        output: p.join(temporary.path, 'cockpit_worker_completion_probe.dill'),
       );
       final authority = _GrantingAuthority();
       final launcher = CockpitLocalWorkerLauncher(
@@ -1440,6 +1444,35 @@ Future<CockpitWorkspaceWorkerConnection> _waitForWorkerRestart(
     await Future<void>.delayed(const Duration(milliseconds: 20));
   }
   throw StateError('Worker process $previousPid did not restart.');
+}
+
+Future<String> _compileWorkerProbe({
+  required String source,
+  required String output,
+}) async {
+  final packageConfig = await Isolate.packageConfig;
+  if (packageConfig == null || packageConfig.scheme != 'file') {
+    throw StateError('Unable to resolve the test package configuration.');
+  }
+  final result = await Process.run(Platform.resolvedExecutable, <String>[
+    'compile',
+    'kernel',
+    '--packages=${packageConfig.toFilePath()}',
+    '--output=$output',
+    '--verbosity=error',
+    source,
+  ]);
+  if (result.exitCode != 0) {
+    throw StateError(
+      'Worker probe compilation failed with exit code ${result.exitCode}: '
+      '${result.stderr}',
+    );
+  }
+  final file = File(output);
+  if (!await file.exists() || await file.length() == 0) {
+    throw StateError('Worker probe compilation did not produce a kernel.');
+  }
+  return output;
 }
 
 Future<void> _expectTreeExcludes(Directory root, String value) async {
