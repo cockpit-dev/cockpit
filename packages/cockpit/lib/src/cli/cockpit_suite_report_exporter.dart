@@ -48,10 +48,22 @@ final class CockpitSuiteReportExporter {
         'Suite report download concurrency must be positive.',
       );
     }
-    if (await FileSystemEntity.type(destination, followLinks: false) !=
-        FileSystemEntityType.notFound) {
+    final destinationType = await FileSystemEntity.type(
+      destination,
+      followLinks: false,
+    );
+    final destinationWasEmptyDirectory = switch (destinationType) {
+      FileSystemEntityType.notFound => false,
+      FileSystemEntityType.directory => await _isEmptyDirectory(destination),
+      _ => throw FileSystemException(
+        'Suite report output must be a new or empty directory.',
+        destination,
+      ),
+    };
+    if (destinationType == FileSystemEntityType.directory &&
+        !destinationWasEmptyDirectory) {
       throw FileSystemException(
-        'Suite report output directory already exists.',
+        'Suite report output directory is not empty.',
         destination,
       );
     }
@@ -156,7 +168,51 @@ final class CockpitSuiteReportExporter {
       await Future.wait(<Future<void>>[
         for (var index = 0; index < workerCount; index += 1) worker(),
       ]);
-      await staging.rename(destination);
+      var removedEmptyDestination = false;
+      try {
+        final currentDestinationType = await FileSystemEntity.type(
+          destination,
+          followLinks: false,
+        );
+        if (destinationWasEmptyDirectory) {
+          if (currentDestinationType == FileSystemEntityType.directory) {
+            if (!await _isEmptyDirectory(destination)) {
+              throw FileSystemException(
+                'Suite report output directory changed while exporting.',
+                destination,
+              );
+            }
+            await Directory(destination).delete();
+            removedEmptyDestination = true;
+          } else if (currentDestinationType != FileSystemEntityType.notFound) {
+            throw FileSystemException(
+              'Suite report output path changed while exporting.',
+              destination,
+            );
+          }
+        } else if (currentDestinationType != FileSystemEntityType.notFound) {
+          throw FileSystemException(
+            'Suite report output path appeared while exporting.',
+            destination,
+          );
+        }
+        await staging.rename(destination);
+      } on Object catch (error, stackTrace) {
+        if (removedEmptyDestination &&
+            await FileSystemEntity.type(destination, followLinks: false) ==
+                FileSystemEntityType.notFound) {
+          try {
+            await Directory(destination).create();
+          } on Object catch (restoreError) {
+            throw FileSystemException(
+              'Suite report export failed and the empty output directory '
+              'could not be restored: $error; restore: $restoreError',
+              destination,
+            );
+          }
+        }
+        Error.throwWithStackTrace(error, stackTrace);
+      }
       return CockpitSuiteReportExportReceipt(
         path: destination,
         fileCount: manifest.files.length + 1,
@@ -173,3 +229,6 @@ final class CockpitSuiteReportExporter {
     }
   }
 }
+
+Future<bool> _isEmptyDirectory(String path) =>
+    Directory(path).list(followLinks: false).isEmpty;

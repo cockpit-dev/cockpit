@@ -94,12 +94,13 @@ cockpit suite report \
   --output-dir /absolute/cockpit-report
 ```
 
-The destination must not already exist. The command downloads the root
-manifest first, matches every declared path to immutable run artifact metadata,
-downloads files with bounded concurrency and byte verification, and atomically
-commits the directory only when complete. Its default terminal output is a
-compact directory receipt. Use the lower-level commands only when one specific
-artifact is needed:
+The destination may be absent or an existing real empty directory. Files,
+links, and non-empty directories are rejected before download. The command
+downloads the root manifest first, matches every declared path to immutable run
+artifact metadata, downloads files with bounded concurrency and byte
+verification, rechecks the destination, and atomically commits the directory
+only when complete. Its default terminal output is a compact directory receipt.
+Use the lower-level commands only when one specific artifact is needed:
 
 ```bash
 cockpit artifact list \

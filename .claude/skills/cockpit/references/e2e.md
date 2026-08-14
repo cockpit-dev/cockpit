@@ -178,7 +178,7 @@ cockpit run get --run-id <runId>
 ```
 
 Use `suite run` for a suite and
-`suite report --run-id <runId> --output-dir <newDirectory>` after terminal
+`suite report --run-id <runId> --output-dir <newOrEmptyDirectory>` after terminal
 completion. Case
 runs default to the advertised case budget (normally 30 minutes, maximum 6
 hours); suites normally default to 2 hours, maximum 24 hours. Add
