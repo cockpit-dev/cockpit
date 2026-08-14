@@ -1,2 +1,2 @@
 /// Cockpit Console product version advertised to external integrations.
-const String consoleVersion = '1.0.0';
+const String consoleVersion = '1.0.1';
