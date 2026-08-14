@@ -259,19 +259,67 @@ void main() {
     expect(await root.list().toList(), isEmpty);
   });
 
-  test('rejects an existing output directory before downloading', () async {
+  test('exports into an existing empty output directory', () async {
     final root = await Directory.systemTemp.createTemp(
       'cockpit-report-export-existing-',
+    );
+    addTearDown(() => root.delete(recursive: true));
+    const runId = 'run_export_4';
+    final output = await Directory(
+      p.join(root.path, 'cockpit-report'),
+    ).create();
+    final manifestBytes = utf8.encode(
+      jsonEncode(
+        CockpitTestReportBundleManifest(
+          runId: runId,
+          createdAt: DateTime.utc(2026, 7, 29),
+          files: const <CockpitTestReportBundleFile>[],
+        ).toJson(),
+      ),
+    );
+    final manifest = _artifact(
+      runId: runId,
+      path: 'reports/final/manifest.json',
+      kind: 'report.manifest',
+      mediaType: 'application/json',
+      bytes: manifestBytes,
+      number: 0,
+    );
+
+    final receipt = await const CockpitSuiteReportExporter().export(
+      runId: runId,
+      outputDirectory: output.path,
+      artifacts: <CockpitArtifactResource>[manifest],
+      download: ({required artifact, required destination}) async {
+        await destination.writeAsBytes(manifestBytes, flush: true);
+        return CockpitArtifactDownloadReceipt(
+          file: destination,
+          mediaType: artifact.mediaType,
+          sizeBytes: manifestBytes.length,
+          sha256: sha256.convert(manifestBytes).toString(),
+        );
+      },
+    );
+
+    expect(receipt.path, output.path);
+    expect(receipt.fileCount, 1);
+    expect(await File(p.join(output.path, 'manifest.json')).exists(), isTrue);
+  });
+
+  test('rejects a non-empty output directory before downloading', () async {
+    final root = await Directory.systemTemp.createTemp(
+      'cockpit-report-export-non-empty-',
     );
     addTearDown(() => root.delete(recursive: true));
     final output = await Directory(
       p.join(root.path, 'cockpit-report'),
     ).create();
+    await File(p.join(output.path, 'keep.txt')).writeAsString('keep');
     var downloaded = false;
 
     await expectLater(
       const CockpitSuiteReportExporter().export(
-        runId: 'run_export_4',
+        runId: 'run_export_5',
         outputDirectory: output.path,
         artifacts: const <CockpitArtifactResource>[],
         download: ({required artifact, required destination}) async {
@@ -282,6 +330,62 @@ void main() {
       throwsA(isA<FileSystemException>()),
     );
     expect(downloaded, isFalse);
+    expect(await File(p.join(output.path, 'keep.txt')).readAsString(), 'keep');
+  });
+
+  test('preserves an output directory populated during export', () async {
+    final root = await Directory.systemTemp.createTemp(
+      'cockpit-report-export-changed-',
+    );
+    addTearDown(() => root.delete(recursive: true));
+    const runId = 'run_export_6';
+    final output = await Directory(
+      p.join(root.path, 'cockpit-report'),
+    ).create();
+    final manifestBytes = utf8.encode(
+      jsonEncode(
+        CockpitTestReportBundleManifest(
+          runId: runId,
+          createdAt: DateTime.utc(2026, 7, 29),
+          files: const <CockpitTestReportBundleFile>[],
+        ).toJson(),
+      ),
+    );
+    final manifest = _artifact(
+      runId: runId,
+      path: 'reports/final/manifest.json',
+      kind: 'report.manifest',
+      mediaType: 'application/json',
+      bytes: manifestBytes,
+      number: 0,
+    );
+
+    await expectLater(
+      const CockpitSuiteReportExporter().export(
+        runId: runId,
+        outputDirectory: output.path,
+        artifacts: <CockpitArtifactResource>[manifest],
+        download: ({required artifact, required destination}) async {
+          await destination.writeAsBytes(manifestBytes, flush: true);
+          await File(
+            p.join(output.path, 'keep.txt'),
+          ).writeAsString('created while exporting', flush: true);
+          return CockpitArtifactDownloadReceipt(
+            file: destination,
+            mediaType: artifact.mediaType,
+            sizeBytes: manifestBytes.length,
+            sha256: sha256.convert(manifestBytes).toString(),
+          );
+        },
+      ),
+      throwsA(isA<FileSystemException>()),
+    );
+
+    expect(
+      await File(p.join(output.path, 'keep.txt')).readAsString(),
+      'created while exporting',
+    );
+    expect(await File(p.join(output.path, 'manifest.json')).exists(), isFalse);
   });
 }
 
