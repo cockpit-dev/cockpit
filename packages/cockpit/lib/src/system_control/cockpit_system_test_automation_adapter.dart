@@ -1167,7 +1167,7 @@ final class CockpitSystemTestAutomationAdapter
     String? previousDigest;
     DateTime? stableSince;
     do {
-      final snapshot = await _readSnapshot(deadline);
+      final snapshot = await _readSnapshot(deadline, stabilitySnapshot: true);
       final digest = sha256.convert(utf8.encode(snapshot.raw)).toString();
       if (digest == previousDigest) {
         stableSince ??= _utcNow();
@@ -1536,11 +1536,19 @@ final class CockpitSystemTestAutomationAdapter
     CockpitTestLocator locator,
   ) => snapshot.resolve(locator, flutterAware: _flutterAwareNative);
 
-  Future<CockpitNativeUiSnapshot> _readSnapshot(DateTime deadline) async {
+  Future<CockpitNativeUiSnapshot> _readSnapshot(
+    DateTime deadline, {
+    bool stabilitySnapshot = false,
+  }) async {
     final result = await _runAction(
       CockpitSystemControlAction.readUiTree,
       const <String, Object?>{},
       deadline,
+      metadata: _isIos && stabilitySnapshot
+          ? const <String, Object?>{
+              cockpitIosUiStabilitySnapshotMetadataKey: true,
+            }
+          : null,
     );
     if (!result.success) {
       if (result.availability != CockpitSystemControlAvailability.available) {

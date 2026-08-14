@@ -256,12 +256,61 @@ void main() {
     final tap = commands.singleWhere(
       (command) => command.action == CockpitIosWdaAction.tap,
     );
+    final treeReads = commands.where(
+      (command) => command.action == CockpitIosWdaAction.readUiTree,
+    );
+    expect(treeReads, isNotEmpty);
+    expect(treeReads.every((command) => !command.stabilitySnapshot), isTrue);
     expect(tap.parameters['x'], 292);
     expect(tap.parameters['y'], 99);
     expect(
       tap.parameters['nativePath'],
       '/XCUIElementTypeApplication[0]/XCUIElementTypeWindow[0]/XCUIElementTypeButton[0]',
     );
+  });
+
+  test('iOS UI idle waits use lightweight WDA source snapshots', () async {
+    final commands = <CockpitIosWdaCommand>[];
+    final controls = CockpitSystemControlService(
+      iosWdaEndpointProbe: (baseUri, {required timeout}) async => true,
+    );
+    final adapter = CockpitSystemTestAutomationAdapter(
+      target: CockpitSystemTestTarget(
+        platform: 'ios',
+        deviceId: 'D3884373-E926-49AF-92E6-7A241C50B64C',
+        appId: 'dev.cockpit.demo',
+        metadata: const <String, Object?>{
+          'wdaUrl': 'http://127.0.0.1:8100',
+          'wdaReachable': true,
+        },
+      ),
+      controlService: controls,
+      actionService: CockpitSystemControlActionService(
+        systemControlService: controls,
+        iosWdaRunner: (command, {required timeout}) async {
+          commands.add(command);
+          return _iosNewTaskTree;
+        },
+      ),
+      workspaceRoot: Directory.current.path,
+      delay: (_) async {},
+    );
+
+    final execution = await adapter.execute(
+      CockpitCommand(
+        commandId: 'wait-for-ios-idle',
+        commandType: CockpitCommandType.waitForUiIdle,
+        parameters: const <String, Object?>{'quietMs': 0},
+        timeoutMs: 1000,
+      ),
+    );
+
+    expect(execution.result.success, isTrue);
+    final treeReads = commands
+        .where((command) => command.action == CockpitIosWdaAction.readUiTree)
+        .toList(growable: false);
+    expect(treeReads, hasLength(2));
+    expect(treeReads.every((command) => command.stabilitySnapshot), isTrue);
   });
 
   test(

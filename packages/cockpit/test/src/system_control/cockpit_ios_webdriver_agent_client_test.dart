@@ -67,6 +67,66 @@ void main() {
     expect(payload, <String, Object?>{'x': 120, 'y': 240});
   });
 
+  test('readUiTree uses the complete WDA source by default', () async {
+    final requests = <http.Request>[];
+    final client = clientWithSession((request) async {
+      requests.add(request);
+      return http.Response(
+        jsonEncode(<String, Object?>{'value': '<App />'}),
+        200,
+      );
+    });
+
+    final result = await CockpitIosWebDriverAgentClient(httpClient: client).run(
+      CockpitIosWdaCommand(
+        baseUri: baseUri,
+        action: CockpitIosWdaAction.readUiTree,
+      ),
+      timeout: const Duration(seconds: 2),
+    );
+
+    expect(result, '<App />');
+    expect(requests.single.url.path, '/session/session-1/source');
+    expect(requests.single.url.queryParameters, isEmpty);
+  });
+
+  test('stability snapshots exclude expensive WDA attributes', () async {
+    final requests = <http.Request>[];
+    final client = MockClient((request) async {
+      requests.add(request);
+      if (request.url.path == '/wda/status') {
+        return http.Response(
+          jsonEncode(<String, Object?>{
+            'sessionId': 'session-1',
+            'value': <String, Object?>{'ready': true},
+          }),
+          200,
+        );
+      }
+      return http.Response(
+        jsonEncode(<String, Object?>{'value': '<App />'}),
+        200,
+      );
+    });
+
+    final result = await CockpitIosWebDriverAgentClient(httpClient: client).run(
+      CockpitIosWdaCommand(
+        baseUri: Uri.parse('http://127.0.0.1:8100/wda?stale=true'),
+        action: CockpitIosWdaAction.readUiTree,
+        stabilitySnapshot: true,
+      ),
+      timeout: const Duration(seconds: 2),
+    );
+
+    expect(result, '<App />');
+    expect(requests, hasLength(2));
+    expect(requests.last.url.path, '/wda/session/session-1/source');
+    expect(requests.last.url.queryParameters, <String, String>{
+      'excluded_attributes': 'visible,accessible',
+    });
+    expect(requests.last.url.queryParameters, isNot(contains('stale')));
+  });
+
   test('tap uses the resolved native element when its tree path is known', () async {
     final requests = <http.Request>[];
     final client = clientWithSession((request) async {
