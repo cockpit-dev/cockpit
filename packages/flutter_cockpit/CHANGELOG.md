@@ -1,5 +1,9 @@
 # Changelog
 
+## 4.0.25
+
+- Synchronized the Flutter bridge package with the current Cockpit release.
+
 ## 4.0.24
 
 - Kept direct Cupertino discovery while preventing type-only container matches

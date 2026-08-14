@@ -1,5 +1,11 @@
 # Changelog
 
+## 4.0.25
+
+- Made explicit Flutter selectors use the same conjunctive route, ancestor,
+  text-mode, and index matching as live actions, preventing unrelated mounted
+  targets from appearing as inspect matches.
+
 ## 4.0.24
 
 - Restored reliable Flutter locator and action discovery for nested controls

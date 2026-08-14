@@ -88,7 +88,7 @@ Map<String, Object?> cockpitBuildUiLocatorMatches(
             )
             .toList()
           ..sort((left, right) => left.compareForQuery(right, normalizedQuery)))
-      : targets;
+      : _matchingSelectorTargets(snapshot, targets, selector);
   final visibleMatches = matches.take(limit).toList(growable: false);
   final queryTargetCount = snapshot.summary?.visibleTargetCount;
   final mounted = matches.isEmpty
@@ -147,6 +147,24 @@ Map<String, Object?> cockpitBuildUiTargetIndex(
   };
 }
 
+List<_DevTarget> _matchingSelectorTargets(
+  CockpitSnapshot snapshot,
+  List<_DevTarget> targets,
+  CockpitLocator selector,
+) {
+  final registry = CockpitTargetRegistry(routeName: snapshot.routeName);
+  final byRegistrationId = <String, _DevTarget>{};
+  for (final target in targets) {
+    byRegistrationId[target.registrationId] = target;
+    registry.register(target.toTarget());
+  }
+  return registry
+      .matchingVisibleTargets(selector)
+      .map((target) => byRegistrationId[target.registrationId])
+      .nonNulls
+      .toList(growable: false);
+}
+
 final class _DevTarget {
   _DevTarget(CockpitSnapshotTarget value)
     : registrationId = value.registrationId,
@@ -160,9 +178,11 @@ final class _DevTarget {
       route = value.routeName,
       path = value.path,
       scrollablePath = value.scrollablePath,
+      commands = value.supportedCommands,
       can = value.supportedCommands
           .map((command) => command.name)
           .toList(growable: false),
+      ancestors = value.ancestors,
       within = value.ancestors
           .map(_DevAncestor.new)
           .where((ancestor) => ancestor.hasUsefulSignal)
@@ -180,9 +200,40 @@ final class _DevTarget {
   final String? route;
   final String? path;
   final String? scrollablePath;
+  final List<CockpitCommandType> commands;
   final List<String> can;
+  final List<CockpitSnapshotAncestor> ancestors;
   final List<_DevAncestor> within;
   final _Layout? layout;
+
+  CockpitTarget toTarget() => CockpitTarget(
+    registrationId: registrationId,
+    cockpitId: cockpitId,
+    semanticId: semanticId,
+    keyValue: key,
+    text: text,
+    textParts: textParts.toSet(),
+    tooltip: tip,
+    typeName: type,
+    path: path,
+    scrollablePath: scrollablePath,
+    routeName: route ?? '',
+    supportedCommands: commands.toSet(),
+    locatorAncestors: ancestors,
+    geometryProvider: layout == null
+        ? null
+        : () => CockpitTargetGeometry(
+            left: layout!.dx,
+            top: layout!.dy,
+            width: layout!.width,
+            height: layout!.height,
+            viewportLeft: 0,
+            viewportTop: 0,
+            viewportWidth: 0,
+            viewportHeight: 0,
+            viewId: 0,
+          ),
+  );
 
   bool get hasUsefulSignal =>
       can.isNotEmpty ||
