@@ -2,6 +2,8 @@
 
 ## 4.0.27
 
+- Prevented iOS black-box idle waits from timing out on expensive accessibility
+  attributes while retaining complete WebDriverAgent trees for native locators.
 - Made iOS native-tree taps, repeated taps, and text focus execute the uniquely
   resolved WebDriverAgent element, and mapped visual screenshot pixels into the
   WebDriverAgent viewport before coordinate gestures.
