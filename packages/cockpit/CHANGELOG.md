@@ -1,5 +1,12 @@
 # Changelog
 
+## 4.0.27
+
+- Made iOS native-tree taps execute the uniquely resolved WebDriverAgent
+  element instead of accepting a coordinate event that produced no UI change.
+- Kept healthy `dev diagnose --view more` output focused by omitting snapshot
+  profile noise, routine next steps, empty logs, and non-failing endpoint rows.
+
 ## 4.0.26
 
 - Added bounded newest-first lease pagination so large durable registries remain
