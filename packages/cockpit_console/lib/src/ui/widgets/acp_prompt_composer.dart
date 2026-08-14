@@ -239,30 +239,22 @@ final class _ComposerSurface extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 8),
-              SizedBox.square(
-                dimension: ConsoleControlStyle.height,
-                child: connection.isPrompting
-                    ? IconButton.outlined(
+              connection.isPrompting
+                  ? SizedBox.square(
+                      dimension: ConsoleControlStyle.height,
+                      child: IconButton.outlined(
                         onPressed: onCancel,
                         icon: const Icon(LucideIcons.square, size: 14),
                         tooltip: 'Stop response',
-                      )
-                    : IconButton.filled(
-                        onPressed: canSend ? submit : null,
-                        icon: const Icon(LucideIcons.arrowUp, size: 16),
-                        tooltip: canSend
-                            ? 'Send message (Enter)'
-                            : 'Write a message or add an attachment',
-                        style: IconButton.styleFrom(
-                          backgroundColor: theme.colorScheme.primary,
-                          foregroundColor: theme.colorScheme.onPrimary,
-                          disabledBackgroundColor:
-                              theme.colorScheme.surfaceContainerHighest,
-                          disabledForegroundColor:
-                              theme.colorScheme.onSurfaceVariant,
-                        ),
                       ),
-              ),
+                    )
+                  : ConsolePrimaryIconButton(
+                      onPressed: canSend ? submit : null,
+                      icon: const Icon(LucideIcons.arrowUp, size: 16),
+                      tooltip: canSend
+                          ? 'Send message (Enter)'
+                          : 'Write a message or add an attachment',
+                    ),
             ],
           ),
           if (attachments.any((item) => item.inlineBytes > 0)) ...[

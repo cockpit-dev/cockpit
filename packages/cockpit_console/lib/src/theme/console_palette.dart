@@ -54,6 +54,12 @@ final class ConsolePalette {
   static const Color accentSubtle = Color(0xFF1A2B48);
   static const Color accentSubtleFg = Color(0xFF7BA1F2);
 
+  // Filled actions use a deeper blue so white labels and icons remain clear.
+  static const Color action = Color(0xFF3867BD);
+  static const Color actionHover = Color(0xFF4775C8);
+  static const Color actionActive = Color(0xFF315EAF);
+  static const Color actionFg = Colors.white;
+
   // ── Status: success (green) ──────────────────────────────────────────
   static const Color success = Color(0xFF4CB782);
   static const Color successSubtle = Color(0xFF123326);
