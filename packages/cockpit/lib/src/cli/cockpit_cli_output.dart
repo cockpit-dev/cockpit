@@ -1417,10 +1417,13 @@ Map<String, Object?> _compactDevStatus(
       'networkFailureCount': networkFailureCount,
   };
   if (more) {
-    result['ui'] = ui is Map<Object?, Object?> ? _compactDevUiSummary(ui) : ui;
-    result['target'] = target is Map<Object?, Object?>
-        ? _compactTargetInspection(target, more: false)
-        : target;
+    if (ui is Map<Object?, Object?>) {
+      result['ui'] = _compactDevUiSummary(ui);
+    }
+    if (target is Map<Object?, Object?>) {
+      final compactTarget = _compactDevTargetHealth(target);
+      if (compactTarget.isNotEmpty) result['target'] = compactTarget;
+    }
     if (errors is Map<Object?, Object?>) {
       final compactErrors = _compactErrorsOutput(errors, more: true);
       if (compactErrors['errors'] is List<Object?>) {
@@ -1429,12 +1432,14 @@ Map<String, Object?> _compactDevStatus(
     } else if (errors is List<Object?> && errors.isNotEmpty) {
       result['issues'] = errors;
     }
-    result['network'] = network is Map<Object?, Object?>
-        ? _compactNetworkOutput(network, more: false)
-        : network;
+    if (network is Map<Object?, Object?>) {
+      final compactNetwork = _compactDevNetworkHealth(network);
+      if (compactNetwork != null) result['network'] = compactNetwork;
+    }
     final logs = state['logs'];
     if (logs is Map<Object?, Object?>) {
-      result['logs'] = _compactLogsOutput(logs, more: true);
+      final compactLogs = _compactDevLogsHealth(logs);
+      if (compactLogs != null) result['logs'] = compactLogs;
     }
   }
   return result;
@@ -1447,23 +1452,128 @@ Map<String, Object?> _compactDevUiSummary(Map<Object?, Object?> ui) {
   final compactFocus = focus is Map<Object?, Object?>
       ? _compactDevFocus(focus)
       : const <String, Object?>{};
+  final accessibilityCount = summary['accessibilityTargetCount'];
+  final traversalCount = summary['accessibilityTraversalCount'];
   final rebuilds = summary['totalRebuildCount'];
   final textPreviews = summary['textPreviews'];
   return <String, Object?>{
-    ..._pick(ui, const <String>['diagnosticLevel', 'truncated']),
     ..._pick(summary, const <String>['visibleTargetCount']),
     if (summary['targetsWithCockpitIdCount'] != null)
       'cockpitIds': summary['targetsWithCockpitIdCount'],
     if (summary['targetsWithTextCount'] != null)
       'textTargets': summary['targetsWithTextCount'],
-    if (summary['accessibilityTargetCount'] != null)
-      'a11y': summary['accessibilityTargetCount'],
-    if (summary['accessibilityTraversalCount'] != null)
-      'a11yOrder': summary['accessibilityTraversalCount'],
+    'a11y': ?accessibilityCount,
+    if (traversalCount != null && traversalCount != accessibilityCount)
+      'a11yOrder': traversalCount,
     if (rebuilds is num && rebuilds > 0) 'rebuilds': rebuilds,
     if (textPreviews is List<Object?> && textPreviews.isNotEmpty)
       'text': textPreviews.take(4).toList(growable: false),
     if (compactFocus.isNotEmpty) 'focus': compactFocus,
+  };
+}
+
+Map<String, Object?> _compactDevTargetHealth(Map<Object?, Object?> target) {
+  final capability = target['capabilityProfile'];
+  final system = target['systemControl'];
+  final route = target['currentRouteName'];
+  final note = target['whatMatters'];
+  final next = target['recommendedNextStep'];
+  return <String, Object?>{
+    ..._pick(target, const <String>['foregroundSurface', 'selectedPlane']),
+    if (capability is Map<Object?, Object?>)
+      'capabilities': _compactCapabilities(capability, more: false),
+    if (system is Map<Object?, Object?>)
+      'systemControl': <String, Object?>{
+        ..._pick(system, const <String>['adapter', 'preferredPlane']),
+        if (_listLength(system['availableActions']) > 0)
+          'availableActionCount': _listLength(system['availableActions']),
+        if (_listLength(system['blockedActions']) > 0)
+          'blockedActionCount': _listLength(system['blockedActions']),
+      },
+    if (_nonEmpty(note) && !_isRoutineTargetNote(note, route))
+      'whatMatters': note,
+    if (_nonEmpty(next) && next != 'runNextCommand')
+      'recommendedNextStep': next,
+  };
+}
+
+bool _isRoutineTargetNote(Object? note, Object? route) =>
+    note is String &&
+    route is String &&
+    note.trim() == 'Current route is $route.';
+
+Map<String, Object?>? _compactDevNetworkHealth(Map<Object?, Object?> network) {
+  final summary = network['summary'];
+  final failureCount = summary is Map<Object?, Object?>
+      ? summary['failureCount'] as num? ?? 0
+      : 0;
+  final inFlightCount = summary is Map<Object?, Object?>
+      ? summary['inFlightCount'] as num? ?? 0
+      : 0;
+  final unavailable = network['available'] == false;
+  final missingReason = network['missingReason'];
+  if (!unavailable &&
+      !_nonEmpty(missingReason) &&
+      failureCount <= 0 &&
+      inFlightCount <= 0) {
+    return null;
+  }
+
+  final failures = network['recentFailures'];
+  final endpoints = network['endpointSummaries'];
+  final failedEndpoints = endpoints is List<Object?>
+      ? endpoints
+            .whereType<Map<Object?, Object?>>()
+            .where((entry) => (entry['failureCount'] as num? ?? 0) > 0)
+            .take(4)
+            .toList(growable: false)
+      : const <Map<Object?, Object?>>[];
+  return <String, Object?>{
+    if (network['available'] != null) 'available': network['available'],
+    if (_nonEmpty(missingReason)) 'missingReason': missingReason,
+    if (failureCount > 0) 'failureCount': failureCount,
+    if (inFlightCount > 0) 'inFlightCount': inFlightCount,
+    if (failures is List<Object?> && failures.isNotEmpty)
+      'recent': <Object?>[
+        for (final entry in failures.take(4))
+          if (entry is Map<Object?, Object?>)
+            _compactNetworkEntry(entry, more: false),
+      ],
+    if (failedEndpoints.isNotEmpty)
+      'endpoints': <Object?>[
+        for (final endpoint in failedEndpoints)
+          <String, Object?>{
+            'method': endpoint['method'],
+            'uri': endpoint['uriPattern'],
+            'failureCount': endpoint['failureCount'],
+            if (endpoint['lastStatusCode'] != null)
+              'statusCode': endpoint['lastStatusCode'],
+          },
+      ],
+  };
+}
+
+Map<String, Object?>? _compactDevLogsHealth(Map<Object?, Object?> logs) {
+  final rawLines = logs['lines'];
+  final lines = rawLines is List<Object?> ? rawLines : const <Object?>[];
+  final unavailable = logs['available'] == false;
+  final missingReason = logs['missingReason'];
+  if (lines.isEmpty && !unavailable && !_nonEmpty(missingReason)) return null;
+
+  const maximum = 32;
+  final start = max(0, lines.length - maximum);
+  return <String, Object?>{
+    if (logs['available'] != null) 'available': logs['available'],
+    if (_nonEmpty(missingReason)) 'missingReason': missingReason,
+    'lineCount': lines.length,
+    if (start > 0) 'omittedLineCount': start,
+    if (lines.isNotEmpty) 'order': 'newestFirst',
+    if (lines.isNotEmpty)
+      'lines': lines
+          .skip(start)
+          .toList(growable: false)
+          .reversed
+          .toList(growable: false),
   };
 }
 
@@ -2368,21 +2478,30 @@ Map<String, Object?> _compactProbeComparisonOutput(
 Map<String, Object?> _compactCapabilities(
   Map<Object?, Object?> capabilities, {
   required bool more,
-}) => more
-    ? _pick(capabilities, const <String>[
-        'surfaceKinds',
-        'supportedCommands',
-        'actionCapabilities',
-        'evidenceCapabilities',
-        'qualityFlags',
-      ])
-    : <String, Object?>{
-        'surfaceCount': _listLength(capabilities['surfaceKinds']),
-        'commandCount': _listLength(capabilities['supportedCommands']),
-        'actionCount': _listLength(capabilities['actionCapabilities']),
-        'evidenceCount': _listLength(capabilities['evidenceCapabilities']),
-        ..._pick(capabilities, const <String>['qualityFlags']),
-      };
+}) {
+  if (more) {
+    return _pick(capabilities, const <String>[
+      'surfaceKinds',
+      'supportedCommands',
+      'actionCapabilities',
+      'evidenceCapabilities',
+      'qualityFlags',
+    ]);
+  }
+  final surfaceCount = _listLength(capabilities['surfaceKinds']);
+  final commandCount = _listLength(capabilities['supportedCommands']);
+  final actionCount = _listLength(capabilities['actionCapabilities']);
+  final evidenceCount = _listLength(capabilities['evidenceCapabilities']);
+  final qualityFlags = capabilities['qualityFlags'];
+  return <String, Object?>{
+    if (surfaceCount > 0) 'surfaceCount': surfaceCount,
+    if (commandCount > 0) 'commandCount': commandCount,
+    if (actionCount > 0) 'actionCount': actionCount,
+    if (evidenceCount > 0) 'evidenceCount': evidenceCount,
+    if (qualityFlags is List<Object?> && qualityFlags.isNotEmpty)
+      'qualityFlags': qualityFlags,
+  };
+}
 
 Map<String, Object?> _compactLeaseListOutput(
   Map<Object?, Object?> output, {
@@ -3175,7 +3294,7 @@ const Map<String, String> _conciseCliFieldNames = <String, String>{
   'currentRouteName': 'route',
   'truncated': 'partial',
   'diagnostics': 'diag',
-  'diagnosticLevel': 'level',
+  'diagnosticLevel': 'profile',
   'snapshotRef': 'snapshot',
   'targetKind': 'targetType',
   'documentKind': 'docType',
