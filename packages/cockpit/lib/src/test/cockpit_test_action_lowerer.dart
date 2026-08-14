@@ -270,7 +270,7 @@ _LocatorLoweringResult _lowerFlutterLocator(
   for (final signal in locator.signals) {
     final kind = switch (signal.strategy) {
       CockpitTestLocatorStrategy.text => CockpitLocatorKind.text,
-      CockpitTestLocatorStrategy.label => CockpitLocatorKind.semanticId,
+      CockpitTestLocatorStrategy.label => CockpitLocatorKind.tooltip,
       CockpitTestLocatorStrategy.testId => CockpitLocatorKind.key,
       CockpitTestLocatorStrategy.type => CockpitLocatorKind.type,
       CockpitTestLocatorStrategy.path => CockpitLocatorKind.path,
@@ -318,7 +318,7 @@ _LocatorLoweringResult _lowerFlutterLocator(
     CockpitLocator(
       key: locator.testId,
       text: locator.text,
-      semanticId: locator.label,
+      tooltip: locator.label,
       matchMode: locator.matchMode,
       type: locator.type,
       path: locator.path,
