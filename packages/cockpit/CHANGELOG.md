@@ -8,6 +8,9 @@
 - Migrated legacy Pub-bin AOT installs automatically, preserved rollback during
   activation failures, and launched Supervisor and worker processes from the
   selected runtime before deferred Windows executable cleanup.
+- Routed `cockpit`, `cockpit_mcp`, `cockpit_worker`, and `cockpitd` through the
+  same atomically selected runtime so AI hosts and direct executable users never
+  keep running an older Pub snapshot after an update.
 
 ## 4.0.27
 

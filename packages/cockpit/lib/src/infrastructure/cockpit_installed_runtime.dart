@@ -2,10 +2,19 @@ import 'dart:io';
 
 import 'package:path/path.dart' as p;
 
+import '../foundation/cockpit_internal_process.dart';
 import 'cockpit_runtime_resources.dart';
 
 const String _runtimeDirectoryName = 'cockpit-runtime';
 const String _runtimeReleasesDirectoryName = 'releases';
+
+const Map<String, List<String>> cockpitManagedLauncherArguments =
+    <String, List<String>>{
+      'cockpit': <String>[],
+      'cockpit_mcp': <String>['serve-mcp'],
+      'cockpit_worker': <String>[cockpitInternalWorkerCommand],
+      'cockpitd': <String>[cockpitInternalDaemonCommand],
+    };
 
 String? _currentExecutableOverride;
 
@@ -68,9 +77,16 @@ final class CockpitInstalledRuntimePaths {
   Directory get releases =>
       Directory.fromUri(root.uri.resolve('$_runtimeReleasesDirectoryName/'));
 
-  File get launcher => File.fromUri(
-    pubCache.uri.resolve(windows ? 'bin/cockpit.bat' : 'bin/cockpit'),
+  File launcherFor(String executable) => File.fromUri(
+    pubCache.uri.resolve(windows ? 'bin/$executable.bat' : 'bin/$executable'),
   );
+
+  Map<String, File> get launchers => <String, File>{
+    for (final executable in cockpitManagedLauncherArguments.keys)
+      executable: launcherFor(executable),
+  };
+
+  File get launcher => launcherFor('cockpit');
 
   File get legacyNative => File.fromUri(
     pubCache.uri.resolve(windows ? 'bin/cockpit.exe' : 'bin/cockpit'),
@@ -97,26 +113,40 @@ String cockpitRuntimeLauncherContents({
   required String executablePath,
   required String version,
   required bool windows,
+  String executableName = 'cockpit',
+  List<String> fixedArguments = const <String>[],
 }) {
   if (windows) {
     final quoted = '"${executablePath.replaceAll('"', '""')}"';
+    final arguments = fixedArguments
+        .map((argument) => '"${argument.replaceAll('"', '""')}"')
+        .join(' ');
+    final invocation = arguments.isEmpty
+        ? '$quoted %*'
+        : '$quoted $arguments %*';
     return '@echo off\r\n'
         'rem This file was created by Cockpit.\r\n'
         'rem Package: cockpit\r\n'
         'rem Version: $version\r\n'
-        'rem Executable: cockpit\r\n'
-        'rem Script: cockpit\r\n'
-        '$quoted %*\r\n'
+        'rem Executable: $executableName\r\n'
+        'rem Script: $executableName\r\n'
+        '$invocation\r\n'
         'exit /b %errorlevel%\r\n';
   }
   final quoted = "'${executablePath.replaceAll("'", "'\"'\"'")}'";
+  final arguments = fixedArguments
+      .map((argument) => "'${argument.replaceAll("'", "'\"'\"'")}'")
+      .join(' ');
+  final invocation = arguments.isEmpty
+      ? 'exec $quoted "\$@"'
+      : 'exec $quoted $arguments "\$@"';
   return '#!/usr/bin/env sh\n'
       '# This file was created by Cockpit.\n'
       '# Package: cockpit\n'
       '# Version: $version\n'
-      '# Executable: cockpit\n'
-      '# Script: cockpit\n'
-      'exec $quoted "\$@"\n';
+      '# Executable: $executableName\n'
+      '# Script: $executableName\n'
+      '$invocation\n';
 }
 
 Future<CockpitInstalledRuntime?> cockpitReadCanonicalInstalledRuntime({
@@ -160,14 +190,18 @@ Future<CockpitInstalledRuntime?> cockpitReadCanonicalInstalledRuntime({
     if (windows && !allowLegacyNative && await paths.legacyNative.exists()) {
       return null;
     }
-    if (!await paths.launcher.exists() ||
-        await paths.launcher.readAsString() !=
-            cockpitRuntimeLauncherContents(
-              executablePath: executable.path,
-              version: version,
-              windows: windows,
-            )) {
-      return null;
+    for (final launcher in paths.launchers.entries) {
+      if (!await launcher.value.exists() ||
+          await launcher.value.readAsString() !=
+              cockpitRuntimeLauncherContents(
+                executablePath: executable.path,
+                version: version,
+                windows: windows,
+                executableName: launcher.key,
+                fixedArguments: cockpitManagedLauncherArguments[launcher.key]!,
+              )) {
+        return null;
+      }
     }
     return CockpitInstalledRuntime(
       paths: paths,
@@ -265,15 +299,16 @@ Future<CockpitInstalledRuntime> cockpitInstallRuntimeRelease({
         resources.path,
       );
     }
-    await _replaceLauncher(
-      paths.launcher,
-      contents: cockpitRuntimeLauncherContents(
-        executablePath: executable.path,
-        version: version,
-        windows: windows,
-      ),
-      windows: windows,
-    );
+    await _replaceLaunchers(<File, String>{
+      for (final launcher in paths.launchers.entries)
+        launcher.value: cockpitRuntimeLauncherContents(
+          executablePath: executable.path,
+          version: version,
+          windows: windows,
+          executableName: launcher.key,
+          fixedArguments: cockpitManagedLauncherArguments[launcher.key]!,
+        ),
+    }, windows: windows);
     launcherInstalled = true;
     return CockpitInstalledRuntime(
       paths: paths,
@@ -303,45 +338,70 @@ Future<Directory> _createReleaseDirectory(Directory releases) async {
   );
 }
 
-Future<void> _replaceLauncher(
-  File launcher, {
-  required String contents,
+Future<void> _replaceLaunchers(
+  Map<File, String> launchers, {
   required bool windows,
 }) async {
-  await launcher.parent.create(recursive: true);
   final suffix = '$pid-${DateTime.now().microsecondsSinceEpoch}';
-  final staged = File('${launcher.path}.install-$suffix');
-  final backup = File('${launcher.path}.backup-$suffix');
-  var replaced = false;
-  var installed = false;
+  final staged = <String, File>{};
+  final backups = <String, File>{};
+  final installed = <String>{};
+  var committed = false;
   try {
-    await staged.writeAsString(contents, flush: true);
-    if (!windows) await _makeExecutable(staged);
-    if (await launcher.exists()) {
-      await launcher.rename(backup.path);
-      replaced = true;
+    for (final launcher in launchers.entries) {
+      await launcher.key.parent.create(recursive: true);
+      final candidate = File('${launcher.key.path}.install-$suffix');
+      await candidate.writeAsString(launcher.value, flush: true);
+      if (!windows) await _makeExecutable(candidate);
+      staged[launcher.key.path] = candidate;
     }
+
     try {
-      await staged.rename(launcher.path);
-      installed = true;
+      for (final launcher in launchers.keys) {
+        if (!await launcher.exists()) continue;
+        final backup = File('${launcher.path}.backup-$suffix');
+        await launcher.rename(backup.path);
+        backups[launcher.path] = backup;
+      }
+      for (final launcher in launchers.keys) {
+        await staged[launcher.path]!.rename(launcher.path);
+        installed.add(launcher.path);
+      }
+      committed = true;
     } on Object {
-      if (replaced && await backup.exists() && !await launcher.exists()) {
-        await backup.rename(launcher.path);
+      for (final path in installed) {
+        final launcher = File(path);
+        if (await launcher.exists()) await launcher.delete();
+      }
+      for (final backup in backups.entries) {
+        final launcher = File(backup.key);
+        if (!await launcher.exists() && await backup.value.exists()) {
+          await backup.value.rename(launcher.path);
+        }
       }
       rethrow;
     }
-    if (await backup.exists()) {
+
+    for (final backup in backups.values) {
+      if (!await backup.exists()) continue;
       try {
         await backup.delete();
       } on FileSystemException {
-        // The launcher is already committed. A later install may remove the
+        // The launchers are already committed. A later install removes the
         // bounded sibling backup without invalidating the active runtime.
       }
     }
   } finally {
-    if (await staged.exists()) await staged.delete();
-    if (!installed && await backup.exists() && !await launcher.exists()) {
-      await backup.rename(launcher.path);
+    for (final candidate in staged.values) {
+      if (await candidate.exists()) await candidate.delete();
+    }
+    if (!committed) {
+      for (final backup in backups.entries) {
+        final launcher = File(backup.key);
+        if (!await launcher.exists() && await backup.value.exists()) {
+          await backup.value.rename(launcher.path);
+        }
+      }
     }
   }
 }
