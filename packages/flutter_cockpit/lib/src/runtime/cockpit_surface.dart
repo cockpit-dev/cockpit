@@ -93,6 +93,36 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
 
   CockpitTargetRegistry get registry => _registry;
 
+  CockpitSemanticActionHandler? resolveDismissAction() {
+    const intent = DismissIntent();
+
+    CockpitSemanticActionHandler? resolveFrom(BuildContext? context) {
+      if (context is! Element || !context.mounted) return null;
+      return Actions.handler(context, intent);
+    }
+
+    final focused = resolveFrom(FocusManager.instance.primaryFocus?.context);
+    if (focused != null) return focused;
+
+    final rootContext = _boundaryKey.currentContext;
+    if (rootContext is! Element) return null;
+    CockpitSemanticActionHandler? resolved;
+
+    void visit(Element element) {
+      if (resolved != null || !element.mounted) return;
+      final children = <Element>[];
+      element.visitChildElements(children.add);
+      for (final child in children.reversed) {
+        visit(child);
+        if (resolved != null) return;
+      }
+      resolved = resolveFrom(element);
+    }
+
+    visit(rootContext);
+    return resolved;
+  }
+
   CockpitTargetResolutionResult probeVisibleLocator(
     CockpitLocator locator, {
     CockpitCommandType? requiredCommand,

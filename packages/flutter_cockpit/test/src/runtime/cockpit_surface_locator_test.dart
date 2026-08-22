@@ -3,6 +3,42 @@ import 'package:flutter_cockpit/flutter_cockpit_flutter.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  testWidgets('resolves the dismiss intent for an open MenuAnchor', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: CockpitSurface(
+          routeName: '/menu',
+          child: Scaffold(
+            body: MenuAnchor(
+              menuChildren: const <Widget>[
+                MenuItemButton(child: Text('English')),
+              ],
+              builder: (context, controller, child) => TextButton(
+                onPressed: controller.open,
+                child: const Text('Language'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('Language'));
+    await tester.pumpAndSettle();
+    expect(find.text('English'), findsOneWidget);
+
+    final surface = tester.state<CockpitSurfaceState>(
+      find.byType(CockpitSurface),
+    );
+    final dismiss = surface.resolveDismissAction();
+    expect(dismiss, isNotNull);
+    dismiss!();
+    await tester.pumpAndSettle();
+
+    expect(find.text('English'), findsNothing);
+  });
+
   testWidgets('action probes ignore passive targets with the same text', (
     tester,
   ) async {

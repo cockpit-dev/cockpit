@@ -85,6 +85,7 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
     CockpitNetworkActivityClearer? clearNetworkActivityHandler,
     CockpitNetworkIdleWaiter? waitForNetworkIdleHandler,
     CockpitBackNavigationHandler? backNavigationHandler,
+    CockpitDismissActionResolver? dismissActionResolver,
     CockpitWaitTickHandler? waitTickHandler,
     CockpitKeyEventHandler? keyEventHandler,
     CockpitScreenshotInspector? screenshotInspector,
@@ -108,6 +109,7 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
          clearNetworkActivityHandler: clearNetworkActivityHandler,
          waitForNetworkIdleHandler: waitForNetworkIdleHandler,
          backNavigationHandler: backNavigationHandler,
+         dismissActionResolver: dismissActionResolver,
          hasCustomWaitTickHandler: waitTickHandler != null,
          waitTickHandler: waitTickHandler ?? _defaultWaitTickHandler,
          keyEventHandler: keyEventHandler ?? _defaultKeyEventHandler,
@@ -158,14 +160,7 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
           semanticAction: (target) => target.onSemanticDecrease,
         );
       },
-      dismiss: (command, stopwatch) {
-        return _executeSemanticAction(
-          command,
-          stopwatch,
-          requiredCommand: CockpitCommandType.dismiss,
-          semanticAction: (target) => target.onSemanticDismiss,
-        );
-      },
+      dismiss: _executeDismiss,
     );
     _textInputCommandExecutor = CockpitTextInputCommandExecutor(
       enterText: _executeEnterText,
@@ -224,6 +219,8 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
       _context.waitForNetworkIdleHandler;
   CockpitBackNavigationHandler? get _backNavigationHandler =>
       _context.backNavigationHandler;
+  CockpitDismissActionResolver? get _dismissActionResolver =>
+      _context.dismissActionResolver;
   bool get _hasCustomWaitTickHandler => _context.hasCustomWaitTickHandler;
   CockpitWaitTickHandler get _waitTickHandler => _context.waitTickHandler;
   CockpitKeyEventHandler get _keyEventHandler => _context.keyEventHandler;
@@ -3109,6 +3106,50 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
       durationMs: stopwatch.elapsedMilliseconds,
       warnings: commit.warnings,
       changed: _changedSince(commit),
+    );
+  }
+
+  Future<CockpitCommandExecution> _executeDismiss(
+    CockpitCommand command,
+    Stopwatch stopwatch,
+  ) async {
+    final resolver = _dismissActionResolver;
+    if (command.locator == null && resolver != null) {
+      final action = resolver();
+      if (action != null) {
+        final previousRouteName = _currentRouteName();
+        await _prepareForAction(
+          command,
+          commandType: CockpitCommandType.dismiss,
+        );
+        final commit = await _invokeActionAndAwaitCommit(
+          command: command,
+          action: action,
+          previousRouteName: previousRouteName,
+          commandType: CockpitCommandType.dismiss,
+          stopwatch: stopwatch,
+          activationPath: _ActionActivationPath.direct,
+        );
+        if (commit.failure != null) {
+          return commit.failure!;
+        }
+        await _stabilizeAfterAction(
+          previousRouteName,
+          commandType: CockpitCommandType.dismiss,
+        );
+        return _buildSuccessWithOptionalCapture(
+          command: command,
+          durationMs: stopwatch.elapsedMilliseconds,
+          warnings: commit.warnings,
+          changed: _changedSince(commit),
+        );
+      }
+    }
+    return _executeSemanticAction(
+      command,
+      stopwatch,
+      requiredCommand: CockpitCommandType.dismiss,
+      semanticAction: (target) => target.onSemanticDismiss,
     );
   }
 

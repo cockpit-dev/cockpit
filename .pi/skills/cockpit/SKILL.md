@@ -135,9 +135,9 @@ Apply exactly one matching recovery:
 - For an expected prompt, perform the scenario's explicit action with an exact
   locator.
 - For an unexpected Flutter dialog, sheet, banner, or upgrade notice, prefer its
-  explicit safe action such as Later, Not now, Skip, Cancel, or Close. If evidence
-  proves it is a dismissible Flutter overlay without a stable safe button, run
-  `cockpit dev dismiss`.
+  explicit safe action such as Later, Not now, Skip, Cancel, or Close. For a menu,
+  popup, or other dismissible Flutter overlay that has no state-changing action to
+  select, run `cockpit dev dismiss`.
 - For an unintended child route, run `cockpit dev back` once only when the current
   state proves that returning is correct.
 - When a system-sourced capture proves that the keyboard, system UI, or an OS dialog

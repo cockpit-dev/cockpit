@@ -792,6 +792,26 @@ void main() {
     expect(dismissed, 1);
   });
 
+  test('dismiss prefers the current Flutter dismiss intent', () async {
+    var dismissed = 0;
+    final executor = InAppCockpitCommandExecutor(
+      registry: CockpitTargetRegistry(routeName: '/menu'),
+      dismissActionResolver: () => () {
+        dismissed += 1;
+      },
+    );
+
+    final result = await executor.execute(
+      CockpitCommand(
+        commandId: 'cmd-dismiss-menu',
+        commandType: CockpitCommandType.dismiss,
+      ),
+    );
+
+    expect(result.success, isTrue);
+    expect(dismissed, 1);
+  });
+
   test('falls back from cockpitId to text when resolving targets', () async {
     final registry = CockpitTargetRegistry(routeName: '/checkout');
     var tapCount = 0;

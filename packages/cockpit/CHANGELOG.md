@@ -1,5 +1,10 @@
 # Changelog
 
+## 4.0.29
+
+- Made `dev dismiss` close standard Flutter menus and popups in addition to
+  semantic dialogs, sheets, and barriers.
+
 ## 4.0.28
 
 - Kept Dart Pub's global `cockpit` entrypoint as a text launcher while storing

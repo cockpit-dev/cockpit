@@ -1,5 +1,11 @@
 # Changelog
 
+## 4.0.29
+
+- Let locator-free dismiss actions invoke Flutter's current `DismissIntent`,
+  closing standard menus, popups, dialogs, drawers, and modal routes before
+  falling back to explicit semantic dismiss targets.
+
 ## 4.0.28
 
 - Synchronized the Flutter bridge package with the current Cockpit release.

@@ -118,7 +118,8 @@ CockpitLeafCommand cockpitDevDismissCommand(
 ) => CockpitLeafCommand(
   runtime: runtime,
   name: 'dismiss',
-  description: 'Dismiss the current Flutter dialog, sheet, or barrier.',
+  description:
+      'Dismiss the current Flutter menu, popup, dialog, sheet, or barrier.',
   example: 'cockpit dev dismiss',
   configure: cockpitAddDevSessionOption,
   action: (arguments) async => dev.runCommand(

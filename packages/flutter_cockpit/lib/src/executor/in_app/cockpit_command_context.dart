@@ -10,6 +10,7 @@ import '../../runtime/cockpit_reveal_alignment.dart';
 import '../../runtime/cockpit_scroll_step_result.dart';
 import '../../runtime/cockpit_snapshot.dart';
 import '../../runtime/cockpit_snapshot_options.dart';
+import '../../runtime/cockpit_target.dart';
 import '../../runtime/cockpit_target_registry.dart';
 
 typedef CockpitCaptureHandler =
@@ -51,6 +52,7 @@ typedef CockpitNetworkIdleWaiter =
       required Duration timeout,
     });
 typedef CockpitBackNavigationHandler = Future<bool> Function();
+typedef CockpitDismissActionResolver = CockpitSemanticActionHandler? Function();
 typedef CockpitWaitTickHandler = Future<void> Function(Duration duration);
 typedef CockpitRecordingActivityProbe = bool Function();
 typedef CockpitRouteNameSynchronizer = void Function(String? routeName);
@@ -74,6 +76,7 @@ final class CockpitInAppCommandContext {
     required this.clearNetworkActivityHandler,
     required this.waitForNetworkIdleHandler,
     required this.backNavigationHandler,
+    required this.dismissActionResolver,
     required this.hasCustomWaitTickHandler,
     required this.waitTickHandler,
     required this.keyEventHandler,
@@ -96,6 +99,7 @@ final class CockpitInAppCommandContext {
   final CockpitNetworkActivityClearer? clearNetworkActivityHandler;
   final CockpitNetworkIdleWaiter? waitForNetworkIdleHandler;
   final CockpitBackNavigationHandler? backNavigationHandler;
+  final CockpitDismissActionResolver? dismissActionResolver;
   final bool hasCustomWaitTickHandler;
   final CockpitWaitTickHandler waitTickHandler;
   final CockpitKeyEventHandler keyEventHandler;
