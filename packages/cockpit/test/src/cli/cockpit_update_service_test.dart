@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:cockpit/src/cli/cockpit_update_service.dart';
 import 'package:cockpit/src/cli/cockpit_update_support.dart';
+import 'package:cockpit/src/foundation/cockpit_version.dart';
 import 'package:cockpit/src/infrastructure/cockpit_runtime_resources.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -469,14 +470,62 @@ void main() {
         timeout: const Duration(minutes: 1),
       );
 
-      expect(lookups, 0);
+      expect(lookups, 1);
       expect(calls, hasLength(6));
-      expect(
-        calls.first,
-        containsAllInOrder(<String>['pub', 'global', 'activate']),
-      );
+      expect(calls.first, <String>[
+        'dart',
+        'pub',
+        'global',
+        'activate',
+        'cockpit',
+        '3.0.7',
+      ]);
       final installed = await _activeRuntime(pubCache, version: '3.0.7');
       expect(await installed.executable.readAsString(), 'hosted aot');
+    },
+  );
+
+  test(
+    'keeps a source release newer than Pub without invoking activation',
+    () async {
+      final pubCache = await Directory.systemTemp.createTemp(
+        'cockpit-update-source-newer-',
+      );
+      addTearDown(() async {
+        if (await pubCache.exists()) await pubCache.delete(recursive: true);
+      });
+      await _writeActivatedPackage(pubCache, version: '3.0.8', hosted: false);
+      final executable = File('${pubCache.path}/bin/cockpit');
+      await executable.create(recursive: true);
+      await executable.writeAsString('source aot');
+      final calls = <List<String>>[];
+      final service = CockpitUpdateService(
+        environment: <String, String>{'PUB_CACHE': pubCache.path},
+        resolvedExecutable: executable.path,
+        windows: false,
+        latestVersionLookup: (_) async => '3.0.7',
+        processRunner: (command, arguments, timeout) async {
+          calls.add(<String>[command, ...arguments]);
+          return ProcessResult(calls.length, 0, '', '');
+        },
+      );
+
+      await expectLater(
+        service.update(
+          currentVersion: '3.0.8',
+          timeout: const Duration(minutes: 1),
+        ),
+        throwsA(
+          isA<CockpitUpdateException>()
+              .having((error) => error.code, 'code', 'updateDowngradeBlocked')
+              .having(
+                (error) => error.message,
+                'message',
+                contains('older than the running 3.0.8 release'),
+              ),
+        ),
+      );
+      expect(calls, isEmpty);
     },
   );
 
@@ -540,6 +589,7 @@ void main() {
     final service = CockpitUpdateService(
       environment: <String, String>{'PUB_CACHE': pubCache.path},
       resolvedExecutable: '${pubCache.path}/bin/cockpit',
+      latestVersionLookup: (_) async => '3.0.7',
       processRunner: (executable, arguments, timeout) async {
         calls.add(<String>[executable, ...arguments]);
         if (arguments.contains('compile')) {
@@ -573,6 +623,7 @@ void main() {
       'global',
       'activate',
       'cockpit',
+      '3.0.7',
     ]);
     expect(
       calls[1],
@@ -608,6 +659,7 @@ void main() {
     var calls = 0;
     final service = CockpitUpdateService(
       environment: <String, String>{'PUB_CACHE': pubCache.path},
+      latestVersionLookup: (_) async => cockpitVersion,
       processRunner: (executable, arguments, timeout) async {
         calls += 1;
         return ProcessResult(1, 1, '', 'network unavailable\n');
@@ -646,6 +698,7 @@ void main() {
       environment: <String, String>{'PUB_CACHE': pubCache.path},
       resolvedExecutable: native.path,
       windows: false,
+      latestVersionLookup: (_) async => '3.0.7',
       processRunner: (executable, arguments, timeout) async {
         if (arguments.contains('activate')) {
           final fallback = await native.readAsString();
@@ -691,6 +744,7 @@ void main() {
       environment: <String, String>{'PUB_CACHE': pubCache.path},
       resolvedExecutable: native.path,
       windows: false,
+      latestVersionLookup: (_) async => cockpitVersion,
       processRunner: (executable, arguments, timeout) async {
         expect(await native.readAsString(), contains('# Package: cockpit'));
         return ProcessResult(1, 1, '', 'network unavailable\n');
@@ -730,6 +784,7 @@ void main() {
       environment: <String, String>{'PUB_CACHE': pubCache.path},
       resolvedExecutable: native.path,
       windows: true,
+      latestVersionLookup: (_) async => '3.0.7',
       processRunner: (executable, arguments, timeout) async {
         if (arguments.contains('activate')) {
           final fallback = await launcher.readAsString();
@@ -777,6 +832,7 @@ void main() {
     var calls = 0;
     final service = CockpitUpdateService(
       environment: const <String, String>{},
+      latestVersionLookup: (_) async => cockpitVersion,
       processRunner: (executable, arguments, timeout) async {
         calls += 1;
         return ProcessResult(

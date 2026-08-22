@@ -4,6 +4,8 @@
 
 - Made `dev dismiss` close standard Flutter menus and popups in addition to
   semantic dialogs, sheets, and barriers.
+- Pinned source-installed updates to the latest version returned by Pub instead
+  of allowing stale unversioned global metadata to select an older release.
 
 ## 4.0.28
 
