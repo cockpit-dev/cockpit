@@ -44,18 +44,11 @@ final class CockpitUpdateInstallation {
   File? _previousNative;
   File? _previousLauncher;
   File? _fallbackLauncher;
+  File? _installedExecutable;
   bool _hostedAccepted = false;
   bool _aotInstalled = false;
 
-  String? get executablePath {
-    final pubCache = _pubCacheRoot;
-    if (pubCache == null) return null;
-    return File.fromUri(
-      Directory(
-        pubCache,
-      ).uri.resolve(_windows ? 'bin/cockpit.exe' : 'bin/cockpit'),
-    ).path;
-  }
+  String? get executablePath => _installedExecutable?.path;
 
   Future<void> acceptHosted() async {
     _hostedAccepted = true;
@@ -148,12 +141,26 @@ final class CockpitUpdateInstallation {
         pubCache,
       ).uri.resolve(_windows ? 'bin/cockpit.exe' : 'bin/cockpit'),
     );
-    if (!cockpitPathsMatch(
+    final ownsLegacyNative =
+        cockpitPathsMatch(
           _resolvedExecutable,
           native.path,
           windows: _windows,
-        ) ||
-        !await native.exists()) {
+        ) &&
+        await native.exists();
+    final launcher = _windows
+        ? File.fromUri(Directory(pubCache).uri.resolve('bin/cockpit.bat'))
+        : native;
+    if (!ownsLegacyNative) {
+      if (!await launcher.exists()) return;
+      final workspace = await _ensureWorkspace();
+      final previousLauncher = File.fromUri(
+        workspace.uri.resolve(
+          _windows ? 'cockpit-previous.bat' : 'cockpit-previous-launcher',
+        ),
+      );
+      await launcher.copy(previousLauncher.path);
+      _previousLauncher = previousLauncher;
       return;
     }
 
@@ -163,9 +170,6 @@ final class CockpitUpdateInstallation {
         _windows ? 'cockpit-previous.exe' : 'cockpit-previous',
       ),
     );
-    final launcher = _windows
-        ? File.fromUri(Directory(pubCache).uri.resolve('bin/cockpit.bat'))
-        : native;
     final fallback = File.fromUri(workspace.uri.resolve('cockpit-fallback'));
     await fallback.writeAsString(
       _windows
@@ -188,7 +192,8 @@ final class CockpitUpdateInstallation {
       previousLauncher = File.fromUri(
         workspace.uri.resolve('cockpit-previous.bat'),
       );
-      await launcher.rename(previousLauncher.path);
+      await launcher.copy(previousLauncher.path);
+      await launcher.delete();
     }
     try {
       await native.rename(previousNative.path);
@@ -250,60 +255,15 @@ final class CockpitUpdateInstallation {
     String version,
     DateTime deadline,
   ) async {
-    final pubCache = _pubCacheRoot!;
-    final destination = File.fromUri(
-      Directory(
-        pubCache,
-      ).uri.resolve(_windows ? 'bin/cockpit.exe' : 'bin/cockpit'),
+    final installed = await cockpitInstallRuntimeRelease(
+      environment: <String, String>{'PUB_CACHE': _pubCacheRoot!},
+      windows: _windows,
+      stagedExecutable: staged,
+      stagedResources: stagedResources,
+      version: version,
+      verify: (executable) => _requireVersion(executable, version, deadline),
     );
-    await destination.parent.create(recursive: true);
-    final hostedBackup = File.fromUri(
-      (await _ensureWorkspace()).uri.resolve('cockpit-hosted-launcher'),
-    );
-    final resourceDestination = Directory(
-      cockpitRuntimeResourceDirectoryPath(destination.path, windows: _windows),
-    );
-    final resourceBackup = Directory.fromUri(
-      (await _ensureWorkspace()).uri.resolve('cockpit-resources-previous/'),
-    );
-    final replacedHosted = await destination.exists();
-    final replacedResources = await resourceDestination.exists();
-    if (replacedHosted) await destination.rename(hostedBackup.path);
-    if (replacedResources) {
-      await resourceDestination.rename(resourceBackup.path);
-    }
-    try {
-      await staged.rename(destination.path);
-      await stagedResources.rename(resourceDestination.path);
-      await _requireVersion(destination, version, deadline);
-      if (!await cockpitHasValidRuntimeResources(
-        executablePath: destination.path,
-        version: version,
-        windows: _windows,
-      )) {
-        throw const CockpitUpdateException(
-          'updateVerificationFailed',
-          'The installed Cockpit runtime resources could not be verified.',
-          retryable: false,
-        );
-      }
-    } on Object {
-      if (await destination.exists()) await destination.delete();
-      if (await resourceDestination.exists()) {
-        await resourceDestination.delete(recursive: true);
-      }
-      if (replacedHosted && await hostedBackup.exists()) {
-        await hostedBackup.rename(destination.path);
-      }
-      if (replacedResources && await resourceBackup.exists()) {
-        await resourceBackup.rename(resourceDestination.path);
-      }
-      rethrow;
-    }
-    if (await hostedBackup.exists()) await hostedBackup.delete();
-    if (await resourceBackup.exists()) {
-      await resourceBackup.delete(recursive: true);
-    }
+    _installedExecutable = installed.executable;
   }
 
   Future<void> _requireVersion(
@@ -375,37 +335,42 @@ final class CockpitUpdateInstallation {
 
   Future<void> _restorePreviousInstallation() async {
     final previousNative = _previousNative;
-    if (previousNative == null || !await previousNative.exists()) return;
-    final pubCache = _pubCacheRoot!;
+    final previousLauncher = _previousLauncher;
+    final pubCache = _pubCacheRoot;
+    if (pubCache == null ||
+        (previousNative == null && previousLauncher == null)) {
+      return;
+    }
     final native = File.fromUri(
       Directory(
         pubCache,
       ).uri.resolve(_windows ? 'bin/cockpit.exe' : 'bin/cockpit'),
     );
-    final fallback = _fallbackLauncher;
-    if (fallback != null && await fallback.exists()) await fallback.delete();
-    if (await native.exists()) await native.delete();
-    try {
-      await previousNative.rename(native.path);
-    } on FileSystemException {
-      if (fallback != null) {
-        await fallback.writeAsString(
-          _windows
-              ? _windowsFallback(previousNative.path)
-              : _unixFallback(previousNative.path),
-          flush: true,
-        );
-        if (!_windows) {
-          await Process.run('chmod', <String>['755', fallback.path]);
+    if (previousNative != null && await previousNative.exists()) {
+      final fallback = _fallbackLauncher;
+      if (fallback != null && await fallback.exists()) await fallback.delete();
+      if (await native.exists()) await native.delete();
+      try {
+        await previousNative.rename(native.path);
+      } on FileSystemException {
+        if (fallback != null) {
+          await fallback.writeAsString(
+            _windows
+                ? _windowsFallback(previousNative.path)
+                : _unixFallback(previousNative.path),
+            flush: true,
+          );
+          if (!_windows) {
+            await Process.run('chmod', <String>['755', fallback.path]);
+          }
         }
+        return;
       }
-      return;
     }
-    final previousLauncher = _previousLauncher;
     if (previousLauncher != null && await previousLauncher.exists()) {
-      final launcher = File.fromUri(
-        Directory(pubCache).uri.resolve('bin/cockpit.bat'),
-      );
+      final launcher = _windows
+          ? File.fromUri(Directory(pubCache).uri.resolve('bin/cockpit.bat'))
+          : native;
       if (await launcher.exists()) await launcher.delete();
       await previousLauncher.rename(launcher.path);
     }
@@ -436,11 +401,13 @@ final class CockpitUpdateInstallation {
         workspace.path,
       );
     }
-    final executable = File.fromUri(
-      Directory(
-        pubCache,
-      ).uri.resolve(_windows ? 'bin/cockpit.exe' : 'bin/cockpit'),
-    );
+    final executable = _installedExecutable;
+    if (executable == null) {
+      throw FileSystemException(
+        'Cockpit update workspace could not be removed.',
+        workspace.path,
+      );
+    }
     await Process.start(executable.path, <String>[
       cockpitInternalUpdateCleanupCommand,
       workspace.path,

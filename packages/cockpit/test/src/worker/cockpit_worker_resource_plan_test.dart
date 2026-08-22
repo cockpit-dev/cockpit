@@ -1,10 +1,13 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:cockpit/src/application/cockpit_app_handle.dart';
+import 'package:cockpit/src/application/cockpit_application_service_exception.dart';
 import 'package:cockpit/src/session/cockpit_remote_session_handle.dart';
 import 'package:cockpit/src/worker/cockpit_worker_runtime_registry.dart';
 import 'package:cockpit/src/worker/cockpit_worker_resource_identity.dart';
 import 'package:cockpit_protocol/cockpit_protocol.dart';
+import 'package:crypto/crypto.dart';
 import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 
@@ -189,6 +192,90 @@ void main() {
           reason: kind,
         );
       }
+    },
+  );
+
+  test(
+    'entrypoint edits block relaunch without blocking a live session',
+    () async {
+      final temporary = await Directory.systemTemp.createTemp(
+        'cockpit-worker-entrypoint-refresh-',
+      );
+      addTearDown(() => temporary.delete(recursive: true));
+      final workspaceRoot = await temporary.resolveSymbolicLinks();
+      final stateRoot = await Directory(
+        p.join(workspaceRoot, 'state'),
+      ).create();
+      await File(p.join(workspaceRoot, 'pubspec.yaml')).writeAsString('''
+name: cockpit_entrypoint_fixture
+environment:
+  sdk: '>=3.8.0 <4.0.0'
+''');
+      const original = 'void main() {}\n';
+      final entrypoint = await File(
+        p.join(workspaceRoot, 'main.dart'),
+      ).writeAsString(original);
+      final registry = CockpitWorkerRuntimeRegistry(
+        workspaceId: 'workspaceA',
+        workspaceRoot: workspaceRoot,
+        stateRoot: stateRoot.path,
+        stateStore: CockpitInMemoryWorkerRuntimeStateStore(),
+      );
+      final targetId = await registry.registerTarget(
+        CockpitWorkerTargetRegistration(
+          workspaceId: 'workspaceA',
+          platform: 'android',
+          deviceId: 'emulator-5554',
+          entrypoint: 'main.dart',
+          entrypointSha256: sha256.convert(utf8.encode(original)).toString(),
+        ),
+      );
+      final app = await registry.recordApp(
+        targetId: targetId,
+        handle: CockpitAppHandle.fromRemoteSession(
+          _remoteSession(
+            appId: 'live-app',
+            devicePort: 8201,
+            projectDir: workspaceRoot,
+          ),
+        ),
+      );
+      final sessionId = await registry.sessionIdForApp(app.appId);
+
+      await entrypoint.writeAsString('Future<void> main() async {}\n');
+
+      expect(
+        (await registry.requireTarget(
+          workspaceId: 'workspaceA',
+          targetId: targetId,
+        )).targetId,
+        targetId,
+      );
+      for (final kind in const <String>['ui.inspect', 'surface.inspect']) {
+        final plan = await registry.resolveApplicationResourcePlan(
+          kind: kind,
+          input: <String, Object?>{'sessionId': sessionId},
+        );
+        expect(plan.primaryResourceId, isNotEmpty, reason: kind);
+      }
+      final inspectPlan = await registry.resolveApplicationResourcePlan(
+        kind: 'target.inspect',
+        input: <String, Object?>{'targetId': targetId},
+      );
+      expect(inspectPlan.primaryResourceId, isNotEmpty);
+      await expectLater(
+        registry.resolveApplicationResourcePlan(
+          kind: 'target.launch',
+          input: <String, Object?>{'targetId': targetId},
+        ),
+        throwsA(
+          isA<CockpitApplicationServiceException>().having(
+            (error) => error.code,
+            'code',
+            'targetEntrypointStale',
+          ),
+        ),
+      );
     },
   );
 }

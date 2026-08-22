@@ -3,11 +3,12 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:http/http.dart' as http;
-import 'package:path/path.dart' as p;
 import 'package:yaml/yaml.dart';
 
+import '../infrastructure/cockpit_installed_runtime.dart';
 import '../infrastructure/cockpit_process_manager.dart';
-import '../infrastructure/cockpit_runtime_resources.dart';
+
+export '../infrastructure/cockpit_installed_runtime.dart';
 
 const Duration _latestVersionLookupLimit = Duration(seconds: 3);
 
@@ -64,17 +65,13 @@ Future<bool> cockpitHasCanonicalHostedInstall({
     final pubCache = cockpitPubCacheRoot(environment, windows: windows);
     if (pubCache == null) return false;
     final cache = Directory(pubCache);
-    final executable = File.fromUri(
-      cache.uri.resolve(windows ? 'bin/cockpit.exe' : 'bin/cockpit'),
+    final runtime = await cockpitReadCanonicalInstalledRuntime(
+      environment: environment,
+      windows: windows,
+      resolvedExecutable: resolvedExecutable,
+      version: version,
     );
-    if (!cockpitPathsMatch(
-          resolvedExecutable,
-          executable.path,
-          windows: windows,
-        ) ||
-        !await executable.exists()) {
-      return false;
-    }
+    if (runtime == null) return false;
 
     final config = File.fromUri(
       cache.uri.resolve(
@@ -106,13 +103,7 @@ Future<bool> cockpitHasCanonicalHostedInstall({
     if (!await pubspec.exists() || !await entrypoint.exists()) return false;
     final manifest = loadYaml(await pubspec.readAsString());
     if (manifest is! YamlMap) return false;
-    return manifest['name'] == 'cockpit' &&
-        manifest['version'] == version &&
-        await cockpitHasValidRuntimeResources(
-          executablePath: executable.path,
-          version: version,
-          windows: windows,
-        );
+    return manifest['name'] == 'cockpit' && manifest['version'] == version;
   } on Object {
     return false;
   }
@@ -196,45 +187,4 @@ String cockpitReadInstalledVersion(String output) {
     );
   }
   return match.group(1)!;
-}
-
-String? cockpitPubCacheRoot(
-  Map<String, String> environment, {
-  required bool windows,
-}) {
-  final configured = environment['PUB_CACHE']?.trim();
-  if (configured != null && configured.isNotEmpty) {
-    return Directory(configured).absolute.path;
-  }
-  if (windows) {
-    final local = environment['LOCALAPPDATA']?.trim();
-    return local == null || local.isEmpty
-        ? null
-        : Directory(local).uri.resolve('Pub/Cache/').toFilePath();
-  }
-  final home = environment['HOME']?.trim();
-  return home == null || home.isEmpty
-      ? null
-      : Directory(home).uri.resolve('.pub-cache/').toFilePath();
-}
-
-bool cockpitPathIsWithin(String path, String directory) {
-  final normalizedPath = p.normalize(p.absolute(path));
-  final normalizedDirectory = p.normalize(p.absolute(directory));
-  return normalizedPath == normalizedDirectory ||
-      p.isWithin(normalizedDirectory, normalizedPath);
-}
-
-bool cockpitPathsMatch(String left, String right, {required bool windows}) {
-  final a = _resolvedPath(left);
-  final b = _resolvedPath(right);
-  return windows ? a.toLowerCase() == b.toLowerCase() : a == b;
-}
-
-String _resolvedPath(String path) {
-  try {
-    return File(path).resolveSymbolicLinksSync();
-  } on FileSystemException {
-    return p.normalize(p.absolute(path));
-  }
 }

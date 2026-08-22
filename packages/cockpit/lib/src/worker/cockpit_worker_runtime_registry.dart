@@ -288,7 +288,6 @@ final class CockpitWorkerRuntimeRegistry
     workerId(targetId, r'$.targetId');
     final target =
         _targets[targetId] ?? (throw _unknownReference('target', targetId));
-    await _validateTargetEntrypointCurrent(target.registration);
     return target;
   });
 
@@ -331,7 +330,6 @@ final class CockpitWorkerRuntimeRegistry
       final targetId = _systemActionTargetId(input);
       final target =
           _targets[targetId] ?? (throw _unknownReference('target', targetId));
-      await _validateTargetEntrypointCurrent(target.registration);
       return CockpitWorkerApplicationResourcePlan(
         primaryResourceId: target.deviceResourceId,
         requiresPort: false,
@@ -341,7 +339,9 @@ final class CockpitWorkerRuntimeRegistry
       final targetId = workerId(input['targetId'], r'$.input.targetId');
       final target =
           _targets[targetId] ?? (throw _unknownReference('target', targetId));
-      await _validateTargetEntrypointCurrent(target.registration);
+      if (kind != 'target.inspect') {
+        await _validateTargetEntrypointCurrent(target.registration);
+      }
       return CockpitWorkerApplicationResourcePlan(
         primaryResourceId: target.deviceResourceId,
         requiresPort:

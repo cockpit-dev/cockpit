@@ -1,3 +1,5 @@
 const String cockpitInternalDaemonCommand = '--_cockpit-daemon';
 const String cockpitInternalWorkerCommand = '--_cockpit-worker';
 const String cockpitInternalUpdateCleanupCommand = '--_cockpit-update-cleanup';
+const String cockpitInternalRuntimeCleanupCommand =
+    '--_cockpit-runtime-cleanup';
