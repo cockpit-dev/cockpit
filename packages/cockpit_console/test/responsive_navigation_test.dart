@@ -1,5 +1,7 @@
 import 'package:cockpit_console/i18n/strings.g.dart';
 import 'package:cockpit_console/src/providers/core_providers.dart';
+import 'package:cockpit_console/src/theme/console_control_style.dart';
+import 'package:cockpit_console/src/theme/console_menu_style.dart';
 import 'package:cockpit_console/src/theme/console_theme.dart';
 import 'package:cockpit_console/src/ui/app_shell.dart';
 import 'package:cockpit_console/src/ui/navigation/console_nav.dart';
@@ -118,6 +120,63 @@ void main() {
         tester.getCenter(find.byKey(const ValueKey('workspaces'))).dy,
       ),
     );
+  });
+
+  testWidgets('language picker uses the shared menu and updates selection', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 700));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(
+      TranslationProvider(
+        child: ProviderScope(
+          child: MaterialApp(
+            theme: ConsoleTheme.build(Brightness.light),
+            home: const Scaffold(
+              body: Align(
+                alignment: Alignment.topLeft,
+                child: Sidebar(collapsed: false),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.byKey(const ValueKey(ConsoleNavigationIds.language)));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Follow system'), findsOneWidget);
+    expect(find.text('English'), findsOneWidget);
+    expect(find.text('AUTO'), findsNothing);
+    expect(find.text('EN'), findsNothing);
+
+    final menuItems = find.byType(MenuItemButton);
+    expect(menuItems, findsNWidgets(3));
+    for (var index = 0; index < 3; index += 1) {
+      expect(
+        tester.getSize(menuItems.at(index)).height,
+        ConsoleControlStyle.height,
+      );
+      expect(
+        tester
+            .widget<MenuItemButton>(menuItems.at(index))
+            .style
+            ?.minimumSize
+            ?.resolve(const <WidgetState>{}),
+        const Size(
+          ConsoleMenuStyle.selectionWidth,
+          ConsoleMenuStyle.itemHeight,
+        ),
+      );
+    }
+
+    await tester.tap(find.text('English'));
+    await tester.pumpAndSettle();
+
+    expect(find.byTooltip('Language: English'), findsOneWidget);
+    expect(menuItems, findsNothing);
   });
 
   testWidgets('direct drawer activation replaces the body and closes', (

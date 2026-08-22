@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'console_colors.dart';
 import 'console_control_style.dart';
+import 'console_menu_style.dart';
 import 'console_shapes.dart';
 
 /// Builds the Cockpit Console [ThemeData] — a Linear / Vercel inspired
@@ -115,6 +116,8 @@ final class ConsoleTheme {
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
         waitDuration: const Duration(milliseconds: 400),
       ),
+      menuTheme: ConsoleMenuStyle.menuTheme(colors),
+      menuButtonTheme: ConsoleMenuStyle.buttonTheme(colors),
       popupMenuTheme: _popupMenuTheme(colors),
       menuBarTheme: MenuBarThemeData(
         style: MenuStyle(
@@ -550,15 +553,18 @@ final class ConsoleTheme {
 
   static PopupMenuThemeData _popupMenuTheme(ConsoleColors colors) {
     return PopupMenuThemeData(
-      color: colors.surface2,
+      color: colors.surface1,
       surfaceTintColor: Colors.transparent,
       elevation: 0,
       textStyle: TextStyle(color: colors.inkPrimary, fontSize: 13),
       labelTextStyle: WidgetStateProperty.all(
         TextStyle(color: colors.inkTertiary, fontSize: 11),
       ),
-      shape: ConsoleShapes.border(side: BorderSide(color: colors.border)),
-      menuPadding: const EdgeInsets.symmetric(vertical: 4),
+      shape: ConsoleShapes.border(
+        radius: ConsoleShapes.surfaceRadius,
+        side: BorderSide(color: colors.border),
+      ),
+      menuPadding: ConsoleMenuStyle.menuPadding,
     );
   }
 }

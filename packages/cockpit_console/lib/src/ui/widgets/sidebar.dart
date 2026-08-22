@@ -2,6 +2,7 @@ import 'package:cockpit_console/i18n/strings.g.dart';
 import 'package:cockpit_console/src/providers/core_providers.dart';
 import 'package:cockpit_console/src/providers/preferences_store.dart';
 import 'package:cockpit_console/src/theme/console_colors.dart';
+import 'package:cockpit_console/src/theme/console_menu_style.dart';
 import 'package:cockpit_console/src/theme/console_shapes.dart';
 import 'package:cockpit_console/src/ui/navigation/console_nav.dart';
 import 'package:cockpit_console/src/ui/widgets/console_shell_header.dart';
@@ -212,33 +213,18 @@ final class _LanguageMenu extends StatelessWidget {
     final colors = context.consoleColors;
     return MenuAnchor(
       consumeOutsideTap: true,
-      style: MenuStyle(
-        backgroundColor: WidgetStatePropertyAll(colors.surface1),
-        surfaceTintColor: const WidgetStatePropertyAll(Colors.transparent),
-        elevation: const WidgetStatePropertyAll(0),
-        padding: const WidgetStatePropertyAll(
-          EdgeInsets.symmetric(vertical: 4),
-        ),
-        side: WidgetStatePropertyAll(BorderSide(color: colors.border)),
-        shape: WidgetStatePropertyAll(
-          ConsoleShapes.border(radius: ConsoleShapes.surfaceRadius),
-        ),
-      ),
       menuChildren: [
         _LanguageMenuItem(
-          code: 'AUTO',
           label: translations.language.system,
           selected: mode == ConsoleLocaleMode.system,
           onPressed: () => onSelected(ConsoleLocaleMode.system),
         ),
         _LanguageMenuItem(
-          code: '中',
           label: translations.language.simplifiedChinese,
           selected: mode == ConsoleLocaleMode.simplifiedChinese,
           onPressed: () => onSelected(ConsoleLocaleMode.simplifiedChinese),
         ),
         _LanguageMenuItem(
-          code: 'EN',
           label: translations.language.english,
           selected: mode == ConsoleLocaleMode.english,
           onPressed: () => onSelected(ConsoleLocaleMode.english),
@@ -274,13 +260,11 @@ final class _LanguageMenu extends StatelessWidget {
 
 final class _LanguageMenuItem extends StatelessWidget {
   const _LanguageMenuItem({
-    required this.code,
     required this.label,
     required this.selected,
     required this.onPressed,
   });
 
-  final String code;
   final String label;
   final bool selected;
   final VoidCallback onPressed;
@@ -288,62 +272,13 @@ final class _LanguageMenuItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = context.consoleColors;
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-      child: MenuItemButton(
-        onPressed: onPressed,
-        leadingIcon: Container(
-          width: 32,
-          height: 22,
-          alignment: Alignment.center,
-          decoration: ConsoleShapes.decoration(
-            color: selected ? colors.accentSubtle : colors.surface2,
-            borderColor: selected
-                ? colors.accent.withValues(alpha: 0.32)
-                : colors.border,
-            radius: ConsoleShapes.smallRadius,
-          ),
-          child: Text(
-            code,
-            textAlign: TextAlign.center,
-            style: Theme.of(context).textTheme.labelSmall?.copyWith(
-              color: selected ? colors.accentSubtleFg : colors.inkTertiary,
-              fontWeight: FontWeight.w700,
-              fontSize: code.length > 2 ? 9 : 11,
-              letterSpacing: code.length > 2 ? 0 : 0.2,
-            ),
-          ),
-        ),
-        trailingIcon: selected
-            ? Icon(LucideIcons.check, size: 14, color: colors.accent)
-            : const SizedBox(width: 14),
-        style: ButtonStyle(
-          minimumSize: const WidgetStatePropertyAll(Size(184, 36)),
-          padding: const WidgetStatePropertyAll(
-            EdgeInsets.symmetric(horizontal: 8),
-          ),
-          foregroundColor: WidgetStatePropertyAll(
-            selected ? colors.inkPrimary : colors.inkSecondary,
-          ),
-          backgroundColor: WidgetStateProperty.resolveWith((states) {
-            if (states.contains(WidgetState.pressed)) {
-              return colors.surface3;
-            }
-            if (states.contains(WidgetState.hovered) ||
-                states.contains(WidgetState.focused)) {
-              return colors.surfaceHover;
-            }
-            return selected ? colors.surface2 : Colors.transparent;
-          }),
-          shape: WidgetStatePropertyAll(
-            ConsoleShapes.border(radius: ConsoleShapes.smallRadius),
-          ),
-          textStyle: const WidgetStatePropertyAll(
-            TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
-          ),
-        ),
-        child: Align(alignment: Alignment.centerLeft, child: Text(label)),
-      ),
+    return MenuItemButton(
+      onPressed: onPressed,
+      trailingIcon: selected
+          ? Icon(LucideIcons.check, size: 16, color: colors.accent)
+          : const SizedBox.square(dimension: 16),
+      style: ConsoleMenuStyle.selectableItem(colors, selected: selected),
+      child: Text(label),
     );
   }
 }
