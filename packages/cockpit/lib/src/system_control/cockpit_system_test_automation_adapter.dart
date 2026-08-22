@@ -332,7 +332,6 @@ final class CockpitSystemTestAutomationAdapter
       CockpitSystemControlAction.tap,
       <String, Object?>{'x': point.x, 'y': point.y},
       deadline,
-      metadata: _iosTapMetadata(point),
     );
     return _fromAction(
       command,
@@ -433,7 +432,6 @@ final class CockpitSystemTestAutomationAdapter
         CockpitSystemControlAction.tap,
         <String, Object?>{'x': point.x, 'y': point.y},
         deadline,
-        metadata: _iosTapMetadata(point),
       );
       if (!result.success) {
         return _fromAction(
@@ -480,7 +478,6 @@ final class CockpitSystemTestAutomationAdapter
         CockpitSystemControlAction.tap,
         <String, Object?>{'x': point.x, 'y': point.y},
         deadline,
-        metadata: _iosTapMetadata(point),
       );
       if (!focus.success) {
         return _fromAction(
@@ -540,7 +537,6 @@ final class CockpitSystemTestAutomationAdapter
         CockpitSystemControlAction.tap,
         <String, Object?>{'x': point.x, 'y': point.y},
         deadline,
-        metadata: _iosTapMetadata(point),
       );
       if (!focus.success) {
         return _fromAction(
@@ -651,7 +647,6 @@ final class CockpitSystemTestAutomationAdapter
         CockpitSystemControlAction.tap,
         <String, Object?>{'x': point.x, 'y': point.y},
         deadline,
-        metadata: _iosTapMetadata(point),
       );
       if (!focus.success) {
         return _fromAction(
@@ -1427,12 +1422,6 @@ final class CockpitSystemTestAutomationAdapter
       artifacts: previous.artifacts,
       artifactSourcePaths: previous.artifactSourcePaths,
     );
-  }
-
-  Map<String, Object?>? _iosTapMetadata(_ResolvedPoint point) {
-    final treePath = point.treePath;
-    if (!_isIos || treePath == null) return null;
-    return <String, Object?>{cockpitIosResolvedNativePathMetadataKey: treePath};
   }
 
   int _scaleCoordinate(

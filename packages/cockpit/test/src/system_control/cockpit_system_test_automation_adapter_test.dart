@@ -205,7 +205,7 @@ void main() {
     ]);
   });
 
-  test('iOS native tap preserves the resolved WDA element path', () async {
+  test('iOS native tap uses the stable resolved WDA coordinate', () async {
     final commands = <CockpitIosWdaCommand>[];
     final controls = CockpitSystemControlService(
       iosWdaEndpointProbe: (baseUri, {required timeout}) async => true,
@@ -227,7 +227,7 @@ void main() {
           commands.add(command);
           return command.action == CockpitIosWdaAction.readUiTree
               ? _iosNewTaskTree
-              : 'tap element';
+              : 'tap x=292 y=99';
         },
       ),
       workspaceRoot: Directory.current.path,
@@ -263,10 +263,7 @@ void main() {
     expect(treeReads.every((command) => !command.stabilitySnapshot), isTrue);
     expect(tap.parameters['x'], 292);
     expect(tap.parameters['y'], 99);
-    expect(
-      tap.parameters['nativePath'],
-      '/XCUIElementTypeApplication[0]/XCUIElementTypeWindow[0]/XCUIElementTypeButton[0]',
-    );
+    expect(tap.parameters['nativePath'], isNull);
   });
 
   test('iOS UI idle waits use lightweight WDA source snapshots', () async {
@@ -314,7 +311,7 @@ void main() {
   });
 
   test(
-    'iOS repeated and focus taps preserve the resolved WDA element path',
+    'iOS repeated and focus taps use stable resolved WDA coordinates',
     () async {
       final commands = <CockpitIosWdaCommand>[];
       final controls = CockpitSystemControlService(
@@ -343,8 +340,6 @@ void main() {
         workspaceRoot: Directory.current.path,
         delay: (_) async {},
       );
-      const nativePath =
-          '/XCUIElementTypeApplication[0]/XCUIElementTypeWindow[0]/XCUIElementTypeButton[0]';
       final cases = <(CockpitCommandType, Map<String, Object?>, int)>[
         (
           CockpitCommandType.doubleTap,
@@ -388,7 +383,9 @@ void main() {
             .toList(growable: false);
         expect(taps, hasLength(expectedTapCount), reason: type.name);
         for (final tap in taps) {
-          expect(tap.parameters['nativePath'], nativePath, reason: type.name);
+          expect(tap.parameters['x'], 292, reason: type.name);
+          expect(tap.parameters['y'], 99, reason: type.name);
+          expect(tap.parameters['nativePath'], isNull, reason: type.name);
         }
       }
     },

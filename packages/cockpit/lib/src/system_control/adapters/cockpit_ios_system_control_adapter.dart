@@ -1698,17 +1698,6 @@ final class CockpitIosSystemControlAdapter
             'This iOS native action requires a reachable WebDriverAgent endpoint.',
       );
     }
-    final resolvedNativePath =
-        request.metadata[cockpitIosResolvedNativePathMetadataKey];
-    final parameters =
-        action == CockpitIosWdaAction.tap &&
-            resolvedNativePath is String &&
-            resolvedNativePath.trim().isNotEmpty
-        ? <String, Object?>{
-            ...request.parameters,
-            'nativePath': resolvedNativePath.trim(),
-          }
-        : request.parameters;
     return CockpitIosWebDriverAgentClient.resolvedCommand(
       CockpitIosWdaCommand(
         baseUri: baseUri,
@@ -1716,7 +1705,7 @@ final class CockpitIosSystemControlAdapter
         stabilitySnapshot:
             action == CockpitIosWdaAction.readUiTree &&
             request.metadata[cockpitIosUiStabilitySnapshotMetadataKey] == true,
-        parameters: parameters,
+        parameters: request.parameters,
       ),
     );
   }

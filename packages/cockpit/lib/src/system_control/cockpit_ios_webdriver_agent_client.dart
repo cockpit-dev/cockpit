@@ -9,8 +9,6 @@ import 'cockpit_system_control_adapter.dart';
 
 const String cockpitIosWdaCommandExecutable =
     '__flutter_cockpit_ios_webdriver_agent';
-const String cockpitIosResolvedNativePathMetadataKey =
-    'cockpit.ios.resolvedNativePath';
 const String cockpitIosUiStabilitySnapshotMetadataKey =
     'cockpit.ios.uiStabilitySnapshot';
 
@@ -191,11 +189,6 @@ final class CockpitIosWebDriverAgentClient {
     return _withClient((client) async {
       switch (command.action) {
         case CockpitIosWdaAction.tap:
-          final nativePath = _optionalString(command.parameters, 'nativePath');
-          if (nativePath != null) {
-            await _tapElement(client, session, nativePath, timeout: timeout);
-            return 'tap element';
-          }
           final x = _requiredInt(command.parameters, 'x');
           final y = _requiredInt(command.parameters, 'y');
           await _postSession(client, session, 'wda/tap', <String, Object?>{
@@ -537,78 +530,6 @@ final class CockpitIosWebDriverAgentClient {
           return 'resolveBlockers appId=$appId decision=$decision';
       }
     });
-  }
-
-  Future<void> _tapElement(
-    http.Client client,
-    CockpitIosWdaSession session,
-    String nativePath, {
-    required Duration timeout,
-  }) async {
-    final response = await _postSession(
-      client,
-      session,
-      'element',
-      <String, Object?>{'using': 'xpath', 'value': _wdaXPath(nativePath)},
-      timeout: timeout,
-    );
-    final elementId = _readElementId(response.body);
-    if (elementId == null) {
-      throw StateError(
-        'WebDriverAgent element lookup did not return an element id.',
-      );
-    }
-    await _postSession(
-      client,
-      session,
-      'element/${Uri.encodeComponent(elementId)}/click',
-      const <String, Object?>{},
-      timeout: timeout,
-    );
-  }
-
-  String? _readElementId(String body) {
-    final value = _decodeObject(body)['value'];
-    if (value is! Map<Object?, Object?>) return null;
-    for (final key in const <String>[
-      'element-6066-11e4-a52e-4f735466cecf',
-      'ELEMENT',
-    ]) {
-      final elementId = value[key];
-      if (elementId is String && elementId.trim().isNotEmpty) {
-        return elementId.trim();
-      }
-    }
-    return null;
-  }
-
-  String _wdaXPath(String nativePath) {
-    final segments = nativePath
-        .split('/')
-        .where((segment) => segment.isNotEmpty)
-        .toList(growable: false);
-    if (segments.isEmpty) {
-      throw ArgumentError.value(
-        nativePath,
-        'nativePath',
-        'Native element path must not be empty.',
-      );
-    }
-    final xpath = <String>[];
-    final pattern = RegExp(r'^([A-Za-z_][A-Za-z0-9_.-]*)\[(\d+)\]$');
-    for (final segment in segments) {
-      final match = pattern.firstMatch(segment);
-      if (match == null) {
-        throw ArgumentError.value(
-          nativePath,
-          'nativePath',
-          'Native element path contains an invalid segment.',
-        );
-      }
-      final zeroBasedIndex = int.parse(match.group(2)!);
-      xpath.add('${match.group(1)}[${zeroBasedIndex + 1}]');
-    }
-    return '/${xpath.join('/')}';
   }
 
   Future<T> _withClient<T>(Future<T> Function(http.Client client) callback) {
