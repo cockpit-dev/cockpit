@@ -1,6 +1,6 @@
 name: flutter_cockpit
 description: Flutter semantic automation, observation, capture, and recording bridge for Cockpit E2E tests.
-version: 4.0.28
+version: 4.0.29
 homepage: https://github.com/cockpit-dev/cockpit
 repository: https://github.com/cockpit-dev/cockpit
 issue_tracker: https://github.com/cockpit-dev/cockpit/issues
@@ -20,7 +20,7 @@ resolution: workspace
 
 dependencies:
   collection: ^1.19.1
-  cockpit_protocol: ^4.0.28
+  cockpit_protocol: ^4.0.29
   flutter:
     sdk: flutter
   flutter_web_plugins:
