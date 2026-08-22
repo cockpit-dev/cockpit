@@ -109,6 +109,8 @@ void main() {
       'Prove recovery before resuming the original flow',
       'cockpit update',
       'Brief canonical LON',
+      'LON may table-encode repeated object arrays',
+      'The first row declares columns',
       'never request JSON merely because it is structured',
       'only on a pipeline that uses `jq`',
       "cockpit dev status --format json | jq '.lifecycle'",

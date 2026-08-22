@@ -413,6 +413,10 @@ JSON, or when inspecting JSON-specific wire behavior. Omit
 `--view brief`, `--format lon`, the current session, inferred input, and
 default wait/screenshot settings. Add an option only when it changes the requested
 behavior.
+LON may table-encode repeated object arrays, for example
+`mounted:[sel label can;@save Save tap;...]`. The first row declares columns; it is
+not an empty target. Read later rows by those columns instead of switching to JSON
+only to expand the same data.
 Formats are `lon|json|yaml|jsonl|path|none`. `path` prints one verified artifact/output
 path, `none` is silent, and `--output` writes an atomic projection whose stdout is
 only its verified path.
