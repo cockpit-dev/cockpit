@@ -1,6 +1,5 @@
 import 'package:cockpit_console/i18n/strings.g.dart';
 import 'package:cockpit_console/src/providers/core_providers.dart';
-import 'package:cockpit_console/src/theme/console_control_style.dart';
 import 'package:cockpit_console/src/theme/console_menu_style.dart';
 import 'package:cockpit_console/src/theme/console_theme.dart';
 import 'package:cockpit_console/src/ui/app_shell.dart';
@@ -149,6 +148,7 @@ void main() {
 
     expect(find.text('Follow system'), findsOneWidget);
     expect(find.text('English'), findsOneWidget);
+    expect(find.text('Language'), findsOneWidget);
     expect(find.text('AUTO'), findsNothing);
     expect(find.text('EN'), findsNothing);
 
@@ -157,7 +157,7 @@ void main() {
     for (var index = 0; index < 3; index += 1) {
       expect(
         tester.getSize(menuItems.at(index)).height,
-        ConsoleControlStyle.height,
+        ConsoleMenuStyle.itemHeight,
       );
       expect(
         tester
