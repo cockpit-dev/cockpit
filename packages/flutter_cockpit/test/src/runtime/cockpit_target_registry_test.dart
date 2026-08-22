@@ -2,6 +2,59 @@ import 'package:flutter_cockpit/flutter_cockpit.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('reuses one discovered target set across a diagnostic read', () {
+    final registry = CockpitTargetRegistry(routeName: '/inbox');
+    var discoveryCount = 0;
+    registry.discoveredTargetsProvider = () {
+      discoveryCount += 1;
+      return const <CockpitTarget>[
+        CockpitTarget(
+          registrationId: 'task',
+          text: 'Open task',
+          routeName: '/inbox',
+        ),
+      ];
+    };
+
+    final values = registry.withDiscoverySnapshot(
+      () => <int>[
+        registry.visibleTargets.length,
+        registry.routeReadyVisibleTargets.length,
+        registry.routeDiagnostics()['visibleTargetCount']! as int,
+      ],
+    );
+
+    expect(values, <int>[1, 1, 1]);
+    expect(discoveryCount, 1);
+  });
+
+  test('resolves registered targets without invoking discovery', () {
+    final registry = CockpitTargetRegistry(routeName: '/inbox');
+    var discoveryCount = 0;
+    registry.discoveredTargetsProvider = () {
+      discoveryCount += 1;
+      return const <CockpitTarget>[];
+    };
+    registry.register(
+      CockpitTarget(
+        registrationId: 'open-task',
+        keyValue: 'open-task',
+        routeName: '/inbox',
+        supportedCommands: const <CockpitCommandType>{CockpitCommandType.tap},
+        onTap: () {},
+      ),
+    );
+
+    final result = registry.resolveRegistered(
+      const CockpitLocator(key: 'open-task'),
+      requiredCommand: CockpitCommandType.tap,
+    );
+
+    expect(result.isSuccess, isTrue);
+    expect(result.target?.registrationId, 'open-task');
+    expect(discoveryCount, 0);
+  });
+
   test('registers visible targets with metadata and supported commands', () {
     final registry = CockpitTargetRegistry(routeName: '/checkout');
 

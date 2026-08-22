@@ -79,6 +79,51 @@ void main() {
     expect(result.target?.keyValue, 'continue-button');
   });
 
+  testWidgets('unique keyed action probes skip full target discovery', (
+    tester,
+  ) async {
+    final registry = CockpitTargetRegistry(routeName: '/actions');
+    await tester.pumpWidget(
+      WidgetsApp(
+        color: const Color(0xFFFFFFFF),
+        builder: (context, child) => CockpitSurface(
+          routeName: '/actions',
+          registry: registry,
+          child: Material(
+            child: Directionality(
+              textDirection: TextDirection.ltr,
+              child: TextButton(
+                key: const ValueKey<String>('continue-button'),
+                onPressed: () {},
+                child: const Text('Continue'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final discoveredTargetsProvider = registry.discoveredTargetsProvider!;
+    var fullDiscoveryCount = 0;
+    registry.discoveredTargetsProvider = () {
+      fullDiscoveryCount += 1;
+      return discoveredTargetsProvider();
+    };
+    final surface = tester.state<CockpitSurfaceState>(
+      find.byType(CockpitSurface),
+    );
+    final result = surface.probeVisibleLocator(
+      const CockpitLocator(key: 'continue-button'),
+      requiredCommand: CockpitCommandType.tap,
+    );
+
+    expect(result.isSuccess, isTrue, reason: '${result.error?.details}');
+    expect(result.target?.keyValue, 'continue-button');
+    expect(result.target?.supportedCommands, contains(CockpitCommandType.tap));
+    expect(fullDiscoveryCount, 0);
+  });
+
   testWidgets('indexed probes use visual order instead of element order', (
     tester,
   ) async {

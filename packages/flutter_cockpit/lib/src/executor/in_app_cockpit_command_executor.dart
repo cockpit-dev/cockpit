@@ -1383,7 +1383,14 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
       }
     }
 
-    var resolution = _resolve(command);
+    var resolution = allowsGenericResolution
+        ? _resolve(command)
+        : CockpitTargetResolutionResult.failure(
+            error: CockpitCommandError.targetNotFound(
+              message: 'No visible target matched the requested locator chain.',
+              details: <String, Object?>{'requestedLocator': locator.toJson()},
+            ),
+          );
     const maxAutoScrollableCandidates = 8;
     final hasExplicitScrollable =
         (scrollableKey != null && scrollableKey.isNotEmpty) ||
@@ -1855,8 +1862,7 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
     int? scrollHandlerDurationMs,
     int? scrollObservationDurationMs,
   }) {
-    final enrichedResolution = _enrichResolutionFailure(command, resolution);
-    final baseError = enrichedResolution.error;
+    final baseError = resolution.error;
     final details = <String, Object?>{
       if (baseError != null) ...baseError.details,
       'requestedLocator': command.locator?.toJson(),
@@ -4483,28 +4489,30 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
     CockpitCommand command,
     CockpitTargetResolutionResult resolution,
   ) {
-    final error = resolution.error;
-    if (error == null ||
-        error.code != CockpitCommandError.targetNotFoundCode ||
-        command.locator == null) {
-      return resolution;
-    }
-    return CockpitTargetResolutionResult.failure(
-      error: CockpitCommandError.targetNotFound(
-        message: error.message,
-        details: <String, Object?>{
-          ...error.details,
-          'routeName': _liveSnapshot().routeName,
-          'visibleTargetCount': _registry.visibleTargets.length,
-          'visibleTargetHints': _visibleTargetHints(),
-          'visibleTextCandidates': _visibleTextCandidates(
-            _registry.visibleTargets,
-          ).take(12).toList(growable: false),
-          'emptyRouteHint': ?_emptyRouteHint(),
-        },
-      ),
-      matches: resolution.matches,
-    );
+    return _registry.withDiscoverySnapshot(() {
+      final error = resolution.error;
+      if (error == null ||
+          error.code != CockpitCommandError.targetNotFoundCode ||
+          command.locator == null) {
+        return resolution;
+      }
+      return CockpitTargetResolutionResult.failure(
+        error: CockpitCommandError.targetNotFound(
+          message: error.message,
+          details: <String, Object?>{
+            ...error.details,
+            'routeName': _liveSnapshot().routeName,
+            'visibleTargetCount': _registry.visibleTargets.length,
+            'visibleTargetHints': _visibleTargetHints(),
+            'visibleTextCandidates': _visibleTextCandidates(
+              _registry.visibleTargets,
+            ).take(12).toList(growable: false),
+            'emptyRouteHint': ?_emptyRouteHint(),
+          },
+        ),
+        matches: resolution.matches,
+      );
+    });
   }
 
   String? _emptyRouteHint() {
@@ -4741,26 +4749,28 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
     List<CockpitArtifactRef> artifacts = const <CockpitArtifactRef>[],
     Map<String, Object?>? snapshot,
   }) {
-    final enrichedError = (_boolParameter(command, 'probe') ?? false)
-        ? error
-        : _enrichFailureError(
-            command: command,
-            durationMs: durationMs,
-            error: error,
-            snapshot: snapshot,
-          );
-    return CockpitCommandExecution(
-      result: CockpitCommandResult(
-        success: false,
-        commandId: command.commandId,
-        commandType: command.commandType,
-        locatorResolution: locatorResolution,
-        durationMs: durationMs,
-        artifacts: artifacts,
-        snapshot: snapshot,
-        error: enrichedError,
-      ),
-    );
+    return _registry.withDiscoverySnapshot(() {
+      final enrichedError = (_boolParameter(command, 'probe') ?? false)
+          ? error
+          : _enrichFailureError(
+              command: command,
+              durationMs: durationMs,
+              error: error,
+              snapshot: snapshot,
+            );
+      return CockpitCommandExecution(
+        result: CockpitCommandResult(
+          success: false,
+          commandId: command.commandId,
+          commandType: command.commandType,
+          locatorResolution: locatorResolution,
+          durationMs: durationMs,
+          artifacts: artifacts,
+          snapshot: snapshot,
+          error: enrichedError,
+        ),
+      );
+    });
   }
 
   CockpitCommandExecution _unsupportedExecution({
@@ -5599,6 +5609,11 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
               matchedKind: CockpitLocatorKind.text,
               matchedValue: locator.value,
             );
+      }
+
+      if (directProbe != null &&
+          directProbe.error?.code != CockpitCommandError.ambiguousTargetCode) {
+        return null;
       }
 
       // Scroll's postcondition is visibility, not unique mutability. A field
