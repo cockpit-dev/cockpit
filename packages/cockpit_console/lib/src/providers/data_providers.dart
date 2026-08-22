@@ -540,6 +540,7 @@ final class DocumentValidation {
     required this.valid,
     required this.errors,
     required this.warnings,
+    this.missingErrorDiagnostic = false,
   });
 
   factory DocumentValidation.fromResult(Map<String, Object?> result) {
@@ -551,9 +552,7 @@ final class DocumentValidation {
         .map((diagnostic) => diagnostic['message'] as String? ?? '')
         .where((message) => message.isNotEmpty)
         .toList(growable: true);
-    if (!valid && errors.isEmpty) {
-      errors.add('Document validation failed without a diagnostic.');
-    }
+    final missingErrorDiagnostic = !valid && errors.isEmpty;
     final warnings = diagnostics
         .whereType<Map>()
         .where((diagnostic) => diagnostic['severity'] == 'warning')
@@ -563,12 +562,14 @@ final class DocumentValidation {
       valid: valid,
       errors: List<String>.unmodifiable(errors),
       warnings: List<String>.unmodifiable(warnings),
+      missingErrorDiagnostic: missingErrorDiagnostic,
     );
   }
 
   final bool valid;
   final List<String> errors;
   final List<String> warnings;
+  final bool missingErrorDiagnostic;
 }
 
 final class DocumentEditorState {
@@ -622,6 +623,36 @@ final class DocumentEditorState {
       validation: clearValidation ? null : validation ?? this.validation,
     );
   }
+}
+
+enum DocumentSaveResultKind {
+  indexed,
+  workspaceChanged,
+  busy,
+  emptyContent,
+  invalidPath,
+  invalidExtension,
+  documentChanged,
+  validationFailed,
+  failed,
+}
+
+final class DocumentSaveResult {
+  const DocumentSaveResult({
+    required this.kind,
+    this.path,
+    this.format,
+    this.message,
+    this.cleanupError,
+  });
+
+  final DocumentSaveResultKind kind;
+  final String? path;
+  final CockpitDocumentFormat? format;
+  final String? message;
+  final Object? cleanupError;
+
+  bool get succeeded => kind == DocumentSaveResultKind.indexed;
 }
 
 final class DocumentNotifier extends Notifier<DocumentEditorState> {
@@ -757,27 +788,26 @@ final class DocumentNotifier extends Notifier<DocumentEditorState> {
 
   /// Validates, atomically replaces, and indexes one workspace-confined
   /// document. A failed validation or index leaves the previous file intact.
-  Future<({bool ok, String message})> saveAndIndex({
-    required String workspaceId,
-  }) async {
+  Future<DocumentSaveResult> saveAndIndex({required String workspaceId}) async {
     if (state.workspaceId != workspaceId) {
-      return (
-        ok: false,
-        message: 'The selected workspace changed before the save started.',
+      return const DocumentSaveResult(
+        kind: DocumentSaveResultKind.workspaceChanged,
       );
     }
     if (state.saving) {
-      return (ok: false, message: 'A document save is already in progress.');
+      return const DocumentSaveResult(kind: DocumentSaveResultKind.busy);
     }
     final relativePath = p.normalize(state.relativePath.trim());
     final content = state.content;
     if (content.trim().isEmpty) {
-      return (ok: false, message: 'Document content cannot be empty.');
+      return const DocumentSaveResult(
+        kind: DocumentSaveResultKind.emptyContent,
+      );
     }
     if (relativePath.isEmpty ||
         relativePath == '.' ||
         p.isAbsolute(relativePath)) {
-      return (ok: false, message: 'Document path must be workspace-relative.');
+      return const DocumentSaveResult(kind: DocumentSaveResultKind.invalidPath);
     }
     final extension = p.extension(relativePath).toLowerCase();
     final extensionMatches = switch (state.format) {
@@ -786,14 +816,9 @@ final class DocumentNotifier extends Notifier<DocumentEditorState> {
       CockpitDocumentFormat.yaml => extension == '.yaml' || extension == '.yml',
     };
     if (!extensionMatches) {
-      return (
-        ok: false,
-        message: switch (state.format) {
-          CockpitDocumentFormat.lon => 'LON documents must use a .lon path.',
-          CockpitDocumentFormat.json => 'JSON documents must use a .json path.',
-          CockpitDocumentFormat.yaml =>
-            'YAML documents must use a .yaml or .yml path.',
-        },
+      return DocumentSaveResult(
+        kind: DocumentSaveResultKind.invalidExtension,
+        format: state.format,
       );
     }
 
@@ -813,15 +838,17 @@ final class DocumentNotifier extends Notifier<DocumentEditorState> {
       if (workspaceGeneration != _workspaceGeneration ||
           validationGeneration != _validationGeneration ||
           state.workspaceId != workspaceId) {
-        return (
-          ok: false,
-          message: 'The document changed while validation was in progress.',
+        return const DocumentSaveResult(
+          kind: DocumentSaveResultKind.documentChanged,
         );
       }
       final validation = DocumentValidation.fromResult(validationResult);
       state = state.copyWith(validating: false, validation: validation);
       if (!validation.valid) {
-        return (ok: false, message: validation.errors.first);
+        return DocumentSaveResult(
+          kind: DocumentSaveResultKind.validationFailed,
+          message: validation.errors.firstOrNull,
+        );
       }
 
       final file = File(
@@ -845,14 +872,16 @@ final class DocumentNotifier extends Notifier<DocumentEditorState> {
       }
       ref.invalidate(documentsForWorkspaceProvider(workspaceId));
       ref.invalidate(casesForWorkspaceProvider(workspaceId));
-      return (
-        ok: true,
-        message: cleanupWarning == null
-            ? 'Indexed $relativePath'
-            : 'Indexed $relativePath. $cleanupWarning',
+      return DocumentSaveResult(
+        kind: DocumentSaveResultKind.indexed,
+        path: relativePath,
+        cleanupError: cleanupWarning,
       );
     } on Object catch (error) {
-      return (ok: false, message: '$error');
+      return DocumentSaveResult(
+        kind: DocumentSaveResultKind.failed,
+        message: '$error',
+      );
     } finally {
       if (workspaceGeneration == _workspaceGeneration &&
           state.workspaceId == workspaceId) {
@@ -861,7 +890,7 @@ final class DocumentNotifier extends Notifier<DocumentEditorState> {
     }
   }
 
-  Future<String?> _replaceAndIndexDocument({
+  Future<Object?> _replaceAndIndexDocument({
     required ConsoleSupervisorClient client,
     required String workspaceId,
     required String relativePath,
@@ -941,7 +970,7 @@ final class DocumentNotifier extends Notifier<DocumentEditorState> {
       try {
         await backup.delete();
       } on Object catch (error) {
-        return 'The previous-file backup could not be removed: $error';
+        return error;
       }
     }
     return null;

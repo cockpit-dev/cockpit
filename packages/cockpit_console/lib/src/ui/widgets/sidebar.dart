@@ -1,4 +1,6 @@
+import 'package:cockpit_console/i18n/strings.g.dart';
 import 'package:cockpit_console/src/providers/core_providers.dart';
+import 'package:cockpit_console/src/providers/preferences_store.dart';
 import 'package:cockpit_console/src/theme/console_colors.dart';
 import 'package:cockpit_console/src/theme/console_shapes.dart';
 import 'package:cockpit_console/src/ui/navigation/console_nav.dart';
@@ -33,6 +35,7 @@ final class Sidebar extends HookConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final daemonState = ref.watch(daemonProvider);
     final themeMode = ref.watch(themeProvider);
+    final localeMode = ref.watch(consoleLocaleProvider);
 
     final theme = Theme.of(context);
     final running = daemonState.running;
@@ -43,10 +46,10 @@ final class Sidebar extends HookConsumerWidget {
         ? context.consoleColors.success
         : context.consoleColors.warning;
     final statusLabel = !running
-        ? 'Offline'
+        ? context.t.shell.offline
         : healthy
-        ? 'Connected'
-        : 'Degraded';
+        ? context.t.shell.connected
+        : context.t.shell.degraded;
 
     final statusIndicator = Tooltip(
       message: statusLabel,
@@ -82,8 +85,13 @@ final class Sidebar extends HookConsumerWidget {
       ),
       onPressed: () =>
           ref.read(themeProvider.notifier).toggle(theme.brightness),
-      tooltip: 'Toggle theme',
+      tooltip: context.t.shell.toggleTheme,
       style: IconButton.styleFrom(minimumSize: const Size.square(28)),
+    );
+    final languageMenu = _LanguageMenu(
+      drawer: drawer,
+      mode: localeMode,
+      onSelected: ref.read(consoleLocaleProvider.notifier).set,
     );
     final navigationToggle = onToggleNavigation == null
         ? null
@@ -99,12 +107,12 @@ final class Sidebar extends HookConsumerWidget {
               size: collapsed ? 15 : 16,
             ),
             tooltip: drawer
-                ? 'Close navigation'
+                ? context.t.shell.closeNavigation
                 : opensDrawer
-                ? 'Open navigation'
+                ? context.t.shell.openNavigation
                 : collapsed
-                ? 'Expand navigation'
-                : 'Collapse navigation',
+                ? context.t.shell.expandNavigation
+                : context.t.shell.collapseNavigation,
             style: IconButton.styleFrom(
               minimumSize: const Size.square(28),
               maximumSize: const Size.square(28),
@@ -148,6 +156,8 @@ final class Sidebar extends HookConsumerWidget {
                     children: [
                       statusIndicator,
                       const SizedBox(height: 8),
+                      languageMenu,
+                      const SizedBox(height: 4),
                       themeToggle,
                       if (navigationToggle != null) ...[
                         const SizedBox(height: 4),
@@ -169,6 +179,8 @@ final class Sidebar extends HookConsumerWidget {
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
+                      languageMenu,
+                      const SizedBox(width: 4),
                       themeToggle,
                       if (navigationToggle != null) ...[
                         const SizedBox(width: 4),
@@ -182,6 +194,167 @@ final class Sidebar extends HookConsumerWidget {
     );
   }
 }
+
+final class _LanguageMenu extends StatelessWidget {
+  const _LanguageMenu({
+    required this.drawer,
+    required this.mode,
+    required this.onSelected,
+  });
+
+  final bool drawer;
+  final ConsoleLocaleMode mode;
+  final ValueChanged<ConsoleLocaleMode> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    final translations = context.t;
+    final colors = context.consoleColors;
+    return MenuAnchor(
+      consumeOutsideTap: true,
+      style: MenuStyle(
+        backgroundColor: WidgetStatePropertyAll(colors.surface1),
+        surfaceTintColor: const WidgetStatePropertyAll(Colors.transparent),
+        elevation: const WidgetStatePropertyAll(0),
+        padding: const WidgetStatePropertyAll(
+          EdgeInsets.symmetric(vertical: 4),
+        ),
+        side: WidgetStatePropertyAll(BorderSide(color: colors.border)),
+        shape: WidgetStatePropertyAll(
+          ConsoleShapes.border(radius: ConsoleShapes.surfaceRadius),
+        ),
+      ),
+      menuChildren: [
+        _LanguageMenuItem(
+          code: 'AUTO',
+          label: translations.language.system,
+          selected: mode == ConsoleLocaleMode.system,
+          onPressed: () => onSelected(ConsoleLocaleMode.system),
+        ),
+        _LanguageMenuItem(
+          code: '中',
+          label: translations.language.simplifiedChinese,
+          selected: mode == ConsoleLocaleMode.simplifiedChinese,
+          onPressed: () => onSelected(ConsoleLocaleMode.simplifiedChinese),
+        ),
+        _LanguageMenuItem(
+          code: 'EN',
+          label: translations.language.english,
+          selected: mode == ConsoleLocaleMode.english,
+          onPressed: () => onSelected(ConsoleLocaleMode.english),
+        ),
+      ],
+      builder: (context, controller, child) => Tooltip(
+        message:
+            '${translations.language.title}: ${_languageLabel(translations, mode)}',
+        child: IconButton(
+          key: ValueKey(
+            drawer
+                ? '${ConsoleNavigationIds.language}-drawer'
+                : ConsoleNavigationIds.language,
+          ),
+          onPressed: () =>
+              controller.isOpen ? controller.close() : controller.open(),
+          icon: const Icon(LucideIcons.languages, size: 15),
+          style: IconButton.styleFrom(
+            minimumSize: const Size.square(28),
+            maximumSize: const Size.square(28),
+            backgroundColor: controller.isOpen ? colors.surface3 : null,
+            foregroundColor: controller.isOpen
+                ? colors.inkPrimary
+                : colors.inkSecondary,
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            shape: ConsoleShapes.border(radius: ConsoleShapes.smallRadius),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+final class _LanguageMenuItem extends StatelessWidget {
+  const _LanguageMenuItem({
+    required this.code,
+    required this.label,
+    required this.selected,
+    required this.onPressed,
+  });
+
+  final String code;
+  final String label;
+  final bool selected;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.consoleColors;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+      child: MenuItemButton(
+        onPressed: onPressed,
+        leadingIcon: Container(
+          width: 32,
+          height: 22,
+          alignment: Alignment.center,
+          decoration: ConsoleShapes.decoration(
+            color: selected ? colors.accentSubtle : colors.surface2,
+            borderColor: selected
+                ? colors.accent.withValues(alpha: 0.32)
+                : colors.border,
+            radius: ConsoleShapes.smallRadius,
+          ),
+          child: Text(
+            code,
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+              color: selected ? colors.accentSubtleFg : colors.inkTertiary,
+              fontWeight: FontWeight.w700,
+              fontSize: code.length > 2 ? 9 : 11,
+              letterSpacing: code.length > 2 ? 0 : 0.2,
+            ),
+          ),
+        ),
+        trailingIcon: selected
+            ? Icon(LucideIcons.check, size: 14, color: colors.accent)
+            : const SizedBox(width: 14),
+        style: ButtonStyle(
+          minimumSize: const WidgetStatePropertyAll(Size(184, 36)),
+          padding: const WidgetStatePropertyAll(
+            EdgeInsets.symmetric(horizontal: 8),
+          ),
+          foregroundColor: WidgetStatePropertyAll(
+            selected ? colors.inkPrimary : colors.inkSecondary,
+          ),
+          backgroundColor: WidgetStateProperty.resolveWith((states) {
+            if (states.contains(WidgetState.pressed)) {
+              return colors.surface3;
+            }
+            if (states.contains(WidgetState.hovered) ||
+                states.contains(WidgetState.focused)) {
+              return colors.surfaceHover;
+            }
+            return selected ? colors.surface2 : Colors.transparent;
+          }),
+          shape: WidgetStatePropertyAll(
+            ConsoleShapes.border(radius: ConsoleShapes.smallRadius),
+          ),
+          textStyle: const WidgetStatePropertyAll(
+            TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+          ),
+        ),
+        child: Align(alignment: Alignment.centerLeft, child: Text(label)),
+      ),
+    );
+  }
+}
+
+String _languageLabel(Translations translations, ConsoleLocaleMode mode) =>
+    switch (mode) {
+      ConsoleLocaleMode.system => translations.language.system,
+      ConsoleLocaleMode.english => translations.language.english,
+      ConsoleLocaleMode.simplifiedChinese =>
+        translations.language.simplifiedChinese,
+    };
 
 final class _Header extends StatelessWidget {
   const _Header({required this.collapsed});
@@ -294,6 +467,7 @@ final class _NavItem extends HookConsumerWidget {
     final iconSize = collapsed
         ? ConsoleShellLayoutStyle.navigationRailIconSize
         : ConsoleShellLayoutStyle.navigationIconSize;
+    final label = destination.label(context.t);
     void navigate() {
       final navigation = ref.read(navProvider.notifier);
       navigation.go(destination);
@@ -303,11 +477,11 @@ final class _NavItem extends HookConsumerWidget {
     final item = Semantics(
       button: true,
       selected: selected,
-      label: destination.label,
+      label: label,
       excludeSemantics: true,
       onTap: navigate,
       child: InkWell(
-        key: ValueKey(destination.label),
+        key: ValueKey(destination.name),
         onTap: navigate,
         customBorder: ConsoleShapes.border(radius: ConsoleShapes.smallRadius),
         child: Container(
@@ -328,7 +502,7 @@ final class _NavItem extends HookConsumerWidget {
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    destination.label,
+                    label,
                     style: TextStyle(
                       fontSize: 13,
                       fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
@@ -351,7 +525,7 @@ final class _NavItem extends HookConsumerWidget {
       onExit: (_) => hovered.value = false,
       child: collapsed
           ? Tooltip(
-              message: destination.label,
+              message: label,
               waitDuration: const Duration(milliseconds: 300),
               showDuration: const Duration(seconds: 2),
               child: item,

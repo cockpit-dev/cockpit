@@ -3,6 +3,7 @@ import 'dart:math' as math;
 
 import 'package:acpd/acpd.dart'
     show ContentBlock, PermissionOption, PermissionOptionKind, TextContentBlock;
+import 'package:cockpit_console/i18n/strings.g.dart';
 import 'package:cockpit_console/src/providers/acp_provider.dart';
 import 'package:cockpit_console/src/providers/agent_presets.dart';
 import 'package:cockpit_console/src/providers/core_providers.dart';
@@ -58,8 +59,8 @@ final class AiChatScreen extends HookConsumerWidget {
     }
 
     return ScreenScaffold(
-      title: 'AI Assistant',
-      subtitle: _subtitleFor(acpState),
+      title: context.t.ai.title,
+      subtitle: _subtitleFor(context, acpState),
       stackActionsBelowWidth: 0,
       actions: [
         if (acpState is AcpConnected)
@@ -67,7 +68,7 @@ final class AiChatScreen extends HookConsumerWidget {
             key: const ValueKey('ai-agent-settings'),
             onPressed: openSettingsDialog,
             icon: const Icon(LucideIcons.settings2, size: 17),
-            tooltip: 'Agent settings',
+            tooltip: context.t.ai.settings,
           ),
       ],
       body: acpState is AcpConnected
@@ -83,14 +84,14 @@ final class AiChatScreen extends HookConsumerWidget {
     );
   }
 
-  String _subtitleFor(AcpAgentState state) {
+  String _subtitleFor(BuildContext context, AcpAgentState state) {
     return switch (state) {
-      AcpDisconnected() => 'Connect an AI agent to start',
-      AcpConnecting() => 'Connecting...',
+      AcpDisconnected() => context.t.ai.connectToStart,
+      AcpConnecting() => context.t.ai.connecting,
       AcpConnected(:final agentInfo) =>
         '${agentInfo.name} ${agentInfo.version}',
       AcpError(:final message) =>
-        message.length > 60 ? '${message.substring(0, 60)}...' : message,
+        message.length > 60 ? '${message.substring(0, 60)}…' : message,
     };
   }
 }
@@ -138,15 +139,14 @@ final class _DisconnectedChatView extends StatelessWidget {
                     const SizedBox(height: 14),
                     Text(
                       connecting
-                          ? 'Connecting to agent'
-                          : 'Start a conversation',
+                          ? context.t.ai.connectingToAgent
+                          : context.t.ai.startConversation,
                       textAlign: TextAlign.center,
                       style: theme.textTheme.headlineSmall,
                     ),
                     const SizedBox(height: 5),
                     Text(
-                      errorMessage ??
-                          'Connect an ACP-compatible agent, then ask questions or run development tasks here.',
+                      errorMessage ?? context.t.ai.connectDescription,
                       textAlign: TextAlign.center,
                       style: theme.textTheme.bodyMedium?.copyWith(
                         color: errorMessage == null
@@ -164,7 +164,9 @@ final class _DisconnectedChatView extends StatelessWidget {
                             )
                           : const Icon(LucideIcons.plug, size: 16),
                       label: Text(
-                        connecting ? 'Connecting...' : 'Connect agent',
+                        connecting
+                            ? context.t.ai.connecting
+                            : context.t.ai.connectAgent,
                       ),
                     ),
                   ],
@@ -186,8 +188,8 @@ final class _DisconnectedChatView extends StatelessWidget {
                   onTap: connecting ? null : onConnect,
                   decoration: InputDecoration(
                     hintText: connecting
-                        ? 'Connecting to agent...'
-                        : 'Connect an agent to start chatting',
+                        ? context.t.ai.connectingToAgent
+                        : context.t.ai.connectChatHint,
                     isDense: true,
                   ),
                 ),
@@ -201,7 +203,9 @@ final class _DisconnectedChatView extends StatelessWidget {
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
                     : const Icon(LucideIcons.plug, size: 16),
-                tooltip: connecting ? 'Connecting to agent' : 'Connect agent',
+                tooltip: connecting
+                    ? context.t.ai.connectingToAgent
+                    : context.t.ai.connectAgent,
               ),
             ],
           ),
@@ -247,11 +251,11 @@ final class _AcpConnectionDialog extends ConsumerWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              'Connect AI agent',
+                              context.t.ai.connectTitle,
                               style: Theme.of(context).textTheme.titleMedium,
                             ),
                             Text(
-                              'Choose an agent and its working directory.',
+                              context.t.ai.connectSubtitle,
                               style: Theme.of(context).textTheme.bodySmall,
                             ),
                           ],
@@ -260,7 +264,7 @@ final class _AcpConnectionDialog extends ConsumerWidget {
                       IconButton(
                         onPressed: () => Navigator.of(context).pop(),
                         icon: const Icon(LucideIcons.x, size: 16),
-                        tooltip: 'Close connection setup',
+                        tooltip: context.t.ai.closeConnectionSetup,
                       ),
                     ],
                   ),
@@ -323,14 +327,14 @@ final class _AcpSettingsDialog extends HookConsumerWidget {
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        'Agent settings',
+                        context.t.ai.settings,
                         style: Theme.of(context).textTheme.titleMedium,
                       ),
                     ),
                     IconButton(
                       onPressed: () => Navigator.of(context).pop(),
                       icon: const Icon(LucideIcons.x, size: 16),
-                      tooltip: 'Close settings',
+                      tooltip: context.t.ai.closeSettings,
                     ),
                   ],
                 ),
@@ -343,7 +347,7 @@ final class _AcpSettingsDialog extends HookConsumerWidget {
                       child: Padding(
                         padding: const EdgeInsets.all(24),
                         child: Text(
-                          'The agent is no longer connected.',
+                          context.t.ai.disconnected,
                           style: Theme.of(context).textTheme.bodyMedium,
                         ),
                       ),
@@ -368,7 +372,7 @@ final class _AcpSettingsDialog extends HookConsumerWidget {
                                       .read(acpAgentProvider.notifier)
                                       .clearMessages,
                             icon: const Icon(LucideIcons.eraser, size: 14),
-                            label: const Text('Clear chat view'),
+                            label: Text(context.t.ai.clearChat),
                           );
                     final disconnectButton = OutlinedButton.icon(
                       onPressed: disconnecting.value ? null : disconnect,
@@ -378,7 +382,7 @@ final class _AcpSettingsDialog extends HookConsumerWidget {
                               child: CircularProgressIndicator(strokeWidth: 2),
                             )
                           : const Icon(LucideIcons.logOut, size: 14),
-                      label: const Text('Disconnect agent'),
+                      label: Text(context.t.ai.disconnect),
                     );
 
                     if (constraints.maxWidth < 420) {
@@ -420,6 +424,14 @@ const _customAgentPreset = AgentPreset(
   description: 'Any ACP executable',
   icon: 'terminal',
 );
+
+String _agentName(Translations t, AgentPreset preset) =>
+    preset.id == _customAgentId ? t.ai.custom : preset.name;
+
+String _agentDescription(Translations t, AgentPreset preset) =>
+    preset.id == _customAgentId
+    ? t.ai.customDescription
+    : t.ai.presetDescription(name: preset.name);
 
 // ── Onboarding: agent selection + directory + recent ────────────────────
 
@@ -539,15 +551,17 @@ final class _OnboardingView extends HookConsumerWidget {
                     ConsoleDropdownField<String>(
                       key: ValueKey(selectedAgentId.value),
                       initialValue: selectedAgentId.value,
-                      label: 'Agent',
-                      hintText: 'Choose an AI agent',
+                      label: context.t.ai.agent,
+                      hintText: context.t.ai.chooseAgent,
                       prefixIcon: const Icon(LucideIcons.bot, size: 16),
-                      supportingText: selectedAgent?.description,
+                      supportingText: selectedAgent == null
+                          ? null
+                          : _agentDescription(context.t, selectedAgent),
                       items: <AgentPreset>[...agentPresets, _customAgentPreset]
                           .map(
                             (preset) => DropdownMenuItem<String>(
                               value: preset.id,
-                              child: Text(preset.name),
+                              child: Text(_agentName(context.t, preset)),
                             ),
                           )
                           .toList(growable: false),
@@ -570,7 +584,7 @@ final class _OnboardingView extends HookConsumerWidget {
                       enabled: !connecting,
                       onPick: () async {
                         final dir = await FilePicker.getDirectoryPath(
-                          dialogTitle: 'Select working directory',
+                          dialogTitle: context.t.ai.selectWorkingDirectory,
                         );
                         if (dir != null) {
                           sessionCwdController.text = dir;
@@ -643,7 +657,11 @@ final class _OnboardingView extends HookConsumerWidget {
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
                       : const Icon(LucideIcons.arrowRight, size: 16),
-                  label: Text(connecting ? 'Connecting...' : 'Start session'),
+                  label: Text(
+                    connecting
+                        ? context.t.ai.connecting
+                        : context.t.ai.startSession,
+                  ),
                 ),
               ),
             ),
@@ -672,7 +690,7 @@ final class _CustomAgentFields extends StatelessWidget {
           autocorrect: false,
           enableSuggestions: false,
           textInputAction: TextInputAction.next,
-          label: 'Executable',
+          label: context.t.ai.executable,
           hint: '/path/to/acp-agent',
           prefixIcon: const Icon(LucideIcons.terminal, size: 16),
           style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
@@ -684,9 +702,9 @@ final class _CustomAgentFields extends StatelessWidget {
           enableSuggestions: false,
           minLines: 2,
           maxLines: 4,
-          label: 'Arguments (one per line)',
+          label: context.t.ai.arguments,
           hint: '--flag\nvalue with spaces',
-          supportingText: 'Passed directly to the executable without a shell.',
+          supportingText: context.t.ai.argumentsDescription,
           style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
         ),
       ],
@@ -710,15 +728,15 @@ final class _DirectoryPicker extends StatelessWidget {
     return ConsoleTextField(
       controller: controller,
       enabled: enabled,
-      label: 'Working directory',
+      label: context.t.ai.workingDirectory,
       autocorrect: false,
       enableSuggestions: false,
-      hint: '/absolute/path/to/project',
+      hint: context.t.ai.workingDirectoryHint,
       prefixIcon: const Icon(LucideIcons.folderOpen, size: 16),
       suffixIcon: IconButton(
         onPressed: enabled ? onPick : null,
         icon: const Icon(LucideIcons.folderSearch, size: 16),
-        tooltip: 'Browse directories',
+        tooltip: context.t.ai.browseDirectories,
         style: ConsoleControlStyle.fieldIconButtonStyle(),
       ),
       style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
@@ -788,7 +806,7 @@ final class _ChatView extends HookConsumerWidget {
       final workspaceId = ref.read(selectedWorkspaceIdProvider);
       if (workspaceId == null) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Select a project before editing.')),
+          SnackBar(content: Text(context.t.ai.selectProjectBeforeEditing)),
         );
         ref.read(navProvider.notifier).go(ConsoleNavDestination.workspaces);
         return;
@@ -835,7 +853,7 @@ final class _ChatView extends HookConsumerWidget {
                       scrollToLatest(force: true);
                     },
                     icon: const Icon(LucideIcons.arrowDown, size: 14),
-                    label: const Text('Latest'),
+                    label: Text(context.t.ai.latest),
                     style: FilledButton.styleFrom(
                       minimumSize: const Size(0, 32),
                       padding: const EdgeInsets.symmetric(horizontal: 10),
@@ -912,7 +930,7 @@ final class _AcpInlineError extends StatelessWidget {
           IconButton(
             onPressed: onDismiss,
             icon: const Icon(LucideIcons.x, size: 14),
-            tooltip: 'Dismiss error',
+            tooltip: context.t.ai.dismissError,
           ),
         ],
       ),
@@ -966,7 +984,7 @@ final class _PermissionSurface extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  'Permission required to continue',
+                  context.t.ai.permissionRequired,
                   style: theme.textTheme.bodySmall?.copyWith(fontSize: 11),
                 ),
                 if (hasRawInput || locations.isNotEmpty) ...[
@@ -986,7 +1004,7 @@ final class _PermissionSurface extends StatelessWidget {
                           children: [
                             if (hasRawInput) ...[
                               Text(
-                                'Input',
+                                context.t.ai.input,
                                 style: theme.textTheme.labelSmall?.copyWith(
                                   fontSize: 11,
                                 ),
@@ -1007,8 +1025,8 @@ final class _PermissionSurface extends StatelessWidget {
                             if (locations.isNotEmpty) ...[
                               Text(
                                 locations.length == 1
-                                    ? 'Location'
-                                    : 'Locations',
+                                    ? context.t.ai.location
+                                    : context.t.ai.locations,
                                 style: theme.textTheme.labelSmall?.copyWith(
                                   fontSize: 11,
                                 ),
@@ -1060,7 +1078,7 @@ final class _PermissionSurface extends StatelessWidget {
                     TextButton.icon(
                       onPressed: () => onRespond(null),
                       icon: const Icon(LucideIcons.x, size: 13),
-                      label: const Text('Cancel request'),
+                      label: Text(context.t.ai.cancelRequest),
                     ),
                   ],
                 ),
@@ -1113,20 +1131,20 @@ final class _ChatEmpty extends StatelessWidget {
     )) {
       (AcpAuthStatus.required, _) => (
         LucideIcons.lockKeyhole,
-        'Sign in to continue',
-        'Choose an authentication method in agent settings, then finish the sign-in flow.',
-        'Open sign-in',
+        context.t.ai.signInTitle,
+        context.t.ai.signInDescription,
+        context.t.ai.openSignIn,
       ),
       (_, null) => (
         LucideIcons.messageSquarePlus,
-        'Create or open a session',
-        'Use agent settings to start a new session or resume recent work.',
-        'Open session setup',
+        context.t.ai.sessionTitle,
+        context.t.ai.sessionDescription,
+        context.t.ai.openSessionSetup,
       ),
       _ => (
         LucideIcons.messageCircle,
-        'Start a conversation',
-        'Ask about your workspace, request a change, or describe a test scenario.',
+        context.t.ai.startConversation,
+        context.t.ai.conversationDescription,
         null,
       ),
     };
@@ -1335,7 +1353,7 @@ final class _MessageBubble extends StatelessWidget {
                                 LucideIcons.arrowRight,
                                 size: 12,
                               ),
-                              label: const Text('Send to editor'),
+                              label: Text(context.t.ai.sendToEditor),
                               style: TextButton.styleFrom(
                                 foregroundColor: theme.colorScheme.primary,
                                 padding: const EdgeInsets.symmetric(

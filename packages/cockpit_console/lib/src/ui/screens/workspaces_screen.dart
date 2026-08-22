@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:cockpit_console/i18n/strings.g.dart';
 import 'package:cockpit_console/src/providers/core_providers.dart';
 import 'package:cockpit_console/src/providers/data_providers.dart';
 import 'package:cockpit_console/src/theme/console_colors.dart';
@@ -59,13 +60,13 @@ final class WorkspacesScreen extends HookConsumerWidget {
     }, []);
 
     return ScreenScaffold(
-      title: 'Projects',
-      subtitle: 'Choose which local folders and projects Cockpit can use',
+      title: context.t.projects.title,
+      subtitle: context.t.projects.subtitle,
       stackActionsBelowWidth: 420,
       actions: [
         IconButton(
           icon: const Icon(LucideIcons.refreshCw, size: 16),
-          tooltip: 'Refresh',
+          tooltip: context.t.common.refresh,
           onPressed: () {
             ref.read(rootsProvider.notifier).refresh();
             ref.read(workspacesProvider.notifier).refresh();
@@ -75,7 +76,7 @@ final class WorkspacesScreen extends HookConsumerWidget {
         FilledButton.icon(
           onPressed: () => _showRegisterWorkspaceDialog(context, ref),
           icon: const Icon(LucideIcons.plus, size: 14),
-          label: const Text('Add project'),
+          label: Text(context.t.projects.addProject),
         ),
       ],
       body: SingleChildScrollView(
@@ -87,16 +88,16 @@ final class WorkspacesScreen extends HookConsumerWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 _SectionHeader(
-                  title: 'Allowed folders',
+                  title: context.t.projects.allowedFolders,
                   count: activeRoots.length,
-                  actionLabel: 'Add folder',
+                  actionLabel: context.t.projects.addFolder,
                   onAdd: () => _showRegisterRootDialog(context, ref),
                 ),
                 const SizedBox(height: 8),
                 _RootsList(state: roots, items: activeRoots),
                 const SizedBox(height: 32),
                 _SectionHeader(
-                  title: 'Projects',
+                  title: context.t.projects.title,
                   count: activeWorkspaces.length,
                 ),
                 const SizedBox(height: 8),
@@ -113,8 +114,10 @@ final class WorkspacesScreen extends HookConsumerWidget {
                     ),
                     label: Text(
                       showRemoved.value
-                          ? 'Hide removed history'
-                          : 'Show removed history ($removedCount)',
+                          ? context.t.projects.hideRemovedHistory
+                          : context.t.projects.showRemovedHistory(
+                              count: removedCount,
+                            ),
                     ),
                   ),
                 ],
@@ -122,7 +125,7 @@ final class WorkspacesScreen extends HookConsumerWidget {
                   if (removedRoots.isNotEmpty) ...[
                     const SizedBox(height: 16),
                     _SectionHeader(
-                      title: 'Removed folders',
+                      title: context.t.projects.removedFolders,
                       count: removedRoots.length,
                     ),
                     const SizedBox(height: 8),
@@ -131,7 +134,7 @@ final class WorkspacesScreen extends HookConsumerWidget {
                   if (removedWorkspaces.isNotEmpty) ...[
                     const SizedBox(height: 24),
                     _SectionHeader(
-                      title: 'Removed projects',
+                      title: context.t.projects.removedProjects,
                       count: removedWorkspaces.length,
                     ),
                     const SizedBox(height: 8),
@@ -239,9 +242,8 @@ final class _RootsList extends StatelessWidget {
             height: 200,
             child: EmptyStateView(
               icon: LucideIcons.folderPlus,
-              title: 'No allowed folders',
-              description:
-                  'Add a local folder before adding projects inside it.',
+              title: context.t.projects.noAllowedFolders,
+              description: context.t.projects.noAllowedFoldersDescription,
             ),
           ),
         ],
@@ -343,7 +345,7 @@ final class _RootTile extends HookConsumerWidget {
                   : IconButton(
                       onPressed: () => _confirmRemove(context, ref, removing),
                       icon: const Icon(LucideIcons.trash2, size: 13),
-                      tooltip: 'Remove folder from Cockpit',
+                      tooltip: context.t.projects.removeFolderTooltip,
                       color: theme.colorScheme.error,
                       padding: EdgeInsets.zero,
                       constraints: const BoxConstraints(
@@ -364,11 +366,10 @@ final class _RootTile extends HookConsumerWidget {
   ) async {
     final force = await _confirmRemoval(
       context: context,
-      title: 'Remove allowed folder?',
-      message:
-          'Cockpit will stop using ${item.canonicalPath} and remove its '
-          'registered projects. Project files stay on disk. Removing now may '
-          'interrupt active Cockpit sessions.',
+      title: context.t.projects.removeFolderTitle,
+      message: context.t.projects.removeFolderDescription(
+        path: item.canonicalPath,
+      ),
     );
     if (force == null || !context.mounted) return;
     removing.value = true;
@@ -381,8 +382,8 @@ final class _RootTile extends HookConsumerWidget {
       SnackBar(
         content: Text(
           ok
-              ? 'Removed folder from Cockpit'
-              : "Couldn't remove folder from Cockpit",
+              ? context.t.projects.folderRemoved
+              : context.t.projects.folderRemoveFailed,
         ),
       ),
     );
@@ -404,9 +405,9 @@ final class _StateBadge extends StatelessWidget {
       _ => theme.colorScheme.onSurfaceVariant,
     };
     final label = switch (stateName) {
-      'active' => 'Ready',
-      'draining' => 'Removing',
-      'retired' => 'Removed',
+      'active' => context.t.projects.stateReady,
+      'draining' => context.t.projects.stateRemoving,
+      'retired' => context.t.projects.stateRemoved,
       _ => stateName,
     };
     return Container(
@@ -444,18 +445,18 @@ Future<bool?> _confirmRemoval({
       actions: [
         TextButton(
           onPressed: () => Navigator.of(dialogContext).pop(null),
-          child: const Text('Cancel'),
+          child: Text(context.t.common.cancel),
         ),
         OutlinedButton(
           onPressed: () => Navigator.of(dialogContext).pop(false),
-          child: const Text('Finish work & remove'),
+          child: Text(context.t.projects.finishWorkRemove),
         ),
         FilledButton(
           style: FilledButton.styleFrom(
             backgroundColor: Theme.of(dialogContext).colorScheme.error,
           ),
           onPressed: () => Navigator.of(dialogContext).pop(true),
-          child: const Text('Remove now'),
+          child: Text(context.t.projects.removeNow),
         ),
       ],
     ),
@@ -486,9 +487,8 @@ final class _WorkspacesList extends StatelessWidget {
             height: 200,
             child: EmptyStateView(
               icon: LucideIcons.gitBranch,
-              title: 'No projects added',
-              description:
-                  'Add a project directory to connect apps and run tests.',
+              title: context.t.projects.noProjects,
+              description: context.t.projects.noProjectsDescription,
             ),
           ),
         ],
@@ -540,8 +540,8 @@ final class _WorkspaceTile extends HookConsumerWidget {
       enabled: !removed,
       selected: isSelected,
       label: removed
-          ? 'Removed project $projectName'
-          : 'Select project $projectName',
+          ? context.t.projects.removedProjectSemantics(name: projectName)
+          : context.t.projects.selectProjectSemantics(name: projectName),
       child: InkWell(
         onTap: removed
             ? null
@@ -590,7 +590,10 @@ final class _WorkspaceTile extends HookConsumerWidget {
                     ),
                     const SizedBox(height: 1),
                     Text(
-                      '${item.workspaceId} · root ${item.rootId}',
+                      context.t.projects.workspaceIdentity(
+                        workspace: item.workspaceId,
+                        root: item.rootId,
+                      ),
                       style: TextStyle(
                         fontSize: 11,
                         color: theme.colorScheme.onSurfaceVariant,
@@ -615,7 +618,7 @@ final class _WorkspaceTile extends HookConsumerWidget {
                                 _RebindWorkspaceDialog(workspace: item),
                           ),
                     icon: const Icon(LucideIcons.gitCompare, size: 13),
-                    tooltip: 'Update project location',
+                    tooltip: context.t.projects.updateLocationTooltip,
                     padding: EdgeInsets.zero,
                     constraints: const BoxConstraints(
                       minWidth: 30,
@@ -636,7 +639,7 @@ final class _WorkspaceTile extends HookConsumerWidget {
                     radius: 6,
                   ),
                   child: Text(
-                    'Current',
+                    context.t.projects.current,
                     style: TextStyle(
                       fontSize: 10,
                       fontWeight: FontWeight.w600,
@@ -660,7 +663,7 @@ final class _WorkspaceTile extends HookConsumerWidget {
                   child: IconButton(
                     onPressed: () => _confirmRemove(context, ref, removing),
                     icon: const Icon(LucideIcons.trash2, size: 13),
-                    tooltip: 'Remove project from Cockpit',
+                    tooltip: context.t.projects.removeProjectTooltip,
                     color: theme.colorScheme.error,
                     padding: EdgeInsets.zero,
                     constraints: const BoxConstraints(
@@ -683,10 +686,10 @@ final class _WorkspaceTile extends HookConsumerWidget {
   ) async {
     final force = await _confirmRemoval(
       context: context,
-      title: 'Remove project?',
-      message:
-          'Cockpit will stop using ${item.canonicalPath}. Project files stay '
-          'on disk. Removing now may interrupt active Cockpit sessions.',
+      title: context.t.projects.removeProjectTitle,
+      message: context.t.projects.removeProjectDescription(
+        path: item.canonicalPath,
+      ),
     );
     if (force == null || !context.mounted) return;
     removing.value = true;
@@ -698,7 +701,9 @@ final class _WorkspaceTile extends HookConsumerWidget {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          ok ? 'Removed project from Cockpit' : "Couldn't remove project",
+          ok
+              ? context.t.projects.projectRemoved
+              : context.t.projects.projectRemoveFailed,
         ),
       ),
     );
@@ -761,7 +766,7 @@ final class _RegisterRootDialog extends HookConsumerWidget {
     Future<void> submit() async {
       final path = pathCtrl.text.trim();
       if (path.isEmpty || !p.isAbsolute(path)) {
-        error.value = 'Choose an absolute folder path.';
+        error.value = context.t.projects.absoluteFolderError;
         return;
       }
       submitting.value = true;
@@ -779,11 +784,12 @@ final class _RegisterRootDialog extends HookConsumerWidget {
         return;
       }
       submitting.value = false;
-      error.value = ref.read(rootsProvider).error ?? "Couldn't add the folder.";
+      error.value =
+          ref.read(rootsProvider).error ?? context.t.projects.addFolderFailed;
     }
 
     return AlertDialog(
-      title: const Text('Add allowed folder'),
+      title: Text(context.t.projects.addFolderTitle),
       content: SizedBox(
         width: 420,
         child: Column(
@@ -791,8 +797,7 @@ final class _RegisterRootDialog extends HookConsumerWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(
-              'Cockpit can only use projects inside folders you add here. '
-              'Nothing is uploaded.',
+              context.t.projects.addFolderDescription,
               style: Theme.of(context).textTheme.bodySmall,
             ),
             const SizedBox(height: 16),
@@ -800,8 +805,8 @@ final class _RegisterRootDialog extends HookConsumerWidget {
               controller: pathCtrl,
               enabled: !submitting.value,
               autofocus: true,
-              label: 'Folder path',
-              hint: '/absolute/path/to/project',
+              label: context.t.projects.folderPath,
+              hint: context.t.projects.folderPathHint,
               prefixIcon: const Icon(LucideIcons.folder, size: 16),
               style: const TextStyle(fontFamily: 'monospace', fontSize: 13),
             ),
@@ -809,8 +814,8 @@ final class _RegisterRootDialog extends HookConsumerWidget {
             ConsoleTextField(
               controller: labelCtrl,
               enabled: !submitting.value,
-              label: 'Name (optional)',
-              hint: 'My Project',
+              label: context.t.projects.optionalName,
+              hint: context.t.projects.projectNameHint,
               onSubmitted: (_) => submitting.value ? null : submit(),
             ),
             if (error.value != null) ...[
@@ -825,7 +830,7 @@ final class _RegisterRootDialog extends HookConsumerWidget {
           onPressed: submitting.value
               ? null
               : () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
+          child: Text(context.t.common.cancel),
         ),
         FilledButton(
           onPressed: submitting.value ? null : submit,
@@ -835,7 +840,7 @@ final class _RegisterRootDialog extends HookConsumerWidget {
                   height: 16,
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
-              : const Text('Add folder'),
+              : Text(context.t.projects.addFolder),
         ),
       ],
     );
@@ -866,11 +871,11 @@ final class _RegisterWorkspaceDialog extends HookConsumerWidget {
     Future<void> submit() async {
       final path = pathCtrl.text.trim();
       if (rootId == null) {
-        error.value = 'Add an allowed folder first.';
+        error.value = context.t.projects.allowedFolderRequired;
         return;
       }
       if (path.isEmpty || !p.isAbsolute(path)) {
-        error.value = 'Choose an absolute project directory.';
+        error.value = context.t.projects.absoluteProjectError;
         return;
       }
       submitting.value = true;
@@ -885,11 +890,12 @@ final class _RegisterWorkspaceDialog extends HookConsumerWidget {
       }
       submitting.value = false;
       error.value =
-          ref.read(workspacesProvider).error ?? "Couldn't add the project.";
+          ref.read(workspacesProvider).error ??
+          context.t.projects.addProjectFailed;
     }
 
     return AlertDialog(
-      title: const Text('Add project'),
+      title: Text(context.t.projects.addProject),
       content: SizedBox(
         width: 420,
         child: Column(
@@ -898,7 +904,7 @@ final class _RegisterWorkspaceDialog extends HookConsumerWidget {
             ConsoleDropdownField<String>(
               key: ValueKey(rootId),
               initialValue: rootId,
-              label: 'Allowed folder',
+              label: context.t.projects.allowedFolder,
               prefixIcon: const Icon(LucideIcons.folder, size: 16),
               items: [
                 for (final root in activeRoots)
@@ -923,8 +929,8 @@ final class _RegisterWorkspaceDialog extends HookConsumerWidget {
               controller: pathCtrl,
               enabled: !submitting.value,
               autofocus: true,
-              label: 'Project directory',
-              hint: '/absolute/path/to/project',
+              label: context.t.projects.projectDirectory,
+              hint: context.t.projects.folderPathHint,
               prefixIcon: const Icon(LucideIcons.gitBranch, size: 16),
               style: const TextStyle(fontFamily: 'monospace', fontSize: 13),
               onSubmitted: (_) {
@@ -933,7 +939,9 @@ final class _RegisterWorkspaceDialog extends HookConsumerWidget {
             ),
             if (activeRoots.isEmpty) ...[
               const SizedBox(height: 12),
-              const _DialogError(message: 'No allowed folders are available.'),
+              _DialogError(
+                message: context.t.projects.noAllowedFoldersAvailable,
+              ),
             ] else if (error.value != null) ...[
               const SizedBox(height: 12),
               _DialogError(message: error.value!),
@@ -946,7 +954,7 @@ final class _RegisterWorkspaceDialog extends HookConsumerWidget {
           onPressed: submitting.value
               ? null
               : () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
+          child: Text(context.t.common.cancel),
         ),
         FilledButton(
           onPressed: submitting.value || activeRoots.isEmpty ? null : submit,
@@ -956,7 +964,7 @@ final class _RegisterWorkspaceDialog extends HookConsumerWidget {
                   height: 16,
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
-              : const Text('Add project'),
+              : Text(context.t.projects.addProject),
         ),
       ],
     );
@@ -977,7 +985,7 @@ final class _RebindWorkspaceDialog extends HookConsumerWidget {
     Future<void> submit() async {
       final path = pathCtrl.text.trim();
       if (path.isEmpty || !p.isAbsolute(path)) {
-        error.value = 'Choose the project’s new absolute directory.';
+        error.value = context.t.projects.newAbsoluteProjectError;
         return;
       }
       submitting.value = true;
@@ -997,11 +1005,11 @@ final class _RebindWorkspaceDialog extends HookConsumerWidget {
       submitting.value = false;
       error.value =
           ref.read(workspacesProvider).error ??
-          "Couldn't update the project location.";
+          context.t.projects.updateLocationFailed;
     }
 
     return AlertDialog(
-      title: const Text('Update project location'),
+      title: Text(context.t.projects.updateLocationTitle),
       content: SizedBox(
         width: 440,
         child: Column(
@@ -1009,7 +1017,7 @@ final class _RebindWorkspaceDialog extends HookConsumerWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(
-              'Current directory',
+              context.t.projects.currentDirectory,
               style: Theme.of(context).textTheme.labelMedium,
             ),
             const SizedBox(height: 4),
@@ -1024,7 +1032,7 @@ final class _RebindWorkspaceDialog extends HookConsumerWidget {
               controller: pathCtrl,
               enabled: !submitting.value,
               autofocus: true,
-              label: 'New project directory',
+              label: context.t.projects.newProjectDirectory,
               prefixIcon: const Icon(LucideIcons.gitBranch, size: 16),
               style: const TextStyle(fontFamily: 'monospace', fontSize: 13),
             ),
@@ -1040,7 +1048,7 @@ final class _RebindWorkspaceDialog extends HookConsumerWidget {
           onPressed: submitting.value
               ? null
               : () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
+          child: Text(context.t.common.cancel),
         ),
         FilledButton(
           onPressed: submitting.value ? null : submit,
@@ -1050,7 +1058,7 @@ final class _RebindWorkspaceDialog extends HookConsumerWidget {
                   height: 16,
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
-              : const Text('Update location'),
+              : Text(context.t.projects.updateLocation),
         ),
       ],
     );

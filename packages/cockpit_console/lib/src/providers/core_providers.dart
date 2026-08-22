@@ -108,7 +108,11 @@ final class ConsoleSupervisorClient {
     String? workspaceId,
     Map<String, Object?> input = const {},
     String? idempotencyKey,
+    Duration? timeout,
   }) async {
+    if (timeout != null && timeout <= Duration.zero) {
+      throw ArgumentError.value(timeout, 'timeout', 'Must be positive.');
+    }
     final invocation = CockpitOperationInvocation(
       kind: kind,
       input: input,
@@ -117,6 +121,7 @@ final class ConsoleSupervisorClient {
       idempotencyKey: idempotencyKey == null || idempotencyKey.isEmpty
           ? null
           : CockpitIdempotencyKey(idempotencyKey),
+      deadline: timeout == null ? null : DateTime.now().toUtc().add(timeout),
     );
     final result = await _api.executeOperation(invocation);
     return result.toJson();

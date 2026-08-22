@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:cockpit_console/i18n/strings.g.dart';
 import 'package:cockpit_console/src/providers/core_providers.dart';
 import 'package:cockpit_console/src/providers/data_providers.dart';
 import 'package:cockpit_console/src/theme/console_colors.dart';
@@ -25,6 +26,7 @@ const _prettyJson = JsonEncoder.withIndent('  ');
 /// project root selected by the operator.
 ({bool invocable, String? reason, String? rootId, String? workspaceId})
 _availabilityFor(
+  Translations t,
   CockpitOperationDescriptor descriptor, {
   required String? selectedWorkspaceId,
   required String? selectedRootId,
@@ -34,7 +36,7 @@ _availabilityFor(
     selectedWorkspaceId == null
         ? (
             invocable: false,
-            reason: 'Select a project to run this project-scoped action.',
+            reason: t.actions.selectProjectReason,
             rootId: null,
             workspaceId: null,
           )
@@ -55,9 +57,8 @@ _availabilityFor(
         ? (
             invocable: false,
             reason: hasActiveRoots
-                ? 'Select an allowed folder to run this folder-scoped action.'
-                : 'No allowed folder is available. Add one under Projects '
-                      'to run folder-scoped actions.',
+                ? t.actions.selectFolderReason
+                : t.actions.noFolderReason,
             rootId: null,
             workspaceId: null,
           )
@@ -166,8 +167,8 @@ final class OperationsScreen extends HookConsumerWidget {
     );
 
     return ScreenScaffold(
-      title: 'Actions',
-      subtitle: 'Inspect and run the actions available in Cockpit',
+      title: context.t.actions.title,
+      subtitle: context.t.actions.subtitle,
       body: _SplitLayout(
         leftWidth: splitWidth,
         left: _OperationBrowser(
@@ -175,12 +176,10 @@ final class OperationsScreen extends HookConsumerWidget {
           selectedKind: invState.selectedKind,
         ),
         right: selectedDescriptor == null
-            ? const EmptyStateView(
+            ? EmptyStateView(
                 icon: LucideIcons.command,
-                title: 'Select an action',
-                description:
-                    'Choose an available action to review its inputs and run it '
-                    'with a LON, JSON, or YAML object.',
+                title: context.t.actions.select,
+                description: context.t.actions.selectDescription,
               )
             : _OperationDetail(
                 descriptor: selectedDescriptor,
@@ -273,7 +272,7 @@ final class _OperationBrowser extends HookConsumerWidget {
           padding: const EdgeInsets.all(10),
           child: ConsoleTextField(
             onChanged: (value) => query.value = value,
-            hint: 'Filter actions',
+            hint: context.t.actions.filter,
             prefixIcon: const Icon(LucideIcons.search, size: 15),
           ),
         ),
@@ -283,7 +282,9 @@ final class _OperationBrowser extends HookConsumerWidget {
             padding: const EdgeInsets.symmetric(vertical: 8),
             children: [
               _OperationSection(
-                label: workspaceId == null ? 'Actions' : 'Global actions',
+                label: workspaceId == null
+                    ? context.t.actions.title
+                    : context.t.actions.global,
                 async: globalAsync,
                 query: query.value,
                 selectedKind: selectedKind,
@@ -293,7 +294,7 @@ final class _OperationBrowser extends HookConsumerWidget {
               if (workspaceId != null) ...[
                 const SizedBox(height: 8),
                 _OperationSection(
-                  label: 'Project actions',
+                  label: context.t.actions.project,
                   async: workspaceAsync,
                   query: query.value,
                   selectedKind: selectedKind,
@@ -353,7 +354,7 @@ final class _OperationSection extends StatelessWidget {
           error: (error, _) => Padding(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
             child: Text(
-              'Failed to load operations: $error',
+              context.t.actions.loadFailed(error: error.toString()),
               style: TextStyle(fontSize: 12, color: theme.colorScheme.error),
             ),
           ),
@@ -367,8 +368,8 @@ final class _OperationSection extends StatelessWidget {
                 ),
                 child: Text(
                   query.trim().isEmpty
-                      ? 'No operations advertised.'
-                      : 'No operations match "${query.trim()}".',
+                      ? context.t.actions.none
+                      : context.t.actions.noMatch(query: query.trim()),
                   style: TextStyle(
                     fontSize: 12,
                     color: theme.colorScheme.onSurfaceVariant,
@@ -529,12 +530,18 @@ final class _ScopeBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final (label, tint) = switch (scope) {
-      CockpitOperationScope.supervisor => ('global', theme.colorScheme.primary),
+      CockpitOperationScope.supervisor => (
+        context.t.actions.scopeBadge.global,
+        theme.colorScheme.primary,
+      ),
       CockpitOperationScope.workspace => (
-        'workspace',
+        context.t.actions.scopeBadge.workspace,
         context.consoleColors.success,
       ),
-      CockpitOperationScope.root => ('root', context.consoleColors.warning),
+      CockpitOperationScope.root => (
+        context.t.actions.scopeBadge.root,
+        context.consoleColors.warning,
+      ),
     };
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
@@ -575,6 +582,7 @@ final class _OperationDetail extends HookConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final notifier = ref.read(operationInvocationProvider.notifier);
     final availability = _availabilityFor(
+      context.t,
       descriptor,
       selectedWorkspaceId: workspaceId,
       selectedRootId: selectedRootId,
@@ -637,10 +645,8 @@ final class _OperationDetail extends HookConsumerWidget {
               const SizedBox(height: 16),
               _SectionCard(
                 icon: LucideIcons.braces,
-                title: 'Input',
-                subtitle:
-                    'A LON, JSON, or YAML object. The idempotency key rides '
-                    'the invocation envelope, never this object.',
+                title: context.t.actions.input,
+                subtitle: context.t.actions.inputDescription,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -771,44 +777,48 @@ final class _ContractPanel extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _MetaRow(label: 'Scope', value: _scopeLabel(descriptor.scope)),
           _MetaRow(
-            label: 'Mutation',
-            value: _mutationLabel(descriptor.mutationClass),
+            label: context.t.actions.scope,
+            value: _scopeLabel(context.t, descriptor.scope),
           ),
           _MetaRow(
-            label: 'Idempotency',
-            value: _idempotencyLabel(descriptor.idempotency),
+            label: context.t.actions.mutation,
+            value: _mutationLabel(context.t, descriptor.mutationClass),
           ),
           _MetaRow(
-            label: 'Execution',
-            value: _executionLabel(descriptor.executionMode),
+            label: context.t.actions.idempotency,
+            value: _idempotencyLabel(context.t, descriptor.idempotency),
           ),
           _MetaRow(
-            label: 'Timeout',
-            value:
-                '${_formatTimeoutMs(descriptor.defaultTimeoutMs)} '
-                '(max ${_formatTimeoutMs(descriptor.maximumTimeoutMs)})',
+            label: context.t.actions.execution,
+            value: _executionLabel(context.t, descriptor.executionMode),
+          ),
+          _MetaRow(
+            label: context.t.actions.timeout,
+            value: context.t.actions.timeoutValue(
+              defaultValue: _formatTimeoutMs(descriptor.defaultTimeoutMs),
+              maximum: _formatTimeoutMs(descriptor.maximumTimeoutMs),
+            ),
           ),
           if (descriptor.safetyEffects.isNotEmpty)
             _MetaRow(
-              label: 'Effects',
+              label: context.t.actions.effects,
               value: descriptor.safetyEffects
                   .map((effect) => effect.wireValue)
                   .join(', '),
             ),
           if (descriptor.requiredFeatures.isNotEmpty)
             _MetaRow(
-              label: 'Features',
+              label: context.t.actions.features,
               value: descriptor.requiredFeatures.join(', '),
             ),
           _MetaRow(
-            label: 'Input schema',
+            label: context.t.actions.inputSchema,
             value: descriptor.requestSchemaRef,
             mono: true,
           ),
           _MetaRow(
-            label: 'Output schema',
+            label: context.t.actions.outputSchema,
             value: descriptor.responseSchemaRef,
             mono: true,
           ),
@@ -998,14 +1008,16 @@ final class _IdempotencyField extends StatelessWidget {
                   fontSize: 12,
                   color: theme.colorScheme.onSurface,
                 ),
-                label: 'Idempotency key',
-                hint: required ? 'Generated when run' : 'Optional',
+                label: context.t.actions.idempotencyKey,
+                hint: required
+                    ? context.t.actions.generatedWhenRun
+                    : context.t.actions.optional,
                 prefixIcon: const Icon(LucideIcons.keyRound, size: 14),
               ),
             ),
             const SizedBox(width: 8),
             ConsoleFieldIconButton(
-              tooltip: 'Generate a new key',
+              tooltip: context.t.actions.generateKey,
               onPressed: enabled ? onRegenerate : null,
               icon: const Icon(LucideIcons.refreshCw, size: 15),
             ),
@@ -1014,8 +1026,8 @@ final class _IdempotencyField extends StatelessWidget {
         const SizedBox(height: 4),
         Text(
           required
-              ? 'Required because this action can change state.'
-              : 'Optional; omitted when blank.',
+              ? context.t.actions.keyRequiredDescription
+              : context.t.actions.keyOptionalDescription,
           style: theme.textTheme.bodySmall,
         ),
       ],
@@ -1042,9 +1054,9 @@ final class _RootSelector extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (roots.isEmpty) {
-      return const Text(
-        'No active project roots are registered.',
-        style: TextStyle(fontSize: 12),
+      return Text(
+        context.t.actions.noRoots,
+        style: const TextStyle(fontSize: 12),
       );
     }
     final rootId = roots.any((root) => root.rootId == selectedRootId)
@@ -1053,9 +1065,9 @@ final class _RootSelector extends StatelessWidget {
     return ConsoleDropdownField<String>(
       key: ValueKey(rootId),
       initialValue: rootId,
-      label: 'Project root',
+      label: context.t.actions.projectRoot,
       prefixIcon: const Icon(LucideIcons.folder, size: 16),
-      hint: const Text('Select an active root'),
+      hint: Text(context.t.actions.selectRoot),
       items: [
         for (final root in roots)
           DropdownMenuItem(
@@ -1111,7 +1123,7 @@ final class _InvokeControl extends ConsumerWidget {
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  availability.reason ?? 'This action cannot be run here.',
+                  availability.reason ?? context.t.actions.unavailable,
                   style: TextStyle(
                     fontSize: 12,
                     color: theme.colorScheme.onSurfaceVariant,
@@ -1126,7 +1138,7 @@ final class _InvokeControl extends ConsumerWidget {
                 .read(navProvider.notifier)
                 .go(ConsoleNavDestination.workspaces),
             icon: const Icon(LucideIcons.folderPlus, size: 13),
-            label: const Text('Add allowed folder'),
+            label: Text(context.t.actions.addFolder),
           );
           if (constraints.maxWidth < 520) {
             return Column(
@@ -1159,18 +1171,20 @@ final class _InvokeControl extends ConsumerWidget {
                   : LucideIcons.play,
               size: 14,
             ),
-      label: Text(submitting ? 'Running...' : 'Run action'),
+      label: Text(
+        submitting ? context.t.actions.running : context.t.actions.run,
+      ),
     );
     final actionButton =
         descriptor.mutationClass == CockpitMutationClass.mutating
-        ? Tooltip(message: 'This action can change state.', child: runButton)
+        ? Tooltip(message: context.t.actions.mutationWarning, child: runButton)
         : runButton;
     final scopeLabel = Text(
       availability.rootId != null
-          ? 'Runs for the selected allowed folder.'
+          ? context.t.actions.scopeRootDescription
           : availability.workspaceId != null
-          ? 'Runs for the selected project.'
-          : 'Runs in Supervisor scope; no project required.',
+          ? context.t.actions.scopeProjectDescription
+          : context.t.actions.scopeGlobalDescription,
       style: scopeStyle,
     );
     return LayoutBuilder(
@@ -1222,7 +1236,7 @@ final class _OutcomeBanner extends StatelessWidget {
               ),
               const SizedBox(width: 8),
               Text(
-                'Operation did not succeed',
+                context.t.actions.failed,
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
@@ -1273,8 +1287,10 @@ final class _ResultPanel extends StatelessWidget {
         ? context.consoleColors.success
         : theme.colorScheme.onSurfaceVariant;
     final title = succeeded
-        ? 'Result'
-        : (lifecycle == null ? 'Submitted' : 'Submitted · $lifecycle');
+        ? context.t.actions.result
+        : lifecycle == null
+        ? context.t.actions.submitted
+        : context.t.actions.submittedState(state: lifecycle);
     return _ResultBody(
       result: result,
       header: Row(
@@ -1414,7 +1430,7 @@ final class _CopyButtonState extends State<_CopyButton> {
         });
       },
       icon: Icon(_copied ? LucideIcons.check : LucideIcons.copy, size: 13),
-      label: Text(_copied ? 'Copied' : 'Copy'),
+      label: Text(_copied ? context.t.actions.copied : context.t.actions.copy),
       style: TextButton.styleFrom(
         minimumSize: const Size(0, 30),
         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -1426,28 +1442,35 @@ final class _CopyButtonState extends State<_CopyButton> {
 
 // ── Label formatting ─────────────────────────────────────────────────────
 
-String _scopeLabel(CockpitOperationScope scope) => switch (scope) {
-  CockpitOperationScope.supervisor => 'Supervisor (global)',
-  CockpitOperationScope.root => 'Root',
-  CockpitOperationScope.workspace => 'Workspace',
-};
-
-String _mutationLabel(CockpitMutationClass mutation) => switch (mutation) {
-  CockpitMutationClass.readOnly => 'Read-only',
-  CockpitMutationClass.mutating => 'Mutating',
-};
-
-String _idempotencyLabel(CockpitIdempotencyBehavior behavior) =>
-    switch (behavior) {
-      CockpitIdempotencyBehavior.required => 'Required',
-      CockpitIdempotencyBehavior.optional => 'Optional',
-      CockpitIdempotencyBehavior.prohibited => 'Prohibited',
+String _scopeLabel(Translations t, CockpitOperationScope scope) =>
+    switch (scope) {
+      CockpitOperationScope.supervisor => t.actions.scopeValue.supervisor,
+      CockpitOperationScope.root => t.actions.scopeValue.root,
+      CockpitOperationScope.workspace => t.actions.scopeValue.workspace,
     };
 
-String _executionLabel(CockpitOperationExecutionMode mode) => switch (mode) {
-  CockpitOperationExecutionMode.synchronous => 'Synchronous',
-  CockpitOperationExecutionMode.job => 'Job',
+String _mutationLabel(Translations t, CockpitMutationClass mutation) =>
+    switch (mutation) {
+      CockpitMutationClass.readOnly => t.actions.mutationValue.readOnly,
+      CockpitMutationClass.mutating => t.actions.mutationValue.mutating,
+    };
+
+String _idempotencyLabel(
+  Translations t,
+  CockpitIdempotencyBehavior behavior,
+) => switch (behavior) {
+  CockpitIdempotencyBehavior.required => t.actions.idempotencyValue.required,
+  CockpitIdempotencyBehavior.optional => t.actions.idempotencyValue.optional,
+  CockpitIdempotencyBehavior.prohibited =>
+    t.actions.idempotencyValue.prohibited,
 };
+
+String _executionLabel(Translations t, CockpitOperationExecutionMode mode) =>
+    switch (mode) {
+      CockpitOperationExecutionMode.synchronous =>
+        t.actions.executionValue.synchronous,
+      CockpitOperationExecutionMode.job => t.actions.executionValue.job,
+    };
 
 String _formatTimeoutMs(int milliseconds) {
   if (milliseconds <= 0) return '—';

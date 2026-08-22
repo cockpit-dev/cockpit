@@ -1,4 +1,5 @@
 import 'package:acpd/acpd.dart';
+import 'package:cockpit_console/i18n/strings.g.dart';
 import 'package:cockpit_console/src/ui/widgets/console_form_controls.dart';
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
@@ -28,7 +29,11 @@ Future<McpServer?> showAcpMcpServerEditor(
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setState) => AlertDialog(
-          title: Text(initial == null ? 'Add MCP server' : 'Edit MCP server'),
+          title: Text(
+            initial == null
+                ? context.t.ai.mcp.addTitle
+                : context.t.ai.mcp.editTitle,
+          ),
           content: SizedBox(
             width: 500,
             child: SingleChildScrollView(
@@ -38,7 +43,7 @@ Future<McpServer?> showAcpMcpServerEditor(
                 children: [
                   ConsoleDropdownField<AcpMcpTransport>(
                     key: ValueKey(transport),
-                    label: 'Transport',
+                    label: context.t.ai.mcp.transport,
                     initialValue: transport,
                     items: [
                       const DropdownMenuItem(
@@ -59,21 +64,21 @@ Future<McpServer?> showAcpMcpServerEditor(
                     onChanged: (value) {
                       if (value != null) setState(() => transport = value);
                     },
-                    supportingText: _transportDescription(transport),
+                    supportingText: _transportDescription(context.t, transport),
                   ),
                   const SizedBox(height: 10),
                   ConsoleTextField(
                     controller: nameController,
                     autofocus: true,
-                    label: 'Name',
+                    label: context.t.ai.mcp.name,
                     hint: 'workspace-tools',
                   ),
                   const SizedBox(height: 10),
                   ConsoleTextField(
                     controller: targetController,
                     label: transport == AcpMcpTransport.stdio
-                        ? 'Absolute executable path'
-                        : 'Server URL',
+                        ? context.t.ai.mcp.executablePath
+                        : context.t.ai.mcp.serverUrl,
                     hint: transport == AcpMcpTransport.stdio
                         ? '/absolute/path/to/mcp-server'
                         : 'https://example.test/mcp',
@@ -85,7 +90,7 @@ Future<McpServer?> showAcpMcpServerEditor(
                     const SizedBox(height: 10),
                     ConsoleTextArea(
                       controller: argsController,
-                      label: 'Arguments (one per line)',
+                      label: context.t.ai.mcp.arguments,
                       minLines: 2,
                       maxLines: 4,
                       autocorrect: false,
@@ -97,14 +102,13 @@ Future<McpServer?> showAcpMcpServerEditor(
                   ConsoleTextArea(
                     controller: propertiesController,
                     label: transport == AcpMcpTransport.stdio
-                        ? 'Environment (NAME=value)'
-                        : 'Headers (Name: value)',
+                        ? context.t.ai.mcp.environment
+                        : context.t.ai.mcp.headers,
                     minLines: 2,
                     maxLines: 5,
                     autocorrect: false,
                     enableSuggestions: false,
-                    supportingText:
-                        'Connection-only values. Cockpit Console does not store them.',
+                    supportingText: context.t.ai.mcp.valuesDescription,
                     style: const TextStyle(fontFamily: 'monospace'),
                   ),
                   if (error.isNotEmpty) ...[
@@ -128,7 +132,7 @@ Future<McpServer?> showAcpMcpServerEditor(
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
+              child: Text(context.t.common.cancel),
             ),
             FilledButton(
               onPressed: () {
@@ -145,7 +149,11 @@ Future<McpServer?> showAcpMcpServerEditor(
                 }
                 Navigator.pop(context, result.server);
               },
-              child: Text(initial == null ? 'Add server' : 'Save server'),
+              child: Text(
+                initial == null
+                    ? context.t.ai.mcp.addServer
+                    : context.t.ai.mcp.saveServer,
+              ),
             ),
           ],
         ),
@@ -182,26 +190,26 @@ _McpEditorResult _buildServer({
   final cleanName = name.trim();
   final cleanTarget = target.trim();
   final errors = <String>[];
-  if (cleanName.isEmpty) errors.add('Enter a server name.');
+  if (cleanName.isEmpty) errors.add(t.ai.mcp.nameRequired);
   if (cleanTarget.isEmpty) {
     errors.add(
       transport == AcpMcpTransport.stdio
-          ? 'Enter an executable path.'
-          : 'Enter a server URL.',
+          ? t.ai.mcp.executableRequired
+          : t.ai.mcp.urlRequired,
     );
   }
 
   if (transport == AcpMcpTransport.stdio &&
       cleanTarget.isNotEmpty &&
       !p.isAbsolute(cleanTarget)) {
-    errors.add('The stdio executable must use an absolute path.');
+    errors.add(t.ai.mcp.absoluteExecutable);
   }
   if (transport != AcpMcpTransport.stdio && cleanTarget.isNotEmpty) {
     final uri = Uri.tryParse(cleanTarget);
     if (uri == null ||
         !uri.hasAuthority ||
         (uri.scheme != 'http' && uri.scheme != 'https')) {
-      errors.add('The server URL must be an absolute HTTP(S) URL.');
+      errors.add(t.ai.mcp.absoluteUrl);
     }
   }
 
@@ -252,15 +260,15 @@ _ParsedProperties _parseEnvironment(String source) {
   for (final (index, line) in _indexedNonEmptyLines(source)) {
     final separator = line.indexOf('=');
     if (separator <= 0) {
-      errors.add('Environment line $index must use NAME=value.');
+      errors.add(t.ai.mcp.environmentSyntax(line: index));
       continue;
     }
     final name = line.substring(0, separator).trim();
     final value = line.substring(separator + 1);
     if (!_environmentName.hasMatch(name)) {
-      errors.add('Environment line $index has an invalid variable name.');
+      errors.add(t.ai.mcp.environmentName(line: index));
     } else if (!names.add(name)) {
-      errors.add('Environment variable “$name” is duplicated.');
+      errors.add(t.ai.mcp.environmentDuplicate(name: name));
     } else {
       values.add(EnvVariable(name: name, value: value));
     }
@@ -275,16 +283,16 @@ _ParsedProperties _parseHeaders(String source) {
   for (final (index, line) in _indexedNonEmptyLines(source)) {
     final separator = line.indexOf(':');
     if (separator <= 0) {
-      errors.add('Header line $index must use Name: value.');
+      errors.add(t.ai.mcp.headerSyntax(line: index));
       continue;
     }
     final name = line.substring(0, separator).trim();
     final value = line.substring(separator + 1).trimLeft();
     final identity = name.toLowerCase();
     if (!_headerName.hasMatch(name)) {
-      errors.add('Header line $index has an invalid name.');
+      errors.add(t.ai.mcp.headerName(line: index));
     } else if (!names.add(identity)) {
-      errors.add('Header “$name” is duplicated.');
+      errors.add(t.ai.mcp.headerDuplicate(name: name));
     } else {
       values.add(HttpHeader(name: name, value: value));
     }
@@ -323,11 +331,12 @@ String _properties(McpServer? server) => switch (server) {
   null => '',
 };
 
-String _transportDescription(AcpMcpTransport transport) => switch (transport) {
-  AcpMcpTransport.stdio => 'Supported by every ACP agent.',
-  AcpMcpTransport.http => 'Requires the agent HTTP MCP capability.',
-  AcpMcpTransport.sse => 'Requires the agent SSE MCP capability.',
-};
+String _transportDescription(Translations t, AcpMcpTransport transport) =>
+    switch (transport) {
+      AcpMcpTransport.stdio => t.ai.mcp.stdioDescription,
+      AcpMcpTransport.http => t.ai.mcp.httpDescription,
+      AcpMcpTransport.sse => t.ai.mcp.sseDescription,
+    };
 
 final _environmentName = RegExp(r'^[A-Za-z_][A-Za-z0-9_]*$');
 final _headerName = RegExp(r"^[!#-'*+\-.0-9A-Z\^_`a-z\|~]+$");

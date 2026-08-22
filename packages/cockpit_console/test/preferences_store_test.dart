@@ -64,6 +64,15 @@ void main() {
       await box.put('fontScale', 0.1);
       expect(store.fontScale, 0.85);
     });
+
+    test('persists the selected locale across reopen', () async {
+      await store.setLocaleMode(ConsoleLocaleMode.simplifiedChinese);
+      await store.close();
+
+      store = await PreferencesStore.initialize(storagePath: directory.path);
+
+      expect(store.localeMode, ConsoleLocaleMode.simplifiedChinese);
+    });
   });
 
   group('resolveConsoleStorageDirectory', () {

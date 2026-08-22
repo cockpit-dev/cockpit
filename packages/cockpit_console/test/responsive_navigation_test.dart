@@ -1,7 +1,9 @@
+import 'package:cockpit_console/i18n/strings.g.dart';
 import 'package:cockpit_console/src/providers/core_providers.dart';
 import 'package:cockpit_console/src/theme/console_theme.dart';
 import 'package:cockpit_console/src/ui/app_shell.dart';
 import 'package:cockpit_console/src/ui/navigation/console_nav.dart';
+import 'package:cockpit_console/src/ui/screens/session_monitor_screen.dart';
 import 'package:cockpit_console/src/ui/widgets/console_shell_header.dart';
 import 'package:cockpit_console/src/ui/widgets/sidebar.dart';
 import 'package:flutter/material.dart';
@@ -9,6 +11,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 void main() {
+  setUpAll(() => LocaleSettings.setLocaleSync(AppLocale.en));
+
   test('navigation mode follows the shell breakpoints', () {
     expect(
       ConsoleShellLayoutStyle.navigationMode(719),
@@ -36,18 +40,20 @@ void main() {
 
     var collapsed = true;
     await tester.pumpWidget(
-      ProviderScope(
-        child: MaterialApp(
-          theme: ConsoleTheme.build(Brightness.light),
-          home: Scaffold(
-            body: StatefulBuilder(
-              builder: (context, setState) => Align(
-                alignment: Alignment.topLeft,
-                child: Sidebar(
-                  collapsed: collapsed,
-                  onToggleNavigation: () {
-                    setState(() => collapsed = !collapsed);
-                  },
+      TranslationProvider(
+        child: ProviderScope(
+          child: MaterialApp(
+            theme: ConsoleTheme.build(Brightness.light),
+            home: Scaffold(
+              body: StatefulBuilder(
+                builder: (context, setState) => Align(
+                  alignment: Alignment.topLeft,
+                  child: Sidebar(
+                    collapsed: collapsed,
+                    onToggleNavigation: () {
+                      setState(() => collapsed = !collapsed);
+                    },
+                  ),
                 ),
               ),
             ),
@@ -58,10 +64,14 @@ void main() {
 
     expect(find.byTooltip('Expand navigation'), findsOneWidget);
     expect(find.byTooltip('Projects'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey(ConsoleNavigationIds.language)),
+      findsOneWidget,
+    );
     expect(find.text('Projects'), findsNothing);
     final collapsedProjectsIcon = tester.widget<Icon>(
       find.descendant(
-        of: find.byKey(const ValueKey('Projects')),
+        of: find.byKey(const ValueKey('workspaces')),
         matching: find.byType(Icon),
       ),
     );
@@ -91,7 +101,7 @@ void main() {
     expect(find.text('Projects'), findsOneWidget);
     final expandedProjectsIcon = tester.widget<Icon>(
       find.descendant(
-        of: find.byKey(const ValueKey('Projects')),
+        of: find.byKey(const ValueKey('workspaces')),
         matching: find.byType(Icon),
       ),
     );
@@ -104,7 +114,9 @@ void main() {
       tester
           .getCenter(find.byKey(const ValueKey(ConsoleNavigationIds.toggle)))
           .dy,
-      greaterThan(tester.getCenter(find.byKey(const ValueKey('Projects'))).dy),
+      greaterThan(
+        tester.getCenter(find.byKey(const ValueKey('workspaces'))).dy,
+      ),
     );
   });
 
@@ -118,37 +130,42 @@ void main() {
     addTearDown(() => tester.binding.setSurfaceSize(null));
 
     await tester.pumpWidget(
-      ProviderScope(
-        child: MaterialApp(
-          theme: ConsoleTheme.build(Brightness.light),
-          home: Consumer(
-            builder: (context, ref, child) {
-              final current = ref.watch(navProvider);
-              return Scaffold(
-                drawer: Drawer(
-                  child: Builder(
-                    builder: (drawerContext) => Sidebar(
-                      collapsed: false,
-                      drawer: true,
-                      onDestinationSelected: () =>
-                          Navigator.of(drawerContext).pop(),
+      TranslationProvider(
+        child: ProviderScope(
+          child: MaterialApp(
+            theme: ConsoleTheme.build(Brightness.light),
+            home: Consumer(
+              builder: (context, ref, child) {
+                final current = ref.watch(navProvider);
+                return Scaffold(
+                  drawer: Drawer(
+                    child: Builder(
+                      builder: (drawerContext) => Sidebar(
+                        collapsed: false,
+                        drawer: true,
+                        onDestinationSelected: () =>
+                            Navigator.of(drawerContext).pop(),
+                      ),
                     ),
                   ),
-                ),
-                body: Builder(
-                  builder: (scaffoldContext) => Column(
-                    children: [
-                      IconButton(
-                        key: menuKey,
-                        onPressed: Scaffold.of(scaffoldContext).openDrawer,
-                        icon: const Icon(Icons.menu),
-                      ),
-                      Text(current.label, key: currentDestinationKey),
-                    ],
+                  body: Builder(
+                    builder: (scaffoldContext) => Column(
+                      children: [
+                        IconButton(
+                          key: menuKey,
+                          onPressed: Scaffold.of(scaffoldContext).openDrawer,
+                          icon: const Icon(Icons.menu),
+                        ),
+                        Text(
+                          current.label(context.t),
+                          key: currentDestinationKey,
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-              );
-            },
+                );
+              },
+            ),
           ),
         ),
       ),
@@ -157,7 +174,7 @@ void main() {
     await tester.tap(find.byKey(menuKey));
     await tester.pumpAndSettle();
     final projects = tester.widget<InkWell>(
-      find.byKey(const ValueKey('Projects')),
+      find.byKey(const ValueKey('workspaces')),
     );
     projects.onTap!.call();
     await tester.pump(const Duration(milliseconds: 300));
@@ -165,7 +182,7 @@ void main() {
     expect(tester.takeException(), isNull);
     expect(
       tester.widget<Text>(find.byKey(currentDestinationKey)).data,
-      ConsoleNavDestination.workspaces.label,
+      ConsoleNavDestination.workspaces.label(AppLocale.en.translations),
     );
     expect(
       tester.state<ScaffoldState>(find.byType(Scaffold)).isDrawerOpen,
@@ -178,10 +195,12 @@ void main() {
     addTearDown(() => tester.binding.setSurfaceSize(null));
 
     await tester.pumpWidget(
-      ProviderScope(
-        child: MaterialApp(
-          theme: ConsoleTheme.build(Brightness.light),
-          home: const AppShell(),
+      TranslationProvider(
+        child: ProviderScope(
+          child: MaterialApp(
+            theme: ConsoleTheme.build(Brightness.light),
+            home: const AppShell(),
+          ),
         ),
       ),
     );
@@ -202,6 +221,10 @@ void main() {
     expect(scaffold.isDrawerOpen, isTrue);
     expect(find.byType(Sidebar), findsNWidgets(2));
     expect(find.byTooltip('Close navigation'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('${ConsoleNavigationIds.language}-drawer')),
+      findsOneWidget,
+    );
     expect(find.bySemanticsLabel('Projects'), findsOneWidget);
     expect(
       tester.widget<Drawer>(find.byType(Drawer)).width,
@@ -216,7 +239,7 @@ void main() {
             .getCenter(
               find.descendant(
                 of: find.byType(Drawer),
-                matching: find.byKey(const ValueKey('Projects')),
+                matching: find.byKey(const ValueKey('workspaces')),
               ),
             )
             .dy,
@@ -229,5 +252,23 @@ void main() {
     close.onPressed!.call();
     await tester.pump(const Duration(milliseconds: 300));
     expect(scaffold.isDrawerOpen, isFalse);
+  });
+
+  testWidgets('session monitor stops safely when navigation removes it', (
+    tester,
+  ) async {
+    Widget app(Widget home) => TranslationProvider(
+      child: ProviderScope(
+        child: MaterialApp(
+          theme: ConsoleTheme.build(Brightness.light),
+          home: home,
+        ),
+      ),
+    );
+
+    await tester.pumpWidget(app(const SessionMonitorScreen()));
+    await tester.pumpWidget(app(const SizedBox.shrink()));
+
+    expect(tester.takeException(), isNull);
   });
 }

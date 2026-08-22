@@ -12,6 +12,21 @@ import 'package:path/path.dart' as p;
 /// previous isolate's box lock alive in the host process, so initialization is
 /// bounded and falls back to process-local preferences instead of blocking the
 /// entire Supervisor client indefinitely.
+enum ConsoleLocaleMode {
+  system('system'),
+  english('en'),
+  simplifiedChinese('zh-CN');
+
+  const ConsoleLocaleMode(this.tag);
+
+  final String tag;
+
+  static ConsoleLocaleMode fromTag(String? tag) => values.firstWhere(
+    (mode) => mode.tag == tag,
+    orElse: () => ConsoleLocaleMode.system,
+  );
+}
+
 final class PreferencesStore {
   PreferencesStore._(this._box);
 
@@ -109,6 +124,13 @@ final class PreferencesStore {
   }
 
   Future<void> setThemeMode(ThemeMode mode) => _set(_Keys.themeMode, mode.name);
+
+  // ── Language ─────────────────────────────────────────────────────────
+  ConsoleLocaleMode get localeMode =>
+      ConsoleLocaleMode.fromTag(_storedString(_Keys.localeTag));
+
+  Future<void> setLocaleMode(ConsoleLocaleMode mode) =>
+      _set(_Keys.localeTag, mode.tag);
 
   // ── Selected workspace ───────────────────────────────────────────────
   String? get selectedWorkspaceId {
@@ -218,6 +240,7 @@ final class _Keys {
   const _Keys._();
 
   static const themeMode = 'themeMode';
+  static const localeTag = 'localeTag';
   static const selectedWorkspaceId = 'selectedWorkspaceId';
   static const sidebarCollapsed = 'sidebarCollapsed';
   static const recentDocuments = 'recentDocuments';
@@ -238,3 +261,17 @@ final preferencesProvider = FutureProvider<PreferencesStore>((ref) async {
   ref.onDispose(store.close);
   return store;
 });
+
+final class ConsoleLocaleNotifier extends Notifier<ConsoleLocaleMode> {
+  @override
+  ConsoleLocaleMode build() => ConsoleLocaleMode.system;
+
+  void set(ConsoleLocaleMode mode) {
+    state = mode;
+  }
+}
+
+final consoleLocaleProvider =
+    NotifierProvider<ConsoleLocaleNotifier, ConsoleLocaleMode>(
+      ConsoleLocaleNotifier.new,
+    );

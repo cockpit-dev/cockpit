@@ -44,6 +44,7 @@ void main() {
       expect(validation.valid, isFalse);
       expect(validation.errors, <String>['bad case']);
       expect(validation.warnings, <String>['slow step']);
+      expect(validation.missingErrorDiagnostic, isFalse);
       expect(() => validation.errors.add('later'), throwsUnsupportedError);
     });
 
@@ -53,7 +54,8 @@ void main() {
         'diagnostics': const <Object?>[],
       });
 
-      expect(validation.errors, isNotEmpty);
+      expect(validation.errors, isEmpty);
+      expect(validation.missingErrorDiagnostic, isTrue);
     });
   });
 }

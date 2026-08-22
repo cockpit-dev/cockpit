@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:acpd/acpd.dart';
+import 'package:cockpit_console/i18n/strings.g.dart';
 import 'package:cockpit_console/src/providers/acp_provider.dart';
 import 'package:cockpit_console/src/theme/console_control_style.dart';
 import 'package:cockpit_console/src/theme/console_shapes.dart';
@@ -69,7 +70,10 @@ final class AcpPromptComposer extends HookWidget {
         if (attachments.value.any(
           (existing) => existing.identity == attachment.identity,
         )) {
-          _showComposerError(context, 'That attachment is already included.');
+          _showComposerError(
+            context,
+            context.t.ai.composer.duplicateAttachment,
+          );
           return;
         }
         final next = [...attachments.value, attachment];
@@ -227,8 +231,8 @@ final class _ComposerSurface extends StatelessWidget {
                     maxLines: 5,
                     decoration: InputDecoration(
                       hintText: enabled
-                          ? 'Send a message…'
-                          : 'Create a session or sign in to start chatting',
+                          ? context.t.ai.composer.messageHint
+                          : context.t.ai.composer.sessionRequiredHint,
                       isDense: true,
                     ),
                     style: TextStyle(
@@ -245,23 +249,30 @@ final class _ComposerSurface extends StatelessWidget {
                       child: IconButton.outlined(
                         onPressed: onCancel,
                         icon: const Icon(LucideIcons.square, size: 14),
-                        tooltip: 'Stop response',
+                        tooltip: context.t.ai.composer.stopResponse,
                       ),
                     )
                   : ConsolePrimaryIconButton(
                       onPressed: canSend ? submit : null,
                       icon: const Icon(LucideIcons.arrowUp, size: 16),
                       tooltip: canSend
-                          ? 'Send message (Enter)'
-                          : 'Write a message or add an attachment',
+                          ? context.t.ai.composer.sendMessage
+                          : context.t.ai.composer.addMessage,
                     ),
             ],
           ),
           if (attachments.any((item) => item.inlineBytes > 0)) ...[
             const SizedBox(height: 5),
             Text(
-              '${formatAcpByteSize(attachments.fold<int>(0, (sum, item) => sum + item.inlineBytes))} '
-              'inline · ${formatAcpByteSize(acpMaximumPromptInlineBytes)} limit',
+              context.t.ai.composer.inlineLimit(
+                size: formatAcpByteSize(
+                  attachments.fold<int>(
+                    0,
+                    (sum, item) => sum + item.inlineBytes,
+                  ),
+                ),
+                limit: formatAcpByteSize(acpMaximumPromptInlineBytes),
+              ),
               textAlign: TextAlign.right,
               style: theme.textTheme.labelSmall?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
@@ -291,7 +302,7 @@ final class _CommandMenu extends StatelessWidget {
       dimension: ConsoleControlStyle.height,
       child: PopupMenuButton<AvailableCommand>(
         enabled: enabled,
-        tooltip: 'Available commands',
+        tooltip: context.t.ai.composer.availableCommands,
         onSelected: onSelected,
         itemBuilder: (context) => [
           for (final command in commands)
@@ -361,50 +372,50 @@ final class _AttachmentMenu extends StatelessWidget {
       dimension: ConsoleControlStyle.height,
       child: PopupMenuButton<_AttachAction>(
         enabled: enabled,
-        tooltip: 'Add context',
+        tooltip: context.t.ai.composer.addContext,
         onSelected: onSelected,
         itemBuilder: (context) => [
           if (capabilities?.image == true)
-            const PopupMenuItem(
+            PopupMenuItem(
               value: _AttachAction.image,
               child: _AttachmentMenuLabel(
                 icon: LucideIcons.imagePlus,
-                title: 'Attach image',
-                subtitle: 'Send image data inline',
+                title: context.t.ai.composer.attachImage,
+                subtitle: context.t.ai.composer.attachImageDescription,
               ),
             ),
           if (capabilities?.audio == true)
-            const PopupMenuItem(
+            PopupMenuItem(
               value: _AttachAction.audio,
               child: _AttachmentMenuLabel(
                 icon: LucideIcons.audioLines,
-                title: 'Attach audio',
-                subtitle: 'Send audio data inline',
+                title: context.t.ai.composer.attachAudio,
+                subtitle: context.t.ai.composer.attachAudioDescription,
               ),
             ),
           if (capabilities?.embeddedContext == true)
-            const PopupMenuItem(
+            PopupMenuItem(
               value: _AttachAction.embeddedContext,
               child: _AttachmentMenuLabel(
                 icon: LucideIcons.fileInput,
-                title: 'Embed context file',
-                subtitle: 'Include complete file contents',
+                title: context.t.ai.composer.embedContext,
+                subtitle: context.t.ai.composer.embedContextDescription,
               ),
             ),
-          const PopupMenuItem(
+          PopupMenuItem(
             value: _AttachAction.fileLink,
             child: _AttachmentMenuLabel(
               icon: LucideIcons.fileSymlink,
-              title: 'Link local file',
-              subtitle: 'Reference a file without copying it',
+              title: context.t.ai.composer.linkFile,
+              subtitle: context.t.ai.composer.linkFileDescription,
             ),
           ),
-          const PopupMenuItem(
+          PopupMenuItem(
             value: _AttachAction.resourceUri,
             child: _AttachmentMenuLabel(
               icon: LucideIcons.link,
-              title: 'Link resource URI',
-              subtitle: 'Reference any agent-accessible resource',
+              title: context.t.ai.composer.linkResource,
+              subtitle: context.t.ai.composer.linkResourceDescription,
             ),
           ),
         ],
@@ -499,7 +510,9 @@ final class _AttachmentChip extends StatelessWidget {
           ),
           IconButton(
             onPressed: enabled ? onRemove : null,
-            tooltip: 'Remove ${attachment.name}',
+            tooltip: context.t.ai.composer.removeAttachment(
+              name: attachment.name,
+            ),
             visualDensity: VisualDensity.compact,
             iconSize: 13,
             icon: const Icon(LucideIcons.x),
@@ -523,7 +536,7 @@ Future<AcpPromptAttachment?> _showResourceLinkDialog(
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setState) => AlertDialog(
-          title: const Text('Link resource URI'),
+          title: Text(context.t.ai.composer.linkResource),
           content: SizedBox(
             width: 440,
             child: SingleChildScrollView(
@@ -533,13 +546,13 @@ Future<AcpPromptAttachment?> _showResourceLinkDialog(
                   ConsoleTextField(
                     controller: nameController,
                     autofocus: true,
-                    label: 'Name',
-                    hint: 'API specification',
+                    label: context.t.ai.composer.name,
+                    hint: context.t.ai.composer.nameHint,
                   ),
                   const SizedBox(height: 10),
                   ConsoleTextField(
                     controller: uriController,
-                    label: 'Absolute URI',
+                    label: context.t.ai.composer.absoluteUri,
                     hint: 'file:///path/to/spec.yaml',
                     autocorrect: false,
                     enableSuggestions: false,
@@ -548,7 +561,7 @@ Future<AcpPromptAttachment?> _showResourceLinkDialog(
                   const SizedBox(height: 10),
                   ConsoleTextField(
                     controller: mimeController,
-                    label: 'MIME type (optional)',
+                    label: context.t.ai.composer.mimeOptional,
                     hint: 'application/yaml',
                     autocorrect: false,
                     enableSuggestions: false,
@@ -556,7 +569,7 @@ Future<AcpPromptAttachment?> _showResourceLinkDialog(
                   const SizedBox(height: 10),
                   ConsoleTextArea(
                     controller: descriptionController,
-                    label: 'Description (optional)',
+                    label: context.t.ai.composer.descriptionOptional,
                     minLines: 2,
                     maxLines: 3,
                   ),
@@ -579,7 +592,7 @@ Future<AcpPromptAttachment?> _showResourceLinkDialog(
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
+              child: Text(context.t.common.cancel),
             ),
             FilledButton(
               onPressed: () {
@@ -588,7 +601,7 @@ Future<AcpPromptAttachment?> _showResourceLinkDialog(
                     uri == null ||
                     !uri.hasScheme) {
                   setState(() {
-                    error = 'Enter a name and an absolute URI with a scheme.';
+                    error = context.t.ai.composer.resourceError;
                   });
                   return;
                 }
@@ -602,7 +615,7 @@ Future<AcpPromptAttachment?> _showResourceLinkDialog(
                   ),
                 );
               },
-              child: const Text('Add resource'),
+              child: Text(context.t.ai.composer.addResource),
             ),
           ],
         ),

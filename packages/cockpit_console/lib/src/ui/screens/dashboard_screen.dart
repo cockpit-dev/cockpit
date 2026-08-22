@@ -1,3 +1,4 @@
+import 'package:cockpit_console/i18n/strings.g.dart';
 import 'package:cockpit_console/src/providers/core_providers.dart';
 import 'package:cockpit_console/src/theme/console_colors.dart';
 import 'package:cockpit_console/src/theme/console_shapes.dart';
@@ -18,8 +19,8 @@ final class DashboardScreen extends ConsumerWidget {
     final supervisor = ref.watch(supervisorProvider);
 
     return ScreenScaffold(
-      title: 'Dashboard',
-      subtitle: 'Supervisor status and system overview',
+      title: context.t.dashboard.title,
+      subtitle: context.t.dashboard.subtitle,
       stackActionsBelowWidth: 420,
       actions: [
         OutlinedButton.icon(
@@ -33,7 +34,7 @@ final class DashboardScreen extends ConsumerWidget {
                 ? const CircularProgressIndicator(strokeWidth: 2)
                 : const Icon(LucideIcons.refreshCw, size: 14),
           ),
-          label: const Text('Refresh'),
+          label: Text(context.t.common.refresh),
         ),
         const SizedBox(width: 8),
         if (!daemon.running)
@@ -42,7 +43,7 @@ final class DashboardScreen extends ConsumerWidget {
                 ? null
                 : () => ref.read(daemonProvider.notifier).start(),
             icon: const Icon(LucideIcons.play, size: 14),
-            label: const Text('Start daemon'),
+            label: Text(context.t.dashboard.startDaemon),
           )
         else
           FilledButton.icon(
@@ -50,7 +51,7 @@ final class DashboardScreen extends ConsumerWidget {
                 ? null
                 : () => ref.read(daemonProvider.notifier).restart(),
             icon: const Icon(LucideIcons.rotateCw, size: 14),
-            label: const Text('Restart'),
+            label: Text(context.t.dashboard.restartDaemon),
           ),
       ],
       body: SingleChildScrollView(
@@ -118,10 +119,10 @@ final class _ConnectionBanner extends StatelessWidget {
         ? context.consoleColors.warning
         : theme.colorScheme.error;
     final label = connected
-        ? 'System operational'
+        ? context.t.dashboard.systemOperational
         : daemonRunning
-        ? 'Daemon running, API disconnected'
-        : 'Daemon offline';
+        ? context.t.dashboard.daemonApiDisconnected
+        : context.t.dashboard.daemonOffline;
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
@@ -180,22 +181,22 @@ final class _StatsGrid extends StatelessWidget {
     final theme = Theme.of(context);
     final metrics = <Widget>[
       _MetricItem(
-        label: 'API Version',
+        label: context.t.dashboard.apiVersion,
         value: 'v${server.apiVersion.major}.${server.apiVersion.minor}',
         icon: LucideIcons.code,
       ),
       _MetricItem(
-        label: 'Engine',
+        label: context.t.dashboard.engine,
         value: _truncateVersion(server.engineVersion),
         icon: LucideIcons.cpu,
       ),
       _MetricItem(
-        label: 'Started',
-        value: _formatStarted(server.startedAt),
+        label: context.t.dashboard.started,
+        value: _formatStarted(context, server.startedAt),
         icon: LucideIcons.clock,
       ),
       _MetricItem(
-        label: 'Operations',
+        label: context.t.dashboard.operations,
         value: '${capabilities.operations.length}',
         icon: LucideIcons.workflow,
       ),
@@ -243,13 +244,19 @@ final class _StatsGrid extends StatelessWidget {
     return version;
   }
 
-  String _formatStarted(DateTime startedAt) {
+  String _formatStarted(BuildContext context, DateTime startedAt) {
     final now = DateTime.now();
     final diff = now.difference(startedAt);
-    if (diff.inDays > 0) return '${diff.inDays}d ago';
-    if (diff.inHours > 0) return '${diff.inHours}h ago';
-    if (diff.inMinutes > 0) return '${diff.inMinutes}m ago';
-    return 'just now';
+    if (diff.inDays > 0) {
+      return context.t.dashboard.daysAgo(count: diff.inDays);
+    }
+    if (diff.inHours > 0) {
+      return context.t.dashboard.hoursAgo(count: diff.inHours);
+    }
+    if (diff.inMinutes > 0) {
+      return context.t.dashboard.minutesAgo(count: diff.inMinutes);
+    }
+    return context.t.dashboard.justNow;
   }
 }
 
@@ -316,7 +323,7 @@ final class _ServerInfoSection extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Server Information',
+          context.t.dashboard.serverInformation,
           style: theme.textTheme.titleSmall?.copyWith(fontSize: 13),
         ),
         const SizedBox(height: 8),
@@ -328,20 +335,23 @@ final class _ServerInfoSection extends StatelessWidget {
           child: Column(
             children: [
               _InfoRow(
-                label: 'Instance ID',
+                label: context.t.dashboard.instanceId,
                 value: server.instanceId,
                 mono: true,
               ),
               Divider(height: 1, color: theme.dividerColor),
               _InfoRow(
-                label: 'API Version',
+                label: context.t.dashboard.apiVersion,
                 value: 'v${server.apiVersion.major}.${server.apiVersion.minor}',
               ),
               Divider(height: 1, color: theme.dividerColor),
-              _InfoRow(label: 'Engine Version', value: server.engineVersion),
+              _InfoRow(
+                label: context.t.dashboard.engineVersion,
+                value: server.engineVersion,
+              ),
               Divider(height: 1, color: theme.dividerColor),
               _InfoRow(
-                label: 'Started At',
+                label: context.t.dashboard.startedAt,
                 value: server.startedAt.toUtc().toIso8601String(),
                 mono: true,
               ),
@@ -400,8 +410,8 @@ final class _LoadingState extends StatelessWidget {
   Widget build(BuildContext context) {
     return EmptyStateView(
       icon: LucideIcons.loaderCircle,
-      title: 'Connecting to Supervisor',
-      description: 'Establishing daemon connection and reading capabilities.',
+      title: context.t.dashboard.connectingTitle,
+      description: context.t.dashboard.connectingDescription,
       iconSpin: true,
     );
   }
@@ -417,12 +427,12 @@ final class _DisconnectedState extends StatelessWidget {
   Widget build(BuildContext context) {
     return EmptyStateView(
       icon: LucideIcons.wifiOff,
-      title: 'Cannot connect to Supervisor',
+      title: context.t.dashboard.disconnectedTitle,
       description: message,
       action: FilledButton.icon(
         onPressed: onRetry,
         icon: const Icon(LucideIcons.rotateCw, size: 14),
-        label: const Text('Retry connection'),
+        label: Text(context.t.dashboard.retryConnection),
       ),
     );
   }
