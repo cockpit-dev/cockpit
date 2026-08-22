@@ -6,6 +6,9 @@
   semantic dialogs, sheets, and barriers.
 - Pinned source-installed updates to the latest version returned by Pub instead
   of allowing stale unversioned global metadata to select an older release.
+- Used stable resolved coordinates for iOS native-tree taps, avoiding
+  WebDriverAgent element clicks that can report success without delivering the
+  pointer event to a Flutter application.
 
 ## 4.0.28
 
