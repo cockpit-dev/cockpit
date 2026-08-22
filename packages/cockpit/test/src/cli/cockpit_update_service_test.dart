@@ -931,14 +931,18 @@ Future<File> _writeCanonicalInstall(
     destination: resources,
     version: version,
   );
-  await paths.launcher.create(recursive: true);
-  await paths.launcher.writeAsString(
-    cockpitRuntimeLauncherContents(
-      executablePath: executable.path,
-      version: version,
-      windows: windows,
-    ),
-  );
+  for (final launcher in paths.launchers.entries) {
+    await launcher.value.create(recursive: true);
+    await launcher.value.writeAsString(
+      cockpitRuntimeLauncherContents(
+        executablePath: executable.path,
+        version: version,
+        windows: windows,
+        executableName: launcher.key,
+        fixedArguments: cockpitManagedLauncherArguments[launcher.key]!,
+      ),
+    );
+  }
   return executable;
 }
 

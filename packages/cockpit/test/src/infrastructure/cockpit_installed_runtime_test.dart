@@ -22,7 +22,7 @@ void main() {
     if (await root.exists()) await root.delete(recursive: true);
   });
 
-  test('installs AOT outside Pub bin and keeps a text launcher', () async {
+  test('installs AOT outside Pub bin and keeps text launchers', () async {
     const version = '1.2.3';
     final staged = await _stageRuntime(
       root,
@@ -49,13 +49,29 @@ void main() {
       ),
       isTrue,
     );
+    for (final launcher in installed.paths.launchers.entries) {
+      expect(
+        await launcher.value.readAsString(),
+        cockpitRuntimeLauncherContents(
+          executablePath: installed.executable.path,
+          version: version,
+          windows: Platform.isWindows,
+          executableName: launcher.key,
+          fixedArguments: cockpitManagedLauncherArguments[launcher.key]!,
+        ),
+      );
+    }
     expect(
-      await installed.paths.launcher.readAsString(),
-      cockpitRuntimeLauncherContents(
-        executablePath: installed.executable.path,
-        version: version,
-        windows: Platform.isWindows,
-      ),
+      await installed.paths.launcherFor('cockpit_mcp').readAsString(),
+      contains('serve-mcp'),
+    );
+    expect(
+      await installed.paths.launcherFor('cockpit_worker').readAsString(),
+      contains('--_cockpit-worker'),
+    );
+    expect(
+      await installed.paths.launcherFor('cockpitd').readAsString(),
+      contains('--_cockpit-daemon'),
     );
     expect(
       await cockpitReadCanonicalInstalledRuntime(
@@ -65,6 +81,19 @@ void main() {
         version: version,
       ),
       isNotNull,
+    );
+
+    await installed.paths
+        .launcherFor('cockpit_mcp')
+        .writeAsString('stale launcher');
+    expect(
+      await cockpitReadCanonicalInstalledRuntime(
+        environment: <String, String>{'PUB_CACHE': pubCache.path},
+        windows: Platform.isWindows,
+        resolvedExecutable: installed.executable.path,
+        version: version,
+      ),
+      isNull,
     );
   });
 
@@ -238,14 +267,18 @@ Future<CockpitInstalledRuntime> _writeCanonicalRuntime(
     destination: resources,
     version: version,
   );
-  await paths.launcher.create(recursive: true);
-  await paths.launcher.writeAsString(
-    cockpitRuntimeLauncherContents(
-      executablePath: executable.path,
-      version: version,
-      windows: windows,
-    ),
-  );
+  for (final launcher in paths.launchers.entries) {
+    await launcher.value.create(recursive: true);
+    await launcher.value.writeAsString(
+      cockpitRuntimeLauncherContents(
+        executablePath: executable.path,
+        version: version,
+        windows: windows,
+        executableName: launcher.key,
+        fixedArguments: cockpitManagedLauncherArguments[launcher.key]!,
+      ),
+    );
+  }
   return CockpitInstalledRuntime(
     paths: paths,
     release: release,

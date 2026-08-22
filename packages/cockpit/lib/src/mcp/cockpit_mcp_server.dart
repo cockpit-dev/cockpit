@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:stream_channel/stream_channel.dart';
 
+import '../foundation/cockpit_version.dart';
 import '../supervisor/cockpit_supervisor_api_client.dart';
 import 'cockpit_mcp_api_resources.dart';
 import 'cockpit_mcp_api_tools.dart';
@@ -20,7 +21,7 @@ final class CockpitMcpServer {
     this.featureConfiguration = const CockpitMcpFeatureConfiguration(),
     CockpitMcpRootsTracker? rootsTracker,
     this.serverName = 'cockpit',
-    this.serverVersion = '2.0.0',
+    this.serverVersion = cockpitVersion,
   }) : tools = List<CockpitMcpTool>.unmodifiable(tools),
        resources = List<CockpitMcpResource>.unmodifiable(resources),
        rootsTracker = rootsTracker ?? CockpitMcpRootsTracker();
@@ -30,7 +31,7 @@ final class CockpitMcpServer {
     CockpitMcpFeatureConfiguration featureConfiguration =
         const CockpitMcpFeatureConfiguration(),
     String serverName = 'cockpit',
-    String serverVersion = '2.0.0',
+    String serverVersion = cockpitVersion,
   }) {
     final create = clientProvider ?? createCockpitSupervisorApiClient;
     Future<CockpitSupervisorApiClient>? cached;

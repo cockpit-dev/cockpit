@@ -173,9 +173,13 @@ Future<bool> _cleanupRuntime(CockpitInstalledRuntime active) async {
     }
   }
   if (await active.paths.launcher.parent.exists()) {
-    final launcherName = active.paths.launcher.uri.pathSegments.lastWhere(
-      (segment) => segment.isNotEmpty,
-    );
+    final launcherNames = active.paths.launchers.values
+        .map(
+          (launcher) => launcher.uri.pathSegments.lastWhere(
+            (segment) => segment.isNotEmpty,
+          ),
+        )
+        .toList(growable: false);
     await for (final entity in active.paths.launcher.parent.list(
       followLinks: false,
     )) {
@@ -183,8 +187,11 @@ Future<bool> _cleanupRuntime(CockpitInstalledRuntime active) async {
       final name = entity.uri.pathSegments.lastWhere(
         (segment) => segment.isNotEmpty,
       );
-      if (name.startsWith('$launcherName.install-') ||
-          name.startsWith('$launcherName.backup-')) {
+      if (launcherNames.any(
+        (launcherName) =>
+            name.startsWith('$launcherName.install-') ||
+            name.startsWith('$launcherName.backup-'),
+      )) {
         pending |= await _deleteFile(entity);
       }
     }
