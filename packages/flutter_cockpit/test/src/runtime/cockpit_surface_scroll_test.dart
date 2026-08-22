@@ -276,6 +276,7 @@ void main() {
       final didScroll = await surfaceState.scrollByViewport(
         viewportFraction: 0.9,
         scrollableKey: 'locked-scrollable',
+        targetLocator: const CockpitLocator(text: 'Missing task'),
       );
 
       expect(didScroll.didScroll, isFalse);

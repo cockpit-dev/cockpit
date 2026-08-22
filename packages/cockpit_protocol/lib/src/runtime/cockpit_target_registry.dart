@@ -80,6 +80,13 @@ final class CockpitTargetRegistry {
     ]);
   });
 
+  /// Runs related reads against one lazily captured discovered-target set.
+  ///
+  /// Failure reporting commonly needs counts, hints, and route projections
+  /// from the same UI state. Keeping those reads in one scope avoids repeated
+  /// runtime-tree discovery and guarantees a consistent diagnostic snapshot.
+  T withDiscoverySnapshot<T>(T Function() read) => _withDiscoveryCache(read);
+
   /// Returns visible targets satisfying every condition in [locator].
   ///
   /// Results use visual order. A requested locator index reduces the result to
@@ -157,79 +164,66 @@ final class CockpitTargetRegistry {
     CockpitCommandType? requiredCommand,
   }) {
     return _withDiscoveryCache(() {
-      for (final candidate in _flatten(locator)) {
-        final locatorMatches = _preferCurrentRouteMatches(
-          visibleTargets
-              .where((target) => _matches(target, candidate))
-              .toList(growable: false),
-        );
-        final commandMatches = requiredCommand == null
-            ? locatorMatches
-            : locatorMatches
-                  .where(
-                    (target) =>
-                        target.supportedCommands.contains(requiredCommand),
-                  )
-                  .toList(growable: false);
-        final matches = commandMatches.isEmpty
-            ? locatorMatches
-            : commandMatches;
+      return _resolveTargets(
+        locator,
+        targets: visibleTargets,
+        requiredCommand: requiredCommand,
+      );
+    });
+  }
 
-        if (matches.isEmpty) {
-          continue;
-        }
+  /// Resolves [locator] against explicitly registered targets only.
+  ///
+  /// This avoids native tree discovery when a caller needs to preserve custom
+  /// registrations before attempting a cheaper framework-element probe.
+  CockpitTargetResolutionResult resolveRegistered(
+    CockpitLocator locator, {
+    CockpitCommandType? requiredCommand,
+  }) {
+    return _resolveTargets(
+      locator,
+      targets: _explicitVisibleTargets(),
+      requiredCommand: requiredCommand,
+    );
+  }
 
-        if (candidate.index != null) {
-          final indexedMatch = _selectIndexedMatch(matches, candidate);
-          if (indexedMatch == null) {
-            final orderedMatches = _orderedMatches(matches, candidate);
-            return CockpitTargetResolutionResult.failure(
-              error: CockpitCommandError.targetNotFound(
-                message:
-                    'No matched target exists at the requested locator index.',
-                details: <String, Object?>{
-                  'requestedLocator': candidate.toJson(),
-                  'matchedCount': matches.length,
-                  'requestedIndex': candidate.index,
-                  'candidateCount': orderedMatches.length,
-                  'candidates': _candidateIdsFor(orderedMatches),
-                  'candidateHints': _targetHintsFor(orderedMatches),
-                },
-              ),
-              matches: matches,
-            );
-          }
-          return CockpitTargetResolutionResult.success(
-            target: indexedMatch,
-            locatorResolution: CockpitLocatorResolution(
-              matchedKind: candidate.kind,
-              matchedValue: candidate.value,
-              matchedSignals: _matchedSignals(candidate),
-            ),
-            matches: matches,
-          );
-        }
+  CockpitTargetResolutionResult _resolveTargets(
+    CockpitLocator locator, {
+    required List<CockpitTarget> targets,
+    CockpitCommandType? requiredCommand,
+  }) {
+    for (final candidate in _flatten(locator)) {
+      final locatorMatches = _preferCurrentRouteMatches(
+        targets
+            .where((target) => _matches(target, candidate))
+            .toList(growable: false),
+      );
+      final commandMatches = requiredCommand == null
+          ? locatorMatches
+          : locatorMatches
+                .where(
+                  (target) =>
+                      target.supportedCommands.contains(requiredCommand),
+                )
+                .toList(growable: false);
+      final matches = commandMatches.isEmpty ? locatorMatches : commandMatches;
 
-        if (matches.length > 1) {
+      if (matches.isEmpty) {
+        continue;
+      }
+
+      if (candidate.index != null) {
+        final indexedMatch = _selectIndexedMatch(matches, candidate);
+        if (indexedMatch == null) {
           final orderedMatches = _orderedMatches(matches, candidate);
-          final preferredMatch = _selectPreferredMatch(matches, candidate);
-          if (preferredMatch != null) {
-            return CockpitTargetResolutionResult.success(
-              target: preferredMatch,
-              locatorResolution: CockpitLocatorResolution(
-                matchedKind: candidate.kind,
-                matchedValue: candidate.value,
-                matchedSignals: _matchedSignals(candidate),
-              ),
-              matches: matches,
-            );
-          }
           return CockpitTargetResolutionResult.failure(
-            error: CockpitCommandError.ambiguousTarget(
-              message: 'Multiple targets matched ${candidate.kind.name}.',
+            error: CockpitCommandError.targetNotFound(
+              message:
+                  'No matched target exists at the requested locator index.',
               details: <String, Object?>{
-                'matchedKind': candidate.kind.name,
-                'matchedValue': candidate.value,
+                'requestedLocator': candidate.toJson(),
+                'matchedCount': matches.length,
+                'requestedIndex': candidate.index,
                 'candidateCount': orderedMatches.length,
                 'candidates': _candidateIdsFor(orderedMatches),
                 'candidateHints': _targetHintsFor(orderedMatches),
@@ -238,9 +232,8 @@ final class CockpitTargetRegistry {
             matches: matches,
           );
         }
-
         return CockpitTargetResolutionResult.success(
-          target: matches.single,
+          target: indexedMatch,
           locatorResolution: CockpitLocatorResolution(
             matchedKind: candidate.kind,
             matchedValue: candidate.value,
@@ -250,13 +243,52 @@ final class CockpitTargetRegistry {
         );
       }
 
-      return CockpitTargetResolutionResult.failure(
-        error: CockpitCommandError.targetNotFound(
-          message: 'No visible target matched the requested locator chain.',
-          details: <String, Object?>{'requestedLocator': locator.toJson()},
+      if (matches.length > 1) {
+        final orderedMatches = _orderedMatches(matches, candidate);
+        final preferredMatch = _selectPreferredMatch(matches, candidate);
+        if (preferredMatch != null) {
+          return CockpitTargetResolutionResult.success(
+            target: preferredMatch,
+            locatorResolution: CockpitLocatorResolution(
+              matchedKind: candidate.kind,
+              matchedValue: candidate.value,
+              matchedSignals: _matchedSignals(candidate),
+            ),
+            matches: matches,
+          );
+        }
+        return CockpitTargetResolutionResult.failure(
+          error: CockpitCommandError.ambiguousTarget(
+            message: 'Multiple targets matched ${candidate.kind.name}.',
+            details: <String, Object?>{
+              'matchedKind': candidate.kind.name,
+              'matchedValue': candidate.value,
+              'candidateCount': orderedMatches.length,
+              'candidates': _candidateIdsFor(orderedMatches),
+              'candidateHints': _targetHintsFor(orderedMatches),
+            },
+          ),
+          matches: matches,
+        );
+      }
+
+      return CockpitTargetResolutionResult.success(
+        target: matches.single,
+        locatorResolution: CockpitLocatorResolution(
+          matchedKind: candidate.kind,
+          matchedValue: candidate.value,
+          matchedSignals: _matchedSignals(candidate),
         ),
+        matches: matches,
       );
-    });
+    }
+
+    return CockpitTargetResolutionResult.failure(
+      error: CockpitCommandError.targetNotFound(
+        message: 'No visible target matched the requested locator chain.',
+        details: <String, Object?>{'requestedLocator': locator.toJson()},
+      ),
+    );
   }
 
   CockpitTargetResolutionResult resolveCommand(CockpitCommandType commandType) {

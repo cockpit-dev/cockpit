@@ -66,12 +66,20 @@ bool cockpitIsVisibleInRuntimeTree(Element element) {
   return true;
 }
 
+/// Whether [element] makes its complete descendant subtree inactive.
+///
+/// Tree walkers that already traverse from a visible root can use this once
+/// per node instead of re-walking every node's ancestor chain.
+bool cockpitHidesRuntimeSubtree(Element element) {
+  final widget = element.widget;
+  return (widget is Offstage && widget.offstage) ||
+      _belongsToInactiveModalRoute(widget);
+}
+
 bool _isVisibleInAncestorTree(Element element) {
   var isVisible = true;
   element.visitAncestorElements((ancestor) {
-    final widget = ancestor.widget;
-    if ((widget is Offstage && widget.offstage) ||
-        _belongsToInactiveModalRoute(widget)) {
+    if (cockpitHidesRuntimeSubtree(ancestor)) {
       isVisible = false;
       return false;
     }

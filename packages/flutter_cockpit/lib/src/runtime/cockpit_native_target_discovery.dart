@@ -214,6 +214,113 @@ final class CockpitNativeTargetDiscovery {
     return found;
   }
 
+  /// Discovers native action targets related to one already matched element.
+  ///
+  /// Ancestors are resolved along the single root-to-element chain. A
+  /// descendant scan is used only when that chain owns no actionable target,
+  /// avoiding a full-surface discovery for ordinary controls.
+  List<CockpitTarget> discoverRelatedActionTargets({
+    required BuildContext rootContext,
+    required Element element,
+    required String? routeName,
+    required CockpitCommandType requiredCommand,
+    List<CockpitTarget> explicitTargets = const <CockpitTarget>[],
+  }) {
+    final rootElement = rootContext as Element;
+    if (!rootElement.mounted || !element.mounted) {
+      return const <CockpitTarget>[];
+    }
+
+    final chain = <Element>[element];
+    var reachedRoot = identical(rootElement, element);
+    if (!reachedRoot) {
+      element.visitAncestorElements((ancestor) {
+        chain.add(ancestor);
+        if (identical(ancestor, rootElement)) {
+          reachedRoot = true;
+          return false;
+        }
+        return true;
+      });
+    }
+    if (!reachedRoot) {
+      return const <CockpitTarget>[];
+    }
+
+    final explicitTargetsByElement = _explicitTargetsByElement(explicitTargets);
+    final session = _DiscoverySession();
+    var scope = _seedInheritedScope(
+      rootElement,
+      rootViewport: _viewportBoundsFor(rootElement),
+      explicitTargetsByElement: explicitTargetsByElement,
+    );
+    var insideActionableTarget = false;
+    final ancestorActions = <CockpitTarget>[];
+
+    for (final candidateElement in chain.reversed) {
+      final explicitTarget = explicitTargetsByElement[candidateElement];
+      if (!candidateElement.mounted ||
+          policy.ignoresSubtree(candidateElement) ||
+          scope.ancestorHidden ||
+          scope.routeScope?.isCurrent == false) {
+        return const <CockpitTarget>[];
+      }
+
+      final effectiveViewport = _marksViewportBoundary(candidateElement)
+          ? _intersectViewports(scope.effectiveViewport, candidateElement)
+          : scope.effectiveViewport;
+      final targetRouteName = _effectiveDiscoveryRouteName(
+        scope.routeScope,
+        fallbackRouteName: routeName,
+      );
+      final target =
+          explicitTarget == null &&
+              _isRenderable(candidateElement) &&
+              _overlapsClippedViewport(candidateElement, effectiveViewport)
+          ? _buildTarget(
+              candidateElement,
+              routeName: targetRouteName,
+              path: _locatorPathForElement(candidateElement, session),
+              insideActionableTarget: insideActionableTarget,
+              session: session,
+            )
+          : null;
+      final exposed =
+          target != null &&
+          _hasMeaningfulClippedViewportExposure(
+            candidateElement,
+            effectiveViewport,
+            strictVisibility: false,
+          );
+      if (target != null &&
+          exposed &&
+          target.supportedCommands.contains(requiredCommand)) {
+        ancestorActions.add(target);
+      }
+
+      insideActionableTarget =
+          insideActionableTarget ||
+          explicitTarget?.supportedCommands.isNotEmpty == true ||
+          (target != null && exposed && target.supportedCommands.isNotEmpty);
+      scope = scope.scopeForChildren(
+        candidateElement,
+        effectiveViewport: effectiveViewport,
+      );
+    }
+
+    if (ancestorActions.isNotEmpty || insideActionableTarget) {
+      return _deduplicateDiscoveredTargets(ancestorActions);
+    }
+
+    return discover(
+          rootContext: element,
+          routeName: routeName,
+          explicitTargets: explicitTargets,
+        )
+        .where((target) => target.supportedCommands.contains(requiredCommand))
+        .toList(growable: false);
+  }
+
   bool _matchesDiscoveryRoute(
     String? targetRouteName, {
     required String? routeName,
