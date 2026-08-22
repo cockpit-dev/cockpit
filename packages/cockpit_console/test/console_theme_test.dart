@@ -1,5 +1,6 @@
 import 'package:cockpit_console/src/theme/console_colors.dart';
 import 'package:cockpit_console/src/theme/console_control_style.dart';
+import 'package:cockpit_console/src/theme/console_menu_style.dart';
 import 'package:cockpit_console/src/theme/console_theme.dart';
 import 'package:cockpit_console/src/ui/widgets/console_form_controls.dart';
 import 'package:cockpit_console/src/providers/core_providers.dart';
@@ -71,6 +72,45 @@ void main() {
       );
       expect(
         text.overlayColor?.resolve(const <WidgetState>{WidgetState.focused}),
+        colors.accentSubtle,
+      );
+    }
+  });
+
+  test('anchored menus share compact themed geometry and states', () {
+    for (final brightness in Brightness.values) {
+      final colors = ConsoleColors(brightness);
+      final theme = ConsoleTheme.build(brightness);
+      final menu = theme.menuTheme.style!;
+      final item = theme.menuButtonTheme.style!;
+      final selected = ConsoleMenuStyle.selectableItem(colors, selected: true);
+
+      expect(
+        menu.backgroundColor?.resolve(const <WidgetState>{}),
+        colors.surface1,
+      );
+      expect(menu.elevation?.resolve(const <WidgetState>{}), 0);
+      expect(
+        menu.shape?.resolve(const <WidgetState>{}),
+        isA<RoundedSuperellipseBorder>(),
+      );
+      expect(
+        item.minimumSize?.resolve(const <WidgetState>{})?.height,
+        ConsoleControlStyle.height,
+      );
+      expect(
+        item.backgroundColor?.resolve(const <WidgetState>{WidgetState.hovered}),
+        colors.surfaceHover,
+      );
+      expect(
+        selected.minimumSize?.resolve(const <WidgetState>{}),
+        const Size(
+          ConsoleMenuStyle.selectionWidth,
+          ConsoleMenuStyle.itemHeight,
+        ),
+      );
+      expect(
+        selected.backgroundColor?.resolve(const <WidgetState>{}),
         colors.accentSubtle,
       );
     }
