@@ -555,6 +555,7 @@ final class FlutterCockpitRootState extends State<FlutterCockpitRoot> {
         }
         return cockpitMaybePopCurrentNavigator(context as Element);
       },
+      dismissActionResolver: () => _surfaceStateOrNull?.resolveDismissAction(),
       platform: platform,
       transportType: 'remoteHttp',
     );

@@ -131,7 +131,7 @@ bounded observe-decide-prove loop:
 | Screen belongs to another app, checkout, or target | Select the correct session; do not mutate, restart, or stop the observed app. |
 | Transient non-interactive animation, toast, or loading state | Run `cockpit dev wait` once, then re-observe instead of tapping or dismissing it. |
 | Expected product prompt | Execute its explicit expected action with an exact locator. |
-| Incidental Flutter dialog/sheet/banner/upgrade notice | Prefer an explicit neutral action such as Later, Not now, Skip, Cancel, or Close; otherwise use `cockpit dev dismiss` only when inspection proves the overlay is dismissible. |
+| Incidental Flutter menu/popup/dialog/sheet/banner/upgrade notice | Prefer an explicit neutral action such as Later, Not now, Skip, Cancel, or Close. For a menu, popup, or other overlay with no state-changing action to select, use `cockpit dev dismiss`. |
 | Unintended temporary route | Use `cockpit dev back` once only when current state proves the parent route is the intended destination. |
 | Android/iOS system capture shows OS dialog, keyboard, or system UI | Run `cockpit dev recover` for the exact session. Use `--dialog accept` or `--keyboard` only when the scenario or capture proves it is required. |
 | macOS recovery reports `macosSessionLocked` | Unlock the desktop, then retry the same session once. Do not request Accessibility permission or relaunch the app. |
