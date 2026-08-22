@@ -80,8 +80,8 @@ final class CockpitUpdateService {
     final deadline = DateTime.now().toUtc().add(timeout);
     final dart = _windows ? 'dart.exe' : 'dart';
     onProgress?.call('Checking for Cockpit updates...');
-    final targetVersion = await _targetVersion(currentVersion, deadline);
-    if (targetVersion == currentVersion) {
+    final target = await _targetInstallation(currentVersion, deadline);
+    if (!target.install) {
       await _cleanupLegacySourcePayload();
       onProgress?.call('Reconnecting the Cockpit Supervisor...');
       await _reconnectSupervisor(_resolvedExecutable, deadline);
@@ -111,7 +111,7 @@ final class CockpitUpdateService {
       onProgress?.call('Installing the latest Cockpit release...');
       final activation = await _activate(
         dart,
-        targetVersion,
+        target.version,
         deadline,
         onProgress: onProgress,
       );
@@ -170,18 +170,36 @@ final class CockpitUpdateService {
     }
   }
 
-  Future<String?> _targetVersion(
+  Future<({bool install, String? version})> _targetInstallation(
     String currentVersion,
     DateTime deadline,
   ) async {
+    late final bool hostedInstall;
     try {
-      if (!await _hostedInstallProbe(currentVersion)) return null;
+      hostedInstall = await _hostedInstallProbe(currentVersion);
+    } on Object {
+      return (install: true, version: null);
+    }
+    try {
       final latestText = await _latestVersionLookup(_remaining(deadline));
       final current = Version.parse(currentVersion);
       final latest = Version.parse(latestText);
-      return latest <= current ? currentVersion : latestText;
+      if (!hostedInstall && latest < current) {
+        throw CockpitUpdateException(
+          'updateDowngradeBlocked',
+          'Pub latest is Cockpit $latestText, which is older than the running '
+              '$currentVersion release. The current executable was kept; retry '
+              'after publishing the running release.',
+        );
+      }
+      if (hostedInstall && latest <= current) {
+        return (install: false, version: currentVersion);
+      }
+      return (install: true, version: latestText);
+    } on CockpitUpdateException {
+      rethrow;
     } on Object {
-      return null;
+      return (install: true, version: null);
     }
   }
 
