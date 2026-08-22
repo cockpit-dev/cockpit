@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:acpd/acpd.dart';
+import 'package:cockpit_console/i18n/strings.g.dart';
 import 'package:cockpit_console/src/providers/acp_state.dart';
 import 'package:cockpit_console/src/theme/console_shapes.dart';
 import 'package:flutter/material.dart';
@@ -47,7 +48,7 @@ final class AcpToolCallView extends StatelessWidget {
           runSpacing: 3,
           children: [
             if (toolCall.kind case final kind?) Text(kind.toJson()),
-            if (status != null) Text(_statusLabel(status)),
+            if (status != null) Text(_statusLabel(context.t, status)),
             Text(toolCall.toolCallId),
           ],
         ),
@@ -62,11 +63,17 @@ final class AcpToolCallView extends StatelessWidget {
           ],
           if (toolCall.rawInput case final input?) ...[
             const SizedBox(height: 8),
-            _RawValue(label: 'Raw input', value: _formatRawValue(input)),
+            _RawValue(
+              label: context.t.ai.tool.rawInput,
+              value: _formatRawValue(input),
+            ),
           ],
           if (toolCall.rawOutput case final output?) ...[
             const SizedBox(height: 8),
-            _RawValue(label: 'Raw output', value: _formatRawValue(output)),
+            _RawValue(
+              label: context.t.ai.tool.rawOutput,
+              value: _formatRawValue(output),
+            ),
           ],
         ],
       ),
@@ -114,7 +121,7 @@ final class _ToolContent extends StatelessWidget {
       ),
       ToolCallTerminal(:final terminalId) => _MetadataRow(
         icon: LucideIcons.terminal,
-        label: 'Terminal',
+        label: context.t.ai.tool.terminal,
         value: terminalId,
       ),
     };
@@ -141,7 +148,7 @@ final class _ContentBlockView extends StatelessWidget {
       ),
       AudioContent(:final data, :final mimeType) => _MetadataRow(
         icon: LucideIcons.audioLines,
-        label: 'Audio',
+        label: context.t.ai.tool.audio,
         value: '$mimeType · ${_decodedByteLength(data)} bytes',
       ),
       ResourceLink(
@@ -187,7 +194,7 @@ final class _ImageView extends StatelessWidget {
                 bytes,
                 fit: BoxFit.contain,
                 errorBuilder: (context, error, stackTrace) => _InvalidContent(
-                  message: 'The agent returned invalid $mimeType image data.',
+                  message: context.t.ai.tool.invalidImage(mime: mimeType),
                 ),
               ),
             ),
@@ -202,9 +209,7 @@ final class _ImageView extends StatelessWidget {
         ],
       );
     } on FormatException {
-      return _InvalidContent(
-        message: 'The agent returned malformed base64 image data.',
-      );
+      return _InvalidContent(message: context.t.ai.tool.malformedImage);
     }
   }
 }
@@ -267,13 +272,13 @@ final class _EmbeddedResourceView extends StatelessWidget {
     return switch (resource) {
       TextResourceContents(:final text, :final uri, :final mimeType) =>
         _RawValue(
-          label: [mimeType ?? 'Text resource', uri].join(' · '),
+          label: [mimeType ?? context.t.ai.tool.textResource, uri].join(' · '),
           value: text,
         ),
       BlobResourceContents(:final blob, :final uri, :final mimeType) =>
         _MetadataRow(
           icon: LucideIcons.fileArchive,
-          label: mimeType ?? 'Binary resource',
+          label: mimeType ?? context.t.ai.tool.binaryResource,
           value: '$uri · ${_decodedByteLength(blob)} bytes',
         ),
     };
@@ -297,15 +302,19 @@ final class _DiffView extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _MetadataRow(icon: LucideIcons.fileDiff, label: 'Diff', value: path),
+        _MetadataRow(
+          icon: LucideIcons.fileDiff,
+          label: context.t.ai.tool.diff,
+          value: path,
+        ),
         const SizedBox(height: 6),
         if (oldText case final oldText?) ...[
-          Text('Before', style: theme.textTheme.labelSmall),
+          Text(context.t.ai.tool.before, style: theme.textTheme.labelSmall),
           const SizedBox(height: 2),
           _CodeBlock(value: oldText, tint: theme.colorScheme.error),
           const SizedBox(height: 6),
         ],
-        Text('After', style: theme.textTheme.labelSmall),
+        Text(context.t.ai.tool.after, style: theme.textTheme.labelSmall),
         const SizedBox(height: 2),
         _CodeBlock(value: newText, tint: theme.colorScheme.primary),
       ],
@@ -326,7 +335,7 @@ final class _Locations extends StatelessWidget {
         for (final location in locations)
           _MetadataRow(
             icon: LucideIcons.mapPin,
-            label: 'Location',
+            label: context.t.ai.tool.location,
             value:
                 '${location.path}${location.line == null ? '' : ':${location.line}'}',
           ),
@@ -473,13 +482,20 @@ Color _statusColor(ColorScheme colors, String? status) => switch (status) {
   _ => colors.onSurfaceVariant,
 };
 
-String _statusLabel(String value) => value
-    .split('_')
-    .map(
-      (part) =>
-          part.isEmpty ? part : '${part[0].toUpperCase()}${part.substring(1)}',
-    )
-    .join(' ');
+String _statusLabel(Translations t, String value) => switch (value) {
+  'completed' => t.ai.tool.status.completed,
+  'failed' => t.ai.tool.status.failed,
+  'in_progress' => t.ai.tool.status.inProgress,
+  _ =>
+    value
+        .split('_')
+        .map(
+          (part) => part.isEmpty
+              ? part
+              : '${part[0].toUpperCase()}${part.substring(1)}',
+        )
+        .join(' '),
+};
 
 int _decodedByteLength(String value) {
   try {

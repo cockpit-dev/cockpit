@@ -5,6 +5,7 @@ import 'package:cockpit_console/src/ui/screens/dashboard_screen.dart';
 import 'package:cockpit_console/src/ui/screens/documents_screen.dart';
 import 'package:cockpit_console/src/ui/screens/operations_screen.dart';
 import 'package:cockpit_console/src/ui/screens/runs_screen.dart';
+import 'package:cockpit_console/src/ui/screens/session_monitor_screen.dart';
 import 'package:cockpit_console/src/ui/screens/targets_screen.dart';
 import 'package:cockpit_console/src/ui/screens/workspaces_screen.dart';
 import 'package:cockpit_console/src/theme/console_shapes.dart';
@@ -100,6 +101,7 @@ final class AppShell extends HookConsumerWidget {
       ConsoleNavDestination.dashboard => const DashboardScreen(),
       ConsoleNavDestination.workspaces => const WorkspacesScreen(),
       ConsoleNavDestination.targets => const TargetsScreen(),
+      ConsoleNavDestination.sessions => const SessionMonitorScreen(),
       ConsoleNavDestination.documents => const DocumentsScreen(),
       ConsoleNavDestination.runs => const RunsScreen(),
       ConsoleNavDestination.operations => const OperationsScreen(),

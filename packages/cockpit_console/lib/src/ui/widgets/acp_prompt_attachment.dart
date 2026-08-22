@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:acpd/acpd.dart';
+import 'package:cockpit_console/i18n/strings.g.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:path/path.dart' as p;
 
@@ -58,18 +59,16 @@ Future<AcpPromptAttachment?> pickAcpPromptAttachment(
       AcpPromptAttachmentKind.fileLink => null,
     },
     dialogTitle: switch (kind) {
-      AcpPromptAttachmentKind.image => 'Attach image',
-      AcpPromptAttachmentKind.audio => 'Attach audio',
-      AcpPromptAttachmentKind.embeddedContext => 'Embed context file',
-      AcpPromptAttachmentKind.fileLink => 'Link file',
+      AcpPromptAttachmentKind.image => t.ai.composer.attachImage,
+      AcpPromptAttachmentKind.audio => t.ai.composer.attachAudio,
+      AcpPromptAttachmentKind.embeddedContext => t.ai.composer.embedContext,
+      AcpPromptAttachmentKind.fileLink => t.ai.composer.linkFile,
     },
   );
   if (result == null) return null;
   final path = result.files.single.path;
   if (path == null || path.isEmpty) {
-    throw const AcpPromptAttachmentException(
-      'The selected file does not expose a local path.',
-    );
+    throw AcpPromptAttachmentException(t.ai.composer.pathUnavailable);
   }
   return loadAcpPromptAttachment(path, kind);
 }
@@ -81,9 +80,7 @@ Future<AcpPromptAttachment> loadAcpPromptAttachment(
   final file = File(path);
   final stat = await file.stat();
   if (stat.type != FileSystemEntityType.file) {
-    throw const AcpPromptAttachmentException(
-      'The selected path is not a regular file.',
-    );
+    throw AcpPromptAttachmentException(t.ai.composer.notRegularFile);
   }
   final canonicalPath = await file.resolveSymbolicLinks();
   final name = p.basename(canonicalPath);
@@ -95,7 +92,9 @@ Future<AcpPromptAttachment> loadAcpPromptAttachment(
     return AcpPromptAttachment(
       kind: kind,
       name: name,
-      detail: '$mimeType · ${formatAcpByteSize(sourceBytes)} · linked',
+      detail:
+          '$mimeType · ${formatAcpByteSize(sourceBytes)} · '
+          '${t.ai.composer.linked}',
       identity: 'link:$uri',
       content: ResourceLink(
         name: name,
@@ -141,9 +140,7 @@ AcpPromptAttachment createAcpResourceLink({
 }) {
   final cleanName = name.trim();
   if (cleanName.isEmpty || !uri.hasScheme) {
-    throw const AcpPromptAttachmentException(
-      'Resource links require a name and an absolute URI.',
-    );
+    throw AcpPromptAttachmentException(t.ai.composer.resourceRequirements);
   }
   final value = uri.toString();
   return AcpPromptAttachment(
@@ -173,8 +170,10 @@ void validateAcpPromptAttachmentBudget(
   );
   if (total > acpMaximumPromptInlineBytes) {
     throw AcpPromptAttachmentException(
-      'Inline attachments use ${formatAcpByteSize(total)}. The prompt limit is '
-      '${formatAcpByteSize(acpMaximumPromptInlineBytes)}.',
+      t.ai.composer.promptLimit(
+        size: formatAcpByteSize(total),
+        limit: formatAcpByteSize(acpMaximumPromptInlineBytes),
+      ),
     );
   }
 }
@@ -200,7 +199,7 @@ AcpPromptAttachment _imageAttachment({
 }) {
   if (!mimeType.startsWith('image/')) {
     throw AcpPromptAttachmentException(
-      '“$name” is not a supported image file.',
+      t.ai.composer.unsupportedImage(name: name),
     );
   }
   return AcpPromptAttachment(
@@ -226,7 +225,7 @@ AcpPromptAttachment _audioAttachment({
 }) {
   if (!mimeType.startsWith('audio/')) {
     throw AcpPromptAttachmentException(
-      '“$name” is not a supported audio file.',
+      t.ai.composer.unsupportedAudio(name: name),
     );
   }
   return AcpPromptAttachment(
@@ -271,7 +270,9 @@ AcpPromptAttachment _contextAttachment({
   return AcpPromptAttachment(
     kind: AcpPromptAttachmentKind.embeddedContext,
     name: name,
-    detail: '$mimeType · ${formatAcpByteSize(bytes.length)} · embedded',
+    detail:
+        '$mimeType · ${formatAcpByteSize(bytes.length)} · '
+        '${t.ai.composer.embedded}',
     identity: 'resource:$uri',
     content: EmbeddedResource(resource: resource),
     sourceBytes: bytes.length,
@@ -281,12 +282,14 @@ AcpPromptAttachment _contextAttachment({
 
 void _validateInlineFileSize(int bytes) {
   if (bytes == 0) {
-    throw const AcpPromptAttachmentException('The selected file is empty.');
+    throw AcpPromptAttachmentException(t.ai.composer.emptyFile);
   }
   if (bytes > acpMaximumInlineAttachmentBytes) {
     throw AcpPromptAttachmentException(
-      'The selected file is ${formatAcpByteSize(bytes)}. Inline attachments '
-      'are limited to ${formatAcpByteSize(acpMaximumInlineAttachmentBytes)}.',
+      t.ai.composer.fileTooLarge(
+        size: formatAcpByteSize(bytes),
+        limit: formatAcpByteSize(acpMaximumInlineAttachmentBytes),
+      ),
     );
   }
 }

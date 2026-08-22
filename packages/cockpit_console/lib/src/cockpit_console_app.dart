@@ -1,11 +1,13 @@
 import 'dart:async';
 
+import 'package:cockpit_console/i18n/strings.g.dart';
 import 'package:cockpit_console/src/providers/core_providers.dart';
 import 'package:cockpit_console/src/providers/data_providers.dart';
 import 'package:cockpit_console/src/providers/preferences_store.dart';
 import 'package:cockpit_console/src/theme/console_theme.dart';
 import 'package:cockpit_console/src/ui/app_shell.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 /// Root widget for the Cockpit Console desktop application.
@@ -44,11 +46,14 @@ final class _CockpitConsoleAppState extends ConsumerState<CockpitConsoleApp> {
     final themeMode = ref.watch(themeProvider);
 
     return MaterialApp(
-      title: 'Cockpit Console',
+      title: context.t.app.title,
       debugShowCheckedModeBanner: false,
       theme: ConsoleTheme.build(Brightness.light),
       darkTheme: ConsoleTheme.build(Brightness.dark),
       themeMode: themeMode,
+      locale: TranslationProvider.of(context).flutterLocale,
+      supportedLocales: AppLocaleUtils.supportedLocales,
+      localizationsDelegates: GlobalMaterialLocalizations.delegates,
       navigatorObservers: widget.navigatorObservers,
       home: _startupComplete ? const AppShell() : const _ConsoleStartupView(),
     );
@@ -74,6 +79,9 @@ final class _CockpitConsoleAppState extends ConsumerState<CockpitConsoleApp> {
       loadedPreferences = preferences;
       if (!mounted) return;
       ref.read(themeProvider.notifier).set(preferences.themeMode);
+      final localeMode = preferences.localeMode;
+      ref.read(consoleLocaleProvider.notifier).set(localeMode);
+      await _applyLocale(localeMode);
       ref
           .read(selectedWorkspaceIdProvider.notifier)
           .select(preferences.selectedWorkspaceId);
@@ -91,6 +99,17 @@ final class _CockpitConsoleAppState extends ConsumerState<CockpitConsoleApp> {
           // A persistence failure must not break the active console session.
         }
       });
+      ref.listenManual<ConsoleLocaleMode>(consoleLocaleProvider, (
+        previous,
+        next,
+      ) async {
+        await _applyLocale(next);
+        try {
+          await preferences.setLocaleMode(next);
+        } on Object {
+          // A persistence failure must not break the active console session.
+        }
+      });
       ref.listenManual<String?>(selectedWorkspaceIdProvider, (
         previous,
         next,
@@ -103,6 +122,14 @@ final class _CockpitConsoleAppState extends ConsumerState<CockpitConsoleApp> {
       });
     }
   }
+
+  Future<void> _applyLocale(ConsoleLocaleMode mode) => switch (mode) {
+    ConsoleLocaleMode.system => LocaleSettings.useDeviceLocale(),
+    ConsoleLocaleMode.english => LocaleSettings.setLocale(AppLocale.en),
+    ConsoleLocaleMode.simplifiedChinese => LocaleSettings.setLocale(
+      AppLocale.zhCn,
+    ),
+  };
 
   Future<void> _initializeSupervisor() async {
     try {
@@ -142,14 +169,14 @@ final class _ConsoleStartupView extends StatelessWidget {
                 ),
                 const SizedBox(height: 20),
                 Text(
-                  'Connecting to Cockpit',
+                  context.t.app.connecting,
                   style: theme.textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.w600,
                   ),
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Checking daemon health and Supervisor capabilities.',
+                  context.t.app.checking,
                   textAlign: TextAlign.center,
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: theme.colorScheme.onSurfaceVariant,

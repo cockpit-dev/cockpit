@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:cockpit/cockpit.dart';
+import 'package:cockpit_console/i18n/strings.g.dart';
 import 'package:cockpit_console/src/providers/core_providers.dart';
 import 'package:cockpit_console/src/providers/data_providers.dart';
 import 'package:cockpit_console/src/theme/console_colors.dart';
@@ -22,20 +23,27 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 String _newIdempotencyKey(String prefix) =>
     '$prefix-${DateTime.now().microsecondsSinceEpoch}';
 
-Map<String, Object?> parseRunInputs(String source) {
+Map<String, Object?> parseRunInputs(
+  String source, {
+  Translations? translations,
+}) {
+  final t = translations ?? AppLocale.en.translations;
   final trimmed = source.trim();
   if (trimmed.isEmpty) return const <String, Object?>{};
   final decoded = decodeCockpitStructuredInput(trimmed);
   if (decoded is! Map<Object?, Object?> ||
       decoded.keys.any((key) => key is! String)) {
-    throw const FormatException(
-      'Run inputs must be a LON, JSON, or YAML object.',
-    );
+    throw FormatException(t.runs.inputsObjectError);
   }
   return Map<String, Object?>.unmodifiable(Map<String, Object?>.from(decoded));
 }
 
-int? parseRunTimeout(String source, {required bool isSuite}) {
+int? parseRunTimeout(
+  String source, {
+  required bool isSuite,
+  Translations? translations,
+}) {
+  final t = translations ?? AppLocale.en.translations;
   final trimmed = source.trim();
   if (trimmed.isEmpty) return null;
   final match = RegExp(
@@ -43,7 +51,7 @@ int? parseRunTimeout(String source, {required bool isSuite}) {
     caseSensitive: false,
   ).firstMatch(trimmed);
   if (match == null) {
-    throw const FormatException('Use a duration such as 30s, 5m, or 1h.');
+    throw FormatException(t.runs.durationError);
   }
   final value = int.parse(match.group(1)!);
   final multiplier = switch (match.group(2)?.toLowerCase()) {
@@ -51,13 +59,13 @@ int? parseRunTimeout(String source, {required bool isSuite}) {
     's' => 1000,
     'm' => 60000,
     'h' => 3600000,
-    _ => throw const FormatException('Unsupported timeout unit.'),
+    _ => throw FormatException(t.runs.timeoutUnitError),
   };
   final timeoutMs = value * multiplier;
   final maximum = isSuite ? 86400000 : 21600000;
   if (timeoutMs < 1 || timeoutMs > maximum) {
     throw FormatException(
-      'Timeout must be between 1ms and ${isSuite ? '24h' : '6h'}.',
+      t.runs.timeoutRangeError(maximum: isSuite ? '24h' : '6h'),
     );
   }
   return timeoutMs;
@@ -77,10 +85,10 @@ String _compactRunPath(String value) {
   return parts.sublist(parts.length - 2).join('/');
 }
 
-String _runDocumentLabel(CockpitDocumentResource document) {
+String _runDocumentLabel(Translations t, CockpitDocumentResource document) {
   final kind = document.kind == CockpitIndexedDocumentKind.suite
-      ? 'Suite'
-      : 'Case';
+      ? t.runs.suite
+      : t.runs.caseLabel;
   final title = document.title?.trim();
   final name = title != null && title.isNotEmpty
       ? title
@@ -229,7 +237,7 @@ final class RunsScreen extends HookConsumerWidget {
               runId,
               RunEvent(
                 kind: 'error',
-                message: 'Failed to restore run status: $error',
+                message: context.t.runs.restoreFailed(error: error.toString()),
                 timestamp: DateTime.now(),
               ),
             );
@@ -319,11 +327,7 @@ final class RunsScreen extends HookConsumerWidget {
             .firstOrNull;
         if (document == null) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                'The selected test file changed or was removed. Choose it again.',
-              ),
-            ),
+            SnackBar(content: Text(context.t.runs.selectedFileChanged)),
           );
           selectedDocId.value = null;
           selectedCaseId.value = null;
@@ -333,7 +337,11 @@ final class RunsScreen extends HookConsumerWidget {
       } on Object catch (error) {
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Could not refresh test files: $error')),
+            SnackBar(
+              content: Text(
+                context.t.runs.refreshTestsFailed(error: error.toString()),
+              ),
+            ),
           );
         }
         return;
@@ -342,10 +350,11 @@ final class RunsScreen extends HookConsumerWidget {
       late final Map<String, Object?> inputs;
       late final int? timeoutMs;
       try {
-        inputs = parseRunInputs(inputsCtrl.text);
+        inputs = parseRunInputs(inputsCtrl.text, translations: context.t);
         timeoutMs = parseRunTimeout(
           timeoutCtrl.text,
           isSuite: document.kind == CockpitIndexedDocumentKind.suite,
+          translations: context.t,
         );
       } on FormatException catch (error) {
         ScaffoldMessenger.of(
@@ -406,14 +415,18 @@ final class RunsScreen extends HookConsumerWidget {
         }
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Cancellation requested')),
+            SnackBar(content: Text(context.t.runs.cancellationRequested)),
           );
         }
       } on Object catch (error) {
         if (context.mounted) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text('Cancel failed: $error')));
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                context.t.runs.cancelFailed(error: error.toString()),
+              ),
+            ),
+          );
         }
       } finally {
         canceling.value = false;
@@ -436,9 +449,11 @@ final class RunsScreen extends HookConsumerWidget {
         ref.invalidate(recentRunsForWorkspaceProvider(workspaceId!));
       } on Object catch (e) {
         if (context.mounted) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text('Failed to refresh run: $e')));
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(context.t.runs.refreshFailed(error: e.toString())),
+            ),
+          );
         }
       }
     }
@@ -502,19 +517,18 @@ final class RunsScreen extends HookConsumerWidget {
 
     if (workspaceId == null) {
       return ScreenScaffold(
-        title: 'Test runs',
-        subtitle: 'Run a test case or suite and follow its result',
+        title: context.t.runs.title,
+        subtitle: context.t.runs.subtitle,
         body: EmptyStateView(
           icon: LucideIcons.mousePointerClick,
-          title: 'Select a project',
-          description:
-              'Choose a project from the Projects page to start a test run.',
+          title: context.t.runs.selectProject,
+          description: context.t.runs.selectProjectDescription,
           action: FilledButton.icon(
             onPressed: () => ref
                 .read(navProvider.notifier)
                 .go(ConsoleNavDestination.workspaces),
             icon: const Icon(LucideIcons.folderOpen, size: 14),
-            label: const Text('Choose project'),
+            label: Text(context.t.runs.chooseProject),
           ),
         ),
       );
@@ -564,8 +578,8 @@ final class RunsScreen extends HookConsumerWidget {
     );
 
     return ScreenScaffold(
-      title: 'Test runs',
-      subtitle: 'Run a test case or suite and follow its result',
+      title: context.t.runs.title,
+      subtitle: context.t.runs.subtitle,
       actions: runId == null
           ? <Widget>[
               if (recentRuns.isNotEmpty)
@@ -579,8 +593,8 @@ final class RunsScreen extends HookConsumerWidget {
                       )
                     : const Icon(LucideIcons.refreshCw, size: 15),
                 tooltip: recentRunsAsync.hasError
-                    ? 'Retry recent runs'
-                    : 'Refresh recent runs',
+                    ? context.t.runs.retryRecent
+                    : context.t.runs.refreshRecent,
               ),
             ]
           : null,
@@ -597,7 +611,7 @@ final class RunsScreen extends HookConsumerWidget {
     required ValueNotifier<String?> downloadingId,
   }) async {
     final destination = await FilePicker.saveFile(
-      dialogTitle: 'Save artifact',
+      dialogTitle: context.t.runs.saveArtifact,
       fileName: artifact.relativePath.split('/').last,
     );
     if (destination == null) return;
@@ -608,14 +622,18 @@ final class RunsScreen extends HookConsumerWidget {
           .downloadArtifact(artifact: artifact, destination: File(destination));
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Saved verified artifact to $destination')),
+          SnackBar(
+            content: Text(context.t.runs.artifactSaved(path: destination)),
+          ),
         );
       }
     } on Object catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Download failed: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(context.t.runs.downloadFailed(error: e.toString())),
+          ),
+        );
       }
     } finally {
       downloadingId.value = null;
@@ -657,7 +675,7 @@ final class RunsScreen extends HookConsumerWidget {
       record(
         RunEvent(
           kind: 'error',
-          message: 'Failed to observe run: $error',
+          message: context.t.runs.observeFailed(error: error.toString()),
           timestamp: DateTime.now(),
         ),
       );
@@ -672,7 +690,7 @@ final class RunsScreen extends HookConsumerWidget {
         try {
           final json = jsonDecode(data);
           if (json is! Map<String, Object?>) {
-            throw const FormatException('Expected a JSON object event.');
+            throw FormatException(context.t.runs.jsonEventError);
           }
           final kind = json['kind'] as String? ?? 'event';
           if (kind == 'terminal' || kind == 'gap' || kind == 'disconnected') {
@@ -681,7 +699,9 @@ final class RunsScreen extends HookConsumerWidget {
             record(
               RunEvent(
                 kind: kind,
-                message: kind == 'terminal' ? 'Run completed' : 'Stream $kind',
+                message: kind == 'terminal'
+                    ? context.t.runs.completed
+                    : context.t.runs.streamEvent(kind: kind),
                 timestamp: DateTime.now(),
               ),
             );
@@ -713,7 +733,7 @@ final class RunsScreen extends HookConsumerWidget {
           record(
             RunEvent(
               kind: 'error',
-              message: 'Malformed event: $error',
+              message: context.t.runs.malformedEvent(error: error.toString()),
               timestamp: DateTime.now(),
             ),
           );
@@ -728,7 +748,7 @@ final class RunsScreen extends HookConsumerWidget {
           record(
             RunEvent(
               kind: 'error',
-              message: 'Failed to load run status: $error',
+              message: context.t.runs.statusLoadFailed(error: error.toString()),
               timestamp: DateTime.now(),
             ),
           );
@@ -737,7 +757,7 @@ final class RunsScreen extends HookConsumerWidget {
           record(
             RunEvent(
               kind: 'disconnected',
-              message: 'Event stream ended before terminal state',
+              message: context.t.runs.streamEnded,
               timestamp: DateTime.now(),
             ),
           );
@@ -806,16 +826,16 @@ final class _SubmissionBar extends StatelessWidget {
         (isSuite || selectedCase != null) &&
         !submitting;
     final guidance = documentsLoading
-        ? 'Loading test files...'
+        ? context.t.runs.loadingTests
         : documentsError != null && documents.isEmpty
-        ? 'Test files are temporarily unavailable.'
+        ? context.t.runs.testsUnavailable
         : documents.isEmpty
-        ? 'Create a test file before starting a run.'
+        ? context.t.runs.createTestFirst
         : selectedDocument == null
-        ? 'Select a test file to continue.'
+        ? context.t.runs.selectFile
         : !isSuite && selectedCase == null
-        ? 'Select a test case to continue.'
-        : 'Ready to run in the current project.';
+        ? context.t.runs.selectCase
+        : context.t.runs.ready;
 
     return Center(
       child: ConstrainedBox(
@@ -827,7 +847,7 @@ final class _SubmissionBar extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 16, 20, 4),
               child: Text(
-                'Start a test run',
+                context.t.runs.startTitle,
                 style: theme.textTheme.titleMedium?.copyWith(
                   fontWeight: FontWeight.w700,
                 ),
@@ -836,7 +856,7 @@ final class _SubmissionBar extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
               child: Text(
-                'Choose a case or suite. Override the app only when the test file default is not the intended target.',
+                context.t.runs.startDescription,
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
                 ),
@@ -864,8 +884,8 @@ final class _SubmissionBar extends StatelessWidget {
                         width: itemWidth,
                         child: ConsoleDropdownField<String>(
                           initialValue: selectedDocument?.documentId,
-                          label: '1. Test file',
-                          hint: const Text('Choose a test file'),
+                          label: context.t.runs.testFileStep,
+                          hint: Text(context.t.runs.chooseTestFile),
                           items: [
                             for (final document in documents)
                               DropdownMenuItem(
@@ -873,7 +893,7 @@ final class _SubmissionBar extends StatelessWidget {
                                 child: Tooltip(
                                   message: document.relativePath,
                                   child: Text(
-                                    _runDocumentLabel(document),
+                                    _runDocumentLabel(context.t, document),
                                     style: const TextStyle(fontSize: 12),
                                     overflow: TextOverflow.ellipsis,
                                   ),
@@ -903,8 +923,8 @@ final class _SubmissionBar extends StatelessWidget {
                           width: itemWidth,
                           child: ConsoleDropdownField<String>(
                             initialValue: selectedCase,
-                            label: '2. Test case',
-                            hint: const Text('Choose a test case'),
+                            label: context.t.runs.testCaseStep,
+                            hint: Text(context.t.runs.chooseTestCase),
                             items: [
                               for (final entry in availableCases)
                                 DropdownMenuItem(
@@ -928,9 +948,9 @@ final class _SubmissionBar extends StatelessWidget {
                         SizedBox(
                           width: itemWidth,
                           child: ConsoleFieldValue(
-                            label: '2. Suite contents',
-                            child: const Text(
-                              'All cases in this suite',
+                            label: context.t.runs.suiteContentsStep,
+                            child: Text(
+                              context.t.runs.allSuiteCases,
                               overflow: TextOverflow.ellipsis,
                             ),
                           ),
@@ -939,11 +959,11 @@ final class _SubmissionBar extends StatelessWidget {
                         width: itemWidth,
                         child: ConsoleDropdownField<String>(
                           initialValue: selectedTarget ?? '',
-                          label: '3. App or device',
+                          label: context.t.runs.targetStep,
                           items: [
-                            const DropdownMenuItem(
+                            DropdownMenuItem(
                               value: '',
-                              child: Text('Use test file default'),
+                              child: Text(context.t.runs.useFileDefault),
                             ),
                             for (final target in targets)
                               DropdownMenuItem(
@@ -1003,12 +1023,12 @@ final class _SubmissionBar extends StatelessWidget {
                         ? TextButton.icon(
                             onPressed: () => unawaited(onRetryDocuments()),
                             icon: const Icon(LucideIcons.refreshCw, size: 14),
-                            label: const Text('Retry tests'),
+                            label: Text(context.t.runs.retryTests),
                           )
                         : TextButton.icon(
                             onPressed: onOpenTests,
                             icon: const Icon(LucideIcons.filePlus2, size: 14),
-                            label: const Text('Open tests'),
+                            label: Text(context.t.runs.openTests),
                           );
                     if (constraints.maxWidth < 520) {
                       return Column(
@@ -1033,8 +1053,8 @@ final class _SubmissionBar extends StatelessWidget {
                 child: _InlineRunNotice(
                   icon: LucideIcons.triangleAlert,
                   message: documents.isEmpty
-                      ? 'Cockpit could not load the current test index. Retry when the project worker is available.'
-                      : 'Cockpit could not refresh the test index. Existing choices remain available.',
+                      ? context.t.runs.indexLoadFailed
+                      : context.t.runs.indexRefreshFailed,
                   color: context.consoleColors.warning,
                 ),
               ),
@@ -1057,7 +1077,11 @@ final class _SubmissionBar extends StatelessWidget {
                                 ),
                               )
                             : const Icon(LucideIcons.play, size: 14),
-                        label: Text(isSuite ? 'Run suite' : 'Run test'),
+                        label: Text(
+                          isSuite
+                              ? context.t.runs.runSuite
+                              : context.t.runs.runTest,
+                        ),
                       ),
                     ),
                   );
@@ -1072,15 +1096,18 @@ final class _SubmissionBar extends StatelessWidget {
                 minTileHeight: ConsoleControlStyle.height,
                 tilePadding: EdgeInsets.zero,
                 childrenPadding: const EdgeInsets.fromLTRB(0, 8, 0, 4),
-                title: Text('Run options', style: theme.textTheme.labelLarge),
+                title: Text(
+                  context.t.runs.options,
+                  style: theme.textTheme.labelLarge,
+                ),
                 children: [
                   ConsoleTextArea(
                     controller: inputsCtrl,
                     enabled: !submitting,
                     minLines: 2,
                     maxLines: 4,
-                    label: 'Inputs (optional)',
-                    hint: 'LON, JSON, or YAML object',
+                    label: context.t.runs.inputsOptional,
+                    hint: context.t.runs.inputsHint,
                     style: const TextStyle(
                       fontFamily: 'monospace',
                       fontSize: 12,
@@ -1090,8 +1117,8 @@ final class _SubmissionBar extends StatelessWidget {
                   ConsoleTextField(
                     controller: timeoutCtrl,
                     enabled: !submitting,
-                    label: 'Timeout (optional)',
-                    hint: 'Use default, e.g. 30s or 5m',
+                    label: context.t.runs.timeoutOptional,
+                    hint: context.t.runs.timeoutHint,
                     style: const TextStyle(
                       fontFamily: 'monospace',
                       fontSize: 12,
@@ -1256,7 +1283,7 @@ final class _RunDetail extends HookWidget {
                 ),
               if (recentRunsError)
                 Tooltip(
-                  message: 'Recent runs are temporarily unavailable',
+                  message: context.t.runs.recentUnavailable,
                   child: Icon(
                     LucideIcons.triangleAlert,
                     size: 13,
@@ -1268,7 +1295,10 @@ final class _RunDetail extends HookWidget {
                   dimension: 13,
                   child: CircularProgressIndicator(strokeWidth: 2),
                 ),
-                Text('Loading run', style: theme.textTheme.labelSmall),
+                Text(
+                  context.t.runs.loadingRun,
+                  style: theme.textTheme.labelSmall,
+                ),
               ],
               if (runResource != null) ...[
                 _LifecycleChip(
@@ -1283,7 +1313,7 @@ final class _RunDetail extends HookWidget {
                   radius: 6,
                 ),
                 child: Text(
-                  '${events.length} events',
+                  context.t.runs.events(n: events.length),
                   style: TextStyle(
                     fontSize: 10,
                     fontWeight: FontWeight.w600,
@@ -1295,13 +1325,13 @@ final class _RunDetail extends HookWidget {
               TextButton.icon(
                 onPressed: onRefresh,
                 icon: const Icon(LucideIcons.refreshCw, size: 12),
-                label: const Text('Refresh'),
+                label: Text(context.t.common.refresh),
               ),
               if (!loading && terminal)
                 TextButton.icon(
                   onPressed: onNewRun,
                   icon: const Icon(LucideIcons.plus, size: 12),
-                  label: const Text('New run'),
+                  label: Text(context.t.runs.newRun),
                 ),
               if (!loading && !terminal)
                 TextButton.icon(
@@ -1313,7 +1343,7 @@ final class _RunDetail extends HookWidget {
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
                       : const Icon(LucideIcons.x, size: 12),
-                  label: const Text('Cancel run'),
+                  label: Text(context.t.runs.cancelRun),
                   style: TextButton.styleFrom(
                     foregroundColor: theme.colorScheme.error,
                   ),
@@ -1427,7 +1457,7 @@ final class _RecentRunMenu extends StatelessWidget {
                   ),
                   const SizedBox(width: 8),
                   Text(
-                    _runStateLabel(run),
+                    _runStateLabel(context.t, run),
                     style: theme.textTheme.labelSmall?.copyWith(
                       color: _runStateColor(context, run),
                     ),
@@ -1453,7 +1483,7 @@ final class _RecentRunMenu extends StatelessWidget {
         label: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 150),
           child: Text(
-            currentRunId ?? 'Recent runs',
+            currentRunId ?? context.t.runs.recentRuns,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
@@ -1466,11 +1496,41 @@ final class _RecentRunMenu extends StatelessWidget {
   }
 }
 
-String _runStateLabel(CockpitRunResource run) =>
-    (run.outcome?.name ?? run.lifecycle.name).replaceAll(
-      'internalError',
-      'error',
-    );
+String _runStateLabel(Translations t, CockpitRunResource run) {
+  final outcome = run.outcome;
+  if (outcome != null) {
+    return switch (outcome) {
+      CockpitRunOutcome.passed => t.runs.state.passed,
+      CockpitRunOutcome.failed => t.runs.state.failed,
+      CockpitRunOutcome.blocked => t.runs.state.blocked,
+      CockpitRunOutcome.skipped => t.runs.state.skipped,
+      CockpitRunOutcome.cancelled => t.runs.state.cancelled,
+      CockpitRunOutcome.interrupted => t.runs.state.interrupted,
+      CockpitRunOutcome.internalError => t.runs.state.internalError,
+    };
+  }
+  return switch (run.lifecycle) {
+    CockpitRunLifecycle.queued => t.runs.state.queued,
+    CockpitRunLifecycle.running => t.runs.state.running,
+    CockpitRunLifecycle.finalizing => t.runs.state.finalizing,
+    CockpitRunLifecycle.completed => t.runs.state.completed,
+  };
+}
+
+String _localizedRunState(Translations t, String value) => switch (value) {
+  'queued' => t.runs.state.queued,
+  'running' => t.runs.state.running,
+  'finalizing' => t.runs.state.finalizing,
+  'completed' => t.runs.state.completed,
+  'passed' => t.runs.state.passed,
+  'failed' => t.runs.state.failed,
+  'blocked' => t.runs.state.blocked,
+  'skipped' => t.runs.state.skipped,
+  'cancelled' => t.runs.state.cancelled,
+  'interrupted' => t.runs.state.interrupted,
+  'internalError' => t.runs.state.internalError,
+  _ => _humanizeRunToken(value, capitalize: true),
+};
 
 Color _runStateColor(BuildContext context, CockpitRunResource run) {
   final theme = Theme.of(context);
@@ -1522,7 +1582,7 @@ final class _RunFailureBanner extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Why this run failed',
+                  context.t.runs.failureTitle,
                   style: theme.textTheme.labelMedium?.copyWith(
                     color: theme.colorScheme.error,
                   ),
@@ -1570,7 +1630,7 @@ final class _LifecycleChip extends StatelessWidget {
       'cancelled' || 'interrupted' => theme.colorScheme.onSurfaceVariant,
       _ => theme.colorScheme.onSurfaceVariant,
     };
-    final label = _humanizeRunToken(outcome ?? lifecycle, capitalize: true);
+    final label = _localizedRunState(context.t, outcome ?? lifecycle);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
       decoration: ConsoleShapes.decoration(
@@ -1685,7 +1745,7 @@ final class _ArtifactList extends StatelessWidget {
             border: Border(bottom: BorderSide(color: theme.dividerColor)),
           ),
           child: Text(
-            'Files & evidence (${artifacts.length})',
+            context.t.runs.filesEvidence(count: artifacts.length),
             style: theme.textTheme.labelMedium,
           ),
         ),
@@ -1761,7 +1821,7 @@ final class _ArtifactTile extends StatelessWidget {
               : IconButton(
                   onPressed: onDownload,
                   icon: const Icon(LucideIcons.download, size: 13),
-                  tooltip: 'Save file',
+                  tooltip: context.t.runs.saveFile,
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(
                     minWidth: 30,

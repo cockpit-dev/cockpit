@@ -1,4 +1,5 @@
 import 'package:acpd/acpd.dart';
+import 'package:cockpit_console/i18n/strings.g.dart';
 import 'package:cockpit_console/src/providers/acp_state.dart';
 import 'package:cockpit_console/src/theme/console_control_style.dart';
 import 'package:cockpit_console/src/theme/console_shapes.dart';
@@ -44,7 +45,7 @@ Future<AcpSessionSpec?> showAcpSessionEditor(
     context: context,
     builder: (context) => StatefulBuilder(
       builder: (context, setState) => AlertDialog(
-        title: const Text('Create session'),
+        title: Text(context.t.ai.connection.createSession),
         content: SizedBox(
           width: 560,
           child: SingleChildScrollView(
@@ -53,7 +54,7 @@ Future<AcpSessionSpec?> showAcpSessionEditor(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Text(
-                  'Working directory',
+                  context.t.ai.connection.workingDirectory,
                   style: Theme.of(context).textTheme.labelLarge,
                 ),
                 const SizedBox(height: 6),
@@ -62,7 +63,8 @@ Future<AcpSessionSpec?> showAcpSessionEditor(
                   child: InkWell(
                     onTap: () async {
                       final selected = await FilePicker.getDirectoryPath(
-                        dialogTitle: 'Select session working directory',
+                        dialogTitle:
+                            context.t.ai.connection.selectSessionDirectory,
                         initialDirectory: cwd,
                       );
                       if (selected != null) {
@@ -108,7 +110,7 @@ Future<AcpSessionSpec?> showAcpSessionEditor(
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
+            child: Text(context.t.common.cancel),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(
@@ -119,7 +121,7 @@ Future<AcpSessionSpec?> showAcpSessionEditor(
                 mcpServers: options.mcpServers,
               ),
             ),
-            child: const Text('Create session'),
+            child: Text(context.t.ai.connection.createSession),
           ),
         ],
       ),
@@ -154,17 +156,17 @@ final class AcpConnectionOptionsEditor extends StatelessWidget {
         tilePadding: const EdgeInsets.symmetric(horizontal: 12),
         childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
         leading: const Icon(LucideIcons.slidersHorizontal, size: 16),
-        title: const Text('Session context'),
+        title: Text(context.t.ai.connection.sessionContext),
         subtitle: Text(
           count == 0
-              ? 'Optional directories and MCP servers'
-              : '$count configured item${count == 1 ? '' : 's'}',
+              ? context.t.ai.connection.optionalContext
+              : context.t.ai.connection.configuredItems(n: count),
         ),
         children: [
           _OptionSection(
-            title: 'Additional directories',
+            title: context.t.ai.connection.additionalDirectories,
             description:
-                'Grant the agent access to workspace roots beyond the working directory.',
+                context.t.ai.connection.additionalDirectoriesDescription,
             action: TextButton.icon(
               onPressed:
                   enabled &&
@@ -176,7 +178,7 @@ final class AcpConnectionOptionsEditor extends StatelessWidget {
                   ? () => _addDirectory(context)
                   : null,
               icon: const Icon(LucideIcons.folderPlus, size: 14),
-              label: const Text('Add directory'),
+              label: Text(context.t.ai.connection.addDirectory),
             ),
             children: [
               for (final directory in value.additionalDirectories)
@@ -198,13 +200,12 @@ final class AcpConnectionOptionsEditor extends StatelessWidget {
           ),
           const SizedBox(height: 14),
           _OptionSection(
-            title: 'MCP servers',
-            description:
-                'Attach tools and resources for this Agent connection. Values are not stored.',
+            title: context.t.ai.connection.mcpServers,
+            description: context.t.ai.connection.mcpServersDescription,
             action: TextButton.icon(
               onPressed: enabled ? () => _addMcpServer(context) : null,
               icon: const Icon(LucideIcons.plus, size: 14),
-              label: const Text('Add server'),
+              label: Text(context.t.ai.connection.addServer),
             ),
             children: [
               for (var index = 0; index < value.mcpServers.length; index++)
@@ -233,12 +234,12 @@ final class AcpConnectionOptionsEditor extends StatelessWidget {
 
   Future<void> _addDirectory(BuildContext context) async {
     final directory = await FilePicker.getDirectoryPath(
-      dialogTitle: 'Add session directory',
+      dialogTitle: context.t.ai.connection.addSessionDirectory,
     );
     if (directory == null || !context.mounted) return;
     final normalized = p.normalize(p.absolute(directory));
     if (value.additionalDirectories.any((item) => p.equals(item, normalized))) {
-      _showOptionsError(context, 'That directory is already included.');
+      _showOptionsError(context, context.t.ai.connection.duplicateDirectory);
       return;
     }
     onChanged(
@@ -255,7 +256,7 @@ final class AcpConnectionOptionsEditor extends StatelessWidget {
     );
     if (server == null || !context.mounted) return;
     if (_hasMcpName(server.name)) {
-      _showOptionsError(context, 'MCP server names must be unique.');
+      _showOptionsError(context, context.t.ai.connection.duplicateServer);
       return;
     }
     onChanged(value.copyWith(mcpServers: [...value.mcpServers, server]));
@@ -269,7 +270,7 @@ final class AcpConnectionOptionsEditor extends StatelessWidget {
     );
     if (server == null || !context.mounted) return;
     if (_hasMcpName(server.name, except: index)) {
-      _showOptionsError(context, 'MCP server names must be unique.');
+      _showOptionsError(context, context.t.ai.connection.duplicateServer);
       return;
     }
     final servers = value.mcpServers.toList()..[index] = server;
@@ -378,7 +379,7 @@ final class _ConfiguredRow extends StatelessWidget {
               ),
               IconButton(
                 onPressed: onDelete,
-                tooltip: 'Remove $title',
+                tooltip: context.t.ai.connection.remove(name: title),
                 visualDensity: VisualDensity.compact,
                 iconSize: 14,
                 icon: const Icon(LucideIcons.x),

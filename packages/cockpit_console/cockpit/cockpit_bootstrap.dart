@@ -3,6 +3,7 @@ import 'package:flutter_cockpit/flutter_cockpit_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:cockpit_console/cockpit_console.dart';
+import 'package:cockpit_console/i18n/strings.g.dart';
 
 /// Builds the development-mode wrapper around [CockpitConsoleApp].
 ///
@@ -28,9 +29,12 @@ Widget buildCockpitConsoleDevelopmentApp() {
   );
 
   final configuration = FlutterCockpitConfiguration(
-    httpNetworkObserver: !enableHttpNetworkObserver
+    networkObserver: !enableHttpNetworkObserver
         ? null
-        : CockpitHttpNetworkObserverConfiguration(maxRetainedEntries: 80),
+        : CockpitHttpNetworkObserver(
+            maxRetainedEntries: 80,
+            captureFilter: captureConsoleNetworkRequest,
+          ),
     runtimeObserverConfiguration: CockpitRuntimeObserverConfiguration(
       enabled: enableRuntimeObserver,
     ),
@@ -46,15 +50,24 @@ Widget buildCockpitConsoleDevelopmentApp() {
       ),
     ),
   );
-  return FlutterCockpitApp(
-    config: FlutterCockpitConfig.fromRuntimeConfiguration(configuration),
-    child: ProviderScope(
-      retry: consoleProviderRetry,
-      child: CockpitConsoleApp(
-        navigatorObservers: <NavigatorObserver>[
-          FlutterCockpit.createNavigatorObserver(),
-        ],
+  return TranslationProvider(
+    child: FlutterCockpitApp(
+      config: FlutterCockpitConfig.fromRuntimeConfiguration(configuration),
+      child: ProviderScope(
+        retry: consoleProviderRetry,
+        child: CockpitConsoleApp(
+          navigatorObservers: <NavigatorObserver>[
+            FlutterCockpit.createNavigatorObserver(),
+          ],
+        ),
       ),
     ),
   );
+}
+
+bool captureConsoleNetworkRequest(String _, Uri uri) {
+  final loopback =
+      uri.host == '127.0.0.1' || uri.host == 'localhost' || uri.host == '::1';
+  if (!loopback) return true;
+  return !uri.path.startsWith('/api/v2/') && !uri.path.startsWith('/_cockpit/');
 }

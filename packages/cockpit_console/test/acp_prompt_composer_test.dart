@@ -1,4 +1,5 @@
 import 'package:acpd/acpd.dart';
+import 'package:cockpit_console/i18n/strings.g.dart';
 import 'package:cockpit_console/src/providers/acp_state.dart';
 import 'package:cockpit_console/src/theme/console_theme.dart';
 import 'package:cockpit_console/src/ui/widgets/acp_prompt_composer.dart';
@@ -6,29 +7,33 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  setUp(() => LocaleSettings.setLocaleSync(AppLocale.en));
+
   testWidgets('available command is inserted and sent as prompt content', (
     tester,
   ) async {
     List<ContentBlock>? sent;
     await tester.pumpWidget(
-      MaterialApp(
-        theme: ConsoleTheme.build(Brightness.light),
-        home: Scaffold(
-          body: AcpPromptComposer(
-            connection: _connection(
-              commands: const [
-                AvailableCommand(
-                  name: 'inspect',
-                  description: 'Inspect the current project',
-                  input: UnstructuredCommandInput(hint: 'Optional target'),
-                ),
-              ],
+      TranslationProvider(
+        child: MaterialApp(
+          theme: ConsoleTheme.build(Brightness.light),
+          home: Scaffold(
+            body: AcpPromptComposer(
+              connection: _connection(
+                commands: const [
+                  AvailableCommand(
+                    name: 'inspect',
+                    description: 'Inspect the current project',
+                    input: UnstructuredCommandInput(hint: 'Optional target'),
+                  ),
+                ],
+              ),
+              onSend: (content) async {
+                sent = content;
+                return true;
+              },
+              onCancel: () {},
             ),
-            onSend: (content) async {
-              sent = content;
-              return true;
-            },
-            onCancel: () {},
           ),
         ),
       ),
@@ -55,20 +60,22 @@ void main() {
     tester,
   ) async {
     await tester.pumpWidget(
-      MaterialApp(
-        theme: ConsoleTheme.build(Brightness.dark),
-        home: Scaffold(
-          body: AcpPromptComposer(
-            connection: _connection(
-              commands: const [
-                AvailableCommand(
-                  name: 'review',
-                  description: 'Review a target',
-                ),
-              ],
+      TranslationProvider(
+        child: MaterialApp(
+          theme: ConsoleTheme.build(Brightness.dark),
+          home: Scaffold(
+            body: AcpPromptComposer(
+              connection: _connection(
+                commands: const [
+                  AvailableCommand(
+                    name: 'review',
+                    description: 'Review a target',
+                  ),
+                ],
+              ),
+              onSend: (_) async => true,
+              onCancel: () {},
             ),
-            onSend: (_) async => true,
-            onCancel: () {},
           ),
         ),
       ),

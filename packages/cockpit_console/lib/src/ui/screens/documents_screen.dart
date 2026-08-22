@@ -1,3 +1,4 @@
+import 'package:cockpit_console/i18n/strings.g.dart';
 import 'package:cockpit_console/src/providers/core_providers.dart';
 import 'package:cockpit_console/src/providers/data_providers.dart';
 import 'package:cockpit_console/src/theme/console_colors.dart';
@@ -41,19 +42,18 @@ final class DocumentsScreen extends HookConsumerWidget {
 
     if (workspaceId == null) {
       return ScreenScaffold(
-        title: 'Tests',
-        subtitle: 'Create and check case or suite files in LON, JSON, or YAML',
+        title: context.t.tests.title,
+        subtitle: context.t.tests.subtitle,
         body: EmptyStateView(
           icon: LucideIcons.mousePointerClick,
-          title: 'Select a project',
-          description:
-              'Choose a project from the Projects page to view its test files.',
+          title: context.t.tests.selectProject,
+          description: context.t.tests.selectProjectDescription,
           action: FilledButton.icon(
             onPressed: () => ref
                 .read(navProvider.notifier)
                 .go(ConsoleNavDestination.workspaces),
             icon: const Icon(LucideIcons.folderOpen, size: 16),
-            label: const Text('Choose project'),
+            label: Text(context.t.tests.chooseProject),
           ),
         ),
       );
@@ -62,20 +62,20 @@ final class DocumentsScreen extends HookConsumerWidget {
     final docsAsync = ref.watch(documentsForWorkspaceProvider(workspaceId));
 
     return ScreenScaffold(
-      title: 'Tests',
-      subtitle: 'Create and check case or suite files in LON, JSON, or YAML',
+      title: context.t.tests.title,
+      subtitle: context.t.tests.subtitle,
       body: docsAsync.when(
         loading: () =>
             const Center(child: CircularProgressIndicator(strokeWidth: 2)),
         error: (error, _) => EmptyStateView(
           icon: LucideIcons.alertCircle,
-          title: "Couldn't load test files",
+          title: context.t.tests.loadFailed,
           description: '$error',
           action: OutlinedButton.icon(
             onPressed: () =>
                 ref.invalidate(documentsForWorkspaceProvider(workspaceId)),
             icon: const Icon(LucideIcons.refreshCw, size: 16),
-            label: const Text('Retry'),
+            label: Text(context.t.common.retry),
           ),
         ),
         data: (documents) {
@@ -116,7 +116,10 @@ final class DocumentsScreen extends HookConsumerWidget {
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
                         content: Text(
-                          'Failed to read ${document.relativePath}: $e',
+                          context.t.tests.readFailed(
+                            path: document.relativePath,
+                            error: e.toString(),
+                          ),
                         ),
                       ),
                     );
@@ -136,18 +139,16 @@ Future<bool> _confirmDiscardDocumentEdits(BuildContext context) async {
   return await showDialog<bool>(
         context: context,
         builder: (dialogContext) => AlertDialog(
-          title: const Text('Discard unsaved changes?'),
-          content: const Text(
-            'The editor contains changes that have not been saved.',
-          ),
+          title: Text(context.t.tests.discardTitle),
+          content: Text(context.t.tests.discardDescription),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(dialogContext).pop(false),
-              child: const Text('Keep editing'),
+              child: Text(context.t.tests.keepEditing),
             ),
             FilledButton(
               onPressed: () => Navigator.of(dialogContext).pop(true),
-              child: const Text('Discard changes'),
+              child: Text(context.t.tests.discardChanges),
             ),
           ],
         ),
@@ -228,12 +229,15 @@ final class _DocumentList extends StatelessWidget {
           child: Row(
             children: [
               Expanded(
-                child: Text('Test files', style: theme.textTheme.titleSmall),
+                child: Text(
+                  context.t.tests.files,
+                  style: theme.textTheme.titleSmall,
+                ),
               ),
               TextButton.icon(
                 onPressed: onNew,
                 icon: const Icon(LucideIcons.filePlus2, size: 14),
-                label: const Text('New test'),
+                label: Text(context.t.tests.newTest),
               ),
             ],
           ),
@@ -241,11 +245,10 @@ final class _DocumentList extends StatelessWidget {
         Container(height: 1, color: theme.dividerColor),
         Expanded(
           child: documents.isEmpty
-              ? const EmptyStateView(
+              ? EmptyStateView(
                   icon: LucideIcons.fileX,
-                  title: 'No test files yet',
-                  description:
-                      'Create a test, save it, then check it before running.',
+                  title: context.t.tests.emptyTitle,
+                  description: context.t.tests.emptyDescription,
                 )
               : ListView.separated(
                   padding: const EdgeInsets.symmetric(vertical: 8),
@@ -309,8 +312,10 @@ final class _DocumentTile extends StatelessWidget {
         ),
         subtitle: Text(
           document.kind == CockpitIndexedDocumentKind.suite
-              ? 'Test suite${caseCount > 0 ? " · $caseCount cases" : ""}'
-              : 'Test case',
+              ? caseCount > 0
+                    ? context.t.tests.suiteCases(n: caseCount)
+                    : context.t.tests.suite
+              : context.t.tests.testCase,
           style: TextStyle(
             fontSize: 11,
             color: theme.colorScheme.onSurfaceVariant,
@@ -354,9 +359,9 @@ final class _Editor extends HookConsumerWidget {
           .read(documentProvider.notifier)
           .saveAndIndex(workspaceId: workspaceId);
       if (context.mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(result.message)));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(_saveResultText(context, result))),
+        );
       }
     }
 
@@ -381,8 +386,8 @@ final class _Editor extends HookConsumerWidget {
                     child: ConsoleTextField(
                       controller: pathController,
                       enabled: !docState.saving,
-                      label: 'Test file path',
-                      hint: 'Relative to project, e.g. cockpit/e2e/case.yaml',
+                      label: context.t.tests.filePath,
+                      hint: context.t.tests.filePathHint,
                       prefixIcon: const Icon(LucideIcons.fileText, size: 15),
                       style: const TextStyle(
                         fontFamily: 'monospace',
@@ -397,20 +402,20 @@ final class _Editor extends HookConsumerWidget {
                   AnimatedSwitcher(
                     duration: const Duration(milliseconds: 120),
                     child: docState.saving
-                        ? const _EditorStateLabel(
+                        ? _EditorStateLabel(
                             key: ValueKey('saving'),
-                            label: 'Saving',
+                            label: context.t.tests.saving,
                             icon: LucideIcons.loaderCircle,
                           )
                         : docState.dirty
-                        ? const _EditorStateLabel(
+                        ? _EditorStateLabel(
                             key: ValueKey('dirty'),
-                            label: 'Unsaved',
+                            label: context.t.tests.unsaved,
                             icon: LucideIcons.circle,
                           )
-                        : const _EditorStateLabel(
+                        : _EditorStateLabel(
                             key: ValueKey('saved'),
-                            label: 'Saved',
+                            label: context.t.tests.saved,
                             icon: LucideIcons.check,
                           ),
                   ),
@@ -424,7 +429,7 @@ final class _Editor extends HookConsumerWidget {
                     child: ConsoleDropdownField<CockpitDocumentFormat>(
                       key: ValueKey(docState.format),
                       initialValue: docState.format,
-                      label: 'Format',
+                      label: context.t.tests.format,
                       items: [
                         for (final format in CockpitDocumentFormat.values)
                           DropdownMenuItem(
@@ -453,7 +458,7 @@ final class _Editor extends HookConsumerWidget {
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
                         : const Icon(LucideIcons.save, size: 14),
-                    label: const Text('Save test'),
+                    label: Text(context.t.tests.save),
                   ),
                   const SizedBox(width: 8),
                   FilledButton.icon(
@@ -469,7 +474,7 @@ final class _Editor extends HookConsumerWidget {
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
                         : const Icon(LucideIcons.check, size: 14),
-                    label: const Text('Check test'),
+                    label: Text(context.t.tests.check),
                   ),
                 ],
               ),
@@ -551,6 +556,10 @@ final class _ValidationBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final errors =
+        validation.errors.isEmpty && validation.missingErrorDiagnostic
+        ? <String>[context.t.tests.validationNoDiagnostic]
+        : validation.errors;
     final color = validation.valid
         ? context.consoleColors.success
         : theme.colorScheme.error;
@@ -574,32 +583,34 @@ final class _ValidationBar extends StatelessWidget {
                 Icon(icon, size: 14, color: color),
                 const SizedBox(width: 8),
                 Text(
-                  validation.valid ? 'Valid document' : 'Validation failed',
+                  validation.valid
+                      ? context.t.tests.valid
+                      : context.t.tests.invalid,
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
                     color: color,
                   ),
                 ),
-                if (validation.errors.isNotEmpty) ...[
+                if (errors.isNotEmpty) ...[
                   const SizedBox(width: 8),
                   Text(
-                    '${validation.errors.length} error${validation.errors.length > 1 ? "s" : ""}',
+                    context.t.tests.errors(count: errors.length),
                     style: TextStyle(fontSize: 11, color: color),
                   ),
                 ],
                 if (validation.warnings.isNotEmpty) ...[
                   const SizedBox(width: 8),
                   Text(
-                    '${validation.warnings.length} warning${validation.warnings.length > 1 ? "s" : ""}',
+                    context.t.tests.warnings(count: validation.warnings.length),
                     style: TextStyle(fontSize: 11, color: color),
                   ),
                 ],
               ],
             ),
-            if (validation.errors.isNotEmpty) ...[
+            if (errors.isNotEmpty) ...[
               const SizedBox(height: 6),
-              for (final error in validation.errors.take(5))
+              for (final error in errors.take(5))
                 Padding(
                   padding: const EdgeInsets.only(left: 22, bottom: 2),
                   child: Text(
@@ -632,4 +643,30 @@ final class _ValidationBar extends StatelessWidget {
       ),
     );
   }
+}
+
+String _saveResultText(BuildContext context, DocumentSaveResult result) {
+  final strings = context.t.tests;
+  return switch (result.kind) {
+    DocumentSaveResultKind.indexed when result.cleanupError != null =>
+      strings.indexedCleanupWarning(
+        path: result.path ?? '',
+        error: result.cleanupError!,
+      ),
+    DocumentSaveResultKind.indexed => strings.indexed(path: result.path ?? ''),
+    DocumentSaveResultKind.workspaceChanged => strings.saveWorkspaceChanged,
+    DocumentSaveResultKind.busy => strings.saveBusy,
+    DocumentSaveResultKind.emptyContent => strings.saveEmpty,
+    DocumentSaveResultKind.invalidPath => strings.saveRelativePath,
+    DocumentSaveResultKind.invalidExtension => switch (result.format) {
+      CockpitDocumentFormat.lon => strings.saveExtensionLon,
+      CockpitDocumentFormat.json => strings.saveExtensionJson,
+      CockpitDocumentFormat.yaml => strings.saveExtensionYaml,
+      null => strings.saveRelativePath,
+    },
+    DocumentSaveResultKind.documentChanged => strings.saveDocumentChanged,
+    DocumentSaveResultKind.validationFailed =>
+      result.message ?? strings.validationNoDiagnostic,
+    DocumentSaveResultKind.failed => result.message ?? strings.saveFailed,
+  };
 }

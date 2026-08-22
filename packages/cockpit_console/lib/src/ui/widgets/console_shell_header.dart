@@ -5,6 +5,7 @@ enum ConsoleNavigationMode { sidebar, rail, railDrawer }
 abstract final class ConsoleNavigationIds {
   static const String toggle = 'nav-toggle';
   static const String close = 'nav-close';
+  static const String language = 'language-toggle';
   static const String theme = 'theme-toggle';
 }
 

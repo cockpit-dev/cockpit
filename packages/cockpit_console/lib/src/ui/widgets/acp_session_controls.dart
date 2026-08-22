@@ -1,4 +1,5 @@
 import 'package:acpd/acpd.dart';
+import 'package:cockpit_console/i18n/strings.g.dart';
 import 'package:cockpit_console/src/providers/acp_provider.dart';
 import 'package:cockpit_console/src/theme/console_shapes.dart';
 import 'package:cockpit_console/src/ui/widgets/acp_connection_options.dart';
@@ -41,7 +42,7 @@ final class AcpSessionControls extends HookConsumerWidget {
         if (connection.authMethods.isNotEmpty) ...[
           const SizedBox(height: 16),
           _Section(
-            title: 'Authentication',
+            title: context.t.ai.session.authentication,
             icon: LucideIcons.keyRound,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -73,14 +74,14 @@ final class AcpSessionControls extends HookConsumerWidget {
                         : () =>
                               notifier.authenticate(selectedAuthMethod.value!),
                     icon: const Icon(LucideIcons.logIn, size: 15),
-                    label: const Text('Sign in'),
+                    label: Text(context.t.ai.session.signIn),
                   ),
                 ] else if (connection.canLogout) ...[
                   const SizedBox(height: 8),
                   OutlinedButton.icon(
                     onPressed: busy ? null : notifier.logout,
                     icon: const Icon(LucideIcons.logOut, size: 15),
-                    label: const Text('Sign out'),
+                    label: Text(context.t.ai.session.signOut),
                   ),
                 ],
               ],
@@ -108,7 +109,7 @@ final class _AgentSummary extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final capabilities = _capabilityLabels(connection.capabilities);
+    final capabilities = _capabilityLabels(context.t, connection.capabilities);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -181,12 +182,12 @@ final class _SessionSection extends ConsumerWidget {
     }
 
     return _Section(
-      title: 'Session',
+      title: context.t.ai.session.section,
       icon: LucideIcons.messagesSquare,
       trailing: connection.canListSessions
           ? IconButton(
               onPressed: busy ? null : notifier.refreshSessions,
-              tooltip: 'Refresh recent sessions',
+              tooltip: context.t.ai.session.refreshRecent,
               icon: const Icon(LucideIcons.refreshCw, size: 14),
             )
           : null,
@@ -196,8 +197,8 @@ final class _SessionSection extends ConsumerWidget {
           if (session == null)
             Text(
               connection.authStatus == AcpAuthStatus.required
-                  ? 'Sign in before creating a session.'
-                  : 'No session is open. Create one to start chatting.',
+                  ? context.t.ai.session.signInFirst
+                  : context.t.ai.session.noneOpen,
               style: Theme.of(context).textTheme.bodySmall,
             )
           else
@@ -213,28 +214,28 @@ final class _SessionSection extends ConsumerWidget {
                     ? null
                     : createSession,
                 icon: const Icon(LucideIcons.plus, size: 15),
-                label: const Text('New session'),
+                label: Text(context.t.ai.session.newSession),
               ),
               if (session != null && connection.canCloseSessions)
                 OutlinedButton.icon(
                   onPressed: busy ? null : notifier.closeSession,
                   icon: const Icon(LucideIcons.archive, size: 15),
-                  label: const Text('Close session'),
+                  label: Text(context.t.ai.session.close),
                 ),
             ],
           ),
           if (connection.canListSessions) ...[
             const SizedBox(height: 12),
             Text(
-              'Recent sessions',
+              context.t.ai.session.recent,
               style: Theme.of(context).textTheme.labelMedium,
             ),
             const SizedBox(height: 6),
             if (connection.recentSessions.isEmpty)
               Text(
                 connection.busy == AcpBusyAction.listSessions
-                    ? 'Loading sessions…'
-                    : 'No saved sessions were returned by this agent.',
+                    ? context.t.ai.session.loading
+                    : context.t.ai.session.noneSaved,
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
                   color: Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
@@ -254,7 +255,7 @@ final class _SessionSection extends ConsumerWidget {
               TextButton.icon(
                 onPressed: busy ? null : notifier.loadMoreSessions,
                 icon: const Icon(LucideIcons.chevronsDown, size: 14),
-                label: const Text('Load more'),
+                label: Text(context.t.ai.session.loadMore),
               ),
             ],
           ],
@@ -282,7 +283,7 @@ final class _ActiveSessionSummary extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            session.title ?? 'Active session',
+            session.title ?? context.t.ai.session.activeSession,
             style: theme.textTheme.labelLarge,
           ),
           const SizedBox(height: 4),
@@ -296,14 +297,20 @@ final class _ActiveSessionSummary extends StatelessWidget {
           if (session.additionalDirectories.isNotEmpty) ...[
             const SizedBox(height: 6),
             Text(
-              '${session.additionalDirectories.length} additional ${session.additionalDirectories.length == 1 ? 'directory' : 'directories'}',
+              context.t.ai.session.additionalDirectories(
+                n: session.additionalDirectories.length,
+              ),
               style: theme.textTheme.bodySmall,
             ),
           ],
           if (session.mcpServers.isNotEmpty) ...[
             const SizedBox(height: 3),
             Text(
-              'MCP: ${session.mcpServers.map((server) => server.name).join(', ')}',
+              context.t.ai.session.mcpServers(
+                names: session.mcpServers
+                    .map((server) => server.name)
+                    .join(', '),
+              ),
               style: theme.textTheme.bodySmall,
             ),
           ],
@@ -379,14 +386,14 @@ final class _RecentSessionRow extends ConsumerWidget {
                 ),
               ),
               if (active)
-                const Padding(
+                Padding(
                   padding: EdgeInsets.symmetric(horizontal: 7),
-                  child: _Tag(label: 'Active'),
+                  child: _Tag(label: context.t.ai.session.active),
                 )
               else if (canDelete)
                 PopupMenuButton<String>(
                   enabled: enabled,
-                  tooltip: 'Session actions',
+                  tooltip: context.t.ai.session.actions,
                   onSelected: (action) async {
                     if (action == 'load') {
                       await notifier.loadSession(session);
@@ -403,17 +410,21 @@ final class _RecentSessionRow extends ConsumerWidget {
                     if (canOpen)
                       PopupMenuItem(
                         value: preferResume ? 'resume' : 'load',
-                        child: Text(preferResume ? 'Resume' : 'Load'),
+                        child: Text(
+                          preferResume
+                              ? context.t.ai.session.resume
+                              : context.t.ai.session.load,
+                        ),
                       ),
                     if (canOpen && preferResume)
-                      const PopupMenuItem(
+                      PopupMenuItem(
                         value: 'load',
-                        child: Text('Load from history'),
+                        child: Text(context.t.ai.session.loadHistory),
                       ),
                     const PopupMenuDivider(),
-                    const PopupMenuItem(
+                    PopupMenuItem(
                       value: 'delete',
-                      child: Text('Delete session'),
+                      child: Text(context.t.ai.session.delete),
                     ),
                   ],
                   icon: const Icon(LucideIcons.ellipsis, size: 15),
@@ -438,14 +449,14 @@ final class _SessionSettings extends ConsumerWidget {
     final busy = connection.busy != null || connection.isPrompting;
     final modes = session.modes;
     return _Section(
-      title: 'Agent settings',
+      title: context.t.ai.session.settings,
       icon: LucideIcons.slidersHorizontal,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           if (modes != null && modes.availableModes.isNotEmpty)
             ConsoleDropdownField<String>(
-              label: 'Mode',
+              label: context.t.ai.session.mode,
               initialValue: modes.currentModeId,
               items: [
                 for (final mode in modes.availableModes)
@@ -469,7 +480,7 @@ final class _SessionSettings extends ConsumerWidget {
           if ((modes == null || modes.availableModes.isEmpty) &&
               session.configOptions.isEmpty)
             Text(
-              'This agent did not advertise session settings.',
+              context.t.ai.session.noSettings,
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
                 color: Theme.of(context).colorScheme.onSurfaceVariant,
               ),
@@ -537,7 +548,7 @@ final class _SessionContext extends StatelessWidget {
       return const SizedBox.shrink();
     }
     return _Section(
-      title: 'Current context',
+      title: context.t.ai.session.currentContext,
       icon: LucideIcons.activity,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -570,7 +581,7 @@ final class _UsageView extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Usage', style: theme.textTheme.labelMedium),
+        Text(context.t.ai.session.usage, style: theme.textTheme.labelMedium),
         const SizedBox(height: 5),
         if (progress != null) ...[
           LinearProgressIndicator(value: progress, minHeight: 4),
@@ -581,9 +592,15 @@ final class _UsageView extends StatelessWidget {
           runSpacing: 4,
           children: [
             if (used != null)
-              Text('$used tokens used', style: theme.textTheme.bodySmall),
+              Text(
+                context.t.ai.session.tokensUsed(n: used),
+                style: theme.textTheme.bodySmall,
+              ),
             if (size != null)
-              Text('$size token context', style: theme.textTheme.bodySmall),
+              Text(
+                context.t.ai.session.tokenContext(n: size),
+                style: theme.textTheme.bodySmall,
+              ),
             if (usage.cost case final cost?)
               Text(
                 '${cost.amount.toStringAsFixed(4)} ${cost.currency}',
@@ -607,7 +624,7 @@ final class _PlanView extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Plan', style: theme.textTheme.labelMedium),
+        Text(context.t.ai.session.plan, style: theme.textTheme.labelMedium),
         const SizedBox(height: 5),
         for (final entry in plan.entries)
           Padding(
@@ -643,7 +660,10 @@ final class _CommandsView extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Available commands', style: theme.textTheme.labelMedium),
+        Text(
+          context.t.ai.session.availableCommands,
+          style: theme.textTheme.labelMedium,
+        ),
         const SizedBox(height: 5),
         for (final command in commands)
           Padding(
@@ -757,32 +777,32 @@ final class _AuthStatus extends StatelessWidget {
   Widget build(BuildContext context) {
     final (label, icon, color) = switch (status) {
       AcpAuthStatus.unavailable => (
-        'Authentication is not required',
+        context.t.ai.session.authNotRequired,
         LucideIcons.circleCheck,
         Theme.of(context).colorScheme.primary,
       ),
       AcpAuthStatus.available => (
-        'Sign-in is available',
+        context.t.ai.session.authAvailable,
         LucideIcons.keyRound,
         Theme.of(context).colorScheme.onSurfaceVariant,
       ),
       AcpAuthStatus.required => (
-        'Sign-in is required',
+        context.t.ai.session.authRequired,
         LucideIcons.lockKeyhole,
         Theme.of(context).colorScheme.error,
       ),
       AcpAuthStatus.authenticating => (
-        'Waiting for sign-in to finish…',
+        context.t.ai.session.authWaiting,
         LucideIcons.loaderCircle,
         Theme.of(context).colorScheme.primary,
       ),
       AcpAuthStatus.authenticated => (
-        'Signed in',
+        context.t.ai.session.authenticated,
         LucideIcons.shieldCheck,
         Theme.of(context).colorScheme.primary,
       ),
       AcpAuthStatus.loggingOut => (
-        'Signing out…',
+        context.t.ai.session.signingOut,
         LucideIcons.loaderCircle,
         Theme.of(context).colorScheme.onSurfaceVariant,
       ),
@@ -860,16 +880,24 @@ final class _Tag extends StatelessWidget {
   }
 }
 
-List<String> _capabilityLabels(AgentCapabilities capabilities) {
+List<String> _capabilityLabels(Translations t, AgentCapabilities capabilities) {
   final labels = <String>[];
-  if (capabilities.promptCapabilities?.image == true) labels.add('Images');
-  if (capabilities.promptCapabilities?.audio == true) labels.add('Audio');
-  if (capabilities.promptCapabilities?.embeddedContext == true) {
-    labels.add('Context files');
+  if (capabilities.promptCapabilities?.image == true) {
+    labels.add(t.ai.session.capImages);
   }
-  if (capabilities.loadSession) labels.add('Load sessions');
-  if (capabilities.sessionCapabilities?.resume != null) labels.add('Resume');
-  if (capabilities.sessionCapabilities?.list != null) labels.add('History');
+  if (capabilities.promptCapabilities?.audio == true) {
+    labels.add(t.ai.session.capAudio);
+  }
+  if (capabilities.promptCapabilities?.embeddedContext == true) {
+    labels.add(t.ai.session.capContext);
+  }
+  if (capabilities.loadSession) labels.add(t.ai.session.capLoad);
+  if (capabilities.sessionCapabilities?.resume != null) {
+    labels.add(t.ai.session.capResume);
+  }
+  if (capabilities.sessionCapabilities?.list != null) {
+    labels.add(t.ai.session.capHistory);
+  }
   if (capabilities.mcpCapabilities?.http == true) labels.add('MCP HTTP');
   if (capabilities.mcpCapabilities?.sse == true) labels.add('MCP SSE');
   return labels;
@@ -940,14 +968,16 @@ Future<bool> _confirmDelete(BuildContext context, SessionInfo session) async {
   return await showDialog<bool>(
         context: context,
         builder: (context) => AlertDialog(
-          title: const Text('Delete session?'),
+          title: Text(context.t.ai.session.deleteTitle),
           content: Text(
-            'Delete “${session.title ?? _shortSessionId(session.sessionId)}” from the agent. This cannot be undone.',
+            context.t.ai.session.deleteDescription(
+              name: session.title ?? _shortSessionId(session.sessionId),
+            ),
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context, false),
-              child: const Text('Keep session'),
+              child: Text(context.t.ai.session.keep),
             ),
             FilledButton(
               onPressed: () => Navigator.pop(context, true),
@@ -955,7 +985,7 @@ Future<bool> _confirmDelete(BuildContext context, SessionInfo session) async {
                 backgroundColor: Theme.of(context).colorScheme.error,
                 foregroundColor: Theme.of(context).colorScheme.onError,
               ),
-              child: const Text('Delete session'),
+              child: Text(context.t.ai.session.delete),
             ),
           ],
         ),

@@ -1,3 +1,4 @@
+import 'package:cockpit_console/i18n/strings.g.dart';
 import 'package:cockpit_console/src/providers/core_providers.dart';
 import 'package:cockpit_console/src/theme/console_colors.dart';
 import 'package:flutter/material.dart';
@@ -27,9 +28,9 @@ final class StatusBar extends ConsumerWidget {
           Text(
             daemon.running
                 ? daemon.healthy
-                      ? 'Daemon healthy'
-                      : 'Daemon degraded'
-                : 'Daemon offline',
+                      ? context.t.statusBar.daemonHealthy
+                      : context.t.statusBar.daemonDegraded
+                : context.t.statusBar.daemonOffline,
             style: TextStyle(
               fontSize: 11,
               color: theme.colorScheme.onSurfaceVariant,
@@ -45,8 +46,11 @@ final class StatusBar extends ConsumerWidget {
             ),
             const SizedBox(width: 4),
             Text(
-              'API v${supervisor.server.apiVersion.major}.'
-              '${supervisor.server.apiVersion.minor}',
+              context.t.statusBar.apiVersion(
+                version:
+                    '${supervisor.server.apiVersion.major}.'
+                    '${supervisor.server.apiVersion.minor}',
+              ),
               style: TextStyle(
                 fontSize: 11,
                 color: theme.colorScheme.onSurfaceVariant,
@@ -73,7 +77,7 @@ final class StatusBar extends ConsumerWidget {
           ],
           const Spacer(),
           Text(
-            'Cockpit Console',
+            context.t.app.title,
             style: TextStyle(
               fontSize: 11,
               color: context.consoleColors.inkTertiary,

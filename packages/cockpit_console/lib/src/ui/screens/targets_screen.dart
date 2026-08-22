@@ -1,5 +1,7 @@
+import 'package:cockpit_console/i18n/strings.g.dart';
 import 'package:cockpit_console/src/providers/core_providers.dart';
 import 'package:cockpit_console/src/providers/data_providers.dart';
+import 'package:cockpit_console/src/providers/session_monitor_provider.dart';
 import 'package:cockpit_console/src/theme/console_colors.dart';
 import 'package:cockpit_console/src/theme/console_shapes.dart';
 import 'package:cockpit_console/src/ui/navigation/console_nav.dart';
@@ -39,19 +41,18 @@ final class TargetsScreen extends HookConsumerWidget {
 
     if (workspaceId == null) {
       return ScreenScaffold(
-        title: 'Apps & devices',
-        subtitle: 'Find and connect the apps and devices used by this project',
+        title: context.t.targets.title,
+        subtitle: context.t.targets.subtitle,
         body: EmptyStateView(
           icon: LucideIcons.mousePointerClick,
-          title: 'Select a project',
-          description:
-              'Choose a project from the Projects page to view its apps and devices.',
+          title: context.t.targets.selectProject,
+          description: context.t.targets.selectProjectDescription,
           action: FilledButton.icon(
             onPressed: () => ref
                 .read(navProvider.notifier)
                 .go(ConsoleNavDestination.workspaces),
             icon: const Icon(LucideIcons.folderOpen, size: 14),
-            label: const Text('Choose project'),
+            label: Text(context.t.targets.chooseProject),
           ),
         ),
       );
@@ -64,7 +65,11 @@ final class TargetsScreen extends HookConsumerWidget {
       } on Object catch (e) {
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text("Couldn't find apps & devices: $e")),
+            SnackBar(
+              content: Text(
+                context.t.targets.discoverFailed(error: e.toString()),
+              ),
+            ),
           );
         }
       } finally {
@@ -75,8 +80,8 @@ final class TargetsScreen extends HookConsumerWidget {
     final targets = targetsState.items;
 
     return ScreenScaffold(
-      title: 'Apps & devices',
-      subtitle: 'Find and connect the apps and devices used by this project',
+      title: context.t.targets.title,
+      subtitle: context.t.targets.subtitle,
       stackActionsBelowWidth: 420,
       actions: [
         OutlinedButton.icon(
@@ -88,7 +93,7 @@ final class TargetsScreen extends HookConsumerWidget {
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
               : const Icon(LucideIcons.search, size: 14),
-          label: const Text('Find apps & devices'),
+          label: Text(context.t.targets.find),
         ),
       ],
       body: SingleChildScrollView(
@@ -99,34 +104,35 @@ final class TargetsScreen extends HookConsumerWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _SectionLabel(label: 'Ready to use', count: targets.length),
+                _SectionLabel(
+                  label: context.t.targets.readyToUse,
+                  count: targets.length,
+                ),
                 const SizedBox(height: 8),
                 if (targetsState.error != null && targets.isEmpty)
                   _ErrorBox(message: targetsState.error!)
                 else if (targetsState.loading && targets.isEmpty)
                   const _LoadingBox()
                 else if (targets.isEmpty)
-                  const _EmptyBox(
+                  _EmptyBox(
                     icon: LucideIcons.smartphone,
-                    title: 'No apps or devices added',
-                    description:
-                        'Find available apps and devices, then add the one you need.',
+                    title: context.t.targets.noneAdded,
+                    description: context.t.targets.noneAddedDescription,
                   )
                 else
                   _TargetList(targets: targets),
                 const SizedBox(height: 32),
                 if (discovery != null) ...[
                   _SectionLabel(
-                    label: 'Available to add',
+                    label: context.t.targets.availableToAdd,
                     count: discovery.targets.length,
                   ),
                   const SizedBox(height: 8),
                   if (discovery.targets.isEmpty)
-                    const _EmptyBox(
+                    _EmptyBox(
                       icon: LucideIcons.searchX,
-                      title: 'No apps or devices found',
-                      description:
-                          'Connect or start a device, then try finding again.',
+                      title: context.t.targets.noneFound,
+                      description: context.t.targets.noneFoundDescription,
                     )
                   else
                     _DiscoveryList(
@@ -217,7 +223,7 @@ final class _ErrorBox extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             Text(
-              "Couldn't load apps & devices",
+              context.t.targets.loadFailed,
               style: theme.textTheme.labelMedium?.copyWith(
                 color: theme.colorScheme.error,
               ),
@@ -308,7 +314,7 @@ final class _RegisteredTargetTile extends HookConsumerWidget {
     final workspaceId = ref.watch(selectedWorkspaceIdProvider);
 
     final active = item.sessionId != null;
-    final status = active ? 'Running' : 'Ready';
+    final status = active ? context.t.targets.running : context.t.targets.ready;
     final statusColor = active
         ? context.consoleColors.success
         : theme.colorScheme.onSurfaceVariant;
@@ -326,14 +332,16 @@ final class _RegisteredTargetTile extends HookConsumerWidget {
           Expanded(
             child: Semantics(
               container: true,
-              label: 'App ${_targetTitle(item)}',
+              label: context.t.targets.appSemantics(
+                name: _targetTitle(context.t, item),
+              ),
               value: status,
               excludeSemantics: true,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    _targetTitle(item),
+                    _targetTitle(context.t, item),
                     style: const TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
@@ -341,7 +349,7 @@ final class _RegisteredTargetTile extends HookConsumerWidget {
                   ),
                   const SizedBox(height: 1),
                   Text(
-                    _targetSummary(item),
+                    _targetSummary(context.t, item),
                     style: TextStyle(
                       fontSize: 11,
                       color: theme.colorScheme.onSurfaceVariant,
@@ -369,6 +377,43 @@ final class _RegisteredTargetTile extends HookConsumerWidget {
             ),
           ),
           const SizedBox(width: 8),
+          if (workspaceId != null && active)
+            SizedBox(
+              width: 30,
+              height: 30,
+              child: IconButton(
+                onPressed: () async {
+                  final monitor = ref.read(sessionMonitorProvider.notifier);
+                  var selected = monitor.selectTarget(
+                    workspaceId: workspaceId,
+                    targetId: item.targetId,
+                  );
+                  if (!selected) {
+                    await monitor.refresh();
+                    selected = monitor.selectTarget(
+                      workspaceId: workspaceId,
+                      targetId: item.targetId,
+                    );
+                  }
+                  if (!context.mounted) return;
+                  if (!selected) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(context.t.targets.sessionUnavailable),
+                      ),
+                    );
+                    return;
+                  }
+                  ref
+                      .read(navProvider.notifier)
+                      .go(ConsoleNavDestination.sessions);
+                },
+                icon: const Icon(LucideIcons.radio, size: 13),
+                tooltip: context.t.targets.monitorSession,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 30, minHeight: 30),
+              ),
+            ),
           if (workspaceId != null && !active)
             SizedBox(
               width: 30,
@@ -380,7 +425,7 @@ final class _RegisteredTargetTile extends HookConsumerWidget {
                       _LaunchTargetDialog(workspaceId: workspaceId, item: item),
                 ),
                 icon: const Icon(LucideIcons.play, size: 13),
-                tooltip: 'Start app or device',
+                tooltip: context.t.targets.start,
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(minWidth: 30, minHeight: 30),
               ),
@@ -500,7 +545,7 @@ final class _DiscoveredTargetTile extends HookConsumerWidget {
                 ),
               ),
               icon: const Icon(LucideIcons.plus, size: 13),
-              tooltip: 'Add ${target.name}',
+              tooltip: context.t.targets.addNamed(name: target.name),
               padding: EdgeInsets.zero,
               constraints: const BoxConstraints(minWidth: 30, minHeight: 30),
             ),
@@ -523,25 +568,26 @@ final class _DiscoveredTargetTile extends HookConsumerWidget {
   }
 }
 
-String _targetKindLabel(CockpitTargetKind kind) => switch (kind) {
-  CockpitTargetKind.flutterApp => 'Flutter app',
-  CockpitTargetKind.nativeApp => 'Native app',
-  CockpitTargetKind.desktopApp => 'Desktop app',
-  CockpitTargetKind.browserPage => 'Browser page',
-  CockpitTargetKind.systemSurface => 'System surface',
-  CockpitTargetKind.device => 'Device',
-  CockpitTargetKind.hostWorkspace => 'Host workspace',
+String _targetKindLabel(Translations t, CockpitTargetKind kind) =>
+    switch (kind) {
+      CockpitTargetKind.flutterApp => t.targets.kind.flutterApp,
+      CockpitTargetKind.nativeApp => t.targets.kind.nativeApp,
+      CockpitTargetKind.desktopApp => t.targets.kind.desktopApp,
+      CockpitTargetKind.browserPage => t.targets.kind.browserPage,
+      CockpitTargetKind.systemSurface => t.targets.kind.systemSurface,
+      CockpitTargetKind.device => t.targets.kind.device,
+      CockpitTargetKind.hostWorkspace => t.targets.kind.hostWorkspace,
+    };
+
+String _appModeLabel(Translations t, CockpitAppMode mode) => switch (mode) {
+  CockpitAppMode.development => t.targets.mode.development,
+  CockpitAppMode.automation => t.targets.mode.automation,
 };
 
-String _appModeLabel(CockpitAppMode mode) => switch (mode) {
-  CockpitAppMode.development => 'Development',
-  CockpitAppMode.automation => 'Automation',
-};
-
-String _targetSummary(CockpitAutomationTargetResource item) {
+String _targetSummary(Translations t, CockpitAutomationTargetResource item) {
   final parts = <String>[
     _platformLabel(item.platform),
-    _environmentLabel(item.environment),
+    _environmentLabel(t, item.environment),
     if (item.flavor != null) item.flavor!,
     if (item.appId != null) item.appId!,
     item.targetId,
@@ -549,8 +595,8 @@ String _targetSummary(CockpitAutomationTargetResource item) {
   return parts.join(' · ');
 }
 
-String _targetTitle(CockpitAutomationTargetResource item) {
-  final kind = _targetKindLabel(item.targetKind);
+String _targetTitle(Translations t, CockpitAutomationTargetResource item) {
+  final kind = _targetKindLabel(t, item.targetKind);
   final detail = switch (item.entrypoint) {
     final entrypoint? => _compactPath(entrypoint),
     null => item.appId ?? item.deviceId,
@@ -574,14 +620,29 @@ String _platformLabel(String platform) => switch (platform) {
   _ => platform,
 };
 
-String _environmentLabel(CockpitAutomationTargetEnvironment environment) =>
-    switch (environment) {
-      CockpitAutomationTargetEnvironment.development => 'Development',
-      CockpitAutomationTargetEnvironment.test => 'Test',
-      CockpitAutomationTargetEnvironment.staging => 'Staging',
-      CockpitAutomationTargetEnvironment.production => 'Production',
-      CockpitAutomationTargetEnvironment.unknown => 'Unknown',
-    };
+String _environmentLabel(
+  Translations t,
+  CockpitAutomationTargetEnvironment environment,
+) => switch (environment) {
+  CockpitAutomationTargetEnvironment.development =>
+    t.targets.environment.development,
+  CockpitAutomationTargetEnvironment.test => t.targets.environment.test,
+  CockpitAutomationTargetEnvironment.staging => t.targets.environment.staging,
+  CockpitAutomationTargetEnvironment.production =>
+    t.targets.environment.production,
+  CockpitAutomationTargetEnvironment.unknown => t.targets.environment.unknown,
+};
+
+String _testEnvironmentLabel(
+  Translations t,
+  CockpitTestTargetEnvironment environment,
+) => switch (environment) {
+  CockpitTestTargetEnvironment.development => t.targets.environment.development,
+  CockpitTestTargetEnvironment.test => t.targets.environment.test,
+  CockpitTestTargetEnvironment.staging => t.targets.environment.staging,
+  CockpitTestTargetEnvironment.production => t.targets.environment.production,
+  CockpitTestTargetEnvironment.unknown => t.targets.environment.unknown,
+};
 
 List<String> _parseLines(String text) => text
     .split(RegExp(r'\r?\n'))
@@ -589,12 +650,12 @@ List<String> _parseLines(String text) => text
     .where((line) => line.isNotEmpty)
     .toList(growable: false);
 
-Map<String, String> _parseKeyValueLines(String text) {
+Map<String, String> _parseKeyValueLines(Translations t, String text) {
   final result = <String, String>{};
   for (final line in _parseLines(text)) {
     final equals = line.indexOf('=');
     if (equals <= 0) {
-      throw FormatException('Entries must use KEY=VALUE syntax: "$line".');
+      throw FormatException(t.targets.keyValueSyntaxError(line: line));
     }
     result[line.substring(0, equals).trim()] = line
         .substring(equals + 1)
@@ -604,6 +665,7 @@ Map<String, String> _parseKeyValueLines(String text) {
 }
 
 CockpitFlutterLaunchConfiguration _buildLaunchConfiguration({
+  required Translations t,
   required String dartDefines,
   required String dartDefineFromFiles,
   required String flutterArgs,
@@ -612,7 +674,7 @@ CockpitFlutterLaunchConfiguration _buildLaunchConfiguration({
   final defines = _parseLines(dartDefines);
   final files = _parseLines(dartDefineFromFiles);
   final args = _parseLines(flutterArgs);
-  final env = _parseKeyValueLines(environment);
+  final env = _parseKeyValueLines(t, environment);
   if (defines.isEmpty && files.isEmpty && args.isEmpty && env.isEmpty) {
     return CockpitFlutterLaunchConfiguration.empty;
   }
@@ -708,9 +770,9 @@ final class _RegisterTargetDialog extends HookConsumerWidget {
 
     Future<void> submit() async {
       if (requiresAppId && appIdEmpty.value) {
-        formError.value =
-            '${_targetKindLabel(kind.value)} targets require '
-            'an app ID.';
+        formError.value = context.t.targets.appIdRequired(
+          kind: _targetKindLabel(context.t, kind.value),
+        );
         return;
       }
       formError.value = null;
@@ -736,9 +798,9 @@ final class _RegisterTargetDialog extends HookConsumerWidget {
         if (context.mounted) {
           Navigator.of(context).pop();
           onRegistered();
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text('Added ${target.name}')));
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(context.t.targets.added(name: target.name))),
+          );
         }
       } on Object catch (error) {
         formError.value = '$error';
@@ -748,7 +810,7 @@ final class _RegisterTargetDialog extends HookConsumerWidget {
     }
 
     return AlertDialog(
-      title: const Text('Add app or device'),
+      title: Text(context.t.targets.addTitle),
       content: SizedBox(
         width: 460,
         child: SingleChildScrollView(
@@ -756,18 +818,18 @@ final class _RegisterTargetDialog extends HookConsumerWidget {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _infoRow(context, 'Device', target.name),
-              _infoRow(context, 'Platform', target.platform),
-              _infoRow(context, 'Device ID', target.id),
+              _infoRow(context, context.t.targets.device, target.name),
+              _infoRow(context, context.t.targets.platform, target.platform),
+              _infoRow(context, context.t.targets.deviceId, target.id),
               const SizedBox(height: 12),
               ConsoleDropdownField<CockpitTargetKind>(
                 initialValue: kind.value,
-                label: 'Type',
+                label: context.t.targets.type,
                 items: [
                   for (final candidate in CockpitTargetKind.values)
                     DropdownMenuItem(
                       value: candidate,
-                      child: Text(_targetKindLabel(candidate)),
+                      child: Text(_targetKindLabel(context.t, candidate)),
                     ),
                 ],
                 onChanged: (value) {
@@ -777,12 +839,12 @@ final class _RegisterTargetDialog extends HookConsumerWidget {
               const SizedBox(height: 12),
               ConsoleDropdownField<String?>(
                 initialValue: entrypointDocId.value,
-                label: 'Launch file',
-                hintText: 'Optional',
+                label: context.t.targets.launchFile,
+                hintText: context.t.targets.optional,
                 items: [
-                  const DropdownMenuItem<String?>(
+                  DropdownMenuItem<String?>(
                     value: null,
-                    child: Text('None'),
+                    child: Text(context.t.targets.none),
                   ),
                   for (final document in docs)
                     DropdownMenuItem<String?>(
@@ -800,30 +862,32 @@ final class _RegisterTargetDialog extends HookConsumerWidget {
               ConsoleTextField(
                 controller: appIdCtrl,
                 onChanged: (value) => appIdEmpty.value = value.trim().isEmpty,
-                label: 'App identifier',
-                hint: requiresAppId ? 'Required' : 'Optional',
+                label: context.t.targets.appIdentifier,
+                hint: requiresAppId
+                    ? context.t.targets.required
+                    : context.t.targets.optional,
               ),
               const SizedBox(height: 12),
               ConsoleTextField(
                 controller: flavorCtrl,
-                label: 'Flavor',
-                hint: 'Optional',
+                label: context.t.targets.flavor,
+                hint: context.t.targets.optional,
               ),
               const SizedBox(height: 12),
               ConsoleTextField(
                 controller: wdaUrlCtrl,
                 label: 'WDA URL',
-                hint: 'Optional (iOS)',
+                hint: context.t.targets.optionalIos,
               ),
               const SizedBox(height: 12),
               ConsoleDropdownField<CockpitTestTargetEnvironment>(
                 initialValue: environment.value,
-                label: 'Environment',
+                label: context.t.targets.environmentLabel,
                 items: [
                   for (final candidate in CockpitTestTargetEnvironment.values)
                     DropdownMenuItem(
                       value: candidate,
-                      child: Text(candidate.name),
+                      child: Text(_testEnvironmentLabel(context.t, candidate)),
                     ),
                 ],
                 onChanged: (value) {
@@ -833,12 +897,12 @@ final class _RegisterTargetDialog extends HookConsumerWidget {
               const SizedBox(height: 12),
               ConsoleDropdownField<CockpitAppMode>(
                 initialValue: mode.value,
-                label: 'Mode',
+                label: context.t.targets.modeLabel,
                 items: [
                   for (final candidate in CockpitAppMode.values)
                     DropdownMenuItem(
                       value: candidate,
-                      child: Text(_appModeLabel(candidate)),
+                      child: Text(_appModeLabel(context.t, candidate)),
                     ),
                 ],
                 onChanged: (value) {
@@ -864,7 +928,7 @@ final class _RegisterTargetDialog extends HookConsumerWidget {
           onPressed: submitting.value
               ? null
               : () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
+          child: Text(context.t.common.cancel),
         ),
         FilledButton(
           onPressed: (submitting.value || (requiresAppId && appIdEmpty.value))
@@ -876,7 +940,7 @@ final class _RegisterTargetDialog extends HookConsumerWidget {
                   height: 16,
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
-              : const Text('Add'),
+              : Text(context.t.targets.add),
         ),
       ],
     );
@@ -915,19 +979,18 @@ final class _LaunchTargetDialog extends HookConsumerWidget {
       final timeoutText = timeoutCtrl.text.trim();
       final timeoutMs = int.tryParse(timeoutText);
       if (timeoutText.isNotEmpty && timeoutMs == null) {
-        formError.value =
-            'Launch timeout must be an integer number of milliseconds.';
+        formError.value = context.t.targets.timeoutIntegerError;
         return;
       }
       if (timeoutMs != null && (timeoutMs < 1000 || timeoutMs > 1800000)) {
-        formError.value =
-            'Launch timeout must be between 1,000 and 1,800,000 ms.';
+        formError.value = context.t.targets.timeoutRangeError;
         return;
       }
       CockpitFlutterLaunchConfiguration? launchConfiguration;
       if (!usesSystemControl) {
         try {
           launchConfiguration = _buildLaunchConfiguration(
+            t: context.t,
             dartDefines: dartDefinesCtrl.text,
             dartDefineFromFiles: dartDefineFilesCtrl.text,
             flutterArgs: flutterArgsCtrl.text,
@@ -957,9 +1020,11 @@ final class _LaunchTargetDialog extends HookConsumerWidget {
             );
         if (context.mounted) {
           Navigator.of(context).pop();
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text('Launched ${item.targetId}')));
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(context.t.targets.launched(target: item.targetId)),
+            ),
+          );
         }
       } on Object catch (error) {
         formError.value = '$error';
@@ -969,7 +1034,11 @@ final class _LaunchTargetDialog extends HookConsumerWidget {
     }
 
     return AlertDialog(
-      title: Text('Launch ${_targetKindLabel(item.targetKind)}'),
+      title: Text(
+        context.t.targets.launchTitle(
+          kind: _targetKindLabel(context.t, item.targetKind),
+        ),
+      ),
       content: SizedBox(
         width: 460,
         child: SingleChildScrollView(
@@ -977,26 +1046,22 @@ final class _LaunchTargetDialog extends HookConsumerWidget {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _infoRow(context, 'Target', item.targetId),
-              _infoRow(context, 'Platform', item.platform),
-              _infoRow(context, 'Device', item.deviceId),
+              _infoRow(context, context.t.targets.target, item.targetId),
+              _infoRow(context, context.t.targets.platform, item.platform),
+              _infoRow(context, context.t.targets.device, item.deviceId),
               const SizedBox(height: 12),
               if (usesSystemControl) ...[
-                _infoNote(
-                  context,
-                  'This target is activated via system control. A launch mode '
-                  'and Flutter configuration are not accepted.',
-                ),
+                _infoNote(context, context.t.targets.systemControlNote),
                 const SizedBox(height: 12),
               ] else ...[
                 ConsoleDropdownField<CockpitAppMode>(
                   initialValue: mode.value,
-                  label: 'Mode',
+                  label: context.t.targets.modeLabel,
                   items: [
                     for (final candidate in CockpitAppMode.values)
                       DropdownMenuItem(
                         value: candidate,
-                        child: Text(_appModeLabel(candidate)),
+                        child: Text(_appModeLabel(context.t, candidate)),
                       ),
                   ],
                   onChanged: (value) {
@@ -1008,13 +1073,13 @@ final class _LaunchTargetDialog extends HookConsumerWidget {
               ConsoleTextField(
                 controller: timeoutCtrl,
                 keyboardType: TextInputType.number,
-                label: 'Launch timeout (ms)',
-                hint: 'Default (600,000)',
+                label: context.t.targets.launchTimeout,
+                hint: context.t.targets.launchTimeoutDefault,
               ),
               if (!usesSystemControl) ...[
                 const SizedBox(height: 16),
                 Text(
-                  'Launch configuration',
+                  context.t.targets.launchConfiguration,
                   style: Theme.of(context).textTheme.labelMedium,
                 ),
                 const SizedBox(height: 8),
@@ -1022,8 +1087,8 @@ final class _LaunchTargetDialog extends HookConsumerWidget {
                   controller: dartDefinesCtrl,
                   minLines: 3,
                   maxLines: 3,
-                  label: 'Dart defines',
-                  hint: 'KEY=VALUE, one per line',
+                  label: context.t.targets.dartDefines,
+                  hint: context.t.targets.keyValueLines,
                   style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
                 ),
                 const SizedBox(height: 8),
@@ -1031,8 +1096,8 @@ final class _LaunchTargetDialog extends HookConsumerWidget {
                   controller: dartDefineFilesCtrl,
                   minLines: 2,
                   maxLines: 2,
-                  label: 'Dart define files',
-                  hint: 'config/*.json, one per line',
+                  label: context.t.targets.dartDefineFiles,
+                  hint: context.t.targets.fileLines,
                   style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
                 ),
                 const SizedBox(height: 8),
@@ -1040,8 +1105,8 @@ final class _LaunchTargetDialog extends HookConsumerWidget {
                   controller: flutterArgsCtrl,
                   minLines: 2,
                   maxLines: 2,
-                  label: 'Flutter args',
-                  hint: '--verbose, one per line',
+                  label: context.t.targets.flutterArgs,
+                  hint: context.t.targets.flutterArgsLines,
                   style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
                 ),
                 const SizedBox(height: 8),
@@ -1049,8 +1114,8 @@ final class _LaunchTargetDialog extends HookConsumerWidget {
                   controller: environmentCtrl,
                   minLines: 2,
                   maxLines: 2,
-                  label: 'Environment',
-                  hint: 'KEY=VALUE, one per line',
+                  label: context.t.targets.environmentLabel,
+                  hint: context.t.targets.keyValueLines,
                   style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
                 ),
               ],
@@ -1073,7 +1138,7 @@ final class _LaunchTargetDialog extends HookConsumerWidget {
           onPressed: submitting.value
               ? null
               : () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
+          child: Text(context.t.common.cancel),
         ),
         FilledButton(
           onPressed: submitting.value ? null : submit,
@@ -1083,7 +1148,7 @@ final class _LaunchTargetDialog extends HookConsumerWidget {
                   height: 16,
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
-              : const Text('Launch'),
+              : Text(context.t.targets.launch),
         ),
       ],
     );
