@@ -26,14 +26,14 @@ final class CockpitUpdateService {
        _environment = environment ?? Platform.environment,
        _delay = delay ?? Future<void>.delayed,
        _windows = windows ?? Platform.isWindows,
-       _resolvedExecutable = resolvedExecutable ?? Platform.resolvedExecutable,
+       _resolvedExecutable = resolvedExecutable ?? cockpitCurrentExecutable(),
        _hostedInstallProbe =
            hostedInstallProbe ??
            ((version) => cockpitHasCanonicalHostedInstall(
              environment: environment ?? Platform.environment,
              windows: windows ?? Platform.isWindows,
              resolvedExecutable:
-                 resolvedExecutable ?? Platform.resolvedExecutable,
+                 resolvedExecutable ?? cockpitCurrentExecutable(),
              version: version,
            ));
 

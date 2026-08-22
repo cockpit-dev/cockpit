@@ -173,10 +173,11 @@ void main() {
     addTearDown(() async {
       if (await pubCache.exists()) await pubCache.delete(recursive: true);
     });
-    await _writeActivatedPackage(pubCache, version: '3.0.7');
-    final executable = File('${pubCache.path}/bin/cockpit');
-    await executable.create(recursive: true);
-    await executable.writeAsString('current aot');
+    final executable = await _writeCanonicalInstall(
+      pubCache,
+      version: '3.0.7',
+      contents: 'current aot',
+    );
     final legacy = Directory('${pubCache.path}/cockpit-aot');
     await legacy.create();
     final calls = <List<String>>[];
@@ -231,10 +232,11 @@ void main() {
     addTearDown(() async {
       if (await pubCache.exists()) await pubCache.delete(recursive: true);
     });
-    await _writeActivatedPackage(pubCache, version: '3.0.7');
-    final executable = File('${pubCache.path}/bin/cockpit');
-    await executable.create(recursive: true);
-    await executable.writeAsString('current aot');
+    final executable = await _writeCanonicalInstall(
+      pubCache,
+      version: '3.0.7',
+      contents: 'current aot',
+    );
     final calls = <List<String>>[];
     final service = CockpitUpdateService(
       environment: <String, String>{'PUB_CACHE': pubCache.path},
@@ -268,7 +270,16 @@ void main() {
       calls.first,
       containsAllInOrder(<String>['pub', 'global', 'activate']),
     );
-    expect(await executable.readAsString(), 'new aot');
+    final installed = await _activeRuntime(pubCache, version: '3.0.8');
+    expect(await installed.executable.readAsString(), 'new aot');
+    expect(
+      await installed.paths.launcher.readAsString(),
+      cockpitRuntimeLauncherContents(
+        executablePath: installed.executable.path,
+        version: '3.0.8',
+        windows: false,
+      ),
+    );
   });
 
   test(
@@ -280,10 +291,11 @@ void main() {
       addTearDown(() async {
         if (await pubCache.exists()) await pubCache.delete(recursive: true);
       });
-      await _writeActivatedPackage(pubCache, version: '4.0.4');
-      final executable = File('${pubCache.path}/bin/cockpit');
-      await executable.create(recursive: true);
-      await executable.writeAsString('current aot');
+      final executable = await _writeCanonicalInstall(
+        pubCache,
+        version: '4.0.4',
+        contents: 'current aot',
+      );
       final calls = <List<String>>[];
       var activationAttempts = 0;
       final service = CockpitUpdateService(
@@ -344,10 +356,11 @@ void main() {
     addTearDown(() async {
       if (await pubCache.exists()) await pubCache.delete(recursive: true);
     });
-    await _writeActivatedPackage(pubCache, version: '4.0.8');
-    final executable = File('${pubCache.path}/bin/cockpit');
-    await executable.create(recursive: true);
-    await executable.writeAsString('current aot');
+    final executable = await _writeCanonicalInstall(
+      pubCache,
+      version: '4.0.8',
+      contents: 'current aot',
+    );
     final calls = <List<String>>[];
     final waits = <Duration>[];
     final progress = <String>[];
@@ -462,7 +475,8 @@ void main() {
         calls.first,
         containsAllInOrder(<String>['pub', 'global', 'activate']),
       );
-      expect(await executable.readAsString(), 'hosted aot');
+      final installed = await _activeRuntime(pubCache, version: '3.0.7');
+      expect(await installed.executable.readAsString(), 'hosted aot');
     },
   );
 
@@ -473,10 +487,11 @@ void main() {
     addTearDown(() async {
       if (await pubCache.exists()) await pubCache.delete(recursive: true);
     });
-    await _writeActivatedPackage(pubCache, version: '3.0.7');
-    final executable = File('${pubCache.path}/bin/cockpit');
-    await executable.create(recursive: true);
-    await executable.writeAsString('current aot');
+    final executable = await _writeCanonicalInstall(
+      pubCache,
+      version: '3.0.7',
+      contents: 'current aot',
+    );
     final calls = <List<String>>[];
     final service = CockpitUpdateService(
       environment: <String, String>{'PUB_CACHE': pubCache.path},
@@ -506,7 +521,8 @@ void main() {
       calls.first,
       containsAllInOrder(<String>['pub', 'global', 'activate']),
     );
-    expect(await executable.readAsString(), 'rebuilt aot');
+    final installed = await _activeRuntime(pubCache, version: '3.0.7');
+    expect(await installed.executable.readAsString(), 'rebuilt aot');
   });
 
   test('updates, verifies, reconciles, and removes retired payload', () async {
@@ -565,10 +581,11 @@ void main() {
     expect(calls[2], containsAllInOrder(<String>['compile', 'exe']));
     expect(calls[3], contains('--version'));
     expect(calls[4], contains('--version'));
+    final installed = await _activeRuntime(pubCache, version: '3.0.7');
     expect(
       calls[5],
       containsAllInOrder(<String>[
-        '${pubCache.path}/bin/cockpit',
+        installed.executable.path,
         'server',
         '--format',
         'none',
@@ -653,7 +670,9 @@ void main() {
     );
 
     expect(sawFallback, isTrue);
-    expect(await native.readAsString(), 'optimized aot');
+    final installed = await _activeRuntime(pubCache, version: '3.0.7');
+    expect(await installed.executable.readAsString(), 'optimized aot');
+    expect(await native.readAsString(), startsWith('#!/usr/bin/env sh'));
     expect(await _updateWorkspaces(pubCache), isEmpty);
   });
 
@@ -735,8 +754,22 @@ void main() {
     );
 
     expect(sawFallback, isTrue);
-    expect(await native.readAsString(), 'optimized windows aot');
-    expect(await launcher.readAsString(), 'hosted 3.0.7 batch');
+    final installed = await _activeRuntime(
+      pubCache,
+      version: '3.0.7',
+      windows: true,
+      allowLegacyNative: true,
+    );
+    expect(await installed.executable.readAsString(), 'optimized windows aot');
+    expect(await native.exists(), isFalse);
+    expect(
+      await launcher.readAsString(),
+      cockpitRuntimeLauncherContents(
+        executablePath: installed.executable.path,
+        version: '3.0.7',
+        windows: true,
+      ),
+    );
     expect(await _updateWorkspaces(pubCache), isEmpty);
   });
 
@@ -767,11 +800,30 @@ void main() {
   });
 
   test('blocks a stale Pub cache from downgrading Cockpit', () async {
+    final pubCache = await Directory.systemTemp.createTemp(
+      'cockpit-update-downgrade-',
+    );
+    addTearDown(() async {
+      if (await pubCache.exists()) await pubCache.delete(recursive: true);
+    });
+    final executable = await _writeCanonicalInstall(
+      pubCache,
+      version: '3.0.7',
+      contents: 'current aot',
+    );
+    final launcher = File('${pubCache.path}/bin/cockpit');
+    final originalLauncher = await launcher.readAsString();
     final calls = <List<String>>[];
     final service = CockpitUpdateService(
-      environment: const <String, String>{},
-      processRunner: (executable, arguments, timeout) async {
-        calls.add(<String>[executable, ...arguments]);
+      environment: <String, String>{'PUB_CACHE': pubCache.path},
+      resolvedExecutable: executable.path,
+      windows: false,
+      latestVersionLookup: (_) async => '3.0.8',
+      processRunner: (command, arguments, timeout) async {
+        calls.add(<String>[command, ...arguments]);
+        if (arguments.contains('activate')) {
+          await launcher.writeAsString('downgraded Pub launcher');
+        }
         return ProcessResult(
           calls.length,
           0,
@@ -798,16 +850,18 @@ void main() {
     );
     expect(calls, hasLength(2));
     expect(calls.first, <String>[
-      Platform.isWindows ? 'dart.exe' : 'dart',
+      'dart',
       'pub',
       'global',
       'activate',
       'cockpit',
+      '3.0.8',
     ]);
+    expect(await launcher.readAsString(), originalLauncher);
   });
 }
 
-Future<void> _writeActivatedPackage(
+Future<Directory> _writeActivatedPackage(
   Directory pubCache, {
   required String version,
   bool hosted = true,
@@ -833,19 +887,6 @@ Future<void> _writeActivatedPackage(
   await File(
     '${androidResources.path}/cockpit-driver-test.apk',
   ).writeAsBytes(<int>[4, 5, 6], flush: true);
-  final installedResources = Directory(
-    cockpitRuntimeResourceDirectoryPath(
-      '${pubCache.path}/bin/${Platform.isWindows ? 'cockpit.exe' : 'cockpit'}',
-    ),
-  );
-  if (await installedResources.exists()) {
-    await installedResources.delete(recursive: true);
-  }
-  await cockpitWriteRuntimeResources(
-    packageRoot: package,
-    destination: installedResources,
-    version: version,
-  );
   final config = File(
     '${pubCache.path}/global_packages/cockpit/.dart_tool/package_config.json',
   );
@@ -864,6 +905,66 @@ Future<void> _writeActivatedPackage(
   ]
 }
 ''');
+  return package;
+}
+
+Future<File> _writeCanonicalInstall(
+  Directory pubCache, {
+  required String version,
+  required String contents,
+  bool windows = false,
+}) async {
+  final package = await _writeActivatedPackage(pubCache, version: version);
+  final paths = CockpitInstalledRuntimePaths(
+    pubCacheRoot: pubCache.path,
+    windows: windows,
+  );
+  final release = Directory.fromUri(paths.releases.uri.resolve('current/'));
+  final executable = File.fromUri(release.uri.resolve(paths.executableName));
+  await executable.create(recursive: true);
+  await executable.writeAsString(contents);
+  final resources = Directory(
+    cockpitRuntimeResourceDirectoryPath(executable.path, windows: windows),
+  );
+  await cockpitWriteRuntimeResources(
+    packageRoot: package,
+    destination: resources,
+    version: version,
+  );
+  await paths.launcher.create(recursive: true);
+  await paths.launcher.writeAsString(
+    cockpitRuntimeLauncherContents(
+      executablePath: executable.path,
+      version: version,
+      windows: windows,
+    ),
+  );
+  return executable;
+}
+
+Future<CockpitInstalledRuntime> _activeRuntime(
+  Directory pubCache, {
+  required String version,
+  bool windows = false,
+  bool allowLegacyNative = false,
+}) async {
+  final paths = CockpitInstalledRuntimePaths(
+    pubCacheRoot: pubCache.path,
+    windows: windows,
+  );
+  await for (final entity in paths.releases.list(followLinks: false)) {
+    if (entity is! Directory) continue;
+    final executable = File.fromUri(entity.uri.resolve(paths.executableName));
+    final installed = await cockpitReadCanonicalInstalledRuntime(
+      environment: <String, String>{'PUB_CACHE': pubCache.path},
+      windows: windows,
+      resolvedExecutable: executable.path,
+      version: version,
+      allowLegacyNative: allowLegacyNative,
+    );
+    if (installed != null) return installed;
+  }
+  throw StateError('Canonical Cockpit runtime was not installed.');
 }
 
 Future<List<FileSystemEntity>> _updateWorkspaces(Directory pubCache) async {

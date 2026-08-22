@@ -12,6 +12,7 @@ import 'cockpit_network_snapshot.dart';
 import 'cockpit_web_socket_frame_decoder.dart';
 
 typedef CockpitNetworkTickHandler = Future<void> Function(Duration duration);
+typedef CockpitNetworkCaptureFilter = bool Function(String method, Uri uri);
 
 final class CockpitHttpNetworkObserver extends HttpOverrides
     implements CockpitNetworkObserver {
@@ -25,6 +26,7 @@ final class CockpitHttpNetworkObserver extends HttpOverrides
     this.redact = true,
     this.maxWebSocketFrames = 24,
     this.maxWebSocketPreviewBytes = 1024,
+    this.captureFilter,
     CockpitNetworkTickHandler? tickHandler,
   }) : _tickHandler = tickHandler ?? _defaultTickHandler;
 
@@ -37,6 +39,7 @@ final class CockpitHttpNetworkObserver extends HttpOverrides
   final bool redact;
   final int maxWebSocketFrames;
   final int maxWebSocketPreviewBytes;
+  final CockpitNetworkCaptureFilter? captureFilter;
   final CockpitNetworkTickHandler _tickHandler;
   static const CockpitNetworkRedactor _redactor = CockpitNetworkRedactor();
 
@@ -120,6 +123,16 @@ final class CockpitHttpNetworkObserver extends HttpOverrides
   String nextRequestId() {
     _requestCounter += 1;
     return '$_requestCounter';
+  }
+
+  bool captures(String method, Uri uri) {
+    final filter = captureFilter;
+    if (filter == null) return true;
+    try {
+      return filter(method, uri);
+    } on Object {
+      return true;
+    }
   }
 
   Map<String, String> snapshotHeaders(HttpHeaders headers) {
@@ -305,6 +318,9 @@ final class _CockpitObservedHttpClient implements HttpClient {
 
   @override
   Future<HttpClientRequest> openUrl(String method, Uri url) async {
+    if (!observer.captures(method, url)) {
+      return _delegate.openUrl(method, url);
+    }
     final pending = _CockpitPendingNetworkRecord(
       requestId: observer.nextRequestId(),
       method: method,

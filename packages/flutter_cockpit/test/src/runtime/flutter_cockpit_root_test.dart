@@ -944,12 +944,23 @@ void main() {
   );
 
   testWidgets(
-    'FlutterCockpitRoot remote health exposes captured runtime errors',
+    'FlutterCockpitRoot remote health exposes bounded runtime and network failures',
     (tester) async {
+      final networkObserver = _TrackingNetworkObserver(
+        snapshotResult: const CockpitNetworkSnapshot(
+          totalEntryCount: 3,
+          failureCount: 2,
+          entries: <CockpitNetworkEntry>[],
+          capturedEntryCount: 2,
+          inFlightCount: 1,
+          truncated: true,
+        ),
+      );
       FlutterCockpit.initialize(
-        const FlutterCockpitConfiguration(
+        FlutterCockpitConfiguration(
           initialRouteName: '/',
-          remoteSession: CockpitRemoteSessionConfiguration(
+          networkObserver: networkObserver,
+          remoteSession: const CockpitRemoteSessionConfiguration(
             enabled: true,
             autoStart: false,
             host: '127.0.0.1',
@@ -992,17 +1003,24 @@ void main() {
         status.snapshot.runtime!.entries.first.message,
         contains('runtime exploded'),
       );
+      expect(status.snapshot.network?.failureCount, 2);
+      expect(status.snapshot.network?.inFlightCount, 1);
+      expect(networkObserver.lastMaxEntries, 4);
+      expect(networkObserver.lastQuery?.onlyFailures, isTrue);
     },
   );
 }
 
 final class _TrackingNetworkObserver implements CockpitNetworkObserver {
-  _TrackingNetworkObserver({this.throwOnWait = false});
+  _TrackingNetworkObserver({this.throwOnWait = false, this.snapshotResult});
 
   final bool throwOnWait;
+  final CockpitNetworkSnapshot? snapshotResult;
   int waitCount = 0;
   Duration? lastQuietWindow;
   Duration? lastTimeout;
+  int? lastMaxEntries;
+  CockpitNetworkQuery? lastQuery;
 
   @override
   void clear() {}
@@ -1026,6 +1044,21 @@ final class _TrackingNetworkObserver implements CockpitNetworkObserver {
     int maxEntries = 10,
     CockpitNetworkQuery query = const CockpitNetworkQuery(),
   }) {
+    lastMaxEntries = maxEntries;
+    lastQuery = query;
+    final result = snapshotResult;
+    if (result != null) {
+      return CockpitNetworkSnapshot(
+        totalEntryCount: result.totalEntryCount,
+        failureCount: result.failureCount,
+        entries: result.entries,
+        endpointSummaries: result.endpointSummaries,
+        capturedEntryCount: result.capturedEntryCount,
+        inFlightCount: result.inFlightCount,
+        query: query,
+        truncated: result.truncated,
+      );
+    }
     return CockpitNetworkSnapshot(
       totalEntryCount: 0,
       failureCount: 0,

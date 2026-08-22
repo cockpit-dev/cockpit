@@ -101,6 +101,53 @@ void main() {
     },
   );
 
+  test(
+    'CockpitHttpNetworkObserver excludes filtered control-plane traffic from capture and idle waits',
+    () async {
+      final observer = CockpitHttpNetworkObserver(
+        maxRetainedEntries: 10,
+        captureFilter: (_, uri) => !uri.path.startsWith('/api/v2/'),
+      );
+      observer.attachParentOverrides(HttpOverrides.current);
+      final requestStarted = Completer<void>();
+      final releaseResponse = Completer<void>();
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => server.close(force: true));
+      server.listen((request) async {
+        if (request.uri.path.startsWith('/api/v2/')) {
+          if (!requestStarted.isCompleted) requestStarted.complete();
+          await releaseResponse.future;
+        }
+        request.response.statusCode = HttpStatus.ok;
+        await request.response.close();
+      });
+
+      final controlRequest = HttpOverrides.runZoned(() async {
+        final client = HttpClient();
+        final response = await (await client.getUrl(
+          Uri.parse(
+            'http://127.0.0.1:${server.port}/api/v2/workspaces/current',
+          ),
+        )).close();
+        await response.drain<void>();
+        client.close(force: true);
+      }, createHttpClient: observer.createHttpClient);
+      await requestStarted.future;
+
+      expect(
+        await observer.waitForIdle(
+          quietWindow: Duration.zero,
+          timeout: const Duration(milliseconds: 80),
+        ),
+        isTrue,
+      );
+      expect(observer.snapshot(maxEntries: 2).totalEntryCount, 0);
+
+      releaseResponse.complete();
+      await controlRequest;
+    },
+  );
+
   test('CockpitHttpNetworkObserver redacts captured credentials', () async {
     final observer = CockpitHttpNetworkObserver(maxRetainedEntries: 10);
     observer.attachParentOverrides(HttpOverrides.current);

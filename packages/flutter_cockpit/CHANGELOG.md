@@ -1,5 +1,13 @@
 # Changelog
 
+## 4.0.28
+
+- Synchronized the Flutter bridge package with the current Cockpit release.
+- Kept remote health reads lightweight while exposing bounded runtime and
+  network failure summaries for live session monitoring.
+- Added request capture filters so development shells can exclude internal
+  control-plane traffic from application network evidence and idle waits.
+
 ## 4.0.27
 
 - Synchronized the Flutter bridge package with the current Cockpit release.

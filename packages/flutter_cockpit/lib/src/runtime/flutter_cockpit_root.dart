@@ -13,6 +13,7 @@ import '../control/cockpit_screenshot_request.dart';
 import '../executor/in_app_cockpit_command_executor.dart';
 import '../gesture/cockpit_gesture_action.dart';
 import '../model/cockpit_environment.dart';
+import '../network/cockpit_network_query.dart';
 import '../remote/cockpit_remote_bridge_protocol.dart';
 import '../remote/cockpit_remote_bridge_binary_file_reader.dart';
 import '../remote/cockpit_remote_session_configuration.dart';
@@ -889,6 +890,9 @@ final class FlutterCockpitRootState extends State<FlutterCockpitRoot> {
       return snapshot(
         options: const CockpitSnapshotOptions(
           profile: CockpitSnapshotProfile.live,
+          includeNetworkActivity: true,
+          maxNetworkEntries: 4,
+          networkQuery: CockpitNetworkQuery(onlyFailures: true),
           includeRuntimeActivity: true,
           maxRuntimeEntries: 4,
           runtimeQuery: CockpitRuntimeQuery(onlyErrors: true),

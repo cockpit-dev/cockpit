@@ -420,8 +420,9 @@ cockpitd \
 dart run tool/install_cockpit.dart
 ```
 
-安装器会构建并验证 AOT executable，然后写入 Dart 全局 bin 目录。使用
-`--output PATH` 可以选择其他输出位置。
+安装器会构建并验证 AOT executable，将 runtime 与资源写入 Pub cache 的独立目录，
+并让 Dart 全局 bin 保持为 Pub 可识别的文本 launcher。使用 `--output PATH` 可以生成
+指定位置的独立 AOT executable。
 
 ## 文档
 

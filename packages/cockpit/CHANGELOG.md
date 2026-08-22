@@ -1,5 +1,14 @@
 # Changelog
 
+## 4.0.28
+
+- Kept Dart Pub's global `cockpit` entrypoint as a text launcher while storing
+  verified AOT executables and runtime resources in atomically switched runtime
+  releases, so later Pub activation and Cockpit updates remain reliable.
+- Migrated legacy Pub-bin AOT installs automatically, preserved rollback during
+  activation failures, and launched Supervisor and worker processes from the
+  selected runtime before deferred Windows executable cleanup.
+
 ## 4.0.27
 
 - Prevented iOS black-box idle waits from timing out on expensive accessibility

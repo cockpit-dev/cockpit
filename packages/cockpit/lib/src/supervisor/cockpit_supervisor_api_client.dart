@@ -11,6 +11,7 @@ import '../foundation/cockpit_home.dart';
 import '../foundation/cockpit_internal_process.dart';
 import '../foundation/cockpit_locked_json_store.dart';
 import '../foundation/cockpit_version.dart';
+import '../infrastructure/cockpit_installed_runtime.dart';
 import 'cockpit_daemon_client.dart';
 import 'cockpit_daemon_discovery.dart';
 
@@ -1103,9 +1104,10 @@ Future<CockpitSupervisorApiClient> createCockpitSupervisorApiClient({
 Future<_CockpitDaemonLaunchConfiguration> _resolveDaemonLaunchConfiguration({
   bool selfContained = false,
 }) async {
-  if (selfContained && !_isDartRuntime(Platform.resolvedExecutable)) {
+  final currentExecutable = cockpitCurrentExecutable();
+  if (selfContained && !_isDartRuntime(currentExecutable)) {
     return _CockpitDaemonLaunchConfiguration(
-      executable: Platform.resolvedExecutable,
+      executable: currentExecutable,
       daemonArguments: const <String>[cockpitInternalDaemonCommand],
       restartArguments: const <String>[],
     );
@@ -1121,7 +1123,7 @@ Future<_CockpitDaemonLaunchConfiguration> _resolveDaemonLaunchConfiguration({
           : const <String>[];
       final packageRoot = p.dirname(p.dirname(library.toFilePath()));
       return _CockpitDaemonLaunchConfiguration(
-        executable: Platform.resolvedExecutable,
+        executable: currentExecutable,
         daemonArguments: <String>[
           ...packageArguments,
           p.join(packageRoot, 'bin', 'cockpitd.dart'),

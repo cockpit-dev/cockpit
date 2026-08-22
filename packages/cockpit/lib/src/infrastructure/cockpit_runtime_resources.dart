@@ -95,6 +95,13 @@ Future<bool> cockpitHasValidRuntimeResources({
   final root = Directory(
     cockpitRuntimeResourceDirectoryPath(executablePath, windows: windows),
   );
+  return cockpitHasValidRuntimeResourceDirectory(root, version: version);
+}
+
+Future<bool> cockpitHasValidRuntimeResourceDirectory(
+  Directory root, {
+  required String version,
+}) async {
   return await _validatedRuntimeResourceFiles(root, version: version) != null;
 }
 

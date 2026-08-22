@@ -467,8 +467,10 @@ self-contained AOT executable once before live validation:
 dart run tool/install_cockpit.dart
 ```
 
-The installer builds and verifies the AOT executable, then places it in Dart's
-global bin directory. Use `--output PATH` to select another destination.
+The installer builds and verifies the AOT executable, stores the runtime and its
+resources outside Dart's global bin directory, and keeps a Pub-readable text
+launcher in global bin. Use `--output PATH` to create a standalone AOT executable
+at an exact destination.
 
 ## Documentation
 
