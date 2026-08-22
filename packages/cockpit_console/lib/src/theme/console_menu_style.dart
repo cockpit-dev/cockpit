@@ -1,14 +1,14 @@
 import 'package:flutter/material.dart';
 
 import 'console_colors.dart';
-import 'console_control_style.dart';
 import 'console_shapes.dart';
 
 /// Shared geometry and interaction states for every anchored Console menu.
 abstract final class ConsoleMenuStyle {
-  static const double itemHeight = ConsoleControlStyle.height;
-  static const double selectionWidth = 172;
-  static const EdgeInsets menuPadding = EdgeInsets.all(4);
+  static const double itemHeight = 36;
+  static const double selectionWidth = 188;
+  static const double headerHeight = 32;
+  static const EdgeInsets menuPadding = EdgeInsets.all(6);
   static const EdgeInsets itemPadding = EdgeInsets.symmetric(horizontal: 10);
 
   static MenuThemeData menuTheme(ConsoleColors colors) {
@@ -101,24 +101,24 @@ abstract final class ConsoleMenuStyle {
       backgroundColor: WidgetStateProperty.resolveWith((states) {
         if (states.contains(WidgetState.disabled)) {
           return selected
-              ? colors.accentSubtle.withValues(alpha: 0.5)
+              ? colors.surface3.withValues(alpha: 0.6)
               : Colors.transparent;
         }
         if (selected) {
           if (states.contains(WidgetState.pressed)) {
             return Color.alphaBlend(
-              colors.accent.withValues(alpha: 0.16),
-              colors.accentSubtle,
+              colors.accent.withValues(alpha: 0.1),
+              colors.surface3,
             );
           }
           if (states.contains(WidgetState.hovered) ||
               states.contains(WidgetState.focused)) {
             return Color.alphaBlend(
-              colors.accent.withValues(alpha: 0.08),
-              colors.accentSubtle,
+              colors.accent.withValues(alpha: 0.06),
+              colors.surface3,
             );
           }
-          return colors.accentSubtle;
+          return colors.surface3;
         }
         if (states.contains(WidgetState.pressed)) {
           return colors.surface3;

@@ -2,9 +2,9 @@ import 'package:cockpit_console/i18n/strings.g.dart';
 import 'package:cockpit_console/src/providers/core_providers.dart';
 import 'package:cockpit_console/src/providers/preferences_store.dart';
 import 'package:cockpit_console/src/theme/console_colors.dart';
-import 'package:cockpit_console/src/theme/console_menu_style.dart';
 import 'package:cockpit_console/src/theme/console_shapes.dart';
 import 'package:cockpit_console/src/ui/navigation/console_nav.dart';
+import 'package:cockpit_console/src/ui/widgets/console_menu.dart';
 import 'package:cockpit_console/src/ui/widgets/console_shell_header.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
@@ -214,17 +214,22 @@ final class _LanguageMenu extends StatelessWidget {
     return MenuAnchor(
       consumeOutsideTap: true,
       menuChildren: [
-        _LanguageMenuItem(
+        ConsoleMenuHeader(
+          label: translations.language.title,
+          icon: LucideIcons.languages,
+        ),
+        Divider(height: 1, color: colors.border),
+        ConsoleSelectionMenuItem(
           label: translations.language.system,
           selected: mode == ConsoleLocaleMode.system,
           onPressed: () => onSelected(ConsoleLocaleMode.system),
         ),
-        _LanguageMenuItem(
+        ConsoleSelectionMenuItem(
           label: translations.language.simplifiedChinese,
           selected: mode == ConsoleLocaleMode.simplifiedChinese,
           onPressed: () => onSelected(ConsoleLocaleMode.simplifiedChinese),
         ),
-        _LanguageMenuItem(
+        ConsoleSelectionMenuItem(
           label: translations.language.english,
           selected: mode == ConsoleLocaleMode.english,
           onPressed: () => onSelected(ConsoleLocaleMode.english),
@@ -254,31 +259,6 @@ final class _LanguageMenu extends StatelessWidget {
           ),
         ),
       ),
-    );
-  }
-}
-
-final class _LanguageMenuItem extends StatelessWidget {
-  const _LanguageMenuItem({
-    required this.label,
-    required this.selected,
-    required this.onPressed,
-  });
-
-  final String label;
-  final bool selected;
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.consoleColors;
-    return MenuItemButton(
-      onPressed: onPressed,
-      trailingIcon: selected
-          ? Icon(LucideIcons.check, size: 16, color: colors.accent)
-          : const SizedBox.square(dimension: 16),
-      style: ConsoleMenuStyle.selectableItem(colors, selected: selected),
-      child: Text(label),
     );
   }
 }

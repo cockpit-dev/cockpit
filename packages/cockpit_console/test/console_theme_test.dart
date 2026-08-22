@@ -96,7 +96,7 @@ void main() {
       );
       expect(
         item.minimumSize?.resolve(const <WidgetState>{})?.height,
-        ConsoleControlStyle.height,
+        ConsoleMenuStyle.itemHeight,
       );
       expect(
         item.backgroundColor?.resolve(const <WidgetState>{WidgetState.hovered}),
@@ -111,7 +111,7 @@ void main() {
       );
       expect(
         selected.backgroundColor?.resolve(const <WidgetState>{}),
-        colors.accentSubtle,
+        colors.surface3,
       );
     }
   });
