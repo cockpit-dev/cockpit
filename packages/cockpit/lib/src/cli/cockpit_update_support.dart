@@ -10,7 +10,7 @@ import '../infrastructure/cockpit_process_manager.dart';
 
 export '../infrastructure/cockpit_installed_runtime.dart';
 
-const Duration _latestVersionLookupLimit = Duration(seconds: 3);
+const Duration _latestVersionLookupLimit = Duration(seconds: 30);
 
 Future<String> cockpitLookupLatestVersion(
   Duration timeout, {

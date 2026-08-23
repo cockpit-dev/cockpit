@@ -47,7 +47,7 @@ final class CockpitUpdateService {
 
   Future<CockpitUpdateCheckResult> check({
     String currentVersion = cockpitVersion,
-    Duration timeout = const Duration(seconds: 10),
+    Duration timeout = const Duration(seconds: 30),
   }) async {
     if (timeout <= Duration.zero) {
       throw ArgumentError.value(timeout, 'timeout');
