@@ -446,7 +446,7 @@ final class CockpitWorkerRuntime {
       ],
     );
     Future<void> shutdownRuntime() async {
-      await developmentRuntime.dispose().timeout(const Duration(seconds: 3));
+      await developmentRuntime.dispose();
     }
 
     server = CockpitWorkerServer(

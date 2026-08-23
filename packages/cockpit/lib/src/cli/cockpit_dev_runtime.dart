@@ -1147,6 +1147,7 @@ final class CockpitDevRuntime {
     commandType: type,
     locator: locator,
     parameters: parameters,
+    snapshotOptions: const CockpitSnapshotOptions(maxTargets: 0),
     capturePolicy: CockpitCapturePolicy.onFailure,
     timeoutMs: (timeout ?? runtime.commandTimeout).inMilliseconds,
   );

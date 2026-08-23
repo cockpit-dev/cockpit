@@ -110,6 +110,7 @@ final class CockpitTarget {
       scrollableKeyValue: scrollableKeyValue,
       scrollableTypeName: scrollableTypeName,
       routeName: routeName,
+      visible: isVisible,
       supportedCommands: supportedCommands.toList(growable: false),
       control: control,
       ancestors: locatorAncestors,

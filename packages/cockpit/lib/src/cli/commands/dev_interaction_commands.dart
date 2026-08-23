@@ -12,7 +12,7 @@ CockpitLeafCommand cockpitDevTapCommand(
 ) => CockpitLeafCommand(
   runtime: runtime,
   name: 'tap',
-  description: 'Tap one exact mounted Flutter target.',
+  description: 'Find, reveal, and tap one exact Flutter target.',
   invocationSuffix: 'SELECTOR [arguments]',
   example: 'cockpit dev tap \'Dialog >> FilledButton["Continue"]\'',
   configure: _targetOptions,
@@ -32,7 +32,7 @@ CockpitLeafCommand cockpitDevHoldCommand(
   runtime,
   dev,
   name: 'hold',
-  description: 'Long-press one exact mounted Flutter target.',
+  description: 'Find, reveal, and long-press one exact Flutter target.',
   example: 'cockpit dev hold ":a"',
   type: CockpitCommandType.longPress,
 );
@@ -44,7 +44,7 @@ CockpitLeafCommand cockpitDevDoubleCommand(
   runtime,
   dev,
   name: 'double',
-  description: 'Double-tap one exact mounted Flutter target.',
+  description: 'Find, reveal, and double-tap one exact Flutter target.',
   example: 'cockpit dev double ":a"',
   type: CockpitCommandType.doubleTap,
 );
@@ -56,7 +56,7 @@ CockpitLeafCommand cockpitDevIncreaseCommand(
   runtime,
   dev,
   name: 'inc',
-  description: 'Increase one exact mounted Flutter control.',
+  description: 'Find, reveal, and increase one exact Flutter control.',
   example: 'cockpit dev inc ":a"',
   type: CockpitCommandType.increase,
 );
@@ -68,7 +68,7 @@ CockpitLeafCommand cockpitDevDecreaseCommand(
   runtime,
   dev,
   name: 'dec',
-  description: 'Decrease one exact mounted Flutter control.',
+  description: 'Find, reveal, and decrease one exact Flutter control.',
   example: 'cockpit dev dec ":a"',
   type: CockpitCommandType.decrease,
 );
@@ -79,7 +79,8 @@ CockpitLeafCommand cockpitDevTypeCommand(
 ) => CockpitLeafCommand(
   runtime: runtime,
   name: 'type',
-  description: 'Replace text in the focused or selected Flutter input.',
+  description:
+      'Replace text in the focused or selected Flutter input, revealing it when needed.',
   invocationSuffix: 'TEXT [arguments]',
   example: 'cockpit dev type "hello" --into "Message"',
   configure: (parser) {

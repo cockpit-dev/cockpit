@@ -82,7 +82,6 @@ final class CockpitNativeTargetDiscovery {
           : null;
       final hasMeaningfulViewportExposure =
           candidate == null ||
-          includeClippedTargets ||
           _hasMeaningfulClippedViewportExposure(
             element,
             effectiveViewport,
@@ -95,8 +94,13 @@ final class CockpitNativeTargetDiscovery {
           hasMeaningfulViewportExposure &&
           (_hasOwnedInteraction(candidate.supportedCommands) ||
               _controlOwnsSubtree(element.widget, candidate.control));
-      if (candidate != null && hasMeaningfulViewportExposure) {
-        discoveredTargets.add(candidate);
+      if (candidate != null &&
+          (includeClippedTargets || hasMeaningfulViewportExposure)) {
+        discoveredTargets.add(
+          hasMeaningfulViewportExposure
+              ? candidate
+              : _copyWithVisibility(candidate, isVisible: false),
+        );
       }
       if (policy.stopsTraversal(element)) {
         return;
@@ -994,6 +998,46 @@ final class CockpitNativeTargetDiscovery {
       diagnosticNodeProvider: () => element,
       geometryProvider: () =>
           CockpitTargetGeometryResolver.maybeFromElement(element),
+    );
+  }
+
+  CockpitTarget _copyWithVisibility(
+    CockpitTarget target, {
+    required bool isVisible,
+  }) {
+    return CockpitTarget(
+      registrationId: target.registrationId,
+      cockpitId: target.cockpitId,
+      semanticId: target.semanticId,
+      keyValue: target.keyValue,
+      text: target.text,
+      textParts: target.textParts,
+      tooltip: target.tooltip,
+      typeName: target.typeName,
+      path: target.path,
+      scrollablePath: target.scrollablePath,
+      scrollableKeyValue: target.scrollableKeyValue,
+      scrollableTypeName: target.scrollableTypeName,
+      routeName: target.routeName,
+      isVisible: isVisible,
+      supportedCommands: target.supportedCommands,
+      control: target.control,
+      locatorAncestors: target.locatorAncestors,
+      onTap: target.onTap,
+      onLongPress: target.onLongPress,
+      onDoubleTap: target.onDoubleTap,
+      onEnterText: target.onEnterText,
+      onTextInput: target.onTextInput,
+      onSemanticTap: target.onSemanticTap,
+      onSemanticLongPress: target.onSemanticLongPress,
+      onSemanticEnterText: target.onSemanticEnterText,
+      onSemanticTextInput: target.onSemanticTextInput,
+      onSemanticShowOnScreen: target.onSemanticShowOnScreen,
+      onSemanticIncrease: target.onSemanticIncrease,
+      onSemanticDecrease: target.onSemanticDecrease,
+      onSemanticDismiss: target.onSemanticDismiss,
+      diagnosticNodeProvider: target.diagnosticNodeProvider,
+      geometryProvider: target.geometryProvider,
     );
   }
 

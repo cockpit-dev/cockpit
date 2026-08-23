@@ -255,17 +255,21 @@ function run(argv) {
     }
     app = apps.objectAtIndex(0)
   }
-  const resolvedAppId = app.bundleIdentifier
+  const rawResolvedAppId = app.bundleIdentifier
     ? ObjC.unwrap(app.bundleIdentifier)
+    : ''
+  const resolvedAppId = typeof rawResolvedAppId === 'string'
+    ? rawResolvedAppId
     : ''
   if (requestedAppId !== '' && resolvedAppId !== requestedAppId) {
     throw new Error(
       `macOS process ${Number(app.processIdentifier)} belongs to ${resolvedAppId}, not ${requestedAppId}`,
     )
   }
-  const bundlePath = app.bundleURL && app.bundleURL.path
+  const rawBundlePath = app.bundleURL && app.bundleURL.path
     ? ObjC.unwrap(app.bundleURL.path)
     : ''
+  const bundlePath = typeof rawBundlePath === 'string' ? rawBundlePath : ''
   if (resolvedAppId === '' || bundlePath === '') {
     throw new Error(
       `macOS process ${Number(app.processIdentifier)} has no application bundle`,
@@ -301,8 +305,11 @@ function run(argv) {
   const frontmostProcessId = frontmost
     ? Number(frontmost.processIdentifier)
     : 0
-  const frontmostAppId = frontmost && frontmost.bundleIdentifier
+  const rawFrontmostAppId = frontmost && frontmost.bundleIdentifier
     ? ObjC.unwrap(frontmost.bundleIdentifier)
+    : ''
+  const frontmostAppId = typeof rawFrontmostAppId === 'string'
+    ? rawFrontmostAppId
     : ''
   return JSON.stringify({
     targetFrontmost: frontmostProcessId === processId,

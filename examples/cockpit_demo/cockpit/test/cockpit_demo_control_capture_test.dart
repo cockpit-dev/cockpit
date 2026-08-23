@@ -137,9 +137,28 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-
       expect(result.success, isTrue, reason: result.error?.message);
       expect(find.text('Acceptance bundles'), findsOneWidget);
+
+      final commandLabResult = await executor.execute(
+        CockpitCommand(
+          commandId: 'cmd-scroll-settings-command-lab',
+          commandType: CockpitCommandType.scrollUntilVisible,
+          locator: const CockpitLocator(key: 'settings-open-command-lab'),
+          parameters: const <String, Object?>{
+            'maxScrolls': 12,
+            'viewportFraction': 0.8,
+          },
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        commandLabResult.success,
+        isTrue,
+        reason: commandLabResult.error?.toJson().toString(),
+      );
+      expect(find.text('Open command lab'), findsOneWidget);
     },
   );
 

@@ -1,5 +1,23 @@
 # Changelog
 
+## 4.0.35
+
+- Made Flutter actions automatically reveal mounted and lazy offscreen targets,
+  including nested scrollables, before executing the requested interaction.
+- Made targeted inspection retain mounted offscreen matches, mark them as
+  offscreen, and return bounded visible context on a miss without a second
+  full snapshot round trip.
+- Reduced routine action cost by using route-only success snapshots and cheap
+  route-readiness probes while preserving full failure diagnostics.
+- Prevented desktop reveal settling from manually flushing a partial Flutter
+  pipeline, eliminating layout and semantics assertions under repeated control.
+- Made macOS focus recovery tolerate foreground processes without an application
+  bundle identifier while remaining independent of System Events permissions.
+- Preserved running Flutter applications when Supervisor shutdown overlaps an
+  active operation by forcing worker cancellation before graceful app detach.
+- Documented ordered `&&` command chains with explicit session isolation and
+  normal LON output for known development paths.
+
 ## 4.0.34
 
 - Made the bundled AI skill source-first for first-party Flutter development:

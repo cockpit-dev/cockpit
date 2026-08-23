@@ -1,5 +1,10 @@
 # Changelog
 
+## 4.0.35
+
+- Added target visibility to runtime snapshots and registry access to bounded
+  hidden targets for mounted offscreen inspection.
+
 ## 4.0.34
 
 - Synchronized the public protocol package with the current Cockpit release.

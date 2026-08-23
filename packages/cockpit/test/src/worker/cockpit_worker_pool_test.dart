@@ -277,6 +277,23 @@ void main() {
     );
     expect(connection.isClosed, isTrue);
   });
+
+  test('runs forced worker shutdown after drain failure before exit', () async {
+    final launcher = _FakeLauncher();
+    final pool = CockpitWorkerPool(
+      launcher: launcher,
+      heartbeatInterval: const Duration(seconds: 30),
+    );
+    final spec = _spec('workspaceA');
+    final connection = await pool.connectionFor(spec) as _FakeConnection;
+    connection.drainError = TimeoutException('active operation did not drain');
+
+    await pool.shutdownWorkspace(spec.key, grace: const Duration(seconds: 10));
+
+    expect(connection.shutdownForce, isTrue);
+    expect(connection.terminationForce, isFalse);
+    expect(connection.isClosed, isTrue);
+  });
 }
 
 CockpitWorkspaceWorkerSpec _spec(
@@ -373,6 +390,9 @@ final class _FakeConnection implements CockpitWorkspaceWorkerConnection {
   DateTime? initializationDeadline;
   DateTime? drainDeadline;
   DateTime? shutdownDeadline;
+  Object? drainError;
+  bool? shutdownForce;
+  bool? terminationForce;
   var _closed = false;
   var _activeHealthCalls = 0;
   var maximumConcurrentHealthCalls = 0;
@@ -401,7 +421,7 @@ final class _FakeConnection implements CockpitWorkspaceWorkerConnection {
       'cancel' => _cancel(params['targetRequestId']! as String),
       'health' => await _health(),
       'drain' => _drain(deadline),
-      'shutdown' => _shutdown(deadline),
+      'shutdown' => _shutdown(params, deadline),
       _ => throw StateError('Unexpected fake worker method $method.'),
     };
   }
@@ -437,14 +457,20 @@ final class _FakeConnection implements CockpitWorkspaceWorkerConnection {
 
   Map<String, Object?> _drain(DateTime deadline) {
     drainDeadline = deadline;
+    final error = drainError;
+    if (error != null) throw error;
     return CockpitWorkerDrainResult(
       draining: true,
       activeRequestCount: 0,
     ).toJson();
   }
 
-  Map<String, Object?> _shutdown(DateTime deadline) {
+  Map<String, Object?> _shutdown(
+    Map<String, Object?> params,
+    DateTime deadline,
+  ) {
     shutdownDeadline = deadline;
+    shutdownForce = params['force']! as bool;
     return const CockpitWorkerShutdownResult(accepted: true).toJson();
   }
 
@@ -475,5 +501,8 @@ final class _FakeConnection implements CockpitWorkspaceWorkerConnection {
   void closePeer() => _closed = true;
 
   @override
-  Future<void> terminate({required bool force}) async => exit(force ? -9 : 0);
+  Future<void> terminate({required bool force}) async {
+    terminationForce = force;
+    exit(force ? -9 : 0);
+  }
 }
