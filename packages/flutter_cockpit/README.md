@@ -27,8 +27,10 @@ It provides:
 
 - runtime bootstrap through `FlutterCockpit.runApp` or `FlutterCockpitApp`
 - command execution for taps, text input, gestures, waits, assertions, screenshots, and snapshots
-- remote session serving over HTTP
-- structured Widget, Element, RenderObject, semantics, route, focus, log, runtime error, network, and rebuild state
+- remote session transport over HTTP on VM platforms and the Cockpit WebSocket
+  bridge on web
+- structured Widget, Element, RenderObject, semantics, route, focus, log,
+  runtime error, HTTP/SSE/WebSocket network, and rebuild state
 - snapshot, artifact, recording, and bundle models
 - target, plane, surface, and fallback-aware runtime models for AI-first summaries
 
@@ -175,13 +177,14 @@ flutter run --target main.dart
 
 - low-intrusion root bootstrap
 - command routing and execution
-- UI snapshots plus minimal, standard, and full mounted Element trees
+- UI snapshots with live, baseline, investigate, and forensic diagnostic
+  profiles, including bounded mounted Element trees
 - accessibility, network, runtime, and rebuild signals
 - screenshot and recording requests
 - remote session status and command endpoints
 
-HTTP diagnostics redact credential values by default while retaining useful
-structure such as authorization schemes, cookie names, query keys, and JSON
+HTTP diagnostics mask credential values with `*` by default while retaining
+useful structure such as authorization schemes, cookie names, query keys, and JSON
 field names. A development-only entrypoint can explicitly use
 `CockpitHttpNetworkObserverConfiguration(redact: false)` when raw bounded
 payloads are required; never enable raw capture in a production entrypoint or

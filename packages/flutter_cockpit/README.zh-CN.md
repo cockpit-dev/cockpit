@@ -26,8 +26,9 @@
 
 - 通过 `FlutterCockpit.runApp` 或 `FlutterCockpitApp` 做运行时 bootstrap
 - 点击、输入、手势、等待、断言、截图、快照等命令执行能力
-- 基于 HTTP 的远程会话服务
-- 结构化 Widget、Element、RenderObject、semantics、route、focus、log、runtime error、network 与 rebuild 状态
+- VM 平台使用 HTTP、Web 使用 Cockpit WebSocket bridge 的远程会话传输
+- 结构化 Widget、Element、RenderObject、semantics、route、focus、log、runtime
+  error、HTTP/SSE/WebSocket network 与 rebuild 状态
 - snapshot、artifact、recording 和 bundle 模型
 - 面向 AI 摘要的 target / plane / surface / fallback 运行时模型
 
@@ -162,12 +163,13 @@ flutter run --target main.dart
 
 - 低侵入根级 bootstrap
 - 命令路由与执行
-- UI 快照以及 minimal、standard、full 三档已挂载 Element 树
+- UI 快照及 live、baseline、investigate、forensic 诊断档位，包括有界的已挂载
+  Element 树
 - accessibility、network、runtime、rebuild 信号
 - 截图和录屏请求
 - 远程会话状态与命令端点
 
-HTTP 诊断默认移除凭据值，同时保留鉴权类型、Cookie 名、query key 和 JSON
+HTTP 诊断默认用 `*` 掩码凭据值，同时保留鉴权类型、Cookie 名、query key 和 JSON
 字段名等定位问题所需的结构。只有在本地确实需要查看有界原文时，才应在开发
 专用入口显式使用 `CockpitHttpNetworkObserverConfiguration(redact: false)`；
 不要在生产入口或生成证据的 CI 中关闭脱敏。

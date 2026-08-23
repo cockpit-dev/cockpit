@@ -53,6 +53,13 @@ codex plugin marketplace add cockpit-dev/cockpit
 codex plugin add cockpit@cockpit
 ```
 
+Refresh an existing installation before starting the new session:
+
+```bash
+codex plugin marketplace upgrade cockpit
+codex plugin add cockpit@cockpit
+```
+
 For direct MCP setup without installing the plugin:
 
 ```bash

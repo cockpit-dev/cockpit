@@ -23,9 +23,9 @@
 
 Cockpit 是面向 AI 与 CI 的生产级应用开发、E2E 自动化与验证框架。Flutter 源码
 开发使用一等受管适配器，直接获得 widget、route、log、error、network 与 runtime
-结构化状态；已安装的 Android/iOS 生产应用则可以独立做无侵入黑盒操控与验证。
-两条路径职责不同，但通过 CLI、MCP、Cockpit Console 和第三方客户端共享同一套
-类型化协议。
+结构化状态；已安装的移动端与桌面端应用，以及显式注册的浏览器页面，也可以独立做
+无侵入黑盒操控与验证。两条路径职责不同，但通过 CLI、MCP、Cockpit Console 和
+第三方客户端共享同一套类型化协议。
 
 核心能力包括：
 
@@ -284,7 +284,7 @@ quarantined lease 会持续阻塞资源，直到 cleanup 验证成功。Supervis
 
 ## 黑盒应用
 
-无需修改应用即可注册已经安装的 Android/iOS 应用：
+无需修改源码即可注册由系统控制的 target。下面以 Android 应用为例：
 
 ```bash
 cockpit target register \

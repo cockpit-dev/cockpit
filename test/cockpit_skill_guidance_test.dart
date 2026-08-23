@@ -341,6 +341,7 @@ void main() {
           'cockpit_mcp for the current AI host',
       'whole directory',
       'dart pub global activate cockpit any',
+      'codex plugin marketplace upgrade cockpit',
       'cockpit_mcp',
       'Cursor',
       'Kiro',
