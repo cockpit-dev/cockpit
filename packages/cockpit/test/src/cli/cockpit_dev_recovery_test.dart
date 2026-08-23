@@ -890,7 +890,7 @@ void main() {
     },
   );
 
-  test('command actions keep one post-action commit snapshot', () async {
+  test('brief command actions skip hidden post-action snapshots', () async {
     final calls = <String>[];
     final dev = CockpitDevRuntime(
       runtime,
@@ -912,7 +912,7 @@ void main() {
           );
         }
         expect(kind, 'command.run');
-        expect(input['profile'], 'standard');
+        expect(input['profile'], 'minimal');
         final command = CockpitCommand.fromJson(
           Map<String, Object?>.from(input['command']! as Map<Object?, Object?>),
         );
@@ -948,6 +948,62 @@ void main() {
     final output = lon.decode(stdout.toString())! as Map<Object?, Object?>;
     expect(output['changed'], isTrue);
     expect(output['session'], 1);
+  });
+
+  test('detailed command actions request proportional evidence', () async {
+    for (final (:view, :profile)
+        in <({CockpitCliOutputView view, String profile})>[
+          (view: CockpitCliOutputView.more, profile: 'standard'),
+          (view: CockpitCliOutputView.full, profile: 'evidence'),
+        ]) {
+      final dev = CockpitDevRuntime(
+        runtime,
+        operationInvoker: (_, kind, input) async {
+          if (kind == 'session.development.get') {
+            return _result(
+              kind,
+              output: const <String, Object?>{
+                'sessionId': 'session-old',
+                'targetId': 'target-1',
+                'appId': 'app-old',
+                'status': <String, Object?>{
+                  'state': 'ready',
+                  'appReachable': true,
+                  'remoteSessionReachable': true,
+                },
+              },
+            );
+          }
+          expect(kind, 'command.run');
+          expect(input['profile'], profile);
+          return _result(
+            kind,
+            output: const <String, Object?>{
+              'command': <String, Object?>{'success': true, 'changed': true},
+              'changed': true,
+              'uiSummary': <String, Object?>{'routeName': '/documents'},
+            },
+          );
+        },
+      );
+      runtime.configureOutput(
+        command: 'dev.tap',
+        selection: CockpitCliOutputSelection(view: view),
+      );
+
+      expect(
+        await dev.runCommand(
+          session,
+          action: 'tap',
+          command: dev.command(
+            type: CockpitCommandType.tap,
+            timeout: const Duration(seconds: 30),
+            locator: const CockpitLocator(text: 'Documents'),
+          ),
+        ),
+        cockpitSuccessExitCode,
+      );
+    }
   });
 
   test(
