@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:cockpit_protocol/cockpit_protocol.dart';
 import 'package:path/path.dart' as p;
 
+import '../application/cockpit_interactive_result_profile.dart';
 import '../foundation/cockpit_home.dart';
 import '../foundation/cockpit_ids.dart';
 import '../supervisor/cockpit_supervisor_api_client.dart';
@@ -766,10 +767,18 @@ final class CockpitDevRuntime {
       return writeUnavailable(action: action, resolution: resolution);
     }
     session = resolution.session;
+    final profile = switch (runtime.outputSelection.view) {
+      CockpitCliOutputView.brief =>
+        CockpitInteractiveResultProfileName.minimal.jsonValue,
+      CockpitCliOutputView.more =>
+        CockpitInteractiveResultProfileName.standard.jsonValue,
+      CockpitCliOutputView.full =>
+        CockpitInteractiveResultProfileName.evidence.jsonValue,
+    };
     final result = await invoke(session, 'command.run', <String, Object?>{
       'sessionId': session.sessionId,
       'command': command.toJson(),
-      'profile': 'standard',
+      'profile': profile,
     });
     if (!_operationSucceeded(result)) {
       return writeOperation(
