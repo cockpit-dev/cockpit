@@ -5749,8 +5749,9 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
 
     if (_isSimpleLocatorFor(locator, CockpitLocatorKind.text)) {
       final directProbe = _context.locatorProbe?.call(locator);
-      if (directProbe?.isSuccess == true) {
-        return directProbe!.locatorResolution ??
+      if (directProbe?.isSuccess == true &&
+          _isMeaningfullyVisibleTarget(directProbe!.target!)) {
+        return directProbe.locatorResolution ??
             CockpitLocatorResolution(
               matchedKind: CockpitLocatorKind.text,
               matchedValue: locator.value,
@@ -5830,6 +5831,10 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
   }
 
   bool _isMeaningfullyVisibleTextTarget(CockpitTarget target) {
+    return _isMeaningfullyVisibleTarget(target);
+  }
+
+  bool _isMeaningfullyVisibleTarget(CockpitTarget target) {
     final hitTest = CockpitTargetHitTestInspector.inspect(target);
     if (hitTest == null) {
       return true;

@@ -113,6 +113,13 @@ or anchor with `dev wait` and `dev inspect`.
 Use `dev recover` only after a system capture proves a native blocker. It safely
 does nothing when the selected app already has focus.
 
+`dev scroll TARGET` mounts lazy targets, ranks scroll containers, searches the
+requested initial direction before reversing at its boundary, and reveals nested
+ancestors from inner to outer. Default `nearest` placement verifies the hit test
+and can scroll a target away from a fixed Flutter overlay. A successful
+`dev reload` starts a new runtime-diagnostic generation, so previous errors no
+longer fail current evidence while new errors remain reportable.
+
 ## Explicit Resource Workspaces
 
 `cockpit dev start` automatically registers its canonical Flutter project, so

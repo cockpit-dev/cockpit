@@ -48,6 +48,10 @@ Prefer `brief`; use `more` for diagnosis and `full` only when the entire
 response is required. Do not relaunch while reload and the authenticated
 bridge remain healthy.
 
+Hot reload begins a new runtime-diagnostic generation. Errors captured before
+the reload no longer fail current diagnosis or evidence; errors raised after it
+remain visible and disqualifying.
+
 ## Mixed-Stack Boundaries
 
 Stay on Flutter in-app control for widgets, routes, focus, editing, scrolling,
@@ -195,9 +199,13 @@ cockpit dev scroll "Save" --align center --offset 12
 
 Alignment is `nearest|start|center|end`. Positive offset moves toward the viewport
 end; negative offset moves toward its start. Legal scroll extents win when an exact
-placement is impossible. Cockpit owns scroll-container discovery; when a target is
-ambiguous, strengthen the target selector with a real ancestor or identity instead
-of inventing a container option.
+placement is impossible. `nearest` keeps a fully visible, hittable target in place;
+if a fixed Flutter overlay wins the hit test and scrolling can avoid it, Cockpit moves
+the target to the viewport center. `--direction up|down` selects the initial search
+direction only; reaching that boundary automatically starts a search in the opposite
+direction. Cockpit owns scroll-container discovery; when a target is ambiguous,
+strengthen the target selector with a real ancestor or identity instead of inventing
+a container option.
 
 ## Timeouts
 

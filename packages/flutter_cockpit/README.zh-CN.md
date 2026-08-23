@@ -172,6 +172,10 @@ HTTP 诊断默认移除凭据值，同时保留鉴权类型、Cookie 名、query
 专用入口显式使用 `CockpitHttpNetworkObserverConfiguration(redact: false)`；
 不要在生产入口或生成证据的 CI 中关闭脱敏。
 
+`FlutterCockpitRoot` 会把 Flutter hot reload 视为 runtime diagnostic generation
+边界。reassemble 时会清除上一 generation 的错误和未消费 recorded steps；reload 后
+应用新产生的错误仍会正常捕获。
+
 宿主侧编排、MCP、workspace tooling 和交付验证在 [`cockpit`](https://pub.dev/packages/cockpit) 中。
 运行时 bundle 模型现在会保留 `targetKind`、`primaryExecutionPlane`、`planesUsed`、`surfaceKindsUsed`、`fallbackCount`，以及 step / observation 级别的 plane 元数据，方便宿主侧准确解释这次控制是按预期平面完成，还是发生了受控降级。
 在 web 上，runtime 直接支持 Flutter Element 与 Flutter-view 控制路径；method channel 会注册为“显式不可用”的 stub，这样能力判断会保持真实，不会退化成缺少插件的噪音报错。移动端和桌面端的原生 method-channel 录屏与截图会通过包的插件入口注册，并作为应用窗口级证据 fallback 使用；如果目标是证明系统弹窗、通知、宿主窗口或跨应用行为，仍优先使用 `cockpit` 提供的 system/host 证据链路。

@@ -475,6 +475,69 @@ void main() {
       expect(secondaryActivations, 0);
     },
   );
+
+  testWidgets('nearest reveal moves a fixed-overlay-covered target to center', (
+    tester,
+  ) async {
+    var targetTaps = 0;
+    var overlayTaps = 0;
+    await tester.pumpWidget(
+      WidgetsApp(
+        color: const Color(0xFFFFFFFF),
+        builder: (context, child) => CockpitSurface(
+          routeName: '/overlay',
+          child: Material(
+            child: Directionality(
+              textDirection: TextDirection.ltr,
+              child: Stack(
+                children: <Widget>[
+                  ListView(
+                    children: <Widget>[
+                      const SizedBox(height: 420),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 24),
+                        child: TextButton(
+                          onPressed: () => targetTaps += 1,
+                          child: const Text('Open covered action'),
+                        ),
+                      ),
+                      const SizedBox(height: 400),
+                    ],
+                  ),
+                  Align(
+                    alignment: Alignment.bottomCenter,
+                    child: GestureDetector(
+                      onTap: () => overlayTaps += 1,
+                      behavior: HitTestBehavior.opaque,
+                      child: Container(
+                        height: 180,
+                        color: const Color(0xFF101214),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final surface = tester.state<CockpitSurfaceState>(
+      find.byType(CockpitSurface),
+    );
+    final revealed = await surface.ensureLocatorVisible(
+      const CockpitLocator(text: 'Open covered action'),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Open covered action'));
+    await tester.pump();
+
+    expect(revealed, isTrue);
+    expect(targetTaps, 1);
+    expect(overlayTaps, 0);
+  });
 }
 
 final class SourceOnlyButton extends StatelessWidget {

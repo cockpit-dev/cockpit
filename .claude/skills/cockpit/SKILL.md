@@ -109,6 +109,10 @@ for visible claims. Use `restart` only when reload cannot apply the change. Do n
 start a second app to recover a healthy session, and never restart or stop sessions
 other than the selected handle.
 
+`dev reload` starts a fresh runtime-diagnostic generation. Runtime errors from the
+previous generation no longer fail current diagnosis or evidence, while any error
+raised after the reload remains visible and disqualifying.
+
 Use `dev open URI` for a custom-scheme deep link, Android app link, iOS
 universal link, or ordinary HTTP(S) URL. It targets the selected session's
 platform and does not print the URI. After opening, run `dev wait` and inspect
@@ -421,11 +425,15 @@ properties. Both structural views print only the verified absolute artifact path
 `dev scroll TARGET` uses exact matching by default and automatically ranks visible
 scroll containers. Lazy targets are searched with independent forward and reverse
 budgets; once mounted, every scrollable ancestor is revealed from inner to outer and
-the target must be fully visible through all ancestor viewports. Use `[*="text"]` only
-when exact text is insufficient. Use `--align start|center|end` only for deliberate
-placement; `--offset PX` moves the target toward the viewport end for positive values
-and toward the start for negative values. Omit `--align nearest`, zero offset, direction,
-and default budgets.
+the target must be fully visible through all ancestor viewports. `nearest` also verifies
+the real hit test: when a fixed Flutter overlay covers an otherwise visible target and
+scrolling can avoid it, Cockpit moves the target to the viewport center. Use
+`[*="text"]` only when exact text is insufficient. `--direction up|down` selects only
+the initial search direction; after reaching that boundary Cockpit automatically tries
+the opposite direction. Use `--align start|center|end` only for deliberate placement;
+`--offset PX` moves the target toward the viewport end for positive values and toward
+the start for negative values. Omit `--align nearest`, zero offset, direction, and
+default budgets.
 
 Re-inspect after list reorder, filtering, navigation, dialogs, sheets, or keyboard
 transitions. `type VALUE --into

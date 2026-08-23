@@ -7,6 +7,47 @@ void main() {
   tearDown(FlutterCockpit.dispose);
 
   testWidgets(
+    'FlutterCockpitRoot starts a fresh diagnostic generation on reload',
+    (tester) async {
+      final runtimeObserver = CockpitFlutterRuntimeObserver(
+        routeNameProvider: () => '/',
+        captureDebugPrint: false,
+        capturePrint: false,
+      );
+      FlutterCockpit.initialize(
+        FlutterCockpitConfiguration(runtimeObserver: runtimeObserver),
+      );
+      final rootKey = GlobalKey<FlutterCockpitRootState>();
+
+      await tester.pumpWidget(
+        FlutterCockpitRoot(key: rootKey, child: const SizedBox()),
+      );
+      runtimeObserver.recordUnhandledError(
+        StateError('previous generation'),
+        StackTrace.empty,
+      );
+      FlutterCockpit.recordStep(
+        actionType: 'previous-generation-step',
+        actionArgs: const <String, Object?>{},
+      );
+
+      expect(runtimeObserver.snapshot(maxEntries: 8).errorCount, 1);
+      expect(FlutterCockpit.drainRecordedSteps(clear: false), isNotEmpty);
+
+      rootKey.currentState!.reassemble();
+
+      expect(runtimeObserver.snapshot(maxEntries: 8).errorCount, 0);
+      expect(FlutterCockpit.drainRecordedSteps(clear: false), isEmpty);
+
+      runtimeObserver.recordUnhandledError(
+        StateError('current generation'),
+        StackTrace.empty,
+      );
+      expect(runtimeObserver.snapshot(maxEntries: 8).errorCount, 1);
+    },
+  );
+
+  testWidgets(
     'FlutterCockpitRoot tracks route changes from the navigator observer',
     (tester) async {
       FlutterCockpit.initialize(

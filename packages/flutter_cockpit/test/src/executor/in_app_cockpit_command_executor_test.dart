@@ -4438,6 +4438,7 @@ void main() {
       );
       final executor = InAppCockpitCommandExecutor(
         registry: registry,
+        locatorProbe: surfaceState.probeVisibleLocator,
         snapshotProvider: surfaceState.snapshot,
         postActionSettler: () async {
           await tester.pump();
