@@ -31,7 +31,10 @@ void main() {
     'update check stays compact when the current release is latest',
     () async {
       final service = CockpitUpdateService(
-        latestVersionLookup: (_) async => '4.0.18',
+        latestVersionLookup: (timeout) async {
+          expect(timeout, const Duration(seconds: 30));
+          return '4.0.18';
+        },
       );
 
       final result = await service.check(currentVersion: '4.0.18');
