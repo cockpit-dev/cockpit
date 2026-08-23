@@ -56,6 +56,7 @@ const int _defaultAssertSettleTimeoutMs = 1000;
 const Duration _assertPollInterval = Duration(milliseconds: 16);
 const int _routeTargetReadinessProbeLimit = 6;
 const Duration _hardCommandTimeoutGrace = Duration(milliseconds: 250);
+const Duration _platformClipboardAccessTimeout = Duration(seconds: 5);
 
 enum _TapActivation { auto, direct, semantic, gesture }
 
@@ -202,7 +203,7 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
   late final CockpitTextInputCommandExecutor _textInputCommandExecutor;
   late final CockpitGestureCommandExecutor _gestureCommandExecutor;
   late final CockpitWaitAndAssertExecutor _waitAndAssertExecutor;
-  String _inAppClipboardText = '';
+  String? _inAppClipboardText;
 
   CockpitTargetRegistry get _registry => _context.registry;
   CockpitCaptureHandler? get _captureHandler => _context.captureHandler;
@@ -2358,10 +2359,31 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
         ),
       );
     }
-    _inAppClipboardText = text;
     if (!kIsWeb) {
+      final clipboardTimeout = _platformClipboardTimeout(command, stopwatch);
       try {
-        await Clipboard.setData(ClipboardData(text: text));
+        if (clipboardTimeout <= Duration.zero) {
+          throw TimeoutException('The command deadline has elapsed.');
+        }
+        await Clipboard.setData(
+          ClipboardData(text: text),
+        ).timeout(clipboardTimeout);
+      } on TimeoutException {
+        return _failureExecution(
+          command: command,
+          durationMs: stopwatch.elapsedMilliseconds,
+          locatorResolution: resolution.locatorResolution,
+          error: CockpitCommandError.timeout(
+            message: _platformClipboardTimeoutMessage(
+              operation: 'write',
+              timeout: clipboardTimeout,
+            ),
+            details: <String, Object?>{
+              'phase': 'clipboardWrite',
+              'timeoutMs': clipboardTimeout.inMilliseconds,
+            },
+          ),
+        );
       } on Object catch (error) {
         return _failureExecution(
           command: command,
@@ -2374,6 +2396,7 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
         );
       }
     }
+    _inAppClipboardText = text;
     return _successExecution(
       command: command,
       durationMs: stopwatch.elapsedMilliseconds,
@@ -2385,26 +2408,6 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
     CockpitCommand command,
     Stopwatch stopwatch,
   ) async {
-    String clipboardText;
-    if (kIsWeb) {
-      // Browser clipboard APIs require transient user activation, which a
-      // remote semantic command cannot provide deterministically.
-      clipboardText = _inAppClipboardText;
-    } else {
-      try {
-        clipboardText =
-            (await Clipboard.getData(Clipboard.kTextPlain))?.text ?? '';
-      } on Object catch (error) {
-        return _failureExecution(
-          command: command,
-          durationMs: stopwatch.elapsedMilliseconds,
-          error: CockpitCommandError(
-            code: 'clipboardFailed',
-            message: 'Could not read the platform clipboard: $error',
-          ),
-        );
-      }
-    }
     final resolution = await _resolveTextMutationTarget(command);
     if (!resolution.isSuccess) {
       return _failureExecution(
@@ -2413,6 +2416,54 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
         snapshot: _liveSnapshot().toJson(),
         error: resolution.error!,
       );
+    }
+
+    final cachedClipboardText = _inAppClipboardText;
+    String clipboardText;
+    if (cachedClipboardText != null) {
+      clipboardText = cachedClipboardText;
+    } else if (kIsWeb) {
+      // Browser clipboard APIs require transient user activation, which a
+      // remote semantic command cannot provide deterministically.
+      clipboardText = '';
+    } else {
+      final clipboardTimeout = _platformClipboardTimeout(command, stopwatch);
+      try {
+        if (clipboardTimeout <= Duration.zero) {
+          throw TimeoutException('The command deadline has elapsed.');
+        }
+        clipboardText =
+            (await Clipboard.getData(
+              Clipboard.kTextPlain,
+            ).timeout(clipboardTimeout))?.text ??
+            '';
+      } on TimeoutException {
+        return _failureExecution(
+          command: command,
+          durationMs: stopwatch.elapsedMilliseconds,
+          locatorResolution: resolution.locatorResolution,
+          error: CockpitCommandError.timeout(
+            message: _platformClipboardTimeoutMessage(
+              operation: 'read',
+              timeout: clipboardTimeout,
+            ),
+            details: <String, Object?>{
+              'phase': 'clipboardRead',
+              'timeoutMs': clipboardTimeout.inMilliseconds,
+            },
+          ),
+        );
+      } on Object catch (error) {
+        return _failureExecution(
+          command: command,
+          durationMs: stopwatch.elapsedMilliseconds,
+          locatorResolution: resolution.locatorResolution,
+          error: CockpitCommandError(
+            code: 'clipboardFailed',
+            message: 'Could not read the platform clipboard: $error',
+          ),
+        );
+      }
     }
     final target = resolution.target!;
     final current = _editableTextState(target)?.widget.controller.value;
@@ -2441,6 +2492,35 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
         clearExisting: true,
       ),
     );
+  }
+
+  Duration _platformClipboardTimeout(
+    CockpitCommand command,
+    Stopwatch stopwatch,
+  ) {
+    final commandTimeout = _hardCommandTimeout(command);
+    if (commandTimeout == null) {
+      return _platformClipboardAccessTimeout;
+    }
+    final remaining = commandTimeout - stopwatch.elapsed;
+    if (remaining <= Duration.zero) {
+      return Duration.zero;
+    }
+    return remaining < _platformClipboardAccessTimeout
+        ? remaining
+        : _platformClipboardAccessTimeout;
+  }
+
+  String _platformClipboardTimeoutMessage({
+    required String operation,
+    required Duration timeout,
+  }) {
+    if (timeout <= Duration.zero) {
+      return 'The command deadline elapsed before the platform clipboard '
+          '$operation could start.';
+    }
+    return 'Could not $operation the platform clipboard within '
+        '${timeout.inMilliseconds}ms.';
   }
 
   Future<CockpitTargetResolutionResult> _resolveTextMutationTarget(

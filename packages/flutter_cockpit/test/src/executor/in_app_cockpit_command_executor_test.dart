@@ -7067,6 +7067,7 @@ void main() {
     final controller = TextEditingController(text: 'Cockpit edited');
     addTearDown(controller.dispose);
     var clipboard = '';
+    var clipboardReads = 0;
     tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
       SystemChannels.platform,
       (call) async {
@@ -7076,6 +7077,7 @@ void main() {
           return null;
         }
         if (call.method == 'Clipboard.getData') {
+          clipboardReads += 1;
           return <String, Object?>{'text': clipboard};
         }
         return null;
@@ -7139,9 +7141,76 @@ void main() {
     expect(erased.success, isTrue);
     expect(pasted.success, isTrue);
     expect(clipboard, 'Cockpit edited');
+    expect(clipboardReads, 0);
     expect(erasedText, isEmpty);
     expect(controller.text, 'Cockpit edited');
   });
+
+  testWidgets(
+    'paste bounds a platform clipboard read by the command deadline',
+    (tester) async {
+      final registry = CockpitTargetRegistry(routeName: '/editor');
+      final controller = TextEditingController();
+      final stalledClipboardRead = Completer<Object?>();
+      addTearDown(controller.dispose);
+      addTearDown(() {
+        if (!stalledClipboardRead.isCompleted) {
+          stalledClipboardRead.complete(null);
+        }
+      });
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        (call) => call.method == 'Clipboard.getData'
+            ? stalledClipboardRead.future
+            : Future<Object?>.value(),
+      );
+      addTearDown(
+        () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          SystemChannels.platform,
+          null,
+        ),
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: CockpitSurface(
+            routeName: '/editor',
+            registry: registry,
+            child: Scaffold(
+              body: TextField(
+                key: const ValueKey<String>('editor'),
+                controller: controller,
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final executor = InAppCockpitCommandExecutor(
+        registry: registry,
+        snapshotProvider: tester
+            .state<CockpitSurfaceState>(find.byType(CockpitSurface))
+            .snapshot,
+        postActionSettler: () async => tester.pump(),
+      );
+
+      final result = await tester.runAsync(
+        () => executor.execute(
+          CockpitCommand(
+            commandId: 'paste-editor-stalled-clipboard',
+            commandType: CockpitCommandType.pasteText,
+            locator: const CockpitLocator(key: 'editor'),
+            timeoutMs: 300,
+          ),
+        ),
+      );
+
+      expect(result?.success, isFalse);
+      expect(result?.error?.code, CockpitCommandError.timeoutCode);
+      expect(result?.error?.details['phase'], 'clipboardRead');
+      expect(controller.text, isEmpty);
+    },
+  );
 
   testWidgets(
     'paste returns a warning when committed text outlives the settle budget',
