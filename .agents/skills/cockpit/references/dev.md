@@ -16,7 +16,7 @@ normal Flutter loop.
 
 ## Fast Loop
 
-Start once inside the checkout, then reuse the active handle:
+Start once inside the intended Flutter project, then reuse the active handle:
 
 ```bash
 cockpit dev start
@@ -137,7 +137,7 @@ bounded observe-decide-prove loop:
 | macOS recovery reports `macosSessionLocked` | Unlock the desktop, then retry the same session once. Do not request Accessibility permission or relaunch the app. |
 | Runtime exception or failed request | Read standard diagnostics, fix the cause, then hot reload and prove the expected anchor. |
 | App crashed or stopped unexpectedly | Use `cockpit dev start` to reconcile and relaunch the owned app under the same handle. |
-| Port/bridge changed | Use `cockpit dev start` to reconnect the owned app; do not create another session. |
+| App is live while the bridge reconnects | Follow the exact `next` command from status, normally `cockpit dev recover --session HANDLE`; do not relaunch or create another session. |
 
 Use the task command for routine recovery:
 

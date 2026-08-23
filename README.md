@@ -6,7 +6,7 @@
   <p><strong>One control plane for Flutter development and black-box application E2E.</strong></p>
   <p>
     <a href="https://github.com/cockpit-dev/cockpit/actions/workflows/example-e2e.yml"><img src="https://github.com/cockpit-dev/cockpit/actions/workflows/example-e2e.yml/badge.svg?branch=main" alt="CI"></a>
-    <a href="https://github.com/cockpit-dev/cockpit/blob/main/LICENSE"><img src="https://img.shields.io/github/license/cockpit-dev/cockpit" alt="BSD 3-Clause license"></a>
+    <a href="https://github.com/cockpit-dev/cockpit/blob/main/LICENSE"><img src="https://img.shields.io/github/license/cockpit-dev/cockpit" alt="MIT license"></a>
   </p>
   <p>
     <a href="https://pub.dev/packages/cockpit"><img src="https://img.shields.io/pub/v/cockpit?logo=dart&amp;label=cockpit" alt="cockpit package on pub.dev"></a>
@@ -26,7 +26,8 @@ verification stack for AI and CI. Flutter source development uses a first-class
 managed adapter with structured widget, route, log, error, network, and runtime
 state. Independently, installed Android and iOS applications can be controlled
 and verified as non-invasive black boxes. Both paths expose the same typed
-resources to CLI, MCP, and future clients without conflating their roles.
+resources to CLI, MCP, Cockpit Console, and third-party clients without
+conflating their roles.
 
 It provides:
 
@@ -38,7 +39,8 @@ It provides:
 - durable run events, restart-safe suite checkpoints, exact session affinity,
   cancellation, artifacts, and complete offline regression report bundles;
 - a per-user authenticated Supervisor with isolated per-workspace workers;
-- resource-oriented CLI, HTTP/SSE API, and MCP clients without a bundled GUI.
+- resource-oriented CLI, HTTP/SSE API, MCP, and an independently released
+  desktop Console.
 
 ## Packages
 
@@ -49,8 +51,13 @@ It provides:
 - [`flutter_cockpit`](packages/flutter_cockpit) is the first-class in-app
   Flutter development, inspection, and control adapter. Pure black-box users
   do not need it.
+- [`cockpit_console`](packages/cockpit_console) is the independent desktop
+  client for live Supervisor resources, sessions, runs, operations, and ACP
+  agents. It consumes the public API and ships separately from the Pub packages.
 
-Minimum versions are Dart 3.8.0 and Flutter 3.32.0. Install the host CLI once:
+The published packages require Dart 3.8.0; `flutter_cockpit` additionally
+requires Flutter 3.32.0. Cockpit Console development requires Flutter 3.44.0.
+Install the host CLI once:
 
 ```bash
 dart pub global activate cockpit any
@@ -66,16 +73,32 @@ cockpit update
 It updates the CLI and running Supervisor to the latest verified Pub release
 while preserving local authorization and durable state.
 
-Flutter source development additionally uses the development-only bridge:
+Flutter source development additionally uses a non-published shell package:
 
 ```yaml
+# cockpit/pubspec.yaml
+dependencies:
+  flutter:
+    sdk: flutter
+  your_app:
+    path: ..
+
 dev_dependencies:
   flutter_cockpit: any
 ```
 
-Keep Cockpit development-only. Native black-box testing does not require an
-application source dependency or a Flutter integration.
+Replace `your_app` with the real application package name, then run
+`flutter pub get` inside `cockpit/`. Keep the shell out of the production
+package dependency graph and keep all `flutter_cockpit` imports under
+`cockpit/`. Native black-box testing does not require a Flutter integration.
+For a Pub workspace, register `cockpit/` as a workspace member and use the
+workspace package constraint described in the integration guide instead of a
+path dependency.
 Do not add `flutter_cockpit` imports to production `lib/` code.
+The dependency alone does not expose a control bridge: before the first
+`cockpit dev start`, wire `cockpit/main.dart` to the real app root and its
+Navigator observers as described in the
+[`flutter_cockpit` integration guide](packages/flutter_cockpit/README.md#recommended-integration).
 
 ## Install For AI Agents
 
@@ -100,7 +123,7 @@ target, process, port, and bridge, then reuses that project's active numeric
 handle while checkout identity keeps concurrent projects isolated:
 
 ```bash
-cockpit dev start cockpit/main.dart --platform macos
+cockpit dev start
 cockpit dev status
 cockpit dev inspect "Save"
 cockpit dev tree
@@ -156,7 +179,7 @@ flowchart TB
   subgraph ControlPath["cockpit_protocol · typed control plane"]
     direction LR
     Actors["AI agents · developers · CI"]
-    Surfaces["Skill · CLI · MCP · REST API"]
+    Surfaces["Skill · CLI · MCP · Console · REST API"]
     Supervisor["Supervisor<br/>identity · auth · policy · runs"]
     Actors --> Surfaces --> Supervisor
   end
@@ -235,7 +258,7 @@ cannot change authority mid-run.
   "allowedTargetEnvironments": [
     "development",
     "test",
-    "production"
+    "staging"
   ],
   "allowedSafetyEffects": [
     "communication",
@@ -409,7 +432,7 @@ Every finalized suite publishes one portable report bundle. Export it with
 `suite report --output-dir cockpit-report`; the CLI downloads only the files
 declared by the run manifest, verifies their metadata and SHA-256 while
 downloading, and commits the directory only after the bundle is complete. The
-destination must not already exist. Open
+destination may be absent or an existing real empty directory. Open
 `index.html` offline to move from release summary and coverage through
 executions, evidence, diagnostics, and environment/files. Search, filters,
 deep links, and responsive/print layouts work without a server or network.

@@ -6,7 +6,7 @@
   <p><strong>统一完成 Flutter 快速开发验证与任意应用黑盒 E2E。</strong></p>
   <p>
     <a href="https://github.com/cockpit-dev/cockpit/actions/workflows/example-e2e.yml"><img src="https://github.com/cockpit-dev/cockpit/actions/workflows/example-e2e.yml/badge.svg?branch=main" alt="CI"></a>
-    <a href="https://github.com/cockpit-dev/cockpit/blob/main/LICENSE"><img src="https://img.shields.io/github/license/cockpit-dev/cockpit" alt="BSD 3-Clause 许可证"></a>
+    <a href="https://github.com/cockpit-dev/cockpit/blob/main/LICENSE"><img src="https://img.shields.io/github/license/cockpit-dev/cockpit" alt="MIT 许可证"></a>
   </p>
   <p>
     <a href="https://pub.dev/packages/cockpit"><img src="https://img.shields.io/pub/v/cockpit?logo=dart&amp;label=cockpit" alt="pub.dev 上的 cockpit 包"></a>
@@ -24,7 +24,8 @@
 Cockpit 是面向 AI 与 CI 的生产级应用开发、E2E 自动化与验证框架。Flutter 源码
 开发使用一等受管适配器，直接获得 widget、route、log、error、network 与 runtime
 结构化状态；已安装的 Android/iOS 生产应用则可以独立做无侵入黑盒操控与验证。
-两条路径职责不同，但通过 CLI、MCP 和未来客户端共享同一套类型化协议。
+两条路径职责不同，但通过 CLI、MCP、Cockpit Console 和第三方客户端共享同一套
+类型化协议。
 
 核心能力包括：
 
@@ -35,7 +36,7 @@ Cockpit 是面向 AI 与 CI 的生产级应用开发、E2E 自动化与验证框
 - 持久事件、可恢复 suite 检查点、精确 session 亲和、取消、artifact，以及
   完整离线回归报告 bundle；
 - 每用户一个认证 Supervisor，每 workspace 一个隔离 worker；
-- 资源化 CLI、HTTP/SSE API 和 MCP。
+- 资源化 CLI、HTTP/SSE API、MCP，以及独立发布的桌面 Console。
 
 ## 包结构
 
@@ -45,8 +46,12 @@ Cockpit 是面向 AI 与 CI 的生产级应用开发、E2E 自动化与验证框
   报告和 artifact。
 - [`flutter_cockpit`](packages/flutter_cockpit)：一等 Flutter 开发、检查与控制
   适配器；纯黑盒用户无需接入。
+- [`cockpit_console`](packages/cockpit_console)：独立桌面客户端，用于查看实时
+  Supervisor 资源、session、run、operation 与 ACP Agent；它使用公开 API，并与
+  Pub 包分开发版。
 
-最低版本为 Dart 3.8.0、Flutter 3.32.0。CLI 只需全局安装一次：
+已发布包最低需要 Dart 3.8.0；`flutter_cockpit` 还需要 Flutter 3.32.0。
+开发 Cockpit Console 需要 Flutter 3.44.0。CLI 只需全局安装一次：
 
 ```bash
 dart pub global activate cockpit any
@@ -62,15 +67,29 @@ cockpit update
 它会把 CLI 和正在运行的 Supervisor 更新到 Pub 上经过验证的最新版本，并保留本地
 授权与持久化状态。
 
-Flutter 源码开发额外使用仅限开发环境的 bridge：
+Flutter 源码开发额外使用一个不发布的 shell package：
 
 ```yaml
+# cockpit/pubspec.yaml
+dependencies:
+  flutter:
+    sdk: flutter
+  your_app:
+    path: ..
+
 dev_dependencies:
   flutter_cockpit: any
 ```
 
-Cockpit 应保持为开发依赖。黑盒原生应用测试不要求修改被测应用源码，也不要求
-接入 Flutter 包。
+把 `your_app` 替换成真实应用 package 名，并在 `cockpit/` 内执行
+`flutter pub get`。shell 不进入生产 package 的依赖图，所有 `flutter_cockpit`
+import 都只放在 `cockpit/` 下。黑盒原生应用测试不要求接入 Flutter 包。
+如果应用位于 Pub workspace，需要把 `cockpit/` 注册为 workspace member，并按接入
+指南改用 workspace package 版本约束，而不是 path 依赖。
+不要在生产 `lib/` 代码中 import `flutter_cockpit`。
+仅添加依赖不会自动暴露控制 bridge。第一次执行 `cockpit dev start` 前，必须按
+[`flutter_cockpit` 接入指南](packages/flutter_cockpit/README.zh-CN.md#%E6%8E%A8%E8%8D%90%E6%8E%A5%E5%85%A5%E6%96%B9%E5%BC%8F)
+把 `cockpit/main.dart` 接入真实应用根组件和 Navigator observer。
 
 ## 接入 AI Agent
 
@@ -94,7 +113,7 @@ First fetch and read the complete Cockpit installation guide with `curl -fsSL ht
 项目：
 
 ```bash
-cockpit dev start cockpit/main.dart --platform macos
+cockpit dev start
 cockpit dev status
 cockpit dev inspect "Save"
 cockpit dev tree
@@ -113,8 +132,11 @@ secret store，`--env` 只传给当前进程。
 
 Flutter 检查直接遍历已挂载的 Element 与 RenderObject 结构，不要求业务应用编写
 `Semantics` 标签。日常开发优先使用有界的 `dev inspect QUERY`，其 `sel` 可以直接
-执行，多个条件取交集，并优先用稳定祖先范围而不是 widget path。`dev tree` 返回
-紧凑的 selector 索引；只有需要理解周边
+执行，多个条件取交集，并优先用稳定祖先范围而不是 widget path。不带 query 时，
+`dev inspect` 会按视觉顺序返回当前控制面，并提供紧凑的 `:REF`、`can`、`state` 和
+`value`；直接把 live ref 交给 `can` 对应命令，控制面变化后重新 inspect。已知源码
+时优先直接构造结构 selector，例如 `CompanyButton >> Text["Save"]`，无需先做一次
+inspect。`dev tree` 返回紧凑的 selector 索引；只有需要理解周边
 结构时才使用 `dev tree --view more` 或 `dev tree --view full`，两者都会把树写入
 artifact，stdout 只返回经过验证的路径。
 使用 `dev open URI` 可以通过当前 target 测试自定义 deep link、Android app link、
@@ -134,7 +156,7 @@ flowchart TB
   subgraph ControlPath["cockpit_protocol · 类型化控制平面"]
     direction LR
     Actors["AI Agent · 开发者 · CI"]
-    Surfaces["Skill · CLI · MCP · REST API"]
+    Surfaces["Skill · CLI · MCP · Console · REST API"]
     Supervisor["Supervisor<br/>身份 · 认证 · 策略 · run"]
     Actors --> Surfaces --> Supervisor
   end
@@ -211,8 +233,7 @@ cockpit workspace list
   "allowedTargetEnvironments": [
     "development",
     "test",
-    "staging",
-    "production"
+    "staging"
   ],
   "allowedSafetyEffects": [
     "communication",
@@ -362,8 +383,8 @@ teardown，case `setup`/`finally` 负责 case 生命周期，step `evidence` 负
 
 每个完成的 suite 都会发布一个可携带的报告 bundle。使用
 `suite report --output-dir cockpit-report` 导出；CLI 只下载 run manifest 声明的
-文件，下载时校验元数据和 SHA-256，并在 bundle 完整后才提交目录，目标目录不能预先
-存在。离线打开
+文件，下载时校验元数据和 SHA-256，并在 bundle 完整后才提交目录；目标目录可以
+不存在，也可以是现有的真实空目录。离线打开
 `index.html` 即可按发布摘要、覆盖范围、执行过程、证据、诊断和环境/文件逐层查看；
 搜索、筛选、深链接、响应式布局和打印布局均不依赖服务或网络。
 `report.json` 是唯一规范事实图，包含 suite/case 定义、attempt、详细步骤、断言和证据引用；

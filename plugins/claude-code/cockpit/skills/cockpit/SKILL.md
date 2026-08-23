@@ -17,13 +17,15 @@ confirm that its development-only Cockpit shell is integrated. A normal Flutter
 app does not expose a Cockpit bridge by itself, so starting it first waits for a
 bridge that can never become ready.
 
-Check `pubspec.yaml` and `cockpit/main.dart`. The shell must keep production
-code untouched, resolve `flutter_cockpit` as a development dependency, wrap the
-real application root in `FlutterCockpitApp`, and install the Cockpit navigator
-observer for every Navigator the app owns. Run `flutter pub get` after changing
-the dependency. If any part is absent or does not match the app's actual public
-bootstrap/router API, read and complete [flutter.md](references/flutter.md)
-before `cockpit dev start`.
+Check `cockpit/pubspec.yaml` and `cockpit/main.dart`. The non-published shell
+package must keep the production package graph untouched, depend on the real
+application locally by path or Pub workspace constraint, resolve
+`flutter_cockpit` as a development dependency, wrap the real application root
+in `FlutterCockpitApp`, and install the Cockpit navigator observer for every
+Navigator the app owns. Run `flutter pub get` in the package-resolution root
+after changing dependencies. If any part is absent or does not match the app's
+actual public bootstrap/router API, read and complete
+[flutter.md](references/flutter.md) before `cockpit dev start`.
 
 Only an already integrated checkout takes the fast path below. `cockpit/main.dart`
 is the default development entrypoint; pass another entrypoint only when the
@@ -52,11 +54,12 @@ advertised operation that has no task command.
 
 ## Flutter Fast Path
 
-Start once inside the checkout, specifying only real launch choices:
+Start once inside the intended Flutter project, specifying only real launch
+choices. From a monorepo common ancestor, pass the entrypoint explicitly:
 
 ```bash
 cockpit dev start
-cockpit dev start cockpit/main.dart --platform macos
+cockpit dev start --platform macos
 cockpit dev start --device emulator-5554
 cockpit dev start --flavor staging --dart-define API_URL=https://example.test
 ```
@@ -274,9 +277,10 @@ Use the default first and override only a measured slow operation. Common defaul
 | Command | Default |
 | --- | ---: |
 | `dev start` | `20m` |
-| `dev status`, inspect/actions, viewport, screenshot, diagnose | `1m` |
+| `dev status`, inspect, tree, direct UI actions, open, viewport, screenshot, diagnose | `1m` |
 | `dev wait` | `30s` |
-| `dev network`, reload, stop | `2m` |
+| `dev network`, recover, reload, stop | `2m` |
+| `dev scroll` | `3m` |
 | `dev restart` | `5m` |
 | `target discover` | `2m` |
 | case/suite validation | `1m` |

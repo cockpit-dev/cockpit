@@ -14,7 +14,7 @@
     <a href="https://github.com/cockpit-dev/cockpit/actions/workflows/example-e2e.yml"><img src="https://github.com/cockpit-dev/cockpit/actions/workflows/example-e2e.yml/badge.svg?branch=main" alt="CI"></a>
     <a href="https://dart.dev"><img src="https://img.shields.io/badge/Dart-%E2%89%A53.8.0-0175C2?logo=dart&amp;logoColor=white" alt="Dart 3.8.0 or newer"></a>
     <a href="https://github.com/cockpit-dev/cockpit#black-box-targets"><img src="https://img.shields.io/badge/platforms-6%20supported-2E7D32" alt="Android, iOS, macOS, Linux, Windows, and web"></a>
-    <a href="https://github.com/cockpit-dev/cockpit/blob/main/packages/cockpit/LICENSE"><img src="https://img.shields.io/github/license/cockpit-dev/cockpit" alt="BSD 3-Clause license"></a>
+    <a href="https://github.com/cockpit-dev/cockpit/blob/main/packages/cockpit/LICENSE"><img src="https://img.shields.io/github/license/cockpit-dev/cockpit" alt="MIT license"></a>
   </p>
   <p><a href="https://github.com/cockpit-dev/cockpit/blob/main/packages/cockpit/README.md">English</a> · <a href="https://github.com/cockpit-dev/cockpit/blob/main/packages/cockpit/README.zh-CN.md">简体中文</a></p>
 </div>
@@ -59,11 +59,15 @@ Native adapter and MCP details are documented in the
 
 ## Flutter Fast Path
 
-Run from the intended checkout. Cockpit owns discovery, the Supervisor,
-workspace/target registration, the app process, ports, and bridge state:
+Run from inside the intended Flutter project. From a monorepo common ancestor,
+pass the entrypoint explicitly. Cockpit owns discovery, the Supervisor,
+workspace/target registration, the app process, ports, and bridge state.
+Before the first start, the project must already contain the development-only
+`cockpit/main.dart` bridge shell described in the
+[`flutter_cockpit` integration guide](https://pub.dev/packages/flutter_cockpit#recommended-integration):
 
 ```bash
-cockpit dev start cockpit/main.dart --platform macos
+cockpit dev start
 cockpit dev status
 cockpit dev inspect "Save"
 cockpit dev tree
@@ -381,9 +385,11 @@ then:
 4. decode public foundation DTOs strictly;
 5. use only advertised `/api/v2` resources and operations.
 
-The complete generic client surface is:
+The generic operation-control sequence uses:
 
 ```text
+GET  /api/v2/server
+GET  /api/v2/capabilities
 GET  /api/v2/operations
 GET  /api/v2/workspaces/{workspaceId}/operations
 GET  /api/v2/operations/schema
@@ -441,16 +447,16 @@ without embedding or forwarding the official Dart MCP server.
 ## Client Boundary
 
 The public `/api/v2` resources, SSE stream, foundation DTOs, and artifact
-integrity contract are the only client boundary. A future Flutter GUI or
-third-party SDK must use that protocol and must not link Supervisor application
+integrity contract are the only client boundary. Cockpit Console and
+third-party SDKs use that protocol and must not link Supervisor application
 services in-process.
 
 Exported `cockpit-report/` directories are complete offline run artifacts, not
 server UI. `suite report --output-dir cockpit-report` downloads the manifest
 and every declared report artifact with verified size and SHA-256, then commits
-the directory only after it is complete; the destination must not already
-exist. `index.html` embeds its CSS, JavaScript, and canonical report
-data while media uses bundle-relative paths. `report.json` is the stable
+the directory only after it is complete. The destination may be absent or an
+existing real empty directory. `index.html` embeds its CSS, JavaScript, and
+canonical report data while media uses bundle-relative paths. `report.json` is the stable
 single-file rendering input, and root `manifest.json` covers every exported
 file with ownership, size, media type, and SHA-256. Clients must preserve the
 directory structure and verify the manifest; no HTML route in `cockpitd` is

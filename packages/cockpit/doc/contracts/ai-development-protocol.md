@@ -11,8 +11,9 @@ manage the project resources.
 cockpit dev start
 ```
 
-Run from anywhere inside the intended checkout. Specify only real launch
-choices when discovery cannot choose uniquely:
+Run from inside the intended Flutter project. From a monorepo common ancestor,
+pass the entrypoint explicitly. Specify only real launch choices when discovery
+cannot choose uniquely:
 
 ```bash
 cockpit dev start apps/mobile/cockpit/main.dart --platform macos
@@ -59,8 +60,10 @@ assertion requires completed network activity.
 Keep using the same handle after a process, port, bridge, app, or runtime session
 changes. Reconciliation proves the same checkout, Flutter project, workspace, target, owned
 process, and authenticated bridge. Read commands never relaunch an exited app;
-a mutation may relaunch one unexpectedly exited app once. An intentionally
-stopped session requires `dev start` or `restart`.
+an ordinary mutation may relaunch one owned unexpected crash once. An
+intentionally stopped session requires `dev start`. When custom launch values
+must be restored after an exit, pass them to `dev start` again instead of
+relying on mutation recovery.
 
 Each Flutter project owns its active selection. Checkout and Git worktree identity
 independently protect worker state, process/port ownership, network state, mutation

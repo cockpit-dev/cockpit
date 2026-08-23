@@ -14,7 +14,7 @@
     <a href="https://github.com/cockpit-dev/cockpit/actions/workflows/example-e2e.yml"><img src="https://github.com/cockpit-dev/cockpit/actions/workflows/example-e2e.yml/badge.svg?branch=main" alt="CI"></a>
     <a href="https://dart.dev"><img src="https://img.shields.io/badge/Dart-%E2%89%A53.8.0-0175C2?logo=dart&amp;logoColor=white" alt="Dart 3.8.0 或更高版本"></a>
     <a href="https://github.com/cockpit-dev/cockpit#black-box-targets"><img src="https://img.shields.io/badge/platforms-6%20supported-2E7D32" alt="支持 Android、iOS、macOS、Linux、Windows 和 Web"></a>
-    <a href="https://github.com/cockpit-dev/cockpit/blob/main/packages/cockpit/LICENSE"><img src="https://img.shields.io/github/license/cockpit-dev/cockpit" alt="BSD 3-Clause 许可证"></a>
+    <a href="https://github.com/cockpit-dev/cockpit/blob/main/packages/cockpit/LICENSE"><img src="https://img.shields.io/github/license/cockpit-dev/cockpit" alt="MIT 许可证"></a>
   </p>
   <p><a href="https://github.com/cockpit-dev/cockpit/blob/main/packages/cockpit/README.md">English</a> · <a href="https://github.com/cockpit-dev/cockpit/blob/main/packages/cockpit/README.zh-CN.md">简体中文</a></p>
 </div>
@@ -58,11 +58,14 @@ First fetch and read the complete Cockpit installation guide with `curl -fsSL ht
 
 ## Flutter 快速路径
 
-从目标 checkout 内执行。Cockpit 会管理发现、Supervisor、workspace/target 注册、
-应用进程、端口和 bridge 状态：
+从目标 Flutter project 内执行；如果当前目录是 monorepo 的共同祖先，必须显式传入
+entrypoint。Cockpit 会管理发现、Supervisor、workspace/target 注册、应用进程、端口
+和 bridge 状态。首次启动前，project 必须已经按
+[`flutter_cockpit` 接入指南](https://pub.dev/packages/flutter_cockpit#recommended-integration)
+创建仅开发使用的 `cockpit/main.dart` bridge shell：
 
 ```bash
-cockpit dev start cockpit/main.dart --platform macos
+cockpit dev start
 cockpit dev status
 cockpit dev inspect "Save"
 cockpit dev tree
@@ -341,9 +344,11 @@ foreground 模式负责填入注册后的 `workspaceId`。
 4. 严格解码公开 foundation DTO；
 5. 只调用 advertised `/api/v2` resource 与 operation。
 
-完整的通用客户端控制面为：
+通用 operation 控制序列使用：
 
 ```text
+GET  /api/v2/server
+GET  /api/v2/capabilities
 GET  /api/v2/operations
 GET  /api/v2/workspaces/{workspaceId}/operations
 GET  /api/v2/operations/schema
@@ -395,12 +400,13 @@ server。
 ## 客户端边界
 
 公开 `/api/v2` resources、SSE stream、foundation DTO 和 artifact 完整性契约是唯一的
-客户端边界。未来 Flutter GUI 或第三方 SDK 必须使用该协议，不能在进程内链接
+客户端边界。Cockpit Console 和第三方 SDK 必须使用该协议，不能在进程内链接
 Supervisor application services。
 
 导出的 `cockpit-report/` 是完整离线 run artifact，而不是 server UI。
 `suite report --output-dir cockpit-report` 会下载 manifest 及其声明的全部报告文件，
-逐项校验大小和 SHA-256，并在 bundle 完整后才提交目录；目标目录不能预先存在。
+逐项校验大小和 SHA-256，并在 bundle 完整后才提交目录；目标目录可以不存在，也可以
+是现有的真实空目录。
 `index.html`
 内嵌 CSS、JavaScript 和规范报告数据，媒体使用 bundle 相对路径；`report.json` 是稳定的
 单文件渲染输入，根 `manifest.json` 以归属、大小、媒体类型和 SHA-256 覆盖全部导出文件。

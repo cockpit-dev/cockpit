@@ -14,7 +14,7 @@
     <a href="https://github.com/cockpit-dev/cockpit/actions/workflows/example-e2e.yml"><img src="https://github.com/cockpit-dev/cockpit/actions/workflows/example-e2e.yml/badge.svg?branch=main" alt="CI"></a>
     <a href="https://flutter.dev"><img src="https://img.shields.io/badge/Flutter-%E2%89%A53.32.0-02569B?logo=flutter&amp;logoColor=white" alt="Flutter 3.32.0 or newer"></a>
     <a href="https://github.com/cockpit-dev/cockpit#black-box-targets"><img src="https://img.shields.io/badge/platforms-6%20supported-2E7D32" alt="Android, iOS, macOS, Linux, Windows, and web"></a>
-    <a href="https://github.com/cockpit-dev/cockpit/blob/main/packages/flutter_cockpit/LICENSE"><img src="https://img.shields.io/github/license/cockpit-dev/cockpit" alt="BSD 3-Clause license"></a>
+    <a href="https://github.com/cockpit-dev/cockpit/blob/main/packages/flutter_cockpit/LICENSE"><img src="https://img.shields.io/github/license/cockpit-dev/cockpit" alt="MIT license"></a>
   </p>
   <p><a href="https://github.com/cockpit-dev/cockpit/blob/main/packages/flutter_cockpit/README.md">English</a> · <a href="https://github.com/cockpit-dev/cockpit/blob/main/packages/flutter_cockpit/README.zh-CN.md">简体中文</a></p>
 </div>
@@ -37,6 +37,7 @@ It provides:
 Requires Flutter 3.32.0 or newer.
 
 ```yaml
+# cockpit/pubspec.yaml
 dev_dependencies:
   flutter_cockpit: any
 ```
@@ -77,10 +78,40 @@ installation.
 
 ## Recommended Integration
 
-Create a standalone `cockpit/` development project with `main.dart`, and keep
-`flutter_cockpit` and `cockpit` in that shell's `dev_dependencies`. Keep the
-normal production entrypoint, production `lib/`, and production release
-dependency graph untouched. Do not add `flutter_cockpit` imports to production `lib/` code.
+Create a non-published Flutter package under `cockpit/`. It depends locally on
+the real application and keeps `flutter_cockpit` in the shell's
+`dev_dependencies`; neither dependency enters the production package graph.
+The globally installed `cockpit` CLI is not an application dependency. Keep
+the normal production entrypoint and production `lib/` untouched.
+Do not add `flutter_cockpit` imports to production `lib/` code.
+
+```yaml
+# cockpit/pubspec.yaml
+name: your_app_cockpit
+publish_to: none
+
+environment:
+  sdk: '>=3.8.0 <4.0.0'
+  flutter: '>=3.32.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  your_app:
+    path: ..
+
+dev_dependencies:
+  flutter_cockpit: any
+```
+
+Replace `your_app` with the actual application package name and run
+`flutter pub get` inside `cockpit/`.
+
+If the application uses a Pub workspace, add `cockpit/` to the root
+`workspace` list, add `resolution: workspace` to the shell manifest, and use a
+compatible application version constraint instead of `path: ..`. Run
+`flutter pub get` from the workspace root. This keeps the shell locally
+resolved without adding Cockpit to the production package dependencies.
 
 ```dart
 import 'package:flutter/material.dart';

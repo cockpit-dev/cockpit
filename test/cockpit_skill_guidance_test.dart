@@ -30,7 +30,7 @@ void main() {
       expect(
         _relativeFiles(repositoryRoot, root),
         canonicalFiles,
-        reason: '$root must contain the complete deployable 4.0 skill.',
+        reason: '$root must contain the complete deployable skill.',
       );
       for (final relativePath in canonicalFiles) {
         expect(

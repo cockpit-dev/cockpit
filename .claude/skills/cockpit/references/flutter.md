@@ -22,25 +22,55 @@ entrypoint.
 
 ```text
 cockpit/
+  pubspec.yaml
   main.dart
   cockpit_bootstrap.dart
 lib/
   ... unchanged production code ...
 ```
 
-The shell imports the application's existing public root widget or bootstrap.
+The non-published shell is its own Flutter package. It imports the application's
+existing public root widget or bootstrap through a path dependency.
 
 ## Add The Dependency
 
-Add the bridge as a development dependency:
+Create `cockpit/pubspec.yaml`, replace `your_app` with the real package name,
+and add the bridge only to this shell:
 
 ```yaml
+name: your_app_cockpit
+publish_to: none
+
+environment:
+  sdk: '>=3.8.0 <4.0.0'
+  flutter: '>=3.32.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  your_app:
+    path: ..
+
 dev_dependencies:
   flutter_cockpit: any
 ```
 
-Resolve packages with `flutter pub get`. The standalone `cockpit` CLI does not
-belong in the application dependencies.
+Run `flutter pub get` inside `cockpit/`. The globally installed `cockpit` CLI
+does not belong in either package's dependencies.
+
+If the application participates in a Pub workspace, register `cockpit/` in the
+root `workspace` list, add `resolution: workspace` to this shell manifest, and
+replace the path dependency with a compatible version constraint:
+
+```yaml
+resolution: workspace
+
+dependencies:
+  your_app: ^1.0.0
+```
+
+Use the application's real version constraint and run `flutter pub get` from
+the workspace root. Do not declare both path and workspace forms.
 
 ## Create The Entrypoint
 
@@ -95,13 +125,14 @@ the application's real public API. Create one Cockpit observer per Navigator.
 
 ## Start And Control
 
-Run from anywhere inside the checkout:
+Run from inside the Flutter project that contains the bridge shell:
 
 ```bash
 cockpit dev start
 ```
 
-For a monorepo or non-default entrypoint, pass the workspace-relative path:
+From a monorepo common ancestor or for a non-default entrypoint, pass an
+absolute path or a path relative to the current directory:
 
 ```bash
 cockpit dev start apps/mobile/cockpit/main.dart --platform macos

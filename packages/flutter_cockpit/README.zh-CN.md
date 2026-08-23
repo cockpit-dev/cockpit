@@ -14,7 +14,7 @@
     <a href="https://github.com/cockpit-dev/cockpit/actions/workflows/example-e2e.yml"><img src="https://github.com/cockpit-dev/cockpit/actions/workflows/example-e2e.yml/badge.svg?branch=main" alt="CI"></a>
     <a href="https://flutter.dev"><img src="https://img.shields.io/badge/Flutter-%E2%89%A53.32.0-02569B?logo=flutter&amp;logoColor=white" alt="Flutter 3.32.0 或更高版本"></a>
     <a href="https://github.com/cockpit-dev/cockpit#black-box-targets"><img src="https://img.shields.io/badge/platforms-6%20supported-2E7D32" alt="支持 Android、iOS、macOS、Linux、Windows 和 Web"></a>
-    <a href="https://github.com/cockpit-dev/cockpit/blob/main/packages/flutter_cockpit/LICENSE"><img src="https://img.shields.io/github/license/cockpit-dev/cockpit" alt="BSD 3-Clause 许可证"></a>
+    <a href="https://github.com/cockpit-dev/cockpit/blob/main/packages/flutter_cockpit/LICENSE"><img src="https://img.shields.io/github/license/cockpit-dev/cockpit" alt="MIT 许可证"></a>
   </p>
   <p><a href="https://github.com/cockpit-dev/cockpit/blob/main/packages/flutter_cockpit/README.md">English</a> · <a href="https://github.com/cockpit-dev/cockpit/blob/main/packages/flutter_cockpit/README.zh-CN.md">简体中文</a></p>
 </div>
@@ -36,6 +36,7 @@
 需要 Flutter 3.32.0 或更高版本。
 
 ```yaml
+# cockpit/pubspec.yaml
 dev_dependencies:
   flutter_cockpit: any
 ```
@@ -68,9 +69,37 @@ Oh My Pi、Cline、GitHub Copilot、Windsurf、Roo Code 和可移植 fallback �
 
 ## 推荐接入方式
 
-创建独立的 `cockpit/` 开发项目，入口为 `main.dart`，并把 `flutter_cockpit`
-和 `cockpit` 保留在 shell 的 `dev_dependencies` 中。保持正常生产入口、生产
-`lib/` 和正式发布依赖图不变。不要把 `flutter_cockpit` import 加到生产 `lib/` 代码里。
+在 `cockpit/` 下创建一个不发布的 Flutter package。它在本地依赖真实应用，
+并把 `flutter_cockpit` 放在 shell 自己的 `dev_dependencies` 中；两者都不会进入
+生产 package 的依赖图。全局安装的 `cockpit` CLI 不是应用依赖。保持正常生产入口
+和生产 `lib/` 不变，不要在生产 `lib/` 代码中 import `flutter_cockpit`。
+
+```yaml
+# cockpit/pubspec.yaml
+name: your_app_cockpit
+publish_to: none
+
+environment:
+  sdk: '>=3.8.0 <4.0.0'
+  flutter: '>=3.32.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  your_app:
+    path: ..
+
+dev_dependencies:
+  flutter_cockpit: any
+```
+
+把 `your_app` 替换成真实应用 package 名，并在 `cockpit/` 内执行
+`flutter pub get`。
+
+如果应用使用 Pub workspace，把 `cockpit/` 加到根 `workspace` 列表，在 shell
+manifest 中添加 `resolution: workspace`，并用兼容的应用版本约束替代 `path: ..`；
+然后从 workspace 根目录执行 `flutter pub get`。这样 shell 仍只在本地解析，不会
+把 Cockpit 加入生产 package 依赖。
 
 ```dart
 import 'package:flutter/material.dart';
