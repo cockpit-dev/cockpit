@@ -42,22 +42,36 @@ steps:
         label: New task
         fallbacks:
           - {text: New task}
-  - stepId: tapNewTaskThroughNativeTree
-    description: Commit the native mutation once; later retries only observe its result.
-    timeoutMs: 30000
-    action:
-      type: tap
-      locator:
-        label: New task
-        fallbacks:
-          - {text: New task}
-  - stepId: observeEditorThroughNativeTree
-    description: Retry only the read-only native-tree postcondition after the tap succeeds.
+  - stepId: openEditorThroughNativeTree
+    description: Retry native input only while the native tree proves the editor has not opened.
     timeoutMs: 60000
     retry:
-      maxAttempts: 3
+      maxAttempts: 2
       delayMs: 750
       steps:
+        - stepId: tapCreateTaskIfEditorAbsent
+          timeoutMs: 30000
+          if:
+            condition:
+              type: visible
+              expected: false
+              locator:
+                label: Back
+                type: Button
+                fallbacks:
+                  - {text: Create task}
+            then:
+              - stepId: tapCreateTaskThroughNativeTree
+                timeoutMs: 30000
+                action:
+                  type: tap
+                  locator:
+                    label: Create task
+                    fallbacks:
+                      - {text: Create task}
+            else:
+              - stepId: retainCommittedNativeEditor
+                action: {type: waitForUiIdle, quietMs: 100}
         - stepId: assertEditorThroughNativeTree
           timeoutMs: 20000
           action:
