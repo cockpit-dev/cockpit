@@ -1239,6 +1239,182 @@ void main() {
     expect(snapshotTarget.textParts, contains('/inspect'));
   });
 
+  testWidgets(
+    'keeps direct control text when merged semantics contains nearby content',
+    (tester) async {
+      var outage = false;
+      await tester.pumpWidget(
+        CockpitSurface(
+          routeName: '/settings',
+          child: MaterialApp(
+            home: Scaffold(
+              body: MergeSemantics(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    StatefulBuilder(
+                      builder: (context, setState) => InkWell(
+                        onTap: () => setState(() => outage = !outage),
+                        child: Row(
+                          children: <Widget>[
+                            const Expanded(
+                              child: Text('Simulate relay outage'),
+                            ),
+                            IgnorePointer(
+                              child: Switch(
+                                value: outage,
+                                onChanged: (value) =>
+                                    setState(() => outage = value),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const Text('Recovery workflow'),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final surfaceState = tester.state<CockpitSurfaceState>(
+        find.byType(CockpitSurface),
+      );
+      final registry = surfaceState.registry;
+      final toggleTargets = registry.visibleTargets
+          .where(
+            (target) =>
+                target.text == 'Simulate relay outage' &&
+                target.supportedCommands.contains(CockpitCommandType.tap),
+          )
+          .toList(growable: false);
+
+      expect(toggleTargets, hasLength(1));
+      expect(toggleTargets.single.typeName, 'InkWell');
+      expect(toggleTargets.single.control?.checked, CockpitCheckState.off);
+      expect(
+        registry.visibleTargets.where((target) => target.typeName == 'Switch'),
+        isEmpty,
+      );
+      final recoveryResolution = surfaceState.probeVisibleLocator(
+        const CockpitLocator(text: 'Recovery workflow'),
+        requiredCommand: CockpitCommandType.tap,
+      );
+      expect(recoveryResolution.isSuccess, isTrue);
+      expect(
+        recoveryResolution.target?.supportedCommands,
+        isNot(contains(CockpitCommandType.tap)),
+      );
+
+      toggleTargets.single.onTap?.call();
+      await tester.pump();
+      final updatedToggle = surfaceState.registry.visibleTargets.singleWhere(
+        (target) =>
+            target.text == 'Simulate relay outage' &&
+            target.supportedCommands.contains(CockpitCommandType.tap),
+      );
+      expect(updatedToggle.control?.checked, CockpitCheckState.on);
+    },
+  );
+
+  testWidgets('pointer blockers remove descendant mutation capabilities', (
+    tester,
+  ) async {
+    final controller = TextEditingController();
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(
+      CockpitSurface(
+        routeName: '/blocked',
+        child: MaterialApp(
+          home: Scaffold(
+            body: AbsorbPointer(
+              child: Column(
+                children: <Widget>[
+                  FilledButton(
+                    key: const ValueKey<String>('blocked-button'),
+                    onPressed: () {},
+                    child: const Text('Blocked action'),
+                  ),
+                  TextField(
+                    key: const ValueKey<String>('blocked-input'),
+                    controller: controller,
+                    decoration: const InputDecoration(
+                      labelText: 'Blocked input',
+                    ),
+                  ),
+                  Slider(
+                    key: const ValueKey<String>('blocked-slider'),
+                    value: 0.5,
+                    onChanged: (_) {},
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final targets = tester
+        .state<CockpitSurfaceState>(find.byType(CockpitSurface))
+        .registry
+        .visibleTargets;
+    final button = targets.singleWhere(
+      (target) => target.keyValue == 'blocked-button',
+    );
+    final input = targets.singleWhere(
+      (target) => target.keyValue == 'blocked-input',
+    );
+    final slider = targets.singleWhere(
+      (target) => target.keyValue == 'blocked-slider',
+    );
+
+    expect(button.supportedCommands, isEmpty);
+    expect(input.supportedCommands, isEmpty);
+    expect(slider.supportedCommands, isEmpty);
+  });
+
+  testWidgets('does not guess state from multiple blocked controls', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      CockpitSurface(
+        routeName: '/blocked',
+        child: MaterialApp(
+          home: Scaffold(
+            body: InkWell(
+              key: const ValueKey<String>('multi-control-row'),
+              onTap: () {},
+              child: IgnorePointer(
+                child: Row(
+                  children: <Widget>[
+                    Switch(value: false, onChanged: (_) {}),
+                    Checkbox(value: true, onChanged: (_) {}),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final row = tester
+        .state<CockpitSurfaceState>(find.byType(CockpitSurface))
+        .registry
+        .visibleTargets
+        .singleWhere((target) => target.keyValue == 'multi-control-row');
+
+    expect(row.supportedCommands, contains(CockpitCommandType.tap));
+    expect(row.control?.checked, isNull);
+  });
+
   testWidgets('discovers long press and double tap handlers for native rows', (
     tester,
   ) async {

@@ -1,5 +1,14 @@
 # Changelog
 
+## 4.0.42
+
+- Prevented merged ancestor semantics from assigning aggregate labels and
+  actions to passive Flutter content or controls blocked by `IgnorePointer`
+  and `AbsorbPointer`.
+- Kept the real outer action target for delegated selection rows and exposed
+  the unique blocked descendant control's current selection state without
+  duplicating its implementation control.
+
 ## 4.0.41
 
 - Synchronized native package metadata and documentation with the current

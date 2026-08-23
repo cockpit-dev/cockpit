@@ -10,6 +10,7 @@ final class CockpitSemanticsTargetInfo {
   const CockpitSemanticsTargetInfo({
     required this.nodeId,
     required this.owner,
+    required this.inheritedFromAncestor,
     required this.label,
     required this.value,
     required this.hint,
@@ -21,6 +22,7 @@ final class CockpitSemanticsTargetInfo {
 
   final int nodeId;
   final SemanticsOwner owner;
+  final bool inheritedFromAncestor;
   final String? label;
   final String? value;
   final String? hint;
@@ -57,9 +59,19 @@ final class CockpitSemanticsTargetInfo {
 }
 
 CockpitSemanticsTargetInfo? cockpitResolveSemanticsTargetInfo(Element element) {
-  final node = _resolveSemanticsNode(element);
-  final owner = node?.owner;
-  if (node == null || owner == null) {
+  final resolved = _resolveSemanticsNode(element);
+  if (resolved == null) {
+    return null;
+  }
+  return _targetInfoFromResolvedNode(resolved);
+}
+
+CockpitSemanticsTargetInfo? _targetInfoFromResolvedNode(
+  ({SemanticsNode node, bool inheritedFromAncestor}) resolved,
+) {
+  final node = resolved.node;
+  final owner = node.owner;
+  if (owner == null) {
     return null;
   }
   final data = node.getSemanticsData();
@@ -67,6 +79,7 @@ CockpitSemanticsTargetInfo? cockpitResolveSemanticsTargetInfo(Element element) {
   return CockpitSemanticsTargetInfo(
     nodeId: node.id,
     owner: owner,
+    inheritedFromAncestor: resolved.inheritedFromAncestor,
     label: _normalizeSemanticsValue(data.label),
     value: _normalizeSemanticsValue(data.value),
     hint: _normalizeSemanticsValue(data.hint),
@@ -93,25 +106,61 @@ SemanticsAction? cockpitResolveSemanticScrollAction({
   };
 }
 
-SemanticsNode? _resolveSemanticsNode(Element element) {
+({SemanticsNode node, bool inheritedFromAncestor})? _resolveSemanticsNode(
+  Element element,
+) {
   RenderObject? renderObject = element.findRenderObject();
   SemanticsNode? result = renderObject?.debugSemantics;
+  var inheritedFromAncestor = false;
   while (renderObject != null &&
       (result == null || result.isMergedIntoParent)) {
+    inheritedFromAncestor = true;
     renderObject = renderObject.parent;
     result = renderObject?.debugSemantics;
   }
-  if (result != null || !kReleaseMode) {
-    return result;
+  if (result != null) {
+    return (node: result, inheritedFromAncestor: inheritedFromAncestor);
+  }
+  if (!kReleaseMode) {
+    return null;
   }
   // RenderObject.debugSemantics is assert-gated and always null in release
   // builds, so resolve through the live SemanticsOwner tree instead of
   // silently disabling the semantic plane.
-  return cockpitResolveSemanticsNodeFromOwnerTree(element);
+  final ownerTreeResult = _resolveSemanticsNodeFromOwnerTree(element);
+  if (ownerTreeResult == null) {
+    return null;
+  }
+  return (
+    node: ownerTreeResult.node,
+    inheritedFromAncestor:
+        ownerTreeResult.affinity < _minimumDirectSemanticsRectAffinity,
+  );
 }
 
 @visibleForTesting
 SemanticsNode? cockpitResolveSemanticsNodeFromOwnerTree(Element element) {
+  return _resolveSemanticsNodeFromOwnerTree(element)?.node;
+}
+
+@visibleForTesting
+CockpitSemanticsTargetInfo? cockpitResolveSemanticsTargetInfoFromOwnerTree(
+  Element element,
+) {
+  final resolved = _resolveSemanticsNodeFromOwnerTree(element);
+  if (resolved == null) {
+    return null;
+  }
+  return _targetInfoFromResolvedNode((
+    node: resolved.node,
+    inheritedFromAncestor:
+        resolved.affinity < _minimumDirectSemanticsRectAffinity,
+  ));
+}
+
+({SemanticsNode node, double affinity})? _resolveSemanticsNodeFromOwnerTree(
+  Element element,
+) {
   final renderObject = element.findRenderObject();
   if (renderObject is! RenderBox ||
       !renderObject.attached ||
@@ -168,7 +217,7 @@ SemanticsNode? cockpitResolveSemanticsNodeFromOwnerTree(Element element) {
   }
 
   visit(rootNode, Matrix4.identity(), 0);
-  return best;
+  return best == null ? null : (node: best!, affinity: bestScore);
 }
 
 bool _semanticsDataIsHidden(SemanticsData data) {
@@ -179,6 +228,7 @@ bool _semanticsDataIsHidden(SemanticsData data) {
 }
 
 const double _minimumSemanticsRectAffinity = 0.25;
+const double _minimumDirectSemanticsRectAffinity = 0.8;
 
 double _semanticsRectAffinity(Rect nodeRect, Rect elementRect) {
   final intersection = nodeRect.intersect(elementRect);

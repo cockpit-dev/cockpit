@@ -1,5 +1,10 @@
 # Changelog
 
+## 4.0.42
+
+- Synchronized the CLI, Supervisor resources, package metadata, and bundled
+  integrations with the Flutter target-discovery correctness fix.
+
 ## 4.0.41
 
 - Made healthy `dev network` reads execute immediately and reconcile the

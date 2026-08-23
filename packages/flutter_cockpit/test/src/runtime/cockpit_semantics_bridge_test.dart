@@ -40,8 +40,14 @@ void main() {
         find.byKey(const ValueKey<String>('confirm-button')),
       );
       final node = cockpitResolveSemanticsNodeFromOwnerTree(element);
+      final directInfo = cockpitResolveSemanticsTargetInfo(element);
+      final ownerTreeInfo = cockpitResolveSemanticsTargetInfoFromOwnerTree(
+        element,
+      );
 
       expect(node, isNotNull);
+      expect(directInfo?.inheritedFromAncestor, isFalse);
+      expect(ownerTreeInfo?.inheritedFromAncestor, isFalse);
       final data = node!.getSemanticsData();
       expect(data.hasAction(SemanticsAction.tap), isTrue);
       expect(data.label, contains('Confirm'));
@@ -53,6 +59,46 @@ void main() {
       expect(cancelCount, 0);
     },
   );
+
+  testWidgets('marks merged ancestor semantics as inherited', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: MergeSemantics(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: const <Widget>[
+                  SizedBox(
+                    width: 200,
+                    height: 40,
+                    child: Text('Primary action'),
+                  ),
+                  SizedBox(
+                    width: 200,
+                    height: 40,
+                    child: Text('Passive status'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final passiveElement = tester.element(find.text('Passive status'));
+    final directInfo = cockpitResolveSemanticsTargetInfo(passiveElement);
+    final ownerTreeInfo = cockpitResolveSemanticsTargetInfoFromOwnerTree(
+      passiveElement,
+    );
+
+    expect(directInfo, isNotNull);
+    expect(directInfo?.inheritedFromAncestor, isTrue);
+    expect(ownerTreeInfo, isNotNull);
+    expect(ownerTreeInfo?.inheritedFromAncestor, isTrue);
+  });
 
   testWidgets(
     'returns null when the semantics tree is unavailable',
