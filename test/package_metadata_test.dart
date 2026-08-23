@@ -30,11 +30,10 @@ void main() {
     expect(runtimePubspec, isNot(contains('name: flutter_pilot')));
     expect(protocolPubspec, contains('name: cockpit_protocol'));
     expect(devtoolsPubspec, contains('name: cockpit'));
-    expect(runtimeVersion, '4.0.34');
-    expect(protocolVersion, '4.0.34');
-    expect(devtoolsVersion, '4.0.34');
-    expect(runtimePubspec, contains('cockpit_protocol: ^4.0.34'));
-    expect(devtoolsPubspec, contains('cockpit_protocol: ^4.0.34'));
+    expect(runtimeVersion, protocolVersion);
+    expect(devtoolsVersion, protocolVersion);
+    expect(runtimePubspec, contains('cockpit_protocol: ^$protocolVersion'));
+    expect(devtoolsPubspec, contains('cockpit_protocol: ^$protocolVersion'));
     for (final podLock in <String>[
       iosDevelopmentPodLock,
       macosDevelopmentPodLock,
@@ -540,6 +539,7 @@ void main() {
   });
 
   test('agent integrations use installed executables and bundled skills', () {
+    final devtoolsVersion = _readPackageVersion('packages/cockpit');
     for (final path in <String>[
       '.mcp.json',
       '.cursor/mcp.json',
@@ -566,7 +566,7 @@ void main() {
     expect(kiroSteering, contains('.kiro/skills/cockpit/SKILL.md'));
     expect(kiroSteering, isNot(contains('dart run cockpit')));
     expect(kiroPlugin, contains('agent-plugins.org/schemas/1.0.0'));
-    expect(kiroPlugin, contains('"version": "4.0.34"'));
+    expect(kiroPlugin, contains('"version": "$devtoolsVersion"'));
 
     for (final path in <String>[
       'plugins/codex/cockpit/README.md',

@@ -1,5 +1,9 @@
 # Changelog
 
+## 4.0.36
+
+- Synchronized the public protocol package with the current Cockpit release.
+
 ## 4.0.35
 
 - Added target visibility to runtime snapshots and registry access to bounded

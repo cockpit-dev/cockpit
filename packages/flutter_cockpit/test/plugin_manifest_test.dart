@@ -36,6 +36,11 @@ void main() {
   });
 
   test('Darwin packages support SwiftPM and CocoaPods metadata', () {
+    final pubspec = _packageFile('pubspec.yaml').readAsStringSync();
+    final packageVersion = RegExp(
+      r'^version:\s*(.+)$',
+      multiLine: true,
+    ).firstMatch(pubspec)!.group(1)!.trim();
     final iosPackage = _packageFile(
       'ios/flutter_cockpit/Package.swift',
     ).readAsStringSync();
@@ -85,7 +90,7 @@ void main() {
     expect(macosPackage, contains('.process("PrivacyInfo.xcprivacy")'));
 
     for (final podspec in <String>[iosPodspec, macosPodspec]) {
-      expect(podspec, contains("s.version          = '4.0.35'"));
+      expect(podspec, contains("s.version          = '$packageVersion'"));
       expect(podspec, contains(":type => 'MIT'"));
       expect(
         podspec,

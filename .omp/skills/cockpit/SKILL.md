@@ -81,6 +81,25 @@ cockpit dev diagnose
 cockpit dev stop
 ```
 
+When the route and every action are already known, join the commands in one shell
+call with `&&` to remove repeated Agent/tool round trips while keeping every default
+LON result visible:
+
+```bash
+cockpit dev tap '@open-settings' &&
+cockpit dev tap '@open-profile' &&
+cockpit dev type "Iota" --into '@name' &&
+cockpit dev tap '@save' &&
+cockpit dev inspect "Saved"
+```
+
+`&&` preserves order and stops at the first failed command. Never use a single `&`:
+it runs commands concurrently and can reorder UI mutations. End the chain with the
+smallest read that proves the final state. If an intermediate result determines the
+next route, locator, prompt action, or network-dependent branch, stop the chain at
+that decision and observe before continuing. In a project with concurrent handles,
+pass the same explicit `--session HANDLE` to every command in the chain.
+
 After an edit, use the smallest proof loop: focused analyzer/test, `dev reload`,
 the exact interaction, `dev wait`, a focused `dev inspect`, then a current screenshot
 for visible claims. Use `restart` only when reload cannot apply the change. Do not

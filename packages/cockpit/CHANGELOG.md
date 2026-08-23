@@ -1,5 +1,12 @@
 # Changelog
 
+## 4.0.36
+
+- Synchronized every distributed Cockpit Skill mirror, plugin manifest,
+  development shell, and Console dependency with the current release.
+- Made repository version contracts derive expected values from package
+  metadata so future releases cannot leave stale hardcoded checks behind.
+
 ## 4.0.35
 
 - Made Flutter actions automatically reveal mounted and lazy offscreen targets,

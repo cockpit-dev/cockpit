@@ -10,6 +10,14 @@ void main() {
 
   List<int> readBytes(String path) => File('$root/$path').readAsBytesSync();
 
+  String packageVersion(String packageDir) {
+    final pubspec = read('$packageDir/pubspec.yaml');
+    return RegExp(
+      r'^version:\s*(.+)$',
+      multiLine: true,
+    ).firstMatch(pubspec)!.group(1)!.trim();
+  }
+
   Map<String, Object?> readJson(String path) {
     return jsonDecode(read(path)) as Map<String, Object?>;
   }
@@ -47,6 +55,7 @@ void main() {
   }
 
   test('Codex plugin exposes the skill and MCP server', () {
+    final releaseVersion = packageVersion('packages/cockpit');
     final marketplace = readJson('.agents/plugins/marketplace.json');
     expect(marketplace['name'], 'cockpit');
     final marketplacePlugins = marketplace['plugins']! as List<Object?>;
@@ -65,7 +74,7 @@ void main() {
       'plugins/codex/cockpit/.codex-plugin/plugin.json',
     );
     expect(manifest['name'], 'cockpit');
-    expect(manifest['version'], '4.0.34');
+    expect(manifest['version'], releaseVersion);
     expect(manifest['skills'], './skills/');
     expect(manifest['mcpServers'], './.mcp.json');
     expect(manifest['interface'], isA<Map<String, Object?>>());
@@ -114,6 +123,7 @@ void main() {
   });
 
   test('repo-local agent adapters point to the canonical skill', () {
+    final releaseVersion = packageVersion('packages/cockpit');
     final cursor = read('.cursor/rules/cockpit.mdc');
     expect(cursor, contains('alwaysApply: false'));
     expect(cursor, isNot(contains('globs:')));
@@ -146,7 +156,7 @@ void main() {
       'https://agent-plugins.org/schemas/1.0.0/plugin.schema.json',
     );
     expect(kiroPower['name'], 'cockpit');
-    expect(kiroPower['version'], '4.0.34');
+    expect(kiroPower['version'], releaseVersion);
     expect(
       kiroPower['keywords'],
       containsAll(<Object?>['cockpit', 'flutter', 'e2e']),
