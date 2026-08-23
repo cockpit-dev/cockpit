@@ -1,5 +1,14 @@
 # Changelog
 
+## 4.0.37
+
+- Increased the uncached Pub lookup budget used by `cockpit update --check`
+  from three to thirty seconds so normal network latency does not produce a
+  false timeout.
+- Aligned the public README, AI development protocol, and every distributed
+  Skill with the live CLI, independent Flutter development shell, Pub
+  workspace setup, Console client, API surface, and recovery behavior.
+
 ## 4.0.36
 
 - Synchronized every distributed Cockpit Skill mirror, plugin manifest,
