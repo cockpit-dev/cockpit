@@ -1,5 +1,16 @@
 # Changelog
 
+## 4.0.41
+
+- Made healthy `dev network` reads execute immediately and reconcile the
+  development session only after a real operation failure. Captured HTTP
+  failures remain diagnostic results instead of triggering an unnecessary
+  live-session query.
+- Updated bundled AI-host installation guidance and public capability
+  documentation to match the current CLI, Flutter runtime, and Console.
+- Corrected the bundled Skill and AI protocol to describe development handles
+  as compact lowercase base-36 values instead of numeric-only values.
+
 ## 4.0.40
 
 - Made healthy `dev inspect` and `dev tree` reads execute their Flutter UI

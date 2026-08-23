@@ -149,8 +149,8 @@ cockpit dev start \
 ```
 
 Cockpit indexes the entrypoint, selects/registers the Flutter target, launches
-the process, authenticates the bridge, and binds one numeric handle. Do not
-manually register workspace, target, app, port, or runtime session IDs.
+the process, authenticates the bridge, and binds one short base-36 handle. Do
+not manually register workspace, target, app, port, or runtime session IDs.
 
 Use task commands after launch:
 

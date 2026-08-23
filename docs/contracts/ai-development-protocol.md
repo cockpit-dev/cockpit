@@ -2,8 +2,8 @@
 
 Use the authenticated Supervisor for both rapid development and release E2E.
 Do not call host application services directly. For Flutter source development,
-use a project-scoped numeric handle guarded by checkout identity and let Cockpit
-manage the project resources.
+use a project-scoped short base-36 handle guarded by checkout identity and let
+Cockpit manage the project resources.
 
 ## Flutter Bootstrap
 

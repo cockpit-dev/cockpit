@@ -94,8 +94,8 @@ not allowed to make a development session from another checkout implicit.
 
 ## Recovery
 
-Keep using the same numeric handle while Cockpit reconciles the workspace, target,
-app, bridge, port, and runtime session.
+Keep using the same short base-36 handle while Cockpit reconciles the workspace,
+target, app, bridge, port, and runtime session.
 
 | State | Read command | Mutation command |
 | --- | --- | --- |
@@ -230,7 +230,7 @@ canonical project path with the checkout identity derived from the checkout root
 and, for Git, the worktree-specific Git directory. Each project owns its active
 handle, while checkout identity keeps every runtime resource isolated:
 
-- project-scoped active numeric handle selection;
+- project-scoped active short base-36 handle selection;
 - workspace worker and target/app/session mapping;
 - process and port ownership;
 - mutation sequence and network state;

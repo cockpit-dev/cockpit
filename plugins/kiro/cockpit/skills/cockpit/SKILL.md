@@ -6,9 +6,10 @@ description: Use when application development or black-box E2E must inspect, con
 # Cockpit
 
 `cockpit dev` owns Flutter discovery, processes, ports, and Supervisor state.
-Development handles are numeric (`1`, `2`, ...). Copy other generated IDs exactly;
-never replace them with paths. Use the globally installed `cockpit` executable
-everywhere. Live capabilities are authoritative.
+Development handles are short lowercase base-36 values (`1` through `9`, then
+`a`, `b`, ...). Copy other generated IDs exactly; never replace them with paths.
+Use the globally installed `cockpit` executable everywhere. Live capabilities
+are authoritative.
 
 ## Flutter Preflight
 
