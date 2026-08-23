@@ -78,6 +78,7 @@ class _Translations$common$zh_CN extends Translations$common$en {
 	@override String get retry => '重试';
 	@override String get cancel => '取消';
 	@override String get copy => '复制';
+	@override String get copyFailed => '复制失败';
 	@override String get close => '关闭';
 	@override String get unknown => '未知';
 	@override String get notSet => '未设置';
@@ -1055,6 +1056,12 @@ class _Translations$sessions$logs$zh_CN extends Translations$sessions$logs$en {
 	@override String get open => '打开此分区以实时查看启动日志和应用日志。';
 	@override String get live => '每 2 秒自动刷新';
 	@override String get latestBelow => '最新输出在底部';
+	@override String get expand => '展开日志内容';
+	@override String get collapse => '收起日志内容';
+	@override String get copyLines => '复制日志内容';
+	@override String get linesCopied => '日志内容已复制';
+	@override String get copyPath => '复制日志文件路径';
+	@override String get pathCopied => '日志文件路径已复制';
 	@override String get startupTitle => '启动与 Flutter 工具日志';
 	@override String get startupNone => '暂无启动或 Flutter 工具日志。';
 	@override String startupRecent({required num n}) => (_root.$meta.cardinalResolver ?? PluralResolvers.cardinal('zh'))(n,
@@ -1227,6 +1234,7 @@ extension on TranslationsZhCn {
 			'common.retry' => '重试',
 			'common.cancel' => '取消',
 			'common.copy' => '复制',
+			'common.copyFailed' => '复制失败',
 			'common.close' => '关闭',
 			'common.unknown' => '未知',
 			'common.notSet' => '未设置',
@@ -1731,9 +1739,9 @@ extension on TranslationsZhCn {
 			'ai.session.mode' => '模式',
 			'ai.session.noSettings' => '此 Agent 没有提供会话设置。',
 			'ai.session.currentContext' => '当前上下文',
-			'ai.session.usage' => '用量',
 			_ => null,
 		} ?? switch (path) {
+			'ai.session.usage' => '用量',
 			'ai.session.tokensUsed' => ({required num n}) => (_root.$meta.cardinalResolver ?? PluralResolvers.cardinal('zh'))(n, one: '已使用 ${n} 个 Token', other: '已使用 ${n} 个 Token', ),
 			'ai.session.tokenContext' => ({required num n}) => (_root.$meta.cardinalResolver ?? PluralResolvers.cardinal('zh'))(n, one: '上下文容量 ${n} 个 Token', other: '上下文容量 ${n} 个 Token', ),
 			'ai.session.plan' => '计划',
@@ -1868,6 +1876,12 @@ extension on TranslationsZhCn {
 			'sessions.logs.open' => '打开此分区以实时查看启动日志和应用日志。',
 			'sessions.logs.live' => '每 2 秒自动刷新',
 			'sessions.logs.latestBelow' => '最新输出在底部',
+			'sessions.logs.expand' => '展开日志内容',
+			'sessions.logs.collapse' => '收起日志内容',
+			'sessions.logs.copyLines' => '复制日志内容',
+			'sessions.logs.linesCopied' => '日志内容已复制',
+			'sessions.logs.copyPath' => '复制日志文件路径',
+			'sessions.logs.pathCopied' => '日志文件路径已复制',
 			'sessions.logs.startupTitle' => '启动与 Flutter 工具日志',
 			'sessions.logs.startupNone' => '暂无启动或 Flutter 工具日志。',
 			'sessions.logs.startupRecent' => ({required num n}) => (_root.$meta.cardinalResolver ?? PluralResolvers.cardinal('zh'))(n, one: '最近 ${n} 行启动日志', other: '最近 ${n} 行启动日志', ),
