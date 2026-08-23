@@ -205,8 +205,13 @@ flowchart TB
   style ControlPath fill:transparent,stroke:transparent
 ```
 
-Register multiple projects once, then address them explicitly or run a command
-from inside exactly one registered workspace:
+The Flutter fast path registers each canonical project automatically and keeps
+parallel projects and checkouts isolated. Do not pre-register roots or
+workspaces for routine `cockpit dev` commands.
+
+Use explicit registration only for lower-level API, black-box, or resource
+workflows that do not begin with a development session. Register each checkout
+once, then run from inside one project or pass its `--workspace-id`:
 
 ```bash
 cockpit daemon start

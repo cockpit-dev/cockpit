@@ -182,8 +182,12 @@ flowchart TB
   style ControlPath fill:transparent,stroke:transparent
 ```
 
-并行开发多个项目时，先分别注册，之后显式传 `workspaceId`，或者从唯一匹配的
-workspace 目录中执行命令：
+Flutter 快速路径会自动注册 canonical project，并正确隔离并行项目与 checkout。
+日常使用 `cockpit dev` 无需预先手动注册 root 或 workspace。
+
+只有不从 development session 开始的低层 API、黑盒或资源管理流程才需要显式注册。
+每个 checkout 注册一次，之后从唯一项目目录中执行，或传入对应的
+`--workspace-id`：
 
 ```bash
 cockpit daemon start
