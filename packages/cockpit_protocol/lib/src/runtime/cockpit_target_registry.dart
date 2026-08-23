@@ -8,6 +8,7 @@ import '../control/cockpit_command_type.dart';
 import '../errors/cockpit_command_error.dart';
 import 'cockpit_snapshot.dart';
 import 'cockpit_target.dart';
+import 'cockpit_target_ref.dart';
 import 'cockpit_target_geometry.dart';
 
 typedef CockpitDiscoveredTargetsProvider = List<CockpitTarget> Function();
@@ -371,6 +372,7 @@ final class CockpitTargetRegistry {
       scrollableTypeName: target.scrollableTypeName,
       routeName: target.routeName,
       supportedCommands: target.supportedCommands.toList(growable: false),
+      control: target.control,
     );
   }
 
@@ -400,9 +402,7 @@ final class CockpitTargetRegistry {
   List<CockpitTarget> _prioritizeForLiveSnapshot(List<CockpitTarget> targets) {
     final prioritized = targets.toList(growable: false);
     prioritized.sort((left, right) {
-      final commandCompare = right.supportedCommands.length.compareTo(
-        left.supportedCommands.length,
-      );
+      final commandCompare = _controlRank(right).compareTo(_controlRank(left));
       if (commandCompare != 0) {
         return commandCompare;
       }
@@ -418,6 +418,9 @@ final class CockpitTargetRegistry {
     });
     return prioritized;
   }
+
+  int _controlRank(CockpitTarget target) =>
+      (target.control == null ? 0 : 100) + target.supportedCommands.length;
 
   int _signalScore(CockpitTarget target) {
     var score = 0;
@@ -530,6 +533,10 @@ final class CockpitTargetRegistry {
     CockpitTextMatchMode matchMode,
   ) {
     return switch (kind) {
+      CockpitLocatorKind.ref => cockpitTargetRefMatches(
+        target.registrationId,
+        value,
+      ),
       CockpitLocatorKind.cockpitId => target.cockpitId == value,
       CockpitLocatorKind.semanticId => _matchesTextSignal(
         target.semanticId,
@@ -988,6 +995,7 @@ final class CockpitTargetRegistry {
         ),
         CockpitLocatorKind.route => ancestor.routeName == signal.value,
         CockpitLocatorKind.path => _matchesPath(ancestor.path, signal.value),
+        CockpitLocatorKind.ref ||
         CockpitLocatorKind.registrationId ||
         CockpitLocatorKind.nativeId ||
         CockpitLocatorKind.testId ||

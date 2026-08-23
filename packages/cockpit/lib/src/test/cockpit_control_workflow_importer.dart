@@ -1084,6 +1084,7 @@ CockpitTestLocatorTemplate _locator(
       CockpitLocatorKind.tooltip => CockpitTestLocatorStrategy.label,
       CockpitLocatorKind.type => CockpitTestLocatorStrategy.type,
       CockpitLocatorKind.path => CockpitTestLocatorStrategy.path,
+      CockpitLocatorKind.ref ||
       CockpitLocatorKind.semanticId ||
       CockpitLocatorKind.key ||
       CockpitLocatorKind.route ||

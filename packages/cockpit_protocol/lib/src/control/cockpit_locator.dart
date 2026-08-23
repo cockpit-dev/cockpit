@@ -1,6 +1,7 @@
 import 'package:collection/collection.dart';
 
 enum CockpitLocatorKind {
+  ref,
   cockpitId,
   semanticId,
   key,
@@ -232,6 +233,7 @@ int _fuzzySubstringDistance(List<int> actual, List<int> expected) {
 final class CockpitLocator {
   /// Creates a CockpitLocator.
   const CockpitLocator({
+    this.ref,
     this.cockpitId,
     this.semanticId,
     this.key,
@@ -247,6 +249,7 @@ final class CockpitLocator {
     this.fallbacks = const [],
   });
 
+  final String? ref;
   final String? cockpitId;
   final String? semanticId;
   final String? key;
@@ -302,6 +305,7 @@ final class CockpitLocator {
       yield (kind: kind, value: normalized);
     }
 
+    yield* emit(CockpitLocatorKind.ref, ref);
     yield* emit(CockpitLocatorKind.cockpitId, cockpitId);
     yield* emit(CockpitLocatorKind.semanticId, semanticId);
     yield* emit(CockpitLocatorKind.key, key);
@@ -325,6 +329,7 @@ final class CockpitLocator {
   Map<String, Object?> toJson() {
     final signals = signalMap;
     return <String, Object?>{
+      'ref': ?signals[CockpitLocatorKind.ref.name],
       'cockpitId': ?signals[CockpitLocatorKind.cockpitId.name],
       'semanticId': ?signals[CockpitLocatorKind.semanticId.name],
       'key': ?signals[CockpitLocatorKind.key.name],
@@ -374,6 +379,7 @@ final class CockpitLocator {
     }
 
     return CockpitLocator(
+      ref: json['ref'] as String?,
       cockpitId: json['cockpitId'] as String?,
       semanticId: semanticId,
       key: json['key'] as String?,

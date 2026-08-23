@@ -1069,6 +1069,60 @@ void main() {
     },
   );
 
+  test('expired live refs point to the current control surface', () async {
+    final dev = CockpitDevRuntime(
+      runtime,
+      operationInvoker: (_, kind, _) async {
+        if (kind == 'session.development.get') {
+          return _result(
+            kind,
+            output: const <String, Object?>{
+              'sessionId': 'session-old',
+              'targetId': 'target-1',
+              'appId': 'app-old',
+              'status': <String, Object?>{
+                'state': 'ready',
+                'appReachable': true,
+                'remoteSessionReachable': true,
+              },
+            },
+          );
+        }
+        return _result(
+          kind,
+          output: const <String, Object?>{
+            'command': <String, Object?>{
+              'success': false,
+              'error': <String, Object?>{
+                'code': CockpitCommandError.targetNotFoundCode,
+                'message': 'No visible target matched the live ref.',
+              },
+            },
+          },
+        );
+      },
+    );
+    runtime.configureOutput(
+      command: 'dev.tap',
+      selection: const CockpitCliOutputSelection(),
+    );
+
+    expect(
+      await dev.runCommand(
+        session,
+        action: 'tap',
+        command: dev.command(
+          type: CockpitCommandType.tap,
+          locator: const CockpitLocator(ref: 'a7b9x2'),
+        ),
+      ),
+      cockpitDataExitCode,
+    );
+
+    final output = lon.decode(stdout.toString())! as Map<Object?, Object?>;
+    expect(output['next'], 'cockpit dev inspect --session ${session.handleId}');
+  });
+
   test('open URI reuses the exact session through system control', () async {
     final calls = <String>[];
     final dev = CockpitDevRuntime(

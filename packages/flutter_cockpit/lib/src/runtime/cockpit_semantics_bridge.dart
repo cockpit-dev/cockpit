@@ -16,6 +16,7 @@ final class CockpitSemanticsTargetInfo {
     required this.tooltip,
     required this.identifier,
     required this.supportedActions,
+    required this.control,
   });
 
   final int nodeId;
@@ -26,6 +27,7 @@ final class CockpitSemanticsTargetInfo {
   final String? tooltip;
   final String? identifier;
   final Set<SemanticsAction> supportedActions;
+  final CockpitControlState? control;
 
   bool supports(SemanticsAction action) => supportedActions.contains(action);
 
@@ -61,6 +63,7 @@ CockpitSemanticsTargetInfo? cockpitResolveSemanticsTargetInfo(Element element) {
     return null;
   }
   final data = node.getSemanticsData();
+  final supportedActions = _supportedActionsFrom(data);
   return CockpitSemanticsTargetInfo(
     nodeId: node.id,
     owner: owner,
@@ -69,7 +72,8 @@ CockpitSemanticsTargetInfo? cockpitResolveSemanticsTargetInfo(Element element) {
     hint: _normalizeSemanticsValue(data.hint),
     tooltip: _normalizeSemanticsValue(data.tooltip),
     identifier: _normalizeSemanticsValue(data.identifier),
-    supportedActions: _supportedActionsFrom(data),
+    supportedActions: supportedActions,
+    control: _controlStateFrom(data, supportedActions),
   );
 }
 
@@ -195,6 +199,67 @@ double _semanticsRectAffinity(Rect nodeRect, Rect elementRect) {
 Set<SemanticsAction> _supportedActionsFrom(SemanticsData data) {
   return SemanticsAction.values.where(data.hasAction).toSet();
 }
+
+CockpitControlState? _controlStateFrom(
+  SemanticsData data,
+  Set<SemanticsAction> actions,
+) {
+  // Flutter 3.32 is the supported SDK floor and does not expose the typed
+  // SemanticsFlagsCollection API used by newer SDKs.
+  // ignore: deprecated_member_use
+  final hasEnabled = data.hasFlag(SemanticsFlag.hasEnabledState);
+  // ignore: deprecated_member_use
+  final hasChecked = data.hasFlag(SemanticsFlag.hasCheckedState);
+  // ignore: deprecated_member_use
+  final hasSelected = data.hasFlag(SemanticsFlag.hasSelectedState);
+  // ignore: deprecated_member_use
+  final isTextField = data.hasFlag(SemanticsFlag.isTextField);
+  // ignore: deprecated_member_use
+  final enabled = !hasEnabled || data.hasFlag(SemanticsFlag.isEnabled);
+  final identifiesControl =
+      (hasEnabled && !enabled) ||
+      hasChecked ||
+      hasSelected ||
+      isTextField ||
+      actions.any(_isControlAction);
+  if (!identifiesControl) {
+    return null;
+  }
+
+  final checked = !hasChecked
+      ? null
+      // ignore: deprecated_member_use
+      : data.hasFlag(SemanticsFlag.isCheckStateMixed)
+      ? CockpitCheckState.mixed
+      // ignore: deprecated_member_use
+      : data.hasFlag(SemanticsFlag.isChecked)
+      ? CockpitCheckState.on
+      : CockpitCheckState.off;
+  return CockpitControlState(
+    enabled: enabled,
+    selected: !hasSelected
+        ? null
+        // ignore: deprecated_member_use
+        : data.hasFlag(SemanticsFlag.isSelected),
+    checked: checked,
+    // ignore: deprecated_member_use
+    focused: data.hasFlag(SemanticsFlag.isFocused),
+    // ignore: deprecated_member_use
+    readOnly: data.hasFlag(SemanticsFlag.isReadOnly),
+    // ignore: deprecated_member_use
+    obscured: data.hasFlag(SemanticsFlag.isObscured),
+    value: _normalizeSemanticsValue(data.value),
+  );
+}
+
+bool _isControlAction(SemanticsAction action) => const <SemanticsAction>{
+  SemanticsAction.tap,
+  SemanticsAction.longPress,
+  SemanticsAction.setText,
+  SemanticsAction.increase,
+  SemanticsAction.decrease,
+  SemanticsAction.dismiss,
+}.contains(action);
 
 String? _normalizeSemanticsValue(String? value) {
   final trimmed = value?.trim();

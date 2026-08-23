@@ -1,5 +1,27 @@
 # Changelog
 
+## 4.0.32
+
+- Made query-free Flutter inspection return the mounted control surface in
+  visual order, with compact live target refs, executable actions, and control
+  state instead of hiding useful controls behind passive content.
+- Added direct `hold`, `double`, `inc`, and `dec` Flutter development commands,
+  plus exact-target dismissal, so every advertised control action has a concise
+  task command.
+- Made expired live target refs recover through a fresh control-surface inspect
+  instead of repeatedly querying the stale ref.
+- Made targeted Flutter inspection include matching mounted targets outside the
+  viewport while preserving visible control context on misses, and avoided
+  transition retries for intentionally empty targeted reads.
+- Let explicit source-derived Flutter selectors operate unique visible custom
+  controls through their known actionable owner or a real hit-tested gesture,
+  while keeping plain passive text non-actionable.
+- Removed redundant full UI settles between target-driven lazy-list probes while
+  preserving the final mounted, visible, and post-action validation.
+- Accepted valid Windows access-token size probes when the required buffer
+  length is available, preventing directory ACL verification from failing when
+  thread-local last-error state is cleared by the runtime.
+
 ## 4.0.31
 
 - Rejected Flutter development entrypoints that do not load and use the

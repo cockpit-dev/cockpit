@@ -422,13 +422,16 @@ void main() {
         viewportFraction: 0.8,
         duration: const Duration(milliseconds: 220),
         scrollableKey: 'probe-scrollable',
-        targetLocator: const CockpitLocator(key: 'task-59'),
+        targetLocator: const CockpitLocator(text: 'Task 8'),
       );
       await tester.pumpAndSettle();
 
       expect(didScroll.didScroll, isTrue);
       expect(didScroll.strategy, 'jumpTo');
       expect(didScroll.hadSemanticAction, isFalse);
+      expect(didScroll.targetVisibilityObserved, isTrue);
+      expect(didScroll.targetMounted, isTrue);
+      expect(didScroll.targetVisible, isFalse);
       expect(controller.offset, greaterThan(0));
     },
   );

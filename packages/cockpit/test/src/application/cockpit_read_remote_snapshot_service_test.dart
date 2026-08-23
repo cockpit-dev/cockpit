@@ -237,6 +237,24 @@ void main() {
       expect(result.snapshot?.visibleTargets, isNotEmpty);
     });
 
+    test('does not retry an empty targeted snapshot', () async {
+      var readCount = 0;
+
+      final response = await cockpitReadRemoteSnapshotConsistently(
+        baseUri: _sessionHandle().baseUri,
+        options: const CockpitSnapshotOptions(query: 'Missing target'),
+        readSnapshot: (_, _) async {
+          readCount += 1;
+          return CockpitRemoteSnapshotResponse(
+            snapshot: _emptySnapshot('/editor'),
+          );
+        },
+      );
+
+      expect(readCount, 1);
+      expect(response.snapshot.visibleTargets, isEmpty);
+    });
+
     test('waits for remote ui idle before one final snapshot retry', () async {
       var readCount = 0;
       Uri? waitedBaseUri;

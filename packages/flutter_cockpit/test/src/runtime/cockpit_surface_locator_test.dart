@@ -262,4 +262,154 @@ void main() {
     expect(result.target?.keyValue, 'dashboard-navigation');
     expect(result.target?.tooltip, isNull);
   });
+
+  testWidgets(
+    'source-derived structure can gesture a custom control without keys or semantics',
+    (tester) async {
+      var activated = false;
+      await tester.pumpWidget(
+        WidgetsApp(
+          color: const Color(0xFFFFFFFF),
+          builder: (context, child) => CockpitSurface(
+            routeName: '/source-control',
+            child: Directionality(
+              textDirection: TextDirection.ltr,
+              child: ExcludeSemantics(
+                child: SourceOnlyButton(
+                  onPressed: () => activated = true,
+                  child: const Text('Run source action'),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final surface = tester.state<CockpitSurfaceState>(
+        find.byType(CockpitSurface),
+      );
+      final passive = surface.probeVisibleLocator(
+        const CockpitLocator(text: 'Run source action'),
+        requiredCommand: CockpitCommandType.tap,
+      );
+      expect(passive.isSuccess, isTrue, reason: '${passive.error?.details}');
+      expect(
+        passive.target?.supportedCommands,
+        isNot(contains(CockpitCommandType.tap)),
+      );
+
+      final locator = CockpitSelector.parse(
+        'SourceOnlyButton >> Text["Run source action"]',
+      );
+      final sourceTarget = surface.probeVisibleLocator(
+        locator,
+        requiredCommand: CockpitCommandType.tap,
+      );
+      expect(
+        sourceTarget.isSuccess,
+        isTrue,
+        reason: '${sourceTarget.error?.details}',
+      );
+      expect(
+        sourceTarget.target?.supportedCommands,
+        contains(CockpitCommandType.tap),
+      );
+
+      final executor = InAppCockpitCommandExecutor(
+        registry: surface.registry,
+        locatorProbe: surface.probeVisibleLocator,
+        gestureHandler: surface.performGesture,
+      );
+      final result = await executor.execute(
+        CockpitCommand(
+          commandId: 'source-gesture-tap',
+          commandType: CockpitCommandType.tap,
+          locator: locator,
+        ),
+      );
+      await tester.pump();
+
+      expect(result.success, isTrue, reason: '${result.error?.details}');
+      expect(activated, isTrue);
+    },
+  );
+
+  testWidgets('source-derived structure retains GestureDetector ancestors', (
+    tester,
+  ) async {
+    var activated = false;
+    await tester.pumpWidget(
+      WidgetsApp(
+        color: const Color(0xFFFFFFFF),
+        builder: (context, child) => CockpitSurface(
+          routeName: '/gesture-source',
+          child: Directionality(
+            textDirection: TextDirection.ltr,
+            child: ExcludeSemantics(
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onDoubleTap: () => activated = true,
+                child: const SizedBox(
+                  width: 220,
+                  height: 48,
+                  child: Center(child: Text('Run source gesture')),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final surface = tester.state<CockpitSurfaceState>(
+      find.byType(CockpitSurface),
+    );
+    final locator = CockpitSelector.parse(
+      'GestureDetector >> Text["Run source gesture"]',
+    );
+    final sourceTarget = surface.probeVisibleLocator(
+      locator,
+      requiredCommand: CockpitCommandType.doubleTap,
+    );
+    expect(
+      sourceTarget.isSuccess,
+      isTrue,
+      reason: '${sourceTarget.error?.details}',
+    );
+
+    final executor = InAppCockpitCommandExecutor(
+      registry: surface.registry,
+      locatorProbe: surface.probeVisibleLocator,
+      gestureHandler: surface.performGesture,
+    );
+    final result = await executor.execute(
+      CockpitCommand(
+        commandId: 'source-gesture-double',
+        commandType: CockpitCommandType.doubleTap,
+        locator: locator,
+      ),
+    );
+    await tester.pump();
+
+    expect(result.success, isTrue, reason: '${result.error?.details}');
+    expect(activated, isTrue);
+  });
+}
+
+final class SourceOnlyButton extends StatelessWidget {
+  const SourceOnlyButton({required this.onPressed, required this.child});
+
+  final VoidCallback onPressed;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Listener(
+      behavior: HitTestBehavior.opaque,
+      onPointerUp: (_) => onPressed(),
+      child: SizedBox(width: 220, height: 48, child: Center(child: child)),
+    );
+  }
 }

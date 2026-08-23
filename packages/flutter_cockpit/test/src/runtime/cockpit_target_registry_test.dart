@@ -55,6 +55,32 @@ void main() {
     expect(discoveryCount, 0);
   });
 
+  test('resolves a short live ref against the current target set', () {
+    final registry = CockpitTargetRegistry(routeName: '/inbox');
+    const registrationId = 'native.inbox.iconbutton.refresh.4d82c31a';
+    registry.register(
+      const CockpitTarget(
+        registrationId: registrationId,
+        text: 'Refresh',
+        routeName: '/inbox',
+        supportedCommands: <CockpitCommandType>{CockpitCommandType.tap},
+      ),
+    );
+    final ref = cockpitTargetRefToken(
+      registrationId,
+    ).substring(0, cockpitTargetRefMinimumLength);
+
+    final result = registry.resolve(
+      CockpitLocator(ref: ref),
+      requiredCommand: CockpitCommandType.tap,
+    );
+
+    expect(result.isSuccess, isTrue);
+    expect(result.target?.registrationId, registrationId);
+    expect(result.locatorResolution?.matchedKind, CockpitLocatorKind.ref);
+    expect(result.locatorResolution?.matchedValue, ref);
+  });
+
   test('registers visible targets with metadata and supported commands', () {
     final registry = CockpitTargetRegistry(routeName: '/checkout');
 

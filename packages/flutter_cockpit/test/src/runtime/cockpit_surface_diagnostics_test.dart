@@ -284,6 +284,60 @@ void main() {
     },
   );
 
+  testWidgets('targeted snapshots find mounted targets outside the viewport', (
+    tester,
+  ) async {
+    final rootKey = GlobalKey<CockpitSurfaceState>();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            height: 120,
+            child: CockpitSurface(
+              key: rootKey,
+              routeName: '/logs',
+              child: const SingleChildScrollView(
+                child: Column(
+                  children: <Widget>[
+                    SizedBox(height: 600),
+                    Text(
+                      'gesture:longPress',
+                      key: ValueKey<String>('gesture-status'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final live = rootKey.currentState!.snapshot();
+    final byText = rootKey.currentState!.snapshot(
+      options: const CockpitSnapshotOptions(
+        profile: CockpitSnapshotProfile.baseline,
+        query: 'gesture:longPress',
+        maxTargets: 10,
+      ),
+    );
+    final byKey = rootKey.currentState!.snapshot(
+      options: const CockpitSnapshotOptions(
+        profile: CockpitSnapshotProfile.baseline,
+        query: '@gesture-status',
+        maxTargets: 10,
+      ),
+    );
+
+    expect(
+      live.visibleTargets.any((target) => target.keyValue == 'gesture-status'),
+      isFalse,
+    );
+    expect(byText.visibleTargets.single.text, 'gesture:longPress');
+    expect(byKey.visibleTargets.single.keyValue, 'gesture-status');
+  });
+
   testWidgets(
     'FlutterCockpitRoot can attach network snapshots from an injected observer',
     (tester) async {

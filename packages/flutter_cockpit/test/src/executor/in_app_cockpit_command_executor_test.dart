@@ -4563,6 +4563,74 @@ void main() {
     },
   );
 
+  test(
+    'scrollUntilVisible skips full settles while a settled target probe is still unmounted',
+    () async {
+      final registry = CockpitTargetRegistry(routeName: '/settings');
+      var scrollCount = 0;
+      var settleCount = 0;
+      int? settleBaseline;
+      final executor = InAppCockpitCommandExecutor(
+        registry: registry,
+        snapshotProvider: ({options = const CockpitSnapshotOptions()}) =>
+            registry.snapshot(),
+        postActionSettler: () async {
+          settleCount += 1;
+        },
+        scrollStepProbesTarget: true,
+        scrollStepHandler:
+            ({
+              required reverse,
+              required viewportFraction,
+              scrollableKey,
+              targetLocator,
+              scrollableLocator,
+              required duration,
+              required gestureProfile,
+              required continuous,
+              required postScrollEnsureVisible,
+            }) async {
+              scrollCount += 1;
+              settleBaseline ??= settleCount;
+              if (scrollCount < 3) {
+                expect(settleCount, settleBaseline);
+                return const CockpitScrollStepResult(
+                  didScroll: true,
+                  strategy: 'jumpTo',
+                  targetVisibilityObserved: true,
+                );
+              }
+              registry.register(
+                const CockpitTarget(
+                  registrationId: 'open-command-lab',
+                  text: 'Open command lab',
+                  routeName: '/settings',
+                ),
+              );
+              return const CockpitScrollStepResult(
+                didScroll: true,
+                strategy: 'jumpTo',
+                targetVisibilityObserved: true,
+                targetMounted: true,
+                targetVisible: true,
+              );
+            },
+      );
+
+      final result = await executor.execute(
+        CockpitCommand(
+          commandId: 'scroll-settled-probe',
+          commandType: CockpitCommandType.scrollUntilVisible,
+          locator: const CockpitLocator(text: 'Open command lab'),
+        ),
+      );
+
+      expect(result.success, isTrue, reason: '${result.error?.details}');
+      expect(scrollCount, 3);
+      expect(settleCount, greaterThan(settleBaseline!));
+    },
+  );
+
   testWidgets('scrollUntilVisible includes after-action screenshot evidence', (
     tester,
   ) async {

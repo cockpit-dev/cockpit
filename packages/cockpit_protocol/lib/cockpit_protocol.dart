@@ -83,6 +83,7 @@ export 'src/schema/cockpit_test_v2_schema.dart' show cockpitTestV2SchemaJson;
 export 'src/schema/cockpit_foundation_v2_contracts.dart'
     show cockpitFoundationV2SchemaJson, cockpitV2OpenApiJson;
 export 'src/runtime/cockpit_capabilities.dart';
+export 'src/runtime/cockpit_control_state.dart';
 export 'src/runtime/cockpit_accessibility_summary.dart';
 export 'src/runtime/cockpit_action_capability.dart';
 export 'src/runtime/cockpit_capability_profile.dart';
@@ -101,6 +102,7 @@ export 'src/runtime/cockpit_snapshot.dart';
 export 'src/runtime/cockpit_snapshot_options.dart';
 export 'src/runtime/cockpit_surface_kind.dart';
 export 'src/runtime/cockpit_target.dart';
+export 'src/runtime/cockpit_target_ref.dart';
 export 'src/runtime/cockpit_target_geometry.dart';
 export 'src/runtime/cockpit_viewport.dart';
 export 'src/runtime/cockpit_widget_tree.dart';

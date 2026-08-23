@@ -144,26 +144,27 @@ void main() {
   test(
     'locator miss reads one unfiltered snapshot and returns mounted context',
     () async {
-      CockpitSnapshotOptions? capturedOptions;
+      final capturedOptions = <CockpitSnapshotOptions>[];
       final service = CockpitInspectUiService(
         appReferenceResolver: CockpitAppReferenceResolver(),
         snapshotService: CockpitReadRemoteSnapshotService(
           readSnapshot: (_, options) async {
-            capturedOptions = options;
+            capturedOptions.add(options);
             return CockpitRemoteSnapshotResponse(
               snapshot: CockpitSnapshot(
                 routeName: '/upgrade',
                 visibleTargets: <CockpitSnapshotTarget>[
-                  for (var index = 0; index < 6; index += 1)
-                    CockpitSnapshotTarget(
-                      registrationId: 'action-$index',
-                      cockpitId: 'action-$index',
-                      text: 'Action $index',
-                      routeName: '/upgrade',
-                      supportedCommands: const <CockpitCommandType>[
-                        CockpitCommandType.tap,
-                      ],
-                    ),
+                  if (options.query == null)
+                    for (var index = 0; index < 6; index += 1)
+                      CockpitSnapshotTarget(
+                        registrationId: 'action-$index',
+                        cockpitId: 'action-$index',
+                        text: 'Action $index',
+                        routeName: '/upgrade',
+                        supportedCommands: const <CockpitCommandType>[
+                          CockpitCommandType.tap,
+                        ],
+                      ),
                 ],
               ),
             );
@@ -181,7 +182,13 @@ void main() {
         ),
       );
 
-      expect(capturedOptions?.query, isNull);
+      expect(capturedOptions.last.query, isNull);
+      expect(
+        capturedOptions
+            .take(capturedOptions.length - 1)
+            .every((options) => options.query == 'Missing target'),
+        isTrue,
+      );
       expect(result.locator?['count'], 0);
       expect(result.locator?['route'], '/upgrade');
       expect(result.locator?['mounted'], hasLength(4));

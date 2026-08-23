@@ -98,6 +98,19 @@ void main() {
     expect(CockpitSelector.parse(CockpitSelector.format(locator)), locator);
   });
 
+  test('formats live target refs as compact standalone selectors', () {
+    const locator = CockpitLocator(ref: 'a7b9x2');
+
+    expect(CockpitSelector.isExplicit(':a7b9x2'), isTrue);
+    expect(CockpitSelector.parse(':A7B9X2'), locator);
+    expect(CockpitSelector.format(locator), ':a7b9x2');
+    expect(
+      () => CockpitSelector.parse('Dialog >> :a7b9x2'),
+      throwsFormatException,
+    );
+    expect(() => CockpitSelector.parse(':a7'), throwsFormatException);
+  });
+
   test('rejects ambiguous or malformed selectors', () {
     expect(
       () => CockpitSelector.parse('[*="Save"][tip~="Svae"]'),

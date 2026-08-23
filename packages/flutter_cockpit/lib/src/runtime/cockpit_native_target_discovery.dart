@@ -1,6 +1,7 @@
 // ignore_for_file: deprecated_member_use
 
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 
@@ -24,6 +25,7 @@ final class CockpitNativeTargetDiscovery {
     required String? routeName,
     List<CockpitTarget> explicitTargets = const <CockpitTarget>[],
     bool allowInactiveRouteFallback = false,
+    bool includeClippedTargets = false,
   }) {
     final rootElement = rootContext as Element;
     final rootViewport = _viewportBoundsFor(rootElement);
@@ -43,7 +45,7 @@ final class CockpitNativeTargetDiscovery {
     void visit(
       Element element,
       String path,
-      bool insideActionableTarget,
+      Element? actionableOwner,
       _InheritedDiscoveryScope scope,
     ) {
       final explicitTarget = explicitTargetsByElement[element];
@@ -52,7 +54,7 @@ final class CockpitNativeTargetDiscovery {
           scope.ancestorHidden ||
           (!allowInactiveRouteFallback &&
               scope.routeScope?.isCurrent == false) ||
-          explicitTarget?.supportedCommands.isNotEmpty == true) {
+          _isControlTarget(explicitTarget)) {
         return;
       }
 
@@ -68,26 +70,31 @@ final class CockpitNativeTargetDiscovery {
       final candidate =
           explicitTarget == null &&
               isRenderable &&
-              _overlapsClippedViewport(element, effectiveViewport)
+              (includeClippedTargets ||
+                  _overlapsClippedViewport(element, effectiveViewport))
           ? _buildTarget(
               element,
               routeName: targetRouteName,
               path: path,
-              insideActionableTarget: insideActionableTarget,
+              actionableOwner: actionableOwner,
               session: session,
             )
           : null;
       final hasMeaningfulViewportExposure =
           candidate == null ||
+          includeClippedTargets ||
           _hasMeaningfulClippedViewportExposure(
             element,
             effectiveViewport,
-            strictVisibility: candidate.supportedCommands.isEmpty,
+            strictVisibility:
+                candidate.supportedCommands.isEmpty &&
+                candidate.control == null,
           );
       final createsActionableScope =
           candidate != null &&
           hasMeaningfulViewportExposure &&
-          candidate.supportedCommands.isNotEmpty;
+          (_hasOwnedInteraction(candidate.supportedCommands) ||
+              _controlOwnsSubtree(element.widget, candidate.control));
       if (candidate != null && hasMeaningfulViewportExposure) {
         discoveredTargets.add(candidate);
       }
@@ -104,14 +111,14 @@ final class CockpitNativeTargetDiscovery {
         visit(
           child,
           '$path.$childIndex',
-          insideActionableTarget || createsActionableScope,
+          createsActionableScope ? element : actionableOwner,
           childScope,
         );
         childIndex += 1;
       });
     }
 
-    visit(rootElement, 'root', false, rootScope);
+    visit(rootElement, 'root', null, rootScope);
     return _deduplicateDiscoveredTargets(discoveredTargets);
   }
 
@@ -135,7 +142,7 @@ final class CockpitNativeTargetDiscovery {
     void visit(
       Element element,
       String path,
-      bool insideActionableTarget,
+      Element? actionableOwner,
       _InheritedDiscoveryScope scope,
     ) {
       final explicitTarget = explicitTargetsByElement[element];
@@ -145,7 +152,7 @@ final class CockpitNativeTargetDiscovery {
           scope.ancestorHidden ||
           (!allowInactiveRouteFallback &&
               scope.routeScope?.isCurrent == false) ||
-          explicitTarget?.supportedCommands.isNotEmpty == true) {
+          _isControlTarget(explicitTarget)) {
         return;
       }
 
@@ -171,7 +178,7 @@ final class CockpitNativeTargetDiscovery {
               element,
               routeName: targetRouteName,
               path: path,
-              insideActionableTarget: insideActionableTarget,
+              actionableOwner: actionableOwner,
               session: session,
             )
           : null;
@@ -180,12 +187,15 @@ final class CockpitNativeTargetDiscovery {
           _hasMeaningfulClippedViewportExposure(
             element,
             effectiveViewport,
-            strictVisibility: candidate.supportedCommands.isEmpty,
+            strictVisibility:
+                candidate.supportedCommands.isEmpty &&
+                candidate.control == null,
           );
       final createsActionableScope =
           candidate != null &&
           hasMeaningfulViewportExposure &&
-          candidate.supportedCommands.isNotEmpty;
+          (_hasOwnedInteraction(candidate.supportedCommands) ||
+              _controlOwnsSubtree(element.widget, candidate.control));
       if (candidate != null && hasMeaningfulViewportExposure) {
         found = true;
         return;
@@ -203,14 +213,14 @@ final class CockpitNativeTargetDiscovery {
         visit(
           child,
           '$path.$childIndex',
-          insideActionableTarget || createsActionableScope,
+          createsActionableScope ? element : actionableOwner,
           childScope,
         );
         childIndex += 1;
       });
     }
 
-    visit(rootElement, 'root', false, rootScope);
+    visit(rootElement, 'root', null, rootScope);
     return found;
   }
 
@@ -254,7 +264,7 @@ final class CockpitNativeTargetDiscovery {
       rootViewport: _viewportBoundsFor(rootElement),
       explicitTargetsByElement: explicitTargetsByElement,
     );
-    var insideActionableTarget = false;
+    Element? actionableOwner;
     final ancestorActions = <CockpitTarget>[];
 
     for (final candidateElement in chain.reversed) {
@@ -281,7 +291,7 @@ final class CockpitNativeTargetDiscovery {
               candidateElement,
               routeName: targetRouteName,
               path: _locatorPathForElement(candidateElement, session),
-              insideActionableTarget: insideActionableTarget,
+              actionableOwner: actionableOwner,
               session: session,
             )
           : null;
@@ -298,17 +308,23 @@ final class CockpitNativeTargetDiscovery {
         ancestorActions.add(target);
       }
 
-      insideActionableTarget =
-          insideActionableTarget ||
-          explicitTarget?.supportedCommands.isNotEmpty == true ||
-          (target != null && exposed && target.supportedCommands.isNotEmpty);
+      if (_isControlTarget(explicitTarget) ||
+          (target != null &&
+              exposed &&
+              (_hasOwnedInteraction(target.supportedCommands) ||
+                  _controlOwnsSubtree(
+                    candidateElement.widget,
+                    target.control,
+                  )))) {
+        actionableOwner = candidateElement;
+      }
       scope = scope.scopeForChildren(
         candidateElement,
         effectiveViewport: effectiveViewport,
       );
     }
 
-    if (ancestorActions.isNotEmpty || insideActionableTarget) {
+    if (ancestorActions.isNotEmpty || actionableOwner != null) {
       return _deduplicateDiscoveredTargets(ancestorActions);
     }
 
@@ -343,7 +359,8 @@ final class CockpitNativeTargetDiscovery {
       final duplicateIndex = deduplicated.indexWhere(
         (existing) =>
             _isDuplicatePassiveTarget(existing, target) ||
-            _isDuplicateCupertinoSegmentTarget(existing, target),
+            _isDuplicateCupertinoSegmentTarget(existing, target) ||
+            _isDuplicateWrappedControl(existing, target),
       );
       if (duplicateIndex == -1) {
         deduplicated.add(target);
@@ -416,6 +433,68 @@ final class CockpitNativeTargetDiscovery {
     return intersection.width * intersection.height >= smallerArea * 0.9;
   }
 
+  bool _isDuplicateWrappedControl(CockpitTarget left, CockpitTarget right) {
+    if (!_isControlTarget(left) || !_isControlTarget(right)) {
+      return false;
+    }
+    if (left.routeName != right.routeName ||
+        !_hasDuplicateControlSignal(left, right)) {
+      return false;
+    }
+    final leftCommands = left.supportedCommands;
+    final rightCommands = right.supportedCommands;
+    if (!leftCommands.containsAll(rightCommands) &&
+        !rightCommands.containsAll(leftCommands)) {
+      return false;
+    }
+
+    final leftElement = left.diagnosticNodeProvider?.call();
+    final rightElement = right.diagnosticNodeProvider?.call();
+    if (leftElement is! Element ||
+        rightElement is! Element ||
+        !_areRelatedElements(leftElement, rightElement)) {
+      return false;
+    }
+
+    final leftGeometry = CockpitTargetGeometryResolver.maybeFromTarget(left);
+    final rightGeometry = CockpitTargetGeometryResolver.maybeFromTarget(right);
+    if (leftGeometry == null || rightGeometry == null) {
+      return false;
+    }
+    final leftRect = Rect.fromLTWH(
+      leftGeometry.left,
+      leftGeometry.top,
+      leftGeometry.width,
+      leftGeometry.height,
+    );
+    final rightRect = Rect.fromLTWH(
+      rightGeometry.left,
+      rightGeometry.top,
+      rightGeometry.width,
+      rightGeometry.height,
+    );
+    final intersection = leftRect.intersect(rightRect);
+    if (intersection.isEmpty) {
+      return false;
+    }
+    final leftArea = (leftRect.width * leftRect.height).clamp(
+      1.0,
+      double.infinity,
+    );
+    final rightArea = (rightRect.width * rightRect.height).clamp(
+      1.0,
+      double.infinity,
+    );
+    final smallerArea = leftArea < rightArea ? leftArea : rightArea;
+    return intersection.width * intersection.height >= smallerArea * 0.9;
+  }
+
+  bool _hasDuplicateControlSignal(CockpitTarget left, CockpitTarget right) =>
+      _sameNonEmptySignal(left.tooltip, right.tooltip) ||
+      _sameNonEmptySignal(left.text, right.text) ||
+      _sameNonEmptySignal(left.semanticId, right.semanticId) ||
+      _sameNonEmptySignal(left.cockpitId, right.cockpitId);
+
   CockpitSnapshotAncestor? _cupertinoSegmentAncestor(CockpitTarget target) {
     for (final ancestor in target.locatorAncestors.reversed) {
       if (ancestor.typeName.startsWith('CupertinoSegmentedControl') ||
@@ -427,8 +506,7 @@ final class CockpitNativeTargetDiscovery {
   }
 
   bool _isDuplicatePassiveTarget(CockpitTarget left, CockpitTarget right) {
-    if (left.supportedCommands.isNotEmpty ||
-        right.supportedCommands.isNotEmpty) {
+    if (_isControlTarget(left) || _isControlTarget(right)) {
       return false;
     }
     if (left.routeName != right.routeName) {
@@ -500,7 +578,7 @@ final class CockpitNativeTargetDiscovery {
   }
 
   bool _isPassiveSemanticOnlyTarget(CockpitTarget target, String label) {
-    if (target.supportedCommands.isNotEmpty) {
+    if (_isControlTarget(target)) {
       return false;
     }
     if (target.text != null && target.text!.isNotEmpty) {
@@ -656,8 +734,7 @@ final class CockpitNativeTargetDiscovery {
         // A registered explicit target above the discovery root covers the
         // whole discovered subtree, matching the previous per-element
         // ancestor-coverage check.
-        if (explicitTargetsByElement[ancestor]?.supportedCommands.isNotEmpty ==
-            true) {
+        if (_isControlTarget(explicitTargetsByElement[ancestor])) {
           ancestorHidden = true;
         }
         routeScope ??= _cockpitRouteScopeForWidget(widget);
@@ -687,26 +764,67 @@ final class CockpitNativeTargetDiscovery {
     Element element, {
     required String? routeName,
     required String path,
-    required bool insideActionableTarget,
+    required Element? actionableOwner,
     required _DiscoverySession session,
   }) {
     final semantics = cockpitResolveSemanticsTargetInfo(element);
-    final tapHandler = _tapHandlerForElement(element);
-    final longPressHandler = _longPressHandlerForElement(element);
-    final doubleTapHandler = _doubleTapHandlerForElement(element);
-    final enterTextHandler = _enterTextHandlerForElement(element);
-    final textInputHandler = _textInputHandlerForElement(element);
-    final isTextInput = enterTextHandler != null || textInputHandler != null;
-    final hasDirectHandlers =
+    var tapHandler = _tapHandlerForElement(element);
+    var longPressHandler = _longPressHandlerForElement(element);
+    var doubleTapHandler = _doubleTapHandlerForElement(element);
+    var enterTextHandler = _enterTextHandlerForElement(element);
+    var textInputHandler = _textInputHandlerForElement(element);
+    final isTextInput = _editableTextStateForElement(element) != null;
+    final rawDirectHandlers =
         tapHandler != null ||
         longPressHandler != null ||
         doubleTapHandler != null ||
         enterTextHandler != null ||
         textInputHandler != null;
+    final control = _controlStateForElement(
+      element,
+      semantics: semantics,
+      hasDirectHandlers: rawDirectHandlers,
+    );
+    final enabled = control?.enabled != false;
+    final writable = enabled && control?.readOnly != true;
+    final activatable = !(isTextInput && control?.readOnly == true);
+    final increaseHandler = enabled
+        ? _sliderAdjustmentHandlerForElement(element, increase: true)
+        : null;
+    final decreaseHandler = enabled
+        ? _sliderAdjustmentHandlerForElement(element, increase: false)
+        : null;
+    final gestureTapFallback =
+        enabled && _supportsGestureTapFallback(element.widget);
+    if (!enabled) {
+      tapHandler = null;
+      longPressHandler = null;
+      doubleTapHandler = null;
+    }
+    if (!activatable) {
+      tapHandler = null;
+      longPressHandler = null;
+      doubleTapHandler = null;
+    }
+    if (!writable) {
+      enterTextHandler = null;
+      textInputHandler = null;
+    }
+    final hasDirectHandlers =
+        tapHandler != null ||
+        longPressHandler != null ||
+        doubleTapHandler != null ||
+        enterTextHandler != null ||
+        textInputHandler != null ||
+        increaseHandler != null ||
+        decreaseHandler != null ||
+        gestureTapFallback;
     final supportedCommands = <CockpitCommandType>{
-      if (tapHandler != null) CockpitCommandType.tap,
+      if (tapHandler != null || gestureTapFallback) CockpitCommandType.tap,
       if (longPressHandler != null) CockpitCommandType.longPress,
       if (doubleTapHandler != null) CockpitCommandType.doubleTap,
+      if (increaseHandler != null) CockpitCommandType.increase,
+      if (decreaseHandler != null) CockpitCommandType.decrease,
       if (enterTextHandler != null || textInputHandler != null)
         CockpitCommandType.enterText,
       if (textInputHandler != null) ...<CockpitCommandType>{
@@ -714,11 +832,24 @@ final class CockpitNativeTargetDiscovery {
         CockpitCommandType.setTextEditingValue,
         CockpitCommandType.sendTextInputAction,
       },
-      if (semantics != null) ...semantics.supportedCommands,
+      if (semantics != null)
+        ...semantics.supportedCommands.where(
+          (command) => _controlAllowsCommand(
+            command,
+            enabled: enabled,
+            writable: writable,
+            activatable: activatable,
+          ),
+        ),
     };
     final typeName = _publicTypeNameForElement(element);
 
-    if (insideActionableTarget) {
+    if (actionableOwner != null &&
+        !_isIndependentNestedControl(
+          actionableOwner.widget,
+          element.widget,
+          control,
+        )) {
       return null;
     }
 
@@ -728,7 +859,7 @@ final class CockpitNativeTargetDiscovery {
       return null;
     }
 
-    if (supportedCommands.isNotEmpty) {
+    if (supportedCommands.isNotEmpty || control != null) {
       final metadata = _extractInteractiveMetadata(
         element,
         semantics: semantics,
@@ -764,6 +895,7 @@ final class CockpitNativeTargetDiscovery {
         scrollableTypeName: scrollableMetadata.typeName,
         routeName: routeName ?? '',
         supportedCommands: supportedCommands,
+        control: control,
         locatorAncestors: _extractLocatorAncestors(
           element,
           routeName: routeName,
@@ -774,22 +906,38 @@ final class CockpitNativeTargetDiscovery {
         onDoubleTap: doubleTapHandler,
         onEnterText: enterTextHandler,
         onTextInput: textInputHandler,
-        onSemanticTap: semantics?.actionHandler(SemanticsAction.tap),
-        onSemanticLongPress: semantics?.actionHandler(
-          SemanticsAction.longPress,
-        ),
+        onSemanticTap: enabled
+            ? semantics?.actionHandler(SemanticsAction.tap)
+            : null,
+        onSemanticLongPress: enabled
+            ? semantics?.actionHandler(SemanticsAction.longPress)
+            : null,
         onSemanticShowOnScreen: semantics?.actionHandler(
           SemanticsAction.showOnScreen,
         ),
-        onSemanticIncrease: semantics?.actionHandler(SemanticsAction.increase),
-        onSemanticDecrease: semantics?.actionHandler(SemanticsAction.decrease),
-        onSemanticDismiss: semantics?.actionHandler(SemanticsAction.dismiss),
+        onSemanticIncrease:
+            increaseHandler ??
+            (enabled
+                ? semantics?.actionHandler(SemanticsAction.increase)
+                : null),
+        onSemanticDecrease:
+            decreaseHandler ??
+            (enabled
+                ? semantics?.actionHandler(SemanticsAction.decrease)
+                : null),
+        onSemanticDismiss: enabled
+            ? semantics?.actionHandler(SemanticsAction.dismiss)
+            : null,
         onSemanticEnterText:
-            semantics == null || !semantics.supports(SemanticsAction.setText)
+            !writable ||
+                semantics == null ||
+                !semantics.supports(SemanticsAction.setText)
             ? null
             : (text) => semantics.performAction(SemanticsAction.setText, text),
         onSemanticTextInput:
-            semantics == null || !semantics.supports(SemanticsAction.setText)
+            !writable ||
+                semantics == null ||
+                !semantics.supports(SemanticsAction.setText)
             ? null
             : (request) {
                 final text =
@@ -849,6 +997,443 @@ final class CockpitNativeTargetDiscovery {
     );
   }
 
+  bool _isControlTarget(CockpitTarget? target) =>
+      target != null &&
+      (target.control != null || target.supportedCommands.isNotEmpty);
+
+  bool _hasOwnedInteraction(Set<CockpitCommandType> commands) => commands.any(
+    const <CockpitCommandType>{
+      CockpitCommandType.tap,
+      CockpitCommandType.enterText,
+      CockpitCommandType.focusTextInput,
+      CockpitCommandType.setTextEditingValue,
+      CockpitCommandType.sendTextInputAction,
+      CockpitCommandType.longPress,
+      CockpitCommandType.doubleTap,
+      CockpitCommandType.increase,
+      CockpitCommandType.decrease,
+      CockpitCommandType.dismiss,
+    }.contains,
+  );
+
+  bool _controlOwnsSubtree(Widget widget, CockpitControlState? control) {
+    if (control == null) return false;
+    return widget is ButtonStyleButton ||
+        widget is IconButton ||
+        widget is FloatingActionButton ||
+        widget is ListTile ||
+        widget is ActionChip ||
+        widget is ChoiceChip ||
+        widget is FilterChip ||
+        widget is InputChip ||
+        widget is Checkbox ||
+        widget is CheckboxListTile ||
+        widget is Switch ||
+        widget is SwitchListTile ||
+        widget is Radio ||
+        widget is RadioListTile ||
+        widget is Slider ||
+        widget is RangeSlider ||
+        widget is PopupMenuButton<Object?> ||
+        widget is DropdownButton<Object?> ||
+        widget is DropdownButtonFormField<Object?> ||
+        widget is TextField ||
+        widget is TextFormField ||
+        widget is EditableText ||
+        widget is CupertinoButton ||
+        widget is CupertinoListTile ||
+        widget is CupertinoCheckbox ||
+        widget is CupertinoSwitch ||
+        widget is CupertinoRadio<Object?> ||
+        widget is CupertinoSlider ||
+        widget is CupertinoTextField ||
+        widget is CupertinoSearchTextField;
+  }
+
+  bool _isIndependentNestedControl(
+    Widget owner,
+    Widget candidate,
+    CockpitControlState? control,
+  ) {
+    if (!_controlOwnsSubtree(candidate, control)) {
+      return false;
+    }
+    if ((owner is IconButton || owner is FloatingActionButton) &&
+        candidate is ButtonStyleButton) {
+      return false;
+    }
+    if ((owner is TextField ||
+            owner is TextFormField ||
+            owner is CupertinoTextField ||
+            owner is CupertinoSearchTextField) &&
+        candidate is EditableText) {
+      return false;
+    }
+    if (owner is CupertinoSearchTextField && candidate is CupertinoTextField) {
+      return false;
+    }
+    if (owner is CheckboxListTile && candidate is Checkbox) {
+      return false;
+    }
+    if (owner is SwitchListTile && candidate is Switch) {
+      return false;
+    }
+    if (owner is RadioListTile && candidate is Radio) {
+      return false;
+    }
+    if (owner is DropdownButtonFormField<Object?> &&
+        candidate is DropdownButton<Object?>) {
+      return false;
+    }
+    return true;
+  }
+
+  bool _controlAllowsCommand(
+    CockpitCommandType command, {
+    required bool enabled,
+    required bool writable,
+    required bool activatable,
+  }) {
+    if (!enabled && command != CockpitCommandType.showOnScreen) {
+      return false;
+    }
+    if (!writable &&
+        const <CockpitCommandType>{
+          CockpitCommandType.enterText,
+          CockpitCommandType.eraseText,
+          CockpitCommandType.pasteText,
+          CockpitCommandType.setTextEditingValue,
+          CockpitCommandType.sendTextInputAction,
+        }.contains(command)) {
+      return false;
+    }
+    if (!activatable &&
+        const <CockpitCommandType>{
+          CockpitCommandType.tap,
+          CockpitCommandType.longPress,
+          CockpitCommandType.doubleTap,
+        }.contains(command)) {
+      return false;
+    }
+    return true;
+  }
+
+  bool _supportsGestureTapFallback(Widget widget) {
+    if (widget is PopupMenuButton<Object?>) {
+      return widget.enabled;
+    }
+    if (widget is DropdownButton<Object?>) {
+      return widget.items?.isNotEmpty == true && widget.onChanged != null;
+    }
+    if (widget is DropdownButtonFormField<Object?>) {
+      return widget.enabled;
+    }
+    return false;
+  }
+
+  CockpitSemanticActionHandler? _sliderAdjustmentHandlerForElement(
+    Element element, {
+    required bool increase,
+  }) {
+    final widget = element.widget;
+    if (widget is Slider && widget.onChanged != null) {
+      return () {
+        final current = widget.value;
+        final range = widget.max - widget.min;
+        final unit = widget.divisions == null
+            ? range * _materialSliderAdjustmentFraction()
+            : range / widget.divisions!;
+        final next = (current + (increase ? unit : -unit))
+            .clamp(widget.min, widget.max)
+            .toDouble();
+        if (next == current) return;
+        widget.onChangeStart?.call(current);
+        widget.onChanged!.call(next);
+        widget.onChangeEnd?.call(next);
+      };
+    }
+    if (widget is CupertinoSlider && widget.onChanged != null) {
+      return () {
+        final current = widget.value;
+        final range = widget.max - widget.min;
+        final unit = widget.divisions == null
+            ? range * 0.1
+            : range / widget.divisions!;
+        final next = (current + (increase ? unit : -unit))
+            .clamp(widget.min, widget.max)
+            .toDouble();
+        if (next == current) return;
+        widget.onChangeStart?.call(current);
+        widget.onChanged!.call(next);
+        widget.onChangeEnd?.call(next);
+      };
+    }
+    return null;
+  }
+
+  double _materialSliderAdjustmentFraction() => switch (defaultTargetPlatform) {
+    TargetPlatform.iOS || TargetPlatform.macOS => 0.1,
+    TargetPlatform.android ||
+    TargetPlatform.fuchsia ||
+    TargetPlatform.linux ||
+    TargetPlatform.windows => 0.05,
+  };
+
+  CockpitControlState? _controlStateForElement(
+    Element element, {
+    required CockpitSemanticsTargetInfo? semantics,
+    required bool hasDirectHandlers,
+  }) {
+    final widget = element.widget;
+    final semanticState = semantics?.control;
+    final segmentState = _cupertinoSegmentControlStateForElement(element);
+    final editableState = _editableTextStateForElement(element);
+    CockpitControlState? directState;
+
+    if (segmentState != null) {
+      directState = segmentState;
+    } else if (editableState != null) {
+      final obscured = editableState.widget.obscureText;
+      directState = CockpitControlState(
+        enabled: _textInputEnabledForElement(element),
+        focused: editableState.widget.focusNode.hasFocus,
+        readOnly: editableState.widget.readOnly,
+        obscured: obscured,
+        value: obscured ? null : editableState.widget.controller.text,
+      );
+    } else if (widget is ButtonStyleButton) {
+      directState = CockpitControlState(enabled: widget.enabled);
+    } else if (widget is IconButton) {
+      directState = CockpitControlState(
+        enabled: widget.onPressed != null,
+        selected: widget.isSelected,
+      );
+    } else if (widget is FloatingActionButton) {
+      directState = CockpitControlState(enabled: widget.onPressed != null);
+    } else if (widget is ListTile) {
+      directState = CockpitControlState(
+        enabled: widget.enabled,
+        selected: widget.selected,
+      );
+    } else if (widget is ActionChip) {
+      directState = CockpitControlState(enabled: widget.isEnabled);
+    } else if (widget is ChoiceChip) {
+      directState = CockpitControlState(
+        enabled: widget.isEnabled,
+        selected: widget.selected,
+      );
+    } else if (widget is FilterChip) {
+      directState = CockpitControlState(
+        enabled: widget.isEnabled,
+        selected: widget.selected,
+      );
+    } else if (widget is InputChip) {
+      directState = CockpitControlState(
+        enabled: widget.isEnabled,
+        selected: widget.selected,
+      );
+    } else if (widget is Checkbox) {
+      directState = CockpitControlState(
+        enabled: widget.onChanged != null,
+        checked: _checkState(widget.value),
+      );
+    } else if (widget is CheckboxListTile) {
+      directState = CockpitControlState(
+        enabled: (widget.enabled ?? true) && widget.onChanged != null,
+        selected: widget.selected,
+        checked: _checkState(widget.value),
+      );
+    } else if (widget is Switch) {
+      directState = CockpitControlState(
+        enabled: widget.onChanged != null,
+        checked: widget.value ? CockpitCheckState.on : CockpitCheckState.off,
+      );
+    } else if (widget is SwitchListTile) {
+      directState = CockpitControlState(
+        enabled: widget.onChanged != null,
+        checked: widget.value ? CockpitCheckState.on : CockpitCheckState.off,
+      );
+    } else if (widget is CupertinoCheckbox) {
+      directState = CockpitControlState(
+        enabled: widget.onChanged != null,
+        checked: _checkState(widget.value),
+      );
+    } else if (widget is CupertinoSwitch) {
+      directState = CockpitControlState(
+        enabled: widget.onChanged != null,
+        checked: widget.value ? CockpitCheckState.on : CockpitCheckState.off,
+      );
+    } else if (widget is Radio ||
+        widget is RadioListTile ||
+        widget is CupertinoRadio) {
+      directState = _radioControlState(widget, semanticState);
+    } else if (widget is Slider) {
+      directState = CockpitControlState(
+        enabled: widget.onChanged != null,
+        value: widget.value,
+      );
+    } else if (widget is RangeSlider) {
+      directState = CockpitControlState(
+        enabled: widget.onChanged != null,
+        value: <double>[widget.values.start, widget.values.end],
+      );
+    } else if (widget is CupertinoSlider) {
+      directState = CockpitControlState(
+        enabled: widget.onChanged != null,
+        value: widget.value,
+      );
+    } else if (widget is PopupMenuButton<Object?>) {
+      directState = CockpitControlState(enabled: widget.enabled);
+    } else if (widget is DropdownButton<Object?>) {
+      directState = CockpitControlState(
+        enabled: widget.items?.isNotEmpty == true && widget.onChanged != null,
+        value: _jsonSafeControlValue(widget.value),
+      );
+    } else if (widget is DropdownButtonFormField<Object?>) {
+      directState = CockpitControlState(
+        enabled: widget.enabled,
+        value: _jsonSafeControlValue(widget.initialValue),
+      );
+    } else if (widget is CupertinoButton) {
+      directState = CockpitControlState(enabled: widget.enabled);
+    } else if (widget is CupertinoListTile) {
+      directState = CockpitControlState(enabled: widget.onTap != null);
+    } else if (hasDirectHandlers || policy.matchesInteractiveWidget(element)) {
+      directState = const CockpitControlState();
+    }
+
+    if (directState == null) {
+      return semanticState;
+    }
+    if (semanticState == null) {
+      return directState;
+    }
+    final obscured = directState.obscured || semanticState.obscured;
+    return CockpitControlState(
+      enabled: directState.enabled,
+      selected: directState.selected ?? semanticState.selected,
+      checked: directState.checked ?? semanticState.checked,
+      focused: directState.focused || semanticState.focused,
+      readOnly: directState.readOnly || semanticState.readOnly,
+      obscured: obscured,
+      value: obscured ? null : directState.value ?? semanticState.value,
+    );
+  }
+
+  CockpitControlState? _cupertinoSegmentControlStateForElement(
+    Element element,
+  ) {
+    final control = _cupertinoSegmentControlAncestor(element);
+    if (control == null) return null;
+    final widget = control.widget;
+    final children = switch (widget) {
+      CupertinoSegmentedControl(:final children) => children,
+      CupertinoSlidingSegmentedControl(:final children) => children,
+      _ => const <Object, Widget>{},
+    };
+    final matches = children.entries
+        .where((entry) => _elementContainsWidget(element, entry.value))
+        .toList(growable: false);
+    if (matches.length != 1) return null;
+    final value = matches.single.key;
+    return switch (widget) {
+      CupertinoSegmentedControl(:final groupValue, :final disabledChildren) =>
+        CockpitControlState(
+          enabled: !disabledChildren.contains(value),
+          selected: groupValue == value,
+          value: _jsonSafeControlValue(value),
+        ),
+      CupertinoSlidingSegmentedControl(
+        :final groupValue,
+        :final disabledChildren,
+      ) =>
+        CockpitControlState(
+          enabled: !disabledChildren.contains(value),
+          selected: groupValue == value,
+          value: _jsonSafeControlValue(value),
+        ),
+      _ => null,
+    };
+  }
+
+  CockpitControlState _radioControlState(
+    Widget widget,
+    CockpitControlState? semantics,
+  ) {
+    final (
+      Object? value,
+      Object? groupValue,
+      Function? onChanged,
+      bool? set,
+    ) = switch (widget) {
+      Radio() => (
+        widget.value,
+        widget.groupValue,
+        (widget as dynamic).onChanged as Function?,
+        widget.enabled,
+      ),
+      RadioListTile() => (
+        widget.value,
+        widget.groupValue,
+        (widget as dynamic).onChanged as Function?,
+        widget.enabled,
+      ),
+      CupertinoRadio() => (
+        widget.value,
+        widget.groupValue,
+        (widget as dynamic).onChanged as Function?,
+        widget.enabled,
+      ),
+      _ => (null, null, null, null),
+    };
+    return CockpitControlState(
+      enabled: semantics?.enabled ?? set ?? onChanged != null,
+      checked:
+          semantics?.checked ??
+          (groupValue == value ? CockpitCheckState.on : CockpitCheckState.off),
+      value: _jsonSafeControlValue(value),
+    );
+  }
+
+  CockpitCheckState _checkState(bool? value) => switch (value) {
+    true => CockpitCheckState.on,
+    false => CockpitCheckState.off,
+    null => CockpitCheckState.mixed,
+  };
+
+  bool _textInputEnabledForElement(Element element) {
+    bool? enabled;
+    void read(Widget widget) {
+      enabled ??= switch (widget) {
+        TextField(:final enabled, :final decoration) =>
+          enabled ?? decoration?.enabled ?? true,
+        TextFormField() => widget.enabled,
+        CupertinoTextField(:final enabled) => enabled,
+        CupertinoSearchTextField(:final enabled) => enabled ?? true,
+        _ => null,
+      };
+    }
+
+    read(element.widget);
+    if (enabled == null) {
+      element.visitAncestorElements((ancestor) {
+        read(ancestor.widget);
+        return enabled == null;
+      });
+    }
+    return enabled ?? true;
+  }
+
+  Object? _jsonSafeControlValue(Object? value) {
+    if (value == null || value is String || value is num || value is bool) {
+      return value;
+    }
+    if (value is Iterable<Object?>) {
+      return value.map(_jsonSafeControlValue).toList(growable: false);
+    }
+    return _normalizeText(value.toString());
+  }
+
   List<CockpitSnapshotAncestor> _extractLocatorAncestors(
     Element element, {
     required String? routeName,
@@ -862,16 +1447,26 @@ final class CockpitNativeTargetDiscovery {
       final semanticId = _semanticIdForElement(ancestor, session);
       final keyValue = _keyValueForElement(ancestor);
       final tooltip = _tooltipForElement(ancestor, session);
+      final textPreview = _firstNonEmpty(<String?>[
+        _passiveTextForElement(ancestor),
+        tooltip,
+      ]);
+      final hasStableScopeSignal = <String?>[
+        semanticId,
+        keyValue,
+        tooltip,
+        textPreview,
+      ].any((value) => value != null);
+      if (!hasStableScopeSignal && _shouldSkipPathElement(ancestor)) {
+        return true;
+      }
       ancestors.add(
         CockpitSnapshotAncestor(
           typeName: ancestor.widget.runtimeType.toString(),
           cockpitId: _firstNonEmpty(<String?>[semanticId, keyValue]),
           semanticId: semanticId,
           keyValue: keyValue,
-          textPreview: _firstNonEmpty(<String?>[
-            _passiveTextForElement(ancestor),
-            tooltip,
-          ]),
+          textPreview: textPreview,
           tooltip: tooltip,
           routeName: routeName,
           path: _locatorPathForElement(ancestor, session),
@@ -1329,7 +1924,7 @@ final class CockpitNativeTargetDiscovery {
     if (widget is FloatingActionButton) {
       return widget.onPressed;
     }
-    if (widget is InkWell) {
+    if (widget is InkResponse) {
       return widget.onTap;
     }
     if (widget is GestureDetector) {
@@ -1597,7 +2192,7 @@ final class CockpitNativeTargetDiscovery {
       return customHandler;
     }
     final widget = element.widget;
-    if (widget is InkWell) {
+    if (widget is InkResponse) {
       return widget.onLongPress;
     }
     if (widget is GestureDetector) {
@@ -1618,7 +2213,7 @@ final class CockpitNativeTargetDiscovery {
       return customHandler;
     }
     final widget = element.widget;
-    if (widget is InkWell) {
+    if (widget is InkResponse) {
       return widget.onDoubleTap;
     }
     if (widget is GestureDetector) {

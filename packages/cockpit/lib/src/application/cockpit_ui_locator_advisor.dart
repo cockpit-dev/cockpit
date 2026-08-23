@@ -12,7 +12,7 @@ Map<String, Object?> cockpitBuildUiLocatorMatchesFromOutput(
 
 Map<String, Object?> cockpitBuildUiTargetIndexFromOutput(
   Map<String, Object?> output, {
-  int limit = 12,
+  int limit = 64,
 }) =>
     cockpitBuildUiTargetIndex(_snapshotFromInspectOutput(output), limit: limit);
 
@@ -114,36 +114,44 @@ Map<String, Object?> cockpitBuildUiLocatorMatches(
       'mounted': mountedTargets,
     if (matches.length > visibleMatches.length)
       'more': matches.length - visibleMatches.length,
-    if (queryTargetCount != null && queryTargetCount > targets.length)
+    if (queryTargetCount != null &&
+        queryTargetCount > targets.length &&
+        matches.length == targets.length)
       'partial': true,
   };
 }
 
 Map<String, Object?> cockpitBuildUiTargetIndex(
   CockpitSnapshot snapshot, {
-  int limit = 12,
+  int limit = 64,
 }) {
   final allTargets = snapshot.visibleTargets
       .map(_DevTarget.new)
       .where((target) => target.hasUsefulSignal)
       .toList(growable: false);
   final targets = allTargets
+      .where((target) => target.isControl)
       .where((target) => !_isRedundantTextCandidate(target, allTargets))
       .toList(growable: false);
   final ranked = List<_DevTarget>.of(targets)..sort(_compareForOverview);
   final visible = ranked.take(limit).toList(growable: false);
+  final refs = _shortTargetRefs(targets);
   final route =
       _value(snapshot.routeName) ??
       visible.map((target) => _value(target.route)).nonNulls.firstOrNull;
+  final targetCount = snapshot.summary?.visibleTargetCount;
   return <String, Object?>{
     'route': ?route,
     'count': targets.length,
     'targets': visible
-        .map((target) => target.result(targets, target.searchSeed))
+        .map((target) => target.overviewResult(targets, ref: refs[target]))
         .toList(growable: false),
     if (targets.length > visible.length)
       'more': targets.length - visible.length,
-    if (snapshot.truncated) 'partial': true,
+    if (targetCount != null &&
+        targetCount > snapshot.visibleTargets.length &&
+        targets.length == snapshot.visibleTargets.length)
+      'partial': true,
   };
 }
 
@@ -179,6 +187,7 @@ final class _DevTarget {
       path = value.path,
       scrollablePath = value.scrollablePath,
       commands = value.supportedCommands,
+      control = value.control,
       can = value.supportedCommands
           .map((command) => command.name)
           .toList(growable: false),
@@ -201,6 +210,7 @@ final class _DevTarget {
   final String? path;
   final String? scrollablePath;
   final List<CockpitCommandType> commands;
+  final CockpitControlState? control;
   final List<String> can;
   final List<CockpitSnapshotAncestor> ancestors;
   final List<_DevAncestor> within;
@@ -219,6 +229,7 @@ final class _DevTarget {
     scrollablePath: scrollablePath,
     routeName: route ?? '',
     supportedCommands: commands.toSet(),
+    control: control,
     locatorAncestors: ancestors,
     geometryProvider: layout == null
         ? null
@@ -236,6 +247,7 @@ final class _DevTarget {
   );
 
   bool get hasUsefulSignal =>
+      control != null ||
       can.isNotEmpty ||
       <String?>[
         cockpitId,
@@ -243,6 +255,32 @@ final class _DevTarget {
         text,
         tip,
       ].any((value) => _value(value) != null);
+
+  bool get isControl => compactActions != null || _hasBlockedControlState;
+
+  bool get _hasBlockedControlState {
+    final value = control;
+    return value != null &&
+        (!value.enabled || value.selected != null || value.checked != null);
+  }
+
+  String? get compactActions {
+    final actions = _compactActions(can);
+    if (actions == null || control?.readOnly != true || _isTextInputType) {
+      return actions;
+    }
+    final values = actions.split('|').toSet();
+    return const <String>{'tap', 'hold', 'double'}.containsAll(values)
+        ? null
+        : actions;
+  }
+
+  bool get _isTextInputType => const <String>{
+    'TextField',
+    'TextFormField',
+    'CupertinoTextField',
+    'CupertinoSearchTextField',
+  }.contains(type);
 
   bool get hasStableIdentity => <String?>[
     cockpitId,
@@ -253,6 +291,27 @@ final class _DevTarget {
   String get searchSeed => _searchText(label) ?? '';
 
   String? get label => _labelSignal?.value;
+
+  List<String> get _humanLabels {
+    final values = <String?>[
+      if (!_hasCompositeText) text,
+      tip,
+      semanticId,
+      if (!_hasSyntheticCockpitId) cockpitId,
+      key,
+      ...textParts,
+    ];
+    final labels = <String>[];
+    final seen = <String>{};
+    for (final candidate in values) {
+      final value = _value(candidate);
+      final normalized = _searchText(value);
+      if (value != null && normalized != null && seen.add(normalized)) {
+        labels.add(value);
+      }
+    }
+    return labels;
+  }
 
   _Signal? get _labelSignal {
     final textValue = _value(text);
@@ -367,15 +426,72 @@ final class _DevTarget {
       'sel': CockpitSelector.format(_locator(advice.loc)),
       'label': ?label,
       'can': ?actions,
+      'state': ?_compactControlState(control),
+      'value': ?_compactControlValue(control?.value),
       if (advice.ambiguous) 'ambiguous': true,
     };
+  }
+
+  Map<String, Object?> overviewResult(
+    List<_DevTarget> targets, {
+    required String? ref,
+  }) {
+    if (ref == null) {
+      return result(targets, searchSeed);
+    }
+    final label = _overviewLabel(targets);
+    final actions = compactActions;
+    final needsPosition = label == null || !_hasUniqueLabelSignal(targets);
+    return <String, Object?>{
+      'sel': ':$ref',
+      'label': ?label,
+      if (label == null) 'type': ?type,
+      if (needsPosition) 'at': ?_compactPosition(layout),
+      'can': ?actions,
+      'state': ?_compactControlState(control),
+      'value': ?_compactControlValue(control?.value),
+    };
+  }
+
+  String? _overviewLabel(List<_DevTarget> targets) {
+    final labels = _humanLabels;
+    final primary = labels.firstOrNull;
+    if (primary == null || _isUniqueLabel(primary, targets)) {
+      return primary;
+    }
+    for (final qualifier in labels.skip(1)) {
+      if (_isUniqueLabel(qualifier, targets)) {
+        return '$primary · $qualifier';
+      }
+    }
+    return primary;
+  }
+
+  bool _hasUniqueLabelSignal(List<_DevTarget> targets) =>
+      _humanLabels.any((label) => _isUniqueLabel(label, targets));
+
+  bool _isUniqueLabel(String value, List<_DevTarget> targets) {
+    final normalized = _searchText(value);
+    if (normalized == null) return false;
+    return targets.where((target) {
+          return target._humanLabels.any(
+            (label) => _searchText(label) == normalized,
+          );
+        }).length ==
+        1;
   }
 
   Map<String, Object?> selectorResult(CockpitLocator locator) {
     final selector = CockpitSelector.format(locator);
     final actions = _compactActions(can);
     final label = _labelForLocator(locator);
-    return <String, Object?>{'sel': selector, 'label': ?label, 'can': ?actions};
+    return <String, Object?>{
+      'sel': selector,
+      'label': ?label,
+      'can': ?actions,
+      'state': ?_compactControlState(control),
+      'value': ?_compactControlValue(control?.value),
+    };
   }
 
   String? _labelForAdvice(Map<String, Object?> loc) {
@@ -882,6 +998,18 @@ bool _endsWith(List<String> value, List<String> suffix) {
 }
 
 int _compareForOverview(_DevTarget left, _DevTarget right) {
+  final leftLayout = left.layout;
+  final rightLayout = right.layout;
+  if (leftLayout != null && rightLayout != null) {
+    var compared = leftLayout.dy.compareTo(rightLayout.dy);
+    if (compared != 0) return compared;
+    compared = leftLayout.dx.compareTo(rightLayout.dx);
+    if (compared != 0) return compared;
+  } else if (leftLayout != null) {
+    return -1;
+  } else if (rightLayout != null) {
+    return 1;
+  }
   var compared = right.can.isNotEmpty == left.can.isNotEmpty
       ? 0
       : right.can.isNotEmpty
@@ -890,14 +1018,6 @@ int _compareForOverview(_DevTarget left, _DevTarget right) {
   if (compared != 0) return compared;
   compared = _overviewRank(right).compareTo(_overviewRank(left));
   if (compared != 0) return compared;
-  final leftLayout = left.layout;
-  final rightLayout = right.layout;
-  if (leftLayout != null && rightLayout != null) {
-    compared = leftLayout.dy.compareTo(rightLayout.dy);
-    if (compared != 0) return compared;
-    compared = leftLayout.dx.compareTo(rightLayout.dx);
-    if (compared != 0) return compared;
-  }
   return (left.label ?? '').compareTo(right.label ?? '');
 }
 
@@ -908,6 +1028,33 @@ int _overviewRank(_DevTarget target) {
   if (_value(target.text) != null) rank += 40;
   if (_value(target.tip) != null) rank += 20;
   return rank;
+}
+
+Map<_DevTarget, String> _shortTargetRefs(List<_DevTarget> targets) {
+  final tokens = <_DevTarget, String>{
+    for (final target in targets)
+      target: cockpitTargetRefToken(target.registrationId),
+  };
+  final refs = <_DevTarget, String>{};
+  for (final target in targets) {
+    final token = tokens[target]!;
+    for (
+      var length = cockpitTargetRefMinimumLength;
+      length <= token.length;
+      length += 1
+    ) {
+      final candidate = token.substring(0, length);
+      final unique = tokens.entries.every(
+        (entry) =>
+            identical(entry.key, target) || !entry.value.startsWith(candidate),
+      );
+      if (unique) {
+        refs[target] = candidate;
+        break;
+      }
+    }
+  }
+  return refs;
 }
 
 CockpitLocator _locator(Map<String, Object?> loc) => CockpitLocator(
@@ -932,6 +1079,11 @@ String? _compactActions(List<String> actions) {
     final value = switch (action) {
       'tap' => 'tap',
       'enterText' || 'setTextEditingValue' || 'focusTextInput' => 'type',
+      'longPress' => 'hold',
+      'doubleTap' => 'double',
+      'increase' => 'inc',
+      'decrease' => 'dec',
+      'dismiss' => 'dismiss',
       'scrollUntilVisible' || 'showOnScreen' => 'scroll',
       _ => null,
     };
@@ -939,4 +1091,44 @@ String? _compactActions(List<String> actions) {
     if (!compact.contains(value)) compact.add(value);
   }
   return compact.isEmpty ? null : compact.join('|');
+}
+
+String? _compactPosition(_Layout? layout) {
+  if (layout == null) return null;
+  final x = (layout.dx + layout.width / 2).round();
+  final y = (layout.dy + layout.height / 2).round();
+  return '$x,$y';
+}
+
+String? _compactControlState(CockpitControlState? control) {
+  if (control == null) return null;
+  final values = <String>[
+    if (!control.enabled) 'disabled',
+    if (control.selected case final selected?)
+      selected ? 'selected' : 'unselected',
+    if (control.checked case final checked?) checked.jsonValue,
+    if (control.focused) 'focused',
+    if (control.readOnly) 'readonly',
+    if (control.obscured) 'obscured',
+  ];
+  return values.isEmpty ? null : values.join('|');
+}
+
+Object? _compactControlValue(Object? value) {
+  if (value is String) {
+    final normalized = _exactText(value);
+    if (normalized == null) return null;
+    const limit = 96;
+    return normalized.length <= limit
+        ? normalized
+        : '${normalized.substring(0, limit)}…';
+  }
+  if (value is List<Object?>) {
+    const limit = 4;
+    return <Object?>[
+      ...value.take(limit).map(_compactControlValue),
+      if (value.length > limit) '…',
+    ];
+  }
+  return value;
 }

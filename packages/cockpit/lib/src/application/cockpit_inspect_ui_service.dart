@@ -103,9 +103,6 @@ final class CockpitInspectUiService {
         request.resultProfile.name ==
         CockpitInteractiveResultProfileName.locate;
     final locatorQuery = locate ? request.snapshotOptions?.query?.trim() : null;
-    final snapshotOptions = locatorQuery == null || locatorQuery.isEmpty
-        ? request.snapshotOptions
-        : request.snapshotOptions!.copyWith(clearQuery: true);
     final resolved = await _appReferenceResolver.resolve(
       appId: request.appId,
       app: request.app,
@@ -113,16 +110,31 @@ final class CockpitInspectUiService {
       baseUri: request.baseUri,
       androidDeviceId: request.androidDeviceId,
     );
-    final result = await _snapshotService.read(
+    var result = await _snapshotService.read(
       CockpitReadRemoteSnapshotRequest(
         baseUri: resolved.baseUri,
         sessionHandle: resolved.app?.remoteSession,
         resultProfile: request.resultProfile,
-        snapshotOptions: snapshotOptions,
+        snapshotOptions: request.snapshotOptions,
         compareAgainstSnapshotRef: request.compareAgainstSnapshotRef,
         retainArtifacts: !locate,
       ),
     );
+    if (locate &&
+        locatorQuery != null &&
+        locatorQuery.isNotEmpty &&
+        result.completeSnapshot?.visibleTargets.isEmpty == true) {
+      result = await _snapshotService.read(
+        CockpitReadRemoteSnapshotRequest(
+          baseUri: resolved.baseUri,
+          sessionHandle: resolved.app?.remoteSession,
+          resultProfile: request.resultProfile,
+          snapshotOptions: request.snapshotOptions!.copyWith(clearQuery: true),
+          compareAgainstSnapshotRef: request.compareAgainstSnapshotRef,
+          retainArtifacts: false,
+        ),
+      );
+    }
     final locator = result.completeSnapshot == null || !locate
         ? null
         : locatorQuery == null || locatorQuery.isEmpty

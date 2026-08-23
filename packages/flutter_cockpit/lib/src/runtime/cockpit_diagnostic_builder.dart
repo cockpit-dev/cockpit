@@ -148,7 +148,7 @@ final class CockpitDiagnosticBuilder {
 
   int _salienceFor(CockpitTarget target) {
     var score = 0;
-    if (target.supportedCommands.isNotEmpty) {
+    if (target.control != null || target.supportedCommands.isNotEmpty) {
       score += 1000;
     }
     if (target.semanticId != null) {
@@ -223,6 +223,7 @@ final class CockpitDiagnosticBuilder {
           scrollableTypeName: target.scrollableTypeName,
           routeName: target.routeName,
           supportedCommands: target.supportedCommands.toList(growable: false),
+          control: target.control,
         ),
       );
     }
@@ -270,6 +271,7 @@ final class CockpitDiagnosticBuilder {
         scrollableTypeName: target.scrollableTypeName,
         routeName: target.routeName,
         supportedCommands: target.supportedCommands.toList(growable: false),
+        control: target.control,
         layout: layout,
         content: content,
         style: style,
@@ -289,21 +291,19 @@ final class CockpitDiagnosticBuilder {
       return const <CockpitSnapshotAncestor>[];
     }
 
+    if (runtimeNode != null) {
+      return _extractAncestors(
+        runtimeNode.element,
+        maxAncestors: maxAncestors,
+        onTruncated: onTruncated,
+      );
+    }
+
     final locatorAncestors = target.locatorAncestors;
-    if (locatorAncestors.isNotEmpty) {
-      if (locatorAncestors.length > maxAncestors) {
-        onTruncated();
-      }
-      return locatorAncestors.take(maxAncestors).toList(growable: false);
+    if (locatorAncestors.length > maxAncestors) {
+      onTruncated();
     }
-    if (runtimeNode == null) {
-      return const <CockpitSnapshotAncestor>[];
-    }
-    return _extractAncestors(
-      runtimeNode.element,
-      maxAncestors: maxAncestors,
-      onTruncated: onTruncated,
-    );
+    return locatorAncestors.take(maxAncestors).toList(growable: false);
   }
 
   _RuntimeNode? _resolveRuntimeNode(CockpitTarget target) {

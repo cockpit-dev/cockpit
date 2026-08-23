@@ -54,6 +54,10 @@ void main() {
         'inspect',
         'tree',
         'tap',
+        'hold',
+        'double',
+        'inc',
+        'dec',
         'type',
         'press',
         'back',
@@ -565,14 +569,216 @@ void main() {
 
     expect(result['route'], '/edit');
     expect(result['count'], 2);
-    expect(result['targets'], <Object?>[
-      <String, Object?>{'sel': '#save', 'label': 'Save', 'can': 'tap'},
-      <String, Object?>{'sel': '@title', 'label': 'Title', 'can': 'type'},
+    final targets = (result['targets']! as List<Object?>)
+        .cast<Map<String, Object?>>();
+    expect(targets.map((target) => target['label']), <Object?>[
+      'Save',
+      'Title',
     ]);
+    expect(targets.map((target) => target['can']), <Object?>['tap', 'type']);
+    expect(
+      targets.map((target) => target['sel']),
+      everyElement(matches(RegExp(r'^:[a-z0-9]{6,}$'))),
+    );
     final encoded = jsonEncode(result);
     expect(encoded, isNot(contains('registrationId')));
     expect(encoded, isNot(contains('sha256')));
     expect(encoded, isNot(contains('network')));
+  });
+
+  test('dev target index returns controls in visual order with state', () {
+    Map<String, Object?> target({
+      required String id,
+      required String text,
+      required double dy,
+      List<Object?> commands = const <Object?>[],
+      Map<String, Object?>? control,
+      String type = 'FilledButton',
+    }) => <String, Object?>{
+      'registrationId': id,
+      'cockpitId': id,
+      'text': text,
+      'typeName': type,
+      'routeName': '/dashboard',
+      'supportedCommands': commands,
+      'control': ?control,
+      'ancestors': const <Object?>[],
+      'layout': <String, Object?>{
+        'dx': 20,
+        'dy': dy,
+        'width': 120,
+        'height': 40,
+      },
+    };
+
+    final result = cockpitBuildUiTargetIndexFromOutput(<String, Object?>{
+      'snapshot': <String, Object?>{
+        'route': '/dashboard',
+        'visibleTargets': <Object?>[
+          target(
+            id: 'sidebar',
+            text: 'Sidebar',
+            dy: 100,
+            commands: <Object?>['tap'],
+          ),
+          target(
+            id: 'refresh',
+            text: 'Refresh',
+            dy: 10,
+            commands: <Object?>['tap'],
+          ),
+          target(
+            id: 'submit',
+            text: 'Submit',
+            dy: 60,
+            control: <String, Object?>{'enabled': false},
+          ),
+          target(id: 'heading', text: 'Overview', dy: 0, type: 'Text'),
+          target(
+            id: 'status-only',
+            text: 'Ready',
+            dy: 120,
+            control: <String, Object?>{},
+            type: 'Semantics',
+          ),
+          target(
+            id: 'readout',
+            text: '46',
+            dy: 140,
+            control: <String, Object?>{'readOnly': true, 'value': '46'},
+            type: 'EditableText',
+          ),
+        ],
+      },
+    });
+
+    expect(result['count'], 3);
+    final targets = (result['targets']! as List<Object?>)
+        .cast<Map<String, Object?>>();
+    expect(targets.map((target) => target['label']), <Object?>[
+      'Refresh',
+      'Submit',
+      'Sidebar',
+    ]);
+    expect(targets.map((target) => target['can']), <Object?>[
+      'tap',
+      null,
+      'tap',
+    ]);
+    expect(targets[1]['state'], 'disabled');
+    expect(
+      targets.map((target) => target['sel']),
+      everyElement(matches(RegExp(r'^:[a-z0-9]{6,}$'))),
+    );
+  });
+
+  test('dev target index includes a complete ordinary screen by default', () {
+    final result = cockpitBuildUiTargetIndexFromOutput(<String, Object?>{
+      'snapshot': <String, Object?>{
+        'route': '/many',
+        'visibleTargets': <Object?>[
+          for (var index = 0; index < 40; index += 1)
+            <String, Object?>{
+              'registrationId': 'action-$index',
+              'cockpitId': 'action-$index',
+              'text': 'Action $index',
+              'typeName': 'TextButton',
+              'routeName': '/many',
+              'supportedCommands': <Object?>['tap'],
+              'ancestors': const <Object?>[],
+              'layout': <String, Object?>{
+                'dx': 20,
+                'dy': index * 44,
+                'width': 120,
+                'height': 40,
+              },
+            },
+        ],
+      },
+    });
+
+    expect(result['count'], 40);
+    expect(result['targets'], hasLength(40));
+    expect(result, isNot(contains('more')));
+  });
+
+  test('dev target index ignores unrelated truncated diagnostic detail', () {
+    final result = cockpitBuildUiTargetIndexFromOutput(<String, Object?>{
+      'snapshot': <String, Object?>{
+        'truncated': true,
+        'summary': <String, Object?>{'visibleTargetCount': 1},
+        'visibleTargets': <Object?>[
+          <String, Object?>{
+            'registrationId': 'save',
+            'text': 'Save',
+            'typeName': 'TextButton',
+            'routeName': '/',
+            'supportedCommands': <Object?>['tap'],
+            'ancestors': const <Object?>[],
+          },
+        ],
+      },
+    });
+
+    expect(result, isNot(contains('partial')));
+  });
+
+  test('dev target index ignores omitted passive targets', () {
+    final result = cockpitBuildUiTargetIndexFromOutput(<String, Object?>{
+      'snapshot': <String, Object?>{
+        'summary': <String, Object?>{'visibleTargetCount': 200},
+        'visibleTargets': <Object?>[
+          <String, Object?>{
+            'registrationId': 'refresh',
+            'text': 'Refresh',
+            'typeName': 'IconButton',
+            'routeName': '/',
+            'supportedCommands': <Object?>['tap'],
+            'ancestors': const <Object?>[],
+          },
+          <String, Object?>{
+            'registrationId': 'heading',
+            'text': 'Overview',
+            'typeName': 'Text',
+            'routeName': '/',
+            'supportedCommands': const <Object?>[],
+            'ancestors': const <Object?>[],
+          },
+        ],
+      },
+    });
+
+    expect(result['count'], 1);
+    expect(result, isNot(contains('partial')));
+  });
+
+  test('dev target index exposes every direct task action', () {
+    final result = cockpitBuildUiTargetIndexFromOutput(<String, Object?>{
+      'snapshot': <String, Object?>{
+        'visibleTargets': <Object?>[
+          <String, Object?>{
+            'registrationId': 'advanced-control',
+            'text': 'Volume',
+            'typeName': 'Slider',
+            'routeName': '/',
+            'supportedCommands': <Object?>[
+              'tap',
+              'longPress',
+              'doubleTap',
+              'increase',
+              'decrease',
+              'dismiss',
+              'showOnScreen',
+            ],
+            'ancestors': const <Object?>[],
+          },
+        ],
+      },
+    });
+
+    final target =
+        (result['targets']! as List<Object?>).single as Map<String, Object?>;
+    expect(target['can'], 'tap|hold|double|inc|dec|dismiss|scroll');
   });
 
   test('dev locator search can return a semantic ID selector', () {
@@ -592,7 +798,7 @@ void main() {
     }, 'checkout.submit');
 
     expect(result['matches'], <Object?>[
-      <String, Object?>{'sel': '[sem="checkout.submit"]', 'can': 'tap'},
+      <String, Object?>{'sel': '[sem="checkout.submit"]', 'can': 'tap|hold'},
     ]);
   });
 
@@ -914,12 +1120,12 @@ void main() {
       },
     });
 
-    expect(result['targets'], <Object?>[
-      <String, Object?>{
-        'sel': '[sem="Open task Selector proof"]',
-        'can': 'tap',
-      },
-    ]);
+    final target =
+        (result['targets']! as List<Object?>).single as Map<String, Object?>;
+    expect(target['sel'], matches(RegExp(r'^:[a-z0-9]+$')));
+    expect(target['label'], 'Open task Selector proof');
+    expect(target['can'], 'tap');
+    expect(jsonEncode(target), isNot(contains('Complete task')));
   });
 
   test('dev inspect collapses an identityless text duplicate in one row', () {
@@ -982,7 +1188,7 @@ void main() {
     expect(result['matches'], <Object?>[
       <String, Object?>{
         'sel': '[sem="Open task Selector proof"]',
-        'can': 'tap',
+        'can': 'tap|hold',
       },
     ]);
   });
@@ -1052,7 +1258,7 @@ void main() {
     expect(result['matches'], <Object?>[
       <String, Object?>{
         'sel': '[sem="Open task Android CLI verification"]',
-        'can': 'tap',
+        'can': 'tap|hold|double',
       },
     ]);
   });
