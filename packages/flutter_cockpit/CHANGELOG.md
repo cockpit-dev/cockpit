@@ -1,5 +1,10 @@
 # Changelog
 
+## 4.0.36
+
+- Synchronized native package metadata and development shell integration locks
+  with the current Cockpit release.
+
 ## 4.0.35
 
 - Added visibility-aware mounted target snapshots so offscreen Flutter controls
