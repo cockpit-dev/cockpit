@@ -1,5 +1,10 @@
 # Changelog
 
+## 4.0.39
+
+- Synchronized the public protocol package with the current Cockpit release;
+  public protocol contracts are unchanged.
+
 ## 4.0.38
 
 - Synchronized the public protocol package with the current Cockpit release;

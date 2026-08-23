@@ -1,5 +1,17 @@
 # Changelog
 
+## 4.0.39
+
+- Started a fresh runtime-diagnostic generation after Flutter hot reload so
+  errors captured by the previous generation no longer poison current
+  diagnosis or evidence.
+- Made `dev scroll` reject geometrically visible targets that lose the real
+  Flutter hit test, and made default `nearest` placement move an occluded
+  target toward the viewport center when scrolling can avoid the overlay.
+- Aligned CLI help, public documentation, the AI development protocol, and all
+  distributed Skills with lazy mounting, automatic reverse search, hit-tested
+  visibility, and reload-generation behavior.
+
 ## 4.0.38
 
 - Kept explicit `--session HANDLE` reads, reconciliation, relaunch, screenshot,

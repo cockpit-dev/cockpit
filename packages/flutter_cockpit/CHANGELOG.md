@@ -1,5 +1,13 @@
 # Changelog
 
+## 4.0.39
+
+- Cleared previous-generation runtime errors and unconsumed recorded steps at
+  the Flutter hot-reload boundary while continuing to capture new errors.
+- Required scroll visibility probes to win the real Flutter hit test and made
+  default nearest reveal reposition targets that a fixed Flutter overlay
+  covers when the scroll viewport can expose them.
+
 ## 4.0.38
 
 - Synchronized native package metadata and development shell integration with
