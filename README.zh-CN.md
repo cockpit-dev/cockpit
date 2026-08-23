@@ -110,8 +110,8 @@ First fetch and read the complete Cockpit installation guide with `curl -fsSL ht
 ## Flutter 快速路径
 
 从目标 Flutter project 内执行。`dev` 会发现并管理 workspace、target、进程、端口
-和 bridge，之后复用该项目的 active 数字 handle，同时用 checkout identity 隔离并行
-项目：
+和 bridge，之后复用该项目的 active 短小写 base-36 handle，同时用 checkout identity
+隔离并行项目：
 
 ```bash
 cockpit dev start

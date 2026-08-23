@@ -229,9 +229,10 @@ cockpit dev use 2
 cockpit dev status --session 2
 ```
 
-`session show` reports the Flutter project, checkout path, workspace,
-entrypoint, platform/device, lifecycle, and current live state. Check it before a
-destructive mutation when concurrent apps look similar. Omitting `--session` is safe
+`session show` reports the Flutter project, entrypoint, platform/device,
+lifecycle, and current live state. Add `--view more` when canonical workspace,
+checkout, target, or runtime IDs are needed. Check it before a destructive
+mutation when concurrent apps look similar. Omitting `--session` is safe
 when running inside the intended project and its active handle is the intended
 target. Read readiness as two independent signals: `appLive:true` with
 `bridgeLive:false` means the application still runs but its control bridge is

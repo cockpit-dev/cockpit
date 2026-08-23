@@ -241,6 +241,8 @@ void main() {
   });
 
   test('package readmes teach flutter_cockpit installation and usage', () {
+    final rootReadme = File('README.md').readAsStringSync();
+    final rootReadmeZh = File('README.zh-CN.md').readAsStringSync();
     final runtimeReadme = File(
       'packages/flutter_cockpit/README.md',
     ).readAsStringSync();
@@ -302,6 +304,15 @@ void main() {
     expect(runtimeReadmeZh, contains('flutter_cockpit: any'));
     expect(runtimeReadmeZh, contains('https://pub.dev/packages/cockpit'));
     expect(devtoolsReadmeZh, contains('dart pub global activate cockpit any'));
+
+    for (final readme in <String>[rootReadme, devtoolsReadme]) {
+      expect(readme, contains('short lowercase base-36 handle'));
+      expect(readme, isNot(contains('numeric handle')));
+    }
+    for (final readme in <String>[rootReadmeZh, devtoolsReadmeZh]) {
+      expect(readme, contains('短小写 base-36 handle'));
+      expect(readme, isNot(contains('数字 handle')));
+    }
   });
 
   test('console readme reflects the current public client surfaces', () {

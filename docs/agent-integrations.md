@@ -286,8 +286,9 @@ already included by Cockpit:
 .mcp.json
 ```
 
-Run `copilot plugins list --kind mcp --kind skill` to confirm discovery. No
-Copilot-only Skill copy is needed.
+In the Copilot CLI session, run `/skills reload`, `/skills info cockpit`, and
+`/mcp show` to reload and confirm discovery. No Copilot-only Skill copy is
+needed.
 
 ## Windsurf
 
