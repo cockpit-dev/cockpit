@@ -94,6 +94,9 @@ class Translations$common$en {
 	/// en: 'Copy'
 	String get copy => 'Copy';
 
+	/// en: 'Could not copy'
+	String get copyFailed => 'Could not copy';
+
 	/// en: 'Close'
 	String get close => 'Close';
 
@@ -2353,6 +2356,24 @@ class Translations$sessions$logs$en {
 	/// en: 'Latest output below'
 	String get latestBelow => 'Latest output below';
 
+	/// en: 'Show log output'
+	String get expand => 'Show log output';
+
+	/// en: 'Hide log output'
+	String get collapse => 'Hide log output';
+
+	/// en: 'Copy log lines'
+	String get copyLines => 'Copy log lines';
+
+	/// en: 'Log lines copied'
+	String get linesCopied => 'Log lines copied';
+
+	/// en: 'Copy log file path'
+	String get copyPath => 'Copy log file path';
+
+	/// en: 'Log file path copied'
+	String get pathCopied => 'Log file path copied';
+
 	/// en: 'Startup and Flutter tool logs'
 	String get startupTitle => 'Startup and Flutter tool logs';
 
@@ -2683,6 +2704,7 @@ extension on Translations {
 			'common.retry' => 'Retry',
 			'common.cancel' => 'Cancel',
 			'common.copy' => 'Copy',
+			'common.copyFailed' => 'Could not copy',
 			'common.close' => 'Close',
 			'common.unknown' => 'Unknown',
 			'common.notSet' => 'Not set',
@@ -3187,9 +3209,9 @@ extension on Translations {
 			'ai.session.mode' => 'Mode',
 			'ai.session.noSettings' => 'This agent did not advertise session settings.',
 			'ai.session.currentContext' => 'Current context',
-			'ai.session.usage' => 'Usage',
 			_ => null,
 		} ?? switch (path) {
+			'ai.session.usage' => 'Usage',
 			'ai.session.tokensUsed' => ({required num n}) => (_root.$meta.cardinalResolver ?? PluralResolvers.cardinal('en'))(n, one: '${n} token used', other: '${n} tokens used', ),
 			'ai.session.tokenContext' => ({required num n}) => (_root.$meta.cardinalResolver ?? PluralResolvers.cardinal('en'))(n, one: '${n}-token context', other: '${n}-token context', ),
 			'ai.session.plan' => 'Plan',
@@ -3324,6 +3346,12 @@ extension on Translations {
 			'sessions.logs.open' => 'Open this section to follow startup and application logs live.',
 			'sessions.logs.live' => 'Refreshes every 2 seconds',
 			'sessions.logs.latestBelow' => 'Latest output below',
+			'sessions.logs.expand' => 'Show log output',
+			'sessions.logs.collapse' => 'Hide log output',
+			'sessions.logs.copyLines' => 'Copy log lines',
+			'sessions.logs.linesCopied' => 'Log lines copied',
+			'sessions.logs.copyPath' => 'Copy log file path',
+			'sessions.logs.pathCopied' => 'Log file path copied',
 			'sessions.logs.startupTitle' => 'Startup and Flutter tool logs',
 			'sessions.logs.startupNone' => 'No startup or Flutter tool log lines were captured.',
 			'sessions.logs.startupRecent' => ({required num n}) => (_root.$meta.cardinalResolver ?? PluralResolvers.cardinal('en'))(n, one: '${n} recent startup log line', other: '${n} recent startup log lines', ),

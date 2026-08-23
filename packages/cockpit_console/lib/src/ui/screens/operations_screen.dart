@@ -6,12 +6,12 @@ import 'package:cockpit_console/src/providers/data_providers.dart';
 import 'package:cockpit_console/src/theme/console_colors.dart';
 import 'package:cockpit_console/src/theme/console_shapes.dart';
 import 'package:cockpit_console/src/ui/navigation/console_nav.dart';
+import 'package:cockpit_console/src/ui/widgets/console_copy_button.dart';
 import 'package:cockpit_console/src/ui/widgets/console_form_controls.dart';
 import 'package:cockpit_console/src/ui/widgets/empty_state.dart';
 import 'package:cockpit_console/src/ui/widgets/screen_scaffold.dart';
 import 'package:cockpit_protocol/cockpit_protocol.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -1356,7 +1356,14 @@ final class _ResultBody extends StatelessWidget {
           if (header != null) ...[header!, const SizedBox(height: 8)],
           Row(
             mainAxisAlignment: MainAxisAlignment.end,
-            children: [_CopyButton(text: encoded)],
+            children: [
+              ConsoleCopyButton(
+                text: encoded,
+                copyLabel: context.t.actions.copy,
+                copiedLabel: context.t.actions.copied,
+                variant: ConsoleCopyButtonVariant.labeled,
+              ),
+            ],
           ),
           const SizedBox(height: 4),
           Container(
@@ -1401,40 +1408,6 @@ final class _OutcomeChip extends StatelessWidget {
           fontWeight: FontWeight.w600,
           color: theme.colorScheme.primary,
         ),
-      ),
-    );
-  }
-}
-
-final class _CopyButton extends StatefulWidget {
-  const _CopyButton({required this.text});
-
-  final String text;
-
-  @override
-  State<_CopyButton> createState() => _CopyButtonState();
-}
-
-final class _CopyButtonState extends State<_CopyButton> {
-  bool _copied = false;
-
-  @override
-  Widget build(BuildContext context) {
-    return TextButton.icon(
-      onPressed: () async {
-        await Clipboard.setData(ClipboardData(text: widget.text));
-        if (!mounted) return;
-        setState(() => _copied = true);
-        Future.delayed(const Duration(seconds: 2), () {
-          if (mounted) setState(() => _copied = false);
-        });
-      },
-      icon: Icon(_copied ? LucideIcons.check : LucideIcons.copy, size: 13),
-      label: Text(_copied ? context.t.actions.copied : context.t.actions.copy),
-      style: TextButton.styleFrom(
-        minimumSize: const Size(0, 30),
-        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-        padding: const EdgeInsets.symmetric(horizontal: 8),
       ),
     );
   }

@@ -4,8 +4,8 @@ import 'package:cockpit_console/i18n/strings.g.dart';
 import 'package:cockpit_console/src/theme/console_colors.dart';
 import 'package:cockpit_console/src/theme/console_shapes.dart';
 import 'package:cockpit_console/src/theme/console_theme.dart';
+import 'package:cockpit_console/src/ui/widgets/console_copy_button.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 final class SessionDataView extends StatelessWidget {
@@ -53,10 +53,10 @@ final class SessionDataView extends StatelessWidget {
                     style: Theme.of(context).textTheme.labelMedium,
                   ),
                 ),
-                IconButton(
-                  tooltip: copyLabel ?? context.t.sessions.data.copy,
-                  onPressed: () => _copy(context),
-                  icon: const Icon(LucideIcons.copy, size: 14),
+                ConsoleCopyButton(
+                  text: const JsonEncoder.withIndent('  ').convert(value),
+                  copyLabel: copyLabel ?? context.t.sessions.data.copy,
+                  copiedLabel: context.t.sessions.data.copied,
                 ),
               ],
             ),
@@ -67,15 +67,6 @@ final class SessionDataView extends StatelessWidget {
       ),
     );
   }
-
-  Future<void> _copy(BuildContext context) async {
-    final encoded = const JsonEncoder.withIndent('  ').convert(value);
-    await Clipboard.setData(ClipboardData(text: encoded));
-    if (!context.mounted) return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(context.t.sessions.data.copied)));
-  }
 }
 
 final class SessionInfoRow extends StatelessWidget {
@@ -83,7 +74,7 @@ final class SessionInfoRow extends StatelessWidget {
     required this.label,
     required this.value,
     this.monospace = false,
-    this.copyable = false,
+    this.copyable,
     this.showWhenEmpty = false,
     super.key,
   });
@@ -91,7 +82,7 @@ final class SessionInfoRow extends StatelessWidget {
   final String label;
   final String? value;
   final bool monospace;
-  final bool copyable;
+  final bool? copyable;
   final bool showWhenEmpty;
 
   @override
@@ -108,6 +99,7 @@ final class SessionInfoRow extends StatelessWidget {
         : Theme.of(context).textTheme.bodySmall?.copyWith(
             color: context.consoleColors.inkPrimary,
           );
+    final allowsCopy = copyable ?? monospace;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
@@ -118,21 +110,12 @@ final class SessionInfoRow extends StatelessWidget {
             child: Text(label, style: Theme.of(context).textTheme.labelSmall),
           ),
           Expanded(child: SelectableText(displayValue, style: style)),
-          if (copyable && value?.isNotEmpty == true)
-            IconButton(
-              tooltip: context.t.sessions.data.copyLabel(label: label),
-              onPressed: () async {
-                await Clipboard.setData(ClipboardData(text: value!));
-                if (!context.mounted) return;
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(
-                      context.t.sessions.data.labelCopied(label: label),
-                    ),
-                  ),
-                );
-              },
-              icon: const Icon(LucideIcons.copy, size: 13),
+          if (allowsCopy && value?.isNotEmpty == true)
+            ConsoleCopyButton(
+              text: value!,
+              copyLabel: context.t.sessions.data.copyLabel(label: label),
+              copiedLabel: context.t.sessions.data.labelCopied(label: label),
+              iconSize: 13,
             ),
         ],
       ),
@@ -170,12 +153,16 @@ final class SessionInlineEmpty extends StatelessWidget {
   }
 }
 
-final class SessionSectionCard extends StatelessWidget {
+final class SessionSectionCard extends StatefulWidget {
   const SessionSectionCard({
     required this.title,
     required this.child,
     this.subtitle,
     this.trailing,
+    this.collapsible = false,
+    this.initiallyExpanded = true,
+    this.expandLabel,
+    this.collapseLabel,
     super.key,
   });
 
@@ -183,46 +170,96 @@ final class SessionSectionCard extends StatelessWidget {
   final String? subtitle;
   final Widget? trailing;
   final Widget child;
+  final bool collapsible;
+  final bool initiallyExpanded;
+  final String? expandLabel;
+  final String? collapseLabel;
+
+  @override
+  State<SessionSectionCard> createState() => _SessionSectionCardState();
+}
+
+final class _SessionSectionCardState extends State<SessionSectionCard> {
+  late bool _expanded = widget.initiallyExpanded;
+
+  void _toggle() {
+    if (!widget.collapsible) return;
+    setState(() => _expanded = !_expanded);
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: ConsoleShapes.decoration(
-        color: context.consoleColors.surface1,
-        borderColor: context.consoleColors.border,
-      ),
+    final shape = ConsoleShapes.border(
+      side: BorderSide(color: context.consoleColors.border),
+    );
+    final toggleLabel = _expanded ? widget.collapseLabel : widget.expandLabel;
+    return Material(
+      color: context.consoleColors.surface1,
+      shape: shape,
+      clipBehavior: Clip.antiAlias,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(14, 11, 10, 10),
+            padding: const EdgeInsets.fromLTRB(14, 9, 8, 9),
             child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        title,
-                        style: Theme.of(context).textTheme.titleSmall,
-                      ),
-                      if (subtitle != null) ...[
-                        const SizedBox(height: 2),
+                  child: InkWell(
+                    customBorder: ConsoleShapes.border(
+                      radius: ConsoleShapes.smallRadius,
+                    ),
+                    onTap: widget.collapsible ? _toggle : null,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
                         Text(
-                          subtitle!,
-                          style: Theme.of(context).textTheme.bodySmall,
+                          widget.title,
+                          style: Theme.of(context).textTheme.titleSmall,
                         ),
+                        if (widget.subtitle != null) ...[
+                          const SizedBox(height: 2),
+                          Text(
+                            widget.subtitle!,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        ],
                       ],
-                    ],
+                    ),
                   ),
                 ),
-                ?trailing,
+                ?widget.trailing,
+                if (widget.collapsible)
+                  IconButton(
+                    tooltip: toggleLabel,
+                    onPressed: _toggle,
+                    icon: AnimatedRotation(
+                      turns: _expanded ? 0.5 : 0,
+                      duration: const Duration(milliseconds: 180),
+                      curve: Curves.easeOutCubic,
+                      child: const Icon(LucideIcons.chevronDown, size: 15),
+                    ),
+                  ),
               ],
             ),
           ),
-          Divider(height: 1, color: context.consoleColors.border),
-          child,
+          AnimatedSize(
+            duration: const Duration(milliseconds: 180),
+            curve: Curves.easeOutCubic,
+            alignment: Alignment.topCenter,
+            child: _expanded
+                ? Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Divider(height: 1, color: context.consoleColors.border),
+                      widget.child,
+                    ],
+                  )
+                : const SizedBox.shrink(),
+          ),
         ],
       ),
     );

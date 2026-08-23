@@ -3,6 +3,7 @@ import 'package:cockpit_console/src/providers/session_monitor_models.dart';
 import 'package:cockpit_console/src/theme/console_colors.dart';
 import 'package:cockpit_console/src/theme/console_shapes.dart';
 import 'package:cockpit_console/src/theme/console_theme.dart';
+import 'package:cockpit_console/src/ui/widgets/console_copy_button.dart';
 import 'package:cockpit_console/src/ui/widgets/session_monitor_data_view.dart';
 import 'package:cockpit_console/src/ui/widgets/session_monitor_localization.dart';
 import 'package:flutter/material.dart';
@@ -282,6 +283,7 @@ final class SessionLogsView extends StatelessWidget {
     return _SectionScroll(
       children: [
         SessionSectionCard(
+          key: const ValueKey('session-startup-logs'),
           title: strings.startupTitle,
           subtitle: _liveLogSubtitle(
             live: strings.live,
@@ -292,12 +294,11 @@ final class SessionLogsView extends StatelessWidget {
             truncated: sessionLogs?['truncated'] == true,
             olderHidden: strings.olderHidden,
           ),
-          trailing: sessionPath == null
-              ? null
-              : Tooltip(
-                  message: sessionPath,
-                  child: const Icon(LucideIcons.fileText, size: 14),
-                ),
+          trailing: _LogCopyActions(lines: sessionLines, path: sessionPath),
+          collapsible: true,
+          initiallyExpanded: sessionLines.isNotEmpty || appLines.isEmpty,
+          expandLabel: strings.expand,
+          collapseLabel: strings.collapse,
           child: sessionLines.isEmpty
               ? SessionInlineEmpty(
                   icon: LucideIcons.logs,
@@ -307,6 +308,7 @@ final class SessionLogsView extends StatelessWidget {
         ),
         if (!duplicateSupervisorLog)
           SessionSectionCard(
+            key: const ValueKey('session-app-logs'),
             title: strings.title,
             subtitle: _liveLogSubtitle(
               live: strings.live,
@@ -317,18 +319,47 @@ final class SessionLogsView extends StatelessWidget {
               truncated: appLogs?['truncated'] == true,
               olderHidden: strings.olderHidden,
             ),
-            trailing: appPath == null
-                ? null
-                : Tooltip(
-                    message: appPath,
-                    child: const Icon(LucideIcons.fileText, size: 14),
-                  ),
+            trailing: _LogCopyActions(lines: appLines, path: appPath),
+            collapsible: true,
+            initiallyExpanded: sessionLines.isEmpty && appLines.isNotEmpty,
+            expandLabel: strings.expand,
+            collapseLabel: strings.collapse,
             child: appLines.isEmpty
                 ? SessionInlineEmpty(
                     icon: LucideIcons.logs,
                     message: appMissing ?? strings.runningEmpty,
                   )
                 : _LogLines(lines: appLines),
+          ),
+      ],
+    );
+  }
+}
+
+final class _LogCopyActions extends StatelessWidget {
+  const _LogCopyActions({required this.lines, required this.path});
+
+  final List<String> lines;
+  final String? path;
+
+  @override
+  Widget build(BuildContext context) {
+    final strings = context.t.sessions.logs;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (lines.isNotEmpty)
+          ConsoleCopyButton(
+            text: lines.join('\n'),
+            copyLabel: strings.copyLines,
+            copiedLabel: strings.linesCopied,
+          ),
+        if (path case final logPath?)
+          ConsoleCopyButton(
+            text: logPath,
+            copyLabel: strings.copyPath,
+            copiedLabel: strings.pathCopied,
+            icon: LucideIcons.fileText,
           ),
       ],
     );
@@ -754,20 +785,22 @@ final class _LogLines extends StatelessWidget {
       height: height,
       child: ColoredBox(
         color: context.consoleColors.bg,
-        child: ListView.builder(
-          reverse: true,
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          itemCount: lines.length,
-          itemBuilder: (context, index) {
-            final line = lines[lines.length - index - 1];
-            return SelectableText(
-              line,
-              style: consoleMono(
-                size: 11,
-                color: context.consoleColors.inkSecondary,
-              ),
-            );
-          },
+        child: SelectionArea(
+          child: ListView.builder(
+            reverse: true,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            itemCount: lines.length,
+            itemBuilder: (context, index) {
+              final line = lines[lines.length - index - 1];
+              return Text(
+                line,
+                style: consoleMono(
+                  size: 11,
+                  color: context.consoleColors.inkSecondary,
+                ),
+              );
+            },
+          ),
         ),
       ),
     );

@@ -9,6 +9,7 @@ import 'package:cockpit_console/src/ui/widgets/session_monitor_runtime_views.dar
 import 'package:cockpit_console/src/ui/widgets/session_monitor_session_list.dart';
 import 'package:cockpit_protocol/cockpit_protocol.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
@@ -191,52 +192,87 @@ void main() {
     expect(find.textContaining('500 / 500'), findsOneWidget);
   });
 
-  testWidgets(
-    'logs separate startup and app output with latest lines visible',
-    (tester) async {
-      const detail = SessionMonitorDetail(
-        sessionLogs: <String, Object?>{
-          'logPath': '/tmp/session.log',
-          'lines': <String>['startup-old', 'startup-new'],
-          'truncated': false,
-        },
-        logs: <String, Object?>{
-          'source': 'app_snapshot',
-          'lines': <String>['app-old', 'app-new'],
-          'truncated': false,
-        },
-      );
+  testWidgets('logs are independently collapsible, selectable, and copyable', (
+    tester,
+  ) async {
+    String? clipboardText;
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (call) async {
+        if (call.method == 'Clipboard.setData') {
+          clipboardText =
+              (call.arguments as Map<Object?, Object?>)['text'] as String?;
+        }
+        return null;
+      },
+    );
+    addTearDown(
+      () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        null,
+      ),
+    );
+    const detail = SessionMonitorDetail(
+      sessionLogs: <String, Object?>{
+        'logPath': '/tmp/session.log',
+        'lines': <String>['startup-old', 'startup-new'],
+        'truncated': false,
+      },
+      logs: <String, Object?>{
+        'source': 'app_snapshot',
+        'lines': <String>['app-old', 'app-new'],
+        'truncated': false,
+      },
+    );
 
-      await tester.pumpWidget(
-        TranslationProvider(
-          child: MaterialApp(
-            theme: ConsoleTheme.build(Brightness.dark),
-            home: const Scaffold(
-              body: SizedBox(
-                height: 640,
-                child: SessionLogsView(detail: detail),
-              ),
-            ),
+    await tester.pumpWidget(
+      TranslationProvider(
+        child: MaterialApp(
+          theme: ConsoleTheme.build(Brightness.dark),
+          home: const Scaffold(
+            body: SizedBox(height: 640, child: SessionLogsView(detail: detail)),
           ),
         ),
-      );
+      ),
+    );
 
-      expect(find.text('Startup and Flutter tool logs'), findsOneWidget);
-      expect(find.text('Application logs'), findsOneWidget);
-      expect(
-        find.textContaining('Refreshes every 2 seconds'),
-        findsNWidgets(2),
-      );
-      expect(
-        tester.getTopLeft(find.text('startup-new')).dy,
-        greaterThan(tester.getTopLeft(find.text('startup-old')).dy),
-      );
-      expect(
-        tester.getTopLeft(find.text('app-new')).dy,
-        greaterThan(tester.getTopLeft(find.text('app-old')).dy),
-      );
-    },
-  );
+    expect(find.text('Startup and Flutter tool logs'), findsOneWidget);
+    expect(find.text('Application logs'), findsOneWidget);
+    expect(find.textContaining('Refreshes every 2 seconds'), findsNWidgets(2));
+    expect(find.byType(SelectionArea), findsOneWidget);
+    expect(
+      tester.getTopLeft(find.text('startup-new')).dy,
+      greaterThan(tester.getTopLeft(find.text('startup-old')).dy),
+    );
+    expect(find.text('app-old'), findsNothing);
+    expect(find.text('app-new'), findsNothing);
+
+    await tester.tap(find.text('Application logs'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(SelectionArea), findsNWidgets(2));
+    expect(
+      tester.getTopLeft(find.text('app-new')).dy,
+      greaterThan(tester.getTopLeft(find.text('app-old')).dy),
+    );
+
+    await tester.tap(find.byTooltip('Copy log lines').first);
+    await tester.pump();
+    expect(clipboardText, 'startup-old\nstartup-new');
+    expect(find.byTooltip('Log lines copied'), findsOneWidget);
+    expect(find.text('startup-new'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Copy log file path'));
+    await tester.pump();
+    expect(clipboardText, '/tmp/session.log');
+    expect(find.byTooltip('Log file path copied'), findsOneWidget);
+    expect(find.text('startup-new'), findsOneWidget);
+
+    await tester.tap(find.text('Startup and Flutter tool logs'));
+    await tester.pumpAndSettle();
+    expect(find.text('startup-old'), findsNothing);
+    expect(find.text('startup-new'), findsNothing);
+  });
 
   test('activity retention preserves newest events and dropped count', () {
     SessionMonitorActivity event(int value) => SessionMonitorActivity(
