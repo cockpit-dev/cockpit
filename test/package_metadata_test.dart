@@ -261,7 +261,11 @@ void main() {
       contains("package:flutter_cockpit/flutter_cockpit_flutter.dart"),
     );
     expect(runtimeReadme, contains('cd cockpit'));
-    expect(runtimeReadme, contains('--target main.dart'));
+    expect(runtimeReadme, contains('flutter run --target main.dart'));
+    expect(
+      runtimeReadme,
+      contains('globally installed `cockpit` CLI is not an application'),
+    );
     expect(runtimeReadme, contains('https://pub.dev/packages/cockpit'));
     expect(runtimeReadme, isNot(contains('flutter_pilot')));
 

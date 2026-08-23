@@ -14,7 +14,7 @@
     <a href="https://github.com/cockpit-dev/cockpit/actions/workflows/example-e2e.yml"><img src="https://github.com/cockpit-dev/cockpit/actions/workflows/example-e2e.yml/badge.svg?branch=main" alt="CI"></a>
     <a href="https://dart.dev"><img src="https://img.shields.io/badge/Dart-%E2%89%A53.8.0-0175C2?logo=dart&amp;logoColor=white" alt="Dart 3.8.0 or newer"></a>
     <a href="https://github.com/cockpit-dev/cockpit/tree/main/packages/cockpit_protocol"><img src="https://img.shields.io/badge/contract-platform--neutral-455A64" alt="Platform-neutral protocol contract"></a>
-    <a href="https://github.com/cockpit-dev/cockpit/blob/main/packages/cockpit_protocol/LICENSE"><img src="https://img.shields.io/github/license/cockpit-dev/cockpit" alt="BSD 3-Clause license"></a>
+    <a href="https://github.com/cockpit-dev/cockpit/blob/main/packages/cockpit_protocol/LICENSE"><img src="https://img.shields.io/github/license/cockpit-dev/cockpit" alt="MIT license"></a>
   </p>
 </div>
 

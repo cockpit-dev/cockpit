@@ -37,7 +37,7 @@ Use live descriptors for the installed version and current target.
 | Operation contract | `explain KIND` |
 | Cases | `case validate|list|run` |
 | Suites | `suite validate|list|run|report` |
-| Runs | `run get|events|cancel` |
+| Runs | `run list|get|events|cancel` |
 | Artifacts | `artifact list|read` |
 | MCP | `serve-mcp` or the installed `cockpit_mcp` executable |
 
