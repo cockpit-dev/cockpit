@@ -32,7 +32,8 @@ conflating their roles.
 It provides:
 
 - standalone LON, JSON, or YAML cases and suites;
-- semantic, native accessibility, system, visual, and coordinate planes;
+- semantic, native accessibility, visual, and coordinate planes, plus
+  advertised system actions;
 - target discovery, registration, launch, inspection, and capability truth;
 - dependency DAGs, fixtures, matrices, retries, bounded concurrency, and
   fail-fast suites;
@@ -284,7 +285,8 @@ cannot change authority mid-run.
     "externalNavigation",
     "financial",
     "permissionChange"
-  ]
+  ],
+  "allowedEnvironmentSecretNames": []
 }
 ```
 

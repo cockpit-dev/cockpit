@@ -67,6 +67,7 @@ void main() {
       'cockpit dev',
       'Flutter Fast Path',
       'cockpit dev start',
+      'rejects it during\nbridge-shell preflight before launching Flutter',
       'Development handles are numeric',
       '--session HANDLE',
       'The selection persists',
@@ -393,12 +394,29 @@ void main() {
     expect(development, isNot(contains('explicit scroll-container locator')));
     expect(development, contains('Do not clear app data'));
     expect(development, contains('never reads a keychain or secret store'));
+    expect(
+      development,
+      contains('no custom launch values were used; otherwise require'),
+    );
+    expect(development, contains('cockpit dev start --session HANDLE'));
+    expect(development, isNot(contains('stored non-secret launch')));
+    expect(development, contains('native driver or system action'));
     expect(development, isNot(contains('credential vault')));
     expect(development, isNot(contains('--session s1')));
     expect(development, isNot(contains('--quiet-ms 500')));
     expect(environments, contains('## Contents'));
     expect(environments, contains('cockpit help'));
     expect(environments, isNot(contains('cockpit --version')));
+
+    final flutter = read('${_skillRoots.first}/references/flutter.md');
+    final protocol = read('${_skillRoots.first}/references/protocol.md');
+    expect(flutter, contains('native driver or system action'));
+    expect(flutter, isNot(contains('native/system')));
+    expect(
+      protocol,
+      contains('cockpit target inspect --target-id TARGET --profile inspect'),
+    );
+    expect(protocol, isNot(contains('minimal|inspect')));
   });
 
   test('skill includes platform environment recovery guidance', () {

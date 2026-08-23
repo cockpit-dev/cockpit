@@ -18,7 +18,7 @@ Cockpit source checkout.
 | --- | --- |
 | Current CLI flags | `cockpit help <command> <subcommand>` |
 | Available operation and input | `cockpit explain KIND` for the live descriptor and full request/response schema |
-| Live target capability | `target inspect --profile minimal|inspect` |
+| Live target capability | `cockpit target inspect --target-id TARGET --profile inspect` |
 | Case/suite/project syntax | [`cockpit.test.v2.schema.json`](cockpit.test.v2.schema.json) |
 | Authorization | `daemon policy show` and `daemon status` |
 | Run truth | `run events`, `run get`, canonical report, verified artifacts |

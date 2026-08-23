@@ -1,5 +1,7 @@
+import 'dart:convert';
 import 'dart:io';
 
+import 'package:cockpit/cockpit.dart';
 import 'package:test/test.dart';
 
 void main() {
@@ -170,6 +172,48 @@ void main() {
     ]) {
       expect(document, contains('development session'));
     }
+  });
+
+  test('root authorization examples match the live policy schema', () {
+    for (final path in <String>['README.md', 'README.zh-CN.md']) {
+      final document = File('$root/$path').readAsStringSync();
+      final policySource = RegExp(r'```json\n([\s\S]*?)\n```')
+          .allMatches(document)
+          .map((match) => match.group(1)!)
+          .firstWhere(
+            (source) => source.contains('cockpit.supervisor.authorization/v2'),
+          );
+      final policy = CockpitSupervisorAuthorizationPolicy.fromJson(
+        jsonDecode(policySource),
+      );
+
+      expect(policy.allowedEnvironmentSecretNames, isEmpty, reason: path);
+    }
+  });
+
+  test('public docs distinguish control planes from system actions', () {
+    final documents = <String>[
+      File('$root/README.md').readAsStringSync(),
+      File('$root/README.zh-CN.md').readAsStringSync(),
+      File('$root/skills/cockpit/references/dev.md').readAsStringSync(),
+      File('$root/skills/cockpit/references/flutter.md').readAsStringSync(),
+    ];
+
+    for (final document in documents) {
+      expect(document, isNot(contains('native/system')));
+      expect(document, isNot(contains('accessibility、system、visual')));
+      expect(document, isNot(contains('accessibility, system, visual')));
+    }
+  });
+
+  test('protocol docs preserve negotiated response compatibility', () {
+    final protocol = File(
+      '$root/docs/contracts/cockpit-protocol.md',
+    ).readAsStringSync();
+
+    expect(protocol, contains('Requests and strict responses reject'));
+    expect(protocol, contains('Negotiated responses may ignore additive'));
+    expect(protocol, contains('corresponding feature was negotiated'));
   });
 
   test('readmes document the public MCP control surface by category', () {

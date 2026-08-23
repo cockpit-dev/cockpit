@@ -15,7 +15,9 @@ lifecycle. CLI, MCP, GUI, and third-party clients use the same public contract.
 | Dart DTOs and strict codecs | `package:cockpit_protocol/cockpit_protocol.dart` |
 
 Generated schemas and Dart constants must remain byte-for-byte synchronized.
-Clients must reject unknown fields and unsupported schema versions.
+Requests and strict responses reject unknown fields and unsupported schema
+versions. Negotiated responses may ignore additive fields or preserve declared
+extensible enum values only when the corresponding feature was negotiated.
 
 ## Resource Model
 
@@ -68,8 +70,8 @@ resources are resolved through Supervisor-owned indexes, never through global
 6. Observe the run event stream until a terminal state.
 7. Read the canonical report and digest-checked artifacts.
 
-Case runs provide typed inputs, setup, steps, guaranteed cleanup, safety
-authorization, evidence, and immutable attempt bundles. Suite runs add DAGs,
+Case runs provide typed inputs, setup, steps, always-eligible bounded cleanup,
+safety authorization, evidence, and immutable attempt bundles. Suite runs add DAGs,
 matrix expansion, fixtures, isolation, concurrency, retry, fail-fast,
 checkpoint recovery, and complete offline regression report bundles.
 

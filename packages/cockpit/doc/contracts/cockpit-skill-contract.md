@@ -11,8 +11,9 @@ verification using Cockpit public client surfaces.
 - Treat Flutter and black-box targets as peers in the target model.
 - Select step planes and actions only from the target's advertised semantic,
   native, visual, coordinate, clipboard, location, and evidence capabilities.
-- Keep visual templates and screenshot baselines inside the workspace, and use
-  mixed semantic/system steps for Flutter/native stacks when available.
+- Keep visual templates and screenshot baselines inside the workspace, and mix
+  semantic steps with advertised system actions for Flutter/native stacks when
+  available.
 - Use `cockpit.test/v2` case/suite documents for reusable validation.
 - Observe terminal run state and structured errors before judging success.
 - Read only digest-checked artifacts referenced by the canonical report.
