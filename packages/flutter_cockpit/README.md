@@ -183,6 +183,14 @@ flutter run --target main.dart
 - screenshot and recording requests
 - remote session status and command endpoints
 
+Interaction ownership stays explicit: merged ancestor `Semantics` never makes
+passive descendants actionable, and descendants below `IgnorePointer(ignoring:
+true)` or `AbsorbPointer(absorbing: true)` advertise no mutation actions. When
+one actionable outer row
+delegates selection to exactly one blocked control, the outer target carries
+that control's state; multiple delegated controls leave state unresolved
+instead of guessing.
+
 HTTP diagnostics mask credential values with `*` by default while retaining
 useful structure such as authorization schemes, cookie names, query keys, and JSON
 field names. A development-only entrypoint can explicitly use

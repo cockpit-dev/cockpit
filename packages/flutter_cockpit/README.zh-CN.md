@@ -169,6 +169,12 @@ flutter run --target main.dart
 - 截图和录屏请求
 - 远程会话状态与命令端点
 
+交互归属始终明确：合并到祖先的 `Semantics` 不会让被动后代变成可操作 target，
+处于 `IgnorePointer(ignoring: true)` 或 `AbsorbPointer(absorbing: true)` 下的后代
+也不会声明 mutation action。当一个真实可操作的外层行只代理一个被阻断的
+selection control 时，状态挂在
+外层 target 上；存在多个被代理 control 时不猜测状态。
+
 HTTP 诊断默认用 `*` 掩码凭据值，同时保留鉴权类型、Cookie 名、query key 和 JSON
 字段名等定位问题所需的结构。只有在本地确实需要查看有界原文时，才应在开发
 专用入口显式使用 `CockpitHttpNetworkObserverConfiguration(redact: false)`；

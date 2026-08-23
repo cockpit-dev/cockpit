@@ -99,7 +99,14 @@ control surface in visual order with compact live `:REF` selectors plus `can`,
 `state`, and `value`. Copy a live ref directly into its advertised command and
 re-inspect after the control surface changes; keep targeted stable selectors in
 durable cases and suites. Disabled and selected controls remain visible without
-exposing obscured values. `dev tree` returns a compact selector index; use
+exposing obscured values. Interaction ownership stays explicit: merged ancestor
+`Semantics` never makes passive descendants actionable, and descendants below
+`IgnorePointer(ignoring: true)` or `AbsorbPointer(absorbing: true)` advertise no
+mutation actions. When
+one actionable outer row delegates selection to exactly one blocked control,
+the outer target carries that control's state; multiple delegated controls
+leave state unresolved instead of guessing. `dev tree` returns a compact
+selector index; use
 an explicit source-derived selector such as
 `CompanyButton >> Text["Save"]` directly with `dev tap`, `dev hold`, or
 `dev double` for a unique visible custom control that the bounded control surface

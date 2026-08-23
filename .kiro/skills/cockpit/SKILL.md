@@ -360,6 +360,14 @@ actions. A targeted `dev inspect QUERY` still searches passive content and retur
 a stable selector for durable reuse when text or structure, rather than the whole
 control surface, is the question.
 
+Interaction ownership stays explicit: merged ancestor `Semantics` never makes
+passive descendants actionable, and descendants below `IgnorePointer(ignoring:
+true)` or `AbsorbPointer(absorbing: true)` advertise no mutation actions. When
+one actionable outer row
+delegates selection to exactly one blocked control, the outer target carries
+that control's state; multiple delegated controls leave state unresolved instead
+of guessing. Execute only the `sel` whose own `can` advertises the command.
+
 `can` maps directly to task commands:
 
 | `can` | Command |

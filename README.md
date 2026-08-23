@@ -159,6 +159,13 @@ in visual order with compact live `:REF` selectors plus `can`, `state`, and
 the control surface changes. Targeted inspection returns stable selectors for
 durable cases and suites. Control state includes disabled, selected, checked,
 focused, read-only, and obscured values; obscured input values are never exposed.
+Interaction ownership stays explicit: merged ancestor `Semantics` never makes
+passive descendants actionable, and descendants below `IgnorePointer(ignoring:
+true)` or `AbsorbPointer(absorbing: true)` advertise no mutation actions. When
+one actionable outer row
+delegates selection to exactly one blocked control, the outer target carries
+that control's state; multiple delegated controls leave state unresolved
+instead of guessing.
 `dev tree` returns a compact selector index.
 When source reveals a custom control that is absent from the default control
 surface, pass an explicit structural selector such as
