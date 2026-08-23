@@ -138,6 +138,12 @@ void main() {
   test('root readmes teach the Cockpit resource workflow', () {
     final readme = File('$root/README.md').readAsStringSync();
     final readmeZh = File('$root/README.zh-CN.md').readAsStringSync();
+    final packageReadme = File(
+      '$root/packages/cockpit/README.md',
+    ).readAsStringSync();
+    final packageReadmeZh = File(
+      '$root/packages/cockpit/README.zh-CN.md',
+    ).readAsStringSync();
 
     for (final document in <String>[readme, readmeZh]) {
       expect(document, contains('daemon start'));
@@ -149,6 +155,18 @@ void main() {
       expect(document, isNot(contains('app.json')));
       expect(document, isNot(contains('run-task')));
       expect(document, isNot(contains('validate-task')));
+    }
+    expect(readme, contains('workspaces for routine `cockpit dev`'));
+    expect(packageReadme, contains('routine development never needs'));
+    expect(readmeZh, contains('日常使用 `cockpit dev` 无需'));
+    expect(packageReadmeZh, contains('日常开发无需'));
+    for (final document in <String>[
+      readme,
+      readmeZh,
+      packageReadme,
+      packageReadmeZh,
+    ]) {
+      expect(document, contains('development session'));
     }
   });
 
