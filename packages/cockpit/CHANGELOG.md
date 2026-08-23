@@ -1,5 +1,14 @@
 # Changelog
 
+## 4.0.31
+
+- Rejected Flutter development entrypoints that do not load and use the
+  `flutter_cockpit` bridge before starting services or discovering devices.
+- Kept Flutter copy-and-paste flows deterministic and deadline-bounded when an
+  iOS platform clipboard read is slow or blocked.
+- Persisted bounded, redacted Flutter tool and lifecycle logs per development
+  session so live monitors keep startup output across worker reconnects.
+
 ## 4.0.30
 
 - Avoided hidden post-action snapshot reads for default brief Flutter
@@ -7,8 +16,6 @@
   and complete evidence for `--view full`.
 - Reduced ordinary Flutter action latency by resolving unique mounted elements
   through their related action chain before falling back to full discovery.
-- Kept Flutter copy-and-paste flows deterministic and deadline-bounded when an
-  iOS platform clipboard read is slow or blocked.
 
 ## 4.0.29
 

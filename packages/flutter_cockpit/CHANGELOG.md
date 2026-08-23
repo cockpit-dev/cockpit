@@ -1,5 +1,11 @@
 # Changelog
 
+## 4.0.31
+
+- Reused text copied by the current Cockpit runtime and bounded fallback
+  platform clipboard access, preventing iOS pasteboard reads from stalling
+  text-input commands past their deadline.
+
 ## 4.0.30
 
 - Resolved unique mounted Flutter actions from the target's root-to-element
@@ -7,9 +13,6 @@
   for indexed, ambiguous, and complex fallbacks.
 - Reused scroll-container discovery during one target search and kept tooltip
   matching limited to real Flutter tooltip signals.
-- Reused text copied by the current Cockpit runtime and bounded fallback
-  platform clipboard access, preventing iOS pasteboard reads from stalling
-  text-input commands past their deadline.
 
 ## 4.0.29
 
