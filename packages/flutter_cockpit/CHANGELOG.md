@@ -1,5 +1,10 @@
 # Changelog
 
+## 4.0.40
+
+- Synchronized native package metadata and development shell integration with
+  the current Cockpit release; Flutter runtime behavior is unchanged.
+
 ## 4.0.39
 
 - Cleared previous-generation runtime errors and unconsumed recorded steps at
