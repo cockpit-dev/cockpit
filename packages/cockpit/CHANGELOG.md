@@ -1,5 +1,13 @@
 # Changelog
 
+## 4.0.30
+
+- Avoided hidden post-action snapshot reads for default brief Flutter
+  development commands while preserving standard summaries for `--view more`
+  and complete evidence for `--view full`.
+- Reduced ordinary Flutter action latency by resolving unique mounted elements
+  through their related action chain before falling back to full discovery.
+
 ## 4.0.29
 
 - Made `dev dismiss` close standard Flutter menus and popups in addition to

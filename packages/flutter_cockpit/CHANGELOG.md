@@ -1,5 +1,13 @@
 # Changelog
 
+## 4.0.30
+
+- Resolved unique mounted Flutter actions from the target's root-to-element
+  chain instead of scanning the complete surface, with full discovery retained
+  for indexed, ambiguous, and complex fallbacks.
+- Reused scroll-container discovery during one target search and kept tooltip
+  matching limited to real Flutter tooltip signals.
+
 ## 4.0.29
 
 - Let locator-free dismiss actions invoke Flutter's current `DismissIntent`,

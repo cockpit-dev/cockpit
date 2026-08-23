@@ -1,5 +1,10 @@
 # Changelog
 
+## 4.0.30
+
+- Added explicit-target resolution and scoped discovery snapshots so Flutter
+  actions and diagnostics can avoid repeated full target discovery.
+
 ## 4.0.29
 
 - Synchronized the public protocol package with the current Cockpit release.
