@@ -77,6 +77,7 @@ final class CockpitNativeTargetDiscovery {
               routeName: targetRouteName,
               path: path,
               actionableOwner: actionableOwner,
+              pointerBlocked: scope.pointerBlocked,
               session: session,
             )
           : null;
@@ -183,6 +184,7 @@ final class CockpitNativeTargetDiscovery {
               routeName: targetRouteName,
               path: path,
               actionableOwner: actionableOwner,
+              pointerBlocked: scope.pointerBlocked,
               session: session,
             )
           : null;
@@ -296,6 +298,7 @@ final class CockpitNativeTargetDiscovery {
               routeName: targetRouteName,
               path: _locatorPathForElement(candidateElement, session),
               actionableOwner: actionableOwner,
+              pointerBlocked: scope.pointerBlocked,
               session: session,
             )
           : null;
@@ -726,6 +729,7 @@ final class CockpitNativeTargetDiscovery {
         const <Element, CockpitTarget>{},
   }) {
     var ancestorHidden = false;
+    var pointerBlocked = false;
     _CockpitRouteScope? routeScope;
     var effectiveViewport = rootViewport;
 
@@ -741,6 +745,7 @@ final class CockpitNativeTargetDiscovery {
         if (_isControlTarget(explicitTargetsByElement[ancestor])) {
           ancestorHidden = true;
         }
+        pointerBlocked = pointerBlocked || _blocksPointerForDescendants(widget);
         routeScope ??= _cockpitRouteScopeForWidget(widget);
         if (_marksViewportBoundary(ancestor)) {
           effectiveViewport = _intersectViewports(effectiveViewport, ancestor);
@@ -751,6 +756,7 @@ final class CockpitNativeTargetDiscovery {
 
     return _InheritedDiscoveryScope(
       ancestorHidden: ancestorHidden,
+      pointerBlocked: pointerBlocked,
       effectiveViewport: effectiveViewport,
       routeScope: routeScope,
     );
@@ -769,14 +775,25 @@ final class CockpitNativeTargetDiscovery {
     required String? routeName,
     required String path,
     required Element? actionableOwner,
+    required bool pointerBlocked,
     required _DiscoverySession session,
   }) {
-    final semantics = cockpitResolveSemanticsTargetInfo(element);
+    final resolvedSemantics = cockpitResolveSemanticsTargetInfo(element);
+    final semantics = resolvedSemantics?.inheritedFromAncestor == false
+        ? resolvedSemantics
+        : null;
     var tapHandler = _tapHandlerForElement(element);
     var longPressHandler = _longPressHandlerForElement(element);
     var doubleTapHandler = _doubleTapHandlerForElement(element);
     var enterTextHandler = _enterTextHandlerForElement(element);
     var textInputHandler = _textInputHandlerForElement(element);
+    if (pointerBlocked) {
+      tapHandler = null;
+      longPressHandler = null;
+      doubleTapHandler = null;
+      enterTextHandler = null;
+      textInputHandler = null;
+    }
     final isTextInput = _editableTextStateForElement(element) != null;
     final rawDirectHandlers =
         tapHandler != null ||
@@ -788,18 +805,22 @@ final class CockpitNativeTargetDiscovery {
       element,
       semantics: semantics,
       hasDirectHandlers: rawDirectHandlers,
+      session: session,
     );
     final enabled = control?.enabled != false;
-    final writable = enabled && control?.readOnly != true;
-    final activatable = !(isTextInput && control?.readOnly == true);
-    final increaseHandler = enabled
+    final writable = !pointerBlocked && enabled && control?.readOnly != true;
+    final activatable =
+        !pointerBlocked && !(isTextInput && control?.readOnly == true);
+    final increaseHandler = enabled && !pointerBlocked
         ? _sliderAdjustmentHandlerForElement(element, increase: true)
         : null;
-    final decreaseHandler = enabled
+    final decreaseHandler = enabled && !pointerBlocked
         ? _sliderAdjustmentHandlerForElement(element, increase: false)
         : null;
     final gestureTapFallback =
-        enabled && _supportsGestureTapFallback(element.widget);
+        enabled &&
+        !pointerBlocked &&
+        _supportsGestureTapFallback(element.widget);
     if (!enabled) {
       tapHandler = null;
       longPressHandler = null;
@@ -848,13 +869,15 @@ final class CockpitNativeTargetDiscovery {
     };
     final typeName = _publicTypeNameForElement(element);
 
-    if (actionableOwner != null &&
-        !_isIndependentNestedControl(
-          actionableOwner.widget,
-          element.widget,
-          control,
-        )) {
-      return null;
+    if (actionableOwner != null) {
+      if (pointerBlocked ||
+          !_isIndependentNestedControl(
+            actionableOwner.widget,
+            element.widget,
+            control,
+          )) {
+        return null;
+      }
     }
 
     if (!hasDirectHandlers &&
@@ -870,6 +893,11 @@ final class CockpitNativeTargetDiscovery {
         isTextInput: isTextInput,
         session: session,
       );
+      if (pointerBlocked &&
+          supportedCommands.isEmpty &&
+          !_hasAnyMetadata(metadata)) {
+        return null;
+      }
       final scrollableMetadata = _scrollableMetadataForElement(
         element,
         session,
@@ -1227,12 +1255,16 @@ final class CockpitNativeTargetDiscovery {
     Element element, {
     required CockpitSemanticsTargetInfo? semantics,
     required bool hasDirectHandlers,
+    required _DiscoverySession session,
   }) {
     final widget = element.widget;
     final semanticState = semantics?.control;
     final segmentState =
         _materialSegmentControlStateForElement(element) ??
         _cupertinoSegmentControlStateForElement(element);
+    final delegatedState = hasDirectHandlers
+        ? _blockedDescendantSelectionState(element, session)
+        : null;
     final editableState = _editableTextStateForElement(element);
     CockpitControlState? directState;
 
@@ -1344,6 +1376,8 @@ final class CockpitNativeTargetDiscovery {
       directState = CockpitControlState(enabled: widget.enabled);
     } else if (widget is CupertinoListTile) {
       directState = CockpitControlState(enabled: widget.onTap != null);
+    } else if (delegatedState != null) {
+      directState = delegatedState;
     } else if (hasDirectHandlers || policy.matchesInteractiveWidget(element)) {
       directState = const CockpitControlState();
     }
@@ -1364,6 +1398,104 @@ final class CockpitNativeTargetDiscovery {
       obscured: obscured,
       value: obscured ? null : directState.value ?? semanticState.value,
     );
+  }
+
+  CockpitControlState? _blockedDescendantSelectionState(
+    Element element,
+    _DiscoverySession session,
+  ) {
+    var summary = const _DelegatedSelectionSummary();
+    element.visitChildElements((child) {
+      if (summary.ambiguous) {
+        return;
+      }
+      summary = summary.merge(
+        _delegatedSelectionSummary(
+          child,
+          pointerBlocked: false,
+          session: session,
+        ),
+      );
+    });
+    return summary.ambiguous ? null : summary.state;
+  }
+
+  _DelegatedSelectionSummary _delegatedSelectionSummary(
+    Element element, {
+    required bool pointerBlocked,
+    required _DiscoverySession session,
+  }) {
+    final cache = pointerBlocked
+        ? session.blockedSelectionSummaries
+        : session.selectionSummaries;
+    final cached = cache[element];
+    if (cached != null) {
+      return cached;
+    }
+    if (!element.mounted) {
+      return cache[element] = const _DelegatedSelectionSummary();
+    }
+    if (pointerBlocked) {
+      final directState = _selectionStateFromWidget(element.widget);
+      if (directState != null) {
+        return cache[element] = _DelegatedSelectionSummary(state: directState);
+      }
+    }
+
+    final blocksChildren =
+        pointerBlocked || _blocksPointerForDescendants(element.widget);
+    var summary = const _DelegatedSelectionSummary();
+    element.visitChildElements((child) {
+      if (summary.ambiguous) {
+        return;
+      }
+      summary = summary.merge(
+        _delegatedSelectionSummary(
+          child,
+          pointerBlocked: blocksChildren,
+          session: session,
+        ),
+      );
+    });
+    cache[element] = summary;
+    return summary;
+  }
+
+  CockpitControlState? _selectionStateFromWidget(Widget widget) {
+    if (widget is Checkbox) {
+      return CockpitControlState(checked: _checkState(widget.value));
+    }
+    if (widget is CheckboxListTile) {
+      return CockpitControlState(
+        selected: widget.selected,
+        checked: _checkState(widget.value),
+      );
+    }
+    if (widget is Switch) {
+      return CockpitControlState(
+        checked: widget.value ? CockpitCheckState.on : CockpitCheckState.off,
+      );
+    }
+    if (widget is SwitchListTile) {
+      return CockpitControlState(
+        selected: widget.selected,
+        checked: widget.value ? CockpitCheckState.on : CockpitCheckState.off,
+      );
+    }
+    if (widget is CupertinoCheckbox) {
+      return CockpitControlState(checked: _checkState(widget.value));
+    }
+    if (widget is CupertinoSwitch) {
+      return CockpitControlState(
+        checked: widget.value ? CockpitCheckState.on : CockpitCheckState.off,
+      );
+    }
+    if (widget is Radio ||
+        widget is RadioListTile ||
+        widget is CupertinoRadio) {
+      return _radioControlState(widget, null);
+    }
+    return null;
   }
 
   CockpitControlState? _materialSegmentControlStateForElement(Element element) {
@@ -2329,14 +2461,15 @@ final class CockpitNativeTargetDiscovery {
   }) {
     final inputLabel = _inputLabelForElement(element);
     final inputError = _inputErrorForElement(element);
+    final directText = _interactiveTextForElement(element);
     final text = isTextInput && inputLabel != null
         ? _joinTextSignals(<String?>[inputLabel, inputError])
         : _firstNonEmpty(<String?>[
             policy.extractText?.call(element),
+            directText,
             semantics?.label,
             semantics?.value,
             semantics?.hint,
-            _interactiveTextForElement(element),
             _passiveTextForElement(element),
             inputLabel,
           ]);
@@ -3056,6 +3189,26 @@ final class _TargetMetadata {
   String? get displayLabel => text ?? semanticId ?? tooltip ?? keyValue;
 }
 
+final class _DelegatedSelectionSummary {
+  const _DelegatedSelectionSummary({this.state, this.ambiguous = false});
+
+  final CockpitControlState? state;
+  final bool ambiguous;
+
+  _DelegatedSelectionSummary merge(_DelegatedSelectionSummary other) {
+    if (ambiguous || other.ambiguous) {
+      return const _DelegatedSelectionSummary(ambiguous: true);
+    }
+    if (state == null) {
+      return other;
+    }
+    if (other.state == null) {
+      return this;
+    }
+    return const _DelegatedSelectionSummary(ambiguous: true);
+  }
+}
+
 final class _ScrollableLocatorMetadata {
   const _ScrollableLocatorMetadata({this.path, this.keyValue, this.typeName});
 
@@ -3068,12 +3221,16 @@ final class _ScrollableLocatorMetadata {
 final class _InheritedDiscoveryScope {
   const _InheritedDiscoveryScope({
     required this.ancestorHidden,
+    required this.pointerBlocked,
     required this.effectiveViewport,
     this.routeScope,
   });
 
   /// Whether any ancestor is an active Offstage (subtree invisible).
   final bool ancestorHidden;
+
+  /// Whether an ancestor prevents its descendants from receiving UI input.
+  final bool pointerBlocked;
 
   /// Viewport bounds clipped by all enclosing scrollable boundaries.
   final Rect? effectiveViewport;
@@ -3087,19 +3244,29 @@ final class _InheritedDiscoveryScope {
   }) {
     final widget = element.widget;
     final hidden = ancestorHidden || (widget is Offstage && widget.offstage);
+    final pointerBlocked =
+        this.pointerBlocked || _blocksPointerForDescendants(widget);
     final routeScope = _cockpitRouteScopeForWidget(widget) ?? this.routeScope;
     if (hidden == ancestorHidden &&
+        pointerBlocked == this.pointerBlocked &&
         identical(effectiveViewport, this.effectiveViewport) &&
         identical(routeScope, this.routeScope)) {
       return this;
     }
     return _InheritedDiscoveryScope(
       ancestorHidden: hidden,
+      pointerBlocked: pointerBlocked,
       effectiveViewport: effectiveViewport,
       routeScope: routeScope,
     );
   }
 }
+
+bool _blocksPointerForDescendants(Widget widget) => switch (widget) {
+  IgnorePointer(:final ignoring) => ignoring,
+  AbsorbPointer(:final absorbing) => absorbing,
+  _ => false,
+};
 
 final class _CockpitRouteScope {
   const _CockpitRouteScope({required this.routeName, required this.isCurrent});
@@ -3160,6 +3327,10 @@ final class _DiscoverySession {
   final Map<Element, String> locatorPaths = Map<Element, String>.identity();
   final Map<Element, String?> semanticIds = Map<Element, String?>.identity();
   final Map<Element, String?> tooltips = Map<Element, String?>.identity();
+  final Map<Element, _DelegatedSelectionSummary> selectionSummaries =
+      Map<Element, _DelegatedSelectionSummary>.identity();
+  final Map<Element, _DelegatedSelectionSummary> blockedSelectionSummaries =
+      Map<Element, _DelegatedSelectionSummary>.identity();
 }
 
 /// Parent-linked locator path segment chain shared across sibling subtrees.
