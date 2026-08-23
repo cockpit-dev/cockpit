@@ -158,14 +158,13 @@ final class _CockpitWindowsSecurityApi {
           0,
           requiredLength,
         );
-        final firstError = _getLastError();
-        if (first != 0 ||
-            firstError != _errorInsufficientBuffer ||
-            requiredLength.value == 0) {
+        // ReturnLength survives the size probe reliably across Windows FFI
+        // runtimes. The populated-buffer call below remains authoritative.
+        if (requiredLength.value == 0) {
           throw _windowsSecurityException(
             'GetTokenInformation(size)',
             path,
-            firstError,
+            first == 0 ? _getLastError() : 0,
           );
         }
         final buffer = calloc<Uint8>(requiredLength.value);
@@ -366,8 +365,6 @@ const int _daclSecurityInformation = 0x00000004;
 const int _tokenQuery = 0x0008;
 const int _tokenUserInformationClass = 1;
 const int _aclSizeInformationClass = 2;
-const int _errorInsufficientBuffer = 122;
-
 const int _accessAllowedAceType = 0x00;
 const int _accessAllowedCompoundAceType = 0x04;
 const int _accessAllowedObjectAceType = 0x05;
