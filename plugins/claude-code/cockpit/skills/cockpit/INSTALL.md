@@ -18,7 +18,7 @@ when it does not or when the user explicitly declines MCP.
 Ask the current AI host to install every supported integration surface:
 
 ```text
-Install Cockpit for the current AI host, including the CLI, complete cockpit Skill, native adapter, and cockpit_mcp when supported, by following https://github.com/cockpit-dev/cockpit/blob/main/skills/cockpit/INSTALL.md
+First fetch and read the complete Cockpit installation guide with `curl -fsSL https://raw.githubusercontent.com/cockpit-dev/cockpit/main/skills/cockpit/INSTALL.md`, then install or update the CLI, complete cockpit Skill, native adapter, and cockpit_mcp for the current AI host exactly as that guide directs.
 ```
 
 Use the manual guidance below only when the host cannot complete the request.

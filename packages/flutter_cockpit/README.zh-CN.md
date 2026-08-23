@@ -60,7 +60,7 @@ runtime 包会为 Android、iOS、macOS、Linux、Windows 和 web 声明原生�
 让当前 AI 宿主安装 CLI、完整 Skill、原生适配器和 MCP：
 
 ```text
-Install Cockpit for the current AI host, including the CLI, complete cockpit Skill, native adapter, and cockpit_mcp when supported, by following https://github.com/cockpit-dev/cockpit/blob/main/skills/cockpit/INSTALL.md
+First fetch and read the complete Cockpit installation guide with `curl -fsSL https://raw.githubusercontent.com/cockpit-dev/cockpit/main/skills/cockpit/INSTALL.md`, then install or update the CLI, complete cockpit Skill, native adapter, and cockpit_mcp for the current AI host exactly as that guide directs.
 ```
 
 指南覆盖 Codex、Claude Code、Cursor、Gemini CLI、Kiro、OpenCode、Pi、

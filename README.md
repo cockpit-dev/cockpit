@@ -86,7 +86,7 @@ Preferred: ask the current AI host to install the CLI, Skill, native adapter,
 and MCP surface for you. Copy this prompt:
 
 ```text
-Install Cockpit for the current AI host, including the CLI, complete cockpit Skill, native adapter, and cockpit_mcp when supported, by following https://github.com/cockpit-dev/cockpit/blob/main/skills/cockpit/INSTALL.md
+First fetch and read the complete Cockpit installation guide with `curl -fsSL https://raw.githubusercontent.com/cockpit-dev/cockpit/main/skills/cockpit/INSTALL.md`, then install or update the CLI, complete cockpit Skill, native adapter, and cockpit_mcp for the current AI host exactly as that guide directs.
 ```
 
 Complete host-specific installation and verification instructions live in

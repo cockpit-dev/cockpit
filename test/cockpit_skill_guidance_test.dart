@@ -329,9 +329,11 @@ void main() {
     final install = read('${_skillRoots.first}/INSTALL.md');
 
     for (final requirement in <String>[
-      'Install Cockpit for the current AI host',
-      'including the CLI, complete cockpit Skill, native adapter, and '
-          'cockpit_mcp when supported',
+      'First fetch and read the complete Cockpit installation guide',
+      'curl -fsSL https://raw.githubusercontent.com/cockpit-dev/cockpit/main/'
+          'skills/cockpit/INSTALL.md',
+      'install or update the CLI, complete cockpit Skill, native adapter, and '
+          'cockpit_mcp for the current AI host',
       'whole directory',
       'dart pub global activate cockpit any',
       'cockpit_mcp',
