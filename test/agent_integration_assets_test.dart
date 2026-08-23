@@ -65,7 +65,7 @@ void main() {
       'plugins/codex/cockpit/.codex-plugin/plugin.json',
     );
     expect(manifest['name'], 'cockpit');
-    expect(manifest['version'], '4.0.32');
+    expect(manifest['version'], '4.0.33');
     expect(manifest['skills'], './skills/');
     expect(manifest['mcpServers'], './.mcp.json');
     expect(manifest['interface'], isA<Map<String, Object?>>());
@@ -146,7 +146,7 @@ void main() {
       'https://agent-plugins.org/schemas/1.0.0/plugin.schema.json',
     );
     expect(kiroPower['name'], 'cockpit');
-    expect(kiroPower['version'], '4.0.32');
+    expect(kiroPower['version'], '4.0.33');
     expect(
       kiroPower['keywords'],
       containsAll(<Object?>['cockpit', 'flutter', 'e2e']),

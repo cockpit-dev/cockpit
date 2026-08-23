@@ -170,7 +170,8 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
         fallbackLocator: _stableTextKeyFallback(candidate),
       );
       if (probe.ambiguous) {
-        if (requiredCommand != null) {
+        if (requiredCommand != null &&
+            !_allowsExplicitGestureFallback(candidate, requiredCommand)) {
           return _registry.resolve(locator, requiredCommand: requiredCommand);
         }
         return CockpitTargetResolutionResult.failure(

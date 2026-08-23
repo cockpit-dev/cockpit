@@ -31,6 +31,25 @@ void main() {
                     value: false,
                     onChanged: null,
                   ),
+                  const Radio<int>(
+                    key: ValueKey<String>('disabled-radio'),
+                    value: 1,
+                    groupValue: 0,
+                    onChanged: null,
+                  ),
+                  const RadioListTile<int>(
+                    key: ValueKey<String>('disabled-radio-tile'),
+                    value: 1,
+                    groupValue: 0,
+                    onChanged: null,
+                    title: Text('Disabled radio tile'),
+                  ),
+                  const CupertinoRadio<int>(
+                    key: ValueKey<String>('disabled-cupertino-radio'),
+                    value: 1,
+                    groupValue: 0,
+                    onChanged: null,
+                  ),
                   Switch(
                     key: const ValueKey<String>('active-switch'),
                     value: true,
@@ -80,6 +99,21 @@ void main() {
       final disabledCheck = byKey('disabled-check');
       expect(disabledCheck.control?.enabled, isFalse);
       expect(disabledCheck.control?.checked, CockpitCheckState.off);
+
+      for (final key in const <String>[
+        'disabled-radio',
+        'disabled-radio-tile',
+        'disabled-cupertino-radio',
+      ]) {
+        final radio = byKey(key);
+        expect(radio.control?.enabled, isFalse, reason: key);
+        expect(radio.control?.checked, CockpitCheckState.off, reason: key);
+        expect(
+          radio.supportedCommands,
+          isNot(contains(CockpitCommandType.tap)),
+          reason: key,
+        );
+      }
 
       final activeSwitch = byKey('active-switch');
       expect(activeSwitch.control?.enabled, isTrue);

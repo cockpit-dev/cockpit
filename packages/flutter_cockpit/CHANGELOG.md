@@ -1,5 +1,14 @@
 # Changelog
 
+## 4.0.33
+
+- Restored Flutter 3.32 compatibility for Material and Cupertino radio control
+  state by deriving availability from their stable callback contract, and
+  derived Material segmented-button state without relying on newer Semantics.
+- Kept explicit source-derived custom-control selectors accurately ambiguous
+  when multiple mounted Elements match, so a real ancestor scope can select the
+  intended hit-tested target without falling back to compact discovery.
+
 ## 4.0.32
 
 - Added non-invasive control-state discovery for standard Material and

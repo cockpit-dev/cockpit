@@ -161,14 +161,16 @@ Selectors are conjunctive: `#id`, `@key`, `Type["text"]`, named filters such as
 contains and fuzzy matching. `:nth(2)` is 1-based and only for stable ordered
 items. Equal candidates remain ambiguous.
 
-When the application source is available and a custom control is unlabeled or
-ambiguous, use `rg` to find the visible text, route, public Widget type, tooltip,
-or callback, then read only its containing build method and interaction callback.
-Construct an explicit ancestor selector from the real structure, for example
-`CompanyButton >> Text["Save"]`. Cockpit first resolves a known actionable owner;
-otherwise `tap`, `hold`, and `double` may perform a real hit-tested gesture on the
-unique visible Element. Do not invent keys or semantic labels. Source narrows the
-locator; the live postcondition proves the action.
+When source is available and a custom control is unlabeled, ambiguous, or absent
+from compact inspect, use `rg` to find its visible text, route, public Widget type,
+tooltip, or callback, then read only the containing build method and callback.
+Execute the real structure directly: `CompanyButton >> Text["Save"]`, or
+`Toolbar >> [type="CompanyIconButton"]` for a control with no text, key, or
+Semantics. Explicit action locators traverse the mounted Element tree independently
+of compact inspect. Cockpit requires one visible match and uses the known action owner
+or a real hit-tested `tap`, `hold`, or `double`; equal matches remain ambiguous.
+Add only a source-proven ancestor or condition, never an invented key, semantic label,
+or coordinate. The live postcondition proves the action.
 
 Use the tree only when target inspection is insufficient:
 
