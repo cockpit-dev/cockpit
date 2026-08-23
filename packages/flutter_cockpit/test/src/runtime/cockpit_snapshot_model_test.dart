@@ -143,6 +143,11 @@ void main() {
           typeName: 'ElevatedButton',
           routeName: '/checkout',
           supportedCommands: const <CockpitCommandType>[CockpitCommandType.tap],
+          control: const CockpitControlState(
+            selected: true,
+            focused: true,
+            value: 'card',
+          ),
           layout: const CockpitSnapshotLayout(
             width: 120,
             height: 48,
@@ -187,6 +192,10 @@ void main() {
       'tight 120x48',
     );
     expect(roundTrip.visibleTargets.single.keyValue, 'submit-key');
+    expect(
+      roundTrip.visibleTargets.single.control,
+      const CockpitControlState(selected: true, focused: true, value: 'card'),
+    );
     expect(
       roundTrip.visibleTargets.single.diagnosticProperties.single.category,
       CockpitDiagnosticCategory.spacing,

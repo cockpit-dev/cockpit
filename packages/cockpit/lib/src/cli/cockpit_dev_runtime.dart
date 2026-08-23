@@ -1069,6 +1069,9 @@ final class CockpitDevRuntime {
     if (!_locatorFailureCodes.contains(code) || command.locator == null) {
       return null;
     }
+    if (command.locator!.ref != null) {
+      return 'cockpit dev inspect --session ${session.handleId}';
+    }
     final selector = CockpitSelector.format(command.locator!);
     return 'cockpit dev inspect ${_shellArgument(selector)} '
         '--session ${session.handleId}';

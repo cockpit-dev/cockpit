@@ -148,6 +148,7 @@ final class CockpitCliOutputRenderer {
         ? briefMaximumBytes
         : moreMaximumBytes;
     final isTree = command == 'dev.tree';
+    final isInspect = command == 'dev.inspect';
     final isRunList = command == 'run.list';
     final attempts = view == CockpitCliOutputView.brief
         ? isTree
@@ -162,6 +163,13 @@ final class CockpitCliOutputRenderer {
                   _ProjectionLimits(8, 8, 128, 3),
                   _ProjectionLimits(4, 6, 96, 3),
                 ]
+              : isInspect
+              ? const <_ProjectionLimits>[
+                  _ProjectionLimits(64, 10, 160, 5),
+                  _ProjectionLimits(40, 10, 128, 5),
+                  _ProjectionLimits(24, 8, 128, 5),
+                  _ProjectionLimits(12, 8, 96, 4),
+                ]
               : const <_ProjectionLimits>[
                   _ProjectionLimits(4, 10, 512, 5),
                   _ProjectionLimits(2, 8, 256, 4),
@@ -173,6 +181,13 @@ final class CockpitCliOutputRenderer {
             _ProjectionLimits(16, 24, 512, 6),
             _ProjectionLimits(8, 16, 256, 5),
             _ProjectionLimits(4, 10, 128, 4),
+          ]
+        : isInspect
+        ? const <_ProjectionLimits>[
+            _ProjectionLimits(160, 32, 512, 7),
+            _ProjectionLimits(96, 24, 256, 6),
+            _ProjectionLimits(64, 16, 160, 5),
+            _ProjectionLimits(32, 12, 128, 5),
           ]
         : const <_ProjectionLimits>[
             _ProjectionLimits(16, 32, 1024, 7),

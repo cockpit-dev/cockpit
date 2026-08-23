@@ -4,6 +4,7 @@ import '../control/cockpit_command_type.dart';
 import '../model/cockpit_artifact_ref.dart';
 import '../network/cockpit_network_snapshot.dart';
 import 'cockpit_accessibility_summary.dart';
+import 'cockpit_control_state.dart';
 import 'cockpit_rebuild_models.dart';
 import 'cockpit_snapshot_options.dart';
 import 'cockpit_runtime_snapshot.dart';
@@ -459,6 +460,7 @@ final class CockpitSnapshotTarget {
     this.scrollableTypeName,
     required this.routeName,
     List<CockpitCommandType> supportedCommands = const <CockpitCommandType>[],
+    this.control,
     this.layout,
     this.content,
     this.style,
@@ -484,6 +486,7 @@ final class CockpitSnapshotTarget {
   final String? scrollableTypeName;
   final String routeName;
   final List<CockpitCommandType> supportedCommands;
+  final CockpitControlState? control;
   final CockpitSnapshotLayout? layout;
   final CockpitSnapshotContent? content;
   final CockpitSnapshotStyle? style;
@@ -520,6 +523,7 @@ final class CockpitSnapshotTarget {
     'supportedCommands': supportedCommands
         .map((command) => command.name)
         .toList(),
+    if (control != null) 'control': control!.toJson(),
     if (layout != null) 'layout': layout!.toJson(),
     if (content != null) 'content': content!.toJson(),
     if (style != null) 'style': style!.toJson(),
@@ -534,6 +538,7 @@ final class CockpitSnapshotTarget {
     final layoutJson = json['layout'] as Map<Object?, Object?>?;
     final contentJson = json['content'] as Map<Object?, Object?>?;
     final styleJson = json['style'] as Map<Object?, Object?>?;
+    final controlJson = json['control'] as Map<Object?, Object?>?;
     return CockpitSnapshotTarget(
       registrationId: json['registrationId']! as String,
       cockpitId: json['cockpitId'] as String?,
@@ -554,6 +559,11 @@ final class CockpitSnapshotTarget {
           (json['supportedCommands'] as List<Object?>? ?? const <Object?>[])
               .map(CockpitCommandType.fromJson)
               .toList(growable: false),
+      control: controlJson == null
+          ? null
+          : CockpitControlState.fromJson(
+              Map<String, Object?>.from(controlJson),
+            ),
       layout: layoutJson == null
           ? null
           : CockpitSnapshotLayout.fromJson(
@@ -604,6 +614,7 @@ final class CockpitSnapshotTarget {
             other.scrollableKeyValue == scrollableKeyValue &&
             other.scrollableTypeName == scrollableTypeName &&
             other.routeName == routeName &&
+            other.control == control &&
             other.layout == layout &&
             other.content == content &&
             other.style == style &&
@@ -633,6 +644,7 @@ final class CockpitSnapshotTarget {
     scrollableKeyValue,
     scrollableTypeName,
     routeName,
+    control,
     layout,
     content,
     style,

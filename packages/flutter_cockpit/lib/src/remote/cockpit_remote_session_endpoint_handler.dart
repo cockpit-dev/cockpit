@@ -749,6 +749,7 @@ final class CockpitRemoteSessionEndpointHandler {
             typeName: target.typeName,
             routeName: target.routeName,
             supportedCommands: target.supportedCommands,
+            control: target.control,
           ),
         )
         .toList(growable: false);

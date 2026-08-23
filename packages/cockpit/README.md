@@ -89,7 +89,17 @@ Flutter inspection walks mounted Elements and RenderObjects without requiring
 developer-authored `Semantics`. Use `dev inspect QUERY` for a bounded search;
 it returns a directly executable `sel`, for example `#save` or
 `Dialog >> FilledButton["Continue"]`. Conditions intersect, and ambiguous targets
-fail instead of guessing. `dev tree` returns a compact selector index; use
+fail instead of guessing. Without a query, `dev inspect` returns the mounted
+control surface in visual order with compact live `:REF` selectors plus `can`,
+`state`, and `value`. Copy a live ref directly into its advertised command and
+re-inspect after the control surface changes; keep targeted stable selectors in
+durable cases and suites. Disabled and selected controls remain visible without
+exposing obscured values. `dev tree` returns a compact selector index; use
+an explicit source-derived selector such as
+`CompanyButton >> Text["Save"]` directly with `dev tap`, `dev hold`, or
+`dev double` for a unique visible custom control that the bounded control surface
+cannot classify. Cockpit uses its known actionable owner or a hit-tested gesture.
+Use
 `dev tree --view more` or `dev tree --view full` only for structural context.
 Both structural views write the tree to an artifact and print only its verified path.
 Use `dev open URI` to test a custom deep link, Android app link, iOS universal

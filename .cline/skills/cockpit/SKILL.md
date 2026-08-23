@@ -275,12 +275,28 @@ Execute exact text directly only when that text names the intended actionable
 target, or use a stable locator. Do not add a pre-inspect round trip merely to
 confirm an already-known action. If an action returns `unsupportedCapability`,
 `ambiguousTarget`, `targetNotFound`, or `targetNotHittable`, do not guess that a
-nearby control owns passive text. Run the exact `next` command once; it performs
-a bounded inspect of the same query. Copy the returned actionable `sel` and retry
-the original action once. If bounded inspect returns `count:0`, use its current
-`route` and default bounded `mounted` targets to identify a wrong route or visible blocker;
+nearby control owns passive text. Run the exact `next` command once. A failed
+stable selector performs a bounded inspect of the same query; an expired live
+target ref refreshes the current control surface. Copy the returned actionable
+`sel` and retry the original action once. If bounded inspect returns `count:0`,
+use its current `route` and default bounded `mounted` targets to identify a wrong
+route or visible blocker;
 do not repeat the missing locator or load a full tree. Capture the current screen
 only when those mounted targets do not explain the state.
+
+For a first-party Flutter checkout, use source as a focused locator signal when
+the bounded runtime view is unlabeled, ambiguous, or backed by a custom widget.
+Use `rg` with visible text, route names, public widget types, tooltips, or callback
+names, then read only the containing build method and interaction callback. From
+that code, identify the exact visible text, public control type, ancestor scope,
+and expected state change. Use the resulting explicit structural selector directly,
+for example `CompanyButton >> Text["Save"]`, with `tap`, `hold`, or `double`.
+Cockpit resolves a known actionable owner first, then may use a real hit-tested
+gesture on the unique visible Element for a custom control; this fallback never
+makes plain passive text implicitly actionable. Source removes guesswork but is
+not runtime proof: never invent a key or semantic label, and validate the action
+against the live postcondition.
+
 For ambiguity or exploration, run the smallest `dev inspect QUERY`. It
 searches mounted Flutter Element targets, independent of developer-authored
 Semantics, and returns the shortest stable `sel` plus compact known `can` actions.
@@ -292,10 +308,41 @@ and action fallback. Icon-only controls expose readable tooltips. Lazy lists exp
 only mounted rows; pass an off-screen target directly to `dev scroll`, which owns
 mounting and reveal.
 
+With no query, `dev inspect` returns the current mounted control surface in
+visual order, normally the whole screen in one bounded response. Read each
+`targets` row as `sel`, optional `label`, executable `can`, optional `state`, and
+optional `value`. State can report `disabled`, `selected|unselected`,
+`on|off|mixed`, `focused`, `readonly`, or `obscured`; obscured inputs never expose
+their value. A `sel` beginning with `:` is an opaque live ref for this mounted UI;
+copy it directly into the command named by `can` without another inspect. Live
+refs are deliberately transient: re-inspect after navigation, overlay, filtering,
+reorder, keyboard, or other control-surface changes. Never store them in a case or
+suite. A disabled target intentionally has no executable action. Use these rows
+directly instead of querying every control or loading a tree merely to discover
+actions. A targeted `dev inspect QUERY` still searches passive content and returns
+a stable selector for durable reuse when text or structure, rather than the whole
+control surface, is the question.
+
+`can` maps directly to task commands:
+
+| `can` | Command |
+| --- | --- |
+| `tap` | `dev tap TARGET` |
+| `type` | `dev type VALUE --into TARGET` |
+| `hold` | `dev hold TARGET` |
+| `double` | `dev double TARGET` |
+| `inc` / `dec` | `dev inc TARGET` / `dev dec TARGET` |
+| `dismiss` | `dev dismiss TARGET` |
+| `scroll` | `dev scroll TARGET` |
+
+Do not substitute a gesture or coordinate action when a direct command is
+advertised.
+
 Selector quick reference:
 
 | Need | Selector |
 | --- | --- |
+| Current mounted control | `:a7b9x2` |
 | Exact text | `Save` |
 | Cockpit ID | `#save` |
 | Flutter Key | `@save-key` |
@@ -313,8 +360,12 @@ use `:nth()` only for a real ordered list. Do not invent selector syntax: use th
 table or copy `sel` from `inspect`.
 
 ```bash
+cockpit dev inspect
+cockpit dev tap ':a7b9x2'
 cockpit dev inspect "Save changes"
 cockpit dev tap '#save-button'
+cockpit dev hold ':k4m2p8'
+cockpit dev inc ':v8c1r6'
 cockpit dev tap 'Dialog >> FilledButton["Save"]'
 cockpit dev type "hello" --into '@message'
 cockpit dev scroll "Operations"

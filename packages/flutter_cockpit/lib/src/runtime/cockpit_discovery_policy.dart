@@ -140,7 +140,7 @@ bool _matchesStandardFlutterInteractiveWidget(Element element) {
       widget is IconButton ||
       widget is FloatingActionButton ||
       widget is ListTile ||
-      widget is InkWell ||
+      widget is InkResponse ||
       widget is GestureDetector ||
       widget is ActionChip ||
       widget is ChoiceChip ||

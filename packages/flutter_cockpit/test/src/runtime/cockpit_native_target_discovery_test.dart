@@ -7,6 +7,111 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   testWidgets(
+    'exposes control state without advertising disabled or read-only actions',
+    (tester) async {
+      final draft = TextEditingController(text: 'Draft');
+      final secret = TextEditingController(text: 'secret-value');
+      addTearDown(draft.dispose);
+      addTearDown(secret.dispose);
+
+      await tester.pumpWidget(
+        CockpitSurface(
+          routeName: '/states',
+          child: MaterialApp(
+            home: Scaffold(
+              body: ListView(
+                children: <Widget>[
+                  const FilledButton(
+                    key: ValueKey<String>('disabled-save'),
+                    onPressed: null,
+                    child: Text('Save'),
+                  ),
+                  const Checkbox(
+                    key: ValueKey<String>('disabled-check'),
+                    value: false,
+                    onChanged: null,
+                  ),
+                  Switch(
+                    key: const ValueKey<String>('active-switch'),
+                    value: true,
+                    onChanged: (_) {},
+                  ),
+                  TextField(
+                    key: const ValueKey<String>('read-only-input'),
+                    controller: draft,
+                    readOnly: true,
+                    decoration: const InputDecoration(labelText: 'Draft'),
+                  ),
+                  TextField(
+                    key: const ValueKey<String>('secret-input'),
+                    controller: secret,
+                    obscureText: true,
+                    decoration: const InputDecoration(labelText: 'Secret'),
+                  ),
+                  SegmentedButton<String>(
+                    segments: const <ButtonSegment<String>>[
+                      ButtonSegment<String>(value: 'grid', label: Text('Grid')),
+                      ButtonSegment<String>(value: 'list', label: Text('List')),
+                    ],
+                    selected: const <String>{'grid'},
+                    onSelectionChanged: (_) {},
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final registry = tester
+          .state<CockpitSurfaceState>(find.byType(CockpitSurface))
+          .registry;
+      CockpitTarget byKey(String key) =>
+          registry.resolve(CockpitLocator(key: key)).target!;
+
+      final disabledButton = byKey('disabled-save');
+      expect(disabledButton.control?.enabled, isFalse);
+      expect(
+        disabledButton.supportedCommands,
+        isNot(contains(CockpitCommandType.tap)),
+      );
+
+      final disabledCheck = byKey('disabled-check');
+      expect(disabledCheck.control?.enabled, isFalse);
+      expect(disabledCheck.control?.checked, CockpitCheckState.off);
+
+      final activeSwitch = byKey('active-switch');
+      expect(activeSwitch.control?.enabled, isTrue);
+      expect(activeSwitch.control?.checked, CockpitCheckState.on);
+      expect(activeSwitch.supportedCommands, contains(CockpitCommandType.tap));
+
+      final readOnly = byKey('read-only-input');
+      expect(readOnly.control?.readOnly, isTrue);
+      expect(readOnly.control?.value, 'Draft');
+      expect(
+        readOnly.supportedCommands,
+        isNot(
+          containsAll(<CockpitCommandType>[
+            CockpitCommandType.tap,
+            CockpitCommandType.longPress,
+            CockpitCommandType.enterText,
+          ]),
+        ),
+      );
+
+      final obscured = byKey('secret-input');
+      expect(obscured.control?.obscured, isTrue);
+      expect(obscured.control?.value, isNull);
+
+      final grid = registry.resolve(const CockpitLocator(text: 'Grid')).target!;
+      final list = registry.resolve(const CockpitLocator(text: 'List')).target!;
+      expect(grid.control?.selected, isTrue);
+      expect(list.control?.selected, isFalse);
+    },
+  );
+
+  testWidgets(
     'discovers public Cupertino controls without internal target noise',
     (tester) async {
       var checked = false;
@@ -337,6 +442,145 @@ void main() {
     },
   );
 
+  testWidgets('discovers controls without keys or developer-authored semantics', (
+    tester,
+  ) async {
+    var tapped = false;
+    var longPressed = false;
+    var doubleTapped = false;
+    var sliderValue = 0.5;
+    final controller = TextEditingController();
+    addTearDown(controller.dispose);
+
+    await tester.pumpWidget(
+      CockpitSurface(
+        routeName: '/invoice',
+        child: MaterialApp(
+          home: Scaffold(
+            body: ExcludeSemantics(
+              child: StatefulBuilder(
+                builder: (context, setState) => Column(
+                  children: <Widget>[
+                    Material(
+                      child: InkResponse(
+                        onTap: () => tapped = true,
+                        onLongPress: () => longPressed = true,
+                        onDoubleTap: () => doubleTapped = true,
+                        child: const Padding(
+                          padding: EdgeInsets.all(12),
+                          child: Text('Open invoice'),
+                        ),
+                      ),
+                    ),
+                    TextField(
+                      controller: controller,
+                      decoration: const InputDecoration(
+                        labelText: 'Invoice title',
+                      ),
+                    ),
+                    Slider(
+                      value: sliderValue,
+                      divisions: 10,
+                      onChanged: (value) => setState(() => sliderValue = value),
+                    ),
+                    PopupMenuButton<String>(
+                      itemBuilder: (context) => const <PopupMenuEntry<String>>[
+                        PopupMenuItem<String>(
+                          value: 'archive',
+                          child: Text('Archive'),
+                        ),
+                      ],
+                      child: const Text('More actions'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final surfaceState = tester.state<CockpitSurfaceState>(
+      find.byType(CockpitSurface),
+    );
+    final targets = surfaceState.registry.visibleTargets;
+    final action = targets.singleWhere(
+      (target) =>
+          target.typeName == 'InkResponse' && target.text == 'Open invoice',
+    );
+    expect(action.keyValue, isNull);
+    expect(action.semanticId, isNull);
+    expect(
+      action.supportedCommands,
+      containsAll(<CockpitCommandType>[
+        CockpitCommandType.tap,
+        CockpitCommandType.longPress,
+        CockpitCommandType.doubleTap,
+      ]),
+    );
+    action.onTap?.call();
+    action.onLongPress?.call();
+    action.onDoubleTap?.call();
+    expect(tapped, isTrue);
+    expect(longPressed, isTrue);
+    expect(doubleTapped, isTrue);
+
+    final input = targets.singleWhere(
+      (target) =>
+          target.typeName == 'TextField' && target.text == 'Invoice title',
+    );
+    expect(input.keyValue, isNull);
+    expect(input.semanticId, isNull);
+    expect(input.supportedCommands, contains(CockpitCommandType.enterText));
+    input.onEnterText?.call('August invoice');
+    await tester.pump();
+    expect(controller.text, 'August invoice');
+
+    final sliderMatches = targets
+        .where((target) => target.typeName?.contains('Slider') == true)
+        .toList(growable: false);
+    expect(
+      sliderMatches,
+      hasLength(1),
+      reason: targets
+          .map(
+            (target) =>
+                '${target.typeName}:${target.text}:${target.supportedCommands}',
+          )
+          .join('\n'),
+    );
+    var slider = sliderMatches.single;
+    expect(slider.keyValue, isNull);
+    expect(slider.semanticId, isNull);
+    expect(
+      slider.supportedCommands,
+      containsAll(<CockpitCommandType>[
+        CockpitCommandType.increase,
+        CockpitCommandType.decrease,
+      ]),
+    );
+    slider.onSemanticIncrease?.call();
+    await tester.pump();
+    expect(sliderValue, closeTo(0.6, 0.0001));
+    slider = surfaceState.registry.visibleTargets.singleWhere(
+      (target) => target.typeName == 'Slider',
+    );
+    slider.onSemanticDecrease?.call();
+    await tester.pump();
+    expect(sliderValue, closeTo(0.5, 0.0001));
+
+    final popup = surfaceState.registry.visibleTargets.singleWhere(
+      (target) =>
+          target.typeName?.startsWith('PopupMenuButton') == true &&
+          target.text == 'More actions',
+    );
+    expect(popup.keyValue, isNull);
+    expect(popup.semanticId, isNull);
+    expect(popup.supportedCommands, contains(CockpitCommandType.tap));
+  });
+
   testWidgets('discovers interactive targets by their own key', (tester) async {
     var selected = false;
 
@@ -465,6 +709,208 @@ void main() {
     expect(target.text, isNull);
     expect(target.textParts, isEmpty);
     expect(target.supportedCommands, contains(CockpitCommandType.tap));
+  });
+
+  testWidgets('keeps a nested public control independently actionable', (
+    tester,
+  ) async {
+    var cardTapped = false;
+    var iconTapped = false;
+    await tester.pumpWidget(
+      CockpitSurface(
+        routeName: '/inbox',
+        child: MaterialApp(
+          home: Scaffold(
+            body: GestureDetector(
+              key: const ValueKey<String>('task-card'),
+              onTap: () => cardTapped = true,
+              child: Row(
+                children: <Widget>[
+                  const Expanded(child: Text('Task alpha')),
+                  IconButton(
+                    key: const ValueKey<String>('task-menu'),
+                    tooltip: 'Task menu',
+                    onPressed: () => iconTapped = true,
+                    icon: const Icon(Icons.more_horiz),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final registry = tester
+        .state<CockpitSurfaceState>(find.byType(CockpitSurface))
+        .registry;
+    final card = registry.resolve(const CockpitLocator(key: 'task-card'));
+    final menu = registry.resolve(const CockpitLocator(key: 'task-menu'));
+
+    expect(card.isSuccess, isTrue, reason: card.error?.message);
+    expect(menu.isSuccess, isTrue, reason: menu.error?.message);
+    card.target?.onTap?.call();
+    menu.target?.onTap?.call();
+    expect(cardTapped, isTrue);
+    expect(iconTapped, isTrue);
+  });
+
+  testWidgets('keeps stable keyed scopes within bounded target ancestors', (
+    tester,
+  ) async {
+    Widget section(String key) => Container(
+      key: ValueKey<String>(key),
+      child: Padding(
+        padding: const EdgeInsets.all(8),
+        child: Column(
+          children: <Widget>[
+            Row(
+              children: <Widget>[
+                IconButton(
+                  tooltip: 'Expand output',
+                  onPressed: () {},
+                  icon: const Icon(Icons.expand_more),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+
+    await tester.pumpWidget(
+      CockpitSurface(
+        routeName: '/logs',
+        child: MaterialApp(
+          home: Scaffold(
+            body: Column(
+              children: <Widget>[section('startup-logs'), section('app-logs')],
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final registry = tester
+        .state<CockpitSurfaceState>(find.byType(CockpitSurface))
+        .registry;
+    final targets = registry.visibleTargets
+        .where(
+          (target) =>
+              target.typeName == 'IconButton' &&
+              target.tooltip == 'Expand output',
+        )
+        .toList(growable: false);
+
+    expect(targets, hasLength(2));
+    for (final target in targets) {
+      expect(
+        target.locatorAncestors.take(8).map((ancestor) => ancestor.keyValue),
+        contains(anyOf('startup-logs', 'app-logs')),
+      );
+    }
+    expect(
+      registry
+          .resolve(
+            const CockpitLocator(
+              tooltip: 'Expand output',
+              ancestor: CockpitLocator(key: 'startup-logs'),
+            ),
+            requiredCommand: CockpitCommandType.tap,
+          )
+          .isSuccess,
+      isTrue,
+    );
+  });
+
+  testWidgets('collapses a framework control wrapper into its live child', (
+    tester,
+  ) async {
+    var tapped = false;
+    await tester.pumpWidget(
+      CockpitSurface(
+        routeName: '/settings',
+        child: MaterialApp(
+          home: Scaffold(
+            appBar: AppBar(leading: BackButton(onPressed: () => tapped = true)),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final registry = tester
+        .state<CockpitSurfaceState>(find.byType(CockpitSurface))
+        .registry;
+    final backTargets = registry.visibleTargets
+        .where((target) => target.tooltip == 'Back')
+        .toList(growable: false);
+
+    expect(backTargets, hasLength(1));
+    expect(
+      backTargets.single.supportedCommands,
+      contains(CockpitCommandType.tap),
+    );
+    backTargets.single.onTap?.call();
+    expect(tapped, isTrue);
+  });
+
+  testWidgets('collapses a semantic wrapper into its standard control', (
+    tester,
+  ) async {
+    var value = 0.5;
+    await tester.pumpWidget(
+      CockpitSurface(
+        routeName: '/level',
+        child: MaterialApp(
+          home: Scaffold(
+            body: StatefulBuilder(
+              builder: (context, setState) => Semantics(
+                key: const ValueKey<String>('level-semantics'),
+                label: 'Level',
+                value: '${(value * 100).round()}',
+                increasedValue:
+                    '${((value + 0.1).clamp(0.0, 1.0) * 100).round()}',
+                decreasedValue:
+                    '${((value - 0.1).clamp(0.0, 1.0) * 100).round()}',
+                onIncrease: () => setState(() => value += 0.1),
+                onDecrease: () => setState(() => value -= 0.1),
+                child: Slider(
+                  key: const ValueKey<String>('level-slider'),
+                  value: value,
+                  divisions: 10,
+                  onChanged: (next) => setState(() => value = next),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final registry = tester
+        .state<CockpitSurfaceState>(find.byType(CockpitSurface))
+        .registry;
+    final levelTargets = registry.visibleTargets
+        .where(
+          (target) =>
+              target.semanticId == 'Level' || target.cockpitId == 'Level',
+        )
+        .toList(growable: false);
+
+    expect(levelTargets, hasLength(1));
+    expect(levelTargets.single.typeName, 'Slider');
+    expect(levelTargets.single.keyValue, 'level-slider');
+    expect(
+      levelTargets.single.supportedCommands,
+      containsAll(<CockpitCommandType>[
+        CockpitCommandType.increase,
+        CockpitCommandType.decrease,
+      ]),
+    );
   });
 
   testWidgets('generates compact stable registration ids for native targets', (

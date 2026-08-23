@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import '../runtime/cockpit_target_ref.dart';
 import 'cockpit_locator.dart';
 
 /// Compact, deterministic syntax for one [CockpitLocator].
@@ -14,6 +15,7 @@ final class CockpitSelector {
     final normalized = source.trim();
     if (normalized.isEmpty) return false;
     if (normalized.startsWith('#') ||
+        normalized.startsWith(':') ||
         normalized.startsWith('@') ||
         normalized.startsWith('[') ||
         normalized.contains('>>') ||
@@ -38,6 +40,12 @@ final class CockpitSelector {
     if (segments.length > maxDepth) {
       throw const FormatException('Selector has too many ancestor scopes.');
     }
+    if (segments.length > 1 &&
+        segments.any((segment) => segment.startsWith(':'))) {
+      throw const FormatException(
+        'A live target ref cannot be used in an ancestor chain.',
+      );
+    }
 
     CockpitLocator? locator;
     for (var index = 0; index < segments.length; index += 1) {
@@ -59,6 +67,14 @@ final class CockpitSelector {
       throw const FormatException(
         'Selector does not encode locator fallbacks.',
       );
+    }
+    if (locator.ref != null) {
+      if (locator.signals.length != 1 || locator.ancestor != null) {
+        throw const FormatException(
+          'A live target ref cannot be combined with other selector signals.',
+        );
+      }
+      return ':${locator.ref}';
     }
     final chain = <CockpitLocator>[];
     CockpitLocator? current = locator;
@@ -145,6 +161,7 @@ final class CockpitSelector {
     CockpitLocator locator, {
     required CockpitLocator? ancestor,
   }) => CockpitLocator(
+    ref: locator.ref,
     cockpitId: locator.cockpitId,
     semanticId: locator.semanticId,
     key: locator.key,
@@ -169,6 +186,9 @@ final class _SegmentParser {
   final _Fields fields = _Fields();
 
   CockpitLocator parse() {
+    if (source.startsWith(':')) {
+      return _reference();
+    }
     final prefix = _readUntilSpecial().trim();
     if (offset == source.length) {
       if (prefix.isEmpty) _fail('Selector segment cannot be empty.');
@@ -212,6 +232,26 @@ final class _SegmentParser {
       _fail('Expected #id, @key, a filter, or :nth().');
     }
     return fields.locator();
+  }
+
+  CockpitLocator _reference() {
+    offset = 1;
+    final start = offset;
+    while (offset < source.length &&
+        RegExp(r'[A-Za-z0-9]').hasMatch(source[offset])) {
+      offset += 1;
+    }
+    if (start == offset || offset != source.length) {
+      _fail('Live target refs use : followed by letters or digits.');
+    }
+    final ref = source.substring(start, offset).toLowerCase();
+    if (ref.length < cockpitTargetRefMinimumLength) {
+      _fail(
+        'Live target refs require at least '
+        '$cockpitTargetRefMinimumLength characters.',
+      );
+    }
+    return CockpitLocator(ref: ref);
   }
 
   String _readUntilSpecial() {

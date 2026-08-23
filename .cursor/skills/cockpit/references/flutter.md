@@ -149,11 +149,26 @@ Element targets without requiring Semantics labels and returns `sel` (the shorte
 stable selector) and `can` (known actions). Copy `sel` exactly; do not use
 registration IDs.
 
+With no query, `cockpit dev inspect` returns the current mounted control surface
+in visual order. Its compact `:REF` selectors are live handles for the current UI;
+copy one directly into the command named by `can`, then re-inspect after navigation,
+overlay, filtering, reorder, keyboard, or another control-surface change. Targeted
+inspection returns stable selectors suitable for durable reuse.
+
 Selectors are conjunctive: `#id`, `@key`, `Type["text"]`, named filters such as
 `[tip="Save"][route="/edit"]`, and ancestor chains such as
 `Dialog >> TextButton["Continue"]`. `[*="text"]` and `[~="text"]` opt into
 contains and fuzzy matching. `:nth(2)` is 1-based and only for stable ordered
 items. Equal candidates remain ambiguous.
+
+When the application source is available and a custom control is unlabeled or
+ambiguous, use `rg` to find the visible text, route, public Widget type, tooltip,
+or callback, then read only its containing build method and interaction callback.
+Construct an explicit ancestor selector from the real structure, for example
+`CompanyButton >> Text["Save"]`. Cockpit first resolves a known actionable owner;
+otherwise `tap`, `hold`, and `double` may perform a real hit-tested gesture on the
+unique visible Element. Do not invent keys or semantic labels. Source narrows the
+locator; the live postcondition proves the action.
 
 Use the tree only when target inspection is insufficient:
 

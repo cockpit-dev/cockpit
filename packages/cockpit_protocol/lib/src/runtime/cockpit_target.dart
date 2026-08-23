@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:collection/collection.dart';
 
 import '../control/cockpit_command_type.dart';
+import 'cockpit_control_state.dart';
 import 'cockpit_snapshot.dart';
 import 'cockpit_target_geometry.dart';
 import 'cockpit_text_input_request.dart';
@@ -35,6 +36,7 @@ final class CockpitTarget {
     required this.routeName,
     this.isVisible = true,
     this.supportedCommands = const <CockpitCommandType>{},
+    this.control,
     this.locatorAncestors = const <CockpitSnapshotAncestor>[],
     this.onTap,
     this.onLongPress,
@@ -68,6 +70,7 @@ final class CockpitTarget {
   final String routeName;
   final bool isVisible;
   final Set<CockpitCommandType> supportedCommands;
+  final CockpitControlState? control;
   final List<CockpitSnapshotAncestor> locatorAncestors;
   final CockpitTapHandler? onTap;
   final CockpitLongPressHandler? onLongPress;
@@ -108,6 +111,7 @@ final class CockpitTarget {
       scrollableTypeName: scrollableTypeName,
       routeName: routeName,
       supportedCommands: supportedCommands.toList(growable: false),
+      control: control,
       ancestors: locatorAncestors,
     );
   }
@@ -130,6 +134,7 @@ final class CockpitTarget {
             other.scrollableTypeName == scrollableTypeName &&
             other.routeName == routeName &&
             other.isVisible == isVisible &&
+            other.control == control &&
             other.diagnosticNodeProvider == diagnosticNodeProvider &&
             _commandSetEquality.equals(
               other.supportedCommands,
@@ -153,6 +158,7 @@ final class CockpitTarget {
     scrollableTypeName,
     routeName,
     isVisible,
+    control,
     diagnosticNodeProvider,
     _commandSetEquality.hash(supportedCommands),
   );

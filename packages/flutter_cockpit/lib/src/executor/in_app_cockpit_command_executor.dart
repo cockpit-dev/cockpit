@@ -1696,24 +1696,29 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
           scrollsPerformed += 1;
 
           final observationStopwatch = Stopwatch()..start();
-          await _settleCoordinator.driveHiddenVisualFrames(
-            CockpitCommandType.scrollUntilVisible,
-          );
-          await _waitForVisualContinuity(
-            commandType: CockpitCommandType.scrollUntilVisible,
-            routeChanged: false,
-          );
-          await _postActionSettler();
+          final targetProbeSettledWithoutMatch =
+              _context.scrollStepProbesTarget &&
+              scrollStep.targetVisibilityObserved &&
+              !scrollStep.targetMounted;
+          if (!targetProbeSettledWithoutMatch) {
+            await _settleCoordinator.driveHiddenVisualFrames(
+              CockpitCommandType.scrollUntilVisible,
+            );
+            await _waitForVisualContinuity(
+              commandType: CockpitCommandType.scrollUntilVisible,
+              routeChanged: false,
+            );
+            await _postActionSettler();
+          }
           if (scrollStep.targetMounted && !scrollStep.targetVisible) {
             _liveSnapshot();
           }
           scrollObservationDurationMs +=
               observationStopwatch.elapsedMilliseconds;
 
-          // A direct position jump can report the target state before Flutter
-          // lays out the newly exposed lazy children. Always observe again
-          // after settling instead of treating the step's pre-frame target
-          // flags as authoritative.
+          // A target-probing scroll step observes one layout frame itself.
+          // Resolve again from the live registry instead of trusting state from
+          // before the newly exposed lazy children were laid out.
           final satisfied = _scrollLocatorResolution(command);
           if (satisfied != null) {
             final success = await buildScrollSatisfiedSuccess(satisfied);

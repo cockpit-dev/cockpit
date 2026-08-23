@@ -434,6 +434,36 @@ void main() {
     expect(value['mounted'], hasLength(2));
   });
 
+  test('dev inspect brief preserves an ordinary complete control surface', () {
+    const renderer = CockpitCliOutputRenderer();
+    final value =
+        lon.decode(
+              renderer.renderAi(
+                command: 'dev.inspect',
+                data: <String, Object?>{
+                  'action': 'inspect',
+                  'session': '4',
+                  'state': <String, Object?>{
+                    'route': '/',
+                    'count': 40,
+                    'targets': <Object?>[
+                      for (var index = 0; index < 40; index += 1)
+                        <String, Object?>{
+                          'sel': '@action-$index',
+                          'can': 'tap',
+                        },
+                    ],
+                  },
+                },
+                view: CockpitCliOutputView.brief,
+              ),
+            )!
+            as Map<Object?, Object?>;
+
+    expect(value['targets'], hasLength(40));
+    expect(value, isNot(contains('more')));
+  });
+
   test('dev status does not invent diagnostics that were not collected', () {
     const renderer = CockpitCliOutputRenderer();
 

@@ -285,6 +285,9 @@ Future<CockpitRemoteSnapshotResponse> cockpitReadRemoteSnapshotConsistently({
       budget.run(() => readSnapshot(baseUri, options));
 
   var response = await readOnce();
+  if (options.query?.trim().isNotEmpty == true) {
+    return response;
+  }
   if (!_isLikelyTransitionEmptySnapshot(response.snapshot)) {
     return response;
   }

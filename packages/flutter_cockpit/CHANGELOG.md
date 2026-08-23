@@ -1,5 +1,23 @@
 # Changelog
 
+## 4.0.32
+
+- Added non-invasive control-state discovery for standard Material and
+  Cupertino controls, including disabled controls and safe text-input values.
+- Discovered nested public controls independently while suppressing framework
+  implementation duplicates, and exposed direct tap, text, hold, double-tap,
+  increase, decrease, dismiss, and scroll capabilities without app annotations.
+- Preserved stable keyed ancestors through deep framework layout wrappers,
+  collapsed equivalent framework and Semantics control wrappers, and let
+  targeted snapshots find matching mounted targets outside the viewport.
+- Added direct semantics-independent Slider adjustment, InkResponse discovery,
+  and hit-tested gestures for unique source-derived structural selectors so
+  custom controls remain operable without keys or authored semantics.
+- Made target-driven scrolling observe newly laid-out lazy children in the scroll
+  step itself, avoiding repeated full settle waits before a target is mounted.
+- Kept investigate diagnostics on the live filtered Widget ancestry instead of
+  replacing it with the smaller selector ancestry.
+
 ## 4.0.31
 
 - Reused text copied by the current Cockpit runtime and bounded fallback

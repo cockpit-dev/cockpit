@@ -1,5 +1,12 @@
 # Changelog
 
+## 4.0.32
+
+- Added compact Flutter control state for enabled, selection, check, focus,
+  read-only, obscured, and current-value inspection.
+- Added standalone live target selectors with collision-aware base-36 refs and
+  a safe minimum reference length.
+
 ## 4.0.31
 
 - Synchronized the public protocol package with the current Cockpit release.

@@ -25,6 +25,54 @@ CockpitLeafCommand cockpitDevTapCommand(
   ),
 );
 
+CockpitLeafCommand cockpitDevHoldCommand(
+  CockpitCliRuntime runtime,
+  CockpitDevRuntime dev,
+) => _directTargetCommand(
+  runtime,
+  dev,
+  name: 'hold',
+  description: 'Long-press one exact mounted Flutter target.',
+  example: 'cockpit dev hold ":a"',
+  type: CockpitCommandType.longPress,
+);
+
+CockpitLeafCommand cockpitDevDoubleCommand(
+  CockpitCliRuntime runtime,
+  CockpitDevRuntime dev,
+) => _directTargetCommand(
+  runtime,
+  dev,
+  name: 'double',
+  description: 'Double-tap one exact mounted Flutter target.',
+  example: 'cockpit dev double ":a"',
+  type: CockpitCommandType.doubleTap,
+);
+
+CockpitLeafCommand cockpitDevIncreaseCommand(
+  CockpitCliRuntime runtime,
+  CockpitDevRuntime dev,
+) => _directTargetCommand(
+  runtime,
+  dev,
+  name: 'inc',
+  description: 'Increase one exact mounted Flutter control.',
+  example: 'cockpit dev inc ":a"',
+  type: CockpitCommandType.increase,
+);
+
+CockpitLeafCommand cockpitDevDecreaseCommand(
+  CockpitCliRuntime runtime,
+  CockpitDevRuntime dev,
+) => _directTargetCommand(
+  runtime,
+  dev,
+  name: 'dec',
+  description: 'Decrease one exact mounted Flutter control.',
+  example: 'cockpit dev dec ":a"',
+  type: CockpitCommandType.decrease,
+);
+
 CockpitLeafCommand cockpitDevTypeCommand(
   CockpitCliRuntime runtime,
   CockpitDevRuntime dev,
@@ -121,15 +169,26 @@ CockpitLeafCommand cockpitDevDismissCommand(
   description:
       'Dismiss the current Flutter menu, popup, dialog, sheet, or barrier.',
   example: 'cockpit dev dismiss',
-  configure: cockpitAddDevSessionOption,
-  action: (arguments) async => dev.runCommand(
-    await runtime.resolveDevelopmentSession(arguments.option('session')),
-    action: 'dismiss',
-    command: dev.command(
-      type: CockpitCommandType.dismiss,
-      timeout: runtime.operationTimeout,
-    ),
-  ),
+  configure: _targetOptions,
+  action: (arguments) async {
+    final target = arguments.rest.length == 1 ? arguments.rest.single : null;
+    if (arguments.rest.length > 1) {
+      throw const FormatException('dev dismiss accepts at most one target.');
+    }
+    return dev.runCommand(
+      await runtime.resolveDevelopmentSession(arguments.option('session')),
+      action: 'dismiss',
+      command: dev.command(
+        type: CockpitCommandType.dismiss,
+        timeout: runtime.operationTimeout,
+        locator: cockpitReadDevLocator(
+          arguments,
+          selector: target,
+          targetRequired: false,
+        ),
+      ),
+    );
+  },
 );
 
 CockpitLeafCommand cockpitDevRecoverCommand(
@@ -312,6 +371,24 @@ Future<int> _targetAction(
     ),
   );
 }
+
+CockpitLeafCommand _directTargetCommand(
+  CockpitCliRuntime runtime,
+  CockpitDevRuntime dev, {
+  required String name,
+  required String description,
+  required String example,
+  required CockpitCommandType type,
+}) => CockpitLeafCommand(
+  runtime: runtime,
+  name: name,
+  description: description,
+  invocationSuffix: 'SELECTOR [arguments]',
+  example: example,
+  configure: _targetOptions,
+  action: (arguments) =>
+      _targetAction(runtime, dev, arguments, action: name, type: type),
+);
 
 CockpitLocator? cockpitReadDevLocator(
   ArgResults arguments, {

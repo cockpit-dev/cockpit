@@ -190,6 +190,10 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
           element,
           rootContext: rootContext,
           requiredCommand: requiredCommand,
+          allowGestureFallback: _allowsExplicitGestureFallback(
+            candidate,
+            requiredCommand,
+          ),
         );
         if (!targetResolution.isSuccess) {
           return targetResolution;
@@ -289,12 +293,8 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
     var visibleTargets = _registry.visibleTargets;
     var diagnosticOptions = options;
     final query = options.query?.trim();
-    if (query != null &&
-        query.isNotEmpty &&
-        CockpitSelector.isExplicit(query)) {
-      visibleTargets = _registry.matchingVisibleTargets(
-        CockpitSelector.parse(query),
-      );
+    if (query != null && query.isNotEmpty) {
+      visibleTargets = _mountedTargetsForQuery(query);
       diagnosticOptions = options.copyWith(clearQuery: true);
     }
     var snapshot = _diagnosticBuilder
@@ -459,7 +459,9 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
     }
   }
 
-  List<CockpitTarget> _discoverNativeTargets() {
+  List<CockpitTarget> _discoverNativeTargets({
+    bool includeClippedTargets = false,
+  }) {
     final rootContext = _boundaryKey.currentContext;
     if (rootContext == null) {
       return const <CockpitTarget>[];
@@ -469,6 +471,7 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
       rootContext: rootContext,
       routeName: _registry.routeName,
       explicitTargets: _registry.registeredTargets,
+      includeClippedTargets: includeClippedTargets,
     );
     _syncRouteFromDiscoveredTargets(discovered);
     if (discovered.isNotEmpty ||
@@ -485,10 +488,43 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
       routeName: _registry.routeName,
       explicitTargets: _registry.registeredTargets,
       allowInactiveRouteFallback: true,
+      includeClippedTargets: includeClippedTargets,
     );
     _syncRouteFromDiscoveredTargets(fallbackDiscovered);
     return fallbackDiscovered;
   }
+
+  List<CockpitTarget> _mountedTargetsForQuery(String query) {
+    final discovered = _discoverNativeTargets(includeClippedTargets: true);
+    final mountedRegistry = CockpitTargetRegistry(
+      routeName: _registry.routeName,
+    )..discoveredTargetsProvider = () => discovered;
+    for (final target in _registry.registeredTargets) {
+      mountedRegistry.register(target);
+    }
+    final mountedTargets = mountedRegistry.visibleTargets;
+    if (CockpitSelector.isExplicit(query)) {
+      return mountedRegistry.matchingVisibleTargets(
+        CockpitSelector.parse(query),
+      );
+    }
+    final normalized = query.toLowerCase();
+    return mountedTargets
+        .where((target) => _targetMatchesQuery(target, normalized))
+        .toList(growable: false);
+  }
+
+  bool _targetMatchesQuery(CockpitTarget target, String query) => <String?>[
+    target.cockpitId,
+    target.semanticId,
+    target.keyValue,
+    target.text,
+    ...target.textParts,
+    target.tooltip,
+    target.typeName,
+    target.routeName,
+    target.path,
+  ].any((value) => value?.toLowerCase().contains(query) ?? false);
 
   void _syncRouteFromDiscoveredTargets(List<CockpitTarget> targets) {
     if (targets.isEmpty) {
@@ -641,11 +677,20 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
       postScrollEnsureVisible: postScrollEnsureVisible,
       preferProgrammatic: probeDuringScroll && targetLocator != null,
     );
+    if (probeDuringScroll && targetLocator != null) {
+      await _settleAtomicRevealFrame();
+    }
+    final resolvedTarget = targetLocator == null
+        ? targetElement
+        : _findResolvedElementForLocator(rootElement, targetLocator);
+    final targetVisible =
+        resolvedTarget != null && _elementIsFullyVisible(resolvedTarget);
     return _withScrollableSelection(
       scrollResult,
       selection,
       targetLocator: targetLocator,
-      targetMounted: targetElement != null,
+      targetMounted: resolvedTarget != null,
+      targetVisible: targetVisible,
     );
   }
 
@@ -912,6 +957,7 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
     _CockpitScrollableSelection selection, {
     required CockpitLocator? targetLocator,
     required bool targetMounted,
+    bool? targetVisible,
   }) {
     return CockpitScrollStepResult(
       didScroll: result.didScroll,
@@ -934,7 +980,7 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
       matchedRegistryTarget: result.matchedRegistryTarget,
       targetVisibilityObserved: targetLocator != null,
       targetMounted: targetMounted || result.targetMounted,
-      targetVisible: result.targetVisible,
+      targetVisible: targetVisible ?? result.targetVisible,
     );
   }
 
@@ -1225,6 +1271,7 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
     Element element, {
     required Element rootContext,
     CockpitCommandType? requiredCommand,
+    bool allowGestureFallback = false,
   }) {
     final semanticId = _elementSemanticSignal(element);
     final keyValue = _stableKeyValue(element.widget.key);
@@ -1238,6 +1285,9 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
       typeName: element.widget.runtimeType.toString(),
       path: _locatorPathForElement(element),
       routeName: widget.routeName,
+      supportedCommands: allowGestureFallback && requiredCommand != null
+          ? <CockpitCommandType>{requiredCommand}
+          : const <CockpitCommandType>{},
       locatorAncestors: _extractLocatorAncestors(element),
       diagnosticNodeProvider: () => element,
       geometryProvider: () =>
@@ -1281,6 +1331,24 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
       target: _mergeProbeIdentity(probeTarget, actionTarget),
       matches: closest,
     );
+  }
+
+  bool _allowsExplicitGestureFallback(
+    CockpitLocator locator,
+    CockpitCommandType? requiredCommand,
+  ) {
+    if (requiredCommand != CockpitCommandType.tap &&
+        requiredCommand != CockpitCommandType.longPress &&
+        requiredCommand != CockpitCommandType.doubleTap) {
+      return false;
+    }
+    return locator.type != null ||
+        locator.path != null ||
+        locator.ancestor != null ||
+        locator.cockpitId != null ||
+        locator.semanticId != null ||
+        locator.key != null ||
+        locator.tooltip != null;
   }
 
   List<({CockpitTarget target, int distance})> _relatedActionTargets(
@@ -1373,6 +1441,7 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
       scrollableTypeName: action.scrollableTypeName,
       routeName: action.routeName,
       supportedCommands: action.supportedCommands,
+      control: action.control,
       locatorAncestors: probe.locatorAncestors,
       onTap: action.onTap,
       onLongPress: action.onLongPress,
@@ -1519,6 +1588,7 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
     CockpitTextMatchMode matchMode,
   ) {
     return switch (kind) {
+      CockpitLocatorKind.ref => false,
       CockpitLocatorKind.cockpitId =>
         _stableKeyValue(element.widget.key) == value ||
             _matchesTextSignal(
@@ -2005,8 +2075,6 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
         widget is ParentDataWidget<ParentData> ||
         widget is Focus ||
         widget is Semantics ||
-        widget is Listener ||
-        widget is GestureDetector ||
         widget is IgnorePointer ||
         widget is MouseRegion ||
         widget is ExcludeSemantics ||
@@ -2193,6 +2261,7 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
                 signal.value,
                 CockpitTextMatchMode.exact,
               ),
+        CockpitLocatorKind.ref ||
         CockpitLocatorKind.semanticId ||
         CockpitLocatorKind.tooltip ||
         CockpitLocatorKind.registrationId ||
@@ -2415,7 +2484,8 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
           }
           score += 24;
           matchedSignals += 1;
-        case CockpitLocatorKind.semanticId ||
+        case CockpitLocatorKind.ref ||
+            CockpitLocatorKind.semanticId ||
             CockpitLocatorKind.tooltip ||
             CockpitLocatorKind.registrationId ||
             CockpitLocatorKind.nativeId ||
@@ -2500,6 +2570,7 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
         ),
         CockpitLocatorKind.route => ancestor.routeName == signal.value,
         CockpitLocatorKind.path => _matchesPath(ancestor.path, signal.value),
+        CockpitLocatorKind.ref ||
         CockpitLocatorKind.registrationId ||
         CockpitLocatorKind.nativeId ||
         CockpitLocatorKind.testId ||
