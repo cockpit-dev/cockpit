@@ -85,7 +85,7 @@ void main() {
     expect(macosPackage, contains('.process("PrivacyInfo.xcprivacy")'));
 
     for (final podspec in <String>[iosPodspec, macosPodspec]) {
-      expect(podspec, contains("s.version          = '4.0.33'"));
+      expect(podspec, contains("s.version          = '4.0.34'"));
       expect(podspec, contains(":type => 'MIT'"));
       expect(
         podspec,

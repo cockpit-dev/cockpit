@@ -1,5 +1,10 @@
 # Changelog
 
+## 4.0.34
+
+- Aligned the Flutter package with the source-first Cockpit development
+  workflow and its non-invasive structural selector guidance.
+
 ## 4.0.33
 
 - Restored Flutter 3.32 compatibility for Material and Cupertino radio control

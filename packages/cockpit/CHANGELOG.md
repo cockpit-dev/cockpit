@@ -1,5 +1,11 @@
 # Changelog
 
+## 4.0.34
+
+- Made the bundled AI skill source-first for first-party Flutter development:
+  agents derive exact selectors and postconditions from the code they are
+  changing, and reserve inspection for runtime-only uncertainty or recovery.
+
 ## 4.0.33
 
 - Documented direct source-derived Flutter actions for custom controls omitted

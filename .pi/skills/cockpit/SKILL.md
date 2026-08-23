@@ -284,21 +284,27 @@ route or visible blocker;
 do not repeat the missing locator or load a full tree. Capture the current screen
 only when those mounted targets do not explain the state.
 
-For a first-party Flutter checkout, source is a direct locator channel when the
-bounded runtime view is unlabeled, ambiguous, or omits a custom widget. Use `rg`
-with visible text, route names, public widget types, tooltips, or callback names,
-then read only the containing build method and interaction callback. If the code
-already identifies the control, do not add an inspect round trip: execute an
-explicit structural selector directly. Use `CompanyButton >> Text["Save"]` for a
-labeled custom control, or `Toolbar >> [type="CompanyIconButton"]` when it has no
-text, key, or Semantics. Cockpit traverses the mounted Element tree for explicit
-actions even when compact inspect omitted that Element, requires one visible match,
-and performs a real hit-tested `tap`, `hold`, or `double`. Equal matches fail as
-ambiguous; add a real ancestor, route, key, or other source-proven condition instead
-of guessing or using coordinates. Source removes guesswork but is not runtime proof:
-validate the expected live postcondition after the action.
+For a first-party Flutter checkout, source is the default locator channel during
+development, not an inspect fallback. The feature being edited and its build or
+callback code are normally already known. Use that code directly; if it is not in
+context, use `rg` with visible text, route names, Widget types, tooltips, or callback
+names, then read only the containing build method and interaction callback. Construct
+the exact structural selector and execute the action without a pre-inspect round trip.
+Use `CompanyButton >> Text["Save"]` for a labeled custom control, or
+`Toolbar >> [type="CompanyIconButton"]` when it has no text, key, or Semantics.
+Cockpit traverses the mounted Element tree for explicit actions even when compact
+inspect omitted that Element, requires one visible match, and performs a real
+hit-tested `tap`, `hold`, or `double`. Equal matches fail as ambiguous; add a real
+ancestor, route, key, or other source-proven condition instead of guessing or using
+coordinates.
 
-For ambiguity or exploration, run the smallest `dev inspect QUERY`. It
+Use `dev inspect` before an action only for runtime facts source cannot determine:
+which route or overlay is mounted, runtime-generated content or ordering, lazy
+mounting, or a selector that failed or returned ambiguous. Source removes guesswork
+but is not runtime proof: validate the source-defined live postcondition after the
+action.
+
+For runtime-only ambiguity or exploration, run the smallest `dev inspect QUERY`. It
 searches mounted Flutter Element targets, independent of developer-authored
 Semantics, and returns the shortest stable `sel` plus compact known `can` actions.
 Copy `sel` exactly into `tap`, `type --into`, or `scroll`; every selector condition
