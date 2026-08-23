@@ -11,9 +11,12 @@ import 'package:cockpit/src/development/cockpit_development_session_status.dart'
 import 'package:cockpit/src/development/cockpit_flutter_run_machine_client.dart';
 import 'package:cockpit/src/development/cockpit_vm_network_profiler.dart';
 import 'package:cockpit/src/foundation/cockpit_permissions.dart';
+import 'package:cockpit/src/foundation/cockpit_locked_json_store.dart';
 import 'package:cockpit/src/remote/cockpit_android_port_forwarder.dart';
 import 'package:cockpit/src/session/cockpit_remote_session_handle.dart';
 import 'package:cockpit/src/worker/cockpit_worker_development_session_runtime.dart';
+import 'package:cockpit/src/worker/cockpit_worker_logger.dart';
+import 'package:cockpit/src/worker/cockpit_worker_session_log_store.dart';
 import 'package:cockpit_protocol/cockpit_protocol.dart';
 import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
@@ -208,9 +211,16 @@ void main() {
       );
       addTearDown(() => runtimeRoot.delete(recursive: true));
       final networkProfiler = _RecordingNetworkProfiler();
+      final sessionLogStore = CockpitWorkerSessionLogStore(
+        root: p.join(runtimeRoot.path, 'session-logs'),
+        redactor: CockpitWorkerLogRedactor(),
+        permissionHardener: const _NoopPermissionHardener(),
+        directorySyncer: const _NoopDirectorySyncer(),
+      );
       final runtime = CockpitWorkerDevelopmentSessionRuntime(
         appTempStore: _appTempStore(runtimeRoot),
         networkProfiler: networkProfiler,
+        sessionLogStore: sessionLogStore,
         machineClientAttacher: (handle, environment) async {
           attachCalls += 1;
           attachEnvironment = environment;
@@ -225,7 +235,16 @@ void main() {
       final handle = _persistedHandle(port: server.port);
 
       final recovered = await runtime.query(handle);
+      await sessionLogStore.flush(handle.developmentSessionId);
       expect(recovered.status.state, CockpitDevelopmentSessionState.ready);
+      expect(
+        recovered.supervisorLogPath,
+        sessionLogStore.pathFor(handle.developmentSessionId),
+      );
+      expect(
+        await File(recovered.supervisorLogPath!).readAsString(),
+        contains('recovery requested'),
+      );
       expect(recovered.handle.appId, 'old-machine-app');
       expect(recovered.handle.remoteSessionHandle?.appId, 'old-machine-app');
       expect(attachCalls, 0);
@@ -393,6 +412,13 @@ final class _NoopPermissionHardener implements CockpitPermissionHardener {
 
   @override
   Future<void> hardenFile(File file) async {}
+}
+
+final class _NoopDirectorySyncer implements CockpitDirectorySyncer {
+  const _NoopDirectorySyncer();
+
+  @override
+  Future<void> sync(String directoryPath) async {}
 }
 
 final class _RecordingNetworkProfiler implements CockpitNetworkProfiler {

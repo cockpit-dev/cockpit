@@ -26,6 +26,8 @@ final class SessionMonitorNotifier extends Notifier<SessionMonitorState> {
   bool _forceProbePending = false;
   int _generation = 0;
   final Map<SessionMonitorKey, DateTime> _lastProbeAt = {};
+  final Set<(SessionMonitorKey, SessionMonitorSection)> _sectionLoads =
+      <(SessionMonitorKey, SessionMonitorSection)>{};
 
   @override
   SessionMonitorState build() {
@@ -259,18 +261,22 @@ final class SessionMonitorNotifier extends Notifier<SessionMonitorState> {
 
   Future<void> loadSection(
     SessionMonitorKey key,
-    SessionMonitorSection section,
-  ) async {
+    SessionMonitorSection section, {
+    bool silent = false,
+  }) async {
     if (section == SessionMonitorSection.activity) return;
+    final loadKey = (key, section);
+    if (!_sectionLoads.add(loadKey)) return;
     final current = state.detail(key);
-    if (current.loading(section)) return;
-    _setDetail(
-      key,
-      current.copyWith(
-        loadingSections: {...current.loadingSections, section},
-        sectionErrors: Map.of(current.sectionErrors)..remove(section),
-      ),
-    );
+    if (!silent) {
+      _setDetail(
+        key,
+        current.copyWith(
+          loadingSections: {...current.loadingSections, section},
+          sectionErrors: Map.of(current.sectionErrors)..remove(section),
+        ),
+      );
+    }
     try {
       final client = await ref.read(supervisorProvider.notifier).ensureClient();
       final update = switch (section) {
@@ -291,12 +297,14 @@ final class SessionMonitorNotifier extends Notifier<SessionMonitorState> {
         update.apply(
           latest.copyWith(
             loadingSections: {...latest.loadingSections}..remove(section),
+            sectionErrors: Map.of(latest.sectionErrors)..remove(section),
             updatedAt: DateTime.now().toUtc(),
           ),
         ),
       );
     } on Object catch (error) {
       if (state.selected != key) return;
+      if (silent) return;
       final latest = state.detail(key);
       _setDetail(
         key,
@@ -305,6 +313,8 @@ final class SessionMonitorNotifier extends Notifier<SessionMonitorState> {
           sectionErrors: {...latest.sectionErrors, section: '$error'},
         ),
       );
+    } finally {
+      _sectionLoads.remove(loadKey);
     }
   }
 
@@ -736,14 +746,41 @@ final class SessionMonitorNotifier extends Notifier<SessionMonitorState> {
   Future<_DetailUpdate> _loadLogs(
     ConsoleSupervisorClient client,
     SessionMonitorKey key,
-  ) async => _DetailUpdate(
-    logs: await _operation(
-      client,
-      'logs.read',
-      key,
-      input: const <String, Object?>{'maxLines': 5000},
-    ),
-  );
+  ) async {
+    final values = await Future.wait([
+      _tryOperation(
+        client,
+        'logs.read',
+        key,
+        input: const <String, Object?>{'maxLines': 1000},
+      ),
+      _tryOperation(
+        client,
+        'session.logs.read',
+        key,
+        input: const <String, Object?>{'maxLines': 1000},
+      ),
+    ]);
+    final appLogs = values[0];
+    final sessionLogs = values[1];
+    return _DetailUpdate(
+      logs:
+          appLogs.output ??
+          <String, Object?>{
+            'available': false,
+            'missingReason': appLogs.error ?? 'Application logs unavailable.',
+            'lines': const <String>[],
+          },
+      sessionLogs:
+          sessionLogs.output ??
+          <String, Object?>{
+            'available': false,
+            'missingReason':
+                sessionLogs.error ?? 'Session logs are unavailable.',
+            'lines': const <String>[],
+          },
+    );
+  }
 
   Future<_DetailUpdate> _loadNetwork(
     ConsoleSupervisorClient client,

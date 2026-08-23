@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:cockpit_console/i18n/strings.g.dart';
 import 'package:cockpit_console/src/providers/core_providers.dart';
 import 'package:cockpit_console/src/providers/session_monitor_models.dart';
@@ -14,6 +16,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+
+const _liveLogRefreshInterval = Duration(seconds: 2);
 
 final class SessionMonitorDetailPane extends HookConsumerWidget {
   const SessionMonitorDetailPane({
@@ -44,6 +48,23 @@ final class SessionMonitorDetailPane extends HookConsumerWidget {
         });
       }
       return null;
+    }, [currentSession?.key, section]);
+    useEffect(() {
+      if (currentSession == null || section != SessionMonitorSection.logs) {
+        return null;
+      }
+      final timer = Timer.periodic(_liveLogRefreshInterval, (_) {
+        unawaited(
+          ref
+              .read(sessionMonitorProvider.notifier)
+              .loadSection(
+                currentSession.key,
+                SessionMonitorSection.logs,
+                silent: true,
+              ),
+        );
+      });
+      return timer.cancel;
     }, [currentSession?.key, section]);
 
     if (currentSession == null || currentDetail == null) {
@@ -418,7 +439,8 @@ bool _sectionLoaded(
   return switch (section) {
     SessionMonitorSection.overview => detail.identity != null,
     SessionMonitorSection.ui => detail.ui != null,
-    SessionMonitorSection.logs => detail.logs != null,
+    SessionMonitorSection.logs =>
+      detail.logs != null || detail.sessionLogs != null,
     SessionMonitorSection.network => detail.network != null,
     SessionMonitorSection.activity => true,
     SessionMonitorSection.diagnostics =>

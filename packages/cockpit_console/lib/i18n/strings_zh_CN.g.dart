@@ -1052,7 +1052,16 @@ class _Translations$sessions$logs$zh_CN extends Translations$sessions$logs$en {
 	final TranslationsZhCn _root; // ignore: unused_field
 
 	// Translations
-	@override String get open => '打开此分区以读取最新应用日志。';
+	@override String get open => '打开此分区以实时查看启动日志和应用日志。';
+	@override String get live => '每 2 秒自动刷新';
+	@override String get latestBelow => '最新输出在底部';
+	@override String get startupTitle => '启动与 Flutter 工具日志';
+	@override String get startupNone => '暂无启动或 Flutter 工具日志。';
+	@override String startupRecent({required num n}) => (_root.$meta.cardinalResolver ?? PluralResolvers.cardinal('zh'))(n,
+		one: '最近 ${n} 行启动日志',
+		other: '最近 ${n} 行启动日志',
+	);
+	@override String get startupRunningEmpty => 'Cockpit 正在等待 Flutter 工具输出。';
 	@override String get title => '应用日志';
 	@override String get none => '未捕获到应用日志。';
 	@override String recent({required num n}) => (_root.$meta.cardinalResolver ?? PluralResolvers.cardinal('zh'))(n,
@@ -1856,7 +1865,13 @@ extension on TranslationsZhCn {
 			'sessions.ui.metadata' => '检查元数据',
 			'sessions.ui.metadataEmpty' => '暂无检查元数据。',
 			'sessions.ui.copyMetadata' => '复制检查元数据',
-			'sessions.logs.open' => '打开此分区以读取最新应用日志。',
+			'sessions.logs.open' => '打开此分区以实时查看启动日志和应用日志。',
+			'sessions.logs.live' => '每 2 秒自动刷新',
+			'sessions.logs.latestBelow' => '最新输出在底部',
+			'sessions.logs.startupTitle' => '启动与 Flutter 工具日志',
+			'sessions.logs.startupNone' => '暂无启动或 Flutter 工具日志。',
+			'sessions.logs.startupRecent' => ({required num n}) => (_root.$meta.cardinalResolver ?? PluralResolvers.cardinal('zh'))(n, one: '最近 ${n} 行启动日志', other: '最近 ${n} 行启动日志', ),
+			'sessions.logs.startupRunningEmpty' => 'Cockpit 正在等待 Flutter 工具输出。',
 			'sessions.logs.title' => '应用日志',
 			'sessions.logs.none' => '未捕获到应用日志。',
 			'sessions.logs.recent' => ({required num n}) => (_root.$meta.cardinalResolver ?? PluralResolvers.cardinal('zh'))(n, one: '最近 ${n} 行日志', other: '最近 ${n} 行日志', ),

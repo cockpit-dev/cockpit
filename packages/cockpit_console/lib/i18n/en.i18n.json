@@ -737,7 +737,16 @@
       "copy_metadata": "Copy inspection metadata"
     },
     "logs": {
-      "open": "Open this section to read the latest application logs.",
+      "open": "Open this section to follow startup and application logs live.",
+      "live": "Refreshes every 2 seconds",
+      "latest_below": "Latest output below",
+      "startup_title": "Startup and Flutter tool logs",
+      "startup_none": "No startup or Flutter tool log lines were captured.",
+      "startup_recent": {
+        "one": "{{n}} recent startup log line",
+        "other": "{{n}} recent startup log lines"
+      },
+      "startup_running_empty": "Cockpit is waiting for Flutter tool output.",
       "title": "Application logs",
       "none": "No application log lines were captured.",
       "recent": {

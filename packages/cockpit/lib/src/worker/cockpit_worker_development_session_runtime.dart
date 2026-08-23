@@ -22,15 +22,18 @@ import '../remote/cockpit_remote_session_client.dart';
 import '../session/cockpit_remote_session_launcher.dart';
 import '../session/cockpit_flutter_launch_configuration.dart';
 import '../session/cockpit_session_process_runner.dart';
+import 'cockpit_worker_session_log_store.dart';
 
 final class CockpitWorkerDevelopmentSessionSnapshot {
   const CockpitWorkerDevelopmentSessionSnapshot({
     required this.handle,
     required this.status,
+    this.supervisorLogPath,
   });
 
   final CockpitDevelopmentSessionHandle handle;
   final CockpitDevelopmentSessionStatus status;
+  final String? supervisorLogPath;
 }
 
 final class CockpitWorkerDevelopmentSessionRuntime {
@@ -44,6 +47,7 @@ final class CockpitWorkerDevelopmentSessionRuntime {
     CockpitFlutterExecutableVersionReader? flutterVersionReader,
     CockpitTokenGenerator? tokenGenerator,
     CockpitDevelopmentMachineDiagnosticLogger? logger,
+    CockpitWorkerSessionLogStore? sessionLogStore,
     CockpitAndroidDeviceProbeRunner androidDeviceProbeRunner =
         cockpitRunProcessWithTimeout,
     CockpitNetworkProfiler? networkProfiler,
@@ -69,6 +73,7 @@ final class CockpitWorkerDevelopmentSessionRuntime {
        _flutterVersionReader = flutterVersionReader,
        _tokenGenerator = tokenGenerator ?? CockpitSecureTokenGenerator(),
        _logger = logger,
+       _sessionLogStore = sessionLogStore,
        _androidDeviceProbeRunner = androidDeviceProbeRunner,
        _networkProfiler = networkProfiler,
        _platformAppStopper = platformAppStopper ?? CockpitPlatformAppStopper(),
@@ -85,6 +90,7 @@ final class CockpitWorkerDevelopmentSessionRuntime {
   final CockpitFlutterExecutableVersionReader? _flutterVersionReader;
   final CockpitTokenGenerator _tokenGenerator;
   final CockpitDevelopmentMachineDiagnosticLogger? _logger;
+  final CockpitWorkerSessionLogStore? _sessionLogStore;
   final CockpitAndroidDeviceProbeRunner _androidDeviceProbeRunner;
   final CockpitNetworkProfiler? _networkProfiler;
   final CockpitPlatformAppStopper _platformAppStopper;
@@ -110,6 +116,13 @@ final class CockpitWorkerDevelopmentSessionRuntime {
       target: request.target,
     );
     final developmentSessionId = _tokenGenerator.nextResourceId('s');
+    final supervisorLogPath = _sessionLogStore?.pathFor(developmentSessionId);
+    await _createSessionLog(developmentSessionId);
+    await _logSession(
+      developmentSessionId,
+      'launch requested platform=${request.platform} '
+      'device=${request.deviceId} target=$target',
+    );
     final flutterExecutable = _sdkEnvironment.flutterExecutable;
     final flutterVersion = await (_flutterVersionReader == null
         ? cockpitReadFlutterVersion(
@@ -214,11 +227,7 @@ final class CockpitWorkerDevelopmentSessionRuntime {
         readiness: true,
       ),
       appReachabilityProbe: _appReachabilityProbe,
-      logger: _logger == null
-          ? null
-          : (message) async {
-              await _logger(message);
-            },
+      logger: (message) => _logSession(developmentSessionId, message),
       vmServiceObserver: (uri) {
         final profiler = _networkProfiler;
         if (profiler == null) return;
@@ -253,7 +262,11 @@ final class CockpitWorkerDevelopmentSessionRuntime {
       return CockpitLaunchDevelopmentSessionResult(
         sessionHandle: snapshot.handle,
         status: snapshot.status,
-        app: CockpitAppHandle.fromDevelopmentSession(snapshot.handle),
+        app: CockpitAppHandle.fromDevelopmentSession(
+          snapshot.handle,
+          supervisorLogPath: supervisorLogPath,
+        ),
+        supervisorLogPath: supervisorLogPath,
       );
     } on Object catch (error, stackTrace) {
       supervisor.reportStartupFailure(error);
@@ -268,6 +281,7 @@ final class CockpitWorkerDevelopmentSessionRuntime {
         developmentSessionId: developmentSessionId,
         platform: request.platform,
       );
+      await _flushSessionLog(developmentSessionId);
       final mapped = _developmentLaunchFailure(error);
       if (identical(mapped, error)) rethrow;
       Error.throwWithStackTrace(mapped, stackTrace);
@@ -333,6 +347,7 @@ final class CockpitWorkerDevelopmentSessionRuntime {
         developmentSessionId: handle.developmentSessionId,
         platform: handle.platform,
       );
+      await _flushSessionLog(handle.developmentSessionId);
     }
     return _snapshot(supervisor);
   }
@@ -349,6 +364,7 @@ final class CockpitWorkerDevelopmentSessionRuntime {
         developmentSessionId: handle.developmentSessionId,
         platform: handle.platform,
       );
+      await _flushSessionLog(handle.developmentSessionId);
     }
   }
 
@@ -379,6 +395,7 @@ final class CockpitWorkerDevelopmentSessionRuntime {
         }
       }),
     );
+    await _flushAllSessionLogs();
   }
 
   Future<CockpitDevelopmentSessionSupervisor> _require(
@@ -410,6 +427,11 @@ final class CockpitWorkerDevelopmentSessionRuntime {
         message: 'Development session has no remote runtime identity.',
       );
     }
+    await _logSession(
+      handle.developmentSessionId,
+      'recovery requested platform=${handle.platform} '
+      'device=${handle.deviceId} target=${handle.target}',
+    );
     final supervisor = CockpitDevelopmentSessionSupervisor(
       initialHandle: handle,
       machineClient: null,
@@ -419,11 +441,7 @@ final class CockpitWorkerDevelopmentSessionRuntime {
       remoteControlReadinessProbe: (baseUri) =>
           _probeHandle(handle, baseUri: baseUri, readiness: true),
       appReachabilityProbe: _appReachabilityProbe,
-      logger: _logger == null
-          ? null
-          : (message) async {
-              await _logger(message);
-            },
+      logger: (message) => _logSession(handle.developmentSessionId, message),
       vmServiceObserver: (uri) {
         final profiler = _networkProfiler;
         if (profiler == null) return;
@@ -625,6 +643,9 @@ final class CockpitWorkerDevelopmentSessionRuntime {
         return CockpitWorkerDevelopmentSessionSnapshot(
           handle: handle,
           status: status,
+          supervisorLogPath: _sessionLogStore?.pathFor(
+            handle.developmentSessionId,
+          ),
         );
       }
     }
@@ -697,5 +718,47 @@ final class CockpitWorkerDevelopmentSessionRuntime {
       return path == null ? error.message : '${error.message}: $path';
     }
     return '$error';
+  }
+
+  Future<void> _createSessionLog(String developmentSessionId) async {
+    final store = _sessionLogStore;
+    if (store == null) return;
+    try {
+      await store.create(developmentSessionId);
+    } on Object catch (error) {
+      await _logger?.call('Development session log creation failed: $error');
+    }
+  }
+
+  Future<void> _logSession(String developmentSessionId, String message) async {
+    final store = _sessionLogStore;
+    final write = store?.append(developmentSessionId, message);
+    await _logger?.call(message);
+    if (write == null) return;
+    try {
+      await write;
+    } on Object catch (error) {
+      await _logger?.call('Development session log write failed: $error');
+    }
+  }
+
+  Future<void> _flushSessionLog(String developmentSessionId) async {
+    final store = _sessionLogStore;
+    if (store == null) return;
+    try {
+      await store.flush(developmentSessionId);
+    } on Object catch (error) {
+      await _logger?.call('Development session log flush failed: $error');
+    }
+  }
+
+  Future<void> _flushAllSessionLogs() async {
+    final store = _sessionLogStore;
+    if (store == null) return;
+    try {
+      await store.flushAll();
+    } on Object catch (error) {
+      await _logger?.call('Development session log flush failed: $error');
+    }
   }
 }

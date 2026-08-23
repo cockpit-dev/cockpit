@@ -622,7 +622,8 @@ final class CockpitWorkerInteractiveOperations {
       ..recordDevelopmentSession(
         handle: query.handle,
         status: query.status,
-        supervisorLogPath: app.handle.supervisorLogPath,
+        supervisorLogPath:
+            app.handle.supervisorLogPath ?? query.supervisorLogPath,
       );
     final result = await runWorkerApplicationOperation(
       context: context,
