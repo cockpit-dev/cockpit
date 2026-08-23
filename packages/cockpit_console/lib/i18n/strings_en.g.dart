@@ -2344,8 +2344,29 @@ class Translations$sessions$logs$en {
 
 	// Translations
 
-	/// en: 'Open this section to read the latest application logs.'
-	String get open => 'Open this section to read the latest application logs.';
+	/// en: 'Open this section to follow startup and application logs live.'
+	String get open => 'Open this section to follow startup and application logs live.';
+
+	/// en: 'Refreshes every 2 seconds'
+	String get live => 'Refreshes every 2 seconds';
+
+	/// en: 'Latest output below'
+	String get latestBelow => 'Latest output below';
+
+	/// en: 'Startup and Flutter tool logs'
+	String get startupTitle => 'Startup and Flutter tool logs';
+
+	/// en: 'No startup or Flutter tool log lines were captured.'
+	String get startupNone => 'No startup or Flutter tool log lines were captured.';
+
+	/// en: '(one) {{{n}} recent startup log line} (other) {{{n}} recent startup log lines}'
+	String startupRecent({required num n}) => (_root.$meta.cardinalResolver ?? PluralResolvers.cardinal('en'))(n,
+		one: '${n} recent startup log line',
+		other: '${n} recent startup log lines',
+	);
+
+	/// en: 'Cockpit is waiting for Flutter tool output.'
+	String get startupRunningEmpty => 'Cockpit is waiting for Flutter tool output.';
 
 	/// en: 'Application logs'
 	String get title => 'Application logs';
@@ -3300,7 +3321,13 @@ extension on Translations {
 			'sessions.ui.metadata' => 'Inspection metadata',
 			'sessions.ui.metadataEmpty' => 'No inspection metadata is available.',
 			'sessions.ui.copyMetadata' => 'Copy inspection metadata',
-			'sessions.logs.open' => 'Open this section to read the latest application logs.',
+			'sessions.logs.open' => 'Open this section to follow startup and application logs live.',
+			'sessions.logs.live' => 'Refreshes every 2 seconds',
+			'sessions.logs.latestBelow' => 'Latest output below',
+			'sessions.logs.startupTitle' => 'Startup and Flutter tool logs',
+			'sessions.logs.startupNone' => 'No startup or Flutter tool log lines were captured.',
+			'sessions.logs.startupRecent' => ({required num n}) => (_root.$meta.cardinalResolver ?? PluralResolvers.cardinal('en'))(n, one: '${n} recent startup log line', other: '${n} recent startup log lines', ),
+			'sessions.logs.startupRunningEmpty' => 'Cockpit is waiting for Flutter tool output.',
 			'sessions.logs.title' => 'Application logs',
 			'sessions.logs.none' => 'No application log lines were captured.',
 			'sessions.logs.recent' => ({required num n}) => (_root.$meta.cardinalResolver ?? PluralResolvers.cardinal('en'))(n, one: '${n} recent log line', other: '${n} recent log lines', ),

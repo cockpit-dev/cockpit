@@ -191,6 +191,53 @@ void main() {
     expect(find.textContaining('500 / 500'), findsOneWidget);
   });
 
+  testWidgets(
+    'logs separate startup and app output with latest lines visible',
+    (tester) async {
+      const detail = SessionMonitorDetail(
+        sessionLogs: <String, Object?>{
+          'logPath': '/tmp/session.log',
+          'lines': <String>['startup-old', 'startup-new'],
+          'truncated': false,
+        },
+        logs: <String, Object?>{
+          'source': 'app_snapshot',
+          'lines': <String>['app-old', 'app-new'],
+          'truncated': false,
+        },
+      );
+
+      await tester.pumpWidget(
+        TranslationProvider(
+          child: MaterialApp(
+            theme: ConsoleTheme.build(Brightness.dark),
+            home: const Scaffold(
+              body: SizedBox(
+                height: 640,
+                child: SessionLogsView(detail: detail),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      expect(find.text('Startup and Flutter tool logs'), findsOneWidget);
+      expect(find.text('Application logs'), findsOneWidget);
+      expect(
+        find.textContaining('Refreshes every 2 seconds'),
+        findsNWidgets(2),
+      );
+      expect(
+        tester.getTopLeft(find.text('startup-new')).dy,
+        greaterThan(tester.getTopLeft(find.text('startup-old')).dy),
+      );
+      expect(
+        tester.getTopLeft(find.text('app-new')).dy,
+        greaterThan(tester.getTopLeft(find.text('app-old')).dy),
+      );
+    },
+  );
+
   test('activity retention preserves newest events and dropped count', () {
     SessionMonitorActivity event(int value) => SessionMonitorActivity(
       at: DateTime.utc(2026, 8, 22).add(Duration(seconds: value)),

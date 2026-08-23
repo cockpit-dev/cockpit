@@ -505,9 +505,12 @@ final class CockpitDevelopmentSessionSupervisor {
         if (event.message case final message? when message.isNotEmpty) {
           _log('machine log $message');
         }
+      case CockpitFlutterRunMachineEventKind.stdout:
+        if (event.message case final message? when message.isNotEmpty) {
+          _log('machine stdout $message');
+        }
       case CockpitFlutterRunMachineEventKind.request:
       case CockpitFlutterRunMachineEventKind.response:
-      case CockpitFlutterRunMachineEventKind.stdout:
       case CockpitFlutterRunMachineEventKind.unknown:
         break;
     }

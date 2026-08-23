@@ -32,6 +32,7 @@ import 'cockpit_worker_operation_router.dart';
 import 'cockpit_worker_process_manager.dart';
 import 'cockpit_worker_runtime_registry.dart';
 import 'cockpit_worker_run_event_store.dart';
+import 'cockpit_worker_session_log_store.dart';
 import 'cockpit_worker_secret_resolver.dart';
 import 'cockpit_worker_suite_run_store.dart';
 import 'cockpit_worker_server.dart';
@@ -224,6 +225,12 @@ final class CockpitWorkerRuntime {
     final developmentRuntime = CockpitWorkerDevelopmentSessionRuntime(
       appTempStore: appTempStore,
       networkProfiler: networkProfiler,
+      sessionLogStore: CockpitWorkerSessionLogStore(
+        root: p.join(roots.stateRoot, 'session_logs'),
+        redactor: _logger.redactor,
+        permissionHardener: _permissionHardener,
+        directorySyncer: _directorySyncer,
+      ),
       logger: (message) => _logger.log(
         'info',
         'Development session runtime.',

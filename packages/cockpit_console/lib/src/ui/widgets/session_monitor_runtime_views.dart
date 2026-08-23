@@ -264,34 +264,88 @@ final class SessionLogsView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final strings = context.t.sessions.logs;
-    final logs = detail.logs;
-    final lines = stringList(logs?['lines']);
-    if (logs == null) {
+    final appLogs = detail.logs;
+    final sessionLogs = detail.sessionLogs;
+    if (appLogs == null && sessionLogs == null) {
       return SessionInlineEmpty(icon: LucideIcons.logs, message: strings.open);
     }
+    final appLines = stringList(appLogs?['lines']);
+    final sessionLines = stringList(sessionLogs?['lines']);
+    final appPath = stringValue(appLogs?['logPath']);
+    final sessionPath = stringValue(sessionLogs?['logPath']);
+    final duplicateSupervisorLog =
+        appLogs?['source'] == 'supervisor' &&
+        appPath != null &&
+        appPath == sessionPath;
+    final appMissing = stringValue(appLogs?['missingReason']);
+    final sessionMissing = stringValue(sessionLogs?['missingReason']);
     return _SectionScroll(
       children: [
         SessionSectionCard(
-          title: strings.title,
-          subtitle: lines.isEmpty
-              ? strings.none
-              : '${strings.recent(n: lines.length)}${logs['truncated'] == true ? strings.olderHidden : ''}.',
-          trailing: stringValue(logs['logPath']) == null
+          title: strings.startupTitle,
+          subtitle: _liveLogSubtitle(
+            live: strings.live,
+            latestBelow: strings.latestBelow,
+            empty: sessionMissing ?? strings.startupNone,
+            recent: strings.startupRecent(n: sessionLines.length),
+            hasLines: sessionLines.isNotEmpty,
+            truncated: sessionLogs?['truncated'] == true,
+            olderHidden: strings.olderHidden,
+          ),
+          trailing: sessionPath == null
               ? null
               : Tooltip(
-                  message: stringValue(logs['logPath'])!,
+                  message: sessionPath,
                   child: const Icon(LucideIcons.fileText, size: 14),
                 ),
-          child: lines.isEmpty
+          child: sessionLines.isEmpty
               ? SessionInlineEmpty(
                   icon: LucideIcons.logs,
-                  message: strings.runningEmpty,
+                  message: sessionMissing ?? strings.startupRunningEmpty,
                 )
-              : _LogLines(lines: lines),
+              : _LogLines(lines: sessionLines),
         ),
+        if (!duplicateSupervisorLog)
+          SessionSectionCard(
+            title: strings.title,
+            subtitle: _liveLogSubtitle(
+              live: strings.live,
+              latestBelow: strings.latestBelow,
+              empty: appMissing ?? strings.none,
+              recent: strings.recent(n: appLines.length),
+              hasLines: appLines.isNotEmpty,
+              truncated: appLogs?['truncated'] == true,
+              olderHidden: strings.olderHidden,
+            ),
+            trailing: appPath == null
+                ? null
+                : Tooltip(
+                    message: appPath,
+                    child: const Icon(LucideIcons.fileText, size: 14),
+                  ),
+            child: appLines.isEmpty
+                ? SessionInlineEmpty(
+                    icon: LucideIcons.logs,
+                    message: appMissing ?? strings.runningEmpty,
+                  )
+                : _LogLines(lines: appLines),
+          ),
       ],
     );
   }
+}
+
+String _liveLogSubtitle({
+  required String live,
+  required String latestBelow,
+  required String empty,
+  required String recent,
+  required bool hasLines,
+  required bool truncated,
+  required String olderHidden,
+}) {
+  final summary = hasLines ? '$recent${truncated ? olderHidden : ''}' : empty;
+  return '$live · $summary · $latestBelow';
 }
 
 enum _ActivityFilter { all, lifecycle, routes, runtime, network }
@@ -694,22 +748,26 @@ final class _LogLines extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final visibleRows = lines.length.clamp(1, 28);
-    final height = (20 + visibleRows * 18).clamp(80, 520).toDouble();
+    final visibleRows = lines.length.clamp(1, 16);
+    final height = (20 + visibleRows * 18).clamp(80, 320).toDouble();
     return SizedBox(
       height: height,
       child: ColoredBox(
         color: context.consoleColors.bg,
         child: ListView.builder(
+          reverse: true,
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           itemCount: lines.length,
-          itemBuilder: (context, index) => SelectableText(
-            lines[index],
-            style: consoleMono(
-              size: 11,
-              color: context.consoleColors.inkSecondary,
-            ),
-          ),
+          itemBuilder: (context, index) {
+            final line = lines[lines.length - index - 1];
+            return SelectableText(
+              line,
+              style: consoleMono(
+                size: 11,
+                color: context.consoleColors.inkSecondary,
+              ),
+            );
+          },
         ),
       ),
     );
