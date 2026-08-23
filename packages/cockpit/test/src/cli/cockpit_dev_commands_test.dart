@@ -185,6 +185,24 @@ void main() {
     );
   });
 
+  test('session-bound next commands keep the exact handle', () {
+    for (final path in const <String>[
+      'lib/src/cli/cockpit_dev_runtime.dart',
+      'lib/src/cli/cockpit_dev_screenshot.dart',
+      'lib/src/cli/cockpit_dev_network.dart',
+    ]) {
+      final source = File(path).readAsStringSync();
+      final nextCommands =
+          RegExp(r"(?:next:|'next':)(?:(?!,\s*\n).)*", dotAll: true)
+              .allMatches(source)
+              .where((match) => match.group(0)!.contains('cockpit dev '));
+      expect(nextCommands, isNotEmpty, reason: path);
+      for (final match in nextCommands) {
+        expect(match.group(0), contains('--session'), reason: path);
+      }
+    }
+  });
+
   test('skill exposes one bounded AI installation prompt', () async {
     final stdout = StringBuffer();
     final runner = CockpitCommandRunner(

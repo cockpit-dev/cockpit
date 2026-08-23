@@ -29,7 +29,8 @@ the canonical Flutter project. A monorepo may have independent active handles
 for multiple Flutter projects, and one project may keep several platform/target
 handles. `dev use HANDLE` changes that project's active handle; explicit
 `--session HANDLE` selects one command without changing it. A common ancestor
-with multiple active projects fails as ambiguous instead of guessing.
+with multiple active projects fails as ambiguous instead of guessing. A
+session-bound recovery `next` keeps the exact handle; execute it as returned.
 
 `--env`, `--dart-define`, and custom Flutter arguments are never persisted or
 printed. Cockpit does not access a keychain or secret store. A session launched

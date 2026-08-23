@@ -414,6 +414,7 @@ final class CockpitCliRuntime {
   }
 
   Future<CockpitCliSessionHandle> bindDevelopmentSession({
+    bool activate = true,
     required CockpitCheckoutIdentity checkout,
     required String projectPath,
     required String workspaceId,
@@ -430,6 +431,7 @@ final class CockpitCliRuntime {
     bool replaceLaunchIdentity = false,
   }) => sessionHandleStore().then(
     (store) => store.bindDevelopment(
+      activate: activate,
       checkoutIdentity: checkout.value,
       checkoutPath: checkout.canonicalRoot,
       projectPath: projectPath,
@@ -449,6 +451,7 @@ final class CockpitCliRuntime {
   );
 
   Future<CockpitCliSessionHandle> updateDevelopmentSession({
+    bool activate = false,
     required CockpitCliSessionHandle previous,
     required String workspaceId,
     required String sessionId,
@@ -475,6 +478,7 @@ final class CockpitCliRuntime {
     }
     return sessionHandleStore().then(
       (store) => store.bindDevelopment(
+        activate: activate,
         checkoutIdentity: checkoutIdentity,
         checkoutPath: checkoutPath,
         projectPath: projectPath,

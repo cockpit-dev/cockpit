@@ -162,6 +162,7 @@ final class CockpitCliSessionHandleStore {
   });
 
   Future<CockpitCliSessionHandle> bindDevelopment({
+    bool activate = true,
     required String checkoutIdentity,
     required String checkoutPath,
     required String projectPath,
@@ -289,7 +290,9 @@ final class CockpitCliSessionHandleStore {
       );
       state.handles[state.handles.indexOf(existing)] = handle;
     }
-    state.activeByProject[projectPath] = handle.handleId;
+    if (activate) {
+      state.activeByProject[projectPath] = handle.handleId;
+    }
     return CockpitLockedJsonUpdate.write(state, handle);
   });
 

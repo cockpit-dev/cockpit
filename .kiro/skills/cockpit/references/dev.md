@@ -26,7 +26,9 @@ cockpit dev status
 Use `cockpit session list` for an immediate local index. It performs no daemon,
 worker, Flutter attach, reconnect, or app launch work; `state` is only the
 last saved state. Use `cockpit session show HANDLE` when live reachability is
-actually required.
+actually required. Use `cockpit dev use HANDLE` only for a persistent selection
+change. Explicit `--session HANDLE` and a returned recovery `next` stay scoped to
+that exact handle without changing the saved active selection.
 
 Interactive `dev start` prints bounded launch stages to stderr so a Flutter build
 does not look frozen. Machine-readable stdout remains a single clean projection;
@@ -193,8 +195,9 @@ cockpit dev scroll "Save" --align center --offset 12
 
 Alignment is `nearest|start|center|end`. Positive offset moves toward the viewport
 end; negative offset moves toward its start. Legal scroll extents win when an exact
-placement is impossible. Add an explicit scroll-container locator only to override
-automatic selection after diagnostics prove it is necessary.
+placement is impossible. Cockpit owns scroll-container discovery; when a target is
+ambiguous, strengthen the target selector with a real ancestor or identity instead
+of inventing a container option.
 
 ## Timeouts
 

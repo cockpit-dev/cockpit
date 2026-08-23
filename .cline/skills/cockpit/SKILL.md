@@ -214,7 +214,8 @@ inside that project reuse it automatically. One checkout may contain many Flutte
 projects, and one project may keep concurrent platform or target handles. `cockpit
 dev use HANDLE` changes the active selection for that handle's project. The selection persists.
 An explicit `--session HANDLE` selects exactly one command and never changes the
-saved active selection.
+saved active selection. A session-bound `next` command keeps that exact handle;
+execute it as returned instead of dropping `--session`.
 
 ```bash
 cockpit session list

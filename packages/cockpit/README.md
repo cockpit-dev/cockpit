@@ -85,7 +85,8 @@ active numeric handle per canonical Flutter project, guarded by checkout
 identity; the same project may keep separate platform/target handles. Use
 `cockpit session list`, `cockpit session show HANDLE`, and `cockpit dev use
 HANDLE` when identity needs confirmation or selection. Explicit `--session`
-targets one command without changing the saved active handle. `dev` starts its
+targets one command without changing the saved active handle; a returned
+recovery `next` keeps that exact handle. `dev` starts its
 local Supervisor in process-scoped yolo mode. Cockpit does not read a keychain
 or secret store, and `--env` values are process-only.
 

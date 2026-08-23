@@ -403,6 +403,21 @@ void main() {
     },
   );
 
+  test('stopped status points back to the exact inspected handle', () async {
+    final stopped = session.copyWith(lifecycle: 'stopped');
+    final dev = CockpitDevRuntime(runtime);
+    runtime.configureOutput(
+      command: 'dev.status',
+      selection: const CockpitCliOutputSelection(),
+    );
+
+    expect(await dev.status(stopped), cockpitSuccessExitCode);
+
+    final output = lon.decode(stdout.toString())! as Map<Object?, Object?>;
+    expect(output['session'], int.parse(session.handleId));
+    expect(output['next'], 'cockpit dev start --session ${session.handleId}');
+  });
+
   test(
     'crashed sessions point back to start for handle-preserving recovery',
     () async {
@@ -447,6 +462,42 @@ void main() {
     expect(
       cockpitDevSessionRequiresStopBeforeLaunch(handle('stopped')),
       isFalse,
+    );
+  });
+
+  test('start failure next is exact or omitted', () {
+    expect(
+      cockpitDevStartFailureNext(
+        request: const CockpitDevStartRequest(),
+        session: null,
+      ),
+      'cockpit dev start',
+    );
+    expect(
+      cockpitDevStartFailureNext(
+        request: const CockpitDevStartRequest(platform: 'macos'),
+        session: null,
+      ),
+      isNull,
+    );
+    expect(
+      cockpitDevStartFailureNext(
+        request: const CockpitDevStartRequest(sessionReference: '1'),
+        session: session,
+      ),
+      'cockpit dev start --session ${session.handleId}',
+    );
+    expect(
+      cockpitDevStartFailureNext(
+        request: const CockpitDevStartRequest(
+          sessionReference: '1',
+          launchConfiguration: <String, Object?>{
+            'dartDefines': <Object?>['API_URL=https://example.test'],
+          },
+        ),
+        session: session,
+      ),
+      isNull,
     );
   });
 
@@ -887,6 +938,10 @@ void main() {
       expect(ui, isNot(contains('snapshot')));
       expect(output['errors'], 1);
       expect(output['netFailures'], 1);
+      expect(
+        output['next'],
+        'cockpit dev inspect --session ${session.handleId}',
+      );
     },
   );
 

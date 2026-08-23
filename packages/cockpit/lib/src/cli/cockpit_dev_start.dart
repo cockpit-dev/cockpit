@@ -184,7 +184,11 @@ final class CockpitDevStartService {
         },
       );
       if (!_succeeded(registered)) {
-        return _writePreSessionFailure('start', registered);
+        return _writePreSessionFailure(
+          'start',
+          registered,
+          next: cockpitDevStartFailureNext(request: request, session: active),
+        );
       }
       targets = await client.targets(workspace.workspaceId);
       matches = targets
@@ -227,9 +231,14 @@ final class CockpitDevStartService {
         <String, Object?>{'sessionId': active.sessionId},
       );
       if (!_succeeded(stopped)) {
-        return _writePreSessionFailure('start', stopped);
+        return _writePreSessionFailure(
+          'start',
+          stopped,
+          next: cockpitDevStartFailureNext(request: request, session: active),
+        );
       }
       active = await runtime.updateDevelopmentSession(
+        activate: false,
         previous: active,
         workspaceId: active.workspaceId,
         sessionId: active.sessionId,
@@ -254,7 +263,11 @@ final class CockpitDevStartService {
       },
     );
     if (!_succeeded(launched)) {
-      return _writePreSessionFailure('start', launched);
+      return _writePreSessionFailure(
+        'start',
+        launched,
+        next: cockpitDevStartFailureNext(request: request, session: active),
+      );
     }
     runtime.progress('Binding development session...');
     final output = launched.output ?? const <String, Object?>{};
@@ -270,6 +283,7 @@ final class CockpitDevStartService {
     final recoverable = launchConfiguration == null;
     final handle = active == null
         ? await runtime.bindDevelopmentSession(
+            activate: true,
             checkout: checkout,
             projectPath: projectDirectory,
             workspaceId: workspace.workspaceId,
@@ -285,6 +299,7 @@ final class CockpitDevStartService {
             replaceLaunchIdentity: true,
           )
         : await runtime.updateDevelopmentSession(
+            activate: request.sessionReference == null,
             previous: active,
             workspaceId: workspace.workspaceId,
             sessionId: sessionId,
@@ -561,8 +576,9 @@ final class CockpitDevStartService {
 
   Future<int> _writePreSessionFailure(
     String action,
-    CockpitOperationResult result,
-  ) async {
+    CockpitOperationResult result, {
+    String? next,
+  }) async {
     await runtime.success(<String, Object?>{
       'ok': false,
       'action': action,
@@ -575,10 +591,24 @@ final class CockpitDevStartService {
               'operation': result.kind,
             },
       ],
-      'next': 'cockpit dev start',
+      'next': ?next,
     });
     return cockpitDataExitCode;
   }
+}
+
+String? cockpitDevStartFailureNext({
+  required CockpitDevStartRequest request,
+  required CockpitCliSessionHandle? session,
+}) {
+  if (request.launchConfiguration != null) return null;
+  if (session != null) {
+    return 'cockpit dev start --session ${session.handleId}';
+  }
+  if (request.sessionReference == null && !request.hasExplicitSelection) {
+    return 'cockpit dev start';
+  }
+  return null;
 }
 
 CockpitWorkspaceResource? cockpitSelectDevWorkspace(
