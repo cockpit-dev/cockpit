@@ -8,6 +8,7 @@ import '../supervisor/cockpit_supervisor_api_client.dart';
 import 'cockpit_cli_runtime.dart';
 import 'cockpit_cli_session_handles.dart';
 import 'cockpit_dev_runtime.dart';
+import 'cockpit_flutter_bridge_shell_inspector.dart';
 
 final class CockpitDevStartRequest {
   const CockpitDevStartRequest({
@@ -37,9 +38,15 @@ final class CockpitDevStartRequest {
 }
 
 final class CockpitDevStartService {
-  CockpitDevStartService(this.runtime) : dev = CockpitDevRuntime(runtime);
+  CockpitDevStartService(
+    this.runtime, {
+    CockpitFlutterBridgeShellInspector? bridgeShellInspector,
+  }) : bridgeShellInspector =
+           bridgeShellInspector ?? const CockpitFlutterBridgeShellInspector(),
+       dev = CockpitDevRuntime(runtime);
 
   final CockpitCliRuntime runtime;
+  final CockpitFlutterBridgeShellInspector bridgeShellInspector;
   final CockpitDevRuntime dev;
 
   Future<int> start(CockpitDevStartRequest request) async {
@@ -100,6 +107,12 @@ final class CockpitDevStartService {
     );
     final projectDirectory = project.path;
     final entrypoint = project.entrypoint;
+    runtime.progress('Checking Cockpit bridge shell...');
+    bridgeShellInspector.validate(
+      checkoutRoot: checkout.canonicalRoot,
+      projectPath: projectDirectory,
+      entrypoint: entrypoint,
+    );
     if (active != null &&
         (active.checkoutIdentity != checkout.value ||
             !p.equals(active.projectPath!, projectDirectory))) {
