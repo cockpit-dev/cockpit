@@ -558,6 +558,7 @@ final class SessionDiagnosticsView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final strings = context.t.sessions.diagnostics;
+    final logStrings = context.t.sessions.logs;
     if (detail.errors == null && detail.sessionLogs == null) {
       return SessionInlineEmpty(
         icon: LucideIcons.stethoscope,
@@ -566,6 +567,7 @@ final class SessionDiagnosticsView extends StatelessWidget {
     }
     final errors = objectList(detail.errors?['errors']);
     final sessionLines = stringList(detail.sessionLogs?['lines']);
+    final sessionPath = stringValue(detail.sessionLogs?['logPath']);
     final sessionLogsMissing = stringValue(
       detail.sessionLogs?['missingReason'],
     );
@@ -584,12 +586,18 @@ final class SessionDiagnosticsView extends StatelessWidget {
               : _RuntimeErrorsList(errors: errors),
         ),
         SessionSectionCard(
+          key: const ValueKey('session-diagnostic-logs'),
           title: strings.sessionLogs,
           subtitle:
               sessionLogsMissing ??
               (sessionLines.isEmpty
                   ? strings.noSessionLines
                   : strings.recentSessionLines(n: sessionLines.length)),
+          trailing: _LogCopyActions(lines: sessionLines, path: sessionPath),
+          collapsible: true,
+          initiallyExpanded: false,
+          expandLabel: logStrings.expand,
+          collapseLabel: logStrings.collapse,
           child: sessionLines.isEmpty
               ? SessionInlineEmpty(
                   icon: LucideIcons.logs,

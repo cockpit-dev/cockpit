@@ -274,6 +274,64 @@ void main() {
     expect(find.text('startup-new'), findsNothing);
   });
 
+  testWidgets('diagnostic session logs stay compact and copyable', (
+    tester,
+  ) async {
+    String? clipboardText;
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (call) async {
+        if (call.method == 'Clipboard.setData') {
+          clipboardText =
+              (call.arguments as Map<Object?, Object?>)['text'] as String?;
+        }
+        return null;
+      },
+    );
+    addTearDown(
+      () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        null,
+      ),
+    );
+    const detail = SessionMonitorDetail(
+      sessionLogs: <String, Object?>{
+        'logPath': '/tmp/session.log',
+        'lines': <String>['lifecycle-old', 'lifecycle-new'],
+      },
+    );
+
+    await tester.pumpWidget(
+      TranslationProvider(
+        child: MaterialApp(
+          theme: ConsoleTheme.build(Brightness.dark),
+          home: const Scaffold(
+            body: SizedBox(
+              height: 640,
+              child: SessionDiagnosticsView(detail: detail),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('Session logs'), findsOneWidget);
+    expect(find.text('lifecycle-new'), findsNothing);
+    expect(find.byTooltip('Show log output'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Copy log lines'));
+    await tester.pump();
+    expect(clipboardText, 'lifecycle-old\nlifecycle-new');
+    expect(find.byTooltip('Log lines copied'), findsOneWidget);
+
+    await tester.tap(find.text('Session logs'));
+    await tester.pumpAndSettle();
+    expect(find.byType(SelectionArea), findsOneWidget);
+    expect(find.text('lifecycle-old'), findsOneWidget);
+    expect(find.text('lifecycle-new'), findsOneWidget);
+    expect(find.byTooltip('Hide log output'), findsOneWidget);
+  });
+
   test('activity retention preserves newest events and dropped count', () {
     SessionMonitorActivity event(int value) => SessionMonitorActivity(
       at: DateTime.utc(2026, 8, 22).add(Duration(seconds: value)),
