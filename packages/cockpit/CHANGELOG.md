@@ -5,6 +5,8 @@
 - Made the bundled AI skill source-first for first-party Flutter development:
   agents derive exact selectors and postconditions from the code they are
   changing, and reserve inspection for runtime-only uncertainty or recovery.
+- Made `cockpit skill` tell agents to fetch the raw `INSTALL.md` with `curl`
+  before installing or updating any host integration.
 
 ## 4.0.33
 

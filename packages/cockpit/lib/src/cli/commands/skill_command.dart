@@ -1,12 +1,13 @@
 import '../cockpit_cli_runtime.dart';
 
 const String cockpitSkillInstallUrl =
-    'https://github.com/cockpit-dev/cockpit/blob/main/skills/cockpit/INSTALL.md';
+    'https://raw.githubusercontent.com/cockpit-dev/cockpit/main/skills/cockpit/INSTALL.md';
 
 const String cockpitSkillPrompt =
-    'Install or update Cockpit for the current AI host, including the CLI, '
-    'complete cockpit Skill, native adapter, and cockpit_mcp when supported, '
-    'by following $cockpitSkillInstallUrl';
+    'First fetch and read the complete Cockpit installation guide with '
+    '`curl -fsSL $cockpitSkillInstallUrl`, then install or update the CLI, '
+    'complete cockpit Skill, native adapter, and cockpit_mcp for the current '
+    'AI host exactly as that guide directs.';
 
 CockpitLeafCommand cockpitSkillCommand(CockpitCliRuntime runtime) =>
     CockpitLeafCommand(

@@ -202,6 +202,8 @@ void main() {
     expect(runner.commands, contains('skill'));
     expect(stdout.toString(), '{prompt:"$cockpitSkillPrompt"}\n');
     expect(cockpitSkillPrompt, contains(cockpitSkillInstallUrl));
+    expect(cockpitSkillPrompt, contains('curl -fsSL'));
+    expect(cockpitSkillInstallUrl, contains('raw.githubusercontent.com'));
   });
 
   test(

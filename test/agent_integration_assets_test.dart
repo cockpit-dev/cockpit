@@ -195,10 +195,11 @@ void main() {
     final readme = read('README.md');
     final zhReadme = read('README.zh-CN.md');
     const prompt =
-        'Install Cockpit for the current AI host, including the CLI, complete '
-        'cockpit Skill, native adapter, and cockpit_mcp when supported, by following '
-        'https://github.com/cockpit-dev/cockpit/blob/main/skills/cockpit/'
-        'INSTALL.md';
+        'First fetch and read the complete Cockpit installation guide with '
+        '`curl -fsSL https://raw.githubusercontent.com/cockpit-dev/cockpit/'
+        'main/skills/cockpit/INSTALL.md`, then install or update the CLI, '
+        'complete cockpit Skill, native adapter, and cockpit_mcp for the current '
+        'AI host exactly as that guide directs.';
     for (final host in <String>[
       'Codex',
       'Claude Code',
