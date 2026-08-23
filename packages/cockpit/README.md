@@ -112,10 +112,14 @@ or anchor with `dev wait` and `dev inspect`.
 Use `dev recover` only after a system capture proves a native blocker. It safely
 does nothing when the selected app already has focus.
 
-## Interactive Workspaces
+## Explicit Resource Workspaces
 
-The CLI starts the per-user Supervisor when an interactive API command needs
-it. Register every project root and checkout explicitly:
+`cockpit dev start` automatically registers its canonical Flutter project, so
+routine development never needs these commands. The CLI also starts the
+per-user Supervisor when required.
+
+For lower-level API, black-box, or resource workflows that do not begin with a
+development session, register each checkout once:
 
 ```bash
 cockpit daemon start

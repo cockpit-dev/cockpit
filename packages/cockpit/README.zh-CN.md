@@ -98,10 +98,13 @@ iOS universal link 或 HTTP(S) URL；之后用 `dev wait` 和 `dev inspect` 验�
 只有系统截图已经证明存在原生阻塞时才使用 `dev recover`；所选应用已经正常获得焦点时，
 该命令不会执行任何修改。
 
-## 多项目交互
+## 显式资源 Workspace
 
-交互式 API 命令会按需启动当前用户的 Supervisor。每个项目根目录和 checkout 都要
-显式注册：
+`cockpit dev start` 会自动注册对应的 canonical Flutter project，日常开发无需执行
+这些命令；CLI 也会在需要时自动启动当前用户的 Supervisor。
+
+只有不从 development session 开始的低层 API、黑盒或资源管理流程，才需要把每个
+checkout 显式注册一次：
 
 ```bash
 cockpit daemon start
