@@ -43,6 +43,20 @@ final class CockpitDevSessionResolution {
   final List<Object?> errors;
 }
 
+final class _CockpitDevReadResolution {
+  const _CockpitDevReadResolution({
+    required this.session,
+    required this.changed,
+    this.result,
+    this.unavailable,
+  }) : assert((result == null) != (unavailable == null));
+
+  final CockpitCliSessionHandle session;
+  final String changed;
+  final CockpitOperationResult? result;
+  final CockpitDevSessionResolution? unavailable;
+}
+
 final class CockpitDevRuntime {
   CockpitDevRuntime(
     this.runtime, {
@@ -385,6 +399,41 @@ final class CockpitDevRuntime {
     );
   }
 
+  Future<_CockpitDevReadResolution> _invokeRead(
+    CockpitCliSessionHandle session,
+    String kind,
+    Map<String, Object?> input,
+  ) async {
+    Map<String, Object?> scopedInput(CockpitCliSessionHandle value) =>
+        <String, Object?>{...input, 'sessionId': value.sessionId};
+
+    if (session.lifecycle == 'ready') {
+      final result = await invoke(session, kind, scopedInput(session));
+      if (_operationSucceeded(result)) {
+        return _CockpitDevReadResolution(
+          session: session,
+          changed: 'none',
+          result: result,
+        );
+      }
+    }
+
+    final resolution = await reconcile(session, allowRelaunch: false);
+    if (!resolution.ready) {
+      return _CockpitDevReadResolution(
+        session: resolution.session,
+        changed: resolution.changed,
+        unavailable: resolution,
+      );
+    }
+    session = resolution.session;
+    return _CockpitDevReadResolution(
+      session: session,
+      changed: resolution.changed,
+      result: await invoke(session, kind, scopedInput(session)),
+    );
+  }
+
   Future<int> status(
     CockpitCliSessionHandle session, {
     bool diagnose = false,
@@ -598,15 +647,9 @@ final class CockpitDevRuntime {
   }
 
   Future<int> inspect(CockpitCliSessionHandle session, {String? query}) async {
-    final resolution = await reconcile(session, allowRelaunch: false);
-    if (!resolution.ready) {
-      return writeUnavailable(action: 'inspect', resolution: resolution);
-    }
-    session = resolution.session;
     final normalizedQuery = query?.trim();
     final hasQuery = normalizedQuery != null && normalizedQuery.isNotEmpty;
-    final result = await invoke(session, 'ui.inspect', <String, Object?>{
-      'sessionId': session.sessionId,
+    final read = await _invokeRead(session, 'ui.inspect', <String, Object?>{
       'profile': 'locate',
       'snapshotOptions': CockpitSnapshotOptions(
         profile: CockpitSnapshotProfile.baseline,
@@ -615,6 +658,12 @@ final class CockpitDevRuntime {
         artifact: CockpitSnapshotArtifactMode.large,
       ).copyWith(query: normalizedQuery).toJson(),
     });
+    final unavailable = read.unavailable;
+    if (unavailable != null) {
+      return writeUnavailable(action: 'inspect', resolution: unavailable);
+    }
+    session = read.session;
+    final result = read.result!;
     final output = result.output ?? const <String, Object?>{};
     final state = _operationSucceeded(result) ? _locatorResult(output) : output;
     return writeOperation(
@@ -622,20 +671,14 @@ final class CockpitDevRuntime {
       session: session,
       result: result,
       state: state,
-      changed: resolution.changed,
+      changed: read.changed,
     );
   }
 
   Future<int> tree(CockpitCliSessionHandle session, {int? maxNodes}) async {
-    final resolution = await reconcile(session, allowRelaunch: false);
-    if (!resolution.ready) {
-      return writeUnavailable(action: 'tree', resolution: resolution);
-    }
-    session = resolution.session;
     final view = runtime.outputSelection.view;
     if (view == CockpitCliOutputView.brief) {
-      final result = await invoke(session, 'ui.inspect', <String, Object?>{
-        'sessionId': session.sessionId,
+      final read = await _invokeRead(session, 'ui.inspect', <String, Object?>{
         'profile': 'locate',
         'snapshotOptions': const CockpitSnapshotOptions(
           profile: CockpitSnapshotProfile.baseline,
@@ -644,6 +687,12 @@ final class CockpitDevRuntime {
           artifact: CockpitSnapshotArtifactMode.large,
         ).toJson(),
       });
+      final unavailable = read.unavailable;
+      if (unavailable != null) {
+        return writeUnavailable(action: 'tree', resolution: unavailable);
+      }
+      session = read.session;
+      final result = read.result!;
       final output = result.output ?? const <String, Object?>{};
       final targetIndex = _locatorResult(output);
       return writeOperation(
@@ -653,7 +702,7 @@ final class CockpitDevRuntime {
         state: _operationSucceeded(result)
             ? <String, Object?>{'profile': 'brief', ...targetIndex}
             : output,
-        changed: resolution.changed,
+        changed: read.changed,
       );
     }
     var treeOptions = switch (view) {
@@ -664,8 +713,7 @@ final class CockpitDevRuntime {
     if (maxNodes != null) {
       treeOptions = treeOptions.copyWith(maxNodes: maxNodes);
     }
-    final result = await invoke(session, 'ui.inspect', <String, Object?>{
-      'sessionId': session.sessionId,
+    final read = await _invokeRead(session, 'ui.inspect', <String, Object?>{
       'profile': 'tree',
       'snapshotOptions': CockpitSnapshotOptions(
         profile: CockpitSnapshotProfile.baseline,
@@ -675,13 +723,19 @@ final class CockpitDevRuntime {
         tree: treeOptions,
       ).toJson(),
     });
+    final unavailable = read.unavailable;
+    if (unavailable != null) {
+      return writeUnavailable(action: 'tree', resolution: unavailable);
+    }
+    session = read.session;
+    final result = read.result!;
     if (!_operationSucceeded(result)) {
       return writeOperation(
         action: 'tree',
         session: session,
         result: result,
         state: result.output,
-        changed: resolution.changed,
+        changed: read.changed,
       );
     }
 
@@ -695,7 +749,7 @@ final class CockpitDevRuntime {
         session: session,
         ok: false,
         state: const <String, Object?>{'reason': 'treeArtifactUnavailable'},
-        changed: resolution.changed,
+        changed: read.changed,
         errors: const <Object?>[
           <String, Object?>{
             'code': 'treeArtifactUnavailable',
@@ -724,7 +778,7 @@ final class CockpitDevRuntime {
       session: session,
       ok: true,
       state: state,
-      changed: resolution.changed,
+      changed: read.changed,
       evidence: <String, Object?>{'tree': path},
     );
   }
