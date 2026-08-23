@@ -7,6 +7,8 @@
   and complete evidence for `--view full`.
 - Reduced ordinary Flutter action latency by resolving unique mounted elements
   through their related action chain before falling back to full discovery.
+- Kept Flutter copy-and-paste flows deterministic and deadline-bounded when an
+  iOS platform clipboard read is slow or blocked.
 
 ## 4.0.29
 
