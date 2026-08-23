@@ -191,6 +191,7 @@ final class CockpitDevRuntime {
       return previous;
     }
     return runtime.updateDevelopmentSession(
+      activate: false,
       previous: previous,
       workspaceId: previous.workspaceId,
       sessionId: sessionId,
@@ -220,6 +221,7 @@ final class CockpitDevRuntime {
     if (sessionId == previous.sessionId && appId == previous.appId) return null;
 
     final rebound = await runtime.updateDevelopmentSession(
+      activate: false,
       previous: previous,
       workspaceId: previous.workspaceId,
       sessionId: sessionId,
@@ -302,6 +304,7 @@ final class CockpitDevRuntime {
     }
     final output = launched.output ?? const <String, Object?>{};
     final resolved = await runtime.updateDevelopmentSession(
+      activate: false,
       previous: previous,
       workspaceId: previous.workspaceId,
       sessionId: output['sessionId'] as String,
@@ -331,6 +334,7 @@ final class CockpitDevRuntime {
     String lifecycle,
   ) async {
     return runtime.updateDevelopmentSession(
+      activate: false,
       previous: previous,
       workspaceId: previous.workspaceId,
       sessionId: previous.sessionId,
@@ -395,7 +399,7 @@ final class CockpitDevRuntime {
           ..._sessionIdentity(session),
         },
         changed: 'none',
-        next: 'cockpit dev start',
+        next: 'cockpit dev start --session ${session.handleId}',
       );
     }
     if (diagnose) return _diagnose(session);
@@ -532,7 +536,7 @@ final class CockpitDevRuntime {
             'count': networkFailureCount,
           },
       ],
-      next: ok ? null : 'cockpit dev inspect',
+      next: ok ? null : 'cockpit dev inspect --session ${session.handleId}',
       failureExitCode: cockpitTemporaryExitCode,
     );
   }
@@ -965,6 +969,7 @@ final class CockpitDevRuntime {
     var resolved = session;
     if (_operationSucceeded(result)) {
       resolved = await runtime.updateDevelopmentSession(
+        activate: false,
         previous: session,
         workspaceId: session.workspaceId,
         sessionId: output['sessionId'] as String? ?? session.sessionId,

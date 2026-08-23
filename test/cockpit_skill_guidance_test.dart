@@ -372,6 +372,12 @@ void main() {
     expect(development, contains('Do not chain speculative taps'));
     expect(development, contains('Treat the mutation as committed'));
     expect(development, contains('cockpit session show HANDLE'));
+    expect(
+      development,
+      contains('returned recovery `next` stay scoped to\nthat exact handle'),
+    );
+    expect(development, contains('Cockpit owns scroll-container discovery'));
+    expect(development, isNot(contains('explicit scroll-container locator')));
     expect(development, contains('Do not clear app data'));
     expect(development, contains('never reads a keychain or secret store'));
     expect(development, isNot(contains('credential vault')));

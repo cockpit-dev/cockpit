@@ -126,7 +126,11 @@ cockpit dev diagnose --view more
 ```
 
 能够推断入口和平台时直接省略。正常命令也无需重复当前 handle、LON、brief
-view 和默认 timeout。`dev` 会自动使用仅限本地进程的 yolo Supervisor；
+view 和默认 timeout。同一项目可以保留多个平台或 target handle；使用
+`cockpit session list`、`cockpit session show HANDLE` 和 `cockpit dev use HANDLE`
+检查或持久切换 active handle。显式 `--session HANDLE` 只作用于当前命令，返回的恢复
+`next` 也会继续绑定同一 handle，不会改变已保存的 active selection。`dev` 会自动使用
+仅限本地进程的 yolo Supervisor；
 黑盒、CI、staging 和 production 仍可使用严格策略。Cockpit 不读取 keychain 或
 secret store，`--env` 只传给当前进程。
 

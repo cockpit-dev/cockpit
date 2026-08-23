@@ -160,6 +160,8 @@ void main() {
     expect(packageReadme, contains('routine development never needs'));
     expect(readmeZh, contains('日常使用 `cockpit dev` 无需'));
     expect(packageReadmeZh, contains('日常开发无需'));
+    expect(readme, contains('`--session HANDLE` targets only that command'));
+    expect(readmeZh, contains('显式 `--session HANDLE` 只作用于当前命令'));
     for (final document in <String>[
       readme,
       readmeZh,

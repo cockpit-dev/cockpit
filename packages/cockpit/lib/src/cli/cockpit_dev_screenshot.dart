@@ -143,7 +143,7 @@ final class CockpitDevScreenshotService {
         },
       },
       errors: failures,
-      next: ok ? null : 'cockpit dev diagnose',
+      next: ok ? null : 'cockpit dev diagnose --session ${session.handleId}',
       failureExitCode: cockpitDataExitCode,
     );
   }

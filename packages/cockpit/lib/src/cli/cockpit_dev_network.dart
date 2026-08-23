@@ -67,7 +67,8 @@ final class CockpitDevNetworkService {
             'message': 'Network request $requestId is not retained.',
           },
         ],
-        next: 'cockpit dev network --before $requestId',
+        next:
+            'cockpit dev network --before $requestId --session ${session.handleId}',
         failureExitCode: cockpitDataExitCode,
       );
     }
@@ -148,7 +149,8 @@ final class CockpitDevNetworkService {
       changed: 'captured',
       evidence: paths,
       next: continuing
-          ? 'cockpit dev network $requestId --body $body${raw ? ' --raw' : ''}'
+          ? 'cockpit dev network $requestId --body $body'
+                '${raw ? ' --raw' : ''} --session ${session.handleId}'
           : null,
     );
   }

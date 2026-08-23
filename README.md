@@ -137,7 +137,12 @@ cockpit dev diagnose --view more
 
 Omit the entrypoint and platform when Cockpit can infer them. Normal commands
 also omit the current handle, LON format, brief view, and operation
-timeout. `dev` automatically runs its local Supervisor in process-scoped yolo
+timeout. One project may keep multiple platform or target handles; use
+`cockpit session list`, `cockpit session show HANDLE`, and `cockpit dev use
+HANDLE` to inspect or persistently switch the active handle. Explicit
+`--session HANDLE` targets only that command, and any returned recovery `next`
+keeps the same handle without changing the saved active selection. `dev`
+automatically runs its local Supervisor in process-scoped yolo
 mode; strict policy remains available for black-box, CI, staging, and
 production workflows. Cockpit does not read a keychain or secret store, and
 `--env` values are process-only.

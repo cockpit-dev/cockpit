@@ -104,6 +104,77 @@ void main() {
     expect(reconnected.deviceId, 'macos');
   });
 
+  test('session state refresh preserves the active project handle', () async {
+    final checkoutPath = p.normalize(temporaryDirectory.path);
+    final checkoutIdentity = 'a' * 64;
+    final first = await store.bindDevelopment(
+      checkoutIdentity: checkoutIdentity,
+      checkoutPath: checkoutPath,
+      projectPath: checkoutPath,
+      workspaceId: 'workspace-1',
+      sessionId: 'session-1',
+      targetId: 'target-1',
+      appId: 'app-1',
+      entrypoint: 'lib/main.dart',
+      platform: 'macos',
+      deviceId: 'macos',
+    );
+    final second = await store.bindDevelopment(
+      checkoutIdentity: checkoutIdentity,
+      checkoutPath: checkoutPath,
+      projectPath: checkoutPath,
+      workspaceId: 'workspace-1',
+      sessionId: 'session-2',
+      targetId: 'target-2',
+      appId: 'app-2',
+      entrypoint: 'lib/main.dart',
+      platform: 'android',
+      deviceId: 'emulator-5554',
+    );
+    await store.selectDevelopment(first.handleId);
+    final runtime = CockpitCliRuntime(
+      workingDirectory: checkoutPath,
+      stdoutSink: StringBuffer(),
+      stderrSink: StringBuffer(),
+      sessionHandleStoreProvider: () async => store,
+    );
+
+    final refreshed = await runtime.updateDevelopmentSession(
+      previous: second,
+      workspaceId: second.workspaceId,
+      sessionId: 'session-2-refreshed',
+      targetId: second.targetId!,
+      appId: 'app-2-refreshed',
+      lifecycle: 'crashed',
+    );
+
+    expect(refreshed.handleId, second.handleId);
+    expect(
+      (await store.activeForPath(
+        checkoutIdentity: checkoutIdentity,
+        path: checkoutPath,
+      ))?.handleId,
+      first.handleId,
+    );
+
+    await runtime.updateDevelopmentSession(
+      activate: true,
+      previous: refreshed,
+      workspaceId: refreshed.workspaceId,
+      sessionId: refreshed.sessionId,
+      targetId: refreshed.targetId!,
+      appId: refreshed.appId!,
+      lifecycle: refreshed.lifecycle,
+    );
+    expect(
+      (await store.activeForPath(
+        checkoutIdentity: checkoutIdentity,
+        path: checkoutPath,
+      ))?.handleId,
+      second.handleId,
+    );
+  });
+
   test(
     'persists only whether custom launches can recover automatically',
     () async {
