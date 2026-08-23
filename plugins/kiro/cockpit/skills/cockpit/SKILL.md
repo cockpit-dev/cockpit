@@ -14,8 +14,8 @@ everywhere. Live capabilities are authoritative.
 
 Before running any `cockpit dev` command in a Flutter source checkout, first
 confirm that its development-only Cockpit shell is integrated. A normal Flutter
-app does not expose a Cockpit bridge by itself, so starting it first waits for a
-bridge that can never become ready.
+app does not expose a Cockpit bridge by itself, so `dev start` rejects it during
+bridge-shell preflight before launching Flutter.
 
 Check `cockpit/pubspec.yaml` and `cockpit/main.dart`. The non-published shell
 package must keep the production package graph untouched, depend on the real

@@ -202,8 +202,8 @@ client can list operation resources and read `cockpit://operations/schema`.
 Before Kiro runs `cockpit dev start` in a Flutter checkout, it must follow the
 Skill's Flutter preflight: verify `flutter_cockpit` is a development dependency
 and that `cockpit/main.dart` wraps the real app and installs the navigator
-observer. Starting an ordinary Flutter entrypoint without that bridge waits for
-a session that cannot become ready.
+observer. Starting an ordinary Flutter entrypoint without that bridge fails
+bridge-shell preflight before Flutter is launched.
 
 ## OpenCode
 

@@ -239,7 +239,7 @@ the same handle.
 - Screenshots use ADB/simctl/WDA first on Android/iOS so system dialogs are
   visible, with Flutter view fallback. Desktop and web use Flutter view first.
 - System dialogs, permissions, platform views, and native shell screens use an
-  advertised native/system control plane; return to Flutter state for the
+  advertised native driver or system action; return to Flutter state for the
   postcondition.
 
 ## Router Integration
@@ -277,6 +277,7 @@ for guessing fields.
 
 When the bridge or port changes, keep using the same handle; Cockpit proves
 process and checkout ownership before reconnecting. Unexpected process exits
-may relaunch once from stored non-secret launch configuration. Reads do not
+may relaunch once only when no custom launch values were used; otherwise rerun
+`cockpit dev start --session HANDLE` with the original options. Reads do not
 launch a stopped app. Finish visible verification with a current screenshot and
 zero new disqualifying runtime errors.

@@ -57,7 +57,7 @@ remain visible and disqualifying.
 Stay on Flutter in-app control for widgets, routes, focus, editing, scrolling,
 logs, runtime errors, HTTP activity, and reload/restart. Screenshot routing is
 platform-aware: Android/iOS use system capture first; desktop/web use Flutter
-view capture first. Switch control to an advertised native/system plane only for:
+view capture first. Switch to an advertised native driver or system action only for:
 
 - permissions and OS dialogs;
 - notifications and system UI;
@@ -101,7 +101,7 @@ app, bridge, port, and runtime session.
 | --- | --- | --- |
 | Healthy | Read current state | Execute normally |
 | Port or bridge changed | Authenticated reconnect | Reconnect, then execute |
-| Unexpected process exit | Report crashed | Relaunch once from the stored non-secret launch configuration |
+| Unexpected process exit | Report crashed | Relaunch once only when no custom launch values were used; otherwise require `dev start` with the original options |
 | Intentionally stopped | Report stopped | Require `cockpit dev start` |
 | Ownership mismatch | Fail without adoption | Fail without signaling or launching the candidate |
 
@@ -169,8 +169,9 @@ application or environment cause. A missing native capability is `unavailable` o
 
 Never recover by package name, working directory, or port alone. A reconnect
 must remain bound to the same canonical checkout identity and target. Launch
-recovery never reads a keychain or secret store. Values passed through `--env`
-are not persisted; restart explicitly when those values are required.
+recovery never reads a keychain or secret store. Custom Flutter launch values
+are not persisted; after an exit, rerun `cockpit dev start --session HANDLE`
+with the original options.
 
 ## Locators
 

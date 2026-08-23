@@ -236,6 +236,7 @@ void main() {
     expect(docs, contains('.cursor/rules/cockpit.mdc'));
     expect(docs, contains('.cursor/mcp.json'));
     expect(docs, contains('.cursor/skills/cockpit'));
+    expect(docs, contains('bridge-shell preflight before Flutter is launched'));
     expect(docs, contains('.gemini/settings.json'));
     expect(docs, contains('.kiro/steering/cockpit.md'));
     expect(docs, contains('.kiro/settings/mcp.json'));

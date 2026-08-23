@@ -30,7 +30,8 @@ Cockpit 是面向 AI 与 CI 的生产级应用开发、E2E 自动化与验证框
 核心能力包括：
 
 - 独立 LON/JSON/YAML case 与 suite；
-- Flutter semantic、原生 accessibility、system、visual、coordinate 平面；
+- Flutter semantic、原生 accessibility、visual、coordinate 平面，以及可发现的
+  system action；
 - target 发现、注册、启动、检查与真实能力声明；
 - 依赖 DAG、fixture、matrix、retry、有界并发和 fail-fast；
 - 持久事件、可恢复 suite 检查点、精确 session 亲和、取消、artifact，以及
@@ -256,7 +257,8 @@ cockpit workspace list
     "externalNavigation",
     "financial",
     "permissionChange"
-  ]
+  ],
+  "allowedEnvironmentSecretNames": []
 }
 ```
 
