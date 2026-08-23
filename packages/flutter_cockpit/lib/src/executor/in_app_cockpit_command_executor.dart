@@ -452,7 +452,7 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
         ),
       );
     }
-    final resolution = await _resolveWithRetry(
+    final resolution = await _resolveInteractiveTarget(
       command,
       requiredCommand: CockpitCommandType.tap,
     );
@@ -768,7 +768,7 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
         ),
       );
     }
-    final resolution = await _resolveWithRetry(
+    final resolution = await _resolveInteractiveTarget(
       command,
       requiredCommand: CockpitCommandType.longPress,
     );
@@ -912,7 +912,7 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
         ),
       );
     }
-    final resolution = await _resolveWithRetry(
+    final resolution = await _resolveInteractiveTarget(
       command,
       requiredCommand: CockpitCommandType.doubleTap,
     );
@@ -1299,6 +1299,18 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
     final revealOffset = _doubleParameter(command, 'revealOffsetPx') ?? 0;
     final allowsGenericResolution = _allowsGenericScrollResolution(locator);
 
+    Future<void> settleAfterReveal() async {
+      if (_context.scrollStepProbesTarget) {
+        return;
+      }
+      await _postActionSettler();
+      await _settleBeforeObservation();
+      await _waitForVisualContinuity(
+        commandType: CockpitCommandType.scrollUntilVisible,
+        routeChanged: false,
+      );
+    }
+
     Future<CockpitCommandExecution?> buildScrollSuccess(
       CockpitTargetResolutionResult successResolution,
     ) async {
@@ -1311,12 +1323,7 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
           padding: revealPadding,
           offset: revealOffset,
         )) {
-          await _postActionSettler();
-          await _settleBeforeObservation();
-          await _waitForVisualContinuity(
-            commandType: CockpitCommandType.scrollUntilVisible,
-            routeChanged: false,
-          );
+          await settleAfterReveal();
         }
         final satisfied = _scrollLocatorResolution(command);
         if (satisfied != null) {
@@ -1340,12 +1347,7 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
         padding: revealPadding,
         offset: revealOffset,
       )) {
-        await _postActionSettler();
-        await _settleBeforeObservation();
-        await _waitForVisualContinuity(
-          commandType: CockpitCommandType.scrollUntilVisible,
-          routeChanged: false,
-        );
+        await settleAfterReveal();
       }
       return null;
     }
@@ -1590,12 +1592,7 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
       if (fastSuccess != null) {
         return fastSuccess;
       }
-      await _postActionSettler();
-      await _settleBeforeObservation();
-      await _waitForVisualContinuity(
-        commandType: CockpitCommandType.scrollUntilVisible,
-        routeChanged: false,
-      );
+      await settleAfterReveal();
       resolution = _resolve(command);
       if (resolution.isSuccess) {
         final success = await buildScrollSuccess(resolution);
@@ -1696,11 +1693,7 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
           scrollsPerformed += 1;
 
           final observationStopwatch = Stopwatch()..start();
-          final targetProbeSettledWithoutMatch =
-              _context.scrollStepProbesTarget &&
-              scrollStep.targetVisibilityObserved &&
-              !scrollStep.targetMounted;
-          if (!targetProbeSettledWithoutMatch) {
+          if (!_context.scrollStepProbesTarget) {
             await _settleCoordinator.driveHiddenVisualFrames(
               CockpitCommandType.scrollUntilVisible,
             );
@@ -1748,12 +1741,7 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
             if (fastSuccess != null) {
               return fastSuccess;
             }
-            await _postActionSettler();
-            await _settleBeforeObservation();
-            await _waitForVisualContinuity(
-              commandType: CockpitCommandType.scrollUntilVisible,
-              routeChanged: false,
-            );
+            await settleAfterReveal();
             resolution = _resolve(command);
             if (resolution.isSuccess) {
               final success = await buildScrollSuccess(resolution);
@@ -2150,6 +2138,7 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
     await _stabilizeAfterAction(
       previousRouteName,
       commandType: CockpitCommandType.back,
+      routeAlreadyCommitted: _routeChangedFrom(previousRouteName),
     );
     return _buildSuccessWithOptionalCapture(
       command: command,
@@ -2176,7 +2165,7 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
 
     final resolution = command.locator == null
         ? _resolveActiveTextInput(requiredCommand: CockpitCommandType.enterText)
-        : await _resolveWithRetry(
+        : await _resolveInteractiveTarget(
             command,
             requiredCommand: CockpitCommandType.enterText,
           );
@@ -2532,7 +2521,7 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
     CockpitCommand command,
   ) async => command.locator == null
       ? _resolveActiveTextInput(requiredCommand: CockpitCommandType.enterText)
-      : _resolveWithRetry(
+      : _resolveInteractiveTarget(
           command,
           requiredCommand: CockpitCommandType.enterText,
         );
@@ -2936,7 +2925,10 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
     final previousRouteName = _currentRouteName();
     final resolution = command.locator == null
         ? _resolveActiveTextInput(requiredCommand: requiredCommand)
-        : await _resolveWithRetry(command, requiredCommand: requiredCommand);
+        : await _resolveInteractiveTarget(
+            command,
+            requiredCommand: requiredCommand,
+          );
     if (!resolution.isSuccess) {
       return _failureExecution(
         command: command,
@@ -3142,7 +3134,7 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
       await _settleBeforeObservation();
       resolution = await _resolveWithRetry(command, attempts: 2);
     } else {
-      resolution = await _resolveWithRetry(
+      resolution = await _resolveInteractiveTarget(
         command,
         requiredCommand: requiredCommand,
       );
@@ -4238,7 +4230,7 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
       );
     }
 
-    final resolution = await _resolveWithRetry(command);
+    final resolution = await _resolveInteractiveTarget(command);
     if (!resolution.isSuccess) {
       return _failureExecution(
         command: command,
@@ -4521,6 +4513,71 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
         _registry.resolve(locator, requiredCommand: requiredCommand);
   }
 
+  Future<CockpitTargetResolutionResult> _resolveInteractiveTarget(
+    CockpitCommand command, {
+    CockpitCommandType? requiredCommand,
+  }) async {
+    var resolution = _resolve(command, requiredCommand: requiredCommand);
+    if (_shouldStopResolutionRetry(resolution)) {
+      return resolution;
+    }
+
+    final locator = command.locator;
+    if (locator == null || locator.kind == CockpitLocatorKind.route) {
+      return _resolveWithRetry(command, requiredCommand: requiredCommand);
+    }
+
+    const revealDuration = Duration(milliseconds: 220);
+    if (await _attemptEnsureVisible(
+      locator,
+      revealDuration,
+      alignment: CockpitRevealAlignment.nearest,
+      padding: 0,
+      offset: 0,
+    )) {
+      resolution = _resolve(command, requiredCommand: requiredCommand);
+      if (_shouldStopResolutionRetry(resolution)) {
+        return resolution;
+      }
+    }
+
+    if (_scrollStepHandler != null) {
+      final reveal = await _executeScrollUntilVisible(
+        CockpitCommand(
+          commandId: '${command.commandId}-reveal',
+          commandType: CockpitCommandType.scrollUntilVisible,
+          locator: locator,
+          snapshotOptions: const CockpitSnapshotOptions(maxTargets: 0),
+          parameters: const <String, Object?>{
+            'maxScrolls': 12,
+            'viewportFraction': 0.8,
+          },
+        ),
+        Stopwatch()..start(),
+      );
+      if (reveal.result.success) {
+        resolution = _resolve(command, requiredCommand: requiredCommand);
+        if (_shouldStopResolutionRetry(resolution)) {
+          return resolution;
+        }
+      } else if (reveal.result.error case final error?) {
+        return CockpitTargetResolutionResult.failure(
+          error: CockpitCommandError(
+            code: error.code,
+            message: error.message,
+            details: <String, Object?>{
+              ...error.details,
+              'action': command.commandType.name,
+              'autoReveal': true,
+            },
+          ),
+        );
+      }
+    }
+
+    return _resolveWithRetry(command, requiredCommand: requiredCommand);
+  }
+
   Future<CockpitTargetResolutionResult> _resolveWithRetry(
     CockpitCommand command, {
     int attempts = 3,
@@ -4728,7 +4785,9 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
     List<Map<String, Object?>> warnings = const <Map<String, Object?>>[],
   }) async {
     final snapshot = _appendWarningsToSnapshot(
-      _liveSnapshot().toJson(),
+      _snapshotProvider(
+        options: command.snapshotOptions ?? const CockpitSnapshotOptions.live(),
+      ).toJson(),
       warnings,
     );
     final CockpitCaptureArtifacts? capture;
@@ -4970,7 +5029,9 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
     CockpitCommandType? commandType,
     bool routeAlreadyCommitted = false,
   }) async {
-    await _settleCoordinator.driveHiddenVisualFrames(commandType);
+    if (!routeAlreadyCommitted) {
+      await _settleCoordinator.driveHiddenVisualFrames(commandType);
+    }
     await _postActionSettler();
     await _waitForGestureCommit(commandType);
     final routeChanged =

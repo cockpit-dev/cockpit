@@ -917,6 +917,7 @@ void main() {
           Map<String, Object?>.from(input['command']! as Map<Object?, Object?>),
         );
         expect(command.capturePolicy, CockpitCapturePolicy.onFailure);
+        expect(command.snapshotOptions?.maxTargets, 0);
         return _result(
           kind,
           output: const <String, Object?>{

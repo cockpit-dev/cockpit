@@ -74,6 +74,27 @@ final class CockpitTargetRegistry {
     ]);
   });
 
+  /// Returns every current target, keeping visible targets first and adding
+  /// hidden targets only when they do not duplicate a visible target.
+  List<CockpitTarget> get allTargets => _withDiscoveryCache(() {
+    final targets = <CockpitTarget>[...visibleTargets];
+    final hiddenTargets = <CockpitTarget>[
+      ..._routeScopedTargets(
+        _targets.values.where((target) => !target.isVisible),
+      ),
+      ..._routeScopedTargets(
+        _discoveredTargets().where((target) => !target.isVisible),
+      ),
+    ];
+    for (final target in hiddenTargets) {
+      if (targets.any((candidate) => _targetsOverlap(candidate, target))) {
+        continue;
+      }
+      targets.add(target);
+    }
+    return List<CockpitTarget>.unmodifiable(targets);
+  });
+
   List<CockpitTarget> get routeReadyVisibleTargets => _withDiscoveryCache(() {
     return List.unmodifiable(<CockpitTarget>[
       ..._explicitVisibleTargets(allowRouteFallback: false),
@@ -93,9 +114,20 @@ final class CockpitTargetRegistry {
   /// Results use visual order. A requested locator index reduces the result to
   /// that one target, while an out-of-range index returns an empty list.
   List<CockpitTarget> matchingVisibleTargets(CockpitLocator locator) {
+    return matchingTargets(locator);
+  }
+
+  /// Returns targets satisfying every condition in [locator].
+  ///
+  /// Hidden targets are excluded by default. Set [includeHidden] only for a
+  /// bounded query that must inspect currently mounted offscreen targets.
+  List<CockpitTarget> matchingTargets(
+    CockpitLocator locator, {
+    bool includeHidden = false,
+  }) {
     return _withDiscoveryCache(() {
       final matches = _preferCurrentRouteMatches(
-        visibleTargets
+        (includeHidden ? allTargets : visibleTargets)
             .where((target) => _matches(target, locator))
             .toList(growable: false),
       );
@@ -371,6 +403,7 @@ final class CockpitTargetRegistry {
       scrollableKeyValue: target.scrollableKeyValue,
       scrollableTypeName: target.scrollableTypeName,
       routeName: target.routeName,
+      visible: target.isVisible,
       supportedCommands: target.supportedCommands.toList(growable: false),
       control: target.control,
     );
@@ -629,17 +662,25 @@ final class CockpitTargetRegistry {
     Iterable<CockpitTarget> targets, {
     bool allowRouteFallback = true,
   }) {
-    final visibleTargets = targets
-        .where((target) => target.isVisible)
-        .toList(growable: false);
+    return _routeScopedTargets(
+      targets.where((target) => target.isVisible),
+      allowRouteFallback: allowRouteFallback,
+    );
+  }
+
+  List<CockpitTarget> _routeScopedTargets(
+    Iterable<CockpitTarget> targets, {
+    bool allowRouteFallback = true,
+  }) {
+    final scopedTargets = targets.toList(growable: false);
     final currentRouteName = routeName;
     if (currentRouteName == null || currentRouteName.isEmpty) {
-      return visibleTargets;
+      return scopedTargets;
     }
 
     final routeMatched = <CockpitTarget>[];
     final otherRouteTargets = <CockpitTarget>[];
-    for (final target in visibleTargets) {
+    for (final target in scopedTargets) {
       if (target.routeName == currentRouteName) {
         routeMatched.add(target);
       } else {
@@ -660,14 +701,14 @@ final class CockpitTargetRegistry {
       return const <CockpitTarget>[];
     }
 
-    final unresolvedRouteTargets = visibleTargets
+    final unresolvedRouteTargets = scopedTargets
         .where((target) => _isUnresolvedRouteTarget(target.routeName))
         .toList(growable: false);
     if (unresolvedRouteTargets.isNotEmpty) {
       return unresolvedRouteTargets;
     }
 
-    return visibleTargets;
+    return scopedTargets;
   }
 
   Map<String, int> _routeCounts(Iterable<CockpitTarget> targets) {

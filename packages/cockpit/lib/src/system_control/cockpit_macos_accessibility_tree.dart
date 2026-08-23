@@ -1397,8 +1397,11 @@ function run(argv) {
   const frontmostProcessId = application
     ? Number(application.processIdentifier)
     : 0
-  const frontmostAppId = application && application.bundleIdentifier
+  const rawFrontmostAppId = application && application.bundleIdentifier
     ? ObjC.unwrap(application.bundleIdentifier)
+    : ''
+  const frontmostAppId = typeof rawFrontmostAppId === 'string'
+    ? rawFrontmostAppId
     : ''
   return JSON.stringify({
     targetFrontmost: frontmostProcessId === processId,

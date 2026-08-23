@@ -183,6 +183,8 @@ void main() {
       );
 
       expect(capturedOptions.last.query, isNull);
+      expect(capturedOptions.last.maxTargets, 24);
+      expect(capturedOptions.last.maxAncestorsPerTarget, 0);
       expect(
         capturedOptions
             .take(capturedOptions.length - 1)

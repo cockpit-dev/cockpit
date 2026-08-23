@@ -1299,6 +1299,69 @@ void main() {
   );
 
   test(
+    'tap reveals one mounted offscreen target before resolving the action',
+    () async {
+      final registry = CockpitTargetRegistry(routeName: '/checkout');
+      var visible = false;
+      var revealed = false;
+      var tapped = false;
+      registry.discoveredTargetsProvider = () => <CockpitTarget>[
+        CockpitTarget(
+          registrationId: 'submit',
+          keyValue: 'submit-button',
+          routeName: '/checkout',
+          isVisible: visible,
+          supportedCommands: const <CockpitCommandType>{CockpitCommandType.tap},
+          onTap: () {
+            tapped = true;
+          },
+        ),
+      ];
+
+      final executor = InAppCockpitCommandExecutor(
+        registry: registry,
+        postActionSettler: () async {},
+        ensureVisibleHandler:
+            ({
+              required locator,
+              required duration,
+              required alignment,
+              required padding,
+              required offset,
+            }) async {
+              revealed = true;
+              visible = true;
+              return true;
+            },
+        interactionPolicy: const CockpitInteractionPolicy(
+          targetResolveTimeout: Duration.zero,
+          targetResolvePollInterval: Duration.zero,
+          uiIdleQuietWindow: Duration.zero,
+          uiIdleTimeout: Duration.zero,
+          preActionVisualDelay: Duration.zero,
+          actionCommitTimeout: Duration.zero,
+          actionVisualDelay: Duration.zero,
+          routeTransitionVisualDelay: Duration.zero,
+          recordingPreActionVisualDelay: Duration.zero,
+          recordingActionVisualDelay: Duration.zero,
+        ),
+      );
+
+      final result = await executor.execute(
+        CockpitCommand(
+          commandId: 'cmd-offscreen-tap',
+          commandType: CockpitCommandType.tap,
+          locator: const CockpitLocator(key: 'submit-button'),
+        ),
+      );
+
+      expect(result.success, isTrue);
+      expect(revealed, isTrue);
+      expect(tapped, isTrue);
+    },
+  );
+
+  test(
     'returns targetNotFound when no visible target matches the locator',
     () async {
       final executor = InAppCockpitCommandExecutor(
@@ -2839,6 +2902,39 @@ void main() {
     expect(result.success, isTrue);
     expect(usedOptions?.profile, CockpitSnapshotProfile.baseline);
     expect(result.snapshot?['diagnosticLevel'], 'baseline');
+  });
+
+  test('successful actions honor command snapshot options', () async {
+    final registry = CockpitTargetRegistry(routeName: '/inbox')
+      ..register(
+        CockpitTarget(
+          registrationId: 'open-settings',
+          keyValue: 'open-settings',
+          routeName: '/inbox',
+          supportedCommands: const <CockpitCommandType>{CockpitCommandType.tap},
+          onTap: () {},
+        ),
+      );
+    CockpitSnapshotOptions? usedOptions;
+    final executor = InAppCockpitCommandExecutor(
+      registry: registry,
+      snapshotProvider: ({options = const CockpitSnapshotOptions()}) {
+        usedOptions = options;
+        return CockpitSnapshot(routeName: registry.routeName);
+      },
+    );
+
+    final result = await executor.execute(
+      CockpitCommand(
+        commandId: 'cmd-open-settings',
+        commandType: CockpitCommandType.tap,
+        locator: const CockpitLocator(key: 'open-settings'),
+        snapshotOptions: const CockpitSnapshotOptions(maxTargets: 0),
+      ),
+    );
+
+    expect(result.success, isTrue);
+    expect(usedOptions?.maxTargets, 0);
   });
 
   test('waitFor succeeds when a target appears before timeout', () async {
@@ -4564,7 +4660,7 @@ void main() {
   );
 
   test(
-    'scrollUntilVisible skips full settles while a settled target probe is still unmounted',
+    'scrollUntilVisible trusts target-probing steps without redundant settles',
     () async {
       final registry = CockpitTargetRegistry(routeName: '/settings');
       var scrollCount = 0;
@@ -4627,7 +4723,7 @@ void main() {
 
       expect(result.success, isTrue, reason: '${result.error?.details}');
       expect(scrollCount, 3);
-      expect(settleCount, greaterThan(settleBaseline!));
+      expect(settleCount, settleBaseline);
     },
   );
 

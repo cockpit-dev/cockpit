@@ -3,6 +3,41 @@ import 'package:flutter_cockpit/flutter_cockpit_flutter.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  testWidgets('route-only snapshots skip native target discovery', (
+    tester,
+  ) async {
+    var discoveryVisits = 0;
+    FlutterCockpit.initialize(
+      FlutterCockpitConfiguration(
+        initialRouteName: '/inbox',
+        discoveryPolicy: CockpitDiscoveryPolicy(
+          isIgnoredSubtree: (element) {
+            discoveryVisits += 1;
+            return false;
+          },
+        ),
+      ),
+    );
+
+    final rootKey = GlobalKey<FlutterCockpitRootState>();
+    await tester.pumpWidget(
+      FlutterCockpitRoot(
+        key: rootKey,
+        child: const MaterialApp(home: Scaffold(body: Text('Inbox'))),
+      ),
+    );
+    await tester.pump();
+
+    discoveryVisits = 0;
+    final snapshot = rootKey.currentState!.snapshot(
+      options: const CockpitSnapshotOptions(maxTargets: 0),
+    );
+
+    expect(snapshot.routeName, '/inbox');
+    expect(snapshot.visibleTargets, isEmpty);
+    expect(discoveryVisits, 0);
+  });
+
   testWidgets(
     'FlutterCockpitRoot discovers native widget signals without explicit target wrappers',
     (tester) async {
@@ -299,6 +334,7 @@ void main() {
               child: const SingleChildScrollView(
                 child: Column(
                   children: <Widget>[
+                    Text('Visible target'),
                     SizedBox(height: 600),
                     Text(
                       'gesture:longPress',
@@ -329,6 +365,13 @@ void main() {
         maxTargets: 10,
       ),
     );
+    final missing = rootKey.currentState!.snapshot(
+      options: const CockpitSnapshotOptions(
+        profile: CockpitSnapshotProfile.baseline,
+        query: '@missing-target',
+        maxTargets: 10,
+      ),
+    );
 
     expect(
       live.visibleTargets.any((target) => target.keyValue == 'gesture-status'),
@@ -336,6 +379,8 @@ void main() {
     );
     expect(byText.visibleTargets.single.text, 'gesture:longPress');
     expect(byKey.visibleTargets.single.keyValue, 'gesture-status');
+    expect(missing.visibleTargets, isNotEmpty);
+    expect(missing.visibleTargets.every((target) => target.visible), isTrue);
   });
 
   testWidgets(

@@ -298,34 +298,41 @@ final class CockpitWorkerPool {
     slot.desired = false;
     slot.restartTimer?.cancel();
     CockpitWorkspaceWorkerConnection? connection;
+    var forceShutdown = force;
+    var forceTermination = force;
     try {
       connection = await slot.ready.timeout(grace);
-      if (!force) {
-        await connection.call(
-          method: 'drain',
-          params: _internalParams(
-            key.workspaceId,
-            'drain',
-            extra: <String, Object?>{
-              'cancellationGraceMs': grace.inMilliseconds.clamp(0, 300000),
-            },
-          ),
-          deadline: _utcNow().add(grace),
-        );
+      if (!forceShutdown) {
+        try {
+          await connection.call(
+            method: 'drain',
+            params: _internalParams(
+              key.workspaceId,
+              'drain',
+              extra: <String, Object?>{
+                'cancellationGraceMs': grace.inMilliseconds.clamp(0, 300000),
+              },
+            ),
+            deadline: _utcNow().add(grace),
+          );
+        } on Object {
+          forceShutdown = true;
+        }
       }
       await connection.call(
         method: 'shutdown',
         params: _internalParams(
           key.workspaceId,
           'shutdown',
-          extra: <String, Object?>{'force': force},
+          extra: <String, Object?>{'force': forceShutdown},
         ),
         deadline: _utcNow().add(grace),
       );
+      forceTermination = false;
     } on Object {
-      force = true;
+      forceTermination = true;
     } finally {
-      await connection?.terminate(force: force);
+      await connection?.terminate(force: forceTermination);
     }
   }
 

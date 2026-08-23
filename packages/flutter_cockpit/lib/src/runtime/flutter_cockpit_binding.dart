@@ -551,9 +551,16 @@ final class FlutterCockpitBinding {
 
   bool _hasVisibleTargetsForRoute(Route<dynamic>? route) {
     final routeName = _normalizeObservedRouteName(route?.settings.name);
-    return registry.visibleTargets.any(
+    final explicitMatch = registry.registeredTargets.any(
       (target) => target.isVisible && target.routeName == routeName,
     );
+    final readinessProbe = registry.discoveredTargetsReadinessProbe;
+    return explicitMatch ||
+        (readinessProbe != null
+            ? readinessProbe(allowRouteFallback: false, routeName: routeName)
+            : registry.visibleTargets.any(
+                (target) => target.isVisible && target.routeName == routeName,
+              ));
   }
 
   void _publishPendingNavigatorRoute() {

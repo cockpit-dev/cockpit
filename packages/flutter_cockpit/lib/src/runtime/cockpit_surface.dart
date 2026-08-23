@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart' show Tooltip;
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter/rendering.dart';
 
@@ -31,6 +33,7 @@ import 'cockpit_target.dart';
 import 'cockpit_target_geometry.dart';
 import 'cockpit_target_geometry_resolver.dart';
 import 'cockpit_target_registry.dart';
+import 'cockpit_visual_frame_driver.dart';
 import 'cockpit_widget_tree_builder.dart';
 import 'flutter_cockpit.dart';
 
@@ -291,7 +294,9 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
   CockpitSnapshot snapshot({
     CockpitSnapshotOptions options = const CockpitSnapshotOptions(),
   }) {
-    var visibleTargets = _registry.visibleTargets;
+    var visibleTargets = options.maxTargets == 0 && options.query == null
+        ? const <CockpitTarget>[]
+        : _registry.visibleTargets;
     var diagnosticOptions = options;
     final query = options.query?.trim();
     if (query != null && query.isNotEmpty) {
@@ -449,15 +454,107 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
   Future<void> _settleAtomicRevealFrame() async {
     await Future<void>.microtask(() {});
     final binding = WidgetsBinding.instance;
-    if (!binding.hasScheduledFrame || _isTestBinding(binding)) {
+    if (_isTestBinding(binding)) {
       return;
     }
+    final platform = kIsWeb ? 'web' : defaultTargetPlatform.name;
+    if (cockpitSupportsSyntheticVisualFrames(platform)) {
+      await ensureCockpitVisualFrame(
+        platform: platform,
+        force: true,
+        budget: const Duration(milliseconds: 250),
+        stallTimeout: const Duration(milliseconds: 250),
+      );
+      return;
+    }
+    if (!binding.hasScheduledFrame &&
+        binding.schedulerPhase == SchedulerPhase.idle) {
+      binding.scheduleFrame();
+    }
+    if (!binding.hasScheduledFrame) return;
     try {
       await binding.endOfFrame.timeout(const Duration(milliseconds: 250));
     } on TimeoutException {
       // Geometry is revalidated below; a continuously animated application
       // must not turn one deterministic reveal into an unbounded wait.
     }
+  }
+
+  bool _scrollExtentExpanded(
+    CockpitScrollStepResult result,
+    ScrollPosition position, {
+    required bool reverse,
+  }) {
+    const tolerance = 0.5;
+    if (reverse) {
+      final previousMin = result.minScrollExtent;
+      return previousMin != null &&
+          position.minScrollExtent < previousMin - tolerance;
+    }
+    final previousMax = result.maxScrollExtent;
+    return previousMax != null &&
+        position.maxScrollExtent > previousMax + tolerance;
+  }
+
+  CockpitScrollStepResult _mergeExpandedScrollStep(
+    CockpitScrollStepResult initial,
+    CockpitScrollStepResult expanded,
+  ) {
+    return CockpitScrollStepResult(
+      didScroll: initial.didScroll || expanded.didScroll,
+      strategy: expanded.didScroll
+          ? '${expanded.strategy}_extentRefresh'
+          : initial.strategy,
+      scrollableKey: expanded.scrollableKey ?? initial.scrollableKey,
+      scrollablePath: expanded.scrollablePath ?? initial.scrollablePath,
+      scrollableTypeName:
+          expanded.scrollableTypeName ?? initial.scrollableTypeName,
+      pixelsBefore: initial.pixelsBefore ?? expanded.pixelsBefore,
+      pixelsAfter: expanded.pixelsAfter ?? initial.pixelsAfter,
+      nextPixels: expanded.nextPixels ?? initial.nextPixels,
+      minScrollExtent: expanded.minScrollExtent ?? initial.minScrollExtent,
+      maxScrollExtent: expanded.maxScrollExtent ?? initial.maxScrollExtent,
+      viewportDimension:
+          expanded.viewportDimension ?? initial.viewportDimension,
+      acceptsUserOffset:
+          expanded.acceptsUserOffset ?? initial.acceptsUserOffset,
+      allowsProgrammaticScroll:
+          expanded.allowsProgrammaticScroll ?? initial.allowsProgrammaticScroll,
+      hadGestureTarget: initial.hadGestureTarget || expanded.hadGestureTarget,
+      hadSemanticAction:
+          initial.hadSemanticAction || expanded.hadSemanticAction,
+      matchedRegistryTarget:
+          initial.matchedRegistryTarget || expanded.matchedRegistryTarget,
+    );
+  }
+
+  CockpitScrollStepResult _refreshScrollExtents(
+    CockpitScrollStepResult result,
+    ScrollPosition position,
+  ) {
+    return CockpitScrollStepResult(
+      didScroll: result.didScroll,
+      strategy: result.strategy,
+      scrollableKey: result.scrollableKey,
+      scrollablePath: result.scrollablePath,
+      scrollableTypeName: result.scrollableTypeName,
+      scrollableCandidateIndex: result.scrollableCandidateIndex,
+      scrollableCandidateCount: result.scrollableCandidateCount,
+      pixelsBefore: result.pixelsBefore,
+      pixelsAfter: position.pixels,
+      nextPixels: result.nextPixels,
+      minScrollExtent: position.minScrollExtent,
+      maxScrollExtent: position.maxScrollExtent,
+      viewportDimension: position.viewportDimension,
+      acceptsUserOffset: result.acceptsUserOffset,
+      allowsProgrammaticScroll: result.allowsProgrammaticScroll,
+      hadGestureTarget: result.hadGestureTarget,
+      hadSemanticAction: result.hadSemanticAction,
+      matchedRegistryTarget: result.matchedRegistryTarget,
+      targetVisibilityObserved: result.targetVisibilityObserved,
+      targetMounted: result.targetMounted,
+      targetVisible: result.targetVisible,
+    );
   }
 
   List<CockpitTarget> _discoverNativeTargets({
@@ -503,16 +600,19 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
     for (final target in _registry.registeredTargets) {
       mountedRegistry.register(target);
     }
-    final mountedTargets = mountedRegistry.visibleTargets;
+    final mountedTargets = mountedRegistry.allTargets;
     if (CockpitSelector.isExplicit(query)) {
-      return mountedRegistry.matchingVisibleTargets(
+      final matches = mountedRegistry.matchingTargets(
         CockpitSelector.parse(query),
+        includeHidden: true,
       );
+      return matches.isEmpty ? mountedRegistry.visibleTargets : matches;
     }
     final normalized = query.toLowerCase();
-    return mountedTargets
+    final matches = mountedTargets
         .where((target) => _targetMatchesQuery(target, normalized))
         .toList(growable: false);
+    return matches.isEmpty ? mountedRegistry.visibleTargets : matches;
   }
 
   bool _targetMatchesQuery(CockpitTarget target, String query) => <String?>[
@@ -668,7 +768,7 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
       );
     }
 
-    final scrollResult = await _scrollScrollableByViewport(
+    var scrollResult = await _scrollScrollableByViewport(
       scrollable,
       reverse: reverse,
       viewportFraction: viewportFraction,
@@ -681,6 +781,24 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
     if (probeDuringScroll && targetLocator != null) {
       await _settleAtomicRevealFrame();
     }
+    if (!scrollResult.didScroll &&
+        _scrollExtentExpanded(scrollResult, position, reverse: reverse)) {
+      final expandedResult = await _scrollScrollableByViewport(
+        scrollable,
+        reverse: reverse,
+        viewportFraction: viewportFraction,
+        duration: duration,
+        gestureProfile: gestureProfile,
+        continuous: continuous,
+        postScrollEnsureVisible: postScrollEnsureVisible,
+        preferProgrammatic: probeDuringScroll && targetLocator != null,
+      );
+      scrollResult = _mergeExpandedScrollStep(scrollResult, expandedResult);
+      if (probeDuringScroll && targetLocator != null) {
+        await _settleAtomicRevealFrame();
+      }
+    }
+    scrollResult = _refreshScrollExtents(scrollResult, position);
     final resolvedTarget = targetLocator == null
         ? targetElement
         : _findResolvedElementForLocator(rootElement, targetLocator);

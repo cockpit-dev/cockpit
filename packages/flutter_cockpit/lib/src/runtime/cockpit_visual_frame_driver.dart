@@ -10,6 +10,7 @@ const Duration _defaultStallTimeout = Duration(milliseconds: 50);
 
 Future<bool>? _visualFrameFlight;
 bool _visualFrameFlightMayAnimate = false;
+bool _visualFrameFlightForced = false;
 
 bool cockpitSupportsSyntheticVisualFrames(String platform) {
   return switch (platform.trim().toLowerCase()) {
@@ -28,17 +29,22 @@ bool cockpitSupportsSyntheticVisualFrames(String platform) {
 Future<bool> ensureCockpitVisualFrame({
   required String platform,
   bool mayAnimate = false,
+  bool force = false,
   Duration budget = _defaultBudget,
   Duration stallTimeout = _defaultStallTimeout,
 }) async {
   final active = _visualFrameFlight;
   if (active != null) {
     final activeMayAnimate = _visualFrameFlightMayAnimate;
+    final activeForced = _visualFrameFlightForced;
     final result = await active;
-    if (!mayAnimate || activeMayAnimate) return result;
+    if ((!mayAnimate || activeMayAnimate) && (!force || activeForced)) {
+      return result;
+    }
     return ensureCockpitVisualFrame(
       platform: platform,
-      mayAnimate: true,
+      mayAnimate: mayAnimate,
+      force: force,
       budget: budget,
       stallTimeout: stallTimeout,
     );
@@ -48,18 +54,21 @@ Future<bool> ensureCockpitVisualFrame({
     () => _ensureCockpitVisualFrame(
       platform: platform,
       mayAnimate: mayAnimate,
+      force: force,
       budget: budget,
       stallTimeout: stallTimeout,
     ),
   );
   _visualFrameFlight = future;
   _visualFrameFlightMayAnimate = mayAnimate;
+  _visualFrameFlightForced = force;
   try {
     return await future;
   } finally {
     if (identical(_visualFrameFlight, future)) {
       _visualFrameFlight = null;
       _visualFrameFlightMayAnimate = false;
+      _visualFrameFlightForced = false;
     }
   }
 }
@@ -67,6 +76,7 @@ Future<bool> ensureCockpitVisualFrame({
 Future<bool> _ensureCockpitVisualFrame({
   required String platform,
   required bool mayAnimate,
+  required bool force,
   required Duration budget,
   required Duration stallTimeout,
 }) async {
@@ -80,18 +90,24 @@ Future<bool> _ensureCockpitVisualFrame({
   }
   if (_isTestBinding(binding)) return false;
 
-  final pending =
-      binding.hasScheduledFrame ||
-      binding.schedulerPhase != SchedulerPhase.idle;
-  if (binding.framesEnabled && pending) {
-    try {
-      await binding.endOfFrame.timeout(stallTimeout);
-      return true;
-    } on TimeoutException {
-      // A hidden or occluded engine can retain a scheduled frame indefinitely.
+  if (binding.framesEnabled) {
+    var pending =
+        binding.hasScheduledFrame ||
+        binding.schedulerPhase != SchedulerPhase.idle;
+    if (!pending && force && binding.schedulerPhase == SchedulerPhase.idle) {
+      binding.scheduleFrame();
+      pending = true;
     }
-  } else if (binding.framesEnabled) {
-    return false;
+    if (pending) {
+      try {
+        await binding.endOfFrame.timeout(stallTimeout);
+        return true;
+      } on TimeoutException {
+        // A hidden or occluded engine can retain a scheduled frame indefinitely.
+      }
+    } else if (!force) {
+      return false;
+    }
   }
 
   if (binding.schedulerPhase != SchedulerPhase.idle) return false;

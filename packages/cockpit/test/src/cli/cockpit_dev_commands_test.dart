@@ -804,6 +804,34 @@ void main() {
     ]);
   });
 
+  test('dev locator search marks a mounted clipped target as offscreen', () {
+    final result = cockpitBuildUiLocatorMatchesFromOutput(<String, Object?>{
+      'snapshot': <String, Object?>{
+        'visibleTargets': <Object?>[
+          <String, Object?>{
+            'registrationId': 'open-command-lab',
+            'keyValue': 'settings-open-command-lab',
+            'text': 'Open command lab',
+            'typeName': 'FilledButton',
+            'routeName': '/settings',
+            'visible': false,
+            'supportedCommands': <Object?>['tap'],
+            'ancestors': const <Object?>[],
+          },
+        ],
+      },
+    }, '@settings-open-command-lab');
+
+    expect(result['matches'], <Object?>[
+      <String, Object?>{
+        'sel': '@settings-open-command-lab',
+        'label': 'Open command lab',
+        'can': 'tap',
+        'state': 'offscreen',
+      },
+    ]);
+  });
+
   test('dev locator search prefers native keys over copied identities', () {
     final result = cockpitBuildUiLocatorMatchesFromOutput(<String, Object?>{
       'snapshot': <String, Object?>{

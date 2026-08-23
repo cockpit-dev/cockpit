@@ -2507,6 +2507,10 @@ void main() {
     expect(processManager.arguments.join('\n'), contains('NSWorkspace'));
     expect(
       processManager.arguments.join('\n'),
+      contains("typeof rawFrontmostAppId === 'string'"),
+    );
+    expect(
+      processManager.arguments.join('\n'),
       isNot(contains('System Events')),
     );
     expect(processManager.arguments.last, '4242');

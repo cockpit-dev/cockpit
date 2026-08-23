@@ -129,7 +129,11 @@ final class CockpitInspectUiService {
           baseUri: resolved.baseUri,
           sessionHandle: resolved.app?.remoteSession,
           resultProfile: request.resultProfile,
-          snapshotOptions: request.snapshotOptions!.copyWith(clearQuery: true),
+          snapshotOptions: request.snapshotOptions!.copyWith(
+            clearQuery: true,
+            maxTargets: 24,
+            maxAncestorsPerTarget: 0,
+          ),
           compareAgainstSnapshotRef: request.compareAgainstSnapshotRef,
           retainArtifacts: false,
         ),

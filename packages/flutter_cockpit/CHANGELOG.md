@@ -1,5 +1,17 @@
 # Changelog
 
+## 4.0.35
+
+- Added visibility-aware mounted target snapshots so offscreen Flutter controls
+  remain inspectable without being reported as visible.
+- Added automatic reveal for direct interactions across ordinary, lazy, and
+  nested scrollable layouts, with forward and reverse search and final
+  alignment validation.
+- Made brief action results skip full target discovery while detailed and
+  failure profiles retain proportional diagnostics.
+- Replaced unsafe partial pipeline flushing with bounded real or synthetic
+  visual frames on desktop and web.
+
 ## 4.0.34
 
 - Aligned the Flutter package with the source-first Cockpit development

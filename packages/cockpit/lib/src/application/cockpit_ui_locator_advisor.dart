@@ -184,6 +184,7 @@ final class _DevTarget {
       tip = value.tooltip,
       type = value.typeName,
       route = value.routeName,
+      visible = value.visible,
       path = value.path,
       scrollablePath = value.scrollablePath,
       commands = value.supportedCommands,
@@ -207,6 +208,7 @@ final class _DevTarget {
   final String? tip;
   final String? type;
   final String? route;
+  final bool visible;
   final String? path;
   final String? scrollablePath;
   final List<CockpitCommandType> commands;
@@ -426,7 +428,7 @@ final class _DevTarget {
       'sel': CockpitSelector.format(_locator(advice.loc)),
       'label': ?label,
       'can': ?actions,
-      'state': ?_compactControlState(control),
+      'state': ?_compactTargetState(this),
       'value': ?_compactControlValue(control?.value),
       if (advice.ambiguous) 'ambiguous': true,
     };
@@ -448,7 +450,7 @@ final class _DevTarget {
       if (label == null) 'type': ?type,
       if (needsPosition) 'at': ?_compactPosition(layout),
       'can': ?actions,
-      'state': ?_compactControlState(control),
+      'state': ?_compactTargetState(this),
       'value': ?_compactControlValue(control?.value),
     };
   }
@@ -489,7 +491,7 @@ final class _DevTarget {
       'sel': selector,
       'label': ?label,
       'can': ?actions,
-      'state': ?_compactControlState(control),
+      'state': ?_compactTargetState(this),
       'value': ?_compactControlValue(control?.value),
     };
   }
@@ -1112,6 +1114,14 @@ String? _compactControlState(CockpitControlState? control) {
     if (control.obscured) 'obscured',
   ];
   return values.isEmpty ? null : values.join('|');
+}
+
+String? _compactTargetState(_DevTarget target) {
+  final controlState = _compactControlState(target.control);
+  if (target.visible) {
+    return controlState;
+  }
+  return controlState == null ? 'offscreen' : 'offscreen|$controlState';
 }
 
 Object? _compactControlValue(Object? value) {

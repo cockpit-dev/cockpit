@@ -459,6 +459,7 @@ final class CockpitSnapshotTarget {
     this.scrollableKeyValue,
     this.scrollableTypeName,
     required this.routeName,
+    this.visible = true,
     List<CockpitCommandType> supportedCommands = const <CockpitCommandType>[],
     this.control,
     this.layout,
@@ -485,6 +486,7 @@ final class CockpitSnapshotTarget {
   final String? scrollableKeyValue;
   final String? scrollableTypeName;
   final String routeName;
+  final bool visible;
   final List<CockpitCommandType> supportedCommands;
   final CockpitControlState? control;
   final CockpitSnapshotLayout? layout;
@@ -520,6 +522,7 @@ final class CockpitSnapshotTarget {
     if (scrollableKeyValue != null) 'scrollableKeyValue': scrollableKeyValue,
     if (scrollableTypeName != null) 'scrollableTypeName': scrollableTypeName,
     'routeName': routeName,
+    if (!visible) 'visible': false,
     'supportedCommands': supportedCommands
         .map((command) => command.name)
         .toList(),
@@ -555,6 +558,7 @@ final class CockpitSnapshotTarget {
       scrollableKeyValue: json['scrollableKeyValue'] as String?,
       scrollableTypeName: json['scrollableTypeName'] as String?,
       routeName: json['routeName']! as String,
+      visible: json['visible'] as bool? ?? true,
       supportedCommands:
           (json['supportedCommands'] as List<Object?>? ?? const <Object?>[])
               .map(CockpitCommandType.fromJson)
@@ -614,6 +618,7 @@ final class CockpitSnapshotTarget {
             other.scrollableKeyValue == scrollableKeyValue &&
             other.scrollableTypeName == scrollableTypeName &&
             other.routeName == routeName &&
+            other.visible == visible &&
             other.control == control &&
             other.layout == layout &&
             other.content == content &&
@@ -630,7 +635,7 @@ final class CockpitSnapshotTarget {
   }
 
   @override
-  int get hashCode => Object.hash(
+  int get hashCode => Object.hashAll(<Object?>[
     registrationId,
     cockpitId,
     semanticId,
@@ -644,6 +649,7 @@ final class CockpitSnapshotTarget {
     scrollableKeyValue,
     scrollableTypeName,
     routeName,
+    visible,
     control,
     layout,
     content,
@@ -651,7 +657,7 @@ final class CockpitSnapshotTarget {
     _ancestorListEquality.hash(ancestors),
     _propertyListEquality.hash(diagnosticProperties),
     _commandListEquality.hash(supportedCommands),
-  );
+  ]);
 }
 
 final class CockpitSnapshot {
