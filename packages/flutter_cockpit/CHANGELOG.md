@@ -1,5 +1,12 @@
 # Changelog
 
+## 4.0.37
+
+- Documented the production-isolated `cockpit/` shell package for ordinary
+  projects and Pub workspaces, including the correct direct Flutter launch
+  flow and globally installed CLI boundary.
+- Synchronized package metadata with the current Cockpit release.
+
 ## 4.0.36
 
 - Synchronized native package metadata and development shell integration locks
