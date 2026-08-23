@@ -125,6 +125,13 @@ steps:
     action:
       type: focusTextInput
       locator: {testId: lab-text-field}
+  - stepId: revealTextFocusStatus
+    description: Keep the focus postcondition visible after platform keyboard insets adjust the viewport.
+    timeoutMs: 12000
+    action:
+      type: showOnScreen
+      locator: {testId: lab-focus-status}
+      revealAlignment: center
   - stepId: verifyTextFocus
     action:
       type: assertText

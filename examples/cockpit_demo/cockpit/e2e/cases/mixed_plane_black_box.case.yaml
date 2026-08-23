@@ -36,22 +36,29 @@ steps:
     timeoutMs: 30000
     action: {type: waitForUiIdle, quietMs: 750}
   - stepId: openEditorThroughNativeLocator
-    description: Commit the native mutation once; later retries only observe its result.
-    plane: native
-    timeoutMs: 30000
-    action:
-      type: tap
-      locator:
-        label: New task
-        fallbacks:
-          - text: New task
-  - stepId: observeEditorAfterNativeAction
-    description: Retry only the read-only Flutter route postcondition.
-    timeoutMs: 45000
+    description: Retry native input only while the Flutter route proves the editor has not opened.
+    timeoutMs: 60000
     retry:
-      maxAttempts: 3
+      maxAttempts: 2
       delayMs: 750
       steps:
+        - stepId: openEditorIfStillInInbox
+          timeoutMs: 30000
+          if:
+            condition: {type: route, route: /inbox}
+            then:
+              - stepId: tapCreateTaskThroughNativeLocator
+                plane: native
+                timeoutMs: 30000
+                action:
+                  type: tap
+                  locator:
+                    label: Create task
+                    fallbacks:
+                      - text: Create task
+            else:
+              - stepId: retainCommittedEditorRoute
+                action: {type: waitForUiIdle, quietMs: 100}
         - stepId: verifyEditorAfterNativeAction
           timeoutMs: 12000
           action:
