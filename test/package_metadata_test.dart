@@ -359,6 +359,61 @@ void main() {
     );
   });
 
+  test('public docs describe Flutter interaction ownership', () {
+    for (final path in <String>[
+      'README.md',
+      'packages/cockpit/README.md',
+      'packages/flutter_cockpit/README.md',
+      'docs/contracts/ai-development-protocol.md',
+    ]) {
+      final document = File(
+        path,
+      ).readAsStringSync().replaceAll(RegExp(r'\s+'), ' ');
+      expect(
+        document,
+        contains('merged ancestor `Semantics` never makes'),
+        reason: path,
+      );
+      expect(
+        document,
+        contains('`IgnorePointer(ignoring: true)`'),
+        reason: path,
+      );
+      expect(
+        document,
+        contains('`AbsorbPointer(absorbing: true)`'),
+        reason: path,
+      );
+      expect(
+        document,
+        contains('multiple delegated controls leave state unresolved'),
+        reason: path,
+      );
+    }
+
+    for (final path in <String>[
+      'README.zh-CN.md',
+      'packages/cockpit/README.zh-CN.md',
+      'packages/flutter_cockpit/README.zh-CN.md',
+    ]) {
+      final document = File(
+        path,
+      ).readAsStringSync().replaceAll(RegExp(r'\s+'), ' ');
+      expect(document, contains('合并到祖先的 `Semantics`'), reason: path);
+      expect(
+        document,
+        contains('`IgnorePointer(ignoring: true)`'),
+        reason: path,
+      );
+      expect(
+        document,
+        contains('`AbsorbPointer(absorbing: true)`'),
+        reason: path,
+      );
+      expect(document, contains('存在多个被代理 control 时不猜测状态'), reason: path);
+    }
+  });
+
   test('demo keeps cockpit integration out of production lib code', () {
     final productionPubspec = File(
       'examples/cockpit_demo/pubspec.yaml',

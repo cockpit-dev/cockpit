@@ -200,6 +200,14 @@ copy one directly into the command named by `can`, then re-inspect after navigat
 overlay, filtering, reorder, keyboard, or another control-surface change. Targeted
 inspection returns stable selectors suitable for durable reuse.
 
+Interaction ownership stays explicit: merged ancestor `Semantics` never makes
+passive descendants actionable, and descendants below `IgnorePointer(ignoring:
+true)` or `AbsorbPointer(absorbing: true)` advertise no mutation actions. When
+one actionable outer row
+delegates selection to exactly one blocked control, the outer target carries
+that control's state; multiple delegated controls leave state unresolved instead
+of guessing. Execute only the selector whose own `can` advertises the command.
+
 Selectors are conjunctive: `#id`, `@key`, `Type["text"]`, named filters such as
 `[tip="Save"][route="/edit"]`, and ancestor chains such as
 `Dialog >> TextButton["Continue"]`. `[*="text"]` and `[~="text"]` opt into

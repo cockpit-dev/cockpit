@@ -58,6 +58,15 @@ Use exact text by default. An ambiguous locator fails and returns bounded
 candidates. `dev wait` is UI-only by default; add `--network` only when the
 assertion requires completed network activity.
 
+Interaction ownership stays explicit: merged ancestor `Semantics` never makes
+passive descendants actionable, and descendants below `IgnorePointer(ignoring:
+true)` or `AbsorbPointer(absorbing: true)` advertise no mutation actions. When
+one actionable outer row
+delegates selection to exactly one blocked control, the outer target carries
+that control's state; multiple delegated controls leave state unresolved instead
+of guessing. Execute only the selector whose own advertised capabilities include
+the requested action.
+
 Hot reload starts a new runtime-diagnostic generation: errors captured before
 the reload no longer fail current diagnosis or evidence, while errors raised
 after it remain visible and disqualifying. `dev scroll TARGET` mounts lazy
