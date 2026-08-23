@@ -63,6 +63,33 @@ void main() {
     expect(await reopened.remove('1'), isFalse);
   });
 
+  test('allocates compact lowercase base-36 handles', () async {
+    final handles = <String>[];
+    for (var index = 1; index <= 12; index += 1) {
+      handles.add(
+        (await store.bind(
+          workspaceId: 'workspace-$index',
+          sessionId: 'session-$index',
+        )).handleId,
+      );
+    }
+
+    expect(handles, <String>[
+      '1',
+      '2',
+      '3',
+      '4',
+      '5',
+      '6',
+      '7',
+      '8',
+      '9',
+      'a',
+      'b',
+      'c',
+    ]);
+  });
+
   test('keeps one public handle while development identities change', () async {
     final checkout = p.normalize(temporaryDirectory.path);
     final identity = 'a' * 64;

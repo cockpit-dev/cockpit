@@ -120,7 +120,8 @@ details are documented in the [agent integration guide](docs/agent-integrations.
 ## Flutter Fast Path
 
 Run from the intended Flutter project. `dev` discovers and owns the workspace,
-target, process, port, and bridge, then reuses that project's active numeric
+target, process, port, and bridge, then reuses that project's active short
+base-36
 handle while checkout identity keeps concurrent projects isolated:
 
 ```bash
