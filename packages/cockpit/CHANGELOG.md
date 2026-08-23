@@ -1,5 +1,11 @@
 # Changelog
 
+## 4.0.33
+
+- Documented direct source-derived Flutter actions for custom controls omitted
+  from compact inspection, including type-only selectors and ancestor scoping.
+- Synchronized the CLI package with the Flutter 3.32 compatibility fix.
+
 ## 4.0.32
 
 - Made query-free Flutter inspection return the mounted control surface in

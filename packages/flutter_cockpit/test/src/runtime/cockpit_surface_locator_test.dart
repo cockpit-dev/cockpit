@@ -396,6 +396,85 @@ void main() {
     expect(result.success, isTrue, reason: '${result.error?.details}');
     expect(activated, isTrue);
   });
+
+  testWidgets(
+    'source-derived type scopes operate unlabeled custom controls accurately',
+    (tester) async {
+      var primaryActivations = 0;
+      var secondaryActivations = 0;
+      await tester.pumpWidget(
+        WidgetsApp(
+          color: const Color(0xFFFFFFFF),
+          builder: (context, child) => CockpitSurface(
+            routeName: '/source-types',
+            child: Directionality(
+              textDirection: TextDirection.ltr,
+              child: ExcludeSemantics(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    PrimarySourceRegion(
+                      child: SourceGlyphButton(
+                        onPressed: () => primaryActivations += 1,
+                      ),
+                    ),
+                    SecondarySourceRegion(
+                      child: SourceGlyphButton(
+                        onPressed: () => secondaryActivations += 1,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final surface = tester.state<CockpitSurfaceState>(
+        find.byType(CockpitSurface),
+      );
+      final unscoped = surface.probeVisibleLocator(
+        CockpitSelector.parse('[type="SourceGlyphButton"]'),
+        requiredCommand: CockpitCommandType.tap,
+      );
+      expect(unscoped.isSuccess, isFalse);
+      expect(unscoped.error?.code, CockpitCommandError.ambiguousTargetCode);
+      expect(unscoped.error?.details['candidateCount'], 2);
+
+      final locator = CockpitSelector.parse(
+        'PrimarySourceRegion >> [type="SourceGlyphButton"]',
+      );
+      final scoped = surface.probeVisibleLocator(
+        locator,
+        requiredCommand: CockpitCommandType.tap,
+      );
+      expect(scoped.isSuccess, isTrue, reason: '${scoped.error?.details}');
+      expect(
+        scoped.target?.supportedCommands,
+        contains(CockpitCommandType.tap),
+      );
+
+      final executor = InAppCockpitCommandExecutor(
+        registry: surface.registry,
+        locatorProbe: surface.probeVisibleLocator,
+        gestureHandler: surface.performGesture,
+      );
+      final result = await executor.execute(
+        CockpitCommand(
+          commandId: 'source-type-scope-tap',
+          commandType: CockpitCommandType.tap,
+          locator: locator,
+        ),
+      );
+      await tester.pump();
+
+      expect(result.success, isTrue, reason: '${result.error?.details}');
+      expect(primaryActivations, 1);
+      expect(secondaryActivations, 0);
+    },
+  );
 }
 
 final class SourceOnlyButton extends StatelessWidget {
@@ -412,4 +491,37 @@ final class SourceOnlyButton extends StatelessWidget {
       child: SizedBox(width: 220, height: 48, child: Center(child: child)),
     );
   }
+}
+
+final class SourceGlyphButton extends StatelessWidget {
+  const SourceGlyphButton({required this.onPressed});
+
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Listener(
+      behavior: HitTestBehavior.opaque,
+      onPointerUp: (_) => onPressed(),
+      child: const SizedBox(width: 80, height: 48),
+    );
+  }
+}
+
+final class PrimarySourceRegion extends StatelessWidget {
+  const PrimarySourceRegion({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => child;
+}
+
+final class SecondarySourceRegion extends StatelessWidget {
+  const SecondarySourceRegion({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => child;
 }

@@ -1186,7 +1186,9 @@ final class CockpitNativeTargetDiscovery {
   }) {
     final widget = element.widget;
     final semanticState = semantics?.control;
-    final segmentState = _cupertinoSegmentControlStateForElement(element);
+    final segmentState =
+        _materialSegmentControlStateForElement(element) ??
+        _cupertinoSegmentControlStateForElement(element);
     final editableState = _editableTextStateForElement(element);
     CockpitControlState? directState;
 
@@ -1320,6 +1322,31 @@ final class CockpitNativeTargetDiscovery {
     );
   }
 
+  CockpitControlState? _materialSegmentControlStateForElement(Element element) {
+    final control = _materialSegmentControlAncestor(element);
+    if (control == null) return null;
+    final widget = control.widget;
+    if (widget is! SegmentedButton) return null;
+    final matches = widget.segments
+        .where(
+          (segment) =>
+              (segment.label != null &&
+                  _elementContainsWidget(element, segment.label!)) ||
+              (segment.icon != null &&
+                  _elementContainsWidget(element, segment.icon!)),
+        )
+        .toList(growable: false);
+    if (matches.length != 1) return null;
+    final segment = matches.single;
+    final onSelectionChanged =
+        (widget as dynamic).onSelectionChanged as Function?;
+    return CockpitControlState(
+      enabled: onSelectionChanged != null && segment.enabled,
+      selected: widget.selected.contains(segment.value),
+      value: _jsonSafeControlValue(segment.value),
+    );
+  }
+
   CockpitControlState? _cupertinoSegmentControlStateForElement(
     Element element,
   ) {
@@ -1364,30 +1391,26 @@ final class CockpitNativeTargetDiscovery {
       Object? value,
       Object? groupValue,
       Function? onChanged,
-      bool? set,
     ) = switch (widget) {
       Radio() => (
         widget.value,
         widget.groupValue,
         (widget as dynamic).onChanged as Function?,
-        widget.enabled,
       ),
       RadioListTile() => (
         widget.value,
         widget.groupValue,
         (widget as dynamic).onChanged as Function?,
-        widget.enabled,
       ),
       CupertinoRadio() => (
         widget.value,
         widget.groupValue,
         (widget as dynamic).onChanged as Function?,
-        widget.enabled,
       ),
-      _ => (null, null, null, null),
+      _ => (null, null, null),
     };
     return CockpitControlState(
-      enabled: semantics?.enabled ?? set ?? onChanged != null,
+      enabled: semantics?.enabled ?? onChanged != null,
       checked:
           semantics?.checked ??
           (groupValue == value ? CockpitCheckState.on : CockpitCheckState.off),
@@ -2685,6 +2708,18 @@ final class CockpitNativeTargetDiscovery {
       return 'EditableText';
     }
     return widget.runtimeType.toString();
+  }
+
+  Element? _materialSegmentControlAncestor(Element element) {
+    Element? result;
+    element.visitAncestorElements((ancestor) {
+      if (ancestor.widget is SegmentedButton) {
+        result = ancestor;
+        return false;
+      }
+      return true;
+    });
+    return result;
   }
 
   Element? _cupertinoSegmentControlAncestor(Element element) {

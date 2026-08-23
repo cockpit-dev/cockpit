@@ -284,18 +284,19 @@ route or visible blocker;
 do not repeat the missing locator or load a full tree. Capture the current screen
 only when those mounted targets do not explain the state.
 
-For a first-party Flutter checkout, use source as a focused locator signal when
-the bounded runtime view is unlabeled, ambiguous, or backed by a custom widget.
-Use `rg` with visible text, route names, public widget types, tooltips, or callback
-names, then read only the containing build method and interaction callback. From
-that code, identify the exact visible text, public control type, ancestor scope,
-and expected state change. Use the resulting explicit structural selector directly,
-for example `CompanyButton >> Text["Save"]`, with `tap`, `hold`, or `double`.
-Cockpit resolves a known actionable owner first, then may use a real hit-tested
-gesture on the unique visible Element for a custom control; this fallback never
-makes plain passive text implicitly actionable. Source removes guesswork but is
-not runtime proof: never invent a key or semantic label, and validate the action
-against the live postcondition.
+For a first-party Flutter checkout, source is a direct locator channel when the
+bounded runtime view is unlabeled, ambiguous, or omits a custom widget. Use `rg`
+with visible text, route names, public widget types, tooltips, or callback names,
+then read only the containing build method and interaction callback. If the code
+already identifies the control, do not add an inspect round trip: execute an
+explicit structural selector directly. Use `CompanyButton >> Text["Save"]` for a
+labeled custom control, or `Toolbar >> [type="CompanyIconButton"]` when it has no
+text, key, or Semantics. Cockpit traverses the mounted Element tree for explicit
+actions even when compact inspect omitted that Element, requires one visible match,
+and performs a real hit-tested `tap`, `hold`, or `double`. Equal matches fail as
+ambiguous; add a real ancestor, route, key, or other source-proven condition instead
+of guessing or using coordinates. Source removes guesswork but is not runtime proof:
+validate the expected live postcondition after the action.
 
 For ambiguity or exploration, run the smallest `dev inspect QUERY`. It
 searches mounted Flutter Element targets, independent of developer-authored
@@ -347,6 +348,7 @@ Selector quick reference:
 | Cockpit ID | `#save` |
 | Flutter Key | `@save-key` |
 | Type + text | `FilledButton["Save"]` |
+| Source-only custom type | `[type="CompanyIconButton"]` |
 | Multiple conditions | `#save[type="FilledButton"][route="/edit"]` |
 | Ancestor scope | `Dialog >> FilledButton["Continue"]` |
 | Keyed row scope | `@task-row >> FilledButton["Open"]` |
@@ -367,6 +369,7 @@ cockpit dev tap '#save-button'
 cockpit dev hold ':k4m2p8'
 cockpit dev inc ':v8c1r6'
 cockpit dev tap 'Dialog >> FilledButton["Save"]'
+cockpit dev tap 'Toolbar >> [type="CompanyIconButton"]'
 cockpit dev type "hello" --into '@message'
 cockpit dev scroll "Operations"
 ```

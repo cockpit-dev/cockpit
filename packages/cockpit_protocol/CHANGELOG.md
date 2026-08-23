@@ -1,5 +1,9 @@
 # Changelog
 
+## 4.0.33
+
+- Synchronized the public protocol package with the current Cockpit release.
+
 ## 4.0.32
 
 - Added compact Flutter control state for enabled, selection, check, focus,
