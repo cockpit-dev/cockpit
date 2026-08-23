@@ -4,6 +4,7 @@ import 'package:lon/lon.dart';
 import 'package:cockpit/src/cli/cockpit_cli_runtime.dart';
 import 'package:cockpit/src/cli/cockpit_cli_output.dart';
 import 'package:cockpit/src/cli/cockpit_cli_session_handles.dart';
+import 'package:cockpit/src/cli/cockpit_dev_network.dart';
 import 'package:cockpit/src/cli/cockpit_dev_runtime.dart';
 import 'package:cockpit/src/cli/cockpit_dev_start.dart';
 import 'package:cockpit/src/development/cockpit_checkout_identity.dart';
@@ -103,6 +104,119 @@ void main() {
 
     expect(dev.diagnosticReadSucceeded(result), isTrue);
     expect(dev.operationSucceeded(result), isFalse);
+  });
+
+  test('network failures do not trigger session reconciliation', () async {
+    final calls = <String>[];
+    final sessionIds = <String>[];
+    final dev = CockpitDevRuntime(
+      runtime,
+      operationInvoker: (_, kind, input) async {
+        calls.add(kind);
+        expect(kind, 'network.read');
+        sessionIds.add(input['sessionId']! as String);
+        return _result(
+          kind,
+          output: const <String, Object?>{
+            'available': true,
+            'summary': <String, Object?>{'failureCount': 1},
+            'entries': <Object?>[
+              <String, Object?>{'requestId': '10', 'statusCode': 503},
+            ],
+          },
+        );
+      },
+    );
+    runtime.configureOutput(
+      command: 'dev.network',
+      selection: const CockpitCliOutputSelection(),
+    );
+
+    final exitCode = await CockpitDevNetworkService(runtime, dev).read(
+      sessionReference: session.handleId,
+      requestId: null,
+      before: null,
+      limit: 12,
+      failuresOnly: false,
+      method: null,
+      uriContains: null,
+      body: null,
+      raw: false,
+    );
+
+    expect(exitCode, cockpitDataExitCode);
+    expect(calls, <String>['network.read']);
+    expect(sessionIds, <String>['session-old']);
+    expect(stdout.toString(), contains('networkFailures'));
+  });
+
+  test('network operation failure reconciles and retries once', () async {
+    final calls = <String>[];
+    final networkSessionIds = <String>[];
+    final dev = CockpitDevRuntime(
+      runtime,
+      operationInvoker: (_, kind, input) async {
+        calls.add(kind);
+        if (kind == 'network.read') {
+          networkSessionIds.add(input['sessionId']! as String);
+          if (networkSessionIds.length == 1) {
+            return _result(kind, output: const <String, Object?>{'ok': false});
+          }
+          return _result(
+            kind,
+            output: const <String, Object?>{
+              'available': true,
+              'summary': <String, Object?>{'failureCount': 0},
+              'entries': <Object?>[],
+            },
+          );
+        }
+        if (kind == 'session.development.get') {
+          expect(input['sessionId'], 'session-old');
+          return _result(
+            kind,
+            output: const <String, Object?>{
+              'sessionId': 'session-new',
+              'targetId': 'target-1',
+              'appId': 'app-new',
+              'status': <String, Object?>{
+                'state': 'ready',
+                'appReachable': true,
+                'remoteSessionReachable': true,
+              },
+            },
+          );
+        }
+        throw StateError('Unexpected operation $kind');
+      },
+    );
+    runtime.configureOutput(
+      command: 'dev.network',
+      selection: const CockpitCliOutputSelection(),
+    );
+
+    final exitCode = await CockpitDevNetworkService(runtime, dev).read(
+      sessionReference: session.handleId,
+      requestId: null,
+      before: null,
+      limit: 12,
+      failuresOnly: false,
+      method: null,
+      uriContains: null,
+      body: null,
+      raw: false,
+    );
+
+    expect(exitCode, cockpitSuccessExitCode);
+    expect(calls, <String>[
+      'network.read',
+      'session.development.get',
+      'network.read',
+    ]);
+    expect(networkSessionIds, <String>['session-old', 'session-new']);
+    final rebound = await runtime.resolveDevelopmentSession(session.handleId);
+    expect(rebound.sessionId, 'session-new');
+    expect(rebound.appId, 'app-new');
   });
 
   test(

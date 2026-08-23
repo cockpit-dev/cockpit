@@ -26,22 +26,23 @@ final class CockpitDevNetworkService {
     required bool raw,
   }) async {
     var session = await runtime.resolveDevelopmentSession(sessionReference);
-    final resolution = await dev.reconcile(session, allowRelaunch: false);
-    if (!resolution.ready) {
-      return dev.writeUnavailable(action: 'network', resolution: resolution);
+    final read = await dev
+        .invokeRead(session, 'network.read', <String, Object?>{
+          'includeEntries': true,
+          'maxEntries': requestId == null ? limit : 1,
+          'maxEndpointSummaries': limit.clamp(1, 12),
+          'id': ?requestId,
+          'before': ?before,
+          'method': ?method,
+          'uriContains': ?uriContains,
+          if (failuresOnly) 'onlyFailures': true,
+        }, accepts: dev.diagnosticReadSucceeded);
+    final unavailable = read.unavailable;
+    if (unavailable != null) {
+      return dev.writeUnavailable(action: 'network', resolution: unavailable);
     }
-    session = resolution.session;
-    final network = await dev.invoke(session, 'network.read', <String, Object?>{
-      'sessionId': session.sessionId,
-      'includeEntries': true,
-      'maxEntries': requestId == null ? limit : 1,
-      'maxEndpointSummaries': limit.clamp(1, 12),
-      'id': ?requestId,
-      'before': ?before,
-      'method': ?method,
-      'uriContains': ?uriContains,
-      if (failuresOnly) 'onlyFailures': true,
-    });
+    session = read.session;
+    final network = read.result!;
     if (!dev.diagnosticReadSucceeded(network)) {
       return dev.writeOperation(
         action: 'network',
@@ -87,7 +88,7 @@ final class CockpitDevNetworkService {
         session: session,
         ok: true,
         state: networkState,
-        changed: resolution.changed,
+        changed: read.changed,
       );
     }
 
