@@ -239,7 +239,7 @@ void main() {
     expect(find.text('Startup and Flutter tool logs'), findsOneWidget);
     expect(find.text('Application logs'), findsOneWidget);
     expect(find.textContaining('Refreshes every 2 seconds'), findsNWidgets(2));
-    expect(find.byType(SelectionArea), findsOneWidget);
+    expect(find.byType(SelectableText), findsNWidgets(2));
     expect(
       tester.getTopLeft(find.text('startup-new')).dy,
       greaterThan(tester.getTopLeft(find.text('startup-old')).dy),
@@ -250,7 +250,7 @@ void main() {
     await tester.tap(find.text('Application logs'));
     await tester.pumpAndSettle();
 
-    expect(find.byType(SelectionArea), findsNWidgets(2));
+    expect(find.byType(SelectableText), findsNWidgets(4));
     expect(
       tester.getTopLeft(find.text('app-new')).dy,
       greaterThan(tester.getTopLeft(find.text('app-old')).dy),
@@ -326,10 +326,61 @@ void main() {
 
     await tester.tap(find.text('Session logs'));
     await tester.pumpAndSettle();
-    expect(find.byType(SelectionArea), findsOneWidget);
+    expect(find.byType(SelectableText), findsNWidgets(2));
     expect(find.text('lifecycle-old'), findsOneWidget);
     expect(find.text('lifecycle-new'), findsOneWidget);
     expect(find.byTooltip('Hide log output'), findsOneWidget);
+  });
+
+  testWidgets('log rows stay virtualized and pause refresh while scrolling', (
+    tester,
+  ) async {
+    final lines = List<String>.generate(
+      1000,
+      (index) =>
+          'line-$index ${List<String>.filled(12, 'long-value').join(' ')}',
+      growable: false,
+    );
+    final scrollActivity = <bool>[];
+    final detail = SessionMonitorDetail(
+      sessionLogs: <String, Object?>{'lines': lines},
+    );
+
+    await tester.pumpWidget(
+      TranslationProvider(
+        child: MaterialApp(
+          theme: ConsoleTheme.build(Brightness.dark),
+          home: Scaffold(
+            body: SizedBox(
+              height: 640,
+              child: SessionLogsView(
+                detail: detail,
+                onScrollActivityChanged: scrollActivity.add,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    final logList = find.byWidgetPredicate(
+      (widget) => widget is ListView && widget.itemExtent == 18,
+    );
+    expect(logList, findsOneWidget);
+    expect(tester.widget<ListView>(logList).itemExtent, 18);
+    expect(
+      find.byType(SelectableText).evaluate().length,
+      lessThan(lines.length),
+    );
+    expect(identical(stringList(lines), lines), isTrue);
+
+    final gesture = await tester.startGesture(tester.getCenter(logList));
+    await gesture.moveBy(const Offset(0, -120));
+    await tester.pump();
+    expect(scrollActivity.last, isTrue);
+    await gesture.up();
+    await tester.pumpAndSettle();
+    expect(scrollActivity.last, isFalse);
   });
 
   test('activity retention preserves newest events and dropped count', () {

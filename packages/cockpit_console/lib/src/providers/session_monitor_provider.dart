@@ -4,6 +4,7 @@ import 'dart:io';
 import 'dart:isolate';
 
 import 'package:cockpit_protocol/cockpit_protocol.dart';
+import 'package:collection/collection.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 
@@ -19,6 +20,7 @@ const _stoppedActivityLimit = 200;
 const _maximumStoppedSessions = 100;
 const _workspaceRefreshConcurrency = 6;
 const _sessionRefreshConcurrency = 4;
+const _detailEquality = DeepCollectionEquality();
 
 final class SessionMonitorNotifier extends Notifier<SessionMonitorState> {
   Timer? _refreshTimer;
@@ -292,6 +294,7 @@ final class SessionMonitorNotifier extends Notifier<SessionMonitorState> {
       };
       if (state.selected != key) return;
       final latest = state.detail(key);
+      if (silent && !update.changes(latest)) return;
       _setDetail(
         key,
         update.apply(
@@ -764,21 +767,8 @@ final class SessionMonitorNotifier extends Notifier<SessionMonitorState> {
     final appLogs = values[0];
     final sessionLogs = values[1];
     return _DetailUpdate(
-      logs:
-          appLogs.output ??
-          <String, Object?>{
-            'available': false,
-            'missingReason': appLogs.error ?? 'Application logs unavailable.',
-            'lines': const <String>[],
-          },
-      sessionLogs:
-          sessionLogs.output ??
-          <String, Object?>{
-            'available': false,
-            'missingReason':
-                sessionLogs.error ?? 'Session logs are unavailable.',
-            'lines': const <String>[],
-          },
+      logs: _logPayload(appLogs, 'Application logs unavailable.'),
+      sessionLogs: _logPayload(sessionLogs, 'Session logs are unavailable.'),
     );
   }
 
@@ -823,14 +813,7 @@ final class SessionMonitorNotifier extends Notifier<SessionMonitorState> {
     final sessionLogs = values[1];
     return _DetailUpdate(
       errors: errors.output,
-      sessionLogs:
-          sessionLogs.output ??
-          <String, Object?>{
-            'available': false,
-            'missingReason':
-                sessionLogs.error ?? 'Session logs are unavailable.',
-            'lines': const <String>[],
-          },
+      sessionLogs: _logPayload(sessionLogs, 'Session logs are unavailable.'),
     );
   }
 
@@ -925,6 +908,24 @@ final class _OperationRead {
   final String? error;
 }
 
+Map<String, Object?> _logPayload(_OperationRead read, String missingReason) {
+  final output = read.output;
+  if (output == null) {
+    return <String, Object?>{
+      'available': false,
+      'missingReason': read.error ?? missingReason,
+      'lines': const <String>[],
+    };
+  }
+  final rawLines = output['lines'];
+  final lines = rawLines is List<String>
+      ? rawLines
+      : rawLines is List
+      ? rawLines.whereType<String>().toList(growable: false)
+      : const <String>[];
+  return <String, Object?>{...output, 'lines': lines};
+}
+
 final class _HydratedArtifact {
   const _HydratedArtifact({this.value, this.path, this.error});
 
@@ -961,6 +962,16 @@ final class _DetailUpdate {
   final Map<String, Object?>? network;
   final Map<String, Object?>? errors;
   final Map<String, Object?>? sessionLogs;
+
+  bool changes(SessionMonitorDetail detail) =>
+      (identity != null &&
+          !_detailEquality.equals(identity, detail.identity)) ||
+      (ui != null && !_detailEquality.equals(ui, detail.ui)) ||
+      (logs != null && !_detailEquality.equals(logs, detail.logs)) ||
+      (network != null && !_detailEquality.equals(network, detail.network)) ||
+      (errors != null && !_detailEquality.equals(errors, detail.errors)) ||
+      (sessionLogs != null &&
+          !_detailEquality.equals(sessionLogs, detail.sessionLogs));
 
   SessionMonitorDetail apply(SessionMonitorDetail detail) => detail.copyWith(
     identity: identity ?? detail.identity,

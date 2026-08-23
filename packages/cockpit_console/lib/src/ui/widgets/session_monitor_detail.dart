@@ -37,6 +37,7 @@ final class SessionMonitorDetailPane extends HookConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final currentSession = session;
     final currentDetail = detail;
+    final logScrolling = useRef(false);
     useEffect(() {
       if (currentSession != null &&
           currentDetail != null &&
@@ -54,6 +55,7 @@ final class SessionMonitorDetailPane extends HookConsumerWidget {
         return null;
       }
       final timer = Timer.periodic(_liveLogRefreshInterval, (_) {
+        if (logScrolling.value) return;
         unawaited(
           ref
               .read(sessionMonitorProvider.notifier)
@@ -104,6 +106,9 @@ final class SessionMonitorDetailPane extends HookConsumerWidget {
             section: section,
             session: currentSession,
             detail: currentDetail,
+            onLogScrollActivityChanged: (scrolling) {
+              logScrolling.value = scrolling;
+            },
           ),
         ),
       ],
@@ -364,11 +369,13 @@ final class _SectionBody extends StatelessWidget {
     required this.section,
     required this.session,
     required this.detail,
+    required this.onLogScrollActivityChanged,
   });
 
   final SessionMonitorSection section;
   final MonitoredSession session;
   final SessionMonitorDetail detail;
+  final ValueChanged<bool> onLogScrollActivityChanged;
 
   @override
   Widget build(BuildContext context) => switch (section) {
@@ -377,7 +384,10 @@ final class _SectionBody extends StatelessWidget {
       detail: detail,
     ),
     SessionMonitorSection.ui => SessionUiView(detail: detail),
-    SessionMonitorSection.logs => SessionLogsView(detail: detail),
+    SessionMonitorSection.logs => SessionLogsView(
+      detail: detail,
+      onScrollActivityChanged: onLogScrollActivityChanged,
+    ),
     SessionMonitorSection.network => SessionNetworkView(
       session: session,
       detail: detail,

@@ -6,6 +6,7 @@ import 'package:cockpit_console/src/theme/console_theme.dart';
 import 'package:cockpit_console/src/ui/widgets/console_copy_button.dart';
 import 'package:cockpit_console/src/ui/widgets/session_monitor_data_view.dart';
 import 'package:cockpit_console/src/ui/widgets/session_monitor_localization.dart';
+import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -258,9 +259,14 @@ final class SessionUiView extends StatelessWidget {
 }
 
 final class SessionLogsView extends StatelessWidget {
-  const SessionLogsView({required this.detail, super.key});
+  const SessionLogsView({
+    required this.detail,
+    this.onScrollActivityChanged,
+    super.key,
+  });
 
   final SessionMonitorDetail detail;
+  final ValueChanged<bool>? onScrollActivityChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -304,7 +310,10 @@ final class SessionLogsView extends StatelessWidget {
                   icon: LucideIcons.logs,
                   message: sessionMissing ?? strings.startupRunningEmpty,
                 )
-              : _LogLines(lines: sessionLines),
+              : _LogLines(
+                  lines: sessionLines,
+                  onScrollActivityChanged: onScrollActivityChanged,
+                ),
         ),
         if (!duplicateSupervisorLog)
           SessionSectionCard(
@@ -329,18 +338,36 @@ final class SessionLogsView extends StatelessWidget {
                     icon: LucideIcons.logs,
                     message: appMissing ?? strings.runningEmpty,
                   )
-                : _LogLines(lines: appLines),
+                : _LogLines(
+                    lines: appLines,
+                    onScrollActivityChanged: onScrollActivityChanged,
+                  ),
           ),
       ],
     );
   }
 }
 
-final class _LogCopyActions extends StatelessWidget {
+final class _LogCopyActions extends StatefulWidget {
   const _LogCopyActions({required this.lines, required this.path});
 
   final List<String> lines;
   final String? path;
+
+  @override
+  State<_LogCopyActions> createState() => _LogCopyActionsState();
+}
+
+final class _LogCopyActionsState extends State<_LogCopyActions> {
+  late String _text = widget.lines.join('\n');
+
+  @override
+  void didUpdateWidget(covariant _LogCopyActions oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!const ListEquality<String>().equals(widget.lines, oldWidget.lines)) {
+      _text = widget.lines.join('\n');
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -348,13 +375,13 @@ final class _LogCopyActions extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        if (lines.isNotEmpty)
+        if (widget.lines.isNotEmpty)
           ConsoleCopyButton(
-            text: lines.join('\n'),
+            text: _text,
             copyLabel: strings.copyLines,
             copiedLabel: strings.linesCopied,
           ),
-        if (path case final logPath?)
+        if (widget.path case final logPath?)
           ConsoleCopyButton(
             text: logPath,
             copyLabel: strings.copyPath,
@@ -780,34 +807,73 @@ enum _MetricTone {
   };
 }
 
-final class _LogLines extends StatelessWidget {
-  const _LogLines({required this.lines});
+final class _LogLines extends StatefulWidget {
+  const _LogLines({required this.lines, this.onScrollActivityChanged});
 
   final List<String> lines;
+  final ValueChanged<bool>? onScrollActivityChanged;
+
+  @override
+  State<_LogLines> createState() => _LogLinesState();
+}
+
+final class _LogLinesState extends State<_LogLines> {
+  static const _lineExtent = 18.0;
+
+  bool _scrolling = false;
+
+  bool _handleScroll(ScrollNotification notification) {
+    if (notification is ScrollStartNotification) {
+      _setScrolling(true);
+    } else if (notification is ScrollEndNotification) {
+      _setScrolling(false);
+    }
+    return false;
+  }
+
+  void _setScrolling(bool value) {
+    if (_scrolling == value) return;
+    _scrolling = value;
+    widget.onScrollActivityChanged?.call(value);
+  }
+
+  @override
+  void dispose() {
+    if (_scrolling) widget.onScrollActivityChanged?.call(false);
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    final visibleRows = lines.length.clamp(1, 16);
+    final visibleRows = widget.lines.length.clamp(1, 16);
     final height = (20 + visibleRows * 18).clamp(80, 320).toDouble();
     return SizedBox(
       height: height,
-      child: ColoredBox(
-        color: context.consoleColors.bg,
-        child: SelectionArea(
-          child: ListView.builder(
-            reverse: true,
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            itemCount: lines.length,
-            itemBuilder: (context, index) {
-              final line = lines[lines.length - index - 1];
-              return Text(
-                line,
-                style: consoleMono(
-                  size: 11,
-                  color: context.consoleColors.inkSecondary,
-                ),
-              );
-            },
+      child: RepaintBoundary(
+        child: ColoredBox(
+          color: context.consoleColors.bg,
+          child: NotificationListener<ScrollNotification>(
+            onNotification: _handleScroll,
+            child: ListView.builder(
+              reverse: true,
+              itemExtent: _lineExtent,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              addRepaintBoundaries: false,
+              addSemanticIndexes: false,
+              itemCount: widget.lines.length,
+              itemBuilder: (context, index) {
+                final line = widget.lines[widget.lines.length - index - 1];
+                return SelectableText(
+                  line,
+                  maxLines: 1,
+                  scrollPhysics: const ClampingScrollPhysics(),
+                  style: consoleMono(
+                    size: 11,
+                    color: context.consoleColors.inkSecondary,
+                  ),
+                );
+              },
+            ),
           ),
         ),
       ),
@@ -1049,9 +1115,12 @@ String? _nextStepLabel(BuildContext context, String? value) {
   return words.join(' ');
 }
 
-List<String> stringList(Object? value) => value is List
-    ? value.whereType<String>().toList(growable: false)
-    : const <String>[];
+List<String> stringList(Object? value) {
+  if (value is List<String>) return value;
+  return value is List
+      ? value.whereType<String>().toList(growable: false)
+      : const <String>[];
+}
 
 List<Map<String, Object?>> objectList(Object? value) => value is List
     ? [
