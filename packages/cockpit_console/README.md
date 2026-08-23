@@ -1,8 +1,30 @@
 # Cockpit Console
 
-Cockpit Console is the desktop client for Cockpit Supervisor. It provides live
-views for workspaces, targets, test documents, runs, operations, and ACP agent
-sessions while using the same public Supervisor contracts as the CLI.
+Cockpit Console is the desktop client for Cockpit Supervisor. It uses the same
+public REST/SSE contracts and typed protocol as the CLI and MCP server; it does
+not link Supervisor application services into the app process.
+
+## Capabilities
+
+- Dashboard health and recent activity across the connected Supervisor.
+- Project root and workspace registration with explicit checkout identity.
+- Application and device discovery, registration, launch, inspection, and
+  live capability state.
+- Concurrent development-session monitoring with project, entrypoint,
+  platform, device, lifecycle, route, and bridge identity.
+- On-demand session views for mounted UI, startup/runtime logs, bounded network
+  activity and bodies, newest-first activity timeline, runtime errors, and
+  diagnostics. Detail reads are lazy and retained activity is bounded so long
+  sessions do not grow memory without limit.
+- LON, JSON, and YAML case/suite authoring, validation, and execution.
+- Durable run submission, resumable live events, cancellation, terminal state,
+  and report-backed results.
+- Advertised operation discovery with exact schema-aware LON, JSON, or YAML
+  inputs.
+- ACP assistant sessions with streaming conversation updates, tool calls,
+  permissions, attachments, and session lifecycle controls.
+- Responsive desktop navigation, light/dark themes, and English or Simplified
+  Chinese UI.
 
 ## Platforms
 
@@ -19,13 +41,17 @@ From the repository root:
 
 ```bash
 flutter pub get
+cockpit daemon start --yolo
 cd packages/cockpit_console
 flutter run -d macos
 ```
 
-Start Cockpit Supervisor before opening the Console. The app discovers the
-local Supervisor through Cockpit's normal discovery state; it does not store or
-request service credentials.
+The Console intentionally does not start a stopped Supervisor behind the
+user's back. Start it before opening the app; use a restricted policy instead
+of `--yolo` when the environment requires one. The app discovers the loopback
+endpoint and bearer token through Cockpit's normal lifecycle state. It never
+copies that token into preferences or a keychain, and network bodies are read
+only when the user requests them.
 
 ## Releases
 

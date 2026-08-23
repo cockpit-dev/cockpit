@@ -24,10 +24,10 @@
 Cockpit is a production application development, E2E automation, and
 verification stack for AI and CI. Flutter source development uses a first-class
 managed adapter with structured widget, route, log, error, network, and runtime
-state. Independently, installed Android and iOS applications can be controlled
-and verified as non-invasive black boxes. Both paths expose the same typed
-resources to CLI, MCP, Cockpit Console, and third-party clients without
-conflating their roles.
+state. Independently, installed mobile and desktop applications plus explicitly
+registered browser pages can be controlled and verified as non-invasive black
+boxes. Both paths expose the same typed resources to CLI, MCP, Cockpit Console,
+and third-party clients without conflating their roles.
 
 It provides:
 
@@ -314,7 +314,8 @@ ports always require verified cleanup and can never be force released.
 
 ## Black-Box Targets
 
-Register an installed application without changing its source:
+Register a system-controlled target without changing its source. This Android
+application is one example:
 
 ```bash
 cockpit target register \

@@ -262,6 +262,25 @@ void main() {
     );
     expect(runtimeReadme, contains('cd cockpit'));
     expect(runtimeReadme, contains('flutter run --target main.dart'));
+    for (final profile in const <String>[
+      'live',
+      'baseline',
+      'investigate',
+      'forensic',
+    ]) {
+      expect(runtimeReadme, contains(profile));
+      expect(runtimeReadmeZh, contains(profile));
+    }
+    expect(
+      runtimeReadme,
+      isNot(contains('minimal, standard, and full mounted Element trees')),
+    );
+    expect(
+      runtimeReadmeZh,
+      isNot(contains('minimal、standard、full 三档已挂载 Element 树')),
+    );
+    expect(runtimeReadme, contains('mask credential values with `*`'));
+    expect(runtimeReadmeZh, contains('用 `*` 掩码凭据值'));
     expect(
       runtimeReadme,
       contains('globally installed `cockpit` CLI is not an application'),
@@ -283,6 +302,29 @@ void main() {
     expect(runtimeReadmeZh, contains('flutter_cockpit: any'));
     expect(runtimeReadmeZh, contains('https://pub.dev/packages/cockpit'));
     expect(devtoolsReadmeZh, contains('dart pub global activate cockpit any'));
+  });
+
+  test('console readme reflects the current public client surfaces', () {
+    final readme = File(
+      'packages/cockpit_console/README.md',
+    ).readAsStringSync();
+    final normalized = readme.replaceAll(RegExp(r'\s+'), ' ');
+
+    for (final capability in const <String>[
+      'Concurrent development-session monitoring',
+      'startup/runtime logs',
+      'bounded network activity',
+      'newest-first activity timeline',
+      'LON, JSON, and YAML',
+      'resumable live events',
+      'Advertised operation discovery',
+      'ACP assistant sessions',
+      'English or Simplified Chinese',
+    ]) {
+      expect(normalized, contains(capability), reason: capability);
+    }
+    expect(normalized, contains('cockpit daemon start --yolo'));
+    expect(normalized, contains('never copies that token into preferences'));
   });
 
   test('setup docs keep cockpit wiring outside production lib code', () {

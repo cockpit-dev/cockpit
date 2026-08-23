@@ -1,8 +1,8 @@
 /// Cockpit Console - desktop GUI client for Cockpit E2E automation.
 ///
-/// Provides a Linear / Vercel inspired interface for managing workspaces,
-/// targets, test documents (YAML / JSON), run execution, live event streams,
-/// and AI-assisted test authoring. Uses hooks_riverpod for state management,
+/// Provides a desktop interface for projects, targets, concurrent live
+/// development sessions, LON / JSON / YAML tests, durable runs, advertised
+/// operations, and ACP assistants. Uses hooks_riverpod for state management,
 /// hive_ce for persistent preferences, and kache_hive_ce for API response
 /// caching.
 library;

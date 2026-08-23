@@ -229,6 +229,8 @@ void main() {
       expect(install, contains(host), reason: 'INSTALL.md: $host');
     }
     expect(docs, contains('plugins/codex/cockpit'));
+    expect(docs, contains('codex plugin marketplace upgrade cockpit'));
+    expect(install, contains('codex plugin marketplace upgrade cockpit'));
     expect(docs, contains('plugins/claude-code/cockpit'));
     expect(docs, contains('.claude-plugin/marketplace.json'));
     expect(docs, contains('.claude/skills/cockpit'));
