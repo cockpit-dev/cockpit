@@ -286,6 +286,12 @@ void main() {
     expect(install, contains('.omp/mcp.json'));
     expect(install, contains('.cline/skills/cockpit'));
     expect(install, contains('cockpit target discover'));
+    for (final document in <String>[docs, install]) {
+      expect(document, contains('/skills reload'));
+      expect(document, contains('/skills info cockpit'));
+      expect(document, contains('/mcp show'));
+      expect(document, isNot(contains('copilot plugins list')));
+    }
     for (final bundledDirectory in <String>[
       'agents/',
       'assets/',

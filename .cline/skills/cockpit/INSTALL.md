@@ -233,10 +233,13 @@ Reload Cline after installing the Skill or changing MCP.
 ## GitHub Copilot CLI
 
 Copy the complete Skill to `.agents/skills/cockpit` and merge the stdio server
-shown for Cursor into the project `.mcp.json`. Confirm both integrations:
+shown for Cursor into the project `.mcp.json`. In the Copilot CLI session,
+reload and confirm both integrations:
 
-```bash
-copilot plugins list --kind mcp --kind skill
+```text
+/skills reload
+/skills info cockpit
+/mcp show
 ```
 
 ## Windsurf
