@@ -1,5 +1,14 @@
 # Changelog
 
+## 4.0.38
+
+- Kept explicit `--session HANDLE` reads, reconciliation, relaunch, screenshot,
+  diagnostics, and network follow-ups bound to that exact handle without
+  changing the Flutter project's saved active selection.
+- Kept every generated recovery `next` session-scoped and aligned the public
+  README, AI protocol, and distributed Skills with the implemented session and
+  automatic scroll-container behavior.
+
 ## 4.0.37
 
 - Increased the uncached Pub lookup budget used by `cockpit update --check`
