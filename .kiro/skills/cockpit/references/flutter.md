@@ -143,11 +143,25 @@ cockpit dev tap 'Dialog >> TextButton["Save"]'
 cockpit dev type "Ada" --into '@profile-name'
 ```
 
-Execute a routine exact-text action without inspecting first. If it is
-ambiguous, run `cockpit dev inspect "Save"` once. It searches mounted Flutter
-Element targets without requiring Semantics labels and returns `sel` (the shortest
-stable selector) and `can` (known actions). Copy `sel` exactly; do not use
-registration IDs.
+During first-party Flutter development, source is the default interaction map.
+The feature and its build or callback code are normally already known. Use that code
+directly; if it is not in context, use `rg` with visible text, route names, Widget
+types, tooltips, or callback names, then read only the containing build method and
+callback. Execute the exact structure without inspecting first:
+`CompanyButton >> Text["Save"]`, or
+`Toolbar >> [type="CompanyIconButton"]` for a control with no text, key, or
+Semantics. Explicit action locators traverse the mounted Element tree independently
+of compact inspect. Cockpit requires one visible match and uses the known action owner
+or a real hit-tested `tap`, `hold`, or `double`; equal matches remain ambiguous.
+Add only a source-proven ancestor or condition, never an invented key, semantic label,
+or coordinate.
+
+Use `cockpit dev inspect` before an action only for runtime facts source cannot
+answer: the mounted route or overlay, runtime-generated content or ordering, lazy
+mounting, or a failed or ambiguous selector. It searches mounted Flutter Element
+targets without requiring Semantics labels and returns `sel` (the shortest stable
+selector) and `can` (known actions). Copy `sel` exactly; do not use registration
+IDs. Routine exact text already proven by source should execute directly.
 
 With no query, `cockpit dev inspect` returns the current mounted control surface
 in visual order. Its compact `:REF` selectors are live handles for the current UI;
@@ -159,18 +173,8 @@ Selectors are conjunctive: `#id`, `@key`, `Type["text"]`, named filters such as
 `[tip="Save"][route="/edit"]`, and ancestor chains such as
 `Dialog >> TextButton["Continue"]`. `[*="text"]` and `[~="text"]` opt into
 contains and fuzzy matching. `:nth(2)` is 1-based and only for stable ordered
-items. Equal candidates remain ambiguous.
-
-When source is available and a custom control is unlabeled, ambiguous, or absent
-from compact inspect, use `rg` to find its visible text, route, public Widget type,
-tooltip, or callback, then read only the containing build method and callback.
-Execute the real structure directly: `CompanyButton >> Text["Save"]`, or
-`Toolbar >> [type="CompanyIconButton"]` for a control with no text, key, or
-Semantics. Explicit action locators traverse the mounted Element tree independently
-of compact inspect. Cockpit requires one visible match and uses the known action owner
-or a real hit-tested `tap`, `hold`, or `double`; equal matches remain ambiguous.
-Add only a source-proven ancestor or condition, never an invented key, semantic label,
-or coordinate. The live postcondition proves the action.
+items. Equal candidates remain ambiguous. The source-defined live postcondition,
+not command success alone, proves the action.
 
 Use the tree only when target inspection is insufficient:
 

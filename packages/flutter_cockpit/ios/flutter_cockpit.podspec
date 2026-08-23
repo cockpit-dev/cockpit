@@ -1,6 +1,6 @@
 Pod::Spec.new do |s|
   s.name             = 'flutter_cockpit'
-  s.version          = '4.0.33'
+  s.version          = '4.0.34'
   s.summary          = 'Native screenshot and recording support for flutter_cockpit.'
   s.description      = <<-DESC
 Native screenshot and recording support for flutter_cockpit development workflows.
