@@ -49,26 +49,24 @@ steps:
       maxAttempts: 2
       delayMs: 750
       steps:
-        - stepId: tapCreateTaskIfEditorAbsent
+        - stepId: tapNewTaskIfInboxVisible
           timeoutMs: 30000
           if:
             condition:
               type: visible
-              expected: false
               locator:
-                label: Back
-                type: Button
+                label: New task
                 fallbacks:
-                  - {text: Create task}
+                  - {text: New task}
             then:
-              - stepId: tapCreateTaskThroughNativeTree
+              - stepId: tapNewTaskThroughNativeTree
                 timeoutMs: 30000
                 action:
                   type: tap
                   locator:
-                    label: Create task
+                    label: New task
                     fallbacks:
-                      - {text: Create task}
+                      - {text: New task}
             else:
               - stepId: retainCommittedNativeEditor
                 action: {type: waitForUiIdle, quietMs: 100}
