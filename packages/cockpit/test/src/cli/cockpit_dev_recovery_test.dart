@@ -504,11 +504,13 @@ void main() {
   test(
     'inspect uses the UI-only locate profile and returns concise locators',
     () async {
+      final calls = <String>[];
       String? requestedProfile;
       String? requestedQuery;
       final dev = CockpitDevRuntime(
         runtime,
         operationInvoker: (_, kind, input) async {
+          calls.add(kind);
           if (kind == 'session.development.get') {
             return _result(
               kind,
@@ -562,6 +564,7 @@ void main() {
       );
       expect(requestedProfile, 'locate');
       expect(requestedQuery, 'Documents');
+      expect(calls, <String>['ui.inspect']);
       final output = lon.decode(stdout.toString())! as Map<Object?, Object?>;
       final matches = output['matches']! as List<Object?>;
       expect(matches, hasLength(1));
@@ -569,6 +572,67 @@ void main() {
       expect(stdout.toString(), isNot(contains('not-public')));
     },
   );
+
+  test('inspect reconciles and retries a failed ready-session read', () async {
+    final calls = <String>[];
+    final inspectedSessionIds = <String>[];
+    final dev = CockpitDevRuntime(
+      runtime,
+      operationInvoker: (_, kind, input) async {
+        calls.add(kind);
+        if (kind == 'ui.inspect') {
+          inspectedSessionIds.add(input['sessionId']! as String);
+          if (inspectedSessionIds.length == 1) {
+            return _result(kind, output: const <String, Object?>{'ok': false});
+          }
+          return _result(
+            kind,
+            output: const <String, Object?>{
+              'locator': <String, Object?>{
+                'query': 'Save',
+                'count': 1,
+                'matches': <Object?>[
+                  <String, Object?>{'sel': '#save', 'can': 'tap'},
+                ],
+              },
+            },
+          );
+        }
+        if (kind == 'session.development.get') {
+          expect(input['sessionId'], 'session-old');
+          return _result(
+            kind,
+            output: const <String, Object?>{
+              'sessionId': 'session-new',
+              'targetId': 'target-1',
+              'appId': 'app-new',
+              'status': <String, Object?>{
+                'state': 'ready',
+                'appReachable': true,
+                'remoteSessionReachable': true,
+              },
+            },
+          );
+        }
+        throw StateError('Unexpected operation $kind');
+      },
+    );
+    runtime.configureOutput(
+      command: 'dev.inspect',
+      selection: const CockpitCliOutputSelection(),
+    );
+
+    expect(await dev.inspect(session, query: 'Save'), cockpitSuccessExitCode);
+    expect(calls, <String>[
+      'ui.inspect',
+      'session.development.get',
+      'ui.inspect',
+    ]);
+    expect(inspectedSessionIds, <String>['session-old', 'session-new']);
+    final rebound = await runtime.resolveDevelopmentSession(session.handleId);
+    expect(rebound.sessionId, 'session-new');
+    expect(rebound.appId, 'app-new');
+  });
 
   test('full widget tree downloads one path-only artifact', () async {
     final artifact = File(p.join(temporaryDirectory.path, 'tree.json'))
@@ -715,11 +779,13 @@ void main() {
   test(
     'brief tree returns a compact selector index without building a tree',
     () async {
+      final calls = <String>[];
       String? requestedProfile;
       CockpitSnapshotOptions? requestedOptions;
       final dev = CockpitDevRuntime(
         runtime,
         operationInvoker: (_, kind, input) async {
+          calls.add(kind);
           if (kind == 'session.development.get') {
             return _result(
               kind,
@@ -768,6 +834,7 @@ void main() {
       );
 
       expect(await dev.tree(session), cockpitSuccessExitCode);
+      expect(calls, <String>['ui.inspect']);
       expect(requestedProfile, 'locate');
       expect(requestedOptions?.tree, isNull);
       final output = lon.decode(stdout.toString())! as Map<Object?, Object?>;
