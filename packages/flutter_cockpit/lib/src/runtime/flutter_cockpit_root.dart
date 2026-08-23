@@ -94,6 +94,13 @@ final class FlutterCockpitRootState extends State<FlutterCockpitRoot> {
     _scheduleRouteInformationDiscovery();
   }
 
+  @override
+  void reassemble() {
+    super.reassemble();
+    FlutterCockpit.binding.runtimeObserver?.clear();
+    FlutterCockpit.clearRecordedSteps();
+  }
+
   void _scheduleRouteInformationDiscovery() {
     if (_routeInformationDiscoveryScheduled) {
       return;

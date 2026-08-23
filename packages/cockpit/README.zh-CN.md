@@ -99,6 +99,11 @@ iOS universal link 或 HTTP(S) URL；之后用 `dev wait` 和 `dev inspect` 验�
 只有系统截图已经证明存在原生阻塞时才使用 `dev recover`；所选应用已经正常获得焦点时，
 该命令不会执行任何修改。
 
+`dev scroll TARGET` 会挂载 lazy target、对滚动容器排序，先按指定的初始方向搜索，
+触边后自动反向，并按 inner → outer 显示嵌套滚动祖先。默认 `nearest` 会验证真实
+hit-test，并可滚动避开固定 Flutter 叠层。成功执行 `dev reload` 会开始新的 runtime
+diagnostic generation：旧错误不再让当前证据失败，reload 后的新错误仍会正常报告。
+
 ## 显式资源 Workspace
 
 `cockpit dev start` 会自动注册对应的 canonical Flutter project，日常开发无需执行

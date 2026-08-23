@@ -263,7 +263,7 @@ CockpitLeafCommand cockpitDevScrollCommand(
 ) => CockpitLeafCommand(
   runtime: runtime,
   name: 'scroll',
-  description: 'Find, fully reveal, and align one mounted Flutter target.',
+  description: 'Find, mount, fully reveal, and align one Flutter target.',
   invocationSuffix: 'SELECTOR [arguments]',
   example: 'cockpit dev scroll "Operations" --align center --offset 12',
   configure: (parser) {
@@ -273,6 +273,8 @@ CockpitLeafCommand cockpitDevScrollCommand(
         'direction',
         allowed: const <String>['up', 'down'],
         defaultsTo: 'down',
+        help:
+            'Choose the initial search direction; Cockpit reverses after reaching the boundary.',
       )
       ..addOption(
         'align',

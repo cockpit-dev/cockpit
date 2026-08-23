@@ -58,6 +58,13 @@ Use exact text by default. An ambiguous locator fails and returns bounded
 candidates. `dev wait` is UI-only by default; add `--network` only when the
 assertion requires completed network activity.
 
+Hot reload starts a new runtime-diagnostic generation: errors captured before
+the reload no longer fail current diagnosis or evidence, while errors raised
+after it remain visible and disqualifying. `dev scroll TARGET` mounts lazy
+targets, discovers nested scroll containers, treats `--direction` as the initial
+search direction, reverses after reaching that boundary, and verifies both
+viewport visibility and the real hit test before succeeding.
+
 Keep using the same handle after a process, port, bridge, app, or runtime session
 changes. Reconciliation proves the same checkout, Flutter project, workspace, target, owned
 process, and authenticated bridge. Read commands never relaunch an exited app;

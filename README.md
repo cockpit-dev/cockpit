@@ -170,6 +170,13 @@ Use `dev open URI` to test a custom deep link, Android app link, iOS universal
 link, or HTTP(S) URL through the selected target, then verify the expected route
 or anchor with `dev wait` and `dev inspect`.
 
+`dev scroll TARGET` mounts lazy targets, ranks available scroll containers,
+searches from the requested initial direction and reverses at the boundary,
+then reveals nested ancestors from inner to outer. Its default `nearest`
+placement also checks the real hit test and can move a target away from a fixed
+Flutter overlay. After `dev reload`, errors from the previous runtime generation
+no longer contaminate current diagnostics; new errors remain reportable.
+
 ## Runtime Model
 
 `cockpit` commands discover or start one daemon under `COCKPIT_HOME`. The daemon

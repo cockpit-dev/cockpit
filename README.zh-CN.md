@@ -147,6 +147,12 @@ artifact，stdout 只返回经过验证的路径。
 iOS universal link 或 HTTP(S) URL；之后用 `dev wait` 和 `dev inspect` 验证预期路由
 或锚点。
 
+`dev scroll TARGET` 会挂载 lazy target、对可用滚动容器排序，从指定的初始方向开始
+搜索并在触边后自动反向，然后按 inner → outer 显示嵌套滚动祖先。默认的 `nearest`
+还会验证真实 hit-test，并在可滚动避开时把 target 移出固定 Flutter 叠层。执行
+`dev reload` 后，上一 runtime generation 的错误不再污染当前诊断；reload 后的新错误
+仍会正常报告。
+
 ## 运行架构
 
 `cockpit` 命令会发现或启动 `COCKPIT_HOME` 下的常驻 daemon。daemon 负责认证、

@@ -85,8 +85,12 @@ void main() {
       '`[*="Save"]`',
       '`Button["Item"]:nth(2)`',
       'Both structural views print only the verified absolute artifact path',
+      '`nearest` also verifies\nthe real hit test',
+      'automatically tries\nthe opposite direction',
       'equal matches fail',
       'cockpit dev reload',
+      'starts a fresh runtime-diagnostic generation',
+      'raised after the reload remains visible and disqualifying',
       'cockpit dev restart',
       'cockpit dev viewport',
       'cockpit dev screenshot',
@@ -377,6 +381,15 @@ void main() {
       contains('returned recovery `next` stay scoped to\nthat exact handle'),
     );
     expect(development, contains('Cockpit owns scroll-container discovery'));
+    expect(
+      development,
+      contains('Hot reload begins a new runtime-diagnostic generation'),
+    );
+    expect(development, contains('fixed Flutter overlay wins the hit test'));
+    expect(
+      development,
+      contains('automatically starts a search in the opposite\ndirection'),
+    );
     expect(development, isNot(contains('explicit scroll-container locator')));
     expect(development, contains('Do not clear app data'));
     expect(development, contains('never reads a keychain or secret store'));

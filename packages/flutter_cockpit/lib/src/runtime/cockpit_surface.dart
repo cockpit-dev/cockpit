@@ -32,6 +32,7 @@ import 'cockpit_snapshot_options.dart';
 import 'cockpit_target.dart';
 import 'cockpit_target_geometry.dart';
 import 'cockpit_target_geometry_resolver.dart';
+import 'cockpit_target_hit_test_inspector.dart';
 import 'cockpit_target_registry.dart';
 import 'cockpit_visual_frame_driver.dart';
 import 'cockpit_widget_tree_builder.dart';
@@ -3116,8 +3117,16 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
         alignmentPolicy: ScrollPositionAlignmentPolicy.explicit,
       ),
       CockpitRevealAlignment.nearest =>
-        (leadingEdge >= paddedLeadingEdge && trailingEdge <= paddedTrailingEdge)
+        (leadingEdge >= paddedLeadingEdge &&
+                trailingEdge <= paddedTrailingEdge &&
+                _elementWinsHitTest(targetElement))
             ? null
+            : leadingEdge >= paddedLeadingEdge &&
+                  trailingEdge <= paddedTrailingEdge
+            ? const _CockpitRevealRequest(
+                alignment: 0.5,
+                alignmentPolicy: ScrollPositionAlignmentPolicy.explicit,
+              )
             : trailingEdge > paddedTrailingEdge
             ? _CockpitRevealRequest(
                 alignment: 1 - (clampedPadding / availableExtent),
@@ -3128,6 +3137,17 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
                 alignmentPolicy: ScrollPositionAlignmentPolicy.explicit,
               ),
     };
+  }
+
+  bool _elementWinsHitTest(Element element) {
+    final result = CockpitTargetHitTestInspector.inspect(
+      CockpitTarget(
+        registrationId: 'reveal:${identityHashCode(element)}',
+        routeName: widget.routeName,
+        diagnosticNodeProvider: () => element,
+      ),
+    );
+    return result == null || (result.withinTargetBounds && result.hit);
   }
 
   RenderObject? _resolveViewportRenderObject(RenderObject? targetRenderObject) {
