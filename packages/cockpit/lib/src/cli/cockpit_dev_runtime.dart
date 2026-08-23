@@ -43,8 +43,8 @@ final class CockpitDevSessionResolution {
   final List<Object?> errors;
 }
 
-final class _CockpitDevReadResolution {
-  const _CockpitDevReadResolution({
+final class CockpitDevReadResolution {
+  const CockpitDevReadResolution({
     required this.session,
     required this.changed,
     this.result,
@@ -399,18 +399,20 @@ final class CockpitDevRuntime {
     );
   }
 
-  Future<_CockpitDevReadResolution> _invokeRead(
+  Future<CockpitDevReadResolution> invokeRead(
     CockpitCliSessionHandle session,
     String kind,
-    Map<String, Object?> input,
-  ) async {
+    Map<String, Object?> input, {
+    bool Function(CockpitOperationResult result)? accepts,
+  }) async {
     Map<String, Object?> scopedInput(CockpitCliSessionHandle value) =>
         <String, Object?>{...input, 'sessionId': value.sessionId};
+    final accepted = accepts ?? _operationSucceeded;
 
     if (session.lifecycle == 'ready') {
       final result = await invoke(session, kind, scopedInput(session));
-      if (_operationSucceeded(result)) {
-        return _CockpitDevReadResolution(
+      if (accepted(result)) {
+        return CockpitDevReadResolution(
           session: session,
           changed: 'none',
           result: result,
@@ -420,14 +422,14 @@ final class CockpitDevRuntime {
 
     final resolution = await reconcile(session, allowRelaunch: false);
     if (!resolution.ready) {
-      return _CockpitDevReadResolution(
+      return CockpitDevReadResolution(
         session: resolution.session,
         changed: resolution.changed,
         unavailable: resolution,
       );
     }
     session = resolution.session;
-    return _CockpitDevReadResolution(
+    return CockpitDevReadResolution(
       session: session,
       changed: resolution.changed,
       result: await invoke(session, kind, scopedInput(session)),
@@ -649,7 +651,7 @@ final class CockpitDevRuntime {
   Future<int> inspect(CockpitCliSessionHandle session, {String? query}) async {
     final normalizedQuery = query?.trim();
     final hasQuery = normalizedQuery != null && normalizedQuery.isNotEmpty;
-    final read = await _invokeRead(session, 'ui.inspect', <String, Object?>{
+    final read = await invokeRead(session, 'ui.inspect', <String, Object?>{
       'profile': 'locate',
       'snapshotOptions': CockpitSnapshotOptions(
         profile: CockpitSnapshotProfile.baseline,
@@ -678,7 +680,7 @@ final class CockpitDevRuntime {
   Future<int> tree(CockpitCliSessionHandle session, {int? maxNodes}) async {
     final view = runtime.outputSelection.view;
     if (view == CockpitCliOutputView.brief) {
-      final read = await _invokeRead(session, 'ui.inspect', <String, Object?>{
+      final read = await invokeRead(session, 'ui.inspect', <String, Object?>{
         'profile': 'locate',
         'snapshotOptions': const CockpitSnapshotOptions(
           profile: CockpitSnapshotProfile.baseline,
@@ -713,7 +715,7 @@ final class CockpitDevRuntime {
     if (maxNodes != null) {
       treeOptions = treeOptions.copyWith(maxNodes: maxNodes);
     }
-    final read = await _invokeRead(session, 'ui.inspect', <String, Object?>{
+    final read = await invokeRead(session, 'ui.inspect', <String, Object?>{
       'profile': 'tree',
       'snapshotOptions': CockpitSnapshotOptions(
         profile: CockpitSnapshotProfile.baseline,
