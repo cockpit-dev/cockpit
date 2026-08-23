@@ -1,5 +1,12 @@
 # Changelog
 
+## 4.0.40
+
+- Made healthy `dev inspect` and `dev tree` reads execute their Flutter UI
+  operation immediately, reconciling and retrying only after a failed read.
+  This removes the redundant live-session query from the normal AI development
+  loop while preserving handle rebinding and stopped/crashed detection.
+
 ## 4.0.39
 
 - Started a fresh runtime-diagnostic generation after Flutter hot reload so
