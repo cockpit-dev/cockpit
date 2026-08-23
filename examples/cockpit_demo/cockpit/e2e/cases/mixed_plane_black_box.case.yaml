@@ -47,15 +47,15 @@ steps:
           if:
             condition: {type: route, route: /inbox}
             then:
-              - stepId: tapCreateTaskThroughNativeLocator
+              - stepId: tapNewTaskThroughNativeLocator
                 plane: native
                 timeoutMs: 30000
                 action:
                   type: tap
                   locator:
-                    label: Create task
+                    label: New task
                     fallbacks:
-                      - text: Create task
+                      - text: New task
             else:
               - stepId: retainCommittedEditorRoute
                 action: {type: waitForUiIdle, quietMs: 100}
