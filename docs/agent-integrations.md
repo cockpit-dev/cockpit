@@ -320,8 +320,12 @@ After installing any adapter:
 
 1. Restart or reload the host so it rescans plugins, skills, rules, or steering files.
 2. Ask the host to load the bundled self-contained `cockpit` skill.
-3. Run `cockpit daemon status`, then `cockpit target discover`.
-4. If MCP is configured, verify the host can see the Cockpit workspace,
+3. For a host-only check, run `cockpit help`, `cockpit --version`,
+   `cockpit daemon status`, and `cockpit session list`.
+4. After a project and target are intentionally in scope, run
+   `cockpit target discover` to verify platform access. It is not required for
+   installing the host runtime or Skill.
+5. If MCP is configured, verify the host can see the Cockpit workspace,
    target, operation, case, suite, run, and artifact resources.
 5. Keep app proof proportional: inspect, act through an advertised operation
    or validated test document, re-inspect, and read report-backed evidence.

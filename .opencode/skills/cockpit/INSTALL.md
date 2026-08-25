@@ -25,24 +25,49 @@ Use the manual guidance below only when the host cannot complete the request.
 
 ## Common Runtime
 
+Cockpit is a host-side Dart executable, not a Flutter application dependency.
+Install and update it with `dart`; never use
+`flutter pub global activate cockpit`, and do not run host installation from
+an app's dependency graph.
+Flutter is only required later for `cockpit dev` against a Flutter project.
+
 Install the runtime:
 
 ```bash
 dart pub global activate cockpit any
 ```
 
-After the first installation, upgrade the runtime with:
+After the first installation, check for an upgrade:
 
 ```bash
 cockpit update --check
+```
+
+Run the full update only when the check returns a `next` value for
+`cockpit update`; when the installed version is already current, skip it. This
+avoids needless activation and AOT compilation on legacy or source-installed
+runtimes. When an update is needed, run:
+
+```bash
 cockpit update
-cockpit skill
 ```
 
 It updates the CLI and running Supervisor to the latest verified Pub release
-while preserving local authorization and durable state. `cockpit update --check`
-only checks Pub. After updating, `cockpit skill` prints the stable prompt for
-refreshing the current host's complete Skill, native adapter, and MCP integration.
+while preserving local authorization and durable state. Then run:
+
+```bash
+cockpit skill
+```
+
+`cockpit skill` prints the stable prompt for refreshing the current host's
+complete Skill, native adapter, and MCP integration.
+
+The host runtime resolves only Cockpit's own global Pub package graph. If an
+upgrade error mentions an unrelated Flutter plugin such as
+`ffmpeg_kit_extended_flutter` or Dart `native-assets`, do not add compiler
+experiment flags. Check `dart --version`, `which dart`, `which cockpit`, and
+`cockpit --version`; reinstall with `dart pub global activate cockpit any` from
+a neutral directory if the host command is mixed with an app's Flutter graph.
 
 Update the host-native plugin through that host's plugin manager. For a manual
 Skill installation, stage the complete new Skill directory, validate it, then
@@ -266,9 +291,13 @@ directory at `.agents/skills/cockpit`. If it also supports stdio MCP, configure
    and MCP configuration.
 2. Confirm the host discovers `cockpit` and can open `INSTALL.md`, `agents/`,
    `assets/`, and `references/` from inside the installed Skill directory.
-3. Run `cockpit help`, `cockpit daemon status`, and `cockpit target discover`.
-4. When MCP is supported, confirm the host starts `cockpit_mcp` and can list
+3. For a host-only check, run `cockpit help`, `cockpit --version`,
+   `cockpit daemon status`, and `cockpit session list`.
+4. After a project and target are intentionally in scope, run
+   `cockpit target discover` to verify platform access. It is not required for
+   installing the host runtime or Skill.
+5. When MCP is supported, confirm the host starts `cockpit_mcp` and can list
    Cockpit roots, workspaces, operations, targets, documents, cases, suites,
    runs, and artifacts.
-5. Report the installed Skill path, CLI path, native adapter, MCP status, and
+6. Report the installed Skill path, CLI path, native adapter, MCP status, and
    any host capability that is unavailable.
