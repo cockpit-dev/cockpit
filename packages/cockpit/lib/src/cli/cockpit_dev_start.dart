@@ -145,6 +145,7 @@ final class CockpitDevStartService {
             'refresh.',
       );
     }
+    final entrypointSha256 = documents.single.sha256;
 
     runtime.progress('Discovering Flutter devices...');
     final device = await _device(client, launchRequest);
@@ -154,6 +155,7 @@ final class CockpitDevStartService {
           (target) => cockpitMatchesDevelopmentTarget(
             target,
             entrypoint: entrypoint,
+            entrypointSha256: entrypointSha256,
             platform: device.platform,
             deviceId: device.id,
             flavor: launchRequest.flavor,
@@ -196,6 +198,7 @@ final class CockpitDevStartService {
             (target) => cockpitMatchesDevelopmentTarget(
               target,
               entrypoint: entrypoint,
+              entrypointSha256: entrypointSha256,
               platform: device.platform,
               deviceId: device.id,
               flavor: launchRequest.flavor,
@@ -634,6 +637,7 @@ CockpitWorkspaceResource? cockpitSelectDevWorkspace(
 bool cockpitMatchesDevelopmentTarget(
   CockpitAutomationTargetResource target, {
   required String entrypoint,
+  required String entrypointSha256,
   required String platform,
   required String deviceId,
   required String? flavor,
@@ -641,6 +645,7 @@ bool cockpitMatchesDevelopmentTarget(
   return target.targetKind == CockpitTargetKind.flutterApp &&
       target.mode == CockpitAutomationTargetMode.development &&
       target.entrypoint == entrypoint &&
+      target.entrypointSha256 == entrypointSha256 &&
       target.platform == platform &&
       target.deviceId == deviceId &&
       target.flavor == flavor &&

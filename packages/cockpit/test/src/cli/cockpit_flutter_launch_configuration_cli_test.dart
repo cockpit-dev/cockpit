@@ -72,6 +72,7 @@ void main() {
   });
 
   test('matches only development targets in safe local environments', () {
+    final entrypointSha256 = List.filled(64, 'a').join();
     bool matches(
       CockpitAutomationTargetMode mode,
       CockpitAutomationTargetEnvironment environment,
@@ -85,8 +86,10 @@ void main() {
         mode: mode,
         environment: environment,
         entrypoint: 'cockpit/main.dart',
+        entrypointSha256: entrypointSha256,
       ),
       entrypoint: 'cockpit/main.dart',
+      entrypointSha256: entrypointSha256,
       platform: 'android',
       deviceId: 'emulator-5554',
       flavor: null,
