@@ -3,7 +3,8 @@
     <img src="assets/brand/cockpit-mark.svg" width="128" alt="Cockpit logo">
   </a>
   <h1>Cockpit</h1>
-  <p><strong>统一完成 Flutter 快速开发验证与任意应用黑盒 E2E。</strong></p>
+  <p><strong>给 AI 一座真正的应用驾驶舱。</strong></p>
+  <p>理解 Flutter · 操作真实界面 · 调试运行状态 · 证明每次发布</p>
   <p>
     <a href="https://github.com/cockpit-dev/cockpit/actions/workflows/example-e2e.yml"><img src="https://github.com/cockpit-dev/cockpit/actions/workflows/example-e2e.yml/badge.svg?branch=main" alt="CI"></a>
     <a href="https://github.com/cockpit-dev/cockpit/blob/main/LICENSE"><img src="https://img.shields.io/github/license/cockpit-dev/cockpit" alt="MIT 许可证"></a>
@@ -19,27 +20,61 @@
     <a href="https://github.com/cockpit-dev/cockpit#black-box-targets"><img src="https://img.shields.io/badge/platforms-6%20supported-2E7D32" alt="支持 Android、iOS、macOS、Linux、Windows 和 Web"></a>
   </p>
   <p><a href="README.md">English</a> · <a href="README.zh-CN.md">简体中文</a></p>
+  <p><a href="#%E5%87%A0%E5%88%86%E9%92%9F%E5%BC%80%E5%A7%8B%E4%BD%BF%E7%94%A8">快速开始</a> · <a href="#flutter-%E5%BF%AB%E9%80%9F%E8%B7%AF%E5%BE%84">Flutter</a> · <a href="#%E9%BB%91%E7%9B%92%E5%BA%94%E7%94%A8">黑盒 E2E</a> · <a href="#%E6%8E%A5%E5%85%A5-ai-agent">AI Agent</a></p>
 </div>
 
-Cockpit 是面向 AI 与 CI 的生产级应用开发、E2E 自动化与验证框架。Flutter 源码
-开发使用一等受管适配器，直接获得 widget、route、log、error、network 与 runtime
-结构化状态；已安装的移动端与桌面端应用，以及显式注册的浏览器页面，也可以独立做
-无侵入黑盒操控与验证。两条路径职责不同，但通过 CLI、MCP、Cockpit Console 和
-第三方客户端共享同一套类型化协议。
+AI 可以读懂源码，但应用真正运行起来以后，大多数工具就失去了视野：它们从截图猜
+控件、期待页面刚好有语义标签、反复尝试坐标；一旦遇到弹窗、懒加载列表、原生页面或
+失败请求，整个开发流程就容易停住。
 
-核心能力包括：
+**Cockpit 补上了这块缺失的能力。** 它为 AI Agent、开发者和 CI 提供面向真实运行
+应用的生产级统一控制面。在 Flutter 中，Cockpit 可以直接理解已挂载的 Widget、
+Element、RenderObject、路由、焦点、滚动祖先、日志、运行时错误、rebuild 和网络活动，
+不要求业务页面手写 Semantics 标签；离开 Flutter 后，它仍能以无侵入黑盒方式控制已
+安装的移动端、桌面端应用和显式注册的浏览器页面。
 
-- 独立 LON/JSON/YAML case 与 suite；
-- Flutter semantic、原生 accessibility、visual、coordinate 平面，以及可发现的
-  system action；
-- target 发现、注册、启动、检查与真实能力声明；
-- 依赖 DAG、fixture、matrix、retry、有界并发和 fail-fast；
-- 持久事件、可恢复 suite 检查点、精确 session 亲和、取消、artifact，以及
-  完整离线回归报告 bundle；
-- 每用户一个认证 Supervisor，每 workspace 一个隔离 worker；
-- 资源化 CLI、HTTP/SSE API、MCP，以及独立发布的桌面 Console。
+## 为什么 Cockpit 完全不同
 
-## 包结构
+| | 你能获得什么 |
+| --- | --- |
+| **真正理解 Flutter** | 检查当前控制面、生成稳定结构选择器、操作自定义组件、挂载懒加载内容并穿过嵌套滚动容器，同时不修改生产 UI 代码。 |
+| **一条快速开发闭环** | 启动一次并复用短 session handle，随后持续检查、点击、输入、滚动、打开链接、热重载、诊断和截图，无需为每个任务重新搭建自动化环境。 |
+| **覆盖真实应用边界** | 从 Flutter 连续进入系统弹窗、原生页面、平台视图、WebView、deep link 和视觉界面，并覆盖 Android、iOS、macOS、Linux、Windows 与 Web 黑盒目标。 |
+| **从设计上服务 AI** | 默认输出简洁 LON、有界检查、只返回文件路径、明确异常恢复、按真实能力发现操作，不用巨大成功响应浪费上下文。 |
+| **可用于发布的 E2E** | 使用 LON、JSON 或 YAML 编写 case 与 suite，支持 matrix、依赖、fixture、并发、重试、断点恢复、截图、录像、artifact 和离线报告。 |
+| **一个公开控制面** | CLI、MCP、认证 REST/SSE API、Cockpit Console 和第三方客户端共享同一套类型化资源。 |
+
+## 从修改代码到拿到证据
+
+Flutter 开发壳接入完成后，日常循环始终保持简短：
+
+```bash
+cockpit dev start
+cockpit dev inspect
+cockpit dev tap 'FilledButton["Save"]'
+cockpit dev type "hello" --into '@message'
+cockpit dev scroll "Activity"
+cockpit dev reload
+cockpit dev diagnose
+cockpit dev screenshot
+```
+
+Cockpit 负责项目发现、应用进程、端口、bridge 状态和 session 隔离。遇到歧义时会明确
+失败而不是猜测；遇到意外叠层或系统弹窗时，会返回当前状态和有界恢复路径，让 Agent
+有依据地继续，而不是循环执行随机操作。
+
+需要重复验证时，把同一条流程提升为 case 或 suite：
+
+```bash
+cockpit case validate --file e2e/save-draft.case.yaml
+cockpit case run --file e2e/save-draft.case.yaml --idempotency-key save-draft
+cockpit suite run --file e2e/regression.suite.lon --idempotency-key regression
+```
+
+最终结果不只是一个进程退出码。Cockpit 会保存终态 run、结构化事件、断言、截图、
+录像、日志、网络证据和可离线浏览的完整报告。
+
+## Cockpit 如何组成
 
 - [`cockpit_protocol`](packages/cockpit_protocol)：平台无关 DTO、测试 DSL、
   JSON Schema 和 OpenAPI。
@@ -52,7 +87,11 @@ Cockpit 是面向 AI 与 CI 的生产级应用开发、E2E 自动化与验证框
   Pub 包分开发版。
 
 已发布包最低需要 Dart 3.8.0；`flutter_cockpit` 还需要 Flutter 3.32.0。
-开发 Cockpit Console 需要 Flutter 3.44.0。CLI 只需全局安装一次：
+开发 Cockpit Console 需要 Flutter 3.44.0。
+
+## 几分钟开始使用
+
+CLI 只需全局安装一次：
 
 ```bash
 dart pub global activate cockpit any

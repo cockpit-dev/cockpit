@@ -3,7 +3,8 @@
     <img src="https://raw.githubusercontent.com/cockpit-dev/cockpit/main/assets/brand/cockpit-mark.svg" width="128" alt="Cockpit logo">
   </a>
   <h1>cockpit</h1>
-  <p><strong>Flutter development control plane and headless black-box E2E runner.</strong></p>
+  <p><strong>The command center that lets AI understand, drive, and verify real apps.</strong></p>
+  <p>Flutter development · Black-box E2E · MCP · REST/SSE · CI evidence</p>
   <p>
     <a href="https://pub.dev/packages/cockpit"><img src="https://img.shields.io/pub/v/cockpit?logo=dart&amp;label=pub.dev" alt="cockpit version on pub.dev"></a>
     <a href="https://pub.dev/packages/cockpit/score"><img src="https://img.shields.io/pub/points/cockpit?logo=dart" alt="cockpit pub points"></a>
@@ -17,13 +18,34 @@
     <a href="https://github.com/cockpit-dev/cockpit/blob/main/packages/cockpit/LICENSE"><img src="https://img.shields.io/github/license/cockpit-dev/cockpit" alt="MIT license"></a>
   </p>
   <p><a href="https://github.com/cockpit-dev/cockpit/blob/main/packages/cockpit/README.md">English</a> · <a href="https://github.com/cockpit-dev/cockpit/blob/main/packages/cockpit/README.zh-CN.md">简体中文</a></p>
+  <p><a href="#start-here">Get started</a> · <a href="#flutter-fast-path">Flutter</a> · <a href="#suites-and-black-box-targets">Black-box E2E</a> · <a href="#install-for-ai-agents">AI agents</a></p>
 </div>
 
-`cockpit` is the authenticated host control plane for Flutter/Dart development
-and headless black-box E2E. It contains the Supervisor daemon, isolated
-workspace worker, resource-oriented CLI, MCP server, and public REST/SSE API.
+AI is fast when it knows what the application is doing. It becomes slow and
+expensive when it has to infer runtime state from screenshots, guess selectors,
+retry coordinates, and rebuild context after every unexpected dialog.
 
-## Install
+`cockpit` gives the agent a direct, authenticated control plane for the running
+application. It owns Flutter development sessions, app processes, devices,
+ports, black-box targets, durable E2E runs, evidence, and recovery. The same
+resources are available through a compact CLI, MCP server, public REST/SSE API,
+Cockpit Console, and third-party clients.
+
+## Built For The Real Development Loop
+
+| Need | Cockpit |
+| --- | --- |
+| Understand a Flutter screen | Read mounted Elements, RenderObjects, routes, focus, control state, scroll ancestry, logs, runtime errors, and network activity without authored Semantics labels. |
+| Operate the app accurately | Use directly executable selectors, source-derived structural selectors, nested/lazy scrolling, hit-tested gestures, text input, keyboard actions, links, reload, restart, and bounded recovery. |
+| Cross the Flutter boundary | Continue into native screens, system dialogs, platform views, WebViews, deep links, visual surfaces, and installed black-box applications. |
+| Keep AI output efficient | Default to brief LON, bounded newest-first indexes, paths for large artifacts, short session handles, and extra detail only on demand. |
+| Prove a release | Run LON, JSON, or YAML cases and suites with matrices, dependencies, retries, concurrency, screenshots, recordings, resumable events, and portable offline reports. |
+
+The host package contains the Supervisor daemon, isolated workspace workers,
+resource-oriented CLI, MCP server, platform drivers, report pipeline, and
+authenticated `/api/v2` REST/SSE surface.
+
+## Start Here
 
 Cockpit requires Dart 3.8.0 or newer. Flutter workspaces require Flutter 3.32.0
 or newer.
@@ -68,14 +90,13 @@ Before the first start, the project must already contain the development-only
 
 ```bash
 cockpit dev start
-cockpit dev status
-cockpit dev inspect "Save"
-cockpit dev tree
-cockpit dev tap "Save"
+cockpit dev inspect
+cockpit dev tap 'FilledButton["Save"]'
+cockpit dev type "hello" --into '@message'
+cockpit dev scroll "Activity"
 cockpit dev open "myapp://tasks/42"
 cockpit dev wait
 cockpit dev screenshot
-cockpit dev recover
 cockpit dev reload
 cockpit dev diagnose --view more
 ```
