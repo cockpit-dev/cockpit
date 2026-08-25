@@ -75,8 +75,9 @@ void main() {
     final entrypointSha256 = List.filled(64, 'a').join();
     bool matches(
       CockpitAutomationTargetMode mode,
-      CockpitAutomationTargetEnvironment environment,
-    ) => cockpitMatchesDevelopmentTarget(
+      CockpitAutomationTargetEnvironment environment, {
+      String? targetEntrypointSha256,
+    }) => cockpitMatchesDevelopmentTarget(
       CockpitAutomationTargetResource(
         targetId: 'target-1',
         workspaceId: 'workspace-1',
@@ -86,7 +87,7 @@ void main() {
         mode: mode,
         environment: environment,
         entrypoint: 'cockpit/main.dart',
-        entrypointSha256: entrypointSha256,
+        entrypointSha256: targetEntrypointSha256 ?? entrypointSha256,
       ),
       entrypoint: 'cockpit/main.dart',
       entrypointSha256: entrypointSha256,
@@ -120,6 +121,14 @@ void main() {
       matches(
         CockpitAutomationTargetMode.development,
         CockpitAutomationTargetEnvironment.production,
+      ),
+      isFalse,
+    );
+    expect(
+      matches(
+        CockpitAutomationTargetMode.development,
+        CockpitAutomationTargetEnvironment.development,
+        targetEntrypointSha256: List.filled(64, 'b').join(),
       ),
       isFalse,
     );
