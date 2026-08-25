@@ -2,6 +2,12 @@
 
 ## 4.0.42
 
+- Made `dev start` register the current Flutter entrypoint identity when the
+  file changed, instead of reusing a stale development target that could no
+  longer launch.
+- Reworked the public English and Chinese package introductions around the
+  real AI-first Flutter development loop, black-box coverage, compact output,
+  and release evidence while retaining the complete reference workflow.
 - Synchronized the CLI, Supervisor resources, package metadata, and bundled
   integrations with the Flutter target-discovery correctness fix.
 

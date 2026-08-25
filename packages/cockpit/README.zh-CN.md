@@ -3,7 +3,8 @@
     <img src="https://raw.githubusercontent.com/cockpit-dev/cockpit/main/assets/brand/cockpit-mark.svg" width="128" alt="Cockpit logo">
   </a>
   <h1>cockpit</h1>
-  <p><strong>Flutter 开发控制面与无头黑盒 E2E 执行器。</strong></p>
+  <p><strong>让 AI 理解、操作并验证真实应用的命令中心。</strong></p>
+  <p>Flutter 开发 · 黑盒 E2E · MCP · REST/SSE · CI 证据</p>
   <p>
     <a href="https://pub.dev/packages/cockpit"><img src="https://img.shields.io/pub/v/cockpit?logo=dart&amp;label=pub.dev" alt="pub.dev 上的 cockpit 版本"></a>
     <a href="https://pub.dev/packages/cockpit/score"><img src="https://img.shields.io/pub/points/cockpit?logo=dart" alt="cockpit pub points"></a>
@@ -17,13 +18,32 @@
     <a href="https://github.com/cockpit-dev/cockpit/blob/main/packages/cockpit/LICENSE"><img src="https://img.shields.io/github/license/cockpit-dev/cockpit" alt="MIT 许可证"></a>
   </p>
   <p><a href="https://github.com/cockpit-dev/cockpit/blob/main/packages/cockpit/README.md">English</a> · <a href="https://github.com/cockpit-dev/cockpit/blob/main/packages/cockpit/README.zh-CN.md">简体中文</a></p>
+  <p><a href="#%E4%BB%8E%E8%BF%99%E9%87%8C%E5%BC%80%E5%A7%8B">快速开始</a> · <a href="#flutter-%E5%BF%AB%E9%80%9F%E8%B7%AF%E5%BE%84">Flutter</a> · <a href="#suite-%E4%B8%8E%E9%BB%91%E7%9B%92-target">黑盒 E2E</a> · <a href="#%E6%8E%A5%E5%85%A5-ai-agent">AI Agent</a></p>
 </div>
 
-`cockpit` 是面向 Flutter/Dart 开发与无头黑盒 E2E 的认证宿主控制面，
-包含 Supervisor daemon、隔离 workspace worker、resource-oriented CLI、MCP server
-和公开 REST/SSE API。
+AI 清楚应用正在发生什么时，开发速度会非常快；一旦只能从截图推测运行状态、猜测
+选择器、重复尝试坐标，或者每遇到一次意外弹窗就重新建立上下文，速度和 Token 成本
+都会迅速失控。
 
-## 安装
+`cockpit` 为真实运行的应用提供直接、经过认证的控制面。它统一管理 Flutter
+development session、应用进程、设备、端口、黑盒 target、持久 E2E run、证据与异常
+恢复；同一套资源可以通过紧凑 CLI、MCP server、公开 REST/SSE API、Cockpit Console
+和第三方客户端使用。
+
+## 为真实开发闭环而生
+
+| 需求 | Cockpit 提供的能力 |
+| --- | --- |
+| 理解 Flutter 页面 | 无需业务 Semantics 标签，直接读取已挂载的 Element、RenderObject、路由、焦点、控件状态、滚动祖先、日志、运行时错误和网络活动。 |
+| 准确操作应用 | 使用可直接执行的 selector、源码推导结构选择器、嵌套与懒加载滚动、真实 hit-test 手势、文本输入、键盘、链接、重载、重启和有界恢复。 |
+| 穿过 Flutter 边界 | 连续进入原生页面、系统弹窗、平台视图、WebView、deep link、视觉界面和已安装黑盒应用。 |
+| 节省 AI 上下文 | 默认输出简洁 LON；大列表有界返回；大产物只给路径；session handle 足够短；只有需要时才展开更多信息。 |
+| 证明发布质量 | 使用 LON、JSON 或 YAML case 与 suite，支持 matrix、依赖、重试、并发、截图、录像、可恢复事件和便携离线报告。 |
+
+宿主包包含 Supervisor daemon、隔离 workspace worker、资源化 CLI、MCP server、
+平台 driver、报告管线和认证 `/api/v2` REST/SSE 接口。
+
+## 从这里开始
 
 需要 Dart 3.8.0 或更高版本；Flutter workspace 使用 Flutter 3.32.0 或更高版本
 内置的 Dart SDK。
@@ -66,14 +86,13 @@ entrypoint。Cockpit 会管理发现、Supervisor、workspace/target 注册、�
 
 ```bash
 cockpit dev start
-cockpit dev status
-cockpit dev inspect "Save"
-cockpit dev tree
-cockpit dev tap "Save"
+cockpit dev inspect
+cockpit dev tap 'FilledButton["Save"]'
+cockpit dev type "hello" --into '@message'
+cockpit dev scroll "Activity"
 cockpit dev open "myapp://tasks/42"
 cockpit dev wait
 cockpit dev screenshot
-cockpit dev recover
 cockpit dev reload
 cockpit dev diagnose --view more
 ```

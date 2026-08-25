@@ -3,7 +3,8 @@
     <img src="assets/brand/cockpit-mark.svg" width="128" alt="Cockpit logo">
   </a>
   <h1>Cockpit</h1>
-  <p><strong>One control plane for Flutter development and black-box application E2E.</strong></p>
+  <p><strong>Give AI a real cockpit for your app.</strong></p>
+  <p>Understand Flutter · Control real UI · Debug live state · Prove every release</p>
   <p>
     <a href="https://github.com/cockpit-dev/cockpit/actions/workflows/example-e2e.yml"><img src="https://github.com/cockpit-dev/cockpit/actions/workflows/example-e2e.yml/badge.svg?branch=main" alt="CI"></a>
     <a href="https://github.com/cockpit-dev/cockpit/blob/main/LICENSE"><img src="https://img.shields.io/github/license/cockpit-dev/cockpit" alt="MIT license"></a>
@@ -19,31 +20,67 @@
     <a href="https://github.com/cockpit-dev/cockpit#black-box-targets"><img src="https://img.shields.io/badge/platforms-6%20supported-2E7D32" alt="Android, iOS, macOS, Linux, Windows, and web"></a>
   </p>
   <p><a href="README.md">English</a> · <a href="README.zh-CN.md">简体中文</a></p>
+  <p><a href="#start-in-minutes">Get started</a> · <a href="#flutter-fast-path">Flutter</a> · <a href="#black-box-targets">Black-box E2E</a> · <a href="#install-for-ai-agents">AI agents</a></p>
 </div>
 
-Cockpit is a production application development, E2E automation, and
-verification stack for AI and CI. Flutter source development uses a first-class
-managed adapter with structured widget, route, log, error, network, and runtime
-state. Independently, installed mobile and desktop applications plus explicitly
-registered browser pages can be controlled and verified as non-invasive black
-boxes. Both paths expose the same typed resources to CLI, MCP, Cockpit Console,
-and third-party clients without conflating their roles.
+AI can read your source code. The moment the app starts, most tools become
+blind: they guess from screenshots, hope a label exists, retry coordinates, and
+lose the thread when a dialog, lazy list, native screen, or failed request gets
+in the way.
 
-It provides:
+**Cockpit closes that gap.** It gives AI agents, developers, and CI one
+production-grade control plane for the real running application. In Flutter it
+walks mounted Widgets, Elements, RenderObjects, routes, focus, scroll ancestry,
+logs, runtime errors, rebuilds, and network activity without requiring
+handwritten Semantics labels in business screens. Outside Flutter it drives
+installed mobile and desktop apps and explicitly registered browser pages as
+non-invasive black boxes.
 
-- standalone LON, JSON, or YAML cases and suites;
-- semantic, native accessibility, visual, and coordinate planes, plus
-  advertised system actions;
-- target discovery, registration, launch, inspection, and capability truth;
-- dependency DAGs, fixtures, matrices, retries, bounded concurrency, and
-  fail-fast suites;
-- durable run events, restart-safe suite checkpoints, exact session affinity,
-  cancellation, artifacts, and complete offline regression report bundles;
-- a per-user authenticated Supervisor with isolated per-workspace workers;
-- resource-oriented CLI, HTTP/SSE API, MCP, and an independently released
-  desktop Console.
+## Why Cockpit Feels Different
 
-## Packages
+| | What you get |
+| --- | --- |
+| **Flutter-native understanding** | Inspect the mounted control surface, derive stable structural selectors, operate custom components, reveal lazy content, and cross nested scroll containers without modifying production UI code. |
+| **One fast development loop** | Start once, reuse a short session handle, inspect, tap, type, scroll, open links, hot reload, diagnose, and capture current evidence without rebuilding a new automation world for every task. |
+| **Real application coverage** | Continue from Flutter into system dialogs, native screens, platform views, WebViews, deep links, visual surfaces, and black-box targets on Android, iOS, macOS, Linux, Windows, and Web. |
+| **Agent-first by design** | Brief canonical LON by default, bounded inspection, paths instead of file payloads, explicit recovery, exact capability discovery, and no giant success envelopes wasting context. |
+| **Release-grade E2E** | Author LON, JSON, or YAML cases and suites with matrices, dependencies, fixtures, concurrency, retries, resumable runs, screenshots, recordings, artifacts, and offline reports. |
+| **One public control plane** | The same typed resources are available through the CLI, MCP, authenticated REST/SSE API, Cockpit Console, and third-party clients. |
+
+## From Code Change To Proof
+
+Once a Flutter development shell is integrated, the normal loop stays short:
+
+```bash
+cockpit dev start
+cockpit dev inspect
+cockpit dev tap 'FilledButton["Save"]'
+cockpit dev type "hello" --into '@message'
+cockpit dev scroll "Activity"
+cockpit dev reload
+cockpit dev diagnose
+cockpit dev screenshot
+```
+
+Cockpit owns project discovery, the app process, ports, bridge state, and
+session isolation. Commands fail on ambiguity instead of guessing. When an
+unexpected overlay or system prompt appears, Cockpit exposes the current state
+and a bounded recovery path so the agent can continue deliberately rather than
+looping random actions.
+
+For repeatable validation, promote the same journey into a case or suite:
+
+```bash
+cockpit case validate --file e2e/save-draft.case.yaml
+cockpit case run --file e2e/save-draft.case.yaml --idempotency-key save-draft
+cockpit suite run --file e2e/regression.suite.lon --idempotency-key regression
+```
+
+The result is not merely a process exit. Cockpit retains terminal run truth,
+structured events, assertions, screenshots, recordings, logs, network
+evidence, and a portable offline report.
+
+## How It Fits Together
 
 - [`cockpit_protocol`](packages/cockpit_protocol) owns platform-neutral DTOs,
   the test DSL, JSON Schema, and OpenAPI contract.
@@ -58,6 +95,9 @@ It provides:
 
 The published packages require Dart 3.8.0; `flutter_cockpit` additionally
 requires Flutter 3.32.0. Cockpit Console development requires Flutter 3.44.0.
+
+## Start In Minutes
+
 Install the host CLI once:
 
 ```bash
