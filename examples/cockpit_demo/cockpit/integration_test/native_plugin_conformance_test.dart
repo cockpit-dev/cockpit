@@ -9,6 +9,10 @@ import 'package:integration_test/integration_test.dart';
 
 void main() {
   final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
+  const runConsentFlow = bool.fromEnvironment(
+    'COCKPIT_NATIVE_CONSENT',
+    defaultValue: false,
+  );
 
   testWidgets('public native plugin conformance', (tester) async {
     final report = <String, Object?>{
@@ -65,7 +69,7 @@ void main() {
         'duplicateStartRejected': false,
         'postFinalizeStopRejected': false,
       };
-      if (capabilities.supportsNativeRecording) {
+      if (capabilities.supportsNativeRecording && runConsentFlow) {
         final request = CockpitRecordingRequest(
           purpose: CockpitRecordingPurpose.acceptance,
           name: 'native_plugin_conformance',
@@ -102,7 +106,13 @@ void main() {
         expect(recordingReport['postFinalizeStopRejected'], isTrue);
       } else {
         recordingReport['unavailableBranchTested'] = true;
-        recordingReport['reason'] = 'recordingUnavailable';
+        recordingReport['reason'] = capabilities.supportsNativeRecording
+            ? 'recordingConsentRequired'
+            : 'recordingUnavailable';
+        // MediaProjection/screen-recording prompts belong to the host/system
+        // plane. They cannot be accepted from an in-app integration isolate;
+        // run this test with COCKPIT_NATIVE_CONSENT=true only when the host
+        // Cockpit driver is configured to resolve the system prompt.
         if (kIsWeb) {
           expect(capabilities.supportsNativeRecording, isFalse);
           expect(captureAvailable, isFalse);

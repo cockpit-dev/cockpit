@@ -73,7 +73,7 @@ final class CockpitSimctlCaptureAdapter implements CockpitHostCaptureAdapter {
           },
         );
       }
-      return cockpitValidateHostCaptureOutput(
+      return await cockpitValidateHostCaptureOutput(
         command: command,
         artifact: artifact,
         durationMs: stopwatch.elapsedMilliseconds,

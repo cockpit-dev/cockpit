@@ -1580,9 +1580,15 @@ final class CockpitAndroidSystemControlAdapter
       );
     }
     final mode = decision.value ?? 'accept';
+    final appId = request.appId?.trim();
     return CockpitResolvedSystemControlCommand(
       cockpitAndroidUiAutomationCommandExecutable,
-      <String>[deviceId, 'dismissSystemDialog', mode],
+      <String>[
+        deviceId,
+        'dismissSystemDialog',
+        mode,
+        if (appId != null && appId.isNotEmpty) appId,
+      ],
     );
   }
 

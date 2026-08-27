@@ -2,9 +2,11 @@ package dev.cockpit.driver;
 
 import static org.junit.Assert.assertTrue;
 
+import android.accessibilityservice.AccessibilityService;
 import android.accessibilityservice.AccessibilityServiceInfo;
 import android.app.Instrumentation;
 import android.app.UiAutomation;
+import android.content.pm.ApplicationInfo;
 import android.graphics.Rect;
 import android.os.Bundle;
 import android.os.SystemClock;
@@ -27,6 +29,8 @@ import java.util.List;
 
 @RunWith(AndroidJUnit4.class)
 public final class CockpitDriverTest {
+    private static final long SYSTEM_DIALOG_TIMEOUT_MILLIS = 5000;
+    private static final long SYSTEM_DIALOG_STEP_DELAY_MILLIS = 150;
     private static final String[] ACCEPT_DIALOG_IDS = {
             "android:id/aerr_wait",
             "com.android.permissioncontroller:id/permission_allow_button",
@@ -49,7 +53,8 @@ public final class CockpitDriverTest {
             "android:id/button2"
     };
     private static final String[] ACCEPT_DIALOG_TEXT = {
-            "Wait", "Allow", "ALLOW", "While using the app", "Only this time", "OK"
+            "Wait", "Allow", "ALLOW", "While using the app", "Only this time", "OK",
+            "Next", "Start now", "Share", "Share screen", "Share this app"
     };
     private static final String[] DISMISS_DIALOG_TEXT = {
             "Close app", "Deny", "DENY", "Don't allow", "Don\u2019t allow", "Cancel", "CANCEL"
@@ -78,17 +83,133 @@ public final class CockpitDriverTest {
         UiAutomation automation = configuredAutomation(instrumentation);
         String decision = InstrumentationRegistry.getArguments().getString("decision", "accept");
         boolean dismiss = "dismiss".equals(decision);
-        AccessibilityNodeInfo match = waitForMatch(
+        String appId = InstrumentationRegistry.getArguments().getString("appId", "");
+        boolean handled = driveSystemDialog(
                 automation,
-                dismiss ? DISMISS_DIALOG_IDS : ACCEPT_DIALOG_IDS,
-                dismiss ? DISMISS_DIALOG_TEXT : ACCEPT_DIALOG_TEXT,
-                false,
-                1000
+                dismiss,
+                resolveApplicationLabel(instrumentation, appId)
         );
-        boolean handled = match != null && click(match);
         Bundle result = new Bundle();
         result.putString("cockpitHandled", Boolean.toString(handled));
         instrumentation.sendStatus(0, result);
+    }
+
+    /**
+     * Drives bounded, known system-dialog flows without guessing at arbitrary
+     * application UI. Android 14+ may split MediaProjection consent into a
+     * consent sheet, an app chooser, and a final "Start now" confirmation.
+     */
+    private static boolean driveSystemDialog(
+            UiAutomation automation,
+            boolean dismiss,
+            String applicationLabel
+    ) {
+        long deadline = SystemClock.elapsedRealtime() + SYSTEM_DIALOG_TIMEOUT_MILLIS;
+        boolean handled = false;
+        String projectionLabel = applicationLabel;
+        do {
+            List<AccessibilityNodeInfo> roots = roots(automation);
+            if (projectionLabel == null) {
+                projectionLabel = mediaProjectionAppLabel(roots);
+            }
+            AccessibilityNodeInfo match = findBestMatch(
+                    roots,
+                    dismiss ? DISMISS_DIALOG_IDS : ACCEPT_DIALOG_IDS,
+                    dismiss ? DISMISS_DIALOG_TEXT : ACCEPT_DIALOG_TEXT,
+                    false
+            );
+            if (match != null && click(match)) {
+                handled = true;
+                SystemClock.sleep(SYSTEM_DIALOG_STEP_DELAY_MILLIS);
+                continue;
+            }
+
+            if (!dismiss) {
+                AccessibilityNodeInfo app = findMediaProjectionApp(roots, projectionLabel);
+                if (app != null && click(app)) {
+                    handled = true;
+                    SystemClock.sleep(SYSTEM_DIALOG_STEP_DELAY_MILLIS);
+                    continue;
+                }
+            } else if (isSystemOverlay(roots)) {
+                // A system chooser may not expose a Cancel button. Back is the
+                // safe neutral action for an incidental blocker.
+                if (automation.performGlobalAction(AccessibilityService.GLOBAL_ACTION_BACK)) {
+                    handled = true;
+                }
+            }
+            break;
+        } while (SystemClock.elapsedRealtime() < deadline);
+        return handled;
+    }
+
+    private static String resolveApplicationLabel(Instrumentation instrumentation, String appId) {
+        if (appId == null || appId.trim().isEmpty()) {
+            return null;
+        }
+        try {
+            ApplicationInfo info = instrumentation.getTargetContext()
+                    .getPackageManager()
+                    .getApplicationInfo(appId.trim(), 0);
+            CharSequence label = info.loadLabel(
+                    instrumentation.getTargetContext().getPackageManager()
+            );
+            return label == null ? null : label.toString().trim();
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    private static AccessibilityNodeInfo findMediaProjectionApp(
+            List<AccessibilityNodeInfo> roots,
+            String label
+    ) {
+        if (label == null || label.isEmpty()) {
+            return null;
+        }
+        List<AccessibilityNodeInfo> nodes = new ArrayList<>();
+        for (AccessibilityNodeInfo root : roots) {
+            collectNodes(root, nodes, 10000);
+        }
+        for (AccessibilityNodeInfo node : nodes) {
+            if (!node.isVisibleToUser() || !node.isEnabled() || !isSystemNode(node)) {
+                continue;
+            }
+            if (matches(node.getText(), label, false)
+                    || matches(node.getContentDescription(), label, false)) {
+                return node;
+            }
+        }
+        return null;
+    }
+
+    private static String mediaProjectionAppLabel(List<AccessibilityNodeInfo> roots) {
+        List<AccessibilityNodeInfo> nodes = new ArrayList<>();
+        for (AccessibilityNodeInfo root : roots) {
+            collectNodes(root, nodes, 10000);
+        }
+        for (AccessibilityNodeInfo node : nodes) {
+            CharSequence text = node.getText();
+            if (text == null) {
+                continue;
+            }
+            String value = text.toString();
+            String prefix = "Share your screen with ";
+            if (value.startsWith(prefix) && value.endsWith("?")) {
+                return value.substring(prefix.length(), value.length() - 1).trim();
+            }
+        }
+        return null;
+    }
+
+    private static boolean isSystemOverlay(List<AccessibilityNodeInfo> roots) {
+        for (AccessibilityNodeInfo root : roots) {
+            CharSequence packageName = root.getPackageName();
+            if (packageName != null && isSystemNode(root)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     @Test

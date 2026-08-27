@@ -520,7 +520,7 @@ final class AcpAgentNotifier extends Notifier<AcpAgentState> {
       _endAction(authStatus: AcpAuthStatus.authenticated);
       final spec = _defaultSessionSpec;
       if (_session == null && spec != null) {
-        return _createSessionInternal(
+        return await _createSessionInternal(
           cwd: spec.cwd,
           additionalDirectories: spec.additionalDirectories,
           mcpServers: spec.mcpServers,
@@ -577,7 +577,7 @@ final class AcpAgentNotifier extends Notifier<AcpAgentState> {
             additionalDirectories ?? defaults.additionalDirectories,
         mcpServers: mcpServers ?? defaults.mcpServers,
       );
-      return _createSessionInternal(
+      return await _createSessionInternal(
         cwd: spec.cwd,
         additionalDirectories: spec.additionalDirectories,
         mcpServers: spec.mcpServers,

@@ -1,6 +1,17 @@
 # Changelog
 
+## 4.0.43
+
+- Synchronized native package metadata and documentation with the current
+  Cockpit release; Flutter runtime behavior is unchanged.
+- Added a bounded native recording-start cancellation path for callers that
+  time out while an OS consent request is still pending.
+
 ## 4.0.42
+
+- Exposed a development-only root key and in-app command executor factory so
+  dedicated Dart integration-test adapters can reuse Cockpit's real control
+  path without a loopback server, including test-binding frame hooks.
 
 - Prevented merged ancestor semantics from assigning aggregate labels and
   actions to passive Flutter content or controls blocked by `IgnorePointer`

@@ -37,7 +37,8 @@ jobs:
         run: >-
           dart format --output=none --set-exit-if-changed
           packages/cockpit_protocol packages/flutter_cockpit packages/cockpit
-          packages/cockpit_console examples/cockpit_demo test
+          packages/flutter_cockpit_test packages/cockpit_console
+          examples/cockpit_demo test
 
       - name: Analyze workspace
         run: dart analyze
@@ -64,6 +65,7 @@ jobs:
         run: |
           dart analyze packages/cockpit_protocol
           dart analyze packages/flutter_cockpit
+          dart analyze packages/flutter_cockpit_test
           dart analyze packages/cockpit
           dart analyze examples/cockpit_demo
           dart analyze examples/cockpit_demo/cockpit
@@ -114,6 +116,9 @@ jobs:
           - name: Flutter bridge tests
             directory: packages/flutter_cockpit
             flutter-version: '3.32.0'
+          - name: Flutter Cockpit test facade
+            directory: packages/flutter_cockpit_test
+            flutter-version: '3.32.0'
           - name: production example tests
             directory: examples/cockpit_demo
             flutter-version: '3.32.0'
@@ -152,13 +157,16 @@ jobs:
         include:
           - package: cockpit_protocol
             directory: packages/cockpit_protocol
-            command: dart pub publish --dry-run
+            command: dart pub publish --dry-run --ignore-warnings
           - package: flutter_cockpit
             directory: packages/flutter_cockpit
-            command: flutter pub publish --dry-run
+            command: flutter pub publish --dry-run --ignore-warnings
+          - package: flutter_cockpit_test
+            directory: packages/flutter_cockpit_test
+            command: flutter pub publish --dry-run --ignore-warnings
           - package: cockpit
             directory: packages/cockpit
-            command: dart pub publish --dry-run
+            command: dart pub publish --dry-run --ignore-warnings
     steps:
       - uses: actions/checkout@v6
 

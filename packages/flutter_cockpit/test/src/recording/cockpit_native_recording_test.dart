@@ -109,6 +109,23 @@ void main() {
     expect(sentArguments?['relativePath'], isA<String>());
   });
 
+  test('cancelStart forwards the native cancellation request', () async {
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    const channel = MethodChannel(channelName);
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      expect(call.method, 'cancelRecordingStart');
+      return true;
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+
+    final cancelled = await const CockpitNativeRecording(
+      channel: channel,
+    ).cancelStart();
+
+    expect(cancelled, isTrue);
+  });
+
   test('stopRecording parses a completed recording payload', () async {
     final messenger =
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;

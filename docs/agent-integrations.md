@@ -207,9 +207,10 @@ cockpit dev status
 ```
 
 `dev status` may truthfully report that no session exists; the important
-installation check is that Kiro can launch `cockpit_mcp` and the agent loads
-the Cockpit Skill for a Flutter debugging or E2E request. Confirm the MCP
-client can list operation resources and read `cockpit://operations/schema`.
+installation check is that Kiro can launch `cockpit_mcp`. The Cockpit Skill is
+opt-in: load or invoke it only after the user explicitly asks to use Cockpit
+or invokes a Cockpit command. Confirm the MCP client can list operation
+resources and read `cockpit://operations/schema`.
 
 Before Kiro runs `cockpit dev start` in a Flutter checkout, it must follow the
 Skill's Flutter preflight: verify `flutter_cockpit` is a development dependency

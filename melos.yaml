@@ -3,6 +3,7 @@ name: cockpit_workspace
 packages:
   - packages/cockpit_protocol
   - packages/flutter_cockpit
+  - packages/flutter_cockpit_test
   - packages/cockpit
   - packages/cockpit_console
   - examples/cockpit_demo
@@ -15,6 +16,7 @@ scripts:
     run: >-
       (dart test test) &&
       (flutter test --no-pub packages/flutter_cockpit/test) &&
+      (flutter test --no-pub packages/flutter_cockpit_test/test) &&
       (dart test packages/cockpit/test) &&
       (cd examples/cockpit_demo && flutter test --no-pub) &&
       (cd examples/cockpit_demo/cockpit && flutter test --no-pub)

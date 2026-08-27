@@ -184,6 +184,11 @@ HTTP 诊断默认用 `*` 掩码凭据值，同时保留鉴权类型、Cookie 名
 边界。reassemble 时会清除上一 generation 的错误和未消费 recorded steps；reload 后
 应用新产生的错误仍会正常捕获。
 
+如果要用 Dart 编写 Flutter 集成测试，请使用
+[`flutter_cockpit_test`](https://pub.dev/packages/flutter_cockpit_test)。它继续使用官方
+`integration_test` runner，同时复用 Cockpit 的选择器命令、原生证据能力和紧凑 session
+报告。这个包只作为开发依赖，不会把 Cockpit 加入生产应用。
+
 宿主侧编排、MCP、workspace tooling 和交付验证在 [`cockpit`](https://pub.dev/packages/cockpit) 中。
 运行时 bundle 模型现在会保留 `targetKind`、`primaryExecutionPlane`、`planesUsed`、`surfaceKindsUsed`、`fallbackCount`，以及 step / observation 级别的 plane 元数据，方便宿主侧准确解释这次控制是按预期平面完成，还是发生了受控降级。
 在 web 上，runtime 直接支持 Flutter Element 与 Flutter-view 控制路径；method channel 会注册为“显式不可用”的 stub，这样能力判断会保持真实，不会退化成缺少插件的噪音报错。移动端和桌面端的原生 method-channel 录屏与截图会通过包的插件入口注册，并作为应用窗口级证据 fallback 使用；如果目标是证明系统弹窗、通知、宿主窗口或跨应用行为，仍优先使用 `cockpit` 提供的 system/host 证据链路。

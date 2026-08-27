@@ -9,12 +9,19 @@ final class FlutterCockpitApp extends StatefulWidget {
     required this.child,
     this.config = const FlutterCockpitConfig.production(),
     this.ownsRuntime = false,
+    this.rootKey,
     super.key,
   });
 
   final Widget child;
   final FlutterCockpitConfig config;
   final bool ownsRuntime;
+
+  /// Key forwarded to the mounted [FlutterCockpitRoot].
+  ///
+  /// Development-only test harnesses can use this to obtain the live root
+  /// controller without relying on a broad widget-tree lookup.
+  final GlobalKey<FlutterCockpitRootState>? rootKey;
 
   @override
   State<FlutterCockpitApp> createState() => _FlutterCockpitAppState();
@@ -47,6 +54,6 @@ final class _FlutterCockpitAppState extends State<FlutterCockpitApp> {
 
   @override
   Widget build(BuildContext context) {
-    return FlutterCockpitRoot(child: widget.child);
+    return FlutterCockpitRoot(key: widget.rootKey, child: widget.child);
   }
 }

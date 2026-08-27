@@ -80,7 +80,7 @@ final class CockpitWindowsCaptureAdapter implements CockpitHostCaptureAdapter {
         timeout: remainingTimeout(),
       ).timeout(remainingTimeout());
       stopwatch.stop();
-      return cockpitValidateHostCaptureOutput(
+      return await cockpitValidateHostCaptureOutput(
         command: command,
         artifact: artifact,
         durationMs: stopwatch.elapsedMilliseconds,

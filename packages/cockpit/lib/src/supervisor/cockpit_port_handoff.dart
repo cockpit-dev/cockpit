@@ -85,7 +85,7 @@ extension CockpitPortReservationOperations on CockpitPortReservation {
           wallDeadline: wallDeadline,
         );
         if (observed != null) {
-          return _completeVerifiedHandoff(
+          return await _completeVerifiedHandoff(
             observed: observed,
             expectedOwner: expectedOwner,
             durableOwner: durableOwner,
@@ -124,7 +124,7 @@ extension CockpitPortReservationOperations on CockpitPortReservation {
           wallDeadline: wallDeadline,
         );
         if (observed != null) {
-          return _completeVerifiedHandoff(
+          return await _completeVerifiedHandoff(
             observed: observed,
             expectedOwner: expectedOwner,
             durableOwner: durableOwner,

@@ -108,7 +108,19 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
 
     CockpitSemanticActionHandler? resolveFrom(BuildContext? context) {
       if (context is! Element || !context.mounted) return null;
-      return Actions.handler(context, intent);
+      final action = Actions.maybeFind<Intent>(context, intent: intent);
+      if (action == null || !_isDismissActionEnabled(action, context, intent)) {
+        return null;
+      }
+      return () {
+        if (!context.mounted) return;
+        final current = Actions.maybeFind<Intent>(context, intent: intent);
+        if (current == null ||
+            !_isDismissActionEnabled(current, context, intent)) {
+          return;
+        }
+        Actions.of(context).invokeAction(current, intent, context);
+      };
     }
 
     final focused = resolveFrom(FocusManager.instance.primaryFocus?.context);
@@ -131,6 +143,20 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
 
     visit(rootContext);
     return resolved;
+  }
+
+  bool _isDismissActionEnabled(
+    Action<Intent> action,
+    BuildContext context,
+    DismissIntent intent,
+  ) {
+    return switch (action) {
+      final ContextAction<Intent> contextAction => contextAction.isEnabled(
+        intent,
+        context,
+      ),
+      _ => action.isEnabled(intent),
+    };
   }
 
   CockpitTargetResolutionResult probeVisibleLocator(

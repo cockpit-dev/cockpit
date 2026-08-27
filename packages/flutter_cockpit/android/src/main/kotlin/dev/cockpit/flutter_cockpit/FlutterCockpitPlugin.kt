@@ -38,6 +38,7 @@ class FlutterCockpitPlugin : FlutterPlugin, ActivityAware {
             when (call.method) {
                 "queryRecordingCapabilities" -> recordingCoordinator.queryCapabilities(result)
                 "startRecording" -> recordingCoordinator.startRecording(call, result)
+                "cancelRecordingStart" -> recordingCoordinator.cancelStart(result)
                 "stopRecording" -> recordingCoordinator.stopRecording(result)
                 else -> result.notImplemented()
             }

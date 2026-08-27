@@ -56,10 +56,9 @@ void main() {
     expect(
       frontmatter.last,
       allOf(
-        startsWith('description: Use when '),
-        contains('application development'),
-        contains('black-box E2E'),
-        contains('live Flutter'),
+        startsWith('description: Use only when '),
+        contains('explicitly asks to use Cockpit'),
+        contains('do not activate for generic app, Flutter, UI, or E2E work'),
       ),
     );
 

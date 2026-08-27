@@ -221,7 +221,7 @@ final class CockpitRemoteSessionEndpointHandler {
                 : snapshotResponse.toJson(),
           );
         case ('GET', '/artifacts/download'):
-          return _artifactResponseFor(request);
+          return await _artifactResponseFor(request);
         case ('POST', '/commands/execute'):
           final command = _decodePayload(
             () => CockpitCommand.fromJson(request.jsonBody),

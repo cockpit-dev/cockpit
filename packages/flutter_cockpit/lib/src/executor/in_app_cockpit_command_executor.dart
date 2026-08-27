@@ -6679,24 +6679,20 @@ final class _CockpitGesturePreflightResult {
 final class _ActionCommitResult {
   const _ActionCommitResult({
     this.warnings = const <Map<String, Object?>>[],
-    this.failure,
     this.routeCommitted = false,
     this.diagnostics = const <String, Object?>{},
     this.beforeActionFingerprint,
     this.interactedTarget,
     this.beforeTargetInteractionState,
-  });
+  }) : failure = null;
 
-  const _ActionCommitResult.failure(CockpitCommandExecution failure)
-    : this(
-        warnings: const <Map<String, Object?>>[],
-        failure: failure,
-        routeCommitted: false,
-        diagnostics: const <String, Object?>{},
-        beforeActionFingerprint: null,
-        interactedTarget: null,
-        beforeTargetInteractionState: null,
-      );
+  const _ActionCommitResult.failure(this.failure)
+    : warnings = const <Map<String, Object?>>[],
+      routeCommitted = false,
+      diagnostics = const <String, Object?>{},
+      beforeActionFingerprint = null,
+      interactedTarget = null,
+      beforeTargetInteractionState = null;
 
   final List<Map<String, Object?>> warnings;
   final CockpitCommandExecution? failure;

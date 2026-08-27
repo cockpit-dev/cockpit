@@ -95,7 +95,7 @@ final class CockpitLinuxCaptureAdapter implements CockpitHostCaptureAdapter {
           },
         );
       }
-      return cockpitValidateHostCaptureOutput(
+      return await cockpitValidateHostCaptureOutput(
         command: command,
         artifact: artifact,
         durationMs: stopwatch.elapsedMilliseconds,
@@ -291,7 +291,7 @@ final class CockpitLinuxCaptureAdapter implements CockpitHostCaptureAdapter {
       ];
       final ffmpegAttempt = _startAttempt('xwd-ffmpeg', ffmpegArguments);
       attempts.add(ffmpegAttempt);
-      return _runAttempt('ffmpeg', ffmpegArguments, ffmpegAttempt);
+      return await _runAttempt('ffmpeg', ffmpegArguments, ffmpegAttempt);
     } finally {
       if (rawFile.existsSync()) {
         rawFile.deleteSync();

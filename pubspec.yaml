@@ -7,6 +7,7 @@ environment:
 workspace:
   - packages/cockpit_protocol
   - packages/flutter_cockpit
+  - packages/flutter_cockpit_test
   - packages/cockpit
   - packages/cockpit_console
   - examples/cockpit_demo

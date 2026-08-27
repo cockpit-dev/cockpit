@@ -152,6 +152,31 @@ final class FlutterCockpitRootState extends State<FlutterCockpitRoot> {
     );
   }
 
+  /// Creates the same in-app command executor used by the remote Cockpit
+  /// bridge.
+  ///
+  /// This is intentionally exposed for development-only test adapters. It
+  /// keeps Dart integration tests on the exact Element traversal, hit testing,
+  /// reveal, gesture, wait, assertion, capture, and diagnostic paths used by
+  /// `cockpit dev`, without requiring a loopback server or a second runner.
+  InAppCockpitCommandExecutor createCommandExecutor({
+    String? platform,
+    String transportType = 'inAppTest',
+    Future<void> Function()? postActionSettler,
+    Future<void> Function(Duration duration)? waitTickHandler,
+  }) {
+    return _buildRemoteCommandExecutor(
+      platform ??
+          resolveCockpitRemoteSessionPlatform(
+            isWeb: kIsWeb,
+            targetPlatform: defaultTargetPlatform,
+          ),
+      transportType: transportType,
+      postActionSettler: postActionSettler,
+      waitTickHandler: waitTickHandler,
+    );
+  }
+
   Future<CockpitSnapshot> _remoteSnapshot({
     required CockpitSnapshotOptions options,
   }) async {
@@ -347,6 +372,15 @@ final class FlutterCockpitRootState extends State<FlutterCockpitRoot> {
     return FlutterCockpit.binding.stopRecording();
   }
 
+  /// Resizes the native viewport when the current platform exposes that
+  /// capability. The result reports an unavailable capability instead of
+  /// pretending that the logical size changed.
+  Future<CockpitViewportResizeResult> resizeViewport(
+    CockpitViewportResizeRequest request,
+  ) {
+    return _resizeRemoteViewport(request);
+  }
+
   Future<void> performGesture(CockpitGestureAction action) {
     final surfaceState = _requireSurfaceState();
     return surfaceState.performGesture(action);
@@ -458,7 +492,12 @@ final class FlutterCockpitRootState extends State<FlutterCockpitRoot> {
     };
   }
 
-  InAppCockpitCommandExecutor _buildRemoteCommandExecutor(String platform) {
+  InAppCockpitCommandExecutor _buildRemoteCommandExecutor(
+    String platform, {
+    String transportType = 'remoteHttp',
+    Future<void> Function()? postActionSettler,
+    Future<void> Function(Duration duration)? waitTickHandler,
+  }) {
     return InAppCockpitCommandExecutor(
       registry: FlutterCockpit.binding.registry,
       captureHandler: (request) =>
@@ -551,7 +590,9 @@ final class FlutterCockpitRootState extends State<FlutterCockpitRoot> {
                 timeout: timeout,
               );
             },
-      waitTickHandler: FlutterCockpit.binding.configuration.gestureDelay,
+      postActionSettler: postActionSettler,
+      waitTickHandler:
+          waitTickHandler ?? FlutterCockpit.binding.configuration.gestureDelay,
       interactionPolicy: FlutterCockpit.binding.configuration.interactionPolicy,
       isRecordingActive: () =>
           FlutterCockpit.binding.activeRecordingSession != null,
@@ -564,7 +605,7 @@ final class FlutterCockpitRootState extends State<FlutterCockpitRoot> {
       },
       dismissActionResolver: () => _surfaceStateOrNull?.resolveDismissAction(),
       platform: platform,
-      transportType: 'remoteHttp',
+      transportType: transportType,
     );
   }
 

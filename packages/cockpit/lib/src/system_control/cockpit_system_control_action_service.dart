@@ -1470,6 +1470,9 @@ final class CockpitSystemControlActionService {
     final arguments = command.arguments;
     final deviceId = arguments.first;
     final action = arguments[1];
+    final appId = action == 'dismissSystemDialog' && arguments.length > 2
+        ? (arguments.length > 3 ? arguments[3] : null)
+        : null;
     final testMethod = switch (action) {
       'readUiTree' => 'dumpUiTree',
       'dismissSystemDialog' => 'tapSystemDialog',
@@ -1486,6 +1489,7 @@ final class CockpitSystemControlActionService {
       '-e',
       'class',
       'dev.cockpit.driver.CockpitDriverTest#$testMethod',
+      if (appId != null && appId.isNotEmpty) ...<String>['-e', 'appId', appId],
       _cockpitAndroidInstrumentationTarget,
     ];
     try {
@@ -1499,6 +1503,7 @@ final class CockpitSystemControlActionService {
         'dismissSystemDialog' => await _androidUiAutomation.dismissSystemDialog(
           deviceId: deviceId,
           decision: arguments[2],
+          appId: appId,
           timeout: request.timeout,
         ),
         'tapNotification' => await _androidUiAutomation.tapNotification(
@@ -1517,15 +1522,28 @@ final class CockpitSystemControlActionService {
         processId: request.processId,
         action: request.action,
         availability: capability.availability,
-        success: true,
+        success: action == 'readUiTree' || _androidAutomationHandled(stdout),
         command: visibleCommand,
         stdout: stdout,
         recommendedNextStep: action == 'readUiTree'
             ? 'resolveNativeLocator'
-            : 'readPostActionState',
+            : _androidAutomationHandled(stdout)
+            ? 'readPostActionState'
+            : 'inspectAndroidUiTree',
         strategy: capability.strategy,
         requires: capability.requires,
         limitations: capability.limitations,
+        errorCode: action == 'readUiTree' || _androidAutomationHandled(stdout)
+            ? null
+            : action == 'dismissSystemDialog'
+            ? 'systemDialogNotFound'
+            : 'notificationNotFound',
+        errorMessage:
+            action == 'readUiTree' || _androidAutomationHandled(stdout)
+            ? null
+            : action == 'dismissSystemDialog'
+            ? 'No actionable Android system dialog was found.'
+            : 'No matching Android notification was found.',
       );
     } on TimeoutException {
       return CockpitSystemControlActionResult(
@@ -2492,10 +2510,16 @@ String? _androidFocusedPackage(String output) {
 bool _isAndroidSystemDialogPackage(String? packageName) {
   if (packageName == null) return false;
   return packageName == 'android' ||
+      packageName == 'com.android.systemui' ||
       packageName == 'com.android.permissioncontroller' ||
       packageName == 'com.google.android.permissioncontroller' ||
       packageName == 'com.android.packageinstaller' ||
       packageName == 'com.google.android.packageinstaller';
+}
+
+bool _androidAutomationHandled(String? output) {
+  if (output == null) return false;
+  return RegExp(r'\bhandled=true\b').hasMatch(output);
 }
 
 bool _isAndroidSystemUiPackage(String? packageName) =>

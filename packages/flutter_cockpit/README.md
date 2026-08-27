@@ -203,6 +203,12 @@ boundary. Errors and unconsumed recorded steps from the previous generation are
 cleared during reassembly; errors raised by the reloaded application are captured
 normally.
 
+For Dart-authored Flutter integration tests, use
+[`flutter_cockpit_test`](https://pub.dev/packages/flutter_cockpit_test). It keeps
+the official `integration_test` runner while reusing Cockpit's selector-first
+commands, native evidence helpers, and compact session reporting. This package
+is a development dependency and does not add Cockpit to the production app.
+
 Host-side orchestration, MCP, workspace tooling, and delivery validation live in [`cockpit`](https://pub.dev/packages/cockpit).
 The runtime bundle models now preserve `targetKind`, `primaryExecutionPlane`, `planesUsed`, `surfaceKindsUsed`, `fallbackCount`, plus per-step and per-observation plane metadata so host-side tooling can explain when Flutter control stayed on-plan versus when it had to degrade to another surface.
 On web, the runtime supports the Flutter Element and Flutter-view control path directly, while the method channels are registered as explicit unavailable stubs so capability checks stay truthful instead of failing through missing-plugin noise. On mobile and desktop, native method-channel recording and capture register through the package plugin entries and are used as app-window evidence fallbacks; prefer system or host evidence through `cockpit` when the goal is to prove system dialogs, notifications, host windows, or cross-app behavior.
