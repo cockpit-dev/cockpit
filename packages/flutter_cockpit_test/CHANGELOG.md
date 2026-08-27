@@ -1,5 +1,9 @@
 # Changelog
 
+## 4.0.44
+
+- Synchronized the integration-test facade with the current Cockpit release.
+
 ## 4.0.43
 
 - Use the native timeout default for explicit host/system actions in the

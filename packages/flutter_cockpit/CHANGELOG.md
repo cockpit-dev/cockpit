@@ -1,5 +1,9 @@
 # Changelog
 
+## 4.0.44
+
+- Synchronized native package metadata with the current Cockpit release.
+
 ## 4.0.43
 
 - Synchronized native package metadata and documentation with the current
