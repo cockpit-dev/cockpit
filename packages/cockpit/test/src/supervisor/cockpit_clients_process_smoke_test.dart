@@ -9,32 +9,35 @@ import 'package:test/test.dart';
 String? _compiledClientExecutable;
 
 void main() {
-  test('CLI and MCP use the authenticated Supervisor HTTP boundary', () async {
-    final temporary = await Directory.systemTemp.createTemp(
-      'cockpit-clients-smoke-',
-    );
-    final home = await Directory(p.join(temporary.path, 'home')).create();
-    final root = await Directory(p.join(temporary.path, 'projects')).create();
-    final workspace = await Directory(p.join(root.path, 'sample')).create();
-    await File(p.join(workspace.path, 'pubspec.yaml')).writeAsString('''
+  test(
+    'CLI and MCP use the authenticated Supervisor HTTP boundary',
+    () async {
+      final temporary = await Directory.systemTemp.createTemp(
+        'cockpit-clients-smoke-',
+      );
+      final home = await Directory(p.join(temporary.path, 'home')).create();
+      final root = await Directory(p.join(temporary.path, 'projects')).create();
+      final workspace = await Directory(p.join(root.path, 'sample')).create();
+      await File(p.join(workspace.path, 'pubspec.yaml')).writeAsString('''
 name: cockpit_client_smoke
 environment:
   sdk: '>=3.8.0 <4.0.0'
 ''');
-    final dartFile = await File(
-      p.join(workspace.path, 'lib', 'smoke.dart'),
-    ).create(recursive: true);
-    await dartFile.writeAsString('int smokeValue() => 2;\n');
-    final supportFile = await File(
-      p.join(workspace.path, 'test', 'support.dart'),
-    ).create(recursive: true);
-    await supportFile.writeAsString('''
+      final dartFile = await File(
+        p.join(workspace.path, 'lib', 'smoke.dart'),
+      ).create(recursive: true);
+      await dartFile.writeAsString('int smokeValue() => 2;\n');
+      final supportFile = await File(
+        p.join(workspace.path, 'test', 'support.dart'),
+      ).create(recursive: true);
+      await supportFile.writeAsString('''
 int expectedSmokeValue() => 2;
 
 void main() => throw StateError('support.dart is not a test suite');
 ''');
-    await File(p.join(workspace.path, 'test', 'smoke_test.dart')).writeAsString(
-      '''
+      await File(
+        p.join(workspace.path, 'test', 'smoke_test.dart'),
+      ).writeAsString('''
 import 'package:test/test.dart';
 
 import 'support.dart';
@@ -44,9 +47,8 @@ void main() {
     expect(expectedSmokeValue(), 2);
   });
 }
-''',
-    );
-    await File(p.join(workspace.path, 'smoke_case.yaml')).writeAsString('''
+''');
+      await File(p.join(workspace.path, 'smoke_case.yaml')).writeAsString('''
 schemaVersion: cockpit.test/v2
 kind: case
 id: smokeCase
@@ -55,7 +57,7 @@ steps:
   - stepId: goBack
     action: {type: back}
 ''');
-    final suiteSource = '''
+      final suiteSource = '''
 schemaVersion: cockpit.test/v2
 kind: suite
 id: smokeSuite
@@ -73,484 +75,499 @@ cases:
           - stepId: goBack
             action: {type: back}
 ''';
-    final suiteFile = await File(
-      p.join(workspace.path, 'smoke_suite.yaml'),
-    ).writeAsString(suiteSource);
-    final packageLibrary = await Isolate.resolvePackageUri(
-      Uri.parse('package:cockpit/cockpit.dart'),
-    );
-    if (packageLibrary == null) throw StateError('Cannot resolve cockpit.');
-    final packageRoot = p.dirname(p.dirname(packageLibrary.toFilePath()));
-    final packageConfig = await Isolate.packageConfig;
-    if (packageConfig == null) {
-      throw StateError('Cannot resolve the test package configuration.');
-    }
-    final workspaceDartTool = await Directory(
-      p.join(workspace.path, '.dart_tool'),
-    ).create();
-    await File.fromUri(
-      packageConfig,
-    ).copy(p.join(workspaceDartTool.path, 'package_config.json'));
-    final environment = <String, String>{
-      ...Platform.environment,
-      'COCKPIT_HOME': await home.resolveSymbolicLinks(),
-    };
-    _compiledClientExecutable = p.join(
-      temporary.path,
-      Platform.isWindows ? 'cockpit-smoke.exe' : 'cockpit-smoke',
-    );
-    await _compileClient(packageRoot, _compiledClientExecutable!);
-    final authorizationFile =
-        await File(p.join(temporary.path, 'authorization.json')).writeAsString(
-          jsonEncode(<String, Object?>{
-            'schemaVersion': 'cockpit.supervisor.authorization/v2',
-            'allowedDangerousOperations': <String>['target.launch'],
-            'allowedOperationSafetyEffects': <String>['externalSideEffect'],
-            'allowedTargetEnvironments': <String>[
-              'development',
-              'test',
-              'staging',
-              'production',
-            ],
-            'allowedSafetyEffects': <String>[],
-            'allowedEnvironmentSecretNames': <String>[],
-          }),
-        );
+      final suiteFile = await File(
+        p.join(workspace.path, 'smoke_suite.yaml'),
+      ).writeAsString(suiteSource);
+      final packageLibrary = await Isolate.resolvePackageUri(
+        Uri.parse('package:cockpit/cockpit.dart'),
+      );
+      if (packageLibrary == null) throw StateError('Cannot resolve cockpit.');
+      final packageRoot = p.dirname(p.dirname(packageLibrary.toFilePath()));
+      final packageConfig = await Isolate.packageConfig;
+      if (packageConfig == null) {
+        throw StateError('Cannot resolve the test package configuration.');
+      }
+      final workspaceDartTool = await Directory(
+        p.join(workspace.path, '.dart_tool'),
+      ).create();
+      await File.fromUri(
+        packageConfig,
+      ).copy(p.join(workspaceDartTool.path, 'package_config.json'));
+      final environment = <String, String>{
+        ...Platform.environment,
+        'COCKPIT_HOME': await home.resolveSymbolicLinks(),
+      };
+      _compiledClientExecutable = p.join(
+        temporary.path,
+        Platform.isWindows ? 'cockpit-smoke.exe' : 'cockpit-smoke',
+      );
+      await _compileClient(packageRoot, _compiledClientExecutable!);
+      final authorizationFile =
+          await File(
+            p.join(temporary.path, 'authorization.json'),
+          ).writeAsString(
+            jsonEncode(<String, Object?>{
+              'schemaVersion': 'cockpit.supervisor.authorization/v2',
+              'allowedDangerousOperations': <String>['target.launch'],
+              'allowedOperationSafetyEffects': <String>['externalSideEffect'],
+              'allowedTargetEnvironments': <String>[
+                'development',
+                'test',
+                'staging',
+                'production',
+              ],
+              'allowedSafetyEffects': <String>[],
+              'allowedEnvironmentSecretNames': <String>[],
+            }),
+          );
 
-    addTearDown(() async {
-      _compiledClientExecutable = null;
-      await _cli(packageRoot, environment, const <String>[
+      addTearDown(() async {
+        _compiledClientExecutable = null;
+        await _cli(packageRoot, environment, const <String>[
+          'daemon',
+          'stop',
+          '--mode',
+          'emergency',
+        ], allowFailure: true);
+        if (await temporary.exists()) await temporary.delete(recursive: true);
+      });
+
+      final validatedPolicy = await _cli(packageRoot, environment, <String>[
         'daemon',
-        'stop',
-        '--mode',
-        'emergency',
-      ], allowFailure: true);
-      if (await temporary.exists()) await temporary.delete(recursive: true);
-    });
-
-    final validatedPolicy = await _cli(packageRoot, environment, <String>[
-      'daemon',
-      'policy',
-      'validate',
-      '--file',
-      authorizationFile.path,
-    ]);
-    expect(validatedPolicy['targetEnvs'], contains('production'));
-    final appliedPolicy = await _cli(packageRoot, environment, <String>[
-      'daemon',
-      'policy',
-      'apply',
-      '--file',
-      authorizationFile.path,
-    ]);
-    expect(
-      (appliedPolicy['daemon']! as Map<String, Object?>)['running'],
-      isFalse,
-    );
-    final started = await _cli(packageRoot, environment, const <String>[
-      'daemon',
-      'start',
-    ]);
-    expect(started['running'], isTrue);
-    expect(started['healthy'], isTrue);
-
-    final server = await _cli(packageRoot, environment, const <String>[
-      'server',
-    ]);
-    expect(server['api'], <String, Object?>{'major': 2, 'minor': 0});
-    expect(server, isNot(contains('bearerToken')));
-
-    final registeredRoot = await _cli(packageRoot, environment, <String>[
-      'root',
-      'add',
-      '--path',
-      root.path,
-    ]);
-    final rootId = registeredRoot['root']! as String;
-    final registeredWorkspace = await _cli(packageRoot, environment, <String>[
-      'workspace',
-      'register',
-      '--root-id',
-      rootId,
-      '--path',
-      workspace.path,
-    ]);
-    final workspaceId = registeredWorkspace['workspace']! as String;
-    final explained = await _cli(packageRoot, environment, <String>[
-      'explain',
-      'viewport.set',
-      '--workspace-id',
-      workspaceId,
-    ]);
-    final explainedOperation = explained['operation']! as Map<String, Object?>;
-    expect(explainedOperation['title'], 'Set viewport');
-    final inputContract = explained['input']! as Map<String, Object?>;
-    final inputSchema = inputContract['schema']! as Map<String, Object?>;
-    expect(
-      inputSchema['properties']! as Map<String, Object?>,
-      containsPair('width', isA<Map<String, Object?>>()),
-    );
-
-    final registeredTarget = await _cli(packageRoot, environment, <String>[
-      'target',
-      'register',
-      '--workspace-id',
-      workspaceId,
-      '--platform',
-      'android',
-      '--device-id',
-      'smoke-device',
-      '--target-kind',
-      'nativeApp',
-      '--environment',
-      'test',
-      '--app-id',
-      'com.example.smoke',
-      '--idempotency-key',
-      'smoke-target-register',
-    ]);
-    expect(
-      registeredTarget['outcome'],
-      'succeeded',
-      reason: '$registeredTarget',
-    );
-    final targetId = registeredTarget['output']! as Map<String, Object?>;
-    final registeredTargetId = targetId['target']! as String;
-    final targets = await _cli(packageRoot, environment, <String>[
-      'target',
-      'list',
-      '--workspace-id',
-      workspaceId,
-    ]);
-    expect(
-      (targets['items']! as List<Object?>).cast<Map<String, Object?>>().map(
-        (target) => target['target'],
-      ),
-      contains(registeredTargetId),
-    );
-    final target = await _cli(packageRoot, environment, <String>[
-      'target',
-      'get',
-      '--workspace-id',
-      workspaceId,
-      '--target-id',
-      registeredTargetId,
-    ]);
-    expect(target['app'], 'com.example.smoke');
-    final discovery =
-        jsonDecode(await File(p.join(home.path, 'daemon.json')).readAsString())
-            as Map<String, Object?>;
-    final http = HttpClient();
-    try {
-      final request = await http.getUrl(
-        Uri.parse(
-          discovery['endpoint']! as String,
-        ).resolve('/api/v2/workspaces/$workspaceId/targets/target_missing'),
-      );
-      request.headers
-        ..set(
-          HttpHeaders.authorizationHeader,
-          'Bearer ${discovery['bearerToken']}',
-        )
-        ..set('Cockpit-API-Version', '2.0');
-      final response = await request.close();
-      final body =
-          jsonDecode(await utf8.decoder.bind(response).join())
-              as Map<String, Object?>;
-      expect(response.statusCode, HttpStatus.notFound, reason: '$body');
+        'policy',
+        'validate',
+        '--file',
+        authorizationFile.path,
+      ]);
+      expect(validatedPolicy['targetEnvs'], contains('production'));
+      final appliedPolicy = await _cli(packageRoot, environment, <String>[
+        'daemon',
+        'policy',
+        'apply',
+        '--file',
+        authorizationFile.path,
+      ]);
       expect(
-        (body['error']! as Map<String, Object?>)['code'],
-        'opaqueReferenceNotFound',
+        (appliedPolicy['daemon']! as Map<String, Object?>)['running'],
+        isFalse,
       );
-    } finally {
-      http.close(force: true);
-    }
+      final started = await _cli(packageRoot, environment, const <String>[
+        'daemon',
+        'start',
+      ]);
+      expect(started['running'], isTrue);
+      expect(started['healthy'], isTrue);
 
-    final cases = await _cli(packageRoot, environment, <String>[
-      'case',
-      'list',
-      '--workspace-id',
-      workspaceId,
-    ]);
-    expect(
-      (cases['items']! as List<Object?>).cast<Map<String, Object?>>().map(
-        (item) => item['case'],
-      ),
-      contains('smokeCase'),
-    );
+      final server = await _cli(packageRoot, environment, const <String>[
+        'server',
+      ]);
+      expect(server['api'], <String, Object?>{'major': 2, 'minor': 0});
+      expect(server, isNot(contains('bearerToken')));
 
-    final suites = await _cli(packageRoot, environment, <String>[
-      'suite',
-      'list',
-      '--workspace-id',
-      workspaceId,
-    ]);
-    expect(
-      (suites['items']! as List<Object?>).cast<Map<String, Object?>>().map(
-        (item) => item['id'],
-      ),
-      contains('smokeSuite'),
-    );
-    final validatedSuite = await _cli(packageRoot, environment, <String>[
-      'suite',
-      'validate',
-      '--workspace-id',
-      workspaceId,
-      '--file',
-      suiteFile.path,
-    ]);
-    expect(validatedSuite['valid'], isTrue);
-    final acceptedSuite = await _cli(packageRoot, environment, <String>[
-      'suite',
-      'run',
-      '--workspace-id',
-      workspaceId,
-      '--suite-id',
-      'smokeSuite',
-      '--idempotency-key',
-      'smoke-suite-run',
-    ]);
-    final suiteRunId = acceptedSuite['run']! as String;
-    expect(suiteRunId, matches(RegExp(r'^r[0-9a-z]{10}$')));
-    final suiteRun = await _waitForCompletedRun(
-      packageRoot,
-      environment,
-      suiteRunId,
-    );
-    expect(suiteRun['docType'], 'suite');
-    final reportDirectory = p.join(temporary.path, 'cockpit-report');
-    final reportReceipt = await _cli(packageRoot, environment, <String>[
-      'suite',
-      'report',
-      '--run-id',
-      suiteRunId,
-      '--output-dir',
-      reportDirectory,
-    ]);
-    expect(reportReceipt, <String, Object?>{'path': reportDirectory});
-    final reportManifest =
-        jsonDecode(
-              await File(
-                p.join(reportDirectory, 'manifest.json'),
-              ).readAsString(),
-            )
-            as Map<String, Object?>;
-    expect(reportManifest['runId'], suiteRunId);
-    final reportFiles = (reportManifest['files']! as List<Object?>)
-        .cast<Map<String, Object?>>()
-        .map((file) => file['relativePath']);
-    expect(
-      reportFiles,
-      containsAll(<String>[
-        'report.json',
-        'index.html',
-        'summary.md',
-        'junit.xml',
-        'run/events.jsonl',
-      ]),
-    );
+      final registeredRoot = await _cli(packageRoot, environment, <String>[
+        'root',
+        'add',
+        '--path',
+        root.path,
+      ]);
+      final rootId = registeredRoot['root']! as String;
+      final registeredWorkspace = await _cli(packageRoot, environment, <String>[
+        'workspace',
+        'register',
+        '--root-id',
+        rootId,
+        '--path',
+        workspace.path,
+      ]);
+      final workspaceId = registeredWorkspace['workspace']! as String;
+      final explained = await _cli(packageRoot, environment, <String>[
+        'explain',
+        'viewport.set',
+        '--workspace-id',
+        workspaceId,
+      ]);
+      final explainedOperation =
+          explained['operation']! as Map<String, Object?>;
+      expect(explainedOperation['title'], 'Set viewport');
+      final inputContract = explained['input']! as Map<String, Object?>;
+      final inputSchema = inputContract['schema']! as Map<String, Object?>;
+      expect(
+        inputSchema['properties']! as Map<String, Object?>,
+        containsPair('width', isA<Map<String, Object?>>()),
+      );
 
-    final inlineSuite = await _cli(packageRoot, environment, <String>[
-      'suite',
-      'run',
-      '--workspace-id',
-      workspaceId,
-      '--file',
-      suiteFile.path,
-      '--idempotency-key',
-      'smoke-suite-inline',
-    ]);
-    expect(inlineSuite['run'], matches(RegExp(r'^r[0-9a-z]{10}$')));
+      final registeredTarget = await _cli(packageRoot, environment, <String>[
+        'target',
+        'register',
+        '--workspace-id',
+        workspaceId,
+        '--platform',
+        'android',
+        '--device-id',
+        'smoke-device',
+        '--target-kind',
+        'nativeApp',
+        '--environment',
+        'test',
+        '--app-id',
+        'com.example.smoke',
+        '--idempotency-key',
+        'smoke-target-register',
+      ]);
+      expect(
+        registeredTarget['outcome'],
+        'succeeded',
+        reason: '$registeredTarget',
+      );
+      final targetId = registeredTarget['output']! as Map<String, Object?>;
+      final registeredTargetId = targetId['target']! as String;
+      final targets = await _cli(packageRoot, environment, <String>[
+        'target',
+        'list',
+        '--workspace-id',
+        workspaceId,
+      ]);
+      expect(
+        (targets['items']! as List<Object?>).cast<Map<String, Object?>>().map(
+          (target) => target['target'],
+        ),
+        contains(registeredTargetId),
+      );
+      final target = await _cli(packageRoot, environment, <String>[
+        'target',
+        'get',
+        '--workspace-id',
+        workspaceId,
+        '--target-id',
+        registeredTargetId,
+      ]);
+      expect(target['app'], 'com.example.smoke');
+      final discovery =
+          jsonDecode(
+                await File(p.join(home.path, 'daemon.json')).readAsString(),
+              )
+              as Map<String, Object?>;
+      final http = HttpClient();
+      try {
+        final request = await http.getUrl(
+          Uri.parse(
+            discovery['endpoint']! as String,
+          ).resolve('/api/v2/workspaces/$workspaceId/targets/target_missing'),
+        );
+        request.headers
+          ..set(
+            HttpHeaders.authorizationHeader,
+            'Bearer ${discovery['bearerToken']}',
+          )
+          ..set('Cockpit-API-Version', '2.0');
+        final response = await request.close();
+        final body =
+            jsonDecode(await utf8.decoder.bind(response).join())
+                as Map<String, Object?>;
+        expect(response.statusCode, HttpStatus.notFound, reason: '$body');
+        expect(
+          (body['error']! as Map<String, Object?>)['code'],
+          'opaqueReferenceNotFound',
+        );
+      } finally {
+        http.close(force: true);
+      }
 
-    final accepted = await _cli(packageRoot, environment, <String>[
-      'case',
-      'run',
-      '--workspace-id',
-      workspaceId,
-      '--case-id',
-      'smokeCase',
-      '--idempotency-key',
-      'smoke-case-run',
-    ]);
-    final runId = accepted['run']! as String;
-    expect(runId, matches(RegExp(r'^r[0-9a-z]{10}$')));
-    final run = await _cli(packageRoot, environment, <String>[
-      'run',
-      'get',
-      '--run-id',
-      runId,
-    ]);
-    expect(run['run'], runId);
+      final cases = await _cli(packageRoot, environment, <String>[
+        'case',
+        'list',
+        '--workspace-id',
+        workspaceId,
+      ]);
+      expect(
+        (cases['items']! as List<Object?>).cast<Map<String, Object?>>().map(
+          (item) => item['case'],
+        ),
+        contains('smokeCase'),
+      );
 
-    final inlineCase = await _cli(packageRoot, environment, <String>[
-      'case',
-      'run',
-      '--workspace-id',
-      workspaceId,
-      '--file',
-      p.join(workspace.path, 'smoke_case.yaml'),
-      '--idempotency-key',
-      'smoke-case-inline',
-    ]);
-    expect(inlineCase['run'], matches(RegExp(r'^r[0-9a-z]{10}$')));
+      final suites = await _cli(packageRoot, environment, <String>[
+        'suite',
+        'list',
+        '--workspace-id',
+        workspaceId,
+      ]);
+      expect(
+        (suites['items']! as List<Object?>).cast<Map<String, Object?>>().map(
+          (item) => item['id'],
+        ),
+        contains('smokeSuite'),
+      );
+      final validatedSuite = await _cli(packageRoot, environment, <String>[
+        'suite',
+        'validate',
+        '--workspace-id',
+        workspaceId,
+        '--file',
+        suiteFile.path,
+      ]);
+      expect(validatedSuite['valid'], isTrue);
+      final acceptedSuite = await _cli(packageRoot, environment, <String>[
+        'suite',
+        'run',
+        '--workspace-id',
+        workspaceId,
+        '--suite-id',
+        'smokeSuite',
+        '--idempotency-key',
+        'smoke-suite-run',
+      ]);
+      final suiteRunId = acceptedSuite['run']! as String;
+      expect(suiteRunId, matches(RegExp(r'^r[0-9a-z]{10}$')));
+      final suiteRun = await _waitForCompletedRun(
+        packageRoot,
+        environment,
+        suiteRunId,
+      );
+      expect(suiteRun['docType'], 'suite');
+      final reportDirectory = p.join(temporary.path, 'cockpit-report');
+      final reportReceipt = await _cli(packageRoot, environment, <String>[
+        'suite',
+        'report',
+        '--run-id',
+        suiteRunId,
+        '--output-dir',
+        reportDirectory,
+      ]);
+      expect(reportReceipt, <String, Object?>{'path': reportDirectory});
+      final reportManifest =
+          jsonDecode(
+                await File(
+                  p.join(reportDirectory, 'manifest.json'),
+                ).readAsString(),
+              )
+              as Map<String, Object?>;
+      expect(reportManifest['runId'], suiteRunId);
+      final reportFiles = (reportManifest['files']! as List<Object?>)
+          .cast<Map<String, Object?>>()
+          .map((file) => file['relativePath']);
+      expect(
+        reportFiles,
+        containsAll(<String>[
+          'report.json',
+          'index.html',
+          'summary.md',
+          'junit.xml',
+          'run/events.jsonl',
+        ]),
+      );
 
-    final events = await _cli(packageRoot, environment, <String>[
-      'run',
-      'events',
-      '--run-id',
-      runId,
-      '--after-sequence',
-      '0',
-      '--max-events',
-      '1',
-    ]);
-    expect(events['items'], isNotEmpty);
+      final inlineSuite = await _cli(packageRoot, environment, <String>[
+        'suite',
+        'run',
+        '--workspace-id',
+        workspaceId,
+        '--file',
+        suiteFile.path,
+        '--idempotency-key',
+        'smoke-suite-inline',
+      ]);
+      expect(inlineSuite['run'], matches(RegExp(r'^r[0-9a-z]{10}$')));
 
-    final cancellation = await _cli(packageRoot, environment, <String>[
-      'run',
-      'cancel',
-      '--run-id',
-      runId,
-      '--idempotency-key',
-      'smoke-case-cancel',
-    ]);
-    expect(cancellation['run'], runId);
-    final listedArtifacts = await _cli(packageRoot, environment, <String>[
-      'artifact',
-      'list',
-      '--run-id',
-      runId,
-    ]);
-    expect(listedArtifacts['items'], isA<List<Object?>>());
+      final accepted = await _cli(packageRoot, environment, <String>[
+        'case',
+        'run',
+        '--workspace-id',
+        workspaceId,
+        '--case-id',
+        'smokeCase',
+        '--idempotency-key',
+        'smoke-case-run',
+      ]);
+      final runId = accepted['run']! as String;
+      expect(runId, matches(RegExp(r'^r[0-9a-z]{10}$')));
+      final run = await _cli(packageRoot, environment, <String>[
+        'run',
+        'get',
+        '--run-id',
+        runId,
+      ]);
+      expect(run['run'], runId);
 
-    final mcp = await _mcp(
-      packageRoot,
-      environment,
-      runId: runId,
-      workspaceId: workspaceId,
-      targetId: registeredTargetId,
-      suiteSource: suiteSource,
-      dartFilePath: await dartFile.resolveSymbolicLinks(),
-      testDirectoryPath: await Directory(
-        p.join(workspace.path, 'test'),
-      ).resolveSymbolicLinks(),
-    );
-    Map<String, Object?> response(int id) =>
-        mcp.singleWhere((message) => message['id'] == id);
-    expect(response(1)['result'], isA<Map<String, Object?>>());
-    final resource = response(2)['result']! as Map<String, Object?>;
-    final contents = (resource['contents']! as List<Object?>).single;
-    final resourceJson =
-        jsonDecode((contents as Map<String, Object?>)['text']! as String)
-            as Map<String, Object?>;
-    expect(resourceJson['instanceId'], server['instanceId']);
-    final tool = response(3)['result']! as Map<String, Object?>;
-    expect(
-      (tool['structuredContent']! as Map<String, Object?>)['runId'],
-      runId,
-    );
-    final suiteResource = response(4)['result']! as Map<String, Object?>;
-    final suiteContents = (suiteResource['contents']! as List<Object?>).single;
-    final suitesJson =
-        jsonDecode((suiteContents as Map<String, Object?>)['text']! as String)
-            as Map<String, Object?>;
-    expect(
-      (suitesJson['items']! as List<Object?>).cast<Map<String, Object?>>().map(
-        (item) => item['authoredId'],
-      ),
-      contains('smokeSuite'),
-    );
-    final suiteValidation = response(5)['result']! as Map<String, Object?>;
-    expect(
-      (suiteValidation['structuredContent']! as Map<String, Object?>)['valid'],
-      isTrue,
-    );
-    final targetsResource = response(6)['result']! as Map<String, Object?>;
-    final targetsContents =
-        (targetsResource['contents']! as List<Object?>).single;
-    final targetsJson =
-        jsonDecode((targetsContents as Map<String, Object?>)['text']! as String)
-            as Map<String, Object?>;
-    expect(
-      (targetsJson['items']! as List<Object?>).cast<Map<String, Object?>>().map(
-        (target) => target['targetId'],
-      ),
-      contains(registeredTargetId),
-    );
-    final targetResource = response(7)['result']! as Map<String, Object?>;
-    final targetContents =
-        (targetResource['contents']! as List<Object?>).single;
-    final targetJson =
-        jsonDecode((targetContents as Map<String, Object?>)['text']! as String)
-            as Map<String, Object?>;
-    expect(targetJson['targetId'], registeredTargetId);
-    final targetTool = response(8)['result']! as Map<String, Object?>;
-    expect(
-      (targetTool['structuredContent']! as Map<String, Object?>)['targetId'],
-      registeredTargetId,
-    );
-    final artifactResource = response(9)['result']! as Map<String, Object?>;
-    final artifactContents =
-        (artifactResource['contents']! as List<Object?>).single;
-    final artifactResourceJson =
-        jsonDecode(
-              (artifactContents as Map<String, Object?>)['text']! as String,
-            )
-            as Map<String, Object?>;
-    expect(artifactResourceJson['items'], isA<List<Object?>>());
-    final artifactTool = response(10)['result']! as Map<String, Object?>;
-    expect(
-      (artifactTool['structuredContent']! as Map<String, Object?>)['items'],
-      isA<List<Object?>>(),
-    );
-    final toolsResult = response(11)['result']! as Map<String, Object?>;
-    final toolNames = (toolsResult['tools']! as List<Object?>)
-        .cast<Map<String, Object?>>()
-        .map((tool) => tool['name']);
-    expect(toolNames, contains('analyze_files'));
-    final analysisTool = response(12)['result']! as Map<String, Object?>;
-    expect(
-      (analysisTool['structuredContent']! as Map<String, Object?>)['outcome'],
-      'succeeded',
-    );
-    final testTool = response(13)['result']! as Map<String, Object?>;
-    final testStructured =
-        testTool['structuredContent']! as Map<String, Object?>;
-    expect(testStructured['outcome'], 'succeeded', reason: '$testTool');
-    final testOutput = testStructured['output']! as Map<String, Object?>;
-    final testCommand = testOutput['command']! as Map<String, Object?>;
-    expect(testCommand['arguments'], <Object?>['test', 'test']);
-    final schemaResource = response(14)['result']! as Map<String, Object?>;
-    final schemaContents =
-        (schemaResource['contents']! as List<Object?>).single;
-    final schemaJson =
-        jsonDecode((schemaContents as Map<String, Object?>)['text']! as String)
-            as Map<String, Object?>;
-    expect(schemaJson[r'$id'], 'cockpit://operations/schema');
-    expect(
-      schemaJson[r'$defs']! as Map<String, Object?>,
-      contains('viewport.set.request'),
-    );
+      final inlineCase = await _cli(packageRoot, environment, <String>[
+        'case',
+        'run',
+        '--workspace-id',
+        workspaceId,
+        '--file',
+        p.join(workspace.path, 'smoke_case.yaml'),
+        '--idempotency-key',
+        'smoke-case-inline',
+      ]);
+      expect(inlineCase['run'], matches(RegExp(r'^r[0-9a-z]{10}$')));
 
-    final workspaceRetirement = await _cli(packageRoot, environment, <String>[
-      'workspace',
-      'unregister',
-      '--workspace-id',
-      workspaceId,
-      '--force',
-    ]);
-    expect(workspaceRetirement['id'], workspaceId);
-    expect(workspaceRetirement['refs'], isA<Map<String, Object?>>());
-    final rootRetirement = await _cli(packageRoot, environment, <String>[
-      'root',
-      'remove',
-      '--root-id',
-      rootId,
-      '--force',
-    ]);
-    expect(rootRetirement['id'], rootId);
-    expect(rootRetirement['refs'], isA<Map<String, Object?>>());
-  }, timeout: const Timeout(Duration(minutes: 5)));
+      final events = await _cli(packageRoot, environment, <String>[
+        'run',
+        'events',
+        '--run-id',
+        runId,
+        '--after-sequence',
+        '0',
+        '--max-events',
+        '1',
+      ]);
+      expect(events['items'], isNotEmpty);
+
+      final cancellation = await _cli(packageRoot, environment, <String>[
+        'run',
+        'cancel',
+        '--run-id',
+        runId,
+        '--idempotency-key',
+        'smoke-case-cancel',
+      ]);
+      expect(cancellation['run'], runId);
+      final listedArtifacts = await _cli(packageRoot, environment, <String>[
+        'artifact',
+        'list',
+        '--run-id',
+        runId,
+      ]);
+      expect(listedArtifacts['items'], isA<List<Object?>>());
+
+      final mcp = await _mcp(
+        packageRoot,
+        environment,
+        runId: runId,
+        workspaceId: workspaceId,
+        targetId: registeredTargetId,
+        suiteSource: suiteSource,
+        dartFilePath: await dartFile.resolveSymbolicLinks(),
+        testDirectoryPath: await Directory(
+          p.join(workspace.path, 'test'),
+        ).resolveSymbolicLinks(),
+      );
+      Map<String, Object?> response(int id) =>
+          mcp.singleWhere((message) => message['id'] == id);
+      expect(response(1)['result'], isA<Map<String, Object?>>());
+      final resource = response(2)['result']! as Map<String, Object?>;
+      final contents = (resource['contents']! as List<Object?>).single;
+      final resourceJson =
+          jsonDecode((contents as Map<String, Object?>)['text']! as String)
+              as Map<String, Object?>;
+      expect(resourceJson['instanceId'], server['instanceId']);
+      final tool = response(3)['result']! as Map<String, Object?>;
+      expect(
+        (tool['structuredContent']! as Map<String, Object?>)['runId'],
+        runId,
+      );
+      final suiteResource = response(4)['result']! as Map<String, Object?>;
+      final suiteContents =
+          (suiteResource['contents']! as List<Object?>).single;
+      final suitesJson =
+          jsonDecode((suiteContents as Map<String, Object?>)['text']! as String)
+              as Map<String, Object?>;
+      expect(
+        (suitesJson['items']! as List<Object?>)
+            .cast<Map<String, Object?>>()
+            .map((item) => item['authoredId']),
+        contains('smokeSuite'),
+      );
+      final suiteValidation = response(5)['result']! as Map<String, Object?>;
+      expect(
+        (suiteValidation['structuredContent']!
+            as Map<String, Object?>)['valid'],
+        isTrue,
+      );
+      final targetsResource = response(6)['result']! as Map<String, Object?>;
+      final targetsContents =
+          (targetsResource['contents']! as List<Object?>).single;
+      final targetsJson =
+          jsonDecode(
+                (targetsContents as Map<String, Object?>)['text']! as String,
+              )
+              as Map<String, Object?>;
+      expect(
+        (targetsJson['items']! as List<Object?>)
+            .cast<Map<String, Object?>>()
+            .map((target) => target['targetId']),
+        contains(registeredTargetId),
+      );
+      final targetResource = response(7)['result']! as Map<String, Object?>;
+      final targetContents =
+          (targetResource['contents']! as List<Object?>).single;
+      final targetJson =
+          jsonDecode(
+                (targetContents as Map<String, Object?>)['text']! as String,
+              )
+              as Map<String, Object?>;
+      expect(targetJson['targetId'], registeredTargetId);
+      final targetTool = response(8)['result']! as Map<String, Object?>;
+      expect(
+        (targetTool['structuredContent']! as Map<String, Object?>)['targetId'],
+        registeredTargetId,
+      );
+      final artifactResource = response(9)['result']! as Map<String, Object?>;
+      final artifactContents =
+          (artifactResource['contents']! as List<Object?>).single;
+      final artifactResourceJson =
+          jsonDecode(
+                (artifactContents as Map<String, Object?>)['text']! as String,
+              )
+              as Map<String, Object?>;
+      expect(artifactResourceJson['items'], isA<List<Object?>>());
+      final artifactTool = response(10)['result']! as Map<String, Object?>;
+      expect(
+        (artifactTool['structuredContent']! as Map<String, Object?>)['items'],
+        isA<List<Object?>>(),
+      );
+      final toolsResult = response(11)['result']! as Map<String, Object?>;
+      final toolNames = (toolsResult['tools']! as List<Object?>)
+          .cast<Map<String, Object?>>()
+          .map((tool) => tool['name']);
+      expect(toolNames, contains('analyze_files'));
+      final analysisTool = response(12)['result']! as Map<String, Object?>;
+      expect(
+        (analysisTool['structuredContent']! as Map<String, Object?>)['outcome'],
+        'succeeded',
+      );
+      final testTool = response(13)['result']! as Map<String, Object?>;
+      final testStructured =
+          testTool['structuredContent']! as Map<String, Object?>;
+      expect(testStructured['outcome'], 'succeeded', reason: '$testTool');
+      final testOutput = testStructured['output']! as Map<String, Object?>;
+      final testCommand = testOutput['command']! as Map<String, Object?>;
+      expect(testCommand['arguments'], <Object?>['test', 'test']);
+      final schemaResource = response(14)['result']! as Map<String, Object?>;
+      final schemaContents =
+          (schemaResource['contents']! as List<Object?>).single;
+      final schemaJson =
+          jsonDecode(
+                (schemaContents as Map<String, Object?>)['text']! as String,
+              )
+              as Map<String, Object?>;
+      expect(schemaJson[r'$id'], 'cockpit://operations/schema');
+      expect(
+        schemaJson[r'$defs']! as Map<String, Object?>,
+        contains('viewport.set.request'),
+      );
+
+      final workspaceRetirement = await _cli(packageRoot, environment, <String>[
+        'workspace',
+        'unregister',
+        '--workspace-id',
+        workspaceId,
+        '--force',
+      ]);
+      expect(workspaceRetirement['id'], workspaceId);
+      expect(workspaceRetirement['refs'], isA<Map<String, Object?>>());
+      final rootRetirement = await _cli(packageRoot, environment, <String>[
+        'root',
+        'remove',
+        '--root-id',
+        rootId,
+        '--force',
+      ]);
+      expect(rootRetirement['id'], rootId);
+      expect(rootRetirement['refs'], isA<Map<String, Object?>>());
+    },
+    timeout: const Timeout(Duration(minutes: 5)),
+  );
 }
 
 Future<Map<String, Object?>> _waitForCompletedRun(

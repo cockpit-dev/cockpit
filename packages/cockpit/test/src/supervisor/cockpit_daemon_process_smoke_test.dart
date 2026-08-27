@@ -14,227 +14,241 @@ import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 
 void main() {
-  test('AOT CLI launches its self-contained daemon', () async {
-    final temporary = await Directory.systemTemp.createTemp(
-      'cockpit-aot-daemon-smoke-',
-    );
-    final packageLibrary = await Isolate.resolvePackageUri(
-      Uri.parse('package:cockpit/cockpit.dart'),
-    );
-    if (packageLibrary == null) throw StateError('Cannot resolve cockpit.');
-    final packageRoot = p.dirname(p.dirname(packageLibrary.toFilePath()));
-    final executable = p.join(
-      temporary.path,
-      Platform.isWindows ? 'cockpit.exe' : 'cockpit',
-    );
-    final home = await Directory(p.join(temporary.path, 'home')).create();
-    final allowedRoot = await Directory(
-      p.join(temporary.path, 'projects'),
-    ).create();
-    final workspace = await Directory(
-      p.join(allowedRoot.path, 'sample'),
-    ).create();
-    await File(p.join(workspace.path, 'pubspec.yaml')).writeAsString('''
+  test(
+    'AOT CLI launches its self-contained daemon',
+    () async {
+      final temporary = await Directory.systemTemp.createTemp(
+        'cockpit-aot-daemon-smoke-',
+      );
+      final packageLibrary = await Isolate.resolvePackageUri(
+        Uri.parse('package:cockpit/cockpit.dart'),
+      );
+      if (packageLibrary == null) throw StateError('Cannot resolve cockpit.');
+      final packageRoot = p.dirname(p.dirname(packageLibrary.toFilePath()));
+      final executable = p.join(
+        temporary.path,
+        Platform.isWindows ? 'cockpit.exe' : 'cockpit',
+      );
+      final home = await Directory(p.join(temporary.path, 'home')).create();
+      final allowedRoot = await Directory(
+        p.join(temporary.path, 'projects'),
+      ).create();
+      final workspace = await Directory(
+        p.join(allowedRoot.path, 'sample'),
+      ).create();
+      await File(p.join(workspace.path, 'pubspec.yaml')).writeAsString('''
 name: cockpit_aot_worker_smoke
 environment:
   sdk: '>=3.8.0 <4.0.0'
 ''');
-    final environment = <String, String>{
-      ...Platform.environment,
-      'COCKPIT_HOME': await home.resolveSymbolicLinks(),
-    };
-    addTearDown(() async {
-      if (await File(executable).exists()) {
-        await Process.run(executable, const <String>[
+      final environment = <String, String>{
+        ...Platform.environment,
+        'COCKPIT_HOME': await home.resolveSymbolicLinks(),
+      };
+      addTearDown(() async {
+        if (await File(executable).exists()) {
+          await Process.run(executable, const <String>[
+            'daemon',
+            'stop',
+            '--mode',
+            'emergency',
+            '--format',
+            'none',
+          ], environment: environment).timeout(
+            const Duration(seconds: 10),
+            onTimeout: () => ProcessResult(0, 1, '', 'stop timed out'),
+          );
+        }
+        if (await temporary.exists()) await temporary.delete(recursive: true);
+      });
+
+      final compilation = await Process.run(
+        Platform.resolvedExecutable,
+        <String>[
+          'compile',
+          'exe',
+          p.join(packageRoot, 'bin', 'cockpit.dart'),
+          '-o',
+          executable,
+        ],
+        workingDirectory: packageRoot,
+      ).timeout(const Duration(minutes: 2));
+      expect(compilation.exitCode, 0, reason: '${compilation.stderr}');
+
+      final started = await Process.run(executable, const <String>[
+        'daemon',
+        'start',
+        '--yolo',
+        '--format',
+        'json',
+        '--view',
+        'full',
+      ], environment: environment).timeout(const Duration(seconds: 20));
+      expect(started.exitCode, 0, reason: '${started.stderr}');
+      final output =
+          jsonDecode('${started.stdout}'.trim()) as Map<String, Object?>;
+      expect(output['running'], isTrue);
+      expect(output['healthy'], isTrue);
+      expect(output['auth'], 'yolo');
+
+      final rootResult = await _runAotCli(executable, environment, <String>[
+        'root',
+        'add',
+        '--path',
+        allowedRoot.path,
+      ]);
+      final rootId = rootResult['root']! as String;
+      final workspaceResult = await _runAotCli(
+        executable,
+        environment,
+        <String>[
+          'workspace',
+          'register',
+          '--root-id',
+          rootId,
+          '--path',
+          workspace.path,
+        ],
+      );
+      final workspaceId = workspaceResult['workspace']! as String;
+      final discovery = await _waitForDiscovery(
+        CockpitHomePaths(environment['COCKPIT_HOME']!),
+      );
+      final capabilitiesStopwatch = Stopwatch()..start();
+      final capabilities = await _get(
+        discovery,
+        '/api/v2/capabilities',
+        headers: const <String, String>{'Cockpit-API-Version': '2.0'},
+      );
+      capabilitiesStopwatch.stop();
+      expect(capabilities.statusCode, HttpStatus.ok);
+      expect(
+        capabilitiesStopwatch.elapsed,
+        lessThan(const Duration(seconds: 2)),
+      );
+      final capabilityKinds =
+          ((jsonDecode(utf8.decode(capabilities.body))
+                      as Map<String, Object?>)['operations']!
+                  as List<Object?>)
+              .cast<Map<String, Object?>>()
+              .map((operation) => operation['kind']);
+      expect(capabilityKinds, contains('analyze.workspace'));
+      expect(
+        await File(
+          CockpitHomePaths(environment['COCKPIT_HOME']!).daemonLog,
+        ).readAsString(),
+        isNot(contains('Workspace worker started.')),
+      );
+      final cases = await _runAotCli(executable, environment, <String>[
+        'case',
+        'list',
+        '--workspace-id',
+        workspaceId,
+      ]);
+      expect(cases['items'], isEmpty);
+
+      final beforePreservingStart = await Process.run(
+        executable,
+        const <String>['daemon', 'status', '--format', 'json'],
+        environment: environment,
+      );
+      expect(beforePreservingStart.exitCode, 0);
+      final beforePreservingStartJson =
+          jsonDecode('${beforePreservingStart.stdout}') as Map<String, Object?>;
+      final preservingStart = await Process.run(executable, const <String>[
+        'daemon',
+        'start',
+        '--format',
+        'none',
+      ], environment: environment);
+      expect(
+        preservingStart.exitCode,
+        0,
+        reason: '${preservingStart.stdout}\n${preservingStart.stderr}',
+      );
+      final afterPreservingStart = await Process.run(executable, const <String>[
+        'daemon',
+        'status',
+        '--format',
+        'json',
+      ], environment: environment);
+      expect(afterPreservingStart.exitCode, 0);
+      final afterPreservingStartJson =
+          jsonDecode('${afterPreservingStart.stdout}') as Map<String, Object?>;
+      expect(
+        afterPreservingStartJson['auth'],
+        CockpitAuthorizationMode.yolo.name,
+      );
+      expect(
+        afterPreservingStartJson['processId'],
+        beforePreservingStartJson['processId'],
+      );
+
+      for (var iteration = 0; iteration < 3; iteration += 1) {
+        final stopped = await Process.run(executable, const <String>[
           'daemon',
           'stop',
           '--mode',
           'emergency',
           '--format',
           'none',
-        ], environment: environment).timeout(
-          const Duration(seconds: 10),
-          onTimeout: () => ProcessResult(0, 1, '', 'stop timed out'),
+        ], environment: environment).timeout(const Duration(seconds: 20));
+        expect(
+          stopped.exitCode,
+          0,
+          reason: '${stopped.stdout}\n${stopped.stderr}',
         );
-      }
-      if (await temporary.exists()) await temporary.delete(recursive: true);
-    });
-
-    final compilation = await Process.run(Platform.resolvedExecutable, <String>[
-      'compile',
-      'exe',
-      p.join(packageRoot, 'bin', 'cockpit.dart'),
-      '-o',
-      executable,
-    ], workingDirectory: packageRoot).timeout(const Duration(minutes: 2));
-    expect(compilation.exitCode, 0, reason: '${compilation.stderr}');
-
-    final started = await Process.run(executable, const <String>[
-      'daemon',
-      'start',
-      '--yolo',
-      '--format',
-      'json',
-      '--view',
-      'full',
-    ], environment: environment).timeout(const Duration(seconds: 20));
-    expect(started.exitCode, 0, reason: '${started.stderr}');
-    final output =
-        jsonDecode('${started.stdout}'.trim()) as Map<String, Object?>;
-    expect(output['running'], isTrue);
-    expect(output['healthy'], isTrue);
-    expect(output['auth'], 'yolo');
-
-    final rootResult = await _runAotCli(executable, environment, <String>[
-      'root',
-      'add',
-      '--path',
-      allowedRoot.path,
-    ]);
-    final rootId = rootResult['root']! as String;
-    final workspaceResult = await _runAotCli(executable, environment, <String>[
-      'workspace',
-      'register',
-      '--root-id',
-      rootId,
-      '--path',
-      workspace.path,
-    ]);
-    final workspaceId = workspaceResult['workspace']! as String;
-    final discovery = await _waitForDiscovery(
-      CockpitHomePaths(environment['COCKPIT_HOME']!),
-    );
-    final capabilitiesStopwatch = Stopwatch()..start();
-    final capabilities = await _get(
-      discovery,
-      '/api/v2/capabilities',
-      headers: const <String, String>{'Cockpit-API-Version': '2.0'},
-    );
-    capabilitiesStopwatch.stop();
-    expect(capabilities.statusCode, HttpStatus.ok);
-    expect(capabilitiesStopwatch.elapsed, lessThan(const Duration(seconds: 2)));
-    final capabilityKinds =
-        ((jsonDecode(utf8.decode(capabilities.body))
-                    as Map<String, Object?>)['operations']!
-                as List<Object?>)
-            .cast<Map<String, Object?>>()
-            .map((operation) => operation['kind']);
-    expect(capabilityKinds, contains('analyze.workspace'));
-    expect(
-      await File(
-        CockpitHomePaths(environment['COCKPIT_HOME']!).daemonLog,
-      ).readAsString(),
-      isNot(contains('Workspace worker started.')),
-    );
-    final cases = await _runAotCli(executable, environment, <String>[
-      'case',
-      'list',
-      '--workspace-id',
-      workspaceId,
-    ]);
-    expect(cases['items'], isEmpty);
-
-    final beforePreservingStart = await Process.run(executable, const <String>[
-      'daemon',
-      'status',
-      '--format',
-      'json',
-    ], environment: environment);
-    expect(beforePreservingStart.exitCode, 0);
-    final beforePreservingStartJson =
-        jsonDecode('${beforePreservingStart.stdout}') as Map<String, Object?>;
-    final preservingStart = await Process.run(executable, const <String>[
-      'daemon',
-      'start',
-      '--format',
-      'none',
-    ], environment: environment);
-    expect(
-      preservingStart.exitCode,
-      0,
-      reason: '${preservingStart.stdout}\n${preservingStart.stderr}',
-    );
-    final afterPreservingStart = await Process.run(executable, const <String>[
-      'daemon',
-      'status',
-      '--format',
-      'json',
-    ], environment: environment);
-    expect(afterPreservingStart.exitCode, 0);
-    final afterPreservingStartJson =
-        jsonDecode('${afterPreservingStart.stdout}') as Map<String, Object?>;
-    expect(
-      afterPreservingStartJson['auth'],
-      CockpitAuthorizationMode.yolo.name,
-    );
-    expect(
-      afterPreservingStartJson['processId'],
-      beforePreservingStartJson['processId'],
-    );
-
-    for (var iteration = 0; iteration < 3; iteration += 1) {
-      final stopped = await Process.run(executable, const <String>[
-        'daemon',
-        'stop',
-        '--mode',
-        'emergency',
-        '--format',
-        'none',
-      ], environment: environment).timeout(const Duration(seconds: 20));
-      expect(
-        stopped.exitCode,
-        0,
-        reason: '${stopped.stdout}\n${stopped.stderr}',
-      );
-      final restricted = await Process.run(executable, const <String>[
-        'daemon',
-        'start',
-        '--format',
-        'none',
-      ], environment: environment).timeout(const Duration(seconds: 20));
-      expect(
-        restricted.exitCode,
-        0,
-        reason: '${restricted.stdout}\n${restricted.stderr}',
-      );
-
-      final concurrent = await Future.wait(<Future<ProcessResult>>[
-        Process.run(executable, const <String>[
+        final restricted = await Process.run(executable, const <String>[
           'daemon',
           'start',
-          '--yolo',
           '--format',
           'none',
-        ], environment: environment),
-        for (var reader = 0; reader < 8; reader += 1)
+        ], environment: environment).timeout(const Duration(seconds: 20));
+        expect(
+          restricted.exitCode,
+          0,
+          reason: '${restricted.stdout}\n${restricted.stderr}',
+        );
+
+        final concurrent = await Future.wait(<Future<ProcessResult>>[
           Process.run(executable, const <String>[
-            'workspace',
-            'list',
+            'daemon',
+            'start',
+            '--yolo',
             '--format',
             'none',
           ], environment: environment),
-      ]).timeout(const Duration(seconds: 30));
-      for (final result in concurrent) {
+          for (var reader = 0; reader < 8; reader += 1)
+            Process.run(executable, const <String>[
+              'workspace',
+              'list',
+              '--format',
+              'none',
+            ], environment: environment),
+        ]).timeout(const Duration(seconds: 30));
+        for (final result in concurrent) {
+          expect(
+            result.exitCode,
+            0,
+            reason: '${result.stdout}\n${result.stderr}',
+          );
+        }
+
+        final status = await Process.run(executable, const <String>[
+          'daemon',
+          'status',
+          '--format',
+          'json',
+        ], environment: environment).timeout(const Duration(seconds: 20));
+        expect(status.exitCode, 0, reason: '${status.stderr}');
         expect(
-          result.exitCode,
-          0,
-          reason: '${result.stdout}\n${result.stderr}',
+          (jsonDecode('${status.stdout}') as Map<String, Object?>)['auth'],
+          CockpitAuthorizationMode.yolo.name,
         );
       }
-
-      final status = await Process.run(executable, const <String>[
-        'daemon',
-        'status',
-        '--format',
-        'json',
-      ], environment: environment).timeout(const Duration(seconds: 20));
-      expect(status.exitCode, 0, reason: '${status.stderr}');
-      expect(
-        (jsonDecode('${status.stdout}') as Map<String, Object?>)['auth'],
-        CockpitAuthorizationMode.yolo.name,
-      );
-    }
-  }, timeout: const Timeout(Duration(minutes: 3)));
+    },
+    timeout: const Timeout(Duration(minutes: 3)),
+  );
 
   test('process start identity is stable across caller locales', () async {
     if (Platform.isWindows) return;
@@ -423,115 +437,119 @@ Future<void> main(List<String> arguments) async {
     expect(stopwatch.elapsed, lessThan(const Duration(seconds: 2)));
   });
 
-  test('ensure replaces an older engine and preserves authorization', () async {
-    final temporary = await Directory.systemTemp.createTemp(
-      'cockpitd-engine-upgrade-',
-    );
-    final paths = CockpitHomePaths(await temporary.resolveSymbolicLinks());
-    final policy = Platform.isWindows
-        ? const CockpitWindowsAclPermissionHardener()
-        : const CockpitPosixPermissionHardener();
-    final syncer = CockpitSystemDirectorySyncer(
-      Platform.isWindows
-          ? CockpitHostPlatform.windows
-          : Platform.isMacOS
-          ? CockpitHostPlatform.macos
-          : CockpitHostPlatform.linux,
-    );
-    final store = CockpitDaemonDiscoveryStore(
-      paths: paths,
-      permissionHardener: policy,
-      directorySyncer: syncer,
-    );
-    final oldServer = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
-    final startedAt = DateTime.now().toUtc();
-    final oldDiscovery = CockpitDaemonDiscovery(
-      instanceId: 'daemon-old-engine',
-      processId: pid,
-      processStartIdentity: await const CockpitSystemProcessIdentityProbe()
-          .current(),
-      endpoint: Uri(
-        scheme: 'http',
-        host: InternetAddress.loopbackIPv4.address,
-        port: oldServer.port,
-      ),
-      bearerToken: List<String>.filled(32, 'o').join(),
-      apiMajor: 2,
-      apiMinor: 0,
-      engineVersion: '3.0.4',
-      startedAt: startedAt,
-      authorizationMode: CockpitAuthorizationMode.yolo,
-    );
-    await store.write(oldDiscovery);
-    var shutdownCount = 0;
-    oldServer.listen((request) async {
-      if (request.uri.path == '/_cockpit/health') {
-        request.response.headers.contentType = ContentType.json;
-        request.response.write(
-          jsonEncode(
-            CockpitServerInfo(
-              instanceId: oldDiscovery.instanceId,
-              apiVersion: CockpitApiVersion(major: 2, minor: 0),
-              engineVersion: oldDiscovery.engineVersion,
-              startedAt: startedAt,
-            ).toJson(),
-          ),
-        );
+  test(
+    'ensure replaces an older engine and preserves authorization',
+    () async {
+      final temporary = await Directory.systemTemp.createTemp(
+        'cockpitd-engine-upgrade-',
+      );
+      final paths = CockpitHomePaths(await temporary.resolveSymbolicLinks());
+      final policy = Platform.isWindows
+          ? const CockpitWindowsAclPermissionHardener()
+          : const CockpitPosixPermissionHardener();
+      final syncer = CockpitSystemDirectorySyncer(
+        Platform.isWindows
+            ? CockpitHostPlatform.windows
+            : Platform.isMacOS
+            ? CockpitHostPlatform.macos
+            : CockpitHostPlatform.linux,
+      );
+      final store = CockpitDaemonDiscoveryStore(
+        paths: paths,
+        permissionHardener: policy,
+        directorySyncer: syncer,
+      );
+      final oldServer = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      final startedAt = DateTime.now().toUtc();
+      final oldDiscovery = CockpitDaemonDiscovery(
+        instanceId: 'daemon-old-engine',
+        processId: pid,
+        processStartIdentity: await const CockpitSystemProcessIdentityProbe()
+            .current(),
+        endpoint: Uri(
+          scheme: 'http',
+          host: InternetAddress.loopbackIPv4.address,
+          port: oldServer.port,
+        ),
+        bearerToken: List<String>.filled(32, 'o').join(),
+        apiMajor: 2,
+        apiMinor: 0,
+        engineVersion: '3.0.4',
+        startedAt: startedAt,
+        authorizationMode: CockpitAuthorizationMode.yolo,
+      );
+      await store.write(oldDiscovery);
+      var shutdownCount = 0;
+      oldServer.listen((request) async {
+        if (request.uri.path == '/_cockpit/health') {
+          request.response.headers.contentType = ContentType.json;
+          request.response.write(
+            jsonEncode(
+              CockpitServerInfo(
+                instanceId: oldDiscovery.instanceId,
+                apiVersion: CockpitApiVersion(major: 2, minor: 0),
+                engineVersion: oldDiscovery.engineVersion,
+                startedAt: startedAt,
+              ).toJson(),
+            ),
+          );
+          await request.response.close();
+          return;
+        }
+        if (request.uri.path == '/_cockpit/lifecycle') {
+          await request.drain<void>();
+          shutdownCount += 1;
+          request.response.statusCode = HttpStatus.accepted;
+          await request.response.close();
+          await store.deleteIfMatches(oldDiscovery);
+          await oldServer.close(force: true);
+          return;
+        }
+        request.response.statusCode = HttpStatus.notFound;
         await request.response.close();
-        return;
-      }
-      if (request.uri.path == '/_cockpit/lifecycle') {
-        await request.drain<void>();
-        shutdownCount += 1;
-        request.response.statusCode = HttpStatus.accepted;
-        await request.response.close();
-        await store.deleteIfMatches(oldDiscovery);
+      });
+
+      final packageLibrary = await Isolate.resolvePackageUri(
+        Uri.parse('package:cockpit/cockpit.dart'),
+      );
+      if (packageLibrary == null) throw StateError('Cannot resolve cockpit.');
+      final packageRoot = p.dirname(p.dirname(packageLibrary.toFilePath()));
+      final lifecycle = CockpitDaemonLifecycleClient(
+        paths: paths,
+        executable: Platform.resolvedExecutable,
+        daemonArguments: <String>[p.join(packageRoot, 'bin', 'cockpitd.dart')],
+        restartArguments: <String>[p.join(packageRoot, 'bin', 'cockpit.dart')],
+        permissionHardener: policy,
+        directorySyncer: syncer,
+        requiredEngineVersion: cockpitVersion,
+      );
+      addTearDown(() async {
+        try {
+          await lifecycle.stop(
+            mode: CockpitDaemonShutdownMode.emergency,
+            timeout: const Duration(seconds: 5),
+          );
+        } on Object {
+          // The assertion failure remains primary; the process timeout is bounded.
+        }
         await oldServer.close(force: true);
-        return;
-      }
-      request.response.statusCode = HttpStatus.notFound;
-      await request.response.close();
-    });
+        if (await temporary.exists()) await temporary.delete(recursive: true);
+      });
 
-    final packageLibrary = await Isolate.resolvePackageUri(
-      Uri.parse('package:cockpit/cockpit.dart'),
-    );
-    if (packageLibrary == null) throw StateError('Cannot resolve cockpit.');
-    final packageRoot = p.dirname(p.dirname(packageLibrary.toFilePath()));
-    final lifecycle = CockpitDaemonLifecycleClient(
-      paths: paths,
-      executable: Platform.resolvedExecutable,
-      daemonArguments: <String>[p.join(packageRoot, 'bin', 'cockpitd.dart')],
-      restartArguments: <String>[p.join(packageRoot, 'bin', 'cockpit.dart')],
-      permissionHardener: policy,
-      directorySyncer: syncer,
-      requiredEngineVersion: cockpitVersion,
-    );
-    addTearDown(() async {
-      try {
-        await lifecycle.stop(
-          mode: CockpitDaemonShutdownMode.emergency,
-          timeout: const Duration(seconds: 5),
-        );
-      } on Object {
-        // The assertion failure remains primary; the process timeout is bounded.
-      }
-      await oldServer.close(force: true);
-      if (await temporary.exists()) await temporary.delete(recursive: true);
-    });
+      expect((await lifecycle.status()).diagnostic, 'upgradeRequired');
 
-    expect((await lifecycle.status()).diagnostic, 'upgradeRequired');
+      final upgraded = await lifecycle.ensure(
+        timeout: const Duration(seconds: 20),
+      );
 
-    final upgraded = await lifecycle.ensure(
-      timeout: const Duration(seconds: 20),
-    );
-
-    expect(shutdownCount, 1);
-    expect(upgraded.instanceId, isNot(oldDiscovery.instanceId));
-    expect(upgraded.engineVersion, cockpitVersion);
-    expect(upgraded.authorizationMode, CockpitAuthorizationMode.yolo);
-    expect((await lifecycle.status()).diagnostic, isNull);
-  }, timeout: const Timeout(Duration(seconds: 30)));
+      expect(shutdownCount, 1);
+      expect(upgraded.instanceId, isNot(oldDiscovery.instanceId));
+      expect(upgraded.engineVersion, cockpitVersion);
+      expect(upgraded.authorizationMode, CockpitAuthorizationMode.yolo);
+      expect((await lifecycle.status()).diagnostic, isNull);
+    },
+    timeout: const Timeout(Duration(seconds: 30)),
+  );
 
   test('an older compatible client reuses a newer engine', () async {
     final temporary = await Directory.systemTemp.createTemp(
@@ -623,205 +641,224 @@ Future<void> main(List<String> arguments) async {
     expect(shutdownCount, 0);
   });
 
-  test('cockpitd discovery auth route and ensure process smoke', () async {
-    final temporary = await Directory.systemTemp.createTemp('cockpitd-smoke-');
-    final packageLibrary = await Isolate.resolvePackageUri(
-      Uri.parse('package:cockpit/cockpit.dart'),
-    );
-    if (packageLibrary == null) throw StateError('Cannot resolve cockpit.');
-    final packageRoot = p.dirname(p.dirname(packageLibrary.toFilePath()));
-    final daemonEntrypoint = p.join(packageRoot, 'bin', 'cockpitd.dart');
-    final process = await Process.start(Platform.resolvedExecutable, <String>[
-      daemonEntrypoint,
-      '--home=${temporary.path}',
-    ], workingDirectory: packageRoot);
-    addTearDown(() async {
-      process.kill(ProcessSignal.sigkill);
-      await process.exitCode.timeout(
-        const Duration(seconds: 2),
-        onTimeout: () => -1,
+  test(
+    'cockpitd discovery auth route and ensure process smoke',
+    () async {
+      final temporary = await Directory.systemTemp.createTemp(
+        'cockpitd-smoke-',
       );
-      if (await temporary.exists()) await temporary.delete(recursive: true);
-    });
-    final paths = CockpitHomePaths(await temporary.resolveSymbolicLinks());
-    final discovery = await _waitForDiscovery(paths);
-    expect(discovery.authorizationMode, CockpitAuthorizationMode.restricted);
-    final policy = Platform.isWindows
-        ? const CockpitWindowsAclPermissionHardener()
-        : const CockpitPosixPermissionHardener();
-    final lifecycle = CockpitDaemonLifecycleClient(
-      paths: paths,
-      executable: Platform.resolvedExecutable,
-      daemonArguments: <String>[daemonEntrypoint],
-      restartArguments: <String>[p.join(packageRoot, 'bin', 'cockpit.dart')],
-      permissionHardener: policy,
-      directorySyncer: CockpitSystemDirectorySyncer(
-        Platform.isWindows
-            ? CockpitHostPlatform.windows
-            : Platform.isMacOS
-            ? CockpitHostPlatform.macos
-            : CockpitHostPlatform.linux,
-      ),
-      requiredEngineVersion: cockpitVersion,
-    );
-    final ensured = await Future.wait(
-      List<Future<CockpitDaemonDiscovery>>.generate(
-        8,
-        (_) => lifecycle.ensure(),
-      ),
-    );
-    expect(ensured.map((item) => item.instanceId).toSet(), <String>{
-      discovery.instanceId,
-    });
-    if (!Platform.isWindows) {
-      expect((await File(paths.daemonDiscovery).stat()).mode & 0x3f, 0);
-    }
-
-    expect(
-      (await _get(discovery, '/_cockpit/health', token: 'wrong')).statusCode,
-      HttpStatus.unauthorized,
-    );
-    expect((await _get(discovery, '/api/v2/server')).statusCode, HttpStatus.ok);
-    expect(
-      (await _get(discovery, '/api/v2/capabilities')).statusCode,
-      HttpStatus.badRequest,
-    );
-    final capabilities = await _get(
-      discovery,
-      '/api/v2/capabilities',
-      headers: const <String, String>{'Cockpit-API-Version': '2.0'},
-    );
-    expect(
-      capabilities.statusCode,
-      HttpStatus.ok,
-      reason: utf8.decode(capabilities.body),
-    );
-    final capabilitiesText = utf8.decode(capabilities.body);
-    final capabilitiesJson = jsonDecode(capabilitiesText);
-    final features =
-        (capabilitiesJson as Map<String, Object?>)['features']!
-            as List<Object?>;
-    expect(
-      features.cast<Map<String, Object?>>().map((feature) => feature['id']),
-      contains('suiteRuns'),
-    );
-    expect(
-      (await _request(
-        discovery,
-        'PUT',
-        '/api/v2/roots',
-        headers: const <String, String>{'Cockpit-API-Version': '2.0'},
-      )).statusCode,
-      HttpStatus.methodNotAllowed,
-    );
-    expect(
-      (await _get(
-        discovery,
-        '/api/v2/server',
-        headers: const <String, String>{'Origin': 'https://example.invalid'},
-      )).statusCode,
-      HttpStatus.forbidden,
-    );
-    await lifecycle.stop(mode: CockpitDaemonShutdownMode.emergency);
-    expect(await process.exitCode, 0);
-    expect(await File(paths.daemonDiscovery).exists(), isFalse);
-    final yolo = await lifecycle.start(
-      authorizationMode: CockpitAuthorizationMode.yolo,
-    );
-    expect(yolo.authorizationMode, CockpitAuthorizationMode.yolo);
-    expect(
-      (await lifecycle.status()).authorizationMode,
-      CockpitAuthorizationMode.yolo,
-    );
-    await lifecycle.scheduleRestart();
-    final restarted = await _waitForReplacement(
-      lifecycle,
-      previousProcessId: yolo.processId,
-    );
-    expect(restarted.authorizationMode, CockpitAuthorizationMode.yolo);
-    final staleDiscovery = await _waitForDiscovery(paths);
-    await lifecycle.stop(mode: CockpitDaemonShutdownMode.emergency);
-    await _waitForProcessExit(staleDiscovery);
-    await CockpitDaemonDiscoveryStore(
-      paths: paths,
-      permissionHardener: policy,
-      directorySyncer: CockpitSystemDirectorySyncer(
-        Platform.isWindows
-            ? CockpitHostPlatform.windows
-            : Platform.isMacOS
-            ? CockpitHostPlatform.macos
-            : CockpitHostPlatform.linux,
-      ),
-    ).write(staleDiscovery);
-    expect((await lifecycle.status()).diagnostic, 'staleDiscovery');
-    final restartedFromStale = await lifecycle.restart(
-      authorizationMode: CockpitAuthorizationMode.yolo,
-    );
-    expect(restartedFromStale.authorizationMode, CockpitAuthorizationMode.yolo);
-    await lifecycle.stop(mode: CockpitDaemonShutdownMode.emergency);
-    final log = await File(paths.daemonLog).readAsString();
-    expect(log, isNot(contains(discovery.bearerToken)));
-  }, timeout: const Timeout(Duration(seconds: 45)));
-
-  test('foreground daemon derives exit and cleans isolated state', () async {
-    final temporary = await Directory.systemTemp.createTemp(
-      'cockpitd-foreground-',
-    );
-    final workspace = await Directory(
-      p.join(temporary.path, 'workspace'),
-    ).create();
-    final home = await Directory(p.join(temporary.path, 'home')).create();
-    final submission = await File(p.join(temporary.path, 'submission.json'))
-        .writeAsString(
-          jsonEncode(<String, Object?>{
-            'workspaceId': 'workspace-placeholder',
-            'source': <String, Object?>{
-              'kind': 'inline',
-              'case': <String, Object?>{
-                'schemaVersion': 'cockpit.test/v2',
-                'kind': 'case',
-                'id': 'foregroundCase',
-                'target': <String, Object?>{
-                  'platform': 'android',
-                  'targetKind': 'flutterApp',
-                  'plane': 'semantic',
-                },
-                'steps': <Object?>[
-                  <String, Object?>{
-                    'stepId': 'assertReady',
-                    'action': <String, Object?>{
-                      'type': 'assertText',
-                      'text': 'Ready',
-                    },
-                  },
-                ],
-              },
-              'sourceSha256': List<String>.filled(64, '0').join(),
-            },
-            'idempotencyKey': 'foreground-run',
-            'inputs': <String, Object?>{},
-            'requiredFeatures': <String>[],
-          }),
+      final packageLibrary = await Isolate.resolvePackageUri(
+        Uri.parse('package:cockpit/cockpit.dart'),
+      );
+      if (packageLibrary == null) throw StateError('Cannot resolve cockpit.');
+      final packageRoot = p.dirname(p.dirname(packageLibrary.toFilePath()));
+      final daemonEntrypoint = p.join(packageRoot, 'bin', 'cockpitd.dart');
+      final process = await Process.start(Platform.resolvedExecutable, <String>[
+        daemonEntrypoint,
+        '--home=${temporary.path}',
+      ], workingDirectory: packageRoot);
+      addTearDown(() async {
+        process.kill(ProcessSignal.sigkill);
+        await process.exitCode.timeout(
+          const Duration(seconds: 2),
+          onTimeout: () => -1,
         );
-    final packageLibrary = await Isolate.resolvePackageUri(
-      Uri.parse('package:cockpit/cockpit.dart'),
-    );
-    if (packageLibrary == null) throw StateError('Cannot resolve cockpit.');
-    final packageRoot = p.dirname(p.dirname(packageLibrary.toFilePath()));
-    final process = await Process.start(Platform.resolvedExecutable, <String>[
-      p.join(packageRoot, 'bin', 'cockpitd.dart'),
-      '--home=${home.path}',
-      '--foreground-workspace=${workspace.path}',
-      '--foreground-submission=${submission.path}',
-    ], workingDirectory: packageRoot);
-    addTearDown(() async {
-      process.kill(ProcessSignal.sigkill);
-      if (await temporary.exists()) await temporary.delete(recursive: true);
-    });
-    expect(await process.exitCode, 2);
-    final canonicalHome = await home.resolveSymbolicLinks();
-    expect(await File(p.join(canonicalHome, 'daemon.json')).exists(), isFalse);
-  }, timeout: const Timeout(Duration(seconds: 60)));
+        if (await temporary.exists()) await temporary.delete(recursive: true);
+      });
+      final paths = CockpitHomePaths(await temporary.resolveSymbolicLinks());
+      final discovery = await _waitForDiscovery(paths);
+      expect(discovery.authorizationMode, CockpitAuthorizationMode.restricted);
+      final policy = Platform.isWindows
+          ? const CockpitWindowsAclPermissionHardener()
+          : const CockpitPosixPermissionHardener();
+      final lifecycle = CockpitDaemonLifecycleClient(
+        paths: paths,
+        executable: Platform.resolvedExecutable,
+        daemonArguments: <String>[daemonEntrypoint],
+        restartArguments: <String>[p.join(packageRoot, 'bin', 'cockpit.dart')],
+        permissionHardener: policy,
+        directorySyncer: CockpitSystemDirectorySyncer(
+          Platform.isWindows
+              ? CockpitHostPlatform.windows
+              : Platform.isMacOS
+              ? CockpitHostPlatform.macos
+              : CockpitHostPlatform.linux,
+        ),
+        requiredEngineVersion: cockpitVersion,
+      );
+      final ensured = await Future.wait(
+        List<Future<CockpitDaemonDiscovery>>.generate(
+          8,
+          (_) => lifecycle.ensure(),
+        ),
+      );
+      expect(ensured.map((item) => item.instanceId).toSet(), <String>{
+        discovery.instanceId,
+      });
+      if (!Platform.isWindows) {
+        expect((await File(paths.daemonDiscovery).stat()).mode & 0x3f, 0);
+      }
+
+      expect(
+        (await _get(discovery, '/_cockpit/health', token: 'wrong')).statusCode,
+        HttpStatus.unauthorized,
+      );
+      expect(
+        (await _get(discovery, '/api/v2/server')).statusCode,
+        HttpStatus.ok,
+      );
+      expect(
+        (await _get(discovery, '/api/v2/capabilities')).statusCode,
+        HttpStatus.badRequest,
+      );
+      final capabilities = await _get(
+        discovery,
+        '/api/v2/capabilities',
+        headers: const <String, String>{'Cockpit-API-Version': '2.0'},
+      );
+      expect(
+        capabilities.statusCode,
+        HttpStatus.ok,
+        reason: utf8.decode(capabilities.body),
+      );
+      final capabilitiesText = utf8.decode(capabilities.body);
+      final capabilitiesJson = jsonDecode(capabilitiesText);
+      final features =
+          (capabilitiesJson as Map<String, Object?>)['features']!
+              as List<Object?>;
+      expect(
+        features.cast<Map<String, Object?>>().map((feature) => feature['id']),
+        contains('suiteRuns'),
+      );
+      expect(
+        (await _request(
+          discovery,
+          'PUT',
+          '/api/v2/roots',
+          headers: const <String, String>{'Cockpit-API-Version': '2.0'},
+        )).statusCode,
+        HttpStatus.methodNotAllowed,
+      );
+      expect(
+        (await _get(
+          discovery,
+          '/api/v2/server',
+          headers: const <String, String>{'Origin': 'https://example.invalid'},
+        )).statusCode,
+        HttpStatus.forbidden,
+      );
+      await lifecycle.stop(mode: CockpitDaemonShutdownMode.emergency);
+      expect(await process.exitCode, 0);
+      expect(await File(paths.daemonDiscovery).exists(), isFalse);
+      final yolo = await lifecycle.start(
+        authorizationMode: CockpitAuthorizationMode.yolo,
+      );
+      expect(yolo.authorizationMode, CockpitAuthorizationMode.yolo);
+      expect(
+        (await lifecycle.status()).authorizationMode,
+        CockpitAuthorizationMode.yolo,
+      );
+      await lifecycle.scheduleRestart();
+      final restarted = await _waitForReplacement(
+        lifecycle,
+        previousProcessId: yolo.processId,
+      );
+      expect(restarted.authorizationMode, CockpitAuthorizationMode.yolo);
+      final staleDiscovery = await _waitForDiscovery(paths);
+      await lifecycle.stop(mode: CockpitDaemonShutdownMode.emergency);
+      await _waitForProcessExit(staleDiscovery);
+      await CockpitDaemonDiscoveryStore(
+        paths: paths,
+        permissionHardener: policy,
+        directorySyncer: CockpitSystemDirectorySyncer(
+          Platform.isWindows
+              ? CockpitHostPlatform.windows
+              : Platform.isMacOS
+              ? CockpitHostPlatform.macos
+              : CockpitHostPlatform.linux,
+        ),
+      ).write(staleDiscovery);
+      expect((await lifecycle.status()).diagnostic, 'staleDiscovery');
+      final restartedFromStale = await lifecycle.restart(
+        authorizationMode: CockpitAuthorizationMode.yolo,
+      );
+      expect(
+        restartedFromStale.authorizationMode,
+        CockpitAuthorizationMode.yolo,
+      );
+      await lifecycle.stop(mode: CockpitDaemonShutdownMode.emergency);
+      final log = await File(paths.daemonLog).readAsString();
+      expect(log, isNot(contains(discovery.bearerToken)));
+    },
+    timeout: const Timeout(Duration(seconds: 45)),
+  );
+
+  test(
+    'foreground daemon derives exit and cleans isolated state',
+    () async {
+      final temporary = await Directory.systemTemp.createTemp(
+        'cockpitd-foreground-',
+      );
+      final workspace = await Directory(
+        p.join(temporary.path, 'workspace'),
+      ).create();
+      final home = await Directory(p.join(temporary.path, 'home')).create();
+      final submission = await File(p.join(temporary.path, 'submission.json'))
+          .writeAsString(
+            jsonEncode(<String, Object?>{
+              'workspaceId': 'workspace-placeholder',
+              'source': <String, Object?>{
+                'kind': 'inline',
+                'case': <String, Object?>{
+                  'schemaVersion': 'cockpit.test/v2',
+                  'kind': 'case',
+                  'id': 'foregroundCase',
+                  'target': <String, Object?>{
+                    'platform': 'android',
+                    'targetKind': 'flutterApp',
+                    'plane': 'semantic',
+                  },
+                  'steps': <Object?>[
+                    <String, Object?>{
+                      'stepId': 'assertReady',
+                      'action': <String, Object?>{
+                        'type': 'assertText',
+                        'text': 'Ready',
+                      },
+                    },
+                  ],
+                },
+                'sourceSha256': List<String>.filled(64, '0').join(),
+              },
+              'idempotencyKey': 'foreground-run',
+              'inputs': <String, Object?>{},
+              'requiredFeatures': <String>[],
+            }),
+          );
+      final packageLibrary = await Isolate.resolvePackageUri(
+        Uri.parse('package:cockpit/cockpit.dart'),
+      );
+      if (packageLibrary == null) throw StateError('Cannot resolve cockpit.');
+      final packageRoot = p.dirname(p.dirname(packageLibrary.toFilePath()));
+      final process = await Process.start(Platform.resolvedExecutable, <String>[
+        p.join(packageRoot, 'bin', 'cockpitd.dart'),
+        '--home=${home.path}',
+        '--foreground-workspace=${workspace.path}',
+        '--foreground-submission=${submission.path}',
+      ], workingDirectory: packageRoot);
+      addTearDown(() async {
+        process.kill(ProcessSignal.sigkill);
+        if (await temporary.exists()) await temporary.delete(recursive: true);
+      });
+      expect(await process.exitCode, 2);
+      final canonicalHome = await home.resolveSymbolicLinks();
+      expect(
+        await File(p.join(canonicalHome, 'daemon.json')).exists(),
+        isFalse,
+      );
+    },
+    timeout: const Timeout(Duration(seconds: 60)),
+  );
 }
 
 Future<Map<String, Object?>> _runAotCli(
