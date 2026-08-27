@@ -144,68 +144,42 @@ port changes keep the existing handle.
 
 ## Copy-Ready Workflows
 
-Use these recipes as the default decision path. Start with the shortest command
-that can prove the next state; add `--session`, `--view`, `--format`, or a custom
-timeout only when the situation requires it.
+Start with the shortest command that proves the next state. Add `--session`,
+`--view`, `--format`, or a custom timeout only when it changes the decision.
 
-### Start From A Nested Project Or Worktree
+### Project, Flutter Shell, And Session
 
-Run from the directory that contains the intended app, not from a repository
-ancestor that contains several apps:
+Run inside the intended app/worktree. Cockpit resolves the nearest Flutter
+package and checkout; do not register roots, ports, targets, or apps manually.
+The handle binds one project, checkout, target, app, bridge, port, and artifact
+namespace:
 
 ```bash
 cd /absolute/path/to/worktree/apps/mobile
 cockpit dev start --device emulator-5554
-cockpit dev status
-```
-
-Cockpit resolves the nearest Flutter package and the nearest checkout/worktree.
-Do not register a root, port, target, or app by hand. If you are already at a
-common ancestor, select the exact project before mutating anything:
-
-```bash
 cockpit session list
 cockpit session show 2 --view more
 cockpit dev status --session 2
-cockpit dev tap --session 2 '#save'
 ```
 
-The handle is the only routine selector. It binds the command to one project,
-checkout, target, app, bridge, port, network log, and artifact namespace. Never
-use a package name, PID, port, or working directory as a substitute for a
-session handle, and never use a second app as recovery.
-
-### Start A Flutter Development Shell
-
-`dev start` requires the development-only bridge shell. Before blaming a build
-hang, check that `cockpit/pubspec.yaml` points to the real app, includes the
-development `flutter_cockpit` dependency, and that `cockpit/main.dart` wraps the
-real root with `FlutterCockpitApp` and installs the navigator observer:
+Before blaming a Flutter launch hang, verify the development shell and then run
+`flutter pub get` from its package root:
 
 ```bash
-cd /absolute/path/to/app
 rg -n "flutter_cockpit|FlutterCockpitApp|NavigatorObserver" cockpit/pubspec.yaml cockpit/main.dart
 flutter pub get
 cockpit dev start --platform android
 ```
 
-On a human terminal, launch stages appear on stderr while Flutter builds. Do
-not add `sleep`, a polling loop, or a verbose flag. If the command actually
-times out, inspect once and follow the returned `next` action:
+Human terminals show real launch stages on stderr. Do not add sleeps or polling.
+On a real timeout, read `status` once; use `diagnose` only if it does not explain
+the block, then follow `next` when the response provides it. Recover a
+reconnecting bridge; explicitly start only a stopped or crashed app.
 
-```bash
-cockpit dev status
-cockpit dev diagnose --view more
-```
+### Source-First Locate, Act, And Scroll
 
-If the bridge is live but temporarily reconnecting, recover the same handle;
-if the app is stopped or crashed, run `cockpit dev start` once. A missing bridge
-shell is an integration error, not permission to launch a plain Flutter app.
-
-### Locate And Operate A Flutter Widget
-
-When source is available, read the containing build method and callback first.
-Use the source-defined structure directly, then prove the live postcondition:
+Read the containing build method/callback when source is available. Otherwise
+inspect the smallest current surface and copy its `sel`:
 
 ```bash
 rg -n "Save|onPressed|CompanyButton" lib
@@ -214,40 +188,24 @@ cockpit dev wait
 cockpit dev inspect 'Saved'
 ```
 
-When the route, lazy content, overlay, or generated value is unknown, inspect
-only the current surface and copy its `sel`:
-
-```bash
-cockpit dev inspect
-cockpit dev tap ':a7b9x2'
-```
-
-If a selector fails, do not try nearby text or coordinates. Read the failure's
-`next`, re-inspect the same query once, strengthen the selector with a real
-ancestor/type/state condition, and retry the original action once. Equal matches
-are intentionally an error. Re-inspect after navigation, filtering, reordering,
-dialogs, sheets, or keyboard transitions because live `:` refs expire.
-
-### Reveal A Lazy Or Nested-Scroll Target
-
-Scroll the target, not a guessed container. Cockpit discovers nested scrollables,
-searches both directions, mounts the target, and verifies every ancestor viewport:
+Equal matches, missing targets, and expired `:` refs are failures to observe,
+not guesses to repeat. Strengthen the selector with a real ancestor/type/state;
+re-inspect after navigation, filtering, reorder, overlays, or keyboard changes.
+Scroll the target directly; nested lazy containers are discovered automatically:
 
 ```bash
 cockpit dev scroll 'Settings >> Text["Advanced"]'
 cockpit dev scroll 'Settings >> Text["Advanced"]' --align center --offset 12
 ```
 
-Use `--direction up|down` only to choose the initial search direction. Use
-`--align start|center|end` and `--offset` only when the final visual placement
-matters. If the target is ambiguous, add a real scope such as
-`ListView >> Text["Advanced"]`; there is no routine `--container` guess.
+Use `--direction` only for the initial direction and alignment/offset only when
+placement matters. Read [dev.md](references/dev.md) for structural edge cases.
 
-### Recover A System Prompt Or Unexpected Overlay
+### Observe, Recover, Prove
 
-Observe before mutating. Android/iOS screenshots use the system screen first, so
-an OS permission or keyboard blocker is visible even when the Flutter tree is
-empty:
+System-first capture on Android/iOS exposes OS dialogs and keyboards that are not
+in the Flutter tree. Observe once, apply one evidence-matched recovery, then
+prove the original anchor:
 
 ```bash
 cockpit dev status --session 2
@@ -257,34 +215,26 @@ cockpit dev wait --session 2
 cockpit dev inspect --session 2 'EXPECTED_ANCHOR'
 ```
 
-Use `--dialog accept` only when the scenario explicitly requires acceptance;
-use `--keyboard` only when the capture proves the keyboard is blocking the
-target. For an incidental Flutter popup with no state-changing action, use
-`dev dismiss`. For a product prompt, choose its explicit safe action. Never
-accept an upgrade, permission, installation, sign-in, payment, deletion, or
-external navigation speculatively.
+Use `--dialog accept` only when required by the scenario and `--keyboard` only
+when the capture proves it blocks the target. Never speculate on permissions,
+upgrades, sign-in, payments, deletion, installation, or external navigation.
 
-### Use Network Evidence Without Flooding The Context
+### Bounded Network And Durable Tests
 
-Read the bounded newest-first index, then retrieve one side of one request:
+Read the newest-first network index before a body; bodies are separate artifacts:
 
 ```bash
 cockpit dev network --failures
-cockpit dev network 37
 cockpit dev network 37 --body response
 ```
 
-Sensitive values are masked by default. Add `--raw` only with `--body` when the
-complete value or binary payload is required; the body is written to an artifact
-file and stdout stays compact. For a large or unfinished response, read its
-metadata/state first and page with `--before ID`; `receiving` means the record is
-still being appended. WebSocket frames are indexed, text may be previewed, and
-binary frames stay in artifacts. Raw socket interception is unavailable.
+Sensitive values are masked by default. Add `--raw` only with `--body` for a
+needed complete/binary payload. Page with `--before ID`; `receiving` means an
+unfinished response is still being recorded. WebSocket activity is indexed;
+raw socket interception is unavailable.
 
-### Run A Reusable Flutter Or Black-Box Journey
-
-Validate the document before executing it. Let the file extension infer LON,
-JSON, or YAML; use JSON output only for a JSON consumer such as `jq`:
+Validate documents first, infer LON/JSON/YAML from the file extension, and prove
+a terminal run state rather than trusting process exit alone:
 
 ```bash
 cockpit case validate --file /absolute/case.lon
@@ -294,15 +244,12 @@ cockpit run get --run-id RUN
 cockpit suite report --run-id RUN --output-dir /absolute/report
 ```
 
-For source-owned Flutter integration tests, use `flutter_cockpit_test` with the
-official runner. For a black-box or cross-technology journey, use `case` or
-`suite`. A run is proven only by terminal state, expected assertions, current
-evidence, and no disqualifying runtime/network errors; a zero process exit alone
-is not a pass.
+Use `flutter_cockpit_test` for source-owned Flutter integration tests and
+`case`/`suite` for black-box or cross-technology journeys.
 
-### Run Several Known Actions Efficiently
+### Batch Known Actions And Keep Output Small
 
-Use `&&` for a known, ordered path and stop at the first decision point:
+Join only known ordered mutations with `&&`; never use a single `&`:
 
 ```bash
 cockpit dev tap '@open-settings' --session 2 &&
@@ -312,47 +259,33 @@ cockpit dev tap '@save' --session 2 &&
 cockpit dev inspect 'Saved' --session 2
 ```
 
-Never use a single `&`; it runs UI mutations concurrently and can target the
-wrong state. If an intermediate result changes the route, locator, prompt, or
-network branch, stop the chain, observe, then continue with a fresh selector.
-
-### Choose Output And Input Formats
-
-Default output is compact LON and default input is inferred. These are ordinary
-commands:
-
-```bash
-cockpit dev status
-cockpit dev inspect
-cockpit suite validate --file /absolute/suite.yaml
-cockpit op run viewport.set --input-file /absolute/viewport.yaml
-```
-
-Use JSON only when another program consumes it, normally with `jq`; use YAML or
-LON when a human or AI is reading/writing the document:
+Stop the chain at any route, locator, prompt, or network decision. Default output
+is compact LON and input format is inferred. Use JSON output only for a JSON
+consumer:
 
 ```bash
 cockpit dev status --format json | jq '.lifecycle'
+```
+
+Use YAML or LON input files without spelling an input format:
+
+```bash
 cockpit op run viewport.set --input-file /absolute/viewport.yaml
 ```
 
-Do not spell default options such as `--format lon`, `--view brief`, inferred
-`--input-format`, default session, or default timeout. `--output PATH` writes an
-atomic projection and prints only its verified path.
+Omit `--format lon`, `--view brief`, `--input-format`, default session, and
+default timeout. Use `--output PATH` when the complete projection belongs in an
+artifact file.
 
-### Check Or Apply An Explicit Upgrade
-
-An available update is informational:
+### Updates Are Explicit
 
 ```bash
 cockpit update --check
 ```
 
-Only after the user explicitly asks to upgrade, run `cockpit update`, refresh the
-Skill with `cockpit skill`, and align the project's `cockpit_protocol`,
-`flutter_cockpit`, and `flutter_cockpit_test` development constraints to the
-exact same version. Never upgrade a user's project or delete old Cockpit state
-automatically.
+Only after an explicit upgrade request run `cockpit update`, refresh with
+`cockpit skill`, and align all three Flutter/Cockpit package constraints to the
+same version. Never upgrade a user project or delete Cockpit state implicitly.
 
 ## Unexpected-State Recovery
 
