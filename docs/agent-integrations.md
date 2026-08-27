@@ -2,6 +2,11 @@
 
 Cockpit ships one canonical AI workflow at `skills/cockpit/SKILL.md` and host-native adapters for common coding agents. Keep the canonical skill as the source of truth; native skill directories and packaged plugins carry synced copies so installed or repo-local adapters work outside this repository.
 
+Cockpit integration is opt-in. Installing an adapter or MCP server does not
+authorize it to inspect, control, start, stop, or validate an application
+automatically; load it only after the user explicitly asks to use Cockpit or
+work on Cockpit itself.
+
 Install the runtime once before enabling any MCP adapter, and ensure Dart's
 global executable directory is on `PATH`:
 
