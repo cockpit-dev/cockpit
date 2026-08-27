@@ -1,5 +1,16 @@
 # Changelog
 
+## 4.0.44
+
+- Prevented Android device and focus diagnostics from hanging while the input
+  method service is starting.
+- Routed native target inspection through the platform control plane instead of
+  the Flutter bridge, avoiding invalid remote forwarding and stale target data.
+- Kept artifact-producing system actions bound to their owning development
+  session and returned an explicit error when no active app can own the artifact.
+- Added operation-specific diagnostic timeouts and synchronized the complete
+  `flutter_cockpit_test` skill guidance across every distributed host mirror.
+
 ## 4.0.43
 
 - Kept process smoke coverage fast by compiling one temporary CLI binary and
