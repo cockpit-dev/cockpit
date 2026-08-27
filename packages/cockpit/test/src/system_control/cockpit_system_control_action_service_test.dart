@@ -3021,31 +3021,35 @@ void main() {
     expect(result.command, contains('200'));
   });
 
-  test('android readFocusState reports windows and IME state', () async {
-    final processManager = _FakeProcessManager();
-    final service = CockpitSystemControlActionService(
-      processManager: processManager,
-    );
+  test(
+    'android readFocusState reports window focus without IME hangs',
+    () async {
+      final processManager = _FakeProcessManager();
+      final service = CockpitSystemControlActionService(
+        processManager: processManager,
+      );
 
-    final result = await service.run(
-      const CockpitSystemControlActionRequest(
-        platform: 'android',
-        deviceId: 'emulator-5554',
-        action: CockpitSystemControlAction.readFocusState,
-      ),
-    );
+      final result = await service.run(
+        const CockpitSystemControlActionRequest(
+          platform: 'android',
+          deviceId: 'emulator-5554',
+          action: CockpitSystemControlAction.readFocusState,
+        ),
+      );
 
-    expect(result.success, isTrue);
-    expect(result.command.take(5), <String>[
-      'adb',
-      '-s',
-      'emulator-5554',
-      'shell',
-      'sh',
-    ]);
-    expect(result.command[5], '-c');
-    expect(result.command[6], contains('dumpsys input_method'));
-  });
+      expect(result.success, isTrue);
+      expect(result.command.take(5), <String>[
+        'adb',
+        '-s',
+        'emulator-5554',
+        'shell',
+        'sh',
+      ]);
+      expect(result.command[5], '-c');
+      expect(result.command[6], contains('dumpsys window'));
+      expect(result.command[6], isNot(contains('dumpsys input_method')));
+    },
+  );
 
   test('android setLocation sends emulator geo fix in lon lat order', () async {
     final processManager = _FakeProcessManager();

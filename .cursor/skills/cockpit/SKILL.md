@@ -557,6 +557,18 @@ names only from `explain` under `input.fields`.
 
 ## Flutter E2E And Black-Box E2E
 
+For Dart-authored Flutter integration tests, use the development-only
+`flutter_cockpit_test` package. It keeps Flutter's official
+`integration_test` runner while reusing Cockpit's source-first Element
+selectors, real hit-tested actions, nested/lazy scrolling, assertions,
+native evidence, and explicit host actions. Add it with
+`flutter pub add --dev flutter_cockpit_test`; never import it from production
+application code. Start with `cockpitTestWidgets`, use source-known selectors
+directly, and keep OS/system actions behind the explicit `hostCommand` bridge.
+Do not use this package for a purely black-box target; use `cockpit case` or
+`cockpit suite` there. Read [flutter-test.md](references/flutter-test.md) for
+the complete API and platform workflow.
+
 Validate documents before running them. During local development, run the same
 validated file directly; use the indexed identity when the document is a durable
 shared workspace asset or CI source.
