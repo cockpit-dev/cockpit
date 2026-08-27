@@ -273,16 +273,19 @@ keeps the in-app Flutter tree. A generic Chromium page needs an explicit target
 profile. Read [environments.md](references/environments.md) before registering a
 browser page or repairing a blocked platform driver.
 
-Use `cockpit update --check` for a side-effect-free release check. Use `cockpit
-update` for normal upgrades; it updates the CLI and Supervisor while preserving
-authorization and durable state. Then run `cockpit skill` and give its prompt to
-the current AI host so the complete Skill, native adapter, and MCP integration can
-be refreshed. Do not manually delete Cockpit home data, Pub caches, sessions,
-executables, or ports.
+Use `cockpit update --check` for a side-effect-free release check. A newer
+version is informational until the user explicitly asks to upgrade: never run
+`cockpit update` or change project dependencies automatically. After explicit
+upgrade approval, `cockpit update` updates the CLI and Supervisor while
+preserving authorization and durable state; then run `cockpit skill` and give its
+prompt to the current AI host so the complete Skill, native adapter, and MCP
+integration can be refreshed. Do not manually delete Cockpit home data, Pub
+caches, sessions, executables, or ports.
 When a Flutter project uses Cockpit packages, upgrade its development shell and
 `cockpit_protocol`, `flutter_cockpit`, and `flutter_cockpit_test` constraints in
-the same release line, then run `flutter pub get`; read [upgrade.md](references/upgrade.md)
-for the ordered project upgrade and verification flow.
+the same release line only after the user explicitly requests the upgrade, then
+run `flutter pub get`; read [upgrade.md](references/upgrade.md) for the ordered
+project upgrade and verification flow.
 
 `cockpit daemon start` and an unflagged
 `daemon restart` preserve the authorization of a healthy running daemon; with no

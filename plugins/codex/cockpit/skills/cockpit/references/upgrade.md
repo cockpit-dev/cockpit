@@ -5,6 +5,10 @@ update the Cockpit packages used by the Flutter project. Keeping only one layer
 current creates a mixed CLI/bridge surface that can look healthy while actions,
 native evidence, or integration tests use older contracts.
 
+Upgrade is a user-authorized mutation. If a check finds a newer release but the
+user has not explicitly asked to upgrade, report the available version and stop;
+do not run the update command, edit `pubspec.yaml`, or regenerate lockfiles.
+
 ## Host tooling
 
 Run the side-effect-free check when deciding whether an upgrade is needed:
@@ -13,7 +17,8 @@ Run the side-effect-free check when deciding whether an upgrade is needed:
 cockpit update --check
 ```
 
-Apply the host upgrade only after the check identifies a newer release:
+Apply the host upgrade only after the user explicitly requests it and the check
+identifies a newer release:
 
 ```bash
 cockpit update
@@ -37,8 +42,9 @@ Update the development shell and all Cockpit packages to the same release line:
   `cockpit/` development package.
 
 Keep these dependencies out of the production application package whenever the
-project uses a separate development shell. Update the shell or test package
-`pubspec.yaml` constraints, then resolve from the workspace root:
+project uses a separate development shell. After explicit upgrade approval,
+update the shell or test package `pubspec.yaml` constraints, then resolve from
+the workspace root:
 
 ```bash
 flutter pub get
