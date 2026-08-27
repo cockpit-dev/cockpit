@@ -282,10 +282,10 @@ prompt to the current AI host so the complete Skill, native adapter, and MCP
 integration can be refreshed. Do not manually delete Cockpit home data, Pub
 caches, sessions, executables, or ports.
 When a Flutter project uses Cockpit packages, upgrade its development shell and
-`cockpit_protocol`, `flutter_cockpit`, and `flutter_cockpit_test` constraints in
-the same release line only after the user explicitly requests the upgrade, then
-run `flutter pub get`; read [upgrade.md](references/upgrade.md) for the ordered
-project upgrade and verification flow.
+`cockpit_protocol`, `flutter_cockpit`, and `flutter_cockpit_test` constraints to
+the exact same Cockpit version only after the user explicitly requests the
+upgrade, then run `flutter pub get`; read [upgrade.md](references/upgrade.md) for
+the ordered project upgrade and verification flow.
 
 `cockpit daemon start` and an unflagged
 `daemon restart` preserve the authorization of a healthy running daemon; with no
