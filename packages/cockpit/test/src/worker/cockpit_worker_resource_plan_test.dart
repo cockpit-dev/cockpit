@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:cockpit/src/application/cockpit_app_handle.dart';
 import 'package:cockpit/src/application/cockpit_application_service_exception.dart';
 import 'package:cockpit/src/session/cockpit_remote_session_handle.dart';
+import 'package:cockpit/src/test/cockpit_test_safety_policy.dart';
 import 'package:cockpit/src/worker/cockpit_worker_runtime_registry.dart';
 import 'package:cockpit/src/worker/cockpit_worker_resource_identity.dart';
 import 'package:cockpit_protocol/cockpit_protocol.dart';
@@ -12,6 +13,58 @@ import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 
 void main() {
+  test('reuses and replaces orphaned Flutter development targets', () async {
+    final temporary = await Directory.systemTemp.createTemp(
+      'cockpit-worker-target-reconcile-',
+    );
+    addTearDown(() => temporary.delete(recursive: true));
+    final workspaceRoot = await temporary.resolveSymbolicLinks();
+    await File(
+      p.join(workspaceRoot, 'pubspec.yaml'),
+    ).writeAsString('name: target_reconcile\n');
+    final entrypoint = await File(
+      p.join(workspaceRoot, 'main.dart'),
+    ).writeAsString('void main() {}\n');
+    final registry = CockpitWorkerRuntimeRegistry(
+      workspaceId: 'workspaceA',
+      workspaceRoot: workspaceRoot,
+      stateRoot: p.join(workspaceRoot, 'state'),
+      stateStore: CockpitInMemoryWorkerRuntimeStateStore(),
+    );
+    CockpitWorkerTargetRegistration registration(String hash) =>
+        CockpitWorkerTargetRegistration(
+          workspaceId: 'workspaceA',
+          platform: 'android',
+          deviceId: 'emulator-5554',
+          entrypoint: 'main.dart',
+          entrypointSha256: hash,
+          mode: CockpitAppMode.development,
+          environment: CockpitTestTargetEnvironment.development,
+        );
+
+    final firstHash = sha256
+        .convert(utf8.encode('void main() {}\n'))
+        .toString();
+    final first = await registry.registerTarget(registration(firstHash));
+    final reused = await registry.registerTarget(registration(firstHash));
+    expect(reused, first);
+    expect(
+      (await registry.listTargets()).map((target) => target.targetId),
+      <String>[first],
+    );
+
+    await entrypoint.writeAsString('void main() => print(1);\n');
+    final secondHash = sha256
+        .convert(utf8.encode('void main() => print(1);\n'))
+        .toString();
+    final second = await registry.registerTarget(registration(secondHash));
+    expect(second, isNot(first));
+    expect(
+      (await registry.listTargets()).map((target) => target.targetId),
+      <String>[second],
+    );
+  });
+
   test(
     'plans one shared device lease for distinct sessions on one device',
     () async {

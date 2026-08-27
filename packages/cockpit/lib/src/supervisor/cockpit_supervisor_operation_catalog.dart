@@ -41,7 +41,7 @@ final class CockpitSupervisorOperationCatalog {
             ],
           ),
           _read('package.search', CockpitOperationScope.root),
-          _read(
+          _mutation(
             'document.index',
             CockpitOperationScope.workspace,
             defaultTimeout: const Duration(minutes: 5),
