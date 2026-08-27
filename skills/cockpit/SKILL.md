@@ -279,6 +279,10 @@ authorization and durable state. Then run `cockpit skill` and give its prompt to
 the current AI host so the complete Skill, native adapter, and MCP integration can
 be refreshed. Do not manually delete Cockpit home data, Pub caches, sessions,
 executables, or ports.
+When a Flutter project uses Cockpit packages, upgrade its development shell and
+`cockpit_protocol`, `flutter_cockpit`, and `flutter_cockpit_test` constraints in
+the same release line, then run `flutter pub get`; read [upgrade.md](references/upgrade.md)
+for the ordered project upgrade and verification flow.
 
 `cockpit daemon start` and an unflagged
 `daemon restart` preserve the authorization of a healthy running daemon; with no
@@ -680,6 +684,7 @@ never make another checkout's session implicit. Keep Cockpit wiring in a develop
 entrypoint; production Flutter code must not import the bridge package.
 
 Read [flutter.md](references/flutter.md) for bridge shells,
+[upgrade.md](references/upgrade.md) for CLI and project package upgrades,
 [dev.md](references/dev.md) for recovery/native boundaries,
 [e2e.md](references/e2e.md) for black-box E2E,
 [reporting.md](references/reporting.md) for CI,
