@@ -1079,7 +1079,11 @@ final class CockpitAndroidSystemControlAdapter
         CockpitResolvedSystemControlCommand(
           'adb',
           adbShellScript(
-            'printf "serial=" && getprop ro.serialno; printf "model=" && getprop ro.product.model; printf "sdk=" && getprop ro.build.version.sdk; printf "release=" && getprop ro.build.version.release; wm size; wm density; settings get system font_scale; settings get secure default_input_method; dumpsys input_method | grep -E "mInputShown|InputShown" | head -n 5 || true',
+            // Android 16 emulator builds can block indefinitely in
+            // `dumpsys input_method` while the IME service is starting. Keep
+            // device info bounded to stable shell services; focus inspection
+            // separately reports window focus without making every read hang.
+            'printf "serial=" && getprop ro.serialno; printf "model=" && getprop ro.product.model; printf "sdk=" && getprop ro.build.version.sdk; printf "release=" && getprop ro.build.version.release; wm size; wm density; settings get system font_scale',
           ),
         ),
       CockpitSystemControlAction.readFocusState =>
@@ -1087,8 +1091,10 @@ final class CockpitAndroidSystemControlAdapter
           'adb',
           // Focus fields moved out of `dumpsys window windows` on modern
           // Android; the full `dumpsys window` output still carries them.
+          // `dumpsys input_method` is intentionally omitted because Android
+          // 16 can leave that service dump blocked for minutes.
           adbShellScript(
-            'printf "windowFocus=\\n"; dumpsys window | grep -E "mCurrentFocus|mFocusedApp|mFocusedWindow|imeLayeringTarget|mInputMethodTarget" | head -n 20 || true; printf "\\ninputMethod=\\n"; dumpsys input_method | grep -E "mInputShown|InputShown|mServedView|mCurrentFocus|mCurMethodId" | head -n 40 || true',
+            'printf "windowFocus=\\n"; dumpsys window | grep -E "mCurrentFocus|mFocusedApp|mFocusedWindow|imeLayeringTarget|mInputMethodTarget" | head -n 20 || true',
           ),
         ),
       CockpitSystemControlAction.readNotificationState =>

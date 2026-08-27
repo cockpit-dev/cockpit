@@ -17,6 +17,6 @@ scripts:
       (dart test test) &&
       (flutter test --no-pub packages/flutter_cockpit/test) &&
       (flutter test --no-pub packages/flutter_cockpit_test/test) &&
-      (dart test packages/cockpit/test) &&
+      (cd packages/cockpit && dart test test) &&
       (cd examples/cockpit_demo && flutter test --no-pub) &&
       (cd examples/cockpit_demo/cockpit && flutter test --no-pub)

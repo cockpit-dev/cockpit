@@ -262,7 +262,13 @@ final class CockpitWorkerLifecycleOperations {
       targetId: values.id('targetId'),
     );
     final handle = binding.handle;
-    if (handle == null && binding.registration.usesSystemControl) {
+    // Native/system targets are described through their platform adapter.
+    // They do not expose a Flutter bridge handle, even after launch. Routing
+    // an already-launched native target through `_readTarget` makes the
+    // resolver treat its system handle as a Flutter remote session (for
+    // Android this attempts `adb forward` to port 0). Keep this branch before
+    // the handle check so inspect is stable before and after launch.
+    if (binding.registration.usesSystemControl) {
       final result = await runWorkerApplicationOperation(
         context: context,
         operation: () => _systemControl.describe(
@@ -279,11 +285,14 @@ final class CockpitWorkerLifecycleOperations {
           ),
         ),
       );
+      final profile = _systemProfileForTarget(
+        cockpitWorkerSystemControlProfile(result.profile),
+        binding.registration.targetKind,
+      );
       return <String, Object?>{
         'targetId': binding.targetId,
         'targetKind': binding.registration.targetKind.name,
-        ...cockpitWorkerSystemControlProfile(result.profile).toJson(),
-        'recommendedNextStep': result.recommendedNextStep,
+        ...profile.toJson(),
       };
     }
     if (handle == null) {
@@ -1146,6 +1155,62 @@ final class CockpitWorkerLifecycleOperations {
       );
     }
   }
+}
+
+CockpitSystemControlProfile _systemProfileForTarget(
+  CockpitSystemControlProfile profile,
+  CockpitTargetKind targetKind,
+) {
+  final (preferred, order, next) = switch (targetKind) {
+    CockpitTargetKind.flutterApp => (
+      profile.preferredPlane,
+      profile.fallbackOrder,
+      profile.recommendedNextStep,
+    ),
+    CockpitTargetKind.nativeApp => (
+      profile.platform == 'android' || profile.platform == 'ios'
+          ? CockpitPlaneKind.nativeUiPlane
+          : CockpitPlaneKind.hostPlane,
+      profile.platform == 'android' || profile.platform == 'ios'
+          ? const <CockpitPlaneKind>[
+              CockpitPlaneKind.nativeUiPlane,
+              CockpitPlaneKind.deviceSystemPlane,
+            ]
+          : const <CockpitPlaneKind>[CockpitPlaneKind.hostPlane],
+      profile.platform == 'android' || profile.platform == 'ios'
+          ? 'preferNativeUiPlane'
+          : 'preferHostPlane',
+    ),
+    CockpitTargetKind.desktopApp || CockpitTargetKind.hostWorkspace => (
+      CockpitPlaneKind.hostPlane,
+      const <CockpitPlaneKind>[CockpitPlaneKind.hostPlane],
+      'preferHostPlane',
+    ),
+    CockpitTargetKind.browserPage => (
+      CockpitPlaneKind.nativeUiPlane,
+      const <CockpitPlaneKind>[
+        CockpitPlaneKind.nativeUiPlane,
+        CockpitPlaneKind.hostPlane,
+      ],
+      'preferNativeUiPlane',
+    ),
+    CockpitTargetKind.systemSurface || CockpitTargetKind.device => (
+      CockpitPlaneKind.deviceSystemPlane,
+      const <CockpitPlaneKind>[CockpitPlaneKind.deviceSystemPlane],
+      'preferDeviceSystemPlane',
+    ),
+  };
+  return CockpitSystemControlProfile(
+    platform: profile.platform,
+    deviceId: profile.deviceId,
+    appId: profile.appId,
+    processId: profile.processId,
+    adapter: profile.adapter,
+    preferredPlane: preferred,
+    fallbackOrder: order,
+    capabilities: profile.capabilities,
+    recommendedNextStep: next,
+  );
 }
 
 void _requireSessionGrant(

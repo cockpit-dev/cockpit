@@ -953,8 +953,6 @@ final class CockpitWorkerInteractiveOperations {
     final capturesStdout = preparedParameters.capturedStdoutRole != null;
     final sessionId = preparedParameters.producedPath == null
         ? null
-        : capturesStdout && app == null
-        ? null
         : await _requireArtifactOwnerSession(app);
     final result = await runWorkerApplicationOperation(
       context: context,
@@ -979,7 +977,7 @@ final class CockpitWorkerInteractiveOperations {
               minimum: 1,
               maximum: 120000,
             ),
-            defaultValue: const Duration(seconds: 15),
+            defaultValue: _systemActionDefaultTimeout(action),
             maximum: const Duration(minutes: 2),
           ),
         ),
@@ -1017,6 +1015,13 @@ final class CockpitWorkerInteractiveOperations {
     }
     if (result.success && producedPath != null) {
       json.putIfAbsent('sourceFilePath', () => producedPath);
+    }
+    // Keep the owning session on artifact-producing target actions so the CLI
+    // can bind a short handle and materialize the verified artifact path. This
+    // is especially important for black-box system targets, which are selected
+    // by targetId rather than an existing development handle.
+    if (sessionId != null) {
+      json['sessionId'] = sessionId;
     }
     return sanitizer.sanitize(
       json,
@@ -1362,6 +1367,21 @@ final class CockpitWorkerInteractiveOperations {
     recordingId: recordingId,
   );
 }
+
+Duration _systemActionDefaultTimeout(CockpitSystemControlAction action) =>
+    switch (action) {
+      // Device introspection can be slow on a busy emulator or simulator;
+      // allow a generous default while preserving the advertised 2-minute cap.
+      CockpitSystemControlAction.readUiTree ||
+      CockpitSystemControlAction.readProcessList ||
+      CockpitSystemControlAction.readWindows ||
+      CockpitSystemControlAction.readSystemState ||
+      CockpitSystemControlAction.readDeviceInfo ||
+      CockpitSystemControlAction.readFocusState ||
+      CockpitSystemControlAction.readNotificationState ||
+      CockpitSystemControlAction.readSystemLogs => const Duration(minutes: 1),
+      _ => const Duration(seconds: 30),
+    };
 
 Map<String, Object?> cockpitWorkerInspectUiOutput(
   CockpitInspectUiResult result, {
