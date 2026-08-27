@@ -8,6 +8,8 @@
   the Flutter bridge, avoiding invalid remote forwarding and stale target data.
 - Kept artifact-producing system actions bound to their owning development
   session and returned an explicit error when no active app can own the artifact.
+- Allowed native text diagnostics such as `readUiTree` to run against a target
+  without a Flutter session while preserving inline stdout for locator probes.
 - Added operation-specific diagnostic timeouts and synchronized the complete
   `flutter_cockpit_test` skill guidance across every distributed host mirror.
 
