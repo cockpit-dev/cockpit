@@ -673,6 +673,7 @@ final class _TransientUiTreeProcessManager
   Future<String> dismissSystemDialog({
     required String deviceId,
     required String decision,
+    String? appId,
     required Duration timeout,
   }) => throw UnsupportedError('Not used by this test.');
 

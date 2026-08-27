@@ -1,5 +1,14 @@
 # Changelog
 
+## 4.0.43
+
+- Kept process smoke coverage fast by compiling one temporary CLI binary and
+  reusing it for the authenticated CLI and MCP boundary checks.
+- Corrected the Flutter integration-test host facade to use the native timeout
+  default for explicit system-plane actions.
+- Synchronized the CLI, Supervisor, Flutter bridge, and integration-test
+  package metadata with the current release.
+
 ## 4.0.42
 
 - Made `dev start` register the current Flutter entrypoint identity when the

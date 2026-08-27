@@ -257,7 +257,7 @@ final class CockpitWorkerRemoteOperations {
         );
         try {
           final sessionId = await _registry.sessionIdForApp(appBinding.appId);
-          return sanitizer.sanitize(
+          return await sanitizer.sanitize(
             <String, Object?>{
               'sessionId': sessionId,
               'appId': appBinding.appId,

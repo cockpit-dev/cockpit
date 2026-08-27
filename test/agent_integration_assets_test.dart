@@ -134,7 +134,7 @@ void main() {
     expectStdioMcpServer(cursorServers['cockpit']! as Map<String, Object?>);
 
     final kiro = read('.kiro/steering/cockpit.md');
-    expect(kiro, startsWith('---\ninclusion: auto\nname: cockpit\n'));
+    expect(kiro, startsWith('---\ninclusion: manual\nname: cockpit\n'));
     expect(kiro, contains('.kiro/skills/cockpit/SKILL.md'));
     expect(kiro, contains('Cockpit Power'));
     expect(kiro, isNot(contains('dart run cockpit')));

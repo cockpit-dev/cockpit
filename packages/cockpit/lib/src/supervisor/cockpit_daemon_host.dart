@@ -177,11 +177,11 @@ final class CockpitDaemonHost {
     request.response.headers.set('X-Content-Type-Options', 'nosniff');
     try {
       if (!request.connectionInfo!.remoteAddress.isLoopback) {
-        return _error(request, HttpStatus.forbidden, 'loopbackRequired');
+        return await _error(request, HttpStatus.forbidden, 'loopbackRequired');
       }
       if (request.headers.value('origin') != null ||
           request.method == 'OPTIONS') {
-        return _error(request, HttpStatus.forbidden, 'corsDenied');
+        return await _error(request, HttpStatus.forbidden, 'corsDenied');
       }
       final authorization = request.headers.value(
         HttpHeaders.authorizationHeader,
@@ -191,21 +191,21 @@ final class CockpitDaemonHost {
           HttpHeaders.wwwAuthenticateHeader,
           'Bearer',
         );
-        return _error(request, HttpStatus.unauthorized, 'unauthorized');
+        return await _error(request, HttpStatus.unauthorized, 'unauthorized');
       }
       if (request.uri.path == '/_cockpit/health') {
         if (request.method != 'GET') {
-          return _error(
+          return await _error(
             request,
             HttpStatus.methodNotAllowed,
             'methodNotAllowed',
           );
         }
-        return _json(request, HttpStatus.ok, serverInfo.toJson());
+        return await _json(request, HttpStatus.ok, serverInfo.toJson());
       }
       if (request.uri.path == '/_cockpit/lifecycle') {
         if (request.method != 'POST') {
-          return _error(
+          return await _error(
             request,
             HttpStatus.methodNotAllowed,
             'methodNotAllowed',
@@ -226,7 +226,11 @@ final class CockpitDaemonHost {
         return;
       }
       if (_stopping) {
-        return _error(request, HttpStatus.serviceUnavailable, 'daemonDraining');
+        return await _error(
+          request,
+          HttpStatus.serviceUnavailable,
+          'daemonDraining',
+        );
       }
       await requestHandler(request);
     } on FormatException catch (error) {

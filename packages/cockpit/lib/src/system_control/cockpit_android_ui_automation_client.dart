@@ -20,6 +20,7 @@ abstract interface class CockpitAndroidUiAutomation {
   Future<String> dismissSystemDialog({
     required String deviceId,
     required String decision,
+    String? appId,
     required Duration timeout,
   });
 
@@ -81,16 +82,16 @@ final class CockpitAndroidUiAutomationClient
   Future<String> dismissSystemDialog({
     required String deviceId,
     required String decision,
+    String? appId,
     required Duration timeout,
   }) async {
     final deadline = DateTime.now().add(timeout);
     await _ensureInstalled(deviceId, deadline);
-    final output = await _runInstrumentation(
-      deviceId,
-      'tapSystemDialog',
-      <String, String>{'decision': decision},
-      deadline,
-    );
+    final output =
+        await _runInstrumentation(deviceId, 'tapSystemDialog', <String, String>{
+          'decision': decision,
+          if (appId != null && appId.trim().isNotEmpty) 'appId': appId.trim(),
+        }, deadline);
     final handled = RegExp(
       r'INSTRUMENTATION_STATUS: cockpitHandled=(true|false)',
     ).firstMatch(output)?.group(1);

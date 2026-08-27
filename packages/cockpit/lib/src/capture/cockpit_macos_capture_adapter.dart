@@ -127,7 +127,7 @@ final class CockpitMacosCaptureAdapter implements CockpitHostCaptureAdapter {
         );
       }
       stopwatch.stop();
-      return cockpitValidateHostCaptureOutput(
+      return await cockpitValidateHostCaptureOutput(
         command: command,
         artifact: artifact,
         durationMs: stopwatch.elapsedMilliseconds,

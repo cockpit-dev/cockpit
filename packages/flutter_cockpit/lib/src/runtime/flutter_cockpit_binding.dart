@@ -146,6 +146,10 @@ final class FlutterCockpitBinding {
     return session;
   }
 
+  Future<bool> cancelRecordingStart() {
+    return nativeRecording.cancelStart();
+  }
+
   Future<CockpitRecordingResult> stopRecording() async {
     final session = _activeRecordingSession;
     if (session == null) {

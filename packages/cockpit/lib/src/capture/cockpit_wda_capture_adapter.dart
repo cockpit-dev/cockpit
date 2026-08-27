@@ -37,7 +37,7 @@ final class CockpitWdaCaptureAdapter implements CockpitHostCaptureAdapter {
       await outputFile.parent.create(recursive: true);
       final bytes = await _client.captureScreenshot(baseUri, timeout: timeout);
       await outputFile.writeAsBytes(bytes, flush: true);
-      return cockpitValidateHostCaptureOutput(
+      return await cockpitValidateHostCaptureOutput(
         command: command,
         artifact: artifact,
         durationMs: stopwatch.elapsedMilliseconds,

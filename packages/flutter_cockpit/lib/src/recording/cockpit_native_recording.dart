@@ -54,6 +54,25 @@ class CockpitNativeRecording {
     return CockpitRecordingSession(request: request, state: state);
   }
 
+  /// Cancels a pending native recording consent/start request.
+  ///
+  /// Platforms without an interruptible pending request return `false`.
+  /// The method is intentionally separate from [stopRecording], because a
+  /// recording session does not exist until startup has completed.
+  Future<bool> cancelStart() async {
+    final Object? payload;
+    try {
+      payload = await _channel.invokeMethod<Object?>('cancelRecordingStart');
+    } on MissingPluginException {
+      return false;
+    }
+    if (payload is bool) return payload;
+    if (payload is Map<Object?, Object?>) {
+      return payload['cancelled'] == true;
+    }
+    throw StateError('Cancel recording start returned an invalid payload.');
+  }
+
   Future<CockpitRecordingResult> stopRecording({
     required CockpitRecordingSession session,
   }) async {

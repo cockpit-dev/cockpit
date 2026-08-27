@@ -211,6 +211,27 @@ internal class FlutterCockpitRecordingCoordinator(
         }
     }
 
+    fun cancelStart(result: MethodChannel.Result) {
+        val token = currentSessionToken
+        if (state != RecordingState.Starting || token == null) {
+            result.success(false)
+            return
+        }
+
+        val startResult = pendingStartResult
+        pendingStartResult = null
+        pendingStartRequest = null
+        currentSessionToken = null
+        state = RecordingState.Idle
+        FlutterCockpitRecordingService.cancelPendingStart(token)
+        startResult?.error(
+            "recordingCancelled",
+            "Recording startup was cancelled after the caller timeout.",
+            null,
+        )
+        result.success(true)
+    }
+
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: android.content.Intent?): Boolean {
         if (requestCode != REQUEST_CODE) {
             return false

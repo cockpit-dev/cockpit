@@ -5109,6 +5109,7 @@ final class _FakeAndroidUiAutomation implements CockpitAndroidUiAutomation {
   Future<String> dismissSystemDialog({
     required String deviceId,
     required String decision,
+    String? appId,
     required Duration timeout,
   }) async {
     lastAction = 'dismissSystemDialog';
