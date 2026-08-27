@@ -263,6 +263,17 @@ final class CockpitWorkerRuntimeRegistry
           registration,
           requireProject: true,
         );
+        final reusable = _selectReusableDevelopmentTarget(registration);
+        if (reusable != null) {
+          if (_pruneDevelopmentTargetRegistrations(
+            registration,
+            keepTargetId: reusable.targetId,
+          )) {
+            await _persist();
+          }
+          return reusable.targetId;
+        }
+        _pruneDevelopmentTargetRegistrations(registration);
         final targetId = _newId('tg');
         _targets[targetId] = CockpitWorkerTargetBinding(
           targetId: targetId,
@@ -277,6 +288,109 @@ final class CockpitWorkerRuntimeRegistry
         await _persist();
         return targetId;
       });
+
+  CockpitWorkerTargetBinding? _selectReusableDevelopmentTarget(
+    CockpitWorkerTargetRegistration registration,
+  ) {
+    if (!_isReusableDevelopmentRegistration(registration)) return null;
+    final matches = _targets.values
+        .where(
+          (target) =>
+              _sameTargetRegistration(target.registration, registration),
+        )
+        .toList(growable: false);
+    if (matches.isEmpty) return null;
+    matches.sort(_compareTargetRuntimePriority);
+    return matches.first;
+  }
+
+  bool _pruneDevelopmentTargetRegistrations(
+    CockpitWorkerTargetRegistration registration, {
+    String? keepTargetId,
+  }) {
+    if (!_isReusableDevelopmentRegistration(registration)) return false;
+    var changed = false;
+    final candidates = _targets.values
+        .where(
+          (target) =>
+              target.targetId != keepTargetId &&
+              _sameDevelopmentLaunchIdentity(
+                target.registration,
+                registration,
+              ) &&
+              !_targetOwnsRuntime(target.targetId),
+        )
+        .map((target) => target.targetId)
+        .toList(growable: false);
+    for (final targetId in candidates) {
+      changed = _targets.remove(targetId) != null || changed;
+    }
+    return changed;
+  }
+
+  bool _targetOwnsRuntime(String targetId) =>
+      _targets[targetId]?.handle != null ||
+      _apps.values.any((app) => app.targetId == targetId) ||
+      _sessions.values.any((session) => session.targetId == targetId);
+
+  int _compareTargetRuntimePriority(
+    CockpitWorkerTargetBinding left,
+    CockpitWorkerTargetBinding right,
+  ) {
+    final runtime = _targetRuntimePriority(
+      right.targetId,
+    ).compareTo(_targetRuntimePriority(left.targetId));
+    if (runtime != 0) return runtime;
+    final launched = right.handle?.launchedAt.compareTo(
+      left.handle?.launchedAt ?? DateTime.fromMillisecondsSinceEpoch(0),
+    );
+    if (launched != null && launched != 0) return launched;
+    return left.targetId.compareTo(right.targetId);
+  }
+
+  int _targetRuntimePriority(String targetId) {
+    var priority = _targets[targetId]?.handle == null ? 0 : 1;
+    if (_apps.values.any((app) => app.targetId == targetId)) priority += 2;
+    if (_sessions.values.any((session) => session.targetId == targetId)) {
+      priority += 4;
+    }
+    return priority;
+  }
+
+  bool _isReusableDevelopmentRegistration(
+    CockpitWorkerTargetRegistration registration,
+  ) =>
+      registration.targetKind == CockpitTargetKind.flutterApp &&
+      registration.mode == CockpitAppMode.development &&
+      registration.entrypoint != null &&
+      registration.entrypointSha256 != null &&
+      (registration.environment == CockpitTestTargetEnvironment.development ||
+          registration.environment == CockpitTestTargetEnvironment.test);
+
+  bool _sameDevelopmentLaunchIdentity(
+    CockpitWorkerTargetRegistration left,
+    CockpitWorkerTargetRegistration right,
+  ) =>
+      _isReusableDevelopmentRegistration(left) &&
+      _isReusableDevelopmentRegistration(right) &&
+      left.workspaceId == right.workspaceId &&
+      left.platform == right.platform &&
+      left.deviceId == right.deviceId &&
+      left.entrypoint == right.entrypoint &&
+      left.flavor == right.flavor &&
+      left.appId == right.appId &&
+      left.wdaUrl == right.wdaUrl &&
+      left.cdpUrl == right.cdpUrl &&
+      left.targetKind == right.targetKind &&
+      left.mode == right.mode &&
+      left.environment == right.environment;
+
+  bool _sameTargetRegistration(
+    CockpitWorkerTargetRegistration left,
+    CockpitWorkerTargetRegistration right,
+  ) =>
+      _sameDevelopmentLaunchIdentity(left, right) &&
+      left.entrypointSha256 == right.entrypointSha256;
 
   @override
   Future<CockpitWorkerTargetBinding> requireTarget({

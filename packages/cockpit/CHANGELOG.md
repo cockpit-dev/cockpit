@@ -1,5 +1,13 @@
 # Changelog
 
+## 4.0.45
+
+- Made Flutter development start self-healing for nested projects and Git
+  worktrees: refresh the entrypoint index before launch, reuse the exact target
+  identity, and preserve the short session handle when the entrypoint changes.
+- Reconciled orphaned duplicate and stale development target registrations so a
+  repeated start no longer blocks on `developmentTargetAmbiguous`.
+
 ## 4.0.44
 
 - Prevented Android device and focus diagnostics from hanging while the input

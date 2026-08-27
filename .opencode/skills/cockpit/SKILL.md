@@ -65,8 +65,11 @@ advertised operation that has no task command.
 
 ## Flutter Fast Path
 
-Start once inside the intended Flutter project, specifying only real launch
-choices. From a monorepo common ancestor, pass the entrypoint explicitly:
+Start once anywhere inside the intended Flutter project, specifying only real
+launch choices. Cockpit resolves the nearest enclosing Flutter package and its
+actual Git checkout/worktree, so nested projects and nested worktree directories
+remain isolated. From a common ancestor containing several Flutter projects,
+enter the intended project directory or pass its entrypoint explicitly:
 
 ```bash
 cockpit dev start
@@ -250,17 +253,21 @@ blocked or reconnecting. Never run `dev start` for that state; follow `next`, no
 `cockpit dev recover --session HANDLE`, then read status once. Only an explicit stopped
 or crashed state with `appLive:false` justifies `dev start`.
 With concurrent targets for that project, select once with `dev use`, or
-pass `--session HANDLE` on the exact command. From a common ancestor containing
-multiple active projects, Cockpit fails as ambiguous instead of guessing.
+pass `--session HANDLE` on the exact command. Project selection always uses the
+nearest enclosing Flutter package plus checkout/worktree identity; neighboring
+projects and worktrees are never mixed. A true common-ancestor ambiguity still
+requires entering the project directory or passing the exact handle.
 
 `session list` is a fast, side-effect-free local index: it never starts a worker,
 attaches Flutter, reconnects, or relaunches an app. Its `state` is the last saved
 state, not a live probe. Use `session show HANDLE` or `dev status --session HANDLE`
 only when current reachability is needed.
 
-Never register roots, targets, apps, ports, or runtime sessions manually for the
-fast path. If a session is unreachable, inspect `status` or `diagnose`; `dev start`
-reconciles the owned target and preserves the local handle when recovery is safe.
+Never register or delete roots, targets, apps, ports, or runtime sessions manually
+for the fast path. Every `dev start` refreshes the selected entrypoint index,
+reuses an identical development target, removes orphaned duplicate or stale target
+registrations, and preserves the local handle. If a session is unreachable, inspect
+`status` or `diagnose`; rerun `dev start` only when its state or `next` requires it.
 Reads do not relaunch an intentionally stopped app. A timed-out request cancels that
 request, not the owned app; check `dev status` before retrying. Cockpit does not read a
 keychain or secret store. `--env` values are process-only and are not persisted.

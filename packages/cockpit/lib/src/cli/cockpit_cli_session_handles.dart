@@ -215,19 +215,15 @@ final class CockpitCliSessionHandleStore {
               item.targetId == targetId,
         )
         .toList(growable: false);
-    if (targetMatches.length > 1) {
-      throw const FormatException(
-        'Flutter target is bound to multiple local session handles.',
+    final existing =
+        requestedHandle ?? _preferredDevelopmentHandle(targetMatches);
+    if (existing != null) {
+      _removeDuplicateDevelopmentHandles(
+        state,
+        keep: existing,
+        candidates: targetMatches,
       );
     }
-    if (requestedHandle != null &&
-        targetMatches.isNotEmpty &&
-        targetMatches.single.handleId != requestedHandle.handleId) {
-      throw const FormatException(
-        'Flutter target belongs to a different local session handle.',
-      );
-    }
-    final existing = requestedHandle ?? targetMatches.firstOrNull;
     late final CockpitCliSessionHandle handle;
     if (existing == null) {
       if (entrypoint == null || platform == null || deviceId == null) {
@@ -349,11 +345,11 @@ final class CockpitCliSessionHandleStore {
     required String checkoutIdentity,
     required String projectPath,
     required String targetId,
-  }) async {
+  }) => _store.transact<CockpitCliSessionHandle?>((state) {
     _checkoutIdentity(checkoutIdentity, r'$.checkoutIdentity');
     _absolutePath(projectPath, r'$.projectPath');
     _identifier(targetId, r'$.targetId');
-    final matches = (await _store.read()).handles
+    final matches = state.handles
         .where(
           (item) =>
               item.checkoutIdentity == checkoutIdentity &&
@@ -361,13 +357,19 @@ final class CockpitCliSessionHandleStore {
               item.targetId == targetId,
         )
         .toList(growable: false);
-    if (matches.length > 1) {
-      throw const FormatException(
-        'Flutter target is bound to multiple local session handles.',
-      );
+    final preferred = _preferredDevelopmentHandle(matches);
+    if (preferred == null) {
+      return CockpitLockedJsonUpdate.readOnly(state, null);
     }
-    return matches.firstOrNull;
-  }
+    final changed = _removeDuplicateDevelopmentHandles(
+      state,
+      keep: preferred,
+      candidates: matches,
+    );
+    return changed
+        ? CockpitLockedJsonUpdate.write(state, preferred)
+        : CockpitLockedJsonUpdate.readOnly(state, preferred);
+  });
 
   Future<CockpitCliSessionHandle> selectDevelopment(String reference) =>
       _store.transact<CockpitCliSessionHandle>((state) {
@@ -480,6 +482,51 @@ final class CockpitCliSessionHandleStore {
     }
     return matches.firstOrNull;
   }
+
+  CockpitCliSessionHandle? _preferredDevelopmentHandle(
+    Iterable<CockpitCliSessionHandle> handles,
+  ) {
+    final candidates = handles.toList(growable: false);
+    if (candidates.isEmpty) return null;
+    candidates.sort((left, right) {
+      final lifecycle = _lifecyclePriority(
+        right.lifecycle,
+      ).compareTo(_lifecyclePriority(left.lifecycle));
+      if (lifecycle != 0) return lifecycle;
+      final updated = right.updatedAt.compareTo(left.updatedAt);
+      if (updated != 0) return updated;
+      return left.handleId.compareTo(right.handleId);
+    });
+    return candidates.first;
+  }
+
+  bool _removeDuplicateDevelopmentHandles(
+    _SessionHandleState state, {
+    required CockpitCliSessionHandle keep,
+    required Iterable<CockpitCliSessionHandle> candidates,
+  }) {
+    final duplicateIds = candidates
+        .where((handle) => handle.handleId != keep.handleId)
+        .map((handle) => handle.handleId)
+        .toSet();
+    if (duplicateIds.isEmpty) return false;
+    state.handles.removeWhere(
+      (handle) => duplicateIds.contains(handle.handleId),
+    );
+    state.activeByProject.updateAll(
+      (_, handleId) =>
+          duplicateIds.contains(handleId) ? keep.handleId : handleId,
+    );
+    return true;
+  }
+
+  int _lifecyclePriority(String lifecycle) => switch (lifecycle) {
+    'ready' => 4,
+    'connecting' => 3,
+    'crashed' => 2,
+    'stopped' => 1,
+    _ => 0,
+  };
 }
 
 final class _SessionHandleState {

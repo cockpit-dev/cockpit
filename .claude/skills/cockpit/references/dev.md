@@ -225,10 +225,11 @@ by the live capability response.
 
 ## Parallel Projects
 
-Run commands from inside the intended Flutter project. Cockpit combines its
-canonical project path with the checkout identity derived from the checkout root
-and, for Git, the worktree-specific Git directory. Each project owns its active
-handle, while checkout identity keeps every runtime resource isolated:
+Run commands anywhere inside the intended Flutter project. Cockpit resolves the
+nearest enclosing Flutter package and combines its canonical project path with
+the checkout identity derived from the checkout root and, for Git, the
+worktree-specific Git directory. Each project owns its active handle, while
+checkout identity keeps every runtime resource isolated:
 
 - project-scoped active short base-36 handle selection;
 - workspace worker and target/app/session mapping;
@@ -237,9 +238,11 @@ handle, while checkout identity keeps every runtime resource isolated:
 - artifact paths.
 
 One monorepo may therefore run several Flutter projects without cross-selecting
-sessions. A command from a common ancestor resolves one active descendant project;
-if several match, it fails as ambiguous and requires running inside the project or
-passing `--session HANDLE`. Generic capability recovery must use that same handle
+sessions. Nested projects and nested worktree directories are resolved to their
+nearest package boundary and never mixed with a neighboring checkout. A command
+from a common ancestor with several active projects still requires entering the
+intended project or passing `--session HANDLE`. Generic capability recovery must
+use that same handle
 for `op list`, `explain`, and `op run` so all three resolve one workspace and app.
 
 Different worktrees of one repository may run concurrently and must remain

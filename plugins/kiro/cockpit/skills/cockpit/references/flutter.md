@@ -131,8 +131,9 @@ Run from inside the Flutter project that contains the bridge shell:
 cockpit dev start
 ```
 
-From a monorepo common ancestor or for a non-default entrypoint, pass an
-absolute path or a path relative to the current directory:
+From a monorepo common ancestor or for a non-default entrypoint, enter the
+intended project directory when possible. If you must start at the ancestor,
+pass an absolute path or a path relative to the current directory:
 
 ```bash
 cockpit dev start apps/mobile/cockpit/main.dart --platform macos
@@ -148,9 +149,10 @@ cockpit dev start \
   --env LOG_LEVEL=debug
 ```
 
-Cockpit indexes the entrypoint, selects/registers the Flutter target, launches
-the process, authenticates the bridge, and binds one short base-36 handle. Do
-not manually register workspace, target, app, port, or runtime session IDs.
+Cockpit refreshes the entrypoint index, reuses an identical development target,
+removes orphaned duplicate or stale registrations, launches the process,
+authenticates the bridge, and binds one short base-36 handle. Do not manually
+register workspace, target, app, port, or runtime session IDs.
 
 Use task commands after launch:
 

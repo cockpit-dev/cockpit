@@ -1,5 +1,9 @@
 # Changelog
 
+## 4.0.45
+
+- Synchronized the integration-test facade with the current Cockpit release.
+
 ## 4.0.44
 
 - Synchronized the integration-test facade with the current Cockpit release.

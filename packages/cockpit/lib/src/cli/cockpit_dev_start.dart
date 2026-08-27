@@ -53,6 +53,7 @@ final class CockpitDevStartService {
     final store = await runtime.sessionHandleStore();
     CockpitCheckoutIdentity? resolvedCheckout;
     CockpitCliSessionHandle? active;
+    var targetNeedsRefresh = false;
     if (request.sessionReference != null) {
       active = await runtime.resolveDevelopmentSession(
         request.sessionReference,
@@ -66,30 +67,36 @@ final class CockpitDevStartService {
       );
     }
     if (active != null && !request.hasExplicitSelection) {
-      runtime.progress(
-        active.lifecycle == 'stopped'
-            ? 'Relaunching session ${active.handleId}...'
-            : 'Reconnecting session ${active.handleId}...',
-      );
-      final resolution = active.lifecycle == 'stopped'
-          ? await dev.relaunch(active)
-          : await dev.reconcile(active, allowRelaunch: true);
-      if (resolution.ready) {
-        runtime.progress('Ready: session ${resolution.session.handleId}.');
-        return dev.writeEnvelope(
-          action: 'start',
-          session: resolution.session,
-          ok: true,
-          state: resolution.state,
-          changed: resolution.changed,
+      if (active.lifecycle == 'stopped') {
+        runtime.progress(
+          'Refreshing stopped session ${active.handleId} before relaunch...',
+        );
+      } else {
+        runtime.progress('Reconnecting session ${active.handleId}...');
+        final resolution = await dev.reconcile(active, allowRelaunch: true);
+        if (resolution.ready) {
+          runtime.progress('Ready: session ${resolution.session.handleId}.');
+          return dev.writeEnvelope(
+            action: 'start',
+            session: resolution.session,
+            ok: true,
+            state: resolution.state,
+            changed: resolution.changed,
+          );
+        }
+        if (!_targetRefreshRequired(resolution.errors)) {
+          return dev.writeUnavailable(action: 'start', resolution: resolution);
+        }
+        targetNeedsRefresh = true;
+        runtime.progress(
+          'Refreshing the Flutter target after its entrypoint changed...',
         );
       }
-      return dev.writeUnavailable(action: 'start', resolution: resolution);
     }
 
     runtime.progress('Resolving checkout...');
     final checkout = resolvedCheckout ?? await runtime.checkoutIdentity();
-    final launchRequest = active == null || request.sessionReference == null
+    final launchRequest = active == null
         ? request
         : CockpitDevStartRequest(
             sessionReference: request.sessionReference,
@@ -132,6 +139,23 @@ final class CockpitDevStartService {
     runtime.progress('Starting Cockpit services...');
     final client = await runtime.developmentClient();
     final workspace = await _workspace(client, checkout, projectDirectory);
+    runtime.progress('Refreshing Flutter source index...');
+    final indexed = await _invokeWorkspace(
+      client,
+      workspace.workspaceId,
+      'document.index',
+      <String, Object?>{
+        'kind': CockpitIndexedDocumentKind.source.name,
+        'relativePath': entrypoint,
+      },
+    );
+    if (!_succeeded(indexed)) {
+      return _writePreSessionFailure(
+        'start',
+        indexed,
+        next: cockpitDevStartFailureNext(request: request, session: active),
+      );
+    }
     final documents = await client.documents(
       workspace.workspaceId,
       kind: CockpitIndexedDocumentKind.source,
@@ -150,40 +174,29 @@ final class CockpitDevStartService {
     runtime.progress('Discovering Flutter devices...');
     final device = await _device(client, launchRequest);
     var targets = await client.targets(workspace.workspaceId);
-    var matches = targets
-        .where(
-          (target) => cockpitMatchesDevelopmentTarget(
-            target,
-            entrypoint: entrypoint,
-            entrypointSha256: entrypointSha256,
-            platform: device.platform,
-            deviceId: device.id,
-            flavor: launchRequest.flavor,
-          ),
-        )
-        .toList(growable: false);
-    if (matches.length > 1) {
-      throw const CockpitSupervisorClientException(
-        code: 'developmentTargetAmbiguous',
-        message:
-            'Multiple matching Flutter development targets exist; remove the '
-            'duplicate registrations.',
-      );
-    }
-    if (matches.isEmpty) {
+    final registration = <String, Object?>{
+      'platform': device.platform,
+      'deviceId': device.id,
+      'targetKind': CockpitTargetKind.flutterApp.name,
+      'environment': CockpitAutomationTargetEnvironment.development.name,
+      'mode': CockpitAutomationTargetMode.development.name,
+      'entrypointDocumentId': documents.single.documentId,
+      if (launchRequest.flavor != null) 'flavor': launchRequest.flavor,
+    };
+    var matches = _matchingDevelopmentTargets(
+      targets,
+      entrypoint: entrypoint,
+      entrypointSha256: entrypointSha256,
+      platform: device.platform,
+      deviceId: device.id,
+      flavor: launchRequest.flavor,
+    );
+    if (matches.length != 1) {
       final registered = await _invokeWorkspace(
         client,
         workspace.workspaceId,
         'target.register',
-        <String, Object?>{
-          'platform': device.platform,
-          'deviceId': device.id,
-          'targetKind': CockpitTargetKind.flutterApp.name,
-          'environment': CockpitAutomationTargetEnvironment.development.name,
-          'mode': CockpitAutomationTargetMode.development.name,
-          'entrypointDocumentId': documents.single.documentId,
-          if (launchRequest.flavor != null) 'flavor': launchRequest.flavor,
-        },
+        registration,
       );
       if (!_succeeded(registered)) {
         return _writePreSessionFailure(
@@ -193,27 +206,35 @@ final class CockpitDevStartService {
         );
       }
       targets = await client.targets(workspace.workspaceId);
-      matches = targets
-          .where(
-            (target) => cockpitMatchesDevelopmentTarget(
-              target,
-              entrypoint: entrypoint,
-              entrypointSha256: entrypointSha256,
-              platform: device.platform,
-              deviceId: device.id,
-              flavor: launchRequest.flavor,
-            ),
-          )
-          .toList(growable: false);
-      if (matches.length != 1) {
+      matches = _matchingDevelopmentTargets(
+        targets,
+        entrypoint: entrypoint,
+        entrypointSha256: entrypointSha256,
+        platform: device.platform,
+        deviceId: device.id,
+        flavor: launchRequest.flavor,
+      );
+      if (matches.isEmpty) {
         throw const CockpitSupervisorClientException(
           code: 'developmentTargetRegistrationFailed',
           message: 'Registered Flutter target could not be resolved uniquely.',
         );
       }
     }
-    final target = matches.single;
-    if (active != null && active.targetId != target.targetId) {
+    final target = cockpitSelectDevelopmentTarget(
+      matches,
+      preferredTargetId: active?.targetId,
+    );
+    final canReplaceTarget =
+        active != null &&
+        active.entrypoint == entrypoint &&
+        active.platform == device.platform &&
+        active.deviceId == device.id &&
+        active.flavor == launchRequest.flavor &&
+        (targetNeedsRefresh || active.lifecycle == 'stopped');
+    if (active != null &&
+        active.targetId != target.targetId &&
+        !canReplaceTarget) {
       throw const CockpitSupervisorClientException(
         code: 'sessionTargetMismatch',
         message:
@@ -618,19 +639,19 @@ CockpitWorkspaceResource? cockpitSelectDevWorkspace(
   Iterable<CockpitWorkspaceResource> workspaces, {
   required String projectPath,
 }) {
-  final matches = workspaces
-      .where(
-        (item) =>
-            item.state == CockpitWorkspaceState.active &&
-            p.equals(item.canonicalPath, projectPath),
-      )
-      .toList(growable: false);
-  if (matches.length > 1) {
-    throw const CockpitSupervisorClientException(
-      code: 'workspaceAmbiguous',
-      message: 'Flutter project has multiple active workspace registrations.',
-    );
-  }
+  final matches =
+      workspaces
+          .where(
+            (item) =>
+                item.state == CockpitWorkspaceState.active &&
+                p.equals(item.canonicalPath, projectPath),
+          )
+          .toList(growable: false)
+        ..sort((left, right) {
+          final updated = right.updatedAt.compareTo(left.updatedAt);
+          if (updated != 0) return updated;
+          return left.workspaceId.compareTo(right.workspaceId);
+        });
   return matches.firstOrNull;
 }
 
@@ -651,6 +672,71 @@ bool cockpitMatchesDevelopmentTarget(
       target.flavor == flavor &&
       (target.environment == CockpitAutomationTargetEnvironment.development ||
           target.environment == CockpitAutomationTargetEnvironment.test);
+}
+
+List<CockpitAutomationTargetResource> _matchingDevelopmentTargets(
+  Iterable<CockpitAutomationTargetResource> targets, {
+  required String entrypoint,
+  required String entrypointSha256,
+  required String platform,
+  required String deviceId,
+  required String? flavor,
+}) => targets
+    .where(
+      (target) => cockpitMatchesDevelopmentTarget(
+        target,
+        entrypoint: entrypoint,
+        entrypointSha256: entrypointSha256,
+        platform: platform,
+        deviceId: deviceId,
+        flavor: flavor,
+      ),
+    )
+    .toList(growable: false);
+
+CockpitAutomationTargetResource cockpitSelectDevelopmentTarget(
+  Iterable<CockpitAutomationTargetResource> targets, {
+  String? preferredTargetId,
+}) {
+  final candidates = targets.toList(growable: false);
+  if (candidates.isEmpty) {
+    throw const CockpitSupervisorClientException(
+      code: 'developmentTargetNotFound',
+      message: 'No matching Flutter development target is registered.',
+    );
+  }
+  final preferred = preferredTargetId == null
+      ? null
+      : candidates
+            .where((target) => target.targetId == preferredTargetId)
+            .firstOrNull;
+  if (preferred != null) return preferred;
+  candidates.sort((left, right) {
+    final live = (right.sessionId == null ? 0 : 1).compareTo(
+      left.sessionId == null ? 0 : 1,
+    );
+    if (live != 0) return live;
+    return left.targetId.compareTo(right.targetId);
+  });
+  return candidates.first;
+}
+
+bool _targetRefreshRequired(Iterable<Object?> errors) => errors.any(
+  (error) => _containsErrorCode(error, const <String>{
+    'opaqueReferenceNotFound',
+    'targetEntrypointStale',
+  }),
+);
+
+bool _containsErrorCode(Object? value, Set<String> codes) {
+  if (value is Map<Object?, Object?>) {
+    if (codes.contains(value['code'])) return true;
+    return value.values.any((item) => _containsErrorCode(item, codes));
+  }
+  if (value is Iterable<Object?>) {
+    return value.any((item) => _containsErrorCode(item, codes));
+  }
+  return false;
 }
 
 bool _succeeded(CockpitOperationResult result) =>

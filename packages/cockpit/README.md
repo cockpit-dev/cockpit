@@ -81,8 +81,9 @@ Native adapter and MCP details are documented in the
 
 ## Flutter Fast Path
 
-Run from inside the intended Flutter project. From a monorepo common ancestor,
-pass the entrypoint explicitly. Cockpit owns discovery, the Supervisor,
+Run from inside the intended Flutter project. Cockpit resolves the nearest Flutter
+package and Git worktree automatically, including nested projects. From a monorepo
+common ancestor, pass the entrypoint explicitly. Cockpit owns discovery, the Supervisor,
 workspace/target registration, the app process, ports, and bridge state.
 Before the first start, the project must already contain the development-only
 `cockpit/main.dart` bridge shell described in the
@@ -176,9 +177,10 @@ path.
 Workspace commands accept `--workspace-id`. When it is omitted, Cockpit
 resolves the current directory against registered active workspaces and
 requires exactly one match. It never selects a global latest run, active
-session, or unrelated checkout. From a common ancestor with several Flutter
-projects, `op list --session HANDLE` resolves the exact session's workspace
-without requiring a long workspace ID.
+session, or unrelated checkout. Duplicate or stale development targets are
+reconciled automatically while the short session handle is preserved. From a
+common ancestor with several Flutter projects, `op list --session HANDLE`
+resolves the exact session's workspace without requiring a long workspace ID.
 
 ```bash
 cd /work/projects/app-a
