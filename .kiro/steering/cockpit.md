@@ -1,19 +1,20 @@
 ---
-inclusion: auto
+inclusion: manual
 name: cockpit
-description: Use when Flutter development or black-box application testing needs live control, E2E execution, reports, or evidence.
+description: Load only when the user explicitly asks to use Cockpit or work on Cockpit itself.
 ---
 
 # Cockpit
 
-Use this steering note when Flutter development or black-box application
-testing needs live control, E2E execution, reports, or evidence.
+This steering note is opt-in. Load it only when the user explicitly asks to use
+Cockpit or to work on Cockpit itself. Generic Flutter development, UI work,
+debugging, screenshots, or E2E requests do not activate it.
 
 Load the self-contained Cockpit workflow from
 `.kiro/skills/cockpit/SKILL.md` before controlling an application or
 claiming validation. When the Cockpit Power is installed, its bundled
-`skills/cockpit` directory provides the same workflow and activates for
-Cockpit, Flutter debugging, UI automation, and E2E requests.
+`skills/cockpit` directory provides the same workflow; select or invoke this
+Power only for explicit Cockpit requests.
 
 ```bash
 cockpit session list

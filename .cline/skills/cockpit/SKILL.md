@@ -1,9 +1,19 @@
 ---
 name: cockpit
-description: Use when application development or black-box E2E must inspect, control, debug, resize, capture, compare, or prove live Flutter, mobile, desktop, web, native, or mixed-stack behavior through Cockpit.
+description: Use only when the user explicitly asks to use Cockpit, invokes a Cockpit command or skill, or asks to install, configure, develop, debug, inspect, or verify Cockpit itself; do not activate for generic app, Flutter, UI, or E2E work.
 ---
 
 # Cockpit
+
+## Activation Boundary
+
+Cockpit is opt-in. Activate this Skill only after an explicit user request to
+use Cockpit or to work on Cockpit itself. A generic request about app
+development, Flutter, UI, debugging, screenshots, mobile, desktop, browser, or
+E2E does not activate it. Before activation, do not invoke Cockpit commands,
+inspect sessions or targets, start or stop a daemon or app, load Cockpit MCP
+resources, or suggest a Cockpit workflow. Do not carry Cockpit into an unrelated
+later task unless the user explicitly activates it again.
 
 `cockpit dev` owns Flutter discovery, processes, ports, and Supervisor state.
 Development handles are short lowercase base-36 values (`1` through `9`, then

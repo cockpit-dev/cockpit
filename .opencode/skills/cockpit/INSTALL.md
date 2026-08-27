@@ -23,6 +23,11 @@ First fetch and read the complete Cockpit installation guide with `curl -fsSL ht
 
 Use the manual guidance below only when the host cannot complete the request.
 
+Cockpit is opt-in on every host. Installing the CLI, Skill, plugin, or MCP
+server does not authorize Cockpit to inspect, control, start, stop, or validate
+an application automatically. Activate it only after the user explicitly asks
+to use Cockpit or work on Cockpit itself.
+
 ## Common Runtime
 
 Cockpit is a host-side Dart executable, not a Flutter application dependency.
@@ -198,7 +203,10 @@ complete Skill. Open Powers, choose **Add Custom Power**, choose
 **Import power from a folder**, and select that directory. The Power MCP schema
 does require `type: stdio`; it is a different schema from the workspace file.
 Kiro manages Power MCP servers internally and activates them with the Power;
-do not also add that Power server to the user-level MCP configuration.
+Kiro manages Power MCP servers internally. Select or invoke this Power only
+when the user explicitly requests Cockpit; generic Flutter debugging, UI
+automation, or E2E work must not activate it. Do not also add that Power server
+to the user-level MCP configuration.
 
 Reload Kiro and confirm the steering file can load
 `.kiro/skills/cockpit/SKILL.md` before testing MCP. From Kiro's terminal, run

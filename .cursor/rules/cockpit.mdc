@@ -1,9 +1,10 @@
 ---
-description: Use Cockpit when Flutter or black-box application work needs live control, E2E execution, reports, or evidence.
+description: Use only when the user explicitly asks to use Cockpit or work on Cockpit itself.
 alwaysApply: false
 ---
 
-Load the `cockpit` skill from
+This rule is opt-in. Do not load it for generic Flutter, UI, debugging,
+screenshots, mobile, desktop, browser, or E2E work. Load the `cockpit` skill from
 `.cursor/skills/cockpit` before controlling an application or
 claiming runtime validation. If skill discovery is unavailable, read the
 self-contained `.cursor/skills/cockpit/SKILL.md` directly.
