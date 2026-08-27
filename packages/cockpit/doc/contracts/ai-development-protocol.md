@@ -11,9 +11,10 @@ Cockpit manage the project resources.
 cockpit dev start
 ```
 
-Run from inside the intended Flutter project. From a monorepo common ancestor,
-pass the entrypoint explicitly. Specify only real launch choices when discovery
-cannot choose uniquely:
+Run from inside the intended Flutter project. Cockpit resolves the nearest Flutter
+package and Git worktree automatically, including nested projects. From a monorepo
+common ancestor, pass the entrypoint explicitly. Specify only real launch choices
+when discovery cannot choose uniquely:
 
 ```bash
 cockpit dev start apps/mobile/cockpit/main.dart --platform macos
@@ -35,7 +36,9 @@ session-bound recovery `next` keeps the exact handle; execute it as returned.
 `--env`, `--dart-define`, and custom Flutter arguments are never persisted or
 printed. Cockpit does not access a keychain or secret store. A session launched
 with custom values remains fully usable while running, but an unexpected exit
-requires `cockpit dev start` with those values again.
+requires `cockpit dev start` with those values again. Each start refreshes the
+entrypoint index, reuses an identical development target, and removes orphaned
+duplicate or stale registrations without changing the short handle.
 
 ## Fast Development Loop
 

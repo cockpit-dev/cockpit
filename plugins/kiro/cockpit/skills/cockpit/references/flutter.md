@@ -151,8 +151,8 @@ cockpit dev start \
 
 Cockpit refreshes the entrypoint index, reuses an identical development target,
 removes orphaned duplicate or stale registrations, launches the process,
-authenticates the bridge, and binds one short base-36 handle. Do not manually
-register workspace, target, app, port, or runtime session IDs.
+authenticates the bridge, and binds one short base-36 handle. Do not manually register workspace,
+target, app, port, or runtime session IDs.
 
 Use task commands after launch:
 
