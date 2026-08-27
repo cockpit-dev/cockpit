@@ -33,7 +33,9 @@ or ports manually.
 
 ## Flutter project packages
 
-Update the development shell and all Cockpit packages to the same release line:
+Update the development shell and all Cockpit packages to one exact version
+number. Do not mix patch versions between the CLI, bridge, protocol, test facade,
+or shell:
 
 - `cockpit_protocol` — shared DTO and operation contracts;
 - `flutter_cockpit` — the in-app bridge and native plugin;
@@ -55,10 +57,13 @@ package's own root. Let Pub regenerate platform lockfiles; do not hand-edit
 `Podfile.lock`, `Package.resolved`, or generated plugin registrants.
 
 After dependency resolution, verify that every Cockpit package in the project
-uses the same release line and that no stale package constraint remains:
+uses the exact same version number and that no stale package constraint remains.
+The resolved lockfile version must agree with the version reported by the
+upgraded `cockpit` CLI:
 
 ```bash
 rg -n 'cockpit(_protocol)?|flutter_cockpit(_test)?' --glob 'pubspec.yaml'
+cockpit --version
 flutter pub outdated
 ```
 
