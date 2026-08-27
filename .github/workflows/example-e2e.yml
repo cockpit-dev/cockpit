@@ -157,16 +157,16 @@ jobs:
         include:
           - package: cockpit_protocol
             directory: packages/cockpit_protocol
-            command: dart pub publish --dry-run --ignore-warnings
+            command: dart pub publish --dry-run
           - package: flutter_cockpit
             directory: packages/flutter_cockpit
-            command: flutter pub publish --dry-run --ignore-warnings
+            command: flutter pub publish --dry-run
           - package: flutter_cockpit_test
             directory: packages/flutter_cockpit_test
-            command: flutter pub publish --dry-run --ignore-warnings
+            command: flutter pub publish --dry-run
           - package: cockpit
             directory: packages/cockpit
-            command: dart pub publish --dry-run --ignore-warnings
+            command: dart pub publish --dry-run
     steps:
       - uses: actions/checkout@v6
 

@@ -135,51 +135,55 @@ void main() {
     },
   );
 
-  test('shards completed results beyond the former global capacity', () async {
-    final fixture = await _JournalFixture.create();
-    addTearDown(fixture.dispose);
-    final journal = fixture.open();
-    final submittedAt = DateTime.utc(2026, 7, 22, 3);
-    final payload = List<String>.filled(900 * 1024, 'x').join();
-    for (var index = 0; index < 40; index += 1) {
-      final key = 'capacity-$index';
-      final invocation = _invocation(key);
-      final admission = await journal.admit(
-        invocation: invocation,
-        submittedAt: submittedAt,
-      );
-      await journal.markRunning(idempotencyKey: key, startedAt: submittedAt);
-      await journal.complete(
-        idempotencyKey: key,
-        result: _success(
-          admission.operationId,
+  test(
+    'shards completed results beyond the former global capacity',
+    () async {
+      final fixture = await _JournalFixture.create();
+      addTearDown(fixture.dispose);
+      final journal = fixture.open();
+      final submittedAt = DateTime.utc(2026, 7, 22, 3);
+      final payload = List<String>.filled(900 * 1024, 'x').join();
+      for (var index = 0; index < 40; index += 1) {
+        final key = 'capacity-$index';
+        final invocation = _invocation(key);
+        final admission = await journal.admit(
+          invocation: invocation,
           submittedAt: submittedAt,
-          output: <String, Object?>{'payload': payload},
-        ),
+        );
+        await journal.markRunning(idempotencyKey: key, startedAt: submittedAt);
+        await journal.complete(
+          idempotencyKey: key,
+          result: _success(
+            admission.operationId,
+            submittedAt: submittedAt,
+            output: <String, Object?>{'payload': payload},
+          ),
+        );
+      }
+
+      final records = await Directory(fixture.path)
+          .list(recursive: true, followLinks: false)
+          .where(
+            (entity) =>
+                entity is File && p.basename(entity.path) == 'record.json',
+          )
+          .cast<File>()
+          .toList();
+      expect(records, hasLength(40));
+      final totalBytes = (await Future.wait(
+        records.map((file) => file.length()),
+      )).fold<int>(0, (total, length) => total + length);
+      expect(totalBytes, greaterThan(32 * 1024 * 1024));
+
+      final replay = await fixture.open().admit(
+        invocation: _invocation('capacity-39'),
+        submittedAt: submittedAt.add(const Duration(seconds: 1)),
       );
-    }
-
-    final records = await Directory(fixture.path)
-        .list(recursive: true, followLinks: false)
-        .where(
-          (entity) =>
-              entity is File && p.basename(entity.path) == 'record.json',
-        )
-        .cast<File>()
-        .toList();
-    expect(records, hasLength(40));
-    final totalBytes = (await Future.wait(
-      records.map((file) => file.length()),
-    )).fold<int>(0, (total, length) => total + length);
-    expect(totalBytes, greaterThan(32 * 1024 * 1024));
-
-    final replay = await fixture.open().admit(
-      invocation: _invocation('capacity-39'),
-      submittedAt: submittedAt.add(const Duration(seconds: 1)),
-    );
-    expect(replay.execute, isFalse);
-    expect(replay.replay?.output?['payload'], payload);
-  }, timeout: const Timeout(Duration(minutes: 2)));
+      expect(replay.execute, isFalse);
+      expect(replay.replay?.output?['payload'], payload);
+    },
+    timeout: const Timeout(Duration(minutes: 2)),
+  );
 
   test('case.run recovery retries with the original operation id', () async {
     final fixture = await _JournalFixture.create();

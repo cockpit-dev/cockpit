@@ -32,69 +32,77 @@ void main() {
     timeout: const Timeout(Duration(seconds: 30)),
   );
 
-  test('real ACP agent cooperatively cancels before forced teardown', () async {
-    final harness = await _AcpAgentHarness.start();
-    addTearDown(harness.dispose);
+  test(
+    'real ACP agent cooperatively cancels before forced teardown',
+    () async {
+      final harness = await _AcpAgentHarness.start();
+      addTearDown(harness.dispose);
 
-    final prompt = harness.notifier.sendPrompt('wait-for-cancel');
-    await harness.waitFor((state) => state.isPrompting);
+      final prompt = harness.notifier.sendPrompt('wait-for-cancel');
+      await harness.waitFor((state) => state.isPrompting);
 
-    final elapsed = Stopwatch()..start();
-    harness.notifier.cancelTurn();
-    expect(await prompt, isTrue);
-    elapsed.stop();
+      final elapsed = Stopwatch()..start();
+      harness.notifier.cancelTurn();
+      expect(await prompt, isTrue);
+      elapsed.stop();
 
-    final connected = harness.connected;
-    expect(elapsed.elapsed, lessThan(const Duration(seconds: 5)));
-    expect(connected.isPrompting, isFalse);
-    expect(connected.messages.last.text, 'Cancelled by client');
-    expect(connected.messages.last.messageId, 'cancelled-message');
-  }, timeout: const Timeout(Duration(seconds: 30)));
+      final connected = harness.connected;
+      expect(elapsed.elapsed, lessThan(const Duration(seconds: 5)));
+      expect(connected.isPrompting, isFalse);
+      expect(connected.messages.last.text, 'Cancelled by client');
+      expect(connected.messages.last.messageId, 'cancelled-message');
+    },
+    timeout: const Timeout(Duration(seconds: 30)),
+  );
 
-  test('real ACP permission request accepts only an offered option', () async {
-    final harness = await _AcpAgentHarness.start();
-    addTearDown(harness.dispose);
+  test(
+    'real ACP permission request accepts only an offered option',
+    () async {
+      final harness = await _AcpAgentHarness.start();
+      addTearDown(harness.dispose);
 
-    final prompt = harness.notifier.sendPrompt('request-permission');
-    final awaitingPermission = await harness.waitFor(
-      (state) => state.pendingPermission != null,
-    );
-    final permission = awaitingPermission.pendingPermission!;
+      final prompt = harness.notifier.sendPrompt('request-permission');
+      final awaitingPermission = await harness.waitFor(
+        (state) => state.pendingPermission != null,
+      );
+      final permission = awaitingPermission.pendingPermission!;
 
-    expect(permission.toolCall.toolCallId, 'permission-tool');
-    expect(permission.options.map((option) => option.optionId), [
-      'allow-once',
-      'reject-once',
-    ]);
-    expect(
-      harness.notifier.respondToPermission(
-        requestId: permission.requestId,
-        optionId: 'not-offered',
-      ),
-      isFalse,
-    );
-    expect(
-      harness.notifier.respondToPermission(
-        requestId: permission.requestId,
-        optionId: 'allow-once',
-      ),
-      isTrue,
-    );
-    expect(await prompt, isTrue);
+      expect(permission.toolCall.toolCallId, 'permission-tool');
+      expect(permission.options.map((option) => option.optionId), [
+        'allow-once',
+        'reject-once',
+      ]);
+      expect(
+        harness.notifier.respondToPermission(
+          requestId: permission.requestId,
+          optionId: 'not-offered',
+        ),
+        isFalse,
+      );
+      expect(
+        harness.notifier.respondToPermission(
+          requestId: permission.requestId,
+          optionId: 'allow-once',
+        ),
+        isTrue,
+      );
+      expect(await prompt, isTrue);
 
-    final session = harness.connected.activeSession!;
-    expect(session.pendingPermission, isNull);
-    expect(
-      session.toolCalls['permission-tool']?.status,
-      ToolCallStatus.completed,
-    );
-    expect(
-      session.messages.any(
-        (message) => message.text == 'permission:allow-once',
-      ),
-      isTrue,
-    );
-  }, timeout: const Timeout(Duration(seconds: 30)));
+      final session = harness.connected.activeSession!;
+      expect(session.pendingPermission, isNull);
+      expect(
+        session.toolCalls['permission-tool']?.status,
+        ToolCallStatus.completed,
+      );
+      expect(
+        session.messages.any(
+          (message) => message.text == 'permission:allow-once',
+        ),
+        isTrue,
+      );
+    },
+    timeout: const Timeout(Duration(seconds: 30)),
+  );
 
   test(
     'real ACP agent uses confined file and terminal client callbacks',
@@ -268,39 +276,43 @@ void main() {
     timeout: const Timeout(Duration(seconds: 45)),
   );
 
-  test('real ACP agent accepts every supported prompt content type', () async {
-    final harness = await _AcpAgentHarness.start();
-    addTearDown(harness.dispose);
-    final encoded = base64Encode(const [1, 2, 3, 4]);
+  test(
+    'real ACP agent accepts every supported prompt content type',
+    () async {
+      final harness = await _AcpAgentHarness.start();
+      addTearDown(harness.dispose);
+      final encoded = base64Encode(const [1, 2, 3, 4]);
 
-    expect(
-      await harness.notifier.sendPromptContent([
-        const TextContentBlock(text: 'all-content-types'),
-        ImageContent(data: encoded, mimeType: 'image/png'),
-        AudioContent(data: encoded, mimeType: 'audio/wav'),
-        const ResourceLink(
-          name: 'documentation',
-          uri: 'https://example.test/docs',
-        ),
-        const EmbeddedResource(
-          resource: TextResourceContents(
-            text: 'embedded text',
-            uri: 'file:///project/context.txt',
-            mimeType: 'text/plain',
+      expect(
+        await harness.notifier.sendPromptContent([
+          const TextContentBlock(text: 'all-content-types'),
+          ImageContent(data: encoded, mimeType: 'image/png'),
+          AudioContent(data: encoded, mimeType: 'audio/wav'),
+          const ResourceLink(
+            name: 'documentation',
+            uri: 'https://example.test/docs',
           ),
-        ),
-        EmbeddedResource(
-          resource: BlobResourceContents(
-            blob: encoded,
-            uri: 'file:///project/context.bin',
-            mimeType: 'application/octet-stream',
+          const EmbeddedResource(
+            resource: TextResourceContents(
+              text: 'embedded text',
+              uri: 'file:///project/context.txt',
+              mimeType: 'text/plain',
+            ),
           ),
-        ),
-      ]),
-      isTrue,
-    );
-    expect(harness.connected.lastError, isNull);
-  }, timeout: const Timeout(Duration(seconds: 30)));
+          EmbeddedResource(
+            resource: BlobResourceContents(
+              blob: encoded,
+              uri: 'file:///project/context.bin',
+              mimeType: 'application/octet-stream',
+            ),
+          ),
+        ]),
+        isTrue,
+      );
+      expect(harness.connected.lastError, isNull);
+    },
+    timeout: const Timeout(Duration(seconds: 30)),
+  );
 
   test(
     'prompt validation rejects unsupported, malformed, and oversized input',
