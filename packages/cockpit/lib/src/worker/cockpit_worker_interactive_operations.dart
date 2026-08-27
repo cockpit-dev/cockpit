@@ -951,7 +951,13 @@ final class CockpitWorkerInteractiveOperations {
           values.optionalObject('parameters') ?? const <String, Object?>{},
     );
     final capturesStdout = preparedParameters.capturedStdoutRole != null;
-    final sessionId = preparedParameters.producedPath == null
+    // Diagnostic stdout actions (for example readUiTree) can target a native
+    // app without a Flutter session. Keep their stdout inline so black-box
+    // probes can inspect it. Binary/file artifacts still need an owning app
+    // session because the worker must retain and publish their host path.
+    final sessionId =
+        preparedParameters.producedPath == null ||
+            (capturesStdout && app == null)
         ? null
         : await _requireArtifactOwnerSession(app);
     final result = await runWorkerApplicationOperation(
