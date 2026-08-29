@@ -54,6 +54,7 @@ void main() {
         'inspect',
         'tree',
         'tap',
+        'hover',
         'hold',
         'double',
         'drag',
@@ -72,6 +73,7 @@ void main() {
         'recover',
         'open',
         'scroll',
+        'wheel',
         'wait',
         'watch',
         'screenshot',
@@ -86,7 +88,7 @@ void main() {
     expect(dev.subcommands['tap']!.usage, contains('cockpit dev tap'));
     expect(
       dev.subcommands['tap']!.invocation,
-      'cockpit dev tap SELECTOR [arguments]',
+      'cockpit dev tap [SELECTOR] [arguments]',
     );
     expect(
       dev.subcommands['start']!.invocation,
@@ -157,6 +159,16 @@ void main() {
       dev.subcommands['scroll']!.argParser.options['offset']!.defaultsTo,
       '0',
     );
+    expect(
+      dev.subcommands['tap']!.argParser.options.keys,
+      containsAll(<String>['at', 'device', 'buttons']),
+    );
+    expect(
+      dev.subcommands['hover']!.argParser.options.keys,
+      containsAll(<String>['at', 'device']),
+    );
+    expect(dev.subcommands['hold']!.argParser.options.keys, contains('at'));
+    expect(dev.subcommands['double']!.argParser.options.keys, contains('at'));
     expect(
       dev.subcommands['wait']!.argParser.options['network']!.defaultsTo,
       false,
@@ -400,6 +412,36 @@ void main() {
     ]);
     expect(multi.rest, <String>['Canvas']);
     expect(multi.option('sequence'), contains('pointer:2'));
+
+    final wheel = dev.subcommands['wheel']!.argParser.parse(const <String>[
+      'List',
+      '--dx',
+      '12',
+      '--dy',
+      '120',
+      '--steps',
+      '3',
+      '--interval',
+      '40ms',
+      '--device',
+      'trackpad',
+      '--at',
+      '40,80',
+    ]);
+    expect(wheel.rest, <String>['List']);
+    expect(wheel.option('dx'), '12');
+    expect(wheel.option('dy'), '120');
+    expect(wheel.option('steps'), '3');
+    expect(wheel.option('interval'), '40ms');
+    expect(wheel.option('device'), 'trackpad');
+    expect(wheel.option('at'), '40,80');
+
+    final coordinateTap = dev.subcommands['tap']!.argParser.parse(
+      const <String>['--at', '40,80', '--device', 'mouse'],
+    );
+    expect(coordinateTap.rest, isEmpty);
+    expect(coordinateTap.option('at'), '40,80');
+    expect(coordinateTap.option('device'), 'mouse');
   });
 
   test('dev rejects invalid task flags before resolving a session', () async {

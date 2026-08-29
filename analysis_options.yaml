@@ -4,3 +4,10 @@ analyzer:
   exclude:
     - .worktrees/**
     - third/**
+    - build/**
+    - android/**
+    - ios/**
+    - web/**
+    - windows/**
+    - macos/**
+    - linux/**

@@ -73,25 +73,6 @@ final class CockpitTestActionLowerer {
       );
     }
     if (backend == CockpitTestActionBackend.flutter &&
-        action.kind == CockpitTestActionKind.setTextEditingValue &&
-        (action.values.containsKey(CockpitTestActionField.composingStart) ||
-            action.values.containsKey(CockpitTestActionField.composingEnd))) {
-      return _failure(
-        CockpitTestErrorCode.unsupportedAction,
-        'The Flutter backend does not support composing ranges.',
-      );
-    }
-    if (backend == CockpitTestActionBackend.flutter &&
-        action.kind == CockpitTestActionKind.scrollUntilVisible) {
-      final direction = action.value<String>(CockpitTestActionField.direction);
-      if (direction == 'left' || direction == 'right') {
-        return _failure(
-          CockpitTestErrorCode.unsupportedAction,
-          'The Flutter backend currently supports vertical scrolling only.',
-        );
-      }
-    }
-    if (backend == CockpitTestActionBackend.flutter &&
         action.kind == CockpitTestActionKind.swipe) {
       final distance = action
           .value<num>(CockpitTestActionField.distance)!
@@ -374,6 +355,8 @@ CockpitCommandType _commandType(
   CockpitTestAction action,
 ) => switch (action.kind) {
   CockpitTestActionKind.tap => CockpitCommandType.tap,
+  CockpitTestActionKind.hover => CockpitCommandType.hover,
+  CockpitTestActionKind.wheel => CockpitCommandType.wheel,
   CockpitTestActionKind.longPress => CockpitCommandType.longPress,
   CockpitTestActionKind.doubleTap => CockpitCommandType.doubleTap,
   CockpitTestActionKind.enterText => CockpitCommandType.enterText,
@@ -436,16 +419,15 @@ Map<String, Object?> _parameters(CockpitTestAction action) {
         parameters['selectionBase'] = entry.value;
       case CockpitTestActionField.selectionEnd:
         parameters['selectionExtent'] = entry.value;
-      case CockpitTestActionField.composingStart ||
-          CockpitTestActionField.composingEnd:
-        throw const FormatException(
-          'The Flutter backend does not support composing ranges.',
-        );
+      case CockpitTestActionField.composingStart:
+        parameters['composingBase'] = entry.value;
+      case CockpitTestActionField.composingEnd:
+        parameters['composingExtent'] = entry.value;
       case CockpitTestActionField.distance:
         parameters['distanceFactor'] = entry.value;
       case CockpitTestActionField.direction:
         if (action.kind == CockpitTestActionKind.scrollUntilVisible) {
-          parameters['reverse'] = entry.value == 'up';
+          parameters['reverse'] = entry.value == 'up' || entry.value == 'left';
         } else {
           parameters[entry.key.wireName] = entry.value;
         }
@@ -477,7 +459,9 @@ Map<String, Object?> _parameters(CockpitTestAction action) {
         .value<num>(CockpitTestActionField.velocity)!
         .toDouble();
     final distance = math.sqrt(dx * dx + dy * dy);
-    parameters['durationMs'] = (distance / velocity * 1000).round();
+    if (!parameters.containsKey('durationMs')) {
+      parameters['durationMs'] = (distance / velocity * 1000).round();
+    }
   }
   if (action.kind == CockpitTestActionKind.assertVisible &&
       action.value<bool>(CockpitTestActionField.expected) == false) {

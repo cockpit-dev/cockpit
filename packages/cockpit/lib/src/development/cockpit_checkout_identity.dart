@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -11,6 +12,8 @@ typedef CockpitCheckoutProcessRunner =
       String? workingDirectory,
       Map<String, String>? environment,
     });
+
+const Duration _gitIdentityProbeTimeout = Duration(seconds: 2);
 
 final class CockpitCheckoutIdentity {
   const CockpitCheckoutIdentity({
@@ -47,23 +50,29 @@ final class CockpitCheckoutIdentityResolver {
       throw FileSystemException('Checkout directory does not exist.', path);
     }
     final canonical = p.normalize(await directory.resolveSymbolicLinks());
-    final result = await _processRunner(
-      'git',
-      const <String>[
-        'rev-parse',
-        '--path-format=absolute',
-        '--show-toplevel',
-        '--git-common-dir',
-        '--git-dir',
-      ],
-      workingDirectory: canonical,
-      environment: const <String, String>{'LANG': 'C', 'LC_ALL': 'C'},
-    );
+    ProcessResult result;
+    try {
+      result = await _processRunner(
+        'git',
+        const <String>[
+          'rev-parse',
+          '--path-format=absolute',
+          '--show-toplevel',
+          '--git-common-dir',
+          '--git-dir',
+        ],
+        workingDirectory: canonical,
+        environment: const <String, String>{'LANG': 'C', 'LC_ALL': 'C'},
+      ).timeout(_gitIdentityProbeTimeout);
+    } on TimeoutException {
+      return _filesystemIdentity(canonical);
+    } on ProcessException {
+      // Git is optional for ordinary Flutter directories. A missing or
+      // unlaunchable executable must not block session selection.
+      return _filesystemIdentity(canonical);
+    }
     if (result.exitCode != 0) {
-      return CockpitCheckoutIdentity(
-        value: _digest(<String>['filesystem', canonical]),
-        canonicalRoot: canonical,
-      );
+      return _filesystemIdentity(canonical);
     }
     final lines = const LineSplitter()
         .convert('${result.stdout}')
@@ -101,6 +110,12 @@ final class CockpitCheckoutIdentityResolver {
     }
     return p.normalize(await directory.resolveSymbolicLinks());
   }
+
+  CockpitCheckoutIdentity _filesystemIdentity(String canonical) =>
+      CockpitCheckoutIdentity(
+        value: _digest(<String>['filesystem', canonical]),
+        canonicalRoot: canonical,
+      );
 }
 
 String _digest(List<String> parts) => sha256

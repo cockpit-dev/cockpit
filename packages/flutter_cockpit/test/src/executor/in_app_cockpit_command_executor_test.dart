@@ -2472,6 +2472,37 @@ void main() {
     },
   );
 
+  test('wheel forwards bounded pointer scroll parameters', () async {
+    CockpitGestureAction? capturedAction;
+    final executor = InAppCockpitCommandExecutor(
+      registry: CockpitTargetRegistry(routeName: '/list'),
+      gestureHandler: (action) async {
+        capturedAction = action;
+      },
+    );
+
+    final result = await executor.execute(
+      CockpitCommand(
+        commandId: 'cmd-wheel',
+        commandType: CockpitCommandType.wheel,
+        parameters: const <String, Object?>{
+          'dx': 12.0,
+          'dy': 80.0,
+          'steps': 3,
+          'intervalMs': 20,
+          'deviceKind': 'trackpad',
+        },
+      ),
+    );
+
+    expect(result.success, isTrue);
+    expect(capturedAction?.type, CockpitGestureActionType.wheel);
+    expect(capturedAction?.delta, const Offset(12, 80));
+    expect(capturedAction?.steps, 3);
+    expect(capturedAction?.interval, const Duration(milliseconds: 20));
+    expect(capturedAction?.pointerDeviceKind, PointerDeviceKind.trackpad);
+  });
+
   test('clearNetworkActivity invokes the injected handler', () async {
     var clearCount = 0;
     final executor = InAppCockpitCommandExecutor(

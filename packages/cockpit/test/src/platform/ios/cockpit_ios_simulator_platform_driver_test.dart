@@ -93,25 +93,21 @@ void main() {
     );
   });
 
-  test(
-    'omits simulator shell when the probe times out',
-    () async {
-      final driver = CockpitIosSimulatorPlatformDriver(
-        deviceId: 'SIMULATOR-TIMEOUT',
-        processRunner: (_, _) => Completer<ProcessResult>().future,
-      );
+  test('omits simulator shell when the probe times out', () async {
+    final driver = CockpitIosSimulatorPlatformDriver(
+      deviceId: 'SIMULATOR-TIMEOUT',
+      processRunner: (_, _) => Completer<ProcessResult>().future,
+    );
 
-      final profile = await driver.describeCapabilities();
+    final profile = await driver.describeCapabilities();
 
-      expect(
-        profile.actionCapabilities,
-        isNot(contains(CockpitActionCapability.runShell)),
-      );
-      expect(
-        profile.actionCapabilities,
-        contains(CockpitActionCapability.launchApp),
-      );
-    },
-    timeout: const Timeout(Duration(seconds: 3)),
-  );
+    expect(
+      profile.actionCapabilities,
+      isNot(contains(CockpitActionCapability.runShell)),
+    );
+    expect(
+      profile.actionCapabilities,
+      contains(CockpitActionCapability.launchApp),
+    );
+  }, timeout: const Timeout(Duration(seconds: 3)));
 }

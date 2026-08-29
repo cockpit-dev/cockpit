@@ -344,6 +344,8 @@ final class CockpitReadAppService {
             CockpitCommandType.longPress ||
             CockpitCommandType.doubleTap:
           actionCapabilities.add(CockpitActionCapability.tap);
+        case CockpitCommandType.wheel:
+          actionCapabilities.add(CockpitActionCapability.scroll);
         case CockpitCommandType.enterText ||
             CockpitCommandType.focusTextInput ||
             CockpitCommandType.setTextEditingValue ||

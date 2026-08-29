@@ -104,6 +104,68 @@ void main() {
     expect(doubleTapCount, 1);
   });
 
+  testWidgets('hover dispatches a real mouse transition', (tester) async {
+    var entered = 0;
+    var hovered = 0;
+    await tester.pumpWidget(
+      Directionality(
+        textDirection: TextDirection.ltr,
+        child: MouseRegion(
+          key: const ValueKey<String>('hover-target'),
+          onEnter: (_) => entered += 1,
+          onHover: (_) => hovered += 1,
+          child: const SizedBox(width: 140, height: 80),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final target = _targetFor(tester, 'hover-target');
+    final engine = CockpitGestureEngine(delay: tester.pump);
+    await engine.perform(CockpitGestureAction.hover(target: target));
+    await tester.pump();
+
+    expect(entered, 1);
+    expect(hovered, greaterThanOrEqualTo(1));
+  });
+
+  testWidgets('wheel dispatches real pointer scroll signals', (tester) async {
+    final deltas = <Offset>[];
+    await tester.pumpWidget(
+      Directionality(
+        textDirection: TextDirection.ltr,
+        child: Listener(
+          key: const ValueKey<String>('wheel-target'),
+          behavior: HitTestBehavior.opaque,
+          onPointerSignal: (event) {
+            if (event is PointerScrollEvent) {
+              deltas.add(event.scrollDelta);
+            }
+          },
+          child: const SizedBox(width: 180, height: 120),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final target = _targetFor(tester, 'wheel-target');
+    final engine = CockpitGestureEngine(delay: tester.pump);
+    await engine.perform(
+      CockpitGestureAction.wheel(
+        target: target,
+        delta: const Offset(0, 40),
+        steps: 3,
+      ),
+    );
+    await tester.pump();
+
+    expect(deltas, <Offset>[
+      const Offset(0, 40),
+      const Offset(0, 40),
+      const Offset(0, 40),
+    ]);
+  });
+
   testWidgets('tap can target the top-right anchor of a larger shell', (
     tester,
   ) async {
@@ -630,42 +692,42 @@ void main() {
         sequence: const CockpitMultiTouchSequence(
           steps: <CockpitMultiTouchStep>[
             CockpitMultiTouchStep(
-              pointer: 1,
+              pointer: 0,
               phase: CockpitMultiTouchPhase.down,
               atMs: 0,
               dx: -24,
               dy: 0,
             ),
             CockpitMultiTouchStep(
-              pointer: 2,
+              pointer: 1,
               phase: CockpitMultiTouchPhase.down,
               atMs: 0,
               dx: 24,
               dy: 0,
             ),
             CockpitMultiTouchStep(
-              pointer: 1,
+              pointer: 0,
               phase: CockpitMultiTouchPhase.move,
               atMs: 120,
               dx: -72,
               dy: 0,
             ),
             CockpitMultiTouchStep(
-              pointer: 2,
+              pointer: 1,
               phase: CockpitMultiTouchPhase.move,
               atMs: 120,
               dx: 72,
               dy: 0,
             ),
             CockpitMultiTouchStep(
-              pointer: 1,
+              pointer: 0,
               phase: CockpitMultiTouchPhase.up,
               atMs: 220,
               dx: -72,
               dy: 0,
             ),
             CockpitMultiTouchStep(
-              pointer: 2,
+              pointer: 1,
               phase: CockpitMultiTouchPhase.up,
               atMs: 220,
               dx: 72,
@@ -755,6 +817,65 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(tapCount, 1);
+  });
+
+  testWidgets('multiTouch preserves authored order for tied pointer events', (
+    tester,
+  ) async {
+    final phases = <String>[];
+    void recordEvent(PointerEvent event) {
+      if (event.pointer != 0) return;
+      if (event is PointerDownEvent) phases.add('down');
+      if (event is PointerUpEvent) phases.add('up');
+    }
+
+    await tester.pumpWidget(
+      Directionality(
+        textDirection: TextDirection.ltr,
+        child: Center(
+          child: SizedBox(
+            key: const ValueKey<String>('multitouch-order-target'),
+            width: 220,
+            height: 220,
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    GestureBinding.instance.pointerRouter.addGlobalRoute(recordEvent);
+    addTearDown(
+      () =>
+          GestureBinding.instance.pointerRouter.removeGlobalRoute(recordEvent),
+    );
+
+    final target = _targetFor(tester, 'multitouch-order-target');
+    final engine = CockpitGestureEngine(delay: tester.pump);
+    await engine.perform(
+      CockpitGestureAction.multiTouch(
+        target: target,
+        sequence: const CockpitMultiTouchSequence(
+          steps: <CockpitMultiTouchStep>[
+            CockpitMultiTouchStep(
+              pointer: 0,
+              phase: CockpitMultiTouchPhase.down,
+              atMs: 0,
+              dx: 0,
+              dy: 0,
+            ),
+            CockpitMultiTouchStep(
+              pointer: 0,
+              phase: CockpitMultiTouchPhase.up,
+              atMs: 0,
+              dx: 0,
+              dy: 0,
+            ),
+          ],
+        ),
+      ),
+    );
+
+    expect(phases, <String>['down', 'up']);
   });
 
   testWidgets(

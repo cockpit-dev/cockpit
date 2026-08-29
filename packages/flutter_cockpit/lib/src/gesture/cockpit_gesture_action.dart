@@ -10,6 +10,8 @@ import 'cockpit_multi_touch_sequence.dart';
 
 enum CockpitGestureActionType {
   tap,
+  hover,
+  wheel,
   longPress,
   doubleTap,
   drag,
@@ -35,6 +37,7 @@ final class CockpitGestureAction {
     this.duration = const Duration(milliseconds: 220),
     this.holdDuration = Duration.zero,
     this.interval = const Duration(milliseconds: 80),
+    this.steps = 1,
     this.delta = Offset.zero,
     this.direction = AxisDirection.right,
     this.distanceFactor = 0.82,
@@ -66,6 +69,58 @@ final class CockpitGestureAction {
          anchor: anchor,
          pointerDeviceKind: pointerDeviceKind,
          buttons: buttons,
+         duration: Duration.zero,
+         profile: CockpitGestureProfile.fast,
+       );
+
+  /// Moves a mouse pointer into the target without pressing a button.
+  ///
+  /// Keeping hover as a real pointer action is important for desktop and web
+  /// Flutter widgets such as [MouseRegion], hover menus, and tooltip states.
+  const CockpitGestureAction.hover({
+    CockpitTarget? target,
+    CockpitTargetGeometry? geometry,
+    Offset? origin,
+    CockpitGestureAnchor anchor = CockpitGestureAnchor.center,
+    PointerDeviceKind pointerDeviceKind = PointerDeviceKind.mouse,
+  }) : this._(
+         type: CockpitGestureActionType.hover,
+         target: target,
+         geometry: geometry,
+         origin: origin,
+         anchor: anchor,
+         pointerDeviceKind: pointerDeviceKind,
+         buttons: 0,
+         duration: Duration.zero,
+         profile: CockpitGestureProfile.fast,
+       );
+
+  /// Dispatches real [PointerScrollEvent] signals at the target position.
+  ///
+  /// Unlike a drag-based scroll, wheel input exercises Flutter's pointer
+  /// signal path used by desktop scrollables, custom [Listener] handlers, and
+  /// trackpad-aware widgets. [delta] is the per-event scroll delta and
+  /// [steps] repeats it without retaining any event history.
+  const CockpitGestureAction.wheel({
+    CockpitTarget? target,
+    CockpitTargetGeometry? geometry,
+    Offset? origin,
+    CockpitGestureAnchor anchor = CockpitGestureAnchor.center,
+    required Offset delta,
+    int steps = 1,
+    Duration interval = Duration.zero,
+    PointerDeviceKind pointerDeviceKind = PointerDeviceKind.mouse,
+  }) : this._(
+         type: CockpitGestureActionType.wheel,
+         target: target,
+         geometry: geometry,
+         origin: origin,
+         anchor: anchor,
+         pointerDeviceKind: pointerDeviceKind,
+         buttons: 0,
+         delta: delta,
+         interval: interval,
+         steps: steps,
          duration: Duration.zero,
          profile: CockpitGestureProfile.fast,
        );
@@ -325,6 +380,7 @@ final class CockpitGestureAction {
   final Duration duration;
   final Duration holdDuration;
   final Duration interval;
+  final int steps;
   final Offset delta;
   final AxisDirection direction;
   final double distanceFactor;

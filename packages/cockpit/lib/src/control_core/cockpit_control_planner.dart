@@ -117,6 +117,8 @@ final class CockpitControlPlanner {
   bool _requiresObservation(CockpitIntentAction action) {
     return switch (action) {
       CockpitIntentAction.tap ||
+      CockpitIntentAction.hover ||
+      CockpitIntentAction.wheel ||
       CockpitIntentAction.enterText ||
       CockpitIntentAction.eraseText ||
       CockpitIntentAction.pasteText ||
@@ -157,7 +159,9 @@ final class CockpitControlPlanner {
 
   CockpitActionCapability _actionCapabilityFor(CockpitIntentAction action) {
     return switch (action) {
-      CockpitIntentAction.tap ||
+      CockpitIntentAction.tap => CockpitActionCapability.tap,
+      CockpitIntentAction.hover => CockpitActionCapability.hover,
+      CockpitIntentAction.wheel => CockpitActionCapability.scroll,
       CockpitIntentAction.longPress ||
       CockpitIntentAction.doubleTap ||
       CockpitIntentAction.drag ||

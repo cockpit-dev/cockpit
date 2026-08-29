@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_cockpit/flutter_cockpit_flutter.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -196,15 +197,88 @@ final class CockpitTester {
   }
 
   Future<CockpitCommandExecution> tap(
-    Object target, {
+    Object? target, {
+    Offset? at,
+    PointerDeviceKind device = PointerDeviceKind.touch,
+    int buttons = kPrimaryButton,
     Duration? timeout,
     CockpitCapturePolicy capture = CockpitCapturePolicy.none,
-  }) => _run(
-    CockpitCommandType.tap,
-    target: target,
-    timeout: timeout,
-    capturePolicy: capture,
-  );
+  }) {
+    _validateTargetOrPoint(target, at, 'tap');
+    _validateOptionalOffset(at, 'at');
+    _validateButtons(buttons);
+    return _run(
+      CockpitCommandType.tap,
+      target: target,
+      timeout: timeout,
+      capturePolicy: capture,
+      parameters: <String, Object?>{
+        ..._pointerParameters(device: device, buttons: buttons),
+        'x': ?at?.dx,
+        'y': ?at?.dy,
+      },
+    );
+  }
+
+  /// Moves a mouse pointer into a target without pressing a button. This is
+  /// useful for desktop/web hover menus, tooltips, and hover animations.
+  Future<CockpitCommandExecution> hover(
+    Object? target, {
+    Offset? at,
+    PointerDeviceKind device = PointerDeviceKind.mouse,
+    Duration? timeout,
+  }) {
+    _validateTargetOrPoint(target, at, 'hover');
+    _validateOptionalOffset(at, 'at');
+    return _run(
+      CockpitCommandType.hover,
+      target: target,
+      timeout: timeout,
+      parameters: <String, Object?>{
+        ..._pointerParameters(device: device),
+        'x': ?at?.dx,
+        'y': ?at?.dy,
+      },
+    );
+  }
+
+  /// Dispatches real mouse or trackpad wheel signals at a target position.
+  ///
+  /// [delta] is applied once per event. Use [steps] for a bounded sequence of
+  /// wheel ticks; this keeps continuous scrolling deterministic without
+  /// retaining an unbounded event stream.
+  Future<CockpitCommandExecution> wheel({
+    Object? target,
+    required Offset delta,
+    int steps = 1,
+    Duration interval = Duration.zero,
+    Offset? at,
+    PointerDeviceKind device = PointerDeviceKind.mouse,
+    Duration? timeout,
+  }) {
+    _validateMovement(delta, 'delta');
+    if (steps < 1 || steps > 1000) {
+      throw ArgumentError.value(steps, 'steps', 'Must be between 1 and 1000.');
+    }
+    if (interval < Duration.zero) {
+      throw ArgumentError.value(interval, 'interval', 'Must not be negative.');
+    }
+    _validateOptionalOffset(at, 'at');
+    return _run(
+      CockpitCommandType.wheel,
+      target: target,
+      timeout: timeout,
+      parameters: <String, Object?>{
+        'dx': delta.dx,
+        'dy': delta.dy,
+        if (steps != 1) 'steps': steps,
+        if (interval > Duration.zero) 'intervalMs': interval.inMilliseconds,
+        'x': ?at?.dx,
+        'y': ?at?.dy,
+        'deviceKind': device.name,
+      },
+    );
+  }
 
   Future<CockpitCommandExecution> type(
     String value, {
@@ -220,33 +294,269 @@ final class CockpitTester {
   Future<CockpitCommandExecution> clear(Object target, {Duration? timeout}) =>
       _run(CockpitCommandType.eraseText, target: target, timeout: timeout);
 
-  /// Performs a real long-press on a resolved Flutter target.
-  Future<CockpitCommandExecution> longPress(
+  /// Copies the selected or complete value from an editable target. When no
+  /// target is supplied, Cockpit uses the currently focused text input.
+  Future<CockpitCommandExecution> copy({Object? from, Duration? timeout}) =>
+      _run(CockpitCommandType.copyText, target: from, timeout: timeout);
+
+  /// Pastes the platform/in-app clipboard value into an editable target.
+  Future<CockpitCommandExecution> paste(Object target, {Duration? timeout}) =>
+      _run(CockpitCommandType.pasteText, target: target, timeout: timeout);
+
+  /// Gives focus to an editable target without changing its value.
+  Future<CockpitCommandExecution> focus(Object target, {Duration? timeout}) =>
+      _run(CockpitCommandType.focusTextInput, target: target, timeout: timeout);
+
+  /// Sets text, selection, and/or the IME composing range using the same
+  /// editing path as the live Cockpit bridge. Omit [text] to change only
+  /// selection or composing state.
+  Future<CockpitCommandExecution> setTextEditingValue(
     Object target, {
-    Duration duration = const Duration(milliseconds: 600),
+    String? text,
+    int? selectionBase,
+    int? selectionExtent,
+    int? composingBase,
+    int? composingExtent,
+    bool requestFocus = true,
+    bool clearExisting = false,
     Duration? timeout,
   }) {
+    if (text == null &&
+        selectionBase == null &&
+        selectionExtent == null &&
+        composingBase == null &&
+        composingExtent == null &&
+        !clearExisting) {
+      throw ArgumentError(
+        'setTextEditingValue requires text, selection, or clearExisting.',
+      );
+    }
+    if (selectionBase != null && selectionBase < 0) {
+      throw ArgumentError.value(selectionBase, 'selectionBase');
+    }
+    if (selectionExtent != null && selectionExtent < 0) {
+      throw ArgumentError.value(selectionExtent, 'selectionExtent');
+    }
+    if (composingBase != null && composingBase < 0) {
+      throw ArgumentError.value(composingBase, 'composingBase');
+    }
+    if (composingExtent != null && composingExtent < 0) {
+      throw ArgumentError.value(composingExtent, 'composingExtent');
+    }
+    return _run(
+      CockpitCommandType.setTextEditingValue,
+      target: target,
+      timeout: timeout,
+      parameters: <String, Object?>{
+        'text': ?text,
+        'selectionBase': ?selectionBase,
+        'selectionExtent': ?selectionExtent,
+        'composingBase': ?composingBase,
+        'composingExtent': ?composingExtent,
+        'requestFocus': requestFocus,
+        'clearExisting': clearExisting,
+      },
+    );
+  }
+
+  /// Selects a UTF-16 range in an editable target.
+  Future<CockpitCommandExecution> selectText(
+    Object target, {
+    required int start,
+    required int end,
+    Duration? timeout,
+  }) {
+    if (start < 0 || end < 0) {
+      throw ArgumentError('Text selection offsets must be non-negative.');
+    }
+    return setTextEditingValue(
+      target,
+      selectionBase: start,
+      selectionExtent: end,
+      timeout: timeout,
+    );
+  }
+
+  /// Sends a key-down event to the focused Flutter focus tree.
+  Future<CockpitCommandExecution> keyDown(
+    String logicalKey, {
+    String? physicalKey,
+    String? character,
+    bool allowUnhandled = false,
+    Duration? timeout,
+  }) => _keyEvent(
+    CockpitCommandType.sendKeyDownEvent,
+    logicalKey,
+    physicalKey: physicalKey,
+    character: character,
+    allowUnhandled: allowUnhandled,
+    timeout: timeout,
+  );
+
+  /// Sends a key-up event to the focused Flutter focus tree.
+  Future<CockpitCommandExecution> keyUp(
+    String logicalKey, {
+    String? physicalKey,
+    String? character,
+    bool allowUnhandled = false,
+    Duration? timeout,
+  }) => _keyEvent(
+    CockpitCommandType.sendKeyUpEvent,
+    logicalKey,
+    physicalKey: physicalKey,
+    character: character,
+    allowUnhandled: allowUnhandled,
+    timeout: timeout,
+  );
+
+  /// Sends a keyboard chord while keeping modifier keys pressed.
+  ///
+  /// All keys except the last are sent as key-down events, the last key is
+  /// sent as a complete key event, and modifiers are released in reverse
+  /// order even when one step fails. This mirrors a real shortcut such as
+  /// `ControlLeft+KeyS` without requiring callers to manage pressed state.
+  Future<List<CockpitCommandExecution>> hotkey(
+    Iterable<String> keys, {
+    Duration? timeout,
+  }) async {
+    final normalized = keys
+        .map((key) => key.trim())
+        .where((key) => key.isNotEmpty)
+        .toList(growable: false);
+    if (normalized.length < 2) {
+      throw ArgumentError.value(
+        keys,
+        'keys',
+        'A hotkey requires at least one modifier and one key.',
+      );
+    }
+
+    final results = <CockpitCommandExecution>[];
+    final pressed = <String>[];
+    try {
+      for (final key in normalized.take(normalized.length - 1)) {
+        final result = await _keyEvent(
+          CockpitCommandType.sendKeyDownEvent,
+          key,
+          timeout: timeout,
+          allowUnhandled: true,
+          check: false,
+        );
+        results.add(result);
+        if (!result.result.success) break;
+        pressed.add(key);
+      }
+      if (pressed.length == normalized.length - 1) {
+        results.add(
+          await _keyEvent(
+            CockpitCommandType.sendKeyEvent,
+            normalized.last,
+            timeout: timeout,
+            check: false,
+          ),
+        );
+      }
+    } finally {
+      for (final key in pressed.reversed) {
+        results.add(
+          await _keyEvent(
+            CockpitCommandType.sendKeyUpEvent,
+            key,
+            timeout: timeout,
+            allowUnhandled: true,
+            check: false,
+          ),
+        );
+      }
+    }
+    if (options.failFast) {
+      final failed = results.where((result) => !result.result.success);
+      if (failed.isNotEmpty) {
+        final result = failed.first.result;
+        fail(
+          'Cockpit hotkey failed'
+          '${result.error == null ? '' : ': ${result.error!.message}'}',
+        );
+      }
+    }
+    return List.unmodifiable(results);
+  }
+
+  Future<CockpitCommandExecution> _keyEvent(
+    CockpitCommandType type,
+    String logicalKey, {
+    String? physicalKey,
+    String? character,
+    Duration? timeout,
+    bool allowUnhandled = false,
+    bool? check,
+  }) {
+    final key = logicalKey.trim();
+    if (key.isEmpty) {
+      throw ArgumentError.value(logicalKey, 'logicalKey');
+    }
+    return _run(
+      type,
+      timeout: timeout,
+      check: check,
+      parameters: <String, Object?>{
+        'logicalKey': key,
+        'physicalKey': ?physicalKey,
+        'character': ?character,
+        if (allowUnhandled) 'allowUnhandled': true,
+      },
+    );
+  }
+
+  /// Performs a real long-press on a resolved Flutter target.
+  Future<CockpitCommandExecution> longPress(
+    Object? target, {
+    Duration duration = const Duration(milliseconds: 600),
+    Offset? at,
+    PointerDeviceKind device = PointerDeviceKind.touch,
+    int buttons = kPrimaryButton,
+    Duration? timeout,
+  }) {
+    _validateTargetOrPoint(target, at, 'longPress');
     _validateGestureDuration(duration, 'duration');
+    _validateOptionalOffset(at, 'at');
+    _validateButtons(buttons);
     return _run(
       CockpitCommandType.longPress,
       target: target,
       timeout: timeout,
-      parameters: <String, Object?>{'durationMs': duration.inMilliseconds},
+      parameters: <String, Object?>{
+        'durationMs': duration.inMilliseconds,
+        ..._pointerParameters(device: device, buttons: buttons),
+        'x': ?at?.dx,
+        'y': ?at?.dy,
+      },
     );
   }
 
   /// Performs a real double-tap on a resolved Flutter target.
   Future<CockpitCommandExecution> doubleTap(
-    Object target, {
+    Object? target, {
     Duration interval = const Duration(milliseconds: 90),
+    Offset? at,
+    PointerDeviceKind device = PointerDeviceKind.touch,
+    int buttons = kPrimaryButton,
     Duration? timeout,
   }) {
+    _validateTargetOrPoint(target, at, 'doubleTap');
     _validateGestureDuration(interval, 'interval');
+    _validateOptionalOffset(at, 'at');
+    _validateButtons(buttons);
     return _run(
       CockpitCommandType.doubleTap,
       target: target,
       timeout: timeout,
-      parameters: <String, Object?>{'intervalMs': interval.inMilliseconds},
+      parameters: <String, Object?>{
+        'intervalMs': interval.inMilliseconds,
+        ..._pointerParameters(device: device, buttons: buttons),
+        'x': ?at?.dx,
+        'y': ?at?.dy,
+      },
     );
   }
 
@@ -258,13 +568,17 @@ final class CockpitTester {
     Duration duration = const Duration(milliseconds: 220),
     Duration? hold,
     int? moveEvents,
+    PointerDeviceKind device = PointerDeviceKind.touch,
+    int buttons = kPrimaryButton,
     Duration? timeout,
   }) {
+    _validateTargetOrPoint(target, at, 'drag');
     _validateMovement(delta, 'delta');
     _validateOptionalOffset(at, 'at');
     _validateGestureDuration(duration, 'duration');
     if (hold != null) _validateGestureDuration(hold, 'hold');
     _validateMoveEvents(moveEvents);
+    _validateButtons(buttons);
     return _run(
       CockpitCommandType.drag,
       target: target,
@@ -277,6 +591,7 @@ final class CockpitTester {
         'durationMs': duration.inMilliseconds,
         'holdDurationMs': ?hold?.inMilliseconds,
         'moveEventCount': ?moveEvents,
+        ..._pointerParameters(device: device, buttons: buttons),
       },
     );
   }
@@ -289,8 +604,11 @@ final class CockpitTester {
     Offset? at,
     Duration? duration,
     int? moveEvents,
+    PointerDeviceKind device = PointerDeviceKind.touch,
+    int buttons = kPrimaryButton,
     Duration? timeout,
   }) {
+    _validateTargetOrPoint(target, at, 'fling');
     _validateMovement(delta, 'delta');
     _validateOptionalOffset(at, 'at');
     if (!velocity.isFinite || velocity <= 0) {
@@ -306,6 +624,7 @@ final class CockpitTester {
         );
     _validateGestureDuration(effectiveDuration, 'duration');
     _validateMoveEvents(moveEvents);
+    _validateButtons(buttons);
     return _run(
       CockpitCommandType.fling,
       target: target,
@@ -318,6 +637,7 @@ final class CockpitTester {
         'y': ?at?.dy,
         'durationMs': effectiveDuration.inMilliseconds,
         'moveEventCount': ?moveEvents,
+        ..._pointerParameters(device: device, buttons: buttons),
       },
     );
   }
@@ -330,8 +650,11 @@ final class CockpitTester {
     Duration duration = const Duration(milliseconds: 200),
     Offset? at,
     int? moveEvents,
+    PointerDeviceKind device = PointerDeviceKind.touch,
+    int buttons = kPrimaryButton,
     Duration? timeout,
   }) {
+    _validateTargetOrPoint(target, at, 'swipe');
     _validateOptionalOffset(at, 'at');
     if (!distance.isFinite || distance < 0.15 || distance > 0.95) {
       throw ArgumentError.value(
@@ -342,6 +665,7 @@ final class CockpitTester {
     }
     _validateGestureDuration(duration, 'duration');
     _validateMoveEvents(moveEvents);
+    _validateButtons(buttons);
     return _run(
       CockpitCommandType.swipe,
       target: target,
@@ -353,6 +677,7 @@ final class CockpitTester {
         'x': ?at?.dx,
         'y': ?at?.dy,
         'moveEventCount': ?moveEvents,
+        ..._pointerParameters(device: device, buttons: buttons),
       },
     );
   }
@@ -365,8 +690,10 @@ final class CockpitTester {
     Offset? at,
     Duration duration = const Duration(milliseconds: 220),
     int? moveEvents,
+    PointerDeviceKind device = PointerDeviceKind.touch,
     Duration? timeout,
   }) {
+    _validateTargetOrPoint(target, at, 'pinch');
     _validateOptionalOffset(at, 'at');
     if (!scale.isFinite || scale <= 0 || scale == 1) {
       throw ArgumentError.value(
@@ -389,6 +716,7 @@ final class CockpitTester {
         'x': ?at?.dx,
         'y': ?at?.dy,
         'moveEventCount': ?moveEvents,
+        ..._pointerParameters(device: device),
       },
     );
   }
@@ -401,8 +729,10 @@ final class CockpitTester {
     Offset? at,
     Duration duration = const Duration(milliseconds: 220),
     int? moveEvents,
+    PointerDeviceKind device = PointerDeviceKind.touch,
     Duration? timeout,
   }) {
+    _validateTargetOrPoint(target, at, 'rotate');
     _validateOptionalOffset(at, 'at');
     if (!radians.isFinite || radians == 0) {
       throw ArgumentError.value(radians, 'radians', 'Must be non-zero.');
@@ -421,6 +751,7 @@ final class CockpitTester {
         'x': ?at?.dx,
         'y': ?at?.dy,
         'moveEventCount': ?moveEvents,
+        ..._pointerParameters(device: device),
       },
     );
   }
@@ -434,8 +765,10 @@ final class CockpitTester {
     Offset? at,
     Duration duration = const Duration(milliseconds: 180),
     int? moveEvents,
+    PointerDeviceKind device = PointerDeviceKind.touch,
     Duration? timeout,
   }) {
+    _validateTargetOrPoint(target, at, 'panZoom');
     _validateOptionalOffset(at, 'at');
     if (!pan.dx.isFinite || !pan.dy.isFinite) {
       throw ArgumentError.value(pan, 'pan', 'Must contain finite coordinates.');
@@ -464,6 +797,7 @@ final class CockpitTester {
         'x': ?at?.dx,
         'y': ?at?.dy,
         'moveEventCount': ?moveEvents,
+        ..._pointerParameters(device: device),
       },
     );
   }
@@ -475,6 +809,7 @@ final class CockpitTester {
     Offset? at,
     Duration? timeout,
   }) {
+    _validateTargetOrPoint(target, at, 'multiTouch');
     _validateOptionalOffset(at, 'at');
     _validateMultiTouch(sequence);
     return _run(
@@ -524,7 +859,7 @@ final class CockpitTester {
     String? direction,
     String? align,
     double? offset,
-    String? scrollable,
+    Object? scrollLocator,
     int? maxScrolls,
     Duration? timeout,
   }) {
@@ -532,7 +867,9 @@ final class CockpitTester {
     if (direction != null) parameters['direction'] = direction;
     if (align != null) parameters['revealAlignment'] = align;
     if (offset != null) parameters['revealOffsetPx'] = offset;
-    if (scrollable != null) parameters['scrollLocator'] = scrollable;
+    if (scrollLocator != null) {
+      parameters['scrollLocator'] = _locator(scrollLocator)!.toJson();
+    }
     if (maxScrolls != null) parameters['maxScrolls'] = maxScrolls;
     return _run(
       CockpitCommandType.scrollUntilVisible,
@@ -679,7 +1016,11 @@ final class CockpitTester {
       clearQuery: normalizedQuery?.isEmpty == true,
       maxTargets: options.maxTargets.clamp(1, 160).toInt(),
       maxAncestorsPerTarget: 0,
-      includeStyleDetails: false,
+      // A watch must see paint-only transitions (opacity, animated colors,
+      // inherited text styles, and transforms) in addition to layout changes.
+      // The projection keeps this bounded to compact style fields and emits
+      // them only in deltas, so continuous UI monitoring remains cheap.
+      includeStyleDetails: true,
       includeDiagnosticProperties: false,
       includeRebuildActivity: false,
       includeNetworkActivity: false,
@@ -752,6 +1093,7 @@ final class CockpitTester {
     Map<String, Object?> parameters = const <String, Object?>{},
     Duration? timeout,
     CockpitCapturePolicy capturePolicy = CockpitCapturePolicy.none,
+    bool? check,
   }) => execute(
     CockpitCommand(
       commandId: _nextId(type.name),
@@ -761,6 +1103,7 @@ final class CockpitTester {
       timeoutMs: _timeoutMs(timeout),
       capturePolicy: capturePolicy,
     ),
+    check: check,
   );
 
   Future<CockpitCommandExecution> _executeHost(CockpitCommand command) async {
@@ -895,6 +1238,32 @@ final class CockpitHostTester {
       timeoutMs: _tester._nativeTimeoutMs(timeout),
     ),
   );
+}
+
+Map<String, Object?> _pointerParameters({
+  required PointerDeviceKind device,
+  int? buttons,
+}) {
+  final parameters = <String, Object?>{};
+  if (device != PointerDeviceKind.touch) {
+    parameters['deviceKind'] = device.name;
+  }
+  if (buttons != null && buttons != kPrimaryButton) {
+    parameters['buttons'] = buttons;
+  }
+  return parameters;
+}
+
+void _validateTargetOrPoint(Object? target, Offset? at, String action) {
+  if (target == null && at == null) {
+    throw ArgumentError('$action requires a target or explicit at point.');
+  }
+}
+
+void _validateButtons(int buttons) {
+  if (buttons <= 0) {
+    throw ArgumentError.value(buttons, 'buttons', 'Must be positive.');
+  }
 }
 
 void _validateGestureDuration(Duration value, String name) {

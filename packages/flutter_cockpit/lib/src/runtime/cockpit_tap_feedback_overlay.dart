@@ -121,6 +121,8 @@ final class _CockpitTapFeedbackMarker extends StatelessWidget {
 
   Color _accentFor(CockpitGestureActionType type) {
     return switch (type) {
+      CockpitGestureActionType.hover => const Color(0xFF67E8F9),
+      CockpitGestureActionType.wheel => const Color(0xFF5EEAD4),
       CockpitGestureActionType.longPress => const Color(0xFFFFC857),
       CockpitGestureActionType.doubleTap => const Color(0xFF7DD3FC),
       CockpitGestureActionType.drag ||

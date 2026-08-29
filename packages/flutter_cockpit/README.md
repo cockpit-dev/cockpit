@@ -26,7 +26,7 @@ path used for installed production applications.
 It provides:
 
 - runtime bootstrap through `FlutterCockpit.runApp` or `FlutterCockpitApp`
-- command execution for taps, text input, gestures, waits, assertions, screenshots, and snapshots
+- command execution for taps, hover, text input, real wheel/trackpad input, gestures, waits, assertions, screenshots, and snapshots
 - remote session transport over HTTP on VM platforms and the Cockpit WebSocket
   bridge on web
 - structured Widget, Element, RenderObject, semantics, route, focus, log,

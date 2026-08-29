@@ -53,14 +53,27 @@ changes; live refs are not durable test data.
 
 ```dart
 await cockpit.tap('#save');
+await cockpit.hover('More options');
 await cockpit.tap('Dialog >> FilledButton["Continue"]');
 await cockpit.type('hello', into: '@message');
+await cockpit.focus('@message');
+await cockpit.selectText('@message', start: 0, end: 5);
+await cockpit.copy(from: '@message');
+await cockpit.paste('@message');
+await cockpit.clear('@message');
 await cockpit.scroll('Settings >> Text["Advanced"]', align: 'center');
+await cockpit.wheel(
+  target: '#list',
+  delta: const Offset(0, 120),
+  steps: 2,
+);
 ```
 
-Available facade methods cover `tap`, `longPress`, `doubleTap`, `drag`, `fling`,
-`swipe`, `pinch`, `rotate`, `panZoom`, `multiTouch`, `type`, `clear`, `press`,
-`increase`, `decrease`, `showOnScreen`, `scroll`,
+Available facade methods cover `tap`, `hover`, `longPress`, `doubleTap`, `drag`, `fling`,
+`swipe`, `pinch`, `rotate`, `panZoom`, `multiTouch`, `type`, `clear`, `copy`,
+`paste`, `focus`, `setTextEditingValue`, `selectText`, `keyDown`, `keyUp`,
+`press`, `increase`, `decrease`, `showOnScreen`, `scroll`,
+`wheel`,
 `waitFor`, `waitForUi`, `waitForRoute`, `back`, `dismiss`,
 `dismissKeyboard`, `expectVisible`, `expectText`, `screenshot`, `snapshot`,
 `watch`, and `execute`. `scroll` reveals through every mounted nested scrollable
@@ -73,6 +86,11 @@ explicit `at` point is supplied; source-owned tests should prefer a selector.
 `pinch` uses a scale greater than 1 to spread and less than 1 to pinch. `rotate`
 uses radians. `multiTouch` accepts a validated `CockpitMultiTouchSequence` and
 always releases every pointer, cancelling active pointers if a sequence fails.
+`wheel` dispatches real `PointerScrollEvent` signals rather than a drag, so
+scrollables and custom `Listener(onPointerSignal: ...)` widgets receive the
+same input as a mouse or trackpad. Its `delta` is per event; use `steps` and
+`interval` for a bounded sequence, `device` for device-kind-sensitive code,
+and `at` only when the signal owner is not discoverable as a mounted target.
 
 ```dart
 await cockpit.longPress('#card', duration: const Duration(milliseconds: 900));
@@ -82,6 +100,21 @@ await cockpit.swipe(target: '#list', direction: AxisDirection.up);
 await cockpit.pinch(target: '#map', scale: 1.5);
 await cockpit.rotate(target: '#canvas', radians: 1.5708);
 await cockpit.panZoom(target: '#canvas', pan: const Offset(40, 0));
+await cockpit.wheel(
+  target: '#list',
+  delta: const Offset(0, 120),
+  steps: 3,
+  interval: const Duration(milliseconds: 40),
+  device: PointerDeviceKind.trackpad,
+);
+await cockpit.setTextEditingValue(
+  '@message',
+  text: 'hello',
+  selectionBase: 0,
+  selectionExtent: 5,
+);
+await cockpit.keyDown('ControlLeft');
+await cockpit.keyUp('ControlLeft');
 await cockpit.multiTouch(
   const CockpitMultiTouchSequence(
     steps: <CockpitMultiTouchStep>[

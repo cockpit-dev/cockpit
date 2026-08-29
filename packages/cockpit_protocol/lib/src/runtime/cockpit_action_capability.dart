@@ -6,6 +6,7 @@ enum CockpitActionCapability {
   grantPermission,
   dismissPermissionDialog,
   tap,
+  hover,
   longPress,
   doubleTap,
   scroll,

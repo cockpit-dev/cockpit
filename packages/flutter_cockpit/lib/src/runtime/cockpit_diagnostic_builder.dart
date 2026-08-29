@@ -1,8 +1,10 @@
 // ignore_for_file: deprecated_member_use
 
+import 'dart:math' as math;
+
 import 'package:collection/collection.dart';
 import 'package:flutter/widgets.dart';
-import 'package:flutter/semantics.dart';
+import 'package:flutter/rendering.dart';
 
 import 'cockpit_accessibility_summary.dart';
 import 'cockpit_semantics_bridge.dart';
@@ -245,7 +247,7 @@ final class CockpitDiagnosticBuilder {
     );
     final style = runtimeNode == null || !options.includeStyleDetails
         ? null
-        : _extractStyle(runtimeNode.element);
+        : _extractStyle(runtimeNode.element, runtimeNode.renderBox);
     final diagnosticProperties =
         runtimeNode == null || !options.includeDiagnosticProperties
         ? const <CockpitDiagnosticProperty>[]
@@ -380,43 +382,133 @@ final class CockpitDiagnosticBuilder {
     return ancestors;
   }
 
-  CockpitSnapshotStyle? _extractStyle(Element element) {
+  CockpitSnapshotStyle? _extractStyle(Element element, RenderBox? renderBox) {
     final widget = element.widget;
+    final renderStyle = _extractRenderStyle(renderBox);
     if (widget is Text) {
       final style = widget.style;
       return CockpitSnapshotStyle(
-        textColor: style?.color == null ? null : _colorHex(style!.color!),
-        fontSize: _finiteDoubleOrNull(style?.fontSize),
-        fontWeight: style?.fontWeight?.toString().split('.').last,
+        textColor:
+            renderStyle?.textColor ??
+            (style?.color == null ? null : _colorHex(style!.color!)),
+        fontSize: renderStyle?.fontSize ?? _finiteDoubleOrNull(style?.fontSize),
+        fontWeight:
+            renderStyle?.fontWeight ??
+            style?.fontWeight?.toString().split('.').last,
+        opacity: renderStyle?.opacity,
+        transform: renderStyle?.transform,
       );
     }
     if (widget is Container && widget.decoration is BoxDecoration) {
       final decoration = widget.decoration! as BoxDecoration;
       return CockpitSnapshotStyle(
-        backgroundColor: decoration.color == null
-            ? null
-            : _colorHex(decoration.color!),
+        backgroundColor:
+            renderStyle?.backgroundColor ??
+            (decoration.color == null ? null : _colorHex(decoration.color!)),
         borderSummary: decoration.border?.toString(),
         shadowSummary:
             decoration.boxShadow == null || decoration.boxShadow!.isEmpty
             ? null
             : decoration.boxShadow!.first.toString(),
+        opacity: renderStyle?.opacity,
+        transform: renderStyle?.transform,
       );
     }
     if (widget is DecoratedBox && widget.decoration is BoxDecoration) {
       final decoration = widget.decoration as BoxDecoration;
       return CockpitSnapshotStyle(
-        backgroundColor: decoration.color == null
-            ? null
-            : _colorHex(decoration.color!),
+        backgroundColor:
+            renderStyle?.backgroundColor ??
+            (decoration.color == null ? null : _colorHex(decoration.color!)),
         borderSummary: decoration.border?.toString(),
         shadowSummary:
             decoration.boxShadow == null || decoration.boxShadow!.isEmpty
             ? null
             : decoration.boxShadow!.first.toString(),
+        opacity: renderStyle?.opacity,
+        transform: renderStyle?.transform,
       );
     }
-    return null;
+    if (renderStyle == null) {
+      return null;
+    }
+    return CockpitSnapshotStyle(
+      backgroundColor: renderStyle.backgroundColor,
+      opacity: renderStyle.opacity,
+      transform: renderStyle.transform,
+    );
+  }
+
+  _RenderStyle? _extractRenderStyle(RenderBox? renderBox) {
+    if (renderBox == null || !renderBox.attached) {
+      return null;
+    }
+    String? backgroundColor;
+    String? textColor;
+    double? fontSize;
+    String? fontWeight;
+    double? opacity;
+    String? transform;
+
+    RenderObject? current = renderBox;
+    for (var depth = 0; depth < 4 && current != null; depth += 1) {
+      if (current case final RenderOpacity value
+          when value.opacity.isFinite && value.opacity != 1) {
+        opacity = value.opacity;
+      }
+      if (current case final RenderAnimatedOpacity value
+          when value.opacity.value.isFinite && value.opacity.value != 1) {
+        opacity = value.opacity.value;
+      }
+      if (current case final RenderDecoratedBox value
+          when value.decoration is BoxDecoration) {
+        final decoration = value.decoration as BoxDecoration;
+        final color = decoration.color;
+        if (color != null) {
+          backgroundColor = _colorHex(color);
+        }
+      }
+      if (current case final RenderTransform value) {
+        transform = _transformSummary(value.getTransformTo(null));
+      }
+      if (current case final RenderParagraph paragraph) {
+        final style = paragraph.text.style;
+        if (style != null) {
+          textColor ??= style.color == null ? null : _colorHex(style.color!);
+          fontSize ??= _finiteDoubleOrNull(style.fontSize);
+          fontWeight ??= style.fontWeight?.toString().split('.').last;
+        }
+      }
+      current = current.parent;
+    }
+    if (backgroundColor == null &&
+        textColor == null &&
+        fontSize == null &&
+        fontWeight == null &&
+        opacity == null &&
+        transform == null) {
+      return null;
+    }
+    return _RenderStyle(
+      textColor: textColor,
+      backgroundColor: backgroundColor,
+      fontSize: fontSize,
+      fontWeight: fontWeight,
+      opacity: opacity,
+      transform: transform,
+    );
+  }
+
+  String _transformSummary(Matrix4 transform) {
+    final values = transform.storage;
+    final tx = values[12];
+    final ty = values[13];
+    final sx = math.sqrt(values[0] * values[0] + values[1] * values[1]);
+    final sy = math.sqrt(values[4] * values[4] + values[5] * values[5]);
+    final rotation = math.atan2(values[1], values[0]);
+    return 'x:${tx.toStringAsFixed(1)},y:${ty.toStringAsFixed(1)},'
+        'sx:${sx.toStringAsFixed(3)},sy:${sy.toStringAsFixed(3)},'
+        'r:${rotation.toStringAsFixed(3)}';
   }
 
   List<CockpitDiagnosticProperty> _extractDiagnosticProperties(
@@ -1070,6 +1162,24 @@ final class CockpitDiagnosticBuilder {
         typeName.contains('IgnorePointer') ||
         typeName.contains('MouseRegion');
   }
+}
+
+final class _RenderStyle {
+  const _RenderStyle({
+    this.textColor,
+    this.backgroundColor,
+    this.fontSize,
+    this.fontWeight,
+    this.opacity,
+    this.transform,
+  });
+
+  final String? textColor;
+  final String? backgroundColor;
+  final double? fontSize;
+  final String? fontWeight;
+  final double? opacity;
+  final String? transform;
 }
 
 final class _RuntimeNode {

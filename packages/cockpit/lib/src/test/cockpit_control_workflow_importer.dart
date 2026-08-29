@@ -589,14 +589,37 @@ CockpitTestActionTemplate _action(
     );
   }
 
+  void takeLocator(CockpitTestActionField field, [String? sourceName]) {
+    final name = sourceName ?? field.wireName;
+    if (!parameters.containsKey(name)) return;
+    final raw = parameters.remove(name);
+    if (raw is! Map<Object?, Object?>) {
+      throw _migrationError('$name must be an object at $path.');
+    }
+    final source = CockpitLocator.fromJson(Map<String, Object?>.from(raw));
+    values[field] = CockpitTestTemplateValue.literal(
+      _locator(source, path: '$path.$name').toJson(),
+      expectedType: field.valueType,
+    );
+  }
+
   CockpitTestConditionTemplate? condition;
   switch (kind) {
     case CockpitTestActionKind.tap:
       take(CockpitTestActionField.activation);
+      take(CockpitTestActionField.deviceKind);
+      take(CockpitTestActionField.buttons);
     case CockpitTestActionKind.longPress:
       take(CockpitTestActionField.durationMs);
-    case CockpitTestActionKind.doubleTap ||
-        CockpitTestActionKind.focusTextInput ||
+      take(CockpitTestActionField.deviceKind);
+      take(CockpitTestActionField.buttons);
+    case CockpitTestActionKind.wheel:
+      take(CockpitTestActionField.dx);
+      take(CockpitTestActionField.dy);
+      take(CockpitTestActionField.steps);
+      take(CockpitTestActionField.intervalMs);
+      take(CockpitTestActionField.deviceKind);
+    case CockpitTestActionKind.focusTextInput ||
         CockpitTestActionKind.back ||
         CockpitTestActionKind.increase ||
         CockpitTestActionKind.decrease ||
@@ -604,6 +627,12 @@ CockpitTestActionTemplate _action(
         CockpitTestActionKind.dismissKeyboard ||
         CockpitTestActionKind.clearNetworkActivity:
       break;
+    case CockpitTestActionKind.hover:
+      take(CockpitTestActionField.deviceKind);
+    case CockpitTestActionKind.doubleTap:
+      take(CockpitTestActionField.intervalMs);
+      take(CockpitTestActionField.deviceKind);
+      take(CockpitTestActionField.buttons);
     case CockpitTestActionKind.enterText:
       take(CockpitTestActionField.text);
     case CockpitTestActionKind.eraseText:
@@ -651,18 +680,32 @@ CockpitTestActionTemplate _action(
       take(CockpitTestActionField.dx);
       take(CockpitTestActionField.dy);
       take(CockpitTestActionField.durationMs);
+      take(CockpitTestActionField.holdDurationMs);
+      take(CockpitTestActionField.moveEventCount);
+      take(CockpitTestActionField.deviceKind);
+      take(CockpitTestActionField.buttons);
     case CockpitTestActionKind.fling:
       take(CockpitTestActionField.dx);
       take(CockpitTestActionField.dy);
-      final durationMs = (parameters.remove('durationMs') as int?) ?? 96;
-      final dx = (values[CockpitTestActionField.dx]!.value! as num).toDouble();
-      final dy = (values[CockpitTestActionField.dy]!.value! as num).toDouble();
-      final velocity = math.sqrt(dx * dx + dy * dy) / durationMs * 1000;
-      values[CockpitTestActionField.velocity] =
-          CockpitTestTemplateValue.literal(
-            velocity,
-            expectedType: CockpitTestValueType.number,
-          );
+      final durationMs = (parameters['durationMs'] as int?) ?? 96;
+      take(CockpitTestActionField.durationMs);
+      take(CockpitTestActionField.moveEventCount);
+      take(CockpitTestActionField.deviceKind);
+      take(CockpitTestActionField.buttons);
+      if (parameters.containsKey('velocity')) {
+        take(CockpitTestActionField.velocity);
+      } else {
+        final dx = (values[CockpitTestActionField.dx]!.value! as num)
+            .toDouble();
+        final dy = (values[CockpitTestActionField.dy]!.value! as num)
+            .toDouble();
+        final velocity = math.sqrt(dx * dx + dy * dy) / durationMs * 1000;
+        values[CockpitTestActionField.velocity] =
+            CockpitTestTemplateValue.literal(
+              velocity,
+              expectedType: CockpitTestValueType.number,
+            );
+      }
     case CockpitTestActionKind.swipe:
       take(CockpitTestActionField.direction);
       take(CockpitTestActionField.distance, 'distanceFactor');
@@ -674,15 +717,29 @@ CockpitTestActionTemplate _action(
         ),
       );
       take(CockpitTestActionField.durationMs);
+      take(CockpitTestActionField.moveEventCount);
+      take(CockpitTestActionField.deviceKind);
+      take(CockpitTestActionField.buttons);
     case CockpitTestActionKind.pinchZoom:
       take(CockpitTestActionField.scale);
+      take(CockpitTestActionField.startSpan);
+      take(CockpitTestActionField.durationMs);
+      take(CockpitTestActionField.moveEventCount);
+      take(CockpitTestActionField.deviceKind);
     case CockpitTestActionKind.rotate:
       take(CockpitTestActionField.rotationRadians);
+      take(CockpitTestActionField.startSpan);
+      take(CockpitTestActionField.durationMs);
+      take(CockpitTestActionField.moveEventCount);
+      take(CockpitTestActionField.deviceKind);
     case CockpitTestActionKind.panZoom:
       take(CockpitTestActionField.panDx);
       take(CockpitTestActionField.panDy);
       take(CockpitTestActionField.scale);
       take(CockpitTestActionField.rotationRadians);
+      take(CockpitTestActionField.durationMs);
+      take(CockpitTestActionField.moveEventCount);
+      take(CockpitTestActionField.deviceKind);
     case CockpitTestActionKind.multiTouch:
       take(CockpitTestActionField.sequence);
     case CockpitTestActionKind.scrollUntilVisible:
@@ -696,6 +753,19 @@ CockpitTestActionTemplate _action(
       take(CockpitTestActionField.maxScrolls);
       take(CockpitTestActionField.durationMs, 'durationPerStepMs');
       take(CockpitTestActionField.revealAlignment);
+      take(CockpitTestActionField.revealOffsetPx);
+      if (parameters.containsKey('scrollLocator') &&
+          parameters.containsKey('scrollableLocator')) {
+        throw _migrationError(
+          'scrollUntilVisible cannot define both scrollLocator and '
+          'scrollableLocator at $path.',
+        );
+      }
+      if (parameters.containsKey('scrollLocator')) {
+        takeLocator(CockpitTestActionField.scrollLocator, 'scrollLocator');
+      } else if (parameters.containsKey('scrollableLocator')) {
+        takeLocator(CockpitTestActionField.scrollLocator, 'scrollableLocator');
+      }
     case CockpitTestActionKind.showOnScreen:
       take(CockpitTestActionField.revealAlignment);
     case CockpitTestActionKind.waitForNetworkIdle ||
@@ -1084,9 +1154,9 @@ CockpitTestLocatorTemplate _locator(
       CockpitLocatorKind.tooltip => CockpitTestLocatorStrategy.label,
       CockpitLocatorKind.type => CockpitTestLocatorStrategy.type,
       CockpitLocatorKind.path => CockpitTestLocatorStrategy.path,
+      CockpitLocatorKind.key => CockpitTestLocatorStrategy.testId,
       CockpitLocatorKind.ref ||
       CockpitLocatorKind.semanticId ||
-      CockpitLocatorKind.key ||
       CockpitLocatorKind.route ||
       CockpitLocatorKind.registrationId ||
       CockpitLocatorKind.coordinate ||

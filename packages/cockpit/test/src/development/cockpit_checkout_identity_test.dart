@@ -70,4 +70,27 @@ void main() {
     expect(first.gitDirectory, isNot(second.gitDirectory));
     expect(first.value, isNot(second.value));
   });
+
+  test(
+    'falls back to filesystem identity when git cannot be launched',
+    () async {
+      final temporary = await Directory.systemTemp.createTemp(
+        'cockpit-checkout-identity-',
+      );
+      addTearDown(() async => temporary.delete(recursive: true));
+      final resolver = CockpitCheckoutIdentityResolver(
+        processRunner: (_, _, {workingDirectory, environment}) async {
+          throw const ProcessException('git', <String>[], 'not found', 127);
+        },
+      );
+
+      final identity = await resolver.resolve(temporary.path);
+
+      expect(identity.isGit, isFalse);
+      expect(
+        identity.canonicalRoot,
+        p.normalize(await temporary.resolveSymbolicLinks()),
+      );
+    },
+  );
 }

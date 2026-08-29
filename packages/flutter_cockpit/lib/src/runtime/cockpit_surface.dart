@@ -1455,6 +1455,7 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
       element,
       rootContext: rootContext,
       requiredCommand: requiredCommand,
+      includeInferredInteraction: allowGestureFallback,
     );
     if (relatedTargets.isEmpty) {
       return CockpitTargetResolutionResult.success(target: probeTarget);
@@ -1492,9 +1493,21 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
     CockpitLocator locator,
     CockpitCommandType? requiredCommand,
   ) {
-    if (requiredCommand != CockpitCommandType.tap &&
-        requiredCommand != CockpitCommandType.longPress &&
-        requiredCommand != CockpitCommandType.doubleTap) {
+    const inferredCommands = <CockpitCommandType>{
+      CockpitCommandType.tap,
+      CockpitCommandType.hover,
+      CockpitCommandType.longPress,
+      CockpitCommandType.doubleTap,
+      CockpitCommandType.drag,
+      CockpitCommandType.fling,
+      CockpitCommandType.swipe,
+      CockpitCommandType.pinchZoom,
+      CockpitCommandType.rotate,
+      CockpitCommandType.panZoom,
+      CockpitCommandType.multiTouch,
+      CockpitCommandType.wheel,
+    };
+    if (!inferredCommands.contains(requiredCommand)) {
       return false;
     }
     return locator.type != null ||
@@ -1510,6 +1523,7 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
     Element element, {
     required Element rootContext,
     required CockpitCommandType requiredCommand,
+    bool includeInferredInteraction = false,
   }) {
     final candidates = <({CockpitTarget target, int distance})>[];
     final seenElements = <Element>{};
@@ -1522,6 +1536,7 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
         routeName: routeName,
         requiredCommand: requiredCommand,
         explicitTargets: _registry.registeredTargets,
+        includeInferredInteraction: includeInferredInteraction,
       ),
     ];
     for (final target in targets) {

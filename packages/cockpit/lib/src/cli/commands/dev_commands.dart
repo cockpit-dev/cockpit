@@ -20,6 +20,8 @@ final class CockpitDevCommand extends Command<int> {
     addSubcommand(_inspect(runtime, dev));
     addSubcommand(_tree(runtime, dev));
     addSubcommand(cockpitDevTapCommand(runtime, dev));
+    addSubcommand(cockpitDevHoverCommand(runtime, dev));
+    addSubcommand(cockpitDevWheelCommand(runtime, dev));
     addSubcommand(cockpitDevHoldCommand(runtime, dev));
     addSubcommand(cockpitDevDoubleCommand(runtime, dev));
     addSubcommand(cockpitDevDragCommand(runtime, dev));
@@ -32,6 +34,11 @@ final class CockpitDevCommand extends Command<int> {
     addSubcommand(cockpitDevIncreaseCommand(runtime, dev));
     addSubcommand(cockpitDevDecreaseCommand(runtime, dev));
     addSubcommand(cockpitDevTypeCommand(runtime, dev));
+    addSubcommand(cockpitDevFocusCommand(runtime, dev));
+    addSubcommand(cockpitDevClearCommand(runtime, dev));
+    addSubcommand(cockpitDevCopyCommand(runtime, dev));
+    addSubcommand(cockpitDevPasteCommand(runtime, dev));
+    addSubcommand(cockpitDevSelectCommand(runtime, dev));
     addSubcommand(cockpitDevPressCommand(runtime, dev));
     addSubcommand(cockpitDevBackCommand(runtime, dev));
     addSubcommand(cockpitDevDismissCommand(runtime, dev));

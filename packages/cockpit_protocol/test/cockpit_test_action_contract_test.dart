@@ -125,6 +125,96 @@ void main() {
     }
   });
 
+  test('gesture timing, pointer, and nested scroll fields round-trip', () {
+    final schema = JsonSchema.create(
+      jsonDecode(_schemaFile().readAsStringSync()),
+    );
+    final locator = <String, Object?>{'testId': 'target'};
+    final actions = <Map<String, Object?>>[
+      <String, Object?>{
+        'type': 'doubleTap',
+        'locator': locator,
+        'intervalMs': 120,
+        'deviceKind': 'mouse',
+        'buttons': 'secondary',
+      },
+      <String, Object?>{
+        'type': 'drag',
+        'locator': locator,
+        'dx': 120,
+        'dy': 10,
+        'durationMs': 300,
+        'holdDurationMs': 80,
+        'moveEventCount': 12,
+        'deviceKind': 'stylus',
+        'buttons': 1,
+      },
+      <String, Object?>{
+        'type': 'fling',
+        'locator': locator,
+        'dx': 0,
+        'dy': -240,
+        'velocity': 1200,
+        'durationMs': 240,
+        'moveEventCount': 20,
+        'deviceKind': 'touch',
+        'buttons': 'primary',
+      },
+      <String, Object?>{
+        'type': 'pinchZoom',
+        'locator': locator,
+        'scale': 1.5,
+        'startSpan': 64,
+        'durationMs': 260,
+        'moveEventCount': 16,
+        'deviceKind': 'trackpad',
+      },
+      <String, Object?>{
+        'type': 'rotate',
+        'locator': locator,
+        'rotationRadians': 0.5,
+        'startSpan': 64,
+        'durationMs': 260,
+        'moveEventCount': 16,
+        'deviceKind': 'touch',
+      },
+      <String, Object?>{
+        'type': 'panZoom',
+        'locator': locator,
+        'panDx': 20,
+        'panDy': -10,
+        'durationMs': 180,
+        'moveEventCount': 10,
+        'deviceKind': 'trackpad',
+      },
+      <String, Object?>{
+        'type': 'scrollUntilVisible',
+        'locator': locator,
+        'direction': 'down',
+        'maxScrolls': 10,
+        'durationMs': 220,
+        'revealAlignment': 'center',
+        'revealOffsetPx': 12,
+        'scrollLocator': <String, Object?>{'testId': 'list'},
+      },
+    ];
+
+    for (final action in actions) {
+      final document = _documentFor(action);
+      expect(schema.validate(document).isValid, isTrue, reason: '$action');
+      final template = CockpitTestActionTemplate.fromJson(
+        action,
+        path: r'$.steps[0].action',
+      );
+      expect(template.toJson(), action);
+      final bound = CockpitTestAction.fromJson(
+        action,
+        path: r'$.steps[0].action',
+      );
+      expect(bound.toJson(), action);
+    }
+  });
+
   test('key requests reject unknown fields in the model and schema', () {
     final schema = JsonSchema.create(
       jsonDecode(_schemaFile().readAsStringSync()),
@@ -199,6 +289,16 @@ Map<String, Object?> _actionJson(CockpitTestActionKind kind) {
       'type': kind.name,
       'locator': locator,
       'activation': 'semantic',
+    },
+    CockpitTestActionKind.hover => <String, Object?>{
+      'type': kind.name,
+      'locator': locator,
+    },
+    CockpitTestActionKind.wheel => <String, Object?>{
+      'type': kind.name,
+      'locator': locator,
+      'dx': 0,
+      'dy': 120,
     },
     CockpitTestActionKind.longPress => <String, Object?>{
       'type': kind.name,

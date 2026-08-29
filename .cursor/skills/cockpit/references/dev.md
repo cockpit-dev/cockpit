@@ -24,7 +24,7 @@ cockpit dev status
 ```
 
 Use `cockpit session list` for an immediate local index. It performs no daemon,
-worker, Flutter attach, reconnect, or app launch work; `state` is only the
+worker, Flutter attach, reconnect, or app launch work; `last` is only the
 last saved state. Use `cockpit session show HANDLE` when live reachability is
 actually required. Use `cockpit dev use HANDLE` only for a persistent selection
 change. Explicit `--session HANDLE` and a returned recovery `next` stay scoped to
@@ -208,12 +208,39 @@ direction. Cockpit owns scroll-container discovery; when a target is ambiguous,
 strengthen the target selector with a real ancestor or identity instead of inventing
 a container option.
 
+For input that must behave like a physical mouse wheel or trackpad, use
+`dev wheel` instead of a drag-based scroll:
+
+```bash
+cockpit dev wheel "List" --dy 120
+cockpit dev wheel "List" --dy 120 --steps 3 --interval 40ms --device trackpad
+```
+
+Each step dispatches one real `PointerScrollEvent` at the target. `--dx` and
+`--dy` are per-event logical-pixel deltas; `--steps` repeats the signal and
+`--interval` spaces repeated signals. Use `--device trackpad` only when the
+widget distinguishes device kind; mouse is the default. Cockpit advertises this
+capability for `Scrollable`, a custom `Listener(onPointerSignal: ...)`, and
+trackpad-aware `InteractiveViewer`. A source-known custom widget can be located
+without a Key or Semantics label. Use `--at X,Y` only when no mounted target
+owns the signal.
+
 ## Gestures and change observation
 
 The Flutter development bridge exposes real pointer gestures in addition to tap,
 hold, and double-tap:
 
+`tap`, `hover`, `hold`, and `double` accept either a mounted selector or an
+explicit `--at X,Y` point. Omit the selector only for the deliberate coordinate
+fallback; coordinates are logical Flutter viewport pixels. Prefer source-derived
+selectors or the `sel` returned by `dev inspect` whenever the target is
+discoverable, because selectors remain stable across layout changes.
+
 ```bash
+cockpit dev tap --at 320,640 --device mouse
+cockpit dev hover --at 480,96
+cockpit dev hold --at 320,640 --duration 900ms
+cockpit dev double --at 320,640 --interval 120ms
 cockpit dev drag "Canvas" --dx 120 --dy 0
 cockpit dev fling "List" --dx 0 --dy -400 --velocity 1600
 cockpit dev swipe "List" up
@@ -221,6 +248,7 @@ cockpit dev pinch "Map" 1.5
 cockpit dev rotate "Canvas" 1.5708
 cockpit dev pan "Canvas" --dx 80 --dy 20
 cockpit dev multi "Canvas" --sequence-file /absolute/gesture.yaml
+cockpit dev wheel "List" --dy 120 --steps 3 --device trackpad
 ```
 
 Use `hold TARGET --duration 900ms` when the press duration is part of the

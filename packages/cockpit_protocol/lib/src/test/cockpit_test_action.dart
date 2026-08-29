@@ -359,17 +359,25 @@ void _validateActionValues(
 
   for (final field in const <CockpitTestActionField>{
     CockpitTestActionField.durationMs,
+    CockpitTestActionField.holdDurationMs,
     CockpitTestActionField.velocity,
     CockpitTestActionField.distance,
+    CockpitTestActionField.startSpan,
     CockpitTestActionField.maxScrolls,
     CockpitTestActionField.quietMs,
     CockpitTestActionField.characters,
     CockpitTestActionField.intervalMs,
+    CockpitTestActionField.steps,
   }) {
     final value = number(field);
     if (value != null && value <= 0) {
       throw FormatException('${field.wireName} must be positive.');
     }
+  }
+  final moveEventCount = integer(CockpitTestActionField.moveEventCount);
+  if (moveEventCount != null &&
+      (moveEventCount < 0 || moveEventCount > 10000)) {
+    throw const FormatException('moveEventCount must be between 0 and 10000.');
   }
   for (final field in const <CockpitTestActionField>{
     CockpitTestActionField.selectionStart,
@@ -412,6 +420,51 @@ void _validateActionValues(
         'gesture',
       }.contains(activation)) {
     throw const FormatException('Unsupported tap activation.');
+  }
+  final deviceKind = string(CockpitTestActionField.deviceKind);
+  if (deviceKind != null &&
+      !const <String>{
+        'touch',
+        'mouse',
+        'stylus',
+        'invertedStylus',
+        'trackpad',
+        'unknown',
+      }.contains(deviceKind)) {
+    throw const FormatException('Unsupported pointer device kind.');
+  }
+  final buttons = values[CockpitTestActionField.buttons];
+  if (buttons != null && buttons is! CockpitTestSecretToken) {
+    switch (buttons) {
+      case int value when value > 0:
+        break;
+      case String value:
+        final aliases = value
+            .split(RegExp(r'[\s,+|]+'))
+            .where((token) => token.isNotEmpty)
+            .map((token) => token.toLowerCase())
+            .toList(growable: false);
+        if (aliases.isEmpty ||
+            aliases.any(
+              (token) => !const <String>{
+                'primary',
+                'left',
+                'tap',
+                'secondary',
+                'right',
+                'tertiary',
+                'middle',
+                'back',
+                'forward',
+              }.contains(token),
+            )) {
+          throw const FormatException('Unsupported pointer buttons.');
+        }
+      default:
+        throw const FormatException(
+          'buttons must be a positive bitmask or named aliases.',
+        );
+    }
   }
   final matchMode = string(CockpitTestActionField.matchMode);
   if (matchMode != null &&
@@ -466,7 +519,9 @@ void _validateActionValues(
         CockpitTestActionField.composingStart,
         CockpitTestActionField.composingEnd,
       );
-    case CockpitTestActionKind.drag || CockpitTestActionKind.fling:
+    case CockpitTestActionKind.drag ||
+        CockpitTestActionKind.fling ||
+        CockpitTestActionKind.wheel:
       final dx = number(CockpitTestActionField.dx);
       final dy = number(CockpitTestActionField.dy);
       if (dx != null && dy != null && dx == 0 && dy == 0) {

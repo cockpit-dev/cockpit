@@ -532,14 +532,12 @@ final class FlutterCockpitRootState extends State<FlutterCockpitRoot> {
             required gestureProfile,
             required continuous,
             required postScrollEnsureVisible,
-          }) {
+          }) async {
             final surfaceState = _surfaceStateOrNull;
             if (surfaceState == null) {
-              return Future<CockpitScrollStepResult>.value(
-                const CockpitScrollStepResult(didScroll: false),
-              );
+              return const CockpitScrollStepResult(didScroll: false);
             }
-            return surfaceState.scrollByViewport(
+            final result = await surfaceState.scrollByViewport(
               reverse: reverse,
               viewportFraction: viewportFraction,
               scrollableKey: scrollableKey,
@@ -550,6 +548,13 @@ final class FlutterCockpitRootState extends State<FlutterCockpitRoot> {
               continuous: continuous,
               postScrollEnsureVisible: postScrollEnsureVisible,
             );
+            // Test bindings do not expose a live endOfFrame future. The
+            // injected settler is the authoritative frame pump for lazy
+            // children after jumpTo/gesture scrolling.
+            if (postActionSettler != null && result.didScroll) {
+              await postActionSettler();
+            }
+            return result;
           },
       ensureVisibleHandler:
           ({

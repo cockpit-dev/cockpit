@@ -14,16 +14,19 @@ CockpitLeafCommand cockpitDevTapCommand(
 ) => CockpitLeafCommand(
   runtime: runtime,
   name: 'tap',
-  description: 'Find, reveal, and tap one exact Flutter target.',
-  invocationSuffix: 'SELECTOR [arguments]',
+  description: 'Find and tap one Flutter target, or tap explicit coordinates.',
+  invocationSuffix: '[SELECTOR] [arguments]',
   example: 'cockpit dev tap \'Dialog >> FilledButton["Continue"]\'',
-  configure: _targetOptions,
+  configure: _pointerTargetOptions,
   action: (arguments) => _targetAction(
     runtime,
     dev,
     arguments,
     action: 'tap',
     type: CockpitCommandType.tap,
+    targetRequired: false,
+    requireTargetOrPoint: true,
+    includePoint: true,
   ),
 );
 
@@ -33,11 +36,12 @@ CockpitLeafCommand cockpitDevHoldCommand(
 ) => CockpitLeafCommand(
   runtime: runtime,
   name: 'hold',
-  description: 'Find, reveal, and long-press one exact Flutter target.',
-  invocationSuffix: 'SELECTOR [arguments]',
+  description:
+      'Find and long-press one Flutter target, or hold at explicit coordinates.',
+  invocationSuffix: '[SELECTOR] [arguments]',
   example: 'cockpit dev hold ":a" --duration 900ms',
   configure: (parser) {
-    _targetOptions(parser);
+    _pointerTargetOptions(parser);
     parser.addOption(
       'duration',
       defaultsTo: '600ms',
@@ -53,6 +57,87 @@ CockpitLeafCommand cockpitDevHoldCommand(
       action: 'hold',
       type: CockpitCommandType.longPress,
       parameters: <String, Object?>{'durationMs': duration.inMilliseconds},
+      targetRequired: false,
+      requireTargetOrPoint: true,
+      includePoint: true,
+    );
+  },
+);
+
+CockpitLeafCommand cockpitDevHoverCommand(
+  CockpitCliRuntime runtime,
+  CockpitDevRuntime dev,
+) => CockpitLeafCommand(
+  runtime: runtime,
+  name: 'hover',
+  description:
+      'Move the pointer into a Flutter target or explicit coordinates.',
+  invocationSuffix: '[SELECTOR] [arguments]',
+  example: 'cockpit dev hover "More options"',
+  configure: (parser) => _pointerTargetOptions(parser, includeButtons: false),
+  action: (arguments) => _targetAction(
+    runtime,
+    dev,
+    arguments,
+    action: 'hover',
+    type: CockpitCommandType.hover,
+    targetRequired: false,
+    requireTargetOrPoint: true,
+    includePoint: true,
+  ),
+);
+
+CockpitLeafCommand cockpitDevWheelCommand(
+  CockpitCliRuntime runtime,
+  CockpitDevRuntime dev,
+) => CockpitLeafCommand(
+  runtime: runtime,
+  name: 'wheel',
+  description: 'Dispatch real mouse or trackpad wheel signals.',
+  invocationSuffix: '[SELECTOR] [arguments]',
+  example: 'cockpit dev wheel "List" --dy 120',
+  configure: (parser) {
+    _pointerTargetOptions(parser, includeButtons: false, allowTrackpad: true);
+    parser
+      ..addOption('dx', help: 'Horizontal scroll delta per wheel event.')
+      ..addOption('dy', help: 'Vertical scroll delta per wheel event.')
+      ..addOption('steps', help: 'Number of wheel events to dispatch.')
+      ..addOption('interval', help: 'Delay between wheel events.');
+  },
+  action: (arguments) async {
+    final dx = _optionalFiniteDouble(arguments, 'dx');
+    final dy = _optionalFiniteDouble(arguments, 'dy');
+    if (dx == 0 && dy == 0) {
+      throw const FormatException('dev wheel requires non-zero dx or dy.');
+    }
+    final rawSteps = arguments.option('steps');
+    final steps = rawSteps == null ? 1 : int.tryParse(rawSteps);
+    if (steps == null || steps < 1 || steps > 1000) {
+      throw const FormatException('--steps must be between 1 and 1000.');
+    }
+    final rawInterval = arguments.option('interval');
+    final interval = rawInterval == null
+        ? null
+        : _positiveDurationValue(rawInterval, 'interval');
+    final target = arguments.rest.isEmpty ? null : arguments.rest.single;
+    if (arguments.rest.length > 1) {
+      throw const FormatException('dev wheel accepts at most one target.');
+    }
+    return _targetGestureAction(
+      runtime,
+      dev,
+      arguments,
+      action: 'wheel',
+      type: CockpitCommandType.wheel,
+      selector: target,
+      targetRequired: false,
+      parameters: <String, Object?>{
+        'dx': dx,
+        'dy': dy,
+        if (steps != 1) 'steps': steps,
+        if (interval != null) 'intervalMs': interval.inMilliseconds,
+        ..._optionalPoint(arguments),
+      },
     );
   },
 );
@@ -63,11 +148,12 @@ CockpitLeafCommand cockpitDevDoubleCommand(
 ) => CockpitLeafCommand(
   runtime: runtime,
   name: 'double',
-  description: 'Find, reveal, and double-tap one exact Flutter target.',
-  invocationSuffix: 'SELECTOR [arguments]',
+  description:
+      'Find and double-tap one Flutter target, or double-tap coordinates.',
+  invocationSuffix: '[SELECTOR] [arguments]',
   example: 'cockpit dev double ":a"',
   configure: (parser) {
-    _targetOptions(parser);
+    _pointerTargetOptions(parser);
     parser.addOption(
       'interval',
       defaultsTo: '90ms',
@@ -83,6 +169,9 @@ CockpitLeafCommand cockpitDevDoubleCommand(
     parameters: <String, Object?>{
       'intervalMs': _positiveDuration(arguments, 'interval').inMilliseconds,
     },
+    targetRequired: false,
+    requireTargetOrPoint: true,
+    includePoint: true,
   ),
 );
 
@@ -124,7 +213,10 @@ CockpitLeafCommand cockpitDevDragCommand(
       arguments,
       action: 'drag',
       type: CockpitCommandType.drag,
-      parameters: parameters,
+      parameters: <String, Object?>{
+        ...parameters,
+        ..._optionalPointerInput(arguments),
+      },
     );
   },
 );
@@ -475,6 +567,97 @@ CockpitLeafCommand cockpitDevTypeCommand(
   },
 );
 
+CockpitLeafCommand cockpitDevFocusCommand(
+  CockpitCliRuntime runtime,
+  CockpitDevRuntime dev,
+) => _directTargetCommand(
+  runtime,
+  dev,
+  name: 'focus',
+  description: 'Focus one Flutter text input without changing its value.',
+  example: 'cockpit dev focus "Message"',
+  type: CockpitCommandType.focusTextInput,
+);
+
+CockpitLeafCommand cockpitDevClearCommand(
+  CockpitCliRuntime runtime,
+  CockpitDevRuntime dev,
+) => _directTargetCommand(
+  runtime,
+  dev,
+  name: 'clear',
+  description: 'Clear one Flutter text input.',
+  example: 'cockpit dev clear "Message"',
+  type: CockpitCommandType.eraseText,
+);
+
+CockpitLeafCommand cockpitDevCopyCommand(
+  CockpitCliRuntime runtime,
+  CockpitDevRuntime dev,
+) => _optionalTextTargetCommand(
+  runtime,
+  dev,
+  name: 'copy',
+  description: 'Copy selected or complete Flutter text to the clipboard.',
+  example: 'cockpit dev copy "Message"',
+  type: CockpitCommandType.copyText,
+);
+
+CockpitLeafCommand cockpitDevPasteCommand(
+  CockpitCliRuntime runtime,
+  CockpitDevRuntime dev,
+) => _directTargetCommand(
+  runtime,
+  dev,
+  name: 'paste',
+  description: 'Paste the clipboard into one Flutter text input.',
+  example: 'cockpit dev paste "Message"',
+  type: CockpitCommandType.pasteText,
+);
+
+CockpitLeafCommand cockpitDevSelectCommand(
+  CockpitCliRuntime runtime,
+  CockpitDevRuntime dev,
+) => CockpitLeafCommand(
+  runtime: runtime,
+  name: 'select',
+  description: 'Select a UTF-16 text range in one Flutter input.',
+  invocationSuffix: 'SELECTOR START END [arguments]',
+  example: 'cockpit dev select "Message" 0 5',
+  configure: cockpitAddDevSessionOption,
+  action: (arguments) async {
+    if (arguments.rest.length != 3) {
+      throw const FormatException(
+        'dev select requires SELECTOR, START, and END.',
+      );
+    }
+    final start = int.tryParse(arguments.rest[1]);
+    final end = int.tryParse(arguments.rest[2]);
+    if (start == null || end == null || start < 0 || end < 0) {
+      throw const FormatException(
+        'START and END must be non-negative integers.',
+      );
+    }
+    return dev.runCommand(
+      await runtime.resolveDevelopmentSession(arguments.option('session')),
+      action: 'select',
+      command: dev.command(
+        type: CockpitCommandType.setTextEditingValue,
+        timeout: runtime.operationTimeout,
+        locator: cockpitReadDevLocator(
+          arguments,
+          selector: arguments.rest.first,
+        ),
+        parameters: <String, Object?>{
+          'selectionBase': start,
+          'selectionExtent': end,
+          'requestFocus': true,
+        },
+      ),
+    );
+  },
+);
+
 CockpitLeafCommand cockpitDevPressCommand(
   CockpitCliRuntime runtime,
   CockpitDevRuntime dev,
@@ -637,7 +820,7 @@ CockpitLeafCommand cockpitDevScrollCommand(
     parser
       ..addOption(
         'direction',
-        allowed: const <String>['up', 'down'],
+        allowed: const <String>['up', 'down', 'left', 'right'],
         defaultsTo: 'down',
         help:
             'Choose the initial search direction; Cockpit reverses after reaching the boundary.',
@@ -674,7 +857,10 @@ CockpitLeafCommand cockpitDevScrollCommand(
       type: CockpitCommandType.scrollUntilVisible,
       parameters: <String, Object?>{
         'maxScrolls': maxScrolls,
-        'reverse': arguments.option('direction') == 'up',
+        'reverse': const <String>{
+          'up',
+          'left',
+        }.contains(arguments.option('direction')),
         'revealAlignment': arguments.option('align'),
         'revealOffsetPx': offset,
       },
@@ -724,10 +910,22 @@ Future<int> _targetAction(
   required String action,
   required CockpitCommandType type,
   Map<String, Object?> parameters = const <String, Object?>{},
+  bool targetRequired = true,
+  bool requireTargetOrPoint = false,
+  bool includePoint = false,
 }) async {
   final text = arguments.rest.length == 1 ? arguments.rest.single : null;
   if (arguments.rest.length > 1) {
     throw FormatException('dev $action accepts exactly one target.');
+  }
+  final point = includePoint
+      ? _optionalPoint(arguments)
+      : const <String, Object?>{};
+  final hasTarget = text != null && text.trim().isNotEmpty;
+  if (requireTargetOrPoint && !hasTarget && point.isEmpty) {
+    throw FormatException(
+      'dev $action requires a target selector or --at X,Y.',
+    );
   }
   return dev.runCommand(
     await runtime.resolveDevelopmentSession(arguments.option('session')),
@@ -735,8 +933,61 @@ Future<int> _targetAction(
     command: dev.command(
       type: type,
       timeout: runtime.operationTimeout,
-      locator: cockpitReadDevLocator(arguments, selector: text),
-      parameters: parameters,
+      locator: cockpitReadDevLocator(
+        arguments,
+        selector: text,
+        targetRequired: targetRequired,
+      ),
+      parameters: <String, Object?>{
+        ...parameters,
+        ...point,
+        ..._optionalPointerInput(arguments),
+      },
+    ),
+  );
+}
+
+CockpitLeafCommand _optionalTextTargetCommand(
+  CockpitCliRuntime runtime,
+  CockpitDevRuntime dev, {
+  required String name,
+  required String description,
+  required String example,
+  required CockpitCommandType type,
+}) => CockpitLeafCommand(
+  runtime: runtime,
+  name: name,
+  description: description,
+  invocationSuffix: '[SELECTOR] [arguments]',
+  example: example,
+  configure: _targetOptions,
+  action: (arguments) =>
+      _targetActionOptional(runtime, dev, arguments, action: name, type: type),
+);
+
+Future<int> _targetActionOptional(
+  CockpitCliRuntime runtime,
+  CockpitDevRuntime dev,
+  ArgResults arguments, {
+  required String action,
+  required CockpitCommandType type,
+}) async {
+  final target = arguments.rest.length == 1 ? arguments.rest.single : null;
+  if (arguments.rest.length > 1) {
+    throw FormatException('dev $action accepts at most one target.');
+  }
+  return dev.runCommand(
+    await runtime.resolveDevelopmentSession(arguments.option('session')),
+    action: action,
+    command: dev.command(
+      type: type,
+      timeout: runtime.operationTimeout,
+      locator: cockpitReadDevLocator(
+        arguments,
+        selector: target,
+        targetRequired: false,
+      ),
+      parameters: _optionalPointerInput(arguments),
     ),
   );
 }
@@ -773,9 +1024,30 @@ Future<int> _targetGestureAction(
         selector: target,
         targetRequired: targetRequired,
       ),
-      parameters: parameters,
+      parameters: <String, Object?>{
+        ...parameters,
+        ..._optionalPointerInput(arguments),
+      },
     ),
   );
+}
+
+Map<String, Object?> _optionalPointerInput(ArgResults arguments) {
+  // Pointer commands intentionally expose different option subsets.  Reading
+  // an option that is not registered on the selected command throws from
+  // package:args, which made commands such as `dev hover` fail before the
+  // action reached the session.  Check the parsed command surface first so
+  // shared action builders remain safe for every pointer command.
+  final device = arguments.options.contains('device')
+      ? arguments.option('device')
+      : null;
+  final buttons = arguments.options.contains('buttons')
+      ? arguments.option('buttons')
+      : null;
+  return <String, Object?>{
+    if (device != null && device.trim().isNotEmpty) 'deviceKind': device,
+    if (buttons != null && buttons.trim().isNotEmpty) 'buttons': buttons,
+  };
 }
 
 Map<String, Object?> _optionalGestureTiming(ArgResults arguments) {
@@ -846,6 +1118,56 @@ CockpitLocator? cockpitReadDevLocator(
 
 void _targetOptions(ArgParser parser) {
   cockpitAddDevSessionOption(parser);
+  _addPointerOptions(
+    parser,
+    includeButtons: true,
+    includeAt: false,
+    allowTrackpad: true,
+  );
+}
+
+void _pointerTargetOptions(
+  ArgParser parser, {
+  bool includeButtons = true,
+  bool allowTrackpad = false,
+}) {
+  cockpitAddDevSessionOption(parser);
+  _addPointerOptions(
+    parser,
+    includeButtons: includeButtons,
+    includeAt: true,
+    allowTrackpad: allowTrackpad,
+  );
+}
+
+void _addPointerOptions(
+  ArgParser parser, {
+  required bool includeButtons,
+  required bool includeAt,
+  required bool allowTrackpad,
+}) {
+  final devices = <String>[
+    'touch',
+    'mouse',
+    'stylus',
+    'invertedStylus',
+    if (allowTrackpad) 'trackpad',
+  ];
+  parser.addOption(
+    'device',
+    allowed: devices,
+    help: 'Pointer device for pointer gestures.',
+  );
+  if (includeButtons) {
+    parser.addOption(
+      'buttons',
+      help:
+          'Mouse button aliases: primary, secondary, tertiary, back, forward.',
+    );
+  }
+  if (includeAt) {
+    parser.addOption('at', help: 'Optional pointer position as X,Y.');
+  }
 }
 
 int _integer(ArgResults arguments, String name) {
@@ -859,6 +1181,16 @@ double _finiteDouble(ArgResults arguments, String name) {
   if (raw == null) {
     throw FormatException('--$name is required.');
   }
+  final parsed = double.tryParse(raw);
+  if (parsed == null || !parsed.isFinite) {
+    throw FormatException('--$name is invalid.');
+  }
+  return parsed;
+}
+
+double _optionalFiniteDouble(ArgResults arguments, String name) {
+  final raw = arguments.options.contains(name) ? arguments.option(name) : null;
+  if (raw == null || raw.trim().isEmpty) return 0;
   final parsed = double.tryParse(raw);
   if (parsed == null || !parsed.isFinite) {
     throw FormatException('--$name is invalid.');

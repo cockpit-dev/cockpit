@@ -97,6 +97,8 @@ bool _shouldDefaultToAfterActionCapture(CockpitCommand command) {
 bool _isKeyOperation(CockpitCommandType commandType) {
   return switch (commandType) {
     CockpitCommandType.tap ||
+    CockpitCommandType.hover ||
+    CockpitCommandType.wheel ||
     CockpitCommandType.enterText ||
     CockpitCommandType.eraseText ||
     CockpitCommandType.pasteText ||

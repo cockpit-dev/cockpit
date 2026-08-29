@@ -1,5 +1,7 @@
 enum CockpitCommandType {
   tap,
+  hover,
+  wheel,
   enterText,
   eraseText,
   copyText,

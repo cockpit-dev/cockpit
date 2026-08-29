@@ -615,6 +615,114 @@ void main() {
     expect(popup.supportedCommands, contains(CockpitCommandType.tap));
   });
 
+  testWidgets(
+    'discovers wheel owners without keys or semantics and keeps passive text compact',
+    (tester) async {
+      await tester.pumpWidget(
+        CockpitSurface(
+          routeName: '/wheel',
+          child: MaterialApp(
+            home: Scaffold(
+              body: ExcludeSemantics(
+                child: Column(
+                  children: <Widget>[
+                    SizedBox(
+                      height: 220,
+                      child: ListView.builder(
+                        itemCount: 20,
+                        itemBuilder: (context, index) =>
+                            SizedBox(height: 40, child: Text('Row $index')),
+                      ),
+                    ),
+                    SizedBox(
+                      height: 80,
+                      child: Listener(
+                        onPointerSignal: (_) {},
+                        child: const Text('Custom wheel surface'),
+                      ),
+                    ),
+                    SizedBox(
+                      height: 80,
+                      child: InteractiveViewer(
+                        trackpadScrollCausesScale: true,
+                        child: const Text('Trackpad canvas'),
+                      ),
+                    ),
+                    const Text('Passive text'),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final targets = tester
+          .state<CockpitSurfaceState>(find.byType(CockpitSurface))
+          .registry
+          .visibleTargets;
+      final wheelTargets = targets
+          .where(
+            (target) =>
+                target.supportedCommands.contains(CockpitCommandType.wheel),
+          )
+          .toList(growable: false);
+
+      expect(wheelTargets, isEmpty);
+
+      final passive = targets.singleWhere(
+        (target) => target.text == 'Passive text',
+      );
+      expect(
+        passive.supportedCommands,
+        isNot(contains(CockpitCommandType.wheel)),
+      );
+
+      final state = tester.state<CockpitSurfaceState>(
+        find.byType(CockpitSurface),
+      );
+      final customWheel = state.probeVisibleLocator(
+        const CockpitLocator(
+          text: 'Custom wheel surface',
+          ancestor: CockpitLocator(type: 'Listener'),
+        ),
+        requiredCommand: CockpitCommandType.wheel,
+      );
+      expect(customWheel.isSuccess, isTrue);
+      expect(
+        customWheel.target?.supportedCommands,
+        contains(CockpitCommandType.wheel),
+      );
+
+      final scrollWheel = state.probeVisibleLocator(
+        const CockpitLocator(
+          text: 'Row 0',
+          ancestor: CockpitLocator(type: 'Scrollable'),
+        ),
+        requiredCommand: CockpitCommandType.wheel,
+      );
+      expect(scrollWheel.isSuccess, isTrue);
+      expect(
+        scrollWheel.target?.supportedCommands,
+        contains(CockpitCommandType.wheel),
+      );
+
+      final trackpadWheel = state.probeVisibleLocator(
+        const CockpitLocator(
+          text: 'Trackpad canvas',
+          ancestor: CockpitLocator(type: 'InteractiveViewer'),
+        ),
+        requiredCommand: CockpitCommandType.wheel,
+      );
+      expect(trackpadWheel.isSuccess, isTrue);
+      expect(
+        trackpadWheel.target?.supportedCommands,
+        contains(CockpitCommandType.wheel),
+      );
+    },
+  );
+
   testWidgets('discovers interactive targets by their own key', (tester) async {
     var selected = false;
 

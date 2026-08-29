@@ -2805,7 +2805,7 @@ Map<String, Object?>? _compactCollection(
       'platform',
       'deviceId',
       'flavor',
-      'lastState',
+      'last',
       if (more) ...<String>[
         'sessionId',
         'workspaceId',
@@ -3402,7 +3402,6 @@ const Map<String, String> _conciseCliFieldNames = <String, String>{
   'opUnavailable': 'unavailable',
   'sessionHandle': 'session',
   'handleId': 'session',
-  'lastState': 'state',
   'projectPath': 'path',
   'relativePath': 'path',
   'packageName': 'package',

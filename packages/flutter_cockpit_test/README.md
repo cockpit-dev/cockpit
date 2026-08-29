@@ -34,6 +34,7 @@ any secret store.
 ## Quick start
 
 ```dart
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_cockpit_test/flutter_cockpit_test.dart';
 
@@ -64,23 +65,43 @@ Selectors use the same syntax as `cockpit dev`:
 
 ```dart
 await cockpit.tap('#save');
+await cockpit.hover('More options');
+await cockpit.tap(null, at: const Offset(400, 300),
+    device: PointerDeviceKind.mouse, buttons: kSecondaryButton);
 await cockpit.tap('Dialog >> FilledButton["Continue"]');
 await cockpit.type('hello', into: '@message');
 await cockpit.scroll('Settings >> Text["Advanced"]', align: 'center');
+await cockpit.wheel(
+  target: '#list',
+  delta: const Offset(0, 120),
+  steps: 2,
+);
 ```
 
 Plain text is exact. Use `#id`, `@key`, widget type, ancestor chains, and
 multiple conditions when source context gives you a stronger locator. No
 business `Key` or `Semantics` changes are required for Cockpit's Element plane.
 
-The facade covers the common interaction loop directly:
-`tap`, `longPress`, `doubleTap`, `type`, `clear`, `press`, `increase`,
-`decrease`, `showOnScreen`, `scroll`, `waitFor`, `back`, `dismiss`,
-`dismissKeyboard`, `expectVisible`, `expectText`, `screenshot`, and `snapshot`.
+The facade covers the complete Flutter interaction loop directly: pointer
+gestures (`tap`, `hover`, `longPress`, `doubleTap`, `drag`, `fling`, `swipe`,
+`pinch`, `rotate`, `panZoom`, `multiTouch`, `wheel`), text and keyboard input
+(`type`, `clear`, `copy`, `paste`, `focus`, `setTextEditingValue`, `selectText`,
+`keyDown`, `keyUp`, `hotkey`, `press`), controls and navigation (`increase`,
+`decrease`, `showOnScreen`, `scroll`, `waitFor`, `waitForUi`, `waitForRoute`,
+`back`, `dismiss`, `dismissKeyboard`), assertions and evidence (`expectVisible`,
+`expectText`, `screenshot`, `snapshot`, `watch`, `execute`).
 Each command advances Flutter's test clock through the same commit and reveal
 logic used by the live bridge, so route pushes and async UI updates do not need
 hand-written sleeps. Use `cockpit.flutter` when a test intentionally needs a
 Flutter-only matcher or custom pump.
+
+All gestures are real hit-tested pointer events. Coordinate input is available
+as `at` when a target is not discoverable; `device` and `buttons` cover mouse,
+stylus, and touch-sensitive behavior without changing the app. `wheel` sends
+real `PointerScrollEvent` signals to `Scrollable`, custom
+`Listener(onPointerSignal: ...)`, and trackpad-aware widgets. Its `delta` is
+applied per event; use `steps`, `interval`, `device`, or `at` only when the
+scenario needs them.
 
 Every facade command has a 10-second default timeout. Override one known-slow
 call with `timeout`; the value must be positive and no longer than one hour:

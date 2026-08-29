@@ -743,6 +743,11 @@ final class CockpitDevRuntime {
             query: query?.trim().isEmpty == true ? null : query?.trim(),
             maxTargets: 96,
             maxAncestorsPerTarget: 0,
+            // Watch is the bounded path for animation and live-state
+            // verification. Include only compact paint state; the delta
+            // projection below prevents full style payloads from reaching
+            // routine output.
+            includeStyleDetails: true,
           ).toJson(),
         },
       );
@@ -1588,6 +1593,7 @@ Map<String, Object?> _watchProjection(Map<String, Object?>? output) {
                   'visible',
                   'control',
                   'layout',
+                  'style',
                 ])
                   if (map[key] != null) key: map[key],
               };

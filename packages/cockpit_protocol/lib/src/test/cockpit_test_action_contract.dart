@@ -2,6 +2,8 @@ import 'cockpit_test_value.dart';
 
 enum CockpitTestActionKind {
   tap,
+  hover,
+  wheel,
   longPress,
   doubleTap,
   enterText,
@@ -44,8 +46,11 @@ enum CockpitTestActionKind {
 enum CockpitTestActionField {
   activation('activation', CockpitTestValueType.string),
   durationMs('durationMs', CockpitTestValueType.integer),
+  holdDurationMs('holdDurationMs', CockpitTestValueType.integer),
+  moveEventCount('moveEventCount', CockpitTestValueType.integer),
   characters('characters', CockpitTestValueType.integer),
   intervalMs('intervalMs', CockpitTestValueType.integer),
+  steps('steps', CockpitTestValueType.integer),
   text('text', CockpitTestValueType.string),
   selectionStart('selectionStart', CockpitTestValueType.integer),
   selectionEnd('selectionEnd', CockpitTestValueType.integer),
@@ -59,12 +64,17 @@ enum CockpitTestActionField {
   direction('direction', CockpitTestValueType.string),
   distance('distance', CockpitTestValueType.number),
   scale('scale', CockpitTestValueType.number),
+  startSpan('startSpan', CockpitTestValueType.number),
   rotationRadians('rotationRadians', CockpitTestValueType.number),
   panDx('panDx', CockpitTestValueType.number),
   panDy('panDy', CockpitTestValueType.number),
   sequence('sequence', CockpitTestValueType.json),
   maxScrolls('maxScrolls', CockpitTestValueType.integer),
   revealAlignment('revealAlignment', CockpitTestValueType.string),
+  revealOffsetPx('revealOffsetPx', CockpitTestValueType.number),
+  scrollLocator('scrollLocator', CockpitTestValueType.json),
+  deviceKind('deviceKind', CockpitTestValueType.string),
+  buttons('buttons', CockpitTestValueType.json),
   quietMs('quietMs', CockpitTestValueType.integer),
   expected('expected', CockpitTestValueType.boolean),
   matchMode('matchMode', CockpitTestValueType.string),
@@ -114,17 +124,49 @@ const Map<CockpitTestActionKind, CockpitTestActionSpec>
 cockpitTestActionSpecs = <CockpitTestActionKind, CockpitTestActionSpec>{
   CockpitTestActionKind.tap: CockpitTestActionSpec(
     locator: CockpitTestLocatorRequirement.required,
-    allowedFields: <CockpitTestActionField>{CockpitTestActionField.activation},
+    allowedFields: <CockpitTestActionField>{
+      CockpitTestActionField.activation,
+      CockpitTestActionField.deviceKind,
+      CockpitTestActionField.buttons,
+    },
+    settlement: CockpitTestSettlement.uiIdle,
+  ),
+  CockpitTestActionKind.hover: CockpitTestActionSpec(
+    locator: CockpitTestLocatorRequirement.required,
+    allowedFields: <CockpitTestActionField>{CockpitTestActionField.deviceKind},
+    settlement: CockpitTestSettlement.uiIdle,
+  ),
+  CockpitTestActionKind.wheel: CockpitTestActionSpec(
+    locator: CockpitTestLocatorRequirement.optional,
+    allowedFields: <CockpitTestActionField>{
+      CockpitTestActionField.dx,
+      CockpitTestActionField.dy,
+      CockpitTestActionField.steps,
+      CockpitTestActionField.intervalMs,
+      CockpitTestActionField.deviceKind,
+    },
+    requiredFields: <CockpitTestActionField>{
+      CockpitTestActionField.dx,
+      CockpitTestActionField.dy,
+    },
     settlement: CockpitTestSettlement.uiIdle,
   ),
   CockpitTestActionKind.longPress: CockpitTestActionSpec(
     locator: CockpitTestLocatorRequirement.required,
-    allowedFields: <CockpitTestActionField>{CockpitTestActionField.durationMs},
+    allowedFields: <CockpitTestActionField>{
+      CockpitTestActionField.durationMs,
+      CockpitTestActionField.deviceKind,
+      CockpitTestActionField.buttons,
+    },
     settlement: CockpitTestSettlement.uiIdle,
   ),
   CockpitTestActionKind.doubleTap: CockpitTestActionSpec(
     locator: CockpitTestLocatorRequirement.required,
-    allowedFields: _none,
+    allowedFields: <CockpitTestActionField>{
+      CockpitTestActionField.intervalMs,
+      CockpitTestActionField.deviceKind,
+      CockpitTestActionField.buttons,
+    },
     settlement: CockpitTestSettlement.uiIdle,
   ),
   CockpitTestActionKind.enterText: CockpitTestActionSpec(
@@ -198,6 +240,10 @@ cockpitTestActionSpecs = <CockpitTestActionKind, CockpitTestActionSpec>{
       CockpitTestActionField.dx,
       CockpitTestActionField.dy,
       CockpitTestActionField.durationMs,
+      CockpitTestActionField.holdDurationMs,
+      CockpitTestActionField.moveEventCount,
+      CockpitTestActionField.deviceKind,
+      CockpitTestActionField.buttons,
     },
     requiredFields: <CockpitTestActionField>{
       CockpitTestActionField.dx,
@@ -211,6 +257,10 @@ cockpitTestActionSpecs = <CockpitTestActionKind, CockpitTestActionSpec>{
       CockpitTestActionField.dx,
       CockpitTestActionField.dy,
       CockpitTestActionField.velocity,
+      CockpitTestActionField.durationMs,
+      CockpitTestActionField.moveEventCount,
+      CockpitTestActionField.deviceKind,
+      CockpitTestActionField.buttons,
     },
     requiredFields: <CockpitTestActionField>{
       CockpitTestActionField.dx,
@@ -225,6 +275,9 @@ cockpitTestActionSpecs = <CockpitTestActionKind, CockpitTestActionSpec>{
       CockpitTestActionField.direction,
       CockpitTestActionField.distance,
       CockpitTestActionField.durationMs,
+      CockpitTestActionField.moveEventCount,
+      CockpitTestActionField.deviceKind,
+      CockpitTestActionField.buttons,
     },
     requiredFields: <CockpitTestActionField>{
       CockpitTestActionField.direction,
@@ -234,7 +287,13 @@ cockpitTestActionSpecs = <CockpitTestActionKind, CockpitTestActionSpec>{
   ),
   CockpitTestActionKind.pinchZoom: CockpitTestActionSpec(
     locator: CockpitTestLocatorRequirement.optional,
-    allowedFields: <CockpitTestActionField>{CockpitTestActionField.scale},
+    allowedFields: <CockpitTestActionField>{
+      CockpitTestActionField.scale,
+      CockpitTestActionField.startSpan,
+      CockpitTestActionField.durationMs,
+      CockpitTestActionField.moveEventCount,
+      CockpitTestActionField.deviceKind,
+    },
     requiredFields: <CockpitTestActionField>{CockpitTestActionField.scale},
     settlement: CockpitTestSettlement.uiIdle,
   ),
@@ -242,6 +301,10 @@ cockpitTestActionSpecs = <CockpitTestActionKind, CockpitTestActionSpec>{
     locator: CockpitTestLocatorRequirement.optional,
     allowedFields: <CockpitTestActionField>{
       CockpitTestActionField.rotationRadians,
+      CockpitTestActionField.startSpan,
+      CockpitTestActionField.durationMs,
+      CockpitTestActionField.moveEventCount,
+      CockpitTestActionField.deviceKind,
     },
     requiredFields: <CockpitTestActionField>{
       CockpitTestActionField.rotationRadians,
@@ -255,6 +318,9 @@ cockpitTestActionSpecs = <CockpitTestActionKind, CockpitTestActionSpec>{
       CockpitTestActionField.panDy,
       CockpitTestActionField.scale,
       CockpitTestActionField.rotationRadians,
+      CockpitTestActionField.durationMs,
+      CockpitTestActionField.moveEventCount,
+      CockpitTestActionField.deviceKind,
     },
     settlement: CockpitTestSettlement.uiIdle,
   ),
@@ -271,6 +337,8 @@ cockpitTestActionSpecs = <CockpitTestActionKind, CockpitTestActionSpec>{
       CockpitTestActionField.maxScrolls,
       CockpitTestActionField.durationMs,
       CockpitTestActionField.revealAlignment,
+      CockpitTestActionField.revealOffsetPx,
+      CockpitTestActionField.scrollLocator,
     },
     requiredFields: <CockpitTestActionField>{CockpitTestActionField.direction},
     settlement: CockpitTestSettlement.uiIdle,

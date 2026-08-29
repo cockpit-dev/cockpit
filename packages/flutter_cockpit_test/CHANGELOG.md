@@ -1,8 +1,16 @@
 # Changelog
 
+## 4.0.46
+
+- Synchronized the integration-test facade with the Flutter-first gesture,
+  animation, native-action, and live-watch capabilities.
+
 ## 4.0.45
 
 - Synchronized the integration-test facade with the current Cockpit release.
+- Completed the Flutter gesture facade with real hover, wheel, coordinate
+  input, and device/button-aware pointer actions; animation watch remains
+  bounded to compact deltas.
 
 ## 4.0.44
 

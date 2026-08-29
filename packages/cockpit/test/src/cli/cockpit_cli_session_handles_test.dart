@@ -504,7 +504,8 @@ void main() {
 
     expect(exitCode, cockpitSuccessExitCode);
     expect(clientRequests, 0);
-    expect(item['state'], 'crashed');
+    expect(item['last'], 'crashed');
+    expect(item, isNot(contains('state')));
     expect(item, isNot(contains('lastState')));
     expect(item, isNot(contains('lifecycle')));
     expect(item, isNot(contains('reachable')));
