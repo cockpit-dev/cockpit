@@ -227,7 +227,7 @@ void main() {
       'lib/src/cli/cockpit_dev_screenshot.dart',
       'lib/src/cli/cockpit_dev_network.dart',
     ]) {
-      final source = File(path).readAsStringSync();
+      final source = _cockpitSourceFile(path).readAsStringSync();
       final nextCommands =
           RegExp(r"(?:next:|'next':)(?:(?!,\s*\n).)*", dotAll: true)
               .allMatches(source)
@@ -1562,4 +1562,12 @@ File _cockpitPubspecFile() {
     }
     directory = parent;
   }
+}
+
+File _cockpitSourceFile(String relativePath) {
+  final file = File(p.join(_cockpitPubspecFile().parent.path, relativePath));
+  if (!file.existsSync()) {
+    throw StateError('Unable to locate cockpit source file: $relativePath');
+  }
+  return file;
 }

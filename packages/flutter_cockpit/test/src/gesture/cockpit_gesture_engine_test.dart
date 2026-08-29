@@ -499,7 +499,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(latestScale, greaterThan(1.2));
+    expect(latestScale, closeTo(1.8, 0.05));
   });
 
   testWidgets('pinchZoom supports an explicit viewport coordinate', (
@@ -540,7 +540,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(latestScale, greaterThan(1.2));
+    expect(latestScale, closeTo(1.8, 0.05));
   });
 
   testWidgets('rotate dispatches a rotation-aware scale gesture', (

@@ -1,5 +1,12 @@
 # Changelog
 
+## 4.0.47
+
+- Corrected the repository-root CLI source lookup used by Cockpit command
+  coverage so package tests work from both the package and workspace roots.
+- Synchronized the release with the Flutter gesture runtime fix for exact
+  pinch scaling inside nested scrollables and independent double-tap pointers.
+
 ## 4.0.46
 
 - Completed the Flutter-first interaction surface with real timed gestures,

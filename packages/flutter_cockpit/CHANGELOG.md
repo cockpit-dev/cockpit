@@ -1,5 +1,12 @@
 # Changelog
 
+## 4.0.47
+
+- Fixed pinch gestures in nested scrollables so the delivered scale matches the
+  requested ratio after gesture-arena recognition.
+- Allocated independent pointer identities for double-tap sequences to mirror
+  real platform input and avoid duplicate-pointer assertions.
+
 ## 4.0.46
 
 - Added real hover, wheel/trackpad, coordinate, timed gesture, multi-pointer,

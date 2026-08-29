@@ -125,6 +125,11 @@ final class CockpitGestureEngine {
           origin: origin,
           scale: action.scale,
           startSpan: action.startSpan,
+          useRecognitionPrelude:
+              action.target?.locatorAncestors.any(
+                (ancestor) => ancestor.typeName == 'Scrollable',
+              ) ??
+              false,
           duration: action.duration,
           moveEventCount: action.moveEventCount,
           profile: action.profile,
@@ -340,8 +345,16 @@ final class CockpitGestureEngine {
     required PointerDeviceKind pointerDeviceKind,
     required int buttons,
   }) async {
+    // Flutter's DoubleTapGestureRecognizer keeps the first tap's recognizer
+    // state alive while it waits for the second contact. Reusing the same
+    // pointer id for that second contact makes the framework treat it as a
+    // duplicate pointer stream and assert in debug/profile builds. A real
+    // platform stream allocates a fresh contact id for each tap, so mirror
+    // that lifecycle here.
+    const firstPointer = 1;
+    const secondPointer = 2;
     _dispatchDown(
-      pointer: 1,
+      pointer: firstPointer,
       geometry: geometry,
       position: origin,
       pointerDeviceKind: pointerDeviceKind,
@@ -350,7 +363,7 @@ final class CockpitGestureEngine {
     );
     await _delay(Duration.zero);
     _dispatchUp(
-      pointer: 1,
+      pointer: firstPointer,
       geometry: geometry,
       position: origin,
       pointerDeviceKind: pointerDeviceKind,
@@ -358,7 +371,7 @@ final class CockpitGestureEngine {
     );
     await _delay(interval);
     _dispatchDown(
-      pointer: 1,
+      pointer: secondPointer,
       geometry: geometry,
       position: origin,
       pointerDeviceKind: pointerDeviceKind,
@@ -367,7 +380,7 @@ final class CockpitGestureEngine {
     );
     await _delay(Duration.zero);
     _dispatchUp(
-      pointer: 1,
+      pointer: secondPointer,
       geometry: geometry,
       position: origin,
       pointerDeviceKind: pointerDeviceKind,
@@ -507,6 +520,7 @@ final class CockpitGestureEngine {
     required Offset origin,
     required double scale,
     required double startSpan,
+    required bool useRecognitionPrelude,
     required Duration duration,
     int moveEventCount = 0,
     required CockpitGestureProfile profile,
@@ -514,9 +528,36 @@ final class CockpitGestureEngine {
     Duration? frameInterval,
     required Duration initialHoldDuration,
   }) async {
-    final clampedScale = scale.clamp(0.25, 4.0);
-    final baseSpan = _resolveGestureSpan(geometry, startSpan);
-    final endSpan = baseSpan * clampedScale;
+    final clampedScale = scale.clamp(0.25, 4.0).toDouble();
+    final requestedSpan = _resolveGestureSpan(geometry, startSpan);
+    var baseSpan = requestedSpan;
+    var recognitionRadius = baseSpan / 2;
+    if (useRecognitionPrelude) {
+      // ScaleGestureRecognizer measures span as the average distance from
+      // each pointer to the focal point (half of the finger-to-finger
+      // distance). It resets that span when a competing scroll recognizer
+      // loses the arena, so establish a symmetric baseline first and apply
+      // the authored ratio from that baseline.
+      //
+      // Keep the intermediate move just above scale slop. The first pointer
+      // is dispatched before the second at each timestamp, so a larger
+      // overshoot can cross slop on that asymmetric half-step and reset the
+      // baseline too early.
+      const recognitionDelta = kScaleSlop + 1;
+      if (clampedScale < 1 && baseSpan / 2 <= recognitionDelta) {
+        baseSpan = _resolveGestureSpan(
+          geometry,
+          math.max(baseSpan, 2 * (recognitionDelta + 4)),
+        );
+      }
+      final baseRadius = baseSpan / 2;
+      recognitionRadius = clampedScale > 1
+          ? baseRadius + recognitionDelta
+          : baseRadius - recognitionDelta;
+    }
+    final endRadius =
+        (useRecognitionPrelude ? recognitionRadius : baseSpan / 2) *
+        clampedScale;
     await _performInterpolatedMultiPointerGesture(
       geometry: geometry,
       origin: origin,
@@ -524,9 +565,15 @@ final class CockpitGestureEngine {
         1: Offset(-baseSpan / 2, 0),
         2: Offset(baseSpan / 2, 0),
       },
+      recognitionOffsets: useRecognitionPrelude
+          ? <int, Offset>{
+              1: Offset(-recognitionRadius, 0),
+              2: Offset(recognitionRadius, 0),
+            }
+          : null,
       endOffsets: <int, Offset>{
-        1: Offset(-endSpan / 2, 0),
-        2: Offset(endSpan / 2, 0),
+        1: Offset(-endRadius, 0),
+        2: Offset(endRadius, 0),
       },
       duration: duration,
       moveEventCount: moveEventCount,
