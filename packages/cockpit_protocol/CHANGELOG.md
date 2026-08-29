@@ -1,5 +1,9 @@
 # Changelog
 
+## 4.0.47
+
+- Synchronized the protocol package with the current Cockpit release.
+
 ## 4.0.46
 
 - Synchronized the public protocol contracts with the Flutter-first interaction,

@@ -1,5 +1,10 @@
 # Changelog
 
+## 4.0.47
+
+- Synchronized the integration-test facade with the Flutter gesture runtime
+  fixes in the current Cockpit release.
+
 ## 4.0.46
 
 - Synchronized the integration-test facade with the Flutter-first gesture,
