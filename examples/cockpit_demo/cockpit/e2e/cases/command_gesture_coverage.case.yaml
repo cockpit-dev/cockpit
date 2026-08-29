@@ -244,6 +244,44 @@ steps:
       locator: {testId: lab-multitouch-status}
       text: touch:2-pointers
       matchMode: exact
+  - stepId: revealHoverPad
+    timeoutMs: 12000
+    action:
+      type: showOnScreen
+      locator: {testId: lab-hover-region}
+      revealAlignment: center
+  - stepId: hoverPad
+    timeoutMs: 12000
+    action:
+      type: hover
+      locator: {testId: lab-hover-region}
+  - stepId: verifyHover
+    timeoutMs: 10000
+    action:
+      type: assertText
+      locator: {testId: lab-hover-status}
+      text: hover:entered
+      matchMode: exact
+  - stepId: revealWheelPad
+    timeoutMs: 12000
+    action:
+      type: showOnScreen
+      locator: {testId: lab-wheel-listener}
+      revealAlignment: center
+  - stepId: wheelPad
+    timeoutMs: 12000
+    action:
+      type: wheel
+      locator: {testId: lab-wheel-listener}
+      dx: 0
+      dy: 120
+  - stepId: verifyWheel
+    timeoutMs: 10000
+    action:
+      type: assertText
+      locator: {testId: lab-wheel-status}
+      text: wheel:down-1
+      matchMode: exact
   - stepId: captureGestureCoverage
     timeoutMs: 20000
     action:

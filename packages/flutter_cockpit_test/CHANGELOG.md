@@ -1,5 +1,10 @@
 # Changelog
 
+## 4.0.48
+
+- Synchronized the integration-test facade with the current Flutter gesture
+  runtime and command-lab coverage.
+
 ## 4.0.47
 
 - Synchronized the integration-test facade with the Flutter gesture runtime

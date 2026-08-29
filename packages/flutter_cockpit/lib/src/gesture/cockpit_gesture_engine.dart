@@ -5,6 +5,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
 
+import '../control/cockpit_command_type.dart';
 import '../runtime/cockpit_target_geometry.dart';
 import '../runtime/cockpit_target_geometry_resolver.dart';
 import 'cockpit_gesture_action.dart';
@@ -35,6 +36,7 @@ final class CockpitGestureEngine {
       case CockpitGestureActionType.tap:
         await _performTap(
           geometry,
+          action: action,
           origin: origin,
           pointerDeviceKind: action.pointerDeviceKind,
           buttons: action.buttons,
@@ -288,6 +290,7 @@ final class CockpitGestureEngine {
 
   Future<void> _performTap(
     CockpitTargetGeometry geometry, {
+    CockpitGestureAction? action,
     required Offset origin,
     required PointerDeviceKind pointerDeviceKind,
     required int buttons,
@@ -309,6 +312,18 @@ final class CockpitGestureEngine {
       timeStamp: const Duration(milliseconds: 32),
     );
     await _delay(Duration.zero);
+    // Flutter keeps a first tap in the gesture arena while a sibling
+    // DoubleTapGestureRecognizer waits for a possible second contact. A
+    // synthetic tap must observe that same decision window or it can report
+    // success before the widget's onTap callback is committed. Only wait when
+    // the resolved target actually advertises double-tap support; ordinary
+    // controls retain the fast path.
+    if (action?.target?.supportedCommands.contains(
+          CockpitCommandType.doubleTap,
+        ) ==
+        true) {
+      await _delay(kDoubleTapTimeout);
+    }
   }
 
   Future<void> _performLongPress(
@@ -1366,6 +1381,20 @@ final class CockpitGestureEngine {
     required Duration timeStamp,
   }) {
     final clampedPosition = _clampToViewport(geometry, position);
+    // Mirror the platform pointer lifecycle. Some Flutter bindings (notably
+    // test/desktop bindings) do not synthesize a hit-test on a bare down
+    // event; without the added event recognizers can receive the stream but
+    // never win the gesture arena.
+    _handlePointerEvent(
+      PointerAddedEvent(
+        timeStamp: timeStamp,
+        pointer: pointer,
+        device: _deviceForKind(pointerDeviceKind),
+        kind: pointerDeviceKind,
+        position: clampedPosition,
+        viewId: geometry.viewId,
+      ),
+    );
     _handlePointerEvent(
       PointerDownEvent(
         timeStamp: timeStamp,
@@ -1414,6 +1443,16 @@ final class CockpitGestureEngine {
     final clampedPosition = _clampToViewport(geometry, position);
     _handlePointerEvent(
       PointerUpEvent(
+        timeStamp: timeStamp,
+        pointer: pointer,
+        device: _deviceForKind(pointerDeviceKind),
+        kind: pointerDeviceKind,
+        position: clampedPosition,
+        viewId: geometry.viewId,
+      ),
+    );
+    _handlePointerEvent(
+      PointerRemovedEvent(
         timeStamp: timeStamp,
         pointer: pointer,
         device: _deviceForKind(pointerDeviceKind),
