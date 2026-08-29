@@ -1,5 +1,13 @@
 # Changelog
 
+## 4.0.49
+
+- Fixed bounded loop execution to re-check the final condition after the last
+  action, preventing false failures when Flutter commits the final frame
+  asynchronously.
+- Synchronized CI Flutter tooling and CocoaPods project contracts with the
+  current release.
+
 ## 4.0.48
 
 - Corrected source-faithful Flutter gesture dispatch and target discovery for

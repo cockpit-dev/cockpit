@@ -337,6 +337,7 @@ final class _BrandMark extends StatelessWidget {
   Widget build(BuildContext context) {
     return Image.asset(
       'assets/branding/cockpit_console_app_icon.png',
+      package: 'cockpit_console',
       width: size,
       height: size,
       filterQuality: FilterQuality.high,

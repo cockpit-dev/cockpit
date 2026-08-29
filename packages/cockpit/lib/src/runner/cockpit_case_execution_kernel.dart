@@ -616,6 +616,38 @@ final class CockpitCaseExecutionKernel {
           if (error != null) {
             return _KernelNodeOutcome(error: error);
           }
+          // A successful action can commit its visible state just after the
+          // command returns (desktop and remote Flutter bindings are the
+          // common case). Re-check after the final iteration so a bounded
+          // loop does not report a false failure merely because the last
+          // frame landed between the next condition probe and loop exit.
+          if (iteration == operation.maxIterations) {
+            final finalConditionResult = await _evaluateCondition(
+              node,
+              operation.condition,
+              plane: cockpitRequestedPlane(node, plan.target.plane),
+              control: control,
+              cleanupControl: cleanupControl,
+              deadline: deadline,
+            );
+            final finalConditionError = _conditionError(
+              finalConditionResult,
+              node.stepId,
+            );
+            if (finalConditionError != null) {
+              return _KernelNodeOutcome(error: finalConditionError);
+            }
+            if (finalConditionResult.evaluation.state ==
+                CockpitTestConditionState.notMatched) {
+              return _KernelNodeOutcome(
+                actualPlane: finalConditionResult.actualPlane,
+                driverId: finalConditionResult.driverId,
+                locatorResolution: finalConditionResult.locatorResolution,
+                degradationReason: finalConditionResult.degradationReason,
+                evidence: finalConditionResult.evidence,
+              );
+            }
+          }
         }
         return _KernelNodeOutcome(
           error: CockpitTestError(
