@@ -364,6 +364,44 @@ void main() {
     expect(loop.single.occurrence.loopIteration, 1);
   });
 
+  test('loop rechecks the condition after its final action', () async {
+    final clock = ManualCockpitClock();
+    final delegate = DeterministicCaseDelegate()
+      ..conditionResults.addAll(<CockpitTestKernelConditionResult>[
+        const CockpitTestKernelConditionResult(
+          evaluation: CockpitTestConditionEvaluation.matched(),
+        ),
+        const CockpitTestKernelConditionResult(
+          evaluation: CockpitTestConditionEvaluation.matched(),
+        ),
+        const CockpitTestKernelConditionResult(
+          evaluation: CockpitTestConditionEvaluation.notMatched(),
+        ),
+      ]);
+    final recorder = CockpitTestAttemptRecorder(clock: clock);
+
+    final result = await _kernel(clock, delegate, recorder).run(
+      plan: testExecutionPlan(steps: <CockpitTestExecutionNode>[_loopNode()]),
+      control: CockpitCaseExecutionControl(),
+    );
+
+    expect(result.outcome, CockpitTestOutcome.passed);
+    expect(
+      recorder.steps.where((step) => step.stepId == 'loopChild'),
+      hasLength(2),
+    );
+    expect(
+      delegate.events,
+      containsAllInOrder(<String>[
+        'condition:loop:primary',
+        'action:loopChild:primary',
+        'condition:loop:primary',
+        'action:loopChild:primary',
+        'condition:loop:primary',
+      ]),
+    );
+  });
+
   test(
     'ordinary cancellation force-aborts primary then runs cleanup',
     () async {

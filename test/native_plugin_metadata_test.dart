@@ -174,7 +174,7 @@ void main() {
     expect(workflow, contains('manager: cocoapods'));
     expect(workflow, contains("flutter-version: '3.32.0'"));
     expect(workflow, contains('manager: swiftpm'));
-    expect(workflow, contains("flutter-version: '3.44.0'"));
+    expect(workflow, contains("flutter-version: '3.47.1'"));
     expect(
       workflow,
       contains('working-directory: examples/cockpit_demo/cockpit'),

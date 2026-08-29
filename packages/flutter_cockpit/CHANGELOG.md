@@ -1,5 +1,9 @@
 # Changelog
 
+## 4.0.49
+
+- Synchronized the Flutter bridge package with the current Cockpit release.
+
 ## 4.0.48
 
 - Fixed Flutter pointer lifecycle delivery, double-tap settling, direct long

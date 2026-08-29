@@ -164,7 +164,7 @@ void main() {
       expect(workspaceLockfile, isNot(contains('>=3.10.0-0')));
     }
     expect(acceptanceWorkflow, contains("MINIMUM_FLUTTER_VERSION: '3.32.0'"));
-    expect(acceptanceWorkflow, contains("CURRENT_FLUTTER_VERSION: '3.44.0'"));
+    expect(acceptanceWorkflow, contains("CURRENT_FLUTTER_VERSION: '3.47.1'"));
     for (final job in const <String>[
       'static_analysis',
       'minimum_flutter',
