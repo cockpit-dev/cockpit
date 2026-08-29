@@ -5,6 +5,8 @@ import 'cockpit_command_router.dart';
 
 final class CockpitGestureCommandExecutor {
   const CockpitGestureCommandExecutor({
+    required this.hover,
+    required this.wheel,
     required this.drag,
     required this.fling,
     required this.swipe,
@@ -14,6 +16,8 @@ final class CockpitGestureCommandExecutor {
     required this.multiTouch,
   });
 
+  final CockpitInAppCommandHandler hover;
+  final CockpitInAppCommandHandler wheel;
   final CockpitInAppCommandHandler drag;
   final CockpitInAppCommandHandler fling;
   final CockpitInAppCommandHandler swipe;
@@ -27,6 +31,8 @@ final class CockpitGestureCommandExecutor {
     Stopwatch stopwatch,
   ) {
     return switch (command.commandType) {
+      CockpitCommandType.hover => hover(command, stopwatch),
+      CockpitCommandType.wheel => wheel(command, stopwatch),
       CockpitCommandType.drag => drag(command, stopwatch),
       CockpitCommandType.fling => fling(command, stopwatch),
       CockpitCommandType.swipe => swipe(command, stopwatch),

@@ -24,6 +24,9 @@ final class CockpitGestureEngine {
 
   final CockpitGestureDelay _delay;
   final CockpitViewportGeometryProvider? _viewportGeometryProvider;
+  int? _hoverViewId;
+  PointerDeviceKind? _hoverDeviceKind;
+  int? _hoverDevice;
 
   Future<void> perform(CockpitGestureAction action) async {
     final geometry = _resolveGeometry(action);
@@ -35,6 +38,21 @@ final class CockpitGestureEngine {
           origin: origin,
           pointerDeviceKind: action.pointerDeviceKind,
           buttons: action.buttons,
+        );
+      case CockpitGestureActionType.hover:
+        await _performHover(
+          geometry,
+          origin: origin,
+          pointerDeviceKind: action.pointerDeviceKind,
+        );
+      case CockpitGestureActionType.wheel:
+        await _performWheel(
+          geometry,
+          origin: origin,
+          delta: action.delta,
+          steps: action.steps,
+          interval: action.interval,
+          pointerDeviceKind: action.pointerDeviceKind,
         );
       case CockpitGestureActionType.longPress:
         await _performLongPress(
@@ -156,6 +174,111 @@ final class CockpitGestureEngine {
           sequence: sequence,
         );
     }
+  }
+
+  Future<void> _performHover(
+    CockpitTargetGeometry geometry, {
+    required Offset origin,
+    required PointerDeviceKind pointerDeviceKind,
+  }) async {
+    final position = _clampToViewport(geometry, origin);
+    final device = _deviceForKind(pointerDeviceKind);
+    // A hover is persistent input. Keep the synthetic mouse in the same view
+    // so a later hover naturally produces exit/enter transitions instead of
+    // leaving the previous view's MouseRegion active.
+    if (_hoverViewId != null &&
+        (_hoverViewId != geometry.viewId ||
+            _hoverDeviceKind != pointerDeviceKind ||
+            _hoverDevice != device)) {
+      _handlePointerEvent(
+        PointerRemovedEvent(
+          timeStamp: Duration.zero,
+          pointer: 1,
+          device: _hoverDevice ?? 1,
+          kind: _hoverDeviceKind ?? PointerDeviceKind.mouse,
+          position: position,
+          viewId: _hoverViewId!,
+        ),
+      );
+      _hoverViewId = null;
+      _hoverDeviceKind = null;
+      _hoverDevice = null;
+    }
+    if (_hoverViewId == null) {
+      _handlePointerEvent(
+        PointerAddedEvent(
+          timeStamp: Duration.zero,
+          pointer: 1,
+          device: device,
+          kind: pointerDeviceKind,
+          position: position,
+          viewId: geometry.viewId,
+        ),
+      );
+      _hoverViewId = geometry.viewId;
+      _hoverDeviceKind = pointerDeviceKind;
+      _hoverDevice = device;
+    }
+    _handlePointerEvent(
+      PointerHoverEvent(
+        timeStamp: Duration.zero,
+        pointer: 1,
+        device: device,
+        kind: pointerDeviceKind,
+        position: position,
+        delta: Offset.zero,
+        buttons: 0,
+        viewId: geometry.viewId,
+      ),
+    );
+    await _delay(Duration.zero);
+  }
+
+  Future<void> _performWheel(
+    CockpitTargetGeometry geometry, {
+    required Offset origin,
+    required Offset delta,
+    required int steps,
+    required Duration interval,
+    required PointerDeviceKind pointerDeviceKind,
+  }) async {
+    if (!delta.dx.isFinite || !delta.dy.isFinite || delta == Offset.zero) {
+      throw ArgumentError.value(
+        delta,
+        'delta',
+        'Wheel delta must be finite and non-zero.',
+      );
+    }
+    if (steps < 1 || steps > 1000) {
+      throw ArgumentError.value(
+        steps,
+        'steps',
+        'Wheel steps must be between 1 and 1000.',
+      );
+    }
+    if (interval < Duration.zero) {
+      throw ArgumentError.value(
+        interval,
+        'interval',
+        'Wheel interval must not be negative.',
+      );
+    }
+    final position = _clampToViewport(geometry, origin);
+    final device = _deviceForKind(pointerDeviceKind);
+    for (var step = 0; step < steps; step += 1) {
+      _handlePointerEvent(
+        PointerScrollEvent(
+          timeStamp: interval * step,
+          device: device,
+          kind: pointerDeviceKind,
+          position: position,
+          scrollDelta: delta,
+          viewId: geometry.viewId,
+        ),
+      );
+      await _delay(interval);
+    }
+    await _delay(Duration.zero);
   }
 
   Future<void> _performTap(
@@ -543,14 +666,27 @@ final class CockpitGestureEngine {
       );
     }
 
-    final orderedSteps = sequence.steps.toList(growable: false)
-      ..sort((left, right) {
-        final timeCompare = left.atMs.compareTo(right.atMs);
-        if (timeCompare != 0) {
-          return timeCompare;
-        }
-        return left.pointer.compareTo(right.pointer);
-      });
+    final indexedSteps = <({int index, CockpitMultiTouchStep step})>[];
+    for (var index = 0; index < sequence.steps.length; index += 1) {
+      indexedSteps.add((index: index, step: sequence.steps[index]));
+    }
+    indexedSteps.sort((left, right) {
+      final timeCompare = left.step.atMs.compareTo(right.step.atMs);
+      if (timeCompare != 0) {
+        return timeCompare;
+      }
+      final pointerCompare = left.step.pointer.compareTo(right.step.pointer);
+      if (pointerCompare != 0) {
+        return pointerCompare;
+      }
+      // List.sort is not stable. Preserve authored order when two events have
+      // the same timestamp and pointer so down/move/up sequences remain
+      // deterministic.
+      return left.index.compareTo(right.index);
+    });
+    final orderedSteps = indexedSteps
+        .map((entry) => entry.step)
+        .toList(growable: false);
     _validateMultiTouchSequence(orderedSteps);
 
     final activePointers = <int, Offset>{};
@@ -623,11 +759,11 @@ final class CockpitGestureEngine {
     }
     final activePointers = <int>{};
     for (final step in orderedSteps) {
-      if (step.pointer <= 0) {
+      if (step.pointer < 0) {
         throw ArgumentError.value(
           step.pointer,
           'step.pointer',
-          'Multi-touch pointer IDs must be positive.',
+          'Multi-touch pointer IDs must be non-negative.',
         );
       }
       if (step.atMs < 0) {
@@ -1164,7 +1300,8 @@ final class CockpitGestureEngine {
             action.type == CockpitGestureActionType.pinchZoom ||
             action.type == CockpitGestureActionType.rotate ||
             action.type == CockpitGestureActionType.panZoom ||
-            action.type == CockpitGestureActionType.multiTouch)) {
+            action.type == CockpitGestureActionType.multiTouch ||
+            action.type == CockpitGestureActionType.wheel)) {
       return viewportGeometry;
     }
 

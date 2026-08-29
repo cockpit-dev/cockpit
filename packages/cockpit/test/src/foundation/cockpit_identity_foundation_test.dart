@@ -702,26 +702,22 @@ void main() {
       },
     );
 
-    test(
-      'combined authority probe attests a real directory',
-      () async {
-        final directory = await Directory.systemTemp.createTemp(
-          'cockpit-windows-authority-',
-        );
-        addTearDown(() => directory.delete(recursive: true));
-        final snapshot = await const CockpitWindowsDirectoryAuthorityProvider()
-            .inspect(directory.path);
-        expect(
-          snapshot.identity.value,
-          matches(r'^windows:[0-9a-f]{16}:[0-9a-f]{32}$'),
-        );
-        expect(snapshot.identity.quality.isStrong, isTrue);
-        expect(snapshot.security.ownerVerified, isTrue);
-        expect(snapshot.security.ownerTrusted, isTrue);
-        expect(snapshot.security.unsafeWritable, isFalse);
-      },
-      skip: !Platform.isWindows,
-    );
+    test('combined authority probe attests a real directory', () async {
+      final directory = await Directory.systemTemp.createTemp(
+        'cockpit-windows-authority-',
+      );
+      addTearDown(() => directory.delete(recursive: true));
+      final snapshot = await const CockpitWindowsDirectoryAuthorityProvider()
+          .inspect(directory.path);
+      expect(
+        snapshot.identity.value,
+        matches(r'^windows:[0-9a-f]{16}:[0-9a-f]{32}$'),
+      );
+      expect(snapshot.identity.quality.isStrong, isTrue);
+      expect(snapshot.security.ownerVerified, isTrue);
+      expect(snapshot.security.ownerTrusted, isTrue);
+      expect(snapshot.security.unsafeWritable, isFalse);
+    }, skip: !Platform.isWindows);
   });
 
   test('Windows ACL inspection fails closed on every mutation mask', () async {

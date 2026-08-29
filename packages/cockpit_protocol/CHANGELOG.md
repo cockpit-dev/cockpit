@@ -1,5 +1,10 @@
 # Changelog
 
+## 4.0.46
+
+- Synchronized the public protocol contracts with the Flutter-first interaction,
+  gesture, diagnostics, and compact output surface.
+
 ## 4.0.45
 
 - Synchronized the public protocol package with the current Cockpit release.

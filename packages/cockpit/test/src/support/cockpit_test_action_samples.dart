@@ -13,6 +13,13 @@ Map<String, Object?> _sampleActionJson(CockpitTestActionKind kind) {
         'locator': locator,
         'activation': 'semantic',
       },
+      CockpitTestActionKind.hover => <String, Object?>{'locator': locator},
+      CockpitTestActionKind.wheel => <String, Object?>{
+        'locator': locator,
+        'dx': 0,
+        'dy': 120,
+        'steps': 2,
+      },
       CockpitTestActionKind.longPress => <String, Object?>{
         'locator': locator,
         'durationMs': 500,

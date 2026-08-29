@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:cockpit_protocol/cockpit_protocol.dart';
 import 'package:flutter_cockpit_test/flutter_cockpit_test.dart';
@@ -57,7 +59,34 @@ void main() {
       expect(watch.samples, greaterThan(1));
       expect(watch.changed, isTrue);
       expect(watch.changes.any((change) => change.updated.isNotEmpty), isTrue);
-      expect(cockpit.report['watches'], hasLength(1));
+
+      await cockpit.flutter.tap(find.text('Animate'));
+      await cockpit.flutter.pump();
+
+      final paintWatch = await cockpit.watch(
+        query: 'Fading',
+        duration: const Duration(milliseconds: 300),
+        interval: const Duration(milliseconds: 50),
+        timeout: const Duration(seconds: 1),
+      );
+      expect(paintWatch.changed, isTrue);
+      expect(
+        paintWatch.changes
+            .expand((change) => change.updated)
+            .any(
+              (update) =>
+                  (update['from'] as Map<Object?, Object?>?)?.containsKey(
+                        'style',
+                      ) ==
+                      true ||
+                  (update['to'] as Map<Object?, Object?>?)?.containsKey(
+                        'style',
+                      ) ==
+                      true,
+            ),
+        isTrue,
+      );
+      expect(cockpit.report['watches'], hasLength(2));
       await cockpit.waitForUi();
     },
   );
@@ -143,6 +172,129 @@ void main() {
       expect(doubleTapped, isTrue);
     },
   );
+
+  var hovered = false;
+  cockpitTestWidgets(
+    'hover facade dispatches a real mouse event to MouseRegion',
+    app: () => _HoverTestApp(onHover: () => hovered = true),
+    body: (cockpit) async {
+      final capabilities = await cockpit.describeCapabilities();
+      expect(
+        capabilities.supportedCommands,
+        contains(CockpitCommandType.hover),
+      );
+      final result = await cockpit.hover('Hover target');
+      expect(
+        result.result.success,
+        isTrue,
+        reason: result.result.error?.message,
+      );
+      expect(hovered, isTrue);
+    },
+  );
+
+  PointerDownEvent? pointerDown;
+  cockpitTestWidgets(
+    'pointer facade supports coordinate and device-specific input',
+    app: () => _PointerProbeApp(onDown: (event) => pointerDown = event),
+    body: (cockpit) async {
+      final result = await cockpit.tap(
+        null,
+        at: const Offset(400, 300),
+        device: PointerDeviceKind.mouse,
+        buttons: kSecondaryButton,
+      );
+      expect(
+        result.result.success,
+        isTrue,
+        reason: result.result.error?.message,
+      );
+      expect(pointerDown?.kind, PointerDeviceKind.mouse);
+      expect(pointerDown?.buttons, kSecondaryButton);
+    },
+  );
+
+  final wheelDeltas = <Offset>[];
+  cockpitTestWidgets(
+    'wheel facade dispatches bounded pointer scroll signals',
+    app: () => _WheelTestApp(onWheel: wheelDeltas.add),
+    body: (cockpit) async {
+      final capabilities = await cockpit.describeCapabilities();
+      expect(
+        capabilities.supportedCommands,
+        contains(CockpitCommandType.wheel),
+      );
+      final result = await cockpit.wheel(
+        target: 'Wheel target',
+        delta: const Offset(0, 40),
+        steps: 2,
+      );
+      expect(
+        result.result.success,
+        isTrue,
+        reason: result.result.error?.message,
+      );
+      expect(wheelDeltas, <Offset>[const Offset(0, 40), const Offset(0, 40)]);
+    },
+  );
+
+  cockpitTestWidgets(
+    'scroll facade forwards a canonical scroll locator',
+    app: () => const _ScrollTestApp(),
+    body: (cockpit) async {
+      final result = await cockpit.scroll(
+        'Row 24',
+        scrollLocator: '@outer-scroll',
+        maxScrolls: 40,
+      );
+      expect(
+        result.result.success,
+        isTrue,
+        reason: result.result.error?.message,
+      );
+      await cockpit.expectVisible('Row 24');
+    },
+  );
+
+  var hotkeyActivated = false;
+  cockpitTestWidgets(
+    'hotkey facade keeps modifiers pressed for Flutter shortcuts',
+    app: () => _HotkeyTestApp(onSave: () => hotkeyActivated = true),
+    body: (cockpit) async {
+      final results = await cockpit.hotkey(const <String>[
+        'ControlLeft',
+        'KeyS',
+      ]);
+      expect(results, hasLength(3));
+      expect(results.every((result) => result.result.success), isTrue);
+      expect(hotkeyActivated, isTrue);
+    },
+  );
+
+  cockpitTestWidgets(
+    'text facade exposes focus, selection, and clear through native editing',
+    app: () => const _TextInputTestApp(),
+    body: (cockpit) async {
+      final focused = await cockpit.focus('Message');
+      expect(focused.result.success, isTrue);
+
+      final replaced = await cockpit.setTextEditingValue(
+        'Message',
+        text: 'hello cockpit',
+      );
+      expect(replaced.result.success, isTrue);
+
+      final selected = await cockpit.selectText('Message', start: 0, end: 5);
+      expect(selected.result.success, isTrue);
+
+      final cleared = await cockpit.clear('Message');
+      expect(cleared.result.success, isTrue);
+      final input = cockpit.snapshot().visibleTargets.firstWhere(
+        (target) => target.text == 'Message',
+      );
+      expect(input.control?.value, isEmpty);
+    },
+  );
 }
 
 Future<CockpitCommandExecution> _successfulHostCommand(
@@ -157,6 +309,53 @@ Future<CockpitCommandExecution> _successfulHostCommand(
       durationMs: 0,
     ),
   );
+}
+
+final class _WheelTestApp extends StatelessWidget {
+  const _WheelTestApp({required this.onWheel});
+
+  final ValueChanged<Offset> onWheel;
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      home: Scaffold(
+        body: Center(
+          child: Listener(
+            behavior: HitTestBehavior.opaque,
+            onPointerSignal: (event) {
+              if (event is PointerScrollEvent) {
+                onWheel(event.scrollDelta);
+              }
+            },
+            child: const SizedBox(
+              width: 180,
+              height: 100,
+              child: Center(child: Text('Wheel target')),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+final class _ScrollTestApp extends StatelessWidget {
+  const _ScrollTestApp();
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      home: Scaffold(
+        body: ListView.builder(
+          key: const ValueKey<String>('outer-scroll'),
+          itemExtent: 48,
+          itemCount: 40,
+          itemBuilder: (context, index) => Text('Row $index'),
+        ),
+      ),
+    );
+  }
 }
 
 final class _TestApp extends StatefulWidget {
@@ -235,6 +434,89 @@ final class _DoubleTapTestApp extends StatelessWidget {
   }
 }
 
+final class _HoverTestApp extends StatelessWidget {
+  const _HoverTestApp({required this.onHover});
+
+  final VoidCallback onHover;
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      home: Scaffold(
+        body: Center(
+          child: MouseRegion(
+            onEnter: (_) => onHover(),
+            onHover: (_) => onHover(),
+            child: const Text('Hover target'),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+final class _PointerProbeApp extends StatelessWidget {
+  const _PointerProbeApp({required this.onDown});
+
+  final ValueChanged<PointerDownEvent> onDown;
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      home: Scaffold(
+        body: Listener(
+          behavior: HitTestBehavior.opaque,
+          onPointerDown: onDown,
+          child: const SizedBox.expand(),
+        ),
+      ),
+    );
+  }
+}
+
+final class _TextInputTestApp extends StatelessWidget {
+  const _TextInputTestApp();
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      home: Scaffold(
+        body: const Padding(
+          padding: EdgeInsets.all(24),
+          child: TextField(decoration: InputDecoration(labelText: 'Message')),
+        ),
+      ),
+    );
+  }
+}
+
+final class _HotkeyTestApp extends StatelessWidget {
+  const _HotkeyTestApp({required this.onSave});
+
+  final VoidCallback onSave;
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      home: Scaffold(
+        body: Focus(
+          autofocus: true,
+          onKeyEvent: (node, event) {
+            if (event is KeyDownEvent &&
+                event.logicalKey == LogicalKeyboardKey.keyS &&
+                HardwareKeyboard.instance.isControlPressed) {
+              onSave();
+              return KeyEventResult.handled;
+            }
+            return KeyEventResult.ignored;
+          },
+          child: const Text('Shortcut target'),
+        ),
+      ),
+    );
+  }
+}
+
 final class _AnimatedTestAppState extends State<_AnimatedTestApp> {
   var _held = false;
   var _alignedRight = false;
@@ -254,7 +536,7 @@ final class _AnimatedTestAppState extends State<_AnimatedTestApp> {
               ),
             ),
             TextButton(
-              onPressed: () => setState(() => _alignedRight = true),
+              onPressed: () => setState(() => _alignedRight = !_alignedRight),
               child: const Text('Animate'),
             ),
             Expanded(
@@ -265,6 +547,11 @@ final class _AnimatedTestAppState extends State<_AnimatedTestApp> {
                 duration: const Duration(milliseconds: 250),
                 child: const Text('Moving'),
               ),
+            ),
+            AnimatedOpacity(
+              opacity: _alignedRight ? 0.2 : 1,
+              duration: const Duration(milliseconds: 250),
+              child: const Text('Fading'),
             ),
           ],
         ),

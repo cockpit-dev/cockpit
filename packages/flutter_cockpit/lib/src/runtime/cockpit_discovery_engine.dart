@@ -47,6 +47,7 @@ final class CockpitDiscoveryEngine {
     required String? routeName,
     required CockpitCommandType requiredCommand,
     List<CockpitTarget> explicitTargets = const <CockpitTarget>[],
+    bool includeInferredInteraction = false,
   }) {
     return CockpitNativeTargetDiscovery(
       policy: policy,
@@ -56,6 +57,7 @@ final class CockpitDiscoveryEngine {
       routeName: routeName,
       requiredCommand: requiredCommand,
       explicitTargets: explicitTargets,
+      includeInferredInteraction: includeInferredInteraction,
     );
   }
 }

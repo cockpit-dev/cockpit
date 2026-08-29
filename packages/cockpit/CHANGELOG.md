@@ -1,5 +1,15 @@
 # Changelog
 
+## 4.0.46
+
+- Completed the Flutter-first interaction surface with real timed gestures,
+  multi-pointer input, animation settling, live UI watch, hover, and wheel
+  control.
+- Hardened nested-project and nested-worktree session discovery, target reuse,
+  stale-target cleanup, and bounded checkout identity probing.
+- Fixed shared pointer option parsing so `dev hover` and vertical-only
+  `dev wheel --dy VALUE` execute without invalid or redundant flags.
+
 ## 4.0.45
 
 - Made Flutter development start self-healing for nested projects and Git
@@ -7,6 +17,15 @@
   identity, and preserve the short session handle when the entrypoint changes.
 - Reconciled orphaned duplicate and stale development target registrations so a
   repeated start no longer blocks on `developmentTargetAmbiguous`.
+- Added the `dev hover` and `dev wheel` task commands, with real pointer-signal
+  input, bounded wheel sequences, trackpad selection, and coordinate fallback.
+- Made shared pointer argument handling safe for commands with intentionally
+  smaller option sets, so `dev hover` no longer probes an unregistered button
+  option and `dev wheel --dy VALUE` works without a redundant `--dx`.
+- Made `session list` label its non-live persisted lifecycle as `last`, so a
+  crashed or stopped handle is never mistaken for a currently reachable app.
+- Bounded Git checkout identity probing and fell back to the canonical filesystem
+  identity when Git is unavailable or cannot be launched.
 
 ## 4.0.44
 

@@ -31,6 +31,7 @@ CLI、daemon、MCP server 或任何 secret store。
 ## 快速开始
 
 ```dart
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_cockpit_test/flutter_cockpit_test.dart';
 
@@ -60,20 +61,35 @@ helper 会把普通 Flutter widget 包在 `FlutterCockpitApp` 中。如果 build
 
 ```dart
 await cockpit.tap('#save');
+await cockpit.hover('更多选项');
+await cockpit.tap(null, at: const Offset(400, 300),
+    device: PointerDeviceKind.mouse, buttons: kSecondaryButton);
 await cockpit.tap('Dialog >> FilledButton["Continue"]');
 await cockpit.type('hello', into: '@message');
 await cockpit.scroll('Settings >> Text["Advanced"]', align: 'center');
+await cockpit.wheel(
+  target: '#list',
+  delta: const Offset(0, 120),
+  steps: 2,
+);
 ```
 
 普通文本是精确匹配。源码已知时优先使用 `#id`、`@key`、Widget 类型、祖先链和多条件
 定位，不需要为了 Cockpit 修改业务 `Key` 或 `Semantics`。
 
-facade 直接覆盖常用交互闭环：`tap`、`longPress`、`doubleTap`、`type`、`clear`、`press`、
-`increase`、`decrease`、`showOnScreen`、`scroll`、`waitFor`、`back`、`dismiss`、
-`dismissKeyboard`、`expectVisible`、`expectText`、`screenshot` 和 `snapshot`。每条命令都会
+facade 直接覆盖完整 Flutter 交互闭环：指针手势（`tap`、`hover`、`longPress`、`doubleTap`、`drag`、`fling`、`swipe`、
+`pinch`、`rotate`、`panZoom`、`multiTouch`、`wheel`）、文本和键盘输入（`type`、`clear`、`copy`、`paste`、`focus`、
+`setTextEditingValue`、`selectText`、`keyDown`、`keyUp`、`hotkey`、`press`）、控件和导航（`increase`、`decrease`、
+`showOnScreen`、`scroll`、`waitFor`、`waitForUi`、`waitForRoute`、`back`、`dismiss`、`dismissKeyboard`），以及断言和证据
+（`expectVisible`、`expectText`、`screenshot`、`snapshot`、`watch`、`execute`）。每条命令都会
 通过与 live bridge 相同的提交和 reveal 逻辑推进 Flutter 测试时钟，路由跳转和异步 UI 更新
 不需要手写 sleep。只有在确实需要 Flutter 专属 matcher 或自定义 pump 时，才使用
 `cockpit.flutter`。
+
+所有手势都会发送真实且经过 hit-test 的指针事件。目标无法被定位时可用 `at` 坐标；`device` 和 `buttons` 可覆盖
+鼠标、触控笔和触摸行为，无需修改业务代码。`wheel` 会发送真实的 `PointerScrollEvent`，因此 `Scrollable`、自定义
+`Listener(onPointerSignal: ...)` 和支持触控板的组件都会收到与实际鼠标/触控板一致的输入。每个 `delta` 对应一个事件；
+只有场景确实需要时才设置 `steps`、`interval`、`device` 或显式 `at` 坐标。
 
 每条 facade 命令默认超时 10 秒。已知较慢的单次操作直接传入 `timeout` 覆盖，必须为正数且
 不超过 1 小时：

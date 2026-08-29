@@ -323,6 +323,118 @@ steps:
       CockpitTestLocatorStrategy.testId,
     );
   });
+
+  test('imports advanced gesture and scroll parameters losslessly', () {
+    final source = _legacyScript()
+      ..remove('recording')
+      ..['steps'] = <Object?>[
+        <String, Object?>{
+          'stepId': 'advancedGestures',
+          'stepType': 'command',
+          'command': <String, Object?>{
+            'commandId': 'advanced-gestures',
+            'commandType': 'drag',
+            'locator': <String, Object?>{'key': 'canvas'},
+            'parameters': <String, Object?>{
+              'dx': 120,
+              'dy': 8,
+              'durationMs': 300,
+              'holdDurationMs': 80,
+              'moveEventCount': 12,
+              'deviceKind': 'stylus',
+              'buttons': 'secondary',
+            },
+          },
+        },
+        <String, Object?>{
+          'stepId': 'advancedScroll',
+          'stepType': 'command',
+          'command': <String, Object?>{
+            'commandId': 'advanced-scroll',
+            'commandType': 'scrollUntilVisible',
+            'locator': <String, Object?>{'key': 'result'},
+            'parameters': <String, Object?>{
+              'reverse': false,
+              'maxScrolls': 10,
+              'durationPerStepMs': 220,
+              'revealAlignment': 'center',
+              'revealOffsetPx': 16,
+              'scrollableLocator': <String, Object?>{'key': 'list'},
+            },
+          },
+        },
+      ];
+
+    final result = importer.import(_request(jsonEncode(source)));
+    final drag =
+        (result.testCase.steps[0].operation
+                as CockpitTestActionOperationTemplate)
+            .action;
+    expect(drag.toJson(), <String, Object?>{
+      'type': 'drag',
+      'locator': <String, Object?>{'testId': 'canvas'},
+      'dx': 120,
+      'dy': 8,
+      'durationMs': 300,
+      'holdDurationMs': 80,
+      'moveEventCount': 12,
+      'deviceKind': 'stylus',
+      'buttons': 'secondary',
+    });
+
+    final scroll =
+        (result.testCase.steps[1].operation
+                as CockpitTestActionOperationTemplate)
+            .action;
+    expect(scroll.toJson(), <String, Object?>{
+      'type': 'scrollUntilVisible',
+      'locator': <String, Object?>{'testId': 'result'},
+      'direction': 'down',
+      'maxScrolls': 10,
+      'durationMs': 220,
+      'revealAlignment': 'center',
+      'revealOffsetPx': 16,
+      'scrollLocator': <String, Object?>{'testId': 'list'},
+    });
+    final compiled = compiler.compile(jsonEncode(result.testCase.toJson()));
+    expect(compiled.isSuccess, isTrue, reason: _diagnostics(compiled));
+  });
+
+  test('imports explicit fling velocity and duration together', () {
+    final source = _legacyScript()
+      ..remove('recording')
+      ..['steps'] = <Object?>[
+        <String, Object?>{
+          'stepId': 'fling',
+          'stepType': 'command',
+          'command': <String, Object?>{
+            'commandId': 'fling',
+            'commandType': 'fling',
+            'locator': <String, Object?>{'key': 'list'},
+            'parameters': <String, Object?>{
+              'dx': 0,
+              'dy': -200,
+              'velocity': 800,
+              'durationMs': 400,
+            },
+          },
+        },
+      ];
+
+    final result = importer.import(_request(jsonEncode(source)));
+    final action =
+        (result.testCase.steps.single.operation
+                as CockpitTestActionOperationTemplate)
+            .action;
+    expect(action.toJson(), <String, Object?>{
+      'type': 'fling',
+      'locator': <String, Object?>{'testId': 'list'},
+      'dx': 0,
+      'dy': -200,
+      'velocity': 800,
+      'durationMs': 400,
+    });
+  });
 }
 
 CockpitTestImportRequest _request(String source) => CockpitTestImportRequest(

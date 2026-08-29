@@ -96,6 +96,49 @@ void main() {
     expect(snapshot.truncated, isFalse);
   });
 
+  testWidgets('baseline style reads current render paint state', (
+    tester,
+  ) async {
+    final rootKey = GlobalKey<CockpitSurfaceState>();
+
+    await tester.pumpWidget(
+      Directionality(
+        textDirection: TextDirection.ltr,
+        child: CockpitSurface(
+          key: rootKey,
+          routeName: '/paint',
+          child: Column(
+            children: const <Widget>[
+              Opacity(opacity: 0.42, child: Text('Fading label')),
+              DecoratedBox(
+                decoration: BoxDecoration(color: Colors.indigo),
+                child: Text('Colored label'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final snapshot = rootKey.currentState!.snapshot(
+      options: const CockpitSnapshotOptions(
+        profile: CockpitSnapshotProfile.baseline,
+        includeStyleDetails: true,
+        maxTargets: 20,
+      ),
+    );
+    final fading = snapshot.visibleTargets.firstWhere(
+      (target) => target.text == 'Fading label',
+    );
+    final colored = snapshot.visibleTargets.firstWhere(
+      (target) => target.text == 'Colored label',
+    );
+
+    expect(fading.style?.opacity, closeTo(0.42, 0.001));
+    expect(colored.style?.backgroundColor, startsWith('#'));
+  });
+
   testWidgets('query filters targets before applying the snapshot limit', (
     tester,
   ) async {

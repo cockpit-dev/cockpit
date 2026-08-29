@@ -6,6 +6,8 @@ void main() {
   test('routes gesture-family commands to the configured handlers', () async {
     final handled = <CockpitCommandType>[];
     final executor = CockpitGestureCommandExecutor(
+      hover: _handlerFor(handled),
+      wheel: _handlerFor(handled),
       drag: _handlerFor(handled),
       fling: _handlerFor(handled),
       swipe: _handlerFor(handled),

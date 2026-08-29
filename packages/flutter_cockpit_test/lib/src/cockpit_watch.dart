@@ -73,6 +73,7 @@ Map<String, Object?> cockpitWatchProjection(CockpitSnapshot snapshot) {
   for (final target in snapshot.visibleTargets) {
     final state = target.control?.toJson();
     final layout = target.layout?.toJson();
+    final style = target.style?.toJson();
     targets.add(<String, Object?>{
       'id': _watchIdentity(target),
       if (target.cockpitId != null) 'cockpitId': target.cockpitId,
@@ -84,6 +85,7 @@ Map<String, Object?> cockpitWatchProjection(CockpitSnapshot snapshot) {
       if (!target.visible) 'visible': false,
       'control': ?_watchControl(state),
       'layout': ?_watchControl(layout),
+      'style': ?_watchControl(style),
     });
   }
   return <String, Object?>{

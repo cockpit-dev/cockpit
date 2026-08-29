@@ -1081,6 +1081,9 @@ String? _compactActions(List<String> actions) {
     final value = switch (action) {
       'tap' => 'tap',
       'enterText' || 'setTextEditingValue' || 'focusTextInput' => 'type',
+      'copyText' => 'copy',
+      'pasteText' => 'paste',
+      'eraseText' => 'clear',
       'longPress' => 'hold',
       'doubleTap' => 'double',
       'increase' => 'inc',

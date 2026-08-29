@@ -25,7 +25,7 @@
 它提供：
 
 - 通过 `FlutterCockpit.runApp` 或 `FlutterCockpitApp` 做运行时 bootstrap
-- 点击、输入、手势、等待、断言、截图、快照等命令执行能力
+- 点击、输入、真实滚轮/触控板输入、手势、等待、断言、截图、快照等命令执行能力
 - VM 平台使用 HTTP、Web 使用 Cockpit WebSocket bridge 的远程会话传输
 - 结构化 Widget、Element、RenderObject、semantics、route、focus、log、runtime
   error、HTTP/SSE/WebSocket network 与 rebuild 状态

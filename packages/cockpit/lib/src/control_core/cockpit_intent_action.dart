@@ -2,6 +2,8 @@ import 'package:cockpit_protocol/cockpit_protocol.dart';
 
 enum CockpitIntentAction {
   tap,
+  hover,
+  wheel,
   enterText,
   eraseText,
   copyText,
@@ -41,6 +43,8 @@ enum CockpitIntentAction {
   static CockpitIntentAction fromCommandType(CockpitCommandType commandType) {
     return switch (commandType) {
       CockpitCommandType.tap => CockpitIntentAction.tap,
+      CockpitCommandType.hover => CockpitIntentAction.hover,
+      CockpitCommandType.wheel => CockpitIntentAction.wheel,
       CockpitCommandType.enterText => CockpitIntentAction.enterText,
       CockpitCommandType.eraseText => CockpitIntentAction.eraseText,
       CockpitCommandType.copyText => CockpitIntentAction.copyText,

@@ -241,6 +241,7 @@ final class CockpitNativeTargetDiscovery {
     required String? routeName,
     required CockpitCommandType requiredCommand,
     List<CockpitTarget> explicitTargets = const <CockpitTarget>[],
+    bool includeInferredInteraction = false,
   }) {
     final rootElement = rootContext as Element;
     if (!rootElement.mounted || !element.mounted) {
@@ -300,6 +301,7 @@ final class CockpitNativeTargetDiscovery {
               actionableOwner: actionableOwner,
               pointerBlocked: scope.pointerBlocked,
               session: session,
+              includeInferredInteraction: includeInferredInteraction,
             )
           : null;
       final exposed =
@@ -777,6 +779,7 @@ final class CockpitNativeTargetDiscovery {
     required Element? actionableOwner,
     required bool pointerBlocked,
     required _DiscoverySession session,
+    bool includeInferredInteraction = false,
   }) {
     final resolvedSemantics = cockpitResolveSemanticsTargetInfo(element);
     final semantics = resolvedSemantics?.inheritedFromAncestor == false
@@ -787,6 +790,12 @@ final class CockpitNativeTargetDiscovery {
     var doubleTapHandler = _doubleTapHandlerForElement(element);
     var enterTextHandler = _enterTextHandlerForElement(element);
     var textInputHandler = _textInputHandlerForElement(element);
+    final hoverable =
+        !pointerBlocked &&
+        _hoverableForElement(
+          element,
+          includeAncestors: includeInferredInteraction,
+        );
     if (pointerBlocked) {
       tapHandler = null;
       longPressHandler = null;
@@ -821,6 +830,9 @@ final class CockpitNativeTargetDiscovery {
         enabled &&
         !pointerBlocked &&
         _supportsGestureTapFallback(element.widget);
+    final gestureCommands = pointerBlocked || !includeInferredInteraction
+        ? const <CockpitCommandType>{}
+        : _gestureCommandsForElement(element);
     if (!enabled) {
       tapHandler = null;
       longPressHandler = null;
@@ -841,6 +853,8 @@ final class CockpitNativeTargetDiscovery {
         doubleTapHandler != null ||
         enterTextHandler != null ||
         textInputHandler != null ||
+        hoverable ||
+        gestureCommands.isNotEmpty ||
         increaseHandler != null ||
         decreaseHandler != null ||
         gestureTapFallback;
@@ -848,6 +862,8 @@ final class CockpitNativeTargetDiscovery {
       if (tapHandler != null || gestureTapFallback) CockpitCommandType.tap,
       if (longPressHandler != null) CockpitCommandType.longPress,
       if (doubleTapHandler != null) CockpitCommandType.doubleTap,
+      if (hoverable) CockpitCommandType.hover,
+      ...gestureCommands,
       if (increaseHandler != null) CockpitCommandType.increase,
       if (decreaseHandler != null) CockpitCommandType.decrease,
       if (enterTextHandler != null || textInputHandler != null)
@@ -856,6 +872,11 @@ final class CockpitNativeTargetDiscovery {
         CockpitCommandType.focusTextInput,
         CockpitCommandType.setTextEditingValue,
         CockpitCommandType.sendTextInputAction,
+        CockpitCommandType.copyText,
+        if (writable) ...<CockpitCommandType>{
+          CockpitCommandType.eraseText,
+          CockpitCommandType.pasteText,
+        },
       },
       if (semantics != null)
         ...semantics.supportedCommands.where(
@@ -1076,12 +1097,21 @@ final class CockpitNativeTargetDiscovery {
   bool _hasOwnedInteraction(Set<CockpitCommandType> commands) => commands.any(
     const <CockpitCommandType>{
       CockpitCommandType.tap,
+      CockpitCommandType.hover,
       CockpitCommandType.enterText,
       CockpitCommandType.focusTextInput,
       CockpitCommandType.setTextEditingValue,
       CockpitCommandType.sendTextInputAction,
       CockpitCommandType.longPress,
       CockpitCommandType.doubleTap,
+      CockpitCommandType.drag,
+      CockpitCommandType.fling,
+      CockpitCommandType.swipe,
+      CockpitCommandType.pinchZoom,
+      CockpitCommandType.rotate,
+      CockpitCommandType.panZoom,
+      CockpitCommandType.multiTouch,
+      CockpitCommandType.wheel,
       CockpitCommandType.increase,
       CockpitCommandType.decrease,
       CockpitCommandType.dismiss,
@@ -1995,8 +2025,8 @@ final class CockpitNativeTargetDiscovery {
       return true;
     }
     if (widget is Dismissible ||
-        widget is Listener ||
-        widget is MouseRegion ||
+        widget is Listener && !_widgetHandlesHover(widget) ||
+        widget is MouseRegion && !_widgetHandlesHover(widget) ||
         widget is IgnorePointer ||
         widget is ExcludeSemantics ||
         widget is MergeSemantics ||
@@ -2073,9 +2103,9 @@ final class CockpitNativeTargetDiscovery {
     if (widget is InheritedWidget ||
         widget is ParentDataWidget<ParentData> ||
         widget is Focus ||
-        widget is Listener ||
+        widget is Listener && !_widgetHandlesHover(widget) ||
         widget is IgnorePointer ||
-        widget is MouseRegion ||
+        widget is MouseRegion && !_widgetHandlesHover(widget) ||
         widget is ExcludeSemantics ||
         widget is MergeSemantics) {
       return true;
@@ -2205,12 +2235,214 @@ final class CockpitNativeTargetDiscovery {
         toggleable: widget.toggleable,
       );
     }
+    if (widget is CupertinoButton) {
+      return widget.enabled ? widget.onPressed : null;
+    }
+    if (widget is CupertinoListTile) {
+      return widget.onTap;
+    }
     final editableState = _editableTextStateForElement(element);
     if (editableState != null) {
       final state = editableState;
       return () => state.widget.focusNode.requestFocus();
     }
     return null;
+  }
+
+  bool _hoverableForElement(Element element, {bool includeAncestors = false}) {
+    if (_widgetHandlesHover(element.widget)) {
+      return true;
+    }
+    if (!includeAncestors) {
+      return false;
+    }
+    var found = false;
+    element.visitAncestorElements((ancestor) {
+      if (_widgetHandlesHover(ancestor.widget)) {
+        found = true;
+        return false;
+      }
+      return true;
+    });
+    return found;
+  }
+
+  bool _widgetHandlesHover(Widget widget) {
+    if (widget is MouseRegion) {
+      return widget.onEnter != null ||
+          widget.onHover != null ||
+          widget.onExit != null;
+    }
+    if (widget is Listener) {
+      return widget.onPointerHover != null;
+    }
+    return false;
+  }
+
+  /// Infers pointer capabilities from public Flutter widget contracts.
+  ///
+  /// Custom controls commonly use a GestureDetector/RawGestureDetector or a
+  /// Listener without Semantics or a Key. Publishing the recognizer-backed
+  /// commands keeps those controls locatable and lets the executor deliver
+  /// real pointer events instead of forcing coordinate guesses.
+  Set<CockpitCommandType> _gestureCommandsForElement(Element element) {
+    final widget = element.widget;
+    final commands = <CockpitCommandType>{};
+
+    // Scrollable handles PointerScrollEvent through its internal listener;
+    // expose wheel as a real input path in addition to drag-based scrolling.
+    if (widget is Scrollable) {
+      commands.add(CockpitCommandType.wheel);
+    }
+
+    if (widget is GestureDetector) {
+      final hasTap =
+          widget.onTap != null ||
+          widget.onTapDown != null ||
+          widget.onTapUp != null ||
+          widget.onTapMove != null ||
+          widget.onTapCancel != null ||
+          widget.onSecondaryTap != null ||
+          widget.onSecondaryTapDown != null ||
+          widget.onSecondaryTapUp != null ||
+          widget.onSecondaryTapCancel != null ||
+          widget.onTertiaryTapDown != null ||
+          widget.onTertiaryTapUp != null ||
+          widget.onTertiaryTapCancel != null;
+      if (hasTap) commands.add(CockpitCommandType.tap);
+
+      final hasDoubleTap =
+          widget.onDoubleTap != null ||
+          widget.onDoubleTapDown != null ||
+          widget.onDoubleTapCancel != null;
+      if (hasDoubleTap) commands.add(CockpitCommandType.doubleTap);
+
+      final hasLongPress =
+          widget.onLongPress != null ||
+          widget.onLongPressDown != null ||
+          widget.onLongPressStart != null ||
+          widget.onLongPressMoveUpdate != null ||
+          widget.onLongPressUp != null ||
+          widget.onLongPressEnd != null ||
+          widget.onLongPressCancel != null ||
+          widget.onSecondaryLongPress != null ||
+          widget.onTertiaryLongPress != null;
+      if (hasLongPress) commands.add(CockpitCommandType.longPress);
+
+      final hasDrag =
+          widget.onPanStart != null ||
+          widget.onPanUpdate != null ||
+          widget.onPanEnd != null ||
+          widget.onPanCancel != null ||
+          widget.onHorizontalDragStart != null ||
+          widget.onHorizontalDragUpdate != null ||
+          widget.onHorizontalDragEnd != null ||
+          widget.onHorizontalDragCancel != null ||
+          widget.onVerticalDragStart != null ||
+          widget.onVerticalDragUpdate != null ||
+          widget.onVerticalDragEnd != null ||
+          widget.onVerticalDragCancel != null;
+      if (hasDrag) {
+        commands.addAll(const <CockpitCommandType>{
+          CockpitCommandType.drag,
+          CockpitCommandType.fling,
+          CockpitCommandType.swipe,
+        });
+      }
+
+      final hasScale =
+          widget.onScaleStart != null ||
+          widget.onScaleUpdate != null ||
+          widget.onScaleEnd != null;
+      if (hasScale) {
+        commands.addAll(const <CockpitCommandType>{
+          CockpitCommandType.pinchZoom,
+          CockpitCommandType.rotate,
+          CockpitCommandType.panZoom,
+          CockpitCommandType.multiTouch,
+        });
+      }
+    } else if (widget is RawGestureDetector) {
+      for (final type in widget.gestures.keys) {
+        final name = type.toString().toLowerCase();
+        if (name.contains('tap')) commands.add(CockpitCommandType.tap);
+        if (name.contains('doubletap')) {
+          commands.add(CockpitCommandType.doubleTap);
+        }
+        if (name.contains('longpress')) {
+          commands.add(CockpitCommandType.longPress);
+        }
+        if (name.contains('drag') || name.contains('pan')) {
+          commands.addAll(const <CockpitCommandType>{
+            CockpitCommandType.drag,
+            CockpitCommandType.fling,
+            CockpitCommandType.swipe,
+          });
+        }
+        if (name.contains('scale')) {
+          commands.addAll(const <CockpitCommandType>{
+            CockpitCommandType.pinchZoom,
+            CockpitCommandType.rotate,
+            CockpitCommandType.panZoom,
+            CockpitCommandType.multiTouch,
+          });
+        }
+      }
+    } else if (widget is Listener) {
+      if (widget.onPointerDown != null || widget.onPointerUp != null) {
+        commands.add(CockpitCommandType.tap);
+      }
+      if (widget.onPointerSignal != null) {
+        commands.add(CockpitCommandType.wheel);
+      }
+      if (widget.onPointerMove != null || widget.onPointerCancel != null) {
+        commands.addAll(const <CockpitCommandType>{
+          CockpitCommandType.drag,
+          CockpitCommandType.fling,
+          CockpitCommandType.swipe,
+        });
+      }
+    } else if (widget is Dismissible) {
+      commands.addAll(const <CockpitCommandType>{
+        CockpitCommandType.drag,
+        CockpitCommandType.fling,
+        CockpitCommandType.swipe,
+      });
+    } else if (widget is LongPressDraggable) {
+      commands.addAll(const <CockpitCommandType>{
+        CockpitCommandType.longPress,
+        CockpitCommandType.drag,
+        CockpitCommandType.fling,
+        CockpitCommandType.swipe,
+      });
+    } else if (widget is Draggable) {
+      commands.addAll(const <CockpitCommandType>{
+        CockpitCommandType.drag,
+        CockpitCommandType.fling,
+        CockpitCommandType.swipe,
+      });
+    } else if (widget is InteractiveViewer) {
+      if (widget.panEnabled) {
+        commands.addAll(const <CockpitCommandType>{
+          CockpitCommandType.drag,
+          CockpitCommandType.fling,
+          CockpitCommandType.swipe,
+          CockpitCommandType.panZoom,
+        });
+      }
+      if (widget.scaleEnabled) {
+        commands.addAll(const <CockpitCommandType>{
+          CockpitCommandType.pinchZoom,
+          CockpitCommandType.rotate,
+          CockpitCommandType.multiTouch,
+        });
+      }
+      if (widget.trackpadScrollCausesScale) {
+        commands.add(CockpitCommandType.wheel);
+      }
+    }
+
+    return commands;
   }
 
   CockpitTapHandler? _cupertinoSegmentTapHandlerForElement(Element element) {
@@ -2350,13 +2582,26 @@ final class CockpitNativeTargetDiscovery {
                 resolvedText.length,
               ),
             );
+      final composingBase = request.composingBase;
+      final composingExtent = request.composingExtent ?? composingBase;
+      final composing = composingBase == null
+          ? (request.text != null || request.clearExisting
+                ? TextRange.empty
+                : currentValue.composing)
+          : TextRange(
+              start: composingBase.clamp(0, resolvedText.length),
+              end: (composingExtent ?? composingBase).clamp(
+                0,
+                resolvedText.length,
+              ),
+            );
       final shouldUpdateValue =
           request.hasEditingMutation || request.requestFocus;
       if (shouldUpdateValue) {
         final value = currentValue.copyWith(
           text: resolvedText,
           selection: selection,
-          composing: TextRange.empty,
+          composing: composing,
         );
         state.userUpdateTextEditingValue(value, SelectionChangedCause.keyboard);
       }

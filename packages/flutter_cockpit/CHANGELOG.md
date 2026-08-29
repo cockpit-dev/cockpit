@@ -1,8 +1,19 @@
 # Changelog
 
+## 4.0.46
+
+- Added real hover, wheel/trackpad, coordinate, timed gesture, multi-pointer,
+  animation-settle, and bounded live-watch support for Flutter development.
+- Improved source-first target discovery and native fallback diagnostics without
+  requiring developer-authored semantics labels.
+
 ## 4.0.45
 
 - Synchronized the Flutter bridge package with the current Cockpit release.
+- Added real hover and wheel/trackpad pointer-signal execution, including
+  bounded wheel steps and correct device identity propagation.
+- Extended animation and gesture settling to cover hover, wheel, and all
+  multi-pointer mutations without exposing unbounded frame history.
 
 ## 4.0.44
 

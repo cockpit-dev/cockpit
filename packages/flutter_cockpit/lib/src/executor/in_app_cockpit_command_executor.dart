@@ -176,6 +176,8 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
       sendKeyUpEvent: _executeKeyEvent,
     );
     _gestureCommandExecutor = CockpitGestureCommandExecutor(
+      hover: _executeHover,
+      wheel: _executeWheel,
       drag: _executeDrag,
       fling: _executeFling,
       swipe: _executeSwipe,
@@ -271,6 +273,8 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
       CockpitCommandType.longPress,
       CockpitCommandType.doubleTap,
       if (_gestureHandler != null) ...<CockpitCommandType>{
+        CockpitCommandType.hover,
+        CockpitCommandType.wheel,
         CockpitCommandType.drag,
         CockpitCommandType.fling,
         CockpitCommandType.swipe,
@@ -385,6 +389,8 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
   Map<CockpitCommandType, CockpitInAppCommandHandler> _buildCommandHandlers() {
     return <CockpitCommandType, CockpitInAppCommandHandler>{
       CockpitCommandType.tap: _semanticCommandExecutor.execute,
+      CockpitCommandType.hover: _gestureCommandExecutor.execute,
+      CockpitCommandType.wheel: _gestureCommandExecutor.execute,
       CockpitCommandType.enterText: _textInputCommandExecutor.execute,
       CockpitCommandType.eraseText: _textInputCommandExecutor.execute,
       CockpitCommandType.copyText: _textInputCommandExecutor.execute,
@@ -676,6 +682,101 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
       command: command,
       durationMs: stopwatch.elapsedMilliseconds,
       target: target,
+    );
+  }
+
+  Future<CockpitCommandExecution> _executeHover(
+    CockpitCommand command,
+    Stopwatch stopwatch,
+  ) async {
+    final coordinateOrigin = _pointParameter(command);
+    if (command.locator == null && coordinateOrigin != null) {
+      return _executeResolvedGesture(
+        command: command,
+        stopwatch: stopwatch,
+        resolution: null,
+        actionBuilder: () => CockpitGestureAction.hover(
+          origin: coordinateOrigin,
+          anchor: _gestureAnchorParameter(command),
+          pointerDeviceKind: _pointerDeviceKindParameter(command),
+        ),
+      );
+    }
+    if (command.locator == null) {
+      return _failureExecution(
+        command: command,
+        durationMs: stopwatch.elapsedMilliseconds,
+        error: CockpitCommandError.invalidGestureParameters(
+          message: 'hover requires either a locator or explicit coordinates.',
+        ),
+      );
+    }
+    final resolution = await _resolveInteractiveTarget(
+      command,
+      requiredCommand: CockpitCommandType.hover,
+    );
+    if (!resolution.isSuccess) {
+      return _failureExecution(
+        command: command,
+        durationMs: stopwatch.elapsedMilliseconds,
+        snapshot: _liveSnapshot().toJson(),
+        error: resolution.error!,
+      );
+    }
+    return _executeResolvedGesture(
+      command: command,
+      stopwatch: stopwatch,
+      resolution: resolution,
+      actionBuilder: () => CockpitGestureAction.hover(
+        target: resolution.target,
+        origin: _pointParameter(command),
+        anchor: _gestureAnchorParameter(command),
+        pointerDeviceKind: _pointerDeviceKindParameter(command),
+      ),
+    );
+  }
+
+  Future<CockpitCommandExecution> _executeWheel(
+    CockpitCommand command,
+    Stopwatch stopwatch,
+  ) async {
+    final dx = _doubleParameter(command, 'dx') ?? 0;
+    final dy = _doubleParameter(command, 'dy') ?? 0;
+    if (!dx.isFinite || !dy.isFinite || (dx == 0 && dy == 0)) {
+      return _failureExecution(
+        command: command,
+        durationMs: stopwatch.elapsedMilliseconds,
+        error: CockpitCommandError.invalidGestureParameters(
+          message: 'wheel requires a finite non-zero dx or dy.',
+        ),
+      );
+    }
+    final steps = _intParameter(command, 'steps') ?? 1;
+    if (steps < 1 || steps > 1000) {
+      return _failureExecution(
+        command: command,
+        durationMs: stopwatch.elapsedMilliseconds,
+        error: CockpitCommandError.invalidGestureParameters(
+          message: 'wheel steps must be between 1 and 1000.',
+        ),
+      );
+    }
+    final interval = _optionalDurationParameter(command, 'intervalMs');
+    return _executeOptionalTargetGesture(
+      command: command,
+      stopwatch: stopwatch,
+      actionBuilder: (target) => CockpitGestureAction.wheel(
+        target: target,
+        origin: _pointParameter(command),
+        anchor: _gestureAnchorParameter(command),
+        delta: Offset(dx, dy),
+        steps: steps,
+        interval: interval,
+        pointerDeviceKind: _pointerDeviceKindParameter(
+          command,
+          allowTrackpad: true,
+        ),
+      ),
     );
   }
 
@@ -2662,19 +2763,30 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
       return false;
     }
     final selectionBase = request.selectionBase;
-    if (selectionBase == null) {
+    if (selectionBase != null) {
+      if (!value.selection.isValid) {
+        return false;
+      }
+      final expectedBase = selectionBase.clamp(0, value.text.length);
+      final expectedExtent = (request.selectionExtent ?? selectionBase).clamp(
+        0,
+        value.text.length,
+      );
+      if (value.selection.baseOffset != expectedBase ||
+          value.selection.extentOffset != expectedExtent) {
+        return false;
+      }
+    }
+    final composingBase = request.composingBase;
+    if (composingBase == null) {
       return true;
     }
-    if (!value.selection.isValid) {
-      return false;
-    }
-    final expectedBase = selectionBase.clamp(0, value.text.length);
-    final expectedExtent = (request.selectionExtent ?? selectionBase).clamp(
+    final composingExtent = (request.composingExtent ?? composingBase).clamp(
       0,
       value.text.length,
     );
-    return value.selection.baseOffset == expectedBase &&
-        value.selection.extentOffset == expectedExtent;
+    return value.composing.start == composingBase.clamp(0, value.text.length) &&
+        value.composing.end == composingExtent;
   }
 
   Map<String, Object?> _textMutationSettleWarning({
@@ -3044,7 +3156,8 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
       previousRouteName,
       commandType: command.commandType,
     );
-    if (!handled) {
+    final allowUnhandled = _boolParameter(command, 'allowUnhandled') ?? false;
+    if (!handled && !allowUnhandled) {
       return _failureExecution(
         command: command,
         durationMs: stopwatch.elapsedMilliseconds,
@@ -6079,6 +6192,9 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
     final selectionBase = _intParameter(command, 'selectionBase');
     final selectionExtent =
         _intParameter(command, 'selectionExtent') ?? selectionBase;
+    final composingBase = _intParameter(command, 'composingBase');
+    final composingExtent =
+        _intParameter(command, 'composingExtent') ?? composingBase;
     final inputAction = CockpitTextInputAction.maybeFromJson(
       command.parameters['inputAction'],
     );
@@ -6088,6 +6204,8 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
     if (stringText == null &&
         selectionBase == null &&
         selectionExtent == null &&
+        composingBase == null &&
+        composingExtent == null &&
         inputAction == null &&
         !requestFocus &&
         !clearExisting) {
@@ -6098,6 +6216,8 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
       text: stringText,
       selectionBase: selectionBase,
       selectionExtent: selectionExtent,
+      composingBase: composingBase,
+      composingExtent: composingExtent,
       inputAction: inputAction,
       requestFocus: requestFocus,
       clearExisting: clearExisting,
@@ -6533,6 +6653,7 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
   }) {
     final isVisualMutation = switch (commandType) {
       CockpitCommandType.tap ||
+      CockpitCommandType.hover ||
       CockpitCommandType.focusTextInput ||
       CockpitCommandType.setTextEditingValue ||
       CockpitCommandType.sendTextInputAction ||
@@ -6545,6 +6666,7 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
       CockpitCommandType.rotate ||
       CockpitCommandType.panZoom ||
       CockpitCommandType.multiTouch ||
+      CockpitCommandType.wheel ||
       CockpitCommandType.scrollUntilVisible ||
       CockpitCommandType.enterText ||
       CockpitCommandType.sendKeyEvent ||
@@ -6578,6 +6700,7 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
   }) {
     final isVisualMutation = switch (commandType) {
       CockpitCommandType.tap ||
+      CockpitCommandType.hover ||
       CockpitCommandType.focusTextInput ||
       CockpitCommandType.setTextEditingValue ||
       CockpitCommandType.sendTextInputAction ||
@@ -6590,6 +6713,7 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
       CockpitCommandType.rotate ||
       CockpitCommandType.panZoom ||
       CockpitCommandType.multiTouch ||
+      CockpitCommandType.wheel ||
       CockpitCommandType.scrollUntilVisible ||
       CockpitCommandType.enterText ||
       CockpitCommandType.sendKeyEvent ||

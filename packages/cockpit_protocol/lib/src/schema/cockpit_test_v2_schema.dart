@@ -743,6 +743,38 @@ const String cockpitTestV2SchemaJson = r'''
         }
       ]
     },
+    "deviceKindTemplate": {
+      "oneOf": [
+        {
+          "enum": [
+            "touch",
+            "mouse",
+            "stylus",
+            "invertedStylus",
+            "trackpad",
+            "unknown"
+          ]
+        },
+        {
+          "$ref": "#/$defs/variableReference"
+        }
+      ]
+    },
+    "buttonsTemplate": {
+      "oneOf": [
+        {
+          "type": "integer",
+          "minimum": 1
+        },
+        {
+          "type": "string",
+          "pattern": "^(primary|left|tap|secondary|right|tertiary|middle|back|forward)([\\s,+|]+(primary|left|tap|secondary|right|tertiary|middle|back|forward))*$"
+        },
+        {
+          "$ref": "#/$defs/variableReference"
+        }
+      ]
+    },
     "revealAlignmentTemplate": {
       "oneOf": [
         {
@@ -1018,7 +1050,16 @@ const String cockpitTestV2SchemaJson = r'''
           "$ref": "#/$defs/tapAction"
         },
         {
+          "$ref": "#/$defs/hoverAction"
+        },
+        {
+          "$ref": "#/$defs/wheelAction"
+        },
+        {
           "$ref": "#/$defs/longPressAction"
+        },
+        {
+          "$ref": "#/$defs/doubleTapAction"
         },
         {
           "$ref": "#/$defs/locatorOnlyAction"
@@ -1114,6 +1155,31 @@ const String cockpitTestV2SchemaJson = r'''
         },
         "activation": {
           "$ref": "#/$defs/activationTemplate"
+        },
+        "deviceKind": {
+          "$ref": "#/$defs/deviceKindTemplate"
+        },
+        "buttons": {
+          "$ref": "#/$defs/buttonsTemplate"
+        }
+      },
+      "patternProperties": {
+        "^x-[A-Za-z0-9][A-Za-z0-9._-]*$": true
+      },
+      "required": ["type", "locator"],
+      "additionalProperties": false
+    },
+    "hoverAction": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "hover"
+        },
+        "locator": {
+          "$ref": "#/$defs/locator"
+        },
+        "deviceKind": {
+          "$ref": "#/$defs/deviceKindTemplate"
         }
       },
       "patternProperties": {
@@ -1133,6 +1199,37 @@ const String cockpitTestV2SchemaJson = r'''
         },
         "durationMs": {
           "$ref": "#/$defs/positiveIntegerTemplate"
+        },
+        "deviceKind": {
+          "$ref": "#/$defs/deviceKindTemplate"
+        },
+        "buttons": {
+          "$ref": "#/$defs/buttonsTemplate"
+        }
+      },
+      "patternProperties": {
+        "^x-[A-Za-z0-9][A-Za-z0-9._-]*$": true
+      },
+      "required": ["type", "locator"],
+      "additionalProperties": false
+    },
+    "doubleTapAction": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "doubleTap"
+        },
+        "locator": {
+          "$ref": "#/$defs/locator"
+        },
+        "intervalMs": {
+          "$ref": "#/$defs/positiveIntegerTemplate"
+        },
+        "deviceKind": {
+          "$ref": "#/$defs/deviceKindTemplate"
+        },
+        "buttons": {
+          "$ref": "#/$defs/buttonsTemplate"
         }
       },
       "patternProperties": {
@@ -1145,7 +1242,7 @@ const String cockpitTestV2SchemaJson = r'''
       "type": "object",
       "properties": {
         "type": {
-          "enum": ["doubleTap", "focusTextInput", "increase", "decrease", "dismiss"]
+          "enum": ["focusTextInput", "increase", "decrease", "dismiss"]
         },
         "locator": {
           "$ref": "#/$defs/locator"
@@ -1324,6 +1421,18 @@ const String cockpitTestV2SchemaJson = r'''
         },
         "durationMs": {
           "$ref": "#/$defs/positiveIntegerTemplate"
+        },
+        "holdDurationMs": {
+          "$ref": "#/$defs/positiveIntegerTemplate"
+        },
+        "moveEventCount": {
+          "$ref": "#/$defs/nonNegativeIntegerTemplate"
+        },
+        "deviceKind": {
+          "$ref": "#/$defs/deviceKindTemplate"
+        },
+        "buttons": {
+          "$ref": "#/$defs/buttonsTemplate"
         }
       },
       "patternProperties": {
@@ -1360,6 +1469,18 @@ const String cockpitTestV2SchemaJson = r'''
         },
         "velocity": {
           "$ref": "#/$defs/positiveNumberTemplate"
+        },
+        "durationMs": {
+          "$ref": "#/$defs/positiveIntegerTemplate"
+        },
+        "moveEventCount": {
+          "$ref": "#/$defs/nonNegativeIntegerTemplate"
+        },
+        "deviceKind": {
+          "$ref": "#/$defs/deviceKindTemplate"
+        },
+        "buttons": {
+          "$ref": "#/$defs/buttonsTemplate"
         }
       },
       "patternProperties": {
@@ -1396,12 +1517,63 @@ const String cockpitTestV2SchemaJson = r'''
         },
         "durationMs": {
           "$ref": "#/$defs/positiveIntegerTemplate"
+        },
+        "moveEventCount": {
+          "$ref": "#/$defs/nonNegativeIntegerTemplate"
+        },
+        "deviceKind": {
+          "$ref": "#/$defs/deviceKindTemplate"
+        },
+        "buttons": {
+          "$ref": "#/$defs/buttonsTemplate"
         }
       },
       "patternProperties": {
         "^x-[A-Za-z0-9][A-Za-z0-9._-]*$": true
       },
       "required": ["type", "direction", "distance"],
+      "additionalProperties": false
+    },
+    "wheelAction": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "wheel"
+        },
+        "locator": {
+          "$ref": "#/$defs/locator"
+        },
+        "dx": {
+          "$ref": "#/$defs/numberTemplate"
+        },
+        "dy": {
+          "$ref": "#/$defs/numberTemplate"
+        },
+        "steps": {
+          "$ref": "#/$defs/positiveIntegerTemplate"
+        },
+        "intervalMs": {
+          "$ref": "#/$defs/positiveIntegerTemplate"
+        },
+        "deviceKind": {
+          "$ref": "#/$defs/deviceKindTemplate"
+        }
+      },
+      "patternProperties": {
+        "^x-[A-Za-z0-9][A-Za-z0-9._-]*$": true
+      },
+      "required": ["type", "dx", "dy"],
+      "not": {
+        "properties": {
+          "dx": {
+            "const": 0
+          },
+          "dy": {
+            "const": 0
+          }
+        },
+        "required": ["dx", "dy"]
+      },
       "additionalProperties": false
     },
     "pinchZoomAction": {
@@ -1415,6 +1587,18 @@ const String cockpitTestV2SchemaJson = r'''
         },
         "scale": {
           "$ref": "#/$defs/positiveNumberTemplate"
+        },
+        "startSpan": {
+          "$ref": "#/$defs/positiveNumberTemplate"
+        },
+        "durationMs": {
+          "$ref": "#/$defs/positiveIntegerTemplate"
+        },
+        "moveEventCount": {
+          "$ref": "#/$defs/nonNegativeIntegerTemplate"
+        },
+        "deviceKind": {
+          "$ref": "#/$defs/deviceKindTemplate"
         }
       },
       "patternProperties": {
@@ -1442,6 +1626,18 @@ const String cockpitTestV2SchemaJson = r'''
         },
         "rotationRadians": {
           "$ref": "#/$defs/numberTemplate"
+        },
+        "startSpan": {
+          "$ref": "#/$defs/positiveNumberTemplate"
+        },
+        "durationMs": {
+          "$ref": "#/$defs/positiveIntegerTemplate"
+        },
+        "moveEventCount": {
+          "$ref": "#/$defs/nonNegativeIntegerTemplate"
+        },
+        "deviceKind": {
+          "$ref": "#/$defs/deviceKindTemplate"
         }
       },
       "patternProperties": {
@@ -1478,6 +1674,15 @@ const String cockpitTestV2SchemaJson = r'''
         },
         "rotationRadians": {
           "$ref": "#/$defs/numberTemplate"
+        },
+        "durationMs": {
+          "$ref": "#/$defs/positiveIntegerTemplate"
+        },
+        "moveEventCount": {
+          "$ref": "#/$defs/nonNegativeIntegerTemplate"
+        },
+        "deviceKind": {
+          "$ref": "#/$defs/deviceKindTemplate"
         }
       },
       "patternProperties": {
@@ -1555,6 +1760,12 @@ const String cockpitTestV2SchemaJson = r'''
         },
         "revealAlignment": {
           "$ref": "#/$defs/revealAlignmentTemplate"
+        },
+        "revealOffsetPx": {
+          "$ref": "#/$defs/numberTemplate"
+        },
+        "scrollLocator": {
+          "$ref": "#/$defs/locator"
         }
       },
       "patternProperties": {

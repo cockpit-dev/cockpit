@@ -208,6 +208,7 @@ final class CockpitPostActionSettleCoordinator {
   bool _mayStartVisualTransition(CockpitCommandType? commandType) {
     return switch (commandType) {
       CockpitCommandType.tap ||
+      CockpitCommandType.hover ||
       CockpitCommandType.doubleTap ||
       CockpitCommandType.longPress ||
       CockpitCommandType.drag ||
@@ -217,6 +218,7 @@ final class CockpitPostActionSettleCoordinator {
       CockpitCommandType.rotate ||
       CockpitCommandType.panZoom ||
       CockpitCommandType.multiTouch ||
+      CockpitCommandType.wheel ||
       CockpitCommandType.scrollUntilVisible ||
       CockpitCommandType.showOnScreen ||
       CockpitCommandType.increase ||
@@ -233,6 +235,7 @@ final class CockpitPostActionSettleCoordinator {
   bool _isVisualMutation(CockpitCommandType? commandType) {
     return switch (commandType) {
       CockpitCommandType.tap ||
+      CockpitCommandType.hover ||
       CockpitCommandType.focusTextInput ||
       CockpitCommandType.setTextEditingValue ||
       CockpitCommandType.sendTextInputAction ||
@@ -245,6 +248,7 @@ final class CockpitPostActionSettleCoordinator {
       CockpitCommandType.rotate ||
       CockpitCommandType.panZoom ||
       CockpitCommandType.multiTouch ||
+      CockpitCommandType.wheel ||
       CockpitCommandType.scrollUntilVisible ||
       CockpitCommandType.enterText ||
       CockpitCommandType.sendKeyEvent ||

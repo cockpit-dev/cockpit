@@ -169,6 +169,8 @@ final class CockpitSnapshotStyle {
     this.fontWeight,
     this.borderSummary,
     this.shadowSummary,
+    this.opacity,
+    this.transform,
   });
 
   final String? textColor;
@@ -177,6 +179,8 @@ final class CockpitSnapshotStyle {
   final String? fontWeight;
   final String? borderSummary;
   final String? shadowSummary;
+  final double? opacity;
+  final String? transform;
 
   /// Encodes this CockpitSnapshotStyle as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
@@ -186,6 +190,8 @@ final class CockpitSnapshotStyle {
     if (fontWeight != null) 'fontWeight': fontWeight,
     if (borderSummary != null) 'borderSummary': borderSummary,
     if (shadowSummary != null) 'shadowSummary': shadowSummary,
+    if (opacity != null) 'opacity': opacity,
+    if (transform != null) 'transform': transform,
   };
 
   /// Decodes a CockpitSnapshotStyle from a JSON object.
@@ -197,6 +203,8 @@ final class CockpitSnapshotStyle {
       fontWeight: json['fontWeight'] as String?,
       borderSummary: json['borderSummary'] as String?,
       shadowSummary: json['shadowSummary'] as String?,
+      opacity: (json['opacity'] as num?)?.toDouble(),
+      transform: json['transform'] as String?,
     );
   }
 
@@ -209,7 +217,9 @@ final class CockpitSnapshotStyle {
             other.fontSize == fontSize &&
             other.fontWeight == fontWeight &&
             other.borderSummary == borderSummary &&
-            other.shadowSummary == shadowSummary;
+            other.shadowSummary == shadowSummary &&
+            other.opacity == opacity &&
+            other.transform == transform;
   }
 
   @override
@@ -220,6 +230,8 @@ final class CockpitSnapshotStyle {
     fontWeight,
     borderSummary,
     shadowSummary,
+    opacity,
+    transform,
   );
 }
 

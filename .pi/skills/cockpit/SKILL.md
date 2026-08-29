@@ -85,6 +85,7 @@ cockpit dev status
 cockpit dev inspect "Documents"
 cockpit dev tree
 cockpit dev tap "Documents"
+cockpit dev hover "More options"
 cockpit dev hold "Documents" --duration 900ms
 cockpit dev double "Card" --interval 120ms
 cockpit dev drag "Canvas" --dx 120 --dy 0
@@ -92,8 +93,14 @@ cockpit dev swipe "List" up
 cockpit dev pinch "Map" 1.5
 cockpit dev rotate "Canvas" 1.5708
 cockpit dev type "hello" --into "Message"
+cockpit dev focus "Message"
+cockpit dev select "Message" 0 5
+cockpit dev copy "Message"
+cockpit dev paste "Message"
+cockpit dev clear "Message"
 cockpit dev press enter
 cockpit dev scroll "Operations"
+cockpit dev wheel "Operations" --dy 120
 cockpit dev watch "Loading" --for 5s
 cockpit dev open "myapp://tasks/42"
 cockpit dev wait
@@ -411,9 +418,13 @@ projects and worktrees are never mixed. A true common-ancestor ambiguity still
 requires entering the project directory or passing the exact handle.
 
 `session list` is a fast, side-effect-free local index: it never starts a worker,
-attaches Flutter, reconnects, or relaunches an app. Its `state` is the last saved
+attaches Flutter, reconnects, or relaunches an app. Its `last` is the last saved
 state, not a live probe. Use `session show HANDLE` or `dev status --session HANDLE`
 only when current reachability is needed.
+Stopped or crashed handles stay registered so `dev start` can recover them and
+reuse the same short reference; Cockpit only removes duplicate target records
+automatically. Remove a handle explicitly with `cockpit session remove --session
+HANDLE` when the project is permanently gone.
 
 Never register or delete roots, targets, apps, ports, or runtime sessions manually
 for the fast path. Every `dev start` refreshes the selected entrypoint index,
@@ -549,10 +560,16 @@ of guessing. Execute only the `sel` whose own `can` advertises the command.
 
 | `can` | Command |
 | --- | --- |
-| `tap` | `dev tap TARGET` |
+| `tap` | `dev tap [TARGET]` or `dev tap --at X,Y` |
+| `hover` | `dev hover [TARGET]` or `dev hover --at X,Y` |
 | `type` | `dev type VALUE --into TARGET` |
-| `hold` | `dev hold TARGET [--duration TIME]` |
-| `double` | `dev double TARGET [--interval TIME]` |
+| `copy` | `dev copy [TARGET]` |
+| `paste` | `dev paste TARGET` |
+| `clear` | `dev clear TARGET` |
+| `focus` | `dev focus TARGET` |
+| `select` | `dev select TARGET START END` |
+| `hold` | `dev hold [TARGET] [--duration TIME]` or `--at X,Y` |
+| `double` | `dev double [TARGET] [--interval TIME]` or `--at X,Y` |
 | `drag` | `dev drag TARGET --dx PX --dy PX` |
 | `fling` | `dev fling TARGET --dx PX --dy PX --velocity PX_PER_S` |
 | `swipe` | `dev swipe TARGET up|down|left|right` |
@@ -563,6 +580,7 @@ of guessing. Execute only the `sel` whose own `can` advertises the command.
 | `inc` / `dec` | `dev inc TARGET` / `dev dec TARGET` |
 | `dismiss` | `dev dismiss TARGET` |
 | `scroll` | `dev scroll TARGET` |
+| `wheel` | `dev wheel TARGET --dy PX [--steps N]` |
 
 Do not substitute a gesture or coordinate action when a direct command is
 advertised.
@@ -592,6 +610,9 @@ table or copy `sel` from `inspect`.
 ```bash
 cockpit dev inspect
 cockpit dev tap ':a7b9x2'
+cockpit dev hover 'More options'
+cockpit dev tap --at 320,640 --device mouse
+cockpit dev hover --at 480,96
 cockpit dev inspect "Save changes"
 cockpit dev tap '#save-button'
 cockpit dev hold ':k4m2p8'
@@ -602,13 +623,24 @@ cockpit dev inc ':v8c1r6'
 cockpit dev tap 'Dialog >> FilledButton["Save"]'
 cockpit dev tap 'Toolbar >> [type="CompanyIconButton"]'
 cockpit dev type "hello" --into '@message'
+cockpit dev focus '@message'
+cockpit dev select '@message' 0 5
+cockpit dev copy '@message'
+cockpit dev paste '@message'
 cockpit dev scroll "Operations"
+cockpit dev wheel "Operations" --dy 120 --steps 3 --device trackpad
 cockpit dev watch "Loading" --for 5s --every 200ms
 ```
 
 `dev watch` is bounded and delta-only: it reports route, target, control-state,
 and layout changes with `endedBy` set to `duration`, `timeout`, `quiet`,
 `eventLimit`, or `error`.
+
+Pointer actions `tap`, `hover`, `hold`, and `double` may omit a selector only
+when they include the explicit `--at X,Y` point. Coordinates are logical Flutter
+viewport pixels; they are a deliberate fallback for source-known custom surfaces
+that expose no stable mounted target. Do not guess coordinates when a selector
+can be derived from source or `inspect`.
 
 For delivery-critical interactions, verify the complete time path rather than
 only the final frame: a real hold/double interval, a multi-pointer sequence,
@@ -643,6 +675,15 @@ the opposite direction. Use `--align start|center|end` only for deliberate place
 `--offset PX` moves the target toward the viewport end for positive values and toward
 the start for negative values. Omit `--align nearest`, zero offset, direction, and
 default budgets.
+
+`dev wheel TARGET --dy PX` dispatches real `PointerScrollEvent` signals to the
+target. Use `--dx` for horizontal input, `--steps` for repeated wheel ticks,
+`--interval` to space them, and `--device trackpad` when the app distinguishes
+trackpad from mouse input. Cockpit advertises wheel on `Scrollable`, custom
+`Listener(onPointerSignal: ...)`, and trackpad-aware `InteractiveViewer` targets;
+it remains available without a Key or Semantics label when source structure is
+the reliable locator. Use `--at X,Y` only for a signal owner that is not itself
+discoverable as a mounted target.
 
 Re-inspect after list reorder, filtering, navigation, dialogs, sheets, or keyboard
 transitions. `type VALUE --into
@@ -750,7 +791,7 @@ For Dart-authored Flutter integration tests, use the development-only
 `flutter_cockpit_test` package. It keeps Flutter's official
 `integration_test` runner while reusing Cockpit's source-first Element
 selectors, real hit-tested actions, nested/lazy scrolling, assertions,
-native evidence, and explicit host actions. Add it with
+native evidence, real wheel input, and explicit host actions. Add it with
 `flutter pub add --dev flutter_cockpit_test`; never import it from production
 application code. Start with `cockpitTestWidgets`, use source-known selectors
 directly, and keep OS/system actions behind the explicit `hostCommand` bridge.

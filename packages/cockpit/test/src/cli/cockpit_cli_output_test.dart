@@ -298,7 +298,7 @@ void main() {
                       'entrypoint': 'cockpit/main.dart',
                       'platform': 'macos',
                       'deviceId': 'macos',
-                      'lastState': 'ready',
+                      'last': 'ready',
                       'checkoutPath': '/workspace',
                       'checkoutIdentity': hash,
                     },

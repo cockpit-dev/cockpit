@@ -100,6 +100,91 @@ void main() {
     }
   });
 
+  test('gesture parameters survive lowering without default coercion', () {
+    final actions = <Map<String, Object?>>[
+      <String, Object?>{
+        'type': 'doubleTap',
+        'locator': <String, Object?>{'testId': 'target'},
+        'intervalMs': 120,
+        'deviceKind': 'mouse',
+        'buttons': 'secondary',
+      },
+      <String, Object?>{
+        'type': 'drag',
+        'locator': <String, Object?>{'testId': 'target'},
+        'dx': 20,
+        'dy': 10,
+        'durationMs': 300,
+        'holdDurationMs': 80,
+        'moveEventCount': 12,
+        'deviceKind': 'stylus',
+        'buttons': 2,
+      },
+      <String, Object?>{
+        'type': 'scrollUntilVisible',
+        'locator': <String, Object?>{'text': 'Result'},
+        'direction': 'down',
+        'maxScrolls': 8,
+        'durationMs': 180,
+        'revealAlignment': 'center',
+        'revealOffsetPx': 16,
+        'scrollLocator': <String, Object?>{'testId': 'results'},
+      },
+    ];
+
+    for (final source in actions) {
+      final action = CockpitTestAction.fromJson(source, path: r'$.action');
+      final command = flutterLowerer
+          .lower(
+            action: action,
+            commandId: 'advanced-${action.kind.name}',
+            timeoutMs: 5000,
+            requestedPlane: CockpitTestPlane.semantic,
+            capabilities: capabilities,
+          )
+          .value!
+          .command;
+      if (source.containsKey('durationMs') || source['type'] == 'fling') {
+        expect(command.parameters, containsPair('durationMs', isNotNull));
+      }
+      for (final key in <String>[
+        'intervalMs',
+        'holdDurationMs',
+        'moveEventCount',
+        'deviceKind',
+        'buttons',
+        'revealOffsetPx',
+        'scrollLocator',
+      ]) {
+        if (source.containsKey(key)) {
+          expect(command.parameters, contains(key), reason: key);
+        }
+      }
+    }
+  });
+
+  test('fling keeps an explicitly authored duration', () {
+    final action = CockpitTestAction.fromJson(<String, Object?>{
+      'type': 'fling',
+      'locator': <String, Object?>{'testId': 'target'},
+      'dx': 0,
+      'dy': -200,
+      'velocity': 1200,
+      'durationMs': 400,
+    }, path: r'$.action');
+    final command = flutterLowerer
+        .lower(
+          action: action,
+          commandId: 'explicit-fling-duration',
+          timeoutMs: 5000,
+          requestedPlane: CockpitTestPlane.semantic,
+          capabilities: capabilities,
+        )
+        .value!
+        .command;
+    expect(command.parameters['durationMs'], 400);
+  });
+
   test('control-flow conditions lower to one-shot probes', () {
     final condition = CockpitTestCondition(
       kind: CockpitTestConditionKind.visible,

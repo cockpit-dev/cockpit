@@ -110,5 +110,7 @@ final class CockpitSessionCommand extends Command<int> {
 
 Map<String, Object?> _sessionListItem(CockpitCliSessionHandle handle) {
   final stored = handle.toJson()..remove('lifecycle');
-  return <String, Object?>{...stored, 'lastState': handle.lifecycle};
+  // `session list` is deliberately a local, side-effect-free index.  Name the
+  // persisted lifecycle `last` so callers cannot mistake it for a live probe.
+  return <String, Object?>{...stored, 'last': handle.lifecycle};
 }
