@@ -12,6 +12,7 @@ import '../capture/cockpit_capture_result.dart';
 import '../control/cockpit_screenshot_request.dart';
 import '../executor/in_app_cockpit_command_executor.dart';
 import '../gesture/cockpit_gesture_action.dart';
+import '../gesture/cockpit_gesture_engine.dart';
 import '../model/cockpit_environment.dart';
 import '../network/cockpit_network_query.dart';
 import '../remote/cockpit_remote_bridge_protocol.dart';
@@ -164,6 +165,7 @@ final class FlutterCockpitRootState extends State<FlutterCockpitRoot> {
     String transportType = 'inAppTest',
     Future<void> Function()? postActionSettler,
     Future<void> Function(Duration duration)? waitTickHandler,
+    CockpitGestureDelay? gestureDelay,
   }) {
     return _buildRemoteCommandExecutor(
       platform ??
@@ -174,6 +176,7 @@ final class FlutterCockpitRootState extends State<FlutterCockpitRoot> {
       transportType: transportType,
       postActionSettler: postActionSettler,
       waitTickHandler: waitTickHandler,
+      gestureDelay: gestureDelay,
     );
   }
 
@@ -497,6 +500,7 @@ final class FlutterCockpitRootState extends State<FlutterCockpitRoot> {
     String transportType = 'remoteHttp',
     Future<void> Function()? postActionSettler,
     Future<void> Function(Duration duration)? waitTickHandler,
+    CockpitGestureDelay? gestureDelay,
   }) {
     return InAppCockpitCommandExecutor(
       registry: FlutterCockpit.binding.registry,
@@ -574,7 +578,7 @@ final class FlutterCockpitRootState extends State<FlutterCockpitRoot> {
             StateError('FlutterCockpitRoot surface is not mounted.'),
           );
         }
-        return surfaceState.performGesture(action);
+        return surfaceState.performGesture(action, delay: gestureDelay);
       },
       clearNetworkActivityHandler:
           FlutterCockpit.binding.networkObserver == null

@@ -208,6 +208,67 @@ direction. Cockpit owns scroll-container discovery; when a target is ambiguous,
 strengthen the target selector with a real ancestor or identity instead of inventing
 a container option.
 
+## Gestures and change observation
+
+The Flutter development bridge exposes real pointer gestures in addition to tap,
+hold, and double-tap:
+
+```bash
+cockpit dev drag "Canvas" --dx 120 --dy 0
+cockpit dev fling "List" --dx 0 --dy -400 --velocity 1600
+cockpit dev swipe "List" up
+cockpit dev pinch "Map" 1.5
+cockpit dev rotate "Canvas" 1.5708
+cockpit dev pan "Canvas" --dx 80 --dy 20
+cockpit dev multi "Canvas" --sequence-file /absolute/gesture.yaml
+```
+
+Use `hold TARGET --duration 900ms` when the press duration is part of the
+behavior under test; `--timeout` remains the outer command budget. Use
+`double TARGET --interval 120ms` only when the inter-tap timing matters.
+`drag`, `fling`, and `pan` use logical-pixel deltas. `swipe` uses a normalized
+distance (`0.15..0.95`), `pinch` uses a scale different from 1, and `rotate`
+uses radians. `multi` accepts LON, JSON, or YAML with a `steps` array containing
+`pointer`, `phase` (`down|move|up`), `atMs`, `dx`, and `dy`. Every pointer must
+end with `up`; failed sequences are cancelled so no pointer leaks into the next
+command. Keep the same `--session` for concurrent apps.
+
+Use `dev wait` for the final animation/settle proof. To inspect the animation or
+any continuously changing page without flooding stdout, use bounded incremental
+sampling:
+
+```bash
+cockpit dev watch "Loading" --for 5s --every 200ms
+cockpit dev watch --for 10s --quiet 800ms
+```
+
+`dev watch` returns sample count, compact route, target, control-state, and
+layout change events plus an `endedBy` reason
+(`duration`, `timeout`, `quiet`, `eventLimit`, or `error`). It compares route and mounted
+target identity, text, control state, and layout; full snapshots and screenshots
+remain explicit follow-up reads. A changed page is reported as deltas, not
+repeated trees. Use a current screenshot or focused `dev inspect` after a change
+when visual or exact locator evidence is required.
+
+Before delivery, select the smallest proofs required by the feature instead of
+running every category blindly:
+
+- pointer timing: hold, double, drag-after-hold, fling, pinch, rotate, and an
+  explicit multi-pointer sequence;
+- temporal UI: start/intermediate/end checkpoints, bounded `watch`, then final
+  UI idle;
+- changing data: polling counters, timers, SSE/WebSocket state, pagination,
+  refresh, and unfinished network responses;
+- boundaries: nested scrolling, keyboard/focus, Flutter overlays, proven system
+  dialogs, back/deep links, viewport changes, and foreground recovery;
+- isolation: the exact session for concurrent projects, targets, and platforms;
+- resilience: one evidence-matched recovery after a timeout, disconnect, route
+  mismatch, or unexpected overlay, followed by the original postcondition.
+
+For a visible claim, take one current screenshot after the terminal state. For
+an animation-specific visual claim, capture only named checkpoints; do not emit
+or retain every frame.
+
 ## Timeouts
 
 - Use the command default first.

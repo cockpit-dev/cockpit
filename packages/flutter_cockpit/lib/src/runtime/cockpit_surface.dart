@@ -410,9 +410,18 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
     );
   }
 
-  Future<void> performGesture(CockpitGestureAction action) {
+  Future<void> performGesture(
+    CockpitGestureAction action, {
+    CockpitGestureDelay? delay,
+  }) {
     widget.tapFeedbackController?.record(action);
-    return _gestureEngine.perform(action);
+    if (delay == null) {
+      return _gestureEngine.perform(action);
+    }
+    return CockpitGestureEngine(
+      delay: delay,
+      viewportGeometryProvider: _viewportGeometry,
+    ).perform(action);
   }
 
   Future<bool> ensureLocatorVisible(

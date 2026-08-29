@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:cockpit_protocol/cockpit_protocol.dart';
@@ -674,6 +676,140 @@ final class CockpitDevRuntime {
       result: result,
       state: state,
       changed: read.changed,
+    );
+  }
+
+  /// Samples the mounted Flutter surface and returns only compact deltas.
+  ///
+  /// This intentionally lives beside [inspect] instead of becoming another
+  /// snapshot profile: a watch is a bounded diagnostic operation, not a second
+  /// full-tree transport. Large evidence remains available through a normal
+  /// inspect/tree command when a delta points at the relevant state.
+  Future<int> watch(
+    CockpitCliSessionHandle session, {
+    String? query,
+    required Duration duration,
+    required Duration interval,
+    required int maxEvents,
+    Duration? quiet,
+  }) async {
+    if (duration <= Duration.zero || interval <= Duration.zero) {
+      throw const FormatException(
+        'watch duration and interval must be positive.',
+      );
+    }
+    if (maxEvents < 1 || maxEvents > 1000) {
+      throw const FormatException(
+        'watch max-events must be between 1 and 1000.',
+      );
+    }
+    if (quiet != null && quiet <= Duration.zero) {
+      throw const FormatException('watch quiet window must be positive.');
+    }
+    final resolution = await reconcile(session, allowRelaunch: false);
+    if (!resolution.ready) {
+      return writeUnavailable(action: 'watch', resolution: resolution);
+    }
+    session = resolution.session;
+    final operationBudget = runtime.operationTimeout;
+    const responseReserve = Duration(milliseconds: 250);
+    final maximumObservation = operationBudget > responseReserve
+        ? operationBudget - responseReserve
+        : operationBudget;
+    final effectiveDuration = duration > maximumObservation
+        ? maximumObservation
+        : duration;
+    final stopwatch = Stopwatch()..start();
+    final changes = <Map<String, Object?>>[];
+    String? previousFingerprint;
+    Map<String, Object?>? previousProjection;
+    var sampleCount = 0;
+    DateTime? lastChangeAt;
+    var endedBy = duration > effectiveDuration ? 'timeout' : 'duration';
+    CockpitOperationResult? failedRead;
+
+    while (stopwatch.elapsed < effectiveDuration) {
+      final snapshotResult = await invoke(
+        session,
+        'ui.inspect',
+        <String, Object?>{
+          'sessionId': session.sessionId,
+          // locate intentionally strips the snapshot after building its
+          // selector index. A watch needs the bounded snapshot itself, so
+          // use the tree profile and keep the target budget small.
+          'profile': 'tree',
+          'snapshotOptions': CockpitSnapshotOptions(
+            profile: CockpitSnapshotProfile.baseline,
+            query: query?.trim().isEmpty == true ? null : query?.trim(),
+            maxTargets: 96,
+            maxAncestorsPerTarget: 0,
+          ).toJson(),
+        },
+      );
+      if (!_operationSucceeded(snapshotResult)) {
+        failedRead = snapshotResult;
+        endedBy = 'error';
+        break;
+      }
+      sampleCount += 1;
+      final projection = _watchProjection(snapshotResult.output);
+      final fingerprint = jsonEncode(projection);
+      if (previousFingerprint != null && fingerprint != previousFingerprint) {
+        final now = DateTime.now().toUtc();
+        lastChangeAt = now;
+        changes.add(
+          _watchChange(
+            previousProjection!,
+            projection,
+            atMs: stopwatch.elapsedMilliseconds,
+          ),
+        );
+        if (changes.length >= maxEvents) {
+          endedBy = 'eventLimit';
+          break;
+        }
+      }
+      previousFingerprint = fingerprint;
+      previousProjection = projection;
+      if (quiet != null &&
+          lastChangeAt != null &&
+          DateTime.now().toUtc().difference(lastChangeAt) >= quiet) {
+        endedBy = 'quiet';
+        break;
+      }
+      final remaining = effectiveDuration - stopwatch.elapsed;
+      if (remaining <= Duration.zero) break;
+      await Future<void>.delayed(interval < remaining ? interval : remaining);
+    }
+    stopwatch.stop();
+
+    if (failedRead != null) {
+      return writeOperation(
+        action: 'watch',
+        session: session,
+        result: failedRead,
+        state: <String, Object?>{
+          'samples': sampleCount,
+          'changes': changes,
+          'endedBy': endedBy,
+        },
+        changed: resolution.changed,
+        failureExitCode: cockpitTemporaryExitCode,
+      );
+    }
+    return writeEnvelope(
+      action: 'watch',
+      session: session,
+      ok: true,
+      state: <String, Object?>{
+        if (query != null && query.trim().isNotEmpty) 'query': query.trim(),
+        'samples': sampleCount,
+        'changes': changes,
+        'changed': changes.isNotEmpty,
+        'endedBy': endedBy,
+        'durationMs': stopwatch.elapsedMilliseconds,
+      },
+      changed: resolution.changed == 'none' ? 'observed' : resolution.changed,
     );
   }
 
@@ -1429,6 +1565,118 @@ Map<String, Object?> _locatorResult(Map<String, Object?> output) {
     throw StateError('ui.inspect did not return bounded locator results.');
   }
   return Map<String, Object?>.from(locator);
+}
+
+Map<String, Object?> _watchProjection(Map<String, Object?>? output) {
+  final snapshot = _objectMap(output?['snapshot']);
+  final route =
+      output?['routeName'] ?? snapshot?['routeName'] ?? snapshot?['route'];
+  final rawTargets = snapshot?['visibleTargets'];
+  final targets = rawTargets is List<Object?>
+      ? rawTargets
+            .whereType<Map<Object?, Object?>>()
+            .map((target) {
+              final map = Map<Object?, Object?>.from(target);
+              return <String, Object?>{
+                for (final key in const <String>[
+                  'cockpitId',
+                  'semanticId',
+                  'keyValue',
+                  'text',
+                  'tooltip',
+                  'typeName',
+                  'visible',
+                  'control',
+                  'layout',
+                ])
+                  if (map[key] != null) key: map[key],
+              };
+            })
+            .toList(growable: false)
+      : const <Map<String, Object?>>[];
+  return <String, Object?>{
+    if (route is String && route.isNotEmpty) 'route': route,
+    'count': targets.length,
+    'targets': targets,
+  };
+}
+
+Map<String, Object?> _watchChange(
+  Map<String, Object?> previous,
+  Map<String, Object?> current, {
+  required int atMs,
+}) {
+  final previousRoute = previous['route'];
+  final currentRoute = current['route'];
+  final previousTargets = _watchTargetMap(previous['targets']);
+  final currentTargets = _watchTargetMap(current['targets']);
+  final added = currentTargets.keys
+      .where((key) => !previousTargets.containsKey(key))
+      .take(8)
+      .map((key) => currentTargets[key]!)
+      .toList(growable: false);
+  final removed = previousTargets.keys
+      .where((key) => !currentTargets.containsKey(key))
+      .take(8)
+      .toList(growable: false);
+  final updated = currentTargets.keys
+      .where(
+        (key) =>
+            previousTargets.containsKey(key) &&
+            jsonEncode(previousTargets[key]) != jsonEncode(currentTargets[key]),
+      )
+      .take(8)
+      .map(
+        (key) => <String, Object?>{
+          'id': key,
+          'from': previousTargets[key],
+          'to': currentTargets[key],
+        },
+      )
+      .toList(growable: false);
+  return <String, Object?>{
+    'atMs': atMs,
+    if (previousRoute != currentRoute) ...<String, Object?>{
+      'from': previousRoute,
+      'route': currentRoute,
+    },
+    if (added.isNotEmpty) 'added': added,
+    if (removed.isNotEmpty) 'removed': removed,
+    if (updated.isNotEmpty) 'updated': updated,
+    'count': current['count'],
+  };
+}
+
+Map<String, Map<String, Object?>> _watchTargetMap(Object? value) {
+  if (value is! List<Object?>) return <String, Map<String, Object?>>{};
+  final result = <String, Map<String, Object?>>{};
+  for (final item in value.whereType<Map<Object?, Object?>>()) {
+    final target = Map<String, Object?>.from(item);
+    final base = _watchTargetIdentity(target);
+    var key = base;
+    var duplicate = 1;
+    while (result.containsKey(key)) {
+      key = '$base#$duplicate';
+      duplicate += 1;
+    }
+    result[key] = target;
+  }
+  return result;
+}
+
+String _watchTargetIdentity(Map<String, Object?> target) {
+  for (final field in const <String>[
+    'cockpitId',
+    'semanticId',
+    'keyValue',
+    'tooltip',
+    'text',
+    'typeName',
+  ]) {
+    final value = target[field];
+    if (value is String && value.isNotEmpty) return '$field=$value';
+  }
+  return 'target=${jsonEncode(target)}';
 }
 
 ({String artifactId, String name, String mediaType})? _treeArtifact(

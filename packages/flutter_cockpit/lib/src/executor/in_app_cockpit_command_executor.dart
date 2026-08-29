@@ -781,7 +781,11 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
       );
     }
     final target = resolution.target!;
-    if (target.supportedCommands.contains(CockpitCommandType.longPress) &&
+    // A command that supplies duration asks for an actual pointer gesture.
+    // Semantic callbacks cannot model the press duration and would make
+    // custom timing silently ineffective.
+    if (!command.parameters.containsKey('durationMs') &&
+        target.supportedCommands.contains(CockpitCommandType.longPress) &&
         target.onSemanticLongPress != null) {
       await _prepareForAction(
         command,
@@ -812,7 +816,8 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
         changed: _changedSince(commit),
       );
     }
-    if (target.supportedCommands.contains(CockpitCommandType.longPress) &&
+    if (!command.parameters.containsKey('durationMs') &&
+        target.supportedCommands.contains(CockpitCommandType.longPress) &&
         target.onLongPress != null) {
       final preflight = _preflightTargetHitTest(
         command: command,
@@ -925,7 +930,8 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
       );
     }
     final target = resolution.target!;
-    if (target.supportedCommands.contains(CockpitCommandType.doubleTap) &&
+    if (!command.parameters.containsKey('intervalMs') &&
+        target.supportedCommands.contains(CockpitCommandType.doubleTap) &&
         target.onDoubleTap != null) {
       final preflight = _preflightTargetHitTest(
         command: command,
@@ -1219,14 +1225,30 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
     Stopwatch stopwatch,
   ) async {
     final rawSequence = command.parameters['sequence'];
-    final sequence = switch (rawSequence) {
-      CockpitMultiTouchSequence() => rawSequence,
-      Map<Object?, Object?>() => CockpitMultiTouchSequence.fromJson(
-        Map<String, Object?>.from(rawSequence),
-      ),
-      _ => null,
-    };
-    if (sequence == null) {
+    CockpitMultiTouchSequence? sequence;
+    try {
+      sequence = switch (rawSequence) {
+        CockpitMultiTouchSequence() => rawSequence,
+        Map<Object?, Object?>() => CockpitMultiTouchSequence.fromJson(
+          Map<String, Object?>.from(rawSequence),
+        ),
+        _ => null,
+      };
+      if (sequence != null && sequence.steps.isEmpty) {
+        throw const FormatException('Multi-touch sequence must not be empty.');
+      }
+    } on Object catch (error) {
+      return _failureExecution(
+        command: command,
+        durationMs: stopwatch.elapsedMilliseconds,
+        error: CockpitCommandError.invalidGestureParameters(
+          message: 'Invalid multiTouch sequence.',
+          details: <String, Object?>{'error': error.toString()},
+        ),
+      );
+    }
+    final validSequence = sequence;
+    if (validSequence == null) {
       return _failureExecution(
         command: command,
         durationMs: stopwatch.elapsedMilliseconds,
@@ -1243,7 +1265,7 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
         target: target,
         origin: _pointParameter(command),
         anchor: _gestureAnchorParameter(command),
-        sequence: sequence,
+        sequence: validSequence,
       ),
     );
   }

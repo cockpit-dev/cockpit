@@ -56,6 +56,13 @@ void main() {
         'tap',
         'hold',
         'double',
+        'drag',
+        'fling',
+        'swipe',
+        'pinch',
+        'rotate',
+        'pan',
+        'multi',
         'inc',
         'dec',
         'type',
@@ -66,6 +73,7 @@ void main() {
         'open',
         'scroll',
         'wait',
+        'watch',
         'screenshot',
         'network',
         'viewport',
@@ -120,6 +128,22 @@ void main() {
     expect(
       dev.subcommands['wait']!.argParser.options['quiet']!.defaultsTo,
       '500ms',
+    );
+    expect(
+      dev.subcommands['hold']!.argParser.options['duration']!.defaultsTo,
+      '600ms',
+    );
+    expect(
+      dev.subcommands['double']!.argParser.options['interval']!.defaultsTo,
+      '90ms',
+    );
+    expect(
+      dev.subcommands['watch']!.argParser.options['for']!.defaultsTo,
+      '5s',
+    );
+    expect(
+      dev.subcommands['watch']!.argParser.options['every']!.defaultsTo,
+      '200ms',
     );
     expect(
       dev.subcommands['scroll']!.argParser.options.keys,
@@ -334,6 +358,48 @@ void main() {
         ),
       ),
     );
+  });
+
+  test('dev gesture commands expose compact production timing controls', () {
+    final runner = CockpitCommandRunner(
+      runtime: CockpitCliRuntime(
+        stdoutSink: StringBuffer(),
+        stderrSink: StringBuffer(),
+      ),
+    );
+    final dev = runner.commands['dev']!;
+
+    final drag = dev.subcommands['drag']!.argParser.parse(const <String>[
+      'Canvas',
+      '--dx',
+      '120',
+      '--dy',
+      '-20',
+      '--duration',
+      '300ms',
+      '--hold',
+      '600ms',
+      '--moves',
+      '12',
+      '--at',
+      '40,80',
+    ]);
+    expect(drag.rest, <String>['Canvas']);
+    expect(drag.option('duration'), '300ms');
+    expect(drag.option('hold'), '600ms');
+    expect(drag.option('moves'), '12');
+    expect(drag.option('at'), '40,80');
+
+    final multi = dev.subcommands['multi']!.argParser.parse(const <String>[
+      'Canvas',
+      '--sequence',
+      '{steps:[{pointer:1 phase:down atMs:0 dx:-20 dy:0} '
+          '{pointer:2 phase:down atMs:0 dx:20 dy:0} '
+          '{pointer:1 phase:up atMs:100 dx:-40 dy:0} '
+          '{pointer:2 phase:up atMs:100 dx:40 dy:0}]}',
+    ]);
+    expect(multi.rest, <String>['Canvas']);
+    expect(multi.option('sequence'), contains('pointer:2'));
   });
 
   test('dev rejects invalid task flags before resolving a session', () async {

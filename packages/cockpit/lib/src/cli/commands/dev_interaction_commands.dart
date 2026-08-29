@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:args/args.dart';
 import 'package:cockpit_protocol/cockpit_protocol.dart';
 
@@ -28,25 +30,389 @@ CockpitLeafCommand cockpitDevTapCommand(
 CockpitLeafCommand cockpitDevHoldCommand(
   CockpitCliRuntime runtime,
   CockpitDevRuntime dev,
-) => _directTargetCommand(
-  runtime,
-  dev,
+) => CockpitLeafCommand(
+  runtime: runtime,
   name: 'hold',
   description: 'Find, reveal, and long-press one exact Flutter target.',
-  example: 'cockpit dev hold ":a"',
-  type: CockpitCommandType.longPress,
+  invocationSuffix: 'SELECTOR [arguments]',
+  example: 'cockpit dev hold ":a" --duration 900ms',
+  configure: (parser) {
+    _targetOptions(parser);
+    parser.addOption(
+      'duration',
+      defaultsTo: '600ms',
+      help: 'How long the pointer remains down.',
+    );
+  },
+  action: (arguments) async {
+    final duration = _positiveDuration(arguments, 'duration');
+    return _targetAction(
+      runtime,
+      dev,
+      arguments,
+      action: 'hold',
+      type: CockpitCommandType.longPress,
+      parameters: <String, Object?>{'durationMs': duration.inMilliseconds},
+    );
+  },
 );
 
 CockpitLeafCommand cockpitDevDoubleCommand(
   CockpitCliRuntime runtime,
   CockpitDevRuntime dev,
-) => _directTargetCommand(
-  runtime,
-  dev,
+) => CockpitLeafCommand(
+  runtime: runtime,
   name: 'double',
   description: 'Find, reveal, and double-tap one exact Flutter target.',
+  invocationSuffix: 'SELECTOR [arguments]',
   example: 'cockpit dev double ":a"',
-  type: CockpitCommandType.doubleTap,
+  configure: (parser) {
+    _targetOptions(parser);
+    parser.addOption(
+      'interval',
+      defaultsTo: '90ms',
+      help: 'Delay between the two taps.',
+    );
+  },
+  action: (arguments) => _targetAction(
+    runtime,
+    dev,
+    arguments,
+    action: 'double',
+    type: CockpitCommandType.doubleTap,
+    parameters: <String, Object?>{
+      'intervalMs': _positiveDuration(arguments, 'interval').inMilliseconds,
+    },
+  ),
+);
+
+CockpitLeafCommand cockpitDevDragCommand(
+  CockpitCliRuntime runtime,
+  CockpitDevRuntime dev,
+) => CockpitLeafCommand(
+  runtime: runtime,
+  name: 'drag',
+  description: 'Drag one Flutter target by a real pointer path.',
+  invocationSuffix: 'SELECTOR [arguments]',
+  example: 'cockpit dev drag "Canvas" --dx 120 --dy 0',
+  configure: (parser) {
+    _targetOptions(parser);
+    parser
+      ..addOption('dx', help: 'Horizontal movement in logical pixels.')
+      ..addOption('dy', help: 'Vertical movement in logical pixels.')
+      ..addOption('duration', defaultsTo: '220ms')
+      ..addOption('hold', help: 'Optional hold before moving.')
+      ..addOption('moves', help: 'Optional number of move events.')
+      ..addOption('at', help: 'Optional start point as X,Y.');
+  },
+  action: (arguments) async {
+    final dx = _finiteDouble(arguments, 'dx');
+    final dy = _finiteDouble(arguments, 'dy');
+    if (dx == 0 && dy == 0) {
+      throw const FormatException('dev drag requires non-zero movement.');
+    }
+    final parameters = <String, Object?>{
+      'dx': dx,
+      'dy': dy,
+      'durationMs': _positiveDuration(arguments, 'duration').inMilliseconds,
+      ..._optionalGestureTiming(arguments),
+      ..._optionalPoint(arguments),
+    };
+    return _targetGestureAction(
+      runtime,
+      dev,
+      arguments,
+      action: 'drag',
+      type: CockpitCommandType.drag,
+      parameters: parameters,
+    );
+  },
+);
+
+CockpitLeafCommand cockpitDevFlingCommand(
+  CockpitCliRuntime runtime,
+  CockpitDevRuntime dev,
+) => CockpitLeafCommand(
+  runtime: runtime,
+  name: 'fling',
+  description: 'Fling one Flutter target with a velocity profile.',
+  invocationSuffix: 'SELECTOR [arguments]',
+  example: 'cockpit dev fling "List" --dx 0 --dy -400 --velocity 1600',
+  configure: (parser) {
+    _targetOptions(parser);
+    parser
+      ..addOption('dx', help: 'Horizontal movement in logical pixels.')
+      ..addOption('dy', help: 'Vertical movement in logical pixels.')
+      ..addOption('velocity', help: 'Fling velocity in logical pixels/second.')
+      ..addOption('duration', help: 'Optional gesture duration.')
+      ..addOption('moves', help: 'Optional number of move events.')
+      ..addOption('at', help: 'Optional start point as X,Y.');
+  },
+  action: (arguments) async {
+    final dx = _finiteDouble(arguments, 'dx');
+    final dy = _finiteDouble(arguments, 'dy');
+    if (dx == 0 && dy == 0) {
+      throw const FormatException('dev fling requires non-zero movement.');
+    }
+    final velocity = _finiteDouble(arguments, 'velocity');
+    if (velocity <= 0) {
+      throw const FormatException('--velocity must be positive.');
+    }
+    final distance = math.sqrt(dx * dx + dy * dy);
+    final duration = arguments.option('duration') == null
+        ? Duration(
+            milliseconds: (distance / velocity * 1000).round().clamp(16, 1200),
+          )
+        : _positiveDuration(arguments, 'duration');
+    final parameters = <String, Object?>{
+      'dx': dx,
+      'dy': dy,
+      'velocity': velocity,
+      'durationMs': duration.inMilliseconds,
+      ..._optionalMoveCount(arguments),
+      ..._optionalPoint(arguments),
+    };
+    return _targetGestureAction(
+      runtime,
+      dev,
+      arguments,
+      action: 'fling',
+      type: CockpitCommandType.fling,
+      parameters: parameters,
+    );
+  },
+);
+
+CockpitLeafCommand cockpitDevSwipeCommand(
+  CockpitCliRuntime runtime,
+  CockpitDevRuntime dev,
+) => CockpitLeafCommand(
+  runtime: runtime,
+  name: 'swipe',
+  description: 'Swipe one Flutter target in a direction.',
+  invocationSuffix: 'SELECTOR DIRECTION [arguments]',
+  example: 'cockpit dev swipe "List" up',
+  configure: (parser) {
+    _targetOptions(parser);
+    parser
+      ..addOption('distance', defaultsTo: '0.82')
+      ..addOption('duration', defaultsTo: '200ms')
+      ..addOption('moves', help: 'Optional number of move events.')
+      ..addOption('at', help: 'Optional start point as X,Y.');
+  },
+  action: (arguments) async {
+    if (arguments.rest.length != 2) {
+      throw const FormatException('dev swipe requires SELECTOR and DIRECTION.');
+    }
+    final direction = arguments.rest[1].toLowerCase();
+    if (!const <String>{'up', 'down', 'left', 'right'}.contains(direction)) {
+      throw const FormatException(
+        'DIRECTION must be up, down, left, or right.',
+      );
+    }
+    final distance = _finiteDouble(arguments, 'distance');
+    if (distance < 0.15 || distance > 0.95) {
+      throw const FormatException('--distance must be between 0.15 and 0.95.');
+    }
+    return _targetGestureAction(
+      runtime,
+      dev,
+      arguments,
+      action: 'swipe',
+      type: CockpitCommandType.swipe,
+      selector: arguments.rest.first,
+      parameters: <String, Object?>{
+        'direction': direction,
+        'distanceFactor': distance,
+        'durationMs': _positiveDuration(arguments, 'duration').inMilliseconds,
+        ..._optionalMoveCount(arguments),
+        ..._optionalPoint(arguments),
+      },
+    );
+  },
+);
+
+CockpitLeafCommand cockpitDevPinchCommand(
+  CockpitCliRuntime runtime,
+  CockpitDevRuntime dev,
+) => CockpitLeafCommand(
+  runtime: runtime,
+  name: 'pinch',
+  description: 'Pinch or spread one Flutter target with two pointers.',
+  invocationSuffix: 'SELECTOR SCALE [arguments]',
+  example: 'cockpit dev pinch "Map" 1.5',
+  configure: (parser) {
+    _targetOptions(parser);
+    parser
+      ..addOption('span', defaultsTo: '56')
+      ..addOption('duration', defaultsTo: '220ms')
+      ..addOption('moves', help: 'Optional number of move events.')
+      ..addOption('at', help: 'Optional focal point as X,Y.');
+  },
+  action: (arguments) async {
+    if (arguments.rest.length != 2) {
+      throw const FormatException('dev pinch requires SELECTOR and SCALE.');
+    }
+    final scale = double.tryParse(arguments.rest[1]);
+    if (scale == null || !scale.isFinite || scale <= 0 || scale == 1) {
+      throw const FormatException(
+        'SCALE must be positive and different from 1.',
+      );
+    }
+    return _targetGestureAction(
+      runtime,
+      dev,
+      arguments,
+      action: 'pinch',
+      type: CockpitCommandType.pinchZoom,
+      selector: arguments.rest.first,
+      parameters: <String, Object?>{
+        'scale': scale,
+        'startSpan': _positiveDouble(arguments, 'span'),
+        'durationMs': _positiveDuration(arguments, 'duration').inMilliseconds,
+        ..._optionalMoveCount(arguments),
+        ..._optionalPoint(arguments),
+      },
+    );
+  },
+);
+
+CockpitLeafCommand cockpitDevRotateCommand(
+  CockpitCliRuntime runtime,
+  CockpitDevRuntime dev,
+) => CockpitLeafCommand(
+  runtime: runtime,
+  name: 'rotate',
+  description: 'Rotate one Flutter target by radians with two pointers.',
+  invocationSuffix: 'SELECTOR RADIANS [arguments]',
+  example: 'cockpit dev rotate "Canvas" 1.5708',
+  configure: (parser) {
+    _targetOptions(parser);
+    parser
+      ..addOption('span', defaultsTo: '56')
+      ..addOption('duration', defaultsTo: '220ms')
+      ..addOption('moves', help: 'Optional number of move events.')
+      ..addOption('at', help: 'Optional focal point as X,Y.');
+  },
+  action: (arguments) async {
+    if (arguments.rest.length != 2) {
+      throw const FormatException('dev rotate requires SELECTOR and RADIANS.');
+    }
+    final radians = double.tryParse(arguments.rest[1]);
+    if (radians == null || !radians.isFinite || radians == 0) {
+      throw const FormatException('RADIANS must be a non-zero finite number.');
+    }
+    return _targetGestureAction(
+      runtime,
+      dev,
+      arguments,
+      action: 'rotate',
+      type: CockpitCommandType.rotate,
+      selector: arguments.rest.first,
+      parameters: <String, Object?>{
+        'rotationRadians': radians,
+        'startSpan': _positiveDouble(arguments, 'span'),
+        'durationMs': _positiveDuration(arguments, 'duration').inMilliseconds,
+        ..._optionalMoveCount(arguments),
+        ..._optionalPoint(arguments),
+      },
+    );
+  },
+);
+
+CockpitLeafCommand cockpitDevPanCommand(
+  CockpitCliRuntime runtime,
+  CockpitDevRuntime dev,
+) => CockpitLeafCommand(
+  runtime: runtime,
+  name: 'pan',
+  description: 'Pan one Flutter target with a trackpad-like gesture.',
+  invocationSuffix: 'SELECTOR [arguments]',
+  example: 'cockpit dev pan "Canvas" --dx 80 --dy 20',
+  configure: (parser) {
+    _targetOptions(parser);
+    parser
+      ..addOption('dx', help: 'Horizontal movement in logical pixels.')
+      ..addOption('dy', help: 'Vertical movement in logical pixels.')
+      ..addOption('scale', defaultsTo: '1')
+      ..addOption('rotate', defaultsTo: '0')
+      ..addOption('duration', defaultsTo: '180ms')
+      ..addOption('moves', help: 'Optional number of move events.')
+      ..addOption('at', help: 'Optional start point as X,Y.');
+  },
+  action: (arguments) async {
+    final dx = _finiteDouble(arguments, 'dx');
+    final dy = _finiteDouble(arguments, 'dy');
+    final scale = _finiteDouble(arguments, 'scale');
+    final rotation = _finiteDouble(arguments, 'rotate');
+    if (scale <= 0 || (dx == 0 && dy == 0 && scale == 1 && rotation == 0)) {
+      throw const FormatException('pan requires movement, scale, or rotation.');
+    }
+    return _targetGestureAction(
+      runtime,
+      dev,
+      arguments,
+      action: 'pan',
+      type: CockpitCommandType.panZoom,
+      parameters: <String, Object?>{
+        'panDx': dx,
+        'panDy': dy,
+        'scale': scale,
+        'rotationRadians': rotation,
+        'durationMs': _positiveDuration(arguments, 'duration').inMilliseconds,
+        ..._optionalMoveCount(arguments),
+        ..._optionalPoint(arguments),
+      },
+    );
+  },
+);
+
+CockpitLeafCommand cockpitDevMultiTouchCommand(
+  CockpitCliRuntime runtime,
+  CockpitDevRuntime dev,
+) => CockpitLeafCommand(
+  runtime: runtime,
+  name: 'multi',
+  description: 'Run an explicit multi-pointer sequence on one Flutter target.',
+  invocationSuffix: '[SELECTOR] [arguments]',
+  example: 'cockpit dev multi "Canvas" --sequence-file gesture.yaml',
+  configure: (parser) {
+    _targetOptions(parser);
+    parser
+      ..addOption('sequence', help: 'Sequence as LON, JSON, or YAML.')
+      ..addOption(
+        'sequence-file',
+        help: 'Read sequence from a LON/JSON/YAML file.',
+      )
+      ..addOption('at', help: 'Optional origin as X,Y.');
+  },
+  action: (arguments) async {
+    final sequence = runtime.structuredObject(
+      arguments.option('sequence'),
+      arguments.option('sequence-file'),
+      option: 'sequence',
+    );
+    if (!sequence.containsKey('steps')) {
+      throw const FormatException('Sequence must contain steps.');
+    }
+    final selector = arguments.rest.isEmpty ? null : arguments.rest.single;
+    if (arguments.rest.length > 1) {
+      throw const FormatException('dev multi accepts at most one selector.');
+    }
+    return _targetGestureAction(
+      runtime,
+      dev,
+      arguments,
+      action: 'multi',
+      type: CockpitCommandType.multiTouch,
+      selector: selector,
+      targetRequired: false,
+      parameters: <String, Object?>{
+        'sequence': sequence,
+        ..._optionalPoint(arguments),
+      },
+    );
+  },
 );
 
 CockpitLeafCommand cockpitDevIncreaseCommand(
@@ -375,6 +741,78 @@ Future<int> _targetAction(
   );
 }
 
+Future<int> _targetGestureAction(
+  CockpitCliRuntime runtime,
+  CockpitDevRuntime dev,
+  ArgResults arguments, {
+  required String action,
+  required CockpitCommandType type,
+  required Map<String, Object?> parameters,
+  String? selector,
+  bool targetRequired = true,
+}) async {
+  final target =
+      selector ?? (arguments.rest.length == 1 ? arguments.rest.single : null);
+  if (targetRequired && (target == null || target.trim().isEmpty)) {
+    throw FormatException('dev $action requires one target selector.');
+  }
+  if (target != null &&
+      target.trim().isNotEmpty &&
+      selector == null &&
+      arguments.rest.length != 1) {
+    throw FormatException('dev $action accepts exactly one target selector.');
+  }
+  return dev.runCommand(
+    await runtime.resolveDevelopmentSession(arguments.option('session')),
+    action: action,
+    command: dev.command(
+      type: type,
+      timeout: runtime.operationTimeout,
+      locator: cockpitReadDevLocator(
+        arguments,
+        selector: target,
+        targetRequired: targetRequired,
+      ),
+      parameters: parameters,
+    ),
+  );
+}
+
+Map<String, Object?> _optionalGestureTiming(ArgResults arguments) {
+  final rawHold = arguments.option('hold');
+  if (rawHold == null) return _optionalMoveCount(arguments);
+  return <String, Object?>{
+    'holdDurationMs': _positiveDurationValue(rawHold, 'hold').inMilliseconds,
+    ..._optionalMoveCount(arguments),
+  };
+}
+
+Map<String, Object?> _optionalMoveCount(ArgResults arguments) {
+  final raw = arguments.option('moves');
+  if (raw == null) return const <String, Object?>{};
+  final parsed = int.tryParse(raw);
+  if (parsed == null || parsed < 0 || parsed > 10000) {
+    throw const FormatException('--moves must be between 0 and 10000.');
+  }
+  return <String, Object?>{'moveEventCount': parsed};
+}
+
+Map<String, Object?> _optionalPoint(ArgResults arguments) {
+  final raw = arguments.option('at');
+  if (raw == null || raw.trim().isEmpty) return const <String, Object?>{};
+  final parts = raw
+      .split(',')
+      .map((part) => double.tryParse(part.trim()))
+      .toList();
+  if (parts.length != 2 || parts.any((part) => part == null)) {
+    throw const FormatException('--at must use X,Y coordinates.');
+  }
+  if (!parts[0]!.isFinite || !parts[1]!.isFinite) {
+    throw const FormatException('--at must use finite X,Y coordinates.');
+  }
+  return <String, Object?>{'x': parts[0], 'y': parts[1]};
+}
+
 CockpitLeafCommand _directTargetCommand(
   CockpitCliRuntime runtime,
   CockpitDevRuntime dev, {
@@ -417,9 +855,33 @@ int _integer(ArgResults arguments, String name) {
 }
 
 double _finiteDouble(ArgResults arguments, String name) {
-  final parsed = double.tryParse(arguments.option(name)!);
+  final raw = arguments.option(name);
+  if (raw == null) {
+    throw FormatException('--$name is required.');
+  }
+  final parsed = double.tryParse(raw);
   if (parsed == null || !parsed.isFinite) {
     throw FormatException('--$name is invalid.');
   }
   return parsed;
+}
+
+double _positiveDouble(ArgResults arguments, String name) {
+  final value = _finiteDouble(arguments, name);
+  if (value <= 0) {
+    throw FormatException('--$name must be positive.');
+  }
+  return value;
+}
+
+Duration _positiveDuration(ArgResults arguments, String name) {
+  return _positiveDurationValue(arguments.option(name)!, name);
+}
+
+Duration _positiveDurationValue(String raw, String name) {
+  final duration = cockpitParseDuration(raw);
+  if (duration <= Duration.zero) {
+    throw FormatException('--$name must be positive.');
+  }
+  return duration;
 }

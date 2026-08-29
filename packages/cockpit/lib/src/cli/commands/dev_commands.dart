@@ -1,6 +1,7 @@
 import 'package:args/command_runner.dart';
 
 import '../cockpit_cli_runtime.dart';
+import '../cockpit_cli_timeout.dart';
 import '../cockpit_cli_output.dart';
 import '../cockpit_dev_network.dart';
 import '../cockpit_dev_runtime.dart';
@@ -21,6 +22,13 @@ final class CockpitDevCommand extends Command<int> {
     addSubcommand(cockpitDevTapCommand(runtime, dev));
     addSubcommand(cockpitDevHoldCommand(runtime, dev));
     addSubcommand(cockpitDevDoubleCommand(runtime, dev));
+    addSubcommand(cockpitDevDragCommand(runtime, dev));
+    addSubcommand(cockpitDevFlingCommand(runtime, dev));
+    addSubcommand(cockpitDevSwipeCommand(runtime, dev));
+    addSubcommand(cockpitDevPinchCommand(runtime, dev));
+    addSubcommand(cockpitDevRotateCommand(runtime, dev));
+    addSubcommand(cockpitDevPanCommand(runtime, dev));
+    addSubcommand(cockpitDevMultiTouchCommand(runtime, dev));
     addSubcommand(cockpitDevIncreaseCommand(runtime, dev));
     addSubcommand(cockpitDevDecreaseCommand(runtime, dev));
     addSubcommand(cockpitDevTypeCommand(runtime, dev));
@@ -31,6 +39,7 @@ final class CockpitDevCommand extends Command<int> {
     addSubcommand(cockpitDevOpenCommand(runtime, dev));
     addSubcommand(cockpitDevScrollCommand(runtime, dev));
     addSubcommand(cockpitDevWaitCommand(runtime, dev));
+    addSubcommand(_watch(runtime, dev));
     addSubcommand(_viewport(runtime, dev));
     addSubcommand(cockpitDevScreenshotCommand(runtime, dev));
     addSubcommand(_network(runtime, dev));
@@ -251,6 +260,54 @@ CockpitLeafCommand _viewport(
       await runtime.resolveDevelopmentSession(arguments.option('session')),
       width: width,
       height: height,
+    );
+  },
+);
+
+CockpitLeafCommand _watch(
+  CockpitCliRuntime runtime,
+  CockpitDevRuntime dev,
+) => CockpitLeafCommand(
+  runtime: runtime,
+  name: 'watch',
+  description: 'Monitor compact Flutter surface changes for a bounded period.',
+  invocationSuffix: '[QUERY] [arguments]',
+  example: 'cockpit dev watch "Loading" --for 5s',
+  defaultTimeout: const Duration(seconds: 30),
+  maximumTimeout: const Duration(minutes: 30),
+  configure: (parser) {
+    cockpitAddDevSessionOption(parser);
+    parser
+      ..addOption('for', defaultsTo: '5s', help: 'Observation duration.')
+      ..addOption('every', defaultsTo: '200ms', help: 'Sampling interval.')
+      ..addOption('max-events', defaultsTo: '64')
+      ..addOption(
+        'quiet',
+        help: 'Stop after this quiet window once a change has been observed.',
+      );
+  },
+  action: (arguments) async {
+    if (arguments.rest.length > 1) {
+      throw const FormatException('dev watch accepts at most one query.');
+    }
+    final duration = cockpitParseDuration(arguments.option('for')!);
+    final interval = cockpitParseDuration(arguments.option('every')!);
+    final maxEvents = int.tryParse(arguments.option('max-events')!);
+    if (maxEvents == null || maxEvents < 1 || maxEvents > 1000) {
+      throw const FormatException('--max-events must be between 1 and 1000.');
+    }
+    final quietRaw = arguments.option('quiet');
+    final quiet = quietRaw == null ? null : cockpitParseDuration(quietRaw);
+    if (quiet != null && quiet >= duration) {
+      throw const FormatException('--quiet must be shorter than --for.');
+    }
+    return dev.watch(
+      await runtime.resolveDevelopmentSession(arguments.option('session')),
+      query: arguments.rest.firstOrNull,
+      duration: duration,
+      interval: interval,
+      maxEvents: maxEvents,
+      quiet: quiet,
     );
   },
 );

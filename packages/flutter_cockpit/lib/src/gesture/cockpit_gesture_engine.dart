@@ -614,8 +614,32 @@ final class CockpitGestureEngine {
   }
 
   void _validateMultiTouchSequence(List<CockpitMultiTouchStep> orderedSteps) {
+    if (orderedSteps.length > 10000) {
+      throw ArgumentError.value(
+        orderedSteps.length,
+        'sequence.steps',
+        'Multi-touch sequences must contain no more than 10000 steps.',
+      );
+    }
     final activePointers = <int>{};
     for (final step in orderedSteps) {
+      if (step.pointer <= 0) {
+        throw ArgumentError.value(
+          step.pointer,
+          'step.pointer',
+          'Multi-touch pointer IDs must be positive.',
+        );
+      }
+      if (step.atMs < 0) {
+        throw ArgumentError.value(
+          step.atMs,
+          'step.atMs',
+          'Multi-touch timestamps must not be negative.',
+        );
+      }
+      if (!step.dx.isFinite || !step.dy.isFinite) {
+        throw ArgumentError('Multi-touch coordinates must be finite numbers.');
+      }
       switch (step.phase) {
         case CockpitMultiTouchPhase.down:
           if (!activePointers.add(step.pointer)) {
@@ -1158,7 +1182,7 @@ final class CockpitGestureEngine {
     required Duration timeStamp,
   }) {
     final clampedPosition = _clampToViewport(geometry, position);
-    GestureBinding.instance.handlePointerEvent(
+    _handlePointerEvent(
       PointerDownEvent(
         timeStamp: timeStamp,
         pointer: pointer,
@@ -1182,7 +1206,7 @@ final class CockpitGestureEngine {
   }) {
     final clampedPrevious = _clampToViewport(geometry, previousPosition);
     final clampedNext = _clampToViewport(geometry, nextPosition);
-    GestureBinding.instance.handlePointerEvent(
+    _handlePointerEvent(
       PointerMoveEvent(
         timeStamp: timeStamp,
         pointer: pointer,
@@ -1204,7 +1228,7 @@ final class CockpitGestureEngine {
     required Duration timeStamp,
   }) {
     final clampedPosition = _clampToViewport(geometry, position);
-    GestureBinding.instance.handlePointerEvent(
+    _handlePointerEvent(
       PointerUpEvent(
         timeStamp: timeStamp,
         pointer: pointer,
@@ -1224,7 +1248,7 @@ final class CockpitGestureEngine {
     required Duration timeStamp,
   }) {
     final clampedPosition = _clampToViewport(geometry, position);
-    GestureBinding.instance.handlePointerEvent(
+    _handlePointerEvent(
       PointerCancelEvent(
         timeStamp: timeStamp,
         pointer: pointer,
@@ -1246,7 +1270,7 @@ final class CockpitGestureEngine {
     required Offset position,
     required Duration timeStamp,
   }) {
-    GestureBinding.instance.handlePointerEvent(
+    _handlePointerEvent(
       PointerPanZoomStartEvent(
         timeStamp: timeStamp,
         pointer: pointer,
@@ -1267,7 +1291,7 @@ final class CockpitGestureEngine {
     required double rotation,
     required Duration timeStamp,
   }) {
-    GestureBinding.instance.handlePointerEvent(
+    _handlePointerEvent(
       PointerPanZoomUpdateEvent(
         timeStamp: timeStamp,
         pointer: pointer,
@@ -1288,7 +1312,7 @@ final class CockpitGestureEngine {
     required Offset position,
     required Duration timeStamp,
   }) {
-    GestureBinding.instance.handlePointerEvent(
+    _handlePointerEvent(
       PointerPanZoomEndEvent(
         timeStamp: timeStamp,
         pointer: pointer,
@@ -1297,6 +1321,40 @@ final class CockpitGestureEngine {
         viewId: geometry.viewId,
       ),
     );
+  }
+
+  /// Test bindings classify direct framework pointer events as device input
+  /// and drop them unless propagation is enabled. Cockpit gestures are
+  /// synthetic test/control input, so temporarily opt in when that optional
+  /// test-binding switch is available without importing flutter_test into the
+  /// production package.
+  static void _handlePointerEvent(PointerEvent event) {
+    final binding = WidgetsBinding.instance;
+    final dynamic dynamicBinding = binding;
+    var restoredPropagation = false;
+    var previousPropagation = false;
+    try {
+      previousPropagation =
+          dynamicBinding.shouldPropagateDevicePointerEvents as bool;
+      if (!previousPropagation) {
+        dynamicBinding.shouldPropagateDevicePointerEvents = true;
+        restoredPropagation = true;
+      }
+    } on Object {
+      // Normal application bindings do not expose the test-only switch.
+    }
+    try {
+      GestureBinding.instance.handlePointerEvent(event);
+    } finally {
+      if (restoredPropagation) {
+        try {
+          dynamicBinding.shouldPropagateDevicePointerEvents =
+              previousPropagation;
+        } on Object {
+          // The binding may have been torn down during an integration test.
+        }
+      }
+    }
   }
 
   static Offset _clampToViewport(

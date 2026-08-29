@@ -1226,7 +1226,17 @@ Object? _compactDevState(
     'tap' ||
     'type' ||
     'press' ||
-    'scroll' => _compactDevCommand(state, more: more),
+    'scroll' ||
+    'hold' ||
+    'double' ||
+    'drag' ||
+    'fling' ||
+    'swipe' ||
+    'pinch' ||
+    'rotate' ||
+    'pan' ||
+    'multi' => _compactDevCommand(state, more: more),
+    'watch' => _compactDevWatch(state, more: more),
     'wait' => <String, Object?>{
       ..._pick(state, const <String>['idle']),
       if (state['includeNetworkIdle'] == true) 'network': true,
@@ -1673,6 +1683,24 @@ Map<String, Object?> _compactDevCommand(
       ]),
       'locator': ?locator,
     },
+  };
+}
+
+Map<String, Object?> _compactDevWatch(
+  Map<Object?, Object?> state, {
+  required bool more,
+}) {
+  final rawChanges = state['changes'];
+  final changes = rawChanges is List<Object?>
+      ? rawChanges.whereType<Map<Object?, Object?>>().toList(growable: false)
+      : const <Map<Object?, Object?>>[];
+  final visibleChanges = changes.take(more ? 32 : 8).toList(growable: false);
+  return <String, Object?>{
+    ..._pick(state, const <String>['samples', 'endedBy', 'changed']),
+    if (more) ..._pick(state, const <String>['durationMs']),
+    if (visibleChanges.isNotEmpty) 'changes': visibleChanges,
+    if (changes.length > visibleChanges.length)
+      'more': changes.length - visibleChanges.length,
   };
 }
 
