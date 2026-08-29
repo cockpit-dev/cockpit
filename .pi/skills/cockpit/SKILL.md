@@ -85,9 +85,16 @@ cockpit dev status
 cockpit dev inspect "Documents"
 cockpit dev tree
 cockpit dev tap "Documents"
+cockpit dev hold "Documents" --duration 900ms
+cockpit dev double "Card" --interval 120ms
+cockpit dev drag "Canvas" --dx 120 --dy 0
+cockpit dev swipe "List" up
+cockpit dev pinch "Map" 1.5
+cockpit dev rotate "Canvas" 1.5708
 cockpit dev type "hello" --into "Message"
 cockpit dev press enter
 cockpit dev scroll "Operations"
+cockpit dev watch "Loading" --for 5s
 cockpit dev open "myapp://tasks/42"
 cockpit dev wait
 cockpit dev viewport 800x600
@@ -455,6 +462,7 @@ Use the default first and override only a measured slow operation. Common defaul
 | `dev start` | `20m` |
 | `dev status`, inspect, tree, direct UI actions, open, viewport, screenshot, diagnose | `1m` |
 | `dev wait` | `30s` |
+| `dev watch` | `30s` |
 | `dev network`, recover, reload, stop | `2m` |
 | `dev scroll` | `3m` |
 | `dev restart` | `5m` |
@@ -543,8 +551,15 @@ of guessing. Execute only the `sel` whose own `can` advertises the command.
 | --- | --- |
 | `tap` | `dev tap TARGET` |
 | `type` | `dev type VALUE --into TARGET` |
-| `hold` | `dev hold TARGET` |
-| `double` | `dev double TARGET` |
+| `hold` | `dev hold TARGET [--duration TIME]` |
+| `double` | `dev double TARGET [--interval TIME]` |
+| `drag` | `dev drag TARGET --dx PX --dy PX` |
+| `fling` | `dev fling TARGET --dx PX --dy PX --velocity PX_PER_S` |
+| `swipe` | `dev swipe TARGET up|down|left|right` |
+| `pinch` | `dev pinch TARGET SCALE` |
+| `rotate` | `dev rotate TARGET RADIANS` |
+| `pan` | `dev pan TARGET --dx PX --dy PX` |
+| `multi` | `dev multi [TARGET] --sequence-file FILE` |
 | `inc` / `dec` | `dev inc TARGET` / `dev dec TARGET` |
 | `dismiss` | `dev dismiss TARGET` |
 | `scroll` | `dev scroll TARGET` |
@@ -580,12 +595,27 @@ cockpit dev tap ':a7b9x2'
 cockpit dev inspect "Save changes"
 cockpit dev tap '#save-button'
 cockpit dev hold ':k4m2p8'
+cockpit dev drag 'Canvas' --dx 120 --dy 0
+cockpit dev swipe 'List' up
+cockpit dev pinch 'Map' 1.5
 cockpit dev inc ':v8c1r6'
 cockpit dev tap 'Dialog >> FilledButton["Save"]'
 cockpit dev tap 'Toolbar >> [type="CompanyIconButton"]'
 cockpit dev type "hello" --into '@message'
 cockpit dev scroll "Operations"
+cockpit dev watch "Loading" --for 5s --every 200ms
 ```
+
+`dev watch` is bounded and delta-only: it reports route, target, control-state,
+and layout changes with `endedBy` set to `duration`, `timeout`, `quiet`,
+`eventLimit`, or `error`.
+
+For delivery-critical interactions, verify the complete time path rather than
+only the final frame: a real hold/double interval, a multi-pointer sequence,
+animation checkpoints, and a bounded watch for changing text/layout/state.
+Finish with `dev wait` and one focused inspect or screenshot. Keep sequences
+ordered, release every pointer, and stop watching on `quiet`, `eventLimit`, or
+an operation error instead of retrying mutations.
 
 Use `dev tree` only when bounded target inspection cannot explain the structure:
 

@@ -23,6 +23,7 @@ runtime dependency. `cockpitTestWidgets` initializes
 ```dart
 import 'package:flutter/material.dart';
 import 'package:flutter_cockpit_test/flutter_cockpit_test.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   cockpitTestWidgets(
@@ -57,14 +58,85 @@ await cockpit.type('hello', into: '@message');
 await cockpit.scroll('Settings >> Text["Advanced"]', align: 'center');
 ```
 
-Available facade methods cover `tap`, `longPress`, `doubleTap`, `type`,
-`clear`, `press`, `increase`, `decrease`, `showOnScreen`, `scroll`,
+Available facade methods cover `tap`, `longPress`, `doubleTap`, `drag`, `fling`,
+`swipe`, `pinch`, `rotate`, `panZoom`, `multiTouch`, `type`, `clear`, `press`,
+`increase`, `decrease`, `showOnScreen`, `scroll`,
 `waitFor`, `waitForUi`, `waitForRoute`, `back`, `dismiss`,
 `dismissKeyboard`, `expectVisible`, `expectText`, `screenshot`, `snapshot`,
-and `execute`. `scroll` reveals through every mounted nested scrollable
+`watch`, and `execute`. `scroll` reveals through every mounted nested scrollable
 ancestor; pass `direction`, `align` (`start|center|end`), `offset`, an
 explicit `scrollable` selector, or `maxScrolls` only when the default search
 does not express the required placement. Do not add sleeps.
+
+Gestures use real hit-tested pointer events. A target is optional only when an
+explicit `at` point is supplied; source-owned tests should prefer a selector.
+`pinch` uses a scale greater than 1 to spread and less than 1 to pinch. `rotate`
+uses radians. `multiTouch` accepts a validated `CockpitMultiTouchSequence` and
+always releases every pointer, cancelling active pointers if a sequence fails.
+
+```dart
+await cockpit.longPress('#card', duration: const Duration(milliseconds: 900));
+await cockpit.doubleTap('#card', interval: const Duration(milliseconds: 120));
+await cockpit.drag(target: '#slider', delta: const Offset(120, 0));
+await cockpit.swipe(target: '#list', direction: AxisDirection.up);
+await cockpit.pinch(target: '#map', scale: 1.5);
+await cockpit.rotate(target: '#canvas', radians: 1.5708);
+await cockpit.panZoom(target: '#canvas', pan: const Offset(40, 0));
+await cockpit.multiTouch(
+  const CockpitMultiTouchSequence(
+    steps: <CockpitMultiTouchStep>[
+      CockpitMultiTouchStep(
+        pointer: 1,
+        phase: CockpitMultiTouchPhase.down,
+        atMs: 0,
+        dx: -24,
+        dy: 0,
+      ),
+      CockpitMultiTouchStep(
+        pointer: 2,
+        phase: CockpitMultiTouchPhase.down,
+        atMs: 0,
+        dx: 24,
+        dy: 0,
+      ),
+      CockpitMultiTouchStep(
+        pointer: 1,
+        phase: CockpitMultiTouchPhase.up,
+        atMs: 220,
+        dx: -72,
+        dy: 0,
+      ),
+      CockpitMultiTouchStep(
+        pointer: 2,
+        phase: CockpitMultiTouchPhase.up,
+        atMs: 220,
+        dx: 72,
+        dy: 0,
+      ),
+    ],
+  ),
+  target: '#canvas',
+);
+```
+
+For animation verification, trigger the mutation without settling it, then use
+`cockpit.watch` for bounded layout/control/text deltas and finish with
+`await cockpit.waitForUi()`. Use `cockpit.snapshot()` with
+`flutter.pump`/`pumpFrames` only when a named intermediate checkpoint needs a
+custom assertion. This separates process evidence from the final idle proof and
+never retains every full animation frame.
+
+```dart
+await cockpit.flutter.tap(find.text('Expand'));
+await cockpit.flutter.pump();
+final motion = await cockpit.watch(
+  query: 'Details',
+  duration: const Duration(milliseconds: 600),
+  interval: const Duration(milliseconds: 50),
+);
+expect(motion.changed, isTrue);
+await cockpit.waitForUi();
+```
 
 `cockpit.flutter` remains the underlying `WidgetTester` for custom matchers,
 goldens, pump control, or Flutter APIs intentionally outside Cockpit.

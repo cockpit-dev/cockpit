@@ -748,6 +748,279 @@ void main() {
     expect(rebound.appId, 'app-new');
   });
 
+  test(
+    'watch samples bounded snapshots and reports compact layout deltas',
+    () async {
+      var samples = 0;
+      final calls = <String>[];
+      final dev = CockpitDevRuntime(
+        runtime,
+        operationInvoker: (_, kind, input) async {
+          calls.add(kind);
+          if (kind == 'session.development.get') {
+            return _result(
+              kind,
+              output: const <String, Object?>{
+                'sessionId': 'session-old',
+                'targetId': 'target-1',
+                'appId': 'app-old',
+                'status': <String, Object?>{
+                  'state': 'ready',
+                  'appReachable': true,
+                  'remoteSessionReachable': true,
+                },
+              },
+            );
+          }
+          expect(kind, 'ui.inspect');
+          expect(input['profile'], 'tree');
+          final options = CockpitSnapshotOptions.fromJson(
+            Map<String, Object?>.from(
+              input['snapshotOptions']! as Map<Object?, Object?>,
+            ),
+          );
+          expect(options.maxTargets, 96);
+          expect(options.maxAncestorsPerTarget, 0);
+          samples += 1;
+          return _result(
+            kind,
+            output: <String, Object?>{
+              'routeName': '/loading',
+              'snapshot': <String, Object?>{
+                'routeName': '/loading',
+                'visibleTargets': <Object?>[
+                  <String, Object?>{
+                    'cockpitId': 'progress',
+                    'text': 'Loading',
+                    'typeName': 'Text',
+                    'layout': <String, Object?>{
+                      'dx': samples == 1 ? 0 : 12,
+                      'dy': 0,
+                      'width': 80,
+                      'height': 20,
+                    },
+                  },
+                ],
+              },
+            },
+          );
+        },
+      );
+      runtime
+        ..configureOutput(
+          command: 'dev.watch',
+          selection: const CockpitCliOutputSelection(),
+        )
+        ..configureTimeout(const Duration(seconds: 1), explicit: false);
+
+      expect(
+        await dev.watch(
+          session,
+          duration: const Duration(milliseconds: 100),
+          interval: const Duration(milliseconds: 1),
+          maxEvents: 1,
+        ),
+        cockpitSuccessExitCode,
+      );
+
+      expect(calls.first, 'session.development.get');
+      expect(samples, 2);
+      final output = lon.decode(stdout.toString())! as Map<Object?, Object?>;
+      expect(output['endedBy'], 'eventLimit');
+      final changes = output['changes']! as List<Object?>;
+      expect(changes, hasLength(1));
+      final change = changes.single as Map<Object?, Object?>;
+      final updated = change['updated']! as List<Object?>;
+      expect(updated, hasLength(1));
+      expect(
+        (updated.single as Map<Object?, Object?>)['id'],
+        'cockpitId=progress',
+      );
+    },
+  );
+
+  test('watch stops on quiet after the first observed change', () async {
+    var samples = 0;
+    final dev = CockpitDevRuntime(
+      runtime,
+      operationInvoker: (_, kind, _) async {
+        if (kind == 'session.development.get') {
+          return _result(
+            kind,
+            output: const <String, Object?>{
+              'sessionId': 'session-old',
+              'targetId': 'target-1',
+              'appId': 'app-old',
+              'status': <String, Object?>{
+                'state': 'ready',
+                'appReachable': true,
+                'remoteSessionReachable': true,
+              },
+            },
+          );
+        }
+        expect(kind, 'ui.inspect');
+        samples += 1;
+        return _result(
+          kind,
+          output: <String, Object?>{
+            'snapshot': <String, Object?>{
+              'routeName': '/home',
+              'visibleTargets': <Object?>[
+                <String, Object?>{
+                  'cockpitId': 'status',
+                  'text': samples == 1 ? 'Idle' : 'Ready',
+                  'typeName': 'Text',
+                },
+              ],
+            },
+          },
+        );
+      },
+    );
+    runtime
+      ..configureOutput(
+        command: 'dev.watch',
+        selection: const CockpitCliOutputSelection(),
+      )
+      ..configureTimeout(const Duration(seconds: 1), explicit: false);
+
+    expect(
+      await dev.watch(
+        session,
+        duration: const Duration(milliseconds: 80),
+        interval: const Duration(milliseconds: 1),
+        maxEvents: 8,
+        quiet: const Duration(milliseconds: 10),
+      ),
+      cockpitSuccessExitCode,
+    );
+
+    final output = lon.decode(stdout.toString())! as Map<Object?, Object?>;
+    expect(output['endedBy'], 'quiet');
+    expect(output['changed'], 'observed');
+    expect(output['changes'], hasLength(1));
+    expect(samples, greaterThan(2));
+  });
+
+  test(
+    'watch reports timeout when the command budget bounds observation',
+    () async {
+      final dev = CockpitDevRuntime(
+        runtime,
+        operationInvoker: (_, kind, _) async {
+          if (kind == 'session.development.get') {
+            return _result(
+              kind,
+              output: const <String, Object?>{
+                'sessionId': 'session-old',
+                'targetId': 'target-1',
+                'appId': 'app-old',
+                'status': <String, Object?>{
+                  'state': 'ready',
+                  'appReachable': true,
+                  'remoteSessionReachable': true,
+                },
+              },
+            );
+          }
+          expect(kind, 'ui.inspect');
+          return _result(
+            kind,
+            output: const <String, Object?>{
+              'snapshot': <String, Object?>{
+                'routeName': '/home',
+                'visibleTargets': <Object?>[],
+              },
+            },
+          );
+        },
+      );
+      runtime
+        ..configureOutput(
+          command: 'dev.watch',
+          selection: const CockpitCliOutputSelection(),
+        )
+        ..configureTimeout(const Duration(milliseconds: 20), explicit: false);
+
+      expect(
+        await dev.watch(
+          session,
+          duration: const Duration(seconds: 1),
+          interval: const Duration(milliseconds: 1),
+          maxEvents: 8,
+        ),
+        cockpitSuccessExitCode,
+      );
+
+      final output = lon.decode(stdout.toString())! as Map<Object?, Object?>;
+      expect(output['endedBy'], 'timeout');
+      expect(output['changes'], anyOf(isNull, isEmpty));
+    },
+  );
+
+  test(
+    'watch keeps an unchanged page compact until its duration ends',
+    () async {
+      final dev = CockpitDevRuntime(
+        runtime,
+        operationInvoker: (_, kind, _) async {
+          if (kind == 'session.development.get') {
+            return _result(
+              kind,
+              output: const <String, Object?>{
+                'sessionId': 'session-old',
+                'targetId': 'target-1',
+                'appId': 'app-old',
+                'status': <String, Object?>{
+                  'state': 'ready',
+                  'appReachable': true,
+                  'remoteSessionReachable': true,
+                },
+              },
+            );
+          }
+          expect(kind, 'ui.inspect');
+          return _result(
+            kind,
+            output: const <String, Object?>{
+              'snapshot': <String, Object?>{
+                'routeName': '/home',
+                'visibleTargets': <Object?>[
+                  <String, Object?>{
+                    'cockpitId': 'status',
+                    'text': 'Ready',
+                    'typeName': 'Text',
+                  },
+                ],
+              },
+            },
+          );
+        },
+      );
+      runtime
+        ..configureOutput(
+          command: 'dev.watch',
+          selection: const CockpitCliOutputSelection(),
+        )
+        ..configureTimeout(const Duration(seconds: 1), explicit: false);
+
+      expect(
+        await dev.watch(
+          session,
+          duration: const Duration(milliseconds: 20),
+          interval: const Duration(milliseconds: 1),
+          maxEvents: 8,
+        ),
+        cockpitSuccessExitCode,
+      );
+
+      final output = lon.decode(stdout.toString())! as Map<Object?, Object?>;
+      expect(output['endedBy'], 'duration');
+      expect(output['changes'], anyOf(isNull, isEmpty));
+    },
+  );
+
   test('full widget tree downloads one path-only artifact', () async {
     final artifact = File(p.join(temporaryDirectory.path, 'tree.json'))
       ..writeAsStringSync('{"tree":true}');

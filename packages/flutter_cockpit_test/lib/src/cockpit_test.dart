@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:convert';
+
 import 'package:flutter/widgets.dart';
 import 'package:flutter_cockpit/flutter_cockpit_flutter.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -5,6 +8,7 @@ import 'package:integration_test/integration_test.dart';
 
 import 'cockpit_native_tester.dart';
 import 'cockpit_test_options.dart';
+import 'cockpit_watch.dart';
 
 /// Registers an integration test that runs the real Cockpit in-app executor.
 ///
@@ -113,6 +117,7 @@ final class CockpitTester {
   late final CockpitHostTester host = CockpitHostTester._(this);
 
   final List<CockpitCommandResult> _results = <CockpitCommandResult>[];
+  final List<CockpitWatchResult> _watches = <CockpitWatchResult>[];
   var _sequence = 0;
   late final InAppCockpitCommandExecutor _executor = root.createCommandExecutor(
     platform: options.platform,
@@ -123,6 +128,7 @@ final class CockpitTester {
     // while making Dart integration tests advance the test clock correctly.
     postActionSettler: flutter.pump,
     waitTickHandler: flutter.pump,
+    gestureDelay: flutter.pump,
   );
 
   /// Describes the live in-app commands and locator strategies available to
@@ -151,6 +157,17 @@ final class CockpitTester {
                   'artifacts': result.artifacts
                       .map((artifact) => artifact.relativePath)
                       .toList(growable: false),
+              },
+            )
+            .toList(growable: false),
+      if (_watches.isNotEmpty)
+        'watches': _watches
+            .map(
+              (watch) => <String, Object?>{
+                'samples': watch.samples,
+                'changes': watch.changes.length,
+                'endedBy': watch.endedBy,
+                'ms': watch.elapsed.inMilliseconds,
               },
             )
             .toList(growable: false),
@@ -206,14 +223,271 @@ final class CockpitTester {
   /// Performs a real long-press on a resolved Flutter target.
   Future<CockpitCommandExecution> longPress(
     Object target, {
+    Duration duration = const Duration(milliseconds: 600),
     Duration? timeout,
-  }) => _run(CockpitCommandType.longPress, target: target, timeout: timeout);
+  }) {
+    _validateGestureDuration(duration, 'duration');
+    return _run(
+      CockpitCommandType.longPress,
+      target: target,
+      timeout: timeout,
+      parameters: <String, Object?>{'durationMs': duration.inMilliseconds},
+    );
+  }
 
   /// Performs a real double-tap on a resolved Flutter target.
   Future<CockpitCommandExecution> doubleTap(
     Object target, {
+    Duration interval = const Duration(milliseconds: 90),
     Duration? timeout,
-  }) => _run(CockpitCommandType.doubleTap, target: target, timeout: timeout);
+  }) {
+    _validateGestureDuration(interval, 'interval');
+    return _run(
+      CockpitCommandType.doubleTap,
+      target: target,
+      timeout: timeout,
+      parameters: <String, Object?>{'intervalMs': interval.inMilliseconds},
+    );
+  }
+
+  /// Performs a real drag with hit-tested pointer events.
+  Future<CockpitCommandExecution> drag({
+    Object? target,
+    required Offset delta,
+    Offset? at,
+    Duration duration = const Duration(milliseconds: 220),
+    Duration? hold,
+    int? moveEvents,
+    Duration? timeout,
+  }) {
+    _validateMovement(delta, 'delta');
+    _validateOptionalOffset(at, 'at');
+    _validateGestureDuration(duration, 'duration');
+    if (hold != null) _validateGestureDuration(hold, 'hold');
+    _validateMoveEvents(moveEvents);
+    return _run(
+      CockpitCommandType.drag,
+      target: target,
+      timeout: timeout,
+      parameters: <String, Object?>{
+        'dx': delta.dx,
+        'dy': delta.dy,
+        'x': ?at?.dx,
+        'y': ?at?.dy,
+        'durationMs': duration.inMilliseconds,
+        'holdDurationMs': ?hold?.inMilliseconds,
+        'moveEventCount': ?moveEvents,
+      },
+    );
+  }
+
+  /// Performs a fling-like drag using the requested velocity profile.
+  Future<CockpitCommandExecution> fling({
+    Object? target,
+    required Offset delta,
+    required double velocity,
+    Offset? at,
+    Duration? duration,
+    int? moveEvents,
+    Duration? timeout,
+  }) {
+    _validateMovement(delta, 'delta');
+    _validateOptionalOffset(at, 'at');
+    if (!velocity.isFinite || velocity <= 0) {
+      throw ArgumentError.value(velocity, 'velocity', 'Must be positive.');
+    }
+    final effectiveDuration =
+        duration ??
+        Duration(
+          milliseconds: (delta.distance / velocity * 1000).round().clamp(
+            16,
+            1200,
+          ),
+        );
+    _validateGestureDuration(effectiveDuration, 'duration');
+    _validateMoveEvents(moveEvents);
+    return _run(
+      CockpitCommandType.fling,
+      target: target,
+      timeout: timeout,
+      parameters: <String, Object?>{
+        'dx': delta.dx,
+        'dy': delta.dy,
+        'velocity': velocity,
+        'x': ?at?.dx,
+        'y': ?at?.dy,
+        'durationMs': effectiveDuration.inMilliseconds,
+        'moveEventCount': ?moveEvents,
+      },
+    );
+  }
+
+  /// Swipes in one direction across the selected target.
+  Future<CockpitCommandExecution> swipe({
+    Object? target,
+    required AxisDirection direction,
+    double distance = 0.82,
+    Duration duration = const Duration(milliseconds: 200),
+    Offset? at,
+    int? moveEvents,
+    Duration? timeout,
+  }) {
+    _validateOptionalOffset(at, 'at');
+    if (!distance.isFinite || distance < 0.15 || distance > 0.95) {
+      throw ArgumentError.value(
+        distance,
+        'distance',
+        'Must be between 0.15 and 0.95.',
+      );
+    }
+    _validateGestureDuration(duration, 'duration');
+    _validateMoveEvents(moveEvents);
+    return _run(
+      CockpitCommandType.swipe,
+      target: target,
+      timeout: timeout,
+      parameters: <String, Object?>{
+        'direction': direction.name,
+        'distanceFactor': distance,
+        'durationMs': duration.inMilliseconds,
+        'x': ?at?.dx,
+        'y': ?at?.dy,
+        'moveEventCount': ?moveEvents,
+      },
+    );
+  }
+
+  /// Performs a two-pointer pinch or spread gesture.
+  Future<CockpitCommandExecution> pinch({
+    Object? target,
+    required double scale,
+    double startSpan = 56,
+    Offset? at,
+    Duration duration = const Duration(milliseconds: 220),
+    int? moveEvents,
+    Duration? timeout,
+  }) {
+    _validateOptionalOffset(at, 'at');
+    if (!scale.isFinite || scale <= 0 || scale == 1) {
+      throw ArgumentError.value(
+        scale,
+        'scale',
+        'Must be positive and different from 1.',
+      );
+    }
+    _validatePositiveFinite(startSpan, 'startSpan');
+    _validateGestureDuration(duration, 'duration');
+    _validateMoveEvents(moveEvents);
+    return _run(
+      CockpitCommandType.pinchZoom,
+      target: target,
+      timeout: timeout,
+      parameters: <String, Object?>{
+        'scale': scale,
+        'startSpan': startSpan,
+        'durationMs': duration.inMilliseconds,
+        'x': ?at?.dx,
+        'y': ?at?.dy,
+        'moveEventCount': ?moveEvents,
+      },
+    );
+  }
+
+  /// Rotates a target by [radians] using two pointers.
+  Future<CockpitCommandExecution> rotate({
+    Object? target,
+    required double radians,
+    double startSpan = 56,
+    Offset? at,
+    Duration duration = const Duration(milliseconds: 220),
+    int? moveEvents,
+    Duration? timeout,
+  }) {
+    _validateOptionalOffset(at, 'at');
+    if (!radians.isFinite || radians == 0) {
+      throw ArgumentError.value(radians, 'radians', 'Must be non-zero.');
+    }
+    _validatePositiveFinite(startSpan, 'startSpan');
+    _validateGestureDuration(duration, 'duration');
+    _validateMoveEvents(moveEvents);
+    return _run(
+      CockpitCommandType.rotate,
+      target: target,
+      timeout: timeout,
+      parameters: <String, Object?>{
+        'rotationRadians': radians,
+        'startSpan': startSpan,
+        'durationMs': duration.inMilliseconds,
+        'x': ?at?.dx,
+        'y': ?at?.dy,
+        'moveEventCount': ?moveEvents,
+      },
+    );
+  }
+
+  /// Performs a one-pointer pan, optionally combined with scale and rotation.
+  Future<CockpitCommandExecution> panZoom({
+    Object? target,
+    Offset pan = Offset.zero,
+    double scale = 1,
+    double rotation = 0,
+    Offset? at,
+    Duration duration = const Duration(milliseconds: 180),
+    int? moveEvents,
+    Duration? timeout,
+  }) {
+    _validateOptionalOffset(at, 'at');
+    if (!pan.dx.isFinite || !pan.dy.isFinite) {
+      throw ArgumentError.value(pan, 'pan', 'Must contain finite coordinates.');
+    }
+    if (!scale.isFinite || scale <= 0) {
+      throw ArgumentError.value(scale, 'scale', 'Must be positive.');
+    }
+    if (pan == Offset.zero && scale == 1 && rotation == 0) {
+      throw ArgumentError('panZoom requires pan, scale, or rotation.');
+    }
+    if (!rotation.isFinite) {
+      throw ArgumentError.value(rotation, 'rotation', 'Must be finite.');
+    }
+    _validateGestureDuration(duration, 'duration');
+    _validateMoveEvents(moveEvents);
+    return _run(
+      CockpitCommandType.panZoom,
+      target: target,
+      timeout: timeout,
+      parameters: <String, Object?>{
+        'panDx': pan.dx,
+        'panDy': pan.dy,
+        'scale': scale,
+        'rotationRadians': rotation,
+        'durationMs': duration.inMilliseconds,
+        'x': ?at?.dx,
+        'y': ?at?.dy,
+        'moveEventCount': ?moveEvents,
+      },
+    );
+  }
+
+  /// Executes an explicit pointer sequence. Every pointer must be released.
+  Future<CockpitCommandExecution> multiTouch(
+    CockpitMultiTouchSequence sequence, {
+    Object? target,
+    Offset? at,
+    Duration? timeout,
+  }) {
+    _validateOptionalOffset(at, 'at');
+    _validateMultiTouch(sequence);
+    return _run(
+      CockpitCommandType.multiTouch,
+      target: target,
+      timeout: timeout,
+      parameters: <String, Object?>{
+        'sequence': sequence.toJson(),
+        'x': ?at?.dx,
+        'y': ?at?.dy,
+      },
+    );
+  }
 
   /// Moves a slider or other incrementable control forward by one step.
   Future<CockpitCommandExecution> increase(
@@ -358,6 +632,119 @@ final class CockpitTester {
   CockpitSnapshot snapshot({
     CockpitSnapshotOptions options = const CockpitSnapshotOptions(),
   }) => root.snapshot(options: options);
+
+  /// Samples the mounted surface at bounded intervals and returns only
+  /// compact changes. Use this for animation checkpoints and pages whose
+  /// content changes over time; it never retains a full snapshot history.
+  Future<CockpitWatchResult> watch({
+    String? query,
+    Duration duration = const Duration(seconds: 5),
+    Duration interval = const Duration(milliseconds: 200),
+    int maxChanges = 64,
+    Duration? quiet,
+    Duration? timeout,
+    CockpitSnapshotOptions options = const CockpitSnapshotOptions.baseline(),
+  }) async {
+    if (duration <= Duration.zero || interval <= Duration.zero) {
+      throw ArgumentError('duration and interval must be positive.');
+    }
+    if (maxChanges < 1 || maxChanges > 1000) {
+      throw ArgumentError.value(
+        maxChanges,
+        'maxChanges',
+        'Must be between 1 and 1000.',
+      );
+    }
+    if (quiet != null && (quiet <= Duration.zero || quiet >= duration)) {
+      throw ArgumentError.value(
+        quiet,
+        'quiet',
+        'Must be positive and shorter than duration.',
+      );
+    }
+    final effectiveTimeout = timeout ?? this.options.commandTimeout;
+    _validateTimeout(effectiveTimeout, name: 'timeout');
+    if (effectiveTimeout < duration) {
+      throw ArgumentError.value(
+        effectiveTimeout,
+        'timeout',
+        'Must be at least as long as duration.',
+      );
+    }
+
+    final normalizedQuery = query?.trim();
+    final watchOptions = options.copyWith(
+      profile: CockpitSnapshotProfile.baseline,
+      query: normalizedQuery?.isEmpty == true ? null : normalizedQuery,
+      clearQuery: normalizedQuery?.isEmpty == true,
+      maxTargets: options.maxTargets.clamp(1, 160).toInt(),
+      maxAncestorsPerTarget: 0,
+      includeStyleDetails: false,
+      includeDiagnosticProperties: false,
+      includeRebuildActivity: false,
+      includeNetworkActivity: false,
+      includeRuntimeActivity: false,
+      includeAccessibilitySummary: false,
+    );
+
+    var logicalElapsed = Duration.zero;
+    final wallClock = Stopwatch()..start();
+    var samples = 1;
+    var endedBy = 'duration';
+    var lastChangeAt = Duration.zero;
+    var hasChange = false;
+    var previous = cockpitWatchProjection(root.snapshot(options: watchOptions));
+    final changes = <CockpitWatchChange>[];
+
+    while (logicalElapsed < duration) {
+      final remainingTimeout = effectiveTimeout - wallClock.elapsed;
+      if (remainingTimeout <= Duration.zero) {
+        endedBy = 'timeout';
+        break;
+      }
+      final remaining = duration - logicalElapsed;
+      final step = interval < remaining ? interval : remaining;
+      try {
+        await flutter.pump(step).timeout(remainingTimeout);
+      } on TimeoutException {
+        endedBy = 'timeout';
+        break;
+      }
+      logicalElapsed += step;
+      samples += 1;
+      final current = cockpitWatchProjection(
+        root.snapshot(options: watchOptions),
+      );
+      if (jsonEncode(previous) != jsonEncode(current)) {
+        hasChange = true;
+        lastChangeAt = logicalElapsed;
+        changes.add(cockpitWatchChange(previous, current, at: logicalElapsed));
+        if (changes.length >= maxChanges) {
+          endedBy = 'eventLimit';
+          break;
+        }
+      }
+      previous = current;
+      if (quiet != null &&
+          hasChange &&
+          logicalElapsed - lastChangeAt >= quiet) {
+        endedBy = 'quiet';
+        break;
+      }
+    }
+    if (endedBy == 'duration' && logicalElapsed < duration) {
+      endedBy = 'timeout';
+    }
+
+    final result = CockpitWatchResult(
+      samples: samples,
+      changes: List.unmodifiable(changes),
+      endedBy: endedBy,
+      elapsed: logicalElapsed,
+    );
+    _watches.add(result);
+    return result;
+  }
 
   Future<CockpitCommandExecution> _run(
     CockpitCommandType type, {
@@ -508,4 +895,108 @@ final class CockpitHostTester {
       timeoutMs: _tester._nativeTimeoutMs(timeout),
     ),
   );
+}
+
+void _validateGestureDuration(Duration value, String name) {
+  if (value <= Duration.zero) {
+    throw ArgumentError.value(value, name, 'Must be positive.');
+  }
+}
+
+void _validateMovement(Offset value, String name) {
+  if (!value.dx.isFinite || !value.dy.isFinite) {
+    throw ArgumentError.value(value, name, 'Must contain finite coordinates.');
+  }
+  if (value == Offset.zero) {
+    throw ArgumentError.value(value, name, 'Must not be zero.');
+  }
+}
+
+void _validateOptionalOffset(Offset? value, String name) {
+  if (value != null && (!value.dx.isFinite || !value.dy.isFinite)) {
+    throw ArgumentError.value(value, name, 'Must contain finite coordinates.');
+  }
+}
+
+void _validatePositiveFinite(double value, String name) {
+  if (!value.isFinite || value <= 0) {
+    throw ArgumentError.value(value, name, 'Must be positive and finite.');
+  }
+}
+
+void _validateMoveEvents(int? value) {
+  if (value != null && (value < 0 || value > 10000)) {
+    throw ArgumentError.value(
+      value,
+      'moveEvents',
+      'Must be between 0 and 10000.',
+    );
+  }
+}
+
+void _validateMultiTouch(CockpitMultiTouchSequence sequence) {
+  if (sequence.steps.isEmpty) {
+    throw ArgumentError.value(
+      sequence,
+      'sequence',
+      'Must contain at least one step.',
+    );
+  }
+  if (sequence.steps.length > 10000) {
+    throw ArgumentError.value(
+      sequence.steps.length,
+      'sequence',
+      'Must contain no more than 10000 steps.',
+    );
+  }
+  final active = <int>{};
+  for (final step in sequence.steps) {
+    if (step.pointer <= 0) {
+      throw ArgumentError.value(
+        step.pointer,
+        'sequence',
+        'Pointer IDs must be positive.',
+      );
+    }
+    if (step.atMs < 0 || !step.dx.isFinite || !step.dy.isFinite) {
+      throw ArgumentError.value(
+        step,
+        'sequence',
+        'Steps require non-negative timestamps and finite coordinates.',
+      );
+    }
+    switch (step.phase) {
+      case CockpitMultiTouchPhase.down:
+        if (!active.add(step.pointer)) {
+          throw ArgumentError.value(
+            step.pointer,
+            'sequence',
+            'A pointer cannot go down twice without an up event.',
+          );
+        }
+      case CockpitMultiTouchPhase.move:
+        if (!active.contains(step.pointer)) {
+          throw ArgumentError.value(
+            step.pointer,
+            'sequence',
+            'A pointer must be down before it moves.',
+          );
+        }
+      case CockpitMultiTouchPhase.up:
+        if (!active.remove(step.pointer)) {
+          throw ArgumentError.value(
+            step.pointer,
+            'sequence',
+            'A pointer must be down before it is released.',
+          );
+        }
+    }
+  }
+  if (active.isNotEmpty) {
+    throw ArgumentError.value(
+      sequence,
+      'sequence',
+      'Every pointer must end with an up event.',
+    );
+  }
 }
