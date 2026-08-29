@@ -311,16 +311,23 @@ final class CockpitNativeTargetDiscovery {
             effectiveViewport,
             strictVisibility: false,
           );
-      if (target != null &&
+      final ownsRequestedCommand =
+          target != null &&
           exposed &&
-          target.supportedCommands.contains(requiredCommand)) {
+          _ownsRelatedCommand(candidateElement, target, requiredCommand);
+      if (ownsRequestedCommand) {
         ancestorActions.add(target);
       }
 
+      // Only an ancestor that owns the requested command may claim the
+      // discovery scope. Gesture wrappers such as a swipe-to-delete
+      // GestureDetector and the surrounding Scrollable expose other pointer
+      // commands, but must not hide a descendant InkWell's long-press/tap or
+      // a slider's semantic adjustment when resolving that specific action.
       if (_isControlTarget(explicitTarget) ||
           (target != null &&
               exposed &&
-              (_hasOwnedInteraction(target.supportedCommands) ||
+              (ownsRequestedCommand ||
                   _controlOwnsSubtree(
                     candidateElement.widget,
                     target.control,
@@ -337,13 +344,36 @@ final class CockpitNativeTargetDiscovery {
       return _deduplicateDiscoveredTargets(ancestorActions);
     }
 
-    return discover(
-          rootContext: element,
-          routeName: routeName,
-          explicitTargets: explicitTargets,
-        )
-        .where((target) => target.supportedCommands.contains(requiredCommand))
-        .toList(growable: false);
+    final descendantTargets =
+        discover(
+              rootContext: element,
+              routeName: routeName,
+              explicitTargets: explicitTargets,
+            )
+            .where(
+              (target) => target.supportedCommands.contains(requiredCommand),
+            )
+            .toList(growable: false);
+    return descendantTargets;
+  }
+
+  bool _ownsRelatedCommand(
+    Element element,
+    CockpitTarget target,
+    CockpitCommandType requiredCommand,
+  ) {
+    if (!target.supportedCommands.contains(requiredCommand)) {
+      return false;
+    }
+    if (requiredCommand != CockpitCommandType.tap ||
+        element.widget is! Listener) {
+      return true;
+    }
+    final listener = element.widget as Listener;
+    final hasCompleteContact =
+        listener.onPointerDown != null && listener.onPointerUp != null;
+    return hasCompleteContact ||
+        _cupertinoSegmentControlAncestor(element) != null;
   }
 
   bool _matchesDiscoveryRoute(
@@ -1237,7 +1267,11 @@ final class CockpitNativeTargetDiscovery {
     Element element, {
     required bool increase,
   }) {
-    final widget = element.widget;
+    // A Semantics container is often the stable locator while the actual
+    // Slider is its child. Resolve that public control without requiring an
+    // application key on the Slider itself; this keeps increase/decrease
+    // source-faithful and avoids depending on a merged semantics node.
+    final widget = _sliderWidgetForElement(element);
     if (widget is Slider && widget.onChanged != null) {
       return () {
         final current = widget.value;
@@ -1269,6 +1303,38 @@ final class CockpitNativeTargetDiscovery {
         widget.onChanged!.call(next);
         widget.onChangeEnd?.call(next);
       };
+    }
+    return null;
+  }
+
+  Widget? _sliderWidgetForElement(Element element) {
+    final widget = element.widget;
+    if (widget is Slider || widget is CupertinoSlider) {
+      return widget;
+    }
+    if (widget is! Semantics) {
+      return null;
+    }
+    var current = element;
+    for (var depth = 0; depth < 32; depth += 1) {
+      final children = <Element>[];
+      current.visitChildElements((child) {
+        if (child.mounted) {
+          children.add(child);
+        }
+      });
+      // A Semantics wrapper may add framework-only single-child layers around
+      // its real control. Once the chain branches, the semantics node covers
+      // a composite surface and must not borrow an arbitrary descendant
+      // slider's actions.
+      if (children.length != 1) {
+        return null;
+      }
+      current = children.single;
+      final childWidget = current.widget;
+      if (childWidget is Slider || childWidget is CupertinoSlider) {
+        return childWidget;
+      }
     }
     return null;
   }

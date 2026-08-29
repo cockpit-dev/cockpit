@@ -882,41 +882,14 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
       );
     }
     final target = resolution.target!;
+    // Prefer the direct widget callback whenever the source element exposes
+    // one. A Semantics wrapper can inherit a merged long-press action from a
+    // different node; invoking that node may report success without reaching
+    // the callback that owns the matched control. The direct handler is the
+    // source-faithful path for native Flutter controls.
     // A command that supplies duration asks for an actual pointer gesture.
     // Semantic callbacks cannot model the press duration and would make
     // custom timing silently ineffective.
-    if (!command.parameters.containsKey('durationMs') &&
-        target.supportedCommands.contains(CockpitCommandType.longPress) &&
-        target.onSemanticLongPress != null) {
-      await _prepareForAction(
-        command,
-        commandType: CockpitCommandType.longPress,
-      );
-      final commit = await _invokeActionAndAwaitCommit(
-        command: command,
-        action: target.onSemanticLongPress!,
-        previousRouteName: previousRouteName,
-        commandType: CockpitCommandType.longPress,
-        stopwatch: stopwatch,
-        resolution: resolution,
-        activationPath: _ActionActivationPath.semantic,
-      );
-      if (commit.failure != null) {
-        return commit.failure!;
-      }
-      await _stabilizeAfterAction(
-        previousRouteName,
-        commandType: CockpitCommandType.longPress,
-        routeAlreadyCommitted: commit.routeCommitted,
-      );
-      return _buildSuccessWithOptionalCapture(
-        command: command,
-        resolution: resolution,
-        durationMs: stopwatch.elapsedMilliseconds,
-        warnings: commit.warnings,
-        changed: _changedSince(commit),
-      );
-    }
     if (!command.parameters.containsKey('durationMs') &&
         target.supportedCommands.contains(CockpitCommandType.longPress) &&
         target.onLongPress != null) {
@@ -963,6 +936,38 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
           ...commit.warnings,
           if (preflight?.warning != null) preflight!.warning!,
         ],
+        changed: _changedSince(commit),
+      );
+    }
+    if (!command.parameters.containsKey('durationMs') &&
+        target.supportedCommands.contains(CockpitCommandType.longPress) &&
+        target.onSemanticLongPress != null) {
+      await _prepareForAction(
+        command,
+        commandType: CockpitCommandType.longPress,
+      );
+      final commit = await _invokeActionAndAwaitCommit(
+        command: command,
+        action: target.onSemanticLongPress!,
+        previousRouteName: previousRouteName,
+        commandType: CockpitCommandType.longPress,
+        stopwatch: stopwatch,
+        resolution: resolution,
+        activationPath: _ActionActivationPath.semantic,
+      );
+      if (commit.failure != null) {
+        return commit.failure!;
+      }
+      await _stabilizeAfterAction(
+        previousRouteName,
+        commandType: CockpitCommandType.longPress,
+        routeAlreadyCommitted: commit.routeCommitted,
+      );
+      return _buildSuccessWithOptionalCapture(
+        command: command,
+        resolution: resolution,
+        durationMs: stopwatch.elapsedMilliseconds,
+        warnings: commit.warnings,
         changed: _changedSince(commit),
       );
     }

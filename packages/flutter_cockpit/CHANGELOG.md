@@ -1,5 +1,11 @@
 # Changelog
 
+## 4.0.48
+
+- Fixed Flutter pointer lifecycle delivery, double-tap settling, direct long
+  press activation, and nested listener/slider target resolution.
+- Extended the command lab acceptance path with real hover and wheel input.
+
 ## 4.0.47
 
 - Fixed pinch gestures in nested scrollables so the delivered scale matches the

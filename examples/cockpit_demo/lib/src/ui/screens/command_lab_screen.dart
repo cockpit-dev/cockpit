@@ -1,4 +1,5 @@
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -20,6 +21,8 @@ final class _CommandLabScreenState extends State<CommandLabScreen> {
   String _swipe = 'idle';
   String _transform = 'idle';
   String _touch = 'idle';
+  String _hover = 'idle';
+  String _wheel = 'idle';
   String _key = 'idle';
   String _submitted = 'none';
   bool _dismissCardVisible = true;
@@ -31,6 +34,7 @@ final class _CommandLabScreenState extends State<CommandLabScreen> {
   double _lastScale = 1;
   double _lastRotation = 0;
   int _maxConcurrentPointers = 0;
+  int _wheelEvents = 0;
 
   final TextEditingController _textController = TextEditingController();
   final TextEditingController _cupertinoTextController =
@@ -212,6 +216,52 @@ final class _CommandLabScreenState extends State<CommandLabScreen> {
                 child: const SizedBox(
                   height: 104,
                   child: Center(child: Text('Touch with several pointers')),
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
+            _statusText('lab-hover-status', 'hover:$_hover', theme),
+            _pad(
+              key: 'lab-hover-pad',
+              label: 'Hover pad',
+              color: theme.colorScheme.tertiaryContainer,
+              child: MouseRegion(
+                key: const Key('lab-hover-region'),
+                opaque: true,
+                onEnter: (_) => setState(() => _hover = 'entered'),
+                onHover: (_) {
+                  if (_hover != 'entered') {
+                    setState(() => _hover = 'entered');
+                  }
+                },
+                onExit: (_) => setState(() => _hover = 'exited'),
+                child: const SizedBox(
+                  height: 88,
+                  child: Center(child: Text('Move a pointer across this pad')),
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
+            _statusText('lab-wheel-status', 'wheel:$_wheel', theme),
+            _pad(
+              key: 'lab-wheel-pad',
+              label: 'Wheel pad',
+              color: theme.colorScheme.secondaryContainer,
+              child: Listener(
+                key: const Key('lab-wheel-listener'),
+                behavior: HitTestBehavior.opaque,
+                onPointerSignal: (event) {
+                  if (event is PointerScrollEvent) {
+                    final direction = event.scrollDelta.dy < 0 ? 'up' : 'down';
+                    setState(() {
+                      _wheelEvents += 1;
+                      _wheel = '$direction-$_wheelEvents';
+                    });
+                  }
+                },
+                child: const SizedBox(
+                  height: 88,
+                  child: Center(child: Text('Send wheel or trackpad input')),
                 ),
               ),
             ),

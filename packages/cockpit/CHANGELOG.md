@@ -1,5 +1,12 @@
 # Changelog
 
+## 4.0.48
+
+- Corrected source-faithful Flutter gesture dispatch and target discovery for
+  nested listeners, merged slider semantics, long press, and double-tap timing.
+- Added hover and wheel coverage to the development command lab and acceptance
+  journey.
+
 ## 4.0.47
 
 - Corrected the repository-root CLI source lookup used by Cockpit command
