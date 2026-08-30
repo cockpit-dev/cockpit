@@ -162,10 +162,12 @@ CockpitTestExecutionNode actionNode(
   String id,
   String section, {
   String? executionId,
+  CockpitTestPlane? plane,
 }) => CockpitTestExecutionNode(
   stepId: id,
   executionId: executionId ?? '$section/$id',
   section: section,
+  plane: plane,
   timeoutMs: 1000,
   evidence: const CockpitTestEvidencePolicy(
     screenshot: CockpitTestEvidenceMode.none,
