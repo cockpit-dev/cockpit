@@ -212,16 +212,10 @@ final class CockpitGestureEngine {
       _hoverDevice = null;
     }
     if (_hoverViewId == null) {
-      _handlePointerEvent(
-        PointerAddedEvent(
-          timeStamp: Duration.zero,
-          pointer: 1,
-          device: device,
-          kind: pointerDeviceKind,
-          position: position,
-          viewId: geometry.viewId,
-        ),
-      );
+      // MouseTracker accepts a first hover event without an Added event. This
+      // is important on desktop where the host may already have reported a
+      // mouse event before Cockpit's synthetic stream starts; injecting Added
+      // in that state violates Flutter's Added/Removed lifecycle assertion.
       _hoverViewId = geometry.viewId;
       _hoverDeviceKind = pointerDeviceKind;
       _hoverDevice = device;
@@ -1381,20 +1375,6 @@ final class CockpitGestureEngine {
     required Duration timeStamp,
   }) {
     final clampedPosition = _clampToViewport(geometry, position);
-    // Mirror the platform pointer lifecycle. Some Flutter bindings (notably
-    // test/desktop bindings) do not synthesize a hit-test on a bare down
-    // event; without the added event recognizers can receive the stream but
-    // never win the gesture arena.
-    _handlePointerEvent(
-      PointerAddedEvent(
-        timeStamp: timeStamp,
-        pointer: pointer,
-        device: _deviceForKind(pointerDeviceKind),
-        kind: pointerDeviceKind,
-        position: clampedPosition,
-        viewId: geometry.viewId,
-      ),
-    );
     _handlePointerEvent(
       PointerDownEvent(
         timeStamp: timeStamp,
@@ -1451,16 +1431,6 @@ final class CockpitGestureEngine {
         viewId: geometry.viewId,
       ),
     );
-    _handlePointerEvent(
-      PointerRemovedEvent(
-        timeStamp: timeStamp,
-        pointer: pointer,
-        device: _deviceForKind(pointerDeviceKind),
-        kind: pointerDeviceKind,
-        position: clampedPosition,
-        viewId: geometry.viewId,
-      ),
-    );
   }
 
   void _dispatchCancel({
@@ -1484,7 +1454,19 @@ final class CockpitGestureEngine {
   }
 
   int _deviceForKind(PointerDeviceKind kind) {
-    return kind == PointerDeviceKind.mouse ? 1 : 0;
+    // Keep synthetic devices separate from host input devices. Reusing device
+    // id 1 can collide with the desktop mouse already tracked by MouseTracker,
+    // which makes the first synthetic PointerAddedEvent violate its lifecycle
+    // assertion. Pointer ids identify contacts; these stable device ids identify
+    // Cockpit's own input streams.
+    return switch (kind) {
+      PointerDeviceKind.mouse => 0x434f01,
+      PointerDeviceKind.touch => 0x434f02,
+      PointerDeviceKind.stylus => 0x434f03,
+      PointerDeviceKind.invertedStylus => 0x434f04,
+      PointerDeviceKind.trackpad => 0x434f05,
+      PointerDeviceKind.unknown => 0x434f06,
+    };
   }
 
   void _dispatchPanZoomStart({

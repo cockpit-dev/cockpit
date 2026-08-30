@@ -1127,7 +1127,6 @@ final class CockpitNativeTargetDiscovery {
   bool _hasOwnedInteraction(Set<CockpitCommandType> commands) => commands.any(
     const <CockpitCommandType>{
       CockpitCommandType.tap,
-      CockpitCommandType.hover,
       CockpitCommandType.enterText,
       CockpitCommandType.focusTextInput,
       CockpitCommandType.setTextEditingValue,
@@ -1141,7 +1140,6 @@ final class CockpitNativeTargetDiscovery {
       CockpitCommandType.rotate,
       CockpitCommandType.panZoom,
       CockpitCommandType.multiTouch,
-      CockpitCommandType.wheel,
       CockpitCommandType.increase,
       CockpitCommandType.decrease,
       CockpitCommandType.dismiss,
@@ -2345,6 +2343,18 @@ final class CockpitNativeTargetDiscovery {
     return false;
   }
 
+  bool _hasScrollableAncestor(Element element) {
+    var found = false;
+    element.visitAncestorElements((ancestor) {
+      if (ancestor.widget is Scrollable) {
+        found = true;
+        return false;
+      }
+      return true;
+    });
+    return found;
+  }
+
   /// Infers pointer capabilities from public Flutter widget contracts.
   ///
   /// Custom controls commonly use a GestureDetector/RawGestureDetector or a
@@ -2429,6 +2439,14 @@ final class CockpitNativeTargetDiscovery {
         });
       }
     } else if (widget is RawGestureDetector) {
+      // Scrollable builds private RawGestureDetector wrappers whose recognizer
+      // map contains tap/drag entries for the scroll arena. They are not user
+      // controls and must not become the action owner for every descendant.
+      // The public Scrollable target and source-known descendant probes remain
+      // responsible for scroll and gesture actions respectively.
+      if (_hasScrollableAncestor(element)) {
+        return commands;
+      }
       for (final type in widget.gestures.keys) {
         final name = type.toString().toLowerCase();
         if (name.contains('tap')) commands.add(CockpitCommandType.tap);
@@ -2455,9 +2473,6 @@ final class CockpitNativeTargetDiscovery {
         }
       }
     } else if (widget is Listener) {
-      if (widget.onPointerDown != null || widget.onPointerUp != null) {
-        commands.add(CockpitCommandType.tap);
-      }
       if (widget.onPointerSignal != null) {
         commands.add(CockpitCommandType.wheel);
       }
