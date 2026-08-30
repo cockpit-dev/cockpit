@@ -296,7 +296,7 @@ final class CockpitCaseExecutionKernel {
         _finishFailure(
           handle,
           error,
-          plan.target.plane,
+          _requestedPlane(node, plan),
           actualPlane: result.actualPlane,
           driverId: result.driverId,
           locatorResolution: result.locatorResolution,
@@ -307,7 +307,7 @@ final class CockpitCaseExecutionKernel {
       return error;
     } on CockpitDeadlineExceeded {
       final error = _KernelErrors.timeout(node.stepId);
-      _finishFailure(handle, error, plan.target.plane);
+      _finishFailure(handle, error, _requestedPlane(node, plan));
       return error;
     } on CockpitCaseHardShutdown {
       final error = _KernelErrors.hardShutdown(node.stepId);
@@ -323,7 +323,7 @@ final class CockpitCaseExecutionKernel {
         message: 'Internal residual cleanup failure.',
         stepId: node.stepId,
       );
-      _finishFailure(handle, error, plan.target.plane);
+      _finishFailure(handle, error, _requestedPlane(node, plan));
       return error;
     }
   }
@@ -350,7 +350,7 @@ final class CockpitCaseExecutionKernel {
         : availableMs;
     if (budgetMs <= 0) {
       final error = _KernelErrors.timeout(node.stepId);
-      _finishFailure(handle, error, plan.target.plane);
+      _finishFailure(handle, error, _requestedPlane(node, plan));
       return _KernelNodeOutcome(error: error);
     }
     final deadline = CockpitMonotonicDeadline.after(
@@ -389,7 +389,7 @@ final class CockpitCaseExecutionKernel {
         _finishFailure(
           handle,
           error,
-          plan.target.plane,
+          _requestedPlane(node, plan),
           actualPlane: outcome.actualPlane,
           driverId: outcome.driverId,
           locatorResolution: outcome.locatorResolution,
@@ -400,7 +400,7 @@ final class CockpitCaseExecutionKernel {
       return outcome;
     } on CockpitDeadlineExceeded {
       final error = _KernelErrors.timeout(node.stepId);
-      _finishFailure(handle, error, plan.target.plane);
+      _finishFailure(handle, error, _requestedPlane(node, plan));
       return _KernelNodeOutcome(error: error);
     } on CockpitCaseCancelled {
       final error = _KernelErrors.cancelled(node.stepId);
@@ -426,7 +426,7 @@ final class CockpitCaseExecutionKernel {
         message: 'Internal case execution failure.',
         stepId: node.stepId,
       );
-      _finishFailure(handle, error, plan.target.plane);
+      _finishFailure(handle, error, _requestedPlane(node, plan));
       return _KernelNodeOutcome(error: error);
     }
   }
@@ -834,7 +834,7 @@ final class CockpitCaseExecutionKernel {
   void _finishFailure(
     CockpitTestStepRecordingHandle handle,
     CockpitTestError error,
-    CockpitTestPlane requestedPlane, {
+    CockpitTestPlane? requestedPlane, {
     CockpitTestPlane? actualPlane,
     String? driverId,
     CockpitLocatorResolution? locatorResolution,

@@ -93,6 +93,34 @@ void main() {
     expect(delegate.events, isNot(contains('action:errorElse:primary')));
   });
 
+  test('failed steps record the effective requested plane', () async {
+    final clock = ManualCockpitClock();
+    final delegate = DeterministicCaseDelegate()
+      ..actionResults['nativeFailure'] = <CockpitTestKernelOperationResult>[
+        CockpitTestKernelOperationResult.failure(
+          testDriverError('nativeFailure'),
+        ),
+      ];
+    final recorder = CockpitTestAttemptRecorder(clock: clock);
+
+    final result = await _kernel(clock, delegate, recorder).run(
+      plan: testExecutionPlan(
+        steps: <CockpitTestExecutionNode>[
+          actionNode('nativeFailure', 'main', plane: CockpitTestPlane.native),
+        ],
+      ),
+      control: CockpitCaseExecutionControl(),
+    );
+
+    expect(result.outcome, CockpitTestOutcome.failed);
+    expect(
+      recorder.steps
+          .singleWhere((step) => step.stepId == 'nativeFailure')
+          .requestedPlane,
+      CockpitTestPlane.native,
+    );
+  });
+
   test(
     'stalled condition probe does not consume its parent step deadline',
     () async {
