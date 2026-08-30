@@ -267,6 +267,79 @@ void main() {
   });
 
   test(
+    'iOS native tap falls back to the session source when foreground source lags',
+    () async {
+      final commands = <CockpitIosWdaCommand>[];
+      final controls = CockpitSystemControlService(
+        iosWdaEndpointProbe: (baseUri, {required timeout}) async => true,
+      );
+      Future<String> runner(
+        CockpitIosWdaCommand command, {
+        required Duration timeout,
+      }) async {
+        commands.add(command);
+        if (command.action == CockpitIosWdaAction.readUiTree) {
+          return command.parameters['source'] == 'session'
+              ? _iosNewTaskTree
+              : _iosVisualViewportTree;
+        }
+        return 'tap x=292 y=99';
+      }
+
+      final adapter = CockpitSystemTestAutomationAdapter(
+        target: CockpitSystemTestTarget(
+          platform: 'ios',
+          deviceId: 'D3884373-E926-49AF-92E6-7A241C50B64C',
+          appId: 'dev.cockpit.demo',
+          targetKind: CockpitTargetKind.flutterApp,
+          metadata: const <String, Object?>{
+            'wdaUrl': 'http://127.0.0.1:8100',
+            'wdaReachable': true,
+          },
+        ),
+        controlService: controls,
+        actionService: CockpitSystemControlActionService(
+          systemControlService: controls,
+          iosWdaRunner: runner,
+        ),
+        iosWdaRunner: runner,
+        workspaceRoot: Directory.current.path,
+        delay: (_) async {},
+      );
+
+      final execution = await adapter.execute(
+        CockpitCommand(
+          commandId: 'tap-new-task-session-source',
+          commandType: CockpitCommandType.tap,
+          parameters: const <String, Object?>{
+            'cockpitTestLocator': <String, Object?>{'label': 'New task'},
+          },
+          timeoutMs: 1000,
+        ),
+      );
+
+      expect(execution.result.success, isTrue);
+      expect(
+        execution.result.locatorResolution?.matchedSignals['adapter'],
+        'flutterAwareNative',
+      );
+      expect(
+        commands.any(
+          (command) =>
+              command.action == CockpitIosWdaAction.readUiTree &&
+              command.parameters['source'] == 'session',
+        ),
+        isTrue,
+      );
+      final tap = commands.singleWhere(
+        (command) => command.action == CockpitIosWdaAction.tap,
+      );
+      expect(tap.parameters['x'], 292);
+      expect(tap.parameters['y'], 99);
+    },
+  );
+
+  test(
     'iOS Flutter native tap falls back to WDA accessibility id lookup',
     () async {
       final commands = <CockpitIosWdaCommand>[];

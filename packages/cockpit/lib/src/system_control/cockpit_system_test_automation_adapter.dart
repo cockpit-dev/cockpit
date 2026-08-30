@@ -1369,6 +1369,47 @@ final class CockpitSystemTestAutomationAdapter
     }
     if (_isIos) {
       snapshot ??= await _readSnapshot(deadline);
+      // WDA's foreground source endpoint is the authoritative first read, but
+      // some WDA/XCTest combinations briefly expose a stale or incomplete
+      // foreground tree while a Flutter route is settling. The session source
+      // is a bounded, source-level fallback for the same app; resolve against
+      // it before issuing slower native element queries or reporting a miss.
+      CockpitNativeUiSnapshot? sessionSnapshot;
+      try {
+        sessionSnapshot = await _readSnapshot(deadline, source: 'session');
+      } on Object {
+        // The root source is supported by the current WDA contract. Older
+        // agents may not expose the session fallback; continue to the native
+        // element queries instead of turning that optional read into a hard
+        // failure.
+      }
+      if (sessionSnapshot != null) {
+        for (final candidate in locator.flattened) {
+          if (candidate.strategy == CockpitTestLocatorStrategy.visual) {
+            continue;
+          }
+          final resolution = sessionSnapshot.resolveSingle(
+            candidate,
+            flutterAware: _flutterAwareNative,
+          );
+          if (resolution.ambiguous || !resolution.found) continue;
+          final x = resolution.centerX;
+          final y = resolution.centerY;
+          if (x == null || y == null) continue;
+          return _ResolvedPoint(
+            x: x,
+            y: y,
+            viewportWidth: sessionSnapshot.viewportWidth,
+            viewportHeight: sessionSnapshot.viewportHeight,
+            nativePath: resolution.node?.attributes['nativepath'],
+            treePath: resolution.node?.path,
+            textLength: resolution.node?.textValues
+                .map((value) => value.length)
+                .maxOrNull,
+            resolution: _locatorResolution(resolution),
+          );
+        }
+      }
       final resolved = await _resolveIosAccessibilityElement(
         locator,
         snapshot,
@@ -1741,16 +1782,18 @@ final class CockpitSystemTestAutomationAdapter
   Future<CockpitNativeUiSnapshot> _readSnapshot(
     DateTime deadline, {
     bool stabilitySnapshot = false,
+    String? source,
   }) async {
+    final metadata = <String, Object?>{
+      if (_isIos && stabilitySnapshot)
+        cockpitIosUiStabilitySnapshotMetadataKey: true,
+      if (_isIos && source != null) cockpitIosUiSourceMetadataKey: source,
+    };
     final result = await _runAction(
       CockpitSystemControlAction.readUiTree,
       const <String, Object?>{},
       deadline,
-      metadata: _isIos && stabilitySnapshot
-          ? const <String, Object?>{
-              cockpitIosUiStabilitySnapshotMetadataKey: true,
-            }
-          : null,
+      metadata: metadata.isEmpty ? null : metadata,
     );
     if (!result.success) {
       if (result.availability != CockpitSystemControlAvailability.available) {

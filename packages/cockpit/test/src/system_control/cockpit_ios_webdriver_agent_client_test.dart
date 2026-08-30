@@ -105,6 +105,41 @@ void main() {
     });
   });
 
+  test('readUiTree can use the session source as a locator fallback', () async {
+    final requests = <http.Request>[];
+    final client = clientWithSession((request) async {
+      requests.add(request);
+      return http.Response(
+        jsonEncode(<String, Object?>{
+          'value': <String, Object?>{
+            'type': 'Application',
+            'rect': <String, Object?>{
+              'x': 0,
+              'y': 0,
+              'width': 402,
+              'height': 874,
+            },
+          },
+        }),
+        200,
+      );
+    });
+
+    await CockpitIosWebDriverAgentClient(httpClient: client).run(
+      CockpitIosWdaCommand(
+        baseUri: baseUri,
+        action: CockpitIosWdaAction.readUiTree,
+        parameters: const <String, Object?>{'source': 'session'},
+      ),
+      timeout: const Duration(seconds: 2),
+    );
+
+    expect(requests.single.url.path, '/session/session-1/source');
+    expect(requests.single.url.queryParameters, <String, String>{
+      'format': 'json',
+    });
+  });
+
   test(
     'resolveElement uses WDA accessibility id and returns its rect',
     () async {
