@@ -535,6 +535,55 @@ void main() {
   });
 
   test(
+    'iOS native condition waits use lightweight WDA source snapshots',
+    () async {
+      final commands = <CockpitIosWdaCommand>[];
+      final controls = CockpitSystemControlService(
+        iosWdaEndpointProbe: (baseUri, {required timeout}) async => true,
+      );
+      final adapter = CockpitSystemTestAutomationAdapter(
+        target: CockpitSystemTestTarget(
+          platform: 'ios',
+          deviceId: 'D3884373-E926-49AF-92E6-7A241C50B64C',
+          appId: 'dev.cockpit.demo',
+          metadata: const <String, Object?>{
+            'wdaUrl': 'http://127.0.0.1:8100',
+            'wdaReachable': true,
+          },
+        ),
+        controlService: controls,
+        actionService: CockpitSystemControlActionService(
+          systemControlService: controls,
+          iosWdaRunner: (command, {required timeout}) async {
+            commands.add(command);
+            return _iosNewTaskTree;
+          },
+        ),
+        workspaceRoot: Directory.current.path,
+        delay: (_) async {},
+      );
+
+      final execution = await adapter.execute(
+        CockpitCommand(
+          commandId: 'wait-for-ios-native-target',
+          commandType: CockpitCommandType.waitFor,
+          parameters: const <String, Object?>{
+            'cockpitTestLocator': <String, Object?>{'label': 'New task'},
+          },
+          timeoutMs: 1000,
+        ),
+      );
+
+      expect(execution.result.success, isTrue);
+      final treeReads = commands
+          .where((command) => command.action == CockpitIosWdaAction.readUiTree)
+          .toList(growable: false);
+      expect(treeReads, hasLength(1));
+      expect(treeReads.single.stabilitySnapshot, isTrue);
+    },
+  );
+
+  test(
     'iOS repeated and focus taps use stable resolved WDA coordinates',
     () async {
       final commands = <CockpitIosWdaCommand>[];
