@@ -2,6 +2,9 @@
 
 ## 4.0.49
 
+- Fixed iOS native locator recovery so an already foreground Flutter app is
+  queried before any WDA activation, with one target activation retry only
+  after the native tree has been exhausted.
 - Fixed bounded loop execution to re-check the final condition after the last
   action, preventing false failures when Flutter commits the final frame
   asynchronously.
