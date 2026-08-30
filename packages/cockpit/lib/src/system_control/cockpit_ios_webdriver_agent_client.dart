@@ -395,7 +395,9 @@ final class CockpitIosWebDriverAgentClient {
           final using = _requiredString(command.parameters, 'using');
           final value = _requiredString(command.parameters, 'value');
           final bundleId = _optionalString(command.parameters, 'bundleId');
-          if (bundleId != null && bundleId.trim().isNotEmpty) {
+          if (command.parameters['activate'] == true &&
+              bundleId != null &&
+              bundleId.trim().isNotEmpty) {
             // A simulator relaunch through simctl can leave an existing WDA
             // session bound to the previous foreground application. Re-select
             // the target before querying so mixed-plane locators stay scoped

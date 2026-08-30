@@ -1397,6 +1397,7 @@ final class CockpitSystemTestAutomationAdapter
   ) async {
     final baseUri = await _resolveIosWdaBaseUri(deadline);
     if (baseUri == null) return null;
+    var activateTarget = true;
     for (final candidate in locator.flattened) {
       final strategy = candidate.strategy;
       if (strategy != CockpitTestLocatorStrategy.label &&
@@ -1409,6 +1410,8 @@ final class CockpitSystemTestAutomationAdapter
       if (value == null || value.trim().isEmpty) continue;
       for (final query in _iosWdaElementQueries(strategy, value)) {
         try {
+          final shouldActivateTarget = activateTarget;
+          activateTarget = false;
           final raw = await _iosWdaRunner(
             CockpitIosWdaCommand(
               baseUri: baseUri,
@@ -1419,6 +1422,7 @@ final class CockpitSystemTestAutomationAdapter
                 if (_target.appId case final appId?
                     when appId.trim().isNotEmpty)
                   'bundleId': appId.trim(),
+                if (shouldActivateTarget) 'activate': true,
               },
             ),
             timeout: _remaining(deadline),
