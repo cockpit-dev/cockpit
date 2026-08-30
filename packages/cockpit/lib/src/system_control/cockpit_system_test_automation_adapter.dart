@@ -1398,6 +1398,7 @@ final class CockpitSystemTestAutomationAdapter
     final baseUri = await _resolveIosWdaBaseUri(deadline);
     if (baseUri == null) return null;
     var activateTarget = true;
+    var attemptedQuery = false;
     for (final candidate in locator.flattened) {
       final strategy = candidate.strategy;
       if (strategy != CockpitTestLocatorStrategy.label &&
@@ -1412,6 +1413,7 @@ final class CockpitSystemTestAutomationAdapter
         try {
           final shouldActivateTarget = activateTarget;
           activateTarget = false;
+          attemptedQuery = true;
           final raw = await _iosWdaRunner(
             CockpitIosWdaCommand(
               baseUri: baseUri,
@@ -1470,6 +1472,36 @@ final class CockpitSystemTestAutomationAdapter
           // the next strategy while preserving the command deadline.
           continue;
         }
+      }
+    }
+    if (attemptedQuery) {
+      // simctl/WDA app activation can refresh the accessibility tree after
+      // the initial snapshot was read. Re-read the source once and resolve
+      // its exact bounds before reporting a miss; this remains source-based,
+      // not a coordinate or OCR guess.
+      final refreshed = await _readSnapshot(deadline);
+      for (final candidate in locator.flattened) {
+        if (candidate.strategy == CockpitTestLocatorStrategy.visual) continue;
+        final resolution = refreshed.resolveSingle(
+          candidate,
+          flutterAware: _flutterAwareNative,
+        );
+        if (resolution.ambiguous || !resolution.found) continue;
+        final x = resolution.centerX;
+        final y = resolution.centerY;
+        if (x == null || y == null) continue;
+        return _ResolvedPoint(
+          x: x,
+          y: y,
+          viewportWidth: refreshed.viewportWidth,
+          viewportHeight: refreshed.viewportHeight,
+          nativePath: resolution.node?.attributes['nativepath'],
+          treePath: resolution.node?.path,
+          textLength: resolution.node?.textValues
+              .map((value) => value.length)
+              .maxOrNull,
+          resolution: _locatorResolution(resolution),
+        );
       }
     }
     return null;
