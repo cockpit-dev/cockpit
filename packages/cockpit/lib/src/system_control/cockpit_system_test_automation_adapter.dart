@@ -906,7 +906,15 @@ final class CockpitSystemTestAutomationAdapter
     do {
       late final _ResolvedPoint point;
       try {
-        point = await _resolvePoint(command, deadline);
+        // WDA's full source can block while XCTest is rebuilding the
+        // accessibility tree after an app handoff. Condition polling only
+        // needs bounded labels, roles, and bounds; use the lightweight iOS
+        // source here and keep element queries as the precise fallback.
+        point = await _resolvePoint(
+          command,
+          deadline,
+          stabilitySnapshot: _isIos,
+        );
       } on StateError catch (error) {
         lastObservationError = error;
         await _delay(_boundedDelay(deadline, 150));
@@ -1233,8 +1241,9 @@ final class CockpitSystemTestAutomationAdapter
 
   Future<_ResolvedPoint> _resolvePoint(
     CockpitCommand command,
-    DateTime deadline,
-  ) async {
+    DateTime deadline, {
+    bool stabilitySnapshot = false,
+  }) async {
     final locator = _locator(command);
     if (locator == null) {
       return _ResolvedPoint.error(
@@ -1329,7 +1338,10 @@ final class CockpitSystemTestAutomationAdapter
           artifactSourcePaths: sourcePaths,
         );
       }
-      snapshot ??= await _readSnapshot(deadline);
+      snapshot ??= await _readSnapshot(
+        deadline,
+        stabilitySnapshot: stabilitySnapshot,
+      );
       final resolution = snapshot.resolveSingle(
         candidate,
         flutterAware: _flutterAwareNative,
@@ -1370,7 +1382,10 @@ final class CockpitSystemTestAutomationAdapter
       );
     }
     if (_isIos) {
-      snapshot ??= await _readSnapshot(deadline);
+      snapshot ??= await _readSnapshot(
+        deadline,
+        stabilitySnapshot: stabilitySnapshot,
+      );
       // WDA's foreground source endpoint is the authoritative first read, but
       // some WDA/XCTest combinations briefly expose a stale or incomplete
       // foreground tree while a Flutter route is settling. The session source
@@ -1378,7 +1393,11 @@ final class CockpitSystemTestAutomationAdapter
       // it before issuing slower native element queries or reporting a miss.
       CockpitNativeUiSnapshot? sessionSnapshot;
       try {
-        sessionSnapshot = await _readSnapshot(deadline, source: 'session');
+        sessionSnapshot = await _readSnapshot(
+          deadline,
+          stabilitySnapshot: stabilitySnapshot,
+          source: 'session',
+        );
       } on Object {
         // The root source is supported by the current WDA contract. Older
         // agents may not expose the session fallback; continue to the native
