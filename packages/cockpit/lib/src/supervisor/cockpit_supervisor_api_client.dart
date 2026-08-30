@@ -819,8 +819,9 @@ final class CockpitSupervisorApiClient {
     }
   }
 
-  Future<_CockpitSupervisorSession> _ensureSession() async {
-    final discovery = await lifecycle.ensure(timeout: _requestTimeout);
+  Future<_CockpitSupervisorSession> _ensureSession({Duration? timeout}) async {
+    final effectiveTimeout = timeout ?? _requestTimeout;
+    final discovery = await lifecycle.ensure(timeout: effectiveTimeout);
     final cached = _session;
     if (cached != null && cached.discovery.instanceId == discovery.instanceId) {
       return cached;
@@ -833,7 +834,13 @@ final class CockpitSupervisorApiClient {
         featureIds: const <String>[],
       ),
     );
-    final raw = await _jsonRequest(provisional, 'GET', '/api/v2/server');
+    final raw = await _jsonRequest(
+      provisional,
+      'GET',
+      '/api/v2/server',
+      requestTimeout: effectiveTimeout,
+      allowHandoffRetry: false,
+    );
     final server = CockpitServerInfo.fromJson(
       raw,
       decodePolicy: CockpitDecodePolicy.strictResponses,
@@ -877,9 +884,11 @@ final class CockpitSupervisorApiClient {
     String path, {
     Object? body,
     Duration? requestTimeout,
+    bool allowHandoffRetry = true,
   }) async {
     final effectiveTimeout = requestTimeout ?? _requestTimeout;
     _validateRequestTimeout(effectiveTimeout);
+    final deadline = DateTime.now().toUtc().add(effectiveTimeout);
     final client = _httpClientFactory();
     client.connectionTimeout = effectiveTimeout;
     try {
@@ -918,6 +927,20 @@ final class CockpitSupervisorApiClient {
         apiError: error.error,
       );
     } on Object catch (error) {
+      if (allowHandoffRetry &&
+          method == 'GET' &&
+          _isHandoffTransportError(error)) {
+        _session = null;
+        final refreshed = await _ensureSessionAfterHandoff(deadline);
+        return _jsonRequest(
+          refreshed,
+          method,
+          path,
+          body: body,
+          requestTimeout: _remainingRequestTime(deadline, method, path),
+          allowHandoffRetry: false,
+        );
+      }
       throw CockpitSupervisorClientException(
         code: CockpitErrorCode.transportFailed,
         message: 'Supervisor request failed: $error',
@@ -926,6 +949,35 @@ final class CockpitSupervisorApiClient {
       client.close(force: true);
     }
   }
+
+  Future<_CockpitSupervisorSession> _ensureSessionAfterHandoff(
+    DateTime deadline,
+  ) async {
+    Object? lastError;
+    while (true) {
+      final remaining = deadline.difference(DateTime.now().toUtc());
+      if (remaining <= Duration.zero) {
+        if (lastError != null) throw lastError;
+        throw _requestTimedOut('GET', '/_cockpit/health');
+      }
+      try {
+        return await _ensureSession(timeout: remaining);
+      } on CockpitDaemonException catch (error) {
+        if (error.code != 'activeDaemonUnhealthy') rethrow;
+        lastError = error;
+      }
+      final delay = deadline.difference(DateTime.now().toUtc());
+      if (delay <= Duration.zero) continue;
+      await Future<void>.delayed(
+        delay < const Duration(milliseconds: 50)
+            ? delay
+            : const Duration(milliseconds: 50),
+      );
+    }
+  }
+
+  bool _isHandoffTransportError(Object error) =>
+      error is HttpException || error is SocketException;
 
   void _authorize(
     HttpClientRequest request,

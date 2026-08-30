@@ -67,12 +67,22 @@ void main() {
     expect(payload, <String, Object?>{'x': 120, 'y': 240});
   });
 
-  test('readUiTree uses the complete WDA source by default', () async {
+  test('readUiTree uses foreground JSON source by default', () async {
     final requests = <http.Request>[];
     final client = clientWithSession((request) async {
       requests.add(request);
       return http.Response(
-        jsonEncode(<String, Object?>{'value': '<App />'}),
+        jsonEncode(<String, Object?>{
+          'value': <String, Object?>{
+            'type': 'Application',
+            'rect': <String, Object?>{
+              'x': 0,
+              'y': 0,
+              'width': 402,
+              'height': 874,
+            },
+          },
+        }),
         200,
       );
     });
@@ -85,9 +95,14 @@ void main() {
       timeout: const Duration(seconds: 2),
     );
 
-    expect(result, '<App />');
-    expect(requests.single.url.path, '/session/session-1/source');
-    expect(requests.single.url.queryParameters, isEmpty);
+    expect(jsonDecode(result), <String, Object?>{
+      'type': 'Application',
+      'rect': <String, Object?>{'x': 0, 'y': 0, 'width': 402, 'height': 874},
+    });
+    expect(requests.single.url.path, '/source');
+    expect(requests.single.url.queryParameters, <String, String>{
+      'format': 'json',
+    });
   });
 
   test(
@@ -181,8 +196,9 @@ void main() {
 
     expect(result, '<App />');
     expect(requests, hasLength(2));
-    expect(requests.last.url.path, '/wda/session/session-1/source');
+    expect(requests.last.url.path, '/wda/source');
     expect(requests.last.url.queryParameters, <String, String>{
+      'format': 'json',
       'excluded_attributes': 'visible,accessible',
     });
     expect(requests.last.url.queryParameters, isNot(contains('stale')));

@@ -377,15 +377,22 @@ final class CockpitIosWebDriverAgentClient {
           }, timeout: timeout);
           return 'setOrientation orientation=$orientation';
         case CockpitIosWdaAction.readUiTree:
-          final response = await _getSession(
+          // Read the foreground application directly instead of the session's
+          // cached activeApplication. WDA sessions can retain a snapshot from
+          // a previous app after simctl activation; the root source endpoint
+          // resolves XCUIApplication.fb_activeApplication on every request.
+          // JSON source also preserves geometry and the normalized WDA state
+          // attributes that Flutter's UIKit accessibility bridge exposes.
+          final response = await _getRoot(
             client,
-            session,
+            session.baseUri,
             'source',
             queryParameters: command.stabilitySnapshot
                 ? const <String, String>{
+                    'format': 'json',
                     'excluded_attributes': 'visible,accessible',
                   }
-                : const <String, String>{},
+                : const <String, String>{'format': 'json'},
             timeout: timeout,
           );
           final decoded = _decodeObject(response.body);
@@ -663,6 +670,20 @@ final class CockpitIosWebDriverAgentClient {
         )
         .timeout(timeout);
     _ensureSuccess(response, 'run WebDriverAgent $path');
+    return response;
+  }
+
+  Future<http.Response> _getRoot(
+    http.Client client,
+    Uri baseUri,
+    String path, {
+    Map<String, String> queryParameters = const <String, String>{},
+    required Duration timeout,
+  }) async {
+    final response = await client
+        .get(_resolve(baseUri, '/$path', queryParameters: queryParameters))
+        .timeout(timeout);
+    _ensureSuccess(response, 'read WebDriverAgent $path');
     return response;
   }
 

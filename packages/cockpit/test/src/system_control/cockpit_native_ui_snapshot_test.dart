@@ -237,4 +237,37 @@ void main() {
     expect(result.node?.nativeIds, contains('save-button'));
     expect(result.node?.types, contains('Button'));
   });
+
+  test('parses a root WebDriverAgent JSON source tree', () {
+    final wda = CockpitNativeUiSnapshot.parse('''
+{
+  "type": "Application",
+  "rawIdentifier": "com.example.app",
+  "isVisible": true,
+  "isEnabled": true,
+  "rect": {"x": 0, "y": 0, "width": 402, "height": 874},
+  "children": [
+    {
+      "type": "Button",
+      "name": "New task",
+      "label": "New task",
+      "isVisible": true,
+      "isEnabled": true,
+      "rect": {"x": 233, "y": 75, "width": 117, "height": 48}
+    }
+  ]
+}
+''');
+
+    final result = wda.resolve(
+      CockpitTestLocator(text: 'New task'),
+      flutterAware: true,
+    );
+
+    expect(result.found, isTrue);
+    expect(result.centerX, 292);
+    expect(result.centerY, 99);
+    expect(result.node?.state('enabled'), isTrue);
+    expect(result.node?.nativeIds, contains('New task'));
+  });
 }
