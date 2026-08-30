@@ -1416,6 +1416,9 @@ final class CockpitSystemTestAutomationAdapter
               parameters: <String, Object?>{
                 'using': query.using,
                 'value': query.value,
+                if (_target.appId case final appId?
+                    when appId.trim().isNotEmpty)
+                  'bundleId': appId.trim(),
               },
             ),
             timeout: _remaining(deadline),
