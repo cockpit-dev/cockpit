@@ -1481,10 +1481,35 @@ final class CockpitSystemTestAutomationAdapter
         'label == "$escaped" OR name == "$escaped" OR '
             'value == "$escaped" OR title == "$escaped"',
     };
+    final xpathValue = _iosXPathLiteral(value);
+    final xpath = switch (strategy) {
+      CockpitTestLocatorStrategy.nativeId ||
+      CockpitTestLocatorStrategy.testId =>
+        '//*[@identifier=$xpathValue or @name=$xpathValue]',
+      _ =>
+        '//*[@label=$xpathValue or @name=$xpathValue or '
+            '@value=$xpathValue or @title=$xpathValue]',
+    };
     return <({String using, String value})>[
       (using: 'accessibility id', value: value),
       (using: '-ios predicate string', value: predicate),
+      // Flutter's UIKit accessibility bridge can expose a node in WDA's XML
+      // source while omitting the attributes used by predicate lookup. XPath
+      // is a deterministic source-level fallback for that mixed-plane case.
+      (using: 'xpath', value: xpath),
     ];
+  }
+
+  String _iosXPathLiteral(String value) {
+    if (!value.contains('"')) return '"$value"';
+    if (!value.contains("'")) return "'$value'";
+    final parts = value.split('"');
+    final expressions = <String>[];
+    for (var index = 0; index < parts.length; index += 1) {
+      if (parts[index].isNotEmpty) expressions.add('"${parts[index]}"');
+      if (index < parts.length - 1) expressions.add("'\"'");
+    }
+    return 'concat(${expressions.join(',')})';
   }
 
   Future<Uri?> _resolveIosWdaBaseUri(DateTime deadline) async {
