@@ -2,6 +2,8 @@
 
 ## 4.0.49
 
+- Corrected failed and timed-out step reports to preserve each node's effective
+  requested plane instead of falling back to the case default.
 - Fixed iOS native locator recovery so an already foreground Flutter app is
   queried before any WDA activation, with one target activation retry only
   after the native tree has been exhausted.
