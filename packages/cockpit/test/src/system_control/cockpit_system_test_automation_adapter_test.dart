@@ -278,6 +278,10 @@ void main() {
         required Duration timeout,
       }) async {
         commands.add(command);
+        if (command.action == CockpitIosWdaAction.resolveElement &&
+            command.parameters['using'] == 'accessibility id') {
+          throw StateError('accessibility id is not exposed by this tree');
+        }
         return switch (command.action) {
           CockpitIosWdaAction.readUiTree => _iosVisualViewportTree,
           CockpitIosWdaAction.resolveElement => jsonEncode(<String, Object?>{
@@ -326,6 +330,14 @@ void main() {
       expect(
         commands.any(
           (command) => command.action == CockpitIosWdaAction.resolveElement,
+        ),
+        isTrue,
+      );
+      expect(
+        commands.any(
+          (command) =>
+              command.action == CockpitIosWdaAction.resolveElement &&
+              command.parameters['using'] == '-ios predicate string',
         ),
         isTrue,
       );
