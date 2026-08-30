@@ -1397,80 +1397,87 @@ final class CockpitSystemTestAutomationAdapter
   ) async {
     final baseUri = await _resolveIosWdaBaseUri(deadline);
     if (baseUri == null) return null;
-    var activateTarget = true;
     var attemptedQuery = false;
-    for (final candidate in locator.flattened) {
-      final strategy = candidate.strategy;
-      if (strategy != CockpitTestLocatorStrategy.label &&
-          strategy != CockpitTestLocatorStrategy.text &&
-          strategy != CockpitTestLocatorStrategy.nativeId &&
-          strategy != CockpitTestLocatorStrategy.testId) {
-        continue;
-      }
-      final value = candidate.value;
-      if (value == null || value.trim().isEmpty) continue;
-      for (final query in _iosWdaElementQueries(strategy, value)) {
-        try {
-          final shouldActivateTarget = activateTarget;
-          activateTarget = false;
-          attemptedQuery = true;
-          final raw = await _iosWdaRunner(
-            CockpitIosWdaCommand(
-              baseUri: baseUri,
-              action: CockpitIosWdaAction.resolveElement,
-              parameters: <String, Object?>{
-                'using': query.using,
-                'value': query.value,
-                if (_target.appId case final appId?
-                    when appId.trim().isNotEmpty)
-                  'bundleId': appId.trim(),
-                if (shouldActivateTarget) 'activate': true,
-              },
-            ),
-            timeout: _remaining(deadline),
-          );
-          final decoded = jsonDecode(raw);
-          if (decoded is! Map<Object?, Object?>) continue;
-          final x = (decoded['x'] as num?)?.toDouble();
-          final y = (decoded['y'] as num?)?.toDouble();
-          final width = (decoded['width'] as num?)?.toDouble();
-          final height = (decoded['height'] as num?)?.toDouble();
-          if (x == null ||
-              y == null ||
-              width == null ||
-              height == null ||
-              width <= 0 ||
-              height <= 0) {
+    final activationPasses = <bool>[
+      false,
+      if (_target.appId case final appId? when appId.trim().isNotEmpty) true,
+    ];
+    for (final activate in activationPasses) {
+      var activateTarget = activate;
+      for (final candidate in locator.flattened) {
+        final strategy = candidate.strategy;
+        if (strategy != CockpitTestLocatorStrategy.label &&
+            strategy != CockpitTestLocatorStrategy.text &&
+            strategy != CockpitTestLocatorStrategy.nativeId &&
+            strategy != CockpitTestLocatorStrategy.testId) {
+          continue;
+        }
+        final value = candidate.value;
+        if (value == null || value.trim().isEmpty) continue;
+        for (final query in _iosWdaElementQueries(strategy, value)) {
+          try {
+            final shouldActivateTarget = activateTarget;
+            activateTarget = false;
+            attemptedQuery = true;
+            final raw = await _iosWdaRunner(
+              CockpitIosWdaCommand(
+                baseUri: baseUri,
+                action: CockpitIosWdaAction.resolveElement,
+                parameters: <String, Object?>{
+                  'using': query.using,
+                  'value': query.value,
+                  if (_target.appId case final appId?
+                      when appId.trim().isNotEmpty)
+                    'bundleId': appId.trim(),
+                  if (shouldActivateTarget) 'activate': true,
+                },
+              ),
+              timeout: _remaining(deadline),
+            );
+            final decoded = jsonDecode(raw);
+            if (decoded is! Map<Object?, Object?>) continue;
+            final x = (decoded['x'] as num?)?.toDouble();
+            final y = (decoded['y'] as num?)?.toDouble();
+            final width = (decoded['width'] as num?)?.toDouble();
+            final height = (decoded['height'] as num?)?.toDouble();
+            if (x == null ||
+                y == null ||
+                width == null ||
+                height == null ||
+                width <= 0 ||
+                height <= 0) {
+              continue;
+            }
+            final matchedKind = switch (strategy) {
+              CockpitTestLocatorStrategy.label => CockpitLocatorKind.tooltip,
+              CockpitTestLocatorStrategy.text => CockpitLocatorKind.text,
+              CockpitTestLocatorStrategy.nativeId =>
+                CockpitLocatorKind.nativeId,
+              CockpitTestLocatorStrategy.testId => CockpitLocatorKind.testId,
+              _ => null,
+            };
+            if (matchedKind == null) continue;
+            return _ResolvedPoint(
+              x: (x + width / 2).round(),
+              y: (y + height / 2).round(),
+              viewportWidth: snapshot.viewportWidth,
+              viewportHeight: snapshot.viewportHeight,
+              resolution: CockpitLocatorResolution(
+                matchedKind: matchedKind,
+                matchedValue: value,
+                matchedSignals: <String, String>{
+                  'adapter': 'iosWdaElement',
+                  'using': query.using,
+                },
+              ),
+            );
+          } on TimeoutException {
+            rethrow;
+          } on Object {
+            // WDA uses a failed element lookup for a non-matching query. Try
+            // the next strategy while preserving the command deadline.
             continue;
           }
-          final matchedKind = switch (strategy) {
-            CockpitTestLocatorStrategy.label => CockpitLocatorKind.tooltip,
-            CockpitTestLocatorStrategy.text => CockpitLocatorKind.text,
-            CockpitTestLocatorStrategy.nativeId => CockpitLocatorKind.nativeId,
-            CockpitTestLocatorStrategy.testId => CockpitLocatorKind.testId,
-            _ => null,
-          };
-          if (matchedKind == null) continue;
-          return _ResolvedPoint(
-            x: (x + width / 2).round(),
-            y: (y + height / 2).round(),
-            viewportWidth: snapshot.viewportWidth,
-            viewportHeight: snapshot.viewportHeight,
-            resolution: CockpitLocatorResolution(
-              matchedKind: matchedKind,
-              matchedValue: value,
-              matchedSignals: <String, String>{
-                'adapter': 'iosWdaElement',
-                'using': query.using,
-              },
-            ),
-          );
-        } on TimeoutException {
-          rethrow;
-        } on Object {
-          // WDA uses a failed element lookup for a non-matching query. Try
-          // the next strategy while preserving the command deadline.
-          continue;
         }
       }
     }
