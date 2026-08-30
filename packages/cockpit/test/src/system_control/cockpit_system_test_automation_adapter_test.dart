@@ -584,6 +584,86 @@ void main() {
   );
 
   test(
+    'iOS native condition waits refresh without activating the foreground app',
+    () async {
+      final commands = <CockpitIosWdaCommand>[];
+      var sourceReads = 0;
+      final controls = CockpitSystemControlService(
+        iosWdaEndpointProbe: (baseUri, {required timeout}) async => true,
+      );
+      Future<String> runner(
+        CockpitIosWdaCommand command, {
+        required Duration timeout,
+      }) async {
+        commands.add(command);
+        if (command.action == CockpitIosWdaAction.readUiTree) {
+          sourceReads += 1;
+          return sourceReads >= 3 ? _iosNewTaskTree : _iosVisualViewportTree;
+        }
+        if (command.action == CockpitIosWdaAction.resolveElement) {
+          if (command.parameters['activate'] == true) {
+            throw TimeoutException('activation must not be used by a wait');
+          }
+          throw StateError('target is not in the current source yet');
+        }
+        return 'ok';
+      }
+
+      final adapter = CockpitSystemTestAutomationAdapter(
+        target: CockpitSystemTestTarget(
+          platform: 'ios',
+          deviceId: 'D3884373-E926-49AF-92E6-7A241C50B64C',
+          appId: 'dev.cockpit.demo',
+          metadata: const <String, Object?>{
+            'wdaUrl': 'http://127.0.0.1:8100',
+            'wdaReachable': true,
+          },
+        ),
+        controlService: controls,
+        actionService: CockpitSystemControlActionService(
+          systemControlService: controls,
+          iosWdaRunner: runner,
+        ),
+        iosWdaRunner: runner,
+        workspaceRoot: Directory.current.path,
+        delay: (_) async {},
+      );
+
+      final execution = await adapter.execute(
+        CockpitCommand(
+          commandId: 'wait-for-ios-native-target-after-refresh',
+          commandType: CockpitCommandType.waitFor,
+          parameters: const <String, Object?>{
+            'cockpitTestLocator': <String, Object?>{'label': 'New task'},
+          },
+          timeoutMs: 1000,
+        ),
+      );
+
+      expect(execution.result.success, isTrue);
+      expect(
+        commands.where(
+          (command) => command.action == CockpitIosWdaAction.resolveElement,
+        ),
+        isNotEmpty,
+      );
+      expect(
+        commands.any(
+          (command) =>
+              command.action == CockpitIosWdaAction.resolveElement &&
+              command.parameters['activate'] == true,
+        ),
+        isFalse,
+      );
+      final treeReads = commands
+          .where((command) => command.action == CockpitIosWdaAction.readUiTree)
+          .toList(growable: false);
+      expect(treeReads, hasLength(3));
+      expect(treeReads.every((command) => command.stabilitySnapshot), isTrue);
+    },
+  );
+
+  test(
     'iOS repeated and focus taps use stable resolved WDA coordinates',
     () async {
       final commands = <CockpitIosWdaCommand>[];

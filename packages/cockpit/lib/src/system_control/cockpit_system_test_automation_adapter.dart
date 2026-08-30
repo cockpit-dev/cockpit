@@ -1435,6 +1435,8 @@ final class CockpitSystemTestAutomationAdapter
         locator,
         snapshot,
         deadline,
+        allowActivation: !stabilitySnapshot,
+        stabilitySnapshot: stabilitySnapshot,
       );
       if (resolved != null) return resolved;
     }
@@ -1464,14 +1466,17 @@ final class CockpitSystemTestAutomationAdapter
   Future<_ResolvedPoint?> _resolveIosAccessibilityElement(
     CockpitTestLocator locator,
     CockpitNativeUiSnapshot snapshot,
-    DateTime deadline,
-  ) async {
+    DateTime deadline, {
+    bool allowActivation = true,
+    bool stabilitySnapshot = false,
+  }) async {
     final baseUri = await _resolveIosWdaBaseUri(deadline);
     if (baseUri == null) return null;
     var attemptedQuery = false;
     final activationPasses = <bool>[
       false,
-      if (_target.appId case final appId? when appId.trim().isNotEmpty) true,
+      if (allowActivation)
+        if (_target.appId case final appId? when appId.trim().isNotEmpty) true,
     ];
     for (final activate in activationPasses) {
       var activateTarget = activate;
@@ -1486,6 +1491,12 @@ final class CockpitSystemTestAutomationAdapter
         final value = candidate.value;
         if (value == null || value.trim().isEmpty) continue;
         for (final query in _iosWdaElementQueries(strategy, value)) {
+          final remaining = _remaining(deadline);
+          final queryTimeout = allowActivation
+              ? remaining
+              : remaining < const Duration(seconds: 1)
+              ? remaining
+              : const Duration(seconds: 1);
           try {
             final shouldActivateTarget = activateTarget;
             activateTarget = false;
@@ -1503,7 +1514,7 @@ final class CockpitSystemTestAutomationAdapter
                   if (shouldActivateTarget) 'activate': true,
                 },
               ),
-              timeout: _remaining(deadline),
+              timeout: queryTimeout,
             );
             final decoded = jsonDecode(raw);
             if (decoded is! Map<Object?, Object?>) continue;
@@ -1543,7 +1554,11 @@ final class CockpitSystemTestAutomationAdapter
               ),
             );
           } on TimeoutException {
-            rethrow;
+            // A condition probe must remain responsive while XCTest is
+            // rebuilding its accessibility tree. A slow native lookup is a
+            // miss for this probe; the outer wait loop will sample again.
+            if (allowActivation) rethrow;
+            continue;
           } on Object {
             // WDA uses a failed element lookup for a non-matching query. Try
             // the next strategy while preserving the command deadline.
@@ -1557,7 +1572,10 @@ final class CockpitSystemTestAutomationAdapter
       // the initial snapshot was read. Re-read the source once and resolve
       // its exact bounds before reporting a miss; this remains source-based,
       // not a coordinate or OCR guess.
-      final refreshed = await _readSnapshot(deadline);
+      final refreshed = await _readSnapshot(
+        deadline,
+        stabilitySnapshot: stabilitySnapshot,
+      );
       for (final candidate in locator.flattened) {
         if (candidate.strategy == CockpitTestLocatorStrategy.visual) continue;
         final resolution = refreshed.resolveSingle(
