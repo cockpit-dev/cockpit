@@ -11,6 +11,7 @@ const String cockpitIosWdaCommandExecutable =
     '__flutter_cockpit_ios_webdriver_agent';
 const String cockpitIosUiStabilitySnapshotMetadataKey =
     'cockpit.ios.uiStabilitySnapshot';
+const String cockpitIosUiSourceMetadataKey = 'cockpit.ios.uiSource';
 
 typedef CockpitIosWdaHttpClientFactory = http.Client Function();
 typedef CockpitIosWdaEndpointProbe =
@@ -377,24 +378,33 @@ final class CockpitIosWebDriverAgentClient {
           }, timeout: timeout);
           return 'setOrientation orientation=$orientation';
         case CockpitIosWdaAction.readUiTree:
-          // Read the foreground application directly instead of the session's
-          // cached activeApplication. WDA sessions can retain a snapshot from
-          // a previous app after simctl activation; the root source endpoint
-          // resolves XCUIApplication.fb_activeApplication on every request.
-          // JSON source also preserves geometry and the normalized WDA state
-          // attributes that Flutter's UIKit accessibility bridge exposes.
-          final response = await _getRoot(
-            client,
-            session.baseUri,
-            'source',
-            queryParameters: command.stabilitySnapshot
-                ? const <String, String>{
-                    'format': 'json',
-                    'excluded_attributes': 'visible,accessible',
-                  }
-                : const <String, String>{'format': 'json'},
-            timeout: timeout,
-          );
+          // Prefer the foreground source so a session that survived a
+          // simulator app switch cannot expose a previous application's tree.
+          // Callers resolving a target may explicitly request the session
+          // source as a bounded fallback: older WDA builds can briefly lag the
+          // foreground snapshot endpoint during Flutter route transitions.
+          final queryParameters = command.stabilitySnapshot
+              ? const <String, String>{
+                  'format': 'json',
+                  'excluded_attributes': 'visible,accessible',
+                }
+              : const <String, String>{'format': 'json'};
+          final source = command.parameters['source'];
+          final response = source == 'session'
+              ? await _getSession(
+                  client,
+                  session,
+                  'source',
+                  queryParameters: queryParameters,
+                  timeout: timeout,
+                )
+              : await _getRoot(
+                  client,
+                  session.baseUri,
+                  'source',
+                  queryParameters: queryParameters,
+                  timeout: timeout,
+                );
           final decoded = _decodeObject(response.body);
           final value = decoded['value'];
           return value is String ? value : jsonEncode(value);

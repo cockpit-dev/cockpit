@@ -1698,6 +1698,16 @@ final class CockpitIosSystemControlAdapter
             'This iOS native action requires a reachable WebDriverAgent endpoint.',
       );
     }
+    final parameters = <String, Object?>{...request.parameters};
+    final source = request.metadata[cockpitIosUiSourceMetadataKey];
+    if (action == CockpitIosWdaAction.readUiTree &&
+        source is String &&
+        source.isNotEmpty) {
+      // Keep source selection internal to the adapter. It is not a public
+      // readUiTree payload field and therefore remains outside action schema
+      // validation while still reaching the WDA command runner.
+      parameters['source'] = source;
+    }
     return CockpitIosWebDriverAgentClient.resolvedCommand(
       CockpitIosWdaCommand(
         baseUri: baseUri,
@@ -1705,7 +1715,7 @@ final class CockpitIosSystemControlAdapter
         stabilitySnapshot:
             action == CockpitIosWdaAction.readUiTree &&
             request.metadata[cockpitIosUiStabilitySnapshotMetadataKey] == true,
-        parameters: request.parameters,
+        parameters: parameters,
       ),
     );
   }
