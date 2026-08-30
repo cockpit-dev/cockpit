@@ -26,6 +26,7 @@ final class CockpitSystemTestAutomationAdapter
     Future<void> Function(Duration)? delay,
     CockpitVisualMatcher? visualMatcher,
     CockpitMacosAccessibilityElementPresser? macosAccessibilityElementPresser,
+    CockpitIosWdaRunner? iosWdaRunner,
   }) : _target = target,
        _controlService = controlService,
        _actionService = actionService,
@@ -34,6 +35,7 @@ final class CockpitSystemTestAutomationAdapter
        _macosAccessibilityElementPresser =
            macosAccessibilityElementPresser ??
            cockpitPressMacosAccessibilityElement,
+       _iosWdaRunner = iosWdaRunner ?? CockpitIosWebDriverAgentClient().run,
        _utcNow = utcNow ?? (() => DateTime.now().toUtc()),
        _delay = delay ?? Future<void>.delayed;
 
@@ -43,6 +45,7 @@ final class CockpitSystemTestAutomationAdapter
   final CockpitVisualMatcher _visualMatcher;
   final CockpitMacosAccessibilityElementPresser
   _macosAccessibilityElementPresser;
+  final CockpitIosWdaRunner _iosWdaRunner;
   final DateTime Function() _utcNow;
   final Future<void> Function(Duration) _delay;
 
@@ -1364,6 +1367,15 @@ final class CockpitSystemTestAutomationAdapter
         artifactSourcePaths: sourcePaths,
       );
     }
+    if (_isIos) {
+      snapshot ??= await _readSnapshot(deadline);
+      final resolved = await _resolveIosAccessibilityElement(
+        locator,
+        snapshot,
+        deadline,
+      );
+      if (resolved != null) return resolved;
+    }
     return _ResolvedPoint.error(
       CockpitCommandError.targetNotFound(
         message: 'No locator candidate matched the current application UI.',
@@ -1376,6 +1388,112 @@ final class CockpitSystemTestAutomationAdapter
       viewportWidth: visualViewportWidth ?? snapshot?.viewportWidth,
       viewportHeight: visualViewportHeight ?? snapshot?.viewportHeight,
     );
+  }
+
+  Future<_ResolvedPoint?> _resolveIosAccessibilityElement(
+    CockpitTestLocator locator,
+    CockpitNativeUiSnapshot snapshot,
+    DateTime deadline,
+  ) async {
+    final baseUri = await _resolveIosWdaBaseUri(deadline);
+    if (baseUri == null) return null;
+    for (final candidate in locator.flattened) {
+      final strategy = candidate.strategy;
+      if (strategy != CockpitTestLocatorStrategy.label &&
+          strategy != CockpitTestLocatorStrategy.text &&
+          strategy != CockpitTestLocatorStrategy.nativeId &&
+          strategy != CockpitTestLocatorStrategy.testId) {
+        continue;
+      }
+      final value = candidate.value;
+      if (value == null || value.trim().isEmpty) continue;
+      try {
+        final raw = await _iosWdaRunner(
+          CockpitIosWdaCommand(
+            baseUri: baseUri,
+            action: CockpitIosWdaAction.resolveElement,
+            parameters: <String, Object?>{
+              'using': 'accessibility id',
+              'value': value,
+            },
+          ),
+          timeout: _remaining(deadline),
+        );
+        final decoded = jsonDecode(raw);
+        if (decoded is! Map<Object?, Object?>) continue;
+        final x = (decoded['x'] as num?)?.toDouble();
+        final y = (decoded['y'] as num?)?.toDouble();
+        final width = (decoded['width'] as num?)?.toDouble();
+        final height = (decoded['height'] as num?)?.toDouble();
+        if (x == null ||
+            y == null ||
+            width == null ||
+            height == null ||
+            width <= 0 ||
+            height <= 0) {
+          continue;
+        }
+        final matchedKind = switch (strategy) {
+          CockpitTestLocatorStrategy.label => CockpitLocatorKind.tooltip,
+          CockpitTestLocatorStrategy.text => CockpitLocatorKind.text,
+          CockpitTestLocatorStrategy.nativeId => CockpitLocatorKind.nativeId,
+          CockpitTestLocatorStrategy.testId => CockpitLocatorKind.testId,
+          _ => null,
+        };
+        if (matchedKind == null) continue;
+        return _ResolvedPoint(
+          x: (x + width / 2).round(),
+          y: (y + height / 2).round(),
+          viewportWidth: snapshot.viewportWidth,
+          viewportHeight: snapshot.viewportHeight,
+          resolution: CockpitLocatorResolution(
+            matchedKind: matchedKind,
+            matchedValue: value,
+            matchedSignals: <String, String>{
+              'adapter': 'iosWdaElement',
+              'using': 'accessibility id',
+            },
+          ),
+        );
+      } on TimeoutException {
+        rethrow;
+      } on Object {
+        // WDA uses a failed element lookup for a non-matching candidate. Try
+        // the next authored fallback while preserving the command deadline.
+        continue;
+      }
+    }
+    return null;
+  }
+
+  Future<Uri?> _resolveIosWdaBaseUri(DateTime deadline) async {
+    final explicit = _target.metadata['wdaUrl'];
+    if (explicit is String && explicit.trim().isNotEmpty) {
+      final uri = Uri.tryParse(explicit.trim());
+      if (uri != null && uri.hasScheme && uri.host.isNotEmpty) return uri;
+    }
+    try {
+      final description = await _controlService
+          .describe(
+            CockpitSystemControlDescribeRequest(
+              platform: _target.platform,
+              deviceId: _target.deviceId,
+              appId: _target.appId,
+              processId: _target.processId,
+              metadata: _target.metadata,
+            ),
+          )
+          .timeout(_remaining(deadline));
+      final discovered = description.metadata['wdaUrl'];
+      if (discovered is! String || discovered.trim().isEmpty) return null;
+      final uri = Uri.tryParse(discovered.trim());
+      if (uri == null || !uri.hasScheme || uri.host.isEmpty) return null;
+      return uri;
+    } on TimeoutException {
+      rethrow;
+    } on Object {
+      return null;
+    }
   }
 
   Future<_ResolvedPoint> _resolveStablePoint(

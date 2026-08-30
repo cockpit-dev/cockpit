@@ -391,6 +391,55 @@ final class CockpitIosWebDriverAgentClient {
           final decoded = _decodeObject(response.body);
           final value = decoded['value'];
           return value is String ? value : jsonEncode(value);
+        case CockpitIosWdaAction.resolveElement:
+          final using = _requiredString(command.parameters, 'using');
+          final value = _requiredString(command.parameters, 'value');
+          final response = await _postSession(
+            client,
+            session,
+            'element',
+            <String, Object?>{'using': using, 'value': value},
+            timeout: timeout,
+          );
+          final elementId = _readElementId(response.body);
+          if (elementId == null) {
+            throw StateError(
+              'WebDriverAgent element lookup did not return an element id.',
+            );
+          }
+          final rect = await _getSession(
+            client,
+            session,
+            'element/$elementId/rect',
+            timeout: timeout,
+          );
+          final decodedRect = _decodeObject(rect.body);
+          final valueRect = decodedRect['value'];
+          if (valueRect is! Map<Object?, Object?>) {
+            throw StateError(
+              'WebDriverAgent element lookup did not return element bounds.',
+            );
+          }
+          final x = _readNumber(valueRect['x']);
+          final y = _readNumber(valueRect['y']);
+          final width = _readNumber(valueRect['width']);
+          final height = _readNumber(valueRect['height']);
+          if (x == null ||
+              y == null ||
+              width == null ||
+              height == null ||
+              width <= 0 ||
+              height <= 0) {
+            throw StateError(
+              'WebDriverAgent element lookup returned unusable bounds.',
+            );
+          }
+          return jsonEncode(<String, Object?>{
+            'x': x,
+            'y': y,
+            'width': width,
+            'height': height,
+          });
         case CockpitIosWdaAction.readDeviceInfo:
           final response = await _getSession(
             client,
@@ -655,6 +704,20 @@ final class CockpitIosWebDriverAgentClient {
       return decoded.cast<String, Object?>();
     }
     throw StateError('WebDriverAgent response was not a JSON object.');
+  }
+
+  String? _readElementId(String body) {
+    final decoded = _decodeObject(body);
+    final value = decoded['value'];
+    if (value is! Map<Object?, Object?>) return null;
+    for (final key in const <String>[
+      'element-6066-11e4-a52e-4f735466cecf',
+      'ELEMENT',
+    ]) {
+      final id = value[key];
+      if (id is String && id.trim().isNotEmpty) return id.trim();
+    }
+    return null;
   }
 
   void _ensureSuccess(http.Response response, String operation) {
@@ -1024,6 +1087,7 @@ enum CockpitIosWdaAction {
   terminateApp,
   setOrientation,
   readUiTree,
+  resolveElement,
   readDeviceInfo,
   readFocusState,
   expandNotifications,

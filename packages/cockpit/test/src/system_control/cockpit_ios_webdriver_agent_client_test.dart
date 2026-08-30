@@ -90,6 +90,67 @@ void main() {
     expect(requests.single.url.queryParameters, isEmpty);
   });
 
+  test(
+    'resolveElement uses WDA accessibility id and returns its rect',
+    () async {
+      final requests = <http.Request>[];
+      final client = clientWithSession((request) async {
+        requests.add(request);
+        if (request.url.path.endsWith('/element')) {
+          return http.Response(
+            jsonEncode(<String, Object?>{
+              'value': <String, Object?>{
+                'element-6066-11e4-a52e-4f735466cecf': 'element-1',
+              },
+            }),
+            200,
+          );
+        }
+        return http.Response(
+          jsonEncode(<String, Object?>{
+            'value': <String, Object?>{
+              'x': 10,
+              'y': 20,
+              'width': 100,
+              'height': 40,
+            },
+          }),
+          200,
+        );
+      });
+
+      final result = await CockpitIosWebDriverAgentClient(httpClient: client)
+          .run(
+            CockpitIosWdaCommand(
+              baseUri: baseUri,
+              action: CockpitIosWdaAction.resolveElement,
+              parameters: const <String, Object?>{
+                'using': 'accessibility id',
+                'value': 'New task',
+              },
+            ),
+            timeout: const Duration(seconds: 2),
+          );
+
+      expect(jsonDecode(result), <String, Object?>{
+        'x': 10,
+        'y': 20,
+        'width': 100,
+        'height': 40,
+      });
+      expect(requests, hasLength(2));
+      expect(requests.first.url.path, '/session/session-1/element');
+      expect(jsonDecode(requests.first.body), <String, Object?>{
+        'using': 'accessibility id',
+        'value': 'New task',
+      });
+      expect(
+        requests.last.url.path,
+        '/session/session-1/element/element-1/rect',
+      );
+    },
+  );
+
   test('stability snapshots exclude expensive WDA attributes', () async {
     final requests = <http.Request>[];
     final client = MockClient((request) async {
