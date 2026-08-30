@@ -1248,6 +1248,7 @@ final class CockpitSystemTestAutomationAdapter
     double? bestVisualSimilarity;
     int? visualViewportWidth;
     int? visualViewportHeight;
+    CockpitNativeUiResolution? ambiguousResolution;
     final artifacts = <CockpitArtifactRef>[];
     final sourcePaths = <String, String>{};
     for (final candidate in locator.flattened) {
@@ -1334,11 +1335,12 @@ final class CockpitSystemTestAutomationAdapter
         flutterAware: _flutterAwareNative,
       );
       if (resolution.ambiguous) {
-        return _ResolvedPoint.error(
-          _resolutionError(resolution)!,
-          artifacts: artifacts,
-          artifactSourcePaths: sourcePaths,
-        );
+        // A foreground WDA source can transiently contain duplicate semantic
+        // nodes while XCTest is switching routes. Keep the ambiguity as the
+        // final diagnostic, but continue through the same-app source and WDA
+        // element fallbacks before declaring that the target is unusable.
+        ambiguousResolution ??= resolution;
+        continue;
       }
       if (!resolution.found) continue;
       final x = resolution.centerX;
@@ -1416,6 +1418,15 @@ final class CockpitSystemTestAutomationAdapter
         deadline,
       );
       if (resolved != null) return resolved;
+    }
+    if (ambiguousResolution != null) {
+      return _ResolvedPoint.error(
+        _resolutionError(ambiguousResolution)!,
+        artifacts: artifacts,
+        artifactSourcePaths: sourcePaths,
+        viewportWidth: visualViewportWidth ?? snapshot?.viewportWidth,
+        viewportHeight: visualViewportHeight ?? snapshot?.viewportHeight,
+      );
     }
     return _ResolvedPoint.error(
       CockpitCommandError.targetNotFound(
