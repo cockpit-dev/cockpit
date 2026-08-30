@@ -337,7 +337,7 @@ void main() {
         commands.any(
           (command) =>
               command.action == CockpitIosWdaAction.resolveElement &&
-              command.parameters['using'] == '-ios predicate string',
+              command.parameters['using'] == 'predicate string',
         ),
         isTrue,
       );

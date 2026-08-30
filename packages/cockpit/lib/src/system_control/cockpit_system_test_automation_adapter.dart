@@ -1538,7 +1538,10 @@ final class CockpitSystemTestAutomationAdapter
     };
     return <({String using, String value})>[
       (using: 'accessibility id', value: value),
-      (using: '-ios predicate string', value: predicate),
+      // Cockpit talks to WebDriverAgent directly. The Appium-facing name
+      // "-ios predicate string" is translated by Appium Server, but WDA's
+      // native endpoint accepts the unprefixed "predicate string" strategy.
+      (using: 'predicate string', value: predicate),
       // Flutter's UIKit accessibility bridge can expose a node in WDA's XML
       // source while omitting the attributes used by predicate lookup. XPath
       // is a deterministic source-level fallback for that mixed-plane case.

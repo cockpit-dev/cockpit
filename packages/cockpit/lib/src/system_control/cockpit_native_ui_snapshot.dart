@@ -103,6 +103,12 @@ final class CockpitNativeUiSnapshot {
     }
     final tree = decoded['tree'];
     if (tree is Map<Object?, Object?>) roots.add(tree);
+    if (roots.isEmpty &&
+        (decoded.containsKey('type') ||
+            decoded.containsKey('role') ||
+            decoded.containsKey('controlType'))) {
+      roots.add(decoded);
+    }
     if (roots.isEmpty) {
       throw const FormatException('Native UI JSON contains no root nodes.');
     }
@@ -117,8 +123,9 @@ final class CockpitNativeUiSnapshot {
       final controlType = _jsonText(value['controlType']);
       final role = _jsonText(value['role']);
       final subrole = _jsonText(value['subrole']);
+      final type = _jsonText(value['type']);
       final elementName = _jsonElementName(
-        controlType ?? role ?? subrole ?? 'node',
+        controlType ?? role ?? subrole ?? type ?? 'node',
       );
       final elementIndex = siblingCounts.update(
         elementName,
@@ -141,6 +148,7 @@ final class CockpitNativeUiSnapshot {
       final name = _jsonText(value['name']);
       final description = _jsonText(value['description']);
       final automationId = _jsonText(value['automationId']);
+      final rawIdentifier = _jsonText(value['rawIdentifier']);
       final className = _jsonText(value['className']);
       if (title != null) {
         attributes.putIfAbsent('text', () => title);
@@ -160,9 +168,24 @@ final class CockpitNativeUiSnapshot {
         attributes.putIfAbsent('identifier', () => automationId);
         attributes.putIfAbsent('testid', () => automationId);
       }
+      if (rawIdentifier != null) {
+        attributes.putIfAbsent('identifier', () => rawIdentifier);
+        attributes.putIfAbsent('testid', () => rawIdentifier);
+      }
       if (className != null) attributes.putIfAbsent('class', () => className);
 
-      final frame = value['frame'];
+      for (final (source, target) in const <(String, String)>[
+        ('isVisible', 'visible'),
+        ('isEnabled', 'enabled'),
+        ('isAccessible', 'accessible'),
+        ('isFocused', 'focused'),
+        ('isNativeAccessibilityElement', 'nativeaccessibilityelement'),
+      ]) {
+        final scalar = _jsonScalar(value[source]);
+        if (scalar != null) attributes.putIfAbsent(target, () => scalar);
+      }
+
+      final frame = value['rect'] ?? value['frame'];
       if (frame is Map<Object?, Object?>) {
         for (final key in const <String>['x', 'y', 'width', 'height']) {
           final scalar = _jsonScalar(frame[key]);
