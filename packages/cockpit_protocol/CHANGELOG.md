@@ -10,6 +10,8 @@
   isolate-group memory points, and VM timeline recorder/stream metadata.
 - Added VM runtime identity, target/host CPU, architecture, process start, and
   isolate inventory metadata to the same validated DevTools projection.
+- Added bounded VM Service process-memory tree contracts with before/after
+  snapshots, child retention limits, and explicit dropped-child counts.
 
 ## 4.0.49
 

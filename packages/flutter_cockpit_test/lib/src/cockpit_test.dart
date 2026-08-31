@@ -311,6 +311,23 @@ final class CockpitTester {
                       'heap': performance.devTools!.heap!.classes.length,
                     if (performance.devTools!.gpu != null)
                       'gpu': performance.devTools!.gpu!.events,
+                    if (performance.devTools!.vmMemory != null)
+                      'vmem': <String, Object?>{
+                        if (performance.devTools!.vmMemory!.before != null)
+                          'before': performance
+                              .devTools!
+                              .vmMemory!
+                              .before!
+                              .root
+                              .sizeBytes,
+                        if (performance.devTools!.vmMemory!.after != null)
+                          'after': performance
+                              .devTools!
+                              .vmMemory!
+                              .after!
+                              .root
+                              .sizeBytes,
+                      },
                   },
               },
             )
@@ -325,6 +342,8 @@ final class CockpitTester {
   /// [sampleEvery] controls native RSS sampling frequency. [streams] and
   /// [timeline] control VM timeline collection, while [maxEvents] bounds
   /// retained VM events so long captures stay predictable in memory.
+  /// [vmMemory] collects the VM Service process-memory tree before and after
+  /// the action. It is independent from [memory], which samples platform RSS.
   /// Set [trackBuilds], [trackUserBuilds], [trackLayouts], or [trackPaints]
   /// only for diagnostic captures that need per-widget or per-render-object
   /// timeline spans. These flags add measurable tracing overhead and are
@@ -340,6 +359,7 @@ final class CockpitTester {
     List<String> streams = const <String>['all'],
     bool timeline = true,
     bool memory = true,
+    bool vmMemory = true,
     bool cpu = true,
     bool heap = true,
     Duration sampleEvery = const Duration(milliseconds: 100),
@@ -426,6 +446,7 @@ final class CockpitTester {
         cpu: cpu,
         heap: heap,
         timeline: timeline,
+        vmMemory: vmMemory,
         heapSampleEvery: sampleEvery,
       );
       dynamic timelineData;
@@ -480,6 +501,7 @@ final class CockpitTester {
           cpu: cpu,
           heap: heap,
           timeline: timeline,
+          vmMemory: vmMemory,
           events: parsed.events,
         );
         final memoryReport = memorySampler?.stop();

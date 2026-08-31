@@ -30,6 +30,9 @@ void main() {
     expect(html, contains('GPU / Shader signals'));
     expect(html, contains('VM runtime health'));
     expect(html, contains('heap-trend-chart'));
+    expect(html, contains('VM process memory'));
+    expect(html, contains('vm-memory-chart'));
+    expect(html, contains('data-details="vmMemory"'));
     expect(html, contains('Isolate health'));
     expect(html, contains('VM runtime'));
     expect(html, contains('Timeline streams'));
@@ -172,6 +175,10 @@ void main() {
     ]);
     expect(reports[0]['report']['devtools']['vm']['target'], 'arm64');
     expect(reports[0]['report']['devtools']['vm']['isolates'], 2);
+    expect(
+      reports[0]['report']['devtools']['vmem']['after']['root']['s'],
+      1280,
+    );
     expect(reports[1]['report']['events'][0]['a']['payload'], <Object?>[
       1,
       true,
@@ -441,6 +448,30 @@ CockpitPerformanceReport _report({required String step}) {
         'isolates': 2,
         'groups': 1,
         'sys': 1,
+      },
+      'vmem': <String, Object?>{
+        'before': <String, Object?>{
+          't': 0,
+          'root': <String, Object?>{
+            'n': 'Process',
+            's': 1024,
+            'c': <Object?>[
+              <String, Object?>{'n': 'Dart heap', 's': 768},
+              <String, Object?>{'n': 'Native', 's': 256},
+            ],
+          },
+        },
+        'after': <String, Object?>{
+          't': 100000,
+          'root': <String, Object?>{
+            'n': 'Process',
+            's': 1280,
+            'c': <Object?>[
+              <String, Object?>{'n': 'Dart heap', 's': 896},
+              <String, Object?>{'n': 'Native', 's': 384},
+            ],
+          },
+        },
       },
     },
   });

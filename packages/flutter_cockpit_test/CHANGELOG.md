@@ -18,6 +18,8 @@
   supported performance capture, with bounded HTML charts and detail dialogs.
 - Added VM runtime identity, target/host CPU, architecture, process start, and
   isolate inventory to the HTML runtime panel and full export.
+- Added bounded VM Service process-memory trees before and after each capture,
+  with compact JSON, coverage status, comparison chart, and detail export.
 - Added `CockpitTester.debug` for DevTools visual switches, performance overlay,
   rebuild logging, and animation time scaling with automatic restoration.
 - Added a jank/stall evidence panel that correlates slow frames with overlapping

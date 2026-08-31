@@ -538,6 +538,9 @@ details[open] summary::after { content: "−"; }
 .vm-runtime-panel { margin-top: 15px; }
 .vm-runtime-grid { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(250px, .85fr); gap: 15px; align-items: start; }
 .vm-runtime-grid .chart-wrap { height: 210px; }
+.vm-memory-panel { margin-top: 15px; }
+.vm-memory-grid { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(250px, .85fr); gap: 15px; align-items: start; }
+.vm-memory-grid .chart-wrap { height: 190px; }
 .devtools-list { display: grid; gap: 7px; max-height: 260px; overflow: auto; }
 .devtools-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 8px 9px; border-radius: 8px; background: var(--surface-2); font-size: 11px; }
 .devtools-row strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -574,7 +577,7 @@ details[open] summary::after { content: "−"; }
 .hidden { display: none !important; }
 @media (max-width: 1120px) {
   .metric-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-  .hero-grid, .chart-grid, .insight-grid, .resource-grid, .analysis-grid, .devtools-grid, .vm-runtime-grid { grid-template-columns: 1fr; }
+  .hero-grid, .chart-grid, .insight-grid, .resource-grid, .analysis-grid, .devtools-grid, .vm-runtime-grid, .vm-memory-grid { grid-template-columns: 1fr; }
   .health { min-height: 200px; }
 }
 @media (max-width: 700px) {
@@ -641,6 +644,7 @@ details[open] summary::after { content: "−"; }
       <div class="panel"><div class="panel-head"><div><h2>GPU / Shader signals</h2><p>Only actual GPU, raster, Skia, and shader timeline events are shown.</p></div><div class="panel-tools"><span class="subtle" id="gpu-note">—</span><button class="quiet-button detail-button" type="button" data-details="gpu">Details</button></div></div><div class="devtools-list" id="gpu-list"></div></div>
     </section>
     <section class="panel vm-runtime-panel"><div class="panel-head"><div><h2>VM runtime health</h2><p>Isolate lifecycle, heap capacity, and timeline recorder state captured from VM Service.</p></div><div class="panel-tools"><span class="subtle" id="vm-note">—</span><button class="quiet-button detail-button" type="button" data-details="vm">Details</button></div></div><div class="vm-runtime-grid"><div class="chart-wrap" style="height:210px"><canvas id="heap-trend-chart" aria-label="VM heap trend chart"></canvas></div><div class="devtools-list" id="vm-list"></div></div></section>
+    <section class="panel vm-memory-panel"><div class="panel-head"><div><h2>VM process memory</h2><p>Retained VM Service memory buckets before and after the capture. Expand Details for the complete bounded tree.</p></div><div class="panel-tools"><span class="subtle" id="vm-memory-note">—</span><button class="quiet-button detail-button" type="button" data-details="vmMemory">Details</button></div></div><div class="vm-memory-grid"><div class="chart-wrap" style="height:190px"><canvas id="vm-memory-chart" aria-label="VM process memory comparison chart"></canvas></div><div class="devtools-list" id="vm-memory-list"></div></div></section>
     <section class="chart-grid">
       <div class="panel"><div class="panel-head"><div><h2>Frame pacing</h2><p>Total frame span against the display budget. Jank is marked in place.</p></div><span class="subtle" id="frame-range">—</span></div><div class="chart-wrap"><canvas id="frame-chart" aria-label="Frame pacing chart"></canvas></div><div class="chart-legend"><span class="legend-item"><i class="legend-swatch total"></i>Total</span><span class="legend-item"><i class="legend-swatch build"></i>Build</span><span class="legend-item"><i class="legend-swatch raster"></i>Raster</span><span class="legend-item"><i class="legend-swatch budget"></i>Budget</span></div></div>
       <div class="panel"><div class="panel-head"><div><h2>VM timeline</h2><p>Retained event volume and category mix.</p></div></div><div class="event-summary" id="event-summary"></div><div class="chart-wrap" style="height:160px;margin-top:14px"><canvas id="event-chart" aria-label="VM timeline chart"></canvas></div><div class="category-list" id="category-list"></div></div>
@@ -809,11 +813,12 @@ details[open] summary::after { content: "−"; }
     }
     if (kind === 'gpu' && d.gpu) return d.gpu;
     if (kind === 'vm') return { vm: d.vm || null, isolate: d.isolate || null, timeline: d.timeline || null, gc: (reports[state.report].analysis || {}).gc || null };
+    if (kind === 'vmMemory' && d.vmem) return d.vmem;
     return d;
   };
   var openDetails = function (kind) {
     var value = detailValue(kind);
-    var labels = { cpu: 'CPU sampling details', heap: 'Heap and allocation details', gpu: 'GPU and shader details', vm: 'VM runtime details' };
+    var labels = { cpu: 'CPU sampling details', heap: 'Heap and allocation details', gpu: 'GPU and shader details', vm: 'VM runtime details', vmMemory: 'VM process memory details' };
     el('details-title').textContent = labels[kind] || 'Capture details';
     if (value == null) {
       detailsPayload = '';
@@ -1218,6 +1223,7 @@ details[open] summary::after { content: "−"; }
       ['VM runtime', d && d.vm ? 'available' : 'unavailable', d && d.vm ? 'VM identity, CPU target, and isolate inventory' : 'No VM runtime metadata retained'],
       ['Isolate health', d && d.isolate ? 'available' : 'unavailable', d && d.isolate ? 'Before/after lifecycle and pause state' : 'No isolate snapshot retained'],
       ['Timeline streams', d && d.timeline ? 'available' : 'unavailable', d && d.timeline ? nf.format((d.timeline.recorded || []).length) + ' recorded / ' + nf.format((d.timeline.available || []).length) + ' available streams' : 'Timeline recorder metadata unavailable'],
+      ['VM process memory', d && d.vmem && (d.vmem.before || d.vmem.after) ? 'available' : 'unavailable', d && d.vmem && (d.vmem.before || d.vmem.after) ? 'Before/after retained memory tree' : 'VM process memory usage unavailable'],
       ['Network profiler', 'not-collected', 'Use Cockpit network evidence for HTTP/SSE/WebSocket traffic'],
       ['GPU/shader', d && d.gpu ? 'available' : 'unavailable', d && d.gpu ? nf.format(number(d.gpu.events)) + ' timeline signals' : 'No matching GPU or shader timeline events'],
     ];
@@ -1268,6 +1274,29 @@ details[open] summary::after { content: "−"; }
       ctx.fillStyle = css('--muted'); ctx.fillText('Used', left, height - 8); ctx.fillText(nf.format(samples.length) + ' samples · ' + duration(last / 1000), Math.max(left + 30, width - 178), height - 8);
     });
   };
+  var drawVmMemoryChart = function () {
+    setChartHeight('vm-memory-chart', 190);
+    draw(el('vm-memory-chart'), function (ctx, width, height) {
+      chartHits['vm-memory-chart'] = [];
+      ctx.clearRect(0, 0, width, height); ctx.fillStyle = css('--surface-2'); ctx.fillRect(0, 0, width, height);
+      var profile = report().devtools && report().devtools.vmem;
+      var points = [];
+      if (profile && profile.before && profile.before.root) points.push(['Before', profile.before]);
+      if (profile && profile.after && profile.after.root) points.push(['After', profile.after]);
+      if (!points.length) { ctx.fillStyle = css('--muted'); ctx.font = '10px system-ui, sans-serif'; ctx.fillText('VM process memory unavailable', 14, height / 2); return; }
+      var max = Math.max(1, points.reduce(function (value, point) { return Math.max(value, number(point[1].root.s)); }, 0)) * 1.1;
+      var left = 74, right = 84, top = 18, bottom = 28, plotW = width - left - right, plotH = height - top - bottom;
+      ctx.strokeStyle = css('--line'); ctx.lineWidth = 1; ctx.fillStyle = css('--muted'); ctx.font = '10px system-ui, sans-serif';
+      for (var i = 0; i <= 3; i += 1) { var y = top + plotH * i / 3; ctx.beginPath(); ctx.moveTo(left, y); ctx.lineTo(width - right, y); ctx.stroke(); ctx.fillText(bytes(Math.round(max * (1 - i / 3))), 5, y + 3); }
+      points.forEach(function (point, index) {
+        var rootNode = point[1].root; var y = top + index * Math.max(38, plotH / points.length); var barH = Math.min(20, plotH / points.length * .48); var barW = number(rootNode.s) / max * plotW;
+        ctx.fillStyle = css('--muted'); ctx.fillText(point[0], 8, y + 14); ctx.fillStyle = css('--surface-3'); ctx.fillRect(left, y + 2, plotW, barH); ctx.fillStyle = index === 0 ? css('--accent') : css('--blue'); ctx.fillRect(left, y + 2, Math.max(rootNode.s ? 3 : 0, barW), barH); ctx.fillStyle = css('--text-soft'); ctx.fillText(bytes(rootNode.s), width - right + 6, y + 15);
+        var children = Array.isArray(rootNode.c) ? rootNode.c.slice(0, 5) : [];
+        chartHits['vm-memory-chart'].push({ x: left, y: y, w: plotW, h: Math.max(22, barH + 6), html: '<strong>' + esc(point[0]) + ' · ' + esc(rootNode.n || 'process') + '</strong>' + tooltipRow('Retained', bytes(rootNode.s)) + tooltipRow('Top buckets', children.length ? children.map(function (child) { return String(child.n || 'bucket') + ' ' + bytes(child.s); }).join(' · ') : 'Unavailable') + (rootNode.drop ? '<div class="subtle">Dropped children: ' + esc(nf.format(number(rootNode.drop))) + '</div>' : '') + tooltipRow('Timestamp', duration(number(point[1].t) / 1000)) });
+      });
+      ctx.fillStyle = css('--muted'); ctx.fillText('Retained process memory · before / after', left, height - 8);
+    });
+  };
   var renderDevTools = function () {
     var d = report().devtools || null;
     var cpu = d && d.cpu ? d.cpu : null;
@@ -1276,6 +1305,7 @@ details[open] summary::after { content: "−"; }
     var isolate = d && d.isolate ? d.isolate : null;
     var timeline = d && d.timeline ? d.timeline : null;
     var vmRuntime = d && d.vm ? d.vm : null;
+    var vmMemory = d && d.vmem ? d.vmem : null;
     el('cpu-note').textContent = cpu ? nf.format(number(cpu.n)) + ' samples · ' + us(number(cpu.span)) + (cpu.period ? ' · ' + us(number(cpu.period)) + ' period' : '') : (d && d.why ? 'Unavailable' : 'Not collected');
     var functions = cpu && Array.isArray(cpu.f) ? cpu.f.slice().sort(function (a, b) { return number(b.in) - number(a.in); }).slice(0, 12) : [];
     el('cpu-list').innerHTML = functions.length ? functions.map(function (fn) { return '<div class="devtools-row"><strong title="' + esc(fn.n || '') + '">' + esc(fn.n || '<anonymous>') + '</strong><span>' + nf.format(number(fn.in)) + ' ticks · ' + nf.format(number(fn.ex)) + ' self</span></div>'; }).join('') : '<p class="devtools-note">' + esc(cpu ? 'No samples retained.' : (d && d.why ? d.why : 'CPU sampling was unavailable for this run.')) + '</p>';
@@ -1302,6 +1332,13 @@ details[open] summary::after { content: "−"; }
     if (timeline) { vmRows.push(['Recorder', timeline.recorder || 'unknown']); vmRows.push(['Streams', nf.format((timeline.recorded || []).length) + ' recorded / ' + nf.format((timeline.available || []).length) + ' available']); }
     if (heap && heap.drop) vmRows.push(['Heap sample drops', nf.format(number(heap.drop))]);
     el('vm-list').innerHTML = vmRows.length ? vmRows.map(function (row) { return '<div class="devtools-row"><strong>' + esc(row[0]) + '</strong><span title="' + esc(row[1]) + '">' + esc(row[1]) + '</span></div>'; }).join('') : '<p class="devtools-note">VM runtime metadata was unavailable for this capture.</p>';
+    var memoryPoints = [];
+    if (vmMemory && vmMemory.before && vmMemory.before.root) memoryPoints.push(['Before', vmMemory.before.root]);
+    if (vmMemory && vmMemory.after && vmMemory.after.root) memoryPoints.push(['After', vmMemory.after.root]);
+    var memoryRoot = memoryPoints.length ? memoryPoints[memoryPoints.length - 1][1] : null;
+    var memoryRows = memoryRoot && Array.isArray(memoryRoot.c) ? memoryRoot.c.slice(0, 8) : [];
+    el('vm-memory-note').textContent = memoryPoints.length ? memoryPoints.map(function (point) { return point[0] + ' ' + bytes(point[1].s); }).join(' · ') : 'VM process memory unavailable';
+    el('vm-memory-list').innerHTML = memoryRows.length ? '<div class="devtools-row"><strong>' + esc(memoryRoot.n || 'process') + '</strong><span>' + esc(bytes(memoryRoot.s)) + '</span></div>' + memoryRows.map(function (item) { return '<div class="devtools-row"><strong title="' + esc(item.n || '') + '">' + esc(item.n || 'bucket') + '</strong><span>' + esc(bytes(item.s)) + '</span></div>'; }).join('') + (memoryRoot.drop ? '<p class="devtools-note">' + esc(nf.format(number(memoryRoot.drop))) + ' child buckets omitted; Details contains the retained tree.</p>' : '') : '<p class="devtools-note">VM process memory was unavailable for this run.</p>';
   };
   var renderEventSummary = function () {
     var list = events(); var start = list.reduce(function (m, e) { return Math.min(m, number(e.t)); }, Infinity); var finish = list.reduce(function (m, e) { return Math.max(m, number(e.t) + number(e.d)); }, -Infinity); var traceSpan = list.length ? Math.max(0, finish - start) : 0; var categories = {}; list.forEach(function (e) { var key = String(e.c || 'uncategorized'); categories[key] = (categories[key] || 0) + 1; }); var top = Object.keys(categories).sort(function (a, b) { return categories[b] - categories[a]; })[0];
@@ -1403,6 +1440,13 @@ details[open] summary::after { content: "−"; }
       if (dtools.heap) cells.push(['VM heap samples', nf.format((dtools.heap.samples || []).length)], ['VM heap interval', duration(dtools.heap.interval)], ['VM heap dropped', nf.format(number(dtools.heap.drop))], ['Allocation classes', nf.format((dtools.heap.classes || []).length)], ['Group heap before', dtools.heap.gb ? bytes(dtools.heap.gb.use) : 'Unavailable'], ['Group heap after', dtools.heap.ga ? bytes(dtools.heap.ga.use) : 'Unavailable']);
       if (dtools.isolate) { var iso = dtools.isolate.after || dtools.isolate.before || {}; cells.push(['Isolate', iso.name || '—'], ['Isolate group', iso.group || '—'], ['Live ports', iso.ports == null ? 'Unavailable' : nf.format(number(iso.ports))], ['Libraries', iso.libs == null ? 'Unavailable' : nf.format(number(iso.libs))], ['Extensions', iso.ext == null ? 'Unavailable' : nf.format(number(iso.ext))]); }
       if (dtools.timeline) cells.push(['Timeline recorder', dtools.timeline.recorder || '—'], ['Recorded streams', nf.format((dtools.timeline.recorded || []).length)], ['Available streams', nf.format((dtools.timeline.available || []).length)]);
+      if (dtools.vmem) {
+        var vmBefore = dtools.vmem.before && dtools.vmem.before.root ? dtools.vmem.before.root : null;
+        var vmAfter = dtools.vmem.after && dtools.vmem.after.root ? dtools.vmem.after.root : null;
+        if (vmBefore) cells.push(['VM memory before', bytes(vmBefore.s)], ['VM buckets before', nf.format((vmBefore.c || []).length)]);
+        if (vmAfter) cells.push(['VM memory after', bytes(vmAfter.s)], ['VM buckets after', nf.format((vmAfter.c || []).length)]);
+        if (vmBefore && vmAfter) cells.push(['VM memory Δ', bytes(number(vmAfter.s) - number(vmBefore.s))]);
+      }
     }
     var gcAnalysis = (reports[state.report].analysis || {}).gc || null;
     if (gcAnalysis && number(gcAnalysis.count) > 0) {
@@ -1426,7 +1470,7 @@ details[open] summary::after { content: "−"; }
   };
   var renderCategories = function () { var values = {}; events().forEach(function (e) { values[String(e.c || 'uncategorized')] = true; }); var select = el('event-category'); select.innerHTML = '<option value="">All categories</option>' + Object.keys(values).sort().map(function (value) { return '<option value="' + esc(value) + '">' + esc(value) + '</option>'; }).join(''); select.value = state.eventCategory; };
   var renderSelector = function () { var select = el('report-select'); select.innerHTML = reports.map(function (item, index) { return '<option value="' + index + '">' + esc(item.label || ('Capture ' + (index + 1))) + '</option>'; }).join(''); select.value = state.report; };
-  var render = function () { hideTooltip(); renderSelector(); renderMeta(); renderHealth(); renderMetrics(); renderStartup(); renderCoverage(); renderDevTools(); renderEventSummary(); renderStalls(); renderCategories(); renderResources(); renderComparison(); renderDetails(); renderFrames(); renderEvents(); renderCodeEvidence(); renderHotspots(); drawStartupChart(); drawFrameChart(); drawEventChart(); drawPhaseChart(); drawResourceChart(); drawCacheChart(); drawJankChart(); drawCadenceChart(); drawCacheTrendChart(); drawCategoryCostChart(); drawHotspotChart(); drawFlameChart(); drawCpuChart(); drawHeapChart(); drawHeapTrendChart(); };
+  var render = function () { hideTooltip(); renderSelector(); renderMeta(); renderHealth(); renderMetrics(); renderStartup(); renderCoverage(); renderDevTools(); renderEventSummary(); renderStalls(); renderCategories(); renderResources(); renderComparison(); renderDetails(); renderFrames(); renderEvents(); renderCodeEvidence(); renderHotspots(); drawStartupChart(); drawFrameChart(); drawEventChart(); drawPhaseChart(); drawResourceChart(); drawCacheChart(); drawJankChart(); drawCadenceChart(); drawCacheTrendChart(); drawCategoryCostChart(); drawHotspotChart(); drawFlameChart(); drawCpuChart(); drawHeapChart(); drawHeapTrendChart(); drawVmMemoryChart(); };
   el('report-select').addEventListener('change', function (event) { state.report = Number(event.target.value) || 0; state.framePage = 0; state.eventPage = 0; state.eventQuery = ''; state.eventCategory = ''; el('event-search').value = ''; render(); });
   el('frame-sort').addEventListener('change', function (event) { state.frameSort = event.target.value; state.framePage = 0; renderFrames(); });
   el('frame-prev').addEventListener('click', function () { state.framePage -= 1; renderFrames(); }); el('frame-next').addEventListener('click', function () { state.framePage += 1; renderFrames(); });
@@ -1436,10 +1480,10 @@ details[open] summary::after { content: "−"; }
   el('copy-button').addEventListener('click', function (event) { var text = JSON.stringify(report()); if (navigator.clipboard && navigator.clipboard.writeText) { navigator.clipboard.writeText(text).then(function () { event.target.textContent = 'Copied'; setTimeout(function () { event.target.textContent = 'Copy report JSON'; }, 1200); }); } });
   el('download-button').addEventListener('click', function () { var blob = new Blob([JSON.stringify(data)], { type: 'application/json' }); var link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = fileStem(data.title) + '.full.json'; link.click(); setTimeout(function () { URL.revokeObjectURL(link.href); }, 1000); });
   el('timeline-button').addEventListener('click', function () { var blob = new Blob([JSON.stringify(timelinePayload())], { type: 'application/json' }); var link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = (reports[state.report].label || 'cockpit-performance') + '.timeline.json'; link.click(); setTimeout(function () { URL.revokeObjectURL(link.href); }, 1000); });
-  el('theme-button').addEventListener('click', function () { root.dataset.theme = root.dataset.theme === 'light' ? 'dark' : 'light'; drawStartupChart(); drawFrameChart(); drawEventChart(); drawPhaseChart(); drawResourceChart(); drawCacheChart(); drawJankChart(); drawCadenceChart(); drawCacheTrendChart(); drawCategoryCostChart(); drawHotspotChart(); drawFlameChart(); drawCpuChart(); drawHeapChart(); drawHeapTrendChart(); });
+  el('theme-button').addEventListener('click', function () { root.dataset.theme = root.dataset.theme === 'light' ? 'dark' : 'light'; drawStartupChart(); drawFrameChart(); drawEventChart(); drawPhaseChart(); drawResourceChart(); drawCacheChart(); drawJankChart(); drawCadenceChart(); drawCacheTrendChart(); drawCategoryCostChart(); drawHotspotChart(); drawFlameChart(); drawCpuChart(); drawHeapChart(); drawHeapTrendChart(); drawVmMemoryChart(); });
   window.addEventListener('scroll', hideTooltip, { passive: true });
-  window.addEventListener('resize', function () { drawStartupChart(); drawFrameChart(); drawEventChart(); drawPhaseChart(); drawResourceChart(); drawCacheChart(); drawJankChart(); drawCadenceChart(); drawCacheTrendChart(); drawCategoryCostChart(); drawHotspotChart(); drawFlameChart(); drawCpuChart(); drawHeapChart(); drawHeapTrendChart(); });
-  ['startup-chart', 'frame-chart', 'event-chart', 'phase-chart', 'resource-chart', 'cache-chart', 'jank-chart', 'cadence-chart', 'cache-trend-chart', 'category-cost-chart', 'hotspot-chart', 'flame-chart', 'cpu-chart', 'heap-chart', 'heap-trend-chart'].forEach(bindChart);
+  window.addEventListener('resize', function () { drawStartupChart(); drawFrameChart(); drawEventChart(); drawPhaseChart(); drawResourceChart(); drawCacheChart(); drawJankChart(); drawCadenceChart(); drawCacheTrendChart(); drawCategoryCostChart(); drawHotspotChart(); drawFlameChart(); drawCpuChart(); drawHeapChart(); drawHeapTrendChart(); drawVmMemoryChart(); });
+  ['startup-chart', 'frame-chart', 'event-chart', 'phase-chart', 'resource-chart', 'cache-chart', 'jank-chart', 'cadence-chart', 'cache-trend-chart', 'category-cost-chart', 'hotspot-chart', 'flame-chart', 'cpu-chart', 'heap-chart', 'heap-trend-chart', 'vm-memory-chart'].forEach(bindChart);
   document.querySelectorAll('[data-details]').forEach(function (button) { button.addEventListener('click', function () { openDetails(button.getAttribute('data-details')); }); });
   el('details-copy').addEventListener('click', function (event) { if (!detailsPayload || !navigator.clipboard || !navigator.clipboard.writeText) return; navigator.clipboard.writeText(detailsPayload).then(function () { event.target.textContent = 'Copied'; setTimeout(function () { event.target.textContent = 'Copy details'; }, 1200); }); });
   render();

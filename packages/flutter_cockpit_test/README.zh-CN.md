@@ -294,6 +294,11 @@ timeline** 会导出保留的 VM 事件为 Chrome trace 兼容的 `traceEvents` 
 紧凑事件没有保留 async/flow 所需的关联 ID，因此这类阶段会安全降级为独立的瞬时或
 持续事件，确保导出的 trace 可以被导入。
 
+采集默认还会请求 VM Service 的 `getProcessMemoryUsage`（`vmMemory: true`）。它与平台
+RSS 是两条独立数据：会保留采集前后的 VM 进程内存分层、大小、主要子项和明确的丢弃子项数量，
+写入 `devtools.vmem`。树有界以保证测试内存和导出稳定；如果本次调查不需要 VM 内存地图，
+可以设置 `vmMemory: false`。运行时不支持该 RPC 时会显示不可用，不会伪造为 0。
+
 它与 VS Code/DevTools 的对应关系如下：
 
 | DevTools/VS Code 视图 | Cockpit 采集结果 | 查看位置 |
@@ -304,7 +309,7 @@ timeline** 会导出保留的 VM 事件为 Chrome trace 兼容的 `traceEvents` 
 | Memory 与 GC | 原生 RSS 样本和 VM GC 事件 | Memory、Cache/GC 图表 |
 | CPU profiler | VM CPU 采样与有界调用栈 | CPU sampling 面板与完整报告 |
 | Memory heap/allocation | VM heap 点位与有界分配类计数 | Heap & allocation 面板与完整报告 |
-| VM runtime health | Heap 趋势、isolate 快照、recorder/stream 元数据 | VM runtime 面板与详情弹窗 |
+| VM runtime health | Heap 趋势、isolate 快照、recorder/stream 元数据、VM 进程内存树 | VM runtime、VM process memory 面板与详情弹窗 |
 | GPU/shader | 仅展示匹配到的真实 VM timeline 信号 | GPU / Shader signals 面板 |
 | Network profiler | 独立的 Cockpit network evidence | `cockpit dev network` 产物 |
 
