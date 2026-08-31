@@ -25,6 +25,9 @@ export 'package:cockpit_protocol/cockpit_protocol.dart'
         CockpitIsolateProfile,
         CockpitIsolateStats,
         CockpitTimelineProfile,
+        CockpitVmMemoryNode,
+        CockpitVmMemoryProfile,
+        CockpitVmMemorySnapshot,
         CockpitVmRuntimeProfile;
 export 'src/cockpit_test.dart';
 export 'src/cockpit_debug_tools.dart';

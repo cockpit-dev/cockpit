@@ -213,6 +213,13 @@ matching the corresponding DevTools switches. They are off by default because
 the extra instrumentation changes timings, and Cockpit restores the previous
 global flags after the capture.
 
+The capture also requests the VM Service `getProcessMemoryUsage` tree by
+default (`vmMemory: true`). This is separate from platform RSS: it retains the
+VM's before/after process buckets, sizes, top children, and explicit dropped
+child counts under `devtools.vmem`. The tree is bounded to keep test memory and
+exports predictable; set `vmMemory: false` when a VM memory map is not part of
+the investigation. Unsupported runtimes report the metric as unavailable.
+
 `profile()` also samples the VM data behind DevTools' CPU Profiler and Memory
 views when a VM service is available. CPU stacks and bounded allocation classes
 are retained in the complete report; the compact test result keeps only sample
@@ -369,7 +376,7 @@ an interactive DevTools session:
 | Memory and GC | Native RSS samples and VM GC events | Memory and cache/GC charts |
 | CPU profiler | VM CPU samples and bounded stacks | CPU sampling panel and full report |
 | Memory heap/allocation | VM heap points and bounded class counters | Heap & allocation panel and full report |
-| VM runtime health | Heap trend, isolate snapshots, recorder/stream metadata | VM runtime panel and details dialog |
+| VM runtime health | Heap trend, isolate snapshots, recorder/stream metadata, VM process-memory tree | VM runtime and VM process memory panels, details dialog |
 | GPU/shader | Matching VM timeline signals only | GPU / Shader signals panel |
 | Network profiler | Separate Cockpit network evidence | `cockpit dev network` artifacts |
 

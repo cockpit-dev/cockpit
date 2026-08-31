@@ -368,6 +368,30 @@ void main() {
         isolateGroupCount: 1,
         systemIsolateCount: 1,
       ),
+      vmMemory: CockpitVmMemoryProfile(
+        before: CockpitVmMemorySnapshot(
+          timestampUs: 0,
+          root: CockpitVmMemoryNode(
+            name: 'Process',
+            sizeBytes: 1024,
+            children: <CockpitVmMemoryNode>[
+              CockpitVmMemoryNode(name: 'Dart heap', sizeBytes: 768),
+              CockpitVmMemoryNode(name: 'Native', sizeBytes: 256),
+            ],
+          ),
+        ),
+        after: CockpitVmMemorySnapshot(
+          timestampUs: 100000,
+          root: CockpitVmMemoryNode(
+            name: 'Process',
+            sizeBytes: 1280,
+            children: <CockpitVmMemoryNode>[
+              CockpitVmMemoryNode(name: 'Dart heap', sizeBytes: 896),
+              CockpitVmMemoryNode(name: 'Native', sizeBytes: 384),
+            ],
+          ),
+        ),
+      ),
     );
     final decoded = CockpitDevToolsProfile.fromJson(profile.toJson());
     expect(decoded.cpu!.samples.single.stack, <int>[0]);
@@ -380,6 +404,8 @@ void main() {
     expect(decoded.timeline!.recordedStreams, <String>['Dart']);
     expect(decoded.vm!.targetCpu, 'arm64');
     expect(decoded.vm!.isolateCount, 2);
+    expect(decoded.vmMemory!.before!.root.children.first.name, 'Dart heap');
+    expect(decoded.vmMemory!.after!.root.sizeBytes, 1280);
   });
 
   test('DevTools heap samples preserve order and compact drop count', () {
@@ -446,6 +472,38 @@ void main() {
             capacityBytes: 20,
             externalBytes: 1,
           ),
+        ],
+      ),
+      throwsFormatException,
+    );
+  });
+
+  test('VM process-memory trees stay bounded and compact', () {
+    final node = CockpitVmMemoryNode(
+      name: 'Process',
+      sizeBytes: 100,
+      children: <CockpitVmMemoryNode>[
+        CockpitVmMemoryNode(name: 'Dart', sizeBytes: 60),
+      ],
+      droppedChildren: 3,
+    );
+    final snapshot = CockpitVmMemorySnapshot(timestampUs: 12, root: node);
+    final profile = CockpitVmMemoryProfile(before: snapshot);
+    final json = profile.toJson();
+    expect(json['before'], isA<Map<String, Object?>>());
+    expect(
+      (json['before']! as Map<String, Object?>)['root'],
+      containsPair('drop', 3),
+    );
+    final decoded = CockpitVmMemoryProfile.fromJson(json);
+    expect(decoded.before!.root.sizeBytes, 100);
+    expect(decoded.before!.root.children.single.name, 'Dart');
+    expect(
+      () => CockpitVmMemoryNode(
+        name: 'invalid',
+        sizeBytes: 1,
+        children: <CockpitVmMemoryNode>[
+          CockpitVmMemoryNode(name: 'too large', sizeBytes: 2),
         ],
       ),
       throwsFormatException,

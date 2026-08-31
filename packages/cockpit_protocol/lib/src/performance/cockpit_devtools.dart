@@ -15,6 +15,7 @@ final class CockpitDevToolsProfile {
     this.isolate,
     this.timeline,
     this.vm,
+    this.vmMemory,
   }) {
     if (source.trim().isEmpty || state.trim().isEmpty) {
       throw const FormatException('DevTools profile identity is invalid.');
@@ -33,6 +34,7 @@ final class CockpitDevToolsProfile {
   final CockpitIsolateProfile? isolate;
   final CockpitTimelineProfile? timeline;
   final CockpitVmRuntimeProfile? vm;
+  final CockpitVmMemoryProfile? vmMemory;
 
   CockpitDevToolsProfile copyWith({
     CockpitCpuProfile? cpu,
@@ -41,6 +43,7 @@ final class CockpitDevToolsProfile {
     CockpitIsolateProfile? isolate,
     CockpitTimelineProfile? timeline,
     CockpitVmRuntimeProfile? vm,
+    CockpitVmMemoryProfile? vmMemory,
   }) => CockpitDevToolsProfile(
     source: source,
     state: state,
@@ -51,6 +54,7 @@ final class CockpitDevToolsProfile {
     isolate: isolate ?? this.isolate,
     timeline: timeline ?? this.timeline,
     vm: vm ?? this.vm,
+    vmMemory: vmMemory ?? this.vmMemory,
   );
 
   Map<String, Object?> toJson() => <String, Object?>{
@@ -63,6 +67,7 @@ final class CockpitDevToolsProfile {
     if (isolate != null) 'isolate': isolate!.toJson(),
     if (timeline != null) 'timeline': timeline!.toJson(),
     if (vm != null) 'vm': vm!.toJson(),
+    if (vmMemory != null) 'vmem': vmMemory!.toJson(),
   };
 
   factory CockpitDevToolsProfile.fromJson(Object? value) {
@@ -85,6 +90,9 @@ final class CockpitDevToolsProfile {
       vm: json['vm'] == null
           ? null
           : CockpitVmRuntimeProfile.fromJson(json['vm']),
+      vmMemory: json['vmem'] == null
+          ? null
+          : CockpitVmMemoryProfile.fromJson(json['vmem']),
     );
   }
 }
@@ -175,6 +183,118 @@ final class CockpitVmRuntimeProfile {
           ? null
           : _nonNegativeInt(json['sys'], r'$.devtools.vm.sys'),
       extensions: _strings(json['ext'], r'$.devtools.vm.ext'),
+    );
+  }
+}
+
+/// One bounded node from VM Service process-memory accounting.
+final class CockpitVmMemoryNode {
+  CockpitVmMemoryNode({
+    required this.name,
+    required this.sizeBytes,
+    Iterable<CockpitVmMemoryNode> children = const <CockpitVmMemoryNode>[],
+    this.droppedChildren = 0,
+  }) : children = List<CockpitVmMemoryNode>.unmodifiable(children) {
+    if (name.trim().isEmpty ||
+        sizeBytes < 0 ||
+        droppedChildren < 0 ||
+        this.children.length > 64 ||
+        nodeCount > 512 ||
+        maxDepth > 8) {
+      throw const FormatException('VM memory node bounds are invalid.');
+    }
+    if (this.children.any((child) => child.sizeBytes > sizeBytes)) {
+      throw const FormatException('VM memory child exceeds its parent.');
+    }
+  }
+
+  final String name;
+  final int sizeBytes;
+  final List<CockpitVmMemoryNode> children;
+  final int droppedChildren;
+
+  int get nodeCount =>
+      1 + children.fold<int>(0, (sum, child) => sum + child.nodeCount);
+
+  int get maxDepth => children.isEmpty
+      ? 1
+      : 1 +
+            children
+                .map((child) => child.maxDepth)
+                .reduce((a, b) => a > b ? a : b);
+
+  Map<String, Object?> toJson() => <String, Object?>{
+    'n': name,
+    's': sizeBytes,
+    if (children.isNotEmpty)
+      'c': children.map((child) => child.toJson()).toList(growable: false),
+    if (droppedChildren > 0) 'drop': droppedChildren,
+  };
+
+  factory CockpitVmMemoryNode.fromJson(Object? value) {
+    final json = _object(value, r'$.devtools.vmem.node');
+    final rawChildren = json['c'];
+    return CockpitVmMemoryNode(
+      name: _string(json['n'], r'$.devtools.vmem.node.n'),
+      sizeBytes: _nonNegativeInt(json['s'], r'$.devtools.vmem.node.s'),
+      children: rawChildren == null
+          ? const <CockpitVmMemoryNode>[]
+          : _list(
+              rawChildren,
+              r'$.devtools.vmem.node.c',
+            ).map(CockpitVmMemoryNode.fromJson).toList(growable: false),
+      droppedChildren: json['drop'] == null
+          ? 0
+          : _nonNegativeInt(json['drop'], r'$.devtools.vmem.node.drop'),
+    );
+  }
+}
+
+/// One timestamped process-memory snapshot from VM Service.
+final class CockpitVmMemorySnapshot {
+  const CockpitVmMemorySnapshot({
+    required this.timestampUs,
+    required this.root,
+  });
+
+  final int timestampUs;
+  final CockpitVmMemoryNode root;
+
+  Map<String, Object?> toJson() => <String, Object?>{
+    't': timestampUs,
+    'root': root.toJson(),
+  };
+
+  factory CockpitVmMemorySnapshot.fromJson(Object? value) {
+    final json = _object(value, r'$.devtools.vmem.snapshot');
+    return CockpitVmMemorySnapshot(
+      timestampUs: _nonNegativeInt(json['t'], r'$.devtools.vmem.snapshot.t'),
+      root: CockpitVmMemoryNode.fromJson(json['root']),
+    );
+  }
+}
+
+/// Before/after process-memory accounting captured from VM Service.
+final class CockpitVmMemoryProfile {
+  const CockpitVmMemoryProfile({this.before, this.after});
+
+  final CockpitVmMemorySnapshot? before;
+  final CockpitVmMemorySnapshot? after;
+
+  Map<String, Object?> toJson() => <String, Object?>{
+    if (before != null) 'before': before!.toJson(),
+    if (after != null) 'after': after!.toJson(),
+  };
+
+  factory CockpitVmMemoryProfile.fromJson(Object? value) {
+    final json = _object(value, r'$.devtools.vmem');
+    return CockpitVmMemoryProfile(
+      before: json['before'] == null
+          ? null
+          : CockpitVmMemorySnapshot.fromJson(json['before']),
+      after: json['after'] == null
+          ? null
+          : CockpitVmMemorySnapshot.fromJson(json['after']),
     );
   }
 }

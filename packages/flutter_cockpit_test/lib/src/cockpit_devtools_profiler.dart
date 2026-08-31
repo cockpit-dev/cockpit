@@ -57,6 +57,8 @@ final class CockpitDevToolsProfiler {
   CockpitIsolateStats? _isolateAfter;
   CockpitTimelineProfile? _timeline;
   CockpitVmRuntimeProfile? _vm;
+  CockpitVmMemorySnapshot? _vmMemoryBefore;
+  CockpitVmMemorySnapshot? _vmMemoryAfter;
   Duration _heapSampleEvery = const Duration(milliseconds: 100);
   Timer? _heapSampleTimer;
   Future<void>? _heapSamplePending;
@@ -73,6 +75,7 @@ final class CockpitDevToolsProfiler {
     required bool cpu,
     required bool heap,
     required bool timeline,
+    required bool vmMemory,
     Duration heapSampleEvery = const Duration(milliseconds: 100),
   }) async {
     if (heapSampleEvery <= Duration.zero ||
@@ -93,7 +96,9 @@ final class CockpitDevToolsProfiler {
     _isolateAfter = null;
     _timeline = null;
     _vm = null;
-    _requested = cpu || heap || timeline;
+    _vmMemoryBefore = null;
+    _vmMemoryAfter = null;
+    _requested = cpu || heap || timeline || vmMemory;
     if (!_requested) return;
     try {
       final info = await developer.Service.getInfo().timeout(timeout);
@@ -134,6 +139,13 @@ final class CockpitDevToolsProfiler {
       }
       final now = await service.getVMTimelineMicros().timeout(timeout);
       _originUs = now.timestamp ?? 0;
+      if (vmMemory) {
+        try {
+          _vmMemoryBefore = await _readVmMemorySnapshot(service, _originUs!);
+        } on Object catch (error) {
+          _recordFailure('vm-memory', error);
+        }
+      }
       if (cpu) {
         try {
           await _prepareCpuProfiler(service, isolateId);
@@ -172,6 +184,7 @@ final class CockpitDevToolsProfiler {
     required bool cpu,
     required bool heap,
     required bool timeline,
+    required bool vmMemory,
     Iterable<CockpitPerformanceEvent> events =
         const <CockpitPerformanceEvent>[],
   }) async {
@@ -194,11 +207,15 @@ final class CockpitDevToolsProfiler {
         reason: _failureReason ?? 'VM service connection was not established.',
         gpu: _gpu(events),
         vm: _vm,
+        vmMemory: _vmMemoryBefore == null
+            ? null
+            : CockpitVmMemoryProfile(before: _vmMemoryBefore),
       );
     }
 
     CockpitCpuProfile? cpuProfile;
     CockpitHeapProfile? heapProfile;
+    CockpitVmMemoryProfile? vmMemoryProfile;
     try {
       await _stopHeapSampling();
       int? endUs;
@@ -225,6 +242,20 @@ final class CockpitDevToolsProfiler {
           );
         } on Object catch (error) {
           _recordFailure('timeline-flags', error);
+        }
+      }
+
+      if (vmMemory) {
+        try {
+          _vmMemoryAfter = await _readVmMemorySnapshot(service, _originUs!);
+          if (_vmMemoryBefore != null || _vmMemoryAfter != null) {
+            vmMemoryProfile = CockpitVmMemoryProfile(
+              before: _vmMemoryBefore,
+              after: _vmMemoryAfter,
+            );
+          }
+        } on Object catch (error) {
+          _recordFailure('vm-memory', error);
         }
       }
 
@@ -316,6 +347,7 @@ final class CockpitDevToolsProfiler {
         _isolateAfter != null ||
         _timeline != null ||
         _vm != null ||
+        vmMemoryProfile != null ||
         gpu != null;
     if (!hasData && _failures.isNotEmpty) {
       return CockpitDevToolsProfile(
@@ -324,6 +356,7 @@ final class CockpitDevToolsProfiler {
         reason: _failureReason,
         gpu: gpu,
         vm: _vm,
+        vmMemory: vmMemoryProfile,
       );
     }
     return CockpitDevToolsProfile(
@@ -338,6 +371,7 @@ final class CockpitDevToolsProfiler {
           : CockpitIsolateProfile(before: _isolateBefore, after: _isolateAfter),
       timeline: _timeline,
       vm: _vm,
+      vmMemory: vmMemoryProfile,
     );
   }
 
@@ -625,6 +659,70 @@ final class CockpitDevToolsProfiler {
     return _heapSample(timestamp, point);
   }
 
+  Future<CockpitVmMemorySnapshot?> _readVmMemorySnapshot(
+    VmService service,
+    int originUs,
+  ) async {
+    final values = await Future.wait<Object?>(<Future<Object?>>[
+      service.getVMTimelineMicros().timeout(timeout),
+      service.getProcessMemoryUsage().timeout(timeout),
+    ]);
+    final now = values[0] as Timestamp;
+    final usage = values[1] as ProcessMemoryUsage;
+    final root = usage.root;
+    if (root == null) return null;
+    _vmMemoryNodes = 0;
+    final node = _vmMemoryNode(root, depth: 1);
+    if (node == null) return null;
+    final timestamp = ((now.timestamp ?? originUs) - originUs).clamp(
+      0,
+      24 * 60 * 60 * 1000000,
+    );
+    return CockpitVmMemorySnapshot(timestampUs: timestamp, root: node);
+  }
+
+  static const _maxVmMemoryDepth = 8;
+  static const _maxVmMemoryNodes = 512;
+  static const _maxVmMemoryChildren = 64;
+  var _vmMemoryNodes = 0;
+
+  CockpitVmMemoryNode? _vmMemoryNode(
+    ProcessMemoryItem item, {
+    required int depth,
+  }) {
+    if (_vmMemoryNodes >= _maxVmMemoryNodes) return null;
+    final name = item.name?.trim();
+    final size = item.size;
+    if (name == null || name.isEmpty || size == null || size < 0) return null;
+    _vmMemoryNodes += 1;
+
+    final rawChildren = List<ProcessMemoryItem>.of(
+      item.children ?? const <ProcessMemoryItem>[],
+    )..sort((left, right) => (right.size ?? -1).compareTo(left.size ?? -1));
+    var dropped = depth >= _maxVmMemoryDepth
+        ? rawChildren.length
+        : rawChildren.length > _maxVmMemoryChildren
+        ? rawChildren.length - _maxVmMemoryChildren
+        : 0;
+    final children = <CockpitVmMemoryNode>[];
+    if (depth < _maxVmMemoryDepth) {
+      for (final child in rawChildren.take(_maxVmMemoryChildren)) {
+        final node = _vmMemoryNode(child, depth: depth + 1);
+        if (node == null) {
+          dropped += 1;
+        } else {
+          children.add(node);
+        }
+      }
+    }
+    return CockpitVmMemoryNode(
+      name: name,
+      sizeBytes: size,
+      children: children,
+      droppedChildren: dropped,
+    );
+  }
+
   CockpitHeapSample _heapSample(int timestampUs, CockpitHeapPoint point) =>
       CockpitHeapSample(
         timestampUs: timestampUs,
@@ -678,6 +776,8 @@ final class CockpitDevToolsProfiler {
     _isolateId = null;
     _originUs = null;
     _beforeHeap = null;
+    _vmMemoryBefore = null;
+    _vmMemoryAfter = null;
     _heapSampleTimer?.cancel();
     _heapSampleTimer = null;
     _heapSamplePending = null;
