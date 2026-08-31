@@ -32,6 +32,8 @@ It provides:
 - structured Widget, Element, RenderObject, semantics, route, focus, log,
   runtime error, HTTP/SSE/WebSocket network, and rebuild state
 - snapshot, artifact, recording, and bundle models
+- an explicit bounded `CockpitPerformanceCollector` for engine frame timings,
+  display-aware budgets, cache peaks, and action-level profiling
 - target, plane, surface, and fallback-aware runtime models for AI-first summaries
 
 ## Install
@@ -182,6 +184,26 @@ flutter run --target main.dart
 - accessibility, network, runtime, and rebuild signals
 - screenshot and recording requests
 - remote session status and command endpoints
+
+### Frame timing capture
+
+Performance collection is opt-in. The runtime keeps no timing callback attached
+until a caller starts a collector, and stopping it returns a bounded report with
+the original engine timestamps rather than a wall-clock approximation:
+
+```dart
+final collector = FlutterCockpit.performanceCollector;
+collector.start();
+// exercise the app through Cockpit
+final report = collector.stop(stepId: 'open-list');
+```
+
+The report includes build/raster/vsync/total durations, p50/p90/p99/worst
+values, jank counts, cache peaks, and an explicit `dropped` count when the
+retention limit is reached. `fps` is omitted unless the source frame timestamps
+prove a positive monotonic cadence. For VM timeline events and GC counts, use
+`flutter_cockpit_test`'s `cockpit.profile`; unsupported platforms are reported
+as unavailable instead of receiving guessed values.
 
 Interaction ownership stays explicit: merged ancestor `Semantics` never makes
 passive descendants actionable, and descendants below `IgnorePointer(ignoring:

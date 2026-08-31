@@ -3,6 +3,8 @@
 ## 4.0.49
 
 - Synchronized the Flutter bridge package with the current Cockpit release.
+- Added opt-in engine frame timing collection with cache peaks, jank budgets,
+  percentiles, bounded retention, and truthful unavailable/partial metadata.
 
 ## 4.0.48
 

@@ -3,6 +3,8 @@
 ## 4.0.49
 
 - Synchronized the integration-test facade with the current Cockpit release.
+- Added `CockpitTester.profile` for action-level FrameTiming and native VM
+  timeline/GC reports with compact summaries and bounded full report data.
 
 ## 4.0.48
 

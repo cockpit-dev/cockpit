@@ -35,3 +35,4 @@ export 'src/runtime/cockpit_snapshot_options.dart';
 export 'src/runtime/cockpit_target_geometry.dart';
 export 'src/runtime/cockpit_target_geometry_resolver.dart';
 export 'src/runtime/cockpit_text_input_request.dart';
+export 'src/performance/cockpit_performance_collector.dart';

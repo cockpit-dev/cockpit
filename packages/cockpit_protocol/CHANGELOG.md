@@ -3,6 +3,8 @@
 ## 4.0.49
 
 - Synchronized the protocol package with the current Cockpit release.
+- Added bounded, display-aware performance report contracts with strict
+  duration, frame-count, timestamp, and payload validation.
 
 ## 4.0.48
 

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_cockpit/flutter_cockpit_flutter.dart';
@@ -119,6 +120,8 @@ final class CockpitTester {
 
   final List<CockpitCommandResult> _results = <CockpitCommandResult>[];
   final List<CockpitWatchResult> _watches = <CockpitWatchResult>[];
+  final List<CockpitPerformanceReport> _performances =
+      <CockpitPerformanceReport>[];
   var _sequence = 0;
   late final InAppCockpitCommandExecutor _executor = root.createCommandExecutor(
     platform: options.platform,
@@ -172,7 +175,118 @@ final class CockpitTester {
               },
             )
             .toList(growable: false),
+      if (_performances.isNotEmpty)
+        'performance': _performances
+            .map(
+              (performance) => <String, Object?>{
+                if (performance.stepId != null) 'step': performance.stepId,
+                'mode': performance.mode.jsonValue,
+                'summary': performance.summary.toJson(),
+                'frames': performance.frames.length,
+                'events': performance.events.length,
+                if (performance.droppedFrames > 0 ||
+                    performance.droppedEvents > 0 ||
+                    performance.invalidFrames > 0 ||
+                    performance.invalidEvents > 0)
+                  'dropped': <String, Object?>{
+                    if (performance.droppedFrames > 0)
+                      'frames': performance.droppedFrames,
+                    if (performance.droppedEvents > 0)
+                      'events': performance.droppedEvents,
+                    if (performance.invalidFrames > 0)
+                      'badFrames': performance.invalidFrames,
+                    if (performance.invalidEvents > 0)
+                      'badEvents': performance.invalidEvents,
+                  },
+                if (performance.timelineSource != null)
+                  'source': performance.timelineSource,
+              },
+            )
+            .toList(growable: false),
     };
+  }
+
+  /// Profiles one action using Flutter's engine frame timings and, when
+  /// supported by the platform, the official integration-test VM timeline.
+  ///
+  /// The complete bounded report is placed in [IntegrationTestWidgetsFlutterBinding.reportData]
+  /// under `cockpit.performance.<name>`. The value returned to normal test
+  /// output is the compact summary exposed by [report].
+  Future<CockpitPerformanceReport> profile(
+    Future<void> Function() action, {
+    String name = 'performance',
+    CockpitPerformanceMode mode = CockpitPerformanceMode.profile,
+    List<String> streams = const <String>['all'],
+    bool timeline = true,
+    Duration? timeout,
+  }) async {
+    final normalizedName = name.trim();
+    if (normalizedName.isEmpty) {
+      throw ArgumentError.value(name, 'name', 'Must not be empty.');
+    }
+    if (streams.isEmpty) {
+      throw ArgumentError.value(streams, 'streams', 'Must not be empty.');
+    }
+    final effectiveTimeout = timeout ?? options.commandTimeout;
+    _validateTimeout(effectiveTimeout, name: 'timeout');
+    final collector = FlutterCockpit.binding.performanceCollector;
+    if (collector.isRunning) {
+      throw StateError('Another performance capture is already running.');
+    }
+    collector.start(mode: mode);
+    dynamic timelineData;
+    var timelineSource = timeline ? 'unavailable:web' : null;
+    try {
+      if (timeline && !kIsWeb) {
+        final integrationBinding =
+            IntegrationTestWidgetsFlutterBinding.ensureInitialized();
+        final traced = integrationBinding.traceTimeline(
+          action,
+          streams: List<String>.unmodifiable(streams),
+        );
+        try {
+          timelineData = await traced.timeout(effectiveTimeout);
+        } on TimeoutException {
+          // Future.timeout cannot cancel the VM-service action. Wait for the
+          // owned action to finish before detaching frame callbacks, then
+          // surface the timeout to the caller instead of corrupting the next
+          // capture.
+          await traced;
+          rethrow;
+        }
+        timelineSource = 'vm';
+      } else {
+        final run = action();
+        try {
+          await run.timeout(effectiveTimeout);
+        } on TimeoutException {
+          // Futures are not cancellable. Drain the owned action before
+          // detaching the collector so late frames cannot leak into the next
+          // profile.
+          await run;
+          rethrow;
+        }
+      }
+    } finally {
+      final parsed = _parsePerformanceTimeline(timelineData);
+      final report = collector.stop(
+        events: parsed.events,
+        timelineSource: timelineSource,
+        stepId: normalizedName,
+        newGenGcCount: parsed.newGenGcCount,
+        oldGenGcCount: parsed.oldGenGcCount,
+        droppedEvents: parsed.droppedEvents,
+        invalidEvents: parsed.invalidEvents,
+      );
+      _performances.add(report);
+      final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
+      final existing = binding.reportData ?? <String, dynamic>{};
+      binding.reportData = <String, dynamic>{
+        ...existing,
+        'cockpit.performance.$normalizedName': report.toJson(),
+      };
+    }
+    return _performances.last;
   }
 
   /// Executes a fully specified Cockpit command.
@@ -1368,4 +1482,125 @@ void _validateMultiTouch(CockpitMultiTouchSequence sequence) {
       'Every pointer must end with an up event.',
     );
   }
+}
+
+_ParsedPerformanceTimeline _parsePerformanceTimeline(dynamic timeline) {
+  if (timeline == null) {
+    return const _ParsedPerformanceTimeline();
+  }
+  final rawEvents = (timeline as dynamic).traceEvents;
+  if (rawEvents is! Iterable) {
+    return const _ParsedPerformanceTimeline();
+  }
+  final events = <CockpitPerformanceEvent>[];
+  var invalid = 0;
+  var newGc = 0;
+  var oldGc = 0;
+  for (final rawEvent in rawEvents) {
+    if (events.length >= 200000) {
+      break;
+    }
+    final json = (rawEvent as dynamic).json;
+    if (json is! Map) {
+      invalid += 1;
+      continue;
+    }
+    final name = _timelineString(json['name']);
+    final category = _timelineCategory(json['cat']);
+    final timestampUs = _timelineInt(json['ts']);
+    final durationUs = json['dur'] == null ? 0 : _timelineInt(json['dur']);
+    if (name == null ||
+        category == null ||
+        timestampUs == null ||
+        durationUs == null ||
+        durationUs < 0) {
+      invalid += 1;
+      continue;
+    }
+    if (category == 'GC' && name == 'CollectNewGeneration') newGc += 1;
+    if (category == 'GC' && name == 'CollectOldGeneration') oldGc += 1;
+    final args = json['args'];
+    if (args is Map && !_isJsonValue(args)) {
+      invalid += 1;
+      continue;
+    }
+    events.add(
+      CockpitPerformanceEvent(
+        name: name,
+        category: category,
+        timestampUs: timestampUs,
+        durationUs: durationUs,
+        phase: _timelineString(json['ph']),
+        args: args is Map
+            ? <String, Object?>{
+                for (final entry in args.entries)
+                  if (entry.key is String && _isJsonValue(entry.value))
+                    entry.key as String: entry.value,
+              }
+            : const <String, Object?>{},
+      ),
+    );
+  }
+  final dropped = rawEvents.length > events.length + invalid
+      ? rawEvents.length - events.length - invalid
+      : 0;
+  return _ParsedPerformanceTimeline(
+    events: events,
+    invalidEvents: invalid,
+    droppedEvents: dropped,
+    newGenGcCount: newGc,
+    oldGenGcCount: oldGc,
+  );
+}
+
+String? _timelineString(Object? value) {
+  if (value is String && value.isNotEmpty) return value;
+  return null;
+}
+
+String? _timelineCategory(Object? value) {
+  if (value is String && value.isNotEmpty) return value;
+  if (value is List) {
+    final values = value.whereType<String>().where((value) => value.isNotEmpty);
+    return values.isEmpty ? null : values.first;
+  }
+  return null;
+}
+
+int? _timelineInt(Object? value) {
+  if (value is int) return value;
+  if (value is num && value.isFinite && value == value.round()) {
+    return value.toInt();
+  }
+  return null;
+}
+
+bool _isJsonValue(Object? value) {
+  if (value == null || value is String || value is bool) {
+    return true;
+  }
+  if (value is num) return value.isFinite;
+  if (value is List) return value.every(_isJsonValue);
+  if (value is Map) {
+    return value.entries.every(
+      (entry) => entry.key is String && _isJsonValue(entry.value),
+    );
+  }
+  return false;
+}
+
+final class _ParsedPerformanceTimeline {
+  const _ParsedPerformanceTimeline({
+    this.events = const <CockpitPerformanceEvent>[],
+    this.invalidEvents = 0,
+    this.droppedEvents = 0,
+    this.newGenGcCount,
+    this.oldGenGcCount,
+  });
+
+  final List<CockpitPerformanceEvent> events;
+  final int invalidEvents;
+  final int droppedEvents;
+  final int? newGenGcCount;
+  final int? oldGenGcCount;
 }

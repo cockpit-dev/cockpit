@@ -157,6 +157,32 @@ await cockpit.host.action(
 `integration_test` 的 `reportData`。大快照和二进制证据保存在 artifact 中，不会倾倒
 到测试输出。
 
+## 性能采集
+
+使用与应用相同的测试时钟和帧管线，对一次交互进行性能采集。Cockpit 记录引擎提供的
+`FrameTiming`（build、raster、vsync、总耗时、raster cache、jank budget，以及
+p50/p90/p99/最大值）。原生 Flutter 平台还会采集官方 integration-test VM timeline
+和 GC 事件；Web 不支持 VM timeline 时会明确标记 unavailable，不会伪造数据：
+
+```dart
+final report = await cockpit.profile(
+  () async {
+    await cockpit.tap('#open-list');
+    await cockpit.scroll('#list');
+  },
+  name: 'open-list',
+  streams: const <String>['Dart', 'GC', 'Embedder'],
+);
+expect(report.summary.jankCount, 0);
+```
+
+完整的有界报告会写入
+`IntegrationTestWidgetsFlutterBinding.reportData` 的
+`cockpit.performance.open-list`，普通 Cockpit 结果只保留紧凑汇总。达到保留上限时会
+明确输出 `dropped` 数量；当原始引擎时间戳不足以建立单调帧率时会省略 `fps`。帧预算优先
+取 Flutter 暴露的目标屏幕刷新率，否则记录官方文档使用的 60Hz fallback。缺失或
+unavailable 的指标不能当成 0 处理。
+
 ## 运行
 
 使用 Flutter 原生集成测试命令：
