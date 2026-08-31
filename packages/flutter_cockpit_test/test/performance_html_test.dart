@@ -35,7 +35,7 @@ void main() {
     expect(html, contains('Download full JSON'));
     expect(html, contains('JSON.stringify(data)]'));
     expect(html, contains('JSON.stringify(timelinePayload())]'));
-    expect(html, contains('padding: 10px 12px'));
+    expect(html, contains('padding: 6px 8px'));
     expect(html, contains('margin-top: 15px; }'));
     expect(html, contains('traceEvents'));
     expect(html, contains('timelinePayload'));

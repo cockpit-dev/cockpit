@@ -405,7 +405,7 @@ input[type="search"] { width: 100%; }
 .chart-grid .panel { margin-top: 0; }
 .insight-grid { margin-top: 15px; }
 .insight-grid .panel { margin-top: 0; }
-.chart-wrap { position: relative; display: flex; min-width: 0; min-height: 0; height: 310px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); overflow: hidden; }
+.chart-wrap { position: relative; display: flex; min-width: 0; min-height: 0; height: 310px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); overflow: hidden; }
 .chart-wrap canvas { display: block; flex: 1 1 auto; min-width: 0; min-height: 0; width: 100%; height: 100%; }
 .chart-wrap canvas:hover { cursor: crosshair; }
 .chart-tooltip { position: fixed; z-index: 20; max-width: min(360px, calc(100vw - 24px)); padding: 9px 11px; border: 1px solid var(--line-strong); border-radius: 9px; background: color-mix(in srgb, var(--surface) 96%, transparent); color: var(--text-soft); box-shadow: var(--shadow); font-size: 11px; line-height: 1.45; pointer-events: none; opacity: 0; transform: translate(12px, 12px); transition: opacity 100ms ease; }
