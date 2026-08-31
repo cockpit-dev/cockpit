@@ -271,7 +271,7 @@ file, URL, symbol, or line. Frame timings alone do not identify Dart code, so
 the report never invents a source location.
 
 The DevTools section includes a VM heap trend chart, CPU/heap/GPU summaries,
-isolate lifecycle rows, and recorder/stream metadata. Each section has a
+VM identity and isolate inventory, isolate lifecycle rows, and recorder/stream metadata. Each section has a
 compact **Details** action that opens a native dialog with bounded JSON
 previews. The full retained arrays remain in the JSON download, so opening a
 dialog does not freeze the report. CPU details also include verified sample

@@ -56,6 +56,7 @@ final class CockpitDevToolsProfiler {
   CockpitIsolateStats? _isolateBefore;
   CockpitIsolateStats? _isolateAfter;
   CockpitTimelineProfile? _timeline;
+  CockpitVmRuntimeProfile? _vm;
   Duration _heapSampleEvery = const Duration(milliseconds: 100);
   Timer? _heapSampleTimer;
   Future<void>? _heapSamplePending;
@@ -91,6 +92,7 @@ final class CockpitDevToolsProfiler {
     _isolateBefore = null;
     _isolateAfter = null;
     _timeline = null;
+    _vm = null;
     _requested = cpu || heap || timeline;
     if (!_requested) return;
     try {
@@ -102,6 +104,7 @@ final class CockpitDevToolsProfiler {
       }
       final service = await connectCockpitVmService(uri).timeout(timeout);
       final vm = await service.getVM().timeout(timeout);
+      _vm = _vmProfile(vm);
       final isolateId = _mainIsolateId(vm);
       if (isolateId == null) {
         await service.dispose();
@@ -190,6 +193,7 @@ final class CockpitDevToolsProfiler {
         state: _hasUnsupportedFailure ? 'unsupported' : 'unavailable',
         reason: _failureReason ?? 'VM service connection was not established.',
         gpu: _gpu(events),
+        vm: _vm,
       );
     }
 
@@ -311,6 +315,7 @@ final class CockpitDevToolsProfiler {
         _isolateBefore != null ||
         _isolateAfter != null ||
         _timeline != null ||
+        _vm != null ||
         gpu != null;
     if (!hasData && _failures.isNotEmpty) {
       return CockpitDevToolsProfile(
@@ -318,6 +323,7 @@ final class CockpitDevToolsProfiler {
         state: 'unavailable',
         reason: _failureReason,
         gpu: gpu,
+        vm: _vm,
       );
     }
     return CockpitDevToolsProfile(
@@ -331,6 +337,7 @@ final class CockpitDevToolsProfiler {
           ? null
           : CockpitIsolateProfile(before: _isolateBefore, after: _isolateAfter),
       timeline: _timeline,
+      vm: _vm,
     );
   }
 
@@ -702,6 +709,30 @@ final class CockpitDevToolsProfiler {
       if (id != null) return id;
     }
     return null;
+  }
+
+  static CockpitVmRuntimeProfile _vmProfile(VM vm) {
+    int? nonNegative(int? value) => value == null || value < 0 ? null : value;
+    String? nonEmpty(String? value) {
+      final text = value?.trim();
+      return text == null || text.isEmpty ? null : text;
+    }
+
+    return CockpitVmRuntimeProfile(
+      name: nonEmpty(vm.name),
+      version: nonEmpty(vm.version),
+      operatingSystem: nonEmpty(vm.operatingSystem),
+      hostCpu: nonEmpty(vm.hostCPU),
+      targetCpu: nonEmpty(vm.targetCPU),
+      architectureBits: vm.architectureBits == null || vm.architectureBits! <= 0
+          ? null
+          : vm.architectureBits,
+      pid: nonNegative(vm.pid),
+      startTimeMs: nonNegative(vm.startTime),
+      isolateCount: vm.isolates?.length,
+      isolateGroupCount: vm.isolateGroups?.length,
+      systemIsolateCount: vm.systemIsolates?.length,
+    );
   }
 
   static int _nonNegative(int? value) => value == null || value < 0 ? 0 : value;

@@ -355,6 +355,19 @@ void main() {
         availableStreams: const <String>['Dart', 'GC'],
         recordedStreams: const <String>['Dart'],
       ),
+      vm: CockpitVmRuntimeProfile(
+        name: 'vm',
+        version: '3.8.0',
+        operatingSystem: 'macos',
+        hostCpu: 'arm64',
+        targetCpu: 'arm64',
+        architectureBits: 64,
+        pid: 42,
+        startTimeMs: 1700000000000,
+        isolateCount: 2,
+        isolateGroupCount: 1,
+        systemIsolateCount: 1,
+      ),
     );
     final decoded = CockpitDevToolsProfile.fromJson(profile.toJson());
     expect(decoded.cpu!.samples.single.stack, <int>[0]);
@@ -365,6 +378,8 @@ void main() {
     expect(decoded.gpu!.shaderEvents, 1);
     expect(decoded.isolate!.after!.livePorts, 2);
     expect(decoded.timeline!.recordedStreams, <String>['Dart']);
+    expect(decoded.vm!.targetCpu, 'arm64');
+    expect(decoded.vm!.isolateCount, 2);
   });
 
   test('DevTools heap samples preserve order and compact drop count', () {
