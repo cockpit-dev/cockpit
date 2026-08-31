@@ -5,6 +5,10 @@
 - Synchronized the integration-test facade with the current Cockpit release.
 - Added `CockpitTester.profile` for action-level FrameTiming and native VM
   timeline/GC reports with compact summaries and bounded full report data.
+- Profile reports now preserve wall-time frame timestamps and distinguish
+  retained samples from observed frames.
+- Reports also identify the Flutter build mode for safe interpretation of
+  performance data.
 
 ## 4.0.48
 

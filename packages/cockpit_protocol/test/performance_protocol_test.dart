@@ -6,6 +6,7 @@ void main() {
     const CockpitPerformanceFrame(
       index: 0,
       timestampUs: 100,
+      wallTimeUs: 900,
       buildUs: 4000,
       rasterUs: 5000,
       vsyncUs: 1000,
@@ -19,6 +20,7 @@ void main() {
     const CockpitPerformanceFrame(
       index: 1,
       timestampUs: 17100,
+      wallTimeUs: 17900,
       buildUs: 20000,
       rasterUs: 3000,
       vsyncUs: 1000,
@@ -37,12 +39,49 @@ void main() {
     );
 
     expect(summary.frameCount, 2);
+    expect(summary.build.sampleCount, 2);
     expect(summary.jankCount, 1);
     expect(summary.fps, closeTo(58.8235, 0.001));
     expect(summary.build.missedBudget, 1);
     expect(summary.build.budgetUs, 16667);
     expect(summary.layerCacheMax, <String, int>{'count': 4, 'bytes': 40});
     expect(summary.pictureCacheMax, <String, int>{'count': 5, 'bytes': 50});
+    expect(summary.toJson()['build'], containsPair('n', 2));
+  });
+
+  test('jank uses total span and repeated timestamps do not fabricate fps', () {
+    final summary =
+        CockpitPerformanceSummary.fromFrames(<CockpitPerformanceFrame>[
+          const CockpitPerformanceFrame(
+            index: 0,
+            timestampUs: 0,
+            wallTimeUs: 0,
+            buildUs: 1000,
+            rasterUs: 1000,
+            vsyncUs: 1000,
+            totalUs: 20000,
+            layerCount: 0,
+            layerBytes: 0,
+            pictureCount: 0,
+            pictureBytes: 0,
+          ),
+          const CockpitPerformanceFrame(
+            index: 1,
+            timestampUs: 0,
+            wallTimeUs: 16000,
+            buildUs: 1000,
+            rasterUs: 1000,
+            vsyncUs: 1000,
+            totalUs: 1000,
+            layerCount: 0,
+            layerBytes: 0,
+            pictureCount: 0,
+            pictureBytes: 0,
+          ),
+        ], frameBudgetUs: 16667);
+
+    expect(summary.jankCount, 1);
+    expect(summary.fps, isNull);
   });
 
   test('empty summary does not invent fps', () {
@@ -54,6 +93,7 @@ void main() {
     expect(summary.frameCount, 0);
     expect(summary.fps, isNull);
     expect(summary.toJson().containsKey('fps'), isFalse);
+    expect(summary.toJson()['build'], <String, Object?>{'n': 0, 'bud': 16667});
   });
 
   test('report rejects inconsistent duration and frame counts', () {
@@ -70,6 +110,7 @@ void main() {
         durationUs: 10000,
         durationMs: 9,
         platform: 'test',
+        buildMode: 'profile',
         mode: CockpitPerformanceMode.light,
         summary: summary,
         frames: frames,
@@ -83,6 +124,7 @@ void main() {
         durationUs: 0,
         durationMs: 0,
         platform: 'test',
+        buildMode: 'profile',
         mode: CockpitPerformanceMode.light,
         summary: summary,
         frames: const <CockpitPerformanceFrame>[],
@@ -103,10 +145,11 @@ void main() {
       durationUs: 10000,
       durationMs: 10,
       platform: 'test',
+      buildMode: 'profile',
       mode: CockpitPerformanceMode.profile,
       summary: summary,
       frames: frames,
-      events: const <CockpitPerformanceEvent>[
+      events: <CockpitPerformanceEvent>[
         CockpitPerformanceEvent(
           name: 'build',
           category: 'Dart',
@@ -118,7 +161,60 @@ void main() {
     final decoded = CockpitPerformanceReport.fromJson(report.toJson());
 
     expect(decoded.frames, frames);
+    expect(decoded.frames.first.wallTimeUs, 900);
+    expect(decoded.buildMode, 'profile');
     expect(decoded.events.single.timestampUs, -2);
     expect(decoded.summary.build.toJson(), containsPair('bud', 16667));
+  });
+
+  test('rejects incomplete populated phases and timezone-free reports', () {
+    expect(
+      () => CockpitPerformancePhaseSummary.fromJson(<String, Object?>{
+        'n': 1,
+        'bud': 16667,
+        'avg': 1,
+      }),
+      throwsFormatException,
+    );
+
+    final summary = CockpitPerformanceSummary.fromFrames(
+      const <CockpitPerformanceFrame>[],
+      frameBudgetUs: 16667,
+    );
+    expect(
+      () => CockpitPerformanceReport.fromJson(<String, Object?>{
+        'schema': 'cockpit.performance/v2',
+        'started': '2026-01-01T00:00:00',
+        'finished': '2026-01-01T00:00:00Z',
+        'durationUs': 0,
+        'durationMs': 0,
+        'platform': 'test',
+        'mode': 'light',
+        'summary': summary.toJson(),
+      }),
+      throwsFormatException,
+    );
+  });
+
+  test('event arguments are snapshotted instead of remaining mutable', () {
+    final nested = <String, Object?>{
+      'items': <Object?>[
+        <String, Object?>{'value': 1},
+      ],
+    };
+    final event = CockpitPerformanceEvent(
+      name: 'work',
+      category: 'Dart',
+      timestampUs: 1,
+      durationUs: 2,
+      args: nested,
+    );
+    (nested['items']! as List<Object?>).clear();
+
+    expect(event.args['items'], hasLength(1));
+    expect(
+      () => (event.args['items']! as List<Object?>).clear(),
+      throwsUnsupportedError,
+    );
   });
 }

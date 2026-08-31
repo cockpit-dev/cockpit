@@ -15,10 +15,8 @@ void main() {
 
       expect(report.stepId, 'increment');
       expect(report.timelineSource, isNull);
-      expect(
-        report.summary.frameCount,
-        report.frames.length + report.droppedFrames,
-      );
+      expect(report.buildMode, 'debug');
+      expect(report.summary.frameCount, report.frames.length);
       expect(cockpit.report['performance'], isA<List<Object?>>());
     },
   );

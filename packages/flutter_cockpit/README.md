@@ -198,10 +198,16 @@ collector.start();
 final report = collector.stop(stepId: 'open-list');
 ```
 
-The report includes build/raster/vsync/total durations, p50/p90/p99/worst
-values, jank counts, cache peaks, and an explicit `dropped` count when the
-retention limit is reached. `fps` is omitted unless the source frame timestamps
-prove a positive monotonic cadence. For VM timeline events and GC counts, use
+The report includes raw vsync and raster-finish wall-time timestamps,
+build/raster/vsync/total durations, p50/p90/p99/worst values, jank counts,
+cache peaks, and an explicit `dropped` count when the retention limit is
+reached. Aggregates describe retained frames only; when `dropped.frames` is
+present they are a bounded sample, not whole-capture percentiles. Empty phases
+omit duration aggregates instead of reporting a fabricated zero. `fps` is
+omitted unless the source frame timestamps prove a strictly increasing cadence.
+Every report records the Flutter build mode; debug timings are diagnostic only,
+while profile or release timings are suitable for performance decisions.
+For VM timeline events and GC counts, use
 `flutter_cockpit_test`'s `cockpit.profile`; unsupported platforms are reported
 as unavailable instead of receiving guessed values.
 

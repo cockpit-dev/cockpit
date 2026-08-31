@@ -1,5 +1,11 @@
 import 'package:collection/collection.dart';
 
+const Set<String> _performanceBuildModes = <String>{
+  'debug',
+  'profile',
+  'release',
+};
+
 /// The amount of performance data retained while a collector is active.
 enum CockpitPerformanceMode {
   light('light'),
@@ -10,14 +16,10 @@ enum CockpitPerformanceMode {
   final String jsonValue;
 
   static CockpitPerformanceMode fromJson(Object? value) {
-    return values.firstWhere(
-      (mode) => mode.jsonValue == value,
-      orElse: () => throw ArgumentError.value(
-        value,
-        'value',
-        'Unsupported performance mode.',
-      ),
-    );
+    for (final mode in values) {
+      if (mode.jsonValue == value) return mode;
+    }
+    throw FormatException('Unsupported performance mode: $value.');
   }
 }
 
@@ -30,6 +32,7 @@ final class CockpitPerformanceFrame {
   const CockpitPerformanceFrame({
     required this.index,
     required this.timestampUs,
+    required this.wallTimeUs,
     required this.buildUs,
     required this.rasterUs,
     required this.vsyncUs,
@@ -42,7 +45,15 @@ final class CockpitPerformanceFrame {
   });
 
   final int index;
+
+  /// The engine timestamp for [FramePhase.vsyncStart].
   final int timestampUs;
+
+  /// The wall-time timestamp for [FramePhase.rasterFinishWallTime].
+  ///
+  /// This uses the same engine-defined epoch as the other frame timestamps;
+  /// it is not a Dart [DateTime] value.
+  final int wallTimeUs;
   final int buildUs;
   final int rasterUs;
   final int vsyncUs;
@@ -68,6 +79,7 @@ final class CockpitPerformanceFrame {
   Map<String, Object?> toJson() => <String, Object?>{
     'i': index,
     't': timestampUs,
+    'w': wallTimeUs,
     'b': buildUs,
     'r': rasterUs,
     'v': vsyncUs,
@@ -87,6 +99,7 @@ final class CockpitPerformanceFrame {
       // DateTime values and may be negative in synthetic/test data, so never
       // apply a non-negative constraint here.
       timestampUs: _anyInt(json['t'], r'$.frame.t'),
+      wallTimeUs: _anyInt(json['w'], r'$.frame.w'),
       buildUs: _nonNegativeInt(json['b'], r'$.frame.b'),
       rasterUs: _nonNegativeInt(json['r'], r'$.frame.r'),
       vsyncUs: _nonNegativeInt(json['v'], r'$.frame.v'),
@@ -107,6 +120,7 @@ final class CockpitPerformanceFrame {
         other is CockpitPerformanceFrame &&
             other.index == index &&
             other.timestampUs == timestampUs &&
+            other.wallTimeUs == wallTimeUs &&
             other.buildUs == buildUs &&
             other.rasterUs == rasterUs &&
             other.vsyncUs == vsyncUs &&
@@ -122,6 +136,7 @@ final class CockpitPerformanceFrame {
   int get hashCode => Object.hash(
     index,
     timestampUs,
+    wallTimeUs,
     buildUs,
     rasterUs,
     vsyncUs,
@@ -136,14 +151,14 @@ final class CockpitPerformanceFrame {
 
 /// A bounded VM timeline event retained for the exported performance report.
 final class CockpitPerformanceEvent {
-  const CockpitPerformanceEvent({
+  CockpitPerformanceEvent({
     required this.name,
     required this.category,
     required this.timestampUs,
     required this.durationUs,
-    this.args = const <String, Object?>{},
+    Map<String, Object?> args = const <String, Object?>{},
     this.phase,
-  });
+  }) : args = _freezeJsonObject(args);
 
   final String name;
   final String category;
@@ -153,10 +168,10 @@ final class CockpitPerformanceEvent {
   final String? phase;
 
   bool get isValid =>
-      name.isNotEmpty &&
-      category.isNotEmpty &&
+      name.trim().isNotEmpty &&
+      category.trim().isNotEmpty &&
       durationUs >= 0 &&
-      (phase == null || phase!.isNotEmpty) &&
+      (phase == null || phase!.trim().isNotEmpty) &&
       _isJsonObject(args);
 
   Map<String, Object?> toJson() => <String, Object?>{
@@ -211,6 +226,7 @@ final class CockpitPerformanceEvent {
 /// Percentile and budget information for one frame phase.
 final class CockpitPerformancePhaseSummary {
   const CockpitPerformancePhaseSummary({
+    required this.sampleCount,
     required this.averageUs,
     required this.p50Us,
     required this.p90Us,
@@ -220,6 +236,12 @@ final class CockpitPerformancePhaseSummary {
     required this.missedBudget,
   });
 
+  /// Number of retained frames used to calculate this phase summary.
+  ///
+  /// A zero value means the phase has no measurements. In that case the
+  /// numeric aggregates are deliberately omitted from [toJson] instead of
+  /// pretending that the measured duration was zero.
+  final int sampleCount;
   final int averageUs;
   final int p50Us;
   final int p90Us;
@@ -229,59 +251,110 @@ final class CockpitPerformancePhaseSummary {
   final int missedBudget;
 
   bool get isValid =>
+      sampleCount >= 0 &&
       averageUs >= 0 &&
       p50Us >= 0 &&
       p90Us >= 0 &&
       p99Us >= 0 &&
       worstUs >= 0 &&
       budgetUs > 0 &&
-      missedBudget >= 0;
+      missedBudget >= 0 &&
+      missedBudget <= sampleCount &&
+      (sampleCount > 0 ||
+          (averageUs == 0 &&
+              p50Us == 0 &&
+              p90Us == 0 &&
+              p99Us == 0 &&
+              worstUs == 0 &&
+              missedBudget == 0)) &&
+      (sampleCount == 0 ||
+          (averageUs <= worstUs &&
+              p50Us <= worstUs &&
+              p90Us <= worstUs &&
+              p99Us <= worstUs));
 
   Map<String, Object?> toJson() => <String, Object?>{
-    'avg': averageUs,
-    'p50': p50Us,
-    'p90': p90Us,
-    'p99': p99Us,
-    'max': worstUs,
+    'n': sampleCount,
     'bud': budgetUs,
-    'miss': missedBudget,
+    if (sampleCount > 0) ...<String, Object?>{
+      'avg': averageUs,
+      'p50': p50Us,
+      'p90': p90Us,
+      'p99': p99Us,
+      'max': worstUs,
+      'miss': missedBudget,
+    },
   };
 
   factory CockpitPerformancePhaseSummary.fromJson(Object? value) {
     final json = _object(value, r'$.phase');
+    final sampleCount = _nonNegativeInt(json['n'], r'$.phase.n');
+    if (sampleCount > 0 &&
+        <String>[
+          'avg',
+          'p50',
+          'p90',
+          'p99',
+          'max',
+          'miss',
+        ].any((key) => !json.containsKey(key))) {
+      throw const FormatException(
+        'A populated phase must include every aggregate.',
+      );
+    }
     return CockpitPerformancePhaseSummary(
-      averageUs: _nonNegativeInt(json['avg'], r'$.phase.avg'),
-      p50Us: _nonNegativeInt(json['p50'], r'$.phase.p50'),
-      p90Us: _nonNegativeInt(json['p90'], r'$.phase.p90'),
-      p99Us: _nonNegativeInt(json['p99'], r'$.phase.p99'),
-      worstUs: _nonNegativeInt(json['max'], r'$.phase.max'),
+      sampleCount: sampleCount,
+      averageUs: json['avg'] == null
+          ? 0
+          : _nonNegativeInt(json['avg'], r'$.phase.avg'),
+      p50Us: json['p50'] == null
+          ? 0
+          : _nonNegativeInt(json['p50'], r'$.phase.p50'),
+      p90Us: json['p90'] == null
+          ? 0
+          : _nonNegativeInt(json['p90'], r'$.phase.p90'),
+      p99Us: json['p99'] == null
+          ? 0
+          : _nonNegativeInt(json['p99'], r'$.phase.p99'),
+      worstUs: json['max'] == null
+          ? 0
+          : _nonNegativeInt(json['max'], r'$.phase.max'),
       budgetUs: _positiveInt(json['bud'], r'$.phase.bud'),
-      missedBudget: _nonNegativeInt(json['miss'], r'$.phase.miss'),
+      missedBudget: json['miss'] == null
+          ? 0
+          : _nonNegativeInt(json['miss'], r'$.phase.miss'),
     );
   }
 }
 
 /// Compact aggregate performance metrics suitable for normal AI output.
+///
+/// [frameCount] is the number of retained frames represented by the aggregate.
+/// A report can observe more frames than it retains; in that case its
+/// [CockpitPerformanceReport.droppedFrames] field makes the sampling boundary
+/// explicit and these metrics must not be interpreted as whole-capture
+/// percentiles.
 final class CockpitPerformanceSummary {
-  const CockpitPerformanceSummary({
+  CockpitPerformanceSummary({
     required this.frameCount,
     required this.jankCount,
     this.fps,
     required this.build,
     required this.raster,
     required this.vsync,
-    required this.layerCacheMax,
-    required this.pictureCacheMax,
+    required Map<String, int> layerCacheMax,
+    required Map<String, int> pictureCacheMax,
     this.newGenGcCount,
     this.oldGenGcCount,
-  });
+  }) : layerCacheMax = Map<String, int>.unmodifiable(layerCacheMax),
+       pictureCacheMax = Map<String, int>.unmodifiable(pictureCacheMax);
 
   final int frameCount;
   final int jankCount;
 
   /// The observed frame cadence. It is null when fewer than two valid,
-  /// monotonic engine timestamps are available; no wall-clock estimate is
-  /// substituted in that case.
+  /// strictly increasing engine timestamps are available; no wall-clock
+  /// estimate is substituted in that case.
   final double? fps;
   final CockpitPerformancePhaseSummary build;
   final CockpitPerformancePhaseSummary raster;
@@ -294,10 +367,14 @@ final class CockpitPerformanceSummary {
   bool get isValid =>
       frameCount >= 0 &&
       jankCount >= 0 &&
+      jankCount <= frameCount &&
       (fps == null || (fps!.isFinite && fps! > 0)) &&
       build.isValid &&
       raster.isValid &&
       vsync.isValid &&
+      build.sampleCount == frameCount &&
+      raster.sampleCount == frameCount &&
+      vsync.sampleCount == frameCount &&
       _validCache(layerCacheMax) &&
       _validCache(pictureCacheMax) &&
       (newGenGcCount == null || newGenGcCount! >= 0) &&
@@ -365,14 +442,17 @@ final class CockpitPerformanceSummary {
     );
     var jank = 0;
     for (final frame in frames) {
-      if (frame.buildUs > frameBudgetUs || frame.rasterUs > frameBudgetUs) {
+      // Flutter defines the frame budget against totalSpan. Build and raster
+      // phase misses remain available separately, but neither phase alone is
+      // a reliable jank verdict because the engine can overlap their work.
+      if (frame.totalUs > frameBudgetUs) {
         jank += 1;
       }
     }
     final timestamps = <int>[];
     var monotonic = true;
     for (final frame in frames) {
-      if (timestamps.isNotEmpty && frame.timestampUs < timestamps.last) {
+      if (timestamps.isNotEmpty && frame.timestampUs <= timestamps.last) {
         monotonic = false;
       }
       timestamps.add(frame.timestampUs);
@@ -462,12 +542,13 @@ final class CockpitPerformanceSummary {
 /// A complete bounded performance capture.
 final class CockpitPerformanceReport {
   CockpitPerformanceReport({
-    this.schemaVersion = 'cockpit.performance/v1',
+    this.schemaVersion = 'cockpit.performance/v2',
     required this.startedAt,
     required this.finishedAt,
     required this.durationUs,
     required this.durationMs,
     required this.platform,
+    required this.buildMode,
     required this.mode,
     required this.summary,
     Iterable<CockpitPerformanceFrame> frames =
@@ -482,13 +563,19 @@ final class CockpitPerformanceReport {
     this.stepId,
   }) : frames = List<CockpitPerformanceFrame>.unmodifiable(frames),
        events = List<CockpitPerformanceEvent>.unmodifiable(events) {
-    if (schemaVersion != 'cockpit.performance/v1') {
+    if (schemaVersion != 'cockpit.performance/v2') {
       throw const FormatException('Unsupported performance report schema.');
     }
     if (!startedAt.isUtc ||
         !finishedAt.isUtc ||
         finishedAt.isBefore(startedAt)) {
       throw const FormatException('Performance report timestamps are invalid.');
+    }
+    if (platform.trim().isEmpty ||
+        !_performanceBuildModes.contains(buildMode) ||
+        (timelineSource != null && timelineSource!.trim().isEmpty) ||
+        (stepId != null && stepId!.trim().isEmpty)) {
+      throw const FormatException('Performance report identity is invalid.');
     }
     if (durationUs < 0 ||
         durationMs < 0 ||
@@ -504,8 +591,10 @@ final class CockpitPerformanceReport {
         'Performance report duration is inconsistent.',
       );
     }
-    if (summary.frameCount != frames.length + droppedFrames) {
-      throw const FormatException('Performance frame counts are inconsistent.');
+    if (summary.frameCount != this.frames.length) {
+      throw const FormatException(
+        'Performance summary sample count is inconsistent.',
+      );
     }
     if (frames.length > 100000 || events.length > 200000) {
       throw const FormatException('Performance report is too large.');
@@ -515,6 +604,13 @@ final class CockpitPerformanceReport {
         !summary.isValid) {
       throw const FormatException('Performance report contains invalid data.');
     }
+    for (var i = 1; i < this.frames.length; i += 1) {
+      if (this.frames[i].index <= this.frames[i - 1].index) {
+        throw const FormatException(
+          'Performance frame indexes are not ordered.',
+        );
+      }
+    }
   }
 
   final String schemaVersion;
@@ -523,6 +619,7 @@ final class CockpitPerformanceReport {
   final int durationUs;
   final int durationMs;
   final String platform;
+  final String buildMode;
   final CockpitPerformanceMode mode;
   final CockpitPerformanceSummary summary;
   final List<CockpitPerformanceFrame> frames;
@@ -534,6 +631,9 @@ final class CockpitPerformanceReport {
   final String? timelineSource;
   final String? stepId;
 
+  /// Number of valid frames observed before bounded retention was applied.
+  int get observedFrameCount => frames.length + droppedFrames;
+
   Map<String, Object?> toJson() => <String, Object?>{
     'schema': schemaVersion,
     'started': startedAt.toIso8601String(),
@@ -541,6 +641,7 @@ final class CockpitPerformanceReport {
     'durationUs': durationUs,
     'durationMs': durationMs,
     'platform': platform,
+    'build': buildMode,
     'mode': mode.jsonValue,
     'summary': summary.toJson(),
     if (frames.isNotEmpty)
@@ -582,6 +683,7 @@ final class CockpitPerformanceReport {
         r'$.performance.durationMs',
       ),
       platform: _string(json['platform'], r'$.performance.platform'),
+      buildMode: _string(json['build'], r'$.performance.build'),
       mode: CockpitPerformanceMode.fromJson(json['mode']),
       summary: CockpitPerformanceSummary.fromJson(json['summary']),
       frames: rawFrames == null
@@ -620,8 +722,8 @@ final class CockpitPerformanceReport {
               droppedJson['badEvents'],
               r'$.performance.dropped.badEvents',
             ),
-      timelineSource: json['source'] as String?,
-      stepId: json['step'] as String?,
+      timelineSource: _optionalString(json['source'], r'$.performance.source'),
+      stepId: _optionalString(json['step'], r'$.performance.step'),
     );
   }
 }
@@ -640,6 +742,11 @@ List<Object?> _list(Object? value, String path) {
 String _string(Object? value, String path) {
   if (value is String && value.isNotEmpty) return value;
   throw FormatException('$path must be a non-empty string.');
+}
+
+String? _optionalString(Object? value, String path) {
+  if (value == null) return null;
+  return _string(value, path);
 }
 
 int _anyInt(Object? value, String path) {
@@ -666,8 +773,10 @@ DateTime _date(Object? value, String path) {
   if (value is! String) {
     throw FormatException('$path must be an ISO timestamp.');
   }
-  final parsed = DateTime.tryParse(value)?.toUtc();
-  if (parsed == null) throw FormatException('$path must be an ISO timestamp.');
+  final parsed = DateTime.tryParse(value);
+  if (parsed == null || !parsed.isUtc) {
+    throw FormatException('$path must be an ISO timestamp with a timezone.');
+  }
   return parsed;
 }
 
@@ -679,6 +788,7 @@ CockpitPerformancePhaseSummary _phaseSummary(
   final data = values.toList(growable: false);
   if (data.isEmpty) {
     return CockpitPerformancePhaseSummary(
+      sampleCount: 0,
       averageUs: 0,
       p50Us: 0,
       p90Us: 0,
@@ -689,9 +799,19 @@ CockpitPerformancePhaseSummary _phaseSummary(
     );
   }
   final sorted = List<int>.from(data)..sort();
-  int percentile(double p) => sorted[((sorted.length - 1) * p).round()];
+  int percentile(double p) {
+    final rank = (sorted.length - 1) * p;
+    final lower = rank.floor();
+    final upper = rank.ceil();
+    if (lower == upper) return sorted[lower];
+    final fraction = rank - lower;
+    return (sorted[lower] + (sorted[upper] - sorted[lower]) * fraction).round();
+  }
+
+  final sum = data.fold<int>(0, (total, value) => total + value);
   return CockpitPerformancePhaseSummary(
-    averageUs: data.reduce((a, b) => a + b) ~/ data.length,
+    sampleCount: data.length,
+    averageUs: (sum / data.length).round(),
     p50Us: percentile(.50),
     p90Us: percentile(.90),
     p99Us: percentile(.99),
@@ -729,6 +849,24 @@ bool _isJsonObject(Map<String, Object?> value) {
   }
 
   return value.entries.every((entry) => isJson(entry.value));
+}
+
+Map<String, Object?> _freezeJsonObject(Map<String, Object?> value) {
+  return Map<String, Object?>.unmodifiable(<String, Object?>{
+    for (final entry in value.entries) entry.key: _freezeJson(entry.value),
+  });
+}
+
+Object? _freezeJson(Object? value) {
+  if (value is Map) {
+    return Map<Object?, Object?>.unmodifiable(<Object?, Object?>{
+      for (final entry in value.entries) entry.key: _freezeJson(entry.value),
+    });
+  }
+  if (value is List) {
+    return List<Object?>.unmodifiable(value.map(_freezeJson));
+  }
+  return value;
 }
 
 bool _validCache(Map<String, int> value) {

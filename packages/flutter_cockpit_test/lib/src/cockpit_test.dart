@@ -181,6 +181,7 @@ final class CockpitTester {
               (performance) => <String, Object?>{
                 if (performance.stepId != null) 'step': performance.stepId,
                 'mode': performance.mode.jsonValue,
+                'build': performance.buildMode,
                 'summary': performance.summary.toJson(),
                 'frames': performance.frames.length,
                 'events': performance.events.length,
@@ -1488,19 +1489,28 @@ _ParsedPerformanceTimeline _parsePerformanceTimeline(dynamic timeline) {
   if (timeline == null) {
     return const _ParsedPerformanceTimeline();
   }
-  final rawEvents = (timeline as dynamic).traceEvents;
+  final Object? rawEvents;
+  try {
+    rawEvents = (timeline as dynamic).traceEvents;
+  } catch (_) {
+    return const _ParsedPerformanceTimeline(invalidEvents: 1);
+  }
   if (rawEvents is! Iterable) {
-    return const _ParsedPerformanceTimeline();
+    return const _ParsedPerformanceTimeline(invalidEvents: 1);
   }
   final events = <CockpitPerformanceEvent>[];
   var invalid = 0;
+  var dropped = 0;
   var newGc = 0;
   var oldGc = 0;
   for (final rawEvent in rawEvents) {
-    if (events.length >= 200000) {
-      break;
+    final Object? json;
+    try {
+      json = rawEvent is Map ? rawEvent : (rawEvent as dynamic).json;
+    } catch (_) {
+      invalid += 1;
+      continue;
     }
-    final json = (rawEvent as dynamic).json;
     if (json is! Map) {
       invalid += 1;
       continue;
@@ -1524,6 +1534,10 @@ _ParsedPerformanceTimeline _parsePerformanceTimeline(dynamic timeline) {
       invalid += 1;
       continue;
     }
+    if (events.length >= 200000) {
+      dropped += 1;
+      continue;
+    }
     events.add(
       CockpitPerformanceEvent(
         name: name,
@@ -1541,9 +1555,6 @@ _ParsedPerformanceTimeline _parsePerformanceTimeline(dynamic timeline) {
       ),
     );
   }
-  final dropped = rawEvents.length > events.length + invalid
-      ? rawEvents.length - events.length - invalid
-      : 0;
   return _ParsedPerformanceTimeline(
     events: events,
     invalidEvents: invalid,
