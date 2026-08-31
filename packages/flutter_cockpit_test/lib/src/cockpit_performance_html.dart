@@ -259,7 +259,9 @@ String _tracePhase(CockpitPerformanceEvent event) {
 
 String _document(String title, String payload) {
   final safeTitle = _html(title);
-  return '''<!doctype html>
+  return
+  // language=html
+  '''<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -403,8 +405,8 @@ input[type="search"] { width: 100%; }
 .chart-grid .panel { margin-top: 0; }
 .insight-grid { margin-top: 15px; }
 .insight-grid .panel { margin-top: 0; }
-.chart-wrap { position: relative; height: 310px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); overflow: hidden; }
-.chart-wrap canvas { display: block; width: 100%; height: 100%; }
+.chart-wrap { position: relative; display: flex; min-width: 0; min-height: 0; height: 310px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); overflow: hidden; }
+.chart-wrap canvas { display: block; flex: 1 1 auto; min-width: 0; min-height: 0; width: 100%; height: 100%; }
 .chart-wrap canvas:hover { cursor: crosshair; }
 .chart-tooltip { position: fixed; z-index: 20; max-width: min(360px, calc(100vw - 24px)); padding: 9px 11px; border: 1px solid var(--line-strong); border-radius: 9px; background: color-mix(in srgb, var(--surface) 96%, transparent); color: var(--text-soft); box-shadow: var(--shadow); font-size: 11px; line-height: 1.45; pointer-events: none; opacity: 0; transform: translate(12px, 12px); transition: opacity 100ms ease; }
 .chart-tooltip.visible { opacity: 1; }
@@ -489,7 +491,7 @@ details[open] summary::after { content: "−"; }
 .coverage-state.available { color: var(--accent); background: var(--accent-soft); }
 .coverage-state.unavailable { color: var(--warning); background: var(--warning-soft); }
 .coverage-state.not-collected { color: var(--muted); background: var(--surface-3); }
-.devtools-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 15px; }
+.devtools-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 15px; margin-top: 15px; }
 .devtools-grid .panel { margin-top: 0; }
 .devtools-list { display: grid; gap: 7px; max-height: 260px; overflow: auto; }
 .devtools-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 8px 9px; border-radius: 8px; background: var(--surface-2); font-size: 11px; }
@@ -741,6 +743,8 @@ details[open] summary::after { content: "−"; }
     if (!canvas) return;
     var rect = canvas.getBoundingClientRect();
     var dpr = window.devicePixelRatio || 1;
+    // The chart wrapper owns the border. Measure the canvas content box rather
+    // than the wrapper so the painter never treats the border as plot space.
     var width = Math.max(1, Math.round(rect.width * dpr));
     var height = Math.max(1, Math.round(rect.height * dpr));
     if (canvas.width !== width || canvas.height !== height) { canvas.width = width; canvas.height = height; }
@@ -751,7 +755,13 @@ details[open] summary::after { content: "−"; }
   var setChartHeight = function (id, height) {
     var canvas = el(id);
     var wrap = canvas && canvas.parentElement;
-    if (wrap) wrap.style.height = Math.round(height) + 'px';
+    if (!wrap) return;
+    var styles = window.getComputedStyle(wrap);
+    var border = (parseFloat(styles.borderTopWidth) || 0) + (parseFloat(styles.borderBottomWidth) || 0);
+    var inset = (parseFloat(styles.paddingTop) || 0) + (parseFloat(styles.paddingBottom) || 0);
+    // Callers specify the drawable canvas height. Add only the wrapper's
+    // border and symmetric vertical inset so the canvas keeps that height.
+    wrap.style.height = Math.max(1, Math.round(height + border + inset)) + 'px';
   };
   var fitChartRows = function (id, count, min, max, row, top, bottom) {
     var rows = Math.max(1, number(count));
@@ -807,6 +817,7 @@ details[open] summary::after { content: "−"; }
   var hashColor = function (value) { var colors = [css('--accent'), css('--blue'), css('--warning'), '#d79aff', '#8bd4ff', '#ff9da4']; var hash = 0; for (var i = 0; i < value.length; i += 1) hash = ((hash << 5) - hash + value.charCodeAt(i)) | 0; return colors[Math.abs(hash) % colors.length]; };
   var drawEventChart = function () {
     var list = events();
+    setChartHeight('event-chart', 160);
     draw(el('event-chart'), function (ctx, width, height) {
       chartHits['event-chart'] = [];
       ctx.clearRect(0, 0, width, height); ctx.fillStyle = css('--surface-2'); ctx.fillRect(0, 0, width, height);
@@ -1079,6 +1090,7 @@ details[open] summary::after { content: "−"; }
     el('coverage-grid').innerHTML = rows.map(function (row) { var label = row[1] === 'available' ? 'Available' : row[1] === 'not-collected' ? 'Not collected' : 'Unavailable'; return '<div class="coverage-card"><div class="coverage-card-head"><strong>' + esc(row[0]) + '</strong><span class="coverage-state ' + esc(row[1]) + '">' + esc(label) + '</span></div><p>' + esc(row[2]) + '</p></div>'; }).join('');
   };
   var drawCpuChart = function () {
+    setChartHeight('cpu-chart', 170);
     draw(el('cpu-chart'), function (ctx, width, height) {
       chartHits['cpu-chart'] = [];
       ctx.clearRect(0, 0, width, height); ctx.fillStyle = css('--surface-2'); ctx.fillRect(0, 0, width, height);
@@ -1090,6 +1102,7 @@ details[open] summary::after { content: "−"; }
     });
   };
   var drawHeapChart = function () {
+    setChartHeight('heap-chart', 150);
     draw(el('heap-chart'), function (ctx, width, height) {
       chartHits['heap-chart'] = [];
       ctx.clearRect(0, 0, width, height); ctx.fillStyle = css('--surface-2'); ctx.fillRect(0, 0, width, height);
@@ -1231,9 +1244,9 @@ details[open] summary::after { content: "−"; }
   el('event-prev').addEventListener('click', function () { state.eventPage -= 1; renderEvents(); }); el('event-next').addEventListener('click', function () { state.eventPage += 1; renderEvents(); });
   el('event-search').addEventListener('input', function (event) { state.eventQuery = event.target.value || ''; state.eventPage = 0; renderEvents(); }); el('event-category').addEventListener('change', function (event) { state.eventCategory = event.target.value || ''; state.eventPage = 0; renderEvents(); });
   el('raw-button').addEventListener('click', function (event) { var wrap = el('raw-wrap'); var show = wrap.classList.toggle('hidden'); event.target.textContent = show ? 'Show raw JSON' : 'Hide raw JSON'; });
-  el('copy-button').addEventListener('click', function (event) { var text = JSON.stringify(report(), null, 2); if (navigator.clipboard && navigator.clipboard.writeText) { navigator.clipboard.writeText(text).then(function () { event.target.textContent = 'Copied'; setTimeout(function () { event.target.textContent = 'Copy report JSON'; }, 1200); }); } });
-  el('download-button').addEventListener('click', function () { var blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }); var link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = fileStem(data.title) + '.full.json'; link.click(); setTimeout(function () { URL.revokeObjectURL(link.href); }, 1000); });
-  el('timeline-button').addEventListener('click', function () { var blob = new Blob([JSON.stringify(timelinePayload(), null, 2)], { type: 'application/json' }); var link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = (reports[state.report].label || 'cockpit-performance') + '.timeline.json'; link.click(); setTimeout(function () { URL.revokeObjectURL(link.href); }, 1000); });
+  el('copy-button').addEventListener('click', function (event) { var text = JSON.stringify(report()); if (navigator.clipboard && navigator.clipboard.writeText) { navigator.clipboard.writeText(text).then(function () { event.target.textContent = 'Copied'; setTimeout(function () { event.target.textContent = 'Copy report JSON'; }, 1200); }); } });
+  el('download-button').addEventListener('click', function () { var blob = new Blob([JSON.stringify(data)], { type: 'application/json' }); var link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = fileStem(data.title) + '.full.json'; link.click(); setTimeout(function () { URL.revokeObjectURL(link.href); }, 1000); });
+  el('timeline-button').addEventListener('click', function () { var blob = new Blob([JSON.stringify(timelinePayload())], { type: 'application/json' }); var link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = (reports[state.report].label || 'cockpit-performance') + '.timeline.json'; link.click(); setTimeout(function () { URL.revokeObjectURL(link.href); }, 1000); });
   el('theme-button').addEventListener('click', function () { root.dataset.theme = root.dataset.theme === 'light' ? 'dark' : 'light'; drawStartupChart(); drawFrameChart(); drawEventChart(); drawPhaseChart(); drawResourceChart(); drawCacheChart(); drawJankChart(); drawCadenceChart(); drawCacheTrendChart(); drawCategoryCostChart(); drawHotspotChart(); drawFlameChart(); drawCpuChart(); drawHeapChart(); });
   window.addEventListener('scroll', hideTooltip, { passive: true });
   window.addEventListener('resize', function () { drawStartupChart(); drawFrameChart(); drawEventChart(); drawPhaseChart(); drawResourceChart(); drawCacheChart(); drawJankChart(); drawCadenceChart(); drawCacheTrendChart(); drawCategoryCostChart(); drawHotspotChart(); drawFlameChart(); drawCpuChart(); drawHeapChart(); });
