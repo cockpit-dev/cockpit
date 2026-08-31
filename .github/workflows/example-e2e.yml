@@ -147,6 +147,58 @@ jobs:
         working-directory: ${{ matrix.directory }}
         run: flutter test
 
+  performance_reports:
+    name: Flutter performance report export
+    runs-on: macos-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.CURRENT_FLUTTER_VERSION }}
+          channel: stable
+
+      - name: Select CocoaPods integration
+        run: flutter config --no-enable-swift-package-manager
+
+      - name: Bootstrap workspace
+        run: flutter pub get
+
+      - name: Bootstrap development shell
+        working-directory: examples/cockpit_demo/cockpit
+        run: flutter pub get
+
+      - name: Run profile capture and export reports
+        working-directory: examples/cockpit_demo/cockpit
+        env:
+          COCKPIT_NATIVE_REPORT_PATH: ${{ github.workspace }}/performance-artifacts/report.json
+          COCKPIT_NATIVE_HTML_PATH: ${{ github.workspace }}/performance-artifacts/report.html
+        run: >-
+          mkdir -p "$GITHUB_WORKSPACE/performance-artifacts" &&
+          flutter drive --no-dds --profile
+          --driver=integration_test/driver.dart
+          --target=integration_test/performance_profile_test.dart
+          -d macos
+
+      - name: Validate exported report bundle
+        run: >-
+          test -s performance-artifacts/report.json &&
+          test -s performance-artifacts/report.html &&
+          grep -q 'cockpit.performance.complex-task-flow'
+          performance-artifacts/report.json &&
+          grep -q 'Frame pacing' performance-artifacts/report.html &&
+          grep -q 'Cold start milestones' performance-artifacts/report.html
+
+      - name: Upload performance reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: cockpit-performance-report
+          retention-days: 14
+          if-no-files-found: warn
+          path: performance-artifacts
+
   publication:
     name: publish ${{ matrix.package }} dry-run
     runs-on: ubuntu-latest
@@ -648,6 +700,7 @@ jobs:
       - minimum_flutter
       - dart_tests
       - flutter_tests
+      - performance_reports
       - publication
       - darwin_packaging
       - regression
@@ -659,6 +712,7 @@ jobs:
           MINIMUM_FLUTTER: ${{ needs.minimum_flutter.result }}
           DART_TESTS: ${{ needs.dart_tests.result }}
           FLUTTER_TESTS: ${{ needs.flutter_tests.result }}
+          PERFORMANCE_REPORTS: ${{ needs.performance_reports.result }}
           PUBLICATION: ${{ needs.publication.result }}
           DARWIN_PACKAGING: ${{ needs.darwin_packaging.result }}
           REGRESSION: ${{ needs.regression.result }}
@@ -668,6 +722,7 @@ jobs:
             "$MINIMUM_FLUTTER" \
             "$DART_TESTS" \
             "$FLUTTER_TESTS" \
+            "$PERFORMANCE_REPORTS" \
             "$PUBLICATION" \
             "$DARWIN_PACKAGING" \
             "$REGRESSION"; do

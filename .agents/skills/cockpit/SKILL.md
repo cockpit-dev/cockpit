@@ -802,7 +802,9 @@ the complete API and platform workflow.
 For Flutter performance work, use `cockpit.profile` around the smallest
 meaningful interaction. It records the engine's original `FrameTiming` values,
 including vsync and raster-finish wall-time timestamps, and, on native targets,
-the official integration-test VM timeline/GC streams.
+the official integration-test VM timeline/GC streams plus bounded process RSS
+samples. The report includes build/raster/vsync/total phase percentiles,
+cache peaks, jank, memory start/end/peak/delta, and explicit retention drops.
 The complete bounded report is stored in
 `IntegrationTestWidgetsFlutterBinding.reportData` under
 `cockpit.performance.NAME`; normal Cockpit output stays compact. `dropped`

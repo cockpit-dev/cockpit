@@ -25,6 +25,10 @@ void main() {
     final macosDevelopmentPodLock = File(
       'examples/cockpit_demo/cockpit/macos/Podfile.lock',
     ).readAsStringSync();
+    final macosSwiftPackage = File(
+      'examples/cockpit_demo/cockpit/macos/Flutter/ephemeral/Packages/'
+      'FlutterGeneratedPluginSwiftPackage/Package.swift',
+    );
 
     expect(runtimePubspec, contains('name: flutter_cockpit'));
     expect(runtimePubspec, isNot(contains('name: flutter_pilot')));
@@ -34,12 +38,22 @@ void main() {
     expect(devtoolsVersion, protocolVersion);
     expect(runtimePubspec, contains('cockpit_protocol: ^$protocolVersion'));
     expect(devtoolsPubspec, contains('cockpit_protocol: ^$protocolVersion'));
-    for (final podLock in <String>[
+    expect(
       iosDevelopmentPodLock,
-      macosDevelopmentPodLock,
-    ]) {
-      expect(podLock, contains('flutter_cockpit ($runtimeVersion)'));
-    }
+      contains('flutter_cockpit ($runtimeVersion)'),
+    );
+    final macosUsesCocoaPods = macosDevelopmentPodLock.contains(
+      'flutter_cockpit ($runtimeVersion)',
+    );
+    final macosUsesSwiftPm =
+        macosSwiftPackage.existsSync() &&
+        macosSwiftPackage.readAsStringSync().contains('flutter_cockpit');
+    expect(
+      macosUsesCocoaPods || macosUsesSwiftPm,
+      isTrue,
+      reason:
+          'macOS shell must link flutter_cockpit through CocoaPods or SwiftPM.',
+    );
     expect(
       supervisorRuntime,
       contains('const cockpitSupervisorEngineVersion = cockpitVersion;'),

@@ -2,6 +2,8 @@
 
 ## 4.0.49
 
+- Added a bounded process-memory report contract for native integration-test
+  captures, including RSS samples and start/end/peak/delta aggregates.
 - Synchronized the protocol package with the current Cockpit release.
 - Added bounded, display-aware performance report contracts with strict
   duration, timestamp, sample-count, wall-time, and payload validation.

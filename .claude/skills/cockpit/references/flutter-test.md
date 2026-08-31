@@ -174,6 +174,37 @@ await cockpit.waitForUi();
 `cockpit.flutter` remains the underlying `WidgetTester` for custom matchers,
 goldens, pump control, or Flutter APIs intentionally outside Cockpit.
 
+## Performance profiling
+
+Use `cockpit.profile` for a bounded action-level performance capture:
+
+```dart
+final report = await cockpit.profile(
+  () async {
+    await cockpit.tap('#open-list');
+    await cockpit.scroll('#list');
+  },
+  name: 'open-list',
+  streams: const <String>['Dart', 'GC', 'Embedder'],
+);
+```
+
+The collector listens to Flutter's original `FrameTiming` stream and records
+raw vsync and raster-finish wall-time timestamps, build/raster/vsync/total
+durations, cache peaks, jank budget, percentiles, and valid frame timestamps.
+Native targets additionally use the official
+integration-test VM timeline for bounded events and GC counts. Web reports the
+VM timeline as `unavailable:web`; it never substitutes a fake value. The
+complete report is under `cockpit.performance.<name>` in
+`IntegrationTestWidgetsFlutterBinding.reportData`, while the normal Cockpit
+result keeps only summary metrics. `dropped` is explicit when a retention
+bound is reached; those aggregates describe the retained sample only. Empty
+phases omit duration aggregates rather than reporting a fabricated zero, and
+`fps` is omitted unless the original timestamps establish a strictly increasing
+cadence. Never interpret omitted or unavailable metrics as zero.
+Reports include the Flutter build mode; debug timings are diagnostic only, while
+profile and release timings are suitable for performance decisions.
+
 ## Timeouts and waiting
 
 Each in-app command defaults to 10 seconds. Native evidence, recording,

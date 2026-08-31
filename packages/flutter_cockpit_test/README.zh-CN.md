@@ -162,8 +162,8 @@ await cockpit.host.action(
 使用与应用相同的测试时钟和帧管线，对一次交互进行性能采集。Cockpit 会保留原始的
 vsync 与 raster 完成墙钟时间戳，并记录引擎提供的 `FrameTiming`（build、raster、vsync、
 总耗时、raster cache、jank budget，以及
-p50/p90/p99/最大值）。原生 Flutter 平台还会采集官方 integration-test VM timeline
-和 GC 事件；Web 不支持 VM timeline 时会明确标记 unavailable，不会伪造数据：
+p50/p90/p99/最大值）。原生 Flutter 平台还会采集官方 integration-test VM timeline、GC
+事件和有界进程 RSS 样本；Web 不支持这些来源时会明确标记 unavailable，不会伪造数据：
 
 ```dart
 final report = await cockpit.profile(
@@ -177,6 +177,8 @@ final report = await cockpit.profile(
 expect(report.summary.jankCount, 0);
 ```
 
+原生采集默认每 100ms 采样一次进程 RSS，并保留起始/结束/最小/最大/平均/峰值/增量汇总和有界样本时间线。只有确实不需要进程指标时才设置 `memory: false`；需要调整时间分辨率时使用 `sampleEvery`。不支持的目标会明确标记 memory 不可用，不会报告 0。
+
 完整的有界报告会写入
 `IntegrationTestWidgetsFlutterBinding.reportData` 的
 `cockpit.performance.open-list`，普通 Cockpit 结果只保留紧凑汇总。达到保留上限时会
@@ -185,6 +187,35 @@ expect(report.summary.jankCount, 0);
 取 Flutter 暴露的目标屏幕刷新率，否则记录精确四舍五入后的 60Hz fallback（16,667µs）。缺失或
 unavailable 的指标不能当成 0 处理。报告还会记录 `debug`、`profile` 或 `release` 构建模式；
 debug 数据仅用于诊断，不能当作发布性能证据。
+
+每次 `cockpitTestWidgets` 运行还会在紧凑的 `cockpit.startup` 条目和 HTML 报告中记录冷
+启动阶段：应用构建/挂载、首个 pumped frame，以及初始可用时间。计时从 app builder 之前
+立即开始，因此这些数值是可复现的 Dart harness 测量；宿主没有提供原生进程启动时间时，
+不会猜测或伪造该部分数据。
+
+宿主侧的 `integration_test_driver.dart` 应导入
+`package:flutter_cockpit_test/flutter_cockpit_test_report.dart`。这是纯 Dart 入口，提供
+报告模型和 HTML 渲染器，不会加载 `dart:ui`。
+
+### 导出完整的离线 HTML 报告
+
+`CockpitTester.exportPerformanceHtml()` 会把当前测试完成的所有性能采集写入一个独立
+HTML 文件。文件内包含采集切换、帧 pacing 与预算图、按分类排列的 VM timeline、阶段
+分位数、缓存/GC 压力、可搜索且可折叠的事件参数、分页帧表/事件表，以及精确的原始
+JSON。它不需要服务器或外部资源即可打开：
+
+```dart
+final htmlPath = await cockpit.exportPerformanceHtml(
+  title: 'Task flow performance',
+  // path: 'build/reports/task-flow.html', // 可选
+);
+// 将 htmlPath 交给人工或 CI artifact 收集器。
+```
+
+不传 `path` 时会在 `build/cockpit/performance/` 下生成唯一文件。自定义宿主可以使用
+`CockpitPerformanceHtml.render(report)` 或
+`CockpitPerformanceHtml.renderMany(reports)` 直接得到 HTML 字符串，不访问文件系统。
+JSON 仍是机器读取的规范输出，HTML 是给人查看的完整视图。
 
 ## 运行
 

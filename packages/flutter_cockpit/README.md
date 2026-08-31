@@ -200,7 +200,9 @@ final report = collector.stop(stepId: 'open-list');
 
 The report includes raw vsync and raster-finish wall-time timestamps,
 build/raster/vsync/total durations, p50/p90/p99/worst values, jank counts,
-cache peaks, and an explicit `dropped` count when the retention limit is
+cache peaks, and (from the integration-test facade) bounded process RSS
+samples with start/end/peak/delta summaries. It also carries an explicit
+`dropped` count when the retention limit is
 reached. Aggregates describe retained frames only; when `dropped.frames` is
 present they are a bounded sample, not whole-capture percentiles. Empty phases
 omit duration aggregates instead of reporting a fabricated zero. `fps` is
