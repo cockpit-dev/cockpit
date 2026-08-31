@@ -826,6 +826,13 @@ memory, cache/GC, duration-based VM flame charts, CPU sampling stacks,
 heap/allocation classes, and evidence-only GPU/shader signals, plus a code-evidence table
 populated only from source locations explicitly provided by VM event arguments;
 it never guesses a Dart file or CPU call stack from frame timing.
+The complete report also includes the bounded VM heap trend, all-isolate
+before/after health and lifecycle events, timeline recorder/stream metadata, VM
+runtime identity, and VM process-memory trees. Compact results keep only counts;
+`performanceJson()`/`exportPerformanceJson()` and HTML retain the complete
+bounded projections. Selected-class allocation stacks and exact Perfetto CPU/
+timeline payloads are opt-in (`allocationClassIds` and `perfetto: true`) because
+they change profiling overhead.
 The HTML report also has a DevTools coverage panel. It marks FrameTiming, raster
 cache, VM timeline, GC, process RSS, cold-start milestones, CPU sampling,
 heap/allocation profile, and matching GPU/shader timeline signals only when
