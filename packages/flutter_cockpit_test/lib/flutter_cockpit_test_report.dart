@@ -16,5 +16,15 @@ export 'package:cockpit_protocol/cockpit_protocol.dart'
         CockpitPerformancePhaseSummary,
         CockpitPerformanceReport,
         CockpitPerformanceSummary;
+export 'package:cockpit_protocol/cockpit_protocol.dart'
+    show
+        CockpitCpuFunction,
+        CockpitCpuSample,
+        CockpitCpuProfile,
+        CockpitDevToolsProfile,
+        CockpitGpuProfile,
+        CockpitHeapClass,
+        CockpitHeapPoint,
+        CockpitHeapProfile;
 export 'src/cockpit_performance_html.dart';
 export 'src/cockpit_startup_report.dart';

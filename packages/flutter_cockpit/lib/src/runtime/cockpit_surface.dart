@@ -458,23 +458,23 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
       padding: padding,
     );
     if (revealRequest != null) {
-      unawaited(
-        Scrollable.ensureVisible(
+      try {
+        await Scrollable.ensureVisible(
           revealTarget,
           alignment: revealRequest.alignment,
           duration: effectiveDuration,
           alignmentPolicy: revealRequest.alignmentPolicy,
-        ).catchError((Object error, StackTrace stackTrace) {
-          FlutterError.reportError(
-            FlutterErrorDetails(
-              exception: error,
-              stack: stackTrace,
-              library: 'flutter_cockpit',
-              context: ErrorDescription('while revealing a Cockpit target'),
-            ),
-          );
-        }),
-      );
+        );
+      } on Object catch (error, stackTrace) {
+        FlutterError.reportError(
+          FlutterErrorDetails(
+            exception: error,
+            stack: stackTrace,
+            library: 'flutter_cockpit',
+            context: ErrorDescription('while revealing a Cockpit target'),
+          ),
+        );
+      }
       await _settleAtomicRevealFrame();
     }
     await _applyRevealAdjustment(
@@ -3087,6 +3087,9 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
       Offset.zero,
       ancestor: viewportRenderObject,
     );
+    if (!origin.dx.isFinite || !origin.dy.isFinite) {
+      return;
+    }
     final leadingEdge = axis == Axis.vertical ? origin.dy : origin.dx;
     final trailingEdge = leadingEdge + targetExtent;
     final clampedPadding = padding.clamp(0, availableExtent).toDouble();

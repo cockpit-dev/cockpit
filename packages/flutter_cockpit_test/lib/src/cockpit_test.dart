@@ -11,6 +11,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 
 import 'cockpit_native_tester.dart';
+import 'cockpit_debug_tools.dart';
+import 'cockpit_devtools_profiler.dart';
 import 'cockpit_performance_html.dart';
 import 'cockpit_performance_html_io.dart'
     if (dart.library.html) 'cockpit_performance_html_web.dart';
@@ -81,6 +83,7 @@ void cockpitTestWidgets(
     );
     addTearDown(() async {
       _publishIntegrationReport(cockpit.report);
+      cockpit.debug.restore();
       await cockpit.native.close();
       await flutterTester.pumpWidget(const SizedBox.shrink());
       await flutterTester.pump();
@@ -135,6 +138,10 @@ final class CockpitTester {
 
   /// Supported app-native capture, recording, and viewport controls.
   final CockpitNativeTester native;
+
+  /// Flutter visual, timeline, overlay, and animation switches mirrored from
+  /// the DevTools controls.
+  late final CockpitDebugTools debug = CockpitDebugTools();
 
   /// Explicit host/system-plane action facade.
   late final CockpitHostTester host = CockpitHostTester._(this);
@@ -295,6 +302,16 @@ final class CockpitTester {
                   },
                 if (performance.timelineSource != null)
                   'source': performance.timelineSource,
+                if (performance.devTools != null)
+                  'devtools': <String, Object?>{
+                    'state': performance.devTools!.state,
+                    if (performance.devTools!.cpu != null)
+                      'cpu': performance.devTools!.cpu!.sampleCount,
+                    if (performance.devTools!.heap != null)
+                      'heap': performance.devTools!.heap!.classes.length,
+                    if (performance.devTools!.gpu != null)
+                      'gpu': performance.devTools!.gpu!.events,
+                  },
               },
             )
             .toList(growable: false),
@@ -323,8 +340,12 @@ final class CockpitTester {
     List<String> streams = const <String>['all'],
     bool timeline = true,
     bool memory = true,
+    bool cpu = true,
+    bool heap = true,
     Duration sampleEvery = const Duration(milliseconds: 100),
     int maxEvents = 200000,
+    int maxCpuSamples = 50000,
+    int maxHeapClasses = 200,
     bool trackBuilds = false,
     bool trackUserBuilds = false,
     bool trackLayouts = false,
@@ -352,6 +373,20 @@ final class CockpitTester {
         'Must be between 1 and 200000.',
       );
     }
+    if (maxCpuSamples < 1 || maxCpuSamples > 50000) {
+      throw ArgumentError.value(
+        maxCpuSamples,
+        'maxCpuSamples',
+        'Must be between 1 and 50000.',
+      );
+    }
+    if (maxHeapClasses < 1 || maxHeapClasses > 1000) {
+      throw ArgumentError.value(
+        maxHeapClasses,
+        'maxHeapClasses',
+        'Must be between 1 and 1000.',
+      );
+    }
     final effectiveTimeout = timeout ?? options.commandTimeout;
     _validateTimeout(effectiveTimeout, name: 'timeout');
     final collector = FlutterCockpit.binding.performanceCollector;
@@ -359,6 +394,13 @@ final class CockpitTester {
       throw StateError('Another performance capture is already running.');
     }
     final instrumentation = _PerformanceInstrumentation();
+    final devToolsProfiler = CockpitDevToolsProfiler(
+      timeout: effectiveTimeout < const Duration(seconds: 3)
+          ? effectiveTimeout
+          : const Duration(seconds: 3),
+      maxCpuSamples: maxCpuSamples,
+      maxHeapClasses: maxHeapClasses,
+    );
     try {
       instrumentation.enable(
         trackBuilds: trackBuilds,
@@ -371,6 +413,7 @@ final class CockpitTester {
           ? createCockpitPerformanceMemorySampler(interval: sampleEvery)
           : null;
       memorySampler?.start();
+      await devToolsProfiler.start(cpu: cpu, heap: heap);
       dynamic timelineData;
       var canTraceTimeline = timeline && !kIsWeb;
       if (canTraceTimeline) {
@@ -419,6 +462,11 @@ final class CockpitTester {
           timelineData,
           maxEvents: maxEvents,
         );
+        final devTools = await devToolsProfiler.finish(
+          cpu: cpu,
+          heap: heap,
+          events: parsed.events,
+        );
         final memoryReport = memorySampler?.stop();
         final report = collector.stop(
           events: parsed.events,
@@ -429,6 +477,7 @@ final class CockpitTester {
           droppedEvents: parsed.droppedEvents,
           invalidEvents: parsed.invalidEvents,
           memory: memoryReport,
+          devTools: devTools,
         );
         _performances.add(report);
         final binding =

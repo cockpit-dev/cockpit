@@ -1758,6 +1758,17 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
           final handlerStopwatch = Stopwatch()..start();
           final scrollStep = await runScrollAttempt(currentReverse);
           scrollHandlerDurationMs += handlerStopwatch.elapsedMilliseconds;
+          // A custom tick handler is used by Flutter's widget-test binding.
+          // Target-probing scroll handlers can update a ScrollPosition
+          // synchronously, but lazy sliver children are not mounted until the
+          // next pumped frame. Pump exactly one frame before resolving the
+          // target so tests and source-owned integration harnesses observe the
+          // same mounted tree as a live app.
+          if (scrollStep.didScroll &&
+              _usesTestBinding() &&
+              _hasCustomWaitTickHandler) {
+            await _waitTickHandler(const Duration(milliseconds: 16));
+          }
           lastScrollStep = scrollStep;
           lastDirectionScrollStep = scrollStep;
           recordScrollableCandidate(scrollStep, reverse: currentReverse);

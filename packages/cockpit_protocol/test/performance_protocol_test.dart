@@ -268,4 +268,62 @@ void main() {
       throwsFormatException,
     );
   });
+
+  test('DevTools CPU, heap, and GPU projections round-trip compactly', () {
+    final profile = CockpitDevToolsProfile(
+      source: 'vm',
+      state: 'available',
+      cpu: CockpitCpuProfile(
+        samplePeriodUs: 1000,
+        maxStackDepth: 32,
+        sampleCount: 1,
+        timeOriginUs: 100,
+        timeExtentUs: 200,
+        functions: const <CockpitCpuFunction>[
+          CockpitCpuFunction(
+            name: 'main',
+            inclusiveTicks: 1,
+            exclusiveTicks: 1,
+            uri: 'package:test/main.dart',
+          ),
+        ],
+        samples: const <CockpitCpuSample>[
+          CockpitCpuSample(timestampUs: 120, stack: <int>[0]),
+        ],
+      ),
+      heap: CockpitHeapProfile(
+        before: const CockpitHeapPoint(
+          usageBytes: 10,
+          capacityBytes: 20,
+          externalBytes: 2,
+        ),
+        after: const CockpitHeapPoint(
+          usageBytes: 12,
+          capacityBytes: 24,
+          externalBytes: 3,
+        ),
+        classes: const <CockpitHeapClass>[
+          CockpitHeapClass(
+            name: 'Foo',
+            currentBytes: 8,
+            currentInstances: 2,
+            accumulatedBytes: 10,
+            accumulatedInstances: 3,
+          ),
+        ],
+      ),
+      gpu: const CockpitGpuProfile(
+        source: 'vmTimeline',
+        events: 2,
+        shaderEvents: 1,
+        durationUs: 40,
+      ),
+    );
+    final decoded = CockpitDevToolsProfile.fromJson(profile.toJson());
+    expect(decoded.cpu!.samples.single.stack, <int>[0]);
+    expect(decoded.cpu!.functions.single.name, 'main');
+    expect(decoded.heap!.after.usageBytes, 12);
+    expect(decoded.heap!.classes.single.name, 'Foo');
+    expect(decoded.gpu!.shaderEvents, 1);
+  });
 }

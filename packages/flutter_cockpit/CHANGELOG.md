@@ -4,6 +4,8 @@
 
 - Synchronized the Flutter bridge package with the current Cockpit performance
   tooling release.
+- Allowed performance collectors to attach the bounded DevTools profile to the
+  canonical report without changing normal app runtime behavior.
 
 ## 4.0.49
 

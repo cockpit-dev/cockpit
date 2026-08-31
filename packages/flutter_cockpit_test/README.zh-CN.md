@@ -183,6 +183,36 @@ expect(report.summary.jankCount, 0);
 `trackPaints`，采集 Flutter 与 DevTools 对应的真实 Widget/RenderObject 时间线区间。
 这些开关默认关闭，因为额外插桩会改变耗时；采集结束后 Cockpit 会恢复进入采集前的全局状态。
 
+当 VM Service 可用时，`profile()` 还会采集 DevTools CPU Profiler 和 Memory 视图背后的真实
+CPU 采样与 Dart allocation profile。完整报告保留采样栈和有界的分配类，普通测试输出只保留
+数量摘要。长场景可以用 `cpu: false` 或 `heap: false` 关闭对应采集，并通过
+`maxCpuSamples` / `maxHeapClasses` 控制内存上限：
+
+```dart
+final report = await cockpit.profile(
+  () => runScenario(),
+  cpu: true,
+  heap: true,
+  maxCpuSamples: 20000,
+  maxHeapClasses: 100,
+);
+```
+
+同一个 facade 也提供 DevTools 的可视化诊断开关，不需要修改生产代码：
+
+```dart
+cockpit.debug.apply(
+  paintSize: true,
+  repaintRainbow: true,
+  performanceOverlay: true,
+  timeScale: 5,
+);
+// 测试结束时 harness 会恢复所有开关。
+```
+
+GPU/shader 数据只接受真实证据：Flutter 发出匹配的 VM timeline 信号时才展示，否则明确
+标记为不可用，绝不填充猜测的 GPU 数值。
+
 完整的有界报告会写入
 `IntegrationTestWidgetsFlutterBinding.reportData` 的
 `cockpit.performance.open-list`，普通 Cockpit 结果只保留紧凑汇总。达到保留上限时会
@@ -244,9 +274,9 @@ HTML 还提供相对时间 hover 图表、jank 分布、帧节奏、Raster cache
 
 报告还包含 **DevTools coverage** 面板，明确标记本次采集真正拥有的数据：
 FrameTiming、Raster cache、VM timeline、GC、进程 RSS 和 harness 冷启动里程碑只有在
-报告实际包含时才会显示为可用。CPU sampling、heap snapshot、allocation tracing 等
-未采集能力会明确标记为“未采集”，不会伪造 0 或虚构调用栈。网络请求请使用 Cockpit
-的 network evidence；GPU/shader 计数不在该采集器范围内。顶部的 **Download
+报告实际包含时才会显示为可用。CPU sampling、heap/allocation profile 以及匹配到的
+GPU/shader timeline 信号都会直接来自 VM；平台不支持的计数保持不可用，不会伪造 0
+或虚构调用栈。网络请求请使用 Cockpit 的 network evidence。顶部的 **Download
 timeline** 会导出保留的 VM 事件为 Chrome trace 兼容的 `traceEvents` JSON 文件，
 完整的 FrameTiming 和 memory 数据仍保留在报告 JSON 与 HTML 图表中。宿主侧也可以用
 `CockpitPerformanceHtml.timelineJson(report)` 生成同样的时间线文件。
@@ -261,7 +291,9 @@ timeline** 会导出保留的 VM 事件为 Chrome trace 兼容的 `traceEvents` 
 | 慢帧归因 | 重叠的 retained VM 区间，以及仅由证据提供的源码标签 | Jank & stalls 面板 |
 | Raster cache | Layer/picture cache 数量和字节数 | Cache 图表与帧明细 |
 | Memory 与 GC | 原生 RSS 样本和 VM GC 事件 | Memory、Cache/GC 图表 |
-| CPU profiler、Memory heap/allocation、GPU/shader | 此确定性 API 不采集 | 使用官方 DevTools 对应视图 |
+| CPU profiler | VM CPU 采样与有界调用栈 | CPU sampling 面板与完整报告 |
+| Memory heap/allocation | VM heap 点位与有界分配类计数 | Heap & allocation 面板与完整报告 |
+| GPU/shader | 仅展示匹配到的真实 VM timeline 信号 | GPU / Shader signals 面板 |
 | Network profiler | 独立的 Cockpit network evidence | `cockpit dev network` 产物 |
 
 导出的 trace 是可导入 Chrome/DevTools 时间线的 VM 事件真实投影，不会凭空补齐
