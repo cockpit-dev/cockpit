@@ -176,6 +176,35 @@ compact `cockpit` entry is merged into `integration_test`'s `reportData`. Large
 snapshots and binary evidence are kept as artifacts; they are not dumped into
 test output.
 
+## Performance profiling
+
+Profile an interaction with the same test clock and frame pipeline used by the
+app. Cockpit records engine `FrameTiming` values (build, raster, vsync, total
+span, raster-cache usage, jank budget, and p50/p90/p99/worst values). On native
+Flutter targets it also captures the official integration-test VM timeline and
+GC events; web reports the timeline as unavailable instead of fabricating data:
+
+```dart
+final report = await cockpit.profile(
+  () async {
+    await cockpit.tap('#open-list');
+    await cockpit.scroll('#list');
+  },
+  name: 'open-list',
+  streams: const <String>['Dart', 'GC', 'Embedder'],
+);
+expect(report.summary.jankCount, 0);
+```
+
+The complete bounded report is stored under
+`cockpit.performance.open-list` in `IntegrationTestWidgetsFlutterBinding.reportData`;
+the normal Cockpit result contains only the compact summary. `dropped` counts
+are explicit when a configured retention bound is reached, and `fps` is omitted
+when the original engine timestamps cannot establish a monotonic cadence. The
+phase budget is derived from the target display refresh rate when Flutter
+exposes it, otherwise the report records the documented 60Hz fallback budget.
+Never treat a missing or unavailable metric as zero.
+
 ## Run
 
 Run with Flutter's normal integration-test commands:

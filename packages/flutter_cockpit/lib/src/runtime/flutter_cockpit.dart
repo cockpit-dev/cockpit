@@ -16,6 +16,7 @@ import 'flutter_cockpit_binding.dart';
 import 'flutter_cockpit_config.dart';
 import 'flutter_cockpit_configuration.dart';
 import 'flutter_cockpit_root.dart';
+import '../performance/cockpit_performance_collector.dart';
 
 abstract final class FlutterCockpit {
   static FlutterCockpitBinding? _binding;
@@ -77,6 +78,10 @@ abstract final class FlutterCockpit {
 
   static widgets.NavigatorObserver get navigatorObserver =>
       binding.navigatorObserver;
+
+  /// The explicit performance collector owned by this runtime session.
+  static CockpitPerformanceCollector get performanceCollector =>
+      binding.performanceCollector;
 
   /// Creates a navigator observer for a nested Navigator or router-managed
   /// navigator. Each Navigator must receive its own observer instance.

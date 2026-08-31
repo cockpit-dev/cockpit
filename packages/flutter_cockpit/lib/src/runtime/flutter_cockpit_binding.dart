@@ -30,6 +30,7 @@ import 'cockpit_runtime_observer.dart';
 import 'cockpit_runtime_observer_configuration.dart';
 import 'cockpit_runtime_step_buffer.dart';
 import 'cockpit_target_registry.dart';
+import '../performance/cockpit_performance_collector.dart';
 
 final class FlutterCockpitBinding {
   FlutterCockpitBinding(FlutterCockpitConfiguration configuration)
@@ -52,6 +53,11 @@ final class FlutterCockpitBinding {
           configuration.networkObserver ??
           _buildHttpNetworkObserver(configuration.httpNetworkObserver),
       runtimeStepBuffer = CockpitRuntimeStepBuffer(),
+      performanceCollector =
+          configuration.performanceCollector ??
+          CockpitPerformanceCollector(
+            platform: kIsWeb ? 'web' : defaultTargetPlatform.name,
+          ),
       currentRouteName = ValueNotifier<String>(
         _normalizeConfiguredRouteName(configuration.initialRouteName),
       ) {
@@ -86,6 +92,7 @@ final class FlutterCockpitBinding {
   CockpitRebuildTracker? rebuildTracker;
   CockpitRuntimeObserver? runtimeObserver;
   final CockpitRuntimeStepBuffer runtimeStepBuffer;
+  CockpitPerformanceCollector performanceCollector;
   final ValueNotifier<String> currentRouteName;
   late final NavigatorObserver navigatorObserver;
   final Set<_FlutterCockpitNavigatorObserver> _navigatorObservers =
@@ -199,6 +206,7 @@ final class FlutterCockpitBinding {
     _activeRecordingSession = null;
     rebuildTracker?.dispose();
     runtimeObserver?.dispose();
+    performanceCollector.dispose();
   }
 
   void updateConfiguration(FlutterCockpitConfiguration nextConfiguration) {
@@ -232,6 +240,12 @@ final class FlutterCockpitBinding {
       nextDiagnostics: nextConfiguration.diagnostics,
     );
     _reconfigureRuntimeReferences(nextConfiguration);
+    final nextPerformance = nextConfiguration.performanceCollector;
+    if (nextPerformance != null &&
+        !identical(nextPerformance, performanceCollector)) {
+      performanceCollector.dispose();
+      performanceCollector = nextPerformance;
+    }
 
     _configuration = nextConfiguration.copyWith(
       registry: registry,
@@ -240,6 +254,7 @@ final class FlutterCockpitBinding {
       sessionController: sessionController,
       networkObserver: networkObserver,
       runtimeObserver: runtimeObserver,
+      performanceCollector: performanceCollector,
     );
   }
 

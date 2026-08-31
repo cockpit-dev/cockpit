@@ -11,6 +11,7 @@ import 'cockpit_interaction_policy.dart';
 import 'cockpit_target_registry.dart';
 import 'cockpit_discovery_policy.dart';
 import 'cockpit_diagnostics_config.dart';
+import '../performance/cockpit_performance_collector.dart';
 
 final class FlutterCockpitConfiguration {
   const FlutterCockpitConfiguration({
@@ -24,6 +25,7 @@ final class FlutterCockpitConfiguration {
     this.sessionController,
     this.networkObserver,
     this.httpNetworkObserver,
+    this.performanceCollector,
     this.runtimeObserver,
     this.runtimeObserverConfiguration =
         const CockpitRuntimeObserverConfiguration(),
@@ -42,6 +44,7 @@ final class FlutterCockpitConfiguration {
   final CockpitSessionController? sessionController;
   final CockpitNetworkObserver? networkObserver;
   final CockpitHttpNetworkObserverConfiguration? httpNetworkObserver;
+  final CockpitPerformanceCollector? performanceCollector;
   final CockpitRuntimeObserver? runtimeObserver;
   final CockpitRuntimeObserverConfiguration runtimeObserverConfiguration;
   final CockpitInteractionPolicy interactionPolicy;
@@ -59,6 +62,7 @@ final class FlutterCockpitConfiguration {
     CockpitSessionController? sessionController,
     CockpitNetworkObserver? networkObserver,
     CockpitHttpNetworkObserverConfiguration? httpNetworkObserver,
+    CockpitPerformanceCollector? performanceCollector,
     CockpitRuntimeObserver? runtimeObserver,
     CockpitRuntimeObserverConfiguration? runtimeObserverConfiguration,
     CockpitInteractionPolicy? interactionPolicy,
@@ -73,6 +77,7 @@ final class FlutterCockpitConfiguration {
     bool clearSessionController = false,
     bool clearNetworkObserver = false,
     bool clearHttpNetworkObserver = false,
+    bool clearPerformanceCollector = false,
     bool clearRuntimeObserver = false,
     bool clearRuntimeObserverConfiguration = false,
     bool clearInteractionPolicy = false,
@@ -106,6 +111,9 @@ final class FlutterCockpitConfiguration {
       httpNetworkObserver: clearHttpNetworkObserver
           ? null
           : (httpNetworkObserver ?? this.httpNetworkObserver),
+      performanceCollector: clearPerformanceCollector
+          ? null
+          : (performanceCollector ?? this.performanceCollector),
       runtimeObserver: clearRuntimeObserver
           ? null
           : (runtimeObserver ?? this.runtimeObserver),
@@ -138,6 +146,7 @@ final class FlutterCockpitConfiguration {
             other.sessionController == sessionController &&
             other.networkObserver == networkObserver &&
             other.httpNetworkObserver == httpNetworkObserver &&
+            other.performanceCollector == performanceCollector &&
             other.runtimeObserver == runtimeObserver &&
             other.runtimeObserverConfiguration ==
                 runtimeObserverConfiguration &&
@@ -158,6 +167,7 @@ final class FlutterCockpitConfiguration {
     sessionController,
     networkObserver,
     httpNetworkObserver,
+    performanceCollector,
     runtimeObserver,
     runtimeObserverConfiguration,
     interactionPolicy,

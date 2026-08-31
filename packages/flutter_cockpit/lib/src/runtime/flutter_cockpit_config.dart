@@ -12,6 +12,7 @@ import 'cockpit_interaction_policy.dart';
 import 'cockpit_runtime_observer.dart';
 import 'cockpit_runtime_observer_configuration.dart';
 import 'cockpit_target_registry.dart';
+import '../performance/cockpit_performance_collector.dart';
 
 final class FlutterCockpitConfig {
   const FlutterCockpitConfig({
@@ -25,6 +26,7 @@ final class FlutterCockpitConfig {
     this.sessionController,
     this.networkObserver,
     this.httpNetworkObserver,
+    this.performanceCollector,
     this.runtimeObserver,
     this.runtimeObserverConfiguration =
         const CockpitRuntimeObserverConfiguration(),
@@ -44,6 +46,7 @@ final class FlutterCockpitConfig {
     this.sessionController,
     this.networkObserver,
     this.httpNetworkObserver,
+    this.performanceCollector,
     this.runtimeObserver,
     this.runtimeObserverConfiguration =
         const CockpitRuntimeObserverConfiguration(),
@@ -66,6 +69,7 @@ final class FlutterCockpitConfig {
       sessionController: configuration.sessionController,
       networkObserver: configuration.networkObserver,
       httpNetworkObserver: configuration.httpNetworkObserver,
+      performanceCollector: configuration.performanceCollector,
       runtimeObserver: configuration.runtimeObserver,
       runtimeObserverConfiguration: configuration.runtimeObserverConfiguration,
       interactionPolicy: configuration.interactionPolicy,
@@ -84,6 +88,7 @@ final class FlutterCockpitConfig {
   final CockpitSessionController? sessionController;
   final CockpitNetworkObserver? networkObserver;
   final CockpitHttpNetworkObserverConfiguration? httpNetworkObserver;
+  final CockpitPerformanceCollector? performanceCollector;
   final CockpitRuntimeObserver? runtimeObserver;
   final CockpitRuntimeObserverConfiguration runtimeObserverConfiguration;
   final CockpitInteractionPolicy interactionPolicy;
@@ -102,6 +107,7 @@ final class FlutterCockpitConfig {
       sessionController: sessionController,
       networkObserver: networkObserver,
       httpNetworkObserver: httpNetworkObserver,
+      performanceCollector: performanceCollector,
       runtimeObserver: runtimeObserver,
       runtimeObserverConfiguration: runtimeObserverConfiguration,
       interactionPolicy: interactionPolicy,
@@ -121,6 +127,7 @@ final class FlutterCockpitConfig {
     CockpitSessionController? sessionController,
     CockpitNetworkObserver? networkObserver,
     CockpitHttpNetworkObserverConfiguration? httpNetworkObserver,
+    CockpitPerformanceCollector? performanceCollector,
     CockpitRuntimeObserver? runtimeObserver,
     CockpitRuntimeObserverConfiguration? runtimeObserverConfiguration,
     CockpitInteractionPolicy? interactionPolicy,
@@ -138,6 +145,7 @@ final class FlutterCockpitConfig {
       sessionController: sessionController ?? this.sessionController,
       networkObserver: networkObserver ?? this.networkObserver,
       httpNetworkObserver: httpNetworkObserver ?? this.httpNetworkObserver,
+      performanceCollector: performanceCollector ?? this.performanceCollector,
       runtimeObserver: runtimeObserver ?? this.runtimeObserver,
       runtimeObserverConfiguration:
           runtimeObserverConfiguration ?? this.runtimeObserverConfiguration,
@@ -161,6 +169,7 @@ final class FlutterCockpitConfig {
             other.sessionController == sessionController &&
             other.networkObserver == networkObserver &&
             other.httpNetworkObserver == httpNetworkObserver &&
+            other.performanceCollector == performanceCollector &&
             other.runtimeObserver == runtimeObserver &&
             other.runtimeObserverConfiguration ==
                 runtimeObserverConfiguration &&
@@ -181,6 +190,7 @@ final class FlutterCockpitConfig {
     sessionController,
     networkObserver,
     httpNetworkObserver,
+    performanceCollector,
     runtimeObserver,
     runtimeObserverConfiguration,
     interactionPolicy,

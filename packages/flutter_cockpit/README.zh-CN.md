@@ -30,6 +30,8 @@
 - 结构化 Widget、Element、RenderObject、semantics、route、focus、log、runtime
   error、HTTP/SSE/WebSocket network 与 rebuild 状态
 - snapshot、artifact、recording 和 bundle 模型
+- 显式且有界的 `CockpitPerformanceCollector`，用于引擎帧耗时、按屏幕刷新率计算的预算、
+  cache 峰值和动作级性能采集
 - 面向 AI 摘要的 target / plane / surface / fallback 运行时模型
 
 ## 安装
@@ -168,6 +170,23 @@ flutter run --target main.dart
 - accessibility、network、runtime、rebuild 信号
 - 截图和录屏请求
 - 远程会话状态与命令端点
+
+### 帧耗时采集
+
+性能采集是显式开启的。runtime 只有在调用 `start` 后才注册帧回调，停止时返回包含
+引擎原始时间戳的有界报告，不使用墙钟估算：
+
+```dart
+final collector = FlutterCockpit.performanceCollector;
+collector.start();
+// 通过 Cockpit 操作应用
+final report = collector.stop(stepId: 'open-list');
+```
+
+报告包含 build/raster/vsync/总耗时、p50/p90/p99/最大值、jank、cache 峰值；达到保留
+上限时会明确记录 `dropped`。只有原始帧时间戳能证明单调且为正的帧率时才输出 `fps`。
+VM timeline 和 GC 统计请使用 `flutter_cockpit_test` 的 `cockpit.profile`；不支持的
+平台会返回 unavailable，不会用猜测值填充。
 
 交互归属始终明确：合并到祖先的 `Semantics` 不会让被动后代变成可操作 target，
 处于 `IgnorePointer(ignoring: true)` 或 `AbsorbPointer(absorbing: true)` 下的后代

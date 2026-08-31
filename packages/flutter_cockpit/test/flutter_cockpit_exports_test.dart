@@ -15,5 +15,6 @@ void main() {
     expect(CockpitGestureProfile, isNotNull);
     expect(CockpitHitTestMissPolicy, isNotNull);
     expect(CockpitTextInputRequest, isNotNull);
+    expect(CockpitPerformanceCollector, isNotNull);
   });
 }
