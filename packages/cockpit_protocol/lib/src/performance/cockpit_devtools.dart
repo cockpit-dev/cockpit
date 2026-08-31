@@ -14,6 +14,7 @@ final class CockpitDevToolsProfile {
     this.gpu,
     this.isolate,
     this.timeline,
+    this.vm,
   }) {
     if (source.trim().isEmpty || state.trim().isEmpty) {
       throw const FormatException('DevTools profile identity is invalid.');
@@ -31,6 +32,7 @@ final class CockpitDevToolsProfile {
   final CockpitGpuProfile? gpu;
   final CockpitIsolateProfile? isolate;
   final CockpitTimelineProfile? timeline;
+  final CockpitVmRuntimeProfile? vm;
 
   CockpitDevToolsProfile copyWith({
     CockpitCpuProfile? cpu,
@@ -38,6 +40,7 @@ final class CockpitDevToolsProfile {
     CockpitGpuProfile? gpu,
     CockpitIsolateProfile? isolate,
     CockpitTimelineProfile? timeline,
+    CockpitVmRuntimeProfile? vm,
   }) => CockpitDevToolsProfile(
     source: source,
     state: state,
@@ -47,6 +50,7 @@ final class CockpitDevToolsProfile {
     gpu: gpu ?? this.gpu,
     isolate: isolate ?? this.isolate,
     timeline: timeline ?? this.timeline,
+    vm: vm ?? this.vm,
   );
 
   Map<String, Object?> toJson() => <String, Object?>{
@@ -58,6 +62,7 @@ final class CockpitDevToolsProfile {
     if (gpu != null) 'gpu': gpu!.toJson(),
     if (isolate != null) 'isolate': isolate!.toJson(),
     if (timeline != null) 'timeline': timeline!.toJson(),
+    if (vm != null) 'vm': vm!.toJson(),
   };
 
   factory CockpitDevToolsProfile.fromJson(Object? value) {
@@ -77,6 +82,99 @@ final class CockpitDevToolsProfile {
       timeline: json['timeline'] == null
           ? null
           : CockpitTimelineProfile.fromJson(json['timeline']),
+      vm: json['vm'] == null
+          ? null
+          : CockpitVmRuntimeProfile.fromJson(json['vm']),
+    );
+  }
+}
+
+/// VM-level runtime identity and isolate inventory captured from VM Service.
+///
+/// These values are descriptive evidence only. A missing VM field remains
+/// absent instead of being replaced with a guessed value.
+final class CockpitVmRuntimeProfile {
+  CockpitVmRuntimeProfile({
+    this.name,
+    this.version,
+    this.operatingSystem,
+    this.hostCpu,
+    this.targetCpu,
+    this.architectureBits,
+    this.pid,
+    this.startTimeMs,
+    this.isolateCount,
+    this.isolateGroupCount,
+    this.systemIsolateCount,
+    Iterable<String> extensions = const <String>[],
+  }) : extensions = List<String>.unmodifiable(extensions) {
+    if (architectureBits != null && architectureBits! <= 0 ||
+        pid != null && pid! < 0 ||
+        startTimeMs != null && startTimeMs! < 0 ||
+        isolateCount != null && isolateCount! < 0 ||
+        isolateGroupCount != null && isolateGroupCount! < 0 ||
+        systemIsolateCount != null && systemIsolateCount! < 0 ||
+        this.extensions.length > 500) {
+      throw const FormatException('VM runtime profile bounds are invalid.');
+    }
+  }
+
+  final String? name;
+  final String? version;
+  final String? operatingSystem;
+  final String? hostCpu;
+  final String? targetCpu;
+  final int? architectureBits;
+  final int? pid;
+  final int? startTimeMs;
+  final int? isolateCount;
+  final int? isolateGroupCount;
+  final int? systemIsolateCount;
+  final List<String> extensions;
+
+  Map<String, Object?> toJson() => <String, Object?>{
+    if (name != null && name!.trim().isNotEmpty) 'name': name,
+    if (version != null && version!.trim().isNotEmpty) 'ver': version,
+    if (operatingSystem != null && operatingSystem!.trim().isNotEmpty)
+      'os': operatingSystem,
+    if (hostCpu != null && hostCpu!.trim().isNotEmpty) 'host': hostCpu,
+    if (targetCpu != null && targetCpu!.trim().isNotEmpty) 'target': targetCpu,
+    if (architectureBits != null) 'arch': architectureBits,
+    if (pid != null) 'pid': pid,
+    if (startTimeMs != null) 'start': startTimeMs,
+    if (isolateCount != null) 'isolates': isolateCount,
+    if (isolateGroupCount != null) 'groups': isolateGroupCount,
+    if (systemIsolateCount != null) 'sys': systemIsolateCount,
+    if (extensions.isNotEmpty) 'ext': extensions,
+  };
+
+  factory CockpitVmRuntimeProfile.fromJson(Object? value) {
+    final json = _object(value, r'$.devtools.vm');
+    return CockpitVmRuntimeProfile(
+      name: _optionalString(json['name'], r'$.devtools.vm.name'),
+      version: _optionalString(json['ver'], r'$.devtools.vm.ver'),
+      operatingSystem: _optionalString(json['os'], r'$.devtools.vm.os'),
+      hostCpu: _optionalString(json['host'], r'$.devtools.vm.host'),
+      targetCpu: _optionalString(json['target'], r'$.devtools.vm.target'),
+      architectureBits: json['arch'] == null
+          ? null
+          : _positiveInt(json['arch'], r'$.devtools.vm.arch'),
+      pid: json['pid'] == null
+          ? null
+          : _nonNegativeInt(json['pid'], r'$.devtools.vm.pid'),
+      startTimeMs: json['start'] == null
+          ? null
+          : _nonNegativeInt(json['start'], r'$.devtools.vm.start'),
+      isolateCount: json['isolates'] == null
+          ? null
+          : _nonNegativeInt(json['isolates'], r'$.devtools.vm.isolates'),
+      isolateGroupCount: json['groups'] == null
+          ? null
+          : _nonNegativeInt(json['groups'], r'$.devtools.vm.groups'),
+      systemIsolateCount: json['sys'] == null
+          ? null
+          : _nonNegativeInt(json['sys'], r'$.devtools.vm.sys'),
+      extensions: _strings(json['ext'], r'$.devtools.vm.ext'),
     );
   }
 }

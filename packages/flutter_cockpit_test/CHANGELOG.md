@@ -16,6 +16,8 @@
 - Added VM heap trend sampling, isolate health/lifecycle snapshots,
   isolate-group memory points, and timeline recorder/stream metadata to every
   supported performance capture, with bounded HTML charts and detail dialogs.
+- Added VM runtime identity, target/host CPU, architecture, process start, and
+  isolate inventory to the HTML runtime panel and full export.
 - Added `CockpitTester.debug` for DevTools visual switches, performance overlay,
   rebuild logging, and animation time scaling with automatic restoration.
 - Added a jank/stall evidence panel that correlates slow frames with overlapping

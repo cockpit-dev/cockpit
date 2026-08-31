@@ -31,6 +31,7 @@ void main() {
     expect(html, contains('VM runtime health'));
     expect(html, contains('heap-trend-chart'));
     expect(html, contains('Isolate health'));
+    expect(html, contains('VM runtime'));
     expect(html, contains('Timeline streams'));
     expect(html, contains('details-dialog'));
     expect(html, contains('data-details="cpu"'));
@@ -169,6 +170,8 @@ void main() {
     expect(reports[0]['report']['devtools']['timeline']['recorded'], <Object?>[
       'Dart',
     ]);
+    expect(reports[0]['report']['devtools']['vm']['target'], 'arm64');
+    expect(reports[0]['report']['devtools']['vm']['isolates'], 2);
     expect(reports[1]['report']['events'][0]['a']['payload'], <Object?>[
       1,
       true,
@@ -425,6 +428,19 @@ CockpitPerformanceReport _report({required String step}) {
         'recorder': 'ring',
         'available': <Object?>['Dart', 'GC'],
         'recorded': <Object?>['Dart'],
+      },
+      'vm': <String, Object?>{
+        'name': 'vm',
+        'ver': '3.8.0',
+        'os': 'macos',
+        'host': 'arm64',
+        'target': 'arm64',
+        'arch': 64,
+        'pid': 42,
+        'start': 1700000000000,
+        'isolates': 2,
+        'groups': 1,
+        'sys': 1,
       },
     },
   });

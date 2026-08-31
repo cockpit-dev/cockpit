@@ -808,7 +808,7 @@ details[open] summary::after { content: "−"; }
       return { summary: { before: heap.before, after: heap.after, groupBefore: heap.gb || null, groupAfter: heap.ga || null, interval: heap.interval || 0, samples: Array.isArray(heap.samples) ? heap.samples.length : 0, dropped: heap.drop || 0, classes: Array.isArray(heap.classes) ? heap.classes.length : 0 }, classes: preview(heap.classes, 200), samples: preview(heap.samples, 300) };
     }
     if (kind === 'gpu' && d.gpu) return d.gpu;
-    if (kind === 'vm') return { isolate: d.isolate || null, timeline: d.timeline || null, gc: (reports[state.report].analysis || {}).gc || null };
+    if (kind === 'vm') return { vm: d.vm || null, isolate: d.isolate || null, timeline: d.timeline || null, gc: (reports[state.report].analysis || {}).gc || null };
     return d;
   };
   var openDetails = function (kind) {
@@ -1215,6 +1215,7 @@ details[open] summary::after { content: "−"; }
       ['Heap trend', d && d.heap && Array.isArray(d.heap.samples) && d.heap.samples.length ? 'available' : 'unavailable', d && d.heap && Array.isArray(d.heap.samples) && d.heap.samples.length ? nf.format(d.heap.samples.length) + ' VM heap samples' : 'No retained VM heap samples'],
       ['Isolate group memory', d && d.heap && d.heap.gb && d.heap.ga ? 'available' : 'unavailable', d && d.heap && d.heap.gb && d.heap.ga ? 'Group heap before/after points' : 'Group memory usage unavailable'],
       ['Allocation trace', d && d.heap ? 'available' : 'unavailable', d && d.heap ? 'Class allocation counters from the VM' : 'Requires a live VM service'],
+      ['VM runtime', d && d.vm ? 'available' : 'unavailable', d && d.vm ? 'VM identity, CPU target, and isolate inventory' : 'No VM runtime metadata retained'],
       ['Isolate health', d && d.isolate ? 'available' : 'unavailable', d && d.isolate ? 'Before/after lifecycle and pause state' : 'No isolate snapshot retained'],
       ['Timeline streams', d && d.timeline ? 'available' : 'unavailable', d && d.timeline ? nf.format((d.timeline.recorded || []).length) + ' recorded / ' + nf.format((d.timeline.available || []).length) + ' available streams' : 'Timeline recorder metadata unavailable'],
       ['Network profiler', 'not-collected', 'Use Cockpit network evidence for HTTP/SSE/WebSocket traffic'],
@@ -1274,6 +1275,7 @@ details[open] summary::after { content: "−"; }
     var gpu = d && d.gpu ? d.gpu : null;
     var isolate = d && d.isolate ? d.isolate : null;
     var timeline = d && d.timeline ? d.timeline : null;
+    var vmRuntime = d && d.vm ? d.vm : null;
     el('cpu-note').textContent = cpu ? nf.format(number(cpu.n)) + ' samples · ' + us(number(cpu.span)) + (cpu.period ? ' · ' + us(number(cpu.period)) + ' period' : '') : (d && d.why ? 'Unavailable' : 'Not collected');
     var functions = cpu && Array.isArray(cpu.f) ? cpu.f.slice().sort(function (a, b) { return number(b.in) - number(a.in); }).slice(0, 12) : [];
     el('cpu-list').innerHTML = functions.length ? functions.map(function (fn) { return '<div class="devtools-row"><strong title="' + esc(fn.n || '') + '">' + esc(fn.n || '<anonymous>') + '</strong><span>' + nf.format(number(fn.in)) + ' ticks · ' + nf.format(number(fn.ex)) + ' self</span></div>'; }).join('') : '<p class="devtools-note">' + esc(cpu ? 'No samples retained.' : (d && d.why ? d.why : 'CPU sampling was unavailable for this run.')) + '</p>';
@@ -1285,6 +1287,17 @@ details[open] summary::after { content: "−"; }
     var after = isolate && isolate.after ? isolate.after : isolate && isolate.before ? isolate.before : null;
     el('vm-note').textContent = after ? (after.run === false ? 'paused' : 'runnable') + (timeline ? ' · ' + (timeline.recorder || 'unknown recorder') : '') : 'VM metadata unavailable';
     var vmRows = [];
+    if (vmRuntime) {
+      if (vmRuntime.name || vmRuntime.ver) vmRows.push(['VM', (vmRuntime.name || 'VM') + (vmRuntime.ver ? ' · ' + vmRuntime.ver : '')]);
+      if (vmRuntime.os) vmRows.push(['OS', vmRuntime.os]);
+      if (vmRuntime.host || vmRuntime.target) vmRows.push(['CPU', (vmRuntime.host || '—') + ' → ' + (vmRuntime.target || '—')]);
+      if (vmRuntime.arch != null) vmRows.push(['Word size', nf.format(number(vmRuntime.arch)) + '-bit']);
+      if (vmRuntime.pid != null) vmRows.push(['VM pid', nf.format(number(vmRuntime.pid))]);
+      if (vmRuntime.isolates != null) vmRows.push(['Isolates', nf.format(number(vmRuntime.isolates))]);
+      if (vmRuntime.groups != null) vmRows.push(['Isolate groups', nf.format(number(vmRuntime.groups))]);
+      if (vmRuntime.sys != null) vmRows.push(['System isolates', nf.format(number(vmRuntime.sys))]);
+      if (vmRuntime.start != null) vmRows.push(['VM started', dateText(vmRuntime.start)]);
+    }
     if (after) { vmRows.push(['Isolate', (after.name || 'isolate') + (after.id ? ' · ' + after.id : '')]); if (after.group) vmRows.push(['Group', after.group]); if (after.run != null) vmRows.push(['Runnable', after.run ? 'yes' : 'no']); if (after.ports != null) vmRows.push(['Live ports', nf.format(number(after.ports))]); if (after.libs != null) vmRows.push(['Libraries', nf.format(number(after.libs))]); if (after.ext != null) vmRows.push(['Extensions', nf.format(number(after.ext))]); if (after.start != null) vmRows.push(['Started', dateText(after.start)]); if (after.pause) vmRows.push(['Pause state', after.pause]); if (after.error) vmRows.push(['Error', after.error]); }
     if (timeline) { vmRows.push(['Recorder', timeline.recorder || 'unknown']); vmRows.push(['Streams', nf.format((timeline.recorded || []).length) + ' recorded / ' + nf.format((timeline.available || []).length) + ' available']); }
     if (heap && heap.drop) vmRows.push(['Heap sample drops', nf.format(number(heap.drop))]);

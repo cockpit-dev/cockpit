@@ -8,6 +8,8 @@
   allocation classes, and evidence-only GPU/shader timeline signals.
 - Added bounded VM heap timeline samples, isolate health/lifecycle snapshots,
   isolate-group memory points, and VM timeline recorder/stream metadata.
+- Added VM runtime identity, target/host CPU, architecture, process start, and
+  isolate inventory metadata to the same validated DevTools projection.
 
 ## 4.0.49
 
