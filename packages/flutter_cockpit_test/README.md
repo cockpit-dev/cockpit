@@ -213,6 +213,39 @@ matching the corresponding DevTools switches. They are off by default because
 the extra instrumentation changes timings, and Cockpit restores the previous
 global flags after the capture.
 
+`profile()` also samples the VM data behind DevTools' CPU Profiler and Memory
+views when a VM service is available. CPU stacks and bounded allocation classes
+are retained in the complete report; the compact test result keeps only sample
+counts. Use `cpu: false` or `heap: false` for a frame-only capture, and tune
+`maxCpuSamples` / `maxHeapClasses` for long scenarios:
+
+```dart
+final report = await cockpit.profile(
+  () => runScenario(),
+  cpu: true,
+  heap: true,
+  maxCpuSamples: 20000,
+  maxHeapClasses: 100,
+);
+```
+
+The same facade exposes DevTools' visual diagnostics without changing the
+production app:
+
+```dart
+cockpit.debug.apply(
+  paintSize: true,
+  repaintRainbow: true,
+  performanceOverlay: true,
+  timeScale: 5,
+);
+// The test harness restores every switch at tear-down.
+```
+
+GPU/shader values are evidence-only: Cockpit reports matching VM timeline
+signals when Flutter emits them and clearly marks platform counters as
+unavailable otherwise. It never substitutes guessed GPU numbers.
+
 The complete bounded report is stored under
 `cockpit.performance.open-list` in `IntegrationTestWidgetsFlutterBinding.reportData`;
 the normal Cockpit result contains only the compact summary. `dropped` counts
@@ -297,9 +330,10 @@ first-frame, and ready milestones as a chart.
 The report includes a **DevTools coverage** panel so unavailable data is obvious:
 FrameTiming, raster cache, VM timeline, GC, process RSS, and harness cold-start
 milestones are marked only when the capture actually contains them. CPU sampling,
-heap snapshots, allocation tracing, network profiling, and GPU/shader counters
-are marked *not collected* rather than being presented as fabricated values;
-use Cockpit's network evidence for HTTP/SSE/WebSocket traffic. The top-bar **Download timeline** action
+heap/allocation profiling, and matching GPU/shader timeline signals are marked
+only when the VM actually returns them; unsupported platform counters remain
+unavailable rather than being fabricated. Use Cockpit's network evidence for
+HTTP/SSE/WebSocket traffic. The top-bar **Download timeline** action
 exports the retained VM events as a Chrome trace-compatible `traceEvents` JSON
 file for timeline viewers; the complete FrameTiming and memory data remains in
 the report JSON and HTML charts. You can also generate that file from a host
@@ -316,7 +350,9 @@ an interactive DevTools session:
 | Slow-frame attribution | Overlapping retained VM spans, with evidence-only source labels | Jank & stalls panel |
 | Raster cache | Layer/picture cache counts and bytes | Cache charts and frame explorer |
 | Memory and GC | Native RSS samples and VM GC events | Memory and cache/GC charts |
-| CPU profiler, Memory heap/allocation, GPU/shader | Not collected by this deterministic API | Run the official DevTools view |
+| CPU profiler | VM CPU samples and bounded stacks | CPU sampling panel and full report |
+| Memory heap/allocation | VM heap points and bounded class counters | Heap & allocation panel and full report |
+| GPU/shader | Matching VM timeline signals only | GPU / Shader signals panel |
 | Network profiler | Separate Cockpit network evidence | `cockpit dev network` artifacts |
 
 The normal test output is intentionally compact; export is not. The HTML and

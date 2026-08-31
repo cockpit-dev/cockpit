@@ -10,11 +10,15 @@
   configurable with `sampleEvery` and missing source evidence is never guessed.
 - Added a DevTools coverage panel and Chrome trace-compatible timeline export;
   host drivers can call `CockpitPerformanceHtml.timelineJson(report)`.
+- Added VM CPU sampling, Dart heap/allocation profiling, and evidence-only
+  GPU/shader signal panels to performance captures when the VM service supports
+  them.
+- Added `CockpitTester.debug` for DevTools visual switches, performance overlay,
+  rebuild logging, and animation time scaling with automatic restoration.
 - Added a jank/stall evidence panel that correlates slow frames with overlapping
   retained VM spans and shows source locations only when supplied by the VM.
-- The coverage panel explicitly marks network, GPU/shader, CPU sampling, heap,
-  and allocation profilers as not collected when this deterministic capture does
-  not provide them.
+- The coverage panel marks every profiler only when verified data is present;
+  unsupported platform counters remain unavailable instead of being guessed.
 - Hardened Chrome trace export by pairing valid VM `B/E` spans and lowering
   unmatched markers; unavailable cache, GC, and phase values stay unavailable
   in the HTML viewer instead of appearing as zero.

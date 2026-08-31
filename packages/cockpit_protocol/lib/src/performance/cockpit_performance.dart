@@ -1,5 +1,6 @@
 import 'package:collection/collection.dart';
 
+import 'cockpit_devtools.dart';
 import 'cockpit_performance_memory.dart';
 
 const Set<String> _performanceBuildModes = <String>{
@@ -575,6 +576,7 @@ final class CockpitPerformanceReport {
     this.invalidFrames = 0,
     this.invalidEvents = 0,
     this.memory,
+    this.devTools,
     this.timelineSource,
     this.stepId,
   }) : frames = List<CockpitPerformanceFrame>.unmodifiable(frames),
@@ -648,6 +650,7 @@ final class CockpitPerformanceReport {
   final int invalidFrames;
   final int invalidEvents;
   final CockpitPerformanceMemoryReport? memory;
+  final CockpitDevToolsProfile? devTools;
   final String? timelineSource;
   final String? stepId;
 
@@ -679,6 +682,7 @@ final class CockpitPerformanceReport {
         if (invalidEvents > 0) 'badEvents': invalidEvents,
       },
     if (memory != null) 'memory': memory!.toJson(),
+    if (devTools != null) 'devtools': devTools!.toJson(),
     if (timelineSource != null) 'source': timelineSource,
     if (stepId != null) 'step': stepId,
   };
@@ -746,6 +750,9 @@ final class CockpitPerformanceReport {
       memory: json['memory'] == null
           ? null
           : CockpitPerformanceMemoryReport.fromJson(json['memory']),
+      devTools: json['devtools'] == null
+          ? null
+          : CockpitDevToolsProfile.fromJson(json['devtools']),
       timelineSource: _optionalString(json['source'], r'$.performance.source'),
       stepId: _optionalString(json['step'], r'$.performance.step'),
     );

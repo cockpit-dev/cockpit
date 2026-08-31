@@ -85,6 +85,11 @@ void main() {
         expect(report.timelineSource, 'unavailable:vm');
         expect(report.events, isEmpty);
       }
+      expect(report.devTools, isNotNull);
+      expect(
+        report.devTools!.state,
+        anyOf('available', 'unavailable', 'unsupported'),
+      );
 
       final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
       final exported =
@@ -96,6 +101,7 @@ void main() {
       expect(decoded.summary.frameCount, decoded.frames.length);
       expect(decoded.timelineSource, report.timelineSource);
       expect(decoded.memory, report.memory);
+      expect(decoded.devTools!.toJson(), report.devTools!.toJson());
     },
   );
 }

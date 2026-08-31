@@ -4,6 +4,8 @@
 
 - Synchronized the protocol package with the current Cockpit performance
   tooling release.
+- Added compact, validated DevTools projections for VM CPU samples, heap and
+  allocation classes, and evidence-only GPU/shader timeline signals.
 
 ## 4.0.49
 

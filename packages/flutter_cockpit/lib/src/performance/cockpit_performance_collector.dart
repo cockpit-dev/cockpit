@@ -133,6 +133,7 @@ final class CockpitPerformanceCollector {
     int? newGenGcCount,
     int? oldGenGcCount,
     CockpitPerformanceMemoryReport? memory,
+    CockpitDevToolsProfile? devTools,
     int droppedEvents = 0,
     int invalidEvents = 0,
   }) {
@@ -178,6 +179,7 @@ final class CockpitPerformanceCollector {
         invalidFrames: _invalidFrames,
         invalidEvents: invalidEvents,
         memory: memory,
+        devTools: devTools,
         timelineSource: timelineSource,
         stepId: stepId,
       );
@@ -196,6 +198,7 @@ final class CockpitPerformanceCollector {
     int? newGenGcCount,
     int? oldGenGcCount,
     CockpitPerformanceMemoryReport? memory,
+    CockpitDevToolsProfile? devTools,
     Duration? timeout,
   }) async {
     start();
@@ -226,6 +229,7 @@ final class CockpitPerformanceCollector {
           droppedEvents: 0,
           invalidEvents: 0,
           memory: memory,
+          devTools: devTools,
         );
       }
     }

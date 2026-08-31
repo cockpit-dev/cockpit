@@ -822,14 +822,15 @@ performance decisions. Use the report artifact path for
 large timeline inspection instead of printing frame/event arrays. The standalone
 HTML viewer uses relative capture time, hover details, frame-budget, jank,
 cadence, raster-cache trend, VM category cost, operation hotspots, startup milestones,
-memory, cache/GC, and duration-based VM flame charts, plus a code-evidence table
+memory, cache/GC, duration-based VM flame charts, CPU sampling stacks,
+heap/allocation classes, and evidence-only GPU/shader signals, plus a code-evidence table
 populated only from source locations explicitly provided by VM event arguments;
 it never guesses a Dart file or CPU call stack from frame timing.
 The HTML report also has a DevTools coverage panel. It marks FrameTiming, raster
-cache, VM timeline, GC, process RSS, and cold-start milestones available only
-when verified data is retained; CPU sampling, heap snapshots, allocation
-tracing, network profiling, and GPU/shader counters are explicitly not
-collected. Use Cockpit network evidence for HTTP/SSE/WebSocket traffic. Its
+cache, VM timeline, GC, process RSS, cold-start milestones, CPU sampling,
+heap/allocation profile, and matching GPU/shader timeline signals only when
+verified data is retained; unsupported platform counters remain unavailable.
+Use Cockpit network evidence for HTTP/SSE/WebSocket traffic. Its
 `Download timeline` button exports retained VM events as Chrome trace-compatible `traceEvents` JSON. FrameTiming
 and memory values remain in the canonical report and their dedicated charts.
 

@@ -196,8 +196,10 @@ Native targets additionally use the official
 integration-test VM timeline for bounded events and GC counts. Use
 `sampleEvery` for native RSS frequency, `streams` and `timeline` to select VM
 tracing, `memory: false` to disable RSS, and `maxEvents` to cap retained VM
-events. Web reports the VM timeline as `unavailable:web`; it never substitutes a
-fake value. A local `flutter test` process without a VM Service URI still runs
+events. CPU sampling and heap allocation profiling are enabled by default when
+the VM service is available; tune `cpu`, `heap`, `maxCpuSamples`, and
+`maxHeapClasses` for long captures. Web reports these as unavailable and never
+substitutes fake values. A local `flutter test` process without a VM Service URI still runs
 the action and records `unavailable:vm`; `flutter drive` and native
 instrumentation keep the official VM timeline. The
 complete report is under `cockpit.performance.<name>` in
@@ -221,7 +223,20 @@ For a targeted diagnostic capture, set `trackBuilds`, `trackUserBuilds`,
 `trackLayouts`, or `trackPaints` to enable Flutter's real per-widget or
 per-render-object timeline spans. These DevTools-equivalent switches are off by
 default because instrumentation changes timings, and Cockpit restores their
-previous global values after the capture.
+previous global values after the capture. The same facade exposes the visual
+DevTools switches directly:
+
+```dart
+cockpit.debug.apply(
+  paintSize: true,
+  repaintRainbow: true,
+  performanceOverlay: true,
+  timeScale: 5,
+);
+```
+
+The harness restores every global switch at tear-down. GPU/shader values in the
+HTML report come only from real matching VM timeline events.
 Use `cockpit.performanceJson()` for the complete canonical JSON bundle or
 `cockpit.exportPerformanceJson()` to write it to an artifact path. These export
 APIs retain every completed capture and all retained frames, VM events and
@@ -229,11 +244,10 @@ arguments, memory samples, startup milestones, explicit drop counts, and the
 bounded `analysis.hotspots` projection; they
 are intentionally more detailed than the compact integration-test result.
 The HTML viewer also includes a DevTools coverage panel: FrameTiming, raster
-cache, VM timeline, GC, process RSS, and cold-start milestones are marked
-available only when the capture contains verified data. CPU sampling, heap
-snapshots, allocation tracing, network profiling, and GPU/shader counters remain
-explicitly not collected; use Cockpit network evidence for HTTP/SSE/WebSocket
-traffic. Its
+cache, VM timeline, GC, process RSS, cold-start milestones, CPU samples,
+heap/allocation classes, and matching GPU/shader signals are marked available
+only when the capture contains verified data; unsupported values remain
+unavailable. Use Cockpit network evidence for HTTP/SSE/WebSocket traffic. Its
 `Download timeline` action exports retained VM events as Chrome trace-compatible
 `traceEvents` JSON; FrameTiming and memory measurements remain in the canonical
 report and their dedicated charts. Host drivers can generate the same timeline

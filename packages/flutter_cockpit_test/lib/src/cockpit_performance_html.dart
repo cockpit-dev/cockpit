@@ -393,12 +393,13 @@ h1 { margin: 7px 0 0; font-size: clamp(29px, 4vw, 48px); line-height: 1.05; lett
 select, input[type="search"], input[type="number"] { min-height: 38px; border: 1px solid var(--line-strong); border-radius: 9px; background: var(--surface); padding: 7px 10px; }
 input[type="search"] { width: 100%; }
 .toolbar-actions { display: flex; align-items: center; gap: 8px; }
-.panel { min-width: 0; margin-top: 15px; padding: 19px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); box-shadow: var(--shadow); }
-.panel-head { display: flex; align-items: end; justify-content: space-between; gap: 18px; margin-bottom: 14px; }
+.panel { min-width: 0; margin-top: 15px; padding: 16px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); box-shadow: var(--shadow); }
+.panel-head { display: flex; align-items: end; justify-content: space-between; gap: 18px; margin-bottom: 12px; }
 .panel-head h2 { margin: 0; font-size: 17px; letter-spacing: -.01em; }
 .panel-head p { margin: 4px 0 0; color: var(--muted); font-size: 12px; }
 .panel-tools { display: flex; align-items: center; gap: 8px; }
-.chart-grid, .insight-grid { display: grid; grid-template-columns: minmax(0, 1.65fr) minmax(280px, .9fr); gap: 15px; }
+.chart-grid, .insight-grid { display: grid; grid-template-columns: minmax(0, 1.65fr) minmax(280px, .9fr); gap: 15px; align-items: start; }
+.chart-grid { margin-top: 15px; }
 .chart-grid .panel { margin-top: 0; }
 .insight-grid { margin-top: 15px; }
 .insight-grid .panel { margin-top: 0; }
@@ -488,6 +489,13 @@ details[open] summary::after { content: "−"; }
 .coverage-state.available { color: var(--accent); background: var(--accent-soft); }
 .coverage-state.unavailable { color: var(--warning); background: var(--warning-soft); }
 .coverage-state.not-collected { color: var(--muted); background: var(--surface-3); }
+.devtools-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 15px; }
+.devtools-grid .panel { margin-top: 0; }
+.devtools-list { display: grid; gap: 7px; max-height: 260px; overflow: auto; }
+.devtools-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 8px 9px; border-radius: 8px; background: var(--surface-2); font-size: 11px; }
+.devtools-row strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.devtools-row span { color: var(--muted); font-family: var(--mono); white-space: nowrap; }
+.devtools-note { margin: 0 0 10px; color: var(--muted); font-size: 11px; }
 .jank-grid { margin-top: 15px; }
 .jank-grid .panel { margin-top: 0; }
 .stall-panel { margin-top: 15px; }
@@ -509,7 +517,7 @@ details[open] summary::after { content: "−"; }
 .hidden { display: none !important; }
 @media (max-width: 1120px) {
   .metric-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-  .hero-grid, .chart-grid, .insight-grid, .resource-grid, .analysis-grid { grid-template-columns: 1fr; }
+  .hero-grid, .chart-grid, .insight-grid, .resource-grid, .analysis-grid, .devtools-grid { grid-template-columns: 1fr; }
   .health { min-height: 200px; }
 }
 @media (max-width: 700px) {
@@ -565,31 +573,36 @@ details[open] summary::after { content: "−"; }
     </div>
     <div class="metric-grid" id="metric-grid"></div>
     <div class="startup-strip" id="startup-strip"></div>
-    <section class="panel startup-panel hidden" id="startup-panel"><div class="panel-head"><div><h2>Cold-start milestones</h2><p>Ordered harness measurements from app build to first frame and initial ready state.</p></div></div><div class="chart-wrap" style="height:180px"><canvas id="startup-chart" aria-label="Cold start milestone chart"></canvas></div></section>
+    <section class="panel startup-panel hidden" id="startup-panel"><div class="panel-head"><div><h2>Cold-start milestones</h2><p>Ordered harness measurements from app build to first frame and initial ready state.</p></div></div><div class="chart-wrap" style="height:110px"><canvas id="startup-chart" aria-label="Cold start milestone chart"></canvas></div></section>
   </section>
   <main class="workspace">
     <div class="toolbar"><div class="control"><label for="report-select">Capture</label><select id="report-select"></select></div><div class="toolbar-actions"><button class="quiet-button" id="copy-button" type="button">Copy report JSON</button><button class="quiet-button" id="raw-button" type="button">Show raw JSON</button></div></div>
     <section class="panel coverage-panel"><div class="panel-head"><div><h2>DevTools coverage</h2><p>What this deterministic capture can prove, and which DevTools profilers are intentionally not collected.</p></div><span class="subtle" id="coverage-summary">—</span></div><div class="coverage-grid" id="coverage-grid"></div></section>
+    <section class="devtools-grid" id="devtools-grid">
+      <div class="panel"><div class="panel-head"><div><h2>CPU sampling</h2><p>Real VM samples and top inclusive stacks from this capture.</p></div><span class="subtle" id="cpu-note">—</span></div><div class="chart-wrap" style="height:170px"><canvas id="cpu-chart" aria-label="CPU sampling chart"></canvas></div><div class="devtools-list" id="cpu-list"></div></div>
+      <div class="panel"><div class="panel-head"><div><h2>Heap &amp; allocation</h2><p>Dart heap usage and allocation classes returned by the VM.</p></div><span class="subtle" id="heap-note">—</span></div><div class="chart-wrap" style="height:150px"><canvas id="heap-chart" aria-label="Dart heap chart"></canvas></div><div class="devtools-list" id="heap-list"></div></div>
+      <div class="panel"><div class="panel-head"><div><h2>GPU / Shader signals</h2><p>Only actual GPU, raster, Skia, and shader timeline events are shown.</p></div><span class="subtle" id="gpu-note">—</span></div><div class="devtools-list" id="gpu-list"></div></div>
+    </section>
     <section class="chart-grid">
       <div class="panel"><div class="panel-head"><div><h2>Frame pacing</h2><p>Total frame span against the display budget. Jank is marked in place.</p></div><span class="subtle" id="frame-range">—</span></div><div class="chart-wrap"><canvas id="frame-chart" aria-label="Frame pacing chart"></canvas></div><div class="chart-legend"><span class="legend-item"><i class="legend-swatch total"></i>Total</span><span class="legend-item"><i class="legend-swatch build"></i>Build</span><span class="legend-item"><i class="legend-swatch raster"></i>Raster</span><span class="legend-item"><i class="legend-swatch budget"></i>Budget</span></div></div>
       <div class="panel"><div class="panel-head"><div><h2>VM timeline</h2><p>Retained event volume and category mix.</p></div></div><div class="event-summary" id="event-summary"></div><div class="chart-wrap" style="height:160px;margin-top:14px"><canvas id="event-chart" aria-label="VM timeline chart"></canvas></div><div class="category-list" id="category-list"></div></div>
     </section>
     <section class="panel stall-panel"><div class="panel-head"><div><h2>Jank &amp; stalls</h2><p>Only retained timeline events that overlap a slow frame are shown; no source or cause is guessed.</p></div><span class="subtle" id="stall-note">—</span></div><div class="stall-summary" id="stall-summary"></div><div class="table-wrap"><table class="stall-table"><thead><tr><th>Frame</th><th>Over budget</th><th>Frame total</th><th>Observed evidence</th><th>Source</th></tr></thead><tbody id="stall-body"></tbody></table></div></section>
     <section class="insight-grid">
-      <div class="panel"><div class="panel-head"><div><h2>Phase latency</h2><p>Percentiles make long-tail build and raster pressure visible.</p></div></div><div class="chart-wrap" style="height:250px"><canvas id="phase-chart" aria-label="Frame phase latency chart"></canvas></div><div class="chart-legend"><span class="legend-item"><i class="legend-swatch total"></i>p50</span><span class="legend-item"><i class="legend-swatch build"></i>p90</span><span class="legend-item"><i class="legend-swatch raster"></i>p99</span><span class="legend-item"><i class="legend-swatch budget"></i>max</span></div></div>
-      <div class="panel"><div class="panel-head"><div><h2>Jank distribution</h2><p>Frames grouped by how far they exceed the display budget.</p></div></div><div class="chart-wrap" style="height:250px"><canvas id="jank-chart" aria-label="Frame budget distribution chart"></canvas></div><div class="resource-summary" id="jank-summary"></div></div>
+      <div class="panel"><div class="panel-head"><div><h2>Phase latency</h2><p>Percentiles make long-tail build and raster pressure visible.</p></div></div><div class="chart-wrap" style="height:170px"><canvas id="phase-chart" aria-label="Frame phase latency chart"></canvas></div><div class="chart-legend"><span class="legend-item"><i class="legend-swatch total"></i>p50</span><span class="legend-item"><i class="legend-swatch build"></i>p90</span><span class="legend-item"><i class="legend-swatch raster"></i>p99</span><span class="legend-item"><i class="legend-swatch budget"></i>max</span></div></div>
+      <div class="panel"><div class="panel-head"><div><h2>Jank distribution</h2><p>Frames grouped by how far they exceed the display budget.</p></div></div><div class="chart-wrap" style="height:132px"><canvas id="jank-chart" aria-label="Frame budget distribution chart"></canvas></div><div class="resource-summary" id="jank-summary"></div></div>
     </section>
     <section class="resource-grid insight-grid">
-      <div class="panel"><div class="panel-head"><div><h2>Memory trend</h2><p>Resident process memory and the platform-reported process peak over capture time.</p></div></div><div class="chart-wrap" style="height:250px"><canvas id="resource-chart" aria-label="Process memory trend chart"></canvas></div><div class="resource-summary" id="resource-summary"></div></div>
-      <div class="panel"><div class="panel-head"><div><h2>Cache &amp; GC pressure</h2><p>Flutter layer and picture cache peaks beside retained garbage collection activity.</p></div></div><div class="chart-wrap" style="height:250px"><canvas id="cache-chart" aria-label="Cache and garbage collection chart"></canvas></div><div class="resource-summary" id="cache-summary"></div></div>
+      <div class="panel"><div class="panel-head"><div><h2>Memory trend</h2><p>Resident process memory and the platform-reported process peak over capture time.</p></div></div><div class="chart-wrap" style="height:210px"><canvas id="resource-chart" aria-label="Process memory trend chart"></canvas></div><div class="resource-summary" id="resource-summary"></div></div>
+      <div class="panel"><div class="panel-head"><div><h2>Cache &amp; GC pressure</h2><p>Flutter layer and picture cache peaks beside retained garbage collection activity.</p></div></div><div class="chart-wrap" style="height:182px"><canvas id="cache-chart" aria-label="Cache and garbage collection chart"></canvas></div><div class="resource-summary" id="cache-summary"></div></div>
     </section>
     <section class="analysis-grid insight-grid">
-      <div class="panel"><div class="panel-head"><div><h2>Frame cadence</h2><p>Actual time between engine frame timestamps. Spikes expose refresh jitter even when frame work is short.</p></div></div><div class="chart-wrap" style="height:250px"><canvas id="cadence-chart" aria-label="Frame cadence chart"></canvas></div></div>
-      <div class="panel"><div class="panel-head"><div><h2>Raster cache trend</h2><p>Layer and picture cache counts across retained frames, with byte values available on hover.</p></div></div><div class="chart-wrap" style="height:250px"><canvas id="cache-trend-chart" aria-label="Raster cache trend chart"></canvas></div></div>
-      <div class="panel wide"><div class="panel-head"><div><h2>VM category cost</h2><p>Duration and event count grouped by the actual VM timeline category.</p></div></div><div class="chart-wrap" style="height:250px"><canvas id="category-cost-chart" aria-label="VM category duration chart"></canvas></div></div>
+      <div class="panel"><div class="panel-head"><div><h2>Frame cadence</h2><p>Actual time between engine frame timestamps. Spikes expose refresh jitter even when frame work is short.</p></div></div><div class="chart-wrap" style="height:210px"><canvas id="cadence-chart" aria-label="Frame cadence chart"></canvas></div></div>
+      <div class="panel"><div class="panel-head"><div><h2>Raster cache trend</h2><p>Layer and picture cache counts across retained frames, with byte values available on hover.</p></div></div><div class="chart-wrap" style="height:210px"><canvas id="cache-trend-chart" aria-label="Raster cache trend chart"></canvas></div></div>
+      <div class="panel wide"><div class="panel-head"><div><h2>VM category cost</h2><p>Duration and event count grouped by the actual VM timeline category.</p></div></div><div class="chart-wrap" style="height:80px"><canvas id="category-cost-chart" aria-label="VM category duration chart"></canvas></div></div>
     </section>
-    <section class="panel"><div class="panel-head"><div><h2>Operation hotspots</h2><p>Concrete VM event names ranked by retained duration. Source is shown only when the event arguments provide it.</p></div><span class="subtle" id="hotspot-note">—</span></div><div class="chart-wrap" style="height:300px"><canvas id="hotspot-chart" aria-label="VM operation hotspots chart"></canvas></div><div class="table-wrap"><table class="hotspot-table"><thead><tr><th>Operation</th><th>Category</th><th>Events</th><th>Timed</th><th>Total</th><th>p90</th><th>Longest</th><th>Source evidence</th></tr></thead><tbody id="hotspot-body"></tbody></table></div></section>
-    <section class="panel"><div class="panel-head"><div><h2>Timeline flame view</h2><p>Nested VM spans by real event intervals. This is a timeline view, not an invented CPU call stack.</p></div><span class="subtle" id="flame-range">—</span></div><div class="chart-wrap" style="height:280px"><canvas id="flame-chart" aria-label="Nested VM timeline flame view"></canvas></div></section>
+    <section class="panel"><div class="panel-head"><div><h2>Operation hotspots</h2><p>Concrete VM event names ranked by retained duration. Source is shown only when the event arguments provide it.</p></div><span class="subtle" id="hotspot-note">—</span></div><div class="chart-wrap" style="height:92px"><canvas id="hotspot-chart" aria-label="VM operation hotspots chart"></canvas></div><div class="table-wrap"><table class="hotspot-table"><thead><tr><th>Operation</th><th>Category</th><th>Events</th><th>Timed</th><th>Total</th><th>p90</th><th>Longest</th><th>Source evidence</th></tr></thead><tbody id="hotspot-body"></tbody></table></div></section>
+    <section class="panel"><div class="panel-head"><div><h2>Timeline flame view</h2><p>Nested VM spans by real event intervals. This is a timeline view, not an invented CPU call stack.</p></div><span class="subtle" id="flame-range">—</span></div><div class="chart-wrap" style="height:88px"><canvas id="flame-chart" aria-label="Nested VM timeline flame view"></canvas></div></section>
     <section class="panel"><div class="panel-head"><div><h2>Frame explorer</h2><p>Inspect retained engine timings without rendering every sample at once.</p></div><div class="panel-tools"><select id="frame-sort" aria-label="Sort frames"><option value="index">Capture order</option><option value="total">Slowest total</option><option value="build">Slowest build</option><option value="raster">Slowest raster</option></select></div></div><div class="table-wrap"><table><thead><tr><th>#</th><th>Frame</th><th>Total</th><th>Build</th><th>Raster</th><th>Vsync</th><th>Budget</th><th>Cache</th></tr></thead><tbody id="frame-body"></tbody></table></div><div class="pager"><span id="frame-page-label">—</span><div class="pager-actions"><button class="quiet-button" id="frame-prev" type="button">Previous</button><button class="quiet-button" id="frame-next" type="button">Next</button></div></div></section>
     <section class="panel"><div class="panel-head"><div><h2>Capture comparison</h2><p>Compare every capture in this file without switching context.</p></div></div><div class="table-wrap"><table class="comparison-table"><thead><tr><th>Capture</th><th>Frames</th><th>Jank</th><th>FPS</th><th>Total p90</th><th>Total max</th><th>Duration</th><th>RSS peak</th><th>RSS Δ</th></tr></thead><tbody id="comparison-body"></tbody></table></div></section>
     <section class="panel"><div class="panel-head"><div><h2>Timeline events</h2><p>Newest retained VM events first. Search by name, category, or argument key.</p></div><div class="panel-tools"><div class="control"><label for="event-search">Search</label><input id="event-search" type="search" placeholder="Name or category"></div><select id="event-category" aria-label="Filter event category"><option value="">All categories</option></select></div></div><div class="table-wrap"><table><thead><tr><th>When</th><th>Event</th><th>Category</th><th>Duration</th><th>Phase</th><th>Arguments</th></tr></thead><tbody id="event-body"></tbody></table></div><div class="pager"><span id="event-page-label">—</span><div class="pager-actions"><button class="quiet-button" id="event-prev" type="button">Previous</button><button class="quiet-button" id="event-next" type="button">Next</button></div></div></section>
@@ -735,6 +748,15 @@ details[open] summary::after { content: "−"; }
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     painter(ctx, rect.width, rect.height);
   };
+  var setChartHeight = function (id, height) {
+    var canvas = el(id);
+    var wrap = canvas && canvas.parentElement;
+    if (wrap) wrap.style.height = Math.round(height) + 'px';
+  };
+  var fitChartRows = function (id, count, min, max, row, top, bottom) {
+    var rows = Math.max(1, number(count));
+    setChartHeight(id, clamp(top + bottom + rows * row, min, max));
+  };
   var grid = function (ctx, width, height, max, budget) {
     var left = 44, right = 14, top = 18, bottom = 28;
     ctx.clearRect(0, 0, width, height);
@@ -755,6 +777,7 @@ details[open] summary::after { content: "−"; }
   };
   var drawFrameChart = function () {
     var list = frames();
+    setChartHeight('frame-chart', 240);
     draw(el('frame-chart'), function (ctx, width, height) {
       chartHits['frame-chart'] = [];
       var budget = number(summary().build && summary().build.bud);
@@ -798,18 +821,20 @@ details[open] summary::after { content: "−"; }
     });
   };
   var drawPhaseChart = function () {
+    fitChartRows('phase-chart', 4, 156, 220, 32, 10, 24);
     draw(el('phase-chart'), function (ctx, width, height) {
       chartHits['phase-chart'] = [];
       ctx.clearRect(0, 0, width, height); ctx.fillStyle = css('--surface-2'); ctx.fillRect(0, 0, width, height);
-      var names = [['Build', phase('build')], ['Raster', phase('raster')], ['Vsync', phase('vsync')], ['Total', phase('total')]]; var values = names.reduce(function (all, item) { var p = item[1]; return all.concat([p.p50, p.p90, p.p99, p.max].filter(function (value) { return value != null; }).map(number)); }, []); var max = Math.max(1, values.reduce(function (m, value) { return Math.max(m, value); }, 0)) * 1.15; var left = 54, right = 13, top = 19, bottom = 27; var plotW = width - left - right; var plotH = height - top - bottom; var rowH = plotH / names.length;
+      var names = [['Build', phase('build')], ['Raster', phase('raster')], ['Vsync', phase('vsync')], ['Total', phase('total')]]; var values = names.reduce(function (all, item) { var p = item[1]; return all.concat([p.p50, p.p90, p.p99, p.max].filter(function (value) { return value != null; }).map(number)); }, []); var max = Math.max(1, values.reduce(function (m, value) { return Math.max(m, value); }, 0)) * 1.15; var left = 54, right = 13, top = 10, bottom = 24, plotW = width - left - right, plotH = height - top - bottom, rowH = 32;
       ctx.strokeStyle = css('--line'); ctx.lineWidth = 1; ctx.fillStyle = css('--muted'); ctx.font = '10px system-ui, sans-serif';
-      for (var i = 0; i <= 4; i += 1) { var x = left + plotW * i / 4; ctx.beginPath(); ctx.moveTo(x, top); ctx.lineTo(x, top + plotH); ctx.stroke(); ctx.fillText(us(Math.round(max * i / 4)), x - (i === 0 ? 0 : 10), height - 8); }
+      for (var i = 0; i <= 4; i += 1) { var x = left + plotW * i / 4; ctx.beginPath(); ctx.moveTo(x, top); ctx.lineTo(x, top + plotH); ctx.stroke(); var axisLabel = us(Math.round(max * i / 4)); var axisWidth = ctx.measureText(axisLabel).width; ctx.fillText(axisLabel, clamp(x - axisWidth / 2, left, width - right - axisWidth), height - 8); }
       var bars = [['p50', css('--accent')], ['p90', css('--blue')], ['p99', css('--warning')], ['max', css('--danger')]];
-      names.forEach(function (item, row) { var label = item[0], p = item[1], y = top + row * rowH + rowH * .5; ctx.fillStyle = css('--text-soft'); ctx.fillText(label, 10, y + 3); bars.forEach(function (bar, index) { var raw = p[bar[0]], value = raw == null ? 0 : number(raw); var by = y - 17 + index * 8; var barW = raw == null ? 0 : Math.max(value ? 2 : 0, value / max * plotW); ctx.fillStyle = bar[1]; ctx.globalAlpha = raw == null ? .08 : value ? .92 : .22; ctx.fillRect(left, by, barW, 5); ctx.globalAlpha = 1; }); chartHits['phase-chart'].push({ x: left, y: top + row * rowH, w: plotW, h: rowH, html: '<strong>' + esc(label) + ' latency</strong>' + tooltipRow('Average', metricUs(p.avg)) + tooltipRow('p50', metricUs(p.p50)) + tooltipRow('p90', metricUs(p.p90)) + tooltipRow('p99', metricUs(p.p99)) + tooltipRow('Max', metricUs(p.max)) + tooltipRow('Budget', metricUs(p.bud)) + tooltipRow('Missed', metricCount(p.miss)) }); });
+      names.forEach(function (item, row) { var label = item[0], p = item[1], rowTop = top + row * rowH; ctx.fillStyle = css('--text-soft'); ctx.fillText(label, 10, rowTop + 19); bars.forEach(function (bar, index) { var raw = p[bar[0]], value = raw == null ? 0 : number(raw); var by = rowTop + 2 + index * 6; var barW = raw == null ? 0 : Math.max(value ? 2 : 0, value / max * plotW); ctx.fillStyle = bar[1]; ctx.globalAlpha = raw == null ? .08 : value ? .92 : .22; ctx.fillRect(left, by, barW, 4); ctx.globalAlpha = 1; }); chartHits['phase-chart'].push({ x: left, y: rowTop, w: plotW, h: rowH, html: '<strong>' + esc(label) + ' latency</strong>' + tooltipRow('Average', metricUs(p.avg)) + tooltipRow('p50', metricUs(p.p50)) + tooltipRow('p90', metricUs(p.p90)) + tooltipRow('p99', metricUs(p.p99)) + tooltipRow('Max', metricUs(p.max)) + tooltipRow('Budget', metricUs(p.bud)) + tooltipRow('Missed', metricCount(p.miss)) }); });
       if (!values.some(function (value) { return value > 0; })) { ctx.fillStyle = css('--muted'); ctx.fillText('No phase aggregates retained', left, height / 2); }
     });
   };
   var drawResourceChart = function () {
+    setChartHeight('resource-chart', 210);
     draw(el('resource-chart'), function (ctx, width, height) {
       chartHits['resource-chart'] = [];
       ctx.clearRect(0, 0, width, height); ctx.fillStyle = css('--surface-2'); ctx.fillRect(0, 0, width, height);
@@ -834,26 +859,29 @@ details[open] summary::after { content: "−"; }
     });
   };
   var drawCacheChart = function () {
+    fitChartRows('cache-chart', 6, 170, 220, 27, 10, 10);
     draw(el('cache-chart'), function (ctx, width, height) {
       chartHits['cache-chart'] = [];
       ctx.clearRect(0, 0, width, height); ctx.fillStyle = css('--surface-2'); ctx.fillRect(0, 0, width, height);
       var s = summary(); var hasFrames = frames().length > 0; var layer = hasFrames ? (s.layerCache || {}) : {}; var picture = hasFrames ? (s.pictureCache || {}) : {}; var gc = s.gc || {};
       var rows = [['Layer bytes', layer.bytes == null ? null : number(layer.bytes), css('--accent'), layer.bytes == null ? 'Unavailable' : bytes(layer.bytes), 'bytes'], ['Picture bytes', picture.bytes == null ? null : number(picture.bytes), css('--blue'), picture.bytes == null ? 'Unavailable' : bytes(picture.bytes), 'bytes'], ['Layer count', layer.count == null ? null : number(layer.count), css('--warning'), layer.count == null ? 'Unavailable' : nf.format(number(layer.count)), 'count'], ['Picture count', picture.count == null ? null : number(picture.count), '#d79aff', picture.count == null ? 'Unavailable' : nf.format(number(picture.count)), 'count'], ['New GC', gc.new == null ? null : number(gc.new), css('--danger'), gc.new == null ? 'Unavailable' : nf.format(number(gc.new)), 'count'], ['Old GC', gc.old == null ? null : number(gc.old), '#ff9da4', gc.old == null ? 'Unavailable' : nf.format(number(gc.old)), 'count']];
-      var byteMax = Math.max(1, rows.slice(0, 2).reduce(function (m, row) { return Math.max(m, row[1] == null ? 0 : row[1]); }, 0)); var countMax = Math.max(1, rows.slice(2).reduce(function (m, row) { return Math.max(m, row[1] == null ? 0 : row[1]); }, 0)); var left = 92, right = 50, top = 22, rowH = Math.min(32, (height - 35) / rows.length); ctx.font = '10px system-ui, sans-serif'; rows.forEach(function (row, index) { var y = top + index * rowH; var rowMax = row[4] === 'bytes' ? byteMax : countMax; var value = row[1] == null ? 0 : row[1]; var barW = row[1] == null ? 0 : Math.max(value ? 3 : 0, value / rowMax * (width - left - right)); ctx.fillStyle = css('--muted'); ctx.fillText(row[0], 8, y + 11); ctx.fillStyle = css('--surface-3'); ctx.fillRect(left, y + 2, width - left - right, 12); if (row[1] != null) { ctx.fillStyle = row[2]; ctx.fillRect(left, y + 2, barW, 12); } ctx.fillStyle = row[1] == null ? css('--muted') : css('--text-soft'); ctx.fillText(row[3], width - right + 6, y + 12); chartHits['cache-chart'].push({ x: left, y: y, w: width - left - right, h: 16, html: '<strong>' + esc(row[0]) + '</strong>' + tooltipRow('Value', row[3]) + tooltipRow('Scale', row[1] == null ? 'Unavailable' : row[4] === 'bytes' ? bytes(rowMax) : nf.format(rowMax)) }); });
+      var byteMax = Math.max(1, rows.slice(0, 2).reduce(function (m, row) { return Math.max(m, row[1] == null ? 0 : row[1]); }, 0)); var countMax = Math.max(1, rows.slice(2).reduce(function (m, row) { return Math.max(m, row[1] == null ? 0 : row[1]); }, 0)); var left = 92, right = 82, top = 10, rowH = 27; ctx.font = '10px system-ui, sans-serif'; rows.forEach(function (row, index) { var y = top + index * rowH; var rowMax = row[4] === 'bytes' ? byteMax : countMax; var value = row[1] == null ? 0 : row[1]; var barW = row[1] == null ? 0 : Math.max(value ? 3 : 0, value / rowMax * (width - left - right)); ctx.fillStyle = css('--muted'); ctx.fillText(row[0], 8, y + 11); ctx.fillStyle = css('--surface-3'); ctx.fillRect(left, y + 2, width - left - right, 12); if (row[1] != null) { ctx.fillStyle = row[2]; ctx.fillRect(left, y + 2, barW, 12); } ctx.fillStyle = row[1] == null ? css('--muted') : css('--text-soft'); ctx.fillText(row[3], width - right + 6, y + 12); chartHits['cache-chart'].push({ x: left, y: y, w: width - left - right, h: 16, html: '<strong>' + esc(row[0]) + '</strong>' + tooltipRow('Value', row[3]) + tooltipRow('Scale', row[1] == null ? 'Unavailable' : row[4] === 'bytes' ? bytes(rowMax) : nf.format(rowMax)) }); });
       if (!rows.some(function (row) { return row[1] > 0; })) { ctx.fillStyle = css('--muted'); ctx.fillText('No cache or GC data retained', left, height / 2); }
     });
   };
   var drawJankChart = function () {
+    var list = frames(); var budget = number(summary().build && summary().build.bud); var bins = [{ label: 'Within budget', max: budget, min: 0, count: 0, color: css('--accent') }, { label: '1–1.5× budget', max: budget * 1.5, min: budget, count: 0, color: css('--warning') }, { label: '1.5–2× budget', max: budget * 2, min: budget * 1.5, count: 0, color: '#e89a63' }, { label: '>2× budget', max: Infinity, min: budget * 2, count: 0, color: css('--danger') }];
+    if (!budget) bins = [{ label: 'All frames', max: Infinity, min: 0, count: list.length, color: css('--accent') }]; else list.forEach(function (frame) { var value = number(frame.s); bins.some(function (bin) { if (value <= bin.max) { bin.count += 1; return true; } return false; }); });
+    fitChartRows('jank-chart', bins.length, 82, 196, 28, 10, 10);
     draw(el('jank-chart'), function (ctx, width, height) {
       chartHits['jank-chart'] = [];
       ctx.clearRect(0, 0, width, height); ctx.fillStyle = css('--surface-2'); ctx.fillRect(0, 0, width, height);
-      var list = frames(); var budget = number(summary().build && summary().build.bud); var bins = [{ label: 'Within budget', max: budget, min: 0, count: 0, color: css('--accent') }, { label: '1–1.5× budget', max: budget * 1.5, min: budget, count: 0, color: css('--warning') }, { label: '1.5–2× budget', max: budget * 2, min: budget * 1.5, count: 0, color: '#e89a63' }, { label: '>2× budget', max: Infinity, min: budget * 2, count: 0, color: css('--danger') }];
-      if (!budget) bins = [{ label: 'All frames', max: Infinity, min: 0, count: list.length, color: css('--accent') }]; else list.forEach(function (frame) { var value = number(frame.s); bins.some(function (bin) { if (value <= bin.max) { bin.count += 1; return true; } return false; }); });
-      var total = Math.max(1, list.length); var left = 116, right = 18, top = 22, rowH = Math.min(38, (height - 38) / bins.length), plotW = width - left - right; ctx.font = '10px system-ui, sans-serif'; bins.forEach(function (bin, index) { var y = top + index * rowH; var barW = bin.count / total * plotW; ctx.fillStyle = css('--muted'); ctx.fillText(bin.label, 8, y + 12); ctx.fillStyle = css('--surface-3'); ctx.fillRect(left, y + 2, plotW, 14); ctx.fillStyle = bin.color; ctx.fillRect(left, y + 2, barW, 14); ctx.fillStyle = css('--text-soft'); ctx.fillText(nf.format(bin.count) + ' · ' + (bin.count / total * 100).toFixed(1) + '%', left + plotW + 6, y + 13); chartHits['jank-chart'].push({ x: left, y: y, w: plotW, h: 18, html: '<strong>' + esc(bin.label) + '</strong>' + tooltipRow('Frames', nf.format(bin.count)) + tooltipRow('Share', (bin.count / total * 100).toFixed(1) + '%') + tooltipRow('Budget', budget ? us(budget) : 'Unavailable') }); });
+      var total = Math.max(1, list.length); var left = 116, right = 84, top = 10, rowH = 28, plotW = width - left - right; ctx.font = '10px system-ui, sans-serif'; bins.forEach(function (bin, index) { var y = top + index * rowH; var barW = bin.count / total * plotW; ctx.fillStyle = css('--muted'); ctx.fillText(bin.label, 8, y + 12); ctx.fillStyle = css('--surface-3'); ctx.fillRect(left, y + 2, plotW, 14); ctx.fillStyle = bin.color; ctx.fillRect(left, y + 2, barW, 14); ctx.fillStyle = css('--text-soft'); ctx.fillText(nf.format(bin.count) + ' · ' + (bin.count / total * 100).toFixed(1) + '%', left + plotW + 6, y + 13); chartHits['jank-chart'].push({ x: left, y: y, w: plotW, h: 18, html: '<strong>' + esc(bin.label) + '</strong>' + tooltipRow('Frames', nf.format(bin.count)) + tooltipRow('Share', (bin.count / total * 100).toFixed(1) + '%') + tooltipRow('Budget', budget ? us(budget) : 'Unavailable') }); });
       if (!list.length) { ctx.fillStyle = css('--muted'); ctx.fillText('No retained frame timings', left, height / 2); }
     });
   };
   var drawCadenceChart = function () {
+    setChartHeight('cadence-chart', 210);
     draw(el('cadence-chart'), function (ctx, width, height) {
       chartHits['cadence-chart'] = [];
       var list = frames(); var intervals = []; for (var index = 1; index < list.length; index += 1) { var delta = number(list[index].t) - number(list[index - 1].t); if (delta > 0) intervals.push({ frame: list[index], delta: delta }); }
@@ -864,6 +892,7 @@ details[open] summary::after { content: "−"; }
     });
   };
   var drawCacheTrendChart = function () {
+    setChartHeight('cache-trend-chart', 210);
     draw(el('cache-trend-chart'), function (ctx, width, height) {
       chartHits['cache-trend-chart'] = [];
       var list = frames(); ctx.clearRect(0, 0, width, height); ctx.fillStyle = css('--surface-2'); ctx.fillRect(0, 0, width, height);
@@ -875,11 +904,14 @@ details[open] summary::after { content: "−"; }
     });
   };
   var drawCategoryCostChart = function () {
+    var categoryKeys = {};
+    events().forEach(function (event) { categoryKeys[String(event.c || 'uncategorized')] = true; });
+    fitChartRows('category-cost-chart', Math.min(10, Object.keys(categoryKeys).length), 76, 320, 28, 10, 10);
     draw(el('category-cost-chart'), function (ctx, width, height) {
       chartHits['category-cost-chart'] = [];
       var grouped = {}; events().forEach(function (event) { var key = String(event.c || 'uncategorized'); var value = grouped[key] || { total: 0, count: 0, longest: 0 }; value.total += number(event.d); value.count += 1; value.longest = Math.max(value.longest, number(event.d)); grouped[key] = value; }); var rows = Object.keys(grouped).map(function (key) { return { key: key, value: grouped[key] }; }).sort(function (a, b) { return b.value.total - a.value.total || b.value.count - a.value.count; }).slice(0, 10);
       ctx.clearRect(0, 0, width, height); ctx.fillStyle = css('--surface-2'); ctx.fillRect(0, 0, width, height); if (!rows.length) { ctx.fillStyle = css('--muted'); ctx.font = '10px system-ui, sans-serif'; ctx.fillText('No retained VM events', 15, height / 2); return; }
-      var max = Math.max(1, rows.reduce(function (value, row) { return Math.max(value, row.value.total); }, 0)); var left = 112; var right = 80; var top = 18; var bottom = 20; var rowH = Math.min(25, (height - top - bottom) / rows.length); var plotW = width - left - right; ctx.font = '10px system-ui, sans-serif'; rows.forEach(function (row, index) { var y = top + index * rowH; var barW = row.value.total / max * plotW; ctx.fillStyle = css('--muted'); ctx.fillText(row.key.length > 17 ? row.key.slice(0, 16) + '…' : row.key, 8, y + 12); ctx.fillStyle = css('--surface-3'); ctx.fillRect(left, y + 2, plotW, 12); ctx.fillStyle = hashColor(row.key); ctx.fillRect(left, y + 2, barW, 12); ctx.fillStyle = css('--text-soft'); ctx.fillText(us(row.value.total) + ' · ' + nf.format(row.value.count), width - right + 6, y + 12); chartHits['category-cost-chart'].push({ x: left, y: y, w: plotW, h: 16, html: '<strong>' + esc(row.key) + '</strong>' + tooltipRow('Total duration', us(row.value.total)) + tooltipRow('Longest event', us(row.value.longest)) + tooltipRow('Events', nf.format(row.value.count)) }); });
+      var max = Math.max(1, rows.reduce(function (value, row) { return Math.max(value, row.value.total); }, 0)); var left = 112; var right = 80; var top = 10; var rowH = 28; var plotW = width - left - right; ctx.font = '10px system-ui, sans-serif'; rows.forEach(function (row, index) { var y = top + index * rowH; var barW = row.value.total / max * plotW; ctx.fillStyle = css('--muted'); ctx.fillText(row.key.length > 17 ? row.key.slice(0, 16) + '…' : row.key, 8, y + 12); ctx.fillStyle = css('--surface-3'); ctx.fillRect(left, y + 2, plotW, 12); ctx.fillStyle = hashColor(row.key); ctx.fillRect(left, y + 2, barW, 12); ctx.fillStyle = css('--text-soft'); ctx.fillText(us(row.value.total) + ' · ' + nf.format(row.value.count), width - right + 6, y + 12); chartHits['category-cost-chart'].push({ x: left, y: y, w: plotW, h: 16, html: '<strong>' + esc(row.key) + '</strong>' + tooltipRow('Total duration', us(row.value.total)) + tooltipRow('Longest event', us(row.value.longest)) + tooltipRow('Events', nf.format(row.value.count)) }); });
     });
   };
   var hotspotCache = {};
@@ -938,6 +970,7 @@ details[open] summary::after { content: "−"; }
     return hotspotCache[state.report];
   };
   var drawHotspotChart = function () {
+    fitChartRows('hotspot-chart', Math.min(12, hotspotRows().length), 88, 360, 28, 10, 22);
     draw(el('hotspot-chart'), function (ctx, width, height) {
       chartHits['hotspot-chart'] = [];
       ctx.clearRect(0, 0, width, height); ctx.fillStyle = css('--surface-2'); ctx.fillRect(0, 0, width, height);
@@ -945,7 +978,7 @@ details[open] summary::after { content: "−"; }
       if (!rows.length) { ctx.fillStyle = css('--muted'); ctx.font = '10px system-ui, sans-serif'; ctx.fillText('No retained VM operations', 15, height / 2); return; }
       var useDuration = rows.some(function (row) { return row.total > 0; });
       var max = Math.max(1, rows.reduce(function (value, row) { return Math.max(value, useDuration ? row.total : row.count); }, 0));
-      var left = 150, right = 92, top = 18, bottom = 22, rowH = Math.min(30, (height - top - bottom) / rows.length), plotW = width - left - right;
+      var left = 150, right = 92, top = 10, bottom = 22, rowH = 28, plotW = width - left - right;
       ctx.font = '10px system-ui, sans-serif';
       rows.forEach(function (row, index) {
         var y = top + index * rowH;
@@ -971,13 +1004,25 @@ details[open] summary::after { content: "−"; }
     }).join('') : '<tr><td colspan="8"><div class="empty">No retained VM operations.</div></td></tr>';
   };
   var drawStartupChart = function () {
+    fitChartRows('startup-chart', startup ? 3 : 1, 100, 180, 30, 10, 10);
     draw(el('startup-chart'), function (ctx, width, height) {
       chartHits['startup-chart'] = [];
       ctx.clearRect(0, 0, width, height); ctx.fillStyle = css('--surface-2'); ctx.fillRect(0, 0, width, height); if (!startup) return;
-      var rows = [['App build', number(startup.appMs), css('--blue')], ['First frame', number(startup.firstMs), css('--accent')], ['Ready', number(startup.readyMs), css('--warning')]]; var max = Math.max(1, rows.reduce(function (value, row) { return Math.max(value, row[1]); }, 0)) * 1.12; var left = 92; var right = 70; var top = 22; var bottom = 20; var rowH = Math.min(34, (height - top - bottom) / rows.length); var plotW = width - left - right; ctx.font = '10px system-ui, sans-serif'; rows.forEach(function (row, index) { var y = top + index * rowH; var barW = row[1] / max * plotW; ctx.fillStyle = css('--muted'); ctx.fillText(row[0], 8, y + 12); ctx.fillStyle = css('--surface-3'); ctx.fillRect(left, y + 2, plotW, 14); ctx.fillStyle = row[2]; ctx.fillRect(left, y + 2, barW, 14); ctx.fillStyle = css('--text-soft'); ctx.fillText(duration(row[1]), width - right + 6, y + 13); chartHits['startup-chart'].push({ x: left, y: y, w: plotW, h: 18, html: '<strong>' + esc(row[0]) + '</strong>' + tooltipRow('Elapsed', duration(row[1])) + tooltipRow('Clock', startup.source || 'harness') }); });
+      var rows = [['App build', number(startup.appMs), css('--blue')], ['First frame', number(startup.firstMs), css('--accent')], ['Ready', number(startup.readyMs), css('--warning')]]; var max = Math.max(1, rows.reduce(function (value, row) { return Math.max(value, row[1]); }, 0)) * 1.12; var left = 92; var right = 70; var top = 10; var rowH = 30; var plotW = width - left - right; ctx.font = '10px system-ui, sans-serif'; rows.forEach(function (row, index) { var y = top + index * rowH; var barW = row[1] / max * plotW; ctx.fillStyle = css('--muted'); ctx.fillText(row[0], 8, y + 12); ctx.fillStyle = css('--surface-3'); ctx.fillRect(left, y + 2, plotW, 14); ctx.fillStyle = row[2]; ctx.fillRect(left, y + 2, barW, 14); ctx.fillStyle = css('--text-soft'); ctx.fillText(duration(row[1]), width - right + 6, y + 13); chartHits['startup-chart'].push({ x: left, y: y, w: plotW, h: 18, html: '<strong>' + esc(row[0]) + '</strong>' + tooltipRow('Elapsed', duration(row[1])) + tooltipRow('Clock', startup.source || 'harness') }); });
     });
   };
   var drawFlameChart = function () {
+    var spanEvents = events().filter(function (event) { return number(event.d) > 0; });
+    var shownEvents = spanEvents.slice().sort(function (a, b) { return number(b.d) - number(a.d); }).slice(0, 5000).sort(function (a, b) { return number(a.t) - number(b.t) || number(b.d) - number(a.d); });
+    var depthStack = [];
+    var maxDepth = 1;
+    shownEvents.forEach(function (event) {
+      var start = number(event.t);
+      while (depthStack.length && depthStack[depthStack.length - 1] <= start) depthStack.pop();
+      maxDepth = Math.max(maxDepth, depthStack.length + 1);
+      depthStack.push(start + number(event.d));
+    });
+    setChartHeight('flame-chart', clamp(48 + maxDepth * 22, 84, 360));
     draw(el('flame-chart'), function (ctx, width, height) {
       chartHits['flame-chart'] = [];
       ctx.clearRect(0, 0, width, height); ctx.fillStyle = css('--surface-2'); ctx.fillRect(0, 0, width, height);
@@ -1013,7 +1058,7 @@ details[open] summary::after { content: "−"; }
     node.classList.remove('hidden'); panel.classList.remove('hidden'); node.innerHTML = '<div><span class="startup-title">Cold start milestones</span><span>' + esc(startup.source || 'harness') + ' clock</span></div><div><span>App build</span><strong>' + esc(duration(startup.appMs)) + '</strong></div><div><span>First frame</span><strong class="good">' + esc(duration(startup.firstMs)) + '</strong></div><div><span>Ready</span><strong>' + esc(duration(startup.readyMs)) + '</strong></div>';
   };
   var renderCoverage = function () {
-    var r = report(); var s = summary(); var mem = memory(); var available = 0;
+    var r = report(); var s = summary(); var mem = memory(); var d = r.devtools || null; var available = 0;
     var rows = [
       ['Frame timing', frames().length ? 'available' : 'unavailable', frames().length ? nf.format(frames().length) + ' retained frames' : 'No valid FrameTiming samples'],
       ['VM timeline', r.source === 'vm' && events().length ? 'available' : 'unavailable', r.source === 'vm' && events().length ? nf.format(events().length) + ' retained events' : (r.source || 'Timeline not collected')],
@@ -1023,15 +1068,50 @@ details[open] summary::after { content: "−"; }
       ['Cold start', startup ? 'available' : 'unavailable', startup ? 'Build, first frame, ready' : 'No startup harness supplied'],
       ['Jank attribution', frames().length && events().length ? 'available' : 'unavailable', frames().length && events().length ? 'Slow frames matched to overlapping VM spans' : 'Requires retained frames and VM events'],
       ['Operation hotspots', events().length ? 'available' : 'unavailable', events().length ? nf.format(hotspotRows().length) + ' event operations aggregated' : 'Requires retained VM events'],
-      ['CPU sampling', 'not-collected', 'Use DevTools CPU profiler for sampled stacks'],
-      ['Heap snapshot', 'not-collected', 'Use DevTools Memory for heap/allocation snapshots'],
-      ['Allocation trace', 'not-collected', 'Use DevTools Memory for allocation tracing'],
+      ['CPU sampling', d && d.cpu ? 'available' : 'unavailable', d && d.cpu ? nf.format(number(d.cpu.n)) + ' VM samples' : (d && d.why ? d.why : 'CPU profiler unavailable')],
+      ['Heap profile', d && d.heap ? 'available' : 'unavailable', d && d.heap ? nf.format((d.heap.classes || []).length) + ' allocation classes' : (d && d.why ? d.why : 'Dart heap profile unavailable')],
+      ['Allocation trace', d && d.heap ? 'available' : 'unavailable', d && d.heap ? 'Class allocation counters from the VM' : 'Requires a live VM service'],
       ['Network profiler', 'not-collected', 'Use Cockpit network evidence for HTTP/SSE/WebSocket traffic'],
-      ['GPU/shader', 'not-collected', 'No GPU counters or shader compilation stream is retained'],
+      ['GPU/shader', d && d.gpu ? 'available' : 'unavailable', d && d.gpu ? nf.format(number(d.gpu.events)) + ' timeline signals' : 'No matching GPU or shader timeline events'],
     ];
     rows.forEach(function (row) { if (row[1] === 'available') available += 1; });
     el('coverage-summary').textContent = available + ' of ' + rows.length + ' views backed by this capture';
     el('coverage-grid').innerHTML = rows.map(function (row) { var label = row[1] === 'available' ? 'Available' : row[1] === 'not-collected' ? 'Not collected' : 'Unavailable'; return '<div class="coverage-card"><div class="coverage-card-head"><strong>' + esc(row[0]) + '</strong><span class="coverage-state ' + esc(row[1]) + '">' + esc(label) + '</span></div><p>' + esc(row[2]) + '</p></div>'; }).join('');
+  };
+  var drawCpuChart = function () {
+    draw(el('cpu-chart'), function (ctx, width, height) {
+      chartHits['cpu-chart'] = [];
+      ctx.clearRect(0, 0, width, height); ctx.fillStyle = css('--surface-2'); ctx.fillRect(0, 0, width, height);
+      var cpu = report().devtools && report().devtools.cpu; var functions = cpu && Array.isArray(cpu.f) ? cpu.f.slice().sort(function (a, b) { return number(b.in) - number(a.in); }).slice(0, 8) : [];
+      if (!functions.length) { ctx.fillStyle = css('--muted'); ctx.font = '10px system-ui, sans-serif'; ctx.fillText('No CPU samples retained', 14, height / 2); return; }
+      var max = Math.max(1, functions.reduce(function (m, item) { return Math.max(m, number(item.in)); }, 0)); var left = 112; var right = 48; var top = 10; var rowH = Math.max(17, (height - top - 18) / functions.length); ctx.font = '10px system-ui, sans-serif';
+      functions.forEach(function (fn, index) { var y = top + index * rowH; var label = String(fn.n || '<anonymous>'); ctx.fillStyle = css('--muted'); ctx.fillText(label.length > 17 ? label.slice(0, 16) + '…' : label, 8, y + 12); ctx.fillStyle = css('--surface-3'); ctx.fillRect(left, y + 2, width - left - right, 10); ctx.fillStyle = hashColor(label); var barW = number(fn.in) / max * (width - left - right); ctx.fillRect(left, y + 2, barW, 10); ctx.fillStyle = css('--text-soft'); ctx.fillText(nf.format(number(fn.in)), width - right + 6, y + 12); chartHits['cpu-chart'].push({ x: left, y: y, w: width - left - right, h: 14, html: '<strong>' + esc(label) + '</strong>' + tooltipRow('Inclusive ticks', nf.format(number(fn.in))) + tooltipRow('Exclusive ticks', nf.format(number(fn.ex))) + tooltipRow('URI', fn.u || '—') }); });
+      ctx.fillStyle = css('--muted'); ctx.fillText('Top sampled functions · inclusive ticks', 8, height - 6);
+    });
+  };
+  var drawHeapChart = function () {
+    draw(el('heap-chart'), function (ctx, width, height) {
+      chartHits['heap-chart'] = [];
+      ctx.clearRect(0, 0, width, height); ctx.fillStyle = css('--surface-2'); ctx.fillRect(0, 0, width, height);
+      var heap = report().devtools && report().devtools.heap; if (!heap || !heap.before || !heap.after) { ctx.fillStyle = css('--muted'); ctx.font = '10px system-ui, sans-serif'; ctx.fillText('Heap profile unavailable', 14, height / 2); return; }
+      var points = [['Before', heap.before], ['After', heap.after]]; var max = Math.max(1, number(heap.before.cap), number(heap.after.cap)) * 1.08; var left = 58; var right = 18; var top = 16; var plotW = width - left - right; var groupW = plotW / points.length; var colors = [css('--accent'), css('--blue'), css('--warning')]; ctx.font = '10px system-ui, sans-serif';
+      for (var i = 0; i <= 3; i += 1) { var y = top + (height - top - 24) * i / 3; ctx.strokeStyle = css('--line'); ctx.beginPath(); ctx.moveTo(left, y); ctx.lineTo(width - right, y); ctx.stroke(); ctx.fillStyle = css('--muted'); ctx.fillText(bytes(Math.round(max * (1 - i / 3))), 5, y + 3); }
+      points.forEach(function (point, index) { var x = left + index * groupW + groupW * .24; var barW = groupW * .52; var values = [number(point[1].use), number(point[1].cap), number(point[1].ext)]; values.forEach(function (value, series) { var w = barW / 3 - 3; var bx = x + series * (barW / 3); var bh = value / max * (height - top - 24); ctx.fillStyle = colors[series]; ctx.globalAlpha = .88; ctx.fillRect(bx, height - 24 - bh, w, bh); ctx.globalAlpha = 1; chartHits['heap-chart'].push({ x: bx, y: height - 24 - bh, w: w, h: Math.max(8, bh), html: '<strong>' + esc(point[0]) + '</strong>' + tooltipRow(series === 0 ? 'Used' : series === 1 ? 'Capacity' : 'External', bytes(value)) }); }); ctx.fillStyle = css('--text-soft'); ctx.fillText(point[0], x + barW / 2 - 17, height - 8); });
+    });
+  };
+  var renderDevTools = function () {
+    var d = report().devtools || null;
+    var cpu = d && d.cpu ? d.cpu : null;
+    var heap = d && d.heap ? d.heap : null;
+    var gpu = d && d.gpu ? d.gpu : null;
+    el('cpu-note').textContent = cpu ? nf.format(number(cpu.n)) + ' samples · ' + us(number(cpu.span)) : (d && d.why ? 'Unavailable' : 'Not collected');
+    var functions = cpu && Array.isArray(cpu.f) ? cpu.f.slice().sort(function (a, b) { return number(b.in) - number(a.in); }).slice(0, 12) : [];
+    el('cpu-list').innerHTML = functions.length ? functions.map(function (fn) { return '<div class="devtools-row"><strong title="' + esc(fn.n || '') + '">' + esc(fn.n || '<anonymous>') + '</strong><span>' + nf.format(number(fn.in)) + ' ticks · ' + nf.format(number(fn.ex)) + ' self</span></div>'; }).join('') : '<p class="devtools-note">' + esc(cpu ? 'No samples retained.' : (d && d.why ? d.why : 'CPU sampling was unavailable for this run.')) + '</p>';
+    el('heap-note').textContent = heap ? bytes(number(heap.after && heap.after.use)) + ' used · ' + bytes(number(heap.after && heap.after.ext)) + ' external' : (d && d.why ? 'Unavailable' : 'Not collected');
+    var classes = heap && Array.isArray(heap.classes) ? heap.classes.slice(0, 12) : [];
+    el('heap-list').innerHTML = classes.length ? classes.map(function (item) { return '<div class="devtools-row"><strong title="' + esc(item.n || '') + '">' + esc(item.n || '<unknown>') + '</strong><span>' + bytes(number(item.bytes)) + ' · ' + nf.format(number(item.count)) + ' objs</span></div>'; }).join('') : '<p class="devtools-note">' + esc(heap ? 'No allocation classes retained.' : (d && d.why ? d.why : 'Dart heap profiling was unavailable for this run.')) + '</p>';
+    el('gpu-note').textContent = gpu ? nf.format(number(gpu.events)) + ' signals · ' + us(number(gpu.time)) : 'No matching timeline signals';
+    el('gpu-list').innerHTML = gpu ? '<div class="devtools-row"><strong>GPU / raster / Skia</strong><span>' + nf.format(number(gpu.events)) + ' events</span></div><div class="devtools-row"><strong>Shader signals</strong><span>' + nf.format(number(gpu.shaders)) + ' events</span></div><div class="devtools-row"><strong>Observed duration</strong><span>' + esc(us(gpu.time)) + '</span></div>' : '<p class="devtools-note">GPU counters are platform-specific. Cockpit reports only real matching VM timeline events.</p>';
   };
   var renderEventSummary = function () {
     var list = events(); var start = list.reduce(function (m, e) { return Math.min(m, number(e.t)); }, Infinity); var finish = list.reduce(function (m, e) { return Math.max(m, number(e.t) + number(e.d)); }, -Infinity); var traceSpan = list.length ? Math.max(0, finish - start) : 0; var categories = {}; list.forEach(function (e) { var key = String(e.c || 'uncategorized'); categories[key] = (categories[key] || 0) + 1; }); var top = Object.keys(categories).sort(function (a, b) { return categories[b] - categories[a]; })[0];
@@ -1144,7 +1224,7 @@ details[open] summary::after { content: "−"; }
   };
   var renderCategories = function () { var values = {}; events().forEach(function (e) { values[String(e.c || 'uncategorized')] = true; }); var select = el('event-category'); select.innerHTML = '<option value="">All categories</option>' + Object.keys(values).sort().map(function (value) { return '<option value="' + esc(value) + '">' + esc(value) + '</option>'; }).join(''); select.value = state.eventCategory; };
   var renderSelector = function () { var select = el('report-select'); select.innerHTML = reports.map(function (item, index) { return '<option value="' + index + '">' + esc(item.label || ('Capture ' + (index + 1))) + '</option>'; }).join(''); select.value = state.report; };
-  var render = function () { hideTooltip(); renderSelector(); renderMeta(); renderHealth(); renderMetrics(); renderStartup(); renderCoverage(); renderEventSummary(); renderStalls(); renderCategories(); renderResources(); renderComparison(); renderDetails(); renderFrames(); renderEvents(); renderCodeEvidence(); renderHotspots(); drawStartupChart(); drawFrameChart(); drawEventChart(); drawPhaseChart(); drawResourceChart(); drawCacheChart(); drawJankChart(); drawCadenceChart(); drawCacheTrendChart(); drawCategoryCostChart(); drawHotspotChart(); drawFlameChart(); };
+  var render = function () { hideTooltip(); renderSelector(); renderMeta(); renderHealth(); renderMetrics(); renderStartup(); renderCoverage(); renderDevTools(); renderEventSummary(); renderStalls(); renderCategories(); renderResources(); renderComparison(); renderDetails(); renderFrames(); renderEvents(); renderCodeEvidence(); renderHotspots(); drawStartupChart(); drawFrameChart(); drawEventChart(); drawPhaseChart(); drawResourceChart(); drawCacheChart(); drawJankChart(); drawCadenceChart(); drawCacheTrendChart(); drawCategoryCostChart(); drawHotspotChart(); drawFlameChart(); drawCpuChart(); drawHeapChart(); };
   el('report-select').addEventListener('change', function (event) { state.report = Number(event.target.value) || 0; state.framePage = 0; state.eventPage = 0; state.eventQuery = ''; state.eventCategory = ''; el('event-search').value = ''; render(); });
   el('frame-sort').addEventListener('change', function (event) { state.frameSort = event.target.value; state.framePage = 0; renderFrames(); });
   el('frame-prev').addEventListener('click', function () { state.framePage -= 1; renderFrames(); }); el('frame-next').addEventListener('click', function () { state.framePage += 1; renderFrames(); });
@@ -1154,10 +1234,10 @@ details[open] summary::after { content: "−"; }
   el('copy-button').addEventListener('click', function (event) { var text = JSON.stringify(report(), null, 2); if (navigator.clipboard && navigator.clipboard.writeText) { navigator.clipboard.writeText(text).then(function () { event.target.textContent = 'Copied'; setTimeout(function () { event.target.textContent = 'Copy report JSON'; }, 1200); }); } });
   el('download-button').addEventListener('click', function () { var blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }); var link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = fileStem(data.title) + '.full.json'; link.click(); setTimeout(function () { URL.revokeObjectURL(link.href); }, 1000); });
   el('timeline-button').addEventListener('click', function () { var blob = new Blob([JSON.stringify(timelinePayload(), null, 2)], { type: 'application/json' }); var link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = (reports[state.report].label || 'cockpit-performance') + '.timeline.json'; link.click(); setTimeout(function () { URL.revokeObjectURL(link.href); }, 1000); });
-  el('theme-button').addEventListener('click', function () { root.dataset.theme = root.dataset.theme === 'light' ? 'dark' : 'light'; drawStartupChart(); drawFrameChart(); drawEventChart(); drawPhaseChart(); drawResourceChart(); drawCacheChart(); drawJankChart(); drawCadenceChart(); drawCacheTrendChart(); drawCategoryCostChart(); drawHotspotChart(); drawFlameChart(); });
+  el('theme-button').addEventListener('click', function () { root.dataset.theme = root.dataset.theme === 'light' ? 'dark' : 'light'; drawStartupChart(); drawFrameChart(); drawEventChart(); drawPhaseChart(); drawResourceChart(); drawCacheChart(); drawJankChart(); drawCadenceChart(); drawCacheTrendChart(); drawCategoryCostChart(); drawHotspotChart(); drawFlameChart(); drawCpuChart(); drawHeapChart(); });
   window.addEventListener('scroll', hideTooltip, { passive: true });
-  window.addEventListener('resize', function () { drawStartupChart(); drawFrameChart(); drawEventChart(); drawPhaseChart(); drawResourceChart(); drawCacheChart(); drawJankChart(); drawCadenceChart(); drawCacheTrendChart(); drawCategoryCostChart(); drawHotspotChart(); drawFlameChart(); });
-  ['startup-chart', 'frame-chart', 'event-chart', 'phase-chart', 'resource-chart', 'cache-chart', 'jank-chart', 'cadence-chart', 'cache-trend-chart', 'category-cost-chart', 'hotspot-chart', 'flame-chart'].forEach(bindChart);
+  window.addEventListener('resize', function () { drawStartupChart(); drawFrameChart(); drawEventChart(); drawPhaseChart(); drawResourceChart(); drawCacheChart(); drawJankChart(); drawCadenceChart(); drawCacheTrendChart(); drawCategoryCostChart(); drawHotspotChart(); drawFlameChart(); drawCpuChart(); drawHeapChart(); });
+  ['startup-chart', 'frame-chart', 'event-chart', 'phase-chart', 'resource-chart', 'cache-chart', 'jank-chart', 'cadence-chart', 'cache-trend-chart', 'category-cost-chart', 'hotspot-chart', 'flame-chart', 'cpu-chart', 'heap-chart'].forEach(bindChart);
   render();
 }());
 </script>

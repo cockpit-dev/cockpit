@@ -26,6 +26,10 @@ void main() {
     expect(html, contains('DevTools coverage'));
     expect(html, contains('id="coverage-grid"'));
     expect(html, contains('CPU sampling'));
+    expect(html, contains('Heap &amp; allocation'));
+    expect(html, contains('GPU / Shader signals'));
+    expect(html, contains('id="cpu-chart"'));
+    expect(html, contains('id="heap-chart"'));
     expect(html, contains('Network profiler'));
     expect(html, contains('Download timeline'));
     expect(html, contains('Download full JSON'));
@@ -35,6 +39,21 @@ void main() {
     expect(html, contains('Jank distribution'));
     expect(html, contains('Timeline flame view'));
     expect(html, contains('id="flame-chart"'));
+    expect(html, contains('align-items: start'));
+    expect(html, contains('.chart-grid { margin-top: 15px; }'));
+    expect(html, contains('fitChartRows'));
+    expect(
+      html,
+      contains(
+        "setChartHeight('flame-chart', clamp(48 + maxDepth * 22, 84, 360))",
+      ),
+    );
+    expect(
+      html,
+      contains(
+        'var total = Math.max(1, list.length); var left = 116, right = 84',
+      ),
+    );
     expect(html, contains('Frame cadence'));
     expect(html, contains('Raster cache trend'));
     expect(html, contains('VM category cost'));
@@ -320,6 +339,45 @@ CockpitPerformanceReport _report({required String step}) {
         'a': <String, Object?>{'payload': '<script>tracked</script>'},
       },
     ],
+    'devtools': <String, Object?>{
+      'source': 'vm',
+      'state': 'available',
+      'cpu': <String, Object?>{
+        'period': 1000,
+        'depth': 32,
+        'n': 1,
+        'start': 0,
+        'span': 1000,
+        'f': <Object?>[
+          <String, Object?>{'n': 'main', 'in': 1, 'ex': 1},
+        ],
+        's': <Object?>[
+          <String, Object?>{
+            't': 10,
+            's': <Object?>[0],
+          },
+        ],
+      },
+      'heap': <String, Object?>{
+        'before': <String, Object?>{'use': 10, 'cap': 20, 'ext': 1},
+        'after': <String, Object?>{'use': 12, 'cap': 24, 'ext': 2},
+        'classes': <Object?>[
+          <String, Object?>{
+            'n': 'Foo',
+            'bytes': 8,
+            'count': 2,
+            'allocBytes': 10,
+            'allocCount': 3,
+          },
+        ],
+      },
+      'gpu': <String, Object?>{
+        'source': 'vmTimeline',
+        'events': 2,
+        'shaders': 1,
+        'time': 400,
+      },
+    },
   });
 }
 

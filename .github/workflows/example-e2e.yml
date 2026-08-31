@@ -187,8 +187,43 @@ jobs:
           test -s performance-artifacts/report.html &&
           grep -q 'cockpit.performance.complex-task-flow'
           performance-artifacts/report.json &&
-          grep -q 'Frame pacing' performance-artifacts/report.html &&
-          grep -q 'Cold start milestones' performance-artifacts/report.html
+          grep -q '"devtools"' performance-artifacts/report.json &&
+            grep -q 'Frame pacing' performance-artifacts/report.html &&
+            grep -q 'Cold start milestones' performance-artifacts/report.html
+
+      - name: Validate performance capability states
+        env:
+          REPORT_PATH: performance-artifacts/report.json
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+
+          path = os.environ['REPORT_PATH']
+          with open(path, encoding='utf-8') as stream:
+              payload = json.load(stream)
+          report = payload['cockpit.performance.complex-task-flow']
+          devtools = report.get('devtools')
+          if not isinstance(devtools, dict):
+              raise SystemExit('Missing DevTools capability report')
+          if devtools.get('state') not in {'available', 'unavailable', 'unsupported'}:
+              raise SystemExit(f"Invalid DevTools state: {devtools.get('state')!r}")
+          if devtools.get('state') == 'available':
+              if not isinstance(devtools.get('cpu'), dict):
+                  raise SystemExit('Available DevTools report has no CPU profile')
+              if not isinstance(devtools.get('heap'), dict):
+                  raise SystemExit('Available DevTools report has no heap profile')
+              if not devtools['cpu'].get('s'):
+                  raise SystemExit('CPU profile contains no retained samples')
+              if not devtools['heap'].get('before') or not devtools['heap'].get('after'):
+                  raise SystemExit('Heap profile has no before/after samples')
+          print({
+              'state': devtools['state'],
+              'cpuSamples': len(devtools.get('cpu', {}).get('s', [])),
+              'heapClasses': len(devtools.get('heap', {}).get('classes', [])),
+              'gpuEvents': devtools.get('gpu', {}).get('events', 0),
+          })
+          PY
 
       - name: Upload performance reports
         if: always()
@@ -483,6 +518,11 @@ jobs:
         shell: bash
         run: dart test ${{ matrix.platform_tests }}
 
+      - name: Run Flutter facade contracts on ${{ matrix.platform }} host
+        working-directory: packages/flutter_cockpit_test
+        shell: bash
+        run: flutter test
+
       - name: Configure isolated CI authorization
         shell: bash
         run: |
@@ -601,7 +641,11 @@ jobs:
             ${{ matrix.visual_args }}
             --output-root "$ACCEPTANCE_OUTPUT" --require-recording
             --require-native-locator
-            --stop-daemon
+            --stop-daemon &&
+            flutter drive --no-dds
+            --driver=integration_test/driver.dart
+            --target=integration_test/cockpit_facade_test.dart
+            -d emulator-5554
 
       - name: Run iOS regression
         if: matrix.platform == 'ios'
@@ -614,7 +658,11 @@ jobs:
           ${{ matrix.visual_args }}
           --output-root "$ACCEPTANCE_OUTPUT" --require-recording
           --require-native-locator
-          --stop-daemon
+          --stop-daemon &&
+          flutter drive --no-dds
+          --driver=integration_test/driver.dart
+          --target=integration_test/cockpit_facade_test.dart
+          -d "$IOS_DEVICE_ID"
 
       - name: Run macOS regression
         if: matrix.platform == 'macos'
@@ -623,7 +671,11 @@ jobs:
         run: >-
           dart run tool/verify.dart --platform macos
           ${{ matrix.visual_args }}
-          --output-root "$ACCEPTANCE_OUTPUT" --stop-daemon
+          --output-root "$ACCEPTANCE_OUTPUT" --stop-daemon &&
+          flutter drive --no-dds
+          --driver=integration_test/driver.dart
+          --target=integration_test/cockpit_facade_test.dart
+          -d macos
 
       - name: Run headless regression
         if: matrix.platform == 'linux' || matrix.platform == 'web'
@@ -641,6 +693,19 @@ jobs:
         run: |
           Set-Location (Join-Path $env:COCKPIT_WINDOWS_WORKSPACE 'examples\cockpit_demo\cockpit')
           dart run tool/verify.dart --platform windows ${{ matrix.visual_args }} --output-root "$env:ACCEPTANCE_OUTPUT" --stop-daemon
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          flutter drive --no-dds --driver=integration_test/driver.dart --target=integration_test/cockpit_facade_test.dart -d windows
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Run Linux Flutter facade integration
+        if: matrix.platform == 'linux'
+        working-directory: examples/cockpit_demo/cockpit
+        shell: bash
+        run: >-
+          flutter drive --no-dds
+          --driver=integration_test/driver.dart
+          --target=integration_test/cockpit_facade_test.dart
+          -d linux
 
       - name: Collect Windows build diagnostics
         if: always() && matrix.platform == 'windows'

@@ -63,6 +63,7 @@ export 'src/network/cockpit_network_redactor.dart';
 export 'src/network/cockpit_network_snapshot.dart';
 export 'src/network/cockpit_web_socket_activity.dart';
 export 'src/performance/cockpit_performance.dart';
+export 'src/performance/cockpit_devtools.dart';
 export 'src/performance/cockpit_performance_memory.dart';
 export 'src/remote/cockpit_remote_artifact_payload.dart';
 export 'src/remote/cockpit_remote_artifact_download.dart';

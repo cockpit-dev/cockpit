@@ -13,6 +13,29 @@ void main() {
   });
 
   cockpitTestWidgets(
+    'controls and restores DevTools debug switches',
+    app: () => const _TestApp(),
+    body: (cockpit) async {
+      final before = cockpit.debug.current;
+      final applied = cockpit.debug.apply(
+        paintSize: true,
+        repaintRainbow: true,
+        performanceOverlay: true,
+        timeScale: 3,
+      );
+      expect(applied.paintSize, isTrue);
+      expect(applied.repaintRainbow, isTrue);
+      expect(applied.performanceOverlay, isTrue);
+      expect(applied.timeDilation, 3);
+      final restored = cockpit.debug.restore();
+      expect(restored.paintSize, before.paintSize);
+      expect(restored.repaintRainbow, before.repaintRainbow);
+      expect(restored.performanceOverlay, before.performanceOverlay);
+      expect(restored.timeDilation, before.timeDilation);
+    },
+  );
+
+  cockpitTestWidgets(
     'runs selector actions through the in-app executor',
     app: () => const _TestApp(),
     body: (cockpit) async {
