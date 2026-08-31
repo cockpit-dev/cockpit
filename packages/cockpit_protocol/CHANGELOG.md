@@ -4,7 +4,11 @@
 
 - Synchronized the protocol package with the current Cockpit release.
 - Added bounded, display-aware performance report contracts with strict
-  duration, frame-count, timestamp, and payload validation.
+  duration, timestamp, sample-count, wall-time, and payload validation.
+- Performance reports use schema v2 so raw raster-finish wall-time and bounded
+  sample semantics cannot be confused with the earlier contract.
+- Reports record the Flutter build mode so debug measurements cannot be
+  mistaken for profile or release evidence.
 
 ## 4.0.48
 

@@ -5,6 +5,10 @@
 - Synchronized the Flutter bridge package with the current Cockpit release.
 - Added opt-in engine frame timing collection with cache peaks, jank budgets,
   percentiles, bounded retention, and truthful unavailable/partial metadata.
+- Performance captures now preserve raster-finish wall-time, use the exact
+  60Hz fallback interval, and label retained-sample aggregates explicitly.
+- Every report records whether it was collected in debug, profile, or release
+  mode so the result cannot be misclassified.
 
 ## 4.0.48
 

@@ -6,6 +6,15 @@ import 'package:flutter/scheduler.dart';
 
 import 'package:cockpit_protocol/cockpit_protocol.dart';
 
+export 'package:cockpit_protocol/cockpit_protocol.dart'
+    show
+        CockpitPerformanceEvent,
+        CockpitPerformanceFrame,
+        CockpitPerformanceMode,
+        CockpitPerformancePhaseSummary,
+        CockpitPerformanceReport,
+        CockpitPerformanceSummary;
+
 /// Collects engine-reported frame timings for an explicit, bounded capture.
 ///
 /// The collector is dormant until [start] is called. It never samples the
@@ -20,9 +29,11 @@ final class CockpitPerformanceCollector {
     int? frameBudgetUs,
     DateTime Function()? now,
     String? platform,
+    String? buildMode,
   }) : _frameBudgetUs = frameBudgetUs ?? _defaultFrameBudgetUs(),
        _now = now ?? (() => DateTime.now().toUtc()),
-       platform = platform ?? (kIsWeb ? 'web' : defaultTargetPlatform.name) {
+       platform = platform ?? (kIsWeb ? 'web' : defaultTargetPlatform.name),
+       buildMode = buildMode ?? _defaultBuildMode() {
     if (maxFrames < 1 || maxFrames > 1000000) {
       throw ArgumentError.value(
         maxFrames,
@@ -37,6 +48,20 @@ final class CockpitPerformanceCollector {
         'Must be positive.',
       );
     }
+    if (this.platform.trim().isEmpty) {
+      throw ArgumentError.value(
+        this.platform,
+        'platform',
+        'Must not be blank.',
+      );
+    }
+    if (!_performanceBuildModes.contains(this.buildMode)) {
+      throw ArgumentError.value(
+        this.buildMode,
+        'buildMode',
+        'Must be debug, profile, or release.',
+      );
+    }
   }
 
   final CockpitPerformanceMode mode;
@@ -44,6 +69,7 @@ final class CockpitPerformanceCollector {
   final int _frameBudgetUs;
   final DateTime Function() _now;
   final String platform;
+  final String buildMode;
   final List<CockpitPerformanceFrame> _frames = <CockpitPerformanceFrame>[];
   TimingsCallback? _timingsCallback;
   Stopwatch? _clock;
@@ -131,13 +157,14 @@ final class CockpitPerformanceCollector {
         frameBudgetUs: _frameBudgetUs,
         newGenGcCount: newGenGcCount,
         oldGenGcCount: oldGenGcCount,
-      ).copyWith(frameCount: _seenFrames);
+      );
       return CockpitPerformanceReport(
         startedAt: started,
         finishedAt: finished,
         durationUs: elapsed.inMicroseconds,
         durationMs: elapsed.inMilliseconds,
         platform: platform,
+        buildMode: buildMode,
         mode: activeMode,
         summary: summary,
         frames: _frames,
@@ -215,6 +242,9 @@ final class CockpitPerformanceCollector {
     final rasterUs = timing.rasterDuration.inMicroseconds;
     final vsyncUs = timing.vsyncOverhead.inMicroseconds;
     final totalUs = timing.totalSpan.inMicroseconds;
+    final wallTimeUs = timing.timestampInMicroseconds(
+      FramePhase.rasterFinishWallTime,
+    );
     final values = <int>[
       buildUs,
       rasterUs,
@@ -230,6 +260,7 @@ final class CockpitPerformanceCollector {
     return CockpitPerformanceFrame(
       index: index,
       timestampUs: timing.timestampInMicroseconds(FramePhase.vsyncStart),
+      wallTimeUs: wallTimeUs,
       buildUs: buildUs,
       rasterUs: rasterUs,
       vsyncUs: vsyncUs,
@@ -261,8 +292,19 @@ int _defaultFrameBudgetUs() {
     final budget = (1000000 / refreshRate).round();
     if (budget > 0) return budget;
   }
-  // Flutter's public performance guidance uses a 60Hz, 16ms budget when a
-  // display refresh rate is unavailable. The actual budget is retained in
-  // every phase summary so consumers can distinguish this fallback.
-  return const Duration(milliseconds: 16).inMicroseconds;
+  // A 60Hz display has a 16.667ms frame interval. Keep the exact rounded
+  // interval rather than truncating it to 16ms, which would over-report jank.
+  return (1000000 / 60).round();
 }
+
+String _defaultBuildMode() {
+  if (kDebugMode) return 'debug';
+  if (kProfileMode) return 'profile';
+  return 'release';
+}
+
+const Set<String> _performanceBuildModes = <String>{
+  'debug',
+  'profile',
+  'release',
+};

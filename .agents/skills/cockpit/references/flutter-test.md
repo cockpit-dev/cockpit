@@ -190,16 +190,20 @@ final report = await cockpit.profile(
 ```
 
 The collector listens to Flutter's original `FrameTiming` stream and records
-build/raster/vsync/total durations, cache peaks, jank budget, percentiles, and
-valid frame timestamps. Native targets additionally use the official
+raw vsync and raster-finish wall-time timestamps, build/raster/vsync/total
+durations, cache peaks, jank budget, percentiles, and valid frame timestamps.
+Native targets additionally use the official
 integration-test VM timeline for bounded events and GC counts. Web reports the
 VM timeline as `unavailable:web`; it never substitutes a fake value. The
 complete report is under `cockpit.performance.<name>` in
 `IntegrationTestWidgetsFlutterBinding.reportData`, while the normal Cockpit
 result keeps only summary metrics. `dropped` is explicit when a retention
-bound is reached, and `fps` is omitted unless the original timestamps establish
-a positive monotonic cadence. Never interpret omitted or unavailable metrics as
-zero.
+bound is reached; those aggregates describe the retained sample only. Empty
+phases omit duration aggregates rather than reporting a fabricated zero, and
+`fps` is omitted unless the original timestamps establish a strictly increasing
+cadence. Never interpret omitted or unavailable metrics as zero.
+Reports include the Flutter build mode; debug timings are diagnostic only, while
+profile and release timings are suitable for performance decisions.
 
 ## Timeouts and waiting
 

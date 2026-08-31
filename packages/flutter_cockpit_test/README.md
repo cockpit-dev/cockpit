@@ -179,8 +179,9 @@ test output.
 ## Performance profiling
 
 Profile an interaction with the same test clock and frame pipeline used by the
-app. Cockpit records engine `FrameTiming` values (build, raster, vsync, total
-span, raster-cache usage, jank budget, and p50/p90/p99/worst values). On native
+app. Cockpit records raw vsync and raster-finish wall-time timestamps together
+with engine `FrameTiming` values (build, raster, vsync, total span, raster-cache
+usage, jank budget, and p50/p90/p99/worst values). On native
 Flutter targets it also captures the official integration-test VM timeline and
 GC events; web reports the timeline as unavailable instead of fabricating data:
 
@@ -199,10 +200,15 @@ expect(report.summary.jankCount, 0);
 The complete bounded report is stored under
 `cockpit.performance.open-list` in `IntegrationTestWidgetsFlutterBinding.reportData`;
 the normal Cockpit result contains only the compact summary. `dropped` counts
-are explicit when a configured retention bound is reached, and `fps` is omitted
-when the original engine timestamps cannot establish a monotonic cadence. The
+are explicit when a configured retention bound is reached; aggregates then
+describe the retained sample only. Empty phases omit duration aggregates rather
+than reporting a fabricated zero, and `fps` is omitted when the original engine
+timestamps cannot establish a strictly increasing cadence. The
 phase budget is derived from the target display refresh rate when Flutter
-exposes it, otherwise the report records the documented 60Hz fallback budget.
+exposes it, otherwise the report records the exact rounded 60Hz fallback
+interval (16,667µs).
+The report also records `debug`, `profile`, or `release`; debug timings are
+diagnostic and must not be used as release performance evidence.
 Never treat a missing or unavailable metric as zero.
 
 ## Run

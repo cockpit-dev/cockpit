@@ -159,8 +159,9 @@ await cockpit.host.action(
 
 ## 性能采集
 
-使用与应用相同的测试时钟和帧管线，对一次交互进行性能采集。Cockpit 记录引擎提供的
-`FrameTiming`（build、raster、vsync、总耗时、raster cache、jank budget，以及
+使用与应用相同的测试时钟和帧管线，对一次交互进行性能采集。Cockpit 会保留原始的
+vsync 与 raster 完成墙钟时间戳，并记录引擎提供的 `FrameTiming`（build、raster、vsync、
+总耗时、raster cache、jank budget，以及
 p50/p90/p99/最大值）。原生 Flutter 平台还会采集官方 integration-test VM timeline
 和 GC 事件；Web 不支持 VM timeline 时会明确标记 unavailable，不会伪造数据：
 
@@ -179,9 +180,11 @@ expect(report.summary.jankCount, 0);
 完整的有界报告会写入
 `IntegrationTestWidgetsFlutterBinding.reportData` 的
 `cockpit.performance.open-list`，普通 Cockpit 结果只保留紧凑汇总。达到保留上限时会
-明确输出 `dropped` 数量；当原始引擎时间戳不足以建立单调帧率时会省略 `fps`。帧预算优先
-取 Flutter 暴露的目标屏幕刷新率，否则记录官方文档使用的 60Hz fallback。缺失或
-unavailable 的指标不能当成 0 处理。
+明确输出 `dropped` 数量；出现丢弃时汇总只描述保留样本。没有帧的阶段会省略耗时聚合，
+不会伪造 0；当原始引擎时间戳不足以建立严格递增帧率时会省略 `fps`。帧预算优先
+取 Flutter 暴露的目标屏幕刷新率，否则记录精确四舍五入后的 60Hz fallback（16,667µs）。缺失或
+unavailable 的指标不能当成 0 处理。报告还会记录 `debug`、`profile` 或 `release` 构建模式；
+debug 数据仅用于诊断，不能当作发布性能证据。
 
 ## 运行
 

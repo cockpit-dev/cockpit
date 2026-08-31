@@ -46,7 +46,7 @@ void main() {
     final report = collector.stop(stepId: 'scroll');
 
     expect(report.mode, CockpitPerformanceMode.profile);
-    expect(report.summary.frameCount, 2);
+    expect(report.summary.frameCount, report.frames.length);
     expect(report.frames, hasLength(1));
     expect(report.droppedFrames, 1);
     // The second frame is intentionally beyond the one-frame retention bound;
@@ -55,6 +55,7 @@ void main() {
     expect(report.summary.jankCount, 0);
     expect(report.frames.single.frameNumber, 1);
     expect(report.frames.single.timestampUs, 0);
+    expect(report.frames.single.wallTimeUs, 900);
     expect(
       report.durationMs,
       report.finishedAt.difference(report.startedAt).inMilliseconds,
