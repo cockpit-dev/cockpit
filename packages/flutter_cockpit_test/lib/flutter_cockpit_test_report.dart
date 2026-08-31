@@ -22,17 +22,21 @@ export 'package:cockpit_protocol/cockpit_protocol.dart'
         CockpitCpuSample,
         CockpitCpuProfile,
         CockpitDevToolsProfile,
+        CockpitAllocationTrace,
         CockpitGpuProfile,
         CockpitHeapClass,
         CockpitHeapPoint,
         CockpitHeapProfile,
         CockpitHeapSample,
+        CockpitIsolateEvent,
         CockpitIsolateProfile,
         CockpitIsolateStats,
         CockpitTimelineProfile,
         CockpitVmMemoryNode,
         CockpitVmMemoryProfile,
         CockpitVmMemorySnapshot,
-        CockpitVmRuntimeProfile;
+        CockpitVmRuntimeProfile,
+        CockpitPerfettoProfile,
+        CockpitPerfettoTrace;
 export 'src/cockpit_performance_html.dart';
 export 'src/cockpit_startup_report.dart';

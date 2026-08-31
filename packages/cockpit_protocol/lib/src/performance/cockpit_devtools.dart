@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 /// Bounded projections of the VM data exposed by Flutter DevTools.
 ///
 /// These models intentionally keep the report transport compact while
@@ -16,12 +18,20 @@ final class CockpitDevToolsProfile {
     this.timeline,
     this.vm,
     this.vmMemory,
-  }) {
+    Iterable<CockpitAllocationTrace> allocationTraces =
+        const <CockpitAllocationTrace>[],
+    this.perfetto,
+  }) : allocationTraces = List<CockpitAllocationTrace>.unmodifiable(
+         allocationTraces,
+       ) {
     if (source.trim().isEmpty || state.trim().isEmpty) {
       throw const FormatException('DevTools profile identity is invalid.');
     }
     if (reason != null && reason!.trim().isEmpty) {
       throw const FormatException('DevTools profile reason is invalid.');
+    }
+    if (this.allocationTraces.length > 20) {
+      throw const FormatException('Allocation trace count is bounded.');
     }
   }
 
@@ -35,6 +45,8 @@ final class CockpitDevToolsProfile {
   final CockpitTimelineProfile? timeline;
   final CockpitVmRuntimeProfile? vm;
   final CockpitVmMemoryProfile? vmMemory;
+  final List<CockpitAllocationTrace> allocationTraces;
+  final CockpitPerfettoProfile? perfetto;
 
   CockpitDevToolsProfile copyWith({
     CockpitCpuProfile? cpu,
@@ -44,6 +56,8 @@ final class CockpitDevToolsProfile {
     CockpitTimelineProfile? timeline,
     CockpitVmRuntimeProfile? vm,
     CockpitVmMemoryProfile? vmMemory,
+    Iterable<CockpitAllocationTrace>? allocationTraces,
+    CockpitPerfettoProfile? perfetto,
   }) => CockpitDevToolsProfile(
     source: source,
     state: state,
@@ -55,9 +69,11 @@ final class CockpitDevToolsProfile {
     timeline: timeline ?? this.timeline,
     vm: vm ?? this.vm,
     vmMemory: vmMemory ?? this.vmMemory,
+    allocationTraces: allocationTraces ?? this.allocationTraces,
+    perfetto: perfetto ?? this.perfetto,
   );
 
-  Map<String, Object?> toJson() => <String, Object?>{
+  Map<String, Object?> toJson({bool includeRaw = false}) => <String, Object?>{
     'source': source,
     'state': state,
     if (reason != null && reason!.trim().isNotEmpty) 'why': reason,
@@ -68,6 +84,11 @@ final class CockpitDevToolsProfile {
     if (timeline != null) 'timeline': timeline!.toJson(),
     if (vm != null) 'vm': vm!.toJson(),
     if (vmMemory != null) 'vmem': vmMemory!.toJson(),
+    if (allocationTraces.isNotEmpty)
+      'alloc': allocationTraces
+          .map((item) => item.toJson(includeRaw: includeRaw))
+          .toList(growable: false),
+    if (perfetto != null) 'perfetto': perfetto!.toJson(includeRaw: includeRaw),
   };
 
   factory CockpitDevToolsProfile.fromJson(Object? value) {
@@ -93,6 +114,170 @@ final class CockpitDevToolsProfile {
       vmMemory: json['vmem'] == null
           ? null
           : CockpitVmMemoryProfile.fromJson(json['vmem']),
+      allocationTraces: json['alloc'] == null
+          ? const <CockpitAllocationTrace>[]
+          : _list(
+              json['alloc'],
+              r'$.devtools.alloc',
+            ).map(CockpitAllocationTrace.fromJson).toList(growable: false),
+      perfetto: json['perfetto'] == null
+          ? null
+          : CockpitPerfettoProfile.fromJson(json['perfetto']),
+    );
+  }
+}
+
+/// Allocation call-stack samples for one explicitly selected VM class.
+///
+/// DevTools enables this expensive stream only for classes the user selects.
+/// Cockpit follows the same rule: no class is traced unless its VM class id is
+/// passed to the profiling call.
+final class CockpitAllocationTrace {
+  CockpitAllocationTrace({
+    required this.classId,
+    required this.profile,
+    this.className,
+  }) {
+    if (classId.trim().isEmpty ||
+        className != null && className!.trim().isEmpty) {
+      throw const FormatException('Allocation trace identity is invalid.');
+    }
+  }
+
+  final String classId;
+  final String? className;
+  final CockpitCpuProfile profile;
+
+  Map<String, Object?> toJson({bool includeRaw = true}) => <String, Object?>{
+    'id': classId,
+    if (className != null) 'name': className,
+    'trace': profile.toJson(includeRaw: includeRaw),
+  };
+
+  factory CockpitAllocationTrace.fromJson(Object? value) {
+    final json = _object(value, r'$.devtools.alloc[]');
+    return CockpitAllocationTrace(
+      classId: _string(json['id'], r'$.devtools.alloc[].id'),
+      className: _optionalString(json['name'], r'$.devtools.alloc[].name'),
+      profile: CockpitCpuProfile.fromJson(json['trace']),
+    );
+  }
+}
+
+/// Perfetto trace metadata returned by the VM Service, with optional raw data.
+///
+/// The base64 payload is deliberately omitted from normal [toJson] output and
+/// included only by complete exports. This keeps integration-test result
+/// transport compact while preserving an exact trace for offline analysis.
+final class CockpitPerfettoTrace {
+  CockpitPerfettoTrace({
+    required this.kind,
+    this.data,
+    required this.originUs,
+    required this.extentUs,
+    this.samplePeriodUs,
+    this.maxStackDepth,
+    this.sampleCount,
+    this.pid,
+  }) {
+    if (kind != 'cpu' && kind != 'timeline' ||
+        data != null &&
+            (data!.trim().isEmpty || data!.length > 64 * 1024 * 1024) ||
+        originUs < 0 ||
+        extentUs < 0 ||
+        samplePeriodUs != null && samplePeriodUs! < 0 ||
+        maxStackDepth != null && maxStackDepth! < 0 ||
+        sampleCount != null && sampleCount! < 0 ||
+        pid != null && pid! < 0) {
+      throw const FormatException('Perfetto trace is invalid or too large.');
+    }
+    if (data != null) {
+      try {
+        base64Decode(data!);
+      } on FormatException {
+        throw const FormatException('Perfetto trace payload is not base64.');
+      }
+    }
+  }
+
+  final String kind;
+
+  /// Base64 Perfetto bytes. Compact reports intentionally omit this value;
+  /// complete exports retain it for offline viewers.
+  final String? data;
+  final int originUs;
+  final int extentUs;
+  final int? samplePeriodUs;
+  final int? maxStackDepth;
+  final int? sampleCount;
+  final int? pid;
+
+  Map<String, Object?> toJson({bool includeRaw = false}) => <String, Object?>{
+    'kind': kind,
+    'start': originUs,
+    'span': extentUs,
+    if (samplePeriodUs != null) 'period': samplePeriodUs,
+    if (maxStackDepth != null) 'depth': maxStackDepth,
+    if (sampleCount != null) 'n': sampleCount,
+    if (pid != null) 'pid': pid,
+    if (includeRaw && data != null) 'data': data,
+  };
+
+  factory CockpitPerfettoTrace.fromJson(Object? value) {
+    final json = _object(value, r'$.devtools.perfetto.trace');
+    return CockpitPerfettoTrace(
+      kind: _string(json['kind'], r'$.devtools.perfetto.trace.kind'),
+      data: _optionalString(json['data'], r'$.devtools.perfetto.trace.data'),
+      originUs: _nonNegativeInt(
+        json['start'],
+        r'$.devtools.perfetto.trace.start',
+      ),
+      extentUs: _nonNegativeInt(
+        json['span'],
+        r'$.devtools.perfetto.trace.span',
+      ),
+      samplePeriodUs: json['period'] == null
+          ? null
+          : _nonNegativeInt(
+              json['period'],
+              r'$.devtools.perfetto.trace.period',
+            ),
+      maxStackDepth: json['depth'] == null
+          ? null
+          : _nonNegativeInt(json['depth'], r'$.devtools.perfetto.trace.depth'),
+      sampleCount: json['n'] == null
+          ? null
+          : _nonNegativeInt(json['n'], r'$.devtools.perfetto.trace.n'),
+      pid: json['pid'] == null
+          ? null
+          : _nonNegativeInt(json['pid'], r'$.devtools.perfetto.trace.pid'),
+    );
+  }
+}
+
+/// Optional raw CPU and VM timeline traces in Perfetto's proto format.
+final class CockpitPerfettoProfile {
+  const CockpitPerfettoProfile({this.cpu, this.timeline});
+
+  final CockpitPerfettoTrace? cpu;
+  final CockpitPerfettoTrace? timeline;
+
+  bool get isEmpty => cpu == null && timeline == null;
+
+  Map<String, Object?> toJson({bool includeRaw = false}) => <String, Object?>{
+    if (cpu != null) 'cpu': cpu!.toJson(includeRaw: includeRaw),
+    if (timeline != null) 'timeline': timeline!.toJson(includeRaw: includeRaw),
+  };
+
+  factory CockpitPerfettoProfile.fromJson(Object? value) {
+    final json = _object(value, r'$.devtools.perfetto');
+    return CockpitPerfettoProfile(
+      cpu: json['cpu'] == null
+          ? null
+          : CockpitPerfettoTrace.fromJson(json['cpu']),
+      timeline: json['timeline'] == null
+          ? null
+          : CockpitPerfettoTrace.fromJson(json['timeline']),
     );
   }
 }
@@ -412,6 +597,7 @@ final class CockpitCpuProfile {
         sampleCount < 0 ||
         timeOriginUs < 0 ||
         timeExtentUs < 0 ||
+        pid != null && pid! < 0 ||
         droppedSamples < 0 ||
         sampleCount < samples.length ||
         // VM service can legitimately return tens of thousands of function
@@ -436,16 +622,16 @@ final class CockpitCpuProfile {
   final List<CockpitCpuSample> samples;
   final int droppedSamples;
 
-  Map<String, Object?> toJson() => <String, Object?>{
+  Map<String, Object?> toJson({bool includeRaw = true}) => <String, Object?>{
     'period': samplePeriodUs,
     'depth': maxStackDepth,
     'n': sampleCount,
     'start': timeOriginUs,
     'span': timeExtentUs,
     if (pid != null) 'pid': pid,
-    if (functions.isNotEmpty)
+    if (includeRaw && functions.isNotEmpty)
       'f': functions.map((item) => item.toJson()).toList(growable: false),
-    if (samples.isNotEmpty)
+    if (includeRaw && samples.isNotEmpty)
       's': samples.map((item) => item.toJson()).toList(growable: false),
     if (droppedSamples > 0) 'dropped': droppedSamples,
   };
@@ -791,20 +977,111 @@ final class CockpitIsolateStats {
   }
 }
 
+/// One lifecycle notification observed on the VM Isolate stream.
+final class CockpitIsolateEvent {
+  const CockpitIsolateEvent({
+    required this.kind,
+    this.timestampMs,
+    this.isolateId,
+    this.name,
+    this.groupId,
+  });
+
+  final String kind;
+  final int? timestampMs;
+  final String? isolateId;
+  final String? name;
+  final String? groupId;
+
+  Map<String, Object?> toJson() => <String, Object?>{
+    'k': kind,
+    if (timestampMs != null) 't': timestampMs,
+    if (isolateId != null && isolateId!.isNotEmpty) 'id': isolateId,
+    if (name != null && name!.isNotEmpty) 'name': name,
+    if (groupId != null && groupId!.isNotEmpty) 'group': groupId,
+  };
+
+  factory CockpitIsolateEvent.fromJson(Object? value) {
+    final json = _object(value, r'$.devtools.isolate.events[]');
+    final kind = _string(json['k'], r'$.devtools.isolate.events[].k');
+    final timestamp = json['t'];
+    return CockpitIsolateEvent(
+      kind: kind,
+      timestampMs: timestamp == null
+          ? null
+          : _nonNegativeInt(
+              timestamp,
+              r'$.devtools.isolate.events[].t',
+            ),
+      isolateId: _optionalString(
+        json['id'],
+        r'$.devtools.isolate.events[].id',
+      ),
+      name: _optionalString(
+        json['name'],
+        r'$.devtools.isolate.events[].name',
+      ),
+      groupId: _optionalString(
+        json['group'],
+        r'$.devtools.isolate.events[].group',
+      ),
+    );
+  }
+}
+
 /// Before/after isolate state captured around one performance interval.
 final class CockpitIsolateProfile {
-  const CockpitIsolateProfile({this.before, this.after});
+  CockpitIsolateProfile({
+    this.before,
+    this.after,
+    Iterable<CockpitIsolateStats> beforeAll =
+        const <CockpitIsolateStats>[],
+    Iterable<CockpitIsolateStats> afterAll = const <CockpitIsolateStats>[],
+    this.droppedBefore = 0,
+    this.droppedAfter = 0,
+    Iterable<CockpitIsolateEvent> events = const <CockpitIsolateEvent>[],
+    this.droppedEvents = 0,
+  }) : beforeAll = List<CockpitIsolateStats>.unmodifiable(beforeAll),
+       afterAll = List<CockpitIsolateStats>.unmodifiable(afterAll),
+       events = List<CockpitIsolateEvent>.unmodifiable(events) {
+    if (droppedBefore < 0 ||
+        droppedAfter < 0 ||
+        droppedEvents < 0 ||
+        this.beforeAll.length > 64 ||
+        this.afterAll.length > 64 ||
+        this.events.length > 1000) {
+      throw const FormatException('Isolate profile bounds are invalid.');
+    }
+  }
 
   final CockpitIsolateStats? before;
   final CockpitIsolateStats? after;
+  final List<CockpitIsolateStats> beforeAll;
+  final List<CockpitIsolateStats> afterAll;
+  final int droppedBefore;
+  final int droppedAfter;
+  final List<CockpitIsolateEvent> events;
+  final int droppedEvents;
 
   Map<String, Object?> toJson() => <String, Object?>{
     if (before != null) 'before': before!.toJson(),
     if (after != null) 'after': after!.toJson(),
+    if (beforeAll.isNotEmpty)
+      'allB': beforeAll.map((item) => item.toJson()).toList(growable: false),
+    if (afterAll.isNotEmpty)
+      'allA': afterAll.map((item) => item.toJson()).toList(growable: false),
+    if (droppedBefore > 0) 'dropB': droppedBefore,
+    if (droppedAfter > 0) 'dropA': droppedAfter,
+    if (events.isNotEmpty)
+      'events': events.map((item) => item.toJson()).toList(growable: false),
+    if (droppedEvents > 0) 'dropE': droppedEvents,
   };
 
   factory CockpitIsolateProfile.fromJson(Object? value) {
     final json = _object(value, r'$.devtools.isolate');
+    final rawBeforeAll = json['allB'];
+    final rawAfterAll = json['allA'];
+    final rawEvents = json['events'];
     return CockpitIsolateProfile(
       before: json['before'] == null
           ? null
@@ -812,6 +1089,42 @@ final class CockpitIsolateProfile {
       after: json['after'] == null
           ? null
           : CockpitIsolateStats.fromJson(json['after']),
+      beforeAll: rawBeforeAll == null
+          ? const <CockpitIsolateStats>[]
+          : _list(
+              rawBeforeAll,
+              r'$.devtools.isolate.allB',
+            ).map(CockpitIsolateStats.fromJson).toList(growable: false),
+      afterAll: rawAfterAll == null
+          ? const <CockpitIsolateStats>[]
+          : _list(
+              rawAfterAll,
+              r'$.devtools.isolate.allA',
+            ).map(CockpitIsolateStats.fromJson).toList(growable: false),
+      droppedBefore: json['dropB'] == null
+          ? 0
+          : _nonNegativeInt(
+              json['dropB'],
+              r'$.devtools.isolate.dropB',
+            ),
+      droppedAfter: json['dropA'] == null
+          ? 0
+          : _nonNegativeInt(
+              json['dropA'],
+              r'$.devtools.isolate.dropA',
+            ),
+      events: rawEvents == null
+          ? const <CockpitIsolateEvent>[]
+          : _list(
+              rawEvents,
+              r'$.devtools.isolate.events',
+            ).map(CockpitIsolateEvent.fromJson).toList(growable: false),
+      droppedEvents: json['dropE'] == null
+          ? 0
+          : _nonNegativeInt(
+              json['dropE'],
+              r'$.devtools.isolate.dropE',
+            ),
     );
   }
 }

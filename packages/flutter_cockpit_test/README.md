@@ -224,9 +224,44 @@ the investigation. Unsupported runtimes report the metric as unavailable.
 views when a VM service is available. CPU stacks and bounded allocation classes
 are retained in the complete report; the compact test result keeps only sample
 counts. The same capture also records VM heap samples over time, isolate health
-snapshots, and timeline recorder stream metadata. Use `cpu: false` or
+snapshots for every discovered isolate, the VM Isolate stream's bounded
+lifecycle events (start, runnable, update, reload, exit, and extension
+registration), and timeline recorder stream metadata. New/ended isolates and
+retention drops are visible in the HTML runtime panel and complete JSON; the
+compact result keeps only counts. Use `cpu: false` or
 `heap: false` for a frame-only capture, and tune `maxCpuSamples`,
 `maxHeapClasses`, or `maxHeapSamples` for long scenarios:
+
+For a class-specific allocation investigation, first obtain its VM class id
+from the heap report, then opt in to call-stack tracing for at most 20 classes.
+This extra VM stream is intentionally disabled by default because it changes
+allocation profiling overhead:
+
+```dart
+final report = await cockpit.profile(
+  () => runScenario(),
+  allocationClassIds: <String>['classes/123'],
+);
+// report.devTools?.allocationTraces contains only the selected classes.
+```
+
+Set `perfetto: true` when the exact VM CPU/timeline proto is needed for an
+offline Perfetto viewer. Regular results keep only bounded metadata; complete
+HTML/JSON exports retain the base64 payload, and native hosts can write
+standalone `.pftrace` files for every capture with
+`exportPerformancePerfetto()`:
+
+```dart
+final report = await cockpit.profile(
+  () => runScenario(),
+  perfetto: true,
+);
+final tracePaths = await cockpit.exportPerformancePerfetto();
+```
+
+Perfetto is best-effort and recorder/platform dependent. If the VM does not
+support the RPC or the active recorder writes directly to the OS/file, the
+capture remains valid and coverage marks that trace unavailable.
 
 When the VM exposes an isolate group, the heap report also keeps group-level
 before/after memory points. This covers multi-isolate apps without sampling
@@ -278,7 +313,8 @@ file, URL, symbol, or line. Frame timings alone do not identify Dart code, so
 the report never invents a source location.
 
 The DevTools section includes a VM heap trend chart, CPU/heap/GPU summaries,
-VM identity and isolate inventory, isolate lifecycle rows, and recorder/stream metadata. Each section has a
+VM identity and isolate inventory, all-isolate lifecycle snapshots/events, and
+recorder/stream metadata. Each section has a
 compact **Details** action that opens a native dialog with bounded JSON
 previews. The full retained arrays remain in the JSON download, so opening a
 dialog does not freeze the report. CPU details also include verified sample
@@ -375,7 +411,8 @@ an interactive DevTools session:
 | Raster cache | Layer/picture cache counts and bytes | Cache charts and frame explorer |
 | Memory and GC | Native RSS samples and VM GC events | Memory and cache/GC charts |
 | CPU profiler | VM CPU samples and bounded stacks | CPU sampling panel and full report |
-| Memory heap/allocation | VM heap points and bounded class counters | Heap & allocation panel and full report |
+| Memory heap/allocation | VM heap points, bounded class counters, and opt-in selected-class call stacks | Heap & allocation panel and full report |
+| Perfetto CPU/timeline | Exact VM proto payload when the recorder supports retrieval | Perfetto download button or `exportPerformancePerfetto()` |
 | VM runtime health | Heap trend, isolate snapshots, recorder/stream metadata, VM process-memory tree | VM runtime and VM process memory panels, details dialog |
 | GPU/shader | Matching VM timeline signals only | GPU / Shader signals panel |
 | Network profiler | Separate Cockpit network evidence | `cockpit dev network` artifacts |
