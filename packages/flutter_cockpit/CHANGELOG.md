@@ -2,6 +2,10 @@
 
 ## 4.0.49
 
+- Hardened off-screen reveal for fixed and non-viewport targets by using
+  null-safe render-viewport discovery in profile and release builds.
+- Performance reports now carry the complete total-frame phase alongside
+  build/raster/vsync and can include memory samples supplied by test hosts.
 - Synchronized the Flutter bridge package with the current Cockpit release.
 - Added opt-in engine frame timing collection with cache peaks, jank budgets,
   percentiles, bounded retention, and truthful unavailable/partial metadata.

@@ -1,5 +1,7 @@
 import 'package:collection/collection.dart';
 
+import 'cockpit_performance_memory.dart';
+
 const Set<String> _performanceBuildModes = <String>{
   'debug',
   'profile',
@@ -342,6 +344,7 @@ final class CockpitPerformanceSummary {
     required this.build,
     required this.raster,
     required this.vsync,
+    required this.total,
     required Map<String, int> layerCacheMax,
     required Map<String, int> pictureCacheMax,
     this.newGenGcCount,
@@ -359,6 +362,7 @@ final class CockpitPerformanceSummary {
   final CockpitPerformancePhaseSummary build;
   final CockpitPerformancePhaseSummary raster;
   final CockpitPerformancePhaseSummary vsync;
+  final CockpitPerformancePhaseSummary total;
   final Map<String, int> layerCacheMax;
   final Map<String, int> pictureCacheMax;
   final int? newGenGcCount;
@@ -372,9 +376,11 @@ final class CockpitPerformanceSummary {
       build.isValid &&
       raster.isValid &&
       vsync.isValid &&
+      total.isValid &&
       build.sampleCount == frameCount &&
       raster.sampleCount == frameCount &&
       vsync.sampleCount == frameCount &&
+      total.sampleCount == frameCount &&
       _validCache(layerCacheMax) &&
       _validCache(pictureCacheMax) &&
       (newGenGcCount == null || newGenGcCount! >= 0) &&
@@ -388,6 +394,7 @@ final class CockpitPerformanceSummary {
     CockpitPerformancePhaseSummary? build,
     CockpitPerformancePhaseSummary? raster,
     CockpitPerformancePhaseSummary? vsync,
+    CockpitPerformancePhaseSummary? total,
     Map<String, int>? layerCacheMax,
     Map<String, int>? pictureCacheMax,
     int? newGenGcCount,
@@ -400,6 +407,7 @@ final class CockpitPerformanceSummary {
       build: build ?? this.build,
       raster: raster ?? this.raster,
       vsync: vsync ?? this.vsync,
+      total: total ?? this.total,
       layerCacheMax: layerCacheMax ?? this.layerCacheMax,
       pictureCacheMax: pictureCacheMax ?? this.pictureCacheMax,
       newGenGcCount: newGenGcCount ?? this.newGenGcCount,
@@ -440,6 +448,10 @@ final class CockpitPerformanceSummary {
       budgetUs: frameBudgetUs,
       countMisses: false,
     );
+    final total = _phaseSummary(
+      frames.map((frame) => frame.totalUs),
+      budgetUs: frameBudgetUs,
+    );
     var jank = 0;
     for (final frame in frames) {
       // Flutter defines the frame budget against totalSpan. Build and raster
@@ -471,6 +483,7 @@ final class CockpitPerformanceSummary {
       build: build,
       raster: raster,
       vsync: vsync,
+      total: total,
       layerCacheMax: <String, int>{
         'count': _maxOrZero(frames.map((frame) => frame.layerCount)),
         'bytes': _maxOrZero(frames.map((frame) => frame.layerBytes)),
@@ -491,6 +504,7 @@ final class CockpitPerformanceSummary {
     'build': build.toJson(),
     'raster': raster.toJson(),
     'vsync': vsync.toJson(),
+    'total': total.toJson(),
     'layerCache': layerCacheMax,
     'pictureCache': pictureCacheMax,
     if (newGenGcCount != null || oldGenGcCount != null)
@@ -515,6 +529,7 @@ final class CockpitPerformanceSummary {
       build: CockpitPerformancePhaseSummary.fromJson(json['build']),
       raster: CockpitPerformancePhaseSummary.fromJson(json['raster']),
       vsync: CockpitPerformancePhaseSummary.fromJson(json['vsync']),
+      total: CockpitPerformancePhaseSummary.fromJson(json['total']),
       layerCacheMax: <String, int>{
         'count': _nonNegativeInt(layer['count'], r'$.summary.layerCache.count'),
         'bytes': _nonNegativeInt(layer['bytes'], r'$.summary.layerCache.bytes'),
@@ -559,6 +574,7 @@ final class CockpitPerformanceReport {
     this.droppedEvents = 0,
     this.invalidFrames = 0,
     this.invalidEvents = 0,
+    this.memory,
     this.timelineSource,
     this.stepId,
   }) : frames = List<CockpitPerformanceFrame>.unmodifiable(frames),
@@ -584,6 +600,9 @@ final class CockpitPerformanceReport {
         invalidFrames < 0 ||
         invalidEvents < 0) {
       throw const FormatException('Performance report bounds are invalid.');
+    }
+    if (memory != null && memory!.samples.isEmpty) {
+      throw const FormatException('Performance memory report is empty.');
     }
     final exactDurationUs = finishedAt.difference(startedAt).inMicroseconds;
     if (durationUs != exactDurationUs || durationMs != durationUs ~/ 1000) {
@@ -628,6 +647,7 @@ final class CockpitPerformanceReport {
   final int droppedEvents;
   final int invalidFrames;
   final int invalidEvents;
+  final CockpitPerformanceMemoryReport? memory;
   final String? timelineSource;
   final String? stepId;
 
@@ -658,6 +678,7 @@ final class CockpitPerformanceReport {
         if (invalidFrames > 0) 'badFrames': invalidFrames,
         if (invalidEvents > 0) 'badEvents': invalidEvents,
       },
+    if (memory != null) 'memory': memory!.toJson(),
     if (timelineSource != null) 'source': timelineSource,
     if (stepId != null) 'step': stepId,
   };
@@ -722,6 +743,9 @@ final class CockpitPerformanceReport {
               droppedJson['badEvents'],
               r'$.performance.dropped.badEvents',
             ),
+      memory: json['memory'] == null
+          ? null
+          : CockpitPerformanceMemoryReport.fromJson(json['memory']),
       timelineSource: _optionalString(json['source'], r'$.performance.source'),
       stepId: _optionalString(json['step'], r'$.performance.step'),
     );

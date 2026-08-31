@@ -799,6 +799,24 @@ Do not use this package for a purely black-box target; use `cockpit case` or
 `cockpit suite` there. Read [flutter-test.md](references/flutter-test.md) for
 the complete API and platform workflow.
 
+For Flutter performance work, use `cockpit.profile` around the smallest
+meaningful interaction. It records the engine's original `FrameTiming` values,
+including vsync and raster-finish wall-time timestamps, and, on native targets,
+the official integration-test VM timeline/GC streams plus bounded process RSS
+samples. The report includes build/raster/vsync/total phase percentiles,
+cache peaks, jank, memory start/end/peak/delta, and explicit retention drops.
+The complete bounded report is stored in
+`IntegrationTestWidgetsFlutterBinding.reportData` under
+`cockpit.performance.NAME`; normal Cockpit output stays compact. `dropped`
+counts expose retention limits; aggregates describe retained frames when a
+retention limit is reached. Empty phases omit duration aggregates, `fps` is
+omitted when source timestamps cannot prove a strictly increasing cadence, and
+Web reports VM timeline as `unavailable:web`. Treat missing metrics as
+unavailable, never as zero. Reports include the Flutter build mode; debug
+timings are diagnostic only, while profile/release timings are suitable for
+performance decisions. Use the report artifact path for
+large timeline inspection instead of printing frame/event arrays.
+
 Validate documents before running them. During local development, run the same
 validated file directly; use the indexed identity when the document is a durable
 shared workspace asset or CI source.

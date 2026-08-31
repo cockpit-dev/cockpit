@@ -184,8 +184,9 @@ final report = collector.stop(stepId: 'open-list');
 ```
 
 报告会保留原始的 vsync 与 raster 完成墙钟时间戳，并提供
-build/raster/vsync/总耗时、p50/p90/p99/最大值、jank、cache 峰值；达到保留
-上限时会明确记录 `dropped`。汇总只针对实际保留的帧；出现 `dropped.frames` 时，
+build/raster/vsync/总耗时、p50/p90/p99/最大值、jank、cache 峰值；集成测试外观层还会
+以低开销保留有界进程 RSS 采样及起始/结束/峰值/增量汇总；达到保留上限时会明确记录
+`dropped`。汇总只针对实际保留的帧；出现 `dropped.frames` 时，
 它是有界样本，不应当当作整个采集区间的百分位统计。没有帧的阶段会省略耗时聚合，
 不会伪造 0。只有原始帧时间戳能证明严格递增的帧率时才输出 `fps`。
 每份报告都会记录 Flutter 构建模式；debug 数据只用于诊断，只有 profile 或 release

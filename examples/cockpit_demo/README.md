@@ -71,6 +71,28 @@ Each result contains:
 The process exits successfully only when the suite passes, all artifacts are
 verified, the launched app is stopped, and requested daemon cleanup succeeds.
 
+## Export a Full Flutter Performance Report
+
+The development shell includes a real integration-test profile for a multi-step
+task workflow. The test keeps normal output compact while the integration driver
+can export the complete bounded `reportData`, including retained frame timings,
+VM timeline events, GC counters, and cold-start milestones, to one JSON file:
+
+```bash
+mkdir -p /tmp/cockpit-demo-performance
+COCKPIT_NATIVE_REPORT_PATH=/tmp/cockpit-demo-performance/report.json \
+COCKPIT_NATIVE_HTML_PATH=/tmp/cockpit-demo-performance/report.html \
+  flutter drive \
+    --driver=integration_test/driver.dart \
+    --target=integration_test/performance_profile_test.dart \
+    -d macos
+```
+
+The command prints normal test progress; the complete machine report is at
+`/tmp/cockpit-demo-performance/report.json`, and the standalone human-facing
+viewer is at `/tmp/cockpit-demo-performance/report.html`. On web, the report
+explicitly marks the VM timeline as unavailable instead of fabricating events.
+
 ## Documents
 
 - Cases: `cockpit/e2e/cases/`

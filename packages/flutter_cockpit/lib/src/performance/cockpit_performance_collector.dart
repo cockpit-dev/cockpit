@@ -13,7 +13,10 @@ export 'package:cockpit_protocol/cockpit_protocol.dart'
         CockpitPerformanceMode,
         CockpitPerformancePhaseSummary,
         CockpitPerformanceReport,
-        CockpitPerformanceSummary;
+        CockpitPerformanceSummary,
+        CockpitPerformanceMemoryReport,
+        CockpitPerformanceMemorySample,
+        CockpitPerformanceMemorySummary;
 
 /// Collects engine-reported frame timings for an explicit, bounded capture.
 ///
@@ -129,6 +132,7 @@ final class CockpitPerformanceCollector {
     String? stepId,
     int? newGenGcCount,
     int? oldGenGcCount,
+    CockpitPerformanceMemoryReport? memory,
     int droppedEvents = 0,
     int invalidEvents = 0,
   }) {
@@ -173,6 +177,7 @@ final class CockpitPerformanceCollector {
         droppedEvents: droppedEvents,
         invalidFrames: _invalidFrames,
         invalidEvents: invalidEvents,
+        memory: memory,
         timelineSource: timelineSource,
         stepId: stepId,
       );
@@ -190,6 +195,7 @@ final class CockpitPerformanceCollector {
     String? stepId,
     int? newGenGcCount,
     int? oldGenGcCount,
+    CockpitPerformanceMemoryReport? memory,
     Duration? timeout,
   }) async {
     start();
@@ -219,6 +225,7 @@ final class CockpitPerformanceCollector {
           oldGenGcCount: oldGenGcCount,
           droppedEvents: 0,
           invalidEvents: 0,
+          memory: memory,
         );
       }
     }

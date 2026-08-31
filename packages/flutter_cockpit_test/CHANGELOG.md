@@ -2,6 +2,10 @@
 
 ## 4.0.49
 
+- Added bounded native process RSS sampling, total-frame percentiles, memory
+  summaries, and HTML capture comparison/resource charts.
+- Added a pure-Dart public report entrypoint for host integration drivers,
+  keeping report export available without loading Flutter UI libraries.
 - Synchronized the integration-test facade with the current Cockpit release.
 - Added `CockpitTester.profile` for action-level FrameTiming and native VM
   timeline/GC reports with compact summaries and bounded full report data.

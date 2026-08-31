@@ -9,6 +9,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 
 import 'cockpit_native_tester.dart';
+import 'cockpit_performance_html.dart';
+import 'cockpit_performance_html_io.dart'
+    if (dart.library.html) 'cockpit_performance_html_web.dart';
+import 'cockpit_performance_memory_sampler.dart';
+import 'cockpit_startup_report.dart';
 import 'cockpit_test_options.dart';
 import 'cockpit_watch.dart';
 
@@ -27,7 +32,9 @@ void cockpitTestWidgets(
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
   testWidgets(description, (flutterTester) async {
     final rootKey = GlobalKey<FlutterCockpitRootState>();
+    final startupClock = Stopwatch()..start();
     final application = app();
+    final appBuildMs = startupClock.elapsed.inMilliseconds;
     FlutterCockpit.ensureInitialized(options.config);
     final ownsRuntime =
         application is! FlutterCockpitApp && application is! FlutterCockpitRoot;
@@ -42,12 +49,18 @@ void cockpitTestWidgets(
           : application,
     );
     await flutterTester.pump();
+    final firstFrameMs = startupClock.elapsed.inMilliseconds;
     if (options.initialPump > Duration.zero) {
       await flutterTester.runAsync(
         () => Future<void>.delayed(options.initialPump),
       );
       await flutterTester.pump();
     }
+    final startup = CockpitStartupReport(
+      appMs: appBuildMs,
+      firstFrameMs: firstFrameMs,
+      readyMs: startupClock.elapsed.inMilliseconds,
+    );
 
     final root = rootKey.currentState ?? _findRoot(flutterTester);
     if (root == null) {
@@ -62,6 +75,7 @@ void cockpitTestWidgets(
       flutter: flutterTester,
       root: root,
       options: options,
+      startup: startup,
     );
     addTearDown(() async {
       _publishIntegrationReport(cockpit.report);
@@ -95,6 +109,7 @@ final class CockpitTester {
     required this.flutter,
     required this.root,
     required this.options,
+    required this.startup,
   }) : native = CockpitNativeTester(
          root,
          defaultTimeout: options.nativeTimeout,
@@ -112,6 +127,10 @@ final class CockpitTester {
   /// The options used to bootstrap this test.
   final CockpitTestOptions options;
 
+  /// App build, first-frame, and initial-ready milestones captured by the
+  /// harness before the test body starts.
+  final CockpitStartupReport startup;
+
   /// Supported app-native capture, recording, and viewport controls.
   final CockpitNativeTester native;
 
@@ -122,6 +141,42 @@ final class CockpitTester {
   final List<CockpitWatchResult> _watches = <CockpitWatchResult>[];
   final List<CockpitPerformanceReport> _performances =
       <CockpitPerformanceReport>[];
+
+  /// All captures completed by this tester, in capture order.
+  List<CockpitPerformanceReport> get performanceReports =>
+      List<CockpitPerformanceReport>.unmodifiable(_performances);
+
+  /// Renders the captures completed by this tester as one offline HTML file.
+  ///
+  /// The returned string is self-contained and can be written by a custom
+  /// host. Use [exportPerformanceHtml] when the test runs on a native target
+  /// and a path is more convenient.
+  String performanceHtml({String title = 'Cockpit performance'}) {
+    if (_performances.isEmpty) {
+      throw StateError('No performance capture has completed.');
+    }
+    return CockpitPerformanceHtml.renderMany(
+      _performances,
+      title: title,
+      startup: startup,
+    );
+  }
+
+  /// Writes the captures completed by this tester to one standalone HTML
+  /// report and returns its absolute path.
+  ///
+  /// With no [path], a unique file is created under
+  /// `build/cockpit/performance/`. The file contains the complete retained
+  /// frame and VM timeline data, while the normal integration-test output
+  /// remains compact.
+  Future<String> exportPerformanceHtml({
+    String? path,
+    String title = 'Cockpit performance',
+  }) async {
+    final html = performanceHtml(title: title);
+    return writeCockpitPerformanceHtml(html, path: path, title: title);
+  }
+
   var _sequence = 0;
   late final InAppCockpitCommandExecutor _executor = root.createCommandExecutor(
     platform: options.platform,
@@ -147,6 +202,7 @@ final class CockpitTester {
     final failures = _results.where((result) => !result.success).toList();
     return <String, Object?>{
       'commands': _results.length,
+      'startup': startup.toJson(),
       if (failures.isNotEmpty) 'failures': failures.length,
       if (_results.isNotEmpty)
         'steps': _results
@@ -185,6 +241,15 @@ final class CockpitTester {
                 'summary': performance.summary.toJson(),
                 'frames': performance.frames.length,
                 'events': performance.events.length,
+                if (performance.memory != null)
+                  'memory': <String, Object?>{
+                    'source': performance.memory!.source,
+                    'samples': performance.memory!.samples.length,
+                    'peak': performance.memory!.summary.processPeakBytes,
+                    'delta': performance.memory!.summary.deltaRssBytes,
+                    if (performance.memory!.droppedSamples > 0)
+                      'dropped': performance.memory!.droppedSamples,
+                  },
                 if (performance.droppedFrames > 0 ||
                     performance.droppedEvents > 0 ||
                     performance.invalidFrames > 0 ||
@@ -209,6 +274,8 @@ final class CockpitTester {
 
   /// Profiles one action using Flutter's engine frame timings and, when
   /// supported by the platform, the official integration-test VM timeline.
+  /// Native targets also collect low-overhead process RSS samples by default;
+  /// web keeps the metric unavailable instead of substituting a fake value.
   ///
   /// The complete bounded report is placed in [IntegrationTestWidgetsFlutterBinding.reportData]
   /// under `cockpit.performance.<name>`. The value returned to normal test
@@ -219,6 +286,8 @@ final class CockpitTester {
     CockpitPerformanceMode mode = CockpitPerformanceMode.profile,
     List<String> streams = const <String>['all'],
     bool timeline = true,
+    bool memory = true,
+    Duration sampleEvery = const Duration(milliseconds: 100),
     Duration? timeout,
   }) async {
     final normalizedName = name.trim();
@@ -228,6 +297,13 @@ final class CockpitTester {
     if (streams.isEmpty) {
       throw ArgumentError.value(streams, 'streams', 'Must not be empty.');
     }
+    if (sampleEvery <= Duration.zero || sampleEvery.inMilliseconds < 1) {
+      throw ArgumentError.value(
+        sampleEvery,
+        'sampleEvery',
+        'Must be positive.',
+      );
+    }
     final effectiveTimeout = timeout ?? options.commandTimeout;
     _validateTimeout(effectiveTimeout, name: 'timeout');
     final collector = FlutterCockpit.binding.performanceCollector;
@@ -235,6 +311,10 @@ final class CockpitTester {
       throw StateError('Another performance capture is already running.');
     }
     collector.start(mode: mode);
+    final memorySampler = memory
+        ? createCockpitPerformanceMemorySampler(interval: sampleEvery)
+        : null;
+    memorySampler?.start();
     dynamic timelineData;
     var timelineSource = timeline ? 'unavailable:web' : null;
     try {
@@ -270,6 +350,7 @@ final class CockpitTester {
       }
     } finally {
       final parsed = _parsePerformanceTimeline(timelineData);
+      final memoryReport = memorySampler?.stop();
       final report = collector.stop(
         events: parsed.events,
         timelineSource: timelineSource,
@@ -278,6 +359,7 @@ final class CockpitTester {
         oldGenGcCount: parsed.oldGenGcCount,
         droppedEvents: parsed.droppedEvents,
         invalidEvents: parsed.invalidEvents,
+        memory: memoryReport,
       );
       _performances.add(report);
       final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
@@ -1494,6 +1576,9 @@ _ParsedPerformanceTimeline _parsePerformanceTimeline(dynamic timeline) {
     rawEvents = (timeline as dynamic).traceEvents;
   } catch (_) {
     return const _ParsedPerformanceTimeline(invalidEvents: 1);
+  }
+  if (rawEvents == null) {
+    return const _ParsedPerformanceTimeline();
   }
   if (rawEvents is! Iterable) {
     return const _ParsedPerformanceTimeline(invalidEvents: 1);

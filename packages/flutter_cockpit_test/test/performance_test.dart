@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_cockpit_test/flutter_cockpit_test.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -17,7 +18,18 @@ void main() {
       expect(report.timelineSource, isNull);
       expect(report.buildMode, 'debug');
       expect(report.summary.frameCount, report.frames.length);
+      if (kIsWeb) {
+        expect(report.memory, isNull);
+      } else {
+        expect(report.memory, isNotNull);
+        expect(report.memory!.summary.sampleCount, greaterThan(0));
+      }
       expect(cockpit.report['performance'], isA<List<Object?>>());
+      expect(
+        cockpit.startup.firstFrameMs,
+        greaterThanOrEqualTo(cockpit.startup.appMs),
+      );
+      expect(cockpit.report['startup'], isA<Map<String, Object?>>());
     },
   );
 }

@@ -43,6 +43,8 @@ void main() {
     expect(summary.jankCount, 1);
     expect(summary.fps, closeTo(58.8235, 0.001));
     expect(summary.build.missedBudget, 1);
+    expect(summary.total.p90Us, 24400);
+    expect(summary.total.missedBudget, 1);
     expect(summary.build.budgetUs, 16667);
     expect(summary.layerCacheMax, <String, int>{'count': 4, 'bytes': 40});
     expect(summary.pictureCacheMax, <String, int>{'count': 5, 'bytes': 50});
@@ -215,6 +217,55 @@ void main() {
     expect(
       () => (event.args['items']! as List<Object?>).clear(),
       throwsUnsupportedError,
+    );
+  });
+
+  test('memory report preserves bounded RSS samples and summary', () {
+    final report = CockpitPerformanceMemoryReport(
+      intervalMs: 100,
+      samples: const <CockpitPerformanceMemorySample>[
+        CockpitPerformanceMemorySample(
+          timestampUs: 0,
+          rssBytes: 100,
+          processPeakBytes: 100,
+        ),
+        CockpitPerformanceMemorySample(
+          timestampUs: 100000,
+          rssBytes: 160,
+          processPeakBytes: 180,
+        ),
+      ],
+      droppedSamples: 2,
+    );
+
+    final decoded = CockpitPerformanceMemoryReport.fromJson(report.toJson());
+    expect(decoded.samples, report.samples);
+    expect(decoded.summary.averageRssBytes, 130);
+    expect(decoded.summary.deltaRssBytes, 60);
+    expect(decoded.droppedSamples, 2);
+  });
+
+  test('memory report rejects a forged summary', () {
+    final report = <String, Object?>{
+      'source': 'processInfo',
+      'intervalMs': 100,
+      'summary': <String, Object?>{
+        'n': 1,
+        'start': 100,
+        'end': 100,
+        'min': 100,
+        'max': 100,
+        'avg': 100,
+        'peak': 100,
+        'delta': 1,
+      },
+      'samples': <Object?>[
+        <String, Object?>{'t': 0, 'rss': 100, 'peak': 100},
+      ],
+    };
+    expect(
+      () => CockpitPerformanceMemoryReport.fromJson(report),
+      throwsFormatException,
     );
   });
 }

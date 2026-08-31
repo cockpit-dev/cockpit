@@ -183,7 +183,8 @@ app. Cockpit records raw vsync and raster-finish wall-time timestamps together
 with engine `FrameTiming` values (build, raster, vsync, total span, raster-cache
 usage, jank budget, and p50/p90/p99/worst values). On native
 Flutter targets it also captures the official integration-test VM timeline and
-GC events; web reports the timeline as unavailable instead of fabricating data:
+GC events plus bounded process RSS samples; web reports the timeline and memory
+as unavailable instead of fabricating data:
 
 ```dart
 final report = await cockpit.profile(
@@ -196,6 +197,12 @@ final report = await cockpit.profile(
 );
 expect(report.summary.jankCount, 0);
 ```
+
+Native captures also sample process RSS every 100ms by default and retain the
+start/end/min/max/average/peak/delta summary plus the bounded sample timeline.
+Set `memory: false` only when the extra process metric is irrelevant; use
+`sampleEvery` to trade sampling overhead for temporal resolution. Unsupported
+targets leave memory unavailable rather than reporting zero.
 
 The complete bounded report is stored under
 `cockpit.performance.open-list` in `IntegrationTestWidgetsFlutterBinding.reportData`;
@@ -210,6 +217,39 @@ interval (16,667µs).
 The report also records `debug`, `profile`, or `release`; debug timings are
 diagnostic and must not be used as release performance evidence.
 Never treat a missing or unavailable metric as zero.
+
+Each `cockpitTestWidgets` run also records cold-start milestones in the compact
+`cockpit.startup` entry and in the HTML report: app build/mount, first pumped
+frame, and initial-ready time. The clock begins immediately before the app
+builder, so the values are honest Dart-harness measurements. Native process
+launch time is not inferred when the host cannot provide it.
+
+Host-side `integration_test_driver.dart` files should import
+`package:flutter_cockpit_test/flutter_cockpit_test_report.dart`; this pure-Dart
+entrypoint exports the report models and HTML renderer without loading
+`dart:ui`.
+
+### Open a complete offline HTML report
+
+`CockpitTester.exportPerformanceHtml()` writes one self-contained file for the
+captures completed by the current test. It includes a report switcher, frame
+pacing and budget chart, VM timeline lanes, phase percentiles, cache/GC
+pressure, searchable event arguments, paged frame/event tables, and the exact
+raw JSON payload. It works without a server or external assets:
+
+```dart
+final htmlPath = await cockpit.exportPerformanceHtml(
+  title: 'Task flow performance',
+  // path: 'build/reports/task-flow.html', // optional
+);
+// Pass htmlPath to a human or CI artifact collector.
+```
+
+The default path is a unique file under `build/cockpit/performance/`. For a
+custom host, `CockpitPerformanceHtml.render(report)` or
+`CockpitPerformanceHtml.renderMany(reports)` returns the HTML string without
+touching the file system. JSON remains the canonical machine-readable output;
+the HTML is the human-facing view.
 
 ## Run
 
