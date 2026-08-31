@@ -184,7 +184,10 @@ with engine `FrameTiming` values (build, raster, vsync, total span, raster-cache
 usage, jank budget, and p50/p90/p99/worst values). On native
 Flutter targets it also captures the official integration-test VM timeline and
 GC events plus bounded process RSS samples; web reports the timeline and memory
-as unavailable instead of fabricating data:
+as unavailable instead of fabricating data. If a local `flutter test` process
+does not expose a VM Service URI, the action still runs normally and the report
+records `unavailable:vm`; native `flutter drive`/instrumentation runs keep the
+official VM timeline:
 
 ```dart
 final report = await cockpit.profile(
@@ -200,9 +203,15 @@ expect(report.summary.jankCount, 0);
 
 Native captures also sample process RSS every 100ms by default and retain the
 start/end/min/max/average/peak/delta summary plus the bounded sample timeline.
-Set `memory: false` only when the extra process metric is irrelevant; use
-`sampleEvery` to trade sampling overhead for temporal resolution. Unsupported
-targets leave memory unavailable rather than reporting zero.
+Set `memory: false` when the extra process metric is irrelevant; use
+`sampleEvery` to trade sampling overhead for temporal resolution, `streams` and
+`timeline` to choose VM tracing, and `maxEvents` to bound retained timeline
+events. Unsupported targets leave memory unavailable rather than reporting zero.
+For a diagnostic capture, `trackBuilds`, `trackUserBuilds`, `trackLayouts`, and
+`trackPaints` enable Flutter's real per-widget/per-render-object timeline spans,
+matching the corresponding DevTools switches. They are off by default because
+the extra instrumentation changes timings, and Cockpit restores the previous
+global flags after the capture.
 
 The complete bounded report is stored under
 `cockpit.performance.open-list` in `IntegrationTestWidgetsFlutterBinding.reportData`;
@@ -217,6 +226,17 @@ interval (16,667µs).
 The report also records `debug`, `profile`, or `release`; debug timings are
 diagnostic and must not be used as release performance evidence.
 Never treat a missing or unavailable metric as zero.
+
+The HTML report adds source evidence only when VM event arguments contain a
+file, URL, symbol, or line. Frame timings alone do not identify Dart code, so
+the report never invents a source location.
+
+The report also includes **Operation hotspots**, aggregating each actual VM
+event category/name into event count, timed-event count, total duration, p90,
+and longest span. This answers “what is slow?” before opening the raw timeline.
+The source column is evidence-only and appears only when the VM event arguments
+provide a location. The same bounded projection is included in `fullJson()`
+under each capture's `analysis` field; original events remain unchanged.
 
 Each `cockpitTestWidgets` run also records cold-start milestones in the compact
 `cockpit.startup` entry and in the HTML report: app build/mount, first pumped
@@ -245,11 +265,67 @@ final htmlPath = await cockpit.exportPerformanceHtml(
 // Pass htmlPath to a human or CI artifact collector.
 ```
 
+For a machine-readable artifact, use `performanceJson()` or
+`exportPerformanceJson()`. This is the full canonical bundle for every
+completed capture, not the compact `integration_test` result:
+
+```dart
+final jsonPath = await cockpit.exportPerformanceJson(
+  title: 'Task flow performance',
+  // path: 'build/reports/task-flow.json', // optional
+);
+```
+
+Both export methods preserve all retained frames, VM events and arguments,
+memory samples, startup milestones, and explicit retention/drop counts. The
+terminal/report output remains compact; exports retain the complete recorded
+detail. The only limits are the capture retention settings (`maxEvents`, frame
+retention, and memory sampling), and those limits are recorded in the export.
+
 The default path is a unique file under `build/cockpit/performance/`. For a
 custom host, `CockpitPerformanceHtml.render(report)` or
 `CockpitPerformanceHtml.renderMany(reports)` returns the HTML string without
-touching the file system. JSON remains the canonical machine-readable output;
-the HTML is the human-facing view.
+touching the file system. `CockpitPerformanceHtml.fullJson(reports)` returns
+the same complete canonical bundle as a JSON string. JSON remains the
+canonical machine-readable export;
+the HTML is the human-facing view with relative-time hover charts, jank
+distribution, frame cadence, raster-cache trend, VM category cost, a jank/stall
+evidence table, operation hotspots, separate memory/cache/GC views, and a duration-based VM flame view when spans are
+available. When startup data is supplied it also renders the app-build,
+first-frame, and ready milestones as a chart.
+
+The report includes a **DevTools coverage** panel so unavailable data is obvious:
+FrameTiming, raster cache, VM timeline, GC, process RSS, and harness cold-start
+milestones are marked only when the capture actually contains them. CPU sampling,
+heap snapshots, allocation tracing, network profiling, and GPU/shader counters
+are marked *not collected* rather than being presented as fabricated values;
+use Cockpit's network evidence for HTTP/SSE/WebSocket traffic. The top-bar **Download timeline** action
+exports the retained VM events as a Chrome trace-compatible `traceEvents` JSON
+file for timeline viewers; the complete FrameTiming and memory data remains in
+the report JSON and HTML charts. You can also generate that file from a host
+driver with `CockpitPerformanceHtml.timelineJson(report)`. Compact reports do
+not retain async/flow event IDs, so those phases are lowered to self-contained
+instant or duration events to keep the exported trace importable.
+
+This intentionally mirrors the evidence that can be collected without attaching
+an interactive DevTools session:
+
+| DevTools/VS Code view | Cockpit capture | Where to inspect |
+| --- | --- | --- |
+| Performance timeline and frame chart | FrameTiming, jank, cadence, VM events | HTML report and report JSON |
+| Slow-frame attribution | Overlapping retained VM spans, with evidence-only source labels | Jank & stalls panel |
+| Raster cache | Layer/picture cache counts and bytes | Cache charts and frame explorer |
+| Memory and GC | Native RSS samples and VM GC events | Memory and cache/GC charts |
+| CPU profiler, Memory heap/allocation, GPU/shader | Not collected by this deterministic API | Run the official DevTools view |
+| Network profiler | Separate Cockpit network evidence | `cockpit dev network` artifacts |
+
+The normal test output is intentionally compact; export is not. The HTML and
+JSON downloads contain every retained frame, VM event, memory sample, argument,
+startup milestone, and explicit drop count. The exported trace is a faithful
+VM-event projection for Chrome/DevTools timeline import. It does not invent CPU
+stacks, GPU counters, thread identity, or source locations that the captured data
+does not contain. `maxEvents`, frame retention, and memory sampling are the only
+bounded limits, and their drops remain visible in the export.
 
 ## Run
 

@@ -1,5 +1,10 @@
 # Changelog
 
+## 4.0.50
+
+- Synchronized the protocol package with the current Cockpit performance
+  tooling release.
+
 ## 4.0.49
 
 - Added a bounded process-memory report contract for native integration-test

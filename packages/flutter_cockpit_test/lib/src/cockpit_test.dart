@@ -1,8 +1,10 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:developer' as developer;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_cockpit/flutter_cockpit_flutter.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -177,6 +179,33 @@ final class CockpitTester {
     return writeCockpitPerformanceHtml(html, path: path, title: title);
   }
 
+  /// Returns the complete canonical JSON export for all captures completed by
+  /// this tester. This is intentionally separate from [report], whose compact
+  /// shape is used for normal integration-test output.
+  String performanceJson({String title = 'Cockpit performance'}) {
+    if (_performances.isEmpty) {
+      throw StateError('No performance capture has completed.');
+    }
+    return CockpitPerformanceHtml.fullJson(
+      _performances,
+      title: title,
+      startup: startup,
+    );
+  }
+
+  /// Writes the complete canonical JSON export and returns its absolute path.
+  ///
+  /// The file keeps every retained frame, event, argument, memory sample,
+  /// startup milestone, and explicit retention count. It never writes the
+  /// compact normal test result shape.
+  Future<String> exportPerformanceJson({
+    String? path,
+    String title = 'Cockpit performance',
+  }) async {
+    final json = performanceJson(title: title);
+    return writeCockpitPerformanceJson(json, path: path, title: title);
+  }
+
   var _sequence = 0;
   late final InAppCockpitCommandExecutor _executor = root.createCommandExecutor(
     platform: options.platform,
@@ -276,6 +305,13 @@ final class CockpitTester {
   /// supported by the platform, the official integration-test VM timeline.
   /// Native targets also collect low-overhead process RSS samples by default;
   /// web keeps the metric unavailable instead of substituting a fake value.
+  /// [sampleEvery] controls native RSS sampling frequency. [streams] and
+  /// [timeline] control VM timeline collection, while [maxEvents] bounds
+  /// retained VM events so long captures stay predictable in memory.
+  /// Set [trackBuilds], [trackUserBuilds], [trackLayouts], or [trackPaints]
+  /// only for diagnostic captures that need per-widget or per-render-object
+  /// timeline spans. These flags add measurable tracing overhead and are
+  /// restored to their previous values when the capture ends.
   ///
   /// The complete bounded report is placed in [IntegrationTestWidgetsFlutterBinding.reportData]
   /// under `cockpit.performance.<name>`. The value returned to normal test
@@ -288,6 +324,11 @@ final class CockpitTester {
     bool timeline = true,
     bool memory = true,
     Duration sampleEvery = const Duration(milliseconds: 100),
+    int maxEvents = 200000,
+    bool trackBuilds = false,
+    bool trackUserBuilds = false,
+    bool trackLayouts = false,
+    bool trackPaints = false,
     Duration? timeout,
   }) async {
     final normalizedName = name.trim();
@@ -304,72 +345,113 @@ final class CockpitTester {
         'Must be positive.',
       );
     }
+    if (maxEvents < 1 || maxEvents > 200000) {
+      throw ArgumentError.value(
+        maxEvents,
+        'maxEvents',
+        'Must be between 1 and 200000.',
+      );
+    }
     final effectiveTimeout = timeout ?? options.commandTimeout;
     _validateTimeout(effectiveTimeout, name: 'timeout');
     final collector = FlutterCockpit.binding.performanceCollector;
     if (collector.isRunning) {
       throw StateError('Another performance capture is already running.');
     }
-    collector.start(mode: mode);
-    final memorySampler = memory
-        ? createCockpitPerformanceMemorySampler(interval: sampleEvery)
-        : null;
-    memorySampler?.start();
-    dynamic timelineData;
-    var timelineSource = timeline ? 'unavailable:web' : null;
+    final instrumentation = _PerformanceInstrumentation();
     try {
-      if (timeline && !kIsWeb) {
-        final integrationBinding =
-            IntegrationTestWidgetsFlutterBinding.ensureInitialized();
-        final traced = integrationBinding.traceTimeline(
-          action,
-          streams: List<String>.unmodifiable(streams),
+      instrumentation.enable(
+        trackBuilds: trackBuilds,
+        trackUserBuilds: trackUserBuilds,
+        trackLayouts: trackLayouts,
+        trackPaints: trackPaints,
+      );
+      collector.start(mode: mode);
+      final memorySampler = memory
+          ? createCockpitPerformanceMemorySampler(interval: sampleEvery)
+          : null;
+      memorySampler?.start();
+      dynamic timelineData;
+      var canTraceTimeline = timeline && !kIsWeb;
+      if (canTraceTimeline) {
+        canTraceTimeline = await _hasVmService();
+      }
+      var timelineSource = timeline
+          ? kIsWeb
+                ? 'unavailable:web'
+                : canTraceTimeline
+                ? 'vm'
+                : 'unavailable:vm'
+          : null;
+      try {
+        if (canTraceTimeline) {
+          final integrationBinding =
+              IntegrationTestWidgetsFlutterBinding.ensureInitialized();
+          final traced = integrationBinding.traceTimeline(
+            action,
+            streams: List<String>.unmodifiable(streams),
+          );
+          try {
+            timelineData = await traced.timeout(effectiveTimeout);
+          } on TimeoutException {
+            // Future.timeout cannot cancel the VM-service action. Wait for the
+            // owned action to finish before detaching frame callbacks, then
+            // surface the timeout to the caller instead of corrupting the next
+            // capture.
+            await traced;
+            rethrow;
+          }
+          timelineSource = 'vm';
+        } else {
+          final run = action();
+          try {
+            await run.timeout(effectiveTimeout);
+          } on TimeoutException {
+            // Futures are not cancellable. Drain the owned action before
+            // detaching the collector so late frames cannot leak into the next
+            // profile.
+            await run;
+            rethrow;
+          }
+        }
+      } finally {
+        final parsed = _parsePerformanceTimeline(
+          timelineData,
+          maxEvents: maxEvents,
         );
-        try {
-          timelineData = await traced.timeout(effectiveTimeout);
-        } on TimeoutException {
-          // Future.timeout cannot cancel the VM-service action. Wait for the
-          // owned action to finish before detaching frame callbacks, then
-          // surface the timeout to the caller instead of corrupting the next
-          // capture.
-          await traced;
-          rethrow;
-        }
-        timelineSource = 'vm';
-      } else {
-        final run = action();
-        try {
-          await run.timeout(effectiveTimeout);
-        } on TimeoutException {
-          // Futures are not cancellable. Drain the owned action before
-          // detaching the collector so late frames cannot leak into the next
-          // profile.
-          await run;
-          rethrow;
-        }
+        final memoryReport = memorySampler?.stop();
+        final report = collector.stop(
+          events: parsed.events,
+          timelineSource: timelineSource,
+          stepId: normalizedName,
+          newGenGcCount: parsed.newGenGcCount,
+          oldGenGcCount: parsed.oldGenGcCount,
+          droppedEvents: parsed.droppedEvents,
+          invalidEvents: parsed.invalidEvents,
+          memory: memoryReport,
+        );
+        _performances.add(report);
+        final binding =
+            IntegrationTestWidgetsFlutterBinding.ensureInitialized();
+        final existing = binding.reportData ?? <String, dynamic>{};
+        binding.reportData = <String, dynamic>{
+          ...existing,
+          'cockpit.performance.$normalizedName': report.toJson(),
+        };
       }
     } finally {
-      final parsed = _parsePerformanceTimeline(timelineData);
-      final memoryReport = memorySampler?.stop();
-      final report = collector.stop(
-        events: parsed.events,
-        timelineSource: timelineSource,
-        stepId: normalizedName,
-        newGenGcCount: parsed.newGenGcCount,
-        oldGenGcCount: parsed.oldGenGcCount,
-        droppedEvents: parsed.droppedEvents,
-        invalidEvents: parsed.invalidEvents,
-        memory: memoryReport,
-      );
-      _performances.add(report);
-      final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
-      final existing = binding.reportData ?? <String, dynamic>{};
-      binding.reportData = <String, dynamic>{
-        ...existing,
-        'cockpit.performance.$normalizedName': report.toJson(),
-      };
+      instrumentation.restore();
     }
     return _performances.last;
+  }
+
+  Future<bool> _hasVmService() async {
+    try {
+      final info = await developer.Service.getInfo();
+      return info.serverUri != null;
+    } catch (_) {
+      return false;
+    }
   }
 
   /// Executes a fully specified Cockpit command.
@@ -1567,7 +1649,44 @@ void _validateMultiTouch(CockpitMultiTouchSequence sequence) {
   }
 }
 
-_ParsedPerformanceTimeline _parsePerformanceTimeline(dynamic timeline) {
+/// Temporarily enables the same per-build/layout/paint timeline switches that
+/// Flutter DevTools exposes. The switches are process-global debug state, so
+/// every capture must restore the exact values it found on entry.
+final class _PerformanceInstrumentation {
+  final bool _builds = debugProfileBuildsEnabled;
+  final bool _userBuilds = debugProfileBuildsEnabledUserWidgets;
+  final bool _layouts = debugProfileLayoutsEnabled;
+  final bool _paints = debugProfilePaintsEnabled;
+  var _enabled = false;
+
+  void enable({
+    required bool trackBuilds,
+    required bool trackUserBuilds,
+    required bool trackLayouts,
+    required bool trackPaints,
+  }) {
+    if (kReleaseMode) return;
+    if (trackBuilds) debugProfileBuildsEnabled = true;
+    if (trackUserBuilds) debugProfileBuildsEnabledUserWidgets = true;
+    if (trackLayouts) debugProfileLayoutsEnabled = true;
+    if (trackPaints) debugProfilePaintsEnabled = true;
+    _enabled = trackBuilds || trackUserBuilds || trackLayouts || trackPaints;
+  }
+
+  void restore() {
+    if (!_enabled) return;
+    debugProfileBuildsEnabled = _builds;
+    debugProfileBuildsEnabledUserWidgets = _userBuilds;
+    debugProfileLayoutsEnabled = _layouts;
+    debugProfilePaintsEnabled = _paints;
+    _enabled = false;
+  }
+}
+
+_ParsedPerformanceTimeline _parsePerformanceTimeline(
+  dynamic timeline, {
+  int maxEvents = 200000,
+}) {
   if (timeline == null) {
     return const _ParsedPerformanceTimeline();
   }
@@ -1619,7 +1738,7 @@ _ParsedPerformanceTimeline _parsePerformanceTimeline(dynamic timeline) {
       invalid += 1;
       continue;
     }
-    if (events.length >= 200000) {
+    if (events.length >= maxEvents) {
       dropped += 1;
       continue;
     }

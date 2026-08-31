@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_cockpit_test/flutter_cockpit_test.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -8,6 +9,10 @@ void main() {
     'profiles an action without requiring VM timeline',
     app: () => const MaterialApp(home: _ProfilePage()),
     body: (cockpit) async {
+      await expectLater(
+        cockpit.profile(() async {}, maxEvents: 0),
+        throwsArgumentError,
+      );
       final report = await cockpit.profile(
         () => cockpit.tap('#increment'),
         name: 'increment',
@@ -30,6 +35,24 @@ void main() {
         greaterThanOrEqualTo(cockpit.startup.appMs),
       );
       expect(cockpit.report['startup'], isA<Map<String, Object?>>());
+
+      final beforeBuilds = debugProfileBuildsEnabled;
+      final beforeUserBuilds = debugProfileBuildsEnabledUserWidgets;
+      final beforeLayouts = debugProfileLayoutsEnabled;
+      final beforePaints = debugProfilePaintsEnabled;
+      await cockpit.profile(
+        () => cockpit.flutter.pump(),
+        name: 'instrumented',
+        timeline: false,
+        trackBuilds: true,
+        trackUserBuilds: true,
+        trackLayouts: true,
+        trackPaints: true,
+      );
+      expect(debugProfileBuildsEnabled, beforeBuilds);
+      expect(debugProfileBuildsEnabledUserWidgets, beforeUserBuilds);
+      expect(debugProfileLayoutsEnabled, beforeLayouts);
+      expect(debugProfilePaintsEnabled, beforePaints);
     },
   );
 }

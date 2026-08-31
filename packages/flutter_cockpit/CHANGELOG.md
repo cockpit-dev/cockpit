@@ -1,5 +1,10 @@
 # Changelog
 
+## 4.0.50
+
+- Synchronized the Flutter bridge package with the current Cockpit performance
+  tooling release.
+
 ## 4.0.49
 
 - Hardened off-screen reveal for fixed and non-viewport targets by using

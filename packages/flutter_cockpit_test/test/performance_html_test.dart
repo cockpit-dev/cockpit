@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter_cockpit_test/flutter_cockpit_test.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -16,10 +18,44 @@ void main() {
     expect(html, contains('<title>QA &lt;flow&gt;</title>'));
     expect(html, contains('id="cockpit-performance-data"'));
     expect(html, contains('Frame pacing'));
-    expect(html, contains('Memory, cache and GC'));
+    expect(html, contains('Memory trend'));
+    expect(html, contains('Cache &amp; GC pressure'));
+    expect(html, contains('Jank &amp; stalls'));
+    expect(html, contains('id="stall-body"'));
+    expect(html, contains('stallAnalysis'));
+    expect(html, contains('DevTools coverage'));
+    expect(html, contains('id="coverage-grid"'));
+    expect(html, contains('CPU sampling'));
+    expect(html, contains('Network profiler'));
+    expect(html, contains('Download timeline'));
+    expect(html, contains('Download full JSON'));
+    expect(html, contains('JSON.stringify(data, null, 2)'));
+    expect(html, contains('traceEvents'));
+    expect(html, contains('timelinePayload'));
+    expect(html, contains('Jank distribution'));
+    expect(html, contains('Timeline flame view'));
+    expect(html, contains('id="flame-chart"'));
+    expect(html, contains('Frame cadence'));
+    expect(html, contains('Raster cache trend'));
+    expect(html, contains('VM category cost'));
+    expect(html, contains('Operation hotspots'));
+    expect(html, contains('id="hotspot-chart"'));
+    expect(html, contains('hotspotRows'));
+    expect(html, contains('id="cadence-chart"'));
+    expect(html, contains('id="cache-trend-chart"'));
+    expect(html, contains('id="category-cost-chart"'));
+    expect(html, contains('overflow-wrap: anywhere'));
+    expect(html, contains('.coverage-grid > :last-child:nth-child(odd)'));
+    expect(html, contains("window.addEventListener('scroll', hideTooltip"));
     expect(html, contains('Capture comparison'));
     expect(html, contains('Timeline events'));
+    expect(html, contains('Code evidence'));
+    expect(html, contains('<svg viewBox="0 0 1024 1024"'));
+    expect(html, contains('id="chart-tooltip"'));
+    expect(html, contains('relativeUs'));
+    expect(html, contains('"t":0'));
     expect(html, contains('Cold start milestones'));
+    expect(html, contains('id="startup-chart"'));
     expect(html, contains('open-list'));
     expect(html, contains('scroll-list'));
     expect(html, contains(r'\u003cscript\u003e'));
@@ -43,6 +79,125 @@ void main() {
     expect(
       CockpitStartupReport.fromJson(report.toJson()).readyMs,
       report.readyMs,
+    );
+  });
+
+  test('exports retained VM events as a trace timeline', () {
+    final report = _report(step: 'trace');
+    final trace = jsonDecode(CockpitPerformanceHtml.timelineJson(report));
+
+    expect(trace, isA<Map<String, dynamic>>());
+    final events = (trace as Map<String, dynamic>)['traceEvents'];
+    expect(events, hasLength(1));
+    expect(events.single, <String, Object?>{
+      'name': 'BuildOwner.buildScope',
+      'cat': 'Dart',
+      'ph': 'X',
+      'ts': 100,
+      'pid': 1,
+      'tid': 1,
+      'args': <String, Object?>{'payload': '<script>tracked</script>'},
+      'dur': 4000,
+    });
+  });
+
+  test('full JSON export keeps every capture and retained detail', () {
+    final first = _report(step: 'open-list');
+    final second = _report(step: 'scroll-list').copyWithEvents(<Object?>[
+      <String, Object?>{
+        'n': 'Rasterize',
+        'c': 'Embedder',
+        't': 500,
+        'd': 250,
+        'a': <String, Object?>{
+          'file': 'lib/screens/list.dart',
+          'line': 42,
+          'payload': <Object?>[1, true, 'kept'],
+        },
+      },
+    ]);
+    final decoded =
+        jsonDecode(
+              CockpitPerformanceHtml.fullJson(
+                <CockpitPerformanceReport>[first, second],
+                title: 'Complete capture',
+                startup: CockpitStartupReport(
+                  appMs: 6,
+                  firstFrameMs: 18,
+                  readyMs: 31,
+                ),
+              ),
+            )
+            as Map<String, dynamic>;
+
+    expect(decoded['title'], 'Complete capture');
+    expect(decoded['startup']['readyMs'], 31);
+    final reports = decoded['reports'] as List;
+    expect(reports, hasLength(2));
+    expect(reports[0]['report']['frames'], isNotEmpty);
+    expect(reports[0]['report']['events'], isNotEmpty);
+    expect(reports[0]['report']['memory']['samples'], isNotEmpty);
+    expect(reports[1]['report']['events'][0]['a']['payload'], <Object?>[
+      1,
+      true,
+      'kept',
+    ]);
+    expect(reports[1]['analysis']['hotspots'], hasLength(1));
+    expect(reports[1]['analysis']['hotspots'][0]['n'], 'Rasterize');
+    expect(reports[1]['analysis']['hotspots'][0]['p90'], 250);
+  });
+
+  test('closes begin/end spans and lowers unmatched markers', () {
+    final report = _report(step: 'spans').copyWithEvents(<Object?>[
+      <String, Object?>{
+        'n': 'Build',
+        'c': 'Dart',
+        't': 100,
+        'p': 'B',
+        'a': <String, Object?>{'owner': 'root'},
+      },
+      <String, Object?>{'n': 'Build', 'c': 'Dart', 't': 5100, 'p': 'E'},
+      <String, Object?>{'n': 'Unfinished', 'c': 'Dart', 't': 7000, 'p': 'B'},
+      <String, Object?>{'n': 'Orphan end', 'c': 'Dart', 't': 8000, 'p': 'E'},
+    ]);
+    final trace = jsonDecode(CockpitPerformanceHtml.timelineJson(report));
+    final events = (trace as Map<String, dynamic>)['traceEvents'] as List;
+
+    expect(
+      events,
+      contains(
+        predicate<Map<String, dynamic>>((event) {
+          return event['name'] == 'Build' &&
+              event['cat'] == 'Dart' &&
+              event['ph'] == 'X' &&
+              event['ts'] == 100 &&
+              event['pid'] == 1 &&
+              event['tid'] == 1 &&
+              event['args'] is Map &&
+              (event['args'] as Map)['owner'] == 'root' &&
+              event['dur'] == 5000;
+        }),
+      ),
+    );
+    expect(
+      events,
+      contains(
+        predicate<Map<String, dynamic>>((event) {
+          return event['name'] == 'Unfinished' && event['ph'] == 'i';
+        }),
+      ),
+    );
+    expect(
+      events,
+      contains(
+        predicate<Map<String, dynamic>>((event) {
+          return event['name'] == 'Orphan end' && event['ph'] == 'i';
+        }),
+      ),
+    );
+    expect(
+      events.where((event) => event['ph'] == 'B' || event['ph'] == 'E'),
+      isEmpty,
     );
   });
 }
@@ -166,4 +321,12 @@ CockpitPerformanceReport _report({required String step}) {
       },
     ],
   });
+}
+
+extension on CockpitPerformanceReport {
+  CockpitPerformanceReport copyWithEvents(Iterable<Object?> values) {
+    final json = toJson();
+    json['events'] = values.toList(growable: false);
+    return CockpitPerformanceReport.fromJson(json);
+  }
 }
