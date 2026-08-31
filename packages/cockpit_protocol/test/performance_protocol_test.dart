@@ -311,6 +311,16 @@ void main() {
             accumulatedInstances: 3,
           ),
         ],
+        groupBefore: const CockpitHeapPoint(
+          usageBytes: 20,
+          capacityBytes: 30,
+          externalBytes: 4,
+        ),
+        groupAfter: const CockpitHeapPoint(
+          usageBytes: 24,
+          capacityBytes: 34,
+          externalBytes: 5,
+        ),
       ),
       gpu: const CockpitGpuProfile(
         source: 'vmTimeline',
@@ -318,12 +328,112 @@ void main() {
         shaderEvents: 1,
         durationUs: 40,
       ),
+      isolate: const CockpitIsolateProfile(
+        before: CockpitIsolateStats(
+          id: 'isolates/1',
+          name: 'main',
+          groupId: 'groups/1',
+          runnable: true,
+          livePorts: 2,
+          libraryCount: 18,
+          extensionCount: 3,
+          startTimeMs: 1700000000000,
+        ),
+        after: CockpitIsolateStats(
+          id: 'isolates/1',
+          name: 'main',
+          groupId: 'groups/1',
+          runnable: true,
+          livePorts: 2,
+          libraryCount: 18,
+          extensionCount: 3,
+          startTimeMs: 1700000000000,
+        ),
+      ),
+      timeline: CockpitTimelineProfile(
+        recorder: 'ring',
+        availableStreams: const <String>['Dart', 'GC'],
+        recordedStreams: const <String>['Dart'],
+      ),
     );
     final decoded = CockpitDevToolsProfile.fromJson(profile.toJson());
     expect(decoded.cpu!.samples.single.stack, <int>[0]);
     expect(decoded.cpu!.functions.single.name, 'main');
     expect(decoded.heap!.after.usageBytes, 12);
     expect(decoded.heap!.classes.single.name, 'Foo');
+    expect(decoded.heap!.groupAfter!.usageBytes, 24);
     expect(decoded.gpu!.shaderEvents, 1);
+    expect(decoded.isolate!.after!.livePorts, 2);
+    expect(decoded.timeline!.recordedStreams, <String>['Dart']);
+  });
+
+  test('DevTools heap samples preserve order and compact drop count', () {
+    final profile = CockpitHeapProfile(
+      before: const CockpitHeapPoint(
+        usageBytes: 10,
+        capacityBytes: 20,
+        externalBytes: 1,
+      ),
+      after: const CockpitHeapPoint(
+        usageBytes: 14,
+        capacityBytes: 24,
+        externalBytes: 2,
+      ),
+      classes: const <CockpitHeapClass>[],
+      droppedClasses: 2,
+      intervalMs: 100,
+      samples: const <CockpitHeapSample>[
+        CockpitHeapSample(
+          timestampUs: 0,
+          usageBytes: 10,
+          capacityBytes: 20,
+          externalBytes: 1,
+        ),
+        CockpitHeapSample(
+          timestampUs: 100000,
+          usageBytes: 14,
+          capacityBytes: 24,
+          externalBytes: 2,
+        ),
+      ],
+      droppedSamples: 3,
+    );
+    final json = profile.toJson();
+    expect(json['dropped'], 2);
+    expect(json['drop'], 3);
+    expect(json.containsKey('droppedSamples'), isFalse);
+    final decoded = CockpitHeapProfile.fromJson(json);
+    expect(decoded.samples.last.usageBytes, 14);
+    expect(decoded.droppedSamples, 3);
+    expect(
+      () => CockpitHeapProfile(
+        before: const CockpitHeapPoint(
+          usageBytes: 10,
+          capacityBytes: 20,
+          externalBytes: 1,
+        ),
+        after: const CockpitHeapPoint(
+          usageBytes: 14,
+          capacityBytes: 24,
+          externalBytes: 2,
+        ),
+        classes: const <CockpitHeapClass>[],
+        samples: const <CockpitHeapSample>[
+          CockpitHeapSample(
+            timestampUs: 10,
+            usageBytes: 10,
+            capacityBytes: 20,
+            externalBytes: 1,
+          ),
+          CockpitHeapSample(
+            timestampUs: 9,
+            usageBytes: 10,
+            capacityBytes: 20,
+            externalBytes: 1,
+          ),
+        ],
+      ),
+      throwsFormatException,
+    );
   });
 }

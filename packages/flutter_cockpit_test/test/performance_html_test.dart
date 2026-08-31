@@ -28,6 +28,12 @@ void main() {
     expect(html, contains('CPU sampling'));
     expect(html, contains('Heap &amp; allocation'));
     expect(html, contains('GPU / Shader signals'));
+    expect(html, contains('VM runtime health'));
+    expect(html, contains('heap-trend-chart'));
+    expect(html, contains('Isolate health'));
+    expect(html, contains('Timeline streams'));
+    expect(html, contains('details-dialog'));
+    expect(html, contains('data-details="cpu"'));
     expect(html, contains('id="cpu-chart"'));
     expect(html, contains('id="heap-chart"'));
     expect(html, contains('Network profiler'));
@@ -155,6 +161,14 @@ void main() {
     expect(reports[0]['report']['frames'], isNotEmpty);
     expect(reports[0]['report']['events'], isNotEmpty);
     expect(reports[0]['report']['memory']['samples'], isNotEmpty);
+    expect(reports[0]['report']['devtools']['heap']['samples'], isNotEmpty);
+    expect(
+      reports[0]['report']['devtools']['isolate']['before']['run'],
+      isTrue,
+    );
+    expect(reports[0]['report']['devtools']['timeline']['recorded'], <Object?>[
+      'Dart',
+    ]);
     expect(reports[1]['report']['events'][0]['a']['payload'], <Object?>[
       1,
       true,
@@ -163,6 +177,7 @@ void main() {
     expect(reports[1]['analysis']['hotspots'], hasLength(1));
     expect(reports[1]['analysis']['hotspots'][0]['n'], 'Rasterize');
     expect(reports[1]['analysis']['hotspots'][0]['p90'], 250);
+    expect(reports[1]['analysis']['gc']['count'], 0);
   });
 
   test('closes begin/end spans and lowers unmatched markers', () {
@@ -360,6 +375,14 @@ CockpitPerformanceReport _report({required String step}) {
       'heap': <String, Object?>{
         'before': <String, Object?>{'use': 10, 'cap': 20, 'ext': 1},
         'after': <String, Object?>{'use': 12, 'cap': 24, 'ext': 2},
+        'interval': 100,
+        'samples': <Object?>[
+          <String, Object?>{'t': 0, 'use': 10, 'cap': 20, 'ext': 1},
+          <String, Object?>{'t': 100000, 'use': 12, 'cap': 24, 'ext': 2},
+        ],
+        'drop': 1,
+        'gb': <String, Object?>{'use': 20, 'cap': 30, 'ext': 3},
+        'ga': <String, Object?>{'use': 22, 'cap': 32, 'ext': 4},
         'classes': <Object?>[
           <String, Object?>{
             'n': 'Foo',
@@ -375,6 +398,33 @@ CockpitPerformanceReport _report({required String step}) {
         'events': 2,
         'shaders': 1,
         'time': 400,
+      },
+      'isolate': <String, Object?>{
+        'before': <String, Object?>{
+          'id': 'isolates/1',
+          'name': 'main',
+          'group': 'groups/1',
+          'run': true,
+          'ports': 2,
+          'libs': 12,
+          'ext': 1,
+          'start': 1700000000000,
+        },
+        'after': <String, Object?>{
+          'id': 'isolates/1',
+          'name': 'main',
+          'group': 'groups/1',
+          'run': true,
+          'ports': 2,
+          'libs': 12,
+          'ext': 1,
+          'start': 1700000000000,
+        },
+      },
+      'timeline': <String, Object?>{
+        'recorder': 'ring',
+        'available': <Object?>['Dart', 'GC'],
+        'recorded': <Object?>['Dart'],
       },
     },
   });

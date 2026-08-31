@@ -6,6 +6,8 @@
   tooling release.
 - Added compact, validated DevTools projections for VM CPU samples, heap and
   allocation classes, and evidence-only GPU/shader timeline signals.
+- Added bounded VM heap timeline samples, isolate health/lifecycle snapshots,
+  isolate-group memory points, and VM timeline recorder/stream metadata.
 
 ## 4.0.49
 

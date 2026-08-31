@@ -216,8 +216,14 @@ global flags after the capture.
 `profile()` also samples the VM data behind DevTools' CPU Profiler and Memory
 views when a VM service is available. CPU stacks and bounded allocation classes
 are retained in the complete report; the compact test result keeps only sample
-counts. Use `cpu: false` or `heap: false` for a frame-only capture, and tune
-`maxCpuSamples` / `maxHeapClasses` for long scenarios:
+counts. The same capture also records VM heap samples over time, isolate health
+snapshots, and timeline recorder stream metadata. Use `cpu: false` or
+`heap: false` for a frame-only capture, and tune `maxCpuSamples`,
+`maxHeapClasses`, or `maxHeapSamples` for long scenarios:
+
+When the VM exposes an isolate group, the heap report also keeps group-level
+before/after memory points. This covers multi-isolate apps without sampling
+every group on every tick.
 
 ```dart
 final report = await cockpit.profile(
@@ -264,12 +270,22 @@ The HTML report adds source evidence only when VM event arguments contain a
 file, URL, symbol, or line. Frame timings alone do not identify Dart code, so
 the report never invents a source location.
 
+The DevTools section includes a VM heap trend chart, CPU/heap/GPU summaries,
+isolate lifecycle rows, and recorder/stream metadata. Each section has a
+compact **Details** action that opens a native dialog with bounded JSON
+previews. The full retained arrays remain in the JSON download, so opening a
+dialog does not freeze the report. CPU details also include verified sample
+stack paths aggregated from VM function indexes, without inventing source code.
+
 The report also includes **Operation hotspots**, aggregating each actual VM
 event category/name into event count, timed-event count, total duration, p90,
 and longest span. This answers “what is slow?” before opening the raw timeline.
 The source column is evidence-only and appears only when the VM event arguments
 provide a location. The same bounded projection is included in `fullJson()`
 under each capture's `analysis` field; original events remain unchanged.
+The same analysis records GC event count, timed pause total, p50, p90, and max
+when the retained timeline contains real GC markers. The HTML cache panel shows
+these pause metrics alongside new/old collection counts.
 
 Each `cockpitTestWidgets` run also records cold-start milestones in the compact
 `cockpit.startup` entry and in the HTML report: app build/mount, first pumped
@@ -310,7 +326,8 @@ final jsonPath = await cockpit.exportPerformanceJson(
 ```
 
 Both export methods preserve all retained frames, VM events and arguments,
-memory samples, startup milestones, and explicit retention/drop counts. The
+memory samples, VM heap samples, allocation classes, isolate snapshots,
+timeline stream lists, startup milestones, and explicit retention/drop counts. The
 terminal/report output remains compact; exports retain the complete recorded
 detail. The only limits are the capture retention settings (`maxEvents`, frame
 retention, and memory sampling), and those limits are recorded in the export.
@@ -352,6 +369,7 @@ an interactive DevTools session:
 | Memory and GC | Native RSS samples and VM GC events | Memory and cache/GC charts |
 | CPU profiler | VM CPU samples and bounded stacks | CPU sampling panel and full report |
 | Memory heap/allocation | VM heap points and bounded class counters | Heap & allocation panel and full report |
+| VM runtime health | Heap trend, isolate snapshots, recorder/stream metadata | VM runtime panel and details dialog |
 | GPU/shader | Matching VM timeline signals only | GPU / Shader signals panel |
 | Network profiler | Separate Cockpit network evidence | `cockpit dev network` artifacts |
 

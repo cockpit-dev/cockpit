@@ -14,6 +14,7 @@ final class CockpitDevToolsProfiler {
     this.timeout = const Duration(seconds: 3),
     this.maxCpuSamples = 50000,
     this.maxHeapClasses = 200,
+    this.maxHeapSamples = 10000,
   }) {
     if (timeout <= Duration.zero) {
       throw ArgumentError.value(timeout, 'timeout', 'Must be positive.');
@@ -32,16 +33,34 @@ final class CockpitDevToolsProfiler {
         'Must be between 1 and 1000.',
       );
     }
+    if (maxHeapSamples < 1 || maxHeapSamples > 10000) {
+      throw ArgumentError.value(
+        maxHeapSamples,
+        'maxHeapSamples',
+        'Must be between 1 and 10000.',
+      );
+    }
   }
 
   final Duration timeout;
   final int maxCpuSamples;
   final int maxHeapClasses;
+  final int maxHeapSamples;
 
   VmService? _service;
   String? _isolateId;
   int? _originUs;
   CockpitHeapPoint? _beforeHeap;
+  CockpitHeapPoint? _beforeGroupHeap;
+  CockpitHeapPoint? _afterGroupHeap;
+  CockpitIsolateStats? _isolateBefore;
+  CockpitIsolateStats? _isolateAfter;
+  CockpitTimelineProfile? _timeline;
+  Duration _heapSampleEvery = const Duration(milliseconds: 100);
+  Timer? _heapSampleTimer;
+  Future<void>? _heapSamplePending;
+  final List<CockpitHeapSample> _heapSamples = <CockpitHeapSample>[];
+  var _droppedHeapSamples = 0;
   bool _profilerWasEnabled = false;
   bool _profilerChanged = false;
   bool _requested = false;
@@ -49,9 +68,30 @@ final class CockpitDevToolsProfiler {
 
   /// Starts a capture without blocking the action when the VM service is not
   /// available (for example, a web test or a release build).
-  Future<void> start({required bool cpu, required bool heap}) async {
+  Future<void> start({
+    required bool cpu,
+    required bool heap,
+    required bool timeline,
+    Duration heapSampleEvery = const Duration(milliseconds: 100),
+  }) async {
+    if (heapSampleEvery <= Duration.zero ||
+        heapSampleEvery.inMilliseconds < 1) {
+      throw ArgumentError.value(
+        heapSampleEvery,
+        'heapSampleEvery',
+        'Must be positive.',
+      );
+    }
     _failures.clear();
-    _requested = cpu || heap;
+    _heapSampleEvery = heapSampleEvery;
+    _heapSamples.clear();
+    _droppedHeapSamples = 0;
+    _beforeGroupHeap = null;
+    _afterGroupHeap = null;
+    _isolateBefore = null;
+    _isolateAfter = null;
+    _timeline = null;
+    _requested = cpu || heap || timeline;
     if (!_requested) return;
     try {
       final info = await developer.Service.getInfo().timeout(timeout);
@@ -70,6 +110,25 @@ final class CockpitDevToolsProfiler {
       }
       _service = service;
       _isolateId = isolateId;
+      try {
+        _isolateBefore = _isolateStats(
+          await service.getIsolate(isolateId).timeout(timeout),
+        );
+      } on Object catch (error) {
+        _recordFailure('isolate', error);
+      }
+      if (timeline) {
+        try {
+          final flags = await service.getVMTimelineFlags().timeout(timeout);
+          _timeline = CockpitTimelineProfile(
+            recorder: flags.recorderName ?? 'unknown',
+            availableStreams: flags.availableStreams ?? const <String>[],
+            recordedStreams: flags.recordedStreams ?? const <String>[],
+          );
+        } on Object catch (error) {
+          _recordFailure('timeline-flags', error);
+        }
+      }
       final now = await service.getVMTimelineMicros().timeout(timeout);
       _originUs = now.timestamp ?? 0;
       if (cpu) {
@@ -82,6 +141,19 @@ final class CockpitDevToolsProfiler {
       if (heap) {
         try {
           _beforeHeap = await _readHeapPoint(service, isolateId, reset: true);
+          final before = _beforeHeap;
+          if (before != null) {
+            _heapSamples.add(_heapSample(0, before));
+            _startHeapSampling();
+          }
+          final groupId = _isolateBefore?.groupId;
+          if (groupId != null && groupId.isNotEmpty) {
+            try {
+              _beforeGroupHeap = await _readGroupHeapPoint(service, groupId);
+            } on Object catch (error) {
+              _recordFailure('heap-group', error);
+            }
+          }
         } on Object catch (error) {
           _recordFailure('heap', error);
         }
@@ -96,6 +168,7 @@ final class CockpitDevToolsProfiler {
   Future<CockpitDevToolsProfile?> finish({
     required bool cpu,
     required bool heap,
+    required bool timeline,
     Iterable<CockpitPerformanceEvent> events =
         const <CockpitPerformanceEvent>[],
   }) async {
@@ -123,12 +196,32 @@ final class CockpitDevToolsProfiler {
     CockpitCpuProfile? cpuProfile;
     CockpitHeapProfile? heapProfile;
     try {
+      await _stopHeapSampling();
       int? endUs;
       try {
         final end = await service.getVMTimelineMicros().timeout(timeout);
         endUs = end.timestamp ?? _originUs!;
       } on Object catch (error) {
         _recordFailure('timeline', error);
+      }
+
+      if (timeline) {
+        try {
+          final flags = await service.getVMTimelineFlags().timeout(timeout);
+          _timeline = CockpitTimelineProfile(
+            recorder: flags.recorderName ?? _timeline?.recorder ?? 'unknown',
+            availableStreams:
+                flags.availableStreams ??
+                _timeline?.availableStreams ??
+                const <String>[],
+            recordedStreams:
+                flags.recordedStreams ??
+                _timeline?.recordedStreams ??
+                const <String>[],
+          );
+        } on Object catch (error) {
+          _recordFailure('timeline-flags', error);
+        }
       }
 
       if (cpu && (_profilerWasEnabled || _profilerChanged)) {
@@ -159,10 +252,34 @@ final class CockpitDevToolsProfiler {
         try {
           final after = await _readHeapPoint(service, isolateId);
           if (after != null) {
+            if (endUs != null) {
+              _retainHeapSample(
+                _heapSample(
+                  (endUs - _originUs!).clamp(0, 24 * 60 * 60 * 1000000),
+                  after,
+                ),
+              );
+            }
             final allocation = await service
                 .getAllocationProfile(isolateId)
                 .timeout(timeout);
-            heapProfile = _heapProfile(_beforeHeap!, after, allocation);
+            final groupId = _isolateBefore?.groupId;
+            if (groupId != null && groupId.isNotEmpty) {
+              try {
+                _afterGroupHeap = await _readGroupHeapPoint(service, groupId);
+              } on Object catch (error) {
+                _recordFailure('heap-group', error);
+              }
+            }
+            heapProfile = _heapProfile(
+              _beforeHeap!,
+              after,
+              allocation,
+              samples: _heapSamples,
+              droppedSamples: _droppedHeapSamples,
+              groupBefore: _beforeGroupHeap,
+              groupAfter: _afterGroupHeap,
+            );
           } else {
             _recordFailure(
               'heap',
@@ -175,13 +292,27 @@ final class CockpitDevToolsProfiler {
       } else if (heap) {
         _recordFailure('heap', StateError('Heap baseline is unavailable.'));
       }
+      try {
+        _isolateAfter = _isolateStats(
+          await service.getIsolate(isolateId).timeout(timeout),
+        );
+      } on Object catch (error) {
+        _recordFailure('isolate', error);
+      }
     } finally {
       await _restoreCpuProfiler();
       await _close();
     }
 
     final gpu = _gpu(events);
-    if (cpuProfile == null && heapProfile == null && _failures.isNotEmpty) {
+    final hasData =
+        cpuProfile != null ||
+        heapProfile != null ||
+        _isolateBefore != null ||
+        _isolateAfter != null ||
+        _timeline != null ||
+        gpu != null;
+    if (!hasData && _failures.isNotEmpty) {
       return CockpitDevToolsProfile(
         source: 'vm',
         state: 'unavailable',
@@ -191,13 +322,15 @@ final class CockpitDevToolsProfiler {
     }
     return CockpitDevToolsProfile(
       source: 'vm',
-      state: cpuProfile != null || heapProfile != null
-          ? 'available'
-          : 'unavailable',
+      state: hasData ? 'available' : 'unavailable',
       reason: _failureReason,
       cpu: cpuProfile,
       heap: heapProfile,
       gpu: gpu,
+      isolate: _isolateBefore == null && _isolateAfter == null
+          ? null
+          : CockpitIsolateProfile(before: _isolateBefore, after: _isolateAfter),
+      timeline: _timeline,
     );
   }
 
@@ -265,6 +398,57 @@ final class CockpitDevToolsProfiler {
     );
   }
 
+  Future<CockpitHeapPoint?> _readGroupHeapPoint(
+    VmService service,
+    String groupId,
+  ) async {
+    final usage = await service
+        .getIsolateGroupMemoryUsage(groupId)
+        .timeout(timeout);
+    return _heapPointFromMemory(usage);
+  }
+
+  static CockpitHeapPoint? _heapPointFromMemory(MemoryUsage usage) {
+    final heapUsage = usage.heapUsage;
+    final heapCapacity = usage.heapCapacity;
+    final external = usage.externalUsage;
+    if (heapUsage == null || heapCapacity == null || external == null) {
+      return null;
+    }
+    if (heapUsage < 0 || heapCapacity < heapUsage || external < 0) return null;
+    return CockpitHeapPoint(
+      usageBytes: heapUsage,
+      capacityBytes: heapCapacity,
+      externalBytes: external,
+    );
+  }
+
+  static CockpitIsolateStats _isolateStats(Isolate isolate) {
+    String? pauseKind;
+    try {
+      final kind = isolate.pauseEvent?.json?['kind'];
+      if (kind is String && kind.isNotEmpty) pauseKind = kind;
+    } catch (_) {}
+    String? error;
+    try {
+      final message = isolate.error?.message;
+      if (message is String && message.isNotEmpty) error = message;
+    } catch (_) {}
+    return CockpitIsolateStats(
+      id: isolate.id ?? 'unknown',
+      name: isolate.name ?? 'isolate',
+      groupId: isolate.isolateGroupId,
+      runnable: isolate.runnable,
+      livePorts: isolate.livePorts,
+      libraryCount: isolate.libraries?.length,
+      extensionCount: isolate.extensionRPCs?.length,
+      startTimeMs: isolate.startTime,
+      system: isolate.isSystemIsolate,
+      pauseKind: pauseKind,
+      error: error,
+    );
+  }
+
   CockpitCpuProfile _cpuProfile(CpuSamples raw) {
     final functions = <CockpitCpuFunction>[];
     for (final function in raw.functions ?? const <ProfileFunction>[]) {
@@ -323,8 +507,12 @@ final class CockpitDevToolsProfiler {
   CockpitHeapProfile _heapProfile(
     CockpitHeapPoint before,
     CockpitHeapPoint after,
-    AllocationProfile raw,
-  ) {
+    AllocationProfile raw, {
+    Iterable<CockpitHeapSample> samples = const <CockpitHeapSample>[],
+    int droppedSamples = 0,
+    CockpitHeapPoint? groupBefore,
+    CockpitHeapPoint? groupAfter,
+  }) {
     final members =
         List<ClassHeapStats>.of(raw.members ?? const <ClassHeapStats>[])..sort(
           (left, right) => _nonNegative(
@@ -349,12 +537,107 @@ final class CockpitDevToolsProfiler {
         ),
       );
     }
+    final memberCount = raw.members?.length ?? 0;
     return CockpitHeapProfile(
       before: before,
       after: after,
       classes: classes,
-      droppedClasses: (raw.members?.length ?? 0) - classes.length,
+      droppedClasses: memberCount > classes.length
+          ? memberCount - classes.length
+          : 0,
+      intervalMs: _heapSampleEvery.inMilliseconds,
+      samples: samples,
+      droppedSamples: droppedSamples,
+      groupBefore: groupBefore,
+      groupAfter: groupAfter,
     );
+  }
+
+  void _startHeapSampling() {
+    if (_heapSampleTimer != null || _service == null || _isolateId == null) {
+      return;
+    }
+    _heapSampleTimer = Timer.periodic(
+      _heapSampleEvery,
+      (_) => unawaited(_sampleHeap()),
+    );
+  }
+
+  Future<void> _sampleHeap() async {
+    final service = _service;
+    final isolateId = _isolateId;
+    final originUs = _originUs;
+    if (service == null || isolateId == null || originUs == null) return;
+    if (_heapSamplePending != null) {
+      _droppedHeapSamples += 1;
+      return;
+    }
+    final pending = _readVmHeapSample(service, isolateId, originUs);
+    _heapSamplePending = pending;
+    try {
+      final sample = await pending;
+      if (sample == null) {
+        _droppedHeapSamples += 1;
+      } else {
+        _retainHeapSample(sample);
+      }
+    } on Object catch (error) {
+      _droppedHeapSamples += 1;
+      _recordFailure('heap-sample', error);
+    } finally {
+      if (identical(_heapSamplePending, pending)) {
+        _heapSamplePending = null;
+      }
+    }
+  }
+
+  void _retainHeapSample(CockpitHeapSample sample) {
+    if (_heapSamples.length < maxHeapSamples) {
+      _heapSamples.add(sample);
+    } else {
+      _droppedHeapSamples += 1;
+    }
+  }
+
+  Future<CockpitHeapSample?> _readVmHeapSample(
+    VmService service,
+    String isolateId,
+    int originUs,
+  ) async {
+    final values = await Future.wait<Object?>(<Future<Object?>>[
+      service.getVMTimelineMicros().timeout(timeout),
+      service.getMemoryUsage(isolateId).timeout(timeout),
+    ]);
+    final now = values[0] as Timestamp;
+    final point = _heapPointFromMemory(values[1] as MemoryUsage);
+    if (point == null) return null;
+    final timestamp = ((now.timestamp ?? originUs) - originUs).clamp(
+      0,
+      24 * 60 * 60 * 1000000,
+    );
+    return _heapSample(timestamp, point);
+  }
+
+  CockpitHeapSample _heapSample(int timestampUs, CockpitHeapPoint point) =>
+      CockpitHeapSample(
+        timestampUs: timestampUs,
+        usageBytes: point.usageBytes,
+        capacityBytes: point.capacityBytes,
+        externalBytes: point.externalBytes,
+      );
+
+  Future<void> _stopHeapSampling() async {
+    _heapSampleTimer?.cancel();
+    _heapSampleTimer = null;
+    final pending = _heapSamplePending;
+    if (pending != null) {
+      try {
+        await pending;
+      } catch (_) {
+        // The failed sample is already represented by the bounded reason.
+      }
+    }
+    _heapSamplePending = null;
   }
 
   CockpitGpuProfile? _gpu(Iterable<CockpitPerformanceEvent> source) {
@@ -388,6 +671,9 @@ final class CockpitDevToolsProfiler {
     _isolateId = null;
     _originUs = null;
     _beforeHeap = null;
+    _heapSampleTimer?.cancel();
+    _heapSampleTimer = null;
+    _heapSamplePending = null;
     if (service != null) await service.dispose();
   }
 
