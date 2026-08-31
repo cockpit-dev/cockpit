@@ -20,7 +20,11 @@ export 'package:cockpit_protocol/cockpit_protocol.dart'
         CockpitGpuProfile,
         CockpitHeapClass,
         CockpitHeapPoint,
-        CockpitHeapProfile;
+        CockpitHeapProfile,
+        CockpitHeapSample,
+        CockpitIsolateProfile,
+        CockpitIsolateStats,
+        CockpitTimelineProfile;
 export 'src/cockpit_test.dart';
 export 'src/cockpit_debug_tools.dart';
 export 'src/cockpit_test_options.dart';

@@ -12,6 +12,8 @@ final class CockpitDevToolsProfile {
     this.cpu,
     this.heap,
     this.gpu,
+    this.isolate,
+    this.timeline,
   }) {
     if (source.trim().isEmpty || state.trim().isEmpty) {
       throw const FormatException('DevTools profile identity is invalid.');
@@ -27,11 +29,15 @@ final class CockpitDevToolsProfile {
   final CockpitCpuProfile? cpu;
   final CockpitHeapProfile? heap;
   final CockpitGpuProfile? gpu;
+  final CockpitIsolateProfile? isolate;
+  final CockpitTimelineProfile? timeline;
 
   CockpitDevToolsProfile copyWith({
     CockpitCpuProfile? cpu,
     CockpitHeapProfile? heap,
     CockpitGpuProfile? gpu,
+    CockpitIsolateProfile? isolate,
+    CockpitTimelineProfile? timeline,
   }) => CockpitDevToolsProfile(
     source: source,
     state: state,
@@ -39,6 +45,8 @@ final class CockpitDevToolsProfile {
     cpu: cpu ?? this.cpu,
     heap: heap ?? this.heap,
     gpu: gpu ?? this.gpu,
+    isolate: isolate ?? this.isolate,
+    timeline: timeline ?? this.timeline,
   );
 
   Map<String, Object?> toJson() => <String, Object?>{
@@ -48,6 +56,8 @@ final class CockpitDevToolsProfile {
     if (cpu != null) 'cpu': cpu!.toJson(),
     if (heap != null) 'heap': heap!.toJson(),
     if (gpu != null) 'gpu': gpu!.toJson(),
+    if (isolate != null) 'isolate': isolate!.toJson(),
+    if (timeline != null) 'timeline': timeline!.toJson(),
   };
 
   factory CockpitDevToolsProfile.fromJson(Object? value) {
@@ -61,6 +71,12 @@ final class CockpitDevToolsProfile {
           ? null
           : CockpitHeapProfile.fromJson(json['heap']),
       gpu: json['gpu'] == null ? null : CockpitGpuProfile.fromJson(json['gpu']),
+      isolate: json['isolate'] == null
+          ? null
+          : CockpitIsolateProfile.fromJson(json['isolate']),
+      timeline: json['timeline'] == null
+          ? null
+          : CockpitTimelineProfile.fromJson(json['timeline']),
     );
   }
 }
@@ -330,19 +346,91 @@ final class CockpitHeapClass {
   }
 }
 
+/// One VM heap usage sample captured during a performance interval.
+final class CockpitHeapSample {
+  const CockpitHeapSample({
+    required this.timestampUs,
+    required this.usageBytes,
+    required this.capacityBytes,
+    required this.externalBytes,
+  });
+
+  final int timestampUs;
+  final int usageBytes;
+  final int capacityBytes;
+  final int externalBytes;
+
+  bool get isValid =>
+      timestampUs >= 0 &&
+      usageBytes >= 0 &&
+      capacityBytes >= usageBytes &&
+      externalBytes >= 0;
+
+  Map<String, Object?> toJson() => <String, Object?>{
+    't': timestampUs,
+    'use': usageBytes,
+    'cap': capacityBytes,
+    'ext': externalBytes,
+  };
+
+  factory CockpitHeapSample.fromJson(Object? value) {
+    final json = _object(value, r'$.devtools.heap.sample');
+    final sample = CockpitHeapSample(
+      timestampUs: _nonNegativeInt(json['t'], r'$.devtools.heap.sample.t'),
+      usageBytes: _nonNegativeInt(json['use'], r'$.devtools.heap.sample.use'),
+      capacityBytes: _nonNegativeInt(
+        json['cap'],
+        r'$.devtools.heap.sample.cap',
+      ),
+      externalBytes: _nonNegativeInt(
+        json['ext'],
+        r'$.devtools.heap.sample.ext',
+      ),
+    );
+    if (!sample.isValid) {
+      throw const FormatException('Heap sample is inconsistent.');
+    }
+    return sample;
+  }
+}
+
 final class CockpitHeapProfile {
   CockpitHeapProfile({
     required this.before,
     required this.after,
     required Iterable<CockpitHeapClass> classes,
     this.droppedClasses = 0,
-  }) : classes = List<CockpitHeapClass>.unmodifiable(classes) {
-    if (droppedClasses < 0 || this.classes.length > 1000) {
+    this.intervalMs = 0,
+    Iterable<CockpitHeapSample> samples = const <CockpitHeapSample>[],
+    this.droppedSamples = 0,
+    this.groupBefore,
+    this.groupAfter,
+  }) : classes = List<CockpitHeapClass>.unmodifiable(classes),
+       samples = List<CockpitHeapSample>.unmodifiable(samples) {
+    if (droppedClasses < 0 ||
+        droppedSamples < 0 ||
+        this.classes.length > 1000 ||
+        this.samples.length > 10000 ||
+        intervalMs < 0 ||
+        (this.samples.isNotEmpty && intervalMs < 1)) {
       throw const FormatException('Heap profile bounds are invalid.');
     }
     if (before.capacityBytes < before.usageBytes ||
-        after.capacityBytes < after.usageBytes) {
+        after.capacityBytes < after.usageBytes ||
+        (groupBefore != null &&
+            groupBefore!.capacityBytes < groupBefore!.usageBytes) ||
+        (groupAfter != null &&
+            groupAfter!.capacityBytes < groupAfter!.usageBytes)) {
       throw const FormatException('Heap usage exceeds capacity.');
+    }
+    if (this.samples.any((sample) => !sample.isValid)) {
+      throw const FormatException('Heap profile contains an invalid sample.');
+    }
+    for (var index = 1; index < this.samples.length; index += 1) {
+      if (this.samples[index].timestampUs <
+          this.samples[index - 1].timestampUs) {
+        throw const FormatException('Heap samples are not ordered.');
+      }
     }
   }
 
@@ -350,6 +438,11 @@ final class CockpitHeapProfile {
   final CockpitHeapPoint after;
   final List<CockpitHeapClass> classes;
   final int droppedClasses;
+  final int intervalMs;
+  final List<CockpitHeapSample> samples;
+  final int droppedSamples;
+  final CockpitHeapPoint? groupBefore;
+  final CockpitHeapPoint? groupAfter;
 
   Map<String, Object?> toJson() => <String, Object?>{
     'before': before.toJson(),
@@ -357,6 +450,12 @@ final class CockpitHeapProfile {
     if (classes.isNotEmpty)
       'classes': classes.map((item) => item.toJson()).toList(growable: false),
     if (droppedClasses > 0) 'dropped': droppedClasses,
+    if (samples.isNotEmpty)
+      'samples': samples.map((item) => item.toJson()).toList(growable: false),
+    if (intervalMs > 0) 'interval': intervalMs,
+    if (droppedSamples > 0) 'drop': droppedSamples,
+    if (groupBefore != null) 'gb': groupBefore!.toJson(),
+    if (groupAfter != null) 'ga': groupAfter!.toJson(),
   };
 
   factory CockpitHeapProfile.fromJson(Object? value) {
@@ -374,6 +473,168 @@ final class CockpitHeapProfile {
       droppedClasses: json['dropped'] == null
           ? 0
           : _nonNegativeInt(json['dropped'], r'$.devtools.heap.dropped'),
+      intervalMs: json['interval'] == null
+          ? 0
+          : _nonNegativeInt(json['interval'], r'$.devtools.heap.interval'),
+      samples: json['samples'] == null
+          ? const <CockpitHeapSample>[]
+          : _list(
+              json['samples'],
+              r'$.devtools.heap.samples',
+            ).map(CockpitHeapSample.fromJson).toList(growable: false),
+      droppedSamples: json['drop'] == null
+          ? 0
+          : _nonNegativeInt(json['drop'], r'$.devtools.heap.drop'),
+      groupBefore: json['gb'] == null
+          ? null
+          : CockpitHeapPoint.fromJson(json['gb']),
+      groupAfter: json['ga'] == null
+          ? null
+          : CockpitHeapPoint.fromJson(json['ga']),
+    );
+  }
+}
+
+/// A bounded snapshot of one Dart isolate's runtime health.
+final class CockpitIsolateStats {
+  const CockpitIsolateStats({
+    required this.id,
+    required this.name,
+    this.groupId,
+    this.runnable,
+    this.livePorts,
+    this.libraryCount,
+    this.extensionCount,
+    this.startTimeMs,
+    this.system,
+    this.pauseKind,
+    this.error,
+  });
+
+  final String id;
+  final String name;
+  final String? groupId;
+  final bool? runnable;
+  final int? livePorts;
+  final int? libraryCount;
+  final int? extensionCount;
+  final int? startTimeMs;
+  final bool? system;
+  final String? pauseKind;
+  final String? error;
+
+  Map<String, Object?> toJson() => <String, Object?>{
+    'id': id,
+    'name': name,
+    if (groupId != null && groupId!.isNotEmpty) 'group': groupId,
+    if (runnable != null) 'run': runnable,
+    if (livePorts != null) 'ports': livePorts,
+    if (libraryCount != null) 'libs': libraryCount,
+    if (extensionCount != null) 'ext': extensionCount,
+    if (startTimeMs != null) 'start': startTimeMs,
+    if (system != null) 'sys': system,
+    if (pauseKind != null && pauseKind!.isNotEmpty) 'pause': pauseKind,
+    if (error != null && error!.isNotEmpty) 'error': error,
+  };
+
+  factory CockpitIsolateStats.fromJson(Object? value) {
+    final json = _object(value, r'$.devtools.isolate.stats');
+    return CockpitIsolateStats(
+      id: _string(json['id'], r'$.devtools.isolate.stats.id'),
+      name: _string(json['name'], r'$.devtools.isolate.stats.name'),
+      groupId: _optionalString(
+        json['group'],
+        r'$.devtools.isolate.stats.group',
+      ),
+      runnable: json['run'] == null
+          ? null
+          : _bool(json['run'], r'$.devtools.isolate.stats.run'),
+      livePorts: json['ports'] == null
+          ? null
+          : _nonNegativeInt(json['ports'], r'$.devtools.isolate.stats.ports'),
+      libraryCount: json['libs'] == null
+          ? null
+          : _nonNegativeInt(json['libs'], r'$.devtools.isolate.stats.libs'),
+      extensionCount: json['ext'] == null
+          ? null
+          : _nonNegativeInt(json['ext'], r'$.devtools.isolate.stats.ext'),
+      startTimeMs: json['start'] == null
+          ? null
+          : _nonNegativeInt(json['start'], r'$.devtools.isolate.stats.start'),
+      system: json['sys'] == null
+          ? null
+          : _bool(json['sys'], r'$.devtools.isolate.stats.sys'),
+      pauseKind: _optionalString(
+        json['pause'],
+        r'$.devtools.isolate.stats.pause',
+      ),
+      error: _optionalString(json['error'], r'$.devtools.isolate.stats.error'),
+    );
+  }
+}
+
+/// Before/after isolate state captured around one performance interval.
+final class CockpitIsolateProfile {
+  const CockpitIsolateProfile({this.before, this.after});
+
+  final CockpitIsolateStats? before;
+  final CockpitIsolateStats? after;
+
+  Map<String, Object?> toJson() => <String, Object?>{
+    if (before != null) 'before': before!.toJson(),
+    if (after != null) 'after': after!.toJson(),
+  };
+
+  factory CockpitIsolateProfile.fromJson(Object? value) {
+    final json = _object(value, r'$.devtools.isolate');
+    return CockpitIsolateProfile(
+      before: json['before'] == null
+          ? null
+          : CockpitIsolateStats.fromJson(json['before']),
+      after: json['after'] == null
+          ? null
+          : CockpitIsolateStats.fromJson(json['after']),
+    );
+  }
+}
+
+/// Timeline recorder and stream capabilities observed from VM Service.
+final class CockpitTimelineProfile {
+  CockpitTimelineProfile({
+    required this.recorder,
+    required Iterable<String> availableStreams,
+    required Iterable<String> recordedStreams,
+  }) : availableStreams = List<String>.unmodifiable(availableStreams),
+       recordedStreams = List<String>.unmodifiable(recordedStreams) {
+    if (recorder.trim().isEmpty ||
+        this.availableStreams.length > 500 ||
+        this.recordedStreams.length > 500) {
+      throw const FormatException('Timeline profile metadata is invalid.');
+    }
+  }
+
+  final String recorder;
+  final List<String> availableStreams;
+  final List<String> recordedStreams;
+
+  Map<String, Object?> toJson() => <String, Object?>{
+    'recorder': recorder,
+    if (availableStreams.isNotEmpty) 'available': availableStreams,
+    if (recordedStreams.isNotEmpty) 'recorded': recordedStreams,
+  };
+
+  factory CockpitTimelineProfile.fromJson(Object? value) {
+    final json = _object(value, r'$.devtools.timeline');
+    return CockpitTimelineProfile(
+      recorder: _string(json['recorder'], r'$.devtools.timeline.recorder'),
+      availableStreams: _strings(
+        json['available'],
+        r'$.devtools.timeline.available',
+      ),
+      recordedStreams: _strings(
+        json['recorded'],
+        r'$.devtools.timeline.recorded',
+      ),
     );
   }
 }
@@ -444,4 +705,17 @@ int _nonNegativeInt(Object? value, String path) {
 int _positiveInt(Object? value, String path) {
   if (value is int && value > 0) return value;
   throw FormatException('$path must be a positive integer.');
+}
+
+bool _bool(Object? value, String path) {
+  if (value is bool) return value;
+  throw FormatException('$path must be a boolean.');
+}
+
+List<String> _strings(Object? value, String path) {
+  if (value == null) return const <String>[];
+  if (value is! List) throw FormatException('$path must be an array.');
+  return List<String>.unmodifiable(
+    value.map((item) => _string(item, '$path[]')),
+  );
 }

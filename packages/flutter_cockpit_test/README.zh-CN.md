@@ -185,8 +185,12 @@ expect(report.summary.jankCount, 0);
 
 当 VM Service 可用时，`profile()` 还会采集 DevTools CPU Profiler 和 Memory 视图背后的真实
 CPU 采样与 Dart allocation profile。完整报告保留采样栈和有界的分配类，普通测试输出只保留
-数量摘要。长场景可以用 `cpu: false` 或 `heap: false` 关闭对应采集，并通过
-`maxCpuSamples` / `maxHeapClasses` 控制内存上限：
+数量摘要，同时记录 VM heap 时间线样本、isolate 健康快照，以及 timeline recorder 的可用/已记录
+stream 元数据。长场景可以用 `cpu: false` 或 `heap: false` 关闭对应采集，并通过
+`maxCpuSamples`、`maxHeapClasses`、`maxHeapSamples` 控制内存上限：
+
+当 VM 暴露 isolate group 时，heap 报告还会保留 group 级别的起止内存点位，覆盖多 isolate
+应用，同时不会在每个采样 tick 额外轮询所有 group。
 
 ```dart
 final report = await cockpit.profile(
@@ -223,6 +227,12 @@ unavailable 的指标不能当成 0 处理。HTML 只有在 VM 事件参数提�
 debug 数据仅用于诊断，不能当作发布性能证据。
 
 报告还提供 **Operation hotspots**，按真实 VM event 的 category 和名称聚合事件数、有时长事件数、总耗时、p90 和最长区间，先回答“到底是哪类具体操作慢”，再决定是否打开原始时间线。源码列只在对应事件参数实际带有位置时显示，不会从帧耗时推断文件。`fullJson()` 会在每个 capture 下的 `analysis` 字段保留这份有界聚合，同时完整保留原始 events。
+同一份分析还会在时间线确实包含 GC 标记时记录 GC 事件数、带时长的暂停总量、p50、p90 和最大暂停；HTML 的 cache/GC 面板会把这些暂停指标和新生代/老生代次数一起展示。
+
+DevTools 区域包含 VM heap 趋势图、CPU/heap/GPU 汇总、isolate 生命周期行，以及 recorder/stream
+元数据。每个区域都有紧凑的 **Details** 操作，点击后使用原生弹窗查看有界 JSON 预览；完整样本
+仍保留在 JSON 导出中，因此查看详情不会把整页撑开或卡住浏览器。CPU 详情还会根据 VM 返回的
+函数索引聚合真实采样栈路径，不会猜测源码。
 
 每次 `cockpitTestWidgets` 运行还会在紧凑的 `cockpit.startup` 条目和 HTML 报告中记录冷
 启动阶段：应用构建/挂载、首个 pumped frame，以及初始可用时间。计时从 app builder 之前
@@ -259,7 +269,8 @@ final jsonPath = await cockpit.exportPerformanceJson(
 );
 ```
 
-两个导出 API 都会保留所有 retained 帧、VM 事件及参数、内存样本、启动里程碑和明确
+两个导出 API 都会保留所有 retained 帧、VM 事件及参数、内存样本、VM heap 样本、分配类、isolate
+快照、timeline stream 列表、启动里程碑和明确
 的 retention/drop 计数。终端和普通测试结果继续保持紧凑；导出保留完整的已记录细节。
 唯一的限制是采集时设置的 `maxEvents`、帧保留上限和内存采样上限，
 这些限制以及丢弃数量都会写入导出文件。
@@ -293,6 +304,7 @@ timeline** 会导出保留的 VM 事件为 Chrome trace 兼容的 `traceEvents` 
 | Memory 与 GC | 原生 RSS 样本和 VM GC 事件 | Memory、Cache/GC 图表 |
 | CPU profiler | VM CPU 采样与有界调用栈 | CPU sampling 面板与完整报告 |
 | Memory heap/allocation | VM heap 点位与有界分配类计数 | Heap & allocation 面板与完整报告 |
+| VM runtime health | Heap 趋势、isolate 快照、recorder/stream 元数据 | VM runtime 面板与详情弹窗 |
 | GPU/shader | 仅展示匹配到的真实 VM timeline 信号 | GPU / Shader signals 面板 |
 | Network profiler | 独立的 Cockpit network evidence | `cockpit dev network` 产物 |
 

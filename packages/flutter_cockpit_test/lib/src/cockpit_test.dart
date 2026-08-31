@@ -346,6 +346,7 @@ final class CockpitTester {
     int maxEvents = 200000,
     int maxCpuSamples = 50000,
     int maxHeapClasses = 200,
+    int maxHeapSamples = 10000,
     bool trackBuilds = false,
     bool trackUserBuilds = false,
     bool trackLayouts = false,
@@ -387,6 +388,13 @@ final class CockpitTester {
         'Must be between 1 and 1000.',
       );
     }
+    if (maxHeapSamples < 1 || maxHeapSamples > 10000) {
+      throw ArgumentError.value(
+        maxHeapSamples,
+        'maxHeapSamples',
+        'Must be between 1 and 10000.',
+      );
+    }
     final effectiveTimeout = timeout ?? options.commandTimeout;
     _validateTimeout(effectiveTimeout, name: 'timeout');
     final collector = FlutterCockpit.binding.performanceCollector;
@@ -400,6 +408,7 @@ final class CockpitTester {
           : const Duration(seconds: 3),
       maxCpuSamples: maxCpuSamples,
       maxHeapClasses: maxHeapClasses,
+      maxHeapSamples: maxHeapSamples,
     );
     try {
       instrumentation.enable(
@@ -413,7 +422,12 @@ final class CockpitTester {
           ? createCockpitPerformanceMemorySampler(interval: sampleEvery)
           : null;
       memorySampler?.start();
-      await devToolsProfiler.start(cpu: cpu, heap: heap);
+      await devToolsProfiler.start(
+        cpu: cpu,
+        heap: heap,
+        timeline: timeline,
+        heapSampleEvery: sampleEvery,
+      );
       dynamic timelineData;
       var canTraceTimeline = timeline && !kIsWeb;
       if (canTraceTimeline) {
@@ -465,6 +479,7 @@ final class CockpitTester {
         final devTools = await devToolsProfiler.finish(
           cpu: cpu,
           heap: heap,
+          timeline: timeline,
           events: parsed.events,
         );
         final memoryReport = memorySampler?.stop();

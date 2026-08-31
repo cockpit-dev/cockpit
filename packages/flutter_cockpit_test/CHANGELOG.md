@@ -13,6 +13,9 @@
 - Added VM CPU sampling, Dart heap/allocation profiling, and evidence-only
   GPU/shader signal panels to performance captures when the VM service supports
   them.
+- Added VM heap trend sampling, isolate health/lifecycle snapshots,
+  isolate-group memory points, and timeline recorder/stream metadata to every
+  supported performance capture, with bounded HTML charts and detail dialogs.
 - Added `CockpitTester.debug` for DevTools visual switches, performance overlay,
   rebuild logging, and animation time scaling with automatic restoration.
 - Added a jank/stall evidence panel that correlates slow frames with overlapping
