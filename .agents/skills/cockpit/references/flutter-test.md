@@ -209,6 +209,19 @@ bound is reached; those aggregates describe the retained sample only. Empty
 phases omit duration aggregates rather than reporting a fabricated zero, and
 `fps` is omitted unless the original timestamps establish a strictly increasing
 cadence. Never interpret omitted or unavailable metrics as zero.
+The same VM capture also retains the data behind the DevTools runtime views:
+`devtools.heap.samples` is a bounded used/capacity/external heap timeline;
+`devtools.isolate` contains the selected isolate plus all-isolate before/after
+health snapshots and bounded VM Isolate-stream lifecycle events; and
+`devtools.timeline` records the VM timeline recorder, available streams, and
+recorded streams. `devtools.vm` keeps VM identity and isolate inventory, while
+`devtools.vmem` keeps bounded before/after process-memory trees with explicit
+child drops. These are part of the strongly typed `CockpitDevToolsProfile`, not
+ad-hoc HTML fields. Compact test output reports counts and availability;
+`performanceJson()`, `exportPerformanceJson()`, and standalone HTML retain the
+complete bounded data. `allocationClassIds` is explicit opt-in for selected
+class allocation stacks, and `perfetto: true` is explicit opt-in for exact VM
+CPU/timeline proto files because both add capture overhead.
 Reports include the Flutter build mode; debug timings are diagnostic only, while
 profile and release timings are suitable for performance decisions. The
 standalone HTML report converts engine timestamps to relative capture time,
