@@ -294,34 +294,37 @@ final class _Header extends StatelessWidget {
     }
     return ConsoleShellHeader(
       horizontalPadding: 16,
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          const _BrandMark(size: 40),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Cockpit',
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w700,
-                    height: 1.2,
+      child: SizedBox(
+        width: double.infinity,
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            const _BrandMark(size: 40),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Cockpit',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                      height: 1.2,
+                    ),
                   ),
-                ),
-                Text(
-                  'Console',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    height: 1.2,
-                    color: theme.colorScheme.onSurfaceVariant,
+                  Text(
+                    'Console',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      height: 1.2,
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -337,14 +340,114 @@ final class _BrandMark extends StatelessWidget {
   Widget build(BuildContext context) {
     return Image.asset(
       'assets/branding/cockpit_console_app_icon.png',
-      package: 'cockpit_console',
       width: size,
       height: size,
       filterQuality: FilterQuality.high,
       semanticLabel: includeSemantics ? 'Cockpit Console' : null,
       excludeFromSemantics: !includeSemantics,
+      errorBuilder: (context, error, stackTrace) =>
+          _FallbackBrandMark(size: size, includeSemantics: includeSemantics),
     );
   }
+}
+
+final class _FallbackBrandMark extends StatelessWidget {
+  const _FallbackBrandMark({
+    required this.size,
+    required this.includeSemantics,
+  });
+
+  final double size;
+  final bool includeSemantics;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      container: includeSemantics,
+      label: includeSemantics ? 'Cockpit Console' : null,
+      excludeSemantics: !includeSemantics,
+      child: CustomPaint(
+        size: Size.square(size),
+        painter: const _BrandMarkPainter(),
+      ),
+    );
+  }
+}
+
+final class _BrandMarkPainter extends CustomPainter {
+  const _BrandMarkPainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final scale = size.shortestSide / 1024;
+    canvas.scale(scale);
+    final background = Paint()..color = const Color(0xFF111317);
+    final border = Paint()
+      ..color = const Color(0xFF2B3038)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 12;
+    final shape = RRect.fromRectAndRadius(
+      const Rect.fromLTWH(64, 64, 896, 896),
+      const Radius.circular(208),
+    );
+    canvas.drawRRect(shape, background);
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        const Rect.fromLTWH(70, 70, 884, 884),
+        const Radius.circular(202),
+      ),
+      border,
+    );
+
+    final corners = Paint()
+      ..color = const Color(0xFF6A9AF5)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 96
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+    final path = Path()
+      ..moveTo(416, 280)
+      ..lineTo(352, 280)
+      ..cubicTo(304, 280, 280, 304, 280, 352)
+      ..lineTo(280, 416)
+      ..moveTo(608, 280)
+      ..lineTo(672, 280)
+      ..cubicTo(720, 280, 744, 304, 744, 352)
+      ..lineTo(744, 416)
+      ..moveTo(416, 744)
+      ..lineTo(352, 744)
+      ..cubicTo(304, 744, 280, 720, 280, 672)
+      ..lineTo(280, 608)
+      ..moveTo(608, 744)
+      ..lineTo(672, 744)
+      ..cubicTo(720, 744, 744, 720, 744, 672)
+      ..lineTo(744, 608);
+    canvas.drawPath(path, corners);
+
+    final centerLine = Paint()
+      ..color = const Color(0xFF3A5D9F)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 28
+      ..strokeCap = StrokeCap.round;
+    canvas.drawLine(const Offset(420, 512), const Offset(604, 512), centerLine);
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        const Rect.fromLTWH(452, 452, 120, 120),
+        const Radius.circular(34),
+      ),
+      Paint()..color = const Color(0xFF42C990),
+    );
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        const Rect.fromLTWH(485, 485, 54, 54),
+        const Radius.circular(16),
+      ),
+      Paint()..color = const Color(0xFFDDF9EC),
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
 final class _NavItem extends HookConsumerWidget {

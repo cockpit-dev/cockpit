@@ -446,20 +446,21 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
     if (match == null) {
       return false;
     }
+    final revealTarget = _revealElementForLocator(match);
 
     // Search steps preserve their requested pacing. Final placement is an
     // atomic jump so nested scrollables cannot leave Cockpit waiting on
     // competing animation futures after the target is already located.
     const effectiveDuration = Duration.zero;
     final revealRequest = _resolveRevealRequest(
-      match,
+      revealTarget,
       alignment: alignment,
       padding: padding,
     );
     if (revealRequest != null) {
       unawaited(
         Scrollable.ensureVisible(
-          match,
+          revealTarget,
           alignment: revealRequest.alignment,
           duration: effectiveDuration,
           alignmentPolicy: revealRequest.alignmentPolicy,
@@ -477,7 +478,7 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
       await _settleAtomicRevealFrame();
     }
     await _applyRevealAdjustment(
-      match,
+      revealTarget,
       alignment: alignment,
       padding: padding,
       offset: offset,
@@ -485,6 +486,27 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
     );
     await _settleAtomicRevealFrame();
     return _locatorIsVisible(locator);
+  }
+
+  Element _revealElementForLocator(Element match) {
+    // A field label can remain visible while the editable control is covered
+    // by the keyboard or clipped at the viewport edge. Reveal the owning
+    // field so the subsequent action-resolution pass can see its real input
+    // target instead of stopping on a passive label Text element.
+    Element? editableAncestor;
+    match.visitAncestorElements((ancestor) {
+      final typeName = ancestor.widget.runtimeType.toString();
+      if (ancestor.widget is EditableText ||
+          typeName == 'TextField' ||
+          typeName == 'TextFormField' ||
+          typeName == 'CupertinoTextField' ||
+          typeName == 'CupertinoSearchTextField') {
+        editableAncestor = ancestor;
+        return false;
+      }
+      return true;
+    });
+    return editableAncestor ?? match;
   }
 
   Future<void> _settleAtomicRevealFrame() async {
@@ -1458,7 +1480,30 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
       includeInferredInteraction: allowGestureFallback,
     );
     if (relatedTargets.isEmpty) {
-      return CockpitTargetResolutionResult.success(target: probeTarget);
+      const textInputCommands = <CockpitCommandType>{
+        CockpitCommandType.enterText,
+        CockpitCommandType.focusTextInput,
+        CockpitCommandType.setTextEditingValue,
+        CockpitCommandType.sendTextInputAction,
+        CockpitCommandType.copyText,
+        CockpitCommandType.eraseText,
+        CockpitCommandType.pasteText,
+      };
+      if (!textInputCommands.contains(requiredCommand) ||
+          probeTarget.supportedCommands.contains(requiredCommand)) {
+        return CockpitTargetResolutionResult.success(target: probeTarget);
+      }
+      return CockpitTargetResolutionResult.failure(
+        error: CockpitCommandError.targetNotFound(
+          message:
+              'The matched Flutter element does not expose ${requiredCommand.name} in the current viewport.',
+          details: <String, Object?>{
+            'requiredCommand': requiredCommand.name,
+            'matchedType': probeTarget.typeName,
+            'matchedPath': probeTarget.path,
+          },
+        ),
+      );
     }
 
     final closestDistance = relatedTargets.first.distance;

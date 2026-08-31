@@ -164,6 +164,7 @@ vsync 与 raster 完成墙钟时间戳，并记录引擎提供的 `FrameTiming`�
 总耗时、raster cache、jank budget，以及
 p50/p90/p99/最大值）。原生 Flutter 平台还会采集官方 integration-test VM timeline、GC
 事件和有界进程 RSS 样本；Web 不支持这些来源时会明确标记 unavailable，不会伪造数据：
+如果本地直接用 `flutter test` 运行且进程没有暴露 VM Service URI，操作仍会正常执行，报告会标记 `unavailable:vm`；使用 `flutter drive` 或原生 instrumentation 时继续采集官方 VM timeline：
 
 ```dart
 final report = await cockpit.profile(
@@ -177,7 +178,10 @@ final report = await cockpit.profile(
 expect(report.summary.jankCount, 0);
 ```
 
-原生采集默认每 100ms 采样一次进程 RSS，并保留起始/结束/最小/最大/平均/峰值/增量汇总和有界样本时间线。只有确实不需要进程指标时才设置 `memory: false`；需要调整时间分辨率时使用 `sampleEvery`。不支持的目标会明确标记 memory 不可用，不会报告 0。
+原生采集默认每 100ms 采样一次进程 RSS，并保留起始/结束/最小/最大/平均/峰值/增量汇总和有界样本时间线。只有确实不需要进程指标时才设置 `memory: false`；需要调整时间分辨率时使用 `sampleEvery`，使用 `streams` 和 `timeline` 选择 VM 跟踪，并用 `maxEvents` 限制保留的时间线事件数量。不支持的目标会明确标记 memory 不可用，不会报告 0。
+诊断某次卡顿时，可以设置 `trackBuilds`、`trackUserBuilds`、`trackLayouts` 和
+`trackPaints`，采集 Flutter 与 DevTools 对应的真实 Widget/RenderObject 时间线区间。
+这些开关默认关闭，因为额外插桩会改变耗时；采集结束后 Cockpit 会恢复进入采集前的全局状态。
 
 完整的有界报告会写入
 `IntegrationTestWidgetsFlutterBinding.reportData` 的
@@ -185,8 +189,10 @@ expect(report.summary.jankCount, 0);
 明确输出 `dropped` 数量；出现丢弃时汇总只描述保留样本。没有帧的阶段会省略耗时聚合，
 不会伪造 0；当原始引擎时间戳不足以建立严格递增帧率时会省略 `fps`。帧预算优先
 取 Flutter 暴露的目标屏幕刷新率，否则记录精确四舍五入后的 60Hz fallback（16,667µs）。缺失或
-unavailable 的指标不能当成 0 处理。报告还会记录 `debug`、`profile` 或 `release` 构建模式；
+unavailable 的指标不能当成 0 处理。HTML 只有在 VM 事件参数提供文件、URL、符号或行号时才展示代码证据；单独的帧耗时无法识别 Dart 代码，因此不会猜测来源。报告还会记录 `debug`、`profile` 或 `release` 构建模式；
 debug 数据仅用于诊断，不能当作发布性能证据。
+
+报告还提供 **Operation hotspots**，按真实 VM event 的 category 和名称聚合事件数、有时长事件数、总耗时、p90 和最长区间，先回答“到底是哪类具体操作慢”，再决定是否打开原始时间线。源码列只在对应事件参数实际带有位置时显示，不会从帧耗时推断文件。`fullJson()` 会在每个 capture 下的 `analysis` 字段保留这份有界聚合，同时完整保留原始 events。
 
 每次 `cockpitTestWidgets` 运行还会在紧凑的 `cockpit.startup` 条目和 HTML 报告中记录冷
 启动阶段：应用构建/挂载、首个 pumped frame，以及初始可用时间。计时从 app builder 之前
@@ -212,10 +218,58 @@ final htmlPath = await cockpit.exportPerformanceHtml(
 // 将 htmlPath 交给人工或 CI artifact 收集器。
 ```
 
+如果需要机器读取的产物，可以使用 `performanceJson()` 或
+`exportPerformanceJson()`。它会导出当前测试已经完成的所有采集，是完整规范
+报告包，不是紧凑的 `integration_test` 结果：
+
+```dart
+final jsonPath = await cockpit.exportPerformanceJson(
+  title: 'Task flow performance',
+  // path: 'build/reports/task-flow.json', // 可选
+);
+```
+
+两个导出 API 都会保留所有 retained 帧、VM 事件及参数、内存样本、启动里程碑和明确
+的 retention/drop 计数。终端和普通测试结果继续保持紧凑；导出保留完整的已记录细节。
+唯一的限制是采集时设置的 `maxEvents`、帧保留上限和内存采样上限，
+这些限制以及丢弃数量都会写入导出文件。
+
 不传 `path` 时会在 `build/cockpit/performance/` 下生成唯一文件。自定义宿主可以使用
 `CockpitPerformanceHtml.render(report)` 或
-`CockpitPerformanceHtml.renderMany(reports)` 直接得到 HTML 字符串，不访问文件系统。
-JSON 仍是机器读取的规范输出，HTML 是给人查看的完整视图。
+`CockpitPerformanceHtml.renderMany(reports)` 直接得到 HTML 字符串，不访问文件系统；
+`CockpitPerformanceHtml.fullJson(reports)` 返回同一份完整规范 JSON。JSON 是机器读取的
+规范导出，HTML 是给人查看的完整视图。
+HTML 还提供相对时间 hover 图表、jank 分布、帧节奏、Raster cache 趋势、VM 分类耗时、Operation hotspots、卡顿/阻塞证据表、分开的 memory/cache/GC 视图，以及在存在持续区间时展示的 VM duration 火焰时间视图；没有区间时不会伪造调用栈。
+传入启动数据时还会绘制 app build、首帧和 ready 三个冷启动里程碑。
+
+报告还包含 **DevTools coverage** 面板，明确标记本次采集真正拥有的数据：
+FrameTiming、Raster cache、VM timeline、GC、进程 RSS 和 harness 冷启动里程碑只有在
+报告实际包含时才会显示为可用。CPU sampling、heap snapshot、allocation tracing 等
+未采集能力会明确标记为“未采集”，不会伪造 0 或虚构调用栈。网络请求请使用 Cockpit
+的 network evidence；GPU/shader 计数不在该采集器范围内。顶部的 **Download
+timeline** 会导出保留的 VM 事件为 Chrome trace 兼容的 `traceEvents` JSON 文件，
+完整的 FrameTiming 和 memory 数据仍保留在报告 JSON 与 HTML 图表中。宿主侧也可以用
+`CockpitPerformanceHtml.timelineJson(report)` 生成同样的时间线文件。
+紧凑事件没有保留 async/flow 所需的关联 ID，因此这类阶段会安全降级为独立的瞬时或
+持续事件，确保导出的 trace 可以被导入。
+
+它与 VS Code/DevTools 的对应关系如下：
+
+| DevTools/VS Code 视图 | Cockpit 采集结果 | 查看位置 |
+| --- | --- | --- |
+| Performance 时间线与帧图 | FrameTiming、jank、帧节奏、VM 事件 | HTML 报告与 report JSON |
+| 慢帧归因 | 重叠的 retained VM 区间，以及仅由证据提供的源码标签 | Jank & stalls 面板 |
+| Raster cache | Layer/picture cache 数量和字节数 | Cache 图表与帧明细 |
+| Memory 与 GC | 原生 RSS 样本和 VM GC 事件 | Memory、Cache/GC 图表 |
+| CPU profiler、Memory heap/allocation、GPU/shader | 此确定性 API 不采集 | 使用官方 DevTools 对应视图 |
+| Network profiler | 独立的 Cockpit network evidence | `cockpit dev network` 产物 |
+
+导出的 trace 是可导入 Chrome/DevTools 时间线的 VM 事件真实投影，不会凭空补齐
+CPU 调用栈、GPU 计数、线程身份或源码位置。
+
+普通测试输出会保持紧凑；导出不会。HTML 和 JSON 下载会保留所有 retained 帧、VM
+事件、事件参数、内存样本、启动里程碑和明确的丢弃计数。`maxEvents`、帧保留上限和
+内存采样上限是唯一的有界限制，所有丢弃信息都会出现在导出结果中。
 
 ## 运行
 

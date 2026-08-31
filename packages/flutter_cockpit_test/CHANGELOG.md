@@ -1,5 +1,36 @@
 # Changelog
 
+## 4.0.50
+
+- Added a self-contained offline performance report with an embedded Cockpit
+  SVG mark, relative timestamps, aligned comparison tables, and hover details.
+- Added jank distribution, frame cadence, raster-cache trend, VM category cost,
+  cold-start, memory, cache/GC, duration-based flame, and source-evidence views.
+- Added configurable VM-event retention with `maxEvents`; RSS sampling remains
+  configurable with `sampleEvery` and missing source evidence is never guessed.
+- Added a DevTools coverage panel and Chrome trace-compatible timeline export;
+  host drivers can call `CockpitPerformanceHtml.timelineJson(report)`.
+- Added a jank/stall evidence panel that correlates slow frames with overlapping
+  retained VM spans and shows source locations only when supplied by the VM.
+- The coverage panel explicitly marks network, GPU/shader, CPU sampling, heap,
+  and allocation profilers as not collected when this deterministic capture does
+  not provide them.
+- Hardened Chrome trace export by pairing valid VM `B/E` spans and lowering
+  unmatched markers; unavailable cache, GC, and phase values stay unavailable
+  in the HTML viewer instead of appearing as zero.
+- Added complete canonical JSON export through `performanceJson()`,
+  `exportPerformanceJson()`, and `CockpitPerformanceHtml.fullJson(...)`; the
+  HTML full-download now includes every capture in the report bundle.
+- Added opt-in DevTools-equivalent `trackBuilds`, `trackUserBuilds`,
+  `trackLayouts`, and `trackPaints` instrumentation for real per-widget and
+  per-render-object timeline spans, with automatic restoration of prior flags.
+- Added an evidence-only Operation hotspots analysis and chart, aggregating
+  retained VM operations by category/name with count, p90, total, longest span,
+  and optional source locations; the bounded projection is included in full JSON.
+- Avoided treating an absent local VM Service as a test failure: profiling still
+  runs the action and records `unavailable:vm` when official timeline capture is
+  not reachable.
+
 ## 4.0.49
 
 - Added bounded native process RSS sampling, total-frame percentiles, memory

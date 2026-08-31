@@ -805,6 +805,10 @@ including vsync and raster-finish wall-time timestamps, and, on native targets,
 the official integration-test VM timeline/GC streams plus bounded process RSS
 samples. The report includes build/raster/vsync/total phase percentiles,
 cache peaks, jank, memory start/end/peak/delta, and explicit retention drops.
+Tune collection only when it changes the decision: `sampleEvery` controls native
+RSS frequency, `streams` and `timeline` select VM tracing, `memory` disables RSS,
+and `maxEvents` bounds retained VM events. Keep the defaults for normal captures;
+use a shorter interval or narrower streams only for a targeted investigation.
 The complete bounded report is stored in
 `IntegrationTestWidgetsFlutterBinding.reportData` under
 `cockpit.performance.NAME`; normal Cockpit output stays compact. `dropped`
@@ -815,7 +819,19 @@ Web reports VM timeline as `unavailable:web`. Treat missing metrics as
 unavailable, never as zero. Reports include the Flutter build mode; debug
 timings are diagnostic only, while profile/release timings are suitable for
 performance decisions. Use the report artifact path for
-large timeline inspection instead of printing frame/event arrays.
+large timeline inspection instead of printing frame/event arrays. The standalone
+HTML viewer uses relative capture time, hover details, frame-budget, jank,
+cadence, raster-cache trend, VM category cost, operation hotspots, startup milestones,
+memory, cache/GC, and duration-based VM flame charts, plus a code-evidence table
+populated only from source locations explicitly provided by VM event arguments;
+it never guesses a Dart file or CPU call stack from frame timing.
+The HTML report also has a DevTools coverage panel. It marks FrameTiming, raster
+cache, VM timeline, GC, process RSS, and cold-start milestones available only
+when verified data is retained; CPU sampling, heap snapshots, allocation
+tracing, network profiling, and GPU/shader counters are explicitly not
+collected. Use Cockpit network evidence for HTTP/SSE/WebSocket traffic. Its
+`Download timeline` button exports retained VM events as Chrome trace-compatible `traceEvents` JSON. FrameTiming
+and memory values remain in the canonical report and their dedicated charts.
 
 Validate documents before running them. During local development, run the same
 validated file directly; use the indexed identity when the document is a durable

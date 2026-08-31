@@ -193,8 +193,13 @@ The collector listens to Flutter's original `FrameTiming` stream and records
 raw vsync and raster-finish wall-time timestamps, build/raster/vsync/total
 durations, cache peaks, jank budget, percentiles, and valid frame timestamps.
 Native targets additionally use the official
-integration-test VM timeline for bounded events and GC counts. Web reports the
-VM timeline as `unavailable:web`; it never substitutes a fake value. The
+integration-test VM timeline for bounded events and GC counts. Use
+`sampleEvery` for native RSS frequency, `streams` and `timeline` to select VM
+tracing, `memory: false` to disable RSS, and `maxEvents` to cap retained VM
+events. Web reports the VM timeline as `unavailable:web`; it never substitutes a
+fake value. A local `flutter test` process without a VM Service URI still runs
+the action and records `unavailable:vm`; `flutter drive` and native
+instrumentation keep the official VM timeline. The
 complete report is under `cockpit.performance.<name>` in
 `IntegrationTestWidgetsFlutterBinding.reportData`, while the normal Cockpit
 result keeps only summary metrics. `dropped` is explicit when a retention
@@ -203,7 +208,38 @@ phases omit duration aggregates rather than reporting a fabricated zero, and
 `fps` is omitted unless the original timestamps establish a strictly increasing
 cadence. Never interpret omitted or unavailable metrics as zero.
 Reports include the Flutter build mode; debug timings are diagnostic only, while
-profile and release timings are suitable for performance decisions.
+profile and release timings are suitable for performance decisions. The
+standalone HTML report converts engine timestamps to relative capture time,
+exposes hover details for every chart, includes jank/cadence/raster-cache,
+startup milestones, memory/cache/GC, VM category cost, Operation hotspots, and
+duration-based flame views, and shows source evidence only when a VM event
+argument contains a file, URL, symbol, or line. Operation hotspots aggregate
+actual VM event category/name pairs into count, timed count, total duration, p90,
+and longest span; the source column stays evidence-only. It never guesses a
+code location or CPU call stack from a frame timing.
+For a targeted diagnostic capture, set `trackBuilds`, `trackUserBuilds`,
+`trackLayouts`, or `trackPaints` to enable Flutter's real per-widget or
+per-render-object timeline spans. These DevTools-equivalent switches are off by
+default because instrumentation changes timings, and Cockpit restores their
+previous global values after the capture.
+Use `cockpit.performanceJson()` for the complete canonical JSON bundle or
+`cockpit.exportPerformanceJson()` to write it to an artifact path. These export
+APIs retain every completed capture and all retained frames, VM events and
+arguments, memory samples, startup milestones, explicit drop counts, and the
+bounded `analysis.hotspots` projection; they
+are intentionally more detailed than the compact integration-test result.
+The HTML viewer also includes a DevTools coverage panel: FrameTiming, raster
+cache, VM timeline, GC, process RSS, and cold-start milestones are marked
+available only when the capture contains verified data. CPU sampling, heap
+snapshots, allocation tracing, network profiling, and GPU/shader counters remain
+explicitly not collected; use Cockpit network evidence for HTTP/SSE/WebSocket
+traffic. Its
+`Download timeline` action exports retained VM events as Chrome trace-compatible
+`traceEvents` JSON; FrameTiming and memory measurements remain in the canonical
+report and their dedicated charts. Host drivers can generate the same timeline
+with `CockpitPerformanceHtml.timelineJson(report)`. Compact events omit async /
+flow IDs, so those phases are lowered to self-contained instant or duration
+events to keep the exported trace importable.
 
 ## Timeouts and waiting
 

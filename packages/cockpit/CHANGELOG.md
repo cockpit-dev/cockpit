@@ -1,5 +1,10 @@
 # Changelog
 
+## 4.0.50
+
+- Synchronized the Cockpit CLI with the current protocol and Flutter bridge
+  release.
+
 ## 4.0.49
 
 - Corrected failed and timed-out step reports to preserve each node's effective

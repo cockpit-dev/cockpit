@@ -78,9 +78,12 @@ void main() {
       }
       if (kIsWeb) {
         expect(report.timelineSource, 'unavailable:web');
-      } else {
+      } else if (report.timelineSource == 'vm') {
         expect(report.timelineSource, 'vm');
         expect(report.events, isNotEmpty);
+      } else {
+        expect(report.timelineSource, 'unavailable:vm');
+        expect(report.events, isEmpty);
       }
 
       final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();

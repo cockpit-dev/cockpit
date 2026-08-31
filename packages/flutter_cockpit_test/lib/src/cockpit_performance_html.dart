@@ -26,6 +26,38 @@ final class CockpitPerformanceHtml {
     startup: startup,
   );
 
+  /// Encodes the retained VM timeline as a Chrome trace-compatible JSON file.
+  ///
+  /// The trace contains only events actually retained by the collector. Frame
+  /// timing aggregates remain in [CockpitPerformanceReport.toJson] and the
+  /// HTML charts; they are not represented as synthetic VM samples here.
+  /// Compact events do not retain async/flow IDs, so those phases are lowered
+  /// to self-contained instant or duration events for safe importing.
+  static String timelineJson(CockpitPerformanceReport report) =>
+      jsonEncode(_timelinePayload(report));
+
+  /// Encodes the complete canonical report bundle as JSON.
+  ///
+  /// Unlike the compact integration-test result, this payload keeps every
+  /// retained frame, VM event and argument, memory sample, startup milestone,
+  /// and explicit retention/drop count for every capture. It is the
+  /// machine-readable export that pairs with [renderMany].
+  static String fullJson(
+    Iterable<CockpitPerformanceReport> source, {
+    String title = 'Cockpit performance',
+    CockpitStartupReport? startup,
+  }) {
+    final reports = source.toList(growable: false);
+    if (reports.isEmpty) {
+      throw ArgumentError.value(source, 'source', 'Must not be empty.');
+    }
+    final normalizedTitle = title.trim();
+    if (normalizedTitle.isEmpty) {
+      throw ArgumentError.value(title, 'title', 'Must not be blank.');
+    }
+    return jsonEncode(_reportPayload(reports, normalizedTitle, startup));
+  }
+
   /// Renders several captures into one report with a capture switcher.
   ///
   /// Keeping related captures in one file makes before/after and multi-step
@@ -45,22 +77,184 @@ final class CockpitPerformanceHtml {
       throw ArgumentError.value(title, 'title', 'Must not be blank.');
     }
 
-    final payload = <String, Object?>{
-      'title': normalizedTitle,
-      if (startup != null) 'startup': startup.toJson(),
-      'reports': <Object?>[
-        for (var index = 0; index < reports.length; index += 1)
-          <String, Object?>{
-            'id': 'p$index',
-            'label': reports[index].stepId?.trim().isNotEmpty == true
-                ? reports[index].stepId
-                : 'Capture ${index + 1}',
-            'report': reports[index].toJson(),
-          },
-      ],
-    };
+    final payload = _reportPayload(reports, normalizedTitle, startup);
     return _document(normalizedTitle, _scriptJson(payload));
   }
+}
+
+Map<String, Object?> _reportPayload(
+  List<CockpitPerformanceReport> reports,
+  String title,
+  CockpitStartupReport? startup,
+) => <String, Object?>{
+  'title': title,
+  if (startup != null) 'startup': startup.toJson(),
+  'reports': <Object?>[
+    for (var index = 0; index < reports.length; index += 1)
+      <String, Object?>{
+        'id': 'p$index',
+        'label': reports[index].stepId?.trim().isNotEmpty == true
+            ? reports[index].stepId
+            : 'Capture ${index + 1}',
+        'report': reports[index].toJson(),
+        'analysis': _performanceAnalysisPayload(reports[index]),
+      },
+  ],
+};
+
+Map<String, Object?> _performanceAnalysisPayload(
+  CockpitPerformanceReport report,
+) {
+  final grouped = <String, _PerformanceHotspotAccumulator>{};
+  for (final event in report.events) {
+    final key = '${event.category}\u0000${event.name}';
+    final hotspot = grouped.putIfAbsent(
+      key,
+      () => _PerformanceHotspotAccumulator(
+        category: event.category,
+        name: event.name,
+      ),
+    );
+    hotspot.count += 1;
+    if (event.durationUs > 0) {
+      hotspot.totalUs += event.durationUs;
+      hotspot.durationsUs.add(event.durationUs);
+      if (event.durationUs > hotspot.maxUs) {
+        hotspot.maxUs = event.durationUs;
+      }
+    }
+  }
+  final hotspots = grouped.values.toList(growable: false)
+    ..sort((left, right) {
+      final total = right.totalUs.compareTo(left.totalUs);
+      if (total != 0) return total;
+      final longest = right.maxUs.compareTo(left.maxUs);
+      if (longest != 0) return longest;
+      return right.count.compareTo(left.count);
+    });
+  return <String, Object?>{
+    'hotspots': <Object?>[
+      for (final hotspot in hotspots.take(100)) hotspot.toJson(),
+    ],
+  };
+}
+
+final class _PerformanceHotspotAccumulator {
+  _PerformanceHotspotAccumulator({required this.category, required this.name});
+
+  final String category;
+  final String name;
+  var count = 0;
+  var totalUs = 0;
+  var maxUs = 0;
+  final durationsUs = <int>[];
+
+  int get p90Us {
+    if (durationsUs.isEmpty) return 0;
+    final sorted = List<int>.of(durationsUs)..sort();
+    final index = ((sorted.length * 0.9).ceil() - 1).clamp(
+      0,
+      sorted.length - 1,
+    );
+    return sorted[index];
+  }
+
+  Map<String, Object?> toJson() => <String, Object?>{
+    'c': category,
+    'n': name,
+    'count': count,
+    'timed': durationsUs.length,
+    if (totalUs > 0) 'total': totalUs,
+    if (p90Us > 0) 'p90': p90Us,
+    if (maxUs > 0) 'max': maxUs,
+  };
+}
+
+Map<String, Object?> _timelinePayload(CockpitPerformanceReport report) {
+  final traceEvents = <Map<String, Object?>>[];
+  final openSpans = <String, List<CockpitPerformanceEvent>>{};
+  for (final event in report.events) {
+    final phase = event.phase;
+    if (phase == 'B' && event.durationUs == 0) {
+      (openSpans[_spanKey(event)] ??= <CockpitPerformanceEvent>[]).add(event);
+      continue;
+    }
+    if (phase == 'E' && event.durationUs == 0) {
+      final stack = openSpans[_spanKey(event)];
+      if (stack != null && stack.isNotEmpty) {
+        final begin = stack.removeLast();
+        if (stack.isEmpty) openSpans.remove(_spanKey(event));
+        final duration = event.timestampUs - begin.timestampUs;
+        if (duration >= 0) {
+          traceEvents.add(
+            _traceEvent(
+              begin,
+              phase: 'X',
+              durationUs: duration,
+              args: begin.args.isNotEmpty ? begin.args : event.args,
+            ),
+          );
+          continue;
+        }
+      }
+      // An unmatched or out-of-order end marker cannot be imported as an
+      // end event without a corresponding begin marker. Keep the evidence as
+      // an instant event instead of emitting a malformed trace.
+      traceEvents.add(_traceEvent(event, phase: 'i'));
+      continue;
+    }
+    traceEvents.add(_traceEvent(event, phase: _tracePhase(event)));
+  }
+
+  // Keep unmatched begins observable, but lower them to instants so the
+  // exported trace is always self-contained and importable.
+  for (final stack in openSpans.values) {
+    for (final event in stack) {
+      traceEvents.add(_traceEvent(event, phase: 'i'));
+    }
+  }
+  traceEvents.sort((left, right) {
+    final leftTime = (left['ts'] as num).toInt();
+    final rightTime = (right['ts'] as num).toInt();
+    return leftTime.compareTo(rightTime);
+  });
+  return <String, Object?>{'traceEvents': traceEvents};
+}
+
+String _spanKey(CockpitPerformanceEvent event) =>
+    '${event.category}\u0000${event.name}';
+
+Map<String, Object?> _traceEvent(
+  CockpitPerformanceEvent event, {
+  required String phase,
+  int? durationUs,
+  Map<String, Object?>? args,
+}) {
+  final effectiveDuration = durationUs ?? event.durationUs;
+  return <String, Object?>{
+    'name': event.name,
+    'cat': event.category,
+    'ph': phase,
+    'ts': event.timestampUs,
+    'pid': 1,
+    // The compact event model does not retain VM thread identity. Keep one
+    // stable lane instead of presenting categories as fake OS threads.
+    'tid': 1,
+    'args': args ?? event.args,
+    if (phase == 'X' && effectiveDuration > 0) 'dur': effectiveDuration,
+  };
+}
+
+String _tracePhase(CockpitPerformanceEvent event) {
+  final phase = event.phase;
+  if ((phase == 'B' || phase == 'E') && event.durationUs > 0) return 'X';
+  if (phase == 'X' && event.durationUs <= 0) return 'i';
+  // Async and flow phases need an event id that the compact report does not
+  // retain. Downgrade those phases to a self-contained instant/span instead
+  // of emitting a trace that a DevTools importer cannot correlate.
+  const supported = <String>{'B', 'E', 'X', 'I', 'i', 'C'};
+  if (phase != null && supported.contains(phase)) return phase;
+  return event.durationUs > 0 ? 'X' : 'i';
 }
 
 String _document(String title, String payload) {
@@ -142,7 +336,8 @@ a { color: var(--accent); text-underline-offset: 3px; }
 }
 .topbar-inner { display: flex; align-items: center; justify-content: space-between; gap: 20px; min-height: 64px; }
 .brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
-.brand-mark { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 9px; background: var(--accent); color: #08251c; font-weight: 850; letter-spacing: -.06em; }
+.brand-mark { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 9px; overflow: hidden; background: var(--surface-3); color: var(--text); }
+.brand-mark svg { display: block; width: 100%; height: 100%; }
 .brand-copy { min-width: 0; }
 .brand-copy strong, .brand-copy span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .brand-copy strong { font-size: 13px; }
@@ -209,6 +404,12 @@ input[type="search"] { width: 100%; }
 .insight-grid .panel { margin-top: 0; }
 .chart-wrap { position: relative; height: 310px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); overflow: hidden; }
 .chart-wrap canvas { display: block; width: 100%; height: 100%; }
+.chart-wrap canvas:hover { cursor: crosshair; }
+.chart-tooltip { position: fixed; z-index: 20; max-width: min(360px, calc(100vw - 24px)); padding: 9px 11px; border: 1px solid var(--line-strong); border-radius: 9px; background: color-mix(in srgb, var(--surface) 96%, transparent); color: var(--text-soft); box-shadow: var(--shadow); font-size: 11px; line-height: 1.45; pointer-events: none; opacity: 0; transform: translate(12px, 12px); transition: opacity 100ms ease; }
+.chart-tooltip.visible { opacity: 1; }
+.chart-tooltip strong { color: var(--text); font-size: 12px; }
+.chart-tooltip .tooltip-row { display: flex; justify-content: space-between; gap: 16px; }
+.chart-tooltip .tooltip-row span:last-child { color: var(--text); font-family: var(--mono); text-align: right; }
 .chart-legend { display: flex; flex-wrap: wrap; gap: 8px 14px; margin-top: 11px; color: var(--muted); font-size: 11px; }
 .legend-item { display: inline-flex; align-items: center; gap: 6px; }
 .legend-swatch { width: 9px; height: 9px; border-radius: 3px; }
@@ -234,12 +435,17 @@ input[type="search"] { width: 100%; }
 .category-row > span:last-child { color: var(--muted); text-align: right; }
 .table-wrap { overflow: auto; border: 1px solid var(--line); border-radius: 10px; }
 table { width: 100%; min-width: 760px; border-collapse: collapse; }
-th, td { padding: 10px 12px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+th, td { padding: 10px 12px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: middle; }
 th { position: sticky; top: 0; z-index: 1; background: var(--surface-3); color: var(--text-soft); font-size: 10px; font-weight: 750; letter-spacing: .04em; text-transform: uppercase; }
 tbody tr:last-child td { border-bottom: 0; }
 tbody tr:hover td { background: color-mix(in srgb, var(--accent-soft) 35%, var(--surface)); }
 td { color: var(--text-soft); font-size: 12px; }
 .comparison-table { min-width: 900px; }
+.comparison-table th:not(:first-child), .comparison-table td:not(:first-child) { text-align: right; }
+.comparison-table th:first-child, .comparison-table td:first-child { text-align: left; }
+.comparison-table td { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.comparison-table td:first-child { white-space: normal; }
+.comparison-table .quiet-button { min-height: 34px; padding: 6px 12px; white-space: nowrap; }
 .comparison-table tbody tr.current td { background: var(--accent-soft); }
 td code { color: var(--text); }
 .subtle { color: var(--muted); }
@@ -266,17 +472,51 @@ details[open] summary::after { content: "−"; }
 .detail-cell strong { margin-top: 3px; font-size: 13px; overflow-wrap: anywhere; }
 .json-view { max-height: 330px; overflow: auto; margin: 0; padding: 14px; border-radius: 10px; background: #091015; color: #d4e4de; font: 11px/1.55 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; }
 :root[data-theme="light"] .json-view { background: #15221f; color: #e4f1ec; }
+.resource-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.resource-grid .panel { margin-top: 0; }
+.analysis-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 15px; }
+.analysis-grid .panel { margin-top: 0; }
+.analysis-grid .wide { grid-column: 1 / -1; }
+.startup-panel { margin-top: 15px; }
+.coverage-panel { margin-top: 15px; }
+.coverage-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 9px; }
+.coverage-card { min-width: 0; padding: 12px 13px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); }
+.coverage-card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+.coverage-card strong { min-width: 0; color: var(--text); font-size: 12px; line-height: 1.3; overflow-wrap: anywhere; }
+.coverage-card p { margin: 7px 0 0; color: var(--muted); font-size: 11px; line-height: 1.4; }
+.coverage-state { flex: none; padding: 3px 6px; border-radius: 999px; font-size: 9px; font-weight: 750; letter-spacing: .02em; text-transform: uppercase; }
+.coverage-state.available { color: var(--accent); background: var(--accent-soft); }
+.coverage-state.unavailable { color: var(--warning); background: var(--warning-soft); }
+.coverage-state.not-collected { color: var(--muted); background: var(--surface-3); }
+.jank-grid { margin-top: 15px; }
+.jank-grid .panel { margin-top: 0; }
+.stall-panel { margin-top: 15px; }
+.stall-summary { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.stall-pill { padding: 8px 10px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface-2); color: var(--text-soft); font-size: 11px; }
+.stall-pill strong { color: var(--text); font-size: 14px; }
+.stall-table { min-width: 900px; }
+.stall-table td:first-child { white-space: nowrap; }
+.stall-table td:nth-child(2), .stall-table td:nth-child(3) { white-space: nowrap; }
+.stall-evidence { display: grid; gap: 3px; }
+.stall-evidence code { color: var(--text); }
+.stall-evidence span { color: var(--muted); font-size: 10px; }
+.hotspot-table { min-width: 980px; }
+.hotspot-table td:first-child, .hotspot-table td:nth-child(2) { white-space: nowrap; }
+.hotspot-name { display: grid; gap: 2px; }
+.hotspot-name strong { color: var(--text); }
+.hotspot-source { max-width: 290px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .footer { margin-top: 23px; padding-top: 14px; border-top: 1px solid var(--line); color: var(--muted); font-size: 11px; }
 .hidden { display: none !important; }
 @media (max-width: 1120px) {
   .metric-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-  .hero-grid, .chart-grid, .insight-grid { grid-template-columns: 1fr; }
+  .hero-grid, .chart-grid, .insight-grid, .resource-grid, .analysis-grid { grid-template-columns: 1fr; }
   .health { min-height: 200px; }
 }
 @media (max-width: 700px) {
   .shell { padding-left: 16px; padding-right: 16px; }
-  .topbar-inner { min-height: 58px; }
+  .topbar-inner { min-height: 58px; flex-wrap: wrap; padding-top: 8px; padding-bottom: 8px; }
   .brand-copy span { display: none; }
+  .top-actions { margin-left: auto; flex-wrap: wrap; justify-content: flex-end; }
   .hero { padding-top: 24px; }
   h1 { font-size: 32px; }
   .metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -286,7 +526,20 @@ details[open] summary::after { content: "−"; }
   .control { min-width: 0; }
   .panel { padding: 14px; border-radius: 11px; }
   .chart-wrap { height: 250px; }
-  .event-summary, .detail-grid, .resource-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .event-summary, .detail-grid, .resource-summary, .coverage-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .event-summary > :last-child:nth-child(odd),
+  .detail-grid > :last-child:nth-child(odd),
+  .resource-summary > :last-child:nth-child(odd),
+  .coverage-grid > :last-child:nth-child(odd) { grid-column: 1 / -1; }
+  .chart-tooltip { max-width: calc(100vw - 20px); }
+  .analysis-grid .wide { grid-column: auto; }
+}
+@media (max-width: 420px) {
+  .event-summary, .detail-grid, .resource-summary, .coverage-grid { grid-template-columns: 1fr; }
+  .event-summary > :last-child:nth-child(odd),
+  .detail-grid > :last-child:nth-child(odd),
+  .resource-summary > :last-child:nth-child(odd),
+  .coverage-grid > :last-child:nth-child(odd) { grid-column: auto; }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; }
@@ -301,8 +554,8 @@ details[open] summary::after { content: "−"; }
 </head>
 <body>
 <header class="topbar"><div class="shell topbar-inner">
-  <div class="brand"><span class="brand-mark" aria-hidden="true">C</span><div class="brand-copy"><strong>Cockpit performance</strong><span>Offline report · exact retained data</span></div></div>
-  <div class="top-actions"><button class="icon-button" id="theme-button" type="button" title="Toggle theme" aria-label="Toggle theme">☼</button><button class="quiet-button" id="download-button" type="button">Download JSON</button></div>
+  <div class="brand"><span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 1024 1024" focusable="false"><rect width="1024" height="1024" rx="192" fill="#111418"/><path d="M704 254A318 318 0 1 0 704 770" fill="none" stroke="#F4F7F9" stroke-linecap="round" stroke-width="104"/><rect x="512" y="480" width="276" height="64" rx="32" fill="#38D49B"/><circle cx="512" cy="512" r="76" fill="#38D49B"/><path d="M473 512L501 540L556 480" fill="none" stroke="#111418" stroke-linecap="round" stroke-linejoin="round" stroke-width="28"/><circle cx="788" cy="512" r="42" fill="#F6B94A"/></svg></span><div class="brand-copy"><strong>Cockpit performance</strong><span>Offline report · exact retained data</span></div></div>
+  <div class="top-actions"><button class="icon-button" id="theme-button" type="button" title="Toggle theme" aria-label="Toggle theme">☼</button><button class="quiet-button" id="download-button" type="button">Download full JSON</button><button class="quiet-button" id="timeline-button" type="button">Download timeline</button></div>
 </div></header>
 <div class="shell">
   <section class="hero">
@@ -312,24 +565,40 @@ details[open] summary::after { content: "−"; }
     </div>
     <div class="metric-grid" id="metric-grid"></div>
     <div class="startup-strip" id="startup-strip"></div>
+    <section class="panel startup-panel hidden" id="startup-panel"><div class="panel-head"><div><h2>Cold-start milestones</h2><p>Ordered harness measurements from app build to first frame and initial ready state.</p></div></div><div class="chart-wrap" style="height:180px"><canvas id="startup-chart" aria-label="Cold start milestone chart"></canvas></div></section>
   </section>
   <main class="workspace">
     <div class="toolbar"><div class="control"><label for="report-select">Capture</label><select id="report-select"></select></div><div class="toolbar-actions"><button class="quiet-button" id="copy-button" type="button">Copy report JSON</button><button class="quiet-button" id="raw-button" type="button">Show raw JSON</button></div></div>
+    <section class="panel coverage-panel"><div class="panel-head"><div><h2>DevTools coverage</h2><p>What this deterministic capture can prove, and which DevTools profilers are intentionally not collected.</p></div><span class="subtle" id="coverage-summary">—</span></div><div class="coverage-grid" id="coverage-grid"></div></section>
     <section class="chart-grid">
       <div class="panel"><div class="panel-head"><div><h2>Frame pacing</h2><p>Total frame span against the display budget. Jank is marked in place.</p></div><span class="subtle" id="frame-range">—</span></div><div class="chart-wrap"><canvas id="frame-chart" aria-label="Frame pacing chart"></canvas></div><div class="chart-legend"><span class="legend-item"><i class="legend-swatch total"></i>Total</span><span class="legend-item"><i class="legend-swatch build"></i>Build</span><span class="legend-item"><i class="legend-swatch raster"></i>Raster</span><span class="legend-item"><i class="legend-swatch budget"></i>Budget</span></div></div>
       <div class="panel"><div class="panel-head"><div><h2>VM timeline</h2><p>Retained event volume and category mix.</p></div></div><div class="event-summary" id="event-summary"></div><div class="chart-wrap" style="height:160px;margin-top:14px"><canvas id="event-chart" aria-label="VM timeline chart"></canvas></div><div class="category-list" id="category-list"></div></div>
     </section>
+    <section class="panel stall-panel"><div class="panel-head"><div><h2>Jank &amp; stalls</h2><p>Only retained timeline events that overlap a slow frame are shown; no source or cause is guessed.</p></div><span class="subtle" id="stall-note">—</span></div><div class="stall-summary" id="stall-summary"></div><div class="table-wrap"><table class="stall-table"><thead><tr><th>Frame</th><th>Over budget</th><th>Frame total</th><th>Observed evidence</th><th>Source</th></tr></thead><tbody id="stall-body"></tbody></table></div></section>
     <section class="insight-grid">
       <div class="panel"><div class="panel-head"><div><h2>Phase latency</h2><p>Percentiles make long-tail build and raster pressure visible.</p></div></div><div class="chart-wrap" style="height:250px"><canvas id="phase-chart" aria-label="Frame phase latency chart"></canvas></div><div class="chart-legend"><span class="legend-item"><i class="legend-swatch total"></i>p50</span><span class="legend-item"><i class="legend-swatch build"></i>p90</span><span class="legend-item"><i class="legend-swatch raster"></i>p99</span><span class="legend-item"><i class="legend-swatch budget"></i>max</span></div></div>
-      <div class="panel"><div class="panel-head"><div><h2>Memory, cache and GC</h2><p>Process RSS trend beside Flutter cache peaks and collector activity.</p></div></div><div class="chart-wrap" style="height:250px"><canvas id="resource-chart" aria-label="Memory, cache and garbage collection chart"></canvas></div><div class="resource-summary" id="resource-summary"></div></div>
+      <div class="panel"><div class="panel-head"><div><h2>Jank distribution</h2><p>Frames grouped by how far they exceed the display budget.</p></div></div><div class="chart-wrap" style="height:250px"><canvas id="jank-chart" aria-label="Frame budget distribution chart"></canvas></div><div class="resource-summary" id="jank-summary"></div></div>
     </section>
+    <section class="resource-grid insight-grid">
+      <div class="panel"><div class="panel-head"><div><h2>Memory trend</h2><p>Resident process memory and the platform-reported process peak over capture time.</p></div></div><div class="chart-wrap" style="height:250px"><canvas id="resource-chart" aria-label="Process memory trend chart"></canvas></div><div class="resource-summary" id="resource-summary"></div></div>
+      <div class="panel"><div class="panel-head"><div><h2>Cache &amp; GC pressure</h2><p>Flutter layer and picture cache peaks beside retained garbage collection activity.</p></div></div><div class="chart-wrap" style="height:250px"><canvas id="cache-chart" aria-label="Cache and garbage collection chart"></canvas></div><div class="resource-summary" id="cache-summary"></div></div>
+    </section>
+    <section class="analysis-grid insight-grid">
+      <div class="panel"><div class="panel-head"><div><h2>Frame cadence</h2><p>Actual time between engine frame timestamps. Spikes expose refresh jitter even when frame work is short.</p></div></div><div class="chart-wrap" style="height:250px"><canvas id="cadence-chart" aria-label="Frame cadence chart"></canvas></div></div>
+      <div class="panel"><div class="panel-head"><div><h2>Raster cache trend</h2><p>Layer and picture cache counts across retained frames, with byte values available on hover.</p></div></div><div class="chart-wrap" style="height:250px"><canvas id="cache-trend-chart" aria-label="Raster cache trend chart"></canvas></div></div>
+      <div class="panel wide"><div class="panel-head"><div><h2>VM category cost</h2><p>Duration and event count grouped by the actual VM timeline category.</p></div></div><div class="chart-wrap" style="height:250px"><canvas id="category-cost-chart" aria-label="VM category duration chart"></canvas></div></div>
+    </section>
+    <section class="panel"><div class="panel-head"><div><h2>Operation hotspots</h2><p>Concrete VM event names ranked by retained duration. Source is shown only when the event arguments provide it.</p></div><span class="subtle" id="hotspot-note">—</span></div><div class="chart-wrap" style="height:300px"><canvas id="hotspot-chart" aria-label="VM operation hotspots chart"></canvas></div><div class="table-wrap"><table class="hotspot-table"><thead><tr><th>Operation</th><th>Category</th><th>Events</th><th>Timed</th><th>Total</th><th>p90</th><th>Longest</th><th>Source evidence</th></tr></thead><tbody id="hotspot-body"></tbody></table></div></section>
+    <section class="panel"><div class="panel-head"><div><h2>Timeline flame view</h2><p>Nested VM spans by real event intervals. This is a timeline view, not an invented CPU call stack.</p></div><span class="subtle" id="flame-range">—</span></div><div class="chart-wrap" style="height:280px"><canvas id="flame-chart" aria-label="Nested VM timeline flame view"></canvas></div></section>
     <section class="panel"><div class="panel-head"><div><h2>Frame explorer</h2><p>Inspect retained engine timings without rendering every sample at once.</p></div><div class="panel-tools"><select id="frame-sort" aria-label="Sort frames"><option value="index">Capture order</option><option value="total">Slowest total</option><option value="build">Slowest build</option><option value="raster">Slowest raster</option></select></div></div><div class="table-wrap"><table><thead><tr><th>#</th><th>Frame</th><th>Total</th><th>Build</th><th>Raster</th><th>Vsync</th><th>Budget</th><th>Cache</th></tr></thead><tbody id="frame-body"></tbody></table></div><div class="pager"><span id="frame-page-label">—</span><div class="pager-actions"><button class="quiet-button" id="frame-prev" type="button">Previous</button><button class="quiet-button" id="frame-next" type="button">Next</button></div></div></section>
     <section class="panel"><div class="panel-head"><div><h2>Capture comparison</h2><p>Compare every capture in this file without switching context.</p></div></div><div class="table-wrap"><table class="comparison-table"><thead><tr><th>Capture</th><th>Frames</th><th>Jank</th><th>FPS</th><th>Total p90</th><th>Total max</th><th>Duration</th><th>RSS peak</th><th>RSS Δ</th></tr></thead><tbody id="comparison-body"></tbody></table></div></section>
-    <section class="panel"><div class="panel-head"><div><h2>Timeline events</h2><p>Search and filter retained VM events. Arguments stay collapsed until needed.</p></div><div class="panel-tools"><div class="control"><label for="event-search">Search</label><input id="event-search" type="search" placeholder="Name or category"></div><select id="event-category" aria-label="Filter event category"><option value="">All categories</option></select></div></div><div class="table-wrap"><table><thead><tr><th>When</th><th>Event</th><th>Category</th><th>Duration</th><th>Phase</th><th>Arguments</th></tr></thead><tbody id="event-body"></tbody></table></div><div class="pager"><span id="event-page-label">—</span><div class="pager-actions"><button class="quiet-button" id="event-prev" type="button">Previous</button><button class="quiet-button" id="event-next" type="button">Next</button></div></div></section>
+    <section class="panel"><div class="panel-head"><div><h2>Timeline events</h2><p>Newest retained VM events first. Search by name, category, or argument key.</p></div><div class="panel-tools"><div class="control"><label for="event-search">Search</label><input id="event-search" type="search" placeholder="Name or category"></div><select id="event-category" aria-label="Filter event category"><option value="">All categories</option></select></div></div><div class="table-wrap"><table><thead><tr><th>When</th><th>Event</th><th>Category</th><th>Duration</th><th>Phase</th><th>Arguments</th></tr></thead><tbody id="event-body"></tbody></table></div><div class="pager"><span id="event-page-label">—</span><div class="pager-actions"><button class="quiet-button" id="event-prev" type="button">Previous</button><button class="quiet-button" id="event-next" type="button">Next</button></div></div></section>
+    <section class="panel"><div class="panel-head"><div><h2>Code evidence</h2><p>Source locations are shown only when the VM timeline provides them; no location is guessed from a frame.</p></div></div><div class="table-wrap"><table><thead><tr><th>Source</th><th>Events</th><th>Total time</th><th>Longest</th><th>Categories</th></tr></thead><tbody id="code-body"></tbody></table></div></section>
     <section class="panel"><div class="panel-head"><div><h2>Capture details</h2><p>Retention boundaries and interpretation context are kept beside the measurements.</p></div></div><div class="detail-grid" id="detail-grid"></div><div id="raw-wrap" class="hidden" style="margin-top:14px"><pre class="json-view" id="raw-json"></pre></div></section>
     <div class="footer">Generated by <strong>Cockpit</strong>. JSON remains the canonical machine-readable payload. This viewer is self-contained and works offline.</div>
   </main>
 </div>
+<div class="chart-tooltip" id="chart-tooltip" role="status" aria-live="polite"></div>
 <script id="cockpit-performance-data" type="application/json">$payload</script>
 <script>
 (function () {
@@ -352,6 +621,8 @@ details[open] summary::after { content: "−"; }
     if (Math.abs(n) < 1000000) return (n / 1000).toFixed(n < 10000 ? 2 : 1) + ' ms';
     return (n / 1000000).toFixed(2) + ' s';
   };
+  var metricUs = function (value) { return value == null ? 'Unavailable' : us(value); };
+  var metricCount = function (value) { return value == null ? 'Unavailable' : nf.format(number(value)); };
   var bytes = function (value) {
     var n = Number(value || 0);
     if (n < 1024) return nf.format(n) + ' B';
@@ -370,6 +641,81 @@ details[open] summary::after { content: "−"; }
   var memory = function () { return report().memory || null; };
   var phase = function (name) { return summary()[name] || {}; };
   var number = function (value, fallback) { return Number.isFinite(Number(value)) ? Number(value) : (fallback || 0); };
+  var tracePhase = function (event) {
+    var phase = String(event.p || '');
+    if ((phase === 'B' || phase === 'E') && number(event.d) > 0) return 'X';
+    if (phase === 'X' && number(event.d) <= 0) return 'i';
+    if (phase === 'B' || phase === 'E' || phase === 'X' || phase === 'I' || phase === 'i' || phase === 'C') return phase;
+    return number(event.d) > 0 ? 'X' : 'i';
+  };
+  var traceEvent = function (event, phase, durationUs, args) {
+    var duration = durationUs == null ? number(event.d) : durationUs;
+    var item = { name: String(event.n || 'Unnamed event'), cat: String(event.c || 'uncategorized'), ph: phase, ts: number(event.t), pid: 1, tid: 1, args: args || (event.a && typeof event.a === 'object' ? event.a : {}) };
+    if (phase === 'X' && duration > 0) item.dur = duration;
+    return item;
+  };
+  var fileStem = function (value) { var stem = String(value == null ? '' : value).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+\$/g, ''); return stem || 'cockpit-performance'; };
+  var spanKey = function (event) { return String(event.c || 'uncategorized') + '\\u0000' + String(event.n || 'Unnamed event'); };
+  var timelinePayload = function () {
+    var traceEvents = []; var openSpans = {};
+    events().forEach(function (event) {
+      var phase = String(event.p || '');
+      if (phase === 'B' && number(event.d) <= 0) { (openSpans[spanKey(event)] = openSpans[spanKey(event)] || []).push(event); return; }
+      if (phase === 'E' && number(event.d) <= 0) {
+        var stack = openSpans[spanKey(event)];
+        if (stack && stack.length) {
+          var begin = stack.pop();
+          if (!stack.length) delete openSpans[spanKey(event)];
+          var duration = number(event.t) - number(begin.t);
+          if (duration >= 0) { traceEvents.push(traceEvent(begin, 'X', duration, begin.a && typeof begin.a === 'object' ? begin.a : event.a)); return; }
+        }
+        traceEvents.push(traceEvent(event, 'i')); return;
+      }
+      traceEvents.push(traceEvent(event, tracePhase(event)));
+    });
+    Object.keys(openSpans).forEach(function (key) { openSpans[key].forEach(function (event) { traceEvents.push(traceEvent(event, 'i')); }); });
+    traceEvents.sort(function (a, b) { return number(a.ts) - number(b.ts); });
+    return { traceEvents: traceEvents };
+  };
+  var originOf = function (list) { return list.length ? list.reduce(function (min, item) { return Math.min(min, number(item.t)); }, Infinity) : 0; };
+  var frameOrigin = function () { return originOf(frames()); };
+  var eventOrigin = function () { return originOf(events()); };
+  var relativeUs = function (value, origin) { return us(number(value) - number(origin)); };
+  var tooltip = el('chart-tooltip');
+  var chartHits = {};
+  var tooltipRow = function (label, value) { return '<div class="tooltip-row"><span>' + esc(label) + '</span><span>' + esc(value) + '</span></div>'; };
+  var hideTooltip = function () { tooltip.classList.remove('visible'); };
+  var nearestHit = function (hits, x, y) {
+    var best = null; var bestDistance = Infinity;
+    hits.forEach(function (hit) {
+      var left = hit.x; var right = hit.x + (hit.w || 0); var top = hit.y; var bottom = hit.y + (hit.h || 0);
+      var dx = x < left ? left - x : x > right ? x - right : 0;
+      var dy = y < top ? top - y : y > bottom ? y - bottom : 0;
+      var distance = dx * dx + dy * dy;
+      if (distance < bestDistance) { bestDistance = distance; best = hit; }
+    });
+    return bestDistance <= 256 ? best : null;
+  };
+  var showTooltip = function (event, hit) {
+    if (!hit) { hideTooltip(); return; }
+    tooltip.innerHTML = hit.html;
+    tooltip.style.left = event.clientX + 'px';
+    tooltip.style.top = event.clientY + 'px';
+    tooltip.classList.add('visible');
+    var rect = tooltip.getBoundingClientRect();
+    var x = Math.min(event.clientX, window.innerWidth - rect.width - 16);
+    var y = Math.min(event.clientY, window.innerHeight - rect.height - 16);
+    tooltip.style.left = Math.max(8, x) + 'px';
+    tooltip.style.top = Math.max(8, y) + 'px';
+  };
+  var bindChart = function (id) {
+    var canvas = el(id);
+    canvas.addEventListener('pointermove', function (event) {
+      var rect = canvas.getBoundingClientRect();
+      showTooltip(event, nearestHit(chartHits[id] || [], event.clientX - rect.left, event.clientY - rect.top));
+    });
+    canvas.addEventListener('pointerleave', hideTooltip);
+  };
   var quality = function () {
     var s = summary();
     var count = number(s.frames);
@@ -410,6 +756,7 @@ details[open] summary::after { content: "−"; }
   var drawFrameChart = function () {
     var list = frames();
     draw(el('frame-chart'), function (ctx, width, height) {
+      chartHits['frame-chart'] = [];
       var budget = number(summary().build && summary().build.bud);
       var max = Math.max(budget, 1, list.reduce(function (m, f) { return Math.max(m, number(f.s)); }, 0));
       max = max * 1.12;
@@ -417,6 +764,7 @@ details[open] summary::after { content: "−"; }
       if (!list.length) { ctx.fillStyle = css('--muted'); ctx.fillText('No retained frame timings', area.left, height / 2); return; }
       var stride = Math.max(1, Math.ceil(list.length / Math.max(1, Math.floor(area.plotW))));
       var sample = list.filter(function (_, i) { return i % stride === 0; });
+      var origin = number(list[0].t);
       var path = function (key, color, lineWidth) {
         ctx.strokeStyle = color; ctx.lineWidth = lineWidth; ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.beginPath();
         sample.forEach(function (f, i) { var x = area.left + (sample.length === 1 ? .5 : i / (sample.length - 1)) * area.plotW; var y = area.top + area.plotH * (1 - number(f[key]) / max); if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y); });
@@ -424,7 +772,12 @@ details[open] summary::after { content: "−"; }
       };
       path('s', css('--accent'), 2.2); path('b', css('--blue'), 1.15); path('r', css('--warning'), 1.15);
       ctx.fillStyle = css('--danger');
-      sample.forEach(function (f, i) { if (number(f.s) <= budget) return; var x = area.left + (sample.length === 1 ? .5 : i / (sample.length - 1)) * area.plotW; var y = area.top + area.plotH * (1 - number(f.s) / max); ctx.beginPath(); ctx.arc(x, y, 2.7, 0, Math.PI * 2); ctx.fill(); });
+      sample.forEach(function (f, i) {
+        var x = area.left + (sample.length === 1 ? .5 : i / (sample.length - 1)) * area.plotW;
+        var y = area.top + area.plotH * (1 - number(f.s) / max);
+        if (number(f.s) > budget) { ctx.beginPath(); ctx.arc(x, y, 2.7, 0, Math.PI * 2); ctx.fill(); }
+        chartHits['frame-chart'].push({ x: x - 7, y: area.top, w: 14, h: area.plotH, html: '<strong>Frame ' + esc(number(f.i)) + '</strong>' + tooltipRow('Time', relativeUs(f.t, origin)) + tooltipRow('Total', us(f.s)) + tooltipRow('Build', us(f.b)) + tooltipRow('Raster', us(f.r)) + tooltipRow('Vsync', us(f.v)) + tooltipRow('Budget', us(budget)) + tooltipRow('Jank', number(f.s) > budget ? 'yes' : 'no') + tooltipRow('Layers', nf.format(number(f.l))) + tooltipRow('Pictures', nf.format(number(f.p))) + '<div class="subtle">Raw timestamp: ' + esc(us(f.t)) + '</div>' });
+      });
       ctx.fillStyle = css('--muted'); ctx.font = '10px system-ui, sans-serif'; ctx.fillText('0', area.left, height - 8); ctx.fillText(nf.format(list.length) + ' frames', Math.max(area.left, width - 92), height - 8);
     });
   };
@@ -432,30 +785,33 @@ details[open] summary::after { content: "−"; }
   var drawEventChart = function () {
     var list = events();
     draw(el('event-chart'), function (ctx, width, height) {
+      chartHits['event-chart'] = [];
       ctx.clearRect(0, 0, width, height); ctx.fillStyle = css('--surface-2'); ctx.fillRect(0, 0, width, height);
       if (!list.length) { ctx.fillStyle = css('--muted'); ctx.font = '10px system-ui, sans-serif'; ctx.fillText('No retained VM events', 15, height / 2); return; }
       var min = list.reduce(function (m, e) { return Math.min(m, number(e.t)); }, Infinity); var max = list.reduce(function (m, e) { return Math.max(m, number(e.t) + number(e.d)); }, -Infinity); var span = Math.max(1, max - min);
       var lanes = {}; list.forEach(function (e) { var key = String(e.c || 'uncategorized'); if (!lanes[key]) lanes[key] = []; lanes[key].push(e); });
       var laneNames = Object.keys(lanes).sort(function (a, b) { return lanes[b].length - lanes[a].length; }).slice(0, 7); var left = 12; var labelW = Math.min(105, Math.max(58, width * .22)); var plotLeft = left + labelW; var plotW = width - plotLeft - 12; var plotTop = 10; var plotBottom = 22; var rowH = Math.max(14, (height - plotTop - plotBottom) / Math.max(1, laneNames.length));
       ctx.font = '10px system-ui, sans-serif';
-      laneNames.forEach(function (lane, laneIndex) { var y = plotTop + laneIndex * rowH; ctx.fillStyle = css('--muted'); ctx.fillText(lane.length > 16 ? lane.slice(0, 15) + '…' : lane, left, y + rowH * .65); var laneEvents = lanes[lane]; var stride = Math.max(1, Math.ceil(laneEvents.length / Math.max(1, Math.floor(plotW / 2)))); laneEvents.forEach(function (e, i) { if (i % stride !== 0) return; var x = plotLeft + ((number(e.t) - min) / span) * plotW; var w = Math.max(2, (number(e.d) / span) * plotW); ctx.fillStyle = hashColor(lane); ctx.globalAlpha = .88; ctx.fillRect(x, y + 2, Math.min(w, plotLeft + plotW - x), Math.max(5, rowH - 6)); ctx.globalAlpha = 1; }); });
+      laneNames.forEach(function (lane, laneIndex) { var y = plotTop + laneIndex * rowH; ctx.fillStyle = css('--muted'); ctx.fillText(lane.length > 16 ? lane.slice(0, 15) + '…' : lane, left, y + rowH * .65); var laneEvents = lanes[lane]; var stride = Math.max(1, Math.ceil(laneEvents.length / Math.max(1, Math.floor(plotW / 2)))); laneEvents.forEach(function (e, i) { if (i % stride !== 0) return; var x = plotLeft + ((number(e.t) - min) / span) * plotW; var w = Math.max(2, (number(e.d) / span) * plotW); var visibleW = Math.min(w, plotLeft + plotW - x); ctx.fillStyle = hashColor(lane); ctx.globalAlpha = .88; ctx.fillRect(x, y + 2, visibleW, Math.max(5, rowH - 6)); ctx.globalAlpha = 1; chartHits['event-chart'].push({ x: x, y: y + 2, w: Math.max(8, visibleW), h: Math.max(5, rowH - 6), html: '<strong>' + esc(e.n || 'Unnamed event') + '</strong>' + tooltipRow('Category', lane) + tooltipRow('When', relativeUs(e.t, min)) + tooltipRow('Duration', e.d ? us(e.d) : 'Instant') + tooltipRow('Phase', e.p || '—') + (e.a && Object.keys(e.a).length ? '<div class="subtle">Arguments: ' + esc(Object.keys(e.a).join(', ')) + '</div>' : '') + '<div class="subtle">Raw timestamp: ' + esc(us(e.t)) + '</div>' }); }); });
       ctx.strokeStyle = css('--line'); ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(plotLeft, height - plotBottom + 3); ctx.lineTo(plotLeft + plotW, height - plotBottom + 3); ctx.stroke();
       ctx.fillStyle = css('--muted'); ctx.fillText(nf.format(list.length) + ' retained · ' + us(span) + ' span', left, height - 8);
     });
   };
   var drawPhaseChart = function () {
     draw(el('phase-chart'), function (ctx, width, height) {
+      chartHits['phase-chart'] = [];
       ctx.clearRect(0, 0, width, height); ctx.fillStyle = css('--surface-2'); ctx.fillRect(0, 0, width, height);
-      var names = [['Build', phase('build')], ['Raster', phase('raster')], ['Vsync', phase('vsync')], ['Total', phase('total')]]; var values = names.reduce(function (all, item) { var p = item[1]; return all.concat([number(p.p50), number(p.p90), number(p.p99), number(p.max)]); }, []); var max = Math.max(1, values.reduce(function (m, value) { return Math.max(m, value); }, 0)) * 1.15; var left = 54, right = 13, top = 19, bottom = 27; var plotW = width - left - right; var plotH = height - top - bottom; var rowH = plotH / names.length;
+      var names = [['Build', phase('build')], ['Raster', phase('raster')], ['Vsync', phase('vsync')], ['Total', phase('total')]]; var values = names.reduce(function (all, item) { var p = item[1]; return all.concat([p.p50, p.p90, p.p99, p.max].filter(function (value) { return value != null; }).map(number)); }, []); var max = Math.max(1, values.reduce(function (m, value) { return Math.max(m, value); }, 0)) * 1.15; var left = 54, right = 13, top = 19, bottom = 27; var plotW = width - left - right; var plotH = height - top - bottom; var rowH = plotH / names.length;
       ctx.strokeStyle = css('--line'); ctx.lineWidth = 1; ctx.fillStyle = css('--muted'); ctx.font = '10px system-ui, sans-serif';
       for (var i = 0; i <= 4; i += 1) { var x = left + plotW * i / 4; ctx.beginPath(); ctx.moveTo(x, top); ctx.lineTo(x, top + plotH); ctx.stroke(); ctx.fillText(us(Math.round(max * i / 4)), x - (i === 0 ? 0 : 10), height - 8); }
       var bars = [['p50', css('--accent')], ['p90', css('--blue')], ['p99', css('--warning')], ['max', css('--danger')]];
-      names.forEach(function (item, row) { var label = item[0], p = item[1], y = top + row * rowH + rowH * .5; ctx.fillStyle = css('--text-soft'); ctx.fillText(label, 10, y + 3); bars.forEach(function (bar, index) { var value = number(p[bar[0]]); var by = y - 17 + index * 8; ctx.fillStyle = bar[1]; ctx.globalAlpha = value ? .92 : .22; ctx.fillRect(left, by, Math.max(value ? 2 : 0, value / max * plotW), 5); ctx.globalAlpha = 1; }); });
+      names.forEach(function (item, row) { var label = item[0], p = item[1], y = top + row * rowH + rowH * .5; ctx.fillStyle = css('--text-soft'); ctx.fillText(label, 10, y + 3); bars.forEach(function (bar, index) { var raw = p[bar[0]], value = raw == null ? 0 : number(raw); var by = y - 17 + index * 8; var barW = raw == null ? 0 : Math.max(value ? 2 : 0, value / max * plotW); ctx.fillStyle = bar[1]; ctx.globalAlpha = raw == null ? .08 : value ? .92 : .22; ctx.fillRect(left, by, barW, 5); ctx.globalAlpha = 1; }); chartHits['phase-chart'].push({ x: left, y: top + row * rowH, w: plotW, h: rowH, html: '<strong>' + esc(label) + ' latency</strong>' + tooltipRow('Average', metricUs(p.avg)) + tooltipRow('p50', metricUs(p.p50)) + tooltipRow('p90', metricUs(p.p90)) + tooltipRow('p99', metricUs(p.p99)) + tooltipRow('Max', metricUs(p.max)) + tooltipRow('Budget', metricUs(p.bud)) + tooltipRow('Missed', metricCount(p.miss)) }); });
       if (!values.some(function (value) { return value > 0; })) { ctx.fillStyle = css('--muted'); ctx.fillText('No phase aggregates retained', left, height / 2); }
     });
   };
   var drawResourceChart = function () {
     draw(el('resource-chart'), function (ctx, width, height) {
+      chartHits['resource-chart'] = [];
       ctx.clearRect(0, 0, width, height); ctx.fillStyle = css('--surface-2'); ctx.fillRect(0, 0, width, height);
       var mem = memory(); var samples = mem && Array.isArray(mem.samples) ? mem.samples : [];
       if (samples.length) {
@@ -469,11 +825,170 @@ details[open] summary::after { content: "−"; }
         var first = number(samples[0].t), last = number(samples[samples.length - 1].t), span = Math.max(1, last - first);
         var path = function (key, color, dashed) { ctx.strokeStyle = color; ctx.lineWidth = dashed ? 1.1 : 2.2; ctx.setLineDash(dashed ? [5, 4] : []); ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.beginPath(); samples.forEach(function (item, index) { var x = left + (number(item.t) - first) / span * plotW; var y = top + plotH * (1 - number(item[key]) / max); if (index === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y); }); ctx.stroke(); ctx.setLineDash([]); };
         path('rss', css('--accent'), false); path('peak', css('--blue'), true);
-        ctx.fillStyle = css('--muted'); ctx.fillText('RSS', left, height - 8); ctx.fillText(nf.format(samples.length) + ' samples · ' + us(last), Math.max(left + 30, width - 145), height - 8);
-        return;
+        var stride = Math.max(1, Math.ceil(samples.length / Math.max(1, Math.floor(plotW))));
+        samples.forEach(function (item, index) { if (index % stride !== 0) return; var x = left + (number(item.t) - first) / span * plotW; chartHits['resource-chart'].push({ x: x - 7, y: top, w: 14, h: plotH, html: '<strong>Memory sample</strong>' + tooltipRow('Elapsed', duration(number(item.t) / 1000)) + tooltipRow('RSS', bytes(item.rss)) + tooltipRow('Process peak', bytes(item.peak)) }); });
+        ctx.fillStyle = css('--muted'); ctx.fillText('RSS', left, height - 8); ctx.fillText(nf.format(samples.length) + ' samples · ' + duration(last / 1000), Math.max(left + 30, width - 165), height - 8);
+      } else {
+        ctx.fillStyle = css('--muted'); ctx.font = '10px system-ui, sans-serif'; ctx.fillText('No retained memory samples', 15, height / 2);
       }
-      var s = summary(); var layer = s.layerCache || {}; var picture = s.pictureCache || {}; var gc = s.gc || {}; var rows = [['Layer bytes', number(layer.bytes), css('--accent'), bytes(layer.bytes), 'bytes'], ['Picture bytes', number(picture.bytes), css('--blue'), bytes(picture.bytes), 'bytes'], ['Layer count', number(layer.count), css('--warning'), nf.format(number(layer.count)), 'count'], ['Picture count', number(picture.count), '#d79aff', nf.format(number(picture.count)), 'count'], ['New GC', number(gc.new), css('--danger'), nf.format(number(gc.new)), 'count'], ['Old GC', number(gc.old), '#ff9da4', nf.format(number(gc.old)), 'count']]; var byteMax = Math.max(1, rows.slice(0, 2).reduce(function (m, row) { return Math.max(m, row[1]); }, 0)); var countMax = Math.max(1, rows.slice(2).reduce(function (m, row) { return Math.max(m, row[1]); }, 0)); var left = 92, right = 50, top = 22, rowH = Math.min(32, (height - 35) / rows.length); ctx.font = '10px system-ui, sans-serif'; rows.forEach(function (row, index) { var y = top + index * rowH; var max = row[4] === 'bytes' ? byteMax : countMax; ctx.fillStyle = css('--muted'); ctx.fillText(row[0], 8, y + 11); ctx.fillStyle = css('--surface-3'); ctx.fillRect(left, y + 2, width - left - right, 12); ctx.fillStyle = row[2]; ctx.fillRect(left, y + 2, Math.max(row[1] ? 3 : 0, row[1] / max * (width - left - right)), 12); ctx.fillStyle = css('--text-soft'); ctx.fillText(row[3], width - right + 6, y + 12); });
-      if (!rows.some(function (row) { return row[1] > 0; })) { ctx.fillStyle = css('--muted'); ctx.fillText('No memory, cache, or GC data retained', left, height / 2); }
+    });
+  };
+  var drawCacheChart = function () {
+    draw(el('cache-chart'), function (ctx, width, height) {
+      chartHits['cache-chart'] = [];
+      ctx.clearRect(0, 0, width, height); ctx.fillStyle = css('--surface-2'); ctx.fillRect(0, 0, width, height);
+      var s = summary(); var hasFrames = frames().length > 0; var layer = hasFrames ? (s.layerCache || {}) : {}; var picture = hasFrames ? (s.pictureCache || {}) : {}; var gc = s.gc || {};
+      var rows = [['Layer bytes', layer.bytes == null ? null : number(layer.bytes), css('--accent'), layer.bytes == null ? 'Unavailable' : bytes(layer.bytes), 'bytes'], ['Picture bytes', picture.bytes == null ? null : number(picture.bytes), css('--blue'), picture.bytes == null ? 'Unavailable' : bytes(picture.bytes), 'bytes'], ['Layer count', layer.count == null ? null : number(layer.count), css('--warning'), layer.count == null ? 'Unavailable' : nf.format(number(layer.count)), 'count'], ['Picture count', picture.count == null ? null : number(picture.count), '#d79aff', picture.count == null ? 'Unavailable' : nf.format(number(picture.count)), 'count'], ['New GC', gc.new == null ? null : number(gc.new), css('--danger'), gc.new == null ? 'Unavailable' : nf.format(number(gc.new)), 'count'], ['Old GC', gc.old == null ? null : number(gc.old), '#ff9da4', gc.old == null ? 'Unavailable' : nf.format(number(gc.old)), 'count']];
+      var byteMax = Math.max(1, rows.slice(0, 2).reduce(function (m, row) { return Math.max(m, row[1] == null ? 0 : row[1]); }, 0)); var countMax = Math.max(1, rows.slice(2).reduce(function (m, row) { return Math.max(m, row[1] == null ? 0 : row[1]); }, 0)); var left = 92, right = 50, top = 22, rowH = Math.min(32, (height - 35) / rows.length); ctx.font = '10px system-ui, sans-serif'; rows.forEach(function (row, index) { var y = top + index * rowH; var rowMax = row[4] === 'bytes' ? byteMax : countMax; var value = row[1] == null ? 0 : row[1]; var barW = row[1] == null ? 0 : Math.max(value ? 3 : 0, value / rowMax * (width - left - right)); ctx.fillStyle = css('--muted'); ctx.fillText(row[0], 8, y + 11); ctx.fillStyle = css('--surface-3'); ctx.fillRect(left, y + 2, width - left - right, 12); if (row[1] != null) { ctx.fillStyle = row[2]; ctx.fillRect(left, y + 2, barW, 12); } ctx.fillStyle = row[1] == null ? css('--muted') : css('--text-soft'); ctx.fillText(row[3], width - right + 6, y + 12); chartHits['cache-chart'].push({ x: left, y: y, w: width - left - right, h: 16, html: '<strong>' + esc(row[0]) + '</strong>' + tooltipRow('Value', row[3]) + tooltipRow('Scale', row[1] == null ? 'Unavailable' : row[4] === 'bytes' ? bytes(rowMax) : nf.format(rowMax)) }); });
+      if (!rows.some(function (row) { return row[1] > 0; })) { ctx.fillStyle = css('--muted'); ctx.fillText('No cache or GC data retained', left, height / 2); }
+    });
+  };
+  var drawJankChart = function () {
+    draw(el('jank-chart'), function (ctx, width, height) {
+      chartHits['jank-chart'] = [];
+      ctx.clearRect(0, 0, width, height); ctx.fillStyle = css('--surface-2'); ctx.fillRect(0, 0, width, height);
+      var list = frames(); var budget = number(summary().build && summary().build.bud); var bins = [{ label: 'Within budget', max: budget, min: 0, count: 0, color: css('--accent') }, { label: '1–1.5× budget', max: budget * 1.5, min: budget, count: 0, color: css('--warning') }, { label: '1.5–2× budget', max: budget * 2, min: budget * 1.5, count: 0, color: '#e89a63' }, { label: '>2× budget', max: Infinity, min: budget * 2, count: 0, color: css('--danger') }];
+      if (!budget) bins = [{ label: 'All frames', max: Infinity, min: 0, count: list.length, color: css('--accent') }]; else list.forEach(function (frame) { var value = number(frame.s); bins.some(function (bin) { if (value <= bin.max) { bin.count += 1; return true; } return false; }); });
+      var total = Math.max(1, list.length); var left = 116, right = 18, top = 22, rowH = Math.min(38, (height - 38) / bins.length), plotW = width - left - right; ctx.font = '10px system-ui, sans-serif'; bins.forEach(function (bin, index) { var y = top + index * rowH; var barW = bin.count / total * plotW; ctx.fillStyle = css('--muted'); ctx.fillText(bin.label, 8, y + 12); ctx.fillStyle = css('--surface-3'); ctx.fillRect(left, y + 2, plotW, 14); ctx.fillStyle = bin.color; ctx.fillRect(left, y + 2, barW, 14); ctx.fillStyle = css('--text-soft'); ctx.fillText(nf.format(bin.count) + ' · ' + (bin.count / total * 100).toFixed(1) + '%', left + plotW + 6, y + 13); chartHits['jank-chart'].push({ x: left, y: y, w: plotW, h: 18, html: '<strong>' + esc(bin.label) + '</strong>' + tooltipRow('Frames', nf.format(bin.count)) + tooltipRow('Share', (bin.count / total * 100).toFixed(1) + '%') + tooltipRow('Budget', budget ? us(budget) : 'Unavailable') }); });
+      if (!list.length) { ctx.fillStyle = css('--muted'); ctx.fillText('No retained frame timings', left, height / 2); }
+    });
+  };
+  var drawCadenceChart = function () {
+    draw(el('cadence-chart'), function (ctx, width, height) {
+      chartHits['cadence-chart'] = [];
+      var list = frames(); var intervals = []; for (var index = 1; index < list.length; index += 1) { var delta = number(list[index].t) - number(list[index - 1].t); if (delta > 0) intervals.push({ frame: list[index], delta: delta }); }
+      if (!intervals.length) { ctx.clearRect(0, 0, width, height); ctx.fillStyle = css('--surface-2'); ctx.fillRect(0, 0, width, height); ctx.fillStyle = css('--muted'); ctx.font = '10px system-ui, sans-serif'; ctx.fillText('At least two increasing frame timestamps are required', 15, height / 2); return; }
+      var budget = number(summary().build && summary().build.bud); var max = Math.max(budget, intervals.reduce(function (value, item) { return Math.max(value, item.delta); }, 1)) * 1.12; var area = grid(ctx, width, height, max, budget); var stride = Math.max(1, Math.ceil(intervals.length / Math.max(1, Math.floor(area.plotW)))); var sample = intervals.filter(function (_, index) { return index % stride === 0; });
+      ctx.strokeStyle = css('--blue'); ctx.lineWidth = 2; ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.beginPath(); sample.forEach(function (item, index) { var x = area.left + (sample.length === 1 ? .5 : index / (sample.length - 1)) * area.plotW; var y = area.top + area.plotH * (1 - item.delta / max); if (index === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y); chartHits['cadence-chart'].push({ x: x - 7, y: area.top, w: 14, h: area.plotH, html: '<strong>Frame ' + esc(number(item.frame.i)) + ' cadence</strong>' + tooltipRow('Elapsed', relativeUs(item.frame.t, frameOrigin())) + tooltipRow('Interval', us(item.delta)) + tooltipRow('Budget', us(budget)) + tooltipRow('Jitter', us(item.delta - budget)) }); }); ctx.stroke();
+      ctx.fillStyle = css('--muted'); ctx.font = '10px system-ui, sans-serif'; ctx.fillText('Frame 1', area.left, height - 8); ctx.fillText(nf.format(intervals.length) + ' intervals', Math.max(area.left + 30, width - 92), height - 8);
+    });
+  };
+  var drawCacheTrendChart = function () {
+    draw(el('cache-trend-chart'), function (ctx, width, height) {
+      chartHits['cache-trend-chart'] = [];
+      var list = frames(); ctx.clearRect(0, 0, width, height); ctx.fillStyle = css('--surface-2'); ctx.fillRect(0, 0, width, height);
+      if (!list.length) { ctx.fillStyle = css('--muted'); ctx.font = '10px system-ui, sans-serif'; ctx.fillText('No retained frame cache samples', 15, height / 2); return; }
+      var max = Math.max(1, list.reduce(function (value, frame) { return Math.max(value, number(frame.l), number(frame.p)); }, 0)) * 1.12; var left = 48; var right = 16; var top = 18; var bottom = 28; var plotW = width - left - right; var plotH = height - top - bottom; ctx.strokeStyle = css('--line'); ctx.lineWidth = 1; ctx.fillStyle = css('--muted'); ctx.font = '10px system-ui, sans-serif'; for (var i = 0; i <= 4; i += 1) { var y = top + plotH * i / 4; ctx.beginPath(); ctx.moveTo(left, y); ctx.lineTo(width - right, y); ctx.stroke(); ctx.fillText(nf.format(Math.round(max * (1 - i / 4))), 8, y + 3); }
+      var stride = Math.max(1, Math.ceil(list.length / Math.max(1, Math.floor(plotW)))); var sample = list.filter(function (_, index) { return index % stride === 0; }); var path = function (key, color) { ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.beginPath(); sample.forEach(function (frame, index) { var x = left + (sample.length === 1 ? .5 : index / (sample.length - 1)) * plotW; var y = top + plotH * (1 - number(frame[key]) / max); if (index === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y); }); ctx.stroke(); }; path('l', css('--accent')); path('p', css('--blue'));
+      sample.forEach(function (frame, index) { var x = left + (sample.length === 1 ? .5 : index / (sample.length - 1)) * plotW; chartHits['cache-trend-chart'].push({ x: x - 7, y: top, w: 14, h: plotH, html: '<strong>Raster cache · frame ' + esc(number(frame.i)) + '</strong>' + tooltipRow('Elapsed', relativeUs(frame.t, frameOrigin())) + tooltipRow('Layers', nf.format(number(frame.l)) + ' · ' + bytes(frame.lb)) + tooltipRow('Pictures', nf.format(number(frame.p)) + ' · ' + bytes(frame.pb)) }); });
+      ctx.fillStyle = css('--muted'); ctx.fillText('Layer count', left, height - 8); ctx.fillText(nf.format(list.length) + ' frames', Math.max(left + 66, width - 82), height - 8);
+    });
+  };
+  var drawCategoryCostChart = function () {
+    draw(el('category-cost-chart'), function (ctx, width, height) {
+      chartHits['category-cost-chart'] = [];
+      var grouped = {}; events().forEach(function (event) { var key = String(event.c || 'uncategorized'); var value = grouped[key] || { total: 0, count: 0, longest: 0 }; value.total += number(event.d); value.count += 1; value.longest = Math.max(value.longest, number(event.d)); grouped[key] = value; }); var rows = Object.keys(grouped).map(function (key) { return { key: key, value: grouped[key] }; }).sort(function (a, b) { return b.value.total - a.value.total || b.value.count - a.value.count; }).slice(0, 10);
+      ctx.clearRect(0, 0, width, height); ctx.fillStyle = css('--surface-2'); ctx.fillRect(0, 0, width, height); if (!rows.length) { ctx.fillStyle = css('--muted'); ctx.font = '10px system-ui, sans-serif'; ctx.fillText('No retained VM events', 15, height / 2); return; }
+      var max = Math.max(1, rows.reduce(function (value, row) { return Math.max(value, row.value.total); }, 0)); var left = 112; var right = 80; var top = 18; var bottom = 20; var rowH = Math.min(25, (height - top - bottom) / rows.length); var plotW = width - left - right; ctx.font = '10px system-ui, sans-serif'; rows.forEach(function (row, index) { var y = top + index * rowH; var barW = row.value.total / max * plotW; ctx.fillStyle = css('--muted'); ctx.fillText(row.key.length > 17 ? row.key.slice(0, 16) + '…' : row.key, 8, y + 12); ctx.fillStyle = css('--surface-3'); ctx.fillRect(left, y + 2, plotW, 12); ctx.fillStyle = hashColor(row.key); ctx.fillRect(left, y + 2, barW, 12); ctx.fillStyle = css('--text-soft'); ctx.fillText(us(row.value.total) + ' · ' + nf.format(row.value.count), width - right + 6, y + 12); chartHits['category-cost-chart'].push({ x: left, y: y, w: plotW, h: 16, html: '<strong>' + esc(row.key) + '</strong>' + tooltipRow('Total duration', us(row.value.total)) + tooltipRow('Longest event', us(row.value.longest)) + tooltipRow('Events', nf.format(row.value.count)) }); });
+    });
+  };
+  var hotspotCache = {};
+  var hotspotSourceCache = {};
+  var percentile = function (values, ratio) {
+    if (!values.length) return null;
+    var sorted = values.slice().sort(function (a, b) { return a - b; });
+    var index = Math.max(0, Math.min(sorted.length - 1, Math.ceil(sorted.length * ratio) - 1));
+    return sorted[index];
+  };
+  var hotspotKey = function (category, name) { return String(category || 'uncategorized') + '\\u0000' + String(name || 'Unnamed event'); };
+  var hotspotSources = function () {
+    if (hotspotSourceCache[state.report]) return hotspotSourceCache[state.report];
+    var result = {};
+    events().forEach(function (event) {
+      var source = sourceLabel(event.a);
+      if (!source) return;
+      var key = hotspotKey(event.c, event.n);
+      var current = result[key];
+      if (!current || number(event.d) > current.duration) result[key] = { label: source, duration: number(event.d) };
+    });
+    hotspotSourceCache[state.report] = result;
+    return result;
+  };
+  var hotspotRows = function () {
+    if (hotspotCache[state.report]) return hotspotCache[state.report];
+    var item = reports[state.report] || {};
+    var stored = item.analysis && Array.isArray(item.analysis.hotspots) ? item.analysis.hotspots : null;
+    var rows;
+    if (stored) {
+      rows = stored.map(function (row) {
+        var category = String(row.c || 'uncategorized');
+        var name = String(row.n || 'Unnamed event');
+        var key = hotspotKey(category, name);
+        var source = hotspotSources()[key];
+        return { category: category, name: name, count: number(row.count), timed: number(row.timed), total: number(row.total), p90: row.p90 == null ? null : number(row.p90), max: row.max == null ? null : number(row.max), source: source ? source.label : 'Unavailable' };
+      });
+    } else {
+      var grouped = {};
+      events().forEach(function (event) {
+        var category = String(event.c || 'uncategorized');
+        var name = String(event.n || 'Unnamed event');
+        var key = hotspotKey(category, name);
+        var value = grouped[key] || { category: category, name: name, count: 0, timed: 0, total: 0, max: 0, durations: [] };
+        value.count += 1;
+        if (number(event.d) > 0) { value.timed += 1; value.total += number(event.d); value.max = Math.max(value.max, number(event.d)); value.durations.push(number(event.d)); }
+        grouped[key] = value;
+      });
+      rows = Object.keys(grouped).map(function (key) {
+        var value = grouped[key];
+        return { category: value.category, name: value.name, count: value.count, timed: value.timed, total: value.total, p90: percentile(value.durations, .9), max: value.max || null, source: (hotspotSources()[key] || {}).label || 'Unavailable' };
+      });
+    }
+    rows.sort(function (a, b) { return b.total - a.total || (b.max || 0) - (a.max || 0) || b.count - a.count; });
+    hotspotCache[state.report] = rows.slice(0, 100);
+    return hotspotCache[state.report];
+  };
+  var drawHotspotChart = function () {
+    draw(el('hotspot-chart'), function (ctx, width, height) {
+      chartHits['hotspot-chart'] = [];
+      ctx.clearRect(0, 0, width, height); ctx.fillStyle = css('--surface-2'); ctx.fillRect(0, 0, width, height);
+      var rows = hotspotRows().slice(0, 12);
+      if (!rows.length) { ctx.fillStyle = css('--muted'); ctx.font = '10px system-ui, sans-serif'; ctx.fillText('No retained VM operations', 15, height / 2); return; }
+      var useDuration = rows.some(function (row) { return row.total > 0; });
+      var max = Math.max(1, rows.reduce(function (value, row) { return Math.max(value, useDuration ? row.total : row.count); }, 0));
+      var left = 150, right = 92, top = 18, bottom = 22, rowH = Math.min(30, (height - top - bottom) / rows.length), plotW = width - left - right;
+      ctx.font = '10px system-ui, sans-serif';
+      rows.forEach(function (row, index) {
+        var y = top + index * rowH;
+        var value = useDuration ? row.total : row.count;
+        var barW = value / max * plotW;
+        var label = row.name.length > 22 ? row.name.slice(0, 21) + '…' : row.name;
+        ctx.fillStyle = css('--muted'); ctx.fillText(label, 8, y + 12);
+        ctx.fillStyle = css('--surface-3'); ctx.fillRect(left, y + 2, plotW, 12);
+        ctx.fillStyle = hashColor(row.category); ctx.fillRect(left, y + 2, Math.max(value ? 3 : 0, barW), 12);
+        ctx.fillStyle = css('--text-soft'); ctx.fillText(useDuration ? us(row.total) : nf.format(row.count), width - right + 6, y + 12);
+        chartHits['hotspot-chart'].push({ x: left, y: y, w: plotW, h: 16, html: '<strong>' + esc(row.name) + '</strong>' + tooltipRow('Category', row.category) + tooltipRow('Events', nf.format(row.count)) + tooltipRow('Timed', nf.format(row.timed)) + tooltipRow('Total', row.total ? us(row.total) : 'Instant only') + tooltipRow('p90', row.p90 == null ? 'Unavailable' : us(row.p90)) + tooltipRow('Longest', row.max == null ? 'Unavailable' : us(row.max)) + '<div class="subtle">Source: ' + esc(row.source) + '</div>' });
+      });
+      ctx.fillStyle = css('--muted'); ctx.fillText(useDuration ? 'Total retained duration' : 'Event count (no duration samples)', left, height - 8);
+      ctx.fillText(nf.format(rows.length) + ' operations', Math.max(left + 80, width - 93), height - 8);
+    });
+  };
+  var renderHotspots = function () {
+    var rows = hotspotRows();
+    var timed = rows.reduce(function (count, row) { return count + row.timed; }, 0);
+    el('hotspot-note').textContent = rows.length ? nf.format(rows.length) + ' operations · ' + nf.format(timed) + ' timed events' : 'No retained operations';
+    el('hotspot-body').innerHTML = rows.length ? rows.map(function (row) {
+      return '<tr><td><div class="hotspot-name"><strong>' + esc(row.name) + '</strong></div></td><td>' + esc(row.category) + '</td><td>' + nf.format(row.count) + '</td><td>' + nf.format(row.timed) + '</td><td>' + esc(row.total ? us(row.total) : 'Instant only') + '</td><td>' + esc(row.p90 == null ? 'Unavailable' : us(row.p90)) + '</td><td>' + esc(row.max == null ? 'Unavailable' : us(row.max)) + '</td><td class="hotspot-source"><code>' + esc(row.source) + '</code></td></tr>';
+    }).join('') : '<tr><td colspan="8"><div class="empty">No retained VM operations.</div></td></tr>';
+  };
+  var drawStartupChart = function () {
+    draw(el('startup-chart'), function (ctx, width, height) {
+      chartHits['startup-chart'] = [];
+      ctx.clearRect(0, 0, width, height); ctx.fillStyle = css('--surface-2'); ctx.fillRect(0, 0, width, height); if (!startup) return;
+      var rows = [['App build', number(startup.appMs), css('--blue')], ['First frame', number(startup.firstMs), css('--accent')], ['Ready', number(startup.readyMs), css('--warning')]]; var max = Math.max(1, rows.reduce(function (value, row) { return Math.max(value, row[1]); }, 0)) * 1.12; var left = 92; var right = 70; var top = 22; var bottom = 20; var rowH = Math.min(34, (height - top - bottom) / rows.length); var plotW = width - left - right; ctx.font = '10px system-ui, sans-serif'; rows.forEach(function (row, index) { var y = top + index * rowH; var barW = row[1] / max * plotW; ctx.fillStyle = css('--muted'); ctx.fillText(row[0], 8, y + 12); ctx.fillStyle = css('--surface-3'); ctx.fillRect(left, y + 2, plotW, 14); ctx.fillStyle = row[2]; ctx.fillRect(left, y + 2, barW, 14); ctx.fillStyle = css('--text-soft'); ctx.fillText(duration(row[1]), width - right + 6, y + 13); chartHits['startup-chart'].push({ x: left, y: y, w: plotW, h: 18, html: '<strong>' + esc(row[0]) + '</strong>' + tooltipRow('Elapsed', duration(row[1])) + tooltipRow('Clock', startup.source || 'harness') }); });
+    });
+  };
+  var drawFlameChart = function () {
+    draw(el('flame-chart'), function (ctx, width, height) {
+      chartHits['flame-chart'] = [];
+      ctx.clearRect(0, 0, width, height); ctx.fillStyle = css('--surface-2'); ctx.fillRect(0, 0, width, height);
+      var all = events().filter(function (event) { return number(event.d) > 0; });
+      var shown = all.slice().sort(function (a, b) { return number(b.d) - number(a.d); }).slice(0, 5000).sort(function (a, b) { return number(a.t) - number(b.t) || number(b.d) - number(a.d); });
+      if (!shown.length) { ctx.fillStyle = css('--muted'); ctx.font = '10px system-ui, sans-serif'; ctx.fillText('No duration-bearing VM spans retained', 15, height / 2); el('flame-range').textContent = 'No spans'; return; }
+      var min = shown.reduce(function (value, event) { return Math.min(value, number(event.t)); }, Infinity); var max = shown.reduce(function (value, event) { return Math.max(value, number(event.t) + number(event.d)); }, -Infinity); var span = Math.max(1, max - min); var stack = []; var placed = [];
+      shown.forEach(function (event) { var start = number(event.t); var end = start + number(event.d); while (stack.length && stack[stack.length - 1] <= start) stack.pop(); var depth = stack.length; stack.push(end); placed.push({ event: event, depth: depth }); });
+      var maxDepth = placed.reduce(function (value, item) { return Math.max(value, item.depth + 1); }, 1); var left = 10; var right = 12; var top = 12; var bottom = 24; var plotW = width - left - right; var plotH = height - top - bottom; var rowH = Math.max(8, Math.min(24, plotH / maxDepth));
+      placed.forEach(function (item) { var event = item.event; var x = left + (number(event.t) - min) / span * plotW; var w = Math.max(2, number(event.d) / span * plotW); var y = top + item.depth * rowH; var h = Math.max(5, rowH - 2); ctx.fillStyle = hashColor(String(event.c || 'uncategorized')); ctx.globalAlpha = .88; ctx.fillRect(x, y, Math.min(w, left + plotW - x), h); ctx.globalAlpha = 1; if (w > 44) { ctx.fillStyle = css('--text'); ctx.font = '10px system-ui, sans-serif'; ctx.save(); ctx.beginPath(); ctx.rect(x + 4, y, Math.max(0, w - 8), h); ctx.clip(); ctx.fillText(String(event.n || 'Unnamed event'), x + 4, y + h - 5); ctx.restore(); } chartHits['flame-chart'].push({ x: x, y: y, w: Math.max(8, w), h: h, html: '<strong>' + esc(event.n || 'Unnamed event') + '</strong>' + tooltipRow('Category', event.c || 'uncategorized') + tooltipRow('Depth', nf.format(item.depth)) + tooltipRow('When', relativeUs(event.t, min)) + tooltipRow('Duration', us(event.d)) + tooltipRow('Phase', event.p || '—') + (event.a && Object.keys(event.a).length ? '<div class="subtle">Arguments: ' + esc(Object.keys(event.a).join(', ')) + '</div>' : '') }); });
+      ctx.strokeStyle = css('--line'); ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(left, height - bottom + 3); ctx.lineTo(left + plotW, height - bottom + 3); ctx.stroke(); ctx.fillStyle = css('--muted'); ctx.font = '10px system-ui, sans-serif'; ctx.fillText(nf.format(shown.length) + (all.length > shown.length ? ' of ' + nf.format(all.length) : '') + ' spans · ' + us(span) + ' span', left, height - 8); el('flame-range').textContent = relativeUs(min, min) + ' → ' + relativeUs(max, min);
     });
   };
   var metric = function (label, value, kind) { return '<div class="metric"><span>' + esc(label) + '</span><strong class="' + (kind || '') + '">' + esc(value) + '</strong></div>'; };
@@ -490,22 +1005,114 @@ details[open] summary::after { content: "−"; }
   var renderMetrics = function () {
     var r = report(); var s = summary(); var jank = number(s.jank); var count = number(s.frames); var fps = s.fps == null ? '—' : Number(s.fps).toFixed(1) + ' fps'; var eventCount = events().length; var gc = s.gc ? number(s.gc.new) + number(s.gc.old) : null; var mem = memory(); var memSummary = mem && mem.summary ? mem.summary : null;
     el('metric-grid').innerHTML = metric('Frames', nf.format(count)) + metric('Jank', nf.format(jank), jank ? 'bad' : 'good') + metric('Cadence', fps) + metric('Duration', duration(r.durationMs)) + metric('VM events', nf.format(eventCount)) + metric('GC cycles', gc == null ? '—' : nf.format(gc)) + metric('RSS peak', memSummary ? bytes(memSummary.peak) : '—') + metric('RSS Δ', memSummary ? bytes(memSummary.delta) : '—', memSummary && number(memSummary.delta) > 0 ? 'warn' : '');
-    el('frame-range').textContent = count ? us(number(frames()[0].t)) + ' → ' + us(number(frames()[frames().length - 1].t)) : 'No samples';
+    if (count) { var times = frames().map(function (frame) { return number(frame.t); }); var first = times.reduce(function (min, value) { return Math.min(min, value); }, Infinity); var last = times.reduce(function (max, value) { return Math.max(max, value); }, -Infinity); el('frame-range').textContent = relativeUs(first, first) + ' → ' + relativeUs(last, first); } else { el('frame-range').textContent = 'No samples'; }
   };
   var renderStartup = function () {
-    var node = el('startup-strip');
-    if (!startup) { node.classList.add('hidden'); return; }
-    node.classList.remove('hidden'); node.innerHTML = '<div><span class="startup-title">Cold start milestones</span><span>' + esc(startup.source || 'harness') + ' clock</span></div><div><span>App build</span><strong>' + esc(duration(startup.appMs)) + '</strong></div><div><span>First frame</span><strong class="good">' + esc(duration(startup.firstMs)) + '</strong></div><div><span>Ready</span><strong>' + esc(duration(startup.readyMs)) + '</strong></div>';
+    var node = el('startup-strip'); var panel = el('startup-panel');
+    if (!startup) { node.classList.add('hidden'); panel.classList.add('hidden'); return; }
+    node.classList.remove('hidden'); panel.classList.remove('hidden'); node.innerHTML = '<div><span class="startup-title">Cold start milestones</span><span>' + esc(startup.source || 'harness') + ' clock</span></div><div><span>App build</span><strong>' + esc(duration(startup.appMs)) + '</strong></div><div><span>First frame</span><strong class="good">' + esc(duration(startup.firstMs)) + '</strong></div><div><span>Ready</span><strong>' + esc(duration(startup.readyMs)) + '</strong></div>';
+  };
+  var renderCoverage = function () {
+    var r = report(); var s = summary(); var mem = memory(); var available = 0;
+    var rows = [
+      ['Frame timing', frames().length ? 'available' : 'unavailable', frames().length ? nf.format(frames().length) + ' retained frames' : 'No valid FrameTiming samples'],
+      ['VM timeline', r.source === 'vm' && events().length ? 'available' : 'unavailable', r.source === 'vm' && events().length ? nf.format(events().length) + ' retained events' : (r.source || 'Timeline not collected')],
+      ['Raster cache', frames().length ? 'available' : 'unavailable', frames().length ? 'Layer/picture counts and bytes' : 'Requires retained frame samples'],
+      ['GC events', s.gc ? 'available' : 'unavailable', s.gc ? nf.format(number(s.gc.new) + number(s.gc.old)) + ' collection events' : 'No GC stream in this capture'],
+      ['Process memory', mem && mem.samples && mem.samples.length ? 'available' : 'unavailable', mem && mem.samples && mem.samples.length ? nf.format(mem.samples.length) + ' RSS samples' : 'Native RSS unavailable'],
+      ['Cold start', startup ? 'available' : 'unavailable', startup ? 'Build, first frame, ready' : 'No startup harness supplied'],
+      ['Jank attribution', frames().length && events().length ? 'available' : 'unavailable', frames().length && events().length ? 'Slow frames matched to overlapping VM spans' : 'Requires retained frames and VM events'],
+      ['Operation hotspots', events().length ? 'available' : 'unavailable', events().length ? nf.format(hotspotRows().length) + ' event operations aggregated' : 'Requires retained VM events'],
+      ['CPU sampling', 'not-collected', 'Use DevTools CPU profiler for sampled stacks'],
+      ['Heap snapshot', 'not-collected', 'Use DevTools Memory for heap/allocation snapshots'],
+      ['Allocation trace', 'not-collected', 'Use DevTools Memory for allocation tracing'],
+      ['Network profiler', 'not-collected', 'Use Cockpit network evidence for HTTP/SSE/WebSocket traffic'],
+      ['GPU/shader', 'not-collected', 'No GPU counters or shader compilation stream is retained'],
+    ];
+    rows.forEach(function (row) { if (row[1] === 'available') available += 1; });
+    el('coverage-summary').textContent = available + ' of ' + rows.length + ' views backed by this capture';
+    el('coverage-grid').innerHTML = rows.map(function (row) { var label = row[1] === 'available' ? 'Available' : row[1] === 'not-collected' ? 'Not collected' : 'Unavailable'; return '<div class="coverage-card"><div class="coverage-card-head"><strong>' + esc(row[0]) + '</strong><span class="coverage-state ' + esc(row[1]) + '">' + esc(label) + '</span></div><p>' + esc(row[2]) + '</p></div>'; }).join('');
   };
   var renderEventSummary = function () {
     var list = events(); var start = list.reduce(function (m, e) { return Math.min(m, number(e.t)); }, Infinity); var finish = list.reduce(function (m, e) { return Math.max(m, number(e.t) + number(e.d)); }, -Infinity); var traceSpan = list.length ? Math.max(0, finish - start) : 0; var categories = {}; list.forEach(function (e) { var key = String(e.c || 'uncategorized'); categories[key] = (categories[key] || 0) + 1; }); var top = Object.keys(categories).sort(function (a, b) { return categories[b] - categories[a]; })[0];
-    el('event-summary').innerHTML = '<div class="event-stat"><span>Retained</span><strong>' + nf.format(list.length) + '</strong></div><div class="event-stat"><span>Categories</span><strong>' + nf.format(Object.keys(categories).length) + '</strong></div><div class="event-stat"><span>Trace span</span><strong>' + (traceSpan ? esc(us(traceSpan)) : 'Instant') + '</strong></div>';
+    el('event-summary').innerHTML = '<div class="event-stat"><span>Retained</span><strong>' + nf.format(list.length) + '</strong></div><div class="event-stat"><span>Categories</span><strong>' + nf.format(Object.keys(categories).length) + '</strong></div><div class="event-stat"><span>Trace span</span><strong>' + (list.length ? (traceSpan ? esc(us(traceSpan)) : 'Instant') : 'Unavailable') + '</strong></div>';
     var max = top ? categories[top] : 1; el('category-list').innerHTML = Object.keys(categories).sort(function (a, b) { return categories[b] - categories[a]; }).slice(0, 6).map(function (key) { return '<div class="category-row"><span title="' + esc(key) + '">' + esc(key) + '</span><div class="category-track"><span style="width:' + Math.max(4, categories[key] / max * 100) + '%;background:' + hashColor(key) + '"></span></div><span>' + nf.format(categories[key]) + '</span></div>'; }).join('') || '<div class="empty">No categories retained.</div>';
   };
+  var sourceLabel = function (value) {
+    var found = {};
+    var visit = function (item) {
+      if (!item || typeof item !== 'object') return;
+      Object.keys(item).forEach(function (key) {
+        var lower = key.toLowerCase(); var child = item[key];
+        if (['url', 'uri', 'file', 'filepath', 'script', 'source'].indexOf(lower) >= 0 && (typeof child === 'string' || typeof child === 'number')) found.location = String(child);
+        if (['function', 'functionname', 'method', 'symbol', 'library', 'class'].indexOf(lower) >= 0 && (typeof child === 'string' || typeof child === 'number')) found.symbol = String(child);
+        if (lower === 'line' && (typeof child === 'string' || typeof child === 'number')) found.line = String(child);
+        if (child && typeof child === 'object') visit(child);
+      });
+    };
+    visit(value);
+    var label = found.location || (found.symbol ? 'function ' + found.symbol : '');
+    if (found.line && found.location) label += ':' + found.line;
+    if (found.symbol && found.location) label += ' · ' + found.symbol;
+    return label.length > 180 ? label.slice(0, 177) + '…' : label;
+  };
+  var stallAnalysis = function () {
+    var budget = number(summary().total && summary().total.bud);
+    if (!budget) budget = number(summary().build && summary().build.bud);
+    return frames().filter(function (frame) { return number(frame.s) > budget; }).map(function (frame) {
+      var start = number(frame.t); var end = start + number(frame.s);
+      var evidence = events().map(function (event) {
+        var eventStart = number(event.t); var eventDuration = Math.max(0, number(event.d)); var eventEnd = eventStart + eventDuration;
+        var overlap = eventDuration > 0 ? Math.min(end, eventEnd) - Math.max(start, eventStart) : 0;
+        if (overlap <= 0 && !(eventDuration === 0 && eventStart >= start && eventStart <= end)) return null;
+        return { event: event, overlap: Math.max(0, overlap), source: sourceLabel(event.a) };
+      }).filter(function (item) { return item != null; }).sort(function (a, b) { return b.overlap - a.overlap || number(b.event.d) - number(a.event.d); });
+      return { frame: frame, over: number(frame.s) - budget, evidence: evidence.slice(0, 3), budget: budget };
+    });
+  };
+  var renderStalls = function () {
+    var rows = stallAnalysis(); var attributed = rows.filter(function (row) { return row.evidence.some(function (item) { return item.overlap > 0; }); }).length; var categories = {};
+    rows.forEach(function (row) { row.evidence.forEach(function (item) { if (item.overlap > 0) { var category = String(item.event.c || 'uncategorized'); categories[category] = (categories[category] || 0) + item.overlap; } }); });
+    var topCategory = Object.keys(categories).sort(function (a, b) { return categories[b] - categories[a]; })[0];
+    el('stall-note').textContent = rows.length ? (attributed + ' of ' + rows.length + ' jank frames have overlapping retained spans') : 'No over-budget frames';
+    el('stall-summary').innerHTML = '<div class="stall-pill"><strong>' + nf.format(rows.length) + '</strong><br>Jank frames</div><div class="stall-pill"><strong>' + nf.format(attributed) + '</strong><br>With timing evidence</div><div class="stall-pill"><strong>' + esc(topCategory || 'Unavailable') + '</strong><br>Top observed category</div>';
+    el('stall-body').innerHTML = rows.length ? rows.map(function (row) {
+      var evidence = row.evidence.length ? '<div class="stall-evidence">' + row.evidence.map(function (item) { var event = item.event; return '<div><code>' + esc(event.c || 'uncategorized') + ' · ' + esc(event.n || 'Unnamed event') + '</code><span>' + esc(item.overlap > 0 ? 'overlap ' + us(item.overlap) + ' · span ' + us(event.d) : 'instant marker') + '</span></div>'; }).join('') + '</div>' : '<span class="subtle">No overlapping retained span</span>';
+      var source = row.evidence.map(function (item) { return item.source; }).filter(function (value) { return value; })[0] || 'Unavailable';
+      return '<tr><td><strong>#' + esc(number(row.frame.i)) + '</strong></td><td class="bad">+' + esc(us(row.over)) + '</td><td>' + esc(us(row.frame.s)) + '</td><td>' + evidence + '</td><td><code>' + esc(source) + '</code></td></tr>';
+    }).join('') : '<tr><td colspan="5"><div class="empty">No retained frame exceeded the display budget.</div></td></tr>';
+  };
   var renderResources = function () {
-    var s = summary(); var mem = memory(); var m = mem && mem.summary ? mem.summary : null; var layer = s.layerCache || {}; var picture = s.pictureCache || {}; var gc = s.gc || {};
-    var cells = m ? [['RSS start', bytes(m.start)], ['RSS end', bytes(m.end)], ['RSS peak', bytes(m.peak)], ['RSS Δ', bytes(m.delta)], ['Samples', nf.format(number(m.n))], ['Source', mem.source || 'unavailable']] : [['RSS', 'Unavailable'], ['Layer cache', bytes(layer.bytes)], ['Picture cache', bytes(picture.bytes)], ['Layer count', nf.format(number(layer.count))], ['Picture count', nf.format(number(picture.count))], ['GC cycles', nf.format(number(gc.new) + number(gc.old))]];
+    var s = summary(); var mem = memory(); var m = mem && mem.summary ? mem.summary : null; var hasFrames = frames().length > 0; var layer = hasFrames ? (s.layerCache || {}) : {}; var picture = hasFrames ? (s.pictureCache || {}) : {}; var gc = s.gc || {};
+    var cells = m ? [['RSS start', bytes(m.start)], ['RSS end', bytes(m.end)], ['RSS min', bytes(m.min)], ['RSS avg', bytes(m.avg)], ['RSS peak', bytes(m.peak)], ['RSS Δ', bytes(m.delta)], ['Samples', nf.format(number(m.n))], ['Source', mem.source || 'unavailable']] : [['RSS', 'Unavailable'], ['Layer cache', layer.bytes == null ? 'Unavailable' : bytes(layer.bytes)], ['Picture cache', picture.bytes == null ? 'Unavailable' : bytes(picture.bytes)], ['Layer count', layer.count == null ? 'Unavailable' : nf.format(number(layer.count))], ['Picture count', picture.count == null ? 'Unavailable' : nf.format(number(picture.count))], ['GC cycles', s.gc ? nf.format(number(gc.new) + number(gc.old)) : 'Unavailable']];
     el('resource-summary').innerHTML = cells.map(function (cell) { return '<div><span>' + esc(cell[0]) + '</span><strong>' + esc(cell[1]) + '</strong></div>'; }).join('');
+    var cache = [['Layer cache', layer.bytes == null ? 'Unavailable' : bytes(layer.bytes)], ['Picture cache', picture.bytes == null ? 'Unavailable' : bytes(picture.bytes)], ['Layer count', layer.count == null ? 'Unavailable' : nf.format(number(layer.count))], ['Picture count', picture.count == null ? 'Unavailable' : nf.format(number(picture.count))], ['New GC', gc.new == null ? 'Unavailable' : nf.format(number(gc.new))], ['Old GC', gc.old == null ? 'Unavailable' : nf.format(number(gc.old))]];
+    el('cache-summary').innerHTML = cache.map(function (cell) { return '<div><span>' + esc(cell[0]) + '</span><strong>' + esc(cell[1]) + '</strong></div>'; }).join('');
+    var list = frames(); var budget = number(s.build && s.build.bud); var within = list.filter(function (frame) { return number(frame.s) <= budget; }).length; var jank = list.length - within;
+    el('jank-summary').innerHTML = [['Within budget', nf.format(within)], ['Jank frames', nf.format(jank)], ['Jank rate', list.length ? (jank / list.length * 100).toFixed(1) + '%' : '—']].map(function (cell) { return '<div><span>' + esc(cell[0]) + '</span><strong>' + esc(cell[1]) + '</strong></div>'; }).join('');
+  };
+  var codeEvidence = function () {
+    var grouped = {};
+    var sourceKeys = ['url', 'uri', 'file', 'filepath', 'script', 'source', 'function', 'functionname', 'method', 'symbol', 'library', 'class'];
+    var visit = function (value, result) {
+      if (!value || typeof value !== 'object') return;
+      Object.keys(value).forEach(function (key) {
+        var lower = key.toLowerCase(); var item = value[key];
+        if (sourceKeys.indexOf(lower) >= 0 && (typeof item === 'string' || typeof item === 'number')) result[lower] = String(item);
+        if (lower === 'line' && (typeof item === 'string' || typeof item === 'number')) result.line = String(item);
+        if (item && typeof item === 'object') visit(item, result);
+      });
+    };
+    events().forEach(function (event) {
+      var found = {}; visit(event.a, found); var location = found.url || found.uri || found.file || found.filepath || found.script || found.source; var symbol = found.function || found.functionname || found.method || found.symbol || found.library || found.class;
+      if (!location && !symbol) return;
+      var label = location || ('function ' + symbol); if (found.line && location) label += ':' + found.line; if (symbol && location) label += ' · ' + symbol; if (label.length > 180) label = label.slice(0, 177) + '…';
+      var entry = grouped[label] || { count: 0, total: 0, longest: 0, categories: {} }; entry.count += 1; entry.total += number(event.d); entry.longest = Math.max(entry.longest, number(event.d)); entry.categories[String(event.c || 'uncategorized')] = true; grouped[label] = entry;
+    });
+    return Object.keys(grouped).map(function (label) { return { label: label, value: grouped[label] }; }).sort(function (a, b) { return b.value.total - a.value.total || b.value.count - a.value.count; });
+  };
+  var renderCodeEvidence = function () {
+    var rows = codeEvidence(); var body = el('code-body'); body.innerHTML = rows.length ? rows.slice(0, 100).map(function (item) { var value = item.value; return '<tr><td><code>' + esc(item.label) + '</code></td><td>' + nf.format(value.count) + '</td><td>' + esc(us(value.total)) + '</td><td>' + esc(us(value.longest)) + '</td><td>' + esc(Object.keys(value.categories).join(', ')) + '</td></tr>'; }).join('') : '<tr><td colspan="5"><div class="empty">No source locations were included in the retained VM events.</div></td></tr>';
   };
   var renderComparison = function () {
     var body = el('comparison-body');
@@ -516,9 +1123,9 @@ details[open] summary::after { content: "−"; }
     body.querySelectorAll('[data-report-index]').forEach(function (button) { button.addEventListener('click', function () { state.report = Number(button.getAttribute('data-report-index')) || 0; state.framePage = 0; state.eventPage = 0; render(); }); });
   };
   var renderDetails = function () {
-    var r = report(); var s = summary(); var d = r.dropped || {}; var mem = memory(); var cache = function (value) { return value == null ? '—' : bytes(value); };
-    var cells = [['Mode', r.mode || '—'], ['Build', r.build || '—'], ['Platform', r.platform || '—'], ['Timeline', r.source || 'unavailable'], ['Frame budget', us(number(s.build && s.build.bud))], ['Total p99', us(number(s.total && s.total.p99))], ['Retained frames', nf.format(frames().length)], ['Dropped frames', nf.format(number(d.frames))], ['Invalid frames', nf.format(number(d.badFrames))], ['Dropped events', nf.format(number(d.events))], ['Invalid events', nf.format(number(d.badEvents))], ['Max layer cache', cache(s.layerCache && s.layerCache.bytes)], ['Max picture cache', cache(s.pictureCache && s.pictureCache.bytes)]];
-    if (mem && mem.summary) { cells.push(['Memory source', mem.source], ['Memory samples', nf.format(number(mem.summary.n))], ['Memory interval', duration(mem.intervalMs)], ['Memory dropped', nf.format(number(mem.dropped))]); }
+    var r = report(); var s = summary(); var d = r.dropped || {}; var mem = memory(); var hasFrames = frames().length > 0; var cache = function (value) { return value == null || !hasFrames ? 'Unavailable' : bytes(value); };
+    var cells = [['Mode', r.mode || '—'], ['Build', r.build || '—'], ['Platform', r.platform || '—'], ['Timeline', r.source || 'unavailable'], ['Frame budget', s.build == null || s.build.bud == null ? 'Unavailable' : us(s.build.bud)], ['Total p99', s.total == null || s.total.p99 == null ? 'Unavailable' : us(s.total.p99)], ['Retained frames', nf.format(frames().length)], ['Dropped frames', nf.format(number(d.frames))], ['Invalid frames', nf.format(number(d.badFrames))], ['Dropped events', nf.format(number(d.events))], ['Invalid events', nf.format(number(d.badEvents))], ['Max layer cache', cache(s.layerCache && s.layerCache.bytes)], ['Max picture cache', cache(s.pictureCache && s.pictureCache.bytes)]];
+    if (mem && mem.summary) { cells.push(['Memory source', mem.source], ['Memory samples', nf.format(number(mem.summary.n))], ['Memory min', bytes(mem.summary.min)], ['Memory avg', bytes(mem.summary.avg)], ['Memory interval', duration(mem.intervalMs)], ['Memory dropped', nf.format(number(mem.dropped))]); }
     if (startup) { cells.push(['Startup source', startup.source || 'harness'], ['App build', duration(startup.appMs)], ['First frame', duration(startup.firstMs)], ['Ready', duration(startup.readyMs)]); }
     el('detail-grid').innerHTML = cells.map(function (cell) { return '<div class="detail-cell"><span>' + esc(cell[0]) + '</span><strong>' + esc(cell[1]) + '</strong></div>'; }).join('');
     el('raw-json').textContent = JSON.stringify(r, null, 2);
@@ -529,15 +1136,15 @@ details[open] summary::after { content: "−"; }
     el('frame-body').innerHTML = slice.length ? slice.map(function (f) { var bad = number(f.s) > budget; var warn = !bad && (number(f.b) > budget || number(f.r) > budget); return '<tr><td>' + nf.format(number(f.i)) + '</td><td><code>' + esc(f.n == null ? '—' : f.n) + '</code></td><td><strong>' + esc(us(f.s)) + '</strong></td><td>' + esc(us(f.b)) + '</td><td>' + esc(us(f.r)) + '</td><td>' + esc(us(f.v)) + '</td><td>' + status(bad, warn) + '</td><td class="subtle">' + esc(number(f.l)) + ' layers · ' + esc(bytes(f.lb)) + '</td></tr>'; }).join('') : '<tr><td colspan="8"><div class="empty">No retained frame timings.</div></td></tr>';
     el('frame-page-label').textContent = list.length ? 'Showing ' + (start + 1) + '–' + Math.min(start + slice.length, list.length) + ' of ' + nf.format(list.length) : 'No frames'; el('frame-prev').disabled = state.framePage === 0; el('frame-next').disabled = state.framePage >= pages - 1;
   };
-  var filteredEvents = function () { var q = state.eventQuery.toLowerCase(); return events().filter(function (e) { var category = String(e.c || 'uncategorized'); var args = e.a && typeof e.a === 'object' ? Object.keys(e.a).join(' ') : ''; var text = String(e.n || '') + ' ' + category + ' ' + args; return (!q || text.toLowerCase().indexOf(q) >= 0) && (!state.eventCategory || category === state.eventCategory); }); };
+  var filteredEvents = function () { var q = state.eventQuery.toLowerCase(); return events().filter(function (e) { var category = String(e.c || 'uncategorized'); var args = e.a && typeof e.a === 'object' ? Object.keys(e.a).join(' ') : ''; var text = String(e.n || '') + ' ' + category + ' ' + args; return (!q || text.toLowerCase().indexOf(q) >= 0) && (!state.eventCategory || category === state.eventCategory); }).slice().sort(function (a, b) { return number(b.t) - number(a.t); }); };
   var renderEvents = function () {
     var list = filteredEvents(); var pages = Math.max(1, Math.ceil(list.length / eventPageSize)); state.eventPage = clamp(state.eventPage, 0, pages - 1); var start = state.eventPage * eventPageSize; var slice = list.slice(start, start + eventPageSize);
-    el('event-body').innerHTML = slice.length ? slice.map(function (e) { var args = e.a && Object.keys(e.a).length ? '<details><summary>View args</summary><div class="detail-body"><pre class="json-view">' + esc(JSON.stringify(e.a, null, 2)) + '</pre></div></details>' : '<span class="subtle">—</span>'; return '<tr><td><code>' + esc(us(e.t)) + '</code></td><td><strong>' + esc(e.n || 'Unnamed event') + '</strong></td><td>' + esc(e.c || 'uncategorized') + '</td><td>' + esc(e.d ? us(e.d) : 'Instant') + '</td><td>' + esc(e.p || '—') + '</td><td>' + args + '</td></tr>'; }).join('') : '<tr><td colspan="6"><div class="empty">No events match the current filter.</div></td></tr>';
+    el('event-body').innerHTML = slice.length ? slice.map(function (e) { var args = e.a && Object.keys(e.a).length ? '<details><summary>View args</summary><div class="detail-body"><pre class="json-view">' + esc(JSON.stringify(e.a, null, 2)) + '</pre></div></details>' : '<span class="subtle">—</span>'; return '<tr><td><code>' + esc(relativeUs(e.t, eventOrigin())) + '</code></td><td><strong>' + esc(e.n || 'Unnamed event') + '</strong></td><td>' + esc(e.c || 'uncategorized') + '</td><td>' + esc(e.d ? us(e.d) : 'Instant') + '</td><td>' + esc(e.p || '—') + '</td><td>' + args + '</td></tr>'; }).join('') : '<tr><td colspan="6"><div class="empty">No events match the current filter.</div></td></tr>';
     el('event-page-label').textContent = list.length ? 'Showing ' + (start + 1) + '–' + Math.min(start + slice.length, list.length) + ' of ' + nf.format(list.length) : 'No matching events'; el('event-prev').disabled = state.eventPage === 0; el('event-next').disabled = state.eventPage >= pages - 1;
   };
   var renderCategories = function () { var values = {}; events().forEach(function (e) { values[String(e.c || 'uncategorized')] = true; }); var select = el('event-category'); select.innerHTML = '<option value="">All categories</option>' + Object.keys(values).sort().map(function (value) { return '<option value="' + esc(value) + '">' + esc(value) + '</option>'; }).join(''); select.value = state.eventCategory; };
   var renderSelector = function () { var select = el('report-select'); select.innerHTML = reports.map(function (item, index) { return '<option value="' + index + '">' + esc(item.label || ('Capture ' + (index + 1))) + '</option>'; }).join(''); select.value = state.report; };
-  var render = function () { renderSelector(); renderMeta(); renderHealth(); renderMetrics(); renderStartup(); renderEventSummary(); renderCategories(); renderResources(); renderComparison(); renderDetails(); renderFrames(); renderEvents(); drawFrameChart(); drawEventChart(); drawPhaseChart(); drawResourceChart(); };
+  var render = function () { hideTooltip(); renderSelector(); renderMeta(); renderHealth(); renderMetrics(); renderStartup(); renderCoverage(); renderEventSummary(); renderStalls(); renderCategories(); renderResources(); renderComparison(); renderDetails(); renderFrames(); renderEvents(); renderCodeEvidence(); renderHotspots(); drawStartupChart(); drawFrameChart(); drawEventChart(); drawPhaseChart(); drawResourceChart(); drawCacheChart(); drawJankChart(); drawCadenceChart(); drawCacheTrendChart(); drawCategoryCostChart(); drawHotspotChart(); drawFlameChart(); };
   el('report-select').addEventListener('change', function (event) { state.report = Number(event.target.value) || 0; state.framePage = 0; state.eventPage = 0; state.eventQuery = ''; state.eventCategory = ''; el('event-search').value = ''; render(); });
   el('frame-sort').addEventListener('change', function (event) { state.frameSort = event.target.value; state.framePage = 0; renderFrames(); });
   el('frame-prev').addEventListener('click', function () { state.framePage -= 1; renderFrames(); }); el('frame-next').addEventListener('click', function () { state.framePage += 1; renderFrames(); });
@@ -545,9 +1152,12 @@ details[open] summary::after { content: "−"; }
   el('event-search').addEventListener('input', function (event) { state.eventQuery = event.target.value || ''; state.eventPage = 0; renderEvents(); }); el('event-category').addEventListener('change', function (event) { state.eventCategory = event.target.value || ''; state.eventPage = 0; renderEvents(); });
   el('raw-button').addEventListener('click', function (event) { var wrap = el('raw-wrap'); var show = wrap.classList.toggle('hidden'); event.target.textContent = show ? 'Show raw JSON' : 'Hide raw JSON'; });
   el('copy-button').addEventListener('click', function (event) { var text = JSON.stringify(report(), null, 2); if (navigator.clipboard && navigator.clipboard.writeText) { navigator.clipboard.writeText(text).then(function () { event.target.textContent = 'Copied'; setTimeout(function () { event.target.textContent = 'Copy report JSON'; }, 1200); }); } });
-  el('download-button').addEventListener('click', function () { var blob = new Blob([JSON.stringify(report(), null, 2)], { type: 'application/json' }); var link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = (reports[state.report].label || 'cockpit-performance') + '.json'; link.click(); setTimeout(function () { URL.revokeObjectURL(link.href); }, 1000); });
-  el('theme-button').addEventListener('click', function () { root.dataset.theme = root.dataset.theme === 'light' ? 'dark' : 'light'; drawFrameChart(); drawEventChart(); drawPhaseChart(); drawResourceChart(); });
-  window.addEventListener('resize', function () { drawFrameChart(); drawEventChart(); drawPhaseChart(); drawResourceChart(); });
+  el('download-button').addEventListener('click', function () { var blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }); var link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = fileStem(data.title) + '.full.json'; link.click(); setTimeout(function () { URL.revokeObjectURL(link.href); }, 1000); });
+  el('timeline-button').addEventListener('click', function () { var blob = new Blob([JSON.stringify(timelinePayload(), null, 2)], { type: 'application/json' }); var link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = (reports[state.report].label || 'cockpit-performance') + '.timeline.json'; link.click(); setTimeout(function () { URL.revokeObjectURL(link.href); }, 1000); });
+  el('theme-button').addEventListener('click', function () { root.dataset.theme = root.dataset.theme === 'light' ? 'dark' : 'light'; drawStartupChart(); drawFrameChart(); drawEventChart(); drawPhaseChart(); drawResourceChart(); drawCacheChart(); drawJankChart(); drawCadenceChart(); drawCacheTrendChart(); drawCategoryCostChart(); drawHotspotChart(); drawFlameChart(); });
+  window.addEventListener('scroll', hideTooltip, { passive: true });
+  window.addEventListener('resize', function () { drawStartupChart(); drawFrameChart(); drawEventChart(); drawPhaseChart(); drawResourceChart(); drawCacheChart(); drawJankChart(); drawCadenceChart(); drawCacheTrendChart(); drawCategoryCostChart(); drawHotspotChart(); drawFlameChart(); });
+  ['startup-chart', 'frame-chart', 'event-chart', 'phase-chart', 'resource-chart', 'cache-chart', 'jank-chart', 'cadence-chart', 'cache-trend-chart', 'category-cost-chart', 'hotspot-chart', 'flame-chart'].forEach(bindChart);
   render();
 }());
 </script>
