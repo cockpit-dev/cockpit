@@ -15,10 +15,7 @@ Future<void> main() async {
       if (reportPath != null && reportPath.trim().isNotEmpty) {
         final file = File(reportPath);
         await file.parent.create(recursive: true);
-        await file.writeAsString(
-          const JsonEncoder.withIndent('  ').convert(data),
-          flush: true,
-        );
+        await file.writeAsString(jsonEncode(data), flush: true);
       }
       if (htmlPath != null && htmlPath.trim().isNotEmpty) {
         await _writePerformanceHtml(data, htmlPath);

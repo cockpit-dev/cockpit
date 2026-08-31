@@ -33,7 +33,10 @@ void main() {
     expect(html, contains('Network profiler'));
     expect(html, contains('Download timeline'));
     expect(html, contains('Download full JSON'));
-    expect(html, contains('JSON.stringify(data, null, 2)'));
+    expect(html, contains('JSON.stringify(data)]'));
+    expect(html, contains('JSON.stringify(timelinePayload())]'));
+    expect(html, contains('padding: 10px 12px'));
+    expect(html, contains('margin-top: 15px; }'));
     expect(html, contains('traceEvents'));
     expect(html, contains('timelinePayload'));
     expect(html, contains('Jank distribution'));
@@ -103,7 +106,9 @@ void main() {
 
   test('exports retained VM events as a trace timeline', () {
     final report = _report(step: 'trace');
-    final trace = jsonDecode(CockpitPerformanceHtml.timelineJson(report));
+    final encoded = CockpitPerformanceHtml.timelineJson(report);
+    expect(encoded, isNot(contains('\n')));
+    final trace = jsonDecode(encoded);
 
     expect(trace, isA<Map<String, dynamic>>());
     final events = (trace as Map<String, dynamic>)['traceEvents'];
@@ -135,19 +140,13 @@ void main() {
         },
       },
     ]);
-    final decoded =
-        jsonDecode(
-              CockpitPerformanceHtml.fullJson(
-                <CockpitPerformanceReport>[first, second],
-                title: 'Complete capture',
-                startup: CockpitStartupReport(
-                  appMs: 6,
-                  firstFrameMs: 18,
-                  readyMs: 31,
-                ),
-              ),
-            )
-            as Map<String, dynamic>;
+    final encoded = CockpitPerformanceHtml.fullJson(
+      <CockpitPerformanceReport>[first, second],
+      title: 'Complete capture',
+      startup: CockpitStartupReport(appMs: 6, firstFrameMs: 18, readyMs: 31),
+    );
+    expect(encoded, isNot(contains('\n')));
+    final decoded = jsonDecode(encoded) as Map<String, dynamic>;
 
     expect(decoded['title'], 'Complete capture');
     expect(decoded['startup']['readyMs'], 31);
