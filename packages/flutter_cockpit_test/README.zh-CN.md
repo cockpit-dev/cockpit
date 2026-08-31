@@ -185,9 +185,35 @@ expect(report.summary.jankCount, 0);
 
 当 VM Service 可用时，`profile()` 还会采集 DevTools CPU Profiler 和 Memory 视图背后的真实
 CPU 采样与 Dart allocation profile。完整报告保留采样栈和有界的分配类，普通测试输出只保留
-数量摘要，同时记录 VM heap 时间线样本、isolate 健康快照，以及 timeline recorder 的可用/已记录
+数量摘要，同时记录 VM heap 时间线样本、所有已发现 isolate 的前后健康快照和 Isolate stream 生命周期事件，以及 timeline recorder 的可用/已记录
 stream 元数据。长场景可以用 `cpu: false` 或 `heap: false` 关闭对应采集，并通过
 `maxCpuSamples`、`maxHeapClasses`、`maxHeapSamples` 控制内存上限：
+
+如果要调查某个具体类型的分配调用栈，先从 heap 报告取得 VM class id，再显式传入最多 20 个
+`allocationClassIds`。这是额外开销较高的 VM tracing，默认不会开启：
+
+```dart
+final report = await cockpit.profile(
+  () => runScenario(),
+  allocationClassIds: <String>['classes/123'],
+);
+// report.devTools?.allocationTraces 只包含选中的类型。
+```
+
+需要在 Perfetto 中离线分析完整 VM CPU/时间线 proto 时设置 `perfetto: true`。普通报告只保留
+有界元数据，完整 HTML/JSON 导出会保留 base64 原始载荷；原生宿主还可以用
+`exportPerformancePerfetto()` 为每次采集写出独立的 `.pftrace` 文件：
+
+```dart
+final report = await cockpit.profile(
+  () => runScenario(),
+  perfetto: true,
+);
+final tracePaths = await cockpit.exportPerformancePerfetto();
+```
+
+Perfetto 受 VM recorder 和平台能力影响。如果 RPC 不支持，或当前 recorder 直接写入系统/文件，
+本次采集仍然有效，只会在 coverage 中将该 trace 标记为不可用。
 
 当 VM 暴露 isolate group 时，heap 报告还会保留 group 级别的起止内存点位，覆盖多 isolate
 应用，同时不会在每个采样 tick 额外轮询所有 group。
@@ -229,7 +255,7 @@ debug 数据仅用于诊断，不能当作发布性能证据。
 报告还提供 **Operation hotspots**，按真实 VM event 的 category 和名称聚合事件数、有时长事件数、总耗时、p90 和最长区间，先回答“到底是哪类具体操作慢”，再决定是否打开原始时间线。源码列只在对应事件参数实际带有位置时显示，不会从帧耗时推断文件。`fullJson()` 会在每个 capture 下的 `analysis` 字段保留这份有界聚合，同时完整保留原始 events。
 同一份分析还会在时间线确实包含 GC 标记时记录 GC 事件数、带时长的暂停总量、p50、p90 和最大暂停；HTML 的 cache/GC 面板会把这些暂停指标和新生代/老生代次数一起展示。
 
-DevTools 区域包含 VM heap 趋势图、CPU/heap/GPU 汇总、VM 身份与 isolate 数量、isolate 生命周期行，以及 recorder/stream
+DevTools 区域包含 VM heap 趋势图、CPU/heap/GPU 汇总、VM 身份与 isolate 数量、每个已发现 isolate 的前后健康快照，以及 VM Isolate stream 的启动、可运行、更新、重载、退出和扩展注册事件；新增/退出 isolate 与保留丢弃数会在运行时面板和完整 JSON 中显示，同时保留 recorder/stream
 元数据。每个区域都有紧凑的 **Details** 操作，点击后使用原生弹窗查看有界 JSON 预览；完整样本
 仍保留在 JSON 导出中，因此查看详情不会把整页撑开或卡住浏览器。CPU 详情还会根据 VM 返回的
 函数索引聚合真实采样栈路径，不会猜测源码。
@@ -308,7 +334,8 @@ RSS 是两条独立数据：会保留采集前后的 VM 进程内存分层、大
 | Raster cache | Layer/picture cache 数量和字节数 | Cache 图表与帧明细 |
 | Memory 与 GC | 原生 RSS 样本和 VM GC 事件 | Memory、Cache/GC 图表 |
 | CPU profiler | VM CPU 采样与有界调用栈 | CPU sampling 面板与完整报告 |
-| Memory heap/allocation | VM heap 点位与有界分配类计数 | Heap & allocation 面板与完整报告 |
+| Memory heap/allocation | VM heap 点位、有界分配类计数与显式选择类型的调用栈 | Heap & allocation 面板与完整报告 |
+| Perfetto CPU/timeline | recorder 支持时保留 VM 原始 proto | Perfetto 下载按钮或 `exportPerformancePerfetto()` |
 | VM runtime health | Heap 趋势、isolate 快照、recorder/stream 元数据、VM 进程内存树 | VM runtime、VM process memory 面板与详情弹窗 |
 | GPU/shader | 仅展示匹配到的真实 VM timeline 信号 | GPU / Shader signals 面板 |
 | Network profiler | 独立的 Cockpit network evidence | `cockpit dev network` 产物 |

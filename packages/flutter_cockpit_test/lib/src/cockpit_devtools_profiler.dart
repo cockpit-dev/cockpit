@@ -55,10 +55,24 @@ final class CockpitDevToolsProfiler {
   CockpitHeapPoint? _afterGroupHeap;
   CockpitIsolateStats? _isolateBefore;
   CockpitIsolateStats? _isolateAfter;
+  final List<CockpitIsolateStats> _isolatesBefore = <CockpitIsolateStats>[];
+  final List<CockpitIsolateStats> _isolatesAfter = <CockpitIsolateStats>[];
+  final List<CockpitIsolateEvent> _isolateEvents = <CockpitIsolateEvent>[];
+  StreamSubscription<Event>? _isolateSubscription;
+  var _droppedIsolatesBefore = 0;
+  var _droppedIsolatesAfter = 0;
+  var _droppedIsolateEvents = 0;
   CockpitTimelineProfile? _timeline;
   CockpitVmRuntimeProfile? _vm;
   CockpitVmMemorySnapshot? _vmMemoryBefore;
   CockpitVmMemorySnapshot? _vmMemoryAfter;
+  final List<CockpitAllocationTrace> _allocationTraces =
+      <CockpitAllocationTrace>[];
+  final List<String> _allocationClassIds = <String>[];
+  final Map<String, String> _allocationClassNames = <String, String>{};
+  final Set<String> _enabledAllocationClassIds = <String>{};
+  CockpitPerfettoTrace? _perfettoCpu;
+  CockpitPerfettoTrace? _perfettoTimeline;
   Duration _heapSampleEvery = const Duration(milliseconds: 100);
   Timer? _heapSampleTimer;
   Future<void>? _heapSamplePending;
@@ -76,6 +90,8 @@ final class CockpitDevToolsProfiler {
     required bool heap,
     required bool timeline,
     required bool vmMemory,
+    required bool perfetto,
+    Iterable<String> allocationClassIds = const <String>[],
     Duration heapSampleEvery = const Duration(milliseconds: 100),
   }) async {
     if (heapSampleEvery <= Duration.zero ||
@@ -90,15 +106,43 @@ final class CockpitDevToolsProfiler {
     _heapSampleEvery = heapSampleEvery;
     _heapSamples.clear();
     _droppedHeapSamples = 0;
+    _beforeHeap = null;
     _beforeGroupHeap = null;
     _afterGroupHeap = null;
     _isolateBefore = null;
     _isolateAfter = null;
+    _isolatesBefore.clear();
+    _isolatesAfter.clear();
+    _isolateEvents.clear();
+    _droppedIsolatesBefore = 0;
+    _droppedIsolatesAfter = 0;
+    _droppedIsolateEvents = 0;
     _timeline = null;
     _vm = null;
     _vmMemoryBefore = null;
     _vmMemoryAfter = null;
-    _requested = cpu || heap || timeline || vmMemory;
+    _allocationTraces.clear();
+    _allocationClassIds
+      ..clear()
+      ..addAll(
+        allocationClassIds
+            .map((id) => id.trim())
+            .where((id) => id.isNotEmpty)
+            .toSet(),
+      );
+    _allocationClassNames.clear();
+    _enabledAllocationClassIds.clear();
+    _perfettoCpu = null;
+    _perfettoTimeline = null;
+    _profilerWasEnabled = false;
+    _profilerChanged = false;
+    _requested =
+        cpu ||
+        heap ||
+        timeline ||
+        vmMemory ||
+        perfetto ||
+        _allocationClassIds.isNotEmpty;
     if (!_requested) return;
     try {
       final info = await developer.Service.getInfo().timeout(timeout);
@@ -108,6 +152,8 @@ final class CockpitDevToolsProfiler {
         return;
       }
       final service = await connectCockpitVmService(uri).timeout(timeout);
+      _service = service;
+      await _subscribeIsolateEvents(service);
       final vm = await service.getVM().timeout(timeout);
       _vm = _vmProfile(vm);
       final isolateId = _mainIsolateId(vm);
@@ -116,10 +162,13 @@ final class CockpitDevToolsProfiler {
         _recordFailure('vm', StateError('No runnable isolate is available.'));
         return;
       }
-      _service = service;
       _isolateId = isolateId;
       try {
-        _isolateBefore = _isolateStats(
+        _isolatesBefore.addAll(
+          await _readIsolates(service, vm, before: true),
+        );
+        _isolateBefore = _findIsolate(_isolatesBefore, isolateId);
+        _isolateBefore ??= _isolateStats(
           await service.getIsolate(isolateId).timeout(timeout),
         );
       } on Object catch (error) {
@@ -146,7 +195,7 @@ final class CockpitDevToolsProfiler {
           _recordFailure('vm-memory', error);
         }
       }
-      if (cpu) {
+      if (cpu || _allocationClassIds.isNotEmpty) {
         try {
           await _prepareCpuProfiler(service, isolateId);
         } on Object catch (error) {
@@ -173,6 +222,23 @@ final class CockpitDevToolsProfiler {
           _recordFailure('heap', error);
         }
       }
+      if (_allocationClassIds.isNotEmpty) {
+        try {
+          final profile = await service
+              .getAllocationProfile(isolateId)
+              .timeout(timeout);
+          for (final member in profile.members ?? const <ClassHeapStats>[]) {
+            final id = member.classRef?.id;
+            final name = member.classRef?.name;
+            if (id != null && name != null && name.trim().isNotEmpty) {
+              _allocationClassNames[id] = name;
+            }
+          }
+          await _enableAllocationTracing(service, isolateId);
+        } on Object catch (error) {
+          _recordFailure('allocation', error);
+        }
+      }
     } on Object catch (error) {
       await _close();
       _recordFailure('vm', error);
@@ -185,6 +251,7 @@ final class CockpitDevToolsProfiler {
     required bool heap,
     required bool timeline,
     required bool vmMemory,
+    required bool perfetto,
     Iterable<CockpitPerformanceEvent> events =
         const <CockpitPerformanceEvent>[],
   }) async {
@@ -210,6 +277,9 @@ final class CockpitDevToolsProfiler {
         vmMemory: _vmMemoryBefore == null
             ? null
             : CockpitVmMemoryProfile(before: _vmMemoryBefore),
+        isolate: _isolateProfile,
+        allocationTraces: _allocationTraces,
+        perfetto: _perfettoProfile,
       );
     }
 
@@ -243,6 +313,24 @@ final class CockpitDevToolsProfiler {
         } on Object catch (error) {
           _recordFailure('timeline-flags', error);
         }
+      }
+
+      final extentUs = endUs == null
+          ? null
+          : (endUs - _originUs!).clamp(1, 24 * 60 * 60 * 1000000);
+
+      if (_allocationClassIds.isNotEmpty && extentUs != null) {
+        await _readAllocationTraces(service, isolateId, extentUs: extentUs);
+      }
+
+      if (perfetto && extentUs != null) {
+        await _readPerfettoTraces(
+          service,
+          isolateId,
+          extentUs: extentUs,
+          includeCpu: cpu,
+          includeTimeline: timeline,
+        );
       }
 
       if (vmMemory) {
@@ -328,7 +416,12 @@ final class CockpitDevToolsProfiler {
         _recordFailure('heap', StateError('Heap baseline is unavailable.'));
       }
       try {
-        _isolateAfter = _isolateStats(
+        final currentVm = await service.getVM().timeout(timeout);
+        _isolatesAfter.addAll(
+          await _readIsolates(service, currentVm, before: false),
+        );
+        _isolateAfter = _findIsolate(_isolatesAfter, isolateId);
+        _isolateAfter ??= _isolateStats(
           await service.getIsolate(isolateId).timeout(timeout),
         );
       } on Object catch (error) {
@@ -345,9 +438,13 @@ final class CockpitDevToolsProfiler {
         heapProfile != null ||
         _isolateBefore != null ||
         _isolateAfter != null ||
+        _isolatesBefore.isNotEmpty ||
+        _isolatesAfter.isNotEmpty ||
         _timeline != null ||
         _vm != null ||
         vmMemoryProfile != null ||
+        _allocationTraces.isNotEmpty ||
+        _perfettoProfile != null ||
         gpu != null;
     if (!hasData && _failures.isNotEmpty) {
       return CockpitDevToolsProfile(
@@ -357,6 +454,9 @@ final class CockpitDevToolsProfiler {
         gpu: gpu,
         vm: _vm,
         vmMemory: vmMemoryProfile,
+        isolate: _isolateProfile,
+        allocationTraces: _allocationTraces,
+        perfetto: _perfettoProfile,
       );
     }
     return CockpitDevToolsProfile(
@@ -366,12 +466,39 @@ final class CockpitDevToolsProfiler {
       cpu: cpuProfile,
       heap: heapProfile,
       gpu: gpu,
-      isolate: _isolateBefore == null && _isolateAfter == null
-          ? null
-          : CockpitIsolateProfile(before: _isolateBefore, after: _isolateAfter),
+      isolate: _isolateProfile,
       timeline: _timeline,
       vm: _vm,
       vmMemory: vmMemoryProfile,
+      allocationTraces: _allocationTraces,
+      perfetto: _perfettoProfile,
+    );
+  }
+
+  CockpitPerfettoProfile? get _perfettoProfile {
+    if (_perfettoCpu == null && _perfettoTimeline == null) return null;
+    return CockpitPerfettoProfile(
+      cpu: _perfettoCpu,
+      timeline: _perfettoTimeline,
+    );
+  }
+
+  CockpitIsolateProfile? get _isolateProfile {
+    if (_isolateBefore == null &&
+        _isolateAfter == null &&
+        _isolatesBefore.isEmpty &&
+        _isolatesAfter.isEmpty) {
+      return null;
+    }
+    return CockpitIsolateProfile(
+      before: _isolateBefore,
+      after: _isolateAfter,
+      beforeAll: _isolatesBefore,
+      afterAll: _isolatesAfter,
+      droppedBefore: _droppedIsolatesBefore,
+      droppedAfter: _droppedIsolatesAfter,
+      events: _isolateEvents,
+      droppedEvents: _droppedIsolateEvents,
     );
   }
 
@@ -414,6 +541,127 @@ final class CockpitDevToolsProfiler {
       // A disconnected VM is already unavailable; never mask the test action.
     }
     _profilerChanged = false;
+  }
+
+  Future<void> _enableAllocationTracing(
+    VmService service,
+    String isolateId,
+  ) async {
+    for (final classId in _allocationClassIds.take(20)) {
+      if (!_allocationClassNames.containsKey(classId)) {
+        _recordFailure(
+          'allocation',
+          StateError('VM class $classId was not present in the baseline.'),
+        );
+        continue;
+      }
+      try {
+        await service
+            .setTraceClassAllocation(isolateId, classId, true)
+            .timeout(timeout);
+        _enabledAllocationClassIds.add(classId);
+      } on Object catch (error) {
+        _recordFailure('allocation:$classId', error);
+      }
+    }
+  }
+
+  Future<void> _readAllocationTraces(
+    VmService service,
+    String isolateId, {
+    required int extentUs,
+  }) async {
+    for (final classId in _enabledAllocationClassIds) {
+      try {
+        final raw = await service
+            .getAllocationTraces(
+              isolateId,
+              timeOriginMicros: _originUs,
+              timeExtentMicros: extentUs,
+              classId: classId,
+            )
+            .timeout(timeout);
+        _allocationTraces.add(
+          CockpitAllocationTrace(
+            classId: classId,
+            className: _allocationClassNames[classId],
+            profile: _cpuProfile(raw),
+          ),
+        );
+      } on Object catch (error) {
+        _recordFailure('allocation:$classId', error);
+      }
+    }
+  }
+
+  Future<void> _readPerfettoTraces(
+    VmService service,
+    String isolateId, {
+    required int extentUs,
+    required bool includeCpu,
+    required bool includeTimeline,
+  }) async {
+    if (includeCpu && (_profilerWasEnabled || _profilerChanged)) {
+      try {
+        final raw = await service
+            .getPerfettoCpuSamples(
+              isolateId,
+              timeOriginMicros: _originUs,
+              timeExtentMicros: extentUs,
+            )
+            .timeout(timeout);
+        final data = raw.samples;
+        if (data != null && data.isNotEmpty) {
+          _perfettoCpu = CockpitPerfettoTrace(
+            kind: 'cpu',
+            data: data,
+            originUs: _nonNegativeNullable(raw.timeOriginMicros) ?? _originUs!,
+            extentUs: _nonNegativeNullable(raw.timeExtentMicros) ?? extentUs,
+            samplePeriodUs: _nonNegativeNullable(raw.samplePeriod),
+            maxStackDepth: _nonNegativeNullable(raw.maxStackDepth),
+            sampleCount: _nonNegativeNullable(raw.sampleCount),
+            pid: _nonNegativeNullable(raw.pid),
+          );
+        }
+      } on Object catch (error) {
+        _recordFailure('perfetto-cpu', error);
+      }
+    }
+    if (includeTimeline) {
+      try {
+        final raw = await service
+            .getPerfettoVMTimeline(
+              timeOriginMicros: _originUs,
+              timeExtentMicros: extentUs,
+            )
+            .timeout(timeout);
+        final data = raw.trace;
+        if (data != null && data.isNotEmpty) {
+          _perfettoTimeline = CockpitPerfettoTrace(
+            kind: 'timeline',
+            data: data,
+            originUs: _nonNegativeNullable(raw.timeOriginMicros) ?? _originUs!,
+            extentUs: _nonNegativeNullable(raw.timeExtentMicros) ?? extentUs,
+          );
+        }
+      } on Object catch (error) {
+        _recordFailure('perfetto-timeline', error);
+      }
+    }
+  }
+
+  static int? _nonNegativeNullable(int? value) {
+    return value == null || value < 0 ? null : value;
+  }
+
+  static String _nonEmpty(String? value, {required String fallback}) {
+    final text = value?.trim();
+    return text == null || text.isEmpty ? fallback : text;
+  }
+
+  static String? _nonEmptyNullable(String? value) {
+    final text = value?.trim();
+    return text == null || text.isEmpty ? null : text;
   }
 
   Future<CockpitHeapPoint?> _readHeapPoint(
@@ -476,18 +724,92 @@ final class CockpitDevToolsProfiler {
       if (message is String && message.isNotEmpty) error = message;
     } catch (_) {}
     return CockpitIsolateStats(
-      id: isolate.id ?? 'unknown',
-      name: isolate.name ?? 'isolate',
-      groupId: isolate.isolateGroupId,
+      id: _nonEmpty(isolate.id, fallback: 'unknown'),
+      name: _nonEmpty(isolate.name, fallback: 'isolate'),
+      groupId: _nonEmptyNullable(isolate.isolateGroupId),
       runnable: isolate.runnable,
-      livePorts: isolate.livePorts,
+      livePorts: _nonNegativeNullable(isolate.livePorts),
       libraryCount: isolate.libraries?.length,
       extensionCount: isolate.extensionRPCs?.length,
-      startTimeMs: isolate.startTime,
+      startTimeMs: _nonNegativeNullable(isolate.startTime),
       system: isolate.isSystemIsolate,
       pauseKind: pauseKind,
       error: error,
     );
+  }
+
+  static const _maxIsolateSnapshots = 64;
+  static const _maxIsolateEvents = 1000;
+
+  Future<void> _subscribeIsolateEvents(VmService service) async {
+    final subscription = service.onIsolateEvent.listen(_recordIsolateEvent);
+    _isolateSubscription = subscription;
+    try {
+      await service.streamListen(EventStreams.kIsolate).timeout(timeout);
+    } on Object catch (error) {
+      await subscription.cancel();
+      _isolateSubscription = null;
+      _recordFailure('isolate-stream', error);
+    }
+  }
+
+  void _recordIsolateEvent(Event event) {
+    final kind = event.kind?.trim();
+    if (kind == null || kind.isEmpty) return;
+    if (_isolateEvents.length >= _maxIsolateEvents) {
+      _droppedIsolateEvents += 1;
+      return;
+    }
+    _isolateEvents.add(
+      CockpitIsolateEvent(
+        kind: kind,
+        timestampMs: _nonNegativeNullable(event.timestamp),
+        isolateId: _nonEmptyNullable(event.isolate?.id),
+        name: _nonEmptyNullable(event.isolate?.name),
+        groupId: _nonEmptyNullable(event.isolateGroup?.id),
+      ),
+    );
+  }
+
+  Future<List<CockpitIsolateStats>> _readIsolates(
+    VmService service,
+    VM vm, {
+    required bool before,
+  }) async {
+    final refs = vm.isolates ?? const <IsolateRef>[];
+    final dropped = refs.length > _maxIsolateSnapshots
+        ? refs.length - _maxIsolateSnapshots
+        : 0;
+    final values = await Future.wait(
+      refs.take(_maxIsolateSnapshots).map((ref) async {
+        final id = ref.id;
+        if (id == null || id.isEmpty) return null;
+        try {
+          return _isolateStats(
+            await service.getIsolate(id).timeout(timeout),
+          );
+        } on Object catch (error) {
+          _recordFailure('isolate:$id', error);
+          return null;
+        }
+      }),
+    );
+    if (before) {
+      _droppedIsolatesBefore = dropped;
+    } else {
+      _droppedIsolatesAfter = dropped;
+    }
+    return values.whereType<CockpitIsolateStats>().toList(growable: false);
+  }
+
+  static CockpitIsolateStats? _findIsolate(
+    Iterable<CockpitIsolateStats> isolates,
+    String id,
+  ) {
+    for (final isolate in isolates) {
+      if (isolate.id == id) return isolate;
+    }
+    return null;
   }
 
   CockpitCpuProfile _cpuProfile(CpuSamples raw) {
@@ -524,7 +846,7 @@ final class CockpitDevToolsProfiler {
       samples.add(
         CockpitCpuSample(
           timestampUs: timestamp,
-          threadId: sample.tid,
+          threadId: _nonNegativeNullable(sample.tid),
           stack: List<int>.unmodifiable(sample.stack ?? const <int>[]),
           vmTag: sample.vmTag,
           userTag: sample.userTag,
@@ -536,9 +858,10 @@ final class CockpitDevToolsProfiler {
       samplePeriodUs: _nonNegative(raw.samplePeriod),
       maxStackDepth: _nonNegative(raw.maxStackDepth),
       sampleCount: _nonNegative(raw.sampleCount),
-      timeOriginUs: _nonNegative(raw.timeOriginMicros),
-      timeExtentUs: _nonNegative(raw.timeExtentMicros),
-      pid: raw.pid,
+      timeOriginUs:
+          _nonNegativeNullable(raw.timeOriginMicros) ?? _originUs ?? 0,
+      timeExtentUs: _nonNegativeNullable(raw.timeExtentMicros) ?? 0,
+      pid: _nonNegativeNullable(raw.pid),
       functions: List.unmodifiable(functions),
       samples: List.unmodifiable(samples),
       droppedSamples: dropped,
@@ -771,16 +1094,39 @@ final class CockpitDevToolsProfiler {
   }
 
   Future<void> _close() async {
+    await _stopHeapSampling();
     final service = _service;
+    final isolateId = _isolateId;
+    final isolateSubscription = _isolateSubscription;
+    _isolateSubscription = null;
+    if (isolateSubscription != null) {
+      await isolateSubscription.cancel();
+    }
+    if (service != null && isolateId != null) {
+      for (final classId in _enabledAllocationClassIds) {
+        try {
+          await service
+              .setTraceClassAllocation(isolateId, classId, false)
+              .timeout(timeout);
+        } catch (_) {
+          // A disconnected VM already stopped tracing; never mask the action.
+        }
+      }
+    }
+    if (service != null) {
+      try {
+        await service.streamCancel(EventStreams.kIsolate).timeout(timeout);
+      } catch (_) {
+        // A disconnected VM already stopped the stream.
+      }
+    }
+    _enabledAllocationClassIds.clear();
     _service = null;
     _isolateId = null;
     _originUs = null;
     _beforeHeap = null;
     _vmMemoryBefore = null;
     _vmMemoryAfter = null;
-    _heapSampleTimer?.cancel();
-    _heapSampleTimer = null;
-    _heapSamplePending = null;
     if (service != null) await service.dispose();
   }
 

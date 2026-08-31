@@ -328,7 +328,7 @@ void main() {
         shaderEvents: 1,
         durationUs: 40,
       ),
-      isolate: const CockpitIsolateProfile(
+      isolate: CockpitIsolateProfile(
         before: CockpitIsolateStats(
           id: 'isolates/1',
           name: 'main',
@@ -349,6 +349,41 @@ void main() {
           extensionCount: 3,
           startTimeMs: 1700000000000,
         ),
+        beforeAll: <CockpitIsolateStats>[
+          CockpitIsolateStats(
+            id: 'isolates/1',
+            name: 'main',
+            runnable: true,
+          ),
+          CockpitIsolateStats(
+            id: 'isolates/2',
+            name: 'worker',
+            runnable: true,
+          ),
+        ],
+        afterAll: <CockpitIsolateStats>[
+          CockpitIsolateStats(
+            id: 'isolates/1',
+            name: 'main',
+            runnable: true,
+          ),
+          CockpitIsolateStats(
+            id: 'isolates/3',
+            name: 'worker-2',
+            runnable: true,
+          ),
+        ],
+        droppedBefore: 1,
+        events: const <CockpitIsolateEvent>[
+          CockpitIsolateEvent(
+            kind: 'IsolateStart',
+            timestampMs: 1700000000100,
+            isolateId: 'isolates/3',
+            name: 'worker-2',
+            groupId: 'groups/1',
+          ),
+        ],
+        droppedEvents: 2,
       ),
       timeline: CockpitTimelineProfile(
         recorder: 'ring',
@@ -401,6 +436,16 @@ void main() {
     expect(decoded.heap!.groupAfter!.usageBytes, 24);
     expect(decoded.gpu!.shaderEvents, 1);
     expect(decoded.isolate!.after!.livePorts, 2);
+    expect(decoded.isolate!.beforeAll, hasLength(2));
+    expect(
+      decoded.isolate!.afterAll.where((item) => item.id == 'isolates/3'),
+      isNotEmpty,
+    );
+    expect(decoded.isolate!.droppedBefore, 1);
+    expect(decoded.isolate!.droppedAfter, 0);
+    expect(decoded.isolate!.events.single.kind, 'IsolateStart');
+    expect(decoded.isolate!.events.single.isolateId, 'isolates/3');
+    expect(decoded.isolate!.droppedEvents, 2);
     expect(decoded.timeline!.recordedStreams, <String>['Dart']);
     expect(decoded.vm!.targetCpu, 'arm64');
     expect(decoded.vm!.isolateCount, 2);
@@ -477,6 +522,64 @@ void main() {
       throwsFormatException,
     );
   });
+
+  test(
+    'allocation traces and Perfetto payloads stay compact until full export',
+    () {
+      final trace = CockpitCpuProfile(
+        samplePeriodUs: 1000,
+        maxStackDepth: 8,
+        sampleCount: 1,
+        timeOriginUs: 0,
+        timeExtentUs: 1000,
+        functions: const <CockpitCpuFunction>[
+          CockpitCpuFunction(
+            name: 'allocateThing',
+            inclusiveTicks: 1,
+            exclusiveTicks: 1,
+          ),
+        ],
+        samples: const <CockpitCpuSample>[
+          CockpitCpuSample(timestampUs: 10, stack: <int>[0]),
+        ],
+      );
+      final profile = CockpitDevToolsProfile(
+        source: 'vm',
+        state: 'available',
+        allocationTraces: <CockpitAllocationTrace>[
+          CockpitAllocationTrace(
+            classId: 'classes/1',
+            className: 'Thing',
+            profile: trace,
+          ),
+        ],
+        perfetto: CockpitPerfettoProfile(
+          cpu: CockpitPerfettoTrace(
+            kind: 'cpu',
+            data: 'AQID',
+            originUs: 0,
+            extentUs: 1000,
+            samplePeriodUs: 1000,
+            maxStackDepth: 8,
+            sampleCount: 1,
+            pid: 42,
+          ),
+        ),
+      );
+      final compact = profile.toJson();
+      expect(compact['perfetto'], isNot(contains('data')));
+      expect((compact['alloc'] as List).single['trace']['n'], 1);
+      expect((compact['alloc'] as List).single['trace'], isNot(contains('s')));
+      final compactDecoded = CockpitDevToolsProfile.fromJson(compact);
+      expect(compactDecoded.perfetto!.cpu!.data, isNull);
+      expect(compactDecoded.perfetto!.cpu!.sampleCount, 1);
+      final full = profile.toJson(includeRaw: true);
+      expect((full['perfetto'] as Map)['cpu']['data'], 'AQID');
+      final decoded = CockpitDevToolsProfile.fromJson(full);
+      expect(decoded.allocationTraces.single.className, 'Thing');
+      expect(decoded.perfetto!.cpu!.sampleCount, 1);
+    },
+  );
 
   test('VM process-memory trees stay bounded and compact', () {
     final node = CockpitVmMemoryNode(

@@ -96,7 +96,9 @@ Map<String, Object?> _reportPayload(
         'label': reports[index].stepId?.trim().isNotEmpty == true
             ? reports[index].stepId
             : 'Capture ${index + 1}',
-        'report': reports[index].toJson(),
+        // HTML is the explicit complete export surface. Normal integration
+        // test output still uses report.toJson() without raw Perfetto bytes.
+        'report': reports[index].toJson(includeRaw: true),
         'analysis': _performanceAnalysisPayload(reports[index]),
       },
   ],
@@ -623,7 +625,7 @@ details[open] summary::after { content: "−"; }
 <body>
 <header class="topbar"><div class="shell topbar-inner">
   <div class="brand"><span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 1024 1024" focusable="false"><rect width="1024" height="1024" rx="192" fill="#111418"/><path d="M704 254A318 318 0 1 0 704 770" fill="none" stroke="#F4F7F9" stroke-linecap="round" stroke-width="104"/><rect x="512" y="480" width="276" height="64" rx="32" fill="#38D49B"/><circle cx="512" cy="512" r="76" fill="#38D49B"/><path d="M473 512L501 540L556 480" fill="none" stroke="#111418" stroke-linecap="round" stroke-linejoin="round" stroke-width="28"/><circle cx="788" cy="512" r="42" fill="#F6B94A"/></svg></span><div class="brand-copy"><strong>Cockpit performance</strong><span>Offline report · exact retained data</span></div></div>
-  <div class="top-actions"><button class="icon-button" id="theme-button" type="button" title="Toggle theme" aria-label="Toggle theme">☼</button><button class="quiet-button" id="download-button" type="button">Download full JSON</button><button class="quiet-button" id="timeline-button" type="button">Download timeline</button></div>
+  <div class="top-actions"><button class="icon-button" id="theme-button" type="button" title="Toggle theme" aria-label="Toggle theme">☼</button><button class="quiet-button" id="download-button" type="button">Download full JSON</button><button class="quiet-button" id="timeline-button" type="button">Download timeline</button><button class="quiet-button hidden" id="perfetto-button" type="button">Download Perfetto</button></div>
 </div></header>
 <div class="shell">
   <section class="hero">
@@ -640,7 +642,7 @@ details[open] summary::after { content: "−"; }
     <section class="panel coverage-panel"><div class="panel-head"><div><h2>DevTools coverage</h2><p>What this deterministic capture can prove, and which DevTools profilers are intentionally not collected.</p></div><span class="subtle" id="coverage-summary">—</span></div><div class="coverage-grid" id="coverage-grid"></div></section>
     <section class="devtools-grid" id="devtools-grid">
       <div class="panel"><div class="panel-head"><div><h2>CPU sampling</h2><p>Real VM samples and top inclusive stacks from this capture.</p></div><div class="panel-tools"><span class="subtle" id="cpu-note">—</span><button class="quiet-button detail-button" type="button" data-details="cpu">Details</button></div></div><div class="chart-wrap" style="height:170px"><canvas id="cpu-chart" aria-label="CPU sampling chart"></canvas></div><div class="devtools-list" id="cpu-list"></div></div>
-      <div class="panel"><div class="panel-head"><div><h2>Heap &amp; allocation</h2><p>Dart heap usage and allocation classes returned by the VM.</p></div><div class="panel-tools"><span class="subtle" id="heap-note">—</span><button class="quiet-button detail-button" type="button" data-details="heap">Details</button></div></div><div class="chart-wrap" style="height:150px"><canvas id="heap-chart" aria-label="Dart heap chart"></canvas></div><div class="devtools-list" id="heap-list"></div></div>
+      <div class="panel"><div class="panel-head"><div><h2>Heap &amp; allocation</h2><p>Dart heap usage, allocation classes, and explicitly selected allocation call stacks.</p></div><div class="panel-tools"><span class="subtle" id="heap-note">—</span><button class="quiet-button detail-button" type="button" data-details="heap">Details</button></div></div><div class="chart-wrap" style="height:150px"><canvas id="heap-chart" aria-label="Dart heap chart"></canvas></div><div class="devtools-list" id="heap-list"></div></div>
       <div class="panel"><div class="panel-head"><div><h2>GPU / Shader signals</h2><p>Only actual GPU, raster, Skia, and shader timeline events are shown.</p></div><div class="panel-tools"><span class="subtle" id="gpu-note">—</span><button class="quiet-button detail-button" type="button" data-details="gpu">Details</button></div></div><div class="devtools-list" id="gpu-list"></div></div>
     </section>
     <section class="panel vm-runtime-panel"><div class="panel-head"><div><h2>VM runtime health</h2><p>Isolate lifecycle, heap capacity, and timeline recorder state captured from VM Service.</p></div><div class="panel-tools"><span class="subtle" id="vm-note">—</span><button class="quiet-button detail-button" type="button" data-details="vm">Details</button></div></div><div class="vm-runtime-grid"><div class="chart-wrap" style="height:210px"><canvas id="heap-trend-chart" aria-label="VM heap trend chart"></canvas></div><div class="devtools-list" id="vm-list"></div></div></section>
@@ -753,6 +755,11 @@ details[open] summary::after { content: "−"; }
     return item;
   };
   var fileStem = function (value) { var stem = String(value == null ? '' : value).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+\$/g, ''); return stem || 'cockpit-performance'; };
+  var downloadBase64 = function (value, name) {
+    var raw = atob(String(value || '')); var bytes = new Uint8Array(raw.length);
+    for (var i = 0; i < raw.length; i += 1) bytes[i] = raw.charCodeAt(i);
+    var blob = new Blob([bytes], { type: 'application/octet-stream' }); var link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = name; link.click(); setTimeout(function () { URL.revokeObjectURL(link.href); }, 1000);
+  };
   var spanKey = function (event) { return String(event.c || 'uncategorized') + '\\u0000' + String(event.n || 'Unnamed event'); };
   var timelinePayload = function () {
     var traceEvents = []; var openSpans = {};
@@ -809,7 +816,7 @@ details[open] summary::after { content: "−"; }
     }
     if (kind === 'heap' && d.heap) {
       var heap = d.heap;
-      return { summary: { before: heap.before, after: heap.after, groupBefore: heap.gb || null, groupAfter: heap.ga || null, interval: heap.interval || 0, samples: Array.isArray(heap.samples) ? heap.samples.length : 0, dropped: heap.drop || 0, classes: Array.isArray(heap.classes) ? heap.classes.length : 0 }, classes: preview(heap.classes, 200), samples: preview(heap.samples, 300) };
+      return { summary: { before: heap.before, after: heap.after, groupBefore: heap.gb || null, groupAfter: heap.ga || null, interval: heap.interval || 0, samples: Array.isArray(heap.samples) ? heap.samples.length : 0, dropped: heap.drop || 0, classes: Array.isArray(heap.classes) ? heap.classes.length : 0, allocationTraces: Array.isArray(d.alloc) ? d.alloc.length : 0 }, classes: preview(heap.classes, 200), allocationTraces: preview(d.alloc, 20), samples: preview(heap.samples, 300) };
     }
     if (kind === 'gpu' && d.gpu) return d.gpu;
     if (kind === 'vm') return { vm: d.vm || null, isolate: d.isolate || null, timeline: d.timeline || null, gc: (reports[state.report].analysis || {}).gc || null };
@@ -1219,13 +1226,14 @@ details[open] summary::after { content: "−"; }
       ['Heap profile', d && d.heap ? 'available' : 'unavailable', d && d.heap ? nf.format((d.heap.classes || []).length) + ' allocation classes' : (d && d.why ? d.why : 'Dart heap profile unavailable')],
       ['Heap trend', d && d.heap && Array.isArray(d.heap.samples) && d.heap.samples.length ? 'available' : 'unavailable', d && d.heap && Array.isArray(d.heap.samples) && d.heap.samples.length ? nf.format(d.heap.samples.length) + ' VM heap samples' : 'No retained VM heap samples'],
       ['Isolate group memory', d && d.heap && d.heap.gb && d.heap.ga ? 'available' : 'unavailable', d && d.heap && d.heap.gb && d.heap.ga ? 'Group heap before/after points' : 'Group memory usage unavailable'],
-      ['Allocation trace', d && d.heap ? 'available' : 'unavailable', d && d.heap ? 'Class allocation counters from the VM' : 'Requires a live VM service'],
+      ['Allocation trace', d && Array.isArray(d.alloc) && d.alloc.length ? 'available' : 'unavailable', d && Array.isArray(d.alloc) && d.alloc.length ? nf.format(d.alloc.length) + ' selected class call stacks' : 'Pass allocationClassIds to trace selected classes'],
       ['VM runtime', d && d.vm ? 'available' : 'unavailable', d && d.vm ? 'VM identity, CPU target, and isolate inventory' : 'No VM runtime metadata retained'],
       ['Isolate health', d && d.isolate ? 'available' : 'unavailable', d && d.isolate ? 'Before/after lifecycle and pause state' : 'No isolate snapshot retained'],
       ['Timeline streams', d && d.timeline ? 'available' : 'unavailable', d && d.timeline ? nf.format((d.timeline.recorded || []).length) + ' recorded / ' + nf.format((d.timeline.available || []).length) + ' available streams' : 'Timeline recorder metadata unavailable'],
       ['VM process memory', d && d.vmem && (d.vmem.before || d.vmem.after) ? 'available' : 'unavailable', d && d.vmem && (d.vmem.before || d.vmem.after) ? 'Before/after retained memory tree' : 'VM process memory usage unavailable'],
       ['Network profiler', 'not-collected', 'Use Cockpit network evidence for HTTP/SSE/WebSocket traffic'],
       ['GPU/shader', d && d.gpu ? 'available' : 'unavailable', d && d.gpu ? nf.format(number(d.gpu.events)) + ' timeline signals' : 'No matching GPU or shader timeline events'],
+      ['Perfetto export', d && d.perfetto && ((d.perfetto.cpu && d.perfetto.cpu.data) || (d.perfetto.timeline && d.perfetto.timeline.data)) ? 'available' : 'unavailable', d && d.perfetto && ((d.perfetto.cpu && d.perfetto.cpu.data) || (d.perfetto.timeline && d.perfetto.timeline.data)) ? 'Raw CPU/timeline proto traces retained' : 'Set perfetto: true for an exact trace artifact'],
     ];
     rows.forEach(function (row) { if (row[1] === 'available') available += 1; });
     el('coverage-summary').textContent = available + ' of ' + rows.length + ' views backed by this capture';
@@ -1306,15 +1314,27 @@ details[open] summary::after { content: "−"; }
     var timeline = d && d.timeline ? d.timeline : null;
     var vmRuntime = d && d.vm ? d.vm : null;
     var vmMemory = d && d.vmem ? d.vmem : null;
+    var allocations = d && Array.isArray(d.alloc) ? d.alloc : [];
+    var perfetto = d && d.perfetto ? d.perfetto : null;
     el('cpu-note').textContent = cpu ? nf.format(number(cpu.n)) + ' samples · ' + us(number(cpu.span)) + (cpu.period ? ' · ' + us(number(cpu.period)) + ' period' : '') : (d && d.why ? 'Unavailable' : 'Not collected');
     var functions = cpu && Array.isArray(cpu.f) ? cpu.f.slice().sort(function (a, b) { return number(b.in) - number(a.in); }).slice(0, 12) : [];
     el('cpu-list').innerHTML = functions.length ? functions.map(function (fn) { return '<div class="devtools-row"><strong title="' + esc(fn.n || '') + '">' + esc(fn.n || '<anonymous>') + '</strong><span>' + nf.format(number(fn.in)) + ' ticks · ' + nf.format(number(fn.ex)) + ' self</span></div>'; }).join('') : '<p class="devtools-note">' + esc(cpu ? 'No samples retained.' : (d && d.why ? d.why : 'CPU sampling was unavailable for this run.')) + '</p>';
-    el('heap-note').textContent = heap ? bytes(number(heap.after && heap.after.use)) + ' used · ' + bytes(number(heap.after && heap.after.ext)) + ' external' + (heap.samples && heap.samples.length ? ' · ' + nf.format(heap.samples.length) + ' samples' : '') + (heap.ga ? ' · group tracked' : '') : (d && d.why ? 'Unavailable' : 'Not collected');
+    el('heap-note').textContent = heap ? bytes(number(heap.after && heap.after.use)) + ' used · ' + bytes(number(heap.after && heap.after.ext)) + ' external' + (heap.samples && heap.samples.length ? ' · ' + nf.format(heap.samples.length) + ' samples' : '') + (heap.ga ? ' · group tracked' : '') + (allocations.length ? ' · ' + nf.format(allocations.length) + ' traces' : '') : (d && d.why ? 'Unavailable' : 'Not collected');
     var classes = heap && Array.isArray(heap.classes) ? heap.classes.slice(0, 12) : [];
-    el('heap-list').innerHTML = classes.length ? classes.map(function (item) { return '<div class="devtools-row"><strong title="' + esc(item.n || '') + '">' + esc(item.n || '<unknown>') + '</strong><span>' + bytes(number(item.bytes)) + ' · ' + nf.format(number(item.count)) + ' objs</span></div>'; }).join('') : '<p class="devtools-note">' + esc(heap ? 'No allocation classes retained.' : (d && d.why ? d.why : 'Dart heap profiling was unavailable for this run.')) + '</p>';
+    var classRows = classes.map(function (item) { return '<div class="devtools-row"><strong title="' + esc(item.n || '') + '">' + esc(item.n || '<unknown>') + '</strong><span>' + bytes(number(item.bytes)) + ' · ' + nf.format(number(item.count)) + ' objs</span></div>'; });
+    var allocationRows = allocations.map(function (item) { var trace = item.trace || {}; return '<div class="devtools-row"><strong title="' + esc(item.name || item.id || '') + '">' + esc(item.name || item.id || '<unknown>') + '</strong><span>' + nf.format(number(trace.n)) + ' allocation samples</span></div>'; });
+    el('heap-list').innerHTML = classRows.concat(allocationRows).join('') || '<p class="devtools-note">' + esc(heap ? 'No allocation classes retained.' : (d && d.why ? d.why : 'Dart heap profiling was unavailable for this run.')) + '</p>';
     el('gpu-note').textContent = gpu ? nf.format(number(gpu.events)) + ' signals · ' + us(number(gpu.time)) : 'No matching timeline signals';
     el('gpu-list').innerHTML = gpu ? '<div class="devtools-row"><strong>GPU / raster / Skia</strong><span>' + nf.format(number(gpu.events)) + ' events</span></div><div class="devtools-row"><strong>Shader signals</strong><span>' + nf.format(number(gpu.shaders)) + ' events</span></div><div class="devtools-row"><strong>Observed duration</strong><span>' + esc(us(gpu.time)) + '</span></div>' : '<p class="devtools-note">GPU counters are platform-specific. Cockpit reports only real matching VM timeline events.</p>';
     var after = isolate && isolate.after ? isolate.after : isolate && isolate.before ? isolate.before : null;
+    var beforeAll = isolate && Array.isArray(isolate.allB) ? isolate.allB : [];
+    var afterAll = isolate && Array.isArray(isolate.allA) ? isolate.allA : [];
+    var beforeIds = {};
+    beforeAll.forEach(function (item) { if (item && item.id) beforeIds[String(item.id)] = true; });
+    var afterIds = {};
+    afterAll.forEach(function (item) { if (item && item.id) afterIds[String(item.id)] = true; });
+    var startedIsolates = afterAll.filter(function (item) { return item && item.id && !beforeIds[String(item.id)]; }).length;
+    var stoppedIsolates = beforeAll.filter(function (item) { return item && item.id && !afterIds[String(item.id)]; }).length;
     el('vm-note').textContent = after ? (after.run === false ? 'paused' : 'runnable') + (timeline ? ' · ' + (timeline.recorder || 'unknown recorder') : '') : 'VM metadata unavailable';
     var vmRows = [];
     if (vmRuntime) {
@@ -1328,6 +1348,9 @@ details[open] summary::after { content: "−"; }
       if (vmRuntime.sys != null) vmRows.push(['System isolates', nf.format(number(vmRuntime.sys))]);
       if (vmRuntime.start != null) vmRows.push(['VM started', dateText(vmRuntime.start)]);
     }
+    if (beforeAll.length || afterAll.length) vmRows.push(['Isolate snapshots', nf.format(beforeAll.length) + ' before / ' + nf.format(afterAll.length) + ' after']);
+    if (startedIsolates || stoppedIsolates) vmRows.push(['Isolate changes', '+' + nf.format(startedIsolates) + ' started / −' + nf.format(stoppedIsolates) + ' stopped']);
+    if (isolate && (isolate.dropB || isolate.dropA)) vmRows.push(['Isolate snapshot drops', nf.format(number(isolate.dropB)) + ' before / ' + nf.format(number(isolate.dropA)) + ' after']);
     if (after) { vmRows.push(['Isolate', (after.name || 'isolate') + (after.id ? ' · ' + after.id : '')]); if (after.group) vmRows.push(['Group', after.group]); if (after.run != null) vmRows.push(['Runnable', after.run ? 'yes' : 'no']); if (after.ports != null) vmRows.push(['Live ports', nf.format(number(after.ports))]); if (after.libs != null) vmRows.push(['Libraries', nf.format(number(after.libs))]); if (after.ext != null) vmRows.push(['Extensions', nf.format(number(after.ext))]); if (after.start != null) vmRows.push(['Started', dateText(after.start)]); if (after.pause) vmRows.push(['Pause state', after.pause]); if (after.error) vmRows.push(['Error', after.error]); }
     if (timeline) { vmRows.push(['Recorder', timeline.recorder || 'unknown']); vmRows.push(['Streams', nf.format((timeline.recorded || []).length) + ' recorded / ' + nf.format((timeline.available || []).length) + ' available']); }
     if (heap && heap.drop) vmRows.push(['Heap sample drops', nf.format(number(heap.drop))]);
@@ -1339,6 +1362,10 @@ details[open] summary::after { content: "−"; }
     var memoryRows = memoryRoot && Array.isArray(memoryRoot.c) ? memoryRoot.c.slice(0, 8) : [];
     el('vm-memory-note').textContent = memoryPoints.length ? memoryPoints.map(function (point) { return point[0] + ' ' + bytes(point[1].s); }).join(' · ') : 'VM process memory unavailable';
     el('vm-memory-list').innerHTML = memoryRows.length ? '<div class="devtools-row"><strong>' + esc(memoryRoot.n || 'process') + '</strong><span>' + esc(bytes(memoryRoot.s)) + '</span></div>' + memoryRows.map(function (item) { return '<div class="devtools-row"><strong title="' + esc(item.n || '') + '">' + esc(item.n || 'bucket') + '</strong><span>' + esc(bytes(item.s)) + '</span></div>'; }).join('') + (memoryRoot.drop ? '<p class="devtools-note">' + esc(nf.format(number(memoryRoot.drop))) + ' child buckets omitted; Details contains the retained tree.</p>' : '') : '<p class="devtools-note">VM process memory was unavailable for this run.</p>';
+    var perfettoButton = el('perfetto-button');
+    var hasPerfetto = !!(perfetto && ((perfetto.cpu && perfetto.cpu.data) || (perfetto.timeline && perfetto.timeline.data)));
+    perfettoButton.classList.toggle('hidden', !hasPerfetto);
+    perfettoButton.title = hasPerfetto ? 'Download exact VM Perfetto traces' : '';
   };
   var renderEventSummary = function () {
     var list = events(); var start = list.reduce(function (m, e) { return Math.min(m, number(e.t)); }, Infinity); var finish = list.reduce(function (m, e) { return Math.max(m, number(e.t) + number(e.d)); }, -Infinity); var traceSpan = list.length ? Math.max(0, finish - start) : 0; var categories = {}; list.forEach(function (e) { var key = String(e.c || 'uncategorized'); categories[key] = (categories[key] || 0) + 1; }); var top = Object.keys(categories).sort(function (a, b) { return categories[b] - categories[a]; })[0];
@@ -1438,7 +1465,7 @@ details[open] summary::after { content: "−"; }
     if (dtools) {
       if (dtools.cpu) cells.push(['CPU samples', nf.format(number(dtools.cpu.n))], ['CPU period', us(number(dtools.cpu.period))], ['CPU depth', nf.format(number(dtools.cpu.depth))], ['CPU dropped', nf.format(number(dtools.cpu.dropped))]);
       if (dtools.heap) cells.push(['VM heap samples', nf.format((dtools.heap.samples || []).length)], ['VM heap interval', duration(dtools.heap.interval)], ['VM heap dropped', nf.format(number(dtools.heap.drop))], ['Allocation classes', nf.format((dtools.heap.classes || []).length)], ['Group heap before', dtools.heap.gb ? bytes(dtools.heap.gb.use) : 'Unavailable'], ['Group heap after', dtools.heap.ga ? bytes(dtools.heap.ga.use) : 'Unavailable']);
-      if (dtools.isolate) { var iso = dtools.isolate.after || dtools.isolate.before || {}; cells.push(['Isolate', iso.name || '—'], ['Isolate group', iso.group || '—'], ['Live ports', iso.ports == null ? 'Unavailable' : nf.format(number(iso.ports))], ['Libraries', iso.libs == null ? 'Unavailable' : nf.format(number(iso.libs))], ['Extensions', iso.ext == null ? 'Unavailable' : nf.format(number(iso.ext))]); }
+      if (dtools.isolate) { var iso = dtools.isolate.after || dtools.isolate.before || {}; var isoBefore = Array.isArray(dtools.isolate.allB) ? dtools.isolate.allB : []; var isoAfter = Array.isArray(dtools.isolate.allA) ? dtools.isolate.allA : []; var isoBeforeIds = {}; isoBefore.forEach(function (item) { if (item && item.id) isoBeforeIds[String(item.id)] = true; }); var isoAfterIds = {}; isoAfter.forEach(function (item) { if (item && item.id) isoAfterIds[String(item.id)] = true; }); var isoStarted = isoAfter.filter(function (item) { return item && item.id && !isoBeforeIds[String(item.id)]; }).length; var isoStopped = isoBefore.filter(function (item) { return item && item.id && !isoAfterIds[String(item.id)]; }).length; cells.push(['Isolate', iso.name || '—'], ['Isolate group', iso.group || '—'], ['Live ports', iso.ports == null ? 'Unavailable' : nf.format(number(iso.ports))], ['Libraries', iso.libs == null ? 'Unavailable' : nf.format(number(iso.libs))], ['Extensions', iso.ext == null ? 'Unavailable' : nf.format(number(iso.ext))], ['Isolate snapshots', nf.format(isoBefore.length) + ' before / ' + nf.format(isoAfter.length) + ' after'], ['Isolate changes', '+' + nf.format(isoStarted) + ' started / −' + nf.format(isoStopped) + ' stopped']); if (dtools.isolate.dropB || dtools.isolate.dropA) cells.push(['Isolate drops', nf.format(number(dtools.isolate.dropB)) + ' before / ' + nf.format(number(dtools.isolate.dropA)) + ' after']); }
       if (dtools.timeline) cells.push(['Timeline recorder', dtools.timeline.recorder || '—'], ['Recorded streams', nf.format((dtools.timeline.recorded || []).length)], ['Available streams', nf.format((dtools.timeline.available || []).length)]);
       if (dtools.vmem) {
         var vmBefore = dtools.vmem.before && dtools.vmem.before.root ? dtools.vmem.before.root : null;
@@ -1480,6 +1507,7 @@ details[open] summary::after { content: "−"; }
   el('copy-button').addEventListener('click', function (event) { var text = JSON.stringify(report()); if (navigator.clipboard && navigator.clipboard.writeText) { navigator.clipboard.writeText(text).then(function () { event.target.textContent = 'Copied'; setTimeout(function () { event.target.textContent = 'Copy report JSON'; }, 1200); }); } });
   el('download-button').addEventListener('click', function () { var blob = new Blob([JSON.stringify(data)], { type: 'application/json' }); var link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = fileStem(data.title) + '.full.json'; link.click(); setTimeout(function () { URL.revokeObjectURL(link.href); }, 1000); });
   el('timeline-button').addEventListener('click', function () { var blob = new Blob([JSON.stringify(timelinePayload())], { type: 'application/json' }); var link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = (reports[state.report].label || 'cockpit-performance') + '.timeline.json'; link.click(); setTimeout(function () { URL.revokeObjectURL(link.href); }, 1000); });
+  el('perfetto-button').addEventListener('click', function () { var d = report().devtools && report().devtools.perfetto; if (!d) return; var stem = fileStem(reports[state.report].label || 'cockpit-performance'); if (d.cpu && d.cpu.data) downloadBase64(d.cpu.data, stem + '.cpu.pftrace'); if (d.timeline && d.timeline.data) setTimeout(function () { downloadBase64(d.timeline.data, stem + '.timeline.pftrace'); }, 120); });
   el('theme-button').addEventListener('click', function () { root.dataset.theme = root.dataset.theme === 'light' ? 'dark' : 'light'; drawStartupChart(); drawFrameChart(); drawEventChart(); drawPhaseChart(); drawResourceChart(); drawCacheChart(); drawJankChart(); drawCadenceChart(); drawCacheTrendChart(); drawCategoryCostChart(); drawHotspotChart(); drawFlameChart(); drawCpuChart(); drawHeapChart(); drawHeapTrendChart(); drawVmMemoryChart(); });
   window.addEventListener('scroll', hideTooltip, { passive: true });
   window.addEventListener('resize', function () { drawStartupChart(); drawFrameChart(); drawEventChart(); drawPhaseChart(); drawResourceChart(); drawCacheChart(); drawJankChart(); drawCadenceChart(); drawCacheTrendChart(); drawCategoryCostChart(); drawHotspotChart(); drawFlameChart(); drawCpuChart(); drawHeapChart(); drawHeapTrendChart(); drawVmMemoryChart(); });

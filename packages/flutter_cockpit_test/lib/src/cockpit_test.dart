@@ -213,6 +213,22 @@ final class CockpitTester {
     return writeCockpitPerformanceJson(json, path: path, title: title);
   }
 
+  /// Writes all retained Perfetto CPU/timeline traces as standalone files and
+  /// returns only their absolute paths. A capture must opt into [perfetto].
+  Future<List<String>> exportPerformancePerfetto({
+    String? directory,
+    String title = 'Cockpit performance',
+  }) async {
+    if (_performances.isEmpty) {
+      throw StateError('No performance capture has completed.');
+    }
+    return writeCockpitPerformancePerfetto(
+      _performances,
+      directory: directory,
+      title: title,
+    );
+  }
+
   var _sequence = 0;
   late final InAppCockpitCommandExecutor _executor = root.createCommandExecutor(
     platform: options.platform,
@@ -311,6 +327,43 @@ final class CockpitTester {
                       'heap': performance.devTools!.heap!.classes.length,
                     if (performance.devTools!.gpu != null)
                       'gpu': performance.devTools!.gpu!.events,
+                    if (performance.devTools!.isolate != null)
+                      'isolate': <String, Object?>{
+                        if (performance.devTools!.isolate!.beforeAll.isNotEmpty)
+                          'before': performance.devTools!.isolate!.beforeAll.length,
+                        if (performance.devTools!.isolate!.afterAll.isNotEmpty)
+                          'after': performance.devTools!.isolate!.afterAll.length,
+                        if (performance.devTools!.isolate!.events.isNotEmpty)
+                          'events': performance.devTools!.isolate!.events.length,
+                        if (performance.devTools!.isolate!.droppedBefore > 0 ||
+                            performance.devTools!.isolate!.droppedAfter > 0 ||
+                            performance.devTools!.isolate!.droppedEvents > 0)
+                          'dropped': <String, Object?>{
+                            if (performance.devTools!.isolate!.droppedBefore > 0)
+                              'before': performance.devTools!.isolate!.droppedBefore,
+                            if (performance.devTools!.isolate!.droppedAfter > 0)
+                              'after': performance.devTools!.isolate!.droppedAfter,
+                            if (performance.devTools!.isolate!.droppedEvents > 0)
+                              'events': performance.devTools!.isolate!.droppedEvents,
+                          },
+                      },
+                    if (performance.devTools!.timeline != null)
+                      'timeline': <String, Object?>{
+                        'recorder': performance.devTools!.timeline!.recorder,
+                        if (performance.devTools!.timeline!.availableStreams.isNotEmpty)
+                          'available': performance.devTools!.timeline!.availableStreams.length,
+                        if (performance.devTools!.timeline!.recordedStreams.isNotEmpty)
+                          'recorded': performance.devTools!.timeline!.recordedStreams.length,
+                      },
+                    if (performance.devTools!.vm != null)
+                      'vm': <String, Object?>{
+                        if (performance.devTools!.vm!.operatingSystem != null)
+                          'os': performance.devTools!.vm!.operatingSystem,
+                        if (performance.devTools!.vm!.targetCpu != null)
+                          'cpu': performance.devTools!.vm!.targetCpu,
+                        if (performance.devTools!.vm!.isolateCount != null)
+                          'isolates': performance.devTools!.vm!.isolateCount,
+                      },
                     if (performance.devTools!.vmMemory != null)
                       'vmem': <String, Object?>{
                         if (performance.devTools!.vmMemory!.before != null)
@@ -328,6 +381,15 @@ final class CockpitTester {
                               .root
                               .sizeBytes,
                       },
+                    if (performance.devTools!.allocationTraces.isNotEmpty)
+                      'alloc': performance.devTools!.allocationTraces.length,
+                    if (performance.devTools!.perfetto != null)
+                      'perfetto': <String, Object?>{
+                        if (performance.devTools!.perfetto!.cpu != null)
+                          'cpu': true,
+                        if (performance.devTools!.perfetto!.timeline != null)
+                          'timeline': true,
+                      },
                   },
               },
             )
@@ -344,6 +406,11 @@ final class CockpitTester {
   /// retained VM events so long captures stay predictable in memory.
   /// [vmMemory] collects the VM Service process-memory tree before and after
   /// the action. It is independent from [memory], which samples platform RSS.
+  /// [allocationClassIds] enables real VM allocation call-stack tracing for
+  /// selected class ids from a previous heap profile. It is intentionally
+  /// opt-in because tracing allocations changes VM profiling overhead.
+  /// [perfetto] retains the VM's original Perfetto CPU/timeline payload for a
+  /// complete offline export. The compact test result contains metadata only.
   /// Set [trackBuilds], [trackUserBuilds], [trackLayouts], or [trackPaints]
   /// only for diagnostic captures that need per-widget or per-render-object
   /// timeline spans. These flags add measurable tracing overhead and are
@@ -362,6 +429,8 @@ final class CockpitTester {
     bool vmMemory = true,
     bool cpu = true,
     bool heap = true,
+    List<String> allocationClassIds = const <String>[],
+    bool perfetto = false,
     Duration sampleEvery = const Duration(milliseconds: 100),
     int maxEvents = 200000,
     int maxCpuSamples = 50000,
@@ -415,6 +484,18 @@ final class CockpitTester {
         'Must be between 1 and 10000.',
       );
     }
+    final normalizedAllocationClassIds = allocationClassIds
+        .map((id) => id.trim())
+        .where((id) => id.isNotEmpty)
+        .toSet()
+        .toList(growable: false);
+    if (normalizedAllocationClassIds.length > 20) {
+      throw ArgumentError.value(
+        allocationClassIds,
+        'allocationClassIds',
+        'Must contain no more than 20 class ids.',
+      );
+    }
     final effectiveTimeout = timeout ?? options.commandTimeout;
     _validateTimeout(effectiveTimeout, name: 'timeout');
     final collector = FlutterCockpit.binding.performanceCollector;
@@ -445,16 +526,19 @@ final class CockpitTester {
       await devToolsProfiler.start(
         cpu: cpu,
         heap: heap,
-        timeline: timeline,
+        timeline: timeline || perfetto,
         vmMemory: vmMemory,
+        perfetto: perfetto,
+        allocationClassIds: normalizedAllocationClassIds,
         heapSampleEvery: sampleEvery,
       );
       dynamic timelineData;
-      var canTraceTimeline = timeline && !kIsWeb;
+      final collectTimeline = timeline || perfetto;
+      var canTraceTimeline = collectTimeline && !kIsWeb;
       if (canTraceTimeline) {
         canTraceTimeline = await _hasVmService();
       }
-      var timelineSource = timeline
+      var timelineSource = collectTimeline
           ? kIsWeb
                 ? 'unavailable:web'
                 : canTraceTimeline
@@ -500,8 +584,9 @@ final class CockpitTester {
         final devTools = await devToolsProfiler.finish(
           cpu: cpu,
           heap: heap,
-          timeline: timeline,
+          timeline: collectTimeline,
           vmMemory: vmMemory,
+          perfetto: perfetto,
           events: parsed.events,
         );
         final memoryReport = memorySampler?.stop();

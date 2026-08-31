@@ -16,6 +16,8 @@
 - Added VM heap trend sampling, isolate health/lifecycle snapshots,
   isolate-group memory points, and timeline recorder/stream metadata to every
   supported performance capture, with bounded HTML charts and detail dialogs.
+- Added bounded VM Isolate stream lifecycle events and all-isolate before/after
+  snapshots, including explicit started/ended and retention-drop evidence.
 - Added VM runtime identity, target/host CPU, architecture, process start, and
   isolate inventory to the HTML runtime panel and full export.
 - Added bounded VM Service process-memory trees before and after each capture,
@@ -32,6 +34,8 @@
 - Added complete canonical JSON export through `performanceJson()`,
   `exportPerformanceJson()`, and `CockpitPerformanceHtml.fullJson(...)`; the
   HTML full-download now includes every capture in the report bundle.
+- Added opt-in VM allocation call-stack traces for selected heap class ids and
+  exact Perfetto CPU/timeline exports, while keeping compact results metadata-only.
 - Added opt-in DevTools-equivalent `trackBuilds`, `trackUserBuilds`,
   `trackLayouts`, and `trackPaints` instrumentation for real per-widget and
   per-render-object timeline spans, with automatic restoration of prior flags.

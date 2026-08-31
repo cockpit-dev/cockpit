@@ -657,7 +657,7 @@ final class CockpitPerformanceReport {
   /// Number of valid frames observed before bounded retention was applied.
   int get observedFrameCount => frames.length + droppedFrames;
 
-  Map<String, Object?> toJson() => <String, Object?>{
+  Map<String, Object?> toJson({bool includeRaw = false}) => <String, Object?>{
     'schema': schemaVersion,
     'started': startedAt.toIso8601String(),
     'finished': finishedAt.toIso8601String(),
@@ -682,7 +682,7 @@ final class CockpitPerformanceReport {
         if (invalidEvents > 0) 'badEvents': invalidEvents,
       },
     if (memory != null) 'memory': memory!.toJson(),
-    if (devTools != null) 'devtools': devTools!.toJson(),
+    if (devTools != null) 'devtools': devTools!.toJson(includeRaw: includeRaw),
     if (timelineSource != null) 'source': timelineSource,
     if (stepId != null) 'step': stepId,
   };

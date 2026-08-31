@@ -170,6 +170,14 @@ void main() {
       reports[0]['report']['devtools']['isolate']['before']['run'],
       isTrue,
     );
+    expect(
+      reports[0]['report']['devtools']['isolate']['allA'][1]['id'],
+      'isolates/3',
+    );
+    expect(
+      reports[0]['report']['devtools']['isolate']['events'][0]['k'],
+      'IsolateStart',
+    );
     expect(reports[0]['report']['devtools']['timeline']['recorded'], <Object?>[
       'Dart',
     ]);
@@ -189,6 +197,29 @@ void main() {
     expect(reports[1]['analysis']['hotspots'][0]['p90'], 250);
     expect(reports[1]['analysis']['gc']['count'], 0);
   });
+
+  test(
+    'Perfetto stays metadata-only in compact output and is retained in HTML',
+    () {
+      final report = _report(step: 'perfetto').copyWithPerfetto();
+      final compact = report.toJson();
+      expect(
+        ((compact['devtools'] as Map)['perfetto'] as Map)['cpu'],
+        isNot(contains('data')),
+      );
+
+      final html = CockpitPerformanceHtml.render(report);
+      expect(html, contains('id="perfetto-button"'));
+      expect(html, contains('AQID'));
+
+      final full = jsonDecode(CockpitPerformanceHtml.fullJson([report]));
+      expect(
+        (((full as Map)['reports'] as List)
+            .single['report']['devtools']['perfetto']['cpu']['data']),
+        'AQID',
+      );
+    },
+  );
 
   test('closes begin/end spans and lowers unmatched markers', () {
     final report = _report(step: 'spans').copyWithEvents(<Object?>[
@@ -430,6 +461,30 @@ CockpitPerformanceReport _report({required String step}) {
           'ext': 1,
           'start': 1700000000000,
         },
+        'allB': <Object?>[
+          <String, Object?>{'id': 'isolates/1', 'name': 'main', 'run': true},
+          <String, Object?>{
+            'id': 'isolates/2',
+            'name': 'worker',
+            'run': true,
+          },
+        ],
+        'allA': <Object?>[
+          <String, Object?>{'id': 'isolates/1', 'name': 'main', 'run': true},
+          <String, Object?>{
+            'id': 'isolates/3',
+            'name': 'worker-2',
+            'run': true,
+          },
+        ],
+        'events': <Object?>[
+          <String, Object?>{
+            'k': 'IsolateStart',
+            't': 1700000000100,
+            'id': 'isolates/3',
+          },
+        ],
+        'dropE': 1,
       },
       'timeline': <String, Object?>{
         'recorder': 'ring',
@@ -481,6 +536,27 @@ extension on CockpitPerformanceReport {
   CockpitPerformanceReport copyWithEvents(Iterable<Object?> values) {
     final json = toJson();
     json['events'] = values.toList(growable: false);
+    return CockpitPerformanceReport.fromJson(json);
+  }
+
+  CockpitPerformanceReport copyWithPerfetto() {
+    final json = toJson();
+    final devtools = Map<String, Object?>.from(
+      json['devtools']! as Map<Object?, Object?>,
+    );
+    devtools['perfetto'] = <String, Object?>{
+      'cpu': <String, Object?>{
+        'kind': 'cpu',
+        'start': 0,
+        'span': 1000,
+        'period': 1000,
+        'depth': 8,
+        'n': 1,
+        'pid': 42,
+        'data': 'AQID',
+      },
+    };
+    json['devtools'] = devtools;
     return CockpitPerformanceReport.fromJson(json);
   }
 }
