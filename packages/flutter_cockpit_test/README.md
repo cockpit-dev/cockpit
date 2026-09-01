@@ -336,6 +336,9 @@ for repository, network, database, rendering, or business operations. The
 plugin is started only for one explicit capture and does not install a global
 listener:
 
+The complete runnable version of this pattern is in
+[`example/performance_plugin.dart`](example/performance_plugin.dart).
+
 ```dart
 final report = await cockpit.profile(
   () => runCheckoutFlow(),
