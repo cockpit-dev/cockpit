@@ -16,6 +16,10 @@ void main() {
       pictureCount: 3,
       pictureBytes: 20,
       frameNumber: 7,
+      buildStartUs: 150,
+      buildFinishUs: 4150,
+      rasterStartUs: 4200,
+      rasterFinishUs: 10100,
     ),
     const CockpitPerformanceFrame(
       index: 1,
@@ -157,6 +161,11 @@ void main() {
           category: 'Dart',
           timestampUs: -2,
           durationUs: 3,
+          processId: 7,
+          threadId: 11,
+          eventId: 'event-1',
+          scope: 'scope-1',
+          bindId: 'bind-1',
         ),
       ],
     );
@@ -164,8 +173,16 @@ void main() {
 
     expect(decoded.frames, frames);
     expect(decoded.frames.first.wallTimeUs, 900);
+    expect(decoded.frames.first.buildQueueUs, 50);
+    expect(decoded.frames.first.rasterQueueUs, 50);
+    expect(decoded.frames.first.pipelineSpanUs, 10000);
     expect(decoded.buildMode, 'profile');
     expect(decoded.events.single.timestampUs, -2);
+    expect(decoded.events.single.processId, 7);
+    expect(decoded.events.single.threadId, 11);
+    expect(decoded.events.single.eventId, 'event-1');
+    expect(decoded.events.single.scope, 'scope-1');
+    expect(decoded.events.single.bindId, 'bind-1');
     expect(decoded.summary.build.toJson(), containsPair('bud', 16667));
   });
 
@@ -285,6 +302,8 @@ void main() {
             inclusiveTicks: 1,
             exclusiveTicks: 1,
             uri: 'package:test/main.dart',
+            line: 12,
+            column: 0,
           ),
         ],
         samples: const <CockpitCpuSample>[
@@ -321,12 +340,26 @@ void main() {
           capacityBytes: 34,
           externalBytes: 5,
         ),
+        accumulatorResetAt: 1700000000100,
+        serviceGcAt: 1700000000200,
       ),
       gpu: const CockpitGpuProfile(
         source: 'vmTimeline',
         events: 2,
         shaderEvents: 1,
         durationUs: 40,
+      ),
+      gc: const CockpitGcProfile(
+        eventCount: 3,
+        timedCount: 2,
+        newCount: 2,
+        oldCount: 1,
+        totalPauseUs: 90,
+        p50PauseUs: 30,
+        p90PauseUs: 50,
+        maxPauseUs: 60,
+        newPauseUs: 40,
+        oldPauseUs: 50,
       ),
       isolate: CockpitIsolateProfile(
         before: CockpitIsolateStats(
@@ -338,6 +371,24 @@ void main() {
           libraryCount: 18,
           extensionCount: 3,
           startTimeMs: 1700000000000,
+          pauseOnExit: false,
+          exceptionPauseMode: 'Unhandled',
+          rootLibUri: 'package:test/main.dart',
+          number: '1',
+          pauseKind: 'PauseException',
+          pauseTimestampMs: 1700000000050,
+          pauseAsync: true,
+          breakpointCount: 2,
+          newHeap: const CockpitHeapPoint(
+            usageBytes: 4,
+            capacityBytes: 8,
+            externalBytes: 1,
+          ),
+          oldHeap: const CockpitHeapPoint(
+            usageBytes: 6,
+            capacityBytes: 12,
+            externalBytes: 1,
+          ),
         ),
         after: CockpitIsolateStats(
           id: 'isolates/1',
@@ -348,25 +399,31 @@ void main() {
           libraryCount: 18,
           extensionCount: 3,
           startTimeMs: 1700000000000,
+          pauseOnExit: false,
+          exceptionPauseMode: 'Unhandled',
+          rootLibUri: 'package:test/main.dart',
+          number: '1',
+          pauseKind: 'PauseException',
+          pauseTimestampMs: 1700000000050,
+          pauseAsync: true,
+          breakpointCount: 2,
+          newHeap: const CockpitHeapPoint(
+            usageBytes: 4,
+            capacityBytes: 8,
+            externalBytes: 1,
+          ),
+          oldHeap: const CockpitHeapPoint(
+            usageBytes: 6,
+            capacityBytes: 12,
+            externalBytes: 1,
+          ),
         ),
         beforeAll: <CockpitIsolateStats>[
-          CockpitIsolateStats(
-            id: 'isolates/1',
-            name: 'main',
-            runnable: true,
-          ),
-          CockpitIsolateStats(
-            id: 'isolates/2',
-            name: 'worker',
-            runnable: true,
-          ),
+          CockpitIsolateStats(id: 'isolates/1', name: 'main', runnable: true),
+          CockpitIsolateStats(id: 'isolates/2', name: 'worker', runnable: true),
         ],
         afterAll: <CockpitIsolateStats>[
-          CockpitIsolateStats(
-            id: 'isolates/1',
-            name: 'main',
-            runnable: true,
-          ),
+          CockpitIsolateStats(id: 'isolates/1', name: 'main', runnable: true),
           CockpitIsolateStats(
             id: 'isolates/3',
             name: 'worker-2',
@@ -381,6 +438,7 @@ void main() {
             isolateId: 'isolates/3',
             name: 'worker-2',
             groupId: 'groups/1',
+            extensionRpc: 'ext.flutter.inspector.getRootWidgetSummaryTree',
           ),
         ],
         droppedEvents: 2,
@@ -427,14 +485,52 @@ void main() {
           ),
         ),
       ),
+      logs: const <CockpitVmLogEvent>[
+        CockpitVmLogEvent(
+          timestampMs: 1700000000300,
+          level: 900,
+          sequence: 4,
+          message: 'slow request',
+          logger: 'app.network',
+          zone: 'request-zone',
+          error: 'timeout',
+          stack: 'package:test/main.dart:12',
+          isolateId: 'isolates/1',
+        ),
+      ],
+      debug: const <CockpitVmDebugEvent>[
+        CockpitVmDebugEvent(
+          kind: 'PauseException',
+          timestampMs: 1700000000400,
+          isolateId: 'isolates/1',
+          isolateName: 'main',
+          status: 'paused',
+          details: 'uncaught',
+          pauseAsync: true,
+          frame: 'main',
+          uri: 'package:test/main.dart',
+          line: 12,
+          column: 3,
+          exception: 'StateError',
+          breakpoint: 2,
+        ),
+      ],
+      droppedLogs: 3,
+      droppedDebug: 5,
     );
-    final decoded = CockpitDevToolsProfile.fromJson(profile.toJson());
-    expect(decoded.cpu!.samples.single.stack, <int>[0]);
-    expect(decoded.cpu!.functions.single.name, 'main');
+    final compact = profile.toJson();
+    final compactCpu = compact['cpu']! as Map<String, Object?>;
+    expect(compactCpu, isNot(contains('f')));
+    expect(compactCpu, isNot(contains('s')));
+    final decoded = CockpitDevToolsProfile.fromJson(compact);
+    expect(decoded.cpu!.samples, isEmpty);
+    expect(decoded.cpu!.functions, isEmpty);
     expect(decoded.heap!.after.usageBytes, 12);
     expect(decoded.heap!.classes.single.name, 'Foo');
     expect(decoded.heap!.groupAfter!.usageBytes, 24);
     expect(decoded.gpu!.shaderEvents, 1);
+    expect(decoded.gc!.eventCount, 3);
+    expect(decoded.gc!.p90PauseUs, 50);
     expect(decoded.isolate!.after!.livePorts, 2);
     expect(decoded.isolate!.beforeAll, hasLength(2));
     expect(
@@ -445,12 +541,40 @@ void main() {
     expect(decoded.isolate!.droppedAfter, 0);
     expect(decoded.isolate!.events.single.kind, 'IsolateStart');
     expect(decoded.isolate!.events.single.isolateId, 'isolates/3');
+    expect(
+      decoded.isolate!.events.single.extensionRpc,
+      'ext.flutter.inspector.getRootWidgetSummaryTree',
+    );
     expect(decoded.isolate!.droppedEvents, 2);
+    expect(decoded.isolate!.after!.number, '1');
+    expect(decoded.isolate!.after!.pauseKind, 'PauseException');
+    expect(decoded.isolate!.after!.pauseAsync, true);
+    expect(decoded.isolate!.after!.newHeap!.usageBytes, 4);
+    expect(decoded.isolate!.after!.oldHeap!.usageBytes, 6);
+    expect(decoded.logs.single.message, 'slow request');
+    expect(decoded.logs.single.zone, 'request-zone');
+    expect(decoded.logs.single.stack, 'package:test/main.dart:12');
+    expect(decoded.debug.single.uri, 'package:test/main.dart');
+    expect(decoded.debug.single.breakpoint, 2);
+    expect(decoded.droppedLogs, 3);
+    expect(decoded.droppedDebug, 5);
     expect(decoded.timeline!.recordedStreams, <String>['Dart']);
     expect(decoded.vm!.targetCpu, 'arm64');
     expect(decoded.vm!.isolateCount, 2);
     expect(decoded.vmMemory!.before!.root.children.first.name, 'Dart heap');
     expect(decoded.vmMemory!.after!.root.sizeBytes, 1280);
+    final full = CockpitDevToolsProfile.fromJson(
+      profile.toJson(includeRaw: true),
+    );
+    expect(full.cpu!.samples.single.stack, <int>[0]);
+    expect(full.cpu!.functions.single.name, 'main');
+    expect(full.cpu!.functions.single.line, 12);
+    expect(full.cpu!.functions.single.column, 0);
+    expect(full.heap!.accumulatorResetAt, 1700000000100);
+    expect(full.heap!.serviceGcAt, 1700000000200);
+    expect(full.isolate!.before!.pauseOnExit, false);
+    expect(full.isolate!.before!.exceptionPauseMode, 'Unhandled');
+    expect(full.isolate!.before!.rootLibUri, 'package:test/main.dart');
   });
 
   test('DevTools heap samples preserve order and compact drop count', () {
@@ -611,5 +735,63 @@ void main() {
       ),
       throwsFormatException,
     );
+  });
+
+  test('DevTools display and widget rebuild projections round-trip', () {
+    final profile = CockpitDevToolsProfile(
+      source: 'vm',
+      state: 'available',
+      display: CockpitDisplayProfile(
+        refreshRateHz: 120,
+        frameBudgetUs: 8333,
+        viewId: 'view-1',
+      ),
+      rebuild: CockpitRebuildProfile(
+        frames: <CockpitRebuildFrame>[
+          CockpitRebuildFrame(
+            frameNumber: 7,
+            entries: const <CockpitRebuildCount>[
+              CockpitRebuildCount(locationId: 2, count: 3),
+            ],
+          ),
+        ],
+        locations: <CockpitRebuildLocation>[
+          CockpitRebuildLocation(
+            id: 2,
+            uri: 'package:demo/main.dart',
+            line: 12,
+            column: 4,
+            name: 'HomePage',
+          ),
+        ],
+        totals: <CockpitRebuildTotal>[
+          CockpitRebuildTotal(locationId: 2, count: 3),
+        ],
+        unresolvedLocations: 1,
+      ),
+    );
+    final decoded = CockpitDevToolsProfile.fromJson(profile.toJson());
+    expect(decoded.display!.refreshRateHz, 120);
+    expect(decoded.display!.frameBudgetUs, 8333);
+    expect(decoded.rebuild!.frames.single.entries.single.count, 3);
+    expect(decoded.rebuild!.locations.single.name, 'HomePage');
+    expect(decoded.rebuild!.totals.single.count, 3);
+    expect(decoded.rebuild!.unresolvedLocations, 1);
+  });
+
+  test('retains isolate lifecycle events when snapshots are unavailable', () {
+    final profile = CockpitDevToolsProfile(
+      source: 'vm',
+      state: 'available',
+      isolate: CockpitIsolateProfile(
+        events: const <CockpitIsolateEvent>[
+          CockpitIsolateEvent(kind: 'IsolateExit', isolateId: 'isolates/2'),
+        ],
+      ),
+    );
+
+    final decoded = CockpitDevToolsProfile.fromJson(profile.toJson());
+    expect(decoded.isolate, isNotNull);
+    expect(decoded.isolate!.events.single.kind, 'IsolateExit');
   });
 }

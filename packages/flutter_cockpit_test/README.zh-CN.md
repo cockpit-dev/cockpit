@@ -185,9 +185,14 @@ expect(report.summary.jankCount, 0);
 
 当 VM Service 可用时，`profile()` 还会采集 DevTools CPU Profiler 和 Memory 视图背后的真实
 CPU 采样与 Dart allocation profile。完整报告保留采样栈和有界的分配类，普通测试输出只保留
-数量摘要，同时记录 VM heap 时间线样本、所有已发现 isolate 的前后健康快照和 Isolate stream 生命周期事件，以及 timeline recorder 的可用/已记录
+数量摘要，同时记录 VM heap 时间线样本、所有已发现 isolate 的前后健康快照和 Isolate stream 生命周期事件（VM 提供时还保留注册的 RPC），以及 timeline recorder 的可用/已记录
 stream 元数据。长场景可以用 `cpu: false` 或 `heap: false` 关闭对应采集，并通过
 `maxCpuSamples`、`maxHeapClasses`、`maxHeapSamples` 控制内存上限：
+
+当运行时提供真实信息时，CPU 函数会保留已验证的源码位置（URI、行、列）。Heap 报告还会保留 VM allocation accumulator 最近重置时间和最近一次 service GC 时间；isolate 快照会保留 pause-on-exit、异常暂停模式以及 root library URI。VM 没有提供的字段保持缺失，不会猜测填充。
+
+采集默认还会监听 VM 的 `Logging` 和 `Debug` stream。Logging 只保留 VM 通知中已经提供的消息、级别、logger、错误和堆栈；Debug 只保留暂停/恢复/异常/重载上下文以及通知中真实提供的源码位置。这些都是有界元数据，不会隐式执行对象求值，也不会阻塞被测 action。若某次采集不需要其中一类事件，可设置 `logs: false` 或 `debug: false`。当运行时提供时，isolate 快照还会保留新生代/老生代堆空间和断点数量。
+超长场景可以用 `maxLogs` 和 `maxDebug` 调整两类事件的保留上限；默认值已经足够覆盖常规交互，并且完整导出仍只保留有界数据。
 
 如果要调查某个具体类型的分配调用栈，先从 heap 报告取得 VM class id，再显式传入最多 20 个
 `allocationClassIds`。这是额外开销较高的 VM tracing，默认不会开启：

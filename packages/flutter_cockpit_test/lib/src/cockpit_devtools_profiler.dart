@@ -5,6 +5,7 @@ import 'package:cockpit_protocol/cockpit_protocol.dart';
 import 'package:vm_service/vm_service.dart';
 
 import 'cockpit_vm_service_connect.dart';
+import 'cockpit_timeline_analysis.dart';
 
 /// Collects the bounded VM data that powers Flutter DevTools' CPU and Memory
 /// views. It is deliberately best-effort: a missing profiler must not make a
@@ -15,6 +16,10 @@ final class CockpitDevToolsProfiler {
     this.maxCpuSamples = 50000,
     this.maxHeapClasses = 200,
     this.maxHeapSamples = 10000,
+    this.maxRebuildFrames = 10000,
+    this.maxRebuildEntries = 100000,
+    this.maxLogEvents = 2000,
+    this.maxDebugEvents = 2000,
   }) {
     if (timeout <= Duration.zero) {
       throw ArgumentError.value(timeout, 'timeout', 'Must be positive.');
@@ -40,12 +45,44 @@ final class CockpitDevToolsProfiler {
         'Must be between 1 and 10000.',
       );
     }
+    if (maxRebuildFrames < 1 || maxRebuildFrames > 10000) {
+      throw ArgumentError.value(
+        maxRebuildFrames,
+        'maxRebuildFrames',
+        'Must be between 1 and 10000.',
+      );
+    }
+    if (maxRebuildEntries < 1 || maxRebuildEntries > 1000000) {
+      throw ArgumentError.value(
+        maxRebuildEntries,
+        'maxRebuildEntries',
+        'Must be between 1 and 1000000.',
+      );
+    }
+    if (maxLogEvents < 1 || maxLogEvents > 100000) {
+      throw ArgumentError.value(
+        maxLogEvents,
+        'maxLogEvents',
+        'Must be between 1 and 100000.',
+      );
+    }
+    if (maxDebugEvents < 1 || maxDebugEvents > 100000) {
+      throw ArgumentError.value(
+        maxDebugEvents,
+        'maxDebugEvents',
+        'Must be between 1 and 100000.',
+      );
+    }
   }
 
   final Duration timeout;
   final int maxCpuSamples;
   final int maxHeapClasses;
   final int maxHeapSamples;
+  final int maxRebuildFrames;
+  final int maxRebuildEntries;
+  final int maxLogEvents;
+  final int maxDebugEvents;
 
   VmService? _service;
   String? _isolateId;
@@ -58,11 +95,29 @@ final class CockpitDevToolsProfiler {
   final List<CockpitIsolateStats> _isolatesBefore = <CockpitIsolateStats>[];
   final List<CockpitIsolateStats> _isolatesAfter = <CockpitIsolateStats>[];
   final List<CockpitIsolateEvent> _isolateEvents = <CockpitIsolateEvent>[];
+  final List<CockpitVmLogEvent> _logEvents = <CockpitVmLogEvent>[];
+  final List<CockpitVmDebugEvent> _debugEvents = <CockpitVmDebugEvent>[];
   StreamSubscription<Event>? _isolateSubscription;
+  StreamSubscription<Event>? _extensionSubscription;
+  StreamSubscription<Event>? _loggingSubscription;
+  StreamSubscription<Event>? _debugSubscription;
   var _droppedIsolatesBefore = 0;
   var _droppedIsolatesAfter = 0;
   var _droppedIsolateEvents = 0;
+  var _droppedLogEvents = 0;
+  var _droppedDebugEvents = 0;
   CockpitTimelineProfile? _timeline;
+  CockpitDisplayProfile? _display;
+  final List<CockpitRebuildFrame> _rebuildFrames = <CockpitRebuildFrame>[];
+  final Map<int, CockpitRebuildLocation> _rebuildLocations =
+      <int, CockpitRebuildLocation>{};
+  final Map<int, int> _rebuildTotals = <int, int>{};
+  var _retainedRebuildEntries = 0;
+  var _droppedRebuildFrames = 0;
+  var _droppedRebuildEntries = 0;
+  var _unresolvedRebuildLocations = 0;
+  bool? _rebuildEnabledBefore;
+  var _rebuildChanged = false;
   CockpitVmRuntimeProfile? _vm;
   CockpitVmMemorySnapshot? _vmMemoryBefore;
   CockpitVmMemorySnapshot? _vmMemoryAfter;
@@ -91,6 +146,9 @@ final class CockpitDevToolsProfiler {
     required bool timeline,
     required bool vmMemory,
     required bool perfetto,
+    required bool trackRebuilds,
+    bool logs = true,
+    bool debug = true,
     Iterable<String> allocationClassIds = const <String>[],
     Duration heapSampleEvery = const Duration(milliseconds: 100),
   }) async {
@@ -114,10 +172,24 @@ final class CockpitDevToolsProfiler {
     _isolatesBefore.clear();
     _isolatesAfter.clear();
     _isolateEvents.clear();
+    _logEvents.clear();
+    _debugEvents.clear();
     _droppedIsolatesBefore = 0;
     _droppedIsolatesAfter = 0;
     _droppedIsolateEvents = 0;
+    _droppedLogEvents = 0;
+    _droppedDebugEvents = 0;
     _timeline = null;
+    _display = null;
+    _rebuildFrames.clear();
+    _rebuildLocations.clear();
+    _rebuildTotals.clear();
+    _retainedRebuildEntries = 0;
+    _droppedRebuildFrames = 0;
+    _droppedRebuildEntries = 0;
+    _unresolvedRebuildLocations = 0;
+    _rebuildEnabledBefore = null;
+    _rebuildChanged = false;
     _vm = null;
     _vmMemoryBefore = null;
     _vmMemoryAfter = null;
@@ -142,7 +214,10 @@ final class CockpitDevToolsProfiler {
         timeline ||
         vmMemory ||
         perfetto ||
-        _allocationClassIds.isNotEmpty;
+        _allocationClassIds.isNotEmpty ||
+        trackRebuilds ||
+        logs ||
+        debug;
     if (!_requested) return;
     try {
       final info = await developer.Service.getInfo().timeout(timeout);
@@ -154,6 +229,8 @@ final class CockpitDevToolsProfiler {
       final service = await connectCockpitVmService(uri).timeout(timeout);
       _service = service;
       await _subscribeIsolateEvents(service);
+      if (logs) await _subscribeLoggingEvents(service);
+      if (debug) await _subscribeDebugEvents(service);
       final vm = await service.getVM().timeout(timeout);
       _vm = _vmProfile(vm);
       final isolateId = _mainIsolateId(vm);
@@ -163,10 +240,21 @@ final class CockpitDevToolsProfiler {
         return;
       }
       _isolateId = isolateId;
+      if (trackRebuilds) {
+        await _subscribeRebuildEvents(service);
+        try {
+          await _prepareRebuildTracking(service, isolateId);
+        } on Object catch (error) {
+          _recordFailure('rebuilds', error);
+        }
+      }
       try {
-        _isolatesBefore.addAll(
-          await _readIsolates(service, vm, before: true),
-        );
+        _display = await _readDisplayProfile(service, isolateId);
+      } on Object catch (error) {
+        _recordFailure('display', error);
+      }
+      try {
+        _isolatesBefore.addAll(await _readIsolates(service, vm, before: true));
         _isolateBefore = _findIsolate(_isolatesBefore, isolateId);
         _isolateBefore ??= _isolateStats(
           await service.getIsolate(isolateId).timeout(timeout),
@@ -178,7 +266,7 @@ final class CockpitDevToolsProfiler {
         try {
           final flags = await service.getVMTimelineFlags().timeout(timeout);
           _timeline = CockpitTimelineProfile(
-            recorder: flags.recorderName ?? 'unknown',
+            recorder: _timelineRecorder(flags.recorderName),
             availableStreams: flags.availableStreams ?? const <String>[],
             recordedStreams: flags.recordedStreams ?? const <String>[],
           );
@@ -257,22 +345,28 @@ final class CockpitDevToolsProfiler {
   }) async {
     if (!_requested) {
       final gpu = _gpu(events);
-      return gpu == null
+      final gc = _gc(events);
+      return gpu == null && gc == null
           ? null
           : CockpitDevToolsProfile(
               source: 'vmTimeline',
               state: 'available',
               gpu: gpu,
+              gc: gc,
             );
     }
     final service = _service;
     final isolateId = _isolateId;
+    final capturedGc = _gc(events);
     if (service == null || isolateId == null || _originUs == null) {
       return CockpitDevToolsProfile(
         source: 'vm',
         state: _hasUnsupportedFailure ? 'unsupported' : 'unavailable',
         reason: _failureReason ?? 'VM service connection was not established.',
+        gc: capturedGc,
         gpu: _gpu(events),
+        display: _display,
+        rebuild: _rebuildProfile,
         vm: _vm,
         vmMemory: _vmMemoryBefore == null
             ? null
@@ -300,7 +394,9 @@ final class CockpitDevToolsProfiler {
         try {
           final flags = await service.getVMTimelineFlags().timeout(timeout);
           _timeline = CockpitTimelineProfile(
-            recorder: flags.recorderName ?? _timeline?.recorder ?? 'unknown',
+            recorder: _timelineRecorder(
+              flags.recorderName ?? _timeline?.recorder,
+            ),
             availableStreams:
                 flags.availableStreams ??
                 _timeline?.availableStreams ??
@@ -440,22 +536,40 @@ final class CockpitDevToolsProfiler {
         _isolateAfter != null ||
         _isolatesBefore.isNotEmpty ||
         _isolatesAfter.isNotEmpty ||
+        _isolateEvents.isNotEmpty ||
+        _droppedIsolatesBefore > 0 ||
+        _droppedIsolatesAfter > 0 ||
+        _droppedIsolateEvents > 0 ||
+        _logEvents.isNotEmpty ||
+        _debugEvents.isNotEmpty ||
+        _droppedLogEvents > 0 ||
+        _droppedDebugEvents > 0 ||
         _timeline != null ||
+        _display != null ||
+        _rebuildFrames.isNotEmpty ||
         _vm != null ||
         vmMemoryProfile != null ||
         _allocationTraces.isNotEmpty ||
         _perfettoProfile != null ||
-        gpu != null;
+        gpu != null ||
+        capturedGc != null;
     if (!hasData && _failures.isNotEmpty) {
       return CockpitDevToolsProfile(
         source: 'vm',
         state: 'unavailable',
         reason: _failureReason,
+        gc: capturedGc,
         gpu: gpu,
+        display: _display,
+        rebuild: _rebuildProfile,
         vm: _vm,
         vmMemory: vmMemoryProfile,
         isolate: _isolateProfile,
         allocationTraces: _allocationTraces,
+        logs: _logEvents,
+        debug: _debugEvents,
+        droppedLogs: _droppedLogEvents,
+        droppedDebug: _droppedDebugEvents,
         perfetto: _perfettoProfile,
       );
     }
@@ -465,12 +579,19 @@ final class CockpitDevToolsProfiler {
       reason: _failureReason,
       cpu: cpuProfile,
       heap: heapProfile,
+      gc: capturedGc,
       gpu: gpu,
       isolate: _isolateProfile,
       timeline: _timeline,
+      display: _display,
+      rebuild: _rebuildProfile,
       vm: _vm,
       vmMemory: vmMemoryProfile,
       allocationTraces: _allocationTraces,
+      logs: _logEvents,
+      debug: _debugEvents,
+      droppedLogs: _droppedLogEvents,
+      droppedDebug: _droppedDebugEvents,
       perfetto: _perfettoProfile,
     );
   }
@@ -487,7 +608,11 @@ final class CockpitDevToolsProfiler {
     if (_isolateBefore == null &&
         _isolateAfter == null &&
         _isolatesBefore.isEmpty &&
-        _isolatesAfter.isEmpty) {
+        _isolatesAfter.isEmpty &&
+        _isolateEvents.isEmpty &&
+        _droppedIsolatesBefore == 0 &&
+        _droppedIsolatesAfter == 0 &&
+        _droppedIsolateEvents == 0) {
       return null;
     }
     return CockpitIsolateProfile(
@@ -499,6 +624,37 @@ final class CockpitDevToolsProfiler {
       droppedAfter: _droppedIsolatesAfter,
       events: _isolateEvents,
       droppedEvents: _droppedIsolateEvents,
+    );
+  }
+
+  CockpitRebuildProfile? get _rebuildProfile {
+    if (_rebuildFrames.isEmpty &&
+        _rebuildLocations.isEmpty &&
+        _rebuildTotals.isEmpty &&
+        _droppedRebuildFrames == 0 &&
+        _droppedRebuildEntries == 0 &&
+        _unresolvedRebuildLocations == 0) {
+      return null;
+    }
+    final locations = _rebuildLocations.values.toList(growable: false)
+      ..sort((left, right) => left.id.compareTo(right.id));
+    final totals = _rebuildTotals.entries.toList(growable: false)
+      ..sort((left, right) {
+        final count = right.value.compareTo(left.value);
+        return count != 0 ? count : left.key.compareTo(right.key);
+      });
+    return CockpitRebuildProfile(
+      frames: _rebuildFrames,
+      locations: locations,
+      totals: totals
+          .map(
+            (entry) =>
+                CockpitRebuildTotal(locationId: entry.key, count: entry.value),
+          )
+          .toList(growable: false),
+      droppedFrames: _droppedRebuildFrames,
+      droppedEntries: _droppedRebuildEntries,
+      unresolvedLocations: _unresolvedRebuildLocations,
     );
   }
 
@@ -654,9 +810,27 @@ final class CockpitDevToolsProfiler {
     return value == null || value < 0 ? null : value;
   }
 
+  static String? _boundedEventText(String? value) {
+    final text = value?.trim();
+    if (text == null || text.isEmpty) return null;
+    return text.length <= 64 * 1024
+        ? text
+        : '${text.substring(0, 64 * 1024 - 1)}…';
+  }
+
   static String _nonEmpty(String? value, {required String fallback}) {
     final text = value?.trim();
     return text == null || text.isEmpty ? fallback : text;
+  }
+
+  static String _timelineRecorder(String? value) {
+    final normalized = value?.trim();
+    if (normalized == null ||
+        normalized.isEmpty ||
+        normalized.toLowerCase() == 'null') {
+      return 'none';
+    }
+    return normalized;
   }
 
   static String? _nonEmptyNullable(String? value) {
@@ -723,9 +897,13 @@ final class CockpitDevToolsProfiler {
       final message = isolate.error?.message;
       if (message is String && message.isNotEmpty) error = message;
     } catch (_) {}
+    final pause = isolate.pauseEvent;
+    final rawHeaps = isolate.json?['_heaps'];
+    final heaps = rawHeaps is Map ? rawHeaps : const <Object?, Object?>{};
     return CockpitIsolateStats(
       id: _nonEmpty(isolate.id, fallback: 'unknown'),
       name: _nonEmpty(isolate.name, fallback: 'isolate'),
+      number: _nonEmptyNullable(isolate.number),
       groupId: _nonEmptyNullable(isolate.isolateGroupId),
       runnable: isolate.runnable,
       livePorts: _nonNegativeNullable(isolate.livePorts),
@@ -734,7 +912,29 @@ final class CockpitDevToolsProfiler {
       startTimeMs: _nonNegativeNullable(isolate.startTime),
       system: isolate.isSystemIsolate,
       pauseKind: pauseKind,
+      pauseTimestampMs: _nonNegativeNullable(pause?.timestamp),
+      pauseAsync: pause?.atAsyncSuspension,
       error: error,
+      pauseOnExit: isolate.pauseOnExit,
+      exceptionPauseMode: _nonEmptyNullable(isolate.exceptionPauseMode),
+      rootLibUri: _nonEmptyNullable(isolate.rootLib?.uri),
+      breakpointCount: isolate.breakpoints?.length,
+      newHeap: _heapPointFromRaw(heaps['new']),
+      oldHeap: _heapPointFromRaw(heaps['old']),
+    );
+  }
+
+  static CockpitHeapPoint? _heapPointFromRaw(Object? value) {
+    if (value is! Map) return null;
+    final usage = _intValue(value['used'] ?? value['usage']);
+    final capacity = _intValue(value['capacity'] ?? value['cap']);
+    final external = _intValue(value['external'] ?? value['ext']);
+    if (usage == null || capacity == null || external == null) return null;
+    if (usage < 0 || capacity < usage || external < 0) return null;
+    return CockpitHeapPoint(
+      usageBytes: usage,
+      capacityBytes: capacity,
+      externalBytes: external,
     );
   }
 
@@ -767,7 +967,317 @@ final class CockpitDevToolsProfiler {
         isolateId: _nonEmptyNullable(event.isolate?.id),
         name: _nonEmptyNullable(event.isolate?.name),
         groupId: _nonEmptyNullable(event.isolateGroup?.id),
+        extensionRpc: _nonEmptyNullable(event.extensionRPC),
       ),
+    );
+  }
+
+  Future<void> _subscribeLoggingEvents(VmService service) async {
+    final subscription = service.onLoggingEvent.listen(_recordLoggingEvent);
+    _loggingSubscription = subscription;
+    try {
+      await service.streamListen(EventStreams.kLogging).timeout(timeout);
+    } on Object catch (error) {
+      await subscription.cancel();
+      _loggingSubscription = null;
+      _recordFailure('logging-stream', error);
+    }
+  }
+
+  void _recordLoggingEvent(Event event) {
+    if (_logEvents.length >= maxLogEvents) {
+      _droppedLogEvents += 1;
+      return;
+    }
+    final record = event.logRecord;
+    if (record == null) return;
+    _logEvents.add(
+      CockpitVmLogEvent(
+        timestampMs: _nonNegativeNullable(record.time ?? event.timestamp),
+        level: _nonNegativeNullable(record.level),
+        sequence: _nonNegativeNullable(record.sequenceNumber),
+        message: _boundedEventText(record.message?.valueAsString),
+        logger: _boundedEventText(record.loggerName?.valueAsString),
+        zone: _boundedEventText(record.zone?.valueAsString),
+        error: _boundedEventText(record.error?.valueAsString),
+        stack: _boundedEventText(record.stackTrace?.valueAsString),
+        isolateId: _nonEmptyNullable(event.isolate?.id),
+      ),
+    );
+  }
+
+  Future<void> _subscribeDebugEvents(VmService service) async {
+    final subscription = service.onDebugEvent.listen(_recordDebugEvent);
+    _debugSubscription = subscription;
+    try {
+      await service.streamListen(EventStreams.kDebug).timeout(timeout);
+    } on Object catch (error) {
+      await subscription.cancel();
+      _debugSubscription = null;
+      _recordFailure('debug-stream', error);
+    }
+  }
+
+  void _recordDebugEvent(Event event) {
+    if (_debugEvents.length >= maxDebugEvents) {
+      _droppedDebugEvents += 1;
+      return;
+    }
+    final kind = event.kind?.trim();
+    if (kind == null || kind.isEmpty) return;
+    final frame = event.topFrame;
+    final location = frame?.location;
+    final functionName = frame?.function?.name?.trim().isNotEmpty == true
+        ? frame!.function!.name
+        : frame?.code?.name;
+    final exception = event.exception?.valueAsString;
+    _debugEvents.add(
+      CockpitVmDebugEvent(
+        kind: kind,
+        timestampMs: _nonNegativeNullable(event.timestamp),
+        isolateId: _nonEmptyNullable(event.isolate?.id),
+        isolateName: _nonEmptyNullable(event.isolate?.name),
+        status: _boundedEventText(event.status),
+        details: _boundedEventText(event.reloadFailureReason ?? event.details),
+        pauseAsync: event.atAsyncSuspension,
+        frame: _boundedEventText(functionName),
+        uri: _boundedEventText(location?.script?.uri),
+        line: _nonNegativeNullable(location?.line),
+        column: _nonNegativeNullable(location?.column),
+        exception: _boundedEventText(exception),
+        breakpoint: _nonNegativeNullable(event.breakpoint?.breakpointNumber),
+      ),
+    );
+  }
+
+  static const _rebuildExtension =
+      'ext.flutter.inspector.trackRebuildDirtyWidgets';
+  static const _rebuiltWidgetsEvent = 'Flutter.RebuiltWidgets';
+
+  Future<void> _subscribeRebuildEvents(VmService service) async {
+    final subscription = service.onExtensionEvent.listen(_recordExtensionEvent);
+    _extensionSubscription = subscription;
+    try {
+      await service.streamListen(EventStreams.kExtension).timeout(timeout);
+    } on Object catch (error) {
+      await subscription.cancel();
+      _extensionSubscription = null;
+      _recordFailure('rebuild-stream', error);
+    }
+  }
+
+  Future<void> _prepareRebuildTracking(
+    VmService service,
+    String isolateId,
+  ) async {
+    final current = await service
+        .callServiceExtension(_rebuildExtension, isolateId: isolateId)
+        .timeout(timeout);
+    final enabled = _extensionEnabled(current.json?['enabled']);
+    if (enabled == null) {
+      throw StateError('Flutter rebuild tracking state is unavailable.');
+    }
+    _rebuildEnabledBefore = enabled;
+    if (enabled) return;
+    await service
+        .callServiceExtension(
+          _rebuildExtension,
+          isolateId: isolateId,
+          args: <String, dynamic>{'enabled': true},
+        )
+        .timeout(timeout);
+    _rebuildChanged = true;
+  }
+
+  static bool? _extensionEnabled(Object? value) {
+    if (value is bool) return value;
+    if (value is String) {
+      if (value == 'true') return true;
+      if (value == 'false') return false;
+    }
+    return null;
+  }
+
+  void _recordExtensionEvent(Event event) {
+    if (event.extensionKind != _rebuiltWidgetsEvent) return;
+    final data = event.extensionData?.data;
+    if (data == null) return;
+    _recordRebuildEvent(data);
+  }
+
+  void _recordRebuildEvent(Map<String, dynamic> data) {
+    final frameNumber = _intValue(data['frameNumber']);
+    final rawEvents = data['events'];
+    if (frameNumber == null || rawEvents is! List || rawEvents.length.isOdd) {
+      _droppedRebuildFrames += 1;
+      return;
+    }
+
+    _mergeRebuildLocations(data['locations']);
+    final entries = <CockpitRebuildCount>[];
+    for (var index = 0; index < rawEvents.length; index += 2) {
+      final locationId = _intValue(rawEvents[index]);
+      final count = _intValue(rawEvents[index + 1]);
+      if (locationId == null || count == null || locationId < 0 || count <= 0) {
+        _droppedRebuildEntries += 1;
+        continue;
+      }
+      if (entries.length >= 2000 ||
+          _retainedRebuildEntries >= maxRebuildEntries) {
+        _droppedRebuildEntries += 1;
+        continue;
+      }
+      _ensureRebuildLocation(locationId);
+      entries.add(CockpitRebuildCount(locationId: locationId, count: count));
+      _retainedRebuildEntries += 1;
+      _rebuildTotals[locationId] = (_rebuildTotals[locationId] ?? 0) + count;
+    }
+
+    if (_rebuildFrames.isNotEmpty &&
+        frameNumber <= _rebuildFrames.last.frameNumber) {
+      if (frameNumber == _rebuildFrames.last.frameNumber) {
+        _removeRebuildFrame(_rebuildFrames.removeLast());
+      } else {
+        _droppedRebuildFrames += 1;
+        return;
+      }
+    }
+    if (_rebuildFrames.length >= maxRebuildFrames) {
+      _removeRebuildFrame(_rebuildFrames.removeAt(0));
+      _droppedRebuildFrames += 1;
+    }
+    _rebuildFrames.add(
+      CockpitRebuildFrame(frameNumber: frameNumber, entries: entries),
+    );
+  }
+
+  void _removeRebuildFrame(CockpitRebuildFrame frame) {
+    _retainedRebuildEntries -= frame.entries.length;
+    for (final entry in frame.entries) {
+      final current = _rebuildTotals[entry.locationId] ?? 0;
+      final next = current - entry.count;
+      if (next > 0) {
+        _rebuildTotals[entry.locationId] = next;
+      } else {
+        _rebuildTotals.remove(entry.locationId);
+      }
+    }
+  }
+
+  void _mergeRebuildLocations(Object? raw) {
+    if (raw is! Map) return;
+    for (final entry in raw.entries) {
+      if (entry.key is! String || entry.value is! Map) continue;
+      final uri = entry.key as String;
+      final value = Map<Object?, Object?>.from(entry.value as Map);
+      final ids = value['ids'];
+      final lines = value['lines'];
+      final columns = value['columns'];
+      final names = value['names'];
+      if (ids is! List ||
+          lines is! List ||
+          columns is! List ||
+          names is! List) {
+        continue;
+      }
+      final count = <int>[
+        ids.length,
+        lines.length,
+        columns.length,
+        names.length,
+      ].reduce((left, right) => left < right ? left : right);
+      for (var index = 0; index < count; index += 1) {
+        final id = _intValue(ids[index]);
+        final line = _intValue(lines[index]);
+        final column = _intValue(columns[index]);
+        final name = names[index] is String ? (names[index] as String) : null;
+        if (id == null ||
+            id < 0 ||
+            line == null ||
+            line < 0 ||
+            column == null ||
+            column < 0) {
+          continue;
+        }
+        final wasUnresolved = _rebuildLocations[id]?.isResolved != true;
+        _rebuildLocations[id] = CockpitRebuildLocation(
+          id: id,
+          uri: uri,
+          line: line,
+          column: column,
+          name: name,
+        );
+        if (wasUnresolved && _unresolvedRebuildLocations > 0) {
+          _unresolvedRebuildLocations -= 1;
+        }
+      }
+    }
+  }
+
+  void _ensureRebuildLocation(int id) {
+    if (_rebuildLocations.containsKey(id)) return;
+    if (_rebuildLocations.length >= 50000) return;
+    _rebuildLocations[id] = CockpitRebuildLocation(id: id);
+    _unresolvedRebuildLocations += 1;
+  }
+
+  static int? _intValue(Object? value) {
+    if (value is int) return value;
+    if (value is num && value.isFinite && value == value.round()) {
+      return value.toInt();
+    }
+    return null;
+  }
+
+  Future<CockpitDisplayProfile?> _readDisplayProfile(
+    VmService service,
+    String isolateId,
+  ) async {
+    String? viewId;
+    try {
+      final views = await service
+          .callServiceExtension('_flutter.listViews', isolateId: isolateId)
+          .timeout(timeout);
+      final rawViews = views.json?['views'];
+      if (rawViews is List) {
+        for (final raw in rawViews) {
+          if (raw is Map &&
+              raw['type'] == 'FlutterView' &&
+              raw['id'] is String &&
+              (raw['id'] as String).trim().isNotEmpty) {
+            viewId = raw['id'] as String;
+            break;
+          }
+        }
+      }
+    } catch (_) {
+      // The refresh extension can still work without an explicit view id.
+    }
+    final response = await service
+        .callServiceExtension(
+          '_flutter.getDisplayRefreshRate',
+          isolateId: isolateId,
+          args: <String, dynamic>{'viewId': ?viewId},
+        )
+        .timeout(timeout);
+    final fps = response.json?['fps'];
+    final refreshRate = fps is num && fps.isFinite && fps > 0
+        ? fps.toDouble()
+        : fps is String
+        ? double.tryParse(fps)
+        : null;
+    final normalizedRefreshRate =
+        refreshRate != null && refreshRate.isFinite && refreshRate > 0
+        ? refreshRate
+        : null;
+    final budget = normalizedRefreshRate == null
+        ? null
+        : (1000000 / normalizedRefreshRate).round();
+    if (normalizedRefreshRate == null && viewId == null) return null;
+    return CockpitDisplayProfile(
+      refreshRateHz: normalizedRefreshRate,
+      frameBudgetUs: budget,
+      viewId: viewId,
     );
   }
 
@@ -785,9 +1295,7 @@ final class CockpitDevToolsProfiler {
         final id = ref.id;
         if (id == null || id.isEmpty) return null;
         try {
-          return _isolateStats(
-            await service.getIsolate(id).timeout(timeout),
-          );
+          return _isolateStats(await service.getIsolate(id).timeout(timeout));
         } on Object catch (error) {
           _recordFailure('isolate:$id', error);
           return null;
@@ -816,15 +1324,21 @@ final class CockpitDevToolsProfiler {
     final functions = <CockpitCpuFunction>[];
     for (final function in raw.functions ?? const <ProfileFunction>[]) {
       final reference = function.function;
-      final name =
-          _dynamicString(reference, 'name') ??
-          function.resolvedUrl ??
-          '<anonymous>';
+      final location = _dynamicField(reference, 'location');
+      final line = _dynamicInt(location, 'line');
+      final column = _dynamicInt(location, 'column');
+      final uri =
+          _nonEmptyNullable(function.resolvedUrl) ??
+          _dynamicString(_dynamicField(location, 'script'), 'uri') ??
+          _dynamicString(location, 'uri');
+      final name = _dynamicString(reference, 'name') ?? uri ?? '<anonymous>';
       functions.add(
         CockpitCpuFunction(
           name: name,
           kind: function.kind,
-          uri: function.resolvedUrl,
+          uri: uri,
+          line: line == null || line < 1 ? null : line,
+          column: column,
           inclusiveTicks: _nonNegative(function.inclusiveTicks),
           exclusiveTicks: _nonNegative(function.exclusiveTicks),
         ),
@@ -914,6 +1428,8 @@ final class CockpitDevToolsProfiler {
       droppedSamples: droppedSamples,
       groupBefore: groupBefore,
       groupAfter: groupAfter,
+      accumulatorResetAt: _nonNegativeNullable(raw.dateLastAccumulatorReset),
+      serviceGcAt: _nonNegativeNullable(raw.dateLastServiceGC),
     );
   }
 
@@ -1068,6 +1584,53 @@ final class CockpitDevToolsProfiler {
     _heapSamplePending = null;
   }
 
+  CockpitGcProfile? _gc(Iterable<CockpitPerformanceEvent> source) {
+    var count = 0;
+    var timed = 0;
+    var newCount = 0;
+    var oldCount = 0;
+    var total = 0;
+    var newPause = 0;
+    var oldPause = 0;
+    final durations = <int>[];
+    visitCockpitTimelineMeasurements(source, (event, pause, _) {
+      final kind = cockpitGcEventKind(event);
+      if (kind == null) return;
+      count += 1;
+      if (kind == 'new') newCount += 1;
+      if (kind == 'old') oldCount += 1;
+      if (pause <= 0) return;
+      timed += 1;
+      total += pause;
+      durations.add(pause);
+      if (kind == 'new') newPause += pause;
+      if (kind == 'old') oldPause += pause;
+    });
+    if (count == 0) return null;
+    durations.sort();
+    return CockpitGcProfile(
+      eventCount: count,
+      timedCount: timed,
+      newCount: newCount,
+      oldCount: oldCount,
+      totalPauseUs: total,
+      p50PauseUs: _percentile(durations, .5),
+      p90PauseUs: _percentile(durations, .9),
+      maxPauseUs: durations.isEmpty ? 0 : durations.last,
+      newPauseUs: newPause,
+      oldPauseUs: oldPause,
+    );
+  }
+
+  static int _percentile(List<int> values, double ratio) {
+    if (values.isEmpty) return 0;
+    final index = ((values.length - 1) * ratio).round().clamp(
+      0,
+      values.length - 1,
+    );
+    return values[index];
+  }
+
   CockpitGpuProfile? _gpu(Iterable<CockpitPerformanceEvent> source) {
     var count = 0;
     var shaders = 0;
@@ -1098,9 +1661,37 @@ final class CockpitDevToolsProfiler {
     final service = _service;
     final isolateId = _isolateId;
     final isolateSubscription = _isolateSubscription;
+    final extensionSubscription = _extensionSubscription;
+    final loggingSubscription = _loggingSubscription;
+    final debugSubscription = _debugSubscription;
     _isolateSubscription = null;
+    _extensionSubscription = null;
+    _loggingSubscription = null;
+    _debugSubscription = null;
     if (isolateSubscription != null) {
       await isolateSubscription.cancel();
+    }
+    if (extensionSubscription != null) {
+      await extensionSubscription.cancel();
+    }
+    if (loggingSubscription != null) {
+      await loggingSubscription.cancel();
+    }
+    if (debugSubscription != null) {
+      await debugSubscription.cancel();
+    }
+    if (service != null && isolateId != null && _rebuildChanged) {
+      try {
+        await service
+            .callServiceExtension(
+              _rebuildExtension,
+              isolateId: isolateId,
+              args: <String, dynamic>{'enabled': _rebuildEnabledBefore == true},
+            )
+            .timeout(timeout);
+      } catch (_) {
+        // A disconnected VM already stopped tracking; never mask the action.
+      }
     }
     if (service != null && isolateId != null) {
       for (final classId in _enabledAllocationClassIds) {
@@ -1119,6 +1710,27 @@ final class CockpitDevToolsProfiler {
       } catch (_) {
         // A disconnected VM already stopped the stream.
       }
+      if (extensionSubscription != null) {
+        try {
+          await service.streamCancel(EventStreams.kExtension).timeout(timeout);
+        } catch (_) {
+          // A disconnected VM already stopped the stream.
+        }
+      }
+      if (loggingSubscription != null) {
+        try {
+          await service.streamCancel(EventStreams.kLogging).timeout(timeout);
+        } catch (_) {
+          // A disconnected VM already stopped the stream.
+        }
+      }
+      if (debugSubscription != null) {
+        try {
+          await service.streamCancel(EventStreams.kDebug).timeout(timeout);
+        } catch (_) {
+          // A disconnected VM already stopped the stream.
+        }
+      }
     }
     _enabledAllocationClassIds.clear();
     _service = null;
@@ -1127,21 +1739,48 @@ final class CockpitDevToolsProfiler {
     _beforeHeap = null;
     _vmMemoryBefore = null;
     _vmMemoryAfter = null;
+    _rebuildEnabledBefore = null;
+    _rebuildChanged = false;
     if (service != null) await service.dispose();
   }
 
   static String? _dynamicString(Object? value, String field) {
+    final raw = _dynamicField(value, field);
+    if (raw is String && raw.trim().isNotEmpty) return raw;
+    return null;
+  }
+
+  static int? _dynamicInt(Object? value, String field) {
+    final raw = _dynamicField(value, field);
+    if (raw is int && raw >= 0) return raw;
+    if (raw is num && raw.isFinite && raw >= 0 && raw == raw.round()) {
+      return raw.toInt();
+    }
+    return null;
+  }
+
+  static Object? _dynamicField(Object? value, String field) {
+    if (value == null) return null;
     try {
       final result = (value as dynamic)?.toJson();
-      if (result is Map && result[field] is String) {
-        return result[field] as String;
+      if (result is Map && result.containsKey(field)) return result[field];
+    } catch (_) {}
+    try {
+      switch (field) {
+        case 'name':
+          return (value as dynamic)?.name;
+        case 'location':
+          return (value as dynamic)?.location;
+        case 'script':
+          return (value as dynamic)?.script;
+        case 'uri':
+          return (value as dynamic)?.uri;
+        case 'line':
+          return (value as dynamic)?.line;
+        case 'column':
+          return (value as dynamic)?.column;
       }
-    } catch (_) {
-      try {
-        final result = (value as dynamic)?.name;
-        if (result is String && result.isNotEmpty) return result;
-      } catch (_) {}
-    }
+    } catch (_) {}
     return null;
   }
 

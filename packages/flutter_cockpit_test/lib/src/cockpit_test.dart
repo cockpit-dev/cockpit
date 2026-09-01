@@ -18,6 +18,7 @@ import 'cockpit_performance_html_io.dart'
     if (dart.library.html) 'cockpit_performance_html_web.dart';
 import 'cockpit_performance_memory_sampler.dart';
 import 'cockpit_startup_report.dart';
+import 'cockpit_timeline_analysis.dart';
 import 'cockpit_test_options.dart';
 import 'cockpit_watch.dart';
 
@@ -325,35 +326,99 @@ final class CockpitTester {
                       'cpu': performance.devTools!.cpu!.sampleCount,
                     if (performance.devTools!.heap != null)
                       'heap': performance.devTools!.heap!.classes.length,
+                    if (performance.devTools!.gc != null)
+                      'gc': <String, Object?>{
+                        'n': performance.devTools!.gc!.eventCount,
+                        if (performance.devTools!.gc!.timedCount > 0)
+                          'timed': performance.devTools!.gc!.timedCount,
+                        if (performance.devTools!.gc!.p90PauseUs > 0)
+                          'p90': performance.devTools!.gc!.p90PauseUs,
+                      },
                     if (performance.devTools!.gpu != null)
                       'gpu': performance.devTools!.gpu!.events,
                     if (performance.devTools!.isolate != null)
                       'isolate': <String, Object?>{
                         if (performance.devTools!.isolate!.beforeAll.isNotEmpty)
-                          'before': performance.devTools!.isolate!.beforeAll.length,
+                          'before':
+                              performance.devTools!.isolate!.beforeAll.length,
                         if (performance.devTools!.isolate!.afterAll.isNotEmpty)
-                          'after': performance.devTools!.isolate!.afterAll.length,
+                          'after':
+                              performance.devTools!.isolate!.afterAll.length,
                         if (performance.devTools!.isolate!.events.isNotEmpty)
-                          'events': performance.devTools!.isolate!.events.length,
+                          'events':
+                              performance.devTools!.isolate!.events.length,
                         if (performance.devTools!.isolate!.droppedBefore > 0 ||
                             performance.devTools!.isolate!.droppedAfter > 0 ||
                             performance.devTools!.isolate!.droppedEvents > 0)
                           'dropped': <String, Object?>{
-                            if (performance.devTools!.isolate!.droppedBefore > 0)
-                              'before': performance.devTools!.isolate!.droppedBefore,
+                            if (performance.devTools!.isolate!.droppedBefore >
+                                0)
+                              'before':
+                                  performance.devTools!.isolate!.droppedBefore,
                             if (performance.devTools!.isolate!.droppedAfter > 0)
-                              'after': performance.devTools!.isolate!.droppedAfter,
-                            if (performance.devTools!.isolate!.droppedEvents > 0)
-                              'events': performance.devTools!.isolate!.droppedEvents,
+                              'after':
+                                  performance.devTools!.isolate!.droppedAfter,
+                            if (performance.devTools!.isolate!.droppedEvents >
+                                0)
+                              'events':
+                                  performance.devTools!.isolate!.droppedEvents,
                           },
                       },
                     if (performance.devTools!.timeline != null)
                       'timeline': <String, Object?>{
                         'recorder': performance.devTools!.timeline!.recorder,
-                        if (performance.devTools!.timeline!.availableStreams.isNotEmpty)
-                          'available': performance.devTools!.timeline!.availableStreams.length,
-                        if (performance.devTools!.timeline!.recordedStreams.isNotEmpty)
-                          'recorded': performance.devTools!.timeline!.recordedStreams.length,
+                        if (performance
+                            .devTools!
+                            .timeline!
+                            .availableStreams
+                            .isNotEmpty)
+                          'available': performance
+                              .devTools!
+                              .timeline!
+                              .availableStreams
+                              .length,
+                        if (performance
+                            .devTools!
+                            .timeline!
+                            .recordedStreams
+                            .isNotEmpty)
+                          'recorded': performance
+                              .devTools!
+                              .timeline!
+                              .recordedStreams
+                              .length,
+                      },
+                    if (performance.devTools!.display != null)
+                      'display': <String, Object?>{
+                        if (performance.devTools!.display!.refreshRateHz !=
+                            null)
+                          'hz': performance.devTools!.display!.refreshRateHz,
+                        if (performance.devTools!.display!.frameBudgetUs !=
+                            null)
+                          'bud': performance.devTools!.display!.frameBudgetUs,
+                      },
+                    if (performance.devTools!.rebuild != null)
+                      'rebuild': <String, Object?>{
+                        'frames': performance.devTools!.rebuild!.frames.length,
+                        'widgets': performance.devTools!.rebuild!.totals.length,
+                        if (performance.devTools!.rebuild!.unresolvedLocations >
+                            0)
+                          'unknown': performance
+                              .devTools!
+                              .rebuild!
+                              .unresolvedLocations,
+                        if (performance.devTools!.rebuild!.droppedFrames > 0 ||
+                            performance.devTools!.rebuild!.droppedEntries > 0)
+                          'dropped': <String, Object?>{
+                            if (performance.devTools!.rebuild!.droppedFrames >
+                                0)
+                              'frames':
+                                  performance.devTools!.rebuild!.droppedFrames,
+                            if (performance.devTools!.rebuild!.droppedEntries >
+                                0)
+                              'entries':
+                                  performance.devTools!.rebuild!.droppedEntries,
+                          },
                       },
                     if (performance.devTools!.vm != null)
                       'vm': <String, Object?>{
@@ -383,6 +448,22 @@ final class CockpitTester {
                       },
                     if (performance.devTools!.allocationTraces.isNotEmpty)
                       'alloc': performance.devTools!.allocationTraces.length,
+                    if (performance.devTools!.logs.isNotEmpty ||
+                        performance.devTools!.droppedLogs > 0)
+                      'logs': <String, Object?>{
+                        if (performance.devTools!.logs.isNotEmpty)
+                          'n': performance.devTools!.logs.length,
+                        if (performance.devTools!.droppedLogs > 0)
+                          'dropped': performance.devTools!.droppedLogs,
+                      },
+                    if (performance.devTools!.debug.isNotEmpty ||
+                        performance.devTools!.droppedDebug > 0)
+                      'debug': <String, Object?>{
+                        if (performance.devTools!.debug.isNotEmpty)
+                          'n': performance.devTools!.debug.length,
+                        if (performance.devTools!.droppedDebug > 0)
+                          'dropped': performance.devTools!.droppedDebug,
+                      },
                     if (performance.devTools!.perfetto != null)
                       'perfetto': <String, Object?>{
                         if (performance.devTools!.perfetto!.cpu != null)
@@ -415,6 +496,16 @@ final class CockpitTester {
   /// only for diagnostic captures that need per-widget or per-render-object
   /// timeline spans. These flags add measurable tracing overhead and are
   /// restored to their previous values when the capture ends.
+  /// [trackRebuilds] enables Flutter's real `Flutter.RebuiltWidgets` VM
+  /// extension event stream. It retains frame-level counts and source
+  /// locations, and restores the extension state after the capture. Use it
+  /// when rebuild attribution is needed; it is intentionally opt-in because
+  /// the framework instrumentation has measurable overhead.
+  /// [maxRebuildFrames] and [maxRebuildEntries] bound rebuild retention while
+  /// keeping the newest frame evidence available.
+  /// [logs] and [debug] retain bounded VM Logging and Debug stream events. They
+  /// are enabled by default because the VM already emits these notifications;
+  /// set them to false for a capture that must exclude runtime event evidence.
   ///
   /// The complete bounded report is placed in [IntegrationTestWidgetsFlutterBinding.reportData]
   /// under `cockpit.performance.<name>`. The value returned to normal test
@@ -440,6 +531,13 @@ final class CockpitTester {
     bool trackUserBuilds = false,
     bool trackLayouts = false,
     bool trackPaints = false,
+    bool trackRebuilds = false,
+    bool logs = true,
+    bool debug = true,
+    int maxRebuildFrames = 10000,
+    int maxRebuildEntries = 100000,
+    int maxLogs = 2000,
+    int maxDebug = 2000,
     Duration? timeout,
   }) async {
     final normalizedName = name.trim();
@@ -484,6 +582,34 @@ final class CockpitTester {
         'Must be between 1 and 10000.',
       );
     }
+    if (maxRebuildFrames < 1 || maxRebuildFrames > 10000) {
+      throw ArgumentError.value(
+        maxRebuildFrames,
+        'maxRebuildFrames',
+        'Must be between 1 and 10000.',
+      );
+    }
+    if (maxRebuildEntries < 1 || maxRebuildEntries > 1000000) {
+      throw ArgumentError.value(
+        maxRebuildEntries,
+        'maxRebuildEntries',
+        'Must be between 1 and 1000000.',
+      );
+    }
+    if (maxLogs < 1 || maxLogs > 100000) {
+      throw ArgumentError.value(
+        maxLogs,
+        'maxLogs',
+        'Must be between 1 and 100000.',
+      );
+    }
+    if (maxDebug < 1 || maxDebug > 100000) {
+      throw ArgumentError.value(
+        maxDebug,
+        'maxDebug',
+        'Must be between 1 and 100000.',
+      );
+    }
     final normalizedAllocationClassIds = allocationClassIds
         .map((id) => id.trim())
         .where((id) => id.isNotEmpty)
@@ -510,6 +636,10 @@ final class CockpitTester {
       maxCpuSamples: maxCpuSamples,
       maxHeapClasses: maxHeapClasses,
       maxHeapSamples: maxHeapSamples,
+      maxRebuildFrames: maxRebuildFrames,
+      maxRebuildEntries: maxRebuildEntries,
+      maxLogEvents: maxLogs,
+      maxDebugEvents: maxDebug,
     );
     try {
       instrumentation.enable(
@@ -529,6 +659,9 @@ final class CockpitTester {
         timeline: timeline || perfetto,
         vmMemory: vmMemory,
         perfetto: perfetto,
+        trackRebuilds: trackRebuilds,
+        logs: logs,
+        debug: debug,
         allocationClassIds: normalizedAllocationClassIds,
         heapSampleEvery: sampleEvery,
       );
@@ -1876,8 +2009,6 @@ _ParsedPerformanceTimeline _parsePerformanceTimeline(
   final events = <CockpitPerformanceEvent>[];
   var invalid = 0;
   var dropped = 0;
-  var newGc = 0;
-  var oldGc = 0;
   for (final rawEvent in rawEvents) {
     final Object? json;
     try {
@@ -1894,16 +2025,24 @@ _ParsedPerformanceTimeline _parsePerformanceTimeline(
     final category = _timelineCategory(json['cat']);
     final timestampUs = _timelineInt(json['ts']);
     final durationUs = json['dur'] == null ? 0 : _timelineInt(json['dur']);
+    final processId = json['pid'] == null ? null : _timelineInt(json['pid']);
+    final threadId = json['tid'] == null ? null : _timelineInt(json['tid']);
+    final eventId = _timelineId(json['id']);
+    final scope = _timelineString(json['s']);
+    final bindId = _timelineId(json['bind_id'] ?? json['bindId']);
     if (name == null ||
         category == null ||
         timestampUs == null ||
         durationUs == null ||
-        durationUs < 0) {
+        durationUs < 0 ||
+        processId == null && json['pid'] != null ||
+        threadId == null && json['tid'] != null ||
+        eventId == null && json['id'] != null ||
+        scope == null && json['s'] != null ||
+        bindId == null && (json['bind_id'] != null || json['bindId'] != null)) {
       invalid += 1;
       continue;
     }
-    if (category == 'GC' && name == 'CollectNewGeneration') newGc += 1;
-    if (category == 'GC' && name == 'CollectOldGeneration') oldGc += 1;
     final args = json['args'];
     if (args is Map && !_isJsonValue(args)) {
       invalid += 1;
@@ -1920,6 +2059,11 @@ _ParsedPerformanceTimeline _parsePerformanceTimeline(
         timestampUs: timestampUs,
         durationUs: durationUs,
         phase: _timelineString(json['ph']),
+        processId: processId,
+        threadId: threadId,
+        eventId: eventId,
+        scope: scope,
+        bindId: bindId,
         args: args is Map
             ? <String, Object?>{
                 for (final entry in args.entries)
@@ -1930,12 +2074,19 @@ _ParsedPerformanceTimeline _parsePerformanceTimeline(
       ),
     );
   }
+  var newGc = 0;
+  var oldGc = 0;
+  visitCockpitTimelineMeasurements(events, (event, _, _) {
+    final kind = cockpitGcEventKind(event);
+    if (kind == 'new') newGc += 1;
+    if (kind == 'old') oldGc += 1;
+  });
   return _ParsedPerformanceTimeline(
     events: events,
     invalidEvents: invalid,
     droppedEvents: dropped,
-    newGenGcCount: newGc,
-    oldGenGcCount: oldGc,
+    newGenGcCount: newGc == 0 ? null : newGc,
+    oldGenGcCount: oldGc == 0 ? null : oldGc,
   );
 }
 
@@ -1957,6 +2108,15 @@ int? _timelineInt(Object? value) {
   if (value is int) return value;
   if (value is num && value.isFinite && value == value.round()) {
     return value.toInt();
+  }
+  return null;
+}
+
+String? _timelineId(Object? value) {
+  if (value is String && value.isNotEmpty) return value;
+  if (value is int) return value.toString();
+  if (value is num && value.isFinite && value == value.round()) {
+    return value.toInt().toString();
   }
   return null;
 }

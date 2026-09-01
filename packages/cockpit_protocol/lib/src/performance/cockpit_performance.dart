@@ -45,6 +45,10 @@ final class CockpitPerformanceFrame {
     required this.pictureCount,
     required this.pictureBytes,
     this.frameNumber,
+    this.buildStartUs,
+    this.buildFinishUs,
+    this.rasterStartUs,
+    this.rasterFinishUs,
   });
 
   final int index;
@@ -67,17 +71,53 @@ final class CockpitPerformanceFrame {
   final int pictureBytes;
   final int? frameNumber;
 
-  bool get isValid =>
-      index >= 0 &&
-      buildUs >= 0 &&
-      rasterUs >= 0 &&
-      vsyncUs >= 0 &&
-      totalUs >= 0 &&
-      layerCount >= 0 &&
-      layerBytes >= 0 &&
-      pictureCount >= 0 &&
-      pictureBytes >= 0 &&
-      (frameNumber == null || frameNumber! >= 0);
+  /// Raw engine phase timestamps. They are optional because synthetic hosts
+  /// may provide only the aggregate [FrameTiming] durations.
+  final int? buildStartUs;
+  final int? buildFinishUs;
+  final int? rasterStartUs;
+  final int? rasterFinishUs;
+
+  int get vsyncStartUs => timestampUs;
+  int get rasterFinishWallTimeUs => wallTimeUs;
+
+  /// Time spent waiting between vsync and the start of the build phase.
+  int? get buildQueueUs => _delta(buildStartUs, timestampUs);
+
+  /// Time spent waiting for raster work after the build phase completed.
+  int? get rasterQueueUs => _delta(rasterStartUs, buildFinishUs);
+
+  /// End-to-end engine pipeline span when all phase timestamps are present.
+  int? get pipelineSpanUs => _delta(rasterFinishUs, timestampUs);
+
+  bool get isValid {
+    final phaseValues = <int?>[
+      buildStartUs,
+      buildFinishUs,
+      rasterStartUs,
+      rasterFinishUs,
+    ];
+    final hasPhaseTimestamps = phaseValues.any((value) => value != null);
+    final hasAllPhaseTimestamps = phaseValues.every((value) => value != null);
+    final phaseOrder = !hasAllPhaseTimestamps
+        ? !hasPhaseTimestamps
+        : timestampUs <= buildStartUs! &&
+              buildStartUs! <= buildFinishUs! &&
+              buildFinishUs! <= rasterStartUs! &&
+              rasterStartUs! <= rasterFinishUs!;
+    return index >= 0 &&
+        buildUs >= 0 &&
+        rasterUs >= 0 &&
+        vsyncUs >= 0 &&
+        totalUs >= 0 &&
+        layerCount >= 0 &&
+        layerBytes >= 0 &&
+        pictureCount >= 0 &&
+        pictureBytes >= 0 &&
+        (frameNumber == null || frameNumber! >= 0) &&
+        phaseValues.every((value) => value == null || value.isFinite) &&
+        phaseOrder;
+  }
 
   Map<String, Object?> toJson() => <String, Object?>{
     'i': index,
@@ -92,6 +132,10 @@ final class CockpitPerformanceFrame {
     'p': pictureCount,
     'pb': pictureBytes,
     if (frameNumber != null) 'n': frameNumber,
+    if (buildStartUs != null) 'bs': buildStartUs,
+    if (buildFinishUs != null) 'bf': buildFinishUs,
+    if (rasterStartUs != null) 'rs': rasterStartUs,
+    if (rasterFinishUs != null) 'rf': rasterFinishUs,
   };
 
   factory CockpitPerformanceFrame.fromJson(Object? value) {
@@ -114,6 +158,18 @@ final class CockpitPerformanceFrame {
       frameNumber: json['n'] == null
           ? null
           : _nonNegativeInt(json['n'], r'$.frame.n'),
+      buildStartUs: json['bs'] == null
+          ? null
+          : _anyInt(json['bs'], r'$.frame.bs'),
+      buildFinishUs: json['bf'] == null
+          ? null
+          : _anyInt(json['bf'], r'$.frame.bf'),
+      rasterStartUs: json['rs'] == null
+          ? null
+          : _anyInt(json['rs'], r'$.frame.rs'),
+      rasterFinishUs: json['rf'] == null
+          ? null
+          : _anyInt(json['rf'], r'$.frame.rf'),
     );
   }
 
@@ -132,7 +188,11 @@ final class CockpitPerformanceFrame {
             other.layerBytes == layerBytes &&
             other.pictureCount == pictureCount &&
             other.pictureBytes == pictureBytes &&
-            other.frameNumber == frameNumber;
+            other.frameNumber == frameNumber &&
+            other.buildStartUs == buildStartUs &&
+            other.buildFinishUs == buildFinishUs &&
+            other.rasterStartUs == rasterStartUs &&
+            other.rasterFinishUs == rasterFinishUs;
   }
 
   @override
@@ -149,6 +209,10 @@ final class CockpitPerformanceFrame {
     pictureCount,
     pictureBytes,
     frameNumber,
+    buildStartUs,
+    buildFinishUs,
+    rasterStartUs,
+    rasterFinishUs,
   );
 }
 
@@ -161,6 +225,11 @@ final class CockpitPerformanceEvent {
     required this.durationUs,
     Map<String, Object?> args = const <String, Object?>{},
     this.phase,
+    this.processId,
+    this.threadId,
+    this.eventId,
+    this.scope,
+    this.bindId,
   }) : args = _freezeJsonObject(args);
 
   final String name;
@@ -170,11 +239,25 @@ final class CockpitPerformanceEvent {
   final Map<String, Object?> args;
   final String? phase;
 
+  /// Process/thread and trace identity copied from the VM trace when present.
+  /// Keeping these optional preserves truthful data on runtimes that omit them
+  /// while allowing Chrome/Perfetto exports to retain their real lanes.
+  final int? processId;
+  final int? threadId;
+  final String? eventId;
+  final String? scope;
+  final String? bindId;
+
   bool get isValid =>
       name.trim().isNotEmpty &&
       category.trim().isNotEmpty &&
       durationUs >= 0 &&
       (phase == null || phase!.trim().isNotEmpty) &&
+      (processId == null || processId! >= 0) &&
+      (threadId == null || threadId! >= 0) &&
+      (eventId == null || eventId!.trim().isNotEmpty) &&
+      (scope == null || scope!.trim().isNotEmpty) &&
+      (bindId == null || bindId!.trim().isNotEmpty) &&
       _isJsonObject(args);
 
   Map<String, Object?> toJson() => <String, Object?>{
@@ -183,6 +266,11 @@ final class CockpitPerformanceEvent {
     't': timestampUs,
     if (durationUs > 0) 'd': durationUs,
     if (phase != null) 'p': phase,
+    if (processId != null) 'pid': processId,
+    if (threadId != null) 'tid': threadId,
+    if (eventId != null) 'id': eventId,
+    if (scope != null) 'scope': scope,
+    if (bindId != null) 'bid': bindId,
     if (args.isNotEmpty) 'a': args,
   };
 
@@ -197,6 +285,15 @@ final class CockpitPerformanceEvent {
           ? 0
           : _nonNegativeInt(json['d'], r'$.event.d'),
       phase: json['p'] == null ? null : _string(json['p'], r'$.event.p'),
+      processId: json['pid'] == null
+          ? null
+          : _nonNegativeInt(json['pid'], r'$.event.pid'),
+      threadId: json['tid'] == null
+          ? null
+          : _nonNegativeInt(json['tid'], r'$.event.tid'),
+      eventId: _optionalString(json['id'], r'$.event.id'),
+      scope: _optionalString(json['scope'], r'$.event.scope'),
+      bindId: _optionalString(json['bid'], r'$.event.bid'),
       args: args == null
           ? const <String, Object?>{}
           : Map<String, Object?>.unmodifiable(_object(args, r'$.event.a')),
@@ -212,6 +309,11 @@ final class CockpitPerformanceEvent {
             other.timestampUs == timestampUs &&
             other.durationUs == durationUs &&
             other.phase == phase &&
+            other.processId == processId &&
+            other.threadId == threadId &&
+            other.eventId == eventId &&
+            other.scope == scope &&
+            other.bindId == bindId &&
             const DeepCollectionEquality().equals(other.args, args);
   }
 
@@ -222,6 +324,11 @@ final class CockpitPerformanceEvent {
     timestampUs,
     durationUs,
     phase,
+    processId,
+    threadId,
+    eventId,
+    scope,
+    bindId,
     const DeepCollectionEquality().hash(args),
   );
 }
@@ -783,6 +890,12 @@ String? _optionalString(Object? value, String path) {
 int _anyInt(Object? value, String path) {
   if (value is int) return value;
   throw FormatException('$path must be an integer.');
+}
+
+int? _delta(int? end, int? start) {
+  if (end == null || start == null) return null;
+  final value = end - start;
+  return value >= 0 ? value : null;
 }
 
 int _nonNegativeInt(Object? value, String path) {

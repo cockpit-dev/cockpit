@@ -189,6 +189,18 @@ final report = await cockpit.profile(
 );
 ```
 
+For rebuild attribution, opt in explicitly; normal captures leave the extra
+framework instrumentation off:
+
+```dart
+final report = await cockpit.profile(
+  () => cockpit.tap('#refresh'),
+  name: 'refresh-rebuilds',
+  trackRebuilds: true,
+  maxRebuildFrames: 2000,
+);
+```
+
 The collector listens to Flutter's original `FrameTiming` stream and records
 raw vsync and raster-finish wall-time timestamps, build/raster/vsync/total
 durations, cache peaks, jank budget, percentiles, and valid frame timestamps.
@@ -222,6 +234,21 @@ ad-hoc HTML fields. Compact test output reports counts and availability;
 complete bounded data. `allocationClassIds` is explicit opt-in for selected
 class allocation stacks, and `perfetto: true` is explicit opt-in for exact VM
 CPU/timeline proto files because both add capture overhead.
+`devtools.display` records the Flutter engine's effective refresh rate, derived
+frame budget, and selected Flutter view. Set `trackRebuilds: true` only when
+you need DevTools-compatible `Flutter.RebuiltWidgets` frame counts and source
+mappings; `devtools.rebuild` retains per-frame entries, aggregate widget
+totals, unresolved locations, and bounded drops. This stream is separate from
+Cockpit's in-process rebuild tracker and is never enabled implicitly.
+The VM capture also listens to `Logging` and `Debug` by default. `devtools.log`
+keeps only metadata already present in each log notification (message, level,
+logger, zone, error, and stack), while `devtools.dbg` keeps pause/resume/exception/
+reload context and verified frame locations. Both streams are bounded and do
+not trigger object evaluation; set `logs: false` or `debug: false` for a
+capture that must exclude them. Use `maxLogs` and `maxDebug` only for very long
+captures that need a different retention bound. Isolate snapshots retain
+new/old generation heap spaces and breakpoint counts when the VM exposes those
+fields.
 Reports include the Flutter build mode; debug timings are diagnostic only, while
 profile and release timings are suitable for performance decisions. The
 standalone HTML report converts engine timestamps to relative capture time,
@@ -258,7 +285,7 @@ bounded `analysis.hotspots` projection; they
 are intentionally more detailed than the compact integration-test result.
 The HTML viewer also includes a DevTools coverage panel: FrameTiming, raster
 cache, VM timeline, GC, process RSS, cold-start milestones, CPU samples,
-heap/allocation classes, and matching GPU/shader signals are marked available
+heap/allocation classes, display refresh, widget rebuilds, and matching GPU/shader signals are marked available
 only when the capture contains verified data; unsupported values remain
 unavailable. Use Cockpit network evidence for HTTP/SSE/WebSocket traffic. Its
 `Download timeline` action exports retained VM events as Chrome trace-compatible
@@ -333,6 +360,24 @@ flutter test integration_test/task_flow_test.dart -d emulator-5554
 flutter test integration_test/task_flow_test.dart -d <ios-simulator-udid>
 flutter test integration_test/task_flow_test.dart -d macos
 ```
+
+For VM timeline/performance integration, use Flutter's driver with DDS disabled
+so the device isolate connects to the forwarded VM Service endpoint directly:
+
+```bash
+flutter drive --no-dds --driver=integration_test/driver.dart \
+  --target=integration_test/performance_profile_test.dart -d emulator-5554
+flutter drive --no-dds --driver=integration_test/driver.dart \
+  --target=integration_test/performance_profile_test.dart -d <ios-simulator-udid>
+flutter drive --no-dds --driver=integration_test/driver.dart \
+  --target=integration_test/performance_profile_test.dart -d macos
+```
+
+Without `--no-dds`, recent Flutter toolchains can advertise a host-only DDS
+port and make `integration_test` timeline capture fail with a connection error.
+This flag is only needed for `flutter drive`; ordinary `flutter test` does not
+need it. Start one simulator at a time when resources are limited and shut it
+down after the run.
 
 Use `cockpit dev` around a development shell when the same steps must be
 visible in a live session timeline. Use `cockpit case`/`cockpit suite` for

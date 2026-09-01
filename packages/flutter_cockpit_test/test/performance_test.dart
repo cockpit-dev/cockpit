@@ -4,7 +4,49 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter_cockpit_test/flutter_cockpit_test.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:flutter_cockpit_test/src/cockpit_devtools_profiler.dart';
+
 void main() {
+  test('VM event retention limits are explicit and bounded', () {
+    expect(() => CockpitDevToolsProfiler(maxLogEvents: 0), throwsArgumentError);
+    expect(
+      () => CockpitDevToolsProfiler(maxDebugEvents: 100001),
+      throwsArgumentError,
+    );
+  });
+
+  test('profiler derives GC pauses from completed timeline spans', () async {
+    final profile = await CockpitDevToolsProfiler().finish(
+      cpu: false,
+      heap: false,
+      timeline: false,
+      vmMemory: false,
+      perfetto: false,
+      events: <CockpitPerformanceEvent>[
+        CockpitPerformanceEvent(
+          name: 'CollectNewGeneration',
+          category: 'GC',
+          timestampUs: 100,
+          durationUs: 0,
+          phase: 'B',
+        ),
+        CockpitPerformanceEvent(
+          name: 'CollectNewGeneration',
+          category: 'GC',
+          timestampUs: 260,
+          durationUs: 0,
+          phase: 'E',
+        ),
+      ],
+    );
+
+    expect(profile, isNotNull);
+    expect(profile!.gc!.eventCount, 1);
+    expect(profile.gc!.timedCount, 1);
+    expect(profile.gc!.totalPauseUs, 160);
+    expect(profile.gc!.maxPauseUs, 160);
+  });
+
   cockpitTestWidgets(
     'profiles an action without requiring VM timeline',
     app: () => const MaterialApp(home: _ProfilePage()),

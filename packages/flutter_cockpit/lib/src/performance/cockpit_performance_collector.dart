@@ -268,9 +268,33 @@ final class CockpitPerformanceCollector {
     ];
     if (values.any((value) => value < 0)) return null;
     final frameNumber = timing.frameNumber;
+    final timestampUs = timing.timestampInMicroseconds(FramePhase.vsyncStart);
+    final buildStartUs = timing.timestampInMicroseconds(FramePhase.buildStart);
+    final buildFinishUs = timing.timestampInMicroseconds(
+      FramePhase.buildFinish,
+    );
+    final rasterStartUs = timing.timestampInMicroseconds(
+      FramePhase.rasterStart,
+    );
+    final rasterFinishUs = timing.timestampInMicroseconds(
+      FramePhase.rasterFinish,
+    );
+    final phaseTimestamps = <int>[
+      timestampUs,
+      buildStartUs,
+      buildFinishUs,
+      rasterStartUs,
+      rasterFinishUs,
+    ];
+    if (phaseTimestamps[0] > phaseTimestamps[1] ||
+        phaseTimestamps[1] > phaseTimestamps[2] ||
+        phaseTimestamps[2] > phaseTimestamps[3] ||
+        phaseTimestamps[3] > phaseTimestamps[4]) {
+      return null;
+    }
     return CockpitPerformanceFrame(
       index: index,
-      timestampUs: timing.timestampInMicroseconds(FramePhase.vsyncStart),
+      timestampUs: timestampUs,
       wallTimeUs: wallTimeUs,
       buildUs: buildUs,
       rasterUs: rasterUs,
@@ -281,6 +305,10 @@ final class CockpitPerformanceCollector {
       pictureCount: timing.pictureCacheCount,
       pictureBytes: timing.pictureCacheBytes,
       frameNumber: frameNumber < 0 ? null : frameNumber,
+      buildStartUs: buildStartUs,
+      buildFinishUs: buildFinishUs,
+      rasterStartUs: rasterStartUs,
+      rasterFinishUs: rasterFinishUs,
     );
   }
 

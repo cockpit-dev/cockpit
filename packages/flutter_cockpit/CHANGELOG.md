@@ -1,5 +1,10 @@
 # Changelog
 
+## 4.1.0
+
+- Synchronized the Flutter bridge package with the expanded DevTools evidence
+  contract and current performance profiling release.
+
 ## 4.0.50
 
 - Synchronized the Flutter bridge package with the current Cockpit performance
