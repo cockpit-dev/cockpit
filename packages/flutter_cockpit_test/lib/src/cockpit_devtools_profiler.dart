@@ -136,6 +136,8 @@ final class CockpitDevToolsProfiler {
   bool _profilerWasEnabled = false;
   bool _profilerChanged = false;
   bool _requested = false;
+  bool _windowEnded = false;
+  int? _captureEndUs;
   final List<String> _failures = <String>[];
 
   /// Starts a capture without blocking the action when the VM service is not
@@ -208,6 +210,8 @@ final class CockpitDevToolsProfiler {
     _perfettoTimeline = null;
     _profilerWasEnabled = false;
     _profilerChanged = false;
+    _windowEnded = false;
+    _captureEndUs = null;
     _requested =
         cpu ||
         heap ||
@@ -333,6 +337,23 @@ final class CockpitDevToolsProfiler {
     }
   }
 
+  /// Freezes VM-side sampling at the end of the measured action. Queries made
+  /// while assembling the report are excluded from event streams and CPU
+  /// sampling extents.
+  Future<void> endWindow() async {
+    if (_windowEnded) return;
+    _windowEnded = true;
+    await _stopHeapSampling();
+    final service = _service;
+    if (service == null) return;
+    try {
+      final end = await service.getVMTimelineMicros().timeout(timeout);
+      _captureEndUs = end.timestamp;
+    } on Object catch (error) {
+      _recordFailure('timeline-end', error);
+    }
+  }
+
   /// Finishes the capture and returns a truthful, bounded projection.
   Future<CockpitDevToolsProfile?> finish({
     required bool cpu,
@@ -382,10 +403,12 @@ final class CockpitDevToolsProfiler {
     CockpitVmMemoryProfile? vmMemoryProfile;
     try {
       await _stopHeapSampling();
-      int? endUs;
+      int? endUs = _captureEndUs;
       try {
-        final end = await service.getVMTimelineMicros().timeout(timeout);
-        endUs = end.timestamp ?? _originUs!;
+        if (endUs == null) {
+          final end = await service.getVMTimelineMicros().timeout(timeout);
+          endUs = end.timestamp ?? _originUs!;
+        }
       } on Object catch (error) {
         _recordFailure('timeline', error);
       }
@@ -954,6 +977,7 @@ final class CockpitDevToolsProfiler {
   }
 
   void _recordIsolateEvent(Event event) {
+    if (_windowEnded) return;
     final kind = event.kind?.trim();
     if (kind == null || kind.isEmpty) return;
     if (_isolateEvents.length >= _maxIsolateEvents) {
@@ -985,6 +1009,7 @@ final class CockpitDevToolsProfiler {
   }
 
   void _recordLoggingEvent(Event event) {
+    if (_windowEnded) return;
     if (_logEvents.length >= maxLogEvents) {
       _droppedLogEvents += 1;
       return;
@@ -1019,6 +1044,7 @@ final class CockpitDevToolsProfiler {
   }
 
   void _recordDebugEvent(Event event) {
+    if (_windowEnded) return;
     if (_debugEvents.length >= maxDebugEvents) {
       _droppedDebugEvents += 1;
       return;
@@ -1038,7 +1064,10 @@ final class CockpitDevToolsProfiler {
         isolateId: _nonEmptyNullable(event.isolate?.id),
         isolateName: _nonEmptyNullable(event.isolate?.name),
         status: _boundedEventText(event.status),
-        details: _boundedEventText(event.reloadFailureReason ?? event.details),
+        // `details` is not part of the vm_service Event contract on the
+        // minimum supported Flutter toolchain. Keep the projection limited to
+        // the stable reload failure field and preserve exception text below.
+        details: _boundedEventText(event.reloadFailureReason),
         pauseAsync: event.atAsyncSuspension,
         frame: _boundedEventText(functionName),
         uri: _boundedEventText(location?.script?.uri),
@@ -1099,6 +1128,7 @@ final class CockpitDevToolsProfiler {
   }
 
   void _recordExtensionEvent(Event event) {
+    if (_windowEnded) return;
     if (event.extensionKind != _rebuiltWidgetsEvent) return;
     final data = event.extensionData?.data;
     if (data == null) return;
@@ -1444,6 +1474,7 @@ final class CockpitDevToolsProfiler {
   }
 
   Future<void> _sampleHeap() async {
+    if (_windowEnded) return;
     final service = _service;
     final isolateId = _isolateId;
     final originUs = _originUs;
@@ -1456,6 +1487,7 @@ final class CockpitDevToolsProfiler {
     _heapSamplePending = pending;
     try {
       final sample = await pending;
+      if (_windowEnded) return;
       if (sample == null) {
         _droppedHeapSamples += 1;
       } else {
@@ -1472,6 +1504,7 @@ final class CockpitDevToolsProfiler {
   }
 
   void _retainHeapSample(CockpitHeapSample sample) {
+    if (_windowEnded) return;
     if (_heapSamples.length < maxHeapSamples) {
       _heapSamples.add(sample);
     } else {

@@ -1,5 +1,16 @@
 # Changelog
 
+## 4.2.0
+
+- Added `CockpitPerformancePlugin` capture support for explicit AOP and custom
+  instrumentation adapters, including bounded spans, instants, counters,
+  source locations, plugin statistics, and failure isolation.
+- Added plugin attribution to compact reports, complete JSON, HTML timelines,
+  and Chrome trace exports; global retention keeps event lists and statistics
+  consistent.
+- Bounded plugin startup/cleanup and closed the profiling window before
+  teardown so instrumentation overhead is excluded from performance metrics.
+
 ## 4.1.0
 
 - Extended VM Logging evidence with zone context and exposed `maxLogs` and

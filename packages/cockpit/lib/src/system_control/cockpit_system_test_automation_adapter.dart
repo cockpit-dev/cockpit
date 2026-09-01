@@ -869,7 +869,7 @@ final class CockpitSystemTestAutomationAdapter
           artifactSourcePaths: sourcePaths,
         );
       }
-      await _delay(_boundedDelay(deadline, 150));
+      if (!await _delayIfRemaining(deadline, 150)) break;
     }
     return _failure(
       command,
@@ -917,7 +917,7 @@ final class CockpitSystemTestAutomationAdapter
         );
       } on StateError catch (error) {
         lastObservationError = error;
-        await _delay(_boundedDelay(deadline, 150));
+        if (!await _delayIfRemaining(deadline, 150)) break;
         continue;
       }
       lastPoint = point;
@@ -941,7 +941,7 @@ final class CockpitSystemTestAutomationAdapter
           artifactSourcePaths: point.artifactSourcePaths,
         );
       }
-      await _delay(_boundedDelay(deadline, 150));
+      if (!await _delayIfRemaining(deadline, 150)) break;
     } while (_utcNow().isBefore(deadline));
     if (lastPoint == null) {
       return _failure(
@@ -1184,7 +1184,7 @@ final class CockpitSystemTestAutomationAdapter
         previousDigest = digest;
         stableSince = null;
       }
-      await _delay(_boundedDelay(deadline, 100));
+      if (!await _delayIfRemaining(deadline, 100)) break;
     } while (_utcNow().isBefore(deadline));
     return _failure(
       command,
@@ -1971,6 +1971,14 @@ final class CockpitSystemTestAutomationAdapter
     if (remaining <= Duration.zero) throw TimeoutException('deadline elapsed');
     final requested = Duration(milliseconds: milliseconds);
     return remaining < requested ? remaining : requested;
+  }
+
+  Future<bool> _delayIfRemaining(DateTime deadline, int milliseconds) async {
+    final remaining = deadline.difference(_utcNow());
+    if (remaining <= Duration.zero) return false;
+    final requested = Duration(milliseconds: milliseconds);
+    await _delay(remaining < requested ? remaining : requested);
+    return _utcNow().isBefore(deadline);
   }
 }
 

@@ -12,6 +12,18 @@ export 'package:cockpit_protocol/cockpit_protocol.dart'
         CockpitPerformanceMemorySample,
         CockpitPerformanceMemorySummary;
 export 'package:cockpit_protocol/cockpit_protocol.dart'
+    show CockpitPerformancePluginStats;
+export 'package:flutter_cockpit/flutter_cockpit.dart'
+    show
+        CockpitPerformancePlugin,
+        CockpitPerformancePluginCapture,
+        CockpitPerformancePluginContext,
+        CockpitPerformancePluginOptions,
+        CockpitPerformancePluginRegistry,
+        CockpitPerformanceLocation,
+        CockpitPerformanceSink,
+        CockpitPerformanceSpan;
+export 'package:cockpit_protocol/cockpit_protocol.dart'
     show
         CockpitCpuFunction,
         CockpitCpuSample,

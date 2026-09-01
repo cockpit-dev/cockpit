@@ -166,6 +166,25 @@ void main() {
           eventId: 'event-1',
           scope: 'scope-1',
           bindId: 'bind-1',
+          source: 'checkout-aop',
+          isolateId: 'isolates/1',
+          uri: 'package:checkout/checkout.dart',
+          line: 42,
+          column: 7,
+        ),
+      ],
+      plugins: <CockpitPerformancePluginStats>[
+        CockpitPerformancePluginStats(
+          id: 'checkout-aop',
+          state: 'available',
+          version: '1.0.0',
+          eventCount: 1,
+          spanCount: 1,
+          instantCount: 0,
+          counterCount: 0,
+          durationUs: 3,
+          maxDurationUs: 3,
+          categories: const <String, int>{'business': 1},
         ),
       ],
     );
@@ -183,6 +202,14 @@ void main() {
     expect(decoded.events.single.eventId, 'event-1');
     expect(decoded.events.single.scope, 'scope-1');
     expect(decoded.events.single.bindId, 'bind-1');
+    expect(decoded.events.single.source, 'checkout-aop');
+    expect(decoded.events.single.isolateId, 'isolates/1');
+    expect(decoded.events.single.uri, 'package:checkout/checkout.dart');
+    expect(decoded.events.single.line, 42);
+    expect(decoded.events.single.column, 7);
+    expect(decoded.plugins.single.id, 'checkout-aop');
+    expect(decoded.plugins.single.durationUs, 3);
+    expect(decoded.plugins.single.categories, <String, int>{'business': 1});
     expect(decoded.summary.build.toJson(), containsPair('bud', 16667));
   });
 

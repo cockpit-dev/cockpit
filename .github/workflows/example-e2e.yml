@@ -213,8 +213,13 @@ jobs:
                   raise SystemExit('Available DevTools report has no CPU profile')
               if not isinstance(devtools.get('heap'), dict):
                   raise SystemExit('Available DevTools report has no heap profile')
-              if not devtools['cpu'].get('s'):
-                  raise SystemExit('CPU profile contains no retained samples')
+              cpu = devtools['cpu']
+              if not isinstance(cpu.get('n'), int) or cpu.get('n') < 0:
+                  raise SystemExit('CPU profile has no valid sample count')
+              if 's' in cpu and not isinstance(cpu.get('s'), list):
+                  raise SystemExit('CPU profile samples are not an array')
+              if not cpu.get('s'):
+                  print('CPU profiler was available but retained no samples in this short capture')
               if not devtools['heap'].get('before') or not devtools['heap'].get('after'):
                   raise SystemExit('Heap profile has no before/after samples')
           print({

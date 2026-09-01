@@ -213,6 +213,54 @@ For VM timeline events and GC counts, use
 `flutter_cockpit_test`'s `cockpit.profile`; unsupported platforms are reported
 as unavailable instead of receiving guessed values.
 
+### Development performance plugins
+
+Register AOP or other instrumentation explicitly in the development shell. A
+plugin is inert during normal app execution and receives a bounded sink only
+while `cockpit.profile()` is running:
+
+```dart
+final checkoutTrace = CockpitPerformancePlugin(
+  id: 'checkout-aop',
+  start: (context) {
+    CheckoutHooks.onEvent = (name, data) {
+      context.sink.instant(
+        name,
+        category: 'business',
+        args: data,
+        location: const CockpitPerformanceLocation(
+          uri: 'package:checkout/checkout.dart',
+          line: 42,
+        ),
+      );
+    };
+  },
+);
+
+FlutterCockpit.runApp(
+  const AppShell(),
+  config: FlutterCockpitConfig.production(
+    performancePlugins: <CockpitPerformancePlugin>[checkoutTrace],
+  ),
+);
+```
+
+Use `sink.begin/end` or `sink.trace` for durations and `sink.counter` for
+numeric samples. Events share the VM timeline's monotonic clock and carry the
+plugin id, isolate, and optional source location. Payload depth, size,
+category, sampling, event count, and plugin lifecycle time are bounded; invalid
+values are rejected and plugin failures are isolated and reported in
+`report.plugins`. Full JSON,
+Chrome trace, and HTML exports retain the bounded events, while compact output
+keeps only plugin counts and drop statistics. Keep adapters in `cockpit/` or
+another development-only package; do not weave implicit global AOP into
+production code.
+
+Plugin setup and cleanup are each bounded by the plugin's
+`CockpitPerformancePluginOptions.lifecycleTimeout` (two seconds by default).
+The measured window closes before plugin cleanup and report generation, so
+teardown work is not attributed to the profiled interaction.
+
 Interaction ownership stays explicit: merged ancestor `Semantics` never makes
 passive descendants actionable, and descendants below `IgnorePointer(ignoring:
 true)` or `AbsorbPointer(absorbing: true)` advertise no mutation actions. When

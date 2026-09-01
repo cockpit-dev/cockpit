@@ -12,6 +12,7 @@ import 'cockpit_target_registry.dart';
 import 'cockpit_discovery_policy.dart';
 import 'cockpit_diagnostics_config.dart';
 import '../performance/cockpit_performance_collector.dart';
+import '../performance/cockpit_performance_plugin.dart';
 
 final class FlutterCockpitConfiguration {
   const FlutterCockpitConfiguration({
@@ -26,6 +27,7 @@ final class FlutterCockpitConfiguration {
     this.networkObserver,
     this.httpNetworkObserver,
     this.performanceCollector,
+    this.performancePlugins = const <CockpitPerformancePlugin>[],
     this.runtimeObserver,
     this.runtimeObserverConfiguration =
         const CockpitRuntimeObserverConfiguration(),
@@ -45,6 +47,7 @@ final class FlutterCockpitConfiguration {
   final CockpitNetworkObserver? networkObserver;
   final CockpitHttpNetworkObserverConfiguration? httpNetworkObserver;
   final CockpitPerformanceCollector? performanceCollector;
+  final List<CockpitPerformancePlugin> performancePlugins;
   final CockpitRuntimeObserver? runtimeObserver;
   final CockpitRuntimeObserverConfiguration runtimeObserverConfiguration;
   final CockpitInteractionPolicy interactionPolicy;
@@ -63,6 +66,7 @@ final class FlutterCockpitConfiguration {
     CockpitNetworkObserver? networkObserver,
     CockpitHttpNetworkObserverConfiguration? httpNetworkObserver,
     CockpitPerformanceCollector? performanceCollector,
+    Iterable<CockpitPerformancePlugin>? performancePlugins,
     CockpitRuntimeObserver? runtimeObserver,
     CockpitRuntimeObserverConfiguration? runtimeObserverConfiguration,
     CockpitInteractionPolicy? interactionPolicy,
@@ -114,6 +118,9 @@ final class FlutterCockpitConfiguration {
       performanceCollector: clearPerformanceCollector
           ? null
           : (performanceCollector ?? this.performanceCollector),
+      performancePlugins: performancePlugins == null
+          ? this.performancePlugins
+          : List<CockpitPerformancePlugin>.unmodifiable(performancePlugins),
       runtimeObserver: clearRuntimeObserver
           ? null
           : (runtimeObserver ?? this.runtimeObserver),
@@ -147,6 +154,7 @@ final class FlutterCockpitConfiguration {
             other.networkObserver == networkObserver &&
             other.httpNetworkObserver == httpNetworkObserver &&
             other.performanceCollector == performanceCollector &&
+            _samePlugins(other.performancePlugins, performancePlugins) &&
             other.runtimeObserver == runtimeObserver &&
             other.runtimeObserverConfiguration ==
                 runtimeObserverConfiguration &&
@@ -168,10 +176,23 @@ final class FlutterCockpitConfiguration {
     networkObserver,
     httpNetworkObserver,
     performanceCollector,
+    Object.hashAll(performancePlugins),
     runtimeObserver,
     runtimeObserverConfiguration,
     interactionPolicy,
     discoveryPolicy,
     diagnostics,
   );
+}
+
+bool _samePlugins(
+  List<CockpitPerformancePlugin> left,
+  List<CockpitPerformancePlugin> right,
+) {
+  if (identical(left, right)) return true;
+  if (left.length != right.length) return false;
+  for (var index = 0; index < left.length; index += 1) {
+    if (!identical(left[index], right[index])) return false;
+  }
+  return true;
 }

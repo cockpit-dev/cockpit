@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/rendering.dart';
@@ -7,6 +9,185 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_cockpit_test/src/cockpit_devtools_profiler.dart';
 
 void main() {
+  test(
+    'registered plugins emit attributable bounded timeline events',
+    () async {
+      late CockpitPerformanceSink sink;
+      final registry = CockpitPerformancePluginRegistry(
+        plugins: <CockpitPerformancePlugin>[
+          CockpitPerformancePlugin(
+            id: 'checkout-aop',
+            version: '1.0.0',
+            start: (context) {
+              sink = context.sink;
+            },
+          ),
+        ],
+      );
+      final capture = registry.capture();
+      await capture.start();
+      capture.beginWindow();
+      sink.instant(
+        'checkout.open',
+        category: 'business',
+        location: const CockpitPerformanceLocation(
+          uri: 'package:checkout/checkout.dart',
+          line: 42,
+        ),
+      );
+      final span = sink.begin('checkout.fetch', category: 'network');
+      span.end(args: const <String, Object?>{'status': 200});
+      sink.counter('checkout.items', 3, category: 'business');
+      final events = await capture.stop();
+      final stats = capture.stats().single;
+
+      expect(events, hasLength(3));
+      expect(events.every((event) => event.source == 'checkout-aop'), isTrue);
+      expect(events.first.uri, 'package:checkout/checkout.dart');
+      expect(events[1].phase, 'X');
+      expect(events[1].durationUs, greaterThanOrEqualTo(0));
+      expect(events[2].phase, 'C');
+      expect(stats.eventCount, 3);
+      expect(stats.spanCount, 1);
+      expect(stats.instantCount, 1);
+      expect(stats.counterCount, 1);
+      expect(stats.categories['business'], 2);
+      expect(stats.categories['network'], 1);
+    },
+  );
+
+  test('plugin failures do not block capture and are reported', () async {
+    final registry = CockpitPerformancePluginRegistry(
+      plugins: <CockpitPerformancePlugin>[
+        CockpitPerformancePlugin(
+          id: 'broken',
+          start: (_) => throw StateError('instrumentation unavailable'),
+        ),
+      ],
+    );
+    final capture = registry.capture();
+    await capture.start();
+    capture.beginWindow();
+    final events = await capture.stop();
+    final stats = capture.stats().single;
+    expect(events, isEmpty);
+    expect(stats.state, 'failed');
+    expect(stats.reason, contains('instrumentation unavailable'));
+  });
+
+  test(
+    'plugin lifecycle is bounded and cleanup is attempted after startup failure',
+    () async {
+      final cleanup = Completer<void>();
+      final registry = CockpitPerformancePluginRegistry(
+        plugins: <CockpitPerformancePlugin>[
+          CockpitPerformancePlugin(
+            id: 'slow',
+            start: (_) => Completer<void>().future,
+            stop: (_) => cleanup.complete(),
+            options: const CockpitPerformancePluginOptions(
+              lifecycleTimeout: Duration(milliseconds: 1),
+            ),
+          ),
+        ],
+      );
+      final capture = registry.capture();
+      await capture.start();
+      expect(capture.stats().single.state, 'failed');
+      await capture.stop();
+      expect(cleanup.isCompleted, isTrue);
+      expect(
+        capture.stats().single.reason,
+        contains('Plugin lifecycle exceeded'),
+      );
+    },
+  );
+
+  test(
+    'global plugin retention is enforced while events are recorded',
+    () async {
+      late CockpitPerformanceSink sink;
+      final capture = CockpitPerformancePluginRegistry(
+        plugins: <CockpitPerformancePlugin>[
+          CockpitPerformancePlugin(
+            id: 'bounded-live',
+            start: (context) => sink = context.sink,
+          ),
+        ],
+      ).capture(maxEvents: 1);
+      await capture.start();
+      capture.beginWindow();
+      sink.instant('first');
+      sink.instant('second');
+      final events = await capture.stop();
+      expect(events, hasLength(1));
+      expect(capture.stats().single.eventCount, 1);
+      expect(capture.stats().single.dropped, 1);
+    },
+  );
+
+  test(
+    'plugin policy is snapshotted and invalid payloads are rejected',
+    () async {
+      final categories = <String>{'business'};
+      final plugin = CockpitPerformancePlugin(
+        id: 'bounded',
+        start: (_) {},
+        options: CockpitPerformancePluginOptions(categories: categories),
+      );
+      categories.add('network');
+      expect(plugin.options.categories, <String>{'business'});
+
+      late CockpitPerformanceSink sink;
+      final capture = CockpitPerformancePluginRegistry(
+        plugins: <CockpitPerformancePlugin>[
+          CockpitPerformancePlugin(
+            id: 'payload',
+            start: (context) => sink = context.sink,
+          ),
+        ],
+      ).capture();
+      await capture.start();
+      capture.beginWindow();
+      sink.instant(
+        'invalid',
+        args: <String, Object?>{'value': double.infinity},
+      );
+      sink.instant(
+        'invalid-key',
+        args: <String, Object?>{
+          'nested': <Object?, Object?>{1: 'not a JSON object key'},
+        },
+      );
+      final events = await capture.stop();
+      expect(events, isEmpty);
+      expect(capture.stats().single.invalid, 2);
+    },
+  );
+
+  test('global plugin retention keeps events and stats consistent', () async {
+    late CockpitPerformanceSink sink;
+    final capture = CockpitPerformancePluginRegistry(
+      plugins: <CockpitPerformancePlugin>[
+        CockpitPerformancePlugin(
+          id: 'bounded',
+          start: (context) => sink = context.sink,
+        ),
+      ],
+    ).capture();
+    await capture.start();
+    capture.beginWindow();
+    sink.instant('first');
+    sink.instant('second');
+    final events = await capture.stop(maxEvents: 1);
+    final stats = capture.stats().single;
+    expect(events, hasLength(1));
+    expect(stats.eventCount, 1);
+    expect(stats.instantCount, 1);
+    expect(stats.dropped, 1);
+    expect(capture.retentionDrops, 1);
+  });
+
   test('VM event retention limits are explicit and bounded', () {
     expect(() => CockpitDevToolsProfiler(maxLogEvents: 0), throwsArgumentError);
     expect(
@@ -55,16 +236,34 @@ void main() {
         cockpit.profile(() async {}, maxEvents: 0),
         throwsArgumentError,
       );
+      late CockpitPerformanceSink sink;
       final report = await cockpit.profile(
-        () => cockpit.tap('#increment'),
+        () async {
+          sink.instant('increment.requested', category: 'business');
+          await cockpit.tap('#increment');
+        },
         name: 'increment',
         timeline: false,
+        plugins: <CockpitPerformancePlugin>[
+          CockpitPerformancePlugin(
+            id: 'profile-test',
+            start: (context) => sink = context.sink,
+          ),
+        ],
       );
 
       expect(report.stepId, 'increment');
       expect(report.timelineSource, isNull);
       expect(report.buildMode, 'debug');
       expect(report.summary.frameCount, report.frames.length);
+      expect(report.plugins.single.id, 'profile-test');
+      expect(report.plugins.single.eventCount, 1);
+      expect(
+        report.events
+            .singleWhere((event) => event.source == 'profile-test')
+            .name,
+        'increment.requested',
+      );
       if (kIsWeb) {
         expect(report.memory, isNull);
       } else {

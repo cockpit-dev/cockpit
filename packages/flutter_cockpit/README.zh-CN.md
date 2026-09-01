@@ -194,6 +194,44 @@ build/raster/vsync/总耗时、p50/p90/p99/最大值、jank、cache 峰值；集
 VM timeline 和 GC 统计请使用 `flutter_cockpit_test` 的 `cockpit.profile`；不支持的
 平台会返回 unavailable，不会用猜测值填充。
 
+### 开发期性能插件
+
+在开发壳中显式注册 AOP 或其他埋点。插件只在显式执行
+`cockpit.profile()` 时拿到有界 sink，正常运行时保持惰性，不会改变业务行为：
+
+```dart
+final checkoutTrace = CockpitPerformancePlugin(
+  id: 'checkout-aop',
+  start: (context) {
+    CheckoutHooks.onEvent = (name, data) {
+      context.sink.instant(
+        name,
+        category: 'business',
+        args: data,
+        location: const CockpitPerformanceLocation(
+          uri: 'package:checkout/checkout.dart',
+          line: 42,
+        ),
+      );
+    };
+  },
+);
+
+FlutterCockpit.runApp(
+  const AppShell(),
+  config: FlutterCockpitConfig.production(
+    performancePlugins: <CockpitPerformancePlugin>[checkoutTrace],
+  ),
+);
+```
+
+使用 `sink.begin/end` 或 `sink.trace` 记录耗时，使用 `sink.counter` 记录数值。
+插件事件与 VM timeline 使用同一单调时钟，并保留插件 id、isolate 和可选源码位置。
+payload 深度、大小、分类、采样频率和事件数量都有上限；非法值会被拒绝，插件异常
+会被隔离并写入 `report.plugins`。完整 JSON、Chrome trace 和 HTML 会保留有界事件，
+compact 输出只保留插件计数和丢弃统计。适配器应放在 `cockpit/` 或其他仅开发期包中，
+不要对生产代码做隐式全局 AOP 注入。
+
 交互归属始终明确：合并到祖先的 `Semantics` 不会让被动后代变成可操作 target，
 处于 `IgnorePointer(ignoring: true)` 或 `AbsorbPointer(absorbing: true)` 下的后代
 也不会声明 mutation action。当一个真实可操作的外层行只代理一个被阻断的

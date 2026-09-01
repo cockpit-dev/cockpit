@@ -260,6 +260,11 @@ Map<String, Object?> _traceEvent(
     if (event.eventId != null) 'id': event.eventId,
     if (event.scope != null) 's': event.scope,
     if (event.bindId != null) 'bind_id': event.bindId,
+    if (event.source != null) 'src': event.source,
+    if (event.isolateId != null) 'iso': event.isolateId,
+    if (event.uri != null) 'u': event.uri,
+    if (event.line != null) 'l': event.line,
+    if (event.column != null) 'col': event.column,
     if ((args ?? event.args).isNotEmpty) 'args': args ?? event.args,
     if (phase == 'X' && effectiveDuration > 0) 'dur': effectiveDuration,
   };
@@ -622,6 +627,7 @@ details[open] summary::after { content: "−"; }
   <main class="workspace">
     <div class="toolbar"><div class="control"><label for="report-select">Capture</label><select id="report-select"></select></div><div class="toolbar-actions"><button class="quiet-button" id="copy-button" type="button">Copy report JSON</button><button class="quiet-button" id="raw-button" type="button">Show raw JSON</button></div></div>
     <section class="panel coverage-panel"><div class="panel-head"><div><h2>DevTools coverage</h2><p>What this deterministic capture can prove, and which DevTools profilers are intentionally not collected.</p></div><span class="subtle" id="coverage-summary">—</span></div><div class="coverage-grid" id="coverage-grid"></div></section>
+    <section class="panel plugins-panel"><div class="panel-head"><div><h2>Instrumentation plugins</h2><p>AOP and custom instrumentation events attributed to the same VM timeline.</p></div><span class="subtle" id="plugin-summary">—</span></div><div class="table-wrap"><table><thead><tr><th>Plugin</th><th>State</th><th>Events</th><th>Spans</th><th>Total span time</th><th>Drops</th><th>Categories</th></tr></thead><tbody id="plugin-body"></tbody></table></div></section>
     <section class="devtools-grid" id="devtools-grid">
       <div class="panel"><div class="panel-head"><div><h2>CPU sampling</h2><p>Real VM samples and top inclusive stacks from this capture.</p></div><div class="panel-tools"><span class="subtle" id="cpu-note">—</span><button class="quiet-button detail-button" type="button" data-details="cpu">Details</button></div></div><div class="chart-wrap" style="height:170px"><canvas id="cpu-chart" aria-label="CPU sampling chart"></canvas></div><div class="devtools-list" id="cpu-list"></div></div>
       <div class="panel"><div class="panel-head"><div><h2>Heap &amp; allocation</h2><p>Dart heap usage, allocation classes, and explicitly selected allocation call stacks.</p></div><div class="panel-tools"><span class="subtle" id="heap-note">—</span><button class="quiet-button detail-button" type="button" data-details="heap">Details</button></div></div><div class="chart-wrap" style="height:150px"><canvas id="heap-chart" aria-label="Dart heap chart"></canvas></div><div class="devtools-list" id="heap-list"></div></div>
@@ -654,7 +660,7 @@ details[open] summary::after { content: "−"; }
     <section class="panel"><div class="panel-head"><div><h2>Timeline flame view</h2><p>Nested VM spans by real event intervals. This is a timeline view, not an invented CPU call stack.</p></div><span class="subtle" id="flame-range">—</span></div><div class="chart-wrap" style="height:88px"><canvas id="flame-chart" aria-label="Nested VM timeline flame view"></canvas></div></section>
     <section class="panel"><div class="panel-head"><div><h2>Frame explorer</h2><p>Inspect retained engine timings without rendering every sample at once.</p></div><div class="panel-tools"><select id="frame-sort" aria-label="Sort frames"><option value="index">Capture order</option><option value="total">Slowest total</option><option value="build">Slowest build</option><option value="raster">Slowest raster</option></select></div></div><div class="table-wrap"><table><thead><tr><th>#</th><th>Frame</th><th>Total</th><th>Build</th><th>Raster</th><th>Vsync</th><th>Budget</th><th>Cache</th></tr></thead><tbody id="frame-body"></tbody></table></div><div class="pager"><span id="frame-page-label">—</span><div class="pager-actions"><button class="quiet-button" id="frame-prev" type="button">Previous</button><button class="quiet-button" id="frame-next" type="button">Next</button></div></div></section>
     <section class="panel"><div class="panel-head"><div><h2>Capture comparison</h2><p>Compare every capture in this file without switching context.</p></div></div><div class="table-wrap"><table class="comparison-table"><thead><tr><th>Capture</th><th>Frames</th><th>Jank</th><th>FPS</th><th>Total p90</th><th>Total max</th><th>Duration</th><th>RSS peak</th><th>RSS Δ</th></tr></thead><tbody id="comparison-body"></tbody></table></div></section>
-    <section class="panel"><div class="panel-head"><div><h2>Timeline events</h2><p>Newest retained VM events first. Search by name, category, or argument key.</p></div><div class="panel-tools"><div class="control"><label for="event-search">Search</label><input id="event-search" type="search" placeholder="Name or category"></div><select id="event-category" aria-label="Filter event category"><option value="">All categories</option></select></div></div><div class="table-wrap"><table><thead><tr><th>When</th><th>Event</th><th>Category</th><th>Duration</th><th>Phase</th><th>Arguments</th></tr></thead><tbody id="event-body"></tbody></table></div><div class="pager"><span id="event-page-label">—</span><div class="pager-actions"><button class="quiet-button" id="event-prev" type="button">Previous</button><button class="quiet-button" id="event-next" type="button">Next</button></div></div></section>
+    <section class="panel"><div class="panel-head"><div><h2>Timeline events</h2><p>Newest retained VM and plugin events first. Search by name, category, source, or argument key.</p></div><div class="panel-tools"><div class="control"><label for="event-search">Search</label><input id="event-search" type="search" placeholder="Name, category, or plugin"></div><select id="event-category" aria-label="Filter event category"><option value="">All categories</option></select></div></div><div class="table-wrap"><table><thead><tr><th>When</th><th>Event</th><th>Category</th><th>Source</th><th>Duration</th><th>Phase</th><th>Arguments</th></tr></thead><tbody id="event-body"></tbody></table></div><div class="pager"><span id="event-page-label">—</span><div class="pager-actions"><button class="quiet-button" id="event-prev" type="button">Previous</button><button class="quiet-button" id="event-next" type="button">Next</button></div></div></section>
     <section class="panel"><div class="panel-head"><div><h2>Code evidence</h2><p>Source locations are shown only when the VM timeline provides them; no location is guessed from a frame.</p></div></div><div class="table-wrap"><table><thead><tr><th>Source</th><th>Events</th><th>Total time</th><th>Longest</th><th>Categories</th></tr></thead><tbody id="code-body"></tbody></table></div></section>
     <section class="panel"><div class="panel-head"><div><h2>Capture details</h2><p>Retention boundaries and interpretation context are kept beside the measurements.</p></div></div><div class="detail-grid" id="detail-grid"></div><div id="raw-wrap" class="hidden" style="margin-top:14px"><pre class="json-view" id="raw-json"></pre></div></section>
     <div class="footer">Generated by <strong>Cockpit</strong>. JSON remains the canonical machine-readable payload. This viewer is self-contained and works offline.</div>
@@ -743,6 +749,11 @@ details[open] summary::after { content: "−"; }
     if (event.id != null) item.id = String(event.id);
     if (event.scope != null) item.s = String(event.scope);
     if (event.bid != null) item.bind_id = String(event.bid);
+    if (event.src != null) item.src = String(event.src);
+    if (event.iso != null) item.iso = String(event.iso);
+    if (event.u != null) item.u = String(event.u);
+    if (event.l != null) item.l = number(event.l);
+    if (event.col != null) item.col = number(event.col);
     var payload = args || (event.a && typeof event.a === 'object' ? event.a : {});
     if (payload && Object.keys(payload).length) item.args = payload;
     if (phase === 'X' && duration > 0) item.dur = duration;
@@ -1285,6 +1296,16 @@ details[open] summary::after { content: "−"; }
     el('coverage-summary').textContent = available + ' of ' + rows.length + ' views backed by this capture';
     el('coverage-grid').innerHTML = rows.map(function (row) { var label = row[1] === 'available' ? 'Available' : row[1] === 'not-collected' ? 'Not collected' : 'Unavailable'; return '<div class="coverage-card"><div class="coverage-card-head"><strong>' + esc(row[0]) + '</strong><span class="coverage-state ' + esc(row[1]) + '">' + esc(label) + '</span></div><p>' + esc(row[2]) + '</p></div>'; }).join('');
   };
+  var renderPlugins = function () {
+    var r = report(); var plugins = Array.isArray(r.plugins) ? r.plugins : [];
+    var pluginEvents = events().filter(function (event) { return event.src != null; }).length;
+    el('plugin-summary').textContent = plugins.length ? nf.format(plugins.length) + ' plugins · ' + nf.format(pluginEvents) + ' timeline events' : 'No plugins registered';
+    el('plugin-body').innerHTML = plugins.length ? plugins.map(function (plugin) {
+      var state = String(plugin.state || 'unavailable');
+      var drops = number(plugin.drop) + number(plugin.bad) + number(plugin.trunc);
+      return '<tr><td><strong>' + esc(plugin.id || 'unknown') + '</strong>' + (plugin.ver ? '<div class="subtle">' + esc(plugin.ver) + '</div>' : '') + '</td><td><span class="coverage-state ' + esc(state === 'available' ? 'available' : 'unavailable') + '">' + esc(state) + '</span>' + (plugin.why ? '<div class="subtle">' + esc(plugin.why) + '</div>' : '') + '</td><td>' + nf.format(number(plugin.n)) + '</td><td>' + nf.format(number(plugin.span)) + '</td><td>' + esc(us(plugin.dur)) + '</td><td>' + nf.format(drops) + '</td><td>' + esc(Object.keys(plugin.cat || {}).join(', ') || '—') + '</td></tr>';
+    }).join('') : '<tr><td colspan="7"><div class="empty">No instrumentation plugins participated in this capture.</div></td></tr>';
+  };
   var drawCpuChart = function () {
     setChartHeight('cpu-chart', 170);
     draw(el('cpu-chart'), function (ctx, width, height) {
@@ -1514,9 +1535,9 @@ details[open] summary::after { content: "−"; }
       });
     };
     events().forEach(function (event) {
-      var found = {}; visit(event.a, found); var location = found.url || found.uri || found.file || found.filepath || found.script || found.source; var symbol = found.function || found.functionname || found.method || found.symbol || found.library || found.class;
+      var found = {}; visit(event.a, found); if (event.u) found.uri = String(event.u); if (event.l != null) found.line = String(event.l); var location = found.url || found.uri || found.file || found.filepath || found.script || found.source; var symbol = found.function || found.functionname || found.method || found.symbol || found.library || found.class;
       if (!location && !symbol) return;
-      var label = location || ('function ' + symbol); if (found.line && location) label += ':' + found.line; if (symbol && location) label += ' · ' + symbol; if (label.length > 180) label = label.slice(0, 177) + '…';
+      var label = location || ('function ' + symbol); if (found.line && location) label += ':' + found.line; if (symbol && location) label += ' · ' + symbol; if (event.src) label = String(event.src) + ' · ' + label; if (label.length > 180) label = label.slice(0, 177) + '…';
       var entry = grouped[label] || { count: 0, total: 0, longest: 0, categories: {} }; entry.count += 1; entry.total += number(event.d); entry.longest = Math.max(entry.longest, number(event.d)); entry.categories[String(event.c || 'uncategorized')] = true; grouped[label] = entry;
     });
     return Object.keys(grouped).map(function (label) { return { label: label, value: grouped[label] }; }).sort(function (a, b) { return b.value.total - a.value.total || b.value.count - a.value.count; });
@@ -1562,6 +1583,12 @@ details[open] summary::after { content: "−"; }
     var pipeline = pipelineSamples();
     if (pipeline.length) cells.push(['Pipeline samples', nf.format(pipeline.length)], ['Build wait p90', us(percentile(pipeline.map(function (item) { return item.buildWait; }), .9))], ['Raster wait p90', us(percentile(pipeline.map(function (item) { return item.rasterWait; }), .9))]);
     if (startup) { cells.push(['Startup source', startup.source || 'harness'], ['App build', duration(startup.appMs)], ['First frame', duration(startup.firstMs)], ['Ready', duration(startup.readyMs)]); }
+    var pluginStats = Array.isArray(r.plugins) ? r.plugins : [];
+    if (pluginStats.length) {
+      cells.push(['Plugins', nf.format(pluginStats.length)]);
+      cells.push(['Plugin events', nf.format(events().filter(function (event) { return event.src != null; }).length)]);
+      cells.push(['Plugin drops', nf.format(pluginStats.reduce(function (sum, plugin) { return sum + number(plugin.drop) + number(plugin.bad) + number(plugin.trunc); }, 0))]);
+    }
     el('detail-grid').innerHTML = cells.map(function (cell) { return '<div class="detail-cell"><span>' + esc(cell[0]) + '</span><strong>' + esc(cell[1]) + '</strong></div>'; }).join('');
     el('raw-json').textContent = JSON.stringify(r, null, 2);
   };
@@ -1571,15 +1598,15 @@ details[open] summary::after { content: "−"; }
     el('frame-body').innerHTML = slice.length ? slice.map(function (f) { var bad = number(f.s) > budget; var warn = !bad && (number(f.b) > budget || number(f.r) > budget); return '<tr><td>' + nf.format(number(f.i)) + '</td><td><code>' + esc(f.n == null ? '—' : f.n) + '</code></td><td><strong>' + esc(us(f.s)) + '</strong></td><td>' + esc(us(f.b)) + '</td><td>' + esc(us(f.r)) + '</td><td>' + esc(us(f.v)) + '</td><td>' + status(bad, warn) + '</td><td class="subtle">' + esc(number(f.l)) + ' layers · ' + esc(bytes(f.lb)) + '</td></tr>'; }).join('') : '<tr><td colspan="8"><div class="empty">No retained frame timings.</div></td></tr>';
     el('frame-page-label').textContent = list.length ? 'Showing ' + (start + 1) + '–' + Math.min(start + slice.length, list.length) + ' of ' + nf.format(list.length) : 'No frames'; el('frame-prev').disabled = state.framePage === 0; el('frame-next').disabled = state.framePage >= pages - 1;
   };
-  var filteredEvents = function () { var q = state.eventQuery.toLowerCase(); return events().filter(function (e) { var category = String(e.c || 'uncategorized'); var args = e.a && typeof e.a === 'object' ? Object.keys(e.a).join(' ') : ''; var text = String(e.n || '') + ' ' + category + ' ' + args; return (!q || text.toLowerCase().indexOf(q) >= 0) && (!state.eventCategory || category === state.eventCategory); }).slice().sort(function (a, b) { return number(b.t) - number(a.t); }); };
+  var filteredEvents = function () { var q = state.eventQuery.toLowerCase(); return events().filter(function (e) { var category = String(e.c || 'uncategorized'); var source = String(e.src || ''); var args = e.a && typeof e.a === 'object' ? Object.keys(e.a).join(' ') : ''; var text = String(e.n || '') + ' ' + category + ' ' + source + ' ' + args; return (!q || text.toLowerCase().indexOf(q) >= 0) && (!state.eventCategory || category === state.eventCategory); }).slice().sort(function (a, b) { return number(b.t) - number(a.t); }); };
   var renderEvents = function () {
     var list = filteredEvents(); var pages = Math.max(1, Math.ceil(list.length / eventPageSize)); state.eventPage = clamp(state.eventPage, 0, pages - 1); var start = state.eventPage * eventPageSize; var slice = list.slice(start, start + eventPageSize);
-    el('event-body').innerHTML = slice.length ? slice.map(function (e) { var args = e.a && Object.keys(e.a).length ? '<details><summary>View args</summary><div class="detail-body"><pre class="json-view">' + esc(JSON.stringify(e.a, null, 2)) + '</pre></div></details>' : '<span class="subtle">—</span>'; return '<tr><td><code>' + esc(relativeUs(e.t, eventOrigin())) + '</code></td><td><strong>' + esc(e.n || 'Unnamed event') + '</strong></td><td>' + esc(e.c || 'uncategorized') + '</td><td>' + esc(e.d ? us(e.d) : 'Instant') + '</td><td>' + esc(e.p || '—') + '</td><td>' + args + '</td></tr>'; }).join('') : '<tr><td colspan="6"><div class="empty">No events match the current filter.</div></td></tr>';
+    el('event-body').innerHTML = slice.length ? slice.map(function (e) { var args = e.a && Object.keys(e.a).length ? '<details><summary>View args</summary><div class="detail-body"><pre class="json-view">' + esc(JSON.stringify(e.a, null, 2)) + '</pre></div></details>' : '<span class="subtle">—</span>'; return '<tr><td><code>' + esc(relativeUs(e.t, eventOrigin())) + '</code></td><td><strong>' + esc(e.n || 'Unnamed event') + '</strong></td><td>' + esc(e.c || 'uncategorized') + '</td><td>' + esc(e.src || 'VM') + '</td><td>' + esc(e.d ? us(e.d) : 'Instant') + '</td><td>' + esc(e.p || '—') + '</td><td>' + args + '</td></tr>'; }).join('') : '<tr><td colspan="7"><div class="empty">No events match the current filter.</div></td></tr>';
     el('event-page-label').textContent = list.length ? 'Showing ' + (start + 1) + '–' + Math.min(start + slice.length, list.length) + ' of ' + nf.format(list.length) : 'No matching events'; el('event-prev').disabled = state.eventPage === 0; el('event-next').disabled = state.eventPage >= pages - 1;
   };
   var renderCategories = function () { var values = {}; events().forEach(function (e) { values[String(e.c || 'uncategorized')] = true; }); var select = el('event-category'); select.innerHTML = '<option value="">All categories</option>' + Object.keys(values).sort().map(function (value) { return '<option value="' + esc(value) + '">' + esc(value) + '</option>'; }).join(''); select.value = state.eventCategory; };
   var renderSelector = function () { var select = el('report-select'); select.innerHTML = reports.map(function (item, index) { return '<option value="' + index + '">' + esc(item.label || ('Capture ' + (index + 1))) + '</option>'; }).join(''); select.value = state.report; };
-  var render = function () { hideTooltip(); renderSelector(); renderMeta(); renderHealth(); renderMetrics(); renderStartup(); renderCoverage(); renderDevTools(); renderEventSummary(); renderStalls(); renderCategories(); renderResources(); renderComparison(); renderDetails(); renderFrames(); renderEvents(); renderCodeEvidence(); renderHotspots(); drawStartupChart(); drawFrameChart(); drawEventChart(); drawPhaseChart(); drawResourceChart(); drawCacheChart(); drawJankChart(); drawCadenceChart(); drawCacheTrendChart(); drawPipelineChart(); drawGcChart(); drawCategoryCostChart(); drawHotspotChart(); drawFlameChart(); drawCpuChart(); drawHeapChart(); drawHeapTrendChart(); drawVmMemoryChart(); drawRebuildChart(); };
+  var render = function () { hideTooltip(); renderSelector(); renderMeta(); renderHealth(); renderMetrics(); renderStartup(); renderCoverage(); renderPlugins(); renderDevTools(); renderEventSummary(); renderStalls(); renderCategories(); renderResources(); renderComparison(); renderDetails(); renderFrames(); renderEvents(); renderCodeEvidence(); renderHotspots(); drawStartupChart(); drawFrameChart(); drawEventChart(); drawPhaseChart(); drawResourceChart(); drawCacheChart(); drawJankChart(); drawCadenceChart(); drawCacheTrendChart(); drawPipelineChart(); drawGcChart(); drawCategoryCostChart(); drawHotspotChart(); drawFlameChart(); drawCpuChart(); drawHeapChart(); drawHeapTrendChart(); drawVmMemoryChart(); drawRebuildChart(); };
   el('report-select').addEventListener('change', function (event) { state.report = Number(event.target.value) || 0; state.framePage = 0; state.eventPage = 0; state.eventQuery = ''; state.eventCategory = ''; el('event-search').value = ''; render(); });
   el('frame-sort').addEventListener('change', function (event) { state.frameSort = event.target.value; state.framePage = 0; renderFrames(); });
   el('frame-prev').addEventListener('click', function () { state.framePage -= 1; renderFrames(); }); el('frame-next').addEventListener('click', function () { state.framePage += 1; renderFrames(); });

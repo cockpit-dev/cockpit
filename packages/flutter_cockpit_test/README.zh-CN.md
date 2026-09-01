@@ -260,6 +260,49 @@ debug 数据仅用于诊断，不能当作发布性能证据。
 报告还提供 **Operation hotspots**，按真实 VM event 的 category 和名称聚合事件数、有时长事件数、总耗时、p90 和最长区间，先回答“到底是哪类具体操作慢”，再决定是否打开原始时间线。源码列只在对应事件参数实际带有位置时显示，不会从帧耗时推断文件。`fullJson()` 会在每个 capture 下的 `analysis` 字段保留这份有界聚合，同时完整保留原始 events。
 同一份分析还会在时间线确实包含 GC 标记时记录 GC 事件数、带时长的暂停总量、p50、p90 和最大暂停；HTML 的 cache/GC 面板会把这些暂停指标和新生代/老生代次数一起展示。
 
+### 埋点插件与 AOP 适配器
+
+当应用能够提供开发期 hook 时，可以用 `CockpitPerformancePlugin` 记录仓储、网络、
+数据库、渲染或业务操作。插件只在一次显式采集中启动，不安装全局监听器，也不会改变
+正常测试行为：
+
+```dart
+final report = await cockpit.profile(
+  () => runCheckoutFlow(),
+  plugins: <CockpitPerformancePlugin>[
+    CockpitPerformancePlugin(
+      id: 'checkout-aop',
+      start: (context) {
+        CheckoutHooks.onSpan = (name, startUs, endUs) {
+          context.sink.span(
+            name,
+            category: 'business',
+            startUs: startUs,
+            endUs: endUs,
+            location: const CockpitPerformanceLocation(
+              uri: 'package:checkout/checkout.dart',
+              line: 42,
+            ),
+          );
+        };
+      },
+    ),
+  ],
+);
+```
+
+点事件使用 `instant`，耗时使用 `begin/end` 或 `trace`，数值使用
+`counter`/`sample`。插件事件与 VM timeline 使用同一单调时间轴，并合并到
+`report.events`；每个事件包含插件来源，以及可选的 isolate/源码位置。每个插件都有
+事件数量、采样、分类过滤、payload 深度/大小上限和丢弃/非法/截断统计，保证采集有界。
+插件抛出异常只会标记为 `failed`，不会让被测操作失败。通过 `report.plugins` 查看归因和
+统计；compact 输出只保留计数，完整 JSON、HTML 和 Chrome trace 保留有界事件详情。
+AOP 适配器应从显式开发 hook 调用 sink，不支持对生产代码做隐式全局注入。
+
+插件启动和清理都受 `CockpitPerformancePluginOptions.lifecycleTimeout` 限制，默认两秒。
+被测窗口会在插件清理和报告生成前关闭，因此清理开销不会被归因到被测交互；插件超时只会记录
+失败原因，不会阻塞业务动作。
+
 DevTools 区域包含 VM heap 趋势图、CPU/heap/GPU 汇总、VM 身份与 isolate 数量、每个已发现 isolate 的前后健康快照，以及 VM Isolate stream 的启动、可运行、更新、重载、退出和扩展注册事件；新增/退出 isolate 与保留丢弃数会在运行时面板和完整 JSON 中显示，同时保留 recorder/stream
 元数据。每个区域都有紧凑的 **Details** 操作，点击后使用原生弹窗查看有界 JSON 预览；完整样本
 仍保留在 JSON 导出中，因此查看详情不会把整页撑开或卡住浏览器。CPU 详情还会根据 VM 返回的

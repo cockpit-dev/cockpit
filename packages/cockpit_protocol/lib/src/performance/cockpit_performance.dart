@@ -230,6 +230,11 @@ final class CockpitPerformanceEvent {
     this.eventId,
     this.scope,
     this.bindId,
+    this.source,
+    this.isolateId,
+    this.uri,
+    this.line,
+    this.column,
   }) : args = _freezeJsonObject(args);
 
   final String name;
@@ -248,6 +253,18 @@ final class CockpitPerformanceEvent {
   final String? scope;
   final String? bindId;
 
+  /// The explicit instrumentation source, normally a registered plugin id.
+  /// VM-originated events leave this absent because their source is already
+  /// identified by the report's timeline metadata.
+  final String? source;
+
+  /// Isolate and source location metadata supplied by the instrumentation
+  /// source. Missing runtime fields remain absent rather than guessed.
+  final String? isolateId;
+  final String? uri;
+  final int? line;
+  final int? column;
+
   bool get isValid =>
       name.trim().isNotEmpty &&
       category.trim().isNotEmpty &&
@@ -258,6 +275,11 @@ final class CockpitPerformanceEvent {
       (eventId == null || eventId!.trim().isNotEmpty) &&
       (scope == null || scope!.trim().isNotEmpty) &&
       (bindId == null || bindId!.trim().isNotEmpty) &&
+      (source == null || source!.trim().isNotEmpty) &&
+      (isolateId == null || isolateId!.trim().isNotEmpty) &&
+      (uri == null || uri!.trim().isNotEmpty) &&
+      (line == null || line! > 0) &&
+      (column == null || column! >= 0) &&
       _isJsonObject(args);
 
   Map<String, Object?> toJson() => <String, Object?>{
@@ -271,6 +293,11 @@ final class CockpitPerformanceEvent {
     if (eventId != null) 'id': eventId,
     if (scope != null) 'scope': scope,
     if (bindId != null) 'bid': bindId,
+    if (source != null) 'src': source,
+    if (isolateId != null) 'iso': isolateId,
+    if (uri != null) 'u': uri,
+    if (line != null) 'l': line,
+    if (column != null) 'col': column,
     if (args.isNotEmpty) 'a': args,
   };
 
@@ -294,6 +321,13 @@ final class CockpitPerformanceEvent {
       eventId: _optionalString(json['id'], r'$.event.id'),
       scope: _optionalString(json['scope'], r'$.event.scope'),
       bindId: _optionalString(json['bid'], r'$.event.bid'),
+      source: _optionalString(json['src'], r'$.event.src'),
+      isolateId: _optionalString(json['iso'], r'$.event.iso'),
+      uri: _optionalString(json['u'], r'$.event.u'),
+      line: json['l'] == null ? null : _positiveInt(json['l'], r'$.event.l'),
+      column: json['col'] == null
+          ? null
+          : _nonNegativeInt(json['col'], r'$.event.col'),
       args: args == null
           ? const <String, Object?>{}
           : Map<String, Object?>.unmodifiable(_object(args, r'$.event.a')),
@@ -314,6 +348,11 @@ final class CockpitPerformanceEvent {
             other.eventId == eventId &&
             other.scope == scope &&
             other.bindId == bindId &&
+            other.source == source &&
+            other.isolateId == isolateId &&
+            other.uri == uri &&
+            other.line == line &&
+            other.column == column &&
             const DeepCollectionEquality().equals(other.args, args);
   }
 
@@ -329,6 +368,11 @@ final class CockpitPerformanceEvent {
     eventId,
     scope,
     bindId,
+    source,
+    isolateId,
+    uri,
+    line,
+    column,
     const DeepCollectionEquality().hash(args),
   );
 }
@@ -662,6 +706,142 @@ final class CockpitPerformanceSummary {
   }
 }
 
+/// Bounded statistics for one explicitly registered performance plugin.
+///
+/// The event list remains the source of truth. This projection lets compact
+/// consumers inspect attribution and cost without loading every event.
+final class CockpitPerformancePluginStats {
+  CockpitPerformancePluginStats({
+    required this.id,
+    required this.state,
+    this.version,
+    this.reason,
+    required this.eventCount,
+    required this.spanCount,
+    required this.instantCount,
+    required this.counterCount,
+    this.dropped = 0,
+    this.invalid = 0,
+    this.truncated = 0,
+    this.durationUs = 0,
+    this.maxDurationUs = 0,
+    Map<String, int> categories = const <String, int>{},
+  }) : categories = Map<String, int>.unmodifiable(categories) {
+    const states = <String>{'available', 'failed', 'unavailable'};
+    if (id.trim().isEmpty ||
+        state.trim().isEmpty ||
+        !states.contains(state) ||
+        version != null && version!.trim().isEmpty ||
+        reason != null && reason!.trim().isEmpty ||
+        eventCount < 0 ||
+        spanCount < 0 ||
+        instantCount < 0 ||
+        counterCount < 0 ||
+        dropped < 0 ||
+        invalid < 0 ||
+        truncated < 0 ||
+        durationUs < 0 ||
+        maxDurationUs < 0 ||
+        spanCount + instantCount + counterCount > eventCount ||
+        categories.length > 256 ||
+        categories.keys.any(
+          (key) => key.trim().isEmpty || key.trim().length > 128,
+        ) ||
+        categories.values.any((value) => value < 0)) {
+      throw const FormatException('Performance plugin statistics are invalid.');
+    }
+  }
+
+  final String id;
+  final String state;
+  final String? version;
+  final String? reason;
+  final int eventCount;
+  final int spanCount;
+  final int instantCount;
+  final int counterCount;
+  final int dropped;
+  final int invalid;
+  final int truncated;
+  final int durationUs;
+  final int maxDurationUs;
+  final Map<String, int> categories;
+
+  Map<String, Object?> toJson() => <String, Object?>{
+    'id': id,
+    'state': state,
+    if (version != null) 'ver': version,
+    if (reason != null) 'why': reason,
+    if (eventCount > 0) 'n': eventCount,
+    if (spanCount > 0) 'span': spanCount,
+    if (instantCount > 0) 'instant': instantCount,
+    if (counterCount > 0) 'counter': counterCount,
+    if (dropped > 0) 'drop': dropped,
+    if (invalid > 0) 'bad': invalid,
+    if (truncated > 0) 'trunc': truncated,
+    if (durationUs > 0) 'dur': durationUs,
+    if (maxDurationUs > 0) 'max': maxDurationUs,
+    if (categories.isNotEmpty) 'cat': categories,
+  };
+
+  factory CockpitPerformancePluginStats.fromJson(Object? value) {
+    final json = _object(value, r'$.performance.plugins[]');
+    final rawCategories = json['cat'];
+    final categories = rawCategories == null
+        ? const <String, int>{}
+        : <String, int>{
+            for (final entry in _object(
+              rawCategories,
+              r'$.performance.plugins[].cat',
+            ).entries)
+              entry.key: _nonNegativeInt(
+                entry.value,
+                r'$.performance.plugins[].cat.value',
+              ),
+          };
+    return CockpitPerformancePluginStats(
+      id: _string(json['id'], r'$.performance.plugins[].id'),
+      state: _string(json['state'], r'$.performance.plugins[].state'),
+      version: _optionalString(json['ver'], r'$.performance.plugins[].ver'),
+      reason: _optionalString(json['why'], r'$.performance.plugins[].why'),
+      eventCount: json['n'] == null
+          ? 0
+          : _nonNegativeInt(json['n'], r'$.performance.plugins[].n'),
+      spanCount: json['span'] == null
+          ? 0
+          : _nonNegativeInt(json['span'], r'$.performance.plugins[].span'),
+      instantCount: json['instant'] == null
+          ? 0
+          : _nonNegativeInt(
+              json['instant'],
+              r'$.performance.plugins[].instant',
+            ),
+      counterCount: json['counter'] == null
+          ? 0
+          : _nonNegativeInt(
+              json['counter'],
+              r'$.performance.plugins[].counter',
+            ),
+      dropped: json['drop'] == null
+          ? 0
+          : _nonNegativeInt(json['drop'], r'$.performance.plugins[].drop'),
+      invalid: json['bad'] == null
+          ? 0
+          : _nonNegativeInt(json['bad'], r'$.performance.plugins[].bad'),
+      truncated: json['trunc'] == null
+          ? 0
+          : _nonNegativeInt(json['trunc'], r'$.performance.plugins[].trunc'),
+      durationUs: json['dur'] == null
+          ? 0
+          : _nonNegativeInt(json['dur'], r'$.performance.plugins[].dur'),
+      maxDurationUs: json['max'] == null
+          ? 0
+          : _nonNegativeInt(json['max'], r'$.performance.plugins[].max'),
+      categories: categories,
+    );
+  }
+}
+
 /// A complete bounded performance capture.
 final class CockpitPerformanceReport {
   CockpitPerformanceReport({
@@ -686,8 +866,11 @@ final class CockpitPerformanceReport {
     this.devTools,
     this.timelineSource,
     this.stepId,
+    Iterable<CockpitPerformancePluginStats> plugins =
+        const <CockpitPerformancePluginStats>[],
   }) : frames = List<CockpitPerformanceFrame>.unmodifiable(frames),
-       events = List<CockpitPerformanceEvent>.unmodifiable(events) {
+       events = List<CockpitPerformanceEvent>.unmodifiable(events),
+       plugins = List<CockpitPerformancePluginStats>.unmodifiable(plugins) {
     if (schemaVersion != 'cockpit.performance/v2') {
       throw const FormatException('Unsupported performance report schema.');
     }
@@ -727,6 +910,9 @@ final class CockpitPerformanceReport {
     if (frames.length > 100000 || events.length > 200000) {
       throw const FormatException('Performance report is too large.');
     }
+    if (this.plugins.length > 128) {
+      throw const FormatException('Performance plugin count is bounded.');
+    }
     if (frames.any((frame) => !frame.isValid) ||
         events.any((event) => !event.isValid) ||
         !summary.isValid) {
@@ -760,6 +946,7 @@ final class CockpitPerformanceReport {
   final CockpitDevToolsProfile? devTools;
   final String? timelineSource;
   final String? stepId;
+  final List<CockpitPerformancePluginStats> plugins;
 
   /// Number of valid frames observed before bounded retention was applied.
   int get observedFrameCount => frames.length + droppedFrames;
@@ -792,6 +979,8 @@ final class CockpitPerformanceReport {
     if (devTools != null) 'devtools': devTools!.toJson(includeRaw: includeRaw),
     if (timelineSource != null) 'source': timelineSource,
     if (stepId != null) 'step': stepId,
+    if (plugins.isNotEmpty)
+      'plugins': plugins.map((plugin) => plugin.toJson()).toList(),
   };
 
   factory CockpitPerformanceReport.fromJson(Object? value) {
@@ -862,6 +1051,11 @@ final class CockpitPerformanceReport {
           : CockpitDevToolsProfile.fromJson(json['devtools']),
       timelineSource: _optionalString(json['source'], r'$.performance.source'),
       stepId: _optionalString(json['step'], r'$.performance.step'),
+      plugins: json['plugins'] == null
+          ? const <CockpitPerformancePluginStats>[]
+          : _list(json['plugins'], r'$.performance.plugins')
+                .map(CockpitPerformancePluginStats.fromJson)
+                .toList(growable: false),
     );
   }
 }
