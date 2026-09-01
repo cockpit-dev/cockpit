@@ -408,6 +408,13 @@ full tree contents.
 
 ## Run and choose the layer
 
+Always choose the test device explicitly. First run `cockpit target discover`
+when more than one target may be available, then use the exact discovered id;
+Flutter's default target is not a safe selection. If the user has not selected
+among multiple compatible rows, stop and ask for the id. Keep that id for every
+test and performance command; do not fall through to another device after a
+disconnect.
+
 Run with Flutter's normal command for the actual target:
 
 ```bash

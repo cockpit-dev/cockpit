@@ -39,6 +39,38 @@ library, runtime, or plugin cannot load, repair or reinstall that toolchain.
 Changing `PATH` cannot fix a broken executable. Run its version command again
 before repeating Cockpit discovery.
 
+## Select A Device Before Any Launch
+
+Discovery is mandatory for a new or ambiguous target. It runs Flutter's
+machine-readable device probe and returns exact ids; it does not select a device
+for you:
+
+```bash
+cockpit target discover
+```
+
+Read each row's `id`, `name`, `platform`, `emulator`, and `sdk`. Use an explicit
+`--device <id>` for Flutter development or an exact registered `--target-id` for
+black-box control. If multiple compatible rows exist and the user has not
+chosen one, ask for the exact row and stop. Never use the first/last row, a
+cached id, or an implicit platform default. If one row is compatible, report
+which id was selected; do not silently substitute a physical device for a
+simulator (or the reverse).
+
+For a registered target, discovery is followed by a live capability probe:
+
+```bash
+cockpit target list
+cockpit target inspect --target-id <targetId> --profile evidence
+```
+
+The inspect result must advertise every capability required by the flow. A
+device appearing in `flutter devices` or `adb devices` is connectivity only,
+not proof that native UI, input, capture, lifecycle, or VM-backed integration
+operations work. Verify those capabilities with a read-only inspect, screenshot,
+and wait before mutating the app. Keep the same device id through the whole
+session and rediscover only that device after a disconnect.
+
 Read `available`, `limitations`, driver/adapter identity, quality flags, and the
 exact failure reason. Then verify the named platform tool directly. After a
 repair, restart the daemon if its process environment or macOS permissions

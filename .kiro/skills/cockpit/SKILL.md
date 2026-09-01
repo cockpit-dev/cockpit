@@ -42,6 +42,65 @@ Only an already integrated checkout takes the fast path below. `cockpit/main.dar
 is the default development entrypoint; pass another entrypoint only when the
 checkout intentionally uses one.
 
+## Select The Device Explicitly
+
+Never infer a device from host order, the last Flutter target, a platform name,
+or a remembered session. Before the first launch in a project, and whenever the
+target is ambiguous, discover the current devices:
+
+```bash
+cockpit target discover
+```
+
+This returns a bounded `targets` list with the exact `id`, `name`, `platform`,
+`emulator`, and `sdk`. Use the exact `id` in the next command. If the user did
+not provide a device and more than one compatible target is listed, stop and
+ask which row to use; never choose the first, last, or an emulator implicitly.
+If exactly one compatible target exists, state the selected id/name/platform
+and use that exact id. Never silently switch between a simulator and a
+physical device.
+
+```bash
+cockpit target discover
+cockpit dev start --device <deviceId>
+cockpit session list
+cockpit session show <handle>
+cockpit dev status --session <handle>
+```
+
+For a registered black-box target, select the exact target after discovery and
+prove its live capabilities before any mutation:
+
+```bash
+cockpit target list
+cockpit target get --target-id <targetId>
+cockpit target inspect --target-id <targetId> --profile evidence
+```
+
+Physical-device work requires an online, unlocked, trusted device and its
+native control path (Android ADB; iOS WDA/devicectl where native control is
+needed). A connected row alone is not proof of E2E readiness: inspect must
+advertise the required tree, input, capture, and lifecycle capabilities. Probe
+with a read-only inspect, a screenshot, and `dev wait` before running a real
+flow. Keep the same selected device id and session handle for Flutter launches,
+reloads, screenshots, network reads, and recovery.
+
+Integration tests follow the same explicit selection; never rely on Flutter's
+default device when more than one is available:
+
+```bash
+flutter test integration_test/<test>.dart -d <deviceId>
+flutter drive --profile --no-dds --driver=integration_test/driver.dart \
+  --target=integration_test/<test>.dart -d <deviceId>
+```
+
+Use `flutter test` for ordinary integration tests and `flutter drive --profile
+--no-dds` for VM-backed performance evidence. Before a physical run, verify
+the exact device again; after it starts, require a live status, a current
+screen/anchor, and no disqualifying runtime or native-driver error. If the
+device disappears, repair that device and rediscover it; do not fall through to
+another target or create a second session.
+
 ## Choose The Command
 
 Use the highest-level command that owns the task:
