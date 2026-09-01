@@ -10,7 +10,8 @@ export 'package:cockpit_protocol/cockpit_protocol.dart'
         CockpitPerformanceSummary,
         CockpitPerformanceMemoryReport,
         CockpitPerformanceMemorySample,
-        CockpitPerformanceMemorySummary;
+        CockpitPerformanceMemorySummary,
+        CockpitPerformanceArchiveInfo;
 export 'package:cockpit_protocol/cockpit_protocol.dart'
     show CockpitPerformancePluginStats;
 export 'package:flutter_cockpit/flutter_cockpit.dart'
@@ -58,5 +59,6 @@ export 'src/cockpit_debug_tools.dart';
 export 'src/cockpit_test_options.dart';
 export 'src/cockpit_native_tester.dart';
 export 'src/cockpit_performance_html.dart';
+export 'src/cockpit_performance_archive.dart';
 export 'src/cockpit_startup_report.dart';
 export 'src/cockpit_watch.dart';

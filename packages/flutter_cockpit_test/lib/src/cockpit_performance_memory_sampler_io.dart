@@ -6,11 +6,12 @@ import 'package:cockpit_protocol/cockpit_protocol.dart';
 import 'cockpit_performance_memory_sampler_contract.dart';
 
 final class _ProcessMemorySampler implements CockpitPerformanceMemorySampler {
-  _ProcessMemorySampler(this.interval);
+  _ProcessMemorySampler(this.interval, this.onSample);
 
   static const _maxSamples = 10000;
 
   final Duration interval;
+  final void Function(CockpitPerformanceMemorySample sample)? onSample;
   final List<CockpitPerformanceMemorySample> _samples =
       <CockpitPerformanceMemorySample>[];
   Stopwatch? _clock;
@@ -68,6 +69,11 @@ final class _ProcessMemorySampler implements CockpitPerformanceMemorySampler {
       } else {
         _samples.add(sample);
       }
+      try {
+        onSample?.call(sample);
+      } on Object {
+        // Archive failures must never affect the measured action.
+      }
     } on Object {
       _disabled = true;
       _timer?.cancel();
@@ -78,4 +84,5 @@ final class _ProcessMemorySampler implements CockpitPerformanceMemorySampler {
 
 CockpitPerformanceMemorySampler createCockpitPerformanceMemorySampler({
   required Duration interval,
-}) => _ProcessMemorySampler(interval);
+  void Function(CockpitPerformanceMemorySample sample)? onSample,
+}) => _ProcessMemorySampler(interval, onSample);

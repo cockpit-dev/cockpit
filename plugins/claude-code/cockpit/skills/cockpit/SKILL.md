@@ -814,6 +814,16 @@ Tune collection only when it changes the decision: `sampleEvery` controls native
 RSS frequency, `streams` and `timeline` select VM tracing, `memory` disables RSS,
 and `maxEvents` bounds retained VM events. Keep the defaults for normal captures;
 use a shorter interval or narrower streams only for a targeted investigation.
+Short captures may keep the complete report in memory. For multi-hour flows,
+open a `CockpitPerformanceArchive` and pass it as `archive` so records stream
+to rotating JSONL chunks while the report remains a quick in-memory projection.
+The explicit archive defaults to lossless; choose `low` with
+`maxPendingBytes` only when a runner needs a hard queue bound and accepts
+counted drops. The manifest path is the entry point for the complete stream.
+A standalone HTML opened with `file://` can read only its embedded payload; it
+cannot silently read arbitrary project JSON/JSONL paths. Use an HTTP server or
+a browser file picker for external JSONL files, and load chunks incrementally
+instead of embedding a multi-gigabyte stream.
 The complete bounded report is stored in
 `IntegrationTestWidgetsFlutterBinding.reportData` under
 `cockpit.performance.NAME`; normal Cockpit output stays compact. `dropped`

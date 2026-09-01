@@ -12,6 +12,7 @@ export 'package:cockpit_protocol/cockpit_protocol.dart'
         CockpitPerformanceMemoryReport,
         CockpitPerformanceMemorySample,
         CockpitPerformanceMemorySummary,
+        CockpitPerformanceArchiveInfo,
         CockpitPerformanceMode,
         CockpitPerformancePhaseSummary,
         CockpitPerformanceReport,

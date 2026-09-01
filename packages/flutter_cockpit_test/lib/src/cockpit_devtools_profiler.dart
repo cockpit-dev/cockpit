@@ -20,6 +20,10 @@ final class CockpitDevToolsProfiler {
     this.maxRebuildEntries = 100000,
     this.maxLogEvents = 2000,
     this.maxDebugEvents = 2000,
+    this.onIsolateEvent,
+    this.onLogEvent,
+    this.onDebugEvent,
+    this.onHeapSample,
   }) {
     if (timeout <= Duration.zero) {
       throw ArgumentError.value(timeout, 'timeout', 'Must be positive.');
@@ -83,6 +87,10 @@ final class CockpitDevToolsProfiler {
   final int maxRebuildEntries;
   final int maxLogEvents;
   final int maxDebugEvents;
+  final void Function(CockpitIsolateEvent event)? onIsolateEvent;
+  final void Function(CockpitVmLogEvent event)? onLogEvent;
+  final void Function(CockpitVmDebugEvent event)? onDebugEvent;
+  final void Function(CockpitHeapSample sample)? onHeapSample;
 
   VmService? _service;
   String? _isolateId;
@@ -139,6 +147,9 @@ final class CockpitDevToolsProfiler {
   bool _windowEnded = false;
   int? _captureEndUs;
   final List<String> _failures = <String>[];
+  bool _streamTimeline = false;
+  int? _timelineCursorUs;
+  Future<List<Object?>>? _timelineDrainPending;
 
   /// Starts a capture without blocking the action when the VM service is not
   /// available (for example, a web test or a release build).
@@ -153,6 +164,8 @@ final class CockpitDevToolsProfiler {
     bool debug = true,
     Iterable<String> allocationClassIds = const <String>[],
     Duration heapSampleEvery = const Duration(milliseconds: 100),
+    List<String> timelineStreams = const <String>['all'],
+    bool streamTimeline = false,
   }) async {
     if (heapSampleEvery <= Duration.zero ||
         heapSampleEvery.inMilliseconds < 1) {
@@ -212,6 +225,9 @@ final class CockpitDevToolsProfiler {
     _profilerChanged = false;
     _windowEnded = false;
     _captureEndUs = null;
+    _streamTimeline = streamTimeline;
+    _timelineCursorUs = null;
+    _timelineDrainPending = null;
     _requested =
         cpu ||
         heap ||
@@ -268,6 +284,10 @@ final class CockpitDevToolsProfiler {
       }
       if (timeline) {
         try {
+          if (streamTimeline) {
+            await service.setVMTimelineFlags(timelineStreams).timeout(timeout);
+            await service.clearVMTimeline().timeout(timeout);
+          }
           final flags = await service.getVMTimelineFlags().timeout(timeout);
           _timeline = CockpitTimelineProfile(
             recorder: _timelineRecorder(flags.recorderName),
@@ -280,6 +300,7 @@ final class CockpitDevToolsProfiler {
       }
       final now = await service.getVMTimelineMicros().timeout(timeout);
       _originUs = now.timestamp ?? 0;
+      _timelineCursorUs = _originUs;
       if (vmMemory) {
         try {
           _vmMemoryBefore = await _readVmMemorySnapshot(service, _originUs!);
@@ -334,6 +355,49 @@ final class CockpitDevToolsProfiler {
     } on Object catch (error) {
       await _close();
       _recordFailure('vm', error);
+    }
+  }
+
+  /// Reads only the VM timeline interval since the previous drain. This is
+  /// used by long-running archives so the integration_test binding never
+  /// materializes the entire action timeline in one object.
+  Future<List<Object?>> drainTimeline() async {
+    final pending = _timelineDrainPending;
+    if (pending != null) return pending;
+    final operation = _drainTimeline();
+    _timelineDrainPending = operation;
+    try {
+      return await operation;
+    } finally {
+      if (identical(_timelineDrainPending, operation)) {
+        _timelineDrainPending = null;
+      }
+    }
+  }
+
+  Future<List<Object?>> _drainTimeline() async {
+    if (!_streamTimeline) return const <Object>[];
+    final service = _service;
+    final cursor = _timelineCursorUs;
+    if (service == null || cursor == null) return const <Object>[];
+    try {
+      final now = await service.getVMTimelineMicros().timeout(timeout);
+      final end = now.timestamp;
+      if (end == null || end <= cursor) return const <Object>[];
+      final timeline = await service
+          .getVMTimeline(
+            timeOriginMicros: cursor + 1,
+            timeExtentMicros: end - cursor,
+          )
+          .timeout(timeout);
+      _timelineCursorUs = end;
+      return <Object?>[
+        for (final event in timeline.traceEvents ?? const <TimelineEvent>[]) 
+          if (event.json != null) event.json!,
+      ];
+    } on Object catch (error) {
+      _recordFailure('timeline-drain', error);
+      return const <Object>[];
     }
   }
 
@@ -984,16 +1048,20 @@ final class CockpitDevToolsProfiler {
       _droppedIsolateEvents += 1;
       return;
     }
-    _isolateEvents.add(
-      CockpitIsolateEvent(
+    final record = CockpitIsolateEvent(
         kind: kind,
         timestampMs: _nonNegativeNullable(event.timestamp),
         isolateId: _nonEmptyNullable(event.isolate?.id),
         name: _nonEmptyNullable(event.isolate?.name),
         groupId: _nonEmptyNullable(event.isolateGroup?.id),
         extensionRpc: _nonEmptyNullable(event.extensionRPC),
-      ),
-    );
+      );
+    _isolateEvents.add(record);
+    try {
+      onIsolateEvent?.call(record);
+    } on Object {
+      // An archive sink must not affect VM event delivery.
+    }
   }
 
   Future<void> _subscribeLoggingEvents(VmService service) async {
@@ -1014,21 +1082,25 @@ final class CockpitDevToolsProfiler {
       _droppedLogEvents += 1;
       return;
     }
-    final record = event.logRecord;
-    if (record == null) return;
-    _logEvents.add(
-      CockpitVmLogEvent(
-        timestampMs: _nonNegativeNullable(record.time ?? event.timestamp),
-        level: _nonNegativeNullable(record.level),
-        sequence: _nonNegativeNullable(record.sequenceNumber),
-        message: _boundedEventText(record.message?.valueAsString),
-        logger: _boundedEventText(record.loggerName?.valueAsString),
-        zone: _boundedEventText(record.zone?.valueAsString),
-        error: _boundedEventText(record.error?.valueAsString),
-        stack: _boundedEventText(record.stackTrace?.valueAsString),
-        isolateId: _nonEmptyNullable(event.isolate?.id),
-      ),
+    final log = event.logRecord;
+    if (log == null) return;
+    final record = CockpitVmLogEvent(
+      timestampMs: _nonNegativeNullable(log.time ?? event.timestamp),
+      level: _nonNegativeNullable(log.level),
+      sequence: _nonNegativeNullable(log.sequenceNumber),
+      message: _boundedEventText(log.message?.valueAsString),
+      logger: _boundedEventText(log.loggerName?.valueAsString),
+      zone: _boundedEventText(log.zone?.valueAsString),
+      error: _boundedEventText(log.error?.valueAsString),
+      stack: _boundedEventText(log.stackTrace?.valueAsString),
+      isolateId: _nonEmptyNullable(event.isolate?.id),
     );
+    _logEvents.add(record);
+    try {
+      onLogEvent?.call(record);
+    } on Object {
+      // An archive sink must not affect VM event delivery.
+    }
   }
 
   Future<void> _subscribeDebugEvents(VmService service) async {
@@ -1057,8 +1129,7 @@ final class CockpitDevToolsProfiler {
         ? frame!.function!.name
         : frame?.code?.name;
     final exception = event.exception?.valueAsString;
-    _debugEvents.add(
-      CockpitVmDebugEvent(
+    final record = CockpitVmDebugEvent(
         kind: kind,
         timestampMs: _nonNegativeNullable(event.timestamp),
         isolateId: _nonEmptyNullable(event.isolate?.id),
@@ -1075,8 +1146,13 @@ final class CockpitDevToolsProfiler {
         column: _nonNegativeNullable(location?.column),
         exception: _boundedEventText(exception),
         breakpoint: _nonNegativeNullable(event.breakpoint?.breakpointNumber),
-      ),
-    );
+      );
+    _debugEvents.add(record);
+    try {
+      onDebugEvent?.call(record);
+    } on Object {
+      // An archive sink must not affect VM event delivery.
+    }
   }
 
   static const _rebuildExtension =
@@ -1510,6 +1586,11 @@ final class CockpitDevToolsProfiler {
     } else {
       _droppedHeapSamples += 1;
     }
+    try {
+      onHeapSample?.call(sample);
+    } on Object {
+      // An archive sink must not affect VM sampling.
+    }
   }
 
   Future<CockpitHeapSample?> _readVmHeapSample(
@@ -1769,6 +1850,8 @@ final class CockpitDevToolsProfiler {
     _service = null;
     _isolateId = null;
     _originUs = null;
+    _timelineCursorUs = null;
+    _streamTimeline = false;
     _beforeHeap = null;
     _vmMemoryBefore = null;
     _vmMemoryAfter = null;

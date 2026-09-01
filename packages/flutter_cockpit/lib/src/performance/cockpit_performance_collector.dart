@@ -18,7 +18,10 @@ export 'package:cockpit_protocol/cockpit_protocol.dart'
         CockpitPerformanceMemorySample,
         CockpitPerformanceMemorySummary;
 export 'package:cockpit_protocol/cockpit_protocol.dart'
-    show CockpitPerformancePluginStats;
+    show CockpitPerformancePluginStats, CockpitPerformanceArchiveInfo;
+
+typedef CockpitPerformanceFrameListener =
+    void Function(CockpitPerformanceFrame frame);
 
 /// Collects engine-reported frame timings for an explicit, bounded capture.
 ///
@@ -76,6 +79,8 @@ final class CockpitPerformanceCollector {
   final String platform;
   final String buildMode;
   final List<CockpitPerformanceFrame> _frames = <CockpitPerformanceFrame>[];
+  final Set<CockpitPerformanceFrameListener> _frameListeners =
+      <CockpitPerformanceFrameListener>{};
   TimingsCallback? _timingsCallback;
   Stopwatch? _clock;
   DateTime? _startedAt;
@@ -92,6 +97,19 @@ final class CockpitPerformanceCollector {
   int get frameBudgetUs => _frameBudgetUs;
   int get frameCount => _seenFrames;
   int get invalidFrameCount => _invalidFrames;
+
+  /// Registers a low-overhead observer for every valid frame, including
+  /// frames that are outside the bounded in-memory retention window. The
+  /// listener is intended for append-only archives and must not throw or do
+  /// expensive synchronous work; failures are isolated from frame capture.
+  void addFrameListener(CockpitPerformanceFrameListener listener) {
+    _frameListeners.add(listener);
+  }
+
+  /// Removes a previously registered frame observer.
+  void removeFrameListener(CockpitPerformanceFrameListener listener) {
+    _frameListeners.remove(listener);
+  }
 
   /// Starts one capture. A collector owns one capture at a time so that
   /// reports cannot accidentally combine unrelated actions.
@@ -125,6 +143,15 @@ final class CockpitPerformanceCollector {
     _seenFrames += 1;
     if (_frames.length < maxFrames) {
       _frames.add(frame);
+    }
+    for (final listener in List<CockpitPerformanceFrameListener>.of(
+      _frameListeners,
+    )) {
+      try {
+        listener(frame);
+      } on Object {
+        // A diagnostic sink must never change frame timing collection.
+      }
     }
   }
 
@@ -273,6 +300,7 @@ final class CockpitPerformanceCollector {
   void dispose() {
     if (_running) _detach();
     _frames.clear();
+    _frameListeners.clear();
   }
 
   void _recordTimings(List<FrameTiming> timings) {

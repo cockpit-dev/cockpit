@@ -842,6 +842,115 @@ final class CockpitPerformancePluginStats {
   }
 }
 
+/// Metadata for an append-only performance event archive.
+///
+/// A report may retain only a bounded in-memory window while the complete
+/// capture is written to JSONL chunks. Paths are absolute when the archive was
+/// created by the IO host; consumers should use [chunks] and [manifest] as
+/// artifacts instead of expecting the report to contain the event payload.
+final class CockpitPerformanceArchiveInfo {
+  CockpitPerformanceArchiveInfo({
+    required this.format,
+    required this.mode,
+    required this.state,
+    required this.manifest,
+    required Iterable<String> chunks,
+    required this.events,
+    required this.frames,
+    required this.records,
+    required this.bytes,
+    this.dropped = 0,
+    this.errors = 0,
+    this.reason,
+  }) : chunks = List<String>.unmodifiable(chunks);
+
+  final String format;
+  final String mode;
+  final String state;
+  final String manifest;
+  final List<String> chunks;
+  final int events;
+  final int frames;
+  final int records;
+  final int bytes;
+  final int dropped;
+  final int errors;
+  final String? reason;
+
+  bool get isValid {
+    const formats = <String>{'jsonl'};
+    const modes = <String>{'low', 'lossless'};
+    const states = <String>{'active', 'done', 'failed'};
+    return formats.contains(format) &&
+        modes.contains(mode) &&
+        states.contains(state) &&
+        manifest.trim().isNotEmpty &&
+        chunks.every((path) => path.trim().isNotEmpty) &&
+        events >= 0 &&
+        frames >= 0 &&
+        records >= 0 &&
+        bytes >= 0 &&
+        dropped >= 0 &&
+        errors >= 0 &&
+        (reason == null || reason!.trim().isNotEmpty);
+  }
+
+  Map<String, Object?> toJson() => <String, Object?>{
+    'fmt': format,
+    'mode': mode,
+    'state': state,
+    'manifest': manifest,
+    if (chunks.isNotEmpty) 'chunks': chunks,
+    if (events > 0) 'events': events,
+    if (frames > 0) 'frames': frames,
+    if (records > 0) 'records': records,
+    if (bytes > 0) 'bytes': bytes,
+    if (dropped > 0) 'drop': dropped,
+    if (errors > 0) 'errors': errors,
+    if (reason != null) 'why': reason,
+  };
+
+  factory CockpitPerformanceArchiveInfo.fromJson(Object? value) {
+    final json = _object(value, r'$.performance.stream');
+    final rawChunks = json['chunks'];
+    final chunks = rawChunks == null
+        ? const <String>[]
+        : _list(rawChunks, r'$.performance.stream.chunks')
+              .map((item) => _string(item, r'$.performance.stream.chunks[]'))
+              .toList(growable: false);
+    final info = CockpitPerformanceArchiveInfo(
+      format: _string(json['fmt'], r'$.performance.stream.fmt'),
+      mode: _string(json['mode'], r'$.performance.stream.mode'),
+      state: _string(json['state'], r'$.performance.stream.state'),
+      manifest: _string(json['manifest'], r'$.performance.stream.manifest'),
+      chunks: chunks,
+      events: json['events'] == null
+          ? 0
+          : _nonNegativeInt(json['events'], r'$.performance.stream.events'),
+      frames: json['frames'] == null
+          ? 0
+          : _nonNegativeInt(json['frames'], r'$.performance.stream.frames'),
+      records: json['records'] == null
+          ? 0
+          : _nonNegativeInt(json['records'], r'$.performance.stream.records'),
+      bytes: json['bytes'] == null
+          ? 0
+          : _nonNegativeInt(json['bytes'], r'$.performance.stream.bytes'),
+      dropped: json['drop'] == null
+          ? 0
+          : _nonNegativeInt(json['drop'], r'$.performance.stream.drop'),
+      errors: json['errors'] == null
+          ? 0
+          : _nonNegativeInt(json['errors'], r'$.performance.stream.errors'),
+      reason: _optionalString(json['why'], r'$.performance.stream.why'),
+    );
+    if (!info.isValid) {
+      throw const FormatException('Performance archive metadata is invalid.');
+    }
+    return info;
+  }
+}
+
 /// A complete bounded performance capture.
 final class CockpitPerformanceReport {
   CockpitPerformanceReport({
@@ -866,6 +975,7 @@ final class CockpitPerformanceReport {
     this.devTools,
     this.timelineSource,
     this.stepId,
+    this.archive,
     Iterable<CockpitPerformancePluginStats> plugins =
         const <CockpitPerformancePluginStats>[],
   }) : frames = List<CockpitPerformanceFrame>.unmodifiable(frames),
@@ -946,10 +1056,38 @@ final class CockpitPerformanceReport {
   final CockpitDevToolsProfile? devTools;
   final String? timelineSource;
   final String? stepId;
+  final CockpitPerformanceArchiveInfo? archive;
   final List<CockpitPerformancePluginStats> plugins;
 
   /// Number of valid frames observed before bounded retention was applied.
   int get observedFrameCount => frames.length + droppedFrames;
+
+  /// Returns the same immutable report with live-archive metadata attached.
+  CockpitPerformanceReport copyWithArchive(
+    CockpitPerformanceArchiveInfo? value,
+  ) => CockpitPerformanceReport(
+    schemaVersion: schemaVersion,
+    startedAt: startedAt,
+    finishedAt: finishedAt,
+    durationUs: durationUs,
+    durationMs: durationMs,
+    platform: platform,
+    buildMode: buildMode,
+    mode: mode,
+    summary: summary,
+    frames: frames,
+    events: events,
+    droppedFrames: droppedFrames,
+    droppedEvents: droppedEvents,
+    invalidFrames: invalidFrames,
+    invalidEvents: invalidEvents,
+    memory: memory,
+    devTools: devTools,
+    timelineSource: timelineSource,
+    stepId: stepId,
+    archive: value,
+    plugins: plugins,
+  );
 
   Map<String, Object?> toJson({bool includeRaw = false}) => <String, Object?>{
     'schema': schemaVersion,
@@ -979,6 +1117,7 @@ final class CockpitPerformanceReport {
     if (devTools != null) 'devtools': devTools!.toJson(includeRaw: includeRaw),
     if (timelineSource != null) 'source': timelineSource,
     if (stepId != null) 'step': stepId,
+    if (archive != null) 'stream': archive!.toJson(),
     if (plugins.isNotEmpty)
       'plugins': plugins.map((plugin) => plugin.toJson()).toList(),
   };
@@ -1051,6 +1190,9 @@ final class CockpitPerformanceReport {
           : CockpitDevToolsProfile.fromJson(json['devtools']),
       timelineSource: _optionalString(json['source'], r'$.performance.source'),
       stepId: _optionalString(json['step'], r'$.performance.step'),
+      archive: json['stream'] == null
+          ? null
+          : CockpitPerformanceArchiveInfo.fromJson(json['stream']),
       plugins: json['plugins'] == null
           ? const <CockpitPerformancePluginStats>[]
           : _list(json['plugins'], r'$.performance.plugins')

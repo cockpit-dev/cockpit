@@ -280,6 +280,41 @@ Perfetto is best-effort and recorder/platform dependent. If the VM does not
 support the RPC or the active recorder writes directly to the OS/file, the
 capture remains valid and coverage marks that trace unavailable.
 
+### Memory or streaming: choose per capture
+
+Short captures use the normal `profile()` path and keep their retained report
+in memory, which makes immediate assertions and the self-contained HTML export
+simple. For hours-long journeys, explicitly open a JSONL archive and pass it to
+`profile`; frames, VM/plugin events, heap samples, RSS samples, logs, and debug
+records are appended to rotating files while the report remains a small
+in-memory projection:
+
+```dart
+final archive = await cockpit.openPerformanceArchive(name: 'overnight-flow');
+await cockpit.profile(
+  () => runOvernightJourney(),
+  name: 'overnight-flow',
+  archive: archive,
+);
+// The test teardown closes registered archives and flushes the manifest.
+```
+
+The explicit archive defaults to `lossless`, so it does not impose a pending
+queue limit and preserves every record. If a constrained runner needs a hard
+queue bound, opt into `CockpitPerformanceArchiveMode.low` and set
+`maxPendingBytes`; drops are counted in the manifest and report. Chunk size,
+flush interval, polling interval, and queue limit are all configurable.
+`archive.info.manifest` is the only path needed to locate the chunk set.
+`exportPerformanceJsonl()` provides the same format for already completed
+reports without constructing one giant JSON array.
+The generated HTML embeds the small in-memory report. When opened directly as
+`file://`, browser security prevents it from scanning project paths or fetching
+external JSON/JSONL automatically; serve the report from a local HTTP server or
+use an explicit browser file picker for a selected manifest/chunk set. Never
+embed a multi-gigabyte stream in the HTML itself.
+The standalone HTML report shows archive size, state, and chunk paths; it keeps
+large streams out of the page and renders retained summaries responsively.
+
 When the VM exposes an isolate group, the heap report also keeps group-level
 before/after memory points. This covers multi-isolate apps without sampling
 every group on every tick.
