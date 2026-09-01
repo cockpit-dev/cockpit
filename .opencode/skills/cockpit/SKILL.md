@@ -101,6 +101,15 @@ screen/anchor, and no disqualifying runtime or native-driver error. If the
 device disappears, repair that device and rediscover it; do not fall through to
 another target or create a second session.
 
+A wirelessly connected iOS device is a distinct case. Current Flutter
+`flutter test integration_test/...` cannot publish its VM service port and may
+fail with `Cannot start app on wirelessly tethered iOS device`. Use a USB
+connection for that command, or run the same integration target through
+`flutter drive --publish-port` (plus `--profile --no-dds` when profiling).
+Keep the chosen device unlocked, accept Xcode Automation and local-network
+access when required, and treat a launch that stalls before the app process is
+visible as blocked rather than switching devices.
+
 ## Choose The Command
 
 Use the highest-level command that owns the task:

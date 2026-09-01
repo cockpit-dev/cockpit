@@ -247,6 +247,16 @@ and sign WDA with a valid development team/profile. Keep its device connection
 or port forwarding alive and register that reachable URL. Signing, trust, and
 Developer Mode failures must remain explicit environment failures.
 
+Treat USB and wireless iOS connections separately. A device discovered over
+`localNetwork` requires mDNS VM-service publication for debug/profile launches.
+`flutter test integration_test/...` does not expose that publication path in
+current Flutter toolchains and fails with `Cannot start app on wirelessly
+tethered iOS device`; connect the same device by USB for that command. A
+`flutter drive` run may use `--publish-port`, and a profile capture also keeps
+`--profile --no-dds`. Keep the device unlocked and allow Xcode Automation and
+the app's local-network prompt. If Xcode finishes building but no app process
+appears, report a blocked device/host launch instead of selecting another row.
+
 Flutter apps use the same native WDA plane for system dialogs, WebViews, native
 screens, and mixed-stack transitions. The optional development shell adds
 Flutter semantics and runtime diagnostics; it is not required for installed
