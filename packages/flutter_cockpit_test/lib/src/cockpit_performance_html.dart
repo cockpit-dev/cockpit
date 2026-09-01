@@ -617,7 +617,7 @@ details[open] summary::after { content: "−"; }
 <body>
 <header class="topbar"><div class="shell topbar-inner">
   <div class="brand"><span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 1024 1024" focusable="false"><rect width="1024" height="1024" rx="192" fill="#111418"/><path d="M704 254A318 318 0 1 0 704 770" fill="none" stroke="#F4F7F9" stroke-linecap="round" stroke-width="104"/><rect x="512" y="480" width="276" height="64" rx="32" fill="#38D49B"/><circle cx="512" cy="512" r="76" fill="#38D49B"/><path d="M473 512L501 540L556 480" fill="none" stroke="#111418" stroke-linecap="round" stroke-linejoin="round" stroke-width="28"/><circle cx="788" cy="512" r="42" fill="#F6B94A"/></svg></span><div class="brand-copy"><strong>Cockpit performance</strong><span>Offline report · exact retained data</span></div></div>
-  <div class="top-actions"><button class="icon-button" id="theme-button" type="button" title="Toggle theme" aria-label="Toggle theme">☼</button><button class="quiet-button" id="download-button" type="button">Download full JSON</button><button class="quiet-button" id="timeline-button" type="button">Download timeline</button><button class="quiet-button hidden" id="perfetto-button" type="button">Download Perfetto</button></div>
+  <div class="top-actions"><button class="icon-button" id="theme-button" type="button" title="Toggle theme" aria-label="Toggle theme">☼</button><button class="quiet-button" id="timeline-button" type="button">Download timeline</button><button class="quiet-button hidden" id="perfetto-button" type="button">Download Perfetto</button></div>
 </div></header>
 <div class="shell">
   <section class="hero">
@@ -846,7 +846,7 @@ details[open] summary::after { content: "−"; }
     } else {
       detailsPayload = JSON.stringify(value);
       var raw = JSON.stringify(value, null, 2);
-      el('details-note').textContent = 'Explicit detail view. Long arrays are bounded here for responsiveness; the full retained capture remains available through Download full JSON.';
+      el('details-note').textContent = 'Explicit detail view. Long arrays are bounded here for responsiveness; the full retained capture is embedded in this HTML report.';
       el('details-json').textContent = raw;
     }
     if (detailsDialog && typeof detailsDialog.showModal === 'function') {
@@ -1436,6 +1436,12 @@ details[open] summary::after { content: "−"; }
     afterAll.forEach(function (item) { if (item && item.id) afterIds[String(item.id)] = true; });
     var startedIsolates = afterAll.filter(function (item) { return item && item.id && !beforeIds[String(item.id)]; }).length;
     var stoppedIsolates = beforeAll.filter(function (item) { return item && item.id && !afterIds[String(item.id)]; }).length;
+    var extensionPreview = function (values) {
+      if (!Array.isArray(values) || !values.length) return '';
+      var visible = values.slice(0, 12).map(function (value) { return String(value); });
+      if (values.length > visible.length) visible.push('+' + (values.length - visible.length) + ' more');
+      return visible.join(', ');
+    };
     el('vm-note').textContent = after ? (after.run === false ? 'paused' : 'runnable') + (timeline ? ' · ' + (timeline.recorder || 'unknown recorder') : '') + (display && display.hz != null ? ' · ' + Number(display.hz).toFixed(1) + ' Hz' : '') : 'VM metadata unavailable';
     var vmRows = [];
     if (vmRuntime) {
@@ -1447,12 +1453,13 @@ details[open] summary::after { content: "−"; }
       if (vmRuntime.isolates != null) vmRows.push(['Isolates', nf.format(number(vmRuntime.isolates))]);
       if (vmRuntime.groups != null) vmRows.push(['Isolate groups', nf.format(number(vmRuntime.groups))]);
       if (vmRuntime.sys != null) vmRows.push(['System isolates', nf.format(number(vmRuntime.sys))]);
+      if (Array.isArray(vmRuntime.ext) && vmRuntime.ext.length) vmRows.push(['Service RPCs', extensionPreview(vmRuntime.ext)]);
       if (vmRuntime.start != null) vmRows.push(['VM started', dateText(vmRuntime.start)]);
     }
     if (beforeAll.length || afterAll.length) vmRows.push(['Isolate snapshots', nf.format(beforeAll.length) + ' before / ' + nf.format(afterAll.length) + ' after']);
     if (startedIsolates || stoppedIsolates) vmRows.push(['Isolate changes', '+' + nf.format(startedIsolates) + ' started / −' + nf.format(stoppedIsolates) + ' stopped']);
     if (isolate && (isolate.dropB || isolate.dropA)) vmRows.push(['Isolate snapshot drops', nf.format(number(isolate.dropB)) + ' before / ' + nf.format(number(isolate.dropA)) + ' after']);
-    if (after) { vmRows.push(['Isolate', (after.name || 'isolate') + (after.id ? ' · ' + after.id : '')]); if (after.group) vmRows.push(['Group', after.group]); if (after.run != null) vmRows.push(['Runnable', after.run ? 'yes' : 'no']); if (after.ports != null) vmRows.push(['Live ports', nf.format(number(after.ports))]); if (after.libs != null) vmRows.push(['Libraries', nf.format(number(after.libs))]); if (after.ext != null) vmRows.push(['Extensions', nf.format(number(after.ext))]); if (after.start != null) vmRows.push(['Started', dateText(after.start)]); if (after.pause) vmRows.push(['Pause state', after.pause]); if (after.exit != null) vmRows.push(['Pause on exit', after.exit ? 'yes' : 'no']); if (after.ex) vmRows.push(['Exception pause', after.ex]); if (after.root) vmRows.push(['Root library', after.root]); if (after.error) vmRows.push(['Error', after.error]); }
+    if (after) { vmRows.push(['Isolate', (after.name || 'isolate') + (after.id ? ' · ' + after.id : '')]); if (after.group) vmRows.push(['Group', after.group]); if (after.run != null) vmRows.push(['Runnable', after.run ? 'yes' : 'no']); if (after.ports != null) vmRows.push(['Live ports', nf.format(number(after.ports))]); if (after.libs != null) vmRows.push(['Libraries', nf.format(number(after.libs))]); if (after.ext != null) vmRows.push(['Extensions', nf.format(number(after.ext))]); if (Array.isArray(after.rpcs) && after.rpcs.length) vmRows.push(['Isolate RPCs', extensionPreview(after.rpcs)]); if (after.start != null) vmRows.push(['Started', dateText(after.start)]); if (after.pause) vmRows.push(['Pause state', after.pause]); if (after.exit != null) vmRows.push(['Pause on exit', after.exit ? 'yes' : 'no']); if (after.ex) vmRows.push(['Exception pause', after.ex]); if (after.root) vmRows.push(['Root library', after.root]); if (after.error) vmRows.push(['Error', after.error]); }
     if (timeline) { vmRows.push(['Recorder', timeline.recorder || 'unknown']); vmRows.push(['Streams', nf.format((timeline.recorded || []).length) + ' recorded / ' + nf.format((timeline.available || []).length) + ' available']); }
     if (logs.length || (d && d.dropLog)) vmRows.push(['VM logs', nf.format(logs.length) + (d.dropLog ? ' retained · ' + nf.format(number(d.dropLog)) + ' dropped' : ' events')]);
     if (debugEvents.length || (d && d.dropDbg)) vmRows.push(['Debug events', nf.format(debugEvents.length) + (d.dropDbg ? ' retained · ' + nf.format(number(d.dropDbg)) + ' dropped' : ' events')]);
@@ -1641,7 +1648,6 @@ details[open] summary::after { content: "−"; }
   el('event-search').addEventListener('input', function (event) { state.eventQuery = event.target.value || ''; state.eventPage = 0; renderEvents(); }); el('event-category').addEventListener('change', function (event) { state.eventCategory = event.target.value || ''; state.eventPage = 0; renderEvents(); });
   el('raw-button').addEventListener('click', function (event) { var wrap = el('raw-wrap'); var show = wrap.classList.toggle('hidden'); event.target.textContent = show ? 'Show raw JSON' : 'Hide raw JSON'; });
   el('copy-button').addEventListener('click', function (event) { var text = JSON.stringify(report()); if (navigator.clipboard && navigator.clipboard.writeText) { navigator.clipboard.writeText(text).then(function () { event.target.textContent = 'Copied'; setTimeout(function () { event.target.textContent = 'Copy report JSON'; }, 1200); }); } });
-  el('download-button').addEventListener('click', function () { var blob = new Blob([JSON.stringify(data)], { type: 'application/json' }); var link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = fileStem(data.title) + '.full.json'; link.click(); setTimeout(function () { URL.revokeObjectURL(link.href); }, 1000); });
   el('timeline-button').addEventListener('click', function () { var blob = new Blob([JSON.stringify(timelinePayload())], { type: 'application/json' }); var link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = (reports[state.report].label || 'cockpit-performance') + '.timeline.json'; link.click(); setTimeout(function () { URL.revokeObjectURL(link.href); }, 1000); });
   el('perfetto-button').addEventListener('click', function () { var d = report().devtools && report().devtools.perfetto; if (!d) return; var stem = fileStem(reports[state.report].label || 'cockpit-performance'); if (d.cpu && d.cpu.data) downloadBase64(d.cpu.data, stem + '.cpu.pftrace'); if (d.timeline && d.timeline.data) setTimeout(function () { downloadBase64(d.timeline.data, stem + '.timeline.pftrace'); }, 120); });
   el('theme-button').addEventListener('click', function () { root.dataset.theme = root.dataset.theme === 'light' ? 'dark' : 'light'; drawStartupChart(); drawFrameChart(); drawEventChart(); drawPhaseChart(); drawResourceChart(); drawCacheChart(); drawJankChart(); drawCadenceChart(); drawCacheTrendChart(); drawPipelineChart(); drawGcChart(); drawCategoryCostChart(); drawHotspotChart(); drawFlameChart(); drawCpuChart(); drawHeapChart(); drawHeapTrendChart(); drawVmMemoryChart(); drawRebuildChart(); });

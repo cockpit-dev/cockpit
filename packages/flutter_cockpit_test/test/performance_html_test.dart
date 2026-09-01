@@ -51,8 +51,8 @@ void main() {
     expect(html, contains('id="heap-chart"'));
     expect(html, contains('Network profiler'));
     expect(html, contains('Download timeline'));
-    expect(html, contains('Download full JSON'));
-    expect(html, contains('JSON.stringify(data)]'));
+    expect(html, isNot(contains('Download full JSON')));
+    expect(html, isNot(contains("el('download-button')")));
     expect(html, contains('JSON.stringify(timelinePayload())]'));
     expect(html, contains('padding: 6px 8px'));
     expect(html, contains('margin-top: 15px; }'));

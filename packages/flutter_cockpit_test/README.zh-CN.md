@@ -157,6 +157,27 @@ await cockpit.host.action(
 `integration_test` 的 `reportData`。大快照和二进制证据保存在 artifact 中，不会倾倒
 到测试输出。
 
+## VM 调试控制
+
+当测试运行器提供 Dart VM Service 时，`cockpit.debugger` 提供一套可复用的调试会话，
+覆盖 Dart-Code 常用的暂停、继续、单步、堆栈、求值、断点和 Flutter service extension
+流程：
+
+```dart
+final state = await cockpit.debugger.status();
+if (state.runnable == true) await cockpit.debugger.pause();
+final paused = await cockpit.debugger.status(stackLimit: 32);
+final value = await cockpit.debugger.evaluateInFrame(0, 'cart.length');
+await cockpit.debugger.resume();
+```
+
+还可以使用 `stack`、`evaluate`、`getObject`、`addBreakpoint`、`removeBreakpoint`、
+`setBreakpointEnabled`、`setPauseMode`、`setLibraryDebuggable`、`reloadSources` 和显式的
+`callServiceExtension`。返回值只包含有界的对象摘要、
+帧变量、暂停状态和真实源码位置；集合内容只有在显式调用 `getObject` 并指定分页参数时
+才会读取。`available` 是无副作用探测，不支持 VM Service 的 Web 或 release harness 会
+明确返回不可用错误，不会伪造调试数据。
+
 ## 性能采集
 
 使用与应用相同的测试时钟和帧管线，对一次交互进行性能采集。Cockpit 会保留原始的

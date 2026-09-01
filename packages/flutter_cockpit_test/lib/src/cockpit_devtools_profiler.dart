@@ -103,6 +103,7 @@ final class CockpitDevToolsProfiler {
   final List<CockpitIsolateStats> _isolatesBefore = <CockpitIsolateStats>[];
   final List<CockpitIsolateStats> _isolatesAfter = <CockpitIsolateStats>[];
   final List<CockpitIsolateEvent> _isolateEvents = <CockpitIsolateEvent>[];
+  final Set<String> _runtimeExtensions = <String>{};
   final List<CockpitVmLogEvent> _logEvents = <CockpitVmLogEvent>[];
   final List<CockpitVmDebugEvent> _debugEvents = <CockpitVmDebugEvent>[];
   StreamSubscription<Event>? _isolateSubscription;
@@ -187,6 +188,7 @@ final class CockpitDevToolsProfiler {
     _isolatesBefore.clear();
     _isolatesAfter.clear();
     _isolateEvents.clear();
+    _runtimeExtensions.clear();
     _logEvents.clear();
     _debugEvents.clear();
     _droppedIsolatesBefore = 0;
@@ -275,10 +277,16 @@ final class CockpitDevToolsProfiler {
       }
       try {
         _isolatesBefore.addAll(await _readIsolates(service, vm, before: true));
+        _mergeRuntimeExtensions(_isolatesBefore);
+        _syncRuntimeExtensions();
         _isolateBefore = _findIsolate(_isolatesBefore, isolateId);
         _isolateBefore ??= _isolateStats(
           await service.getIsolate(isolateId).timeout(timeout),
         );
+        if (_isolateBefore != null) {
+          _mergeRuntimeExtensions(<CockpitIsolateStats>[_isolateBefore!]);
+          _syncRuntimeExtensions();
+        }
       } on Object catch (error) {
         _recordFailure('isolate', error);
       }
@@ -392,7 +400,7 @@ final class CockpitDevToolsProfiler {
           .timeout(timeout);
       _timelineCursorUs = end;
       return <Object?>[
-        for (final event in timeline.traceEvents ?? const <TimelineEvent>[]) 
+        for (final event in timeline.traceEvents ?? const <TimelineEvent>[])
           if (event.json != null) event.json!,
       ];
     } on Object catch (error) {
@@ -603,10 +611,16 @@ final class CockpitDevToolsProfiler {
         _isolatesAfter.addAll(
           await _readIsolates(service, currentVm, before: false),
         );
+        _mergeRuntimeExtensions(_isolatesAfter);
+        _syncRuntimeExtensions();
         _isolateAfter = _findIsolate(_isolatesAfter, isolateId);
         _isolateAfter ??= _isolateStats(
           await service.getIsolate(isolateId).timeout(timeout),
         );
+        if (_isolateAfter != null) {
+          _mergeRuntimeExtensions(<CockpitIsolateStats>[_isolateAfter!]);
+          _syncRuntimeExtensions();
+        }
       } on Object catch (error) {
         _recordFailure('isolate', error);
       }
@@ -996,6 +1010,13 @@ final class CockpitDevToolsProfiler {
       livePorts: _nonNegativeNullable(isolate.livePorts),
       libraryCount: isolate.libraries?.length,
       extensionCount: isolate.extensionRPCs?.length,
+      extensionRpcs: isolate.extensionRPCs == null
+          ? const <String>[]
+          : isolate.extensionRPCs!
+                .map((value) => value.trim())
+                .where((value) => value.isNotEmpty)
+                .take(_maxRuntimeExtensions)
+                .toList(growable: false),
       startTimeMs: _nonNegativeNullable(isolate.startTime),
       system: isolate.isSystemIsolate,
       pauseKind: pauseKind,
@@ -1027,6 +1048,35 @@ final class CockpitDevToolsProfiler {
 
   static const _maxIsolateSnapshots = 64;
   static const _maxIsolateEvents = 1000;
+  static const _maxRuntimeExtensions = 500;
+
+  void _addRuntimeExtension(String? value) {
+    final extension = value?.trim();
+    if (extension == null || extension.isEmpty) return;
+    if (_runtimeExtensions.length >= _maxRuntimeExtensions &&
+        !_runtimeExtensions.contains(extension)) {
+      return;
+    }
+    _runtimeExtensions.add(extension);
+  }
+
+  void _mergeRuntimeExtensions(Iterable<CockpitIsolateStats> isolates) {
+    for (final isolate in isolates) {
+      for (final extension in isolate.extensionRpcs) {
+        _addRuntimeExtension(extension);
+      }
+    }
+  }
+
+  void _syncRuntimeExtensions() {
+    final runtime = _vm;
+    if (runtime == null) return;
+    final extensions = <String>{
+      ...runtime.extensions,
+      ..._runtimeExtensions,
+    }.toList(growable: false)..sort();
+    _vm = runtime.copyWith(extensions: extensions);
+  }
 
   Future<void> _subscribeIsolateEvents(VmService service) async {
     final subscription = service.onIsolateEvent.listen(_recordIsolateEvent);
@@ -1044,18 +1094,19 @@ final class CockpitDevToolsProfiler {
     if (_windowEnded) return;
     final kind = event.kind?.trim();
     if (kind == null || kind.isEmpty) return;
+    _addRuntimeExtension(event.extensionRPC);
     if (_isolateEvents.length >= _maxIsolateEvents) {
       _droppedIsolateEvents += 1;
       return;
     }
     final record = CockpitIsolateEvent(
-        kind: kind,
-        timestampMs: _nonNegativeNullable(event.timestamp),
-        isolateId: _nonEmptyNullable(event.isolate?.id),
-        name: _nonEmptyNullable(event.isolate?.name),
-        groupId: _nonEmptyNullable(event.isolateGroup?.id),
-        extensionRpc: _nonEmptyNullable(event.extensionRPC),
-      );
+      kind: kind,
+      timestampMs: _nonNegativeNullable(event.timestamp),
+      isolateId: _nonEmptyNullable(event.isolate?.id),
+      name: _nonEmptyNullable(event.isolate?.name),
+      groupId: _nonEmptyNullable(event.isolateGroup?.id),
+      extensionRpc: _nonEmptyNullable(event.extensionRPC),
+    );
     _isolateEvents.add(record);
     try {
       onIsolateEvent?.call(record);
@@ -1130,23 +1181,23 @@ final class CockpitDevToolsProfiler {
         : frame?.code?.name;
     final exception = event.exception?.valueAsString;
     final record = CockpitVmDebugEvent(
-        kind: kind,
-        timestampMs: _nonNegativeNullable(event.timestamp),
-        isolateId: _nonEmptyNullable(event.isolate?.id),
-        isolateName: _nonEmptyNullable(event.isolate?.name),
-        status: _boundedEventText(event.status),
-        // `details` is not part of the vm_service Event contract on the
-        // minimum supported Flutter toolchain. Keep the projection limited to
-        // the stable reload failure field and preserve exception text below.
-        details: _boundedEventText(event.reloadFailureReason),
-        pauseAsync: event.atAsyncSuspension,
-        frame: _boundedEventText(functionName),
-        uri: _boundedEventText(location?.script?.uri),
-        line: _nonNegativeNullable(location?.line),
-        column: _nonNegativeNullable(location?.column),
-        exception: _boundedEventText(exception),
-        breakpoint: _nonNegativeNullable(event.breakpoint?.breakpointNumber),
-      );
+      kind: kind,
+      timestampMs: _nonNegativeNullable(event.timestamp),
+      isolateId: _nonEmptyNullable(event.isolate?.id),
+      isolateName: _nonEmptyNullable(event.isolate?.name),
+      status: _boundedEventText(event.status),
+      // `details` is not part of the vm_service Event contract on the
+      // minimum supported Flutter toolchain. Keep the projection limited to
+      // the stable reload failure field and preserve exception text below.
+      details: _boundedEventText(event.reloadFailureReason),
+      pauseAsync: event.atAsyncSuspension,
+      frame: _boundedEventText(functionName),
+      uri: _boundedEventText(location?.script?.uri),
+      line: _nonNegativeNullable(location?.line),
+      column: _nonNegativeNullable(location?.column),
+      exception: _boundedEventText(exception),
+      breakpoint: _nonNegativeNullable(event.breakpoint?.breakpointNumber),
+    );
     _debugEvents.add(record);
     try {
       onDebugEvent?.call(record);

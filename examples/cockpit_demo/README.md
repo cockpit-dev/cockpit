@@ -82,7 +82,7 @@ VM timeline events, GC counters, and cold-start milestones, to one JSON file:
 mkdir -p /tmp/cockpit-demo-performance
 COCKPIT_NATIVE_REPORT_PATH=/tmp/cockpit-demo-performance/report.json \
 COCKPIT_NATIVE_HTML_PATH=/tmp/cockpit-demo-performance/report.html \
-  flutter drive \
+  flutter drive --profile --no-dds \
     --driver=integration_test/driver.dart \
     --target=integration_test/performance_profile_test.dart \
     -d macos

@@ -1,5 +1,10 @@
 # Changelog
 
+## 4.3.0
+
+- Extended the validated DevTools runtime contract with source-aware extension
+  RPC metadata and immutable runtime-profile updates.
+
 ## 4.2.0
 
 - Added validated performance-plugin statistics and source/isolate location

@@ -799,10 +799,15 @@ Do not use this package for a purely black-box target; use `cockpit case` or
 `cockpit suite` there. Read [flutter-test.md](references/flutter-test.md) for
 the complete API and platform workflow.
 
-For native `flutter drive` performance runs, add `--no-dds` so integration_test
-connects to the device VM Service directly; recent Flutter DDS forwarding can
-otherwise expose an unreachable host port. The complete platform commands are
-in [flutter-test.md](references/flutter-test.md).
+For native `flutter drive` performance runs, use `--profile --no-dds` so the
+app runs in Flutter's profile build and integration_test connects to the device
+VM Service directly. `flutter test integration_test/...` is debug-only. The
+non-web Flutter Driver rejects `flutter drive --release`; do not keep retrying
+that command. A release artifact can still be built for a native XCTest,
+Android instrumentation, or device-lab runner, but VM-backed Cockpit timeline,
+CPU, heap, GC, and DevTools data are unavailable there. The complete platform
+commands and the release-harness boundary are in
+[flutter-test.md](references/flutter-test.md).
 
 For Flutter performance work, use `cockpit.profile` around the smallest
 meaningful interaction. It records the engine's original `FrameTiming` values,
@@ -814,6 +819,16 @@ Tune collection only when it changes the decision: `sampleEvery` controls native
 RSS frequency, `streams` and `timeline` select VM tracing, `memory` disables RSS,
 and `maxEvents` bounds retained VM events. Keep the defaults for normal captures;
 use a shorter interval or narrower streams only for a targeted investigation.
+Short captures may keep the complete report in memory. For multi-hour flows,
+open a `CockpitPerformanceArchive` and pass it as `archive` so records stream
+to rotating JSONL chunks while the report remains a quick in-memory projection.
+The explicit archive defaults to lossless; choose `low` with
+`maxPendingBytes` only when a runner needs a hard queue bound and accepts
+counted drops. The manifest path is the entry point for the complete stream.
+A standalone HTML opened with `file://` can read only its embedded payload; it
+cannot silently read arbitrary project JSON/JSONL paths. Use an HTTP server or
+a browser file picker for external JSONL files, and load chunks incrementally
+instead of embedding a multi-gigabyte stream.
 The complete bounded report is stored in
 `IntegrationTestWidgetsFlutterBinding.reportData` under
 `cockpit.performance.NAME`; normal Cockpit output stays compact. `dropped`
@@ -821,9 +836,11 @@ counts expose retention limits; aggregates describe retained frames when a
 retention limit is reached. Empty phases omit duration aggregates, `fps` is
 omitted when source timestamps cannot prove a strictly increasing cadence, and
 Web reports VM timeline as `unavailable:web`. Treat missing metrics as
-unavailable, never as zero. Reports include the Flutter build mode; debug
-timings are diagnostic only, while profile/release timings are suitable for
-performance decisions. Use the report artifact path for
+unavailable, never as zero. Reports include the Flutter build mode. Debug
+timings are diagnostic only; profile timings are suitable for performance
+decisions. Release timings are suitable only when collected by a native release
+harness, not by `flutter drive`, which rejects release mode for non-web tests.
+Use the report artifact path for
 large timeline inspection instead of printing frame/event arrays. The standalone
 HTML viewer uses relative capture time, hover details, frame-budget, jank,
 cadence, raster-cache trend, VM category cost, operation hotspots, startup milestones,

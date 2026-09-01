@@ -105,4 +105,90 @@ void main() {
     expect(lines.map((line) => jsonDecode(line)['q']), contains('f'));
     expect(lines.map((line) => jsonDecode(line)['q']), contains('e'));
   });
+
+  test(
+    'keeps lossless records while writes, flushes, and rotation overlap',
+    () async {
+      final temp = await Directory.systemTemp.createTemp(
+        'cockpit-archive-race-',
+      );
+      addTearDown(() => temp.delete(recursive: true));
+
+      final archive = await CockpitPerformanceArchive.open(
+        directory: temp.path,
+        name: 'race-flow',
+        options: const CockpitPerformanceArchiveOptions(
+          chunkBytes: 1024 * 1024,
+          flushEvery: Duration(milliseconds: 1),
+          pollEvery: Duration(milliseconds: 100),
+        ),
+      );
+      final capture = archive.beginCapture(
+        id: 'race',
+        startedAt: DateTime.utc(2026, 1, 1),
+      );
+      const eventCount = 3000;
+      final namePrefix = 'race.${List<String>.filled(500, 'x').join()}.';
+      final producer = Future<void>(() async {
+        for (var index = 0; index < eventCount; index += 1) {
+          archive.addEvent(
+            CockpitPerformanceEvent(
+              name: '$namePrefix$index',
+              category: 'stress',
+              timestampUs: index,
+              durationUs: 0,
+            ),
+          );
+          if (index % 17 == 0) await Future<void>.delayed(Duration.zero);
+        }
+      });
+      final flushers = <Future<void>>[
+        for (var index = 0; index < 12; index += 1)
+          Future<void>(() async {
+            await Future<void>.delayed(Duration(milliseconds: index % 3));
+            await archive.flush();
+          }),
+      ];
+
+      await Future.wait(<Future<void>>[producer, ...flushers]);
+      final report = CockpitPerformanceReport.fromJson(<String, Object?>{
+        'schema': 'cockpit.performance/v2',
+        'started': '2026-01-01T00:00:00.000Z',
+        'finished': '2026-01-01T00:00:00.001Z',
+        'durationUs': 1000,
+        'durationMs': 1,
+        'platform': 'test',
+        'build': 'debug',
+        'mode': 'profile',
+        'summary': <String, Object?>{
+          'frames': 0,
+          'jank': 0,
+          'build': <String, Object?>{'n': 0, 'bud': 16667},
+          'raster': <String, Object?>{'n': 0, 'bud': 16667},
+          'vsync': <String, Object?>{'n': 0, 'bud': 16667},
+          'total': <String, Object?>{'n': 0, 'bud': 16667},
+          'layerCache': <String, Object?>{'count': 0, 'bytes': 0},
+          'pictureCache': <String, Object?>{'count': 0, 'bytes': 0},
+        },
+        'step': 'race-flow',
+      });
+      archive.endCapture(capture, report);
+      final info = await archive.close();
+
+      expect(info.state, 'done');
+      expect(info.events, eventCount);
+      expect(info.dropped, 0);
+      expect(info.errors, 0);
+      final records = <Map<String, Object?>>[];
+      for (final chunk in info.chunks) {
+        for (final line in await File(chunk).readAsLines()) {
+          records.add((jsonDecode(line) as Map).cast<String, Object?>());
+        }
+      }
+      expect(
+        records.where((record) => record['q'] == 'e'),
+        hasLength(eventCount),
+      );
+    },
+  );
 }

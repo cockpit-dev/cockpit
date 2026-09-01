@@ -1,5 +1,10 @@
 # Changelog
 
+## 4.3.0
+
+- Synchronized the CLI and Supervisor package with the lossless performance
+  archive flow and source-aware Flutter VM debugger facade.
+
 ## 4.2.0
 
 - Fixed native condition waits and bounded scroll searches so reaching a

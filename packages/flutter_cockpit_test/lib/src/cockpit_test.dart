@@ -22,6 +22,7 @@ import 'cockpit_startup_report.dart';
 import 'cockpit_timeline_analysis.dart';
 import 'cockpit_test_options.dart';
 import 'cockpit_watch.dart';
+import 'cockpit_vm_debugger.dart';
 
 /// Registers an integration test that runs the real Cockpit in-app executor.
 ///
@@ -86,6 +87,7 @@ void cockpitTestWidgets(
     addTearDown(() async {
       _publishIntegrationReport(cockpit.report);
       await cockpit._closePerformanceArchives();
+      await cockpit.debugger.close();
       cockpit.debug.restore();
       await cockpit.native.close();
       await flutterTester.pumpWidget(const SizedBox.shrink());
@@ -146,6 +148,13 @@ final class CockpitTester {
   /// the DevTools controls.
   late final CockpitDebugTools debug = CockpitDebugTools();
 
+  /// Lazy Dart VM debugger session for source-aware pause, stack, evaluate,
+  /// breakpoint, and Flutter service-extension operations. It is inert unless
+  /// a test explicitly calls it and is closed automatically at tear-down.
+  late final CockpitVmDebugger debugger = CockpitVmDebugger(
+    timeout: options.commandTimeout,
+  );
+
   /// Explicit host/system-plane action facade.
   late final CockpitHostTester host = CockpitHostTester._(this);
 
@@ -158,7 +167,7 @@ final class CockpitTester {
 
   /// All captures completed by this tester, in capture order.
   List<CockpitPerformanceReport> get performanceReports =>
-      List<CockpitPerformanceReport>.unmodifiable(_performances);
+      List<CockpitPerformanceReport>.unmodifiable(_currentPerformanceReports());
 
   /// Opens a JSONL archive for captures that may run longer than an in-memory
   /// report can safely retain. The archive is closed automatically with this
@@ -197,11 +206,12 @@ final class CockpitTester {
   /// host. Use [exportPerformanceHtml] when the test runs on a native target
   /// and a path is more convenient.
   String performanceHtml({String title = 'Cockpit performance'}) {
-    if (_performances.isEmpty) {
+    final reports = _currentPerformanceReports();
+    if (reports.isEmpty) {
       throw StateError('No performance capture has completed.');
     }
     return CockpitPerformanceHtml.renderMany(
-      _performances,
+      reports,
       title: title,
       startup: startup,
     );
@@ -226,11 +236,12 @@ final class CockpitTester {
   /// this tester. This is intentionally separate from [report], whose compact
   /// shape is used for normal integration-test output.
   String performanceJson({String title = 'Cockpit performance'}) {
-    if (_performances.isEmpty) {
+    final reports = _currentPerformanceReports();
+    if (reports.isEmpty) {
       throw StateError('No performance capture has completed.');
     }
     return CockpitPerformanceHtml.fullJson(
-      _performances,
+      reports,
       title: title,
       startup: startup,
     );
@@ -303,6 +314,7 @@ final class CockpitTester {
   /// A compact report suitable for integration_test's JSON result payload.
   Map<String, Object?> get report {
     final failures = _results.where((result) => !result.success).toList();
+    final performances = _currentPerformanceReports();
     return <String, Object?>{
       'commands': _results.length,
       'startup': startup.toJson(),
@@ -334,8 +346,8 @@ final class CockpitTester {
               },
             )
             .toList(growable: false),
-      if (_performances.isNotEmpty)
-        'performance': _performances
+      if (performances.isNotEmpty)
+        'performance': performances
             .map(
               (performance) => <String, Object?>{
                 if (performance.stepId != null) 'step': performance.stepId,
@@ -546,6 +558,31 @@ final class CockpitTester {
     };
   }
 
+  /// Refreshes archive metadata without copying any retained event arrays.
+  ///
+  /// A profile attaches the archive snapshot that was available when that
+  /// capture ended. The writer may still be flushing at that point, so report
+  /// exports resolve the current state by manifest path before rendering or
+  /// serializing. This keeps an HTML/JSON export truthful after a caller
+  /// explicitly closes an archive.
+  List<CockpitPerformanceReport> _currentPerformanceReports() {
+    if (_performances.isEmpty || _performanceArchives.isEmpty) {
+      return List<CockpitPerformanceReport>.of(_performances, growable: false);
+    }
+    final current = <String, CockpitPerformanceArchiveInfo>{};
+    for (final archive in _performanceArchives) {
+      final info = archive.info;
+      current[info.manifest] = info;
+    }
+    return <CockpitPerformanceReport>[
+      for (final report in _performances)
+        if (report.archive case final archived?)
+          report.copyWithArchive(current[archived.manifest] ?? archived)
+        else
+          report,
+    ];
+  }
+
   /// Profiles one action using Flutter's engine frame timings and, when
   /// supported by the platform, the official integration-test VM timeline.
   /// Native targets also collect low-overhead process RSS samples by default;
@@ -737,6 +774,7 @@ final class CockpitTester {
         }
       }
     }
+
     Future<void> pollTimeline() async {
       final current = timelinePoll;
       if (current != null) return current;
@@ -748,6 +786,7 @@ final class CockpitTester {
         if (identical(timelinePoll, operation)) timelinePoll = null;
       }
     }
+
     devToolsProfiler = CockpitDevToolsProfiler(
       timeout: effectiveTimeout < const Duration(seconds: 3)
           ? effectiveTimeout
@@ -776,6 +815,7 @@ final class CockpitTester {
       void onFrame(CockpitPerformanceFrame frame) {
         archive?.addFrame(frame);
       }
+
       if (archive != null) {
         frameListener = onFrame;
         collector.addFrameListener(onFrame);

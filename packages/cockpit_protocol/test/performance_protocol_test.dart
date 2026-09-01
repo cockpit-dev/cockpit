@@ -397,6 +397,10 @@ void main() {
           livePorts: 2,
           libraryCount: 18,
           extensionCount: 3,
+          extensionRpcs: const <String>[
+            'ext.flutter.inspector.getRootWidgetSummaryTree',
+            'ext.flutter.inspector.getDetailsSubtree',
+          ],
           startTimeMs: 1700000000000,
           pauseOnExit: false,
           exceptionPauseMode: 'Unhandled',
@@ -425,6 +429,10 @@ void main() {
           livePorts: 2,
           libraryCount: 18,
           extensionCount: 3,
+          extensionRpcs: const <String>[
+            'ext.flutter.inspector.getRootWidgetSummaryTree',
+            'ext.flutter.inspector.getDetailsSubtree',
+          ],
           startTimeMs: 1700000000000,
           pauseOnExit: false,
           exceptionPauseMode: 'Unhandled',
@@ -487,6 +495,10 @@ void main() {
         isolateCount: 2,
         isolateGroupCount: 1,
         systemIsolateCount: 1,
+        extensions: const <String>[
+          'ext.flutter.inspector.getRootWidgetSummaryTree',
+          'ext.flutter.inspector.getDetailsSubtree',
+        ],
       ),
       vmMemory: CockpitVmMemoryProfile(
         before: CockpitVmMemorySnapshot(
@@ -574,6 +586,10 @@ void main() {
     );
     expect(decoded.isolate!.droppedEvents, 2);
     expect(decoded.isolate!.after!.number, '1');
+    expect(decoded.isolate!.after!.extensionRpcs, <String>[
+      'ext.flutter.inspector.getRootWidgetSummaryTree',
+      'ext.flutter.inspector.getDetailsSubtree',
+    ]);
     expect(decoded.isolate!.after!.pauseKind, 'PauseException');
     expect(decoded.isolate!.after!.pauseAsync, true);
     expect(decoded.isolate!.after!.newHeap!.usageBytes, 4);
@@ -588,6 +604,10 @@ void main() {
     expect(decoded.timeline!.recordedStreams, <String>['Dart']);
     expect(decoded.vm!.targetCpu, 'arm64');
     expect(decoded.vm!.isolateCount, 2);
+    expect(decoded.vm!.extensions, <String>[
+      'ext.flutter.inspector.getRootWidgetSummaryTree',
+      'ext.flutter.inspector.getDetailsSubtree',
+    ]);
     expect(decoded.vmMemory!.before!.root.children.first.name, 'Dart heap');
     expect(decoded.vmMemory!.after!.root.sizeBytes, 1280);
     final full = CockpitDevToolsProfile.fromJson(
