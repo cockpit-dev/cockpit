@@ -213,9 +213,10 @@ Reload Kiro and confirm the steering file can load
 `cockpit --version` and `cockpit session list` to confirm its process inherits
 Dart's global executable directory without requiring an active app. After a
 Flutter project has the development shell described in `references/flutter.md`,
-run `cockpit dev start`, then `cockpit dev status` as the live CLI smoke. In
-Kiro's MCP resource browser, confirm the server can list Cockpit operations and
-read `cockpit://operations/schema`.
+run `cockpit target discover`, choose the exact device id, then run
+`cockpit dev start --device <id>` and `cockpit dev status` as the live CLI
+smoke. In Kiro's MCP resource browser, confirm the server can list Cockpit
+operations and read `cockpit://operations/schema`.
 
 ## OpenCode
 

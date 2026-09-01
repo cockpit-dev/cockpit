@@ -128,7 +128,8 @@ the application's real public API. Create one Cockpit observer per Navigator.
 Run from inside the Flutter project that contains the bridge shell:
 
 ```bash
-cockpit dev start
+cockpit target discover
+cockpit dev start --device <deviceId>
 ```
 
 From a monorepo common ancestor or for a non-default entrypoint, enter the
@@ -136,13 +137,15 @@ intended project directory when possible. If you must start at the ancestor,
 pass an absolute path or a path relative to the current directory:
 
 ```bash
-cockpit dev start apps/mobile/cockpit/main.dart --platform macos
+cockpit target discover
+cockpit dev start apps/mobile/cockpit/main.dart --device <deviceId>
 ```
 
 Pass only real application launch choices:
 
 ```bash
 cockpit dev start \
+  --device <deviceId> \
   --flavor staging \
   --dart-define API_URL=https://example.test \
   --dart-define-from-file config/development.json \

@@ -19,7 +19,8 @@ normal Flutter loop.
 Start once inside the intended Flutter project, then reuse the active handle:
 
 ```bash
-cockpit dev start
+cockpit target discover
+cockpit dev start --device <deviceId>
 cockpit dev status
 ```
 

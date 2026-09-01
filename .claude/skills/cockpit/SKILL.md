@@ -131,10 +131,9 @@ remain isolated. From a common ancestor containing several Flutter projects,
 enter the intended project directory or pass its entrypoint explicitly:
 
 ```bash
-cockpit dev start
-cockpit dev start --platform macos
-cockpit dev start --device emulator-5554
-cockpit dev start --flavor staging --dart-define API_URL=https://example.test
+cockpit target discover
+cockpit dev start --device <deviceId>
+cockpit dev start --device <deviceId> --flavor staging --dart-define API_URL=https://example.test
 ```
 
 Normal loop:
@@ -241,7 +240,8 @@ Before blaming a Flutter launch hang, verify the development shell and then run
 ```bash
 rg -n "flutter_cockpit|FlutterCockpitApp|NavigatorObserver" cockpit/pubspec.yaml cockpit/main.dart
 flutter pub get
-cockpit dev start --platform android
+cockpit target discover
+cockpit dev start --device <deviceId>
 ```
 
 Human terminals show real launch stages on stderr. Do not add sleeps or polling.
