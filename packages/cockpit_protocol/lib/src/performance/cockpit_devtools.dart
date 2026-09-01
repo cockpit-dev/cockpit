@@ -13,17 +13,26 @@ final class CockpitDevToolsProfile {
     this.reason,
     this.cpu,
     this.heap,
+    this.gc,
     this.gpu,
     this.isolate,
     this.timeline,
+    this.display,
+    this.rebuild,
     this.vm,
     this.vmMemory,
     Iterable<CockpitAllocationTrace> allocationTraces =
         const <CockpitAllocationTrace>[],
+    Iterable<CockpitVmLogEvent> logs = const <CockpitVmLogEvent>[],
+    Iterable<CockpitVmDebugEvent> debug = const <CockpitVmDebugEvent>[],
+    this.droppedLogs = 0,
+    this.droppedDebug = 0,
     this.perfetto,
   }) : allocationTraces = List<CockpitAllocationTrace>.unmodifiable(
          allocationTraces,
-       ) {
+       ),
+       logs = List<CockpitVmLogEvent>.unmodifiable(logs),
+       debug = List<CockpitVmDebugEvent>.unmodifiable(debug) {
     if (source.trim().isEmpty || state.trim().isEmpty) {
       throw const FormatException('DevTools profile identity is invalid.');
     }
@@ -33,6 +42,12 @@ final class CockpitDevToolsProfile {
     if (this.allocationTraces.length > 20) {
       throw const FormatException('Allocation trace count is bounded.');
     }
+    if (this.logs.length > 2000 || this.debug.length > 2000) {
+      throw const FormatException('VM event count is bounded.');
+    }
+    if (droppedLogs < 0 || droppedDebug < 0) {
+      throw const FormatException('VM event drop counts are invalid.');
+    }
   }
 
   final String source;
@@ -40,23 +55,37 @@ final class CockpitDevToolsProfile {
   final String? reason;
   final CockpitCpuProfile? cpu;
   final CockpitHeapProfile? heap;
+  final CockpitGcProfile? gc;
   final CockpitGpuProfile? gpu;
   final CockpitIsolateProfile? isolate;
   final CockpitTimelineProfile? timeline;
+  final CockpitDisplayProfile? display;
+  final CockpitRebuildProfile? rebuild;
   final CockpitVmRuntimeProfile? vm;
   final CockpitVmMemoryProfile? vmMemory;
   final List<CockpitAllocationTrace> allocationTraces;
+  final List<CockpitVmLogEvent> logs;
+  final List<CockpitVmDebugEvent> debug;
+  final int droppedLogs;
+  final int droppedDebug;
   final CockpitPerfettoProfile? perfetto;
 
   CockpitDevToolsProfile copyWith({
     CockpitCpuProfile? cpu,
     CockpitHeapProfile? heap,
+    CockpitGcProfile? gc,
     CockpitGpuProfile? gpu,
     CockpitIsolateProfile? isolate,
     CockpitTimelineProfile? timeline,
+    CockpitDisplayProfile? display,
+    CockpitRebuildProfile? rebuild,
     CockpitVmRuntimeProfile? vm,
     CockpitVmMemoryProfile? vmMemory,
     Iterable<CockpitAllocationTrace>? allocationTraces,
+    Iterable<CockpitVmLogEvent>? logs,
+    Iterable<CockpitVmDebugEvent>? debug,
+    int? droppedLogs,
+    int? droppedDebug,
     CockpitPerfettoProfile? perfetto,
   }) => CockpitDevToolsProfile(
     source: source,
@@ -64,12 +93,19 @@ final class CockpitDevToolsProfile {
     reason: reason,
     cpu: cpu ?? this.cpu,
     heap: heap ?? this.heap,
+    gc: gc ?? this.gc,
     gpu: gpu ?? this.gpu,
     isolate: isolate ?? this.isolate,
     timeline: timeline ?? this.timeline,
+    display: display ?? this.display,
+    rebuild: rebuild ?? this.rebuild,
     vm: vm ?? this.vm,
     vmMemory: vmMemory ?? this.vmMemory,
     allocationTraces: allocationTraces ?? this.allocationTraces,
+    logs: logs ?? this.logs,
+    debug: debug ?? this.debug,
+    droppedLogs: droppedLogs ?? this.droppedLogs,
+    droppedDebug: droppedDebug ?? this.droppedDebug,
     perfetto: perfetto ?? this.perfetto,
   );
 
@@ -77,17 +113,26 @@ final class CockpitDevToolsProfile {
     'source': source,
     'state': state,
     if (reason != null && reason!.trim().isNotEmpty) 'why': reason,
-    if (cpu != null) 'cpu': cpu!.toJson(),
+    if (cpu != null) 'cpu': cpu!.toJson(includeRaw: includeRaw),
     if (heap != null) 'heap': heap!.toJson(),
+    if (gc != null) 'gc': gc!.toJson(),
     if (gpu != null) 'gpu': gpu!.toJson(),
     if (isolate != null) 'isolate': isolate!.toJson(),
     if (timeline != null) 'timeline': timeline!.toJson(),
+    if (display != null) 'display': display!.toJson(),
+    if (rebuild != null) 'rebuild': rebuild!.toJson(),
     if (vm != null) 'vm': vm!.toJson(),
     if (vmMemory != null) 'vmem': vmMemory!.toJson(),
     if (allocationTraces.isNotEmpty)
       'alloc': allocationTraces
           .map((item) => item.toJson(includeRaw: includeRaw))
           .toList(growable: false),
+    if (logs.isNotEmpty)
+      'log': logs.map((item) => item.toJson()).toList(growable: false),
+    if (debug.isNotEmpty)
+      'dbg': debug.map((item) => item.toJson()).toList(growable: false),
+    if (droppedLogs > 0) 'dropLog': droppedLogs,
+    if (droppedDebug > 0) 'dropDbg': droppedDebug,
     if (perfetto != null) 'perfetto': perfetto!.toJson(includeRaw: includeRaw),
   };
 
@@ -101,6 +146,7 @@ final class CockpitDevToolsProfile {
       heap: json['heap'] == null
           ? null
           : CockpitHeapProfile.fromJson(json['heap']),
+      gc: json['gc'] == null ? null : CockpitGcProfile.fromJson(json['gc']),
       gpu: json['gpu'] == null ? null : CockpitGpuProfile.fromJson(json['gpu']),
       isolate: json['isolate'] == null
           ? null
@@ -108,6 +154,12 @@ final class CockpitDevToolsProfile {
       timeline: json['timeline'] == null
           ? null
           : CockpitTimelineProfile.fromJson(json['timeline']),
+      display: json['display'] == null
+          ? null
+          : CockpitDisplayProfile.fromJson(json['display']),
+      rebuild: json['rebuild'] == null
+          ? null
+          : CockpitRebuildProfile.fromJson(json['rebuild']),
       vm: json['vm'] == null
           ? null
           : CockpitVmRuntimeProfile.fromJson(json['vm']),
@@ -120,6 +172,24 @@ final class CockpitDevToolsProfile {
               json['alloc'],
               r'$.devtools.alloc',
             ).map(CockpitAllocationTrace.fromJson).toList(growable: false),
+      logs: json['log'] == null
+          ? const <CockpitVmLogEvent>[]
+          : _list(
+              json['log'],
+              r'$.devtools.log',
+            ).map(CockpitVmLogEvent.fromJson).toList(growable: false),
+      debug: json['dbg'] == null
+          ? const <CockpitVmDebugEvent>[]
+          : _list(
+              json['dbg'],
+              r'$.devtools.dbg',
+            ).map(CockpitVmDebugEvent.fromJson).toList(growable: false),
+      droppedLogs: json['dropLog'] == null
+          ? 0
+          : _nonNegativeInt(json['dropLog'], r'$.devtools.dropLog'),
+      droppedDebug: json['dropDbg'] == null
+          ? 0
+          : _nonNegativeInt(json['dropDbg'], r'$.devtools.dropDbg'),
       perfetto: json['perfetto'] == null
           ? null
           : CockpitPerfettoProfile.fromJson(json['perfetto']),
@@ -161,6 +231,195 @@ final class CockpitAllocationTrace {
       className: _optionalString(json['name'], r'$.devtools.alloc[].name'),
       profile: CockpitCpuProfile.fromJson(json['trace']),
     );
+  }
+}
+
+/// One bounded Dart VM logging-stream record.
+///
+/// Message, error, and stack text is copied only when the VM already includes
+/// a value in the event. Cockpit never performs an additional object fetch for
+/// a log record, so collecting this stream cannot unexpectedly stall the
+/// profiled action.
+final class CockpitVmLogEvent {
+  const CockpitVmLogEvent({
+    this.timestampMs,
+    this.level,
+    this.sequence,
+    this.message,
+    this.logger,
+    this.zone,
+    this.error,
+    this.stack,
+    this.isolateId,
+  });
+
+  final int? timestampMs;
+  final int? level;
+  final int? sequence;
+  final String? message;
+  final String? logger;
+  final String? zone;
+  final String? error;
+  final String? stack;
+  final String? isolateId;
+
+  bool get isValid =>
+      (timestampMs == null || timestampMs! >= 0) &&
+      (level == null || level! >= 0) &&
+      (sequence == null || sequence! >= 0) &&
+      _validText(message) &&
+      _validText(logger) &&
+      _validText(zone) &&
+      _validText(error) &&
+      _validText(stack) &&
+      _validText(isolateId);
+
+  Map<String, Object?> toJson() => <String, Object?>{
+    if (timestampMs != null) 't': timestampMs,
+    if (level != null) 'lvl': level,
+    if (sequence != null) 'seq': sequence,
+    if (message != null && message!.isNotEmpty) 'msg': message,
+    if (logger != null && logger!.isNotEmpty) 'logger': logger,
+    if (zone != null && zone!.isNotEmpty) 'zone': zone,
+    if (error != null && error!.isNotEmpty) 'err': error,
+    if (stack != null && stack!.isNotEmpty) 'stack': stack,
+    if (isolateId != null && isolateId!.isNotEmpty) 'iso': isolateId,
+  };
+
+  factory CockpitVmLogEvent.fromJson(Object? value) {
+    final json = _object(value, r'$.devtools.log[]');
+    final event = CockpitVmLogEvent(
+      timestampMs: json['t'] == null
+          ? null
+          : _nonNegativeInt(json['t'], r'$.devtools.log[].t'),
+      level: json['lvl'] == null
+          ? null
+          : _nonNegativeInt(json['lvl'], r'$.devtools.log[].lvl'),
+      sequence: json['seq'] == null
+          ? null
+          : _nonNegativeInt(json['seq'], r'$.devtools.log[].seq'),
+      message: _optionalBoundedString(json['msg'], r'$.devtools.log[].msg'),
+      logger: _optionalBoundedString(
+        json['logger'],
+        r'$.devtools.log[].logger',
+      ),
+      zone: _optionalBoundedString(json['zone'], r'$.devtools.log[].zone'),
+      error: _optionalBoundedString(json['err'], r'$.devtools.log[].err'),
+      stack: _optionalBoundedString(json['stack'], r'$.devtools.log[].stack'),
+      isolateId: _optionalBoundedString(json['iso'], r'$.devtools.log[].iso'),
+    );
+    if (!event.isValid) {
+      throw const FormatException('VM log event is invalid.');
+    }
+    return event;
+  }
+}
+
+/// One bounded VM debug-stream event with the source context already present
+/// in the notification. This is intentionally metadata-only; variable and
+/// object evaluation remains an explicit debugger operation.
+final class CockpitVmDebugEvent {
+  const CockpitVmDebugEvent({
+    required this.kind,
+    this.timestampMs,
+    this.isolateId,
+    this.isolateName,
+    this.status,
+    this.details,
+    this.pauseAsync,
+    this.frame,
+    this.uri,
+    this.line,
+    this.column,
+    this.exception,
+    this.breakpoint,
+  });
+
+  final String kind;
+  final int? timestampMs;
+  final String? isolateId;
+  final String? isolateName;
+  final String? status;
+  final String? details;
+  final bool? pauseAsync;
+  final String? frame;
+  final String? uri;
+  final int? line;
+  final int? column;
+  final String? exception;
+  final int? breakpoint;
+
+  bool get isValid =>
+      kind.trim().isNotEmpty &&
+      kind.length <= 256 &&
+      (timestampMs == null || timestampMs! >= 0) &&
+      (line == null || line! >= 0) &&
+      (column == null || column! >= 0) &&
+      (breakpoint == null || breakpoint! >= 0) &&
+      _validText(isolateId) &&
+      _validText(isolateName) &&
+      _validText(status) &&
+      _validText(details) &&
+      _validText(frame) &&
+      _validText(uri) &&
+      _validText(exception);
+
+  Map<String, Object?> toJson() => <String, Object?>{
+    'k': kind,
+    if (timestampMs != null) 't': timestampMs,
+    if (isolateId != null && isolateId!.isNotEmpty) 'iso': isolateId,
+    if (isolateName != null && isolateName!.isNotEmpty) 'name': isolateName,
+    if (status != null && status!.isNotEmpty) 'status': status,
+    if (details != null && details!.isNotEmpty) 'details': details,
+    if (pauseAsync != null) 'async': pauseAsync,
+    if (frame != null && frame!.isNotEmpty) 'fn': frame,
+    if (uri != null && uri!.isNotEmpty) 'uri': uri,
+    if (line != null) 'line': line,
+    if (column != null) 'col': column,
+    if (exception != null && exception!.isNotEmpty) 'err': exception,
+    if (breakpoint != null) 'bp': breakpoint,
+  };
+
+  factory CockpitVmDebugEvent.fromJson(Object? value) {
+    final json = _object(value, r'$.devtools.dbg[]');
+    final event = CockpitVmDebugEvent(
+      kind: _boundedString(json['k'], r'$.devtools.dbg[].k'),
+      timestampMs: json['t'] == null
+          ? null
+          : _nonNegativeInt(json['t'], r'$.devtools.dbg[].t'),
+      isolateId: _optionalBoundedString(json['iso'], r'$.devtools.dbg[].iso'),
+      isolateName: _optionalBoundedString(
+        json['name'],
+        r'$.devtools.dbg[].name',
+      ),
+      status: _optionalBoundedString(
+        json['status'],
+        r'$.devtools.dbg[].status',
+      ),
+      details: _optionalBoundedString(
+        json['details'],
+        r'$.devtools.dbg[].details',
+      ),
+      pauseAsync: json['async'] == null
+          ? null
+          : _bool(json['async'], r'$.devtools.dbg[].async'),
+      frame: _optionalBoundedString(json['fn'], r'$.devtools.dbg[].fn'),
+      uri: _optionalBoundedString(json['uri'], r'$.devtools.dbg[].uri'),
+      line: json['line'] == null
+          ? null
+          : _nonNegativeInt(json['line'], r'$.devtools.dbg[].line'),
+      column: json['col'] == null
+          ? null
+          : _nonNegativeInt(json['col'], r'$.devtools.dbg[].col'),
+      exception: _optionalBoundedString(json['err'], r'$.devtools.dbg[].err'),
+      breakpoint: json['bp'] == null
+          ? null
+          : _nonNegativeInt(json['bp'], r'$.devtools.dbg[].bp'),
+    );
+    if (!event.isValid) {
+      throw const FormatException('VM debug event is invalid.');
+    }
+    return event;
   }
 }
 
@@ -526,7 +785,7 @@ final class CockpitCpuFunction {
           : _positiveInt(json['l'], r'$.devtools.cpu.fn.l'),
       column: json['c'] == null
           ? null
-          : _positiveInt(json['c'], r'$.devtools.cpu.fn.c'),
+          : _nonNegativeInt(json['c'], r'$.devtools.cpu.fn.c'),
     );
   }
 }
@@ -809,6 +1068,8 @@ final class CockpitHeapProfile {
     this.droppedSamples = 0,
     this.groupBefore,
     this.groupAfter,
+    this.accumulatorResetAt,
+    this.serviceGcAt,
   }) : classes = List<CockpitHeapClass>.unmodifiable(classes),
        samples = List<CockpitHeapSample>.unmodifiable(samples) {
     if (droppedClasses < 0 ||
@@ -826,6 +1087,10 @@ final class CockpitHeapProfile {
         (groupAfter != null &&
             groupAfter!.capacityBytes < groupAfter!.usageBytes)) {
       throw const FormatException('Heap usage exceeds capacity.');
+    }
+    if (accumulatorResetAt != null && accumulatorResetAt! < 0 ||
+        serviceGcAt != null && serviceGcAt! < 0) {
+      throw const FormatException('Heap profile timestamps are invalid.');
     }
     if (this.samples.any((sample) => !sample.isValid)) {
       throw const FormatException('Heap profile contains an invalid sample.');
@@ -848,6 +1113,16 @@ final class CockpitHeapProfile {
   final CockpitHeapPoint? groupBefore;
   final CockpitHeapPoint? groupAfter;
 
+  /// VM timestamp of the last allocation accumulator reset, when reported.
+  /// The value is kept in the VM's native timestamp unit and is not converted
+  /// to wall-clock time.
+  final int? accumulatorResetAt;
+
+  /// VM timestamp of the last service-triggered GC, when reported.
+  /// The value is kept in the VM's native timestamp unit and is not converted
+  /// to wall-clock time.
+  final int? serviceGcAt;
+
   Map<String, Object?> toJson() => <String, Object?>{
     'before': before.toJson(),
     'after': after.toJson(),
@@ -860,6 +1135,8 @@ final class CockpitHeapProfile {
     if (droppedSamples > 0) 'drop': droppedSamples,
     if (groupBefore != null) 'gb': groupBefore!.toJson(),
     if (groupAfter != null) 'ga': groupAfter!.toJson(),
+    if (accumulatorResetAt != null) 'reset': accumulatorResetAt,
+    if (serviceGcAt != null) 'gcAt': serviceGcAt,
   };
 
   factory CockpitHeapProfile.fromJson(Object? value) {
@@ -895,7 +1172,112 @@ final class CockpitHeapProfile {
       groupAfter: json['ga'] == null
           ? null
           : CockpitHeapPoint.fromJson(json['ga']),
+      accumulatorResetAt: json['reset'] == null
+          ? null
+          : _nonNegativeInt(json['reset'], r'$.devtools.heap.reset'),
+      serviceGcAt: json['gcAt'] == null
+          ? null
+          : _nonNegativeInt(json['gcAt'], r'$.devtools.heap.gcAt'),
     );
+  }
+}
+
+/// Aggregate garbage-collection pauses observed in the retained VM timeline.
+///
+/// Durations are derived only from real GC timeline events. A missing profile
+/// means the timeline did not expose a verifiable GC event, never that the app
+/// had a zero-cost collection cycle.
+final class CockpitGcProfile {
+  const CockpitGcProfile({
+    required this.eventCount,
+    required this.timedCount,
+    required this.newCount,
+    required this.oldCount,
+    required this.totalPauseUs,
+    required this.p50PauseUs,
+    required this.p90PauseUs,
+    required this.maxPauseUs,
+    required this.newPauseUs,
+    required this.oldPauseUs,
+  });
+
+  final int eventCount;
+  final int timedCount;
+  final int newCount;
+  final int oldCount;
+  final int totalPauseUs;
+  final int p50PauseUs;
+  final int p90PauseUs;
+  final int maxPauseUs;
+  final int newPauseUs;
+  final int oldPauseUs;
+
+  bool get isValid =>
+      eventCount > 0 &&
+      timedCount >= 0 &&
+      timedCount <= eventCount &&
+      newCount >= 0 &&
+      oldCount >= 0 &&
+      newCount + oldCount <= eventCount &&
+      totalPauseUs >= 0 &&
+      p50PauseUs >= 0 &&
+      p90PauseUs >= 0 &&
+      maxPauseUs >= 0 &&
+      p50PauseUs <= p90PauseUs &&
+      p90PauseUs <= maxPauseUs &&
+      newPauseUs >= 0 &&
+      oldPauseUs >= 0 &&
+      newPauseUs + oldPauseUs <= totalPauseUs;
+
+  Map<String, Object?> toJson() => <String, Object?>{
+    'n': eventCount,
+    'timed': timedCount,
+    if (newCount > 0) 'new': newCount,
+    if (oldCount > 0) 'old': oldCount,
+    if (timedCount > 0) ...<String, Object?>{
+      'total': totalPauseUs,
+      'p50': p50PauseUs,
+      'p90': p90PauseUs,
+      'max': maxPauseUs,
+      if (newPauseUs > 0) 'newUs': newPauseUs,
+      if (oldPauseUs > 0) 'oldUs': oldPauseUs,
+    },
+  };
+
+  factory CockpitGcProfile.fromJson(Object? value) {
+    final json = _object(value, r'$.devtools.gc');
+    final profile = CockpitGcProfile(
+      eventCount: _positiveInt(json['n'], r'$.devtools.gc.n'),
+      timedCount: _nonNegativeInt(json['timed'], r'$.devtools.gc.timed'),
+      newCount: json['new'] == null
+          ? 0
+          : _nonNegativeInt(json['new'], r'$.devtools.gc.new'),
+      oldCount: json['old'] == null
+          ? 0
+          : _nonNegativeInt(json['old'], r'$.devtools.gc.old'),
+      totalPauseUs: json['total'] == null
+          ? 0
+          : _nonNegativeInt(json['total'], r'$.devtools.gc.total'),
+      p50PauseUs: json['p50'] == null
+          ? 0
+          : _nonNegativeInt(json['p50'], r'$.devtools.gc.p50'),
+      p90PauseUs: json['p90'] == null
+          ? 0
+          : _nonNegativeInt(json['p90'], r'$.devtools.gc.p90'),
+      maxPauseUs: json['max'] == null
+          ? 0
+          : _nonNegativeInt(json['max'], r'$.devtools.gc.max'),
+      newPauseUs: json['newUs'] == null
+          ? 0
+          : _nonNegativeInt(json['newUs'], r'$.devtools.gc.newUs'),
+      oldPauseUs: json['oldUs'] == null
+          ? 0
+          : _nonNegativeInt(json['oldUs'], r'$.devtools.gc.oldUs'),
+    );
+    if (!profile.isValid) {
+      throw const FormatException('GC profile is inconsistent.');
+    }
+    return profile;
   }
 }
 
@@ -904,6 +1286,7 @@ final class CockpitIsolateStats {
   const CockpitIsolateStats({
     required this.id,
     required this.name,
+    this.number,
     this.groupId,
     this.runnable,
     this.livePorts,
@@ -912,11 +1295,20 @@ final class CockpitIsolateStats {
     this.startTimeMs,
     this.system,
     this.pauseKind,
+    this.pauseTimestampMs,
+    this.pauseAsync,
     this.error,
+    this.pauseOnExit,
+    this.exceptionPauseMode,
+    this.rootLibUri,
+    this.breakpointCount,
+    this.newHeap,
+    this.oldHeap,
   });
 
   final String id;
   final String name;
+  final String? number;
   final String? groupId;
   final bool? runnable;
   final int? livePorts;
@@ -925,11 +1317,20 @@ final class CockpitIsolateStats {
   final int? startTimeMs;
   final bool? system;
   final String? pauseKind;
+  final int? pauseTimestampMs;
+  final bool? pauseAsync;
   final String? error;
+  final bool? pauseOnExit;
+  final String? exceptionPauseMode;
+  final String? rootLibUri;
+  final int? breakpointCount;
+  final CockpitHeapPoint? newHeap;
+  final CockpitHeapPoint? oldHeap;
 
   Map<String, Object?> toJson() => <String, Object?>{
     'id': id,
     'name': name,
+    if (number != null && number!.isNotEmpty) 'num': number,
     if (groupId != null && groupId!.isNotEmpty) 'group': groupId,
     if (runnable != null) 'run': runnable,
     if (livePorts != null) 'ports': livePorts,
@@ -938,7 +1339,16 @@ final class CockpitIsolateStats {
     if (startTimeMs != null) 'start': startTimeMs,
     if (system != null) 'sys': system,
     if (pauseKind != null && pauseKind!.isNotEmpty) 'pause': pauseKind,
+    if (pauseTimestampMs != null) 'pauseT': pauseTimestampMs,
+    if (pauseAsync != null) 'async': pauseAsync,
     if (error != null && error!.isNotEmpty) 'error': error,
+    if (pauseOnExit != null) 'exit': pauseOnExit,
+    if (exceptionPauseMode != null && exceptionPauseMode!.isNotEmpty)
+      'ex': exceptionPauseMode,
+    if (rootLibUri != null && rootLibUri!.isNotEmpty) 'root': rootLibUri,
+    if (breakpointCount != null) 'bp': breakpointCount,
+    if (newHeap != null) 'new': newHeap!.toJson(),
+    if (oldHeap != null) 'old': oldHeap!.toJson(),
   };
 
   factory CockpitIsolateStats.fromJson(Object? value) {
@@ -946,6 +1356,7 @@ final class CockpitIsolateStats {
     return CockpitIsolateStats(
       id: _string(json['id'], r'$.devtools.isolate.stats.id'),
       name: _string(json['name'], r'$.devtools.isolate.stats.name'),
+      number: _optionalString(json['num'], r'$.devtools.isolate.stats.num'),
       groupId: _optionalString(
         json['group'],
         r'$.devtools.isolate.stats.group',
@@ -972,7 +1383,33 @@ final class CockpitIsolateStats {
         json['pause'],
         r'$.devtools.isolate.stats.pause',
       ),
+      pauseTimestampMs: json['pauseT'] == null
+          ? null
+          : _nonNegativeInt(json['pauseT'], r'$.devtools.isolate.stats.pauseT'),
+      pauseAsync: json['async'] == null
+          ? null
+          : _bool(json['async'], r'$.devtools.isolate.stats.async'),
       error: _optionalString(json['error'], r'$.devtools.isolate.stats.error'),
+      pauseOnExit: json['exit'] == null
+          ? null
+          : _bool(json['exit'], r'$.devtools.isolate.stats.exit'),
+      exceptionPauseMode: _optionalString(
+        json['ex'],
+        r'$.devtools.isolate.stats.ex',
+      ),
+      rootLibUri: _optionalString(
+        json['root'],
+        r'$.devtools.isolate.stats.root',
+      ),
+      breakpointCount: json['bp'] == null
+          ? null
+          : _nonNegativeInt(json['bp'], r'$.devtools.isolate.stats.bp'),
+      newHeap: json['new'] == null
+          ? null
+          : CockpitHeapPoint.fromJson(json['new']),
+      oldHeap: json['old'] == null
+          ? null
+          : CockpitHeapPoint.fromJson(json['old']),
     );
   }
 }
@@ -985,6 +1422,7 @@ final class CockpitIsolateEvent {
     this.isolateId,
     this.name,
     this.groupId,
+    this.extensionRpc,
   });
 
   final String kind;
@@ -992,6 +1430,7 @@ final class CockpitIsolateEvent {
   final String? isolateId;
   final String? name;
   final String? groupId;
+  final String? extensionRpc;
 
   Map<String, Object?> toJson() => <String, Object?>{
     'k': kind,
@@ -999,6 +1438,7 @@ final class CockpitIsolateEvent {
     if (isolateId != null && isolateId!.isNotEmpty) 'id': isolateId,
     if (name != null && name!.isNotEmpty) 'name': name,
     if (groupId != null && groupId!.isNotEmpty) 'group': groupId,
+    if (extensionRpc != null && extensionRpc!.isNotEmpty) 'rpc': extensionRpc,
   };
 
   factory CockpitIsolateEvent.fromJson(Object? value) {
@@ -1009,21 +1449,16 @@ final class CockpitIsolateEvent {
       kind: kind,
       timestampMs: timestamp == null
           ? null
-          : _nonNegativeInt(
-              timestamp,
-              r'$.devtools.isolate.events[].t',
-            ),
-      isolateId: _optionalString(
-        json['id'],
-        r'$.devtools.isolate.events[].id',
-      ),
-      name: _optionalString(
-        json['name'],
-        r'$.devtools.isolate.events[].name',
-      ),
+          : _nonNegativeInt(timestamp, r'$.devtools.isolate.events[].t'),
+      isolateId: _optionalString(json['id'], r'$.devtools.isolate.events[].id'),
+      name: _optionalString(json['name'], r'$.devtools.isolate.events[].name'),
       groupId: _optionalString(
         json['group'],
         r'$.devtools.isolate.events[].group',
+      ),
+      extensionRpc: _optionalString(
+        json['rpc'],
+        r'$.devtools.isolate.events[].rpc',
       ),
     );
   }
@@ -1034,8 +1469,7 @@ final class CockpitIsolateProfile {
   CockpitIsolateProfile({
     this.before,
     this.after,
-    Iterable<CockpitIsolateStats> beforeAll =
-        const <CockpitIsolateStats>[],
+    Iterable<CockpitIsolateStats> beforeAll = const <CockpitIsolateStats>[],
     Iterable<CockpitIsolateStats> afterAll = const <CockpitIsolateStats>[],
     this.droppedBefore = 0,
     this.droppedAfter = 0,
@@ -1103,16 +1537,10 @@ final class CockpitIsolateProfile {
             ).map(CockpitIsolateStats.fromJson).toList(growable: false),
       droppedBefore: json['dropB'] == null
           ? 0
-          : _nonNegativeInt(
-              json['dropB'],
-              r'$.devtools.isolate.dropB',
-            ),
+          : _nonNegativeInt(json['dropB'], r'$.devtools.isolate.dropB'),
       droppedAfter: json['dropA'] == null
           ? 0
-          : _nonNegativeInt(
-              json['dropA'],
-              r'$.devtools.isolate.dropA',
-            ),
+          : _nonNegativeInt(json['dropA'], r'$.devtools.isolate.dropA'),
       events: rawEvents == null
           ? const <CockpitIsolateEvent>[]
           : _list(
@@ -1121,10 +1549,279 @@ final class CockpitIsolateProfile {
             ).map(CockpitIsolateEvent.fromJson).toList(growable: false),
       droppedEvents: json['dropE'] == null
           ? 0
-          : _nonNegativeInt(
-              json['dropE'],
-              r'$.devtools.isolate.dropE',
-            ),
+          : _nonNegativeInt(json['dropE'], r'$.devtools.isolate.dropE'),
+    );
+  }
+}
+
+/// Display timing metadata queried from Flutter's engine through VM Service.
+///
+/// The engine reports the effective refresh rate for the selected Flutter view.
+/// A zero/unknown engine response is represented by an absent value rather
+/// than being treated as a 60Hz guess.
+final class CockpitDisplayProfile {
+  CockpitDisplayProfile({this.refreshRateHz, this.frameBudgetUs, this.viewId}) {
+    if (refreshRateHz != null &&
+            (!refreshRateHz!.isFinite || refreshRateHz! <= 0) ||
+        frameBudgetUs != null && frameBudgetUs! <= 0 ||
+        viewId != null && viewId!.trim().isEmpty) {
+      throw const FormatException('Display profile values are invalid.');
+    }
+  }
+
+  final double? refreshRateHz;
+  final int? frameBudgetUs;
+  final String? viewId;
+
+  Map<String, Object?> toJson() => <String, Object?>{
+    if (refreshRateHz != null) 'hz': refreshRateHz,
+    if (frameBudgetUs != null) 'bud': frameBudgetUs,
+    if (viewId != null && viewId!.trim().isNotEmpty) 'view': viewId,
+  };
+
+  factory CockpitDisplayProfile.fromJson(Object? value) {
+    final json = _object(value, r'$.devtools.display');
+    return CockpitDisplayProfile(
+      refreshRateHz: json['hz'] == null
+          ? null
+          : _positiveFiniteDouble(json['hz'], r'$.devtools.display.hz'),
+      frameBudgetUs: json['bud'] == null
+          ? null
+          : _positiveInt(json['bud'], r'$.devtools.display.bud'),
+      viewId: _optionalString(json['view'], r'$.devtools.display.view'),
+    );
+  }
+}
+
+/// One widget source location reported by Flutter.RebuiltWidgets.
+final class CockpitRebuildLocation {
+  CockpitRebuildLocation({
+    required this.id,
+    this.uri,
+    this.line,
+    this.column,
+    this.name,
+  }) {
+    if (id < 0 ||
+        line != null && line! < 0 ||
+        column != null && column! < 0 ||
+        uri != null && uri!.trim().isEmpty ||
+        name != null && name!.trim().isEmpty) {
+      throw const FormatException('Rebuild location is invalid.');
+    }
+  }
+
+  final int id;
+  final String? uri;
+  final int? line;
+  final int? column;
+  final String? name;
+
+  bool get isResolved => uri != null && line != null && column != null;
+
+  Map<String, Object?> toJson() => <String, Object?>{
+    'id': id,
+    if (uri != null && uri!.trim().isNotEmpty) 'u': uri,
+    if (line != null) 'l': line,
+    if (column != null) 'c': column,
+    if (name != null && name!.trim().isNotEmpty) 'n': name,
+  };
+
+  factory CockpitRebuildLocation.fromJson(Object? value) {
+    final json = _object(value, r'$.devtools.rebuild.loc[]');
+    return CockpitRebuildLocation(
+      id: _nonNegativeInt(json['id'], r'$.devtools.rebuild.loc[].id'),
+      uri: _optionalString(json['u'], r'$.devtools.rebuild.loc[].u'),
+      line: json['l'] == null
+          ? null
+          : _nonNegativeInt(json['l'], r'$.devtools.rebuild.loc[].l'),
+      column: json['c'] == null
+          ? null
+          : _nonNegativeInt(json['c'], r'$.devtools.rebuild.loc[].c'),
+      name: _optionalString(json['n'], r'$.devtools.rebuild.loc[].n'),
+    );
+  }
+}
+
+/// One location/count pair in a rebuild frame.
+final class CockpitRebuildCount {
+  const CockpitRebuildCount({required this.locationId, required this.count});
+
+  final int locationId;
+  final int count;
+
+  Map<String, Object?> toJson() => <String, Object?>{
+    'id': locationId,
+    'n': count,
+  };
+}
+
+/// Rebuild counts emitted for one Flutter frame.
+final class CockpitRebuildFrame {
+  CockpitRebuildFrame({
+    required this.frameNumber,
+    Iterable<CockpitRebuildCount> entries = const <CockpitRebuildCount>[],
+  }) : entries = List<CockpitRebuildCount>.unmodifiable(entries) {
+    if (frameNumber < 0 || this.entries.length > 2000) {
+      throw const FormatException('Rebuild frame bounds are invalid.');
+    }
+    if (this.entries.any((entry) => entry.locationId < 0 || entry.count <= 0)) {
+      throw const FormatException('Rebuild entries are invalid.');
+    }
+  }
+
+  final int frameNumber;
+  final List<CockpitRebuildCount> entries;
+
+  Map<String, Object?> toJson() => <String, Object?>{
+    'n': frameNumber,
+    if (entries.isNotEmpty)
+      // Match Flutter's compact wire representation: [locationId, count, …].
+      'e': entries
+          .expand<Object?>((entry) => <Object?>[entry.locationId, entry.count])
+          .toList(growable: false),
+  };
+
+  factory CockpitRebuildFrame.fromJson(Object? value) {
+    final json = _object(value, r'$.devtools.rebuild.frames[]');
+    final raw = json['e'];
+    final values = raw == null
+        ? const <Object?>[]
+        : _list(raw, r'$.devtools.rebuild.frames[].e');
+    if (values.length.isOdd) {
+      throw const FormatException('Rebuild frame entries must be paired.');
+    }
+    final entries = <CockpitRebuildCount>[];
+    for (var index = 0; index < values.length; index += 2) {
+      entries.add(
+        CockpitRebuildCount(
+          locationId: _nonNegativeInt(
+            values[index],
+            r'$.devtools.rebuild.frames[].e[]',
+          ),
+          count: _positiveInt(
+            values[index + 1],
+            r'$.devtools.rebuild.frames[].e[]',
+          ),
+        ),
+      );
+    }
+    return CockpitRebuildFrame(
+      frameNumber: _nonNegativeInt(json['n'], r'$.devtools.rebuild.frames[].n'),
+      entries: entries,
+    );
+  }
+}
+
+/// Aggregate rebuild counts for one widget source location.
+final class CockpitRebuildTotal {
+  CockpitRebuildTotal({required this.locationId, required this.count}) {
+    if (locationId < 0 || count <= 0) {
+      throw const FormatException('Rebuild total is invalid.');
+    }
+  }
+
+  final int locationId;
+  final int count;
+
+  Map<String, Object?> toJson() => <String, Object?>{
+    'id': locationId,
+    'n': count,
+  };
+
+  factory CockpitRebuildTotal.fromJson(Object? value) {
+    final json = _object(value, r'$.devtools.rebuild.totals[]');
+    return CockpitRebuildTotal(
+      locationId: _nonNegativeInt(
+        json['id'],
+        r'$.devtools.rebuild.totals[].id',
+      ),
+      count: _positiveInt(json['n'], r'$.devtools.rebuild.totals[].n'),
+    );
+  }
+}
+
+/// Bounded DevTools-style widget rebuild evidence.
+final class CockpitRebuildProfile {
+  CockpitRebuildProfile({
+    Iterable<CockpitRebuildFrame> frames = const <CockpitRebuildFrame>[],
+    Iterable<CockpitRebuildLocation> locations =
+        const <CockpitRebuildLocation>[],
+    Iterable<CockpitRebuildTotal> totals = const <CockpitRebuildTotal>[],
+    this.droppedFrames = 0,
+    this.droppedEntries = 0,
+    this.unresolvedLocations = 0,
+  }) : frames = List<CockpitRebuildFrame>.unmodifiable(frames),
+       locations = List<CockpitRebuildLocation>.unmodifiable(locations),
+       totals = List<CockpitRebuildTotal>.unmodifiable(totals) {
+    if (droppedFrames < 0 ||
+        droppedEntries < 0 ||
+        unresolvedLocations < 0 ||
+        this.frames.length > 10000 ||
+        this.locations.length > 50000 ||
+        this.totals.length > 50000) {
+      throw const FormatException('Rebuild profile bounds are invalid.');
+    }
+    for (var index = 1; index < this.frames.length; index += 1) {
+      if (this.frames[index].frameNumber <=
+          this.frames[index - 1].frameNumber) {
+        throw const FormatException('Rebuild frames are not ordered.');
+      }
+    }
+  }
+
+  final List<CockpitRebuildFrame> frames;
+  final List<CockpitRebuildLocation> locations;
+  final List<CockpitRebuildTotal> totals;
+  final int droppedFrames;
+  final int droppedEntries;
+  final int unresolvedLocations;
+
+  Map<String, Object?> toJson() => <String, Object?>{
+    if (frames.isNotEmpty)
+      'frames': frames.map((item) => item.toJson()).toList(growable: false),
+    if (locations.isNotEmpty)
+      'loc': locations.map((item) => item.toJson()).toList(growable: false),
+    if (totals.isNotEmpty)
+      'tot': totals.map((item) => item.toJson()).toList(growable: false),
+    if (droppedFrames > 0) 'dropF': droppedFrames,
+    if (droppedEntries > 0) 'dropE': droppedEntries,
+    if (unresolvedLocations > 0) 'unknown': unresolvedLocations,
+  };
+
+  factory CockpitRebuildProfile.fromJson(Object? value) {
+    final json = _object(value, r'$.devtools.rebuild');
+    final rawFrames = json['frames'];
+    final rawLocations = json['loc'];
+    final rawTotals = json['tot'];
+    return CockpitRebuildProfile(
+      frames: rawFrames == null
+          ? const <CockpitRebuildFrame>[]
+          : _list(
+              rawFrames,
+              r'$.devtools.rebuild.frames',
+            ).map(CockpitRebuildFrame.fromJson).toList(growable: false),
+      locations: rawLocations == null
+          ? const <CockpitRebuildLocation>[]
+          : _list(
+              rawLocations,
+              r'$.devtools.rebuild.loc',
+            ).map(CockpitRebuildLocation.fromJson).toList(growable: false),
+      totals: rawTotals == null
+          ? const <CockpitRebuildTotal>[]
+          : _list(
+              rawTotals,
+              r'$.devtools.rebuild.totals',
+            ).map(CockpitRebuildTotal.fromJson).toList(growable: false),
+      droppedFrames: json['dropF'] == null
+          ? 0
+          : _nonNegativeInt(json['dropF'], r'$.devtools.rebuild.dropF'),
+      droppedEntries: json['dropE'] == null
+          ? 0
+          : _nonNegativeInt(json['dropE'], r'$.devtools.rebuild.dropE'),
+      unresolvedLocations: json['unknown'] == null
+          ? 0
+          : _nonNegativeInt(json['unknown'], r'$.devtools.rebuild.unknown'),
     );
   }
 }
@@ -1219,6 +1916,25 @@ String _string(Object? value, String path) {
   throw FormatException('$path must be a non-empty string.');
 }
 
+const _maxEventTextLength = 64 * 1024;
+
+String _boundedString(Object? value, String path) {
+  final result = _string(value, path);
+  if (result.length > _maxEventTextLength) {
+    throw FormatException('$path is too long.');
+  }
+  return result;
+}
+
+String? _optionalBoundedString(Object? value, String path) {
+  if (value == null) return null;
+  if (value is String && value.trim().isEmpty) return null;
+  return _boundedString(value, path);
+}
+
+bool _validText(String? value) =>
+    value == null || value.isEmpty || value.length <= _maxEventTextLength;
+
 String? _optionalString(Object? value, String path) {
   if (value == null) return null;
   // VM responses may include empty optional fields (for example a class with
@@ -1236,6 +1952,11 @@ int _nonNegativeInt(Object? value, String path) {
 int _positiveInt(Object? value, String path) {
   if (value is int && value > 0) return value;
   throw FormatException('$path must be a positive integer.');
+}
+
+double _positiveFiniteDouble(Object? value, String path) {
+  if (value is num && value.isFinite && value > 0) return value.toDouble();
+  throw FormatException('$path must be a positive finite number.');
 }
 
 bool _bool(Object? value, String path) {

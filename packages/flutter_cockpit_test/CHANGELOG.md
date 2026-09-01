@@ -1,5 +1,12 @@
 # Changelog
 
+## 4.1.0
+
+- Extended VM Logging evidence with zone context and exposed `maxLogs` and
+  `maxDebug` retention controls for long-running performance captures.
+- Kept compact output count-only while complete JSON and HTML exports retain
+  the bounded runtime evidence.
+
 ## 4.0.50
 
 - Added a self-contained offline performance report with an embedded Cockpit

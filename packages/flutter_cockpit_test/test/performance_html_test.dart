@@ -28,12 +28,21 @@ void main() {
     expect(html, contains('CPU sampling'));
     expect(html, contains('Heap &amp; allocation'));
     expect(html, contains('GPU / Shader signals'));
+    expect(html, contains('Widget rebuilds'));
+    expect(html, contains('id="rebuild-chart"'));
+    expect(html, contains('Flutter.RebuiltWidgets'));
     expect(html, contains('VM runtime health'));
     expect(html, contains('heap-trend-chart'));
     expect(html, contains('VM process memory'));
     expect(html, contains('vm-memory-chart'));
     expect(html, contains('data-details="vmMemory"'));
+    expect(html, contains('Frame pipeline'));
+    expect(html, contains('pipeline-chart'));
+    expect(html, contains('GC pauses'));
+    expect(html, contains('gc-chart'));
     expect(html, contains('Isolate health'));
+    expect(html, contains('VM logs'));
+    expect(html, contains('VM debug events'));
     expect(html, contains('VM runtime'));
     expect(html, contains('Timeline streams'));
     expect(html, contains('details-dialog'));
@@ -183,6 +192,8 @@ void main() {
     ]);
     expect(reports[0]['report']['devtools']['vm']['target'], 'arm64');
     expect(reports[0]['report']['devtools']['vm']['isolates'], 2);
+    expect(reports[0]['report']['devtools']['display']['hz'], 120);
+    expect(reports[0]['report']['devtools']['rebuild']['frames'], isNotEmpty);
     expect(
       reports[0]['report']['devtools']['vmem']['after']['root']['s'],
       1280,
@@ -273,6 +284,53 @@ void main() {
       events.where((event) => event['ph'] == 'B' || event['ph'] == 'E'),
       isEmpty,
     );
+  });
+
+  test('pairs GC markers for accurate pause and hotspot analysis', () {
+    final report = _report(step: 'gc').copyWithEvents(<Object?>[
+      <String, Object?>{
+        'n': 'CollectNewGeneration',
+        'c': 'GC',
+        't': 100,
+        'p': 'B',
+      },
+      <String, Object?>{
+        'n': 'CollectNewGeneration',
+        'c': 'GC',
+        't': 260,
+        'p': 'E',
+      },
+      <String, Object?>{
+        'n': 'CollectOldGeneration',
+        'c': 'GC',
+        't': 400,
+        'p': 'B',
+      },
+      <String, Object?>{
+        'n': 'CollectOldGeneration',
+        'c': 'GC',
+        't': 940,
+        'p': 'E',
+      },
+    ]);
+    final payload =
+        jsonDecode(CockpitPerformanceHtml.fullJson([report]))
+            as Map<String, dynamic>;
+    final analysis =
+        (payload['reports'] as List).single['analysis'] as Map<String, dynamic>;
+    expect(analysis['gc'], <String, Object?>{
+      'count': 2,
+      'timed': 2,
+      'new': 1,
+      'old': 1,
+      'total': 700,
+      'p50': 160,
+      'p90': 540,
+      'max': 540,
+    });
+    expect(analysis['hotspots'], hasLength(2));
+    expect(analysis['hotspots'][0]['count'], 1);
+    expect(analysis['hotspots'][0]['total'], 540);
   });
 }
 
@@ -397,6 +455,27 @@ CockpitPerformanceReport _report({required String step}) {
     'devtools': <String, Object?>{
       'source': 'vm',
       'state': 'available',
+      'display': <String, Object?>{'hz': 120, 'bud': 8333, 'view': 'view-1'},
+      'rebuild': <String, Object?>{
+        'frames': <Object?>[
+          <String, Object?>{
+            'n': 10,
+            'e': <Object?>[2, 3],
+          },
+        ],
+        'loc': <Object?>[
+          <String, Object?>{
+            'id': 2,
+            'u': 'package:demo/main.dart',
+            'l': 12,
+            'c': 4,
+            'n': 'HomePage',
+          },
+        ],
+        'tot': <Object?>[
+          <String, Object?>{'id': 2, 'n': 3},
+        ],
+      },
       'cpu': <String, Object?>{
         'period': 1000,
         'depth': 32,
@@ -463,11 +542,7 @@ CockpitPerformanceReport _report({required String step}) {
         },
         'allB': <Object?>[
           <String, Object?>{'id': 'isolates/1', 'name': 'main', 'run': true},
-          <String, Object?>{
-            'id': 'isolates/2',
-            'name': 'worker',
-            'run': true,
-          },
+          <String, Object?>{'id': 'isolates/2', 'name': 'worker', 'run': true},
         ],
         'allA': <Object?>[
           <String, Object?>{'id': 'isolates/1', 'name': 'main', 'run': true},
@@ -486,6 +561,36 @@ CockpitPerformanceReport _report({required String step}) {
         ],
         'dropE': 1,
       },
+      'log': <Object?>[
+        <String, Object?>{
+          't': 1700000000300,
+          'lvl': 900,
+          'seq': 4,
+          'msg': 'slow request',
+          'logger': 'app.network',
+          'zone': 'request-zone',
+          'err': 'timeout',
+          'stack': 'package:demo/main.dart:12',
+          'iso': 'isolates/1',
+        },
+      ],
+      'dropLog': 2,
+      'dbg': <Object?>[
+        <String, Object?>{
+          'k': 'PauseException',
+          't': 1700000000400,
+          'iso': 'isolates/1',
+          'name': 'main',
+          'async': true,
+          'fn': 'main',
+          'uri': 'package:demo/main.dart',
+          'line': 12,
+          'col': 2,
+          'err': 'StateError',
+          'bp': 2,
+        },
+      ],
+      'dropDbg': 1,
       'timeline': <String, Object?>{
         'recorder': 'ring',
         'available': <Object?>['Dart', 'GC'],

@@ -1,5 +1,10 @@
 # Changelog
 
+## 4.1.0
+
+- Synchronized the Cockpit CLI, Supervisor, and protocol dependency with the
+  expanded Flutter DevTools performance report release.
+
 ## 4.0.50
 
 - Synchronized the Cockpit CLI with the current protocol and Flutter bridge

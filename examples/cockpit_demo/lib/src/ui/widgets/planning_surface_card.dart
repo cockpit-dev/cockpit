@@ -104,6 +104,7 @@ final class PlanningSurfaceCard extends StatelessWidget {
             ),
             const SizedBox(height: 18),
             GestureDetector(
+              key: const Key('planning-surface-gesture'),
               behavior: HitTestBehavior.opaque,
               onScaleStart: onScaleStart,
               onScaleUpdate: onScaleUpdate,

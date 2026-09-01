@@ -226,11 +226,28 @@ are retained in the complete report; the compact test result keeps only sample
 counts. The same capture also records VM heap samples over time, isolate health
 snapshots for every discovered isolate, the VM Isolate stream's bounded
 lifecycle events (start, runnable, update, reload, exit, and extension
-registration), and timeline recorder stream metadata. New/ended isolates and
-retention drops are visible in the HTML runtime panel and complete JSON; the
+registration, including the registered RPC when the VM provides it), and
+timeline recorder stream metadata. New/ended isolates and retention drops are
+visible in the HTML runtime panel and complete JSON; the
 compact result keeps only counts. Use `cpu: false` or
 `heap: false` for a frame-only capture, and tune `maxCpuSamples`,
 `maxHeapClasses`, or `maxHeapSamples` for long scenarios:
+
+CPU functions retain verified VM source locations when the runtime provides
+them, including resolved URI, line, and column. Heap reports also retain the
+VM allocation-accumulator reset and last service-GC timestamps, while isolate
+snapshots include pause-on-exit, exception-pause mode, and root-library URI.
+Missing VM fields stay absent rather than being inferred.
+
+The capture also listens to the VM `Logging` and `Debug` streams by default.
+Logging records keep the message, severity, logger, error, and stack text only
+when the VM already supplied them; debug records keep pause/resume/exception/
+reload context and verified source locations from the notification. These are
+bounded metadata records, not implicit object evaluation, so they cannot block
+the tested action. Set `logs: false` or `debug: false` when a capture must
+exclude one stream; `maxLogs` and `maxDebug` tune their bounded retention for
+very long scenarios. Isolate snapshots also retain new/old generation heap
+spaces and breakpoint counts when the runtime exposes them.
 
 For a class-specific allocation investigation, first obtain its VM class id
 from the heap report, then opt in to call-stack tracing for at most 20 classes.

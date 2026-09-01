@@ -47,10 +47,7 @@ void main() {
           await cockpit.tap('Dismiss latest update');
 
           await cockpit.scroll('Planning surface', align: 'center');
-          await cockpit.pinch(
-            target: '[type="PlanningSurfaceCard"] >> [type="GestureDetector"]',
-            scale: 1.2,
-          );
+          await cockpit.pinch(target: '@planning-surface-gesture', scale: 1.2);
           await cockpit.tap('Reset');
 
           const taskAction = '[type="TaskListItem"] >> [type="InkWell"]';

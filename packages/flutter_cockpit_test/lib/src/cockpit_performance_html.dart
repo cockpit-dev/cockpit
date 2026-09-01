@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:cockpit_protocol/cockpit_protocol.dart';
 
 import 'cockpit_startup_report.dart';
+import 'cockpit_timeline_analysis.dart';
 
 /// Renders one or more [CockpitPerformanceReport] values as a self-contained
 /// offline HTML report.
@@ -108,7 +109,7 @@ Map<String, Object?> _performanceAnalysisPayload(
   CockpitPerformanceReport report,
 ) {
   final grouped = <String, _PerformanceHotspotAccumulator>{};
-  for (final event in report.events) {
+  visitCockpitTimelineMeasurements(report.events, (event, durationUs, _) {
     final key = '${event.category}\u0000${event.name}';
     final hotspot = grouped.putIfAbsent(
       key,
@@ -118,14 +119,14 @@ Map<String, Object?> _performanceAnalysisPayload(
       ),
     );
     hotspot.count += 1;
-    if (event.durationUs > 0) {
-      hotspot.totalUs += event.durationUs;
-      hotspot.durationsUs.add(event.durationUs);
-      if (event.durationUs > hotspot.maxUs) {
-        hotspot.maxUs = event.durationUs;
+    if (durationUs > 0) {
+      hotspot.totalUs += durationUs;
+      hotspot.durationsUs.add(durationUs);
+      if (durationUs > hotspot.maxUs) {
+        hotspot.maxUs = durationUs;
       }
     }
-  }
+  });
   final hotspots = grouped.values.toList(growable: false)
     ..sort((left, right) {
       final total = right.totalUs.compareTo(left.totalUs);
@@ -147,19 +148,14 @@ Map<String, Object?> _gcAnalysisPayload(CockpitPerformanceReport report) {
   var count = 0;
   var newCount = 0;
   var oldCount = 0;
-  for (final event in report.events) {
-    final text = '${event.category} ${event.name}'.toLowerCase();
-    if (!text.contains('gc') &&
-        !text.contains('garbage') &&
-        !text.contains('scavenge') &&
-        !text.contains('mark-sweep')) {
-      continue;
-    }
+  visitCockpitTimelineMeasurements(report.events, (event, durationUs, _) {
+    final kind = cockpitGcEventKind(event);
+    if (kind == null) return;
     count += 1;
-    if (text.contains('new') || text.contains('scavenge')) newCount += 1;
-    if (text.contains('old') || text.contains('mark-sweep')) oldCount += 1;
-    if (event.durationUs > 0) durations.add(event.durationUs);
-  }
+    if (kind == 'new') newCount += 1;
+    if (kind == 'old') oldCount += 1;
+    if (durationUs > 0) durations.add(durationUs);
+  });
   if (count == 0) return <String, Object?>{'count': 0};
   durations.sort();
   int percentile(double ratio) {
@@ -216,47 +212,29 @@ final class _PerformanceHotspotAccumulator {
 
 Map<String, Object?> _timelinePayload(CockpitPerformanceReport report) {
   final traceEvents = <Map<String, Object?>>[];
-  final openSpans = <String, List<CockpitPerformanceEvent>>{};
-  for (final event in report.events) {
-    final phase = event.phase;
-    if (phase == 'B' && event.durationUs == 0) {
-      (openSpans[_spanKey(event)] ??= <CockpitPerformanceEvent>[]).add(event);
-      continue;
-    }
-    if (phase == 'E' && event.durationUs == 0) {
-      final stack = openSpans[_spanKey(event)];
-      if (stack != null && stack.isNotEmpty) {
-        final begin = stack.removeLast();
-        if (stack.isEmpty) openSpans.remove(_spanKey(event));
-        final duration = event.timestampUs - begin.timestampUs;
-        if (duration >= 0) {
-          traceEvents.add(
-            _traceEvent(
-              begin,
-              phase: 'X',
-              durationUs: duration,
-              args: begin.args.isNotEmpty ? begin.args : event.args,
-            ),
-          );
-          continue;
-        }
+  visitCockpitTimelineMeasurements(
+    report.events,
+    (event, durationUs, end) {
+      if (end == null) {
+        traceEvents.add(_traceEvent(event, phase: _tracePhase(event)));
+      } else {
+        traceEvents.add(
+          _traceEvent(
+            event,
+            phase: 'X',
+            durationUs: durationUs,
+            args: event.args.isNotEmpty ? event.args : end.args,
+          ),
+        );
       }
-      // An unmatched or out-of-order end marker cannot be imported as an
-      // end event without a corresponding begin marker. Keep the evidence as
-      // an instant event instead of emitting a malformed trace.
+    },
+    unmatchedBegin: (event) {
       traceEvents.add(_traceEvent(event, phase: 'i'));
-      continue;
-    }
-    traceEvents.add(_traceEvent(event, phase: _tracePhase(event)));
-  }
-
-  // Keep unmatched begins observable, but lower them to instants so the
-  // exported trace is always self-contained and importable.
-  for (final stack in openSpans.values) {
-    for (final event in stack) {
+    },
+    unmatchedEnd: (event) {
       traceEvents.add(_traceEvent(event, phase: 'i'));
-    }
-  }
+    },
+  );
   traceEvents.sort((left, right) {
     final leftTime = (left['ts'] as num).toInt();
     final rightTime = (right['ts'] as num).toInt();
@@ -264,9 +242,6 @@ Map<String, Object?> _timelinePayload(CockpitPerformanceReport report) {
   });
   return <String, Object?>{'traceEvents': traceEvents};
 }
-
-String _spanKey(CockpitPerformanceEvent event) =>
-    '${event.category}\u0000${event.name}';
 
 Map<String, Object?> _traceEvent(
   CockpitPerformanceEvent event, {
@@ -280,11 +255,12 @@ Map<String, Object?> _traceEvent(
     'cat': event.category,
     'ph': phase,
     'ts': event.timestampUs,
-    'pid': 1,
-    // The compact event model does not retain VM thread identity. Keep one
-    // stable lane instead of presenting categories as fake OS threads.
-    'tid': 1,
-    'args': args ?? event.args,
+    'pid': event.processId ?? 1,
+    'tid': event.threadId ?? 1,
+    if (event.eventId != null) 'id': event.eventId,
+    if (event.scope != null) 's': event.scope,
+    if (event.bindId != null) 'bind_id': event.bindId,
+    if ((args ?? event.args).isNotEmpty) 'args': args ?? event.args,
     if (phase == 'X' && effectiveDuration > 0) 'dur': effectiveDuration,
   };
 }
@@ -296,7 +272,13 @@ String _tracePhase(CockpitPerformanceEvent event) {
   // Async and flow phases need an event id that the compact report does not
   // retain. Downgrade those phases to a self-contained instant/span instead
   // of emitting a trace that a DevTools importer cannot correlate.
-  const supported = <String>{'B', 'E', 'X', 'I', 'i', 'C'};
+  const supported = <String>{
+    'B', 'E', 'X', 'I', 'i', 'C',
+    // Chrome trace async/flow and metadata phases. The VM trace already
+    // carries the required ids; preserving them is more useful than lowering
+    // a valid event to an instant.
+    'S', 'F', 'T', 'b', 'e', 'n', 'N', 'O', 'D', 'P',
+  };
   if (phase != null && supported.contains(phase)) return phase;
   return event.durationUs > 0 ? 'X' : 'i';
 }
@@ -645,6 +627,7 @@ details[open] summary::after { content: "−"; }
       <div class="panel"><div class="panel-head"><div><h2>Heap &amp; allocation</h2><p>Dart heap usage, allocation classes, and explicitly selected allocation call stacks.</p></div><div class="panel-tools"><span class="subtle" id="heap-note">—</span><button class="quiet-button detail-button" type="button" data-details="heap">Details</button></div></div><div class="chart-wrap" style="height:150px"><canvas id="heap-chart" aria-label="Dart heap chart"></canvas></div><div class="devtools-list" id="heap-list"></div></div>
       <div class="panel"><div class="panel-head"><div><h2>GPU / Shader signals</h2><p>Only actual GPU, raster, Skia, and shader timeline events are shown.</p></div><div class="panel-tools"><span class="subtle" id="gpu-note">—</span><button class="quiet-button detail-button" type="button" data-details="gpu">Details</button></div></div><div class="devtools-list" id="gpu-list"></div></div>
     </section>
+    <section class="panel rebuild-panel"><div class="panel-head"><div><h2>Widget rebuilds</h2><p>DevTools-compatible <code>Flutter.RebuiltWidgets</code> counts by frame and source location. This is collected only when explicitly enabled.</p></div><div class="panel-tools"><span class="subtle" id="rebuild-note">—</span><button class="quiet-button detail-button" type="button" data-details="rebuilds">Details</button></div></div><div class="vm-runtime-grid"><div class="chart-wrap" style="height:190px"><canvas id="rebuild-chart" aria-label="Widget rebuilds by frame chart"></canvas></div><div class="devtools-list" id="rebuild-list"></div></div></section>
     <section class="panel vm-runtime-panel"><div class="panel-head"><div><h2>VM runtime health</h2><p>Isolate lifecycle, heap capacity, and timeline recorder state captured from VM Service.</p></div><div class="panel-tools"><span class="subtle" id="vm-note">—</span><button class="quiet-button detail-button" type="button" data-details="vm">Details</button></div></div><div class="vm-runtime-grid"><div class="chart-wrap" style="height:210px"><canvas id="heap-trend-chart" aria-label="VM heap trend chart"></canvas></div><div class="devtools-list" id="vm-list"></div></div></section>
     <section class="panel vm-memory-panel"><div class="panel-head"><div><h2>VM process memory</h2><p>Retained VM Service memory buckets before and after the capture. Expand Details for the complete bounded tree.</p></div><div class="panel-tools"><span class="subtle" id="vm-memory-note">—</span><button class="quiet-button detail-button" type="button" data-details="vmMemory">Details</button></div></div><div class="vm-memory-grid"><div class="chart-wrap" style="height:190px"><canvas id="vm-memory-chart" aria-label="VM process memory comparison chart"></canvas></div><div class="devtools-list" id="vm-memory-list"></div></div></section>
     <section class="chart-grid">
@@ -663,6 +646,8 @@ details[open] summary::after { content: "−"; }
     <section class="analysis-grid insight-grid">
       <div class="panel"><div class="panel-head"><div><h2>Frame cadence</h2><p>Actual time between engine frame timestamps. Spikes expose refresh jitter even when frame work is short.</p></div></div><div class="chart-wrap" style="height:210px"><canvas id="cadence-chart" aria-label="Frame cadence chart"></canvas></div></div>
       <div class="panel"><div class="panel-head"><div><h2>Raster cache trend</h2><p>Layer and picture cache counts across retained frames, with byte values available on hover.</p></div></div><div class="chart-wrap" style="height:210px"><canvas id="cache-trend-chart" aria-label="Raster cache trend chart"></canvas></div></div>
+      <div class="panel"><div class="panel-head"><div><h2>Frame pipeline</h2><p>Raw engine phase timestamps separate build wait, build work, raster wait, and raster work.</p></div></div><div class="chart-wrap" style="height:210px"><canvas id="pipeline-chart" aria-label="Frame pipeline chart"></canvas></div><div class="resource-summary" id="pipeline-summary"></div></div>
+      <div class="panel"><div class="panel-head"><div><h2>GC pauses</h2><p>Real VM garbage-collection pauses, with generation and long-tail details on hover.</p></div><span class="subtle" id="gc-note">—</span></div><div class="chart-wrap" style="height:210px"><canvas id="gc-chart" aria-label="Garbage collection pause chart"></canvas></div><div class="resource-summary" id="gc-summary"></div></div>
       <div class="panel wide"><div class="panel-head"><div><h2>VM category cost</h2><p>Duration and event count grouped by the actual VM timeline category.</p></div></div><div class="chart-wrap" style="height:80px"><canvas id="category-cost-chart" aria-label="VM category duration chart"></canvas></div></div>
     </section>
     <section class="panel"><div class="panel-head"><div><h2>Operation hotspots</h2><p>Concrete VM event names ranked by retained duration. Source is shown only when the event arguments provide it.</p></div><span class="subtle" id="hotspot-note">—</span></div><div class="chart-wrap" style="height:92px"><canvas id="hotspot-chart" aria-label="VM operation hotspots chart"></canvas></div><div class="table-wrap"><table class="hotspot-table"><thead><tr><th>Operation</th><th>Category</th><th>Events</th><th>Timed</th><th>Total</th><th>p90</th><th>Longest</th><th>Source evidence</th></tr></thead><tbody id="hotspot-body"></tbody></table></div></section>
@@ -730,6 +715,10 @@ details[open] summary::after { content: "−"; }
   var memory = function () { return report().memory || null; };
   var devtools = function () { return report().devtools || null; };
   var gcStats = function () {
+    var exact = devtools();
+    if (exact && exact.gc) {
+      return { count: number(exact.gc.n), timed: number(exact.gc.timed), total: number(exact.gc.total), p50: exact.gc.p50 == null ? null : number(exact.gc.p50), p90: exact.gc.p90 == null ? null : number(exact.gc.p90), max: exact.gc.max == null ? null : number(exact.gc.max), new: number(exact.gc.new), old: number(exact.gc.old), newPause: number(exact.gc.newUs), oldPause: number(exact.gc.oldUs) };
+    }
     var rows = events().filter(function (event) {
       var text = String(event.c || '') + ' ' + String(event.n || '');
       text = text.toLowerCase();
@@ -745,12 +734,17 @@ details[open] summary::after { content: "−"; }
     var phase = String(event.p || '');
     if ((phase === 'B' || phase === 'E') && number(event.d) > 0) return 'X';
     if (phase === 'X' && number(event.d) <= 0) return 'i';
-    if (phase === 'B' || phase === 'E' || phase === 'X' || phase === 'I' || phase === 'i' || phase === 'C') return phase;
+    if (['B', 'E', 'X', 'I', 'i', 'C', 'S', 'F', 'T', 'b', 'e', 'n', 'N', 'O', 'D', 'P'].indexOf(phase) >= 0) return phase;
     return number(event.d) > 0 ? 'X' : 'i';
   };
   var traceEvent = function (event, phase, durationUs, args) {
     var duration = durationUs == null ? number(event.d) : durationUs;
-    var item = { name: String(event.n || 'Unnamed event'), cat: String(event.c || 'uncategorized'), ph: phase, ts: number(event.t), pid: 1, tid: 1, args: args || (event.a && typeof event.a === 'object' ? event.a : {}) };
+    var item = { name: String(event.n || 'Unnamed event'), cat: String(event.c || 'uncategorized'), ph: phase, ts: number(event.t), pid: event.pid == null ? 1 : number(event.pid), tid: event.tid == null ? 1 : number(event.tid) };
+    if (event.id != null) item.id = String(event.id);
+    if (event.scope != null) item.s = String(event.scope);
+    if (event.bid != null) item.bind_id = String(event.bid);
+    var payload = args || (event.a && typeof event.a === 'object' ? event.a : {});
+    if (payload && Object.keys(payload).length) item.args = payload;
     if (phase === 'X' && duration > 0) item.dur = duration;
     return item;
   };
@@ -760,7 +754,7 @@ details[open] summary::after { content: "−"; }
     for (var i = 0; i < raw.length; i += 1) bytes[i] = raw.charCodeAt(i);
     var blob = new Blob([bytes], { type: 'application/octet-stream' }); var link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = name; link.click(); setTimeout(function () { URL.revokeObjectURL(link.href); }, 1000);
   };
-  var spanKey = function (event) { return String(event.c || 'uncategorized') + '\\u0000' + String(event.n || 'Unnamed event'); };
+  var spanKey = function (event) { return String(event.c || 'uncategorized') + '\\u0000' + String(event.n || 'Unnamed event') + '\\u0000' + String(event.pid == null ? '' : event.pid) + '\\u0000' + String(event.tid == null ? '' : event.tid) + '\\u0000' + String(event.id == null ? '' : event.id); };
   var timelinePayload = function () {
     var traceEvents = []; var openSpans = {};
     events().forEach(function (event) {
@@ -819,13 +813,14 @@ details[open] summary::after { content: "−"; }
       return { summary: { before: heap.before, after: heap.after, groupBefore: heap.gb || null, groupAfter: heap.ga || null, interval: heap.interval || 0, samples: Array.isArray(heap.samples) ? heap.samples.length : 0, dropped: heap.drop || 0, classes: Array.isArray(heap.classes) ? heap.classes.length : 0, allocationTraces: Array.isArray(d.alloc) ? d.alloc.length : 0 }, classes: preview(heap.classes, 200), allocationTraces: preview(d.alloc, 20), samples: preview(heap.samples, 300) };
     }
     if (kind === 'gpu' && d.gpu) return d.gpu;
-    if (kind === 'vm') return { vm: d.vm || null, isolate: d.isolate || null, timeline: d.timeline || null, gc: (reports[state.report].analysis || {}).gc || null };
+    if (kind === 'rebuilds' && d.rebuild) return d.rebuild;
+    if (kind === 'vm') return { vm: d.vm || null, isolate: d.isolate || null, timeline: d.timeline || null, display: d.display || null, rebuild: d.rebuild || null, gc: (reports[state.report].analysis || {}).gc || null };
     if (kind === 'vmMemory' && d.vmem) return d.vmem;
     return d;
   };
   var openDetails = function (kind) {
     var value = detailValue(kind);
-    var labels = { cpu: 'CPU sampling details', heap: 'Heap and allocation details', gpu: 'GPU and shader details', vm: 'VM runtime details', vmMemory: 'VM process memory details' };
+    var labels = { cpu: 'CPU sampling details', heap: 'Heap and allocation details', gpu: 'GPU and shader details', rebuilds: 'Widget rebuild details', vm: 'VM runtime details', vmMemory: 'VM process memory details' };
     el('details-title').textContent = labels[kind] || 'Capture details';
     if (value == null) {
       detailsPayload = '';
@@ -1057,6 +1052,52 @@ details[open] summary::after { content: "−"; }
       ctx.fillStyle = css('--muted'); ctx.fillText('Layer count', left, height - 8); ctx.fillText(nf.format(list.length) + ' frames', Math.max(left + 66, width - 82), height - 8);
     });
   };
+  var pipelineSamples = function () {
+    return frames().map(function (frame) {
+      if (frame.bs == null || frame.bf == null || frame.rs == null || frame.rf == null) return null;
+      var vsync = number(frame.t); var buildStart = number(frame.bs); var buildFinish = number(frame.bf); var rasterStart = number(frame.rs); var rasterFinish = number(frame.rf);
+      if (buildStart < vsync || buildFinish < buildStart || rasterStart < buildFinish || rasterFinish < rasterStart) return null;
+      return { frame: frame, buildWait: buildStart - vsync, build: buildFinish - buildStart, rasterWait: rasterStart - buildFinish, raster: rasterFinish - rasterStart, total: rasterFinish - vsync };
+    }).filter(function (item) { return item != null; });
+  };
+  var drawPipelineChart = function () {
+    var list = pipelineSamples();
+    setChartHeight('pipeline-chart', 210);
+    draw(el('pipeline-chart'), function (ctx, width, height) {
+      chartHits['pipeline-chart'] = [];
+      ctx.clearRect(0, 0, width, height); ctx.fillStyle = css('--surface-2'); ctx.fillRect(0, 0, width, height);
+      if (!list.length) { ctx.fillStyle = css('--muted'); ctx.font = '10px system-ui, sans-serif'; ctx.fillText('Raw phase timestamps were not retained', 15, height / 2); el('pipeline-summary').innerHTML = '<div><span>Samples</span><strong>Unavailable</strong></div>'; return; }
+      var max = Math.max(1, list.reduce(function (value, item) { return Math.max(value, item.total, item.buildWait, item.build, item.rasterWait, item.raster); }, 0)) * 1.12;
+      var budget = number(summary().build && summary().build.bud); var area = grid(ctx, width, height, max, budget); var stride = Math.max(1, Math.ceil(list.length / Math.max(1, Math.floor(area.plotW)))); var sample = list.filter(function (_, index) { return index % stride === 0; });
+      var paths = [['buildWait', css('--blue')], ['build', '#8bd4ff'], ['rasterWait', css('--warning')], ['raster', css('--accent')]];
+      paths.forEach(function (path) { ctx.strokeStyle = path[1]; ctx.lineWidth = 1.7; ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.beginPath(); sample.forEach(function (item, index) { var x = area.left + (sample.length === 1 ? .5 : index / (sample.length - 1)) * area.plotW; var y = area.top + area.plotH * (1 - item[path[0]] / max); if (index === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y); }); ctx.stroke(); });
+      sample.forEach(function (item, index) { var x = area.left + (sample.length === 1 ? .5 : index / (sample.length - 1)) * area.plotW; chartHits['pipeline-chart'].push({ x: x - 7, y: area.top, w: 14, h: area.plotH, html: '<strong>Frame ' + esc(number(item.frame.i)) + '</strong>' + tooltipRow('Build wait', us(item.buildWait)) + tooltipRow('Build', us(item.build)) + tooltipRow('Raster wait', us(item.rasterWait)) + tooltipRow('Raster', us(item.raster)) + tooltipRow('Pipeline', us(item.total)) }); });
+      ctx.fillStyle = css('--muted'); ctx.font = '10px system-ui, sans-serif'; ctx.fillText('Build wait · build · raster wait · raster', area.left, height - 8); ctx.fillText(nf.format(list.length) + ' frames', Math.max(area.left + 70, width - 84), height - 8);
+    });
+    var values = function (key) { return list.map(function (item) { return item[key]; }); };
+    el('pipeline-summary').innerHTML = [['Samples', nf.format(list.length)], ['Build wait p90', us(percentile(values('buildWait'), .9))], ['Raster wait p90', us(percentile(values('rasterWait'), .9))], ['Pipeline p90', us(percentile(values('total'), .9))]].map(function (cell) { return '<div><span>' + esc(cell[0]) + '</span><strong>' + esc(cell[1]) + '</strong></div>'; }).join('');
+  };
+  var gcEvents = function () {
+    return events().map(function (event) {
+      var text = (String(event.c || '') + ' ' + String(event.n || '')).toLowerCase();
+      if (text.indexOf('gc') < 0 && text.indexOf('garbage') < 0 && text.indexOf('scavenge') < 0 && text.indexOf('mark-sweep') < 0 && text.indexOf('generation') < 0) return null;
+      return { event: event, duration: number(event.d), kind: text.indexOf('new') >= 0 || text.indexOf('scavenge') >= 0 ? 'new' : text.indexOf('old') >= 0 || text.indexOf('mark-sweep') >= 0 ? 'old' : 'gc' };
+    }).filter(function (item) { return item != null && item.duration > 0; });
+  };
+  var drawGcChart = function () {
+    var list = gcEvents();
+    setChartHeight('gc-chart', 210);
+    draw(el('gc-chart'), function (ctx, width, height) {
+      chartHits['gc-chart'] = [];
+      ctx.clearRect(0, 0, width, height); ctx.fillStyle = css('--surface-2'); ctx.fillRect(0, 0, width, height);
+      var stats = gcStats();
+      if (!list.length) { ctx.fillStyle = css('--muted'); ctx.font = '10px system-ui, sans-serif'; ctx.fillText(stats.count ? 'GC events had no duration samples' : 'No retained GC pause events', 15, height / 2); el('gc-note').textContent = stats.count ? nf.format(stats.count) + ' events · no durations' : 'Not collected'; el('gc-summary').innerHTML = [['Cycles', stats.count ? nf.format(stats.count) : 'Unavailable'], ['Timed', nf.format(stats.timed)], ['p90', stats.p90 == null ? 'Unavailable' : us(stats.p90)], ['Max', stats.max == null ? 'Unavailable' : us(stats.max)]].map(function (cell) { return '<div><span>' + esc(cell[0]) + '</span><strong>' + esc(cell[1]) + '</strong></div>'; }).join(''); return; }
+      var max = Math.max(1, list.reduce(function (value, item) { return Math.max(value, item.duration); }, 0)) * 1.12; var left = 48, right = 18, top = 18, bottom = 28, plotW = width - left - right, plotH = height - top - bottom; ctx.strokeStyle = css('--line'); ctx.lineWidth = 1; ctx.fillStyle = css('--muted'); ctx.font = '10px system-ui, sans-serif'; for (var i = 0; i <= 4; i += 1) { var y = top + plotH * i / 4; ctx.beginPath(); ctx.moveTo(left, y); ctx.lineTo(width - right, y); ctx.stroke(); ctx.fillText(us(Math.round(max * (1 - i / 4))), 5, y + 3); }
+      var stride = Math.max(1, Math.ceil(list.length / Math.max(1, Math.floor(plotW / 3)))); list.forEach(function (item, index) { if (index % stride !== 0) return; var x = left + (list.length === 1 ? .5 : index / (list.length - 1)) * plotW; var h = Math.max(2, item.duration / max * plotH); var y = top + plotH - h; ctx.fillStyle = item.kind === 'new' ? css('--blue') : item.kind === 'old' ? css('--danger') : css('--warning'); ctx.globalAlpha = .88; ctx.fillRect(x - 2, y, 4, h); ctx.globalAlpha = 1; chartHits['gc-chart'].push({ x: x - 6, y: top, w: 12, h: plotH, html: '<strong>' + esc(item.event.n || 'GC') + '</strong>' + tooltipRow('Generation', item.kind) + tooltipRow('When', relativeUs(item.event.t, eventOrigin())) + tooltipRow('Pause', us(item.duration)) }); });
+      ctx.fillStyle = css('--muted'); ctx.fillText(nf.format(list.length) + ' timed pauses', left, height - 8); ctx.fillText('max ' + us(max / 1.12), Math.max(left + 50, width - 86), height - 8);
+    });
+    var stats = gcStats(); el('gc-note').textContent = stats.count ? nf.format(stats.count) + ' events · ' + nf.format(stats.timed) + ' timed' : 'Not collected'; el('gc-summary').innerHTML = [['Cycles', stats.count ? nf.format(stats.count) : 'Unavailable'], ['New / old', nf.format(stats.new || 0) + ' / ' + nf.format(stats.old || 0)], ['p90', stats.p90 == null ? 'Unavailable' : us(stats.p90)], ['Max', stats.max == null ? 'Unavailable' : us(stats.max)]].map(function (cell) { return '<div><span>' + esc(cell[0]) + '</span><strong>' + esc(cell[1]) + '</strong></div>'; }).join('');
+  };
   var drawCategoryCostChart = function () {
     var categoryKeys = {};
     events().forEach(function (event) { categoryKeys[String(event.c || 'uncategorized')] = true; });
@@ -1215,6 +1256,7 @@ details[open] summary::after { content: "−"; }
     var r = report(); var s = summary(); var mem = memory(); var d = r.devtools || null; var available = 0;
     var rows = [
       ['Frame timing', frames().length ? 'available' : 'unavailable', frames().length ? nf.format(frames().length) + ' retained frames' : 'No valid FrameTiming samples'],
+      ['Frame pipeline', pipelineSamples().length ? 'available' : 'unavailable', pipelineSamples().length ? nf.format(pipelineSamples().length) + ' phase-timestamp samples' : 'Raw phase timestamps unavailable'],
       ['VM timeline', r.source === 'vm' && events().length ? 'available' : 'unavailable', r.source === 'vm' && events().length ? nf.format(events().length) + ' retained events' : (r.source || 'Timeline not collected')],
       ['Raster cache', frames().length ? 'available' : 'unavailable', frames().length ? 'Layer/picture counts and bytes' : 'Requires retained frame samples'],
       ['GC events', s.gc ? 'available' : 'unavailable', s.gc ? nf.format(number(s.gc.new) + number(s.gc.old)) + ' collection events · pause p90 ' + (gcStats().p90 == null ? 'unavailable' : us(gcStats().p90)) : 'No GC stream in this capture'],
@@ -1229,7 +1271,11 @@ details[open] summary::after { content: "−"; }
       ['Allocation trace', d && Array.isArray(d.alloc) && d.alloc.length ? 'available' : 'unavailable', d && Array.isArray(d.alloc) && d.alloc.length ? nf.format(d.alloc.length) + ' selected class call stacks' : 'Pass allocationClassIds to trace selected classes'],
       ['VM runtime', d && d.vm ? 'available' : 'unavailable', d && d.vm ? 'VM identity, CPU target, and isolate inventory' : 'No VM runtime metadata retained'],
       ['Isolate health', d && d.isolate ? 'available' : 'unavailable', d && d.isolate ? 'Before/after lifecycle and pause state' : 'No isolate snapshot retained'],
+      ['VM logs', d && (Array.isArray(d.log) && d.log.length || d.dropLog) ? 'available' : 'unavailable', d && (Array.isArray(d.log) && d.log.length || d.dropLog) ? nf.format((d.log || []).length) + ' logging events' + (d.dropLog ? ' · ' + nf.format(number(d.dropLog)) + ' dropped' : '') : 'VM Logging stream unavailable'],
+      ['VM debug events', d && (Array.isArray(d.dbg) && d.dbg.length || d.dropDbg) ? 'available' : 'unavailable', d && (Array.isArray(d.dbg) && d.dbg.length || d.dropDbg) ? nf.format((d.dbg || []).length) + ' pause/debug events' + (d.dropDbg ? ' · ' + nf.format(number(d.dropDbg)) + ' dropped' : '') : 'VM Debug stream unavailable'],
       ['Timeline streams', d && d.timeline ? 'available' : 'unavailable', d && d.timeline ? nf.format((d.timeline.recorded || []).length) + ' recorded / ' + nf.format((d.timeline.available || []).length) + ' available streams' : 'Timeline recorder metadata unavailable'],
+      ['Display refresh', d && d.display && d.display.hz != null ? 'available' : 'unavailable', d && d.display && d.display.hz != null ? Number(d.display.hz).toFixed(1) + ' Hz · budget ' + us(number(d.display.bud)) : 'Engine refresh-rate extension unavailable'],
+      ['Widget rebuilds', d && d.rebuild ? 'available' : 'unavailable', d && d.rebuild ? nf.format((d.rebuild.frames || []).length) + ' frames · ' + nf.format((d.rebuild.tot || []).length) + ' locations' : 'Set trackRebuilds: true for DevTools rebuild events'],
       ['VM process memory', d && d.vmem && (d.vmem.before || d.vmem.after) ? 'available' : 'unavailable', d && d.vmem && (d.vmem.before || d.vmem.after) ? 'Before/after retained memory tree' : 'VM process memory usage unavailable'],
       ['Network profiler', 'not-collected', 'Use Cockpit network evidence for HTTP/SSE/WebSocket traffic'],
       ['GPU/shader', d && d.gpu ? 'available' : 'unavailable', d && d.gpu ? nf.format(number(d.gpu.events)) + ' timeline signals' : 'No matching GPU or shader timeline events'],
@@ -1305,6 +1351,23 @@ details[open] summary::after { content: "−"; }
       ctx.fillStyle = css('--muted'); ctx.fillText('Retained process memory · before / after', left, height - 8);
     });
   };
+  var drawRebuildChart = function () {
+    setChartHeight('rebuild-chart', 190);
+    draw(el('rebuild-chart'), function (ctx, width, height) {
+      chartHits['rebuild-chart'] = [];
+      ctx.clearRect(0, 0, width, height); ctx.fillStyle = css('--surface-2'); ctx.fillRect(0, 0, width, height);
+      var rebuild = report().devtools && report().devtools.rebuild;
+      var list = rebuild && Array.isArray(rebuild.frames) ? rebuild.frames : [];
+      if (!list.length) { ctx.fillStyle = css('--muted'); ctx.font = '10px system-ui, sans-serif'; ctx.fillText('Widget rebuild tracking was not collected', 14, height / 2); return; }
+      var points = list.map(function (frame) { var entries = Array.isArray(frame.e) ? frame.e : []; var count = 0; for (var index = 1; index < entries.length; index += 2) count += number(entries[index]); return { frame: frame, count: count }; });
+      var max = Math.max(1, points.reduce(function (value, item) { return Math.max(value, item.count); }, 0)); var left = 52, right = 18, top = 18, bottom = 28, plotW = width - left - right, plotH = height - top - bottom;
+      ctx.strokeStyle = css('--line'); ctx.lineWidth = 1; ctx.fillStyle = css('--muted'); ctx.font = '10px system-ui, sans-serif';
+      for (var i = 0; i <= 4; i += 1) { var y = top + plotH * i / 4; ctx.beginPath(); ctx.moveTo(left, y); ctx.lineTo(width - right, y); ctx.stroke(); ctx.fillText(nf.format(Math.round(max * (1 - i / 4))), 8, y + 3); }
+      var stride = Math.max(1, Math.ceil(points.length / Math.max(1, Math.floor(plotW)))); var sample = points.filter(function (_, index) { return index % stride === 0; });
+      ctx.strokeStyle = css('--accent'); ctx.lineWidth = 2.2; ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.beginPath(); sample.forEach(function (item, index) { var x = left + (sample.length === 1 ? .5 : index / (sample.length - 1)) * plotW; var y = top + plotH * (1 - item.count / max); if (index === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y); chartHits['rebuild-chart'].push({ x: x - 7, y: top, w: 14, h: plotH, html: '<strong>Frame ' + esc(number(item.frame.n)) + '</strong>' + tooltipRow('Rebuilds', nf.format(item.count)) + tooltipRow('Locations', nf.format((item.frame.e || []).length / 2)) }); }); ctx.stroke();
+      ctx.fillStyle = css('--muted'); ctx.fillText('Rebuilds per frame', left, height - 8); ctx.fillText(nf.format(points.length) + ' frames', Math.max(left + 80, width - 92), height - 8);
+    });
+  };
   var renderDevTools = function () {
     var d = report().devtools || null;
     var cpu = d && d.cpu ? d.cpu : null;
@@ -1312,8 +1375,12 @@ details[open] summary::after { content: "−"; }
     var gpu = d && d.gpu ? d.gpu : null;
     var isolate = d && d.isolate ? d.isolate : null;
     var timeline = d && d.timeline ? d.timeline : null;
+    var display = d && d.display ? d.display : null;
+    var rebuild = d && d.rebuild ? d.rebuild : null;
     var vmRuntime = d && d.vm ? d.vm : null;
     var vmMemory = d && d.vmem ? d.vmem : null;
+    var logs = d && Array.isArray(d.log) ? d.log : [];
+    var debugEvents = d && Array.isArray(d.dbg) ? d.dbg : [];
     var allocations = d && Array.isArray(d.alloc) ? d.alloc : [];
     var perfetto = d && d.perfetto ? d.perfetto : null;
     el('cpu-note').textContent = cpu ? nf.format(number(cpu.n)) + ' samples · ' + us(number(cpu.span)) + (cpu.period ? ' · ' + us(number(cpu.period)) + ' period' : '') : (d && d.why ? 'Unavailable' : 'Not collected');
@@ -1326,6 +1393,12 @@ details[open] summary::after { content: "−"; }
     el('heap-list').innerHTML = classRows.concat(allocationRows).join('') || '<p class="devtools-note">' + esc(heap ? 'No allocation classes retained.' : (d && d.why ? d.why : 'Dart heap profiling was unavailable for this run.')) + '</p>';
     el('gpu-note').textContent = gpu ? nf.format(number(gpu.events)) + ' signals · ' + us(number(gpu.time)) : 'No matching timeline signals';
     el('gpu-list').innerHTML = gpu ? '<div class="devtools-row"><strong>GPU / raster / Skia</strong><span>' + nf.format(number(gpu.events)) + ' events</span></div><div class="devtools-row"><strong>Shader signals</strong><span>' + nf.format(number(gpu.shaders)) + ' events</span></div><div class="devtools-row"><strong>Observed duration</strong><span>' + esc(us(gpu.time)) + '</span></div>' : '<p class="devtools-note">GPU counters are platform-specific. Cockpit reports only real matching VM timeline events.</p>';
+    var rebuildFrames = rebuild && Array.isArray(rebuild.frames) ? rebuild.frames : [];
+    var rebuildTotals = rebuild && Array.isArray(rebuild.tot) ? rebuild.tot : [];
+    var rebuildLocations = {};
+    if (rebuild && Array.isArray(rebuild.loc)) rebuild.loc.forEach(function (item) { if (item && item.id != null) rebuildLocations[String(item.id)] = item; });
+    el('rebuild-note').textContent = rebuild ? nf.format(rebuildFrames.length) + ' frames · ' + nf.format(rebuildTotals.length) + ' widgets' + (rebuild.unknown ? ' · ' + nf.format(number(rebuild.unknown)) + ' unresolved' : '') : 'Not collected';
+    el('rebuild-list').innerHTML = rebuildTotals.length ? rebuildTotals.slice(0, 10).map(function (item) { var location = rebuildLocations[String(item.id)] || {}; var label = location.n || location.u || ('location ' + item.id); if (location.u && location.l != null) label += ':' + location.l; return '<div class="devtools-row"><strong title="' + esc(label) + '">' + esc(label) + '</strong><span>' + nf.format(number(item.n)) + ' rebuilds</span></div>'; }).join('') : '<p class="devtools-note">Enable trackRebuilds to collect Flutter.RebuiltWidgets events.</p>';
     var after = isolate && isolate.after ? isolate.after : isolate && isolate.before ? isolate.before : null;
     var beforeAll = isolate && Array.isArray(isolate.allB) ? isolate.allB : [];
     var afterAll = isolate && Array.isArray(isolate.allA) ? isolate.allA : [];
@@ -1335,7 +1408,7 @@ details[open] summary::after { content: "−"; }
     afterAll.forEach(function (item) { if (item && item.id) afterIds[String(item.id)] = true; });
     var startedIsolates = afterAll.filter(function (item) { return item && item.id && !beforeIds[String(item.id)]; }).length;
     var stoppedIsolates = beforeAll.filter(function (item) { return item && item.id && !afterIds[String(item.id)]; }).length;
-    el('vm-note').textContent = after ? (after.run === false ? 'paused' : 'runnable') + (timeline ? ' · ' + (timeline.recorder || 'unknown recorder') : '') : 'VM metadata unavailable';
+    el('vm-note').textContent = after ? (after.run === false ? 'paused' : 'runnable') + (timeline ? ' · ' + (timeline.recorder || 'unknown recorder') : '') + (display && display.hz != null ? ' · ' + Number(display.hz).toFixed(1) + ' Hz' : '') : 'VM metadata unavailable';
     var vmRows = [];
     if (vmRuntime) {
       if (vmRuntime.name || vmRuntime.ver) vmRows.push(['VM', (vmRuntime.name || 'VM') + (vmRuntime.ver ? ' · ' + vmRuntime.ver : '')]);
@@ -1351,8 +1424,10 @@ details[open] summary::after { content: "−"; }
     if (beforeAll.length || afterAll.length) vmRows.push(['Isolate snapshots', nf.format(beforeAll.length) + ' before / ' + nf.format(afterAll.length) + ' after']);
     if (startedIsolates || stoppedIsolates) vmRows.push(['Isolate changes', '+' + nf.format(startedIsolates) + ' started / −' + nf.format(stoppedIsolates) + ' stopped']);
     if (isolate && (isolate.dropB || isolate.dropA)) vmRows.push(['Isolate snapshot drops', nf.format(number(isolate.dropB)) + ' before / ' + nf.format(number(isolate.dropA)) + ' after']);
-    if (after) { vmRows.push(['Isolate', (after.name || 'isolate') + (after.id ? ' · ' + after.id : '')]); if (after.group) vmRows.push(['Group', after.group]); if (after.run != null) vmRows.push(['Runnable', after.run ? 'yes' : 'no']); if (after.ports != null) vmRows.push(['Live ports', nf.format(number(after.ports))]); if (after.libs != null) vmRows.push(['Libraries', nf.format(number(after.libs))]); if (after.ext != null) vmRows.push(['Extensions', nf.format(number(after.ext))]); if (after.start != null) vmRows.push(['Started', dateText(after.start)]); if (after.pause) vmRows.push(['Pause state', after.pause]); if (after.error) vmRows.push(['Error', after.error]); }
+    if (after) { vmRows.push(['Isolate', (after.name || 'isolate') + (after.id ? ' · ' + after.id : '')]); if (after.group) vmRows.push(['Group', after.group]); if (after.run != null) vmRows.push(['Runnable', after.run ? 'yes' : 'no']); if (after.ports != null) vmRows.push(['Live ports', nf.format(number(after.ports))]); if (after.libs != null) vmRows.push(['Libraries', nf.format(number(after.libs))]); if (after.ext != null) vmRows.push(['Extensions', nf.format(number(after.ext))]); if (after.start != null) vmRows.push(['Started', dateText(after.start)]); if (after.pause) vmRows.push(['Pause state', after.pause]); if (after.exit != null) vmRows.push(['Pause on exit', after.exit ? 'yes' : 'no']); if (after.ex) vmRows.push(['Exception pause', after.ex]); if (after.root) vmRows.push(['Root library', after.root]); if (after.error) vmRows.push(['Error', after.error]); }
     if (timeline) { vmRows.push(['Recorder', timeline.recorder || 'unknown']); vmRows.push(['Streams', nf.format((timeline.recorded || []).length) + ' recorded / ' + nf.format((timeline.available || []).length) + ' available']); }
+    if (logs.length || (d && d.dropLog)) vmRows.push(['VM logs', nf.format(logs.length) + (d.dropLog ? ' retained · ' + nf.format(number(d.dropLog)) + ' dropped' : ' events')]);
+    if (debugEvents.length || (d && d.dropDbg)) vmRows.push(['Debug events', nf.format(debugEvents.length) + (d.dropDbg ? ' retained · ' + nf.format(number(d.dropDbg)) + ' dropped' : ' events')]);
     if (heap && heap.drop) vmRows.push(['Heap sample drops', nf.format(number(heap.drop))]);
     el('vm-list').innerHTML = vmRows.length ? vmRows.map(function (row) { return '<div class="devtools-row"><strong>' + esc(row[0]) + '</strong><span title="' + esc(row[1]) + '">' + esc(row[1]) + '</span></div>'; }).join('') : '<p class="devtools-note">VM runtime metadata was unavailable for this capture.</p>';
     var memoryPoints = [];
@@ -1464,9 +1539,14 @@ details[open] summary::after { content: "−"; }
     var dtools = r.devtools || null;
     if (dtools) {
       if (dtools.cpu) cells.push(['CPU samples', nf.format(number(dtools.cpu.n))], ['CPU period', us(number(dtools.cpu.period))], ['CPU depth', nf.format(number(dtools.cpu.depth))], ['CPU dropped', nf.format(number(dtools.cpu.dropped))]);
-      if (dtools.heap) cells.push(['VM heap samples', nf.format((dtools.heap.samples || []).length)], ['VM heap interval', duration(dtools.heap.interval)], ['VM heap dropped', nf.format(number(dtools.heap.drop))], ['Allocation classes', nf.format((dtools.heap.classes || []).length)], ['Group heap before', dtools.heap.gb ? bytes(dtools.heap.gb.use) : 'Unavailable'], ['Group heap after', dtools.heap.ga ? bytes(dtools.heap.ga.use) : 'Unavailable']);
-      if (dtools.isolate) { var iso = dtools.isolate.after || dtools.isolate.before || {}; var isoBefore = Array.isArray(dtools.isolate.allB) ? dtools.isolate.allB : []; var isoAfter = Array.isArray(dtools.isolate.allA) ? dtools.isolate.allA : []; var isoBeforeIds = {}; isoBefore.forEach(function (item) { if (item && item.id) isoBeforeIds[String(item.id)] = true; }); var isoAfterIds = {}; isoAfter.forEach(function (item) { if (item && item.id) isoAfterIds[String(item.id)] = true; }); var isoStarted = isoAfter.filter(function (item) { return item && item.id && !isoBeforeIds[String(item.id)]; }).length; var isoStopped = isoBefore.filter(function (item) { return item && item.id && !isoAfterIds[String(item.id)]; }).length; cells.push(['Isolate', iso.name || '—'], ['Isolate group', iso.group || '—'], ['Live ports', iso.ports == null ? 'Unavailable' : nf.format(number(iso.ports))], ['Libraries', iso.libs == null ? 'Unavailable' : nf.format(number(iso.libs))], ['Extensions', iso.ext == null ? 'Unavailable' : nf.format(number(iso.ext))], ['Isolate snapshots', nf.format(isoBefore.length) + ' before / ' + nf.format(isoAfter.length) + ' after'], ['Isolate changes', '+' + nf.format(isoStarted) + ' started / −' + nf.format(isoStopped) + ' stopped']); if (dtools.isolate.dropB || dtools.isolate.dropA) cells.push(['Isolate drops', nf.format(number(dtools.isolate.dropB)) + ' before / ' + nf.format(number(dtools.isolate.dropA)) + ' after']); }
+      if (dtools.gc) cells.push(['GC events', nf.format(number(dtools.gc.n))], ['GC timed', nf.format(number(dtools.gc.timed))], ['GC pause p90', dtools.gc.p90 == null ? 'Unavailable' : us(dtools.gc.p90)], ['GC pause max', dtools.gc.max == null ? 'Unavailable' : us(dtools.gc.max)]);
+      if (dtools.heap) cells.push(['VM heap samples', nf.format((dtools.heap.samples || []).length)], ['VM heap interval', duration(dtools.heap.interval)], ['VM heap dropped', nf.format(number(dtools.heap.drop))], ['Allocation classes', nf.format((dtools.heap.classes || []).length)], ['Group heap before', dtools.heap.gb ? bytes(dtools.heap.gb.use) : 'Unavailable'], ['Group heap after', dtools.heap.ga ? bytes(dtools.heap.ga.use) : 'Unavailable'], ['Accumulator reset', dtools.heap.reset == null ? 'Unavailable' : String(dtools.heap.reset)], ['Last service GC', dtools.heap.gcAt == null ? 'Unavailable' : String(dtools.heap.gcAt)]);
+      if (dtools.isolate) { var iso = dtools.isolate.after || dtools.isolate.before || {}; var isoBefore = Array.isArray(dtools.isolate.allB) ? dtools.isolate.allB : []; var isoAfter = Array.isArray(dtools.isolate.allA) ? dtools.isolate.allA : []; var isoBeforeIds = {}; isoBefore.forEach(function (item) { if (item && item.id) isoBeforeIds[String(item.id)] = true; }); var isoAfterIds = {}; isoAfter.forEach(function (item) { if (item && item.id) isoAfterIds[String(item.id)] = true; }); var isoStarted = isoAfter.filter(function (item) { return item && item.id && !isoBeforeIds[String(item.id)]; }).length; var isoStopped = isoBefore.filter(function (item) { return item && item.id && !isoAfterIds[String(item.id)]; }).length; cells.push(['Isolate', iso.name || '—'], ['Isolate group', iso.group || '—'], ['Live ports', iso.ports == null ? 'Unavailable' : nf.format(number(iso.ports))], ['Libraries', iso.libs == null ? 'Unavailable' : nf.format(number(iso.libs))], ['Extensions', iso.ext == null ? 'Unavailable' : nf.format(number(iso.ext))], ['Isolate snapshots', nf.format(isoBefore.length) + ' before / ' + nf.format(isoAfter.length) + ' after'], ['Isolate changes', '+' + nf.format(isoStarted) + ' started / −' + nf.format(isoStopped) + ' stopped']); if (iso.exit != null) cells.push(['Pause on exit', iso.exit ? 'yes' : 'no']); if (iso.ex) cells.push(['Exception pause', iso.ex]); if (iso.root) cells.push(['Root library', iso.root]); if (dtools.isolate.dropB || dtools.isolate.dropA) cells.push(['Isolate drops', nf.format(number(dtools.isolate.dropB)) + ' before / ' + nf.format(number(dtools.isolate.dropA)) + ' after']); }
       if (dtools.timeline) cells.push(['Timeline recorder', dtools.timeline.recorder || '—'], ['Recorded streams', nf.format((dtools.timeline.recorded || []).length)], ['Available streams', nf.format((dtools.timeline.available || []).length)]);
+      if (Array.isArray(dtools.log) && (dtools.log.length || dtools.dropLog)) cells.push(['VM logs', nf.format(dtools.log.length)], ['VM log drops', nf.format(number(dtools.dropLog))]);
+      if (Array.isArray(dtools.dbg) && (dtools.dbg.length || dtools.dropDbg)) cells.push(['Debug events', nf.format(dtools.dbg.length)], ['Debug drops', nf.format(number(dtools.dropDbg))]);
+      if (dtools.display) cells.push(['Display refresh', dtools.display.hz == null ? 'Unavailable' : Number(dtools.display.hz).toFixed(1) + ' Hz'], ['Display budget', dtools.display.bud == null ? 'Unavailable' : us(dtools.display.bud)], ['Flutter view', dtools.display.view || 'Default']);
+      if (dtools.rebuild) cells.push(['Rebuild frames', nf.format((dtools.rebuild.frames || []).length)], ['Rebuild locations', nf.format((dtools.rebuild.loc || []).length)], ['Rebuild totals', nf.format((dtools.rebuild.tot || []).length)], ['Unresolved locations', nf.format(number(dtools.rebuild.unknown))], ['Rebuild drops', nf.format(number(dtools.rebuild.dropF) + number(dtools.rebuild.dropE))]);
       if (dtools.vmem) {
         var vmBefore = dtools.vmem.before && dtools.vmem.before.root ? dtools.vmem.before.root : null;
         var vmAfter = dtools.vmem.after && dtools.vmem.after.root ? dtools.vmem.after.root : null;
@@ -1477,8 +1557,10 @@ details[open] summary::after { content: "−"; }
     }
     var gcAnalysis = (reports[state.report].analysis || {}).gc || null;
     if (gcAnalysis && number(gcAnalysis.count) > 0) {
-      cells.push(['GC events', nf.format(number(gcAnalysis.count))], ['GC timed', nf.format(number(gcAnalysis.timed))], ['GC pause p90', gcAnalysis.p90 == null ? 'Unavailable' : us(gcAnalysis.p90)], ['GC pause max', gcAnalysis.max == null ? 'Unavailable' : us(gcAnalysis.max)]);
+      if (!r.devtools || !r.devtools.gc) cells.push(['GC events', nf.format(number(gcAnalysis.count))], ['GC timed', nf.format(number(gcAnalysis.timed))], ['GC pause p90', gcAnalysis.p90 == null ? 'Unavailable' : us(gcAnalysis.p90)], ['GC pause max', gcAnalysis.max == null ? 'Unavailable' : us(gcAnalysis.max)]);
     }
+    var pipeline = pipelineSamples();
+    if (pipeline.length) cells.push(['Pipeline samples', nf.format(pipeline.length)], ['Build wait p90', us(percentile(pipeline.map(function (item) { return item.buildWait; }), .9))], ['Raster wait p90', us(percentile(pipeline.map(function (item) { return item.rasterWait; }), .9))]);
     if (startup) { cells.push(['Startup source', startup.source || 'harness'], ['App build', duration(startup.appMs)], ['First frame', duration(startup.firstMs)], ['Ready', duration(startup.readyMs)]); }
     el('detail-grid').innerHTML = cells.map(function (cell) { return '<div class="detail-cell"><span>' + esc(cell[0]) + '</span><strong>' + esc(cell[1]) + '</strong></div>'; }).join('');
     el('raw-json').textContent = JSON.stringify(r, null, 2);
@@ -1497,7 +1579,7 @@ details[open] summary::after { content: "−"; }
   };
   var renderCategories = function () { var values = {}; events().forEach(function (e) { values[String(e.c || 'uncategorized')] = true; }); var select = el('event-category'); select.innerHTML = '<option value="">All categories</option>' + Object.keys(values).sort().map(function (value) { return '<option value="' + esc(value) + '">' + esc(value) + '</option>'; }).join(''); select.value = state.eventCategory; };
   var renderSelector = function () { var select = el('report-select'); select.innerHTML = reports.map(function (item, index) { return '<option value="' + index + '">' + esc(item.label || ('Capture ' + (index + 1))) + '</option>'; }).join(''); select.value = state.report; };
-  var render = function () { hideTooltip(); renderSelector(); renderMeta(); renderHealth(); renderMetrics(); renderStartup(); renderCoverage(); renderDevTools(); renderEventSummary(); renderStalls(); renderCategories(); renderResources(); renderComparison(); renderDetails(); renderFrames(); renderEvents(); renderCodeEvidence(); renderHotspots(); drawStartupChart(); drawFrameChart(); drawEventChart(); drawPhaseChart(); drawResourceChart(); drawCacheChart(); drawJankChart(); drawCadenceChart(); drawCacheTrendChart(); drawCategoryCostChart(); drawHotspotChart(); drawFlameChart(); drawCpuChart(); drawHeapChart(); drawHeapTrendChart(); drawVmMemoryChart(); };
+  var render = function () { hideTooltip(); renderSelector(); renderMeta(); renderHealth(); renderMetrics(); renderStartup(); renderCoverage(); renderDevTools(); renderEventSummary(); renderStalls(); renderCategories(); renderResources(); renderComparison(); renderDetails(); renderFrames(); renderEvents(); renderCodeEvidence(); renderHotspots(); drawStartupChart(); drawFrameChart(); drawEventChart(); drawPhaseChart(); drawResourceChart(); drawCacheChart(); drawJankChart(); drawCadenceChart(); drawCacheTrendChart(); drawPipelineChart(); drawGcChart(); drawCategoryCostChart(); drawHotspotChart(); drawFlameChart(); drawCpuChart(); drawHeapChart(); drawHeapTrendChart(); drawVmMemoryChart(); drawRebuildChart(); };
   el('report-select').addEventListener('change', function (event) { state.report = Number(event.target.value) || 0; state.framePage = 0; state.eventPage = 0; state.eventQuery = ''; state.eventCategory = ''; el('event-search').value = ''; render(); });
   el('frame-sort').addEventListener('change', function (event) { state.frameSort = event.target.value; state.framePage = 0; renderFrames(); });
   el('frame-prev').addEventListener('click', function () { state.framePage -= 1; renderFrames(); }); el('frame-next').addEventListener('click', function () { state.framePage += 1; renderFrames(); });
@@ -1508,10 +1590,10 @@ details[open] summary::after { content: "−"; }
   el('download-button').addEventListener('click', function () { var blob = new Blob([JSON.stringify(data)], { type: 'application/json' }); var link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = fileStem(data.title) + '.full.json'; link.click(); setTimeout(function () { URL.revokeObjectURL(link.href); }, 1000); });
   el('timeline-button').addEventListener('click', function () { var blob = new Blob([JSON.stringify(timelinePayload())], { type: 'application/json' }); var link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = (reports[state.report].label || 'cockpit-performance') + '.timeline.json'; link.click(); setTimeout(function () { URL.revokeObjectURL(link.href); }, 1000); });
   el('perfetto-button').addEventListener('click', function () { var d = report().devtools && report().devtools.perfetto; if (!d) return; var stem = fileStem(reports[state.report].label || 'cockpit-performance'); if (d.cpu && d.cpu.data) downloadBase64(d.cpu.data, stem + '.cpu.pftrace'); if (d.timeline && d.timeline.data) setTimeout(function () { downloadBase64(d.timeline.data, stem + '.timeline.pftrace'); }, 120); });
-  el('theme-button').addEventListener('click', function () { root.dataset.theme = root.dataset.theme === 'light' ? 'dark' : 'light'; drawStartupChart(); drawFrameChart(); drawEventChart(); drawPhaseChart(); drawResourceChart(); drawCacheChart(); drawJankChart(); drawCadenceChart(); drawCacheTrendChart(); drawCategoryCostChart(); drawHotspotChart(); drawFlameChart(); drawCpuChart(); drawHeapChart(); drawHeapTrendChart(); drawVmMemoryChart(); });
+  el('theme-button').addEventListener('click', function () { root.dataset.theme = root.dataset.theme === 'light' ? 'dark' : 'light'; drawStartupChart(); drawFrameChart(); drawEventChart(); drawPhaseChart(); drawResourceChart(); drawCacheChart(); drawJankChart(); drawCadenceChart(); drawCacheTrendChart(); drawPipelineChart(); drawGcChart(); drawCategoryCostChart(); drawHotspotChart(); drawFlameChart(); drawCpuChart(); drawHeapChart(); drawHeapTrendChart(); drawVmMemoryChart(); drawRebuildChart(); });
   window.addEventListener('scroll', hideTooltip, { passive: true });
-  window.addEventListener('resize', function () { drawStartupChart(); drawFrameChart(); drawEventChart(); drawPhaseChart(); drawResourceChart(); drawCacheChart(); drawJankChart(); drawCadenceChart(); drawCacheTrendChart(); drawCategoryCostChart(); drawHotspotChart(); drawFlameChart(); drawCpuChart(); drawHeapChart(); drawHeapTrendChart(); drawVmMemoryChart(); });
-  ['startup-chart', 'frame-chart', 'event-chart', 'phase-chart', 'resource-chart', 'cache-chart', 'jank-chart', 'cadence-chart', 'cache-trend-chart', 'category-cost-chart', 'hotspot-chart', 'flame-chart', 'cpu-chart', 'heap-chart', 'heap-trend-chart', 'vm-memory-chart'].forEach(bindChart);
+  window.addEventListener('resize', function () { drawStartupChart(); drawFrameChart(); drawEventChart(); drawPhaseChart(); drawResourceChart(); drawCacheChart(); drawJankChart(); drawCadenceChart(); drawCacheTrendChart(); drawPipelineChart(); drawGcChart(); drawCategoryCostChart(); drawHotspotChart(); drawFlameChart(); drawCpuChart(); drawHeapChart(); drawHeapTrendChart(); drawVmMemoryChart(); drawRebuildChart(); });
+  ['startup-chart', 'frame-chart', 'event-chart', 'phase-chart', 'resource-chart', 'cache-chart', 'jank-chart', 'cadence-chart', 'cache-trend-chart', 'pipeline-chart', 'gc-chart', 'category-cost-chart', 'hotspot-chart', 'flame-chart', 'cpu-chart', 'heap-chart', 'heap-trend-chart', 'vm-memory-chart', 'rebuild-chart'].forEach(bindChart);
   document.querySelectorAll('[data-details]').forEach(function (button) { button.addEventListener('click', function () { openDetails(button.getAttribute('data-details')); }); });
   el('details-copy').addEventListener('click', function (event) { if (!detailsPayload || !navigator.clipboard || !navigator.clipboard.writeText) return; navigator.clipboard.writeText(detailsPayload).then(function () { event.target.textContent = 'Copied'; setTimeout(function () { event.target.textContent = 'Copy details'; }, 1200); }); });
   render();

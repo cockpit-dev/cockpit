@@ -1,5 +1,10 @@
 # Changelog
 
+## 4.1.0
+
+- Extended the DevTools report contract with VM Logging zone context and
+  bounded retention metadata for runtime log/debug evidence.
+
 ## 4.0.50
 
 - Synchronized the protocol package with the current Cockpit performance

@@ -799,6 +799,11 @@ Do not use this package for a purely black-box target; use `cockpit case` or
 `cockpit suite` there. Read [flutter-test.md](references/flutter-test.md) for
 the complete API and platform workflow.
 
+For native `flutter drive` performance runs, add `--no-dds` so integration_test
+connects to the device VM Service directly; recent Flutter DDS forwarding can
+otherwise expose an unreachable host port. The complete platform commands are
+in [flutter-test.md](references/flutter-test.md).
+
 For Flutter performance work, use `cockpit.profile` around the smallest
 meaningful interaction. It records the engine's original `FrameTiming` values,
 including vsync and raster-finish wall-time timestamps, and, on native targets,
@@ -833,9 +838,22 @@ runtime identity, and VM process-memory trees. Compact results keep only counts;
 bounded projections. Selected-class allocation stacks and exact Perfetto CPU/
 timeline payloads are opt-in (`allocationClassIds` and `perfetto: true`) because
 they change profiling overhead.
+The same report records the Flutter engine display refresh rate and derived
+frame budget as `devtools.display`. Set `trackRebuilds: true` only when you
+need DevTools-compatible `Flutter.RebuiltWidgets` frame counts and source
+mappings; `devtools.rebuild` contains bounded per-frame entries, aggregate
+widget totals, unresolved locations, and drops, and restores the VM extension
+state afterward. It is separate from Cockpit's in-process rebuild tracker and
+is never enabled by default.
+VM `Logging` and `Debug` streams are captured by default as bounded metadata
+(`devtools.log` and `devtools.dbg`); they retain only values already present in
+the notifications, never evaluate VM objects, and expose drop counts when a
+limit is reached. Set `logs: false` or `debug: false` only for a deliberately
+filtered capture. Isolate snapshots also retain new/old generation heap spaces
+and breakpoint counts when available.
 The HTML report also has a DevTools coverage panel. It marks FrameTiming, raster
 cache, VM timeline, GC, process RSS, cold-start milestones, CPU sampling,
-heap/allocation profile, and matching GPU/shader timeline signals only when
+heap/allocation profile, display refresh, widget rebuilds, and matching GPU/shader timeline signals only when
 verified data is retained; unsupported platform counters remain unavailable.
 Use Cockpit network evidence for HTTP/SSE/WebSocket traffic. Its
 `Download timeline` button exports retained VM events as Chrome trace-compatible `traceEvents` JSON. FrameTiming
