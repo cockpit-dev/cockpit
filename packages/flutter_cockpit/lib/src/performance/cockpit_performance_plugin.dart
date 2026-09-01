@@ -434,6 +434,7 @@ final class CockpitPerformancePluginRegistry {
         const <CockpitPerformancePlugin>[],
     int maxEvents = 200000,
     String? isolateId,
+    void Function(CockpitPerformanceEvent event)? onEvent,
   }) {
     if (maxEvents < 0 || maxEvents > 200000) {
       throw ArgumentError.value(
@@ -468,6 +469,7 @@ final class CockpitPerformancePluginRegistry {
       selected.values,
       isolateId: normalizedIsolateId,
       maxEvents: maxEvents,
+      onEvent: onEvent,
     );
   }
 }
@@ -479,12 +481,14 @@ final class CockpitPerformancePluginCapture {
     Iterable<CockpitPerformancePlugin> plugins, {
     required this.isolateId,
     required int maxEvents,
+    required this.onEvent,
   }) : _maxEvents = maxEvents,
        _registrations = <_PluginRegistration>[
          for (final plugin in plugins) _PluginRegistration(plugin),
        ];
 
   final String? isolateId;
+  final void Function(CockpitPerformanceEvent event)? onEvent;
   final int _maxEvents;
   final List<_PluginRegistration> _registrations;
   bool isRunning = false;
@@ -586,6 +590,15 @@ final class CockpitPerformancePluginCapture {
       return false;
     }
     registration.events.add(event);
+    final sink = onEvent;
+    if (sink != null) {
+      try {
+        sink(event);
+      } on Object {
+        // Archive failures are reported by the archive itself and must never
+        // make an instrumented application action fail.
+      }
+    }
     _retainedEvents += 1;
     registration.eventCount += 1;
     switch (kind) {

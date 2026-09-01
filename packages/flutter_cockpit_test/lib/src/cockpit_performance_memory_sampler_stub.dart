@@ -13,4 +13,5 @@ final class _UnavailableMemorySampler
 
 CockpitPerformanceMemorySampler createCockpitPerformanceMemorySampler({
   required Duration interval,
+  void Function(CockpitPerformanceMemorySample sample)? onSample,
 }) => _UnavailableMemorySampler();

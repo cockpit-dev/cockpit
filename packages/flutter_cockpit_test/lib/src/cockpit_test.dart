@@ -14,6 +14,7 @@ import 'cockpit_native_tester.dart';
 import 'cockpit_debug_tools.dart';
 import 'cockpit_devtools_profiler.dart';
 import 'cockpit_performance_html.dart';
+import 'cockpit_performance_archive.dart';
 import 'cockpit_performance_html_io.dart'
     if (dart.library.html) 'cockpit_performance_html_web.dart';
 import 'cockpit_performance_memory_sampler.dart';
@@ -84,6 +85,7 @@ void cockpitTestWidgets(
     );
     addTearDown(() async {
       _publishIntegrationReport(cockpit.report);
+      await cockpit._closePerformanceArchives();
       cockpit.debug.restore();
       await cockpit.native.close();
       await flutterTester.pumpWidget(const SizedBox.shrink());
@@ -151,10 +153,43 @@ final class CockpitTester {
   final List<CockpitWatchResult> _watches = <CockpitWatchResult>[];
   final List<CockpitPerformanceReport> _performances =
       <CockpitPerformanceReport>[];
+  final Set<CockpitPerformanceArchive> _performanceArchives =
+      <CockpitPerformanceArchive>{};
 
   /// All captures completed by this tester, in capture order.
   List<CockpitPerformanceReport> get performanceReports =>
       List<CockpitPerformanceReport>.unmodifiable(_performances);
+
+  /// Opens a JSONL archive for captures that may run longer than an in-memory
+  /// report can safely retain. The archive is closed automatically with this
+  /// tester; call [CockpitPerformanceArchive.close] early when desired.
+  Future<CockpitPerformanceArchive> openPerformanceArchive({
+    String? directory,
+    String name = 'performance',
+    CockpitPerformanceArchiveOptions options =
+        const CockpitPerformanceArchiveOptions(),
+  }) async {
+    final archive = await CockpitPerformanceArchive.open(
+      directory: directory,
+      name: name,
+      options: options,
+    );
+    _performanceArchives.add(archive);
+    return archive;
+  }
+
+  Future<void> _closePerformanceArchives() async {
+    for (final archive in List<CockpitPerformanceArchive>.of(
+      _performanceArchives,
+    )) {
+      try {
+        await archive.close();
+      } on Object {
+        // The test result already contains the archive error metadata.
+      }
+    }
+    _performanceArchives.clear();
+  }
 
   /// Renders the captures completed by this tester as one offline HTML file.
   ///
@@ -213,6 +248,21 @@ final class CockpitTester {
     final json = performanceJson(title: title);
     return writeCockpitPerformanceJson(json, path: path, title: title);
   }
+
+  /// Exports completed captures as a chunked JSONL archive and returns the
+  /// manifest path. Use this for multi-hour suites or any report set that is
+  /// too large to keep as one JSON document.
+  Future<String> exportPerformanceJsonl({
+    String? directory,
+    String title = 'Cockpit performance',
+    CockpitPerformanceArchiveOptions options =
+        const CockpitPerformanceArchiveOptions(),
+  }) => CockpitPerformanceArchive.exportReports(
+    _performances,
+    directory: directory,
+    name: title,
+    options: options,
+  );
 
   /// Writes all retained Perfetto CPU/timeline traces as standalone files and
   /// returns only their absolute paths. A capture must opt into [perfetto].
@@ -294,6 +344,8 @@ final class CockpitTester {
                 'summary': performance.summary.toJson(),
                 'frames': performance.frames.length,
                 'events': performance.events.length,
+                if (performance.archive != null)
+                  'stream': performance.archive!.toJson(),
                 if (performance.memory != null)
                   'memory': <String, Object?>{
                     'source': performance.memory!.source,
@@ -555,6 +607,7 @@ final class CockpitTester {
     int maxLogs = 2000,
     int maxDebug = 2000,
     List<CockpitPerformancePlugin> plugins = const <CockpitPerformancePlugin>[],
+    CockpitPerformanceArchive? archive,
     Duration? timeout,
   }) async {
     final normalizedName = name.trim();
@@ -645,12 +698,57 @@ final class CockpitTester {
     if (collector.isRunning) {
       throw StateError('Another performance capture is already running.');
     }
+    final collectTimeline = timeline || perfetto;
+    var canTraceTimeline = collectTimeline && !kIsWeb;
+    if (canTraceTimeline) {
+      canTraceTimeline = await _hasVmService();
+    }
+    final retainedTimelineEvents = <CockpitPerformanceEvent>[];
+    var timelineDroppedEvents = 0;
+    var timelineInvalidEvents = 0;
+    var timelineNewGcCount = 0;
+    var timelineOldGcCount = 0;
+    dynamic timelineData;
+    Timer? timelineTimer;
+    Future<void>? timelinePoll;
+    String? archiveCaptureId;
+    CockpitPerformanceFrameListener? frameListener;
     final instrumentation = _PerformanceInstrumentation();
     final pluginCapture = FlutterCockpit.binding.performancePlugins.capture(
       additional: plugins,
       maxEvents: maxEvents,
+      onEvent: archive?.addEvent,
     );
-    final devToolsProfiler = CockpitDevToolsProfiler(
+    late final CockpitDevToolsProfiler devToolsProfiler;
+    Future<void> drainTimeline() async {
+      if (archive == null || !canTraceTimeline) return;
+      final raw = await devToolsProfiler.drainTimeline();
+      if (raw.isEmpty) return;
+      final parsed = _parsePerformanceTimeline(raw, maxEvents: raw.length);
+      timelineInvalidEvents += parsed.invalidEvents;
+      timelineNewGcCount += parsed.newGenGcCount ?? 0;
+      timelineOldGcCount += parsed.oldGenGcCount ?? 0;
+      for (final event in parsed.events) {
+        archive.addEvent(event);
+        if (retainedTimelineEvents.length < maxEvents) {
+          retainedTimelineEvents.add(event);
+        } else {
+          timelineDroppedEvents += 1;
+        }
+      }
+    }
+    Future<void> pollTimeline() async {
+      final current = timelinePoll;
+      if (current != null) return current;
+      final operation = drainTimeline();
+      timelinePoll = operation;
+      try {
+        await operation;
+      } finally {
+        if (identical(timelinePoll, operation)) timelinePoll = null;
+      }
+    }
+    devToolsProfiler = CockpitDevToolsProfiler(
       timeout: effectiveTimeout < const Duration(seconds: 3)
           ? effectiveTimeout
           : const Duration(seconds: 3),
@@ -661,6 +759,10 @@ final class CockpitTester {
       maxRebuildEntries: maxRebuildEntries,
       maxLogEvents: maxLogs,
       maxDebugEvents: maxDebug,
+      onIsolateEvent: archive?.addIsolate,
+      onLogEvent: archive?.addLog,
+      onDebugEvent: archive?.addDebug,
+      onHeapSample: archive?.addHeap,
     );
     try {
       await pluginCapture.start();
@@ -671,9 +773,23 @@ final class CockpitTester {
         trackPaints: trackPaints,
       );
       collector.start(mode: mode);
+      void onFrame(CockpitPerformanceFrame frame) {
+        archive?.addFrame(frame);
+      }
+      if (archive != null) {
+        frameListener = onFrame;
+        collector.addFrameListener(onFrame);
+        archiveCaptureId = archive.beginCapture(
+          id: normalizedName,
+          startedAt: collector.startedAt,
+        );
+      }
       pluginCapture.beginWindow();
       final memorySampler = memory
-          ? createCockpitPerformanceMemorySampler(interval: sampleEvery)
+          ? createCockpitPerformanceMemorySampler(
+              interval: sampleEvery,
+              onSample: archive?.addMemory,
+            )
           : null;
       memorySampler?.start();
       await devToolsProfiler.start(
@@ -687,13 +803,9 @@ final class CockpitTester {
         debug: debug,
         allocationClassIds: normalizedAllocationClassIds,
         heapSampleEvery: sampleEvery,
+        timelineStreams: List<String>.unmodifiable(streams),
+        streamTimeline: archive != null && canTraceTimeline,
       );
-      dynamic timelineData;
-      final collectTimeline = timeline || perfetto;
-      var canTraceTimeline = collectTimeline && !kIsWeb;
-      if (canTraceTimeline) {
-        canTraceTimeline = await _hasVmService();
-      }
       var timelineSource = collectTimeline
           ? kIsWeb
                 ? 'unavailable:web'
@@ -701,23 +813,37 @@ final class CockpitTester {
                 ? 'vm'
                 : 'unavailable:vm'
           : null;
+      if (archive != null && canTraceTimeline) {
+        timelineTimer = Timer.periodic(
+          archive.options.pollEvery,
+          (_) => unawaited(pollTimeline()),
+        );
+      }
       try {
         if (canTraceTimeline) {
-          final integrationBinding =
-              IntegrationTestWidgetsFlutterBinding.ensureInitialized();
-          final traced = integrationBinding.traceTimeline(
-            action,
-            streams: List<String>.unmodifiable(streams),
-          );
-          try {
-            timelineData = await traced.timeout(effectiveTimeout);
-          } on TimeoutException {
-            // Future.timeout cannot cancel the VM-service action. Wait for the
-            // owned action to finish before detaching frame callbacks, then
-            // surface the timeout to the caller instead of corrupting the next
-            // capture.
-            await traced;
-            rethrow;
+          if (archive != null) {
+            final run = action();
+            try {
+              await run.timeout(effectiveTimeout);
+            } on TimeoutException {
+              await run;
+              rethrow;
+            }
+          } else {
+            final integrationBinding =
+                IntegrationTestWidgetsFlutterBinding.ensureInitialized();
+            final traced = integrationBinding.traceTimeline(
+              action,
+              streams: List<String>.unmodifiable(streams),
+            );
+            try {
+              timelineData = await traced.timeout(effectiveTimeout);
+            } on TimeoutException {
+              // Future.timeout cannot cancel the VM-service action. Wait for
+              // the owned action to finish before detaching callbacks.
+              await traced;
+              rethrow;
+            }
           }
           timelineSource = 'vm';
         } else {
@@ -733,14 +859,26 @@ final class CockpitTester {
           }
         }
       } finally {
+        timelineTimer?.cancel();
+        timelineTimer = null;
+        await pollTimeline();
         collector.endWindow();
         pluginCapture.endWindow();
         final memoryReport = memorySampler?.stop();
         await devToolsProfiler.endWindow();
-        final parsed = _parsePerformanceTimeline(
-          timelineData,
-          maxEvents: maxEvents,
-        );
+        final parsed = archive != null && canTraceTimeline
+            ? _ParsedPerformanceTimeline(
+                events: retainedTimelineEvents,
+                invalidEvents: timelineInvalidEvents,
+                droppedEvents: timelineDroppedEvents,
+                newGenGcCount: timelineNewGcCount == 0
+                    ? null
+                    : timelineNewGcCount,
+                oldGenGcCount: timelineOldGcCount == 0
+                    ? null
+                    : timelineOldGcCount,
+              )
+            : _parsePerformanceTimeline(timelineData, maxEvents: maxEvents);
         final pluginEvents = await pluginCapture.stop(
           maxEvents: maxEvents - parsed.events.length,
         );
@@ -768,16 +906,24 @@ final class CockpitTester {
           devTools: devTools,
           plugins: pluginCapture.stats(),
         );
-        _performances.add(report);
+        var completedReport = report;
+        if (archive != null && archiveCaptureId != null) {
+          archive.endCapture(archiveCaptureId, report);
+          await archive.flush();
+          completedReport = report.copyWithArchive(archive.info);
+        }
+        _performances.add(completedReport);
         final binding =
             IntegrationTestWidgetsFlutterBinding.ensureInitialized();
         final existing = binding.reportData ?? <String, dynamic>{};
         binding.reportData = <String, dynamic>{
           ...existing,
-          'cockpit.performance.$normalizedName': report.toJson(),
+          'cockpit.performance.$normalizedName': completedReport.toJson(),
         };
       }
     } finally {
+      final listener = frameListener;
+      if (listener != null) collector.removeFrameListener(listener);
       instrumentation.restore();
       if (pluginCapture.isRunning) {
         await pluginCapture.stop();

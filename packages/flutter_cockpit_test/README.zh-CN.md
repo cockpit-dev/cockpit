@@ -220,6 +220,33 @@ final tracePaths = await cockpit.exportPerformancePerfetto();
 Perfetto 受 VM recorder 和平台能力影响。如果 RPC 不支持，或当前 recorder 直接写入系统/文件，
 本次采集仍然有效，只会在 coverage 中将该 trace 标记为不可用。
 
+### 按场景选择内存或流式归档
+
+短流程直接使用 `profile()`，报告保留在内存中，便于立即断言和生成单文件
+HTML。可能运行数小时的集成/E2E 流程，应显式打开 JSONL 归档并传给
+`profile`：帧、VM/插件事件、堆样本、RSS、日志和 Debug 事件会边采集边写入
+分片文件，而内存中的报告只保留用于快速查看的投影：
+
+```dart
+final archive = await cockpit.openPerformanceArchive(name: 'overnight-flow');
+await cockpit.profile(
+  () => runOvernightJourney(),
+  name: 'overnight-flow',
+  archive: archive,
+);
+// 测试 teardown 会自动关闭已经注册的归档并刷新 manifest。
+```
+
+显式归档默认使用 `lossless`，不设置积压上限并保留每条记录。受限 CI runner
+如需硬性限制，可改用 `CockpitPerformanceArchiveMode.low` 并设置
+`maxPendingBytes`；超出上限的记录会被丢弃，manifest 和报告会记录准确数量。
+分片大小、刷新间隔、轮询间隔和积压上限都可以配置。`archive.info.manifest` 是定位全部
+分片所需的唯一路径。对已完成报告调用 `exportPerformanceJsonl()` 也会逐条写出 JSONL，
+不会构造巨大的 JSON 数组。独立 HTML 只加载内存摘要，避免数 GB 事件拖垮浏览器。
+HTML 内嵌的是小体量内存报告。直接以 `file://` 打开时，浏览器安全策略不允许它扫描项目路径
+或自动读取外部 JSON/JSONL；需要用本地 HTTP 服务打开，或通过浏览器文件选择器明确选择
+manifest/分片。不要把数 GB 的流直接嵌入 HTML。
+
 当 VM 暴露 isolate group 时，heap 报告还会保留 group 级别的起止内存点位，覆盖多 isolate
 应用，同时不会在每个采样 tick 额外轮询所有 group。
 

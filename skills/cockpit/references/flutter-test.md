@@ -234,6 +234,29 @@ ad-hoc HTML fields. Compact test output reports counts and availability;
 complete bounded data. `allocationClassIds` is explicit opt-in for selected
 class allocation stacks, and `perfetto: true` is explicit opt-in for exact VM
 CPU/timeline proto files because both add capture overhead.
+
+Short captures can keep the complete report in memory. For a journey that can
+run for hours, choose the streaming path and write records to JSONL chunks
+instead of letting `traceTimeline` build one giant in-memory result:
+
+```dart
+final archive = await cockpit.openPerformanceArchive(name: 'overnight-flow');
+await cockpit.profile(
+  () => runOvernightJourney(),
+  name: 'overnight-flow',
+  archive: archive,
+);
+```
+
+The archive writes frames, VM/plugin events, RSS and heap samples, logs, and
+debug records incrementally. It rotates 64 MiB JSONL chunks and updates one
+manifest path. The default `lossless` mode leaves the pending queue uncapped
+and preserves every accepted record. If a constrained runner needs a hard
+queue bound, choose `CockpitPerformanceArchiveMode.low` and set
+`maxPendingBytes`; drops are counted rather than hidden. Chunk size, flush and
+poll intervals, and the queue limit are configurable. Use
+`exportPerformanceJsonl()` for completed reports. The HTML viewer displays
+archive metadata and paths, not the entire multi-gigabyte stream.
 `devtools.display` records the Flutter engine's effective refresh rate, derived
 frame budget, and selected Flutter view. Set `trackRebuilds: true` only when
 you need DevTools-compatible `Flutter.RebuiltWidgets` frame counts and source
