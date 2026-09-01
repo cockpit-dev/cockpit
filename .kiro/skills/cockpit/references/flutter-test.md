@@ -423,6 +423,21 @@ flutter test integration_test/task_flow_test.dart -d <ios-simulator-udid>
 flutter test integration_test/task_flow_test.dart -d macos
 ```
 
+For a physical iOS device connected wirelessly, `flutter test
+integration_test/...` cannot publish the VM service port in current Flutter
+toolchains and exits before launch. Connect the same device through USB, or use
+the driver form with `--publish-port`:
+
+```bash
+flutter drive --publish-port --driver=integration_test/driver.dart \
+  --target=integration_test/task_flow_test.dart -d <ios-device-udid>
+```
+
+Keep the device unlocked and accept Xcode Automation/local-network access when
+required. A successful Xcode build without a visible app process is a blocked
+launch, not a passing integration test and not permission to choose another
+device.
+
 For VM timeline/performance integration, use Flutter's profile build and driver
 with DDS disabled so the device isolate connects to the forwarded VM Service
 endpoint directly:
