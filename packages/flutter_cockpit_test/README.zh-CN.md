@@ -266,6 +266,9 @@ debug 数据仅用于诊断，不能当作发布性能证据。
 数据库、渲染或业务操作。插件只在一次显式采集中启动，不安装全局监听器，也不会改变
 正常测试行为：
 
+完整可运行示例见
+[`example/performance_plugin.dart`](example/performance_plugin.dart)。
+
 ```dart
 final report = await cockpit.profile(
   () => runCheckoutFlow(),
