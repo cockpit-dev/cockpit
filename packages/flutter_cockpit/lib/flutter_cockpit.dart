@@ -79,6 +79,7 @@ export 'src/runtime/cockpit_target_kind.dart';
 export 'src/runtime/cockpit_target_registry.dart';
 export 'src/runtime/cockpit_text_input_request.dart';
 export 'src/performance/cockpit_performance_collector.dart';
+export 'src/performance/cockpit_performance_plugin.dart';
 export 'src/session/cockpit_session.dart';
 export 'src/session/cockpit_bundle_summary_assembler.dart';
 export 'src/session/cockpit_evidence_index.dart';

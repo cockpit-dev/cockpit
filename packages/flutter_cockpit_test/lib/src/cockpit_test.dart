@@ -472,6 +472,22 @@ final class CockpitTester {
                           'timeline': true,
                       },
                   },
+                if (performance.plugins.isNotEmpty)
+                  'plugins': performance.plugins
+                      .map(
+                        (plugin) => <String, Object?>{
+                          'id': plugin.id,
+                          'state': plugin.state,
+                          if (plugin.reason != null) 'why': plugin.reason,
+                          if (plugin.eventCount > 0) 'n': plugin.eventCount,
+                          if (plugin.spanCount > 0) 'span': plugin.spanCount,
+                          if (plugin.durationUs > 0) 'dur': plugin.durationUs,
+                          if (plugin.dropped > 0) 'drop': plugin.dropped,
+                          if (plugin.invalid > 0) 'bad': plugin.invalid,
+                          if (plugin.truncated > 0) 'trunc': plugin.truncated,
+                        },
+                      )
+                      .toList(growable: false),
               },
             )
             .toList(growable: false),
@@ -538,6 +554,7 @@ final class CockpitTester {
     int maxRebuildEntries = 100000,
     int maxLogs = 2000,
     int maxDebug = 2000,
+    List<CockpitPerformancePlugin> plugins = const <CockpitPerformancePlugin>[],
     Duration? timeout,
   }) async {
     final normalizedName = name.trim();
@@ -629,6 +646,10 @@ final class CockpitTester {
       throw StateError('Another performance capture is already running.');
     }
     final instrumentation = _PerformanceInstrumentation();
+    final pluginCapture = FlutterCockpit.binding.performancePlugins.capture(
+      additional: plugins,
+      maxEvents: maxEvents,
+    );
     final devToolsProfiler = CockpitDevToolsProfiler(
       timeout: effectiveTimeout < const Duration(seconds: 3)
           ? effectiveTimeout
@@ -642,6 +663,7 @@ final class CockpitTester {
       maxDebugEvents: maxDebug,
     );
     try {
+      await pluginCapture.start();
       instrumentation.enable(
         trackBuilds: trackBuilds,
         trackUserBuilds: trackUserBuilds,
@@ -649,6 +671,7 @@ final class CockpitTester {
         trackPaints: trackPaints,
       );
       collector.start(mode: mode);
+      pluginCapture.beginWindow();
       final memorySampler = memory
           ? createCockpitPerformanceMemorySampler(interval: sampleEvery)
           : null;
@@ -710,29 +733,40 @@ final class CockpitTester {
           }
         }
       } finally {
+        collector.endWindow();
+        pluginCapture.endWindow();
+        final memoryReport = memorySampler?.stop();
+        await devToolsProfiler.endWindow();
         final parsed = _parsePerformanceTimeline(
           timelineData,
           maxEvents: maxEvents,
         );
+        final pluginEvents = await pluginCapture.stop(
+          maxEvents: maxEvents - parsed.events.length,
+        );
+        final mergedEvents = <CockpitPerformanceEvent>[
+          ...parsed.events,
+          ...pluginEvents,
+        ]..sort((left, right) => left.timestampUs.compareTo(right.timestampUs));
         final devTools = await devToolsProfiler.finish(
           cpu: cpu,
           heap: heap,
           timeline: collectTimeline,
           vmMemory: vmMemory,
           perfetto: perfetto,
-          events: parsed.events,
+          events: mergedEvents,
         );
-        final memoryReport = memorySampler?.stop();
         final report = collector.stop(
-          events: parsed.events,
+          events: mergedEvents,
           timelineSource: timelineSource,
           stepId: normalizedName,
           newGenGcCount: parsed.newGenGcCount,
           oldGenGcCount: parsed.oldGenGcCount,
-          droppedEvents: parsed.droppedEvents,
+          droppedEvents: parsed.droppedEvents + pluginCapture.retentionDrops,
           invalidEvents: parsed.invalidEvents,
           memory: memoryReport,
           devTools: devTools,
+          plugins: pluginCapture.stats(),
         );
         _performances.add(report);
         final binding =
@@ -745,6 +779,9 @@ final class CockpitTester {
       }
     } finally {
       instrumentation.restore();
+      if (pluginCapture.isRunning) {
+        await pluginCapture.stop();
+      }
     }
     return _performances.last;
   }

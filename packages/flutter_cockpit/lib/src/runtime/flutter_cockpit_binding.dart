@@ -31,6 +31,7 @@ import 'cockpit_runtime_observer_configuration.dart';
 import 'cockpit_runtime_step_buffer.dart';
 import 'cockpit_target_registry.dart';
 import '../performance/cockpit_performance_collector.dart';
+import '../performance/cockpit_performance_plugin.dart';
 
 final class FlutterCockpitBinding {
   FlutterCockpitBinding(FlutterCockpitConfiguration configuration)
@@ -58,6 +59,9 @@ final class FlutterCockpitBinding {
           CockpitPerformanceCollector(
             platform: kIsWeb ? 'web' : defaultTargetPlatform.name,
           ),
+      performancePlugins = CockpitPerformancePluginRegistry(
+        plugins: configuration.performancePlugins,
+      ),
       currentRouteName = ValueNotifier<String>(
         _normalizeConfiguredRouteName(configuration.initialRouteName),
       ) {
@@ -93,6 +97,7 @@ final class FlutterCockpitBinding {
   CockpitRuntimeObserver? runtimeObserver;
   final CockpitRuntimeStepBuffer runtimeStepBuffer;
   CockpitPerformanceCollector performanceCollector;
+  final CockpitPerformancePluginRegistry performancePlugins;
   final ValueNotifier<String> currentRouteName;
   late final NavigatorObserver navigatorObserver;
   final Set<_FlutterCockpitNavigatorObserver> _navigatorObservers =
@@ -240,6 +245,7 @@ final class FlutterCockpitBinding {
       nextDiagnostics: nextConfiguration.diagnostics,
     );
     _reconfigureRuntimeReferences(nextConfiguration);
+    performancePlugins.replace(nextConfiguration.performancePlugins);
     final nextPerformance = nextConfiguration.performanceCollector;
     if (nextPerformance != null &&
         !identical(nextPerformance, performanceCollector)) {

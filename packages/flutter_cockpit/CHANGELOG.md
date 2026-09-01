@@ -1,5 +1,15 @@
 # Changelog
 
+## 4.2.0
+
+- Added explicit development-only performance plugins for AOP, business,
+  network, database, and rendering instrumentation.
+- Merged bounded plugin events into the same monotonic timeline as VM events,
+  with source/isolate/location attribution, category filtering, sampling,
+  payload limits, lifecycle deadlines, and isolated failure reporting.
+- Closed frame, VM, memory, and plugin capture windows before teardown so
+  cleanup and report-export work cannot inflate measured interaction timings.
+
 ## 4.1.0
 
 - Synchronized the Flutter bridge package with the expanded DevTools evidence

@@ -17,6 +17,8 @@ export 'package:cockpit_protocol/cockpit_protocol.dart'
         CockpitPerformanceMemoryReport,
         CockpitPerformanceMemorySample,
         CockpitPerformanceMemorySummary;
+export 'package:cockpit_protocol/cockpit_protocol.dart'
+    show CockpitPerformancePluginStats;
 
 /// Collects engine-reported frame timings for an explicit, bounded capture.
 ///
@@ -80,7 +82,10 @@ final class CockpitPerformanceCollector {
   int _seenFrames = 0;
   int _invalidFrames = 0;
   bool _running = false;
+  bool _windowEnded = false;
   CockpitPerformanceMode? _activeMode;
+  Duration? _elapsed;
+  DateTime? _finishedAt;
 
   bool get isRunning => _running;
   DateTime? get startedAt => _startedAt;
@@ -100,6 +105,9 @@ final class CockpitPerformanceCollector {
     _activeMode = mode ?? this.mode;
     _startedAt = _now().toUtc();
     _clock = Stopwatch()..start();
+    _elapsed = null;
+    _finishedAt = null;
+    _windowEnded = false;
     _timingsCallback = _recordTimings;
     SchedulerBinding.instance.addTimingsCallback(_timingsCallback!);
     _running = true;
@@ -108,7 +116,7 @@ final class CockpitPerformanceCollector {
   /// Records a single engine timing. This is public for deterministic host or
   /// test adapters that already receive [FrameTiming] from Flutter.
   void record(FrameTiming timing) {
-    if (!_running) return;
+    if (!_running || _windowEnded) return;
     final frame = _frame(timing, index: _seenFrames);
     if (frame == null) {
       _invalidFrames += 1;
@@ -118,6 +126,28 @@ final class CockpitPerformanceCollector {
     if (_frames.length < maxFrames) {
       _frames.add(frame);
     }
+  }
+
+  /// Freezes the measured interval at the end of the user action.
+  /// Subsequent teardown and report-export work cannot affect frame timing or
+  /// elapsed duration. [stop] still owns report construction and cleanup.
+  void endWindow() {
+    if (!_running || _windowEnded) return;
+    final clock = _clock;
+    if (clock != null) {
+      clock.stop();
+      _elapsed = clock.elapsed;
+    }
+    final started = _startedAt;
+    if (started != null && _elapsed != null) {
+      _finishedAt = started.add(_elapsed!);
+    }
+    final callback = _timingsCallback;
+    if (callback != null) {
+      SchedulerBinding.instance.removeTimingsCallback(callback);
+      _timingsCallback = null;
+    }
+    _windowEnded = true;
   }
 
   /// Stops the capture and creates a self-consistent report.
@@ -134,6 +164,8 @@ final class CockpitPerformanceCollector {
     int? oldGenGcCount,
     CockpitPerformanceMemoryReport? memory,
     CockpitDevToolsProfile? devTools,
+    Iterable<CockpitPerformancePluginStats> plugins =
+        const <CockpitPerformancePluginStats>[],
     int droppedEvents = 0,
     int invalidEvents = 0,
   }) {
@@ -141,9 +173,9 @@ final class CockpitPerformanceCollector {
       throw StateError('No performance capture is running.');
     }
     final started = _startedAt!;
-    final clock = _clock!..stop();
-    final elapsed = clock.elapsed;
-    final finished = started.add(elapsed);
+    endWindow();
+    final elapsed = _elapsed ?? Duration.zero;
+    final finished = _finishedAt ?? started.add(elapsed);
     final activeMode = _activeMode ?? mode;
     try {
       final boundedEvents = events.toList(growable: false);
@@ -180,6 +212,7 @@ final class CockpitPerformanceCollector {
         invalidEvents: invalidEvents,
         memory: memory,
         devTools: devTools,
+        plugins: plugins,
         timelineSource: timelineSource,
         stepId: stepId,
       );
@@ -321,6 +354,9 @@ final class CockpitPerformanceCollector {
     _clock = null;
     _activeMode = null;
     _running = false;
+    _windowEnded = false;
+    _elapsed = null;
+    _finishedAt = null;
   }
 }
 

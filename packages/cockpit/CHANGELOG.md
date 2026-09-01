@@ -1,5 +1,13 @@
 # Changelog
 
+## 4.2.0
+
+- Fixed native condition waits and bounded scroll searches so reaching a
+  deadline returns the actual target/idle result instead of a misleading
+  system-command timeout.
+- Synchronized the CLI and Supervisor package with the attributable Flutter
+  performance-plugin release.
+
 ## 4.1.0
 
 - Synchronized the Cockpit CLI, Supervisor, and protocol dependency with the

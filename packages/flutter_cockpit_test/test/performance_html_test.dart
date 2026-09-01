@@ -90,6 +90,8 @@ void main() {
     expect(html, contains("window.addEventListener('scroll', hideTooltip"));
     expect(html, contains('Capture comparison'));
     expect(html, contains('Timeline events'));
+    expect(html, contains('Instrumentation plugins'));
+    expect(html, contains('id="plugin-body"'));
     expect(html, contains('Code evidence'));
     expect(html, contains('<svg viewBox="0 0 1024 1024"'));
     expect(html, contains('id="chart-tooltip"'));
@@ -208,6 +210,46 @@ void main() {
     expect(reports[1]['analysis']['hotspots'][0]['p90'], 250);
     expect(reports[1]['analysis']['gc']['count'], 0);
   });
+
+  test(
+    'renders plugin attribution and source metadata in the timeline view',
+    () {
+      final report = CockpitPerformanceReport.fromJson(<String, Object?>{
+        ..._report(step: 'plugin').toJson(),
+        'plugins': <Object?>[
+          <String, Object?>{
+            'id': 'checkout-aop',
+            'state': 'available',
+            'ver': '1.0.0',
+            'n': 2,
+            'span': 1,
+            'instant': 1,
+            'dur': 1200,
+            'cat': <String, Object?>{'business': 2},
+          },
+        ],
+        'events': <Object?>[
+          <String, Object?>{
+            'n': 'checkout.fetch',
+            'c': 'business',
+            't': 500,
+            'd': 1200,
+            'p': 'X',
+            'src': 'checkout-aop',
+            'iso': 'isolates/1',
+            'u': 'package:checkout/checkout.dart',
+            'l': 42,
+            'a': <String, Object?>{'status': 200},
+          },
+        ],
+      });
+      final html = CockpitPerformanceHtml.render(report);
+      expect(html, contains('checkout-aop'));
+      expect(html, contains('Source'));
+      expect(html, contains('event.src'));
+      expect(html, contains('plugin-body'));
+    },
+  );
 
   test(
     'Perfetto stays metadata-only in compact output and is retained in HTML',

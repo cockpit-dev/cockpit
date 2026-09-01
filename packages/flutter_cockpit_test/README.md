@@ -329,6 +329,55 @@ The HTML report adds source evidence only when VM event arguments contain a
 file, URL, symbol, or line. Frame timings alone do not identify Dart code, so
 the report never invents a source location.
 
+### Instrumentation plugins and AOP adapters
+
+Use `CockpitPerformancePlugin` when the application exposes a development hook
+for repository, network, database, rendering, or business operations. The
+plugin is started only for one explicit capture and does not install a global
+listener:
+
+```dart
+final report = await cockpit.profile(
+  () => runCheckoutFlow(),
+  plugins: <CockpitPerformancePlugin>[
+    CockpitPerformancePlugin(
+      id: 'checkout-aop',
+      start: (context) {
+        CheckoutHooks.onSpan = (name, startUs, endUs) {
+          context.sink.span(
+            name,
+            category: 'business',
+            startUs: startUs,
+            endUs: endUs,
+            location: const CockpitPerformanceLocation(
+              uri: 'package:checkout/checkout.dart',
+              line: 42,
+            ),
+          );
+        };
+      },
+    ),
+  ],
+);
+```
+
+Use `instant` for a point event, `begin/end` or `trace` for a duration, and
+`counter`/`sample` for numeric values. Events use the same monotonic timestamp
+axis as VM timeline events and are merged into `report.events`; each carries
+the plugin source and optional isolate/source location. Per-plugin limits,
+sampling, category filters, payload depth/size, and drop/invalid/truncation
+counts keep captures bounded. A throwing plugin is marked `failed` without
+failing the measured action. Inspect `report.plugins` for attribution and
+statistics; compact output keeps counts, while full JSON, HTML, and the
+downloaded Chrome trace retain the bounded event detail. AOP adapters should
+call the sink from explicit development hooks; implicit production-wide
+instrumentation is intentionally unsupported.
+
+Plugin setup and cleanup are each bounded by the plugin's
+`CockpitPerformancePluginOptions.lifecycleTimeout` (two seconds by default).
+The measured window closes before plugin cleanup and report generation, so
+teardown work is not attributed to the profiled interaction.
+
 The DevTools section includes a VM heap trend chart, CPU/heap/GPU summaries,
 VM identity and isolate inventory, all-isolate lifecycle snapshots/events, and
 recorder/stream metadata. Each section has a

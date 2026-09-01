@@ -1,5 +1,10 @@
 # Changelog
 
+## 4.2.0
+
+- Added validated performance-plugin statistics and source/isolate location
+  fields for attributable application instrumentation events.
+
 ## 4.1.0
 
 - Extended the DevTools report contract with VM Logging zone context and

@@ -838,6 +838,46 @@ runtime identity, and VM process-memory trees. Compact results keep only counts;
 bounded projections. Selected-class allocation stacks and exact Perfetto CPU/
 timeline payloads are opt-in (`allocationClassIds` and `perfetto: true`) because
 they change profiling overhead.
+
+For application-owned attribution, register `CockpitPerformancePlugin` in the
+development shell or pass `plugins: [...]` to one `cockpit.profile()` call. A
+plugin is inert outside an explicit capture. Its sink exposes `instant`,
+`begin/end`, `trace`, `counter`, and `sample`; every event uses the same
+monotonic clock as VM timeline events and carries `src` plus optional isolate
+and source location. Keep AOP adapters on explicit development hooks rather
+than weaving production code. Per-plugin and global event limits, category
+filters, sampling, payload depth/size bounds, and invalid/truncated/drop counts
+are enforced before events enter the report. A failed plugin is isolated and
+reported in `report.plugins`; it never fails the measured action. Compact
+results keep only plugin counts and drops, while complete JSON, HTML, and
+`Download timeline` retain the bounded attributable events. Example:
+
+```dart
+final report = await cockpit.profile(
+  () => runCheckoutFlow(),
+  plugins: <CockpitPerformancePlugin>[
+    CockpitPerformancePlugin(
+      id: 'checkout-aop',
+      start: (context) {
+        CheckoutHooks.onSpan = (name, startUs, endUs) {
+          context.sink.span(
+            name,
+            category: 'business',
+            startUs: startUs,
+            endUs: endUs,
+          );
+        };
+      },
+    ),
+  ],
+);
+```
+
+Plugin setup and cleanup have a bounded lifecycle timeout (two seconds by
+default). The profile closes frame, memory, VM, and plugin windows immediately
+after the action, before teardown/report export, so instrumentation overhead is
+not attributed to the measured interaction.
+
 The same report records the Flutter engine display refresh rate and derived
 frame budget as `devtools.display`. Set `trackRebuilds: true` only when you
 need DevTools-compatible `Flutter.RebuiltWidgets` frame counts and source
