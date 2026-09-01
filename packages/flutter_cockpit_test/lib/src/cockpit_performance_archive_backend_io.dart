@@ -35,10 +35,12 @@ final class _JsonlPerformanceArchive
   var _opened = false;
   Future<void>? _flushFuture;
   var _pendingBytes = 0;
+  var _busy = false;
   String? _reason;
   Future<void> _manifestQueue = Future<void>.value();
   Timer? _flushTimer;
   final List<String> _chunks = <String>[];
+  final List<_ArchiveRecord> _deferred = <_ArchiveRecord>[];
 
   @override
   Future<void> open() async {
@@ -69,8 +71,8 @@ final class _JsonlPerformanceArchive
     }
     // `q` is reserved for the JSONL record type; payloads keep their native
     // compact keys (an isolate event already uses `k` for its lifecycle kind).
-    final record = <String, Object?>{'q': kind, ...value};
-    final line = '${jsonEncode(record)}\n';
+    final payload = <String, Object?>{'q': kind, ...value};
+    final line = '${jsonEncode(payload)}\n';
     final bytes = utf8.encode(line).length;
     final maxPendingBytes = options.maxPendingBytes;
     if (options.mode == CockpitPerformanceArchiveMode.low &&
@@ -79,6 +81,21 @@ final class _JsonlPerformanceArchive
       _dropped += 1;
       return;
     }
+    if (_sink == null) {
+      _errors += 1;
+      _reason ??= 'archive sink is unavailable';
+      return;
+    }
+    final record = _ArchiveRecord(kind: kind, line: line, bytes: bytes);
+    _pendingBytes += bytes;
+    if (_busy) {
+      _deferred.add(record);
+      return;
+    }
+    _writeRecord(record);
+  }
+
+  void _writeRecord(_ArchiveRecord record) {
     final sink = _sink;
     if (sink == null) {
       _errors += 1;
@@ -86,17 +103,25 @@ final class _JsonlPerformanceArchive
       return;
     }
     try {
-      sink.write(line);
-      _pendingBytes += bytes;
-      _bytes += bytes;
+      sink.write(record.line);
+      _bytes += record.bytes;
       _records += 1;
-      _chunkBytes += bytes;
+      _chunkBytes += record.bytes;
       _chunkRecords += 1;
-      if (kind == 'e') _events += 1;
-      if (kind == 'f') _frames += 1;
+      if (record.kind == 'e') _events += 1;
+      if (record.kind == 'f') _frames += 1;
     } on Object catch (error) {
       _errors += 1;
       _reason ??= _shortReason(error);
+    }
+  }
+
+  void _drainDeferred() {
+    if (_deferred.isEmpty) return;
+    final records = List<_ArchiveRecord>.of(_deferred);
+    _deferred.clear();
+    for (final record in records) {
+      _writeRecord(record);
     }
   }
 
@@ -117,17 +142,33 @@ final class _JsonlPerformanceArchive
   }
 
   Future<void> _flushImpl(IOSink sink) async {
+    _busy = true;
     try {
-      await sink.flush();
-      _pendingBytes = 0;
+      await _flushUntilIdle(sink);
       if (_chunkBytes >= options.chunkBytes && _chunkRecords > 0) {
         await _rotateChunk();
-      } else {
-        _writeManifest('active');
+        final rotatedSink = _sink;
+        if (rotatedSink != null) {
+          await _flushUntilIdle(rotatedSink);
+        }
       }
+      _pendingBytes = 0;
+      _writeManifest('active');
     } on Object catch (error) {
       _errors += 1;
       _reason ??= _shortReason(error);
+    } finally {
+      _busy = false;
+    }
+  }
+
+  Future<void> _flushUntilIdle(IOSink sink) async {
+    var activeSink = sink;
+    while (true) {
+      await activeSink.flush();
+      _drainDeferred();
+      if (_deferred.isEmpty) return;
+      activeSink = _sink ?? activeSink;
     }
   }
 
@@ -140,39 +181,48 @@ final class _JsonlPerformanceArchive
     _flushTimer?.cancel();
     _flushTimer = null;
     await flush();
+    _busy = true;
     final sink = _sink;
     final part = _partFile;
-    if (sink != null) {
-      try {
-        await sink.flush();
-        await sink.close();
-        _pendingBytes = 0;
-      } on Object catch (error) {
-        _errors += 1;
-        _reason ??= _shortReason(error);
-      }
-    }
-    if (part != null && await part.exists()) {
-      final finalFile = File(part.path.replaceFirst(RegExp(r'\.part$'), ''));
-      try {
-        if (_chunkRecords > 0) {
-          await part.rename(finalFile.path);
-          if (!_chunks.contains(finalFile.path)) _chunks.add(finalFile.path);
-        } else {
-          await part.delete();
+    try {
+      if (sink != null) {
+        try {
+          await _flushUntilIdle(sink);
+          // Reject late records once the final flush is complete. A frame
+          // listener arriving during close must not be queued behind a sink
+          // that is already being closed.
+          _closed = true;
+          await sink.close();
+          _pendingBytes = 0;
+        } on Object catch (error) {
+          _errors += 1;
+          _reason ??= _shortReason(error);
         }
-      } on Object catch (error) {
-        _errors += 1;
-        _reason ??= _shortReason(error);
       }
+      if (part != null && await part.exists()) {
+        final finalFile = File(part.path.replaceFirst(RegExp(r'\.part$'), ''));
+        try {
+          if (_chunkRecords > 0) {
+            await part.rename(finalFile.path);
+            if (!_chunks.contains(finalFile.path)) _chunks.add(finalFile.path);
+          } else {
+            await part.delete();
+          }
+        } on Object catch (error) {
+          _errors += 1;
+          _reason ??= _shortReason(error);
+        }
+      }
+      _sink = null;
+      _partFile = null;
+      _closed = true;
+      await _manifestQueue;
+      _writeManifest(_errors == 0 ? 'done' : 'failed');
+      await _manifestQueue;
+      return snapshot();
+    } finally {
+      _busy = false;
     }
-    _sink = null;
-    _partFile = null;
-    _closed = true;
-    await _manifestQueue;
-    _writeManifest(_errors == 0 ? 'done' : 'failed');
-    await _manifestQueue;
-    return snapshot();
   }
 
   @override
@@ -213,7 +263,6 @@ final class _JsonlPerformanceArchive
     _sink = null;
     _partFile = null;
     await _openChunk();
-    _writeManifest('active');
   }
 
   void _writeManifest(String state) {
@@ -258,6 +307,18 @@ final class _JsonlPerformanceArchive
     }
     return paths;
   }
+}
+
+final class _ArchiveRecord {
+  const _ArchiveRecord({
+    required this.kind,
+    required this.line,
+    required this.bytes,
+  });
+
+  final String kind;
+  final String line;
+  final int bytes;
 }
 
 CockpitPerformanceArchiveBackend createCockpitPerformanceArchiveBackend({

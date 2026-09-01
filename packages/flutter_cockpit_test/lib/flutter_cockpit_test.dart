@@ -56,6 +56,8 @@ export 'package:cockpit_protocol/cockpit_protocol.dart'
         CockpitPerfettoTrace;
 export 'src/cockpit_test.dart';
 export 'src/cockpit_debug_tools.dart';
+export 'src/cockpit_vm_debugger.dart';
+export 'src/cockpit_vm_debugger_models.dart';
 export 'src/cockpit_test_options.dart';
 export 'src/cockpit_native_tester.dart';
 export 'src/cockpit_performance_html.dart';

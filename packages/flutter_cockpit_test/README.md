@@ -176,6 +176,33 @@ compact `cockpit` entry is merged into `integration_test`'s `reportData`. Large
 snapshots and binary evidence are kept as artifacts; they are not dumped into
 test output.
 
+## VM debugger controls
+
+When the test runner exposes a Dart VM Service, `cockpit.debugger` provides the
+common Dart-Code debugger loop without requiring a separate IDE connection. It
+uses one lazy, reusable VM session and keeps reads bounded:
+
+```dart
+final state = await cockpit.debugger.status();
+if (state.runnable == true) {
+  await cockpit.debugger.pause();
+}
+final paused = await cockpit.debugger.status(stackLimit: 32);
+final value = await cockpit.debugger.evaluateInFrame(0, 'cart.length');
+await cockpit.debugger.resume();
+```
+
+The facade also supports `stack`, `evaluate`, `getObject`, source
+`addBreakpoint`/`removeBreakpoint`, `setBreakpointEnabled`, `setPauseMode`,
+`setLibraryDebuggable`, `reloadSources`, and an explicit `callServiceExtension`
+for Flutter inspector or custom service extensions. The
+returned models contain verified source locations, frame variables, pause
+state, and bounded value summaries; large object pages are fetched only when
+`getObject` is called with an explicit `offset`/`count`. `available` is a
+side-effect-free probe, and unsupported web/release runners report an
+unavailable VM Service through the typed exception rather than fabricating
+debug data.
+
 ## Performance profiling
 
 Profile an interaction with the same test clock and frame pipeline used by the
@@ -186,8 +213,13 @@ Flutter targets it also captures the official integration-test VM timeline and
 GC events plus bounded process RSS samples; web reports the timeline and memory
 as unavailable instead of fabricating data. If a local `flutter test` process
 does not expose a VM Service URI, the action still runs normally and the report
-records `unavailable:vm`; native `flutter drive`/instrumentation runs keep the
-official VM timeline:
+records `unavailable:vm`; `flutter drive --profile --no-dds` and native
+instrumentation runs keep the official VM timeline. `flutter test
+integration_test/...` is debug-only, and the non-web Flutter Driver rejects
+`flutter drive --release`. Use a native XCTest, Android instrumentation, or
+device-lab harness for release artifacts; VM-backed timeline, CPU, heap, GC,
+and DevTools data are unavailable unless that harness provides an equivalent
+collector:
 
 ```dart
 final report = await cockpit.profile(
@@ -418,10 +450,13 @@ teardown work is not attributed to the profiled interaction.
 
 The DevTools section includes a VM heap trend chart, CPU/heap/GPU summaries,
 VM identity and isolate inventory, all-isolate lifecycle snapshots/events, and
-recorder/stream metadata. Each section has a
+recorder/stream metadata. Isolate snapshots and the VM runtime index include
+the service-extension RPC names reported by the VM, so a missing DevTools
+capability can be diagnosed from the capture without guessing. Each section has a
 compact **Details** action that opens a native dialog with bounded JSON
-previews. The full retained arrays remain in the JSON download, so opening a
-dialog does not freeze the report. CPU details also include verified sample
+previews. The full retained arrays are embedded in the HTML report and are
+also available from the JSON export API, so opening a dialog does not freeze
+the report. CPU details also include verified sample
 stack paths aggregated from VM function indexes, without inventing source code.
 
 The report also includes **Operation hotspots**, aggregating each actual VM

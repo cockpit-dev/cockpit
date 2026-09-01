@@ -584,6 +584,28 @@ final class CockpitVmRuntimeProfile {
   final int? systemIsolateCount;
   final List<String> extensions;
 
+  /// Returns an immutable copy with selected runtime fields replaced.
+  ///
+  /// VM service extensions can appear after the initial VM snapshot (for
+  /// example when a Flutter isolate registers an extension during startup),
+  /// so the profiler needs to update this metadata without rebuilding the
+  /// rest of the runtime identity.
+  CockpitVmRuntimeProfile copyWith({Iterable<String>? extensions}) =>
+      CockpitVmRuntimeProfile(
+        name: name,
+        version: version,
+        operatingSystem: operatingSystem,
+        hostCpu: hostCpu,
+        targetCpu: targetCpu,
+        architectureBits: architectureBits,
+        pid: pid,
+        startTimeMs: startTimeMs,
+        isolateCount: isolateCount,
+        isolateGroupCount: isolateGroupCount,
+        systemIsolateCount: systemIsolateCount,
+        extensions: extensions ?? this.extensions,
+      );
+
   Map<String, Object?> toJson() => <String, Object?>{
     if (name != null && name!.trim().isNotEmpty) 'name': name,
     if (version != null && version!.trim().isNotEmpty) 'ver': version,
@@ -1292,6 +1314,7 @@ final class CockpitIsolateStats {
     this.livePorts,
     this.libraryCount,
     this.extensionCount,
+    this.extensionRpcs = const <String>[],
     this.startTimeMs,
     this.system,
     this.pauseKind,
@@ -1314,6 +1337,7 @@ final class CockpitIsolateStats {
   final int? livePorts;
   final int? libraryCount;
   final int? extensionCount;
+  final List<String> extensionRpcs;
   final int? startTimeMs;
   final bool? system;
   final String? pauseKind;
@@ -1336,6 +1360,7 @@ final class CockpitIsolateStats {
     if (livePorts != null) 'ports': livePorts,
     if (libraryCount != null) 'libs': libraryCount,
     if (extensionCount != null) 'ext': extensionCount,
+    if (extensionRpcs.isNotEmpty) 'rpcs': extensionRpcs,
     if (startTimeMs != null) 'start': startTimeMs,
     if (system != null) 'sys': system,
     if (pauseKind != null && pauseKind!.isNotEmpty) 'pause': pauseKind,
@@ -1373,6 +1398,13 @@ final class CockpitIsolateStats {
       extensionCount: json['ext'] == null
           ? null
           : _nonNegativeInt(json['ext'], r'$.devtools.isolate.stats.ext'),
+      extensionRpcs: json['rpcs'] == null
+          ? const <String>[]
+          : _boundedStrings(
+              json['rpcs'],
+              r'$.devtools.isolate.stats.rpcs',
+              maximum: 500,
+            ),
       startTimeMs: json['start'] == null
           ? null
           : _nonNegativeInt(json['start'], r'$.devtools.isolate.stats.start'),
@@ -1970,4 +2002,16 @@ List<String> _strings(Object? value, String path) {
   return List<String>.unmodifiable(
     value.map((item) => _string(item, '$path[]')),
   );
+}
+
+List<String> _boundedStrings(
+  Object? value,
+  String path, {
+  required int maximum,
+}) {
+  final values = _strings(value, path);
+  if (values.length > maximum) {
+    throw FormatException('$path contains too many values.');
+  }
+  return values;
 }

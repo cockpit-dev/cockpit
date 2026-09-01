@@ -1,5 +1,10 @@
 # Changelog
 
+## 4.3.0
+
+- Synchronized the Flutter bridge package with the lossless performance archive
+  and source-aware VM debugger release.
+
 ## 4.2.0
 
 - Added explicit development-only performance plugins for AOP, business,

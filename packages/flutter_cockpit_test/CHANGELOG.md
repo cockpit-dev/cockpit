@@ -1,5 +1,13 @@
 # Changelog
 
+## 4.3.0
+
+- Added the reusable `CockpitTester.debugger` VM session for pause/resume,
+  stacks, bounded evaluation, breakpoints, service extensions, and source
+  locations without a second debugger connection.
+- Added lossless JSONL performance archives with manifest/chunk rotation and
+  exports that resolve the latest archive state before rendering.
+
 ## 4.2.0
 
 - Added `CockpitPerformancePlugin` capture support for explicit AOP and custom

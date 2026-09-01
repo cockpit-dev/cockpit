@@ -174,6 +174,30 @@ await cockpit.waitForUi();
 `cockpit.flutter` remains the underlying `WidgetTester` for custom matchers,
 goldens, pump control, or Flutter APIs intentionally outside Cockpit.
 
+## VM debugger loop
+
+When a native debug/profile harness exposes the Dart VM Service, use the lazy
+`cockpit.debugger` session for the common Dart-Code debugger operations instead
+of opening a second socket or guessing raw RPC payloads:
+
+```dart
+final state = await cockpit.debugger.status(stackLimit: 32);
+if (state.runnable == true) await cockpit.debugger.pause();
+final paused = await cockpit.debugger.status();
+final value = await cockpit.debugger.evaluateInFrame(0, 'cart.length');
+await cockpit.debugger.resume();
+```
+
+The facade also exposes `stack`, `evaluate`, `getObject`, source
+`addBreakpoint`/`removeBreakpoint`, `setBreakpointEnabled`, `setPauseMode`,
+`setLibraryDebuggable`, `reloadSources`, and explicit `callServiceExtension`
+for Flutter inspector or app extensions. Results are
+bounded summaries with verified frame variables and source locations; object
+collections are paged only by an explicit `getObject(offset:, count:)`. Use
+`available` for a side-effect-free capability probe. Web or a release harness
+without VM Service returns an unavailable debugger error; it never fabricates
+stack, pause, or evaluation data.
+
 ## Performance profiling
 
 Use `cockpit.profile` for a bounded action-level performance capture:
@@ -212,8 +236,14 @@ events. CPU sampling and heap allocation profiling are enabled by default when
 the VM service is available; tune `cpu`, `heap`, `maxCpuSamples`, and
 `maxHeapClasses` for long captures. Web reports these as unavailable and never
 substitutes fake values. A local `flutter test` process without a VM Service URI still runs
-the action and records `unavailable:vm`; `flutter drive` and native
-instrumentation keep the official VM timeline. The
+the action and records `unavailable:vm`; `flutter drive --profile --no-dds` and
+native instrumentation keep the official VM timeline. The non-web Flutter
+Driver does not support `flutter drive --release` and Flutter exits before the
+test starts; do not use release with the VM-backed driver. For a true release
+artifact, use the platform-native integration harness (XCTest, Android
+instrumentation, or a device lab) and treat VM timeline, CPU, heap, GC, and
+DevTools metrics as unavailable unless that harness provides an equivalent
+collector. The
 complete report is under `cockpit.performance.<name>` in
 `IntegrationTestWidgetsFlutterBinding.reportData`, while the normal Cockpit
 result keeps only summary metrics. `dropped` is explicit when a retention
@@ -234,6 +264,29 @@ ad-hoc HTML fields. Compact test output reports counts and availability;
 complete bounded data. `allocationClassIds` is explicit opt-in for selected
 class allocation stacks, and `perfetto: true` is explicit opt-in for exact VM
 CPU/timeline proto files because both add capture overhead.
+
+Short captures can keep the complete report in memory. For a journey that can
+run for hours, choose the streaming path and write records to JSONL chunks
+instead of letting `traceTimeline` build one giant in-memory result:
+
+```dart
+final archive = await cockpit.openPerformanceArchive(name: 'overnight-flow');
+await cockpit.profile(
+  () => runOvernightJourney(),
+  name: 'overnight-flow',
+  archive: archive,
+);
+```
+
+The archive writes frames, VM/plugin events, RSS and heap samples, logs, and
+debug records incrementally. It rotates 64 MiB JSONL chunks and updates one
+manifest path. The default `lossless` mode leaves the pending queue uncapped
+and preserves every accepted record. If a constrained runner needs a hard
+queue bound, choose `CockpitPerformanceArchiveMode.low` and set
+`maxPendingBytes`; drops are counted rather than hidden. Chunk size, flush and
+poll intervals, and the queue limit are configurable. Use
+`exportPerformanceJsonl()` for completed reports. The HTML viewer displays
+archive metadata and paths, not the entire multi-gigabyte stream.
 `devtools.display` records the Flutter engine's effective refresh rate, derived
 frame budget, and selected Flutter view. Set `trackRebuilds: true` only when
 you need DevTools-compatible `Flutter.RebuiltWidgets` frame counts and source
@@ -249,8 +302,10 @@ capture that must exclude them. Use `maxLogs` and `maxDebug` only for very long
 captures that need a different retention bound. Isolate snapshots retain
 new/old generation heap spaces and breakpoint counts when the VM exposes those
 fields.
-Reports include the Flutter build mode; debug timings are diagnostic only, while
-profile and release timings are suitable for performance decisions. The
+Reports include the Flutter build mode. Debug timings are diagnostic only;
+profile timings are suitable for performance decisions. Release timings are
+valid only when collected by a native release harness, never by `flutter drive`.
+The
 standalone HTML report converts engine timestamps to relative capture time,
 exposes hover details for every chart, includes jank/cadence/raster-cache,
 startup milestones, memory/cache/GC, VM category cost, Operation hotspots, and
@@ -361,17 +416,26 @@ flutter test integration_test/task_flow_test.dart -d <ios-simulator-udid>
 flutter test integration_test/task_flow_test.dart -d macos
 ```
 
-For VM timeline/performance integration, use Flutter's driver with DDS disabled
-so the device isolate connects to the forwarded VM Service endpoint directly:
+For VM timeline/performance integration, use Flutter's profile build and driver
+with DDS disabled so the device isolate connects to the forwarded VM Service
+endpoint directly:
 
 ```bash
-flutter drive --no-dds --driver=integration_test/driver.dart \
+flutter drive --profile --no-dds --driver=integration_test/driver.dart \
   --target=integration_test/performance_profile_test.dart -d emulator-5554
-flutter drive --no-dds --driver=integration_test/driver.dart \
+flutter drive --profile --no-dds --driver=integration_test/driver.dart \
   --target=integration_test/performance_profile_test.dart -d <ios-simulator-udid>
-flutter drive --no-dds --driver=integration_test/driver.dart \
+flutter drive --profile --no-dds --driver=integration_test/driver.dart \
   --target=integration_test/performance_profile_test.dart -d macos
 ```
+
+`flutter test integration_test/...` always uses debug mode and does not accept
+`--profile` or `--release`. `flutter drive --release` is not a fallback: the
+non-web Flutter Driver rejects release mode. Build release integration artifacts
+only for a native XCTest, Android instrumentation, or device-lab runner when
+release correctness or real production startup is the decision; expect
+Cockpit's VM-backed timeline and DevTools panels to be unavailable in that
+harness.
 
 Without `--no-dds`, recent Flutter toolchains can advertise a host-only DDS
 port and make `integration_test` timeline capture fail with a connection error.
