@@ -217,14 +217,29 @@ as unavailable instead of receiving guessed values.
 
 Register AOP or other instrumentation explicitly in the development shell. A
 plugin is inert during normal app execution and receives a bounded sink only
-while `cockpit.profile()` is running:
+while `cockpit.profile()` is running. Extend `CockpitPerformancePlugin` for
+custom plugins; `open` creates a new `CockpitPerformancePluginRun` per capture,
+which is the right place for mutable subscriptions and counters. For a small
+stateless hook, use `CockpitPerformancePlugin.callbacks(...)`:
 
 ```dart
-final checkoutTrace = CockpitPerformancePlugin(
-  id: 'checkout-aop',
-  start: (context) {
+final class CheckoutPlugin extends CockpitPerformancePlugin {
+  CheckoutPlugin() : super(id: 'checkout-aop');
+
+  @override
+  CockpitPerformancePluginRun open(CockpitPerformancePluginContext context) =>
+      _CheckoutRun(context.sink);
+}
+
+final class _CheckoutRun extends CockpitPerformancePluginRun {
+  _CheckoutRun(this.sink);
+
+  final CockpitPerformanceSink sink;
+
+  @override
+  void start() {
     CheckoutHooks.onEvent = (name, data) {
-      context.sink.instant(
+      sink.instant(
         name,
         category: 'business',
         args: data,
@@ -234,8 +249,15 @@ final checkoutTrace = CockpitPerformancePlugin(
         ),
       );
     };
-  },
-);
+  }
+
+  @override
+  void stop(CockpitPerformancePluginStats stats) {
+    CheckoutHooks.onEvent = null;
+  }
+}
+
+final checkoutTrace = CheckoutPlugin();
 
 FlutterCockpit.runApp(
   const AppShell(),

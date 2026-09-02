@@ -24,25 +24,7 @@ void main() {
           CheckoutHooks.emit('checkout.confirmed');
         },
         name: 'checkout',
-        plugins: <CockpitPerformancePlugin>[
-          CockpitPerformancePlugin(
-            id: 'checkout-hook',
-            start: (context) {
-              CheckoutHooks.onEvent = (name, args) {
-                context.sink.instant(
-                  name,
-                  category: 'business',
-                  args: args,
-                  location: const CockpitPerformanceLocation(
-                    uri: 'package:checkout/checkout.dart',
-                    line: 42,
-                  ),
-                );
-              };
-            },
-            stop: (_) => CheckoutHooks.onEvent = null,
-          ),
-        ],
+        plugins: <CockpitPerformancePlugin>[_CheckoutPerformancePlugin()],
       );
 
       // The full report is also available through IntegrationTest's reportData
@@ -50,6 +32,40 @@ void main() {
       assert(report.plugins.any((plugin) => plugin.id == 'checkout-hook'));
     },
   );
+}
+
+final class _CheckoutPerformancePlugin extends CockpitPerformancePlugin {
+  _CheckoutPerformancePlugin() : super(id: 'checkout-hook');
+
+  @override
+  CockpitPerformancePluginRun open(CockpitPerformancePluginContext context) =>
+      _CheckoutPerformanceRun(context.sink);
+}
+
+final class _CheckoutPerformanceRun extends CockpitPerformancePluginRun {
+  _CheckoutPerformanceRun(this.sink);
+
+  final CockpitPerformanceSink sink;
+
+  @override
+  void start() {
+    CheckoutHooks.onEvent = (name, args) {
+      sink.instant(
+        name,
+        category: 'business',
+        args: args,
+        location: const CockpitPerformanceLocation(
+          uri: 'package:checkout/checkout.dart',
+          line: 42,
+        ),
+      );
+    };
+  }
+
+  @override
+  void stop(CockpitPerformancePluginStats stats) {
+    CheckoutHooks.onEvent = null;
+  }
 }
 
 final class _CheckoutApp extends StatefulWidget {

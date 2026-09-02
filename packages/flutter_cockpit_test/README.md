@@ -399,9 +399,11 @@ the report never invents a source location.
 ### Instrumentation plugins and AOP adapters
 
 Use `CockpitPerformancePlugin` when the application exposes a development hook
-for repository, network, database, rendering, or business operations. The
-plugin is started only for one explicit capture and does not install a global
-listener:
+for repository, network, database, rendering, or business operations. Extend it
+for custom plugins. `open` creates a new `CockpitPerformancePluginRun` for each
+capture; put mutable subscriptions and counters on that Run so repeated or
+concurrent captures stay isolated. The plugin is started only for one explicit
+capture and does not install a global listener:
 
 The complete runnable version of this pattern is in
 [`example/performance_plugin.dart`](example/performance_plugin.dart).
@@ -410,23 +412,7 @@ The complete runnable version of this pattern is in
 final report = await cockpit.profile(
   () => runCheckoutFlow(),
   plugins: <CockpitPerformancePlugin>[
-    CockpitPerformancePlugin(
-      id: 'checkout-aop',
-      start: (context) {
-        CheckoutHooks.onSpan = (name, startUs, endUs) {
-          context.sink.span(
-            name,
-            category: 'business',
-            startUs: startUs,
-            endUs: endUs,
-            location: const CockpitPerformanceLocation(
-              uri: 'package:checkout/checkout.dart',
-              line: 42,
-            ),
-          );
-        };
-      },
-    ),
+    CheckoutPlugin(),
   ],
 );
 ```
@@ -442,6 +428,10 @@ statistics; compact output keeps counts, while full JSON, HTML, and the
 downloaded Chrome trace retain the bounded event detail. AOP adapters should
 call the sink from explicit development hooks; implicit production-wide
 instrumentation is intentionally unsupported.
+
+For a small stateless hook, use `CockpitPerformancePlugin.callbacks(...)` with
+`setup` and optional `cleanup` callbacks. Use a custom Run whenever the hook
+owns a subscription, timer, buffer, or other mutable resource.
 
 Plugin setup and cleanup are each bounded by the plugin's
 `CockpitPerformancePluginOptions.lifecycleTimeout` (two seconds by default).

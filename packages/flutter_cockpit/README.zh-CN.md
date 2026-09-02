@@ -197,14 +197,29 @@ VM timeline 和 GC 统计请使用 `flutter_cockpit_test` 的 `cockpit.profile`�
 ### 开发期性能插件
 
 在开发壳中显式注册 AOP 或其他埋点。插件只在显式执行
-`cockpit.profile()` 时拿到有界 sink，正常运行时保持惰性，不会改变业务行为：
+`cockpit.profile()` 时拿到有界 sink，正常运行时保持惰性，不会改变业务行为。自定义插件继承
+`CockpitPerformancePlugin`，`open` 为每次采集创建独立的
+`CockpitPerformancePluginRun`，把订阅、计数器等可变状态放在 Run 中；简单的无状态埋点
+可以使用 `CockpitPerformancePlugin.callbacks(...)`：
 
 ```dart
-final checkoutTrace = CockpitPerformancePlugin(
-  id: 'checkout-aop',
-  start: (context) {
+final class CheckoutPlugin extends CockpitPerformancePlugin {
+  CheckoutPlugin() : super(id: 'checkout-aop');
+
+  @override
+  CockpitPerformancePluginRun open(CockpitPerformancePluginContext context) =>
+      _CheckoutRun(context.sink);
+}
+
+final class _CheckoutRun extends CockpitPerformancePluginRun {
+  _CheckoutRun(this.sink);
+
+  final CockpitPerformanceSink sink;
+
+  @override
+  void start() {
     CheckoutHooks.onEvent = (name, data) {
-      context.sink.instant(
+      sink.instant(
         name,
         category: 'business',
         args: data,
@@ -214,8 +229,15 @@ final checkoutTrace = CockpitPerformancePlugin(
         ),
       );
     };
-  },
-);
+  }
+
+  @override
+  void stop(CockpitPerformancePluginStats stats) {
+    CheckoutHooks.onEvent = null;
+  }
+}
+
+final checkoutTrace = CheckoutPlugin();
 
 FlutterCockpit.runApp(
   const AppShell(),

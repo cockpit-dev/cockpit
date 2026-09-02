@@ -17,6 +17,9 @@ export 'package:cockpit_protocol/cockpit_protocol.dart'
 export 'package:flutter_cockpit/flutter_cockpit.dart'
     show
         CockpitPerformancePlugin,
+        CockpitPerformancePluginSetup,
+        CockpitPerformancePluginCleanup,
+        CockpitPerformancePluginRun,
         CockpitPerformancePluginCapture,
         CockpitPerformancePluginContext,
         CockpitPerformancePluginOptions,
