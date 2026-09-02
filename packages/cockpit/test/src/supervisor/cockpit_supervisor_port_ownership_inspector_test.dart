@@ -19,6 +19,22 @@ void main() {
     );
   });
 
+  test('keeps all POSIX listeners for one logical loopback endpoint', () {
+    const output = '''
+p1204
+f6
+tIPv4
+p9300
+f7
+tIPv6
+p1204
+f8
+tIPv6
+''';
+
+    expect(cockpitParsePosixLsofListenerProcessIds(output), <int>{1204, 9300});
+  });
+
   test('accepts a real listener owned by the captured process', () async {
     final socket = await ServerSocket.bind(
       InternetAddress.loopbackIPv4,

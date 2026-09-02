@@ -260,6 +260,13 @@ and sign WDA with a valid development team/profile. Keep its device connection
 or port forwarding alive and register that reachable URL. Signing, trust, and
 Developer Mode failures must remain explicit environment failures.
 
+The macOS process that invokes Flutter must also be allowed to automate Xcode:
+open **System Settings > Privacy & Security > Automation**, select the invoking
+host (for example Terminal, an IDE, or Codex), and enable Xcode. Without this
+grant Xcode may build successfully while install/launch blocks and no VM Service
+is published. This is a host authorization prerequisite, not an app permission;
+grant only Xcode automation and rerun the same device command.
+
 Treat USB and wireless iOS connections separately. A device discovered over
 `localNetwork` requires mDNS VM-service publication for debug/profile launches.
 `flutter test integration_test/...` does not expose that publication path in
@@ -389,6 +396,7 @@ retrying; a long operation in one workspace must not become a global blocker.
 | Target exists but action is absent | inspect capability limitations; install/authorize the named driver or choose an advertised plane |
 | Android `unauthorized`/`offline` | unlock, accept RSA, repair USB, restart ADB |
 | iOS tree/locator unavailable | start WDA, verify `/status`, assign the endpoint to the target, re-register/re-inspect |
+| iOS Simulator starts, then `portHandoffFailed` mentions multiple listeners | keep the same device/session, read the session and daemon logs, clean up the failed app, then retry; do not re-authorize, switch devices, or adopt a PID |
 | macOS permission denied | grant the hosting process, restart it and Cockpit, then re-inspect |
 | Capture works but locator does not | treat locator coverage as unavailable; capture is evidence, not control proof |
 | Recording unavailable | verify platform recorder and interactive session; require it only when the case/release policy does |

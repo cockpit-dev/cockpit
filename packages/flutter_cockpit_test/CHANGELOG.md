@@ -1,5 +1,13 @@
 # Changelog
 
+## 4.4.0
+
+- Added the complete stateful performance-plugin example and complex flow
+  covering isolated runs, source attribution, JSON/JSONL archives, and HTML
+  report export.
+- Synchronized the integration-test facade with the stateful Flutter plugin
+  lifecycle and current cross-platform session fixes.
+
 ## 4.3.0
 
 - Added the reusable `CockpitTester.debugger` VM session for pause/resume,

@@ -5,6 +5,7 @@ import 'package:cockpit_protocol/cockpit_protocol.dart'
     show CockpitRemoteSessionStatus;
 
 import '../remote/cockpit_android_port_forwarder.dart';
+import '../remote/cockpit_ios_port_forwarder.dart';
 import '../platform/android/cockpit_android_device_readiness.dart';
 import '../platform/ios/cockpit_ios_device_connection.dart';
 import '../session/cockpit_apple_bundle_support.dart';
@@ -115,6 +116,7 @@ final class CockpitDevelopmentSessionMachineLauncher {
         cockpitReadRemoteSessionStatus,
     CockpitAndroidPortForwarder portForwarder =
         const CockpitAndroidPortForwarder(),
+    CockpitIosPortForwarder? iosPortForwarder,
     CockpitIosDeviceConnectionResolver? iosDeviceConnectionResolver,
     CockpitIosFallbackBundleIdResolver iosFallbackBundleIdResolver =
         cockpitResolveIosBundleId,
@@ -132,6 +134,7 @@ final class CockpitDevelopmentSessionMachineLauncher {
        _recoveryProcessRunner = recoveryProcessRunner ?? _runRecoveryProcess,
        _statusReader = statusReader,
        _portForwarder = portForwarder,
+       _iosPortForwarder = iosPortForwarder ?? CockpitIosPortForwarder(),
        _iosDeviceConnectionResolver =
            iosDeviceConnectionResolver ??
            CockpitIosDeviceConnectionProbe().probe,
@@ -152,6 +155,7 @@ final class CockpitDevelopmentSessionMachineLauncher {
   final CockpitDevelopmentRecoveryProcessRunner _recoveryProcessRunner;
   final CockpitRemoteSessionStatusReader _statusReader;
   final CockpitAndroidPortForwarder _portForwarder;
+  final CockpitIosPortForwarder _iosPortForwarder;
   final CockpitIosDeviceConnectionResolver _iosDeviceConnectionResolver;
   final CockpitIosFallbackBundleIdResolver _iosFallbackBundleIdResolver;
   final CockpitIosFallbackAppBundlePathResolver
@@ -280,6 +284,13 @@ final class CockpitDevelopmentSessionMachineLauncher {
             preferredHostPort: request.hostPort,
             devicePort: request.sessionPort,
           )
+        : endpoint.usePortForward
+        ? await _iosPortForwarder.ensureForwarded(
+            deviceId: request.deviceId,
+            preferredHostPort: request.hostPort,
+            devicePort: request.sessionPort,
+            flutterExecutable: request.flutterExecutable,
+          )
         : request.hostPort;
     final publicHost = endpoint.publicHost;
     final baseUri = Uri(scheme: 'http', host: publicHost, port: hostPort);
@@ -395,7 +406,10 @@ final class CockpitDevelopmentSessionMachineLauncher {
     if (connection != null && connection.hasReachableTunnel) {
       return CockpitResolvedRemoteSessionEndpoint(
         bindHost: '::',
-        publicHost: connection.tunnelIpAddress!,
+        publicHost: connection.isWired
+            ? '127.0.0.1'
+            : connection.tunnelIpAddress!,
+        usePortForward: connection.isWired,
       );
     }
 
@@ -750,10 +764,12 @@ final class CockpitResolvedRemoteSessionEndpoint {
   const CockpitResolvedRemoteSessionEndpoint({
     required this.bindHost,
     required this.publicHost,
+    this.usePortForward = false,
   });
 
   final String bindHost;
   final String publicHost;
+  final bool usePortForward;
 }
 
 Future<String> _resolveIosPhysicalAppBundlePath({

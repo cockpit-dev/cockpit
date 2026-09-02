@@ -1,5 +1,10 @@
 # Changelog
 
+## 4.4.0
+
+- Synchronized the validated protocol release with the stateful Flutter
+  performance-plugin lifecycle and current iOS session handoff behavior.
+
 ## 4.3.0
 
 - Extended the validated DevTools runtime contract with source-aware extension
