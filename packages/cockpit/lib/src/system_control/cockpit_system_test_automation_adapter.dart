@@ -49,6 +49,11 @@ final class CockpitSystemTestAutomationAdapter
   final DateTime Function() _utcNow;
   final Future<void> Function(Duration) _delay;
 
+  // Native targets may not have an app binding with a process id. macOS
+  // accessibility reads still return the resolved pid, which is safer than
+  // translating AX coordinates into global mouse coordinates.
+  int? _lastNativeProcessId;
+
   bool get _flutterAwareNative =>
       _target.targetKind == CockpitTargetKind.flutterApp;
 
@@ -902,7 +907,7 @@ final class CockpitSystemTestAutomationAdapter
     final absent = command.parameters['absent'] == true;
     final deadline = _deadline(command);
     _ResolvedPoint? lastPoint;
-    StateError? lastObservationError;
+    Object? lastObservationError;
     do {
       late final _ResolvedPoint point;
       try {
@@ -913,12 +918,22 @@ final class CockpitSystemTestAutomationAdapter
         point = await _resolvePoint(
           command,
           deadline,
-          stabilitySnapshot: _isIos,
+          // Flutter-aware iOS trees need the complete source. The lightweight
+          // WDA source can omit the attributes needed to expose Flutter
+          // semantics after a simulator handoff.
+          stabilitySnapshot: _isIos && !_flutterAwareNative,
+          allowActivation: false,
         );
       } on StateError catch (error) {
         lastObservationError = error;
         if (!await _delayIfRemaining(deadline, 150)) break;
         continue;
+      } on TimeoutException catch (error) {
+        // A native snapshot can consume the remaining command budget while
+        // XCTest is rebuilding its tree. Report a bounded observation timeout
+        // instead of leaking a generic system-command exception.
+        lastObservationError = error;
+        break;
       }
       lastPoint = point;
       final found = point.error == null;
@@ -943,6 +958,18 @@ final class CockpitSystemTestAutomationAdapter
       }
       if (!await _delayIfRemaining(deadline, 150)) break;
     } while (_utcNow().isBefore(deadline));
+    if (lastPoint == null && lastObservationError is TimeoutException) {
+      return _failure(
+        command,
+        stopwatch,
+        CockpitCommandError.timeout(
+          message: 'Native UI could not be observed before the deadline.',
+          details: <String, Object?>{
+            'lastError': '$lastObservationError',
+          },
+        ),
+      );
+    }
     if (lastPoint == null) {
       return _failure(
         command,
@@ -1173,7 +1200,16 @@ final class CockpitSystemTestAutomationAdapter
     String? previousDigest;
     DateTime? stableSince;
     do {
-      final snapshot = await _readSnapshot(deadline, stabilitySnapshot: true);
+      CockpitNativeUiSnapshot snapshot;
+      try {
+        snapshot = await _readSnapshot(deadline, stabilitySnapshot: true);
+      } on StateError {
+        if (!await _delayIfRemaining(deadline, 100)) break;
+        continue;
+      } on TimeoutException {
+        if (!await _delayIfRemaining(deadline, 100)) break;
+        continue;
+      }
       final digest = sha256.convert(utf8.encode(snapshot.raw)).toString();
       if (digest == previousDigest) {
         stableSince ??= _utcNow();
@@ -1243,6 +1279,7 @@ final class CockpitSystemTestAutomationAdapter
     CockpitCommand command,
     DateTime deadline, {
     bool stabilitySnapshot = false,
+    bool allowActivation = true,
   }) async {
     final locator = _locator(command);
     if (locator == null) {
@@ -1435,7 +1472,7 @@ final class CockpitSystemTestAutomationAdapter
         locator,
         snapshot,
         deadline,
-        allowActivation: !stabilitySnapshot,
+        allowActivation: allowActivation && !stabilitySnapshot,
         stabilitySnapshot: stabilitySnapshot,
       );
       if (resolved != null) return resolved;
@@ -1861,6 +1898,10 @@ final class CockpitSystemTestAutomationAdapter
           },
         ),
       );
+    }
+    final processId = result.processId;
+    if (processId != null && processId > 0) {
+      _lastNativeProcessId = processId;
     }
     return CockpitNativeUiSnapshot.parse(result.stdout!);
   }
