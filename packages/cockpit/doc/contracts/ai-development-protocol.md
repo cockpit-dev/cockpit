@@ -8,10 +8,15 @@ Cockpit manage the project resources.
 ## Flutter Bootstrap
 
 ```bash
-cockpit dev start
+cockpit target discover
+# choose one exact id from the targets list
+cockpit dev start --device <deviceId>
 ```
 
-Run from inside the intended Flutter project. Cockpit resolves the nearest Flutter
+Run from inside the intended Flutter project. Read the discovered `id`, `name`,
+`platform`, `emulator`, and `sdk` rows; if more than one compatible row exists,
+ask the user for one exact id and never choose the host or Flutter default.
+Cockpit resolves the nearest Flutter
 package and Git worktree automatically, including nested projects. From a monorepo
 common ancestor, pass the entrypoint explicitly. Specify only real launch choices
 when discovery cannot choose uniquely:

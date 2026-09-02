@@ -306,11 +306,13 @@ directory at `.agents/skills/cockpit`. If it also supports stdio MCP, configure
    the exact `id`, `name`, `platform`, `emulator`, and `sdk` rows. Pass the
    selected id to `cockpit dev start --device <id>` or
    `flutter test ... -d <id>`. If multiple compatible rows exist, ask the user
-   which one to use; never rely on Flutter's default or switch between a
-   simulator and a physical device implicitly. For a registered black-box
-   target, follow discovery with `cockpit target inspect --target-id <id>
-   --profile evidence` and require the needed native capabilities. Discovery is
-   not required for installing the host runtime or Skill itself.
+   which exact one to use; never choose the host, rely on Flutter's default, or
+   switch between a simulator and a physical device implicitly. If start reports
+   `deviceAmbiguous`, choose one listed id; if it reports `deviceNotFound`, repair
+   that same device and rediscover it. For a registered black-box target, follow
+   discovery with `cockpit target inspect --target-id <id> --profile evidence`
+   and require the needed native capabilities. Discovery is not required for
+   installing the host runtime or Skill itself.
 5. When MCP is supported, confirm the host starts `cockpit_mcp` and can list
    Cockpit roots, workspaces, operations, targets, documents, cases, suites,
    runs, and artifacts.
