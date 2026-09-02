@@ -605,7 +605,11 @@ jobs:
             exit 1
           fi
           tar -xzf "$WDA_ARCHIVE" -C "$WDA_ROOT" --strip-components=1
-          nohup env USE_PORT=8100 MJPEG_SERVER_PORT=9100 xcodebuild \
+          # GitHub Actions reaps background processes carrying its tracking id
+          # when this step exits. WDA must stay alive for the later Flutter
+          # launch and native capability probes, so detach it from that
+          # lifecycle while retaining the explicit PID cleanup below.
+          nohup env RUNNER_TRACKING_ID= USE_PORT=8100 MJPEG_SERVER_PORT=9100 xcodebuild \
             -project "$WDA_ROOT/WebDriverAgent.xcodeproj" \
             -scheme WebDriverAgentRunner \
             -destination "platform=iOS Simulator,id=$IOS_DEVICE_ID" \
