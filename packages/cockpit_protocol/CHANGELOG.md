@@ -1,5 +1,9 @@
 # Changelog
 
+## 4.4.2
+
+- Synchronized the protocol release with the iOS native capability probe fix.
+
 ## 4.4.1
 
 - Synchronized the protocol release with the corrected cross-platform package

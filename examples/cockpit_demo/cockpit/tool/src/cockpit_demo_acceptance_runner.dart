@@ -1959,33 +1959,6 @@ Future<_CockpitNativeLocatorProbeResult> _probeNativeLocator({
   var detail = 'Native locator probe did not return a usable UI tree.';
   for (var attempt = 1; attempt <= 3; attempt += 1) {
     try {
-      final recovery = await _operation(
-        api,
-        CockpitOperationInvocation(
-          kind: 'system.action',
-          workspaceId: workspaceId,
-          idempotencyKey: CockpitIdempotencyKey(
-            'demo-native-recover-${_stableIdSuffix(targetId)}-'
-            '${_stableIdSuffix(probeId)}-$attempt',
-          ),
-          deadline: DateTime.now().toUtc().add(const Duration(seconds: 25)),
-          input: <String, Object?>{
-            'targetId': targetId,
-            'action': 'recoverToApp',
-            'timeoutMs': 20000,
-          },
-        ),
-      );
-      if (recovery.output?['success'] != true) {
-        detail = _systemActionFailureDetail(
-          recovery.output,
-          action: 'recoverToApp',
-        );
-        if (attempt < 3) {
-          await Future<void>.delayed(const Duration(seconds: 1));
-        }
-        continue;
-      }
       final result = await _operation(
         api,
         CockpitOperationInvocation(
@@ -2006,31 +1979,77 @@ Future<_CockpitNativeLocatorProbeResult> _probeNativeLocator({
       );
       final output = result.output;
       final raw = output?['stdout'];
+      var shouldRecover = false;
       if (output?['success'] != true) {
         detail = _systemActionFailureDetail(output, action: 'readUiTree');
+        shouldRecover = true;
       } else if (raw is String && raw.trim().isNotEmpty) {
-        final snapshot = CockpitNativeUiSnapshot.parse(raw);
-        if (snapshot
-                .resolve(
-                  CockpitTestLocator(label: 'New task'),
-                  flutterAware: true,
-                )
-                .found ||
-            snapshot
-                .resolve(
-                  CockpitTestLocator(text: 'New task'),
-                  flutterAware: true,
-                )
-                .found) {
-          return const _CockpitNativeLocatorProbeResult(
-            supported: true,
-            detail: 'Native UI tree resolved the New task control.',
-          );
+        try {
+          final snapshot = CockpitNativeUiSnapshot.parse(raw);
+          if (snapshot
+                  .resolve(
+                    CockpitTestLocator(label: 'New task'),
+                    flutterAware: true,
+                  )
+                  .found ||
+              snapshot
+                  .resolve(
+                    CockpitTestLocator(text: 'New task'),
+                    flutterAware: true,
+                  )
+                  .found) {
+            return const _CockpitNativeLocatorProbeResult(
+              supported: true,
+              detail: 'Native UI tree resolved the New task control.',
+            );
+          }
+        } on Object catch (error) {
+          detail = 'readUiTree returned an invalid UI tree: $error';
         }
-        detail =
-            'readUiTree succeeded but did not contain the New task control.';
+        if (detail == 'Native locator probe did not return a usable UI tree.') {
+          detail =
+              'readUiTree succeeded but did not contain the New task control.';
+        }
+        shouldRecover = true;
       } else {
         detail = 'readUiTree succeeded without a UI tree payload.';
+        shouldRecover = true;
+      }
+
+      // A freshly launched target is already foregrounded.  Avoid activating
+      // it before the first probe: WDA can block /wda/apps/activate while its
+      // XCTest snapshot is still starting (Xcode 26/WDA 16), needlessly
+      // consuming the complete native action deadline.  Recovery is only a
+      // fallback after a real tree read miss, where it can refresh a stale
+      // foreground snapshot without affecting the healthy fast path.
+      if (attempt == 1 && shouldRecover) {
+        try {
+          final recovery = await _operation(
+            api,
+            CockpitOperationInvocation(
+              kind: 'system.action',
+              workspaceId: workspaceId,
+              idempotencyKey: CockpitIdempotencyKey(
+                'demo-native-recover-${_stableIdSuffix(targetId)}-'
+                '${_stableIdSuffix(probeId)}',
+              ),
+              deadline: DateTime.now().toUtc().add(const Duration(seconds: 25)),
+              input: <String, Object?>{
+                'targetId': targetId,
+                'action': 'recoverToApp',
+                'timeoutMs': 20000,
+              },
+            ),
+          );
+          if (recovery.output?['success'] != true) {
+            detail = _systemActionFailureDetail(
+              recovery.output,
+              action: 'recoverToApp',
+            );
+          }
+        } on Object catch (error) {
+          detail = '$detail Recovery failed: $error';
+        }
       }
     } on Object catch (error) {
       detail = 'Native locator probe failed: $error';

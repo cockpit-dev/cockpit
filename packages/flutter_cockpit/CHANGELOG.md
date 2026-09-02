@@ -1,5 +1,10 @@
 # Changelog
 
+## 4.4.2
+
+- Synchronized the Flutter bridge release with the iOS native capability probe
+  fix and updated native package metadata.
+
 ## 4.4.1
 
 - Synchronized the Flutter bridge release with the corrected cross-platform
