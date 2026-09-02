@@ -584,6 +584,67 @@ void main() {
   );
 
   test(
+    'iOS Flutter condition waits ignore stale WDA visibility attributes',
+    () async {
+      final commands = <CockpitIosWdaCommand>[];
+      final controls = CockpitSystemControlService(
+        iosWdaEndpointProbe: (baseUri, {required timeout}) async => true,
+      );
+      Future<String> runner(
+        CockpitIosWdaCommand command, {
+        required Duration timeout,
+      }) async {
+        commands.add(command);
+        if (command.action == CockpitIosWdaAction.readUiTree) {
+          return command.stabilitySnapshot
+              ? _iosLightweightNewTaskTree
+              : _iosStaleVisibilityNewTaskTree;
+        }
+        throw StateError('WDA element lookup should not be needed.');
+      }
+
+      final adapter = CockpitSystemTestAutomationAdapter(
+        target: CockpitSystemTestTarget(
+          platform: 'ios',
+          deviceId: 'D3884373-E926-49AF-92E6-7A241C50B64C',
+          appId: 'dev.cockpit.demo',
+          targetKind: CockpitTargetKind.flutterApp,
+          metadata: const <String, Object?>{
+            'wdaUrl': 'http://127.0.0.1:8100',
+            'wdaReachable': true,
+          },
+        ),
+        controlService: controls,
+        actionService: CockpitSystemControlActionService(
+          systemControlService: controls,
+          iosWdaRunner: runner,
+        ),
+        iosWdaRunner: runner,
+        workspaceRoot: Directory.current.path,
+        delay: (_) async {},
+      );
+
+      final execution = await adapter.execute(
+        CockpitCommand(
+          commandId: 'wait-for-ios-flutter-target',
+          commandType: CockpitCommandType.waitFor,
+          parameters: const <String, Object?>{
+            'cockpitTestLocator': <String, Object?>{'label': 'New task'},
+          },
+          timeoutMs: 1000,
+        ),
+      );
+
+      expect(execution.result.success, isTrue);
+      final treeReads = commands
+          .where((command) => command.action == CockpitIosWdaAction.readUiTree)
+          .toList(growable: false);
+      expect(treeReads, hasLength(1));
+      expect(treeReads.single.stabilitySnapshot, isTrue);
+    },
+  );
+
+  test(
     'iOS native condition waits refresh without activating the foreground app',
     () async {
       final commands = <CockpitIosWdaCommand>[];
@@ -1185,6 +1246,20 @@ const _iosNewTaskTree = '''<?xml version="1.0" encoding="UTF-8"?>
 <XCUIElementTypeApplication type="XCUIElementTypeApplication" x="0" y="0" width="402" height="874">
   <XCUIElementTypeWindow type="XCUIElementTypeWindow" x="0" y="0" width="402" height="874">
     <XCUIElementTypeButton type="XCUIElementTypeButton" name="New task" label="New task" enabled="true" visible="true" accessible="true" x="233" y="75" width="117" height="48" />
+  </XCUIElementTypeWindow>
+</XCUIElementTypeApplication>''';
+
+const _iosLightweightNewTaskTree = '''<?xml version="1.0" encoding="UTF-8"?>
+<XCUIElementTypeApplication type="XCUIElementTypeApplication" x="0" y="0" width="402" height="874">
+  <XCUIElementTypeWindow type="XCUIElementTypeWindow" x="0" y="0" width="402" height="874">
+    <XCUIElementTypeButton type="XCUIElementTypeButton" name="New task" label="New task" enabled="true" x="233" y="75" width="117" height="48" />
+  </XCUIElementTypeWindow>
+</XCUIElementTypeApplication>''';
+
+const _iosStaleVisibilityNewTaskTree = '''<?xml version="1.0" encoding="UTF-8"?>
+<XCUIElementTypeApplication type="XCUIElementTypeApplication" x="0" y="0" width="402" height="874">
+  <XCUIElementTypeWindow type="XCUIElementTypeWindow" x="0" y="0" width="402" height="874">
+    <XCUIElementTypeButton type="XCUIElementTypeButton" name="New task" label="New task" enabled="true" visible="false" accessible="false" x="233" y="75" width="117" height="48" />
   </XCUIElementTypeWindow>
 </XCUIElementTypeApplication>''';
 
