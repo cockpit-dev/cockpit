@@ -1,5 +1,11 @@
 # Changelog
 
+## 4.4.5
+
+- Use a bounded complete XML WDA source for iOS Flutter recovery waits so
+  handoff snapshots retain locator attributes without the JSON snapshot stall.
+- Added coverage for stale visibility flags in the complete XML recovery path.
+
 ## 4.4.4
 
 - Recover iOS Flutter native waits when a full WDA source retains stale

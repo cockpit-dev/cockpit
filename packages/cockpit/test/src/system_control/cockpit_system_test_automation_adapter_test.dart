@@ -810,6 +810,7 @@ void main() {
       }) async {
         commands.add(command);
         if (command.action == CockpitIosWdaAction.readUiTree) {
+          if (command.fullSource) return _iosStaleVisibilityXmlNewTaskTree;
           return command.stabilitySnapshot
               ? _iosVisualViewportTree
               : _iosStaleVisibilityJsonNewTaskTree;
@@ -854,7 +855,7 @@ void main() {
         commands.where(
           (command) =>
               command.action == CockpitIosWdaAction.readUiTree &&
-              !command.stabilitySnapshot,
+              command.fullSource,
         ),
         hasLength(1),
       );
@@ -1436,6 +1437,11 @@ const _iosStaleVisibilityJsonNewTaskTree = '''{
     }
   ]
 }''';
+
+const _iosStaleVisibilityXmlNewTaskTree = '''<?xml version="1.0" encoding="UTF-8"?>
+<XCUIElementTypeApplication type="XCUIElementTypeApplication" name="Cockpit" visible="false" accessible="false" x="0" y="0" width="402" height="874">
+  <XCUIElementTypeButton type="XCUIElementTypeButton" name="New task" label="New task" visible="false" accessible="false" enabled="true" x="233" y="75" width="117" height="48" />
+</XCUIElementTypeApplication>''';
 
 const _macosBackTree = '''{
   "platform": "macos",

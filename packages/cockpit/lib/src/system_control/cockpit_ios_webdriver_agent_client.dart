@@ -12,6 +12,7 @@ const String cockpitIosWdaCommandExecutable =
 const String cockpitIosUiStabilitySnapshotMetadataKey =
     'cockpit.ios.uiStabilitySnapshot';
 const String cockpitIosUiSourceMetadataKey = 'cockpit.ios.uiSource';
+const String cockpitIosUiFullSourceMetadataKey = 'cockpit.ios.uiFullSource';
 
 typedef CockpitIosWdaHttpClientFactory = http.Client Function();
 typedef CockpitIosWdaEndpointProbe =
@@ -155,6 +156,7 @@ final class CockpitIosWebDriverAgentClient {
       baseUri: Uri.parse(json['baseUrl']! as String),
       action: CockpitIosWdaAction.values.byName(json['action']! as String),
       stabilitySnapshot: json['stabilitySnapshot'] == true,
+      fullSource: json['fullSource'] == true,
       parameters:
           (json['parameters'] as Map<Object?, Object?>?)
               ?.cast<String, Object?>() ??
@@ -168,6 +170,7 @@ final class CockpitIosWebDriverAgentClient {
         'baseUrl': command.baseUri.toString(),
         'action': command.action.name,
         if (command.stabilitySnapshot) 'stabilitySnapshot': true,
+        if (command.fullSource) 'fullSource': true,
         if (command.parameters.isNotEmpty) 'parameters': command.parameters,
       }),
     ];
@@ -390,7 +393,9 @@ final class CockpitIosWebDriverAgentClient {
           // excluded attributes and omits that expensive lookup while still
           // retaining type, label, value, bounds, and enabled state required
           // by native locator resolution.
-          final queryParameters = command.stabilitySnapshot
+          final queryParameters = command.fullSource
+              ? const <String, String>{'format': 'xml'}
+              : command.stabilitySnapshot
               ? const <String, String>{
                   'format': 'xml',
                   'excluded_attributes': 'visible,accessible',
@@ -1118,12 +1123,14 @@ final class CockpitIosWdaCommand {
     required this.baseUri,
     required this.action,
     this.stabilitySnapshot = false,
+    this.fullSource = false,
     this.parameters = const <String, Object?>{},
   });
 
   final Uri baseUri;
   final CockpitIosWdaAction action;
   final bool stabilitySnapshot;
+  final bool fullSource;
   final Map<String, Object?> parameters;
 }
 
