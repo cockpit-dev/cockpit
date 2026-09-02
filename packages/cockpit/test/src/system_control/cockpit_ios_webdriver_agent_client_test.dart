@@ -9,6 +9,20 @@ import 'package:test/test.dart';
 void main() {
   final baseUri = Uri.parse('http://127.0.0.1:8100');
 
+  test('full source flag survives the internal command round trip', () {
+    final command = CockpitIosWdaCommand(
+      baseUri: baseUri,
+      action: CockpitIosWdaAction.readUiTree,
+      fullSource: true,
+    );
+    final encoded = CockpitIosWebDriverAgentClient.commandToArguments(command);
+    final decoded = CockpitIosWebDriverAgentClient.commandFromArguments(encoded);
+
+    expect(decoded.fullSource, isTrue);
+    expect(decoded.stabilitySnapshot, isFalse);
+    expect(decoded.action, CockpitIosWdaAction.readUiTree);
+  });
+
   MockClient clientWithSession(
     Future<http.Response> Function(http.Request request) onSessionRequest,
   ) {
@@ -235,6 +249,43 @@ void main() {
     expect(requests.last.url.queryParameters, <String, String>{
       'format': 'xml',
       'excluded_attributes': 'visible,accessible',
+    });
+    expect(requests.last.url.queryParameters, isNot(contains('stale')));
+  });
+
+  test('full source keeps XML attributes for bounded recovery', () async {
+    final requests = <http.Request>[];
+    final client = MockClient((request) async {
+      requests.add(request);
+      if (request.url.path == '/wda/status') {
+        return http.Response(
+          jsonEncode(<String, Object?>{
+            'sessionId': 'session-1',
+            'value': <String, Object?>{'ready': true},
+          }),
+          200,
+        );
+      }
+      return http.Response(
+        jsonEncode(<String, Object?>{'value': '<App />'}),
+        200,
+      );
+    });
+
+    final result = await CockpitIosWebDriverAgentClient(httpClient: client).run(
+      CockpitIosWdaCommand(
+        baseUri: Uri.parse('http://127.0.0.1:8100/wda?stale=true'),
+        action: CockpitIosWdaAction.readUiTree,
+        fullSource: true,
+      ),
+      timeout: const Duration(seconds: 2),
+    );
+
+    expect(result, '<App />');
+    expect(requests, hasLength(2));
+    expect(requests.last.url.path, '/wda/source');
+    expect(requests.last.url.queryParameters, <String, String>{
+      'format': 'xml',
     });
     expect(requests.last.url.queryParameters, isNot(contains('stale')));
   });

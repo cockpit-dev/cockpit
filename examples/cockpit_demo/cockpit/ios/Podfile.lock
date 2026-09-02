@@ -1,6 +1,6 @@
 PODS:
   - Flutter (1.0.0)
-  - flutter_cockpit (4.4.4):
+  - flutter_cockpit (4.4.5):
     - Flutter
   - integration_test (0.0.1):
     - Flutter

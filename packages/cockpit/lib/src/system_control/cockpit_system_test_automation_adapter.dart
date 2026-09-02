@@ -960,10 +960,10 @@ final class CockpitSystemTestAutomationAdapter
         // The lightweight XML source is intentionally used for iOS polling,
         // but some XCTest/WDA versions omit Flutter semantic attributes from
         // that projection immediately after a simulator handoff. Before the
-        // final activation fallback, take one short, non-activating full-source
-        // sample. This preserves the fast, foreground-safe path while still
-        // allowing a real semantic tree to settle without requiring a second
-        // app launch or a guessed coordinate.
+        // final activation fallback, take one short, non-activating complete
+        // XML sample. This preserves the fast, foreground-safe path while
+        // still allowing a real semantic tree to settle without requiring a
+        // second app launch or a guessed coordinate.
         if (!absent &&
             _isIos &&
             _flutterAwareNative &&
@@ -986,6 +986,7 @@ final class CockpitSystemTestAutomationAdapter
               // source-level recovery sample; normal reads and mutations keep
               // strict visibility filtering.
               ignoreVisibility: true,
+              fullSource: true,
             );
             if (refreshed.error == null) {
               return _success(
@@ -1372,6 +1373,7 @@ final class CockpitSystemTestAutomationAdapter
     bool stabilitySnapshot = false,
     bool allowActivation = true,
     bool ignoreVisibility = false,
+    bool fullSource = false,
   }) async {
     final locator = _locator(command);
     if (locator == null) {
@@ -1470,6 +1472,7 @@ final class CockpitSystemTestAutomationAdapter
       snapshot ??= await _readSnapshot(
         deadline,
         stabilitySnapshot: stabilitySnapshot,
+        fullSource: fullSource,
       );
       final resolution = snapshot.resolveSingle(
         candidate,
@@ -1515,6 +1518,7 @@ final class CockpitSystemTestAutomationAdapter
       snapshot ??= await _readSnapshot(
         deadline,
         stabilitySnapshot: stabilitySnapshot,
+        fullSource: fullSource,
       );
       // WDA's foreground source endpoint is the authoritative first read, but
       // some WDA/XCTest combinations briefly expose a stale or incomplete
@@ -1527,6 +1531,7 @@ final class CockpitSystemTestAutomationAdapter
           deadline,
           stabilitySnapshot: stabilitySnapshot,
           source: 'session',
+          fullSource: fullSource,
         );
       } on Object {
         // The root source is supported by the current WDA contract. Older
@@ -1573,6 +1578,7 @@ final class CockpitSystemTestAutomationAdapter
         allowActivation: allowActivation,
         stabilitySnapshot: stabilitySnapshot,
         ignoreVisibility: ignoreVisibility,
+        fullSource: fullSource,
       );
       if (resolved != null) return resolved;
     }
@@ -1606,6 +1612,7 @@ final class CockpitSystemTestAutomationAdapter
     bool allowActivation = true,
     bool stabilitySnapshot = false,
     bool ignoreVisibility = false,
+    bool fullSource = false,
   }) async {
     final baseUri = await _resolveIosWdaBaseUri(deadline);
     if (baseUri == null) return null;
@@ -1723,6 +1730,7 @@ final class CockpitSystemTestAutomationAdapter
       final refreshed = await _readSnapshot(
         deadline,
         stabilitySnapshot: stabilitySnapshot,
+        fullSource: fullSource,
       );
       for (final candidate in locator.flattened) {
         if (candidate.strategy == CockpitTestLocatorStrategy.visual) continue;
@@ -1980,10 +1988,12 @@ final class CockpitSystemTestAutomationAdapter
     DateTime deadline, {
     bool stabilitySnapshot = false,
     String? source,
+    bool fullSource = false,
   }) async {
     final metadata = <String, Object?>{
       if (_isIos && stabilitySnapshot)
         cockpitIosUiStabilitySnapshotMetadataKey: true,
+      if (_isIos && fullSource) cockpitIosUiFullSourceMetadataKey: true,
       if (_isIos && source != null) cockpitIosUiSourceMetadataKey: source,
     };
     final result = await _runAction(

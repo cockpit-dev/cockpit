@@ -1,5 +1,10 @@
 # Changelog
 
+## 4.4.5
+
+- Synchronized the Flutter bridge release with the iOS native source recovery
+  fix and updated native package metadata.
+
 ## 4.4.4
 
 - Synchronized the Flutter bridge release with the iOS native wait recovery

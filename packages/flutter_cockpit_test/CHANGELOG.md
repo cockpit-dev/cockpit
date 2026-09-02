@@ -1,5 +1,10 @@
 # Changelog
 
+## 4.4.5
+
+- Synchronized the integration-test facade release with the iOS native source
+  recovery fix.
+
 ## 4.4.4
 
 - Synchronized the integration-test facade release with the iOS native wait
