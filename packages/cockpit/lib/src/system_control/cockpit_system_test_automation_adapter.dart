@@ -1558,10 +1558,19 @@ final class CockpitSystemTestAutomationAdapter
     final baseUri = await _resolveIosWdaBaseUri(deadline);
     if (baseUri == null) return null;
     var attemptedQuery = false;
+    final hasAppId = switch (_target.appId) {
+      final value? => value.trim().isNotEmpty,
+      null => false,
+    };
+    // An explicit recovery pass combines a lightweight source snapshot with
+    // activation. On iOS, querying a stale element before activation can
+    // block XCTest for the whole command deadline, so activate first in that
+    // one case. Normal actions retain the cheaper non-activating lookup and
+    // only activate as a bounded fallback.
     final activationPasses = <bool>[
-      false,
-      if (allowActivation)
-        if (_target.appId case final appId? when appId.trim().isNotEmpty) true,
+      if (stabilitySnapshot && allowActivation && hasAppId) true,
+      if (!stabilitySnapshot || !allowActivation || !hasAppId) false,
+      if (!stabilitySnapshot && allowActivation && hasAppId) true,
     ];
     for (final activate in activationPasses) {
       var activateTarget = activate;
