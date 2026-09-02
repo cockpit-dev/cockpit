@@ -78,18 +78,19 @@ final class CockpitPerformanceArchive {
         for (final event in report.events) {
           archive.addEvent(event);
         }
-        for (final sample in report.memory?.samples ??
-            const <CockpitPerformanceMemorySample>[]) {
+        for (final sample
+            in report.memory?.samples ??
+                const <CockpitPerformanceMemorySample>[]) {
           archive.addMemory(sample);
         }
         final devtools = report.devTools;
         if (devtools != null) {
-          for (final sample in devtools.heap?.samples ??
-              const <CockpitHeapSample>[]) {
+          for (final sample
+              in devtools.heap?.samples ?? const <CockpitHeapSample>[]) {
             archive.addHeap(sample);
           }
-          for (final event in devtools.isolate?.events ??
-              const <CockpitIsolateEvent>[]) {
+          for (final event
+              in devtools.isolate?.events ?? const <CockpitIsolateEvent>[]) {
             archive.addIsolate(event);
           }
           for (final event in devtools.logs) {

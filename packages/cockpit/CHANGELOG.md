@@ -1,5 +1,10 @@
 # Changelog
 
+## 4.4.1
+
+- Synchronized the CLI release with corrected cross-platform package metadata
+  and CocoaPods/SwiftPM validation coverage.
+
 ## 4.4.0
 
 - Fixed iOS Simulator loopback handoff when one endpoint is reported by

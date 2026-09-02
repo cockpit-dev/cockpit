@@ -1,5 +1,10 @@
 # Changelog
 
+## 4.4.1
+
+- Synchronized the Flutter bridge release with the corrected cross-platform
+  package metadata and CI validation contracts.
+
 ## 4.4.0
 
 - Added reusable stateful `CockpitPerformancePluginRun` instances so each

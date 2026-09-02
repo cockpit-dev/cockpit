@@ -1,5 +1,11 @@
 # Changelog
 
+## 4.4.1
+
+- Corrected cross-platform performance contracts so unavailable native process
+  RSS is reported as unavailable instead of failing a valid test run.
+- Applied the repository formatter used by CI to the performance archive code.
+
 ## 4.4.0
 
 - Added the complete stateful performance-plugin example and complex flow
