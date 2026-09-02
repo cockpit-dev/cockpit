@@ -912,16 +912,19 @@ final class CockpitSystemTestAutomationAdapter
       late final _ResolvedPoint point;
       try {
         // WDA's full source can block while XCTest is rebuilding the
-        // accessibility tree after an app handoff. Condition polling only
-        // needs bounded labels, roles, and bounds; use the lightweight iOS
-        // source here and keep element queries as the precise fallback.
+        // accessibility tree after an app handoff, and its visibility flag is
+        // occasionally stale for Flutter semantic nodes even while they are
+        // visible on screen. Condition polling only needs bounded labels,
+        // roles, enabled state, and bounds; use the lightweight iOS source and
+        // keep element queries as the precise fallback.
         point = await _resolvePoint(
           command,
           deadline,
-          // Flutter-aware iOS trees need the complete source. The lightweight
-          // WDA source can omit the attributes needed to expose Flutter
-          // semantics after a simulator handoff.
-          stabilitySnapshot: _isIos && !_flutterAwareNative,
+          // Excluding WDA's computed visibility/accessibility attributes makes
+          // condition probes deterministic for both native and Flutter apps.
+          // The parser treats bounded nodes as visible when these optional
+          // attributes are absent; precise element queries remain a fallback.
+          stabilitySnapshot: _isIos,
           allowActivation: false,
         );
       } on StateError catch (error) {
