@@ -246,11 +246,16 @@ final class CockpitNativeUiSnapshot {
   CockpitNativeUiResolution resolve(
     CockpitTestLocator locator, {
     bool flutterAware = false,
+    bool ignoreVisibility = false,
   }) {
     final adapter = flutterAware ? 'flutterAwareNative' : 'native';
     for (final candidate in locator.flattened) {
       if (candidate.strategy == CockpitTestLocatorStrategy.visual) continue;
-      final resolution = resolveSingle(candidate, flutterAware: flutterAware);
+      final resolution = resolveSingle(
+        candidate,
+        flutterAware: flutterAware,
+        ignoreVisibility: ignoreVisibility,
+      );
       if (resolution.found || resolution.ambiguous) return resolution;
     }
     return CockpitNativeUiResolution.notFound(locator, adapter: adapter);
@@ -259,6 +264,7 @@ final class CockpitNativeUiSnapshot {
   CockpitNativeUiResolution resolveSingle(
     CockpitTestLocator locator, {
     bool flutterAware = false,
+    bool ignoreVisibility = false,
   }) {
     final adapter = flutterAware ? 'flutterAwareNative' : 'native';
     if (locator.strategy == CockpitTestLocatorStrategy.coordinate) {
@@ -272,7 +278,11 @@ final class CockpitNativeUiSnapshot {
     if (locator.strategy == CockpitTestLocatorStrategy.visual) {
       return CockpitNativeUiResolution.notFound(locator, adapter: adapter);
     }
-    final matches = _matchingNodes(locator, flutterAware: flutterAware);
+    final matches = _matchingNodes(
+      locator,
+      flutterAware: flutterAware,
+      ignoreVisibility: ignoreVisibility,
+    );
     final index = locator.index;
     if (index != null) {
       return index < matches.length
@@ -315,12 +325,20 @@ final class CockpitNativeUiSnapshot {
   List<CockpitNativeUiNode> _matchingNodes(
     CockpitTestLocator locator, {
     required bool flutterAware,
+    required bool ignoreVisibility,
   }) {
     final matches = nodes
         .where(
           (node) =>
-              node.visible &&
-              _matchesLocator(node, locator, flutterAware: flutterAware),
+              (ignoreVisibility
+                  ? node.bounds?.hasArea == true
+                  : node.visible) &&
+              _matchesLocator(
+                node,
+                locator,
+                flutterAware: flutterAware,
+                ignoreVisibility: ignoreVisibility,
+              ),
         )
         .toList(growable: false);
     return flutterAware
@@ -395,10 +413,15 @@ final class CockpitNativeUiSnapshot {
   List<CockpitNativeUiNode> _resolvedRelationNodes(
     CockpitTestLocator locator, {
     required bool flutterAware,
+    required bool ignoreVisibility,
   }) {
     for (final candidate in locator.flattened) {
       if (candidate.degraded) continue;
-      final matches = _matchingNodes(candidate, flutterAware: flutterAware);
+      final matches = _matchingNodes(
+        candidate,
+        flutterAware: flutterAware,
+        ignoreVisibility: ignoreVisibility,
+      );
       final index = candidate.index;
       if (index != null) {
         if (index < matches.length) {
@@ -415,6 +438,7 @@ final class CockpitNativeUiSnapshot {
     CockpitNativeUiNode node,
     CockpitTestLocator locator, {
     required bool flutterAware,
+    required bool ignoreVisibility,
   }) {
     for (final signal in locator.signals) {
       if (!_matchesSignal(
@@ -433,6 +457,7 @@ final class CockpitNativeUiSnapshot {
       final paths = _resolvedRelationNodes(
         ancestor,
         flutterAware: flutterAware,
+        ignoreVisibility: ignoreVisibility,
       ).map((candidate) => candidate.path).toSet();
       if (!node.ancestorPaths.any(paths.contains)) return false;
     }
@@ -440,6 +465,7 @@ final class CockpitNativeUiSnapshot {
       if (!_resolvedRelationNodes(
         child,
         flutterAware: flutterAware,
+        ignoreVisibility: ignoreVisibility,
       ).any((candidate) => candidate.parentPath == node.path)) {
         return false;
       }
@@ -448,6 +474,7 @@ final class CockpitNativeUiSnapshot {
       if (!_resolvedRelationNodes(
         descendant,
         flutterAware: flutterAware,
+        ignoreVisibility: ignoreVisibility,
       ).any((candidate) => candidate.ancestorPaths.contains(node.path))) {
         return false;
       }
@@ -480,7 +507,11 @@ final class CockpitNativeUiSnapshot {
       if (reference == null) continue;
       final bounds = node.bounds;
       if (bounds == null ||
-          !_resolvedRelationNodes(reference, flutterAware: flutterAware).any(
+          !_resolvedRelationNodes(
+            reference,
+            flutterAware: flutterAware,
+            ignoreVisibility: ignoreVisibility,
+          ).any(
             (candidate) =>
                 candidate.path != node.path &&
                 candidate.bounds != null &&

@@ -1,6 +1,6 @@
 name: flutter_cockpit_test
 description: Cockpit-powered Flutter integration tests with native evidence and AI-first selectors.
-version: 4.4.3
+version: 4.4.4
 homepage: https://github.com/cockpit-dev/cockpit
 repository: https://github.com/cockpit-dev/cockpit
 issue_tracker: https://github.com/cockpit-dev/cockpit/issues
@@ -19,10 +19,10 @@ environment:
 resolution: workspace
 
 dependencies:
-  cockpit_protocol: ^4.4.3
+  cockpit_protocol: ^4.4.4
   flutter:
     sdk: flutter
-  flutter_cockpit: ^4.4.3
+  flutter_cockpit: ^4.4.4
   flutter_test:
     sdk: flutter
   integration_test:

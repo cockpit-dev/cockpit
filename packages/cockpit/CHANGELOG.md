@@ -1,5 +1,11 @@
 # Changelog
 
+## 4.4.4
+
+- Recover iOS Flutter native waits when a full WDA source retains stale
+  visibility flags after an app handoff, while keeping normal reads strict.
+- Added regression coverage for the bounded source-level recovery path.
+
 ## 4.4.3
 
 - Hardened Flutter+iOS native condition waits after app recovery with one

@@ -1,5 +1,9 @@
 # Changelog
 
+## 4.4.4
+
+- Synchronized the protocol release with the iOS native wait recovery fix.
+
 ## 4.4.3
 
 - Synchronized the protocol release with the iOS native wait recovery fix.
