@@ -4,10 +4,10 @@ import 'dart:developer' as developer;
 
 import 'package:cockpit_protocol/cockpit_protocol.dart';
 
-typedef CockpitPerformancePluginStart =
+typedef CockpitPerformancePluginSetup =
     FutureOr<void> Function(CockpitPerformancePluginContext context);
 
-typedef CockpitPerformancePluginStop =
+typedef CockpitPerformancePluginCleanup =
     FutureOr<void> Function(CockpitPerformancePluginStats stats);
 
 /// Limits and filtering applied to one plugin during a capture.
@@ -70,16 +70,14 @@ final class CockpitPerformancePluginOptions {
   }
 }
 
-/// A development-only instrumentation plugin.
+/// A development-only instrumentation plugin definition.
 ///
-/// A plugin is inert until a caller explicitly runs [CockpitTester.profile] or
-/// starts a collector capture. This makes application instrumentation safe to
-/// leave installed in a development shell without changing normal app work.
-final class CockpitPerformancePlugin {
+/// The definition is safe to register and reuse. Mutable subscriptions,
+/// counters, and other capture state belong to the [CockpitPerformancePluginRun]
+/// returned by [open], so repeated or concurrent captures cannot share state.
+abstract class CockpitPerformancePlugin {
   CockpitPerformancePlugin({
     required String id,
-    required this.start,
-    this.stop,
     String? version,
     CockpitPerformancePluginOptions options =
         const CockpitPerformancePluginOptions(),
@@ -96,11 +94,87 @@ final class CockpitPerformancePlugin {
     this.options.validate();
   }
 
+  /// Creates a callback-backed plugin for small instrumentation hooks.
+  ///
+  /// Stateful plugins should extend [CockpitPerformancePlugin] and return a
+  /// dedicated [CockpitPerformancePluginRun] from [open].
+  factory CockpitPerformancePlugin.callbacks({
+    required String id,
+    required CockpitPerformancePluginSetup setup,
+    CockpitPerformancePluginCleanup? cleanup,
+    String? version,
+    CockpitPerformancePluginOptions options =
+        const CockpitPerformancePluginOptions(),
+  }) => _CallbackCockpitPerformancePlugin(
+    id: id,
+    setup: setup,
+    cleanup: cleanup,
+    version: version,
+    options: options,
+  );
+
   final String id;
   final String? version;
-  final CockpitPerformancePluginStart start;
-  final CockpitPerformancePluginStop? stop;
   final CockpitPerformancePluginOptions options;
+
+  /// Creates the state and lifecycle owner for one active capture.
+  ///
+  /// This method is synchronous by design: Cockpit obtains the Run before
+  /// invoking [CockpitPerformancePluginRun.start], which guarantees that the
+  /// same Run can be closed when setup fails part-way through.
+  CockpitPerformancePluginRun open(CockpitPerformancePluginContext context);
+}
+
+/// State and lifecycle owner for one performance capture.
+///
+/// A Run is created for one capture only. Override [start] to install hooks and
+/// [stop] to remove them and publish final state. [stop] is called even when
+/// [start] fails, subject to the plugin lifecycle timeout.
+abstract class CockpitPerformancePluginRun {
+  const CockpitPerformancePluginRun();
+
+  FutureOr<void> start() {}
+
+  FutureOr<void> stop(CockpitPerformancePluginStats stats) {}
+}
+
+final class _CallbackCockpitPerformancePlugin extends CockpitPerformancePlugin {
+  _CallbackCockpitPerformancePlugin({
+    required super.id,
+    required this.setup,
+    this.cleanup,
+    super.version,
+    super.options,
+  });
+
+  final CockpitPerformancePluginSetup setup;
+  final CockpitPerformancePluginCleanup? cleanup;
+
+  @override
+  CockpitPerformancePluginRun open(CockpitPerformancePluginContext context) =>
+      _CallbackCockpitPerformancePluginRun(context, setup, cleanup);
+}
+
+final class _CallbackCockpitPerformancePluginRun
+    extends CockpitPerformancePluginRun {
+  _CallbackCockpitPerformancePluginRun(this.context, this.setup, this.cleanup);
+
+  final CockpitPerformancePluginContext context;
+  final CockpitPerformancePluginSetup setup;
+  final CockpitPerformancePluginCleanup? cleanup;
+  var _stopped = false;
+
+  @override
+  Future<void> start() async {
+    await setup(context);
+  }
+
+  @override
+  Future<void> stop(CockpitPerformancePluginStats stats) async {
+    if (_stopped) return;
+    _stopped = true;
+    await cleanup?.call(stats);
+  }
 }
 
 /// Optional source mapping attached to plugin events.
@@ -508,19 +582,16 @@ final class CockpitPerformancePluginCapture {
     for (final registration in _registrations) {
       registration.startAttempted = true;
       try {
+        final context = CockpitPerformancePluginContext(
+          pluginId: registration.plugin.id,
+          sink: CockpitPerformanceSink._(this, registration.plugin, isolateId),
+          startedAtUs: developer.Timeline.now,
+          isolateId: isolateId,
+        );
+        final run = registration.plugin.open(context);
+        registration.run = run;
         await _withinLifecycleTimeout(
-          () => registration.plugin.start(
-            CockpitPerformancePluginContext(
-              pluginId: registration.plugin.id,
-              sink: CockpitPerformanceSink._(
-                this,
-                registration.plugin,
-                isolateId,
-              ),
-              startedAtUs: developer.Timeline.now,
-              isolateId: isolateId,
-            ),
-          ),
+          run.start,
           registration.plugin.options.lifecycleTimeout,
         );
         registration.state = 'available';
@@ -558,11 +629,11 @@ final class CockpitPerformancePluginCapture {
     isRunning = false;
     final retained = _retainEvents(maxEvents);
     for (final registration in _registrations) {
-      final callback = registration.plugin.stop;
-      if (callback == null || !registration.startAttempted) continue;
+      final run = registration.run;
+      if (run == null || !registration.startAttempted) continue;
       try {
         await _withinLifecycleTimeout(
-          () => callback(registration.stats()),
+          () => run.stop(registration.stats()),
           registration.plugin.options.lifecycleTimeout,
         );
       } on Object catch (error) {
@@ -701,6 +772,7 @@ final class _PluginRegistration {
   String state = 'unavailable';
   bool startAttempted = false;
   String? reason;
+  CockpitPerformancePluginRun? run;
   int eventCount = 0;
   int spanCount = 0;
   int instantCount = 0;

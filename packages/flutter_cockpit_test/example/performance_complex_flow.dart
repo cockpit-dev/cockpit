@@ -72,11 +72,25 @@ Future<void> _runStoreFlow(CockpitTester cockpit) async {
   await cockpit.waitFor('Open catalog');
 }
 
-CockpitPerformancePlugin _storePlugin() => CockpitPerformancePlugin(
-  id: 'store-flow',
-  start: (context) {
+CockpitPerformancePlugin _storePlugin() => _StorePerformancePlugin();
+
+final class _StorePerformancePlugin extends CockpitPerformancePlugin {
+  _StorePerformancePlugin() : super(id: 'store-flow');
+
+  @override
+  CockpitPerformancePluginRun open(CockpitPerformancePluginContext context) =>
+      _StorePerformanceRun(context.sink);
+}
+
+final class _StorePerformanceRun extends CockpitPerformancePluginRun {
+  _StorePerformanceRun(this.sink);
+
+  final CockpitPerformanceSink sink;
+
+  @override
+  void start() {
     _StoreProbe.onMark = (name, args) {
-      context.sink.instant(
+      sink.instant(
         name,
         category: 'store',
         args: args,
@@ -86,9 +100,13 @@ CockpitPerformancePlugin _storePlugin() => CockpitPerformancePlugin(
         ),
       );
     };
-  },
-  stop: (_) => _StoreProbe.onMark = null,
-);
+  }
+
+  @override
+  void stop(CockpitPerformancePluginStats stats) {
+    _StoreProbe.onMark = null;
+  }
+}
 
 abstract final class _StoreProbe {
   static void Function(String, Map<String, Object?>)? onMark;

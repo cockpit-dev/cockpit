@@ -15,10 +15,10 @@ void main() {
       late CockpitPerformanceSink sink;
       final registry = CockpitPerformancePluginRegistry(
         plugins: <CockpitPerformancePlugin>[
-          CockpitPerformancePlugin(
+          CockpitPerformancePlugin.callbacks(
             id: 'checkout-aop',
             version: '1.0.0',
-            start: (context) {
+            setup: (context) {
               sink = context.sink;
             },
           ),
@@ -56,12 +56,39 @@ void main() {
     },
   );
 
+  test(
+    'subclasses receive an isolated stateful run for each capture',
+    () async {
+      final plugin = _StatefulPlugin();
+      final registry = CockpitPerformancePluginRegistry(
+        plugins: <CockpitPerformancePlugin>[plugin],
+      );
+
+      final first = registry.capture();
+      await first.start();
+      first.beginWindow();
+      _firstSink(plugin).instant('first.capture');
+      await first.stop();
+
+      final second = registry.capture();
+      await second.start();
+      second.beginWindow();
+      _firstSink(plugin).instant('second.capture');
+      await second.stop();
+
+      expect(plugin.runs, hasLength(2));
+      expect(plugin.runs[0], isNot(same(plugin.runs[1])));
+      expect(plugin.runs[0].stopped, isTrue);
+      expect(plugin.runs[1].stopped, isTrue);
+    },
+  );
+
   test('plugin failures do not block capture and are reported', () async {
     final registry = CockpitPerformancePluginRegistry(
       plugins: <CockpitPerformancePlugin>[
-        CockpitPerformancePlugin(
+        CockpitPerformancePlugin.callbacks(
           id: 'broken',
-          start: (_) => throw StateError('instrumentation unavailable'),
+          setup: (_) => throw StateError('instrumentation unavailable'),
         ),
       ],
     );
@@ -81,10 +108,10 @@ void main() {
       final cleanup = Completer<void>();
       final registry = CockpitPerformancePluginRegistry(
         plugins: <CockpitPerformancePlugin>[
-          CockpitPerformancePlugin(
+          CockpitPerformancePlugin.callbacks(
             id: 'slow',
-            start: (_) => Completer<void>().future,
-            stop: (_) => cleanup.complete(),
+            setup: (_) => Completer<void>().future,
+            cleanup: (_) => cleanup.complete(),
             options: const CockpitPerformancePluginOptions(
               lifecycleTimeout: Duration(milliseconds: 1),
             ),
@@ -109,9 +136,9 @@ void main() {
       late CockpitPerformanceSink sink;
       final capture = CockpitPerformancePluginRegistry(
         plugins: <CockpitPerformancePlugin>[
-          CockpitPerformancePlugin(
+          CockpitPerformancePlugin.callbacks(
             id: 'bounded-live',
-            start: (context) => sink = context.sink,
+            setup: (context) => sink = context.sink,
           ),
         ],
       ).capture(maxEvents: 1);
@@ -130,9 +157,9 @@ void main() {
     'plugin policy is snapshotted and invalid payloads are rejected',
     () async {
       final categories = <String>{'business'};
-      final plugin = CockpitPerformancePlugin(
+      final plugin = CockpitPerformancePlugin.callbacks(
         id: 'bounded',
-        start: (_) {},
+        setup: (_) {},
         options: CockpitPerformancePluginOptions(categories: categories),
       );
       categories.add('network');
@@ -141,9 +168,9 @@ void main() {
       late CockpitPerformanceSink sink;
       final capture = CockpitPerformancePluginRegistry(
         plugins: <CockpitPerformancePlugin>[
-          CockpitPerformancePlugin(
+          CockpitPerformancePlugin.callbacks(
             id: 'payload',
-            start: (context) => sink = context.sink,
+            setup: (context) => sink = context.sink,
           ),
         ],
       ).capture();
@@ -169,9 +196,9 @@ void main() {
     late CockpitPerformanceSink sink;
     final capture = CockpitPerformancePluginRegistry(
       plugins: <CockpitPerformancePlugin>[
-        CockpitPerformancePlugin(
+        CockpitPerformancePlugin.callbacks(
           id: 'bounded',
-          start: (context) => sink = context.sink,
+          setup: (context) => sink = context.sink,
         ),
       ],
     ).capture();
@@ -245,9 +272,9 @@ void main() {
         name: 'increment',
         timeline: false,
         plugins: <CockpitPerformancePlugin>[
-          CockpitPerformancePlugin(
+          CockpitPerformancePlugin.callbacks(
             id: 'profile-test',
-            start: (context) => sink = context.sink,
+            setup: (context) => sink = context.sink,
           ),
         ],
       );
@@ -296,6 +323,34 @@ void main() {
       expect(debugProfilePaintsEnabled, beforePaints);
     },
   );
+}
+
+CockpitPerformanceSink _firstSink(_StatefulPlugin plugin) =>
+    plugin.runs.last.sink;
+
+final class _StatefulPlugin extends CockpitPerformancePlugin {
+  _StatefulPlugin() : super(id: 'stateful');
+
+  final List<_StatefulRun> runs = <_StatefulRun>[];
+
+  @override
+  CockpitPerformancePluginRun open(CockpitPerformancePluginContext context) {
+    final run = _StatefulRun(context.sink);
+    runs.add(run);
+    return run;
+  }
+}
+
+final class _StatefulRun extends CockpitPerformancePluginRun {
+  _StatefulRun(this.sink);
+
+  final CockpitPerformanceSink sink;
+  var stopped = false;
+
+  @override
+  Future<void> stop(CockpitPerformancePluginStats stats) async {
+    stopped = true;
+  }
 }
 
 final class _ProfilePage extends StatefulWidget {

@@ -311,7 +311,9 @@ debug 数据仅用于诊断，不能当作发布性能证据。
 ### 埋点插件与 AOP 适配器
 
 当应用能够提供开发期 hook 时，可以用 `CockpitPerformancePlugin` 记录仓储、网络、
-数据库、渲染或业务操作。插件只在一次显式采集中启动，不安装全局监听器，也不会改变
+数据库、渲染或业务操作。自定义插件继承 `CockpitPerformancePlugin`，`open` 为每次
+采集创建独立的 `CockpitPerformancePluginRun`，把订阅、计数器等可变状态放在 Run 中，
+避免重复或并发采集互相污染。插件只在一次显式采集中启动，不安装全局监听器，也不会改变
 正常测试行为：
 
 完整可运行示例见
@@ -321,23 +323,7 @@ debug 数据仅用于诊断，不能当作发布性能证据。
 final report = await cockpit.profile(
   () => runCheckoutFlow(),
   plugins: <CockpitPerformancePlugin>[
-    CockpitPerformancePlugin(
-      id: 'checkout-aop',
-      start: (context) {
-        CheckoutHooks.onSpan = (name, startUs, endUs) {
-          context.sink.span(
-            name,
-            category: 'business',
-            startUs: startUs,
-            endUs: endUs,
-            location: const CockpitPerformanceLocation(
-              uri: 'package:checkout/checkout.dart',
-              line: 42,
-            ),
-          );
-        };
-      },
-    ),
+    CheckoutPlugin(),
   ],
 );
 ```
@@ -349,6 +335,9 @@ final report = await cockpit.profile(
 插件抛出异常只会标记为 `failed`，不会让被测操作失败。通过 `report.plugins` 查看归因和
 统计；compact 输出只保留计数，完整 JSON、HTML 和 Chrome trace 保留有界事件详情。
 AOP 适配器应从显式开发 hook 调用 sink，不支持对生产代码做隐式全局注入。
+
+简单的无状态埋点可以使用 `CockpitPerformancePlugin.callbacks(...)`，传入 `setup` 和可选的
+`cleanup`。只要 hook 持有订阅、定时器、缓冲区或其他可变资源，就应使用自定义 Run。
 
 插件启动和清理都受 `CockpitPerformancePluginOptions.lifecycleTimeout` 限制，默认两秒。
 被测窗口会在插件清理和报告生成前关闭，因此清理开销不会被归因到被测交互；插件超时只会记录

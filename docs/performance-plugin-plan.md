@@ -4,12 +4,15 @@
 accurate, attributable events to the existing Cockpit performance timeline.
 
 **Architecture:** Keep `CockpitPerformanceEvent` as the only canonical event
-model. Add a small runtime plugin contract and a bounded sink owned by the
-existing collector; plugins are explicitly registered on the Flutter Cockpit
+model. Add a runtime plugin definition and a bounded sink owned by the existing
+collector; plugins are explicitly registered on the Flutter Cockpit
 configuration and are active only during an explicit `profile()` capture.
-The sink supplies Cockpit's monotonic timestamp, preserves source metadata,
-and isolates plugin failures. Compact reports retain counts and summaries;
-complete JSON, Chrome trace, and HTML retain the bounded plugin events.
+`open` creates a fresh `CockpitPerformancePluginRun` for every capture. The Run
+owns mutable subscriptions, timers, counters, and buffers, while the registered
+plugin definition remains reusable and safe for repeated or concurrent captures.
+The sink supplies Cockpit's monotonic timestamp, preserves source metadata, and
+isolates plugin failures. Compact reports retain counts and summaries; complete
+JSON, Chrome trace, and HTML retain the bounded plugin events.
 
 **Tech Stack:** Dart/Flutter, `cockpit_protocol` DTOs, `flutter_cockpit`
 runtime binding, `flutter_cockpit_test` profiling facade, self-contained HTML.
@@ -23,13 +26,16 @@ runtime binding, `flutter_cockpit_test` profiling facade, self-contained HTML.
    - Validate, serialize, deserialize, and export through the public protocol.
 
 2. **Runtime sink and collector**
-   - Add explicit plugin and adapter interfaces with `instant`, `begin/end`,
-     `span`, `counter`, and `sample` helpers.
+   - Add an extensible plugin base class and per-capture Run lifecycle with
+     `instant`, `begin/end`, `span`, `counter`, and `sample` helpers. Keep a
+     callback factory for small stateless hooks without making callback state
+     part of a reusable plugin definition.
    - Use per-plugin limits plus the profile's global event budget, category
      filters, sampling, payload limits, lifecycle deadlines, and
      drop/truncation counters. Close the measured window before plugin cleanup;
      trim before shutdown callbacks so statistics always match retained events.
-   - Start/stop plugins around the existing capture window and never let a
+   - Create one Run per capture, start/stop it around the existing capture
+     window, and always attempt Run cleanup after setup failure. Never let a
      plugin exception fail the app action.
 
 3. **Flutter facade integration**
