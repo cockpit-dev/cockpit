@@ -233,7 +233,7 @@ void main() {
     expect(requests, hasLength(2));
     expect(requests.last.url.path, '/wda/source');
     expect(requests.last.url.queryParameters, <String, String>{
-      'format': 'json',
+      'format': 'xml',
       'excluded_attributes': 'visible,accessible',
     });
     expect(requests.last.url.queryParameters, isNot(contains('stale')));

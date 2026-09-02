@@ -383,9 +383,16 @@ final class CockpitIosWebDriverAgentClient {
           // Callers resolving a target may explicitly request the session
           // source as a bounded fallback: older WDA builds can briefly lag the
           // foreground snapshot endpoint during Flutter route transitions.
+          // WDA's JSON tree always evaluates `customActions` for every node,
+          // even when visibility/accessibility attributes are excluded.  On
+          // a Flutter hierarchy this can keep XCTest busy for the whole
+          // command deadline after an app handoff.  The XML source honours
+          // excluded attributes and omits that expensive lookup while still
+          // retaining type, label, value, bounds, and enabled state required
+          // by native locator resolution.
           final queryParameters = command.stabilitySnapshot
               ? const <String, String>{
-                  'format': 'json',
+                  'format': 'xml',
                   'excluded_attributes': 'visible,accessible',
                 }
               : const <String, String>{'format': 'json'};
