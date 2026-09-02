@@ -879,6 +879,65 @@ void main() {
     expect(processes.starts, isEmpty);
   });
 
+  test(
+    'macOS native tap uses the process id resolved during tree observation',
+    () async {
+      final processes = _TransientUiTreeProcessManager(failFirst: false);
+      final controls = CockpitSystemControlService(processManager: processes);
+      int? pressedProcessId;
+      final adapter = CockpitSystemTestAutomationAdapter(
+        target: CockpitSystemTestTarget(
+          platform: 'macos',
+          deviceId: 'macos',
+          appId: 'dev.cockpit.demo',
+        ),
+        controlService: controls,
+        actionService: CockpitSystemControlActionService(
+          processManager: processes,
+          systemControlService: controls,
+          macosApplicationProcessIdResolver:
+              ({required appId, required timeout}) async => 8642,
+          macosAccessibilityTreeReader:
+              ({
+                required processId,
+                required maxDepth,
+                required maxNodes,
+                required timeout,
+              }) async => _macosBackTree,
+        ),
+        macosAccessibilityElementPresser:
+            ({
+              required processId,
+              required nativePath,
+              required timeout,
+            }) async {
+              pressedProcessId = processId;
+              return true;
+            },
+        workspaceRoot: Directory.current.path,
+        delay: (_) async {},
+      );
+
+      final execution = await adapter.execute(
+        CockpitCommand(
+          commandId: 'press-macos-back-with-resolved-pid',
+          commandType: CockpitCommandType.tap,
+          parameters: <String, Object?>{
+            'cockpitTestLocator': <String, Object?>{
+              'label': 'Back',
+              'type': 'Button',
+            },
+          },
+          timeoutMs: 1000,
+        ),
+      );
+
+      expect(execution.result.success, isTrue);
+      expect(pressedProcessId, 8642);
+      expect(processes.starts, isEmpty);
+    },
+  );
+
   test('blocked system screenshot remains a blocked capability', () async {
     final processes = _TransientUiTreeProcessManager(failFirst: false);
     final controls = CockpitSystemControlService(processManager: processes);
