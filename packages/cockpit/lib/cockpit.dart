@@ -114,6 +114,7 @@ export 'src/recording/cockpit_simctl_recording_adapter.dart';
 export 'src/recording/cockpit_windows_recording_adapter.dart';
 export 'src/capture/cockpit_windows_capture_adapter.dart';
 export 'src/remote/cockpit_android_port_forwarder.dart';
+export 'src/remote/cockpit_ios_port_forwarder.dart';
 export 'src/remote/cockpit_remote_automation_adapter.dart';
 export 'src/remote/cockpit_remote_capture_adapter.dart';
 export 'src/remote/cockpit_remote_recording_adapter.dart';

@@ -103,6 +103,39 @@ Probe with a read-only inspect, a system-first screenshot, and `dev wait` before
 running a real flow. Keep the same selected device id and session handle for
 Flutter launches, tests, reloads, screenshots, network reads, and recovery.
 
+For a wired physical iOS Flutter development session, Cockpit automatically
+owns the Flutter SDK's `iproxy` forwarder for the selected device and remote
+bridge port. Do not start `iproxy` manually, guess a host port, or launch a
+second app. If forwarding is unavailable, repair the same Flutter SDK/device
+connection (for example with `flutter precache --ios` and `devicectl`), then
+rerun the same `dev start --device <id>`; Cockpit keeps the existing handle.
+The app still needs a valid development signature, trusted computer,
+Developer Mode, and an unlocked device. Wireless sessions use the device
+network path instead and require local-network access.
+
+These are external iOS prerequisites, not Cockpit settings. Before reporting a
+launch or VM timeout, verify them once on the selected device:
+
+- macOS must have the intended Xcode selected, first-launch components and iOS
+  platform runtime installed. `flutter doctor -v`, `xcode-select -p`, and
+  `xcodebuild -checkFirstLaunchStatus` are the read-only checks.
+- A physical device must be paired and trusted, unlocked, and have Developer
+  Mode enabled. The app's development team/signing profile must be valid; a
+  successful Xcode build alone does not prove installation or VM reachability.
+- The host app running Flutter (Terminal, IDE, or Codex) must be allowed to
+  control Xcode in macOS **System Settings > Privacy & Security > Automation**.
+  When this grant is missing, Xcode can finish building while install/launch
+  waits and the Dart VM Service never appears. Grant only the requested Xcode
+  automation access, then rerun the same command and device.
+- For a wired device, keep the USB connection alive and use the Cockpit-owned
+  `iproxy`; for a wireless device, allow the app's iOS Local Network prompt and
+  publish the VM port with `flutter drive --publish-port`. Current Flutter
+  `flutter test integration_test/...` cannot publish that port wirelessly, so
+  use USB for it. Do not switch transport or device mid-run.
+- ReplayKit consent is required only for native screen recording. Native WDA
+  control additionally needs a reachable, signed WDA endpoint; neither is
+  required for Flutter-tree-only integration actions.
+
 Integration tests follow the same explicit selection; always pass the exact
 discovered id even when Flutter currently reports a single default:
 
@@ -113,7 +146,9 @@ flutter drive --profile --no-dds --driver=integration_test/driver.dart \
 ```
 
 Use `flutter test` for ordinary integration tests and `flutter drive --profile
---no-dds` for VM-backed performance evidence. Before a physical run, verify the
+--no-dds` for VM-backed performance evidence. iOS Simulator supports debug
+integration only; Flutter rejects iOS Simulator profile/AOT builds because
+profile is physical-device-only. Before a physical run, verify the
 exact device again; after it starts, require a live status, a current
 screen/anchor, and no disqualifying runtime or native-driver error. For a
 source-owned test, `flutter_cockpit_test` still uses Flutter's official runner;
@@ -126,6 +161,9 @@ A wirelessly connected iOS device is a distinct case. Current Flutter
 fail with `Cannot start app on wirelessly tethered iOS device`. Use a USB
 connection for that command, or run the same integration target through
 `flutter drive --publish-port` (plus `--profile --no-dds` when profiling).
+On Xcode 26+ physical profile runs, add `--ios-profile-debugger` to use
+Flutter's direct LLDB path and avoid the Xcode fallback that can wait for
+`CONFIGURATION_BUILD_DIR`.
 Keep the chosen device unlocked, accept Xcode Automation and local-network
 access when required, and treat a launch that stalls before the app process is
 visible as blocked rather than switching devices.
@@ -414,6 +452,13 @@ If a timed-out mutation already produced the expected anchor, treat it as commit
 and continue without repeating it. If the screen does not belong to the intended app,
 project, or target, inspect the handle returned by status with `cockpit session show
 HANDLE` and select the correct session before any mutation; never repair the wrong app.
+
+When launch logs prove `app.debugPort`, `app.started`, and remote readiness but
+the operation ends in `portHandoffFailed`, treat it as a loopback ownership-probe
+failure. Simulators and port-forwarding proxies may expose one endpoint through
+multiple listener PIDs; do not re-authorize, switch devices, guess ports, or start
+another app. Read the session/daemon logs, clean up the failed app, and retry the
+same device and handle once. See [dev.md](references/dev.md) for the exact flow.
 
 Apply exactly one matching recovery:
 

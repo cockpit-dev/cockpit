@@ -18,6 +18,7 @@ import '../platform/android/cockpit_android_device_readiness.dart';
 import '../foundation/cockpit_ids.dart';
 import '../infrastructure/cockpit_sdk_environment.dart';
 import '../remote/cockpit_android_port_forwarder.dart';
+import '../remote/cockpit_ios_port_forwarder.dart';
 import '../remote/cockpit_remote_session_client.dart';
 import '../session/cockpit_remote_session_launcher.dart';
 import '../session/cockpit_flutter_launch_configuration.dart';
@@ -42,6 +43,7 @@ final class CockpitWorkerDevelopmentSessionRuntime {
     CockpitDevelopmentSessionMachineLauncher? machineLauncher,
     CockpitAndroidPortForwarder portForwarder =
         const CockpitAndroidPortForwarder(),
+    CockpitIosPortForwarder? iosPortForwarder,
     CockpitEntrypointResolver? entrypointResolver,
     CockpitSdkEnvironment? sdkEnvironment,
     CockpitFlutterExecutableVersionReader? flutterVersionReader,
@@ -61,6 +63,7 @@ final class CockpitWorkerDevelopmentSessionRuntime {
     DateTime Function()? utcNow,
   }) : _appTempStore = appTempStore,
        _portForwarder = portForwarder,
+       _iosPortForwarder = iosPortForwarder ?? CockpitIosPortForwarder(),
        _machineLauncher =
            machineLauncher ??
            CockpitDevelopmentSessionMachineLauncher(
@@ -85,6 +88,7 @@ final class CockpitWorkerDevelopmentSessionRuntime {
   final CockpitAppTempStore _appTempStore;
   final CockpitDevelopmentSessionMachineLauncher _machineLauncher;
   final CockpitAndroidPortForwarder _portForwarder;
+  final CockpitIosPortForwarder _iosPortForwarder;
   final CockpitEntrypointResolver _entrypointResolver;
   final CockpitSdkEnvironment _sdkEnvironment;
   final CockpitFlutterExecutableVersionReader? _flutterVersionReader;
@@ -146,7 +150,7 @@ final class CockpitWorkerDevelopmentSessionRuntime {
         );
       }
     }
-    final hostPort = request.platform == 'android'
+    var hostPort = request.platform == 'android'
         ? await _portForwarder.ensureForwarded(
             deviceId: request.deviceId,
             preferredHostPort: request.sessionPort,
@@ -170,6 +174,22 @@ final class CockpitWorkerDevelopmentSessionRuntime {
     final endpoint = await _machineLauncher.resolveRemoteSessionEndpoint(
       endpointRequest,
     );
+    if (endpoint.usePortForward) {
+      try {
+        hostPort = await _iosPortForwarder.ensureForwarded(
+          deviceId: request.deviceId,
+          preferredHostPort: hostPort,
+          devicePort: request.sessionPort,
+          flutterExecutable: flutterExecutable,
+        );
+      } on Object catch (error) {
+        await _logSession(
+          developmentSessionId,
+          'iOS port forwarding failed: $error',
+        );
+        rethrow;
+      }
+    }
     final machineRequest = CockpitLaunchDevelopmentMachineSessionRequest(
       projectDir: projectDir,
       target: target,
@@ -281,6 +301,11 @@ final class CockpitWorkerDevelopmentSessionRuntime {
         developmentSessionId: developmentSessionId,
         platform: request.platform,
       );
+      await _releasePortForward(
+        platform: request.platform,
+        deviceId: request.deviceId,
+        hostPort: hostPort,
+      );
       await _flushSessionLog(developmentSessionId);
       final mapped = _developmentLaunchFailure(error);
       if (identical(mapped, error)) rethrow;
@@ -347,6 +372,7 @@ final class CockpitWorkerDevelopmentSessionRuntime {
         developmentSessionId: handle.developmentSessionId,
         platform: handle.platform,
       );
+      await _releasePortForwardForHandle(handle);
       await _flushSessionLog(handle.developmentSessionId);
     }
     return _snapshot(supervisor);
@@ -364,6 +390,7 @@ final class CockpitWorkerDevelopmentSessionRuntime {
         developmentSessionId: handle.developmentSessionId,
         platform: handle.platform,
       );
+      await _releasePortForwardForHandle(handle);
       await _flushSessionLog(handle.developmentSessionId);
     }
   }
@@ -395,6 +422,7 @@ final class CockpitWorkerDevelopmentSessionRuntime {
         }
       }),
     );
+    await _iosPortForwarder.close();
     await _flushAllSessionLogs();
   }
 
@@ -666,12 +694,47 @@ final class CockpitWorkerDevelopmentSessionRuntime {
         preferredHostPort: hostPort,
         devicePort: devicePort,
       );
+    } else if (platform == 'ios' && baseUri.host == '127.0.0.1') {
+      await _iosPortForwarder.ensureForwarded(
+        deviceId: deviceId,
+        preferredHostPort: hostPort,
+        devicePort: devicePort,
+        flutterExecutable: _sdkEnvironment.flutterExecutable,
+      );
     }
     try {
       final client = CockpitRemoteSessionClient(baseUri: baseUri);
       return readiness ? await client.ready() : await client.ping();
     } on Object {
       return false;
+    }
+  }
+
+  Future<void> _releasePortForwardForHandle(
+    CockpitDevelopmentSessionHandle handle,
+  ) async {
+    final remote = handle.remoteSessionHandle;
+    if (remote == null) return;
+    await _releasePortForward(
+      platform: handle.platform,
+      deviceId: handle.deviceId,
+      hostPort: remote.hostPort,
+    );
+  }
+
+  Future<void> _releasePortForward({
+    required String platform,
+    required String deviceId,
+    required int hostPort,
+  }) async {
+    if (platform != 'ios' || hostPort <= 0) return;
+    try {
+      await _iosPortForwarder.removeForwarded(
+        deviceId: deviceId,
+        hostPort: hostPort,
+      );
+    } on Object catch (error) {
+      await _logger?.call('iOS port forwarding cleanup failed: $error');
     }
   }
 

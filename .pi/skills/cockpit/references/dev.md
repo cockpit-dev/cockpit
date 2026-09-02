@@ -36,6 +36,29 @@ does not look frozen. Machine-readable stdout remains a single clean projection;
 non-interactive and redirected runs emit no progress, and `--format none` is fully
 silent. The stages correspond to real launch boundaries.
 
+If the session log already contains `app.debugPort`, `app.started`, and a
+`remote_status_probe ready` line but the command ends with `portHandoffFailed`,
+the app did start. This is a Supervisor loopback ownership-probe failure, not a
+missing Xcode trust or Flutter bridge integration. Mobile simulators and port
+forwarders can expose one logical endpoint through multiple listener processes;
+Cockpit must validate the authenticated handoff and remote session identity,
+not reject the port solely because more than one PID is reported. Read the
+session and daemon logs once, keep the same device and handle, and retry only
+after the failed app has been cleaned up:
+
+```bash
+cockpit session show HANDLE --view more
+cockpit dev diagnose --session HANDLE --view more
+cockpit dev start --session HANDLE --device <sameDeviceId>
+```
+
+Do not grant permissions again, switch to another device, guess a new port, or
+launch a second app. iOS Simulator uses host loopback; a wired physical iOS
+device uses Cockpit's `iproxy`; Android uses its ADB forwarder. If a current
+build still reports the multi-listener error after one same-session retry,
+preserve the logs and report the listener-probe failure instead of disabling
+ownership checks or adopting an existing process.
+
 For each coherent edit:
 
 1. Inspect only the state needed for the change.

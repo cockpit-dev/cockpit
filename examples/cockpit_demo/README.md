@@ -22,6 +22,22 @@ Linux, web, and Windows. It validates real navigation and form behavior,
 streams durable run events, downloads digest-checked evidence, and emits JSON,
 JUnit, HTML, and AI-oriented reports.
 
+## Platform Access
+
+The development shell under `cockpit/` owns the Cockpit bridge. Its platform
+configuration contains only the access required by the example:
+
+| Platform | Declared access | Runtime consent |
+| --- | --- | --- |
+| Android | `INTERNET`; `flutter_cockpit` merges foreground-service and MediaProjection declarations for recording | Android screen-recording consent when recording starts |
+| iOS | local-network usage text and ATS local networking for the device bridge | ReplayKit consent when native recording starts |
+| macOS | sandboxed network client/server entitlements in Debug, Profile, and Release | Host Cockpit process may need Accessibility, Screen Recording, or Automation for native black-box actions |
+| Linux, Windows, web | No application privacy permission is required by the shell | Platform driver availability is reported by Cockpit |
+
+The example does not request camera, microphone, location, contacts, photos,
+keychain, or secret-store access. The production app at the parent directory
+intentionally remains free of the development-only Cockpit bridge.
+
 ## Bootstrap
 
 Use Flutter 3.32.0 or newer:
@@ -33,9 +49,12 @@ flutter pub get
 ```
 
 Platform prerequisites are the normal Flutter toolchains: a booted Android
-emulator, Xcode and an iOS simulator, Chrome for web, or the corresponding
-desktop toolchain. The runner discovers live devices and does not infer a
-device when more than one matching target is available.
+emulator, Xcode and an iOS simulator or trusted/unlocked physical iOS device,
+Chrome for web, or the corresponding desktop toolchain. Physical iOS
+development needs Developer Mode and a valid development signature; Cockpit
+automatically manages Flutter's USB `iproxy` bridge for a wired device. The
+runner discovers live devices and does not infer a device when more than one
+matching target is available.
 
 ## Run The Regression Suite
 

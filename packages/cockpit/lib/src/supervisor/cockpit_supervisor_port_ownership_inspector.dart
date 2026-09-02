@@ -75,13 +75,29 @@ final class CockpitSystemSupervisorPortOwnershipInspector
     if (worker.startIdentity != _workerStartIdentity) {
       throw StateError('Worker process identity changed during port handoff.');
     }
-    final listenerProcessId = await _readListenerProcessId(port, deadline);
-    if (listenerProcessId == null) return null;
-    final listener = await _readProcessSnapshot(listenerProcessId, deadline);
+    // A single logical loopback endpoint can be reported by more than one
+    // process on mobile simulators and port-forwarding proxies (for example,
+    // the simulator host proxy and the app process).  PID cardinality is not
+    // an ownership proof.  Inspect every visible listener, preferring one in
+    // the worker tree when available, and let the authenticated handoff plus
+    // remote-session health check establish the actual owner.
+    final listenerProcessIds = await _readListenerProcessIds(port, deadline);
+    if (listenerProcessIds.isEmpty) return null;
+    _ProcessSnapshot? listener;
+    var owned = false;
+    for (final listenerProcessId in listenerProcessIds.toList()..sort()) {
+      final candidate = await _readProcessSnapshot(listenerProcessId, deadline);
+      if (candidate == null) continue;
+      final candidateOwned = await _belongsToWorker(candidate, deadline);
+      if (listener == null || (candidateOwned && !owned)) {
+        listener = candidate;
+        owned = candidateOwned;
+      }
+      if (owned) break;
+    }
     if (listener == null) return null;
-    final owned = await _belongsToWorker(listener, deadline);
     return CockpitSupervisorPortOwnershipEvidence(
-      listenerProcessId: listenerProcessId,
+      listenerProcessId: listener.processId,
       listenerStartIdentity: listener.startIdentity,
       ownedByWorker: owned,
     );
@@ -106,12 +122,14 @@ final class CockpitSystemSupervisorPortOwnershipInspector
     return false;
   }
 
-  static Future<int?> _readListenerProcessId(int port, DateTime deadline) =>
-      Platform.isWindows
-      ? _readWindowsListenerProcessId(port, deadline)
-      : _readPosixListenerProcessId(port, deadline);
+  static Future<Set<int>> _readListenerProcessIds(
+    int port,
+    DateTime deadline,
+  ) => Platform.isWindows
+      ? _readWindowsListenerProcessIds(port, deadline)
+      : _readPosixListenerProcessIds(port, deadline);
 
-  static Future<int?> _readPosixListenerProcessId(
+  static Future<Set<int>> _readPosixListenerProcessIds(
     int port,
     DateTime deadline,
   ) async {
@@ -123,24 +141,14 @@ final class CockpitSystemSupervisorPortOwnershipInspector
     );
     if (result.exitCode != 0 && '${result.stdout}'.trim().isEmpty) {
       if (Platform.isLinux) {
-        return _readLinuxListenerProcessIdWithSs(port, deadline);
+        return _readLinuxListenerProcessIdsWithSs(port, deadline);
       }
-      return null;
+      return <int>{};
     }
-    final processIds = <int>{};
-    for (final line in const LineSplitter().convert('${result.stdout}')) {
-      if (!line.startsWith('p')) continue;
-      final processId = int.tryParse(line.substring(1));
-      if (processId != null && processId > 1) processIds.add(processId);
-    }
-    if (processIds.isEmpty) return null;
-    if (processIds.length != 1) {
-      throw StateError('Loopback port has multiple listener processes.');
-    }
-    return processIds.single;
+    return cockpitParsePosixLsofListenerProcessIds('${result.stdout}');
   }
 
-  static Future<int?> _readLinuxListenerProcessIdWithSs(
+  static Future<Set<int>> _readLinuxListenerProcessIdsWithSs(
     int port,
     DateTime deadline,
   ) async {
@@ -150,19 +158,14 @@ final class CockpitSystemSupervisorPortOwnershipInspector
       deadline,
       allowFailure: true,
     );
-    if (result.exitCode != 0) return null;
-    final matches = RegExp(r'pid=(\d+)')
+    if (result.exitCode != 0) return <int>{};
+    return RegExp(r'pid=(\d+)')
         .allMatches('${result.stdout}')
         .map((match) => int.parse(match[1]!))
         .toSet();
-    if (matches.isEmpty) return null;
-    if (matches.length != 1) {
-      throw StateError('Loopback port has multiple listener processes.');
-    }
-    return matches.single;
   }
 
-  static Future<int?> _readWindowsListenerProcessId(
+  static Future<Set<int>> _readWindowsListenerProcessIds(
     int port,
     DateTime deadline,
   ) async {
@@ -172,16 +175,11 @@ final class CockpitSystemSupervisorPortOwnershipInspector
       deadline,
       allowFailure: true,
     );
-    if (result.exitCode != 0) return null;
-    final processIds = cockpitParseWindowsNetstatListenerProcessIds(
+    if (result.exitCode != 0) return <int>{};
+    return cockpitParseWindowsNetstatListenerProcessIds(
       '${result.stdout}',
       port: port,
     );
-    if (processIds.isEmpty) return null;
-    if (processIds.length != 1) {
-      throw StateError('Loopback port has multiple listener processes.');
-    }
-    return processIds.single;
   }
 
   static Future<_ProcessSnapshot?> _readProcessSnapshot(
@@ -323,6 +321,16 @@ Set<int> cockpitParseWindowsNetstatListenerProcessIds(
       continue;
     }
     final processId = int.tryParse(fields.last);
+    if (processId != null && processId > 1) processIds.add(processId);
+  }
+  return processIds;
+}
+
+Set<int> cockpitParsePosixLsofListenerProcessIds(String output) {
+  final processIds = <int>{};
+  for (final line in const LineSplitter().convert(output)) {
+    if (!line.startsWith('p')) continue;
+    final processId = int.tryParse(line.substring(1));
     if (processId != null && processId > 1) processIds.add(processId);
   }
   return processIds;

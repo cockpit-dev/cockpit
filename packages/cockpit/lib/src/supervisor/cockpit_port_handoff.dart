@@ -159,14 +159,15 @@ extension CockpitPortReservationOperations on CockpitPortReservation {
         code: 'portHandoffTimeout',
         message: 'Controlled port handoff exceeded its bounded deadline.',
       );
-    } on Object {
+    } on Object catch (error) {
       await _quarantine(
         'portHandoffFailed',
         'Controlled port handoff failed before owner verification.',
       );
-      throw const CockpitLeaseException(
+      throw CockpitLeaseException(
         code: 'portHandoffFailed',
-        message: 'Controlled port handoff failed before owner verification.',
+        message:
+            'Controlled port handoff failed before owner verification: $error',
       );
     }
   }

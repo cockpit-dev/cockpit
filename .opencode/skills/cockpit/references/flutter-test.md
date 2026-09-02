@@ -442,18 +442,32 @@ required. A successful Xcode build without a visible app process is a blocked
 launch, not a passing integration test and not permission to choose another
 device.
 
+Physical iOS runs also depend on host authorization outside the test package:
+the invoking Terminal/IDE/Codex must be enabled for Xcode under macOS System
+Settings > Privacy & Security > Automation; the device must be paired/trusted,
+in Developer Mode, unlocked, and signed by an available development team. If
+the build completes but installation, launch, or VM discovery waits, repair
+that authorization/signing/transport condition and rerun the same device. Do
+not add a second app or silently change to another device.
+
 For VM timeline/performance integration, use Flutter's profile build and driver
 with DDS disabled so the device isolate connects to the forwarded VM Service
-endpoint directly:
+endpoint directly. iOS profile/AOT builds are physical-device-only; the iOS
+Simulator must use the debug commands above. Do not retry a simulator profile
+build after Flutter reports `release/profile builds are only supported for
+physical devices`.
 
 ```bash
 flutter drive --profile --no-dds --driver=integration_test/driver.dart \
   --target=integration_test/performance_profile_test.dart -d emulator-5554
 flutter drive --profile --no-dds --driver=integration_test/driver.dart \
-  --target=integration_test/performance_profile_test.dart -d <ios-simulator-udid>
-flutter drive --profile --no-dds --driver=integration_test/driver.dart \
   --target=integration_test/performance_profile_test.dart -d macos
 ```
+
+On Xcode 26+ physical iOS, add `--ios-profile-debugger` to the profile command
+when VM discovery is required. It selects Flutter's direct LLDB launch path;
+without it Flutter may fall back to Xcode automation and wait for
+`CONFIGURATION_BUILD_DIR`. The flag is not applicable to a simulator.
 
 `flutter test integration_test/...` always uses debug mode and does not accept
 `--profile` or `--release`. `flutter drive --release` is not a fallback: the

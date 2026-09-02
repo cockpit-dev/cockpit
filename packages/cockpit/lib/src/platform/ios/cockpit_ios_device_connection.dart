@@ -28,15 +28,19 @@ final class CockpitIosDeviceConnection {
   const CockpitIosDeviceConnection({
     required this.isPhysical,
     this.tunnelIpAddress,
+    this.transportType,
   });
 
   final bool isPhysical;
   final String? tunnelIpAddress;
+  final String? transportType;
 
   bool get hasReachableTunnel =>
       isPhysical &&
       tunnelIpAddress != null &&
       tunnelIpAddress!.trim().isNotEmpty;
+
+  bool get isWired => transportType?.trim().toLowerCase() == 'wired';
 
   factory CockpitIosDeviceConnection.fromDevicectlJson(
     Map<String, Object?> json,
@@ -48,9 +52,12 @@ final class CockpitIosDeviceConnection {
     final reality = '${hardwareProperties?['reality'] ?? ''}'.trim();
     final tunnelIpAddress = '${connectionProperties?['tunnelIPAddress'] ?? ''}'
         .trim();
+    final transportType = '${connectionProperties?['transportType'] ?? ''}'
+        .trim();
     return CockpitIosDeviceConnection(
       isPhysical: reality == 'physical',
       tunnelIpAddress: tunnelIpAddress.isEmpty ? null : tunnelIpAddress,
+      transportType: transportType.isEmpty ? null : transportType,
     );
   }
 }

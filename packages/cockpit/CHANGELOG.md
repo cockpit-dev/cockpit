@@ -1,5 +1,13 @@
 # Changelog
 
+## 4.4.0
+
+- Fixed iOS Simulator loopback handoff when one endpoint is reported by
+  multiple listener processes; ownership now follows the authenticated worker
+  and remote-session checks instead of PID cardinality.
+- Added reliable iOS physical-device port forwarding and preserved explicit
+  device/session selection across recovery.
+
 ## 4.3.0
 
 - Synchronized the CLI and Supervisor package with the lossless performance

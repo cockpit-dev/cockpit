@@ -22,6 +22,10 @@ void main() {
     final iosDevelopmentPodLock = File(
       'examples/cockpit_demo/cockpit/ios/Podfile.lock',
     ).readAsStringSync();
+    final iosSwiftPackage = File(
+      'examples/cockpit_demo/cockpit/ios/Flutter/ephemeral/Packages/'
+      'FlutterGeneratedPluginSwiftPackage/Package.swift',
+    );
     final macosDevelopmentPodLock = File(
       'examples/cockpit_demo/cockpit/macos/Podfile.lock',
     ).readAsStringSync();
@@ -38,9 +42,17 @@ void main() {
     expect(devtoolsVersion, protocolVersion);
     expect(runtimePubspec, contains('cockpit_protocol: ^$protocolVersion'));
     expect(devtoolsPubspec, contains('cockpit_protocol: ^$protocolVersion'));
+    final iosUsesCocoaPods = iosDevelopmentPodLock.contains(
+      'flutter_cockpit ($runtimeVersion)',
+    );
+    final iosUsesSwiftPm =
+        iosSwiftPackage.existsSync() &&
+        iosSwiftPackage.readAsStringSync().contains('flutter_cockpit');
     expect(
-      iosDevelopmentPodLock,
-      contains('flutter_cockpit ($runtimeVersion)'),
+      iosUsesCocoaPods || iosUsesSwiftPm,
+      isTrue,
+      reason:
+          'iOS shell must link flutter_cockpit through CocoaPods or SwiftPM.',
     );
     final macosUsesCocoaPods = macosDevelopmentPodLock.contains(
       'flutter_cockpit ($runtimeVersion)',

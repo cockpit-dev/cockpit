@@ -129,12 +129,30 @@ void main() {
       ).existsSync(),
       isTrue,
     );
-    expect(
-      File(
-        '${shellIosRoot.path}/Runner.xcodeproj/project.pbxproj',
-      ).readAsStringSync(),
-      isNot(contains('FlutterGeneratedPluginSwiftPackage')),
+    final shellIosProject = File(
+      '${shellIosRoot.path}/Runner.xcodeproj/project.pbxproj',
+    ).readAsStringSync();
+    final shellIosSwiftPackage = File(
+      '${shellIosRoot.path}/Flutter/ephemeral/Packages/'
+      'FlutterGeneratedPluginSwiftPackage/Package.swift',
     );
+    final shellIosUsesSwiftPm =
+        shellIosSwiftPackage.existsSync() &&
+        shellIosSwiftPackage.readAsStringSync().contains('flutter_cockpit');
+    final shellIosPodLock = File('${shellIosRoot.path}/Podfile.lock');
+    final shellIosUsesCocoaPods =
+        shellIosPodLock.existsSync() &&
+        shellIosPodLock.readAsStringSync().contains('flutter_cockpit');
+    expect(
+      shellIosUsesSwiftPm || shellIosUsesCocoaPods,
+      isTrue,
+      reason:
+          'iOS development shell must link flutter_cockpit through '
+          'CocoaPods or SwiftPM.',
+    );
+    if (shellIosUsesSwiftPm) {
+      expect(shellIosProject, contains('FlutterGeneratedPluginSwiftPackage'));
+    }
 
     for (final relativePath in <String>[
       'Flutter/Debug.xcconfig',

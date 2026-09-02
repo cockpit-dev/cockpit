@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import '../platform/ios/cockpit_ios_device_connection.dart';
+import '../remote/cockpit_ios_port_forwarder.dart';
 import 'cockpit_apple_bundle_support.dart';
 import 'cockpit_flutter_launch_configuration.dart';
 import 'cockpit_remote_session_handle.dart';
@@ -30,6 +31,7 @@ final class CockpitIosPhysicalRemoteSessionLauncher
     CockpitIosPhysicalProcessRunner? processRunner,
     CockpitIosDeviceConnectionReader deviceConnectionResolver =
         _defaultDeviceConnectionResolver,
+    CockpitIosPortForwarder? portForwarder,
     CockpitIosPhysicalBundleIdResolver bundleIdResolver = _resolveBundleId,
     CockpitIosPhysicalAppBundlePathResolver appBundlePathResolver =
         _resolveAppBundlePath,
@@ -42,6 +44,7 @@ final class CockpitIosPhysicalRemoteSessionLauncher
   }) : _processRunner = processRunner ?? _runProcess,
        _useKillableProcessRunner = processRunner == null,
        _deviceConnectionResolver = deviceConnectionResolver,
+       _portForwarder = portForwarder ?? CockpitIosPortForwarder(),
        _bundleIdResolver = bundleIdResolver,
        _appBundlePathResolver = appBundlePathResolver,
        _statusReader = statusReader,
@@ -58,6 +61,7 @@ final class CockpitIosPhysicalRemoteSessionLauncher
   final CockpitIosPhysicalProcessRunner _processRunner;
   final bool _useKillableProcessRunner;
   final CockpitIosDeviceConnectionReader _deviceConnectionResolver;
+  final CockpitIosPortForwarder _portForwarder;
   final CockpitIosPhysicalBundleIdResolver _bundleIdResolver;
   final CockpitIosPhysicalAppBundlePathResolver _appBundlePathResolver;
   final CockpitRemoteSessionStatusReader _statusReader;
@@ -154,30 +158,48 @@ final class CockpitIosPhysicalRemoteSessionLauncher
             _remaining(deadline),
           ),
         );
+    final hostPort = connection.isWired
+        ? await _portForwarder.ensureForwarded(
+            deviceId: options.deviceId,
+            preferredHostPort: options.sessionPort,
+            devicePort: options.sessionPort,
+            flutterExecutable: flutterExecutable,
+          )
+        : options.sessionPort;
     final baseUri = Uri(
       scheme: 'http',
-      host: connection.tunnelIpAddress!,
-      port: options.sessionPort,
+      host: connection.isWired ? '127.0.0.1' : connection.tunnelIpAddress!,
+      port: hostPort,
     );
-    final status = await cockpitWaitForRemoteSessionReady(
-      baseUri: baseUri,
-      timeout: _remaining(deadline),
-      statusReader: _statusReader,
-      expectedSessionId: options.launchId,
-      expectedPlatform: options.platform,
-    );
+    try {
+      final status = await cockpitWaitForRemoteSessionReady(
+        baseUri: baseUri,
+        timeout: _remaining(deadline),
+        statusReader: _statusReader,
+        expectedSessionId: options.launchId,
+        expectedPlatform: options.platform,
+      );
 
-    return CockpitRemoteSessionHandle.fromRemoteStatus(
-      projectDir: options.projectDir,
-      target: options.target,
-      deviceId: options.deviceId,
-      appId: bundleId,
-      host: connection.tunnelIpAddress!,
-      hostPort: options.sessionPort,
-      devicePort: options.sessionPort,
-      status: status,
-      launchedAt: _now(),
-    );
+      return CockpitRemoteSessionHandle.fromRemoteStatus(
+        projectDir: options.projectDir,
+        target: options.target,
+        deviceId: options.deviceId,
+        appId: bundleId,
+        host: baseUri.host,
+        hostPort: hostPort,
+        devicePort: options.sessionPort,
+        status: status,
+        launchedAt: _now(),
+      );
+    } on Object {
+      if (connection.isWired) {
+        await _portForwarder.removeForwarded(
+          deviceId: options.deviceId,
+          hostPort: hostPort,
+        );
+      }
+      rethrow;
+    }
   }
 
   Future<void> _runRequired(

@@ -1,5 +1,12 @@
 # Changelog
 
+## 4.4.0
+
+- Added reusable stateful `CockpitPerformancePluginRun` instances so each
+  capture owns its hooks, subscriptions, and cleanup state independently.
+- Kept plugin setup and cleanup bounded and isolated so instrumentation cannot
+  block or invalidate the measured Flutter interaction.
+
 ## 4.3.0
 
 - Synchronized the Flutter bridge package with the lossless performance archive
