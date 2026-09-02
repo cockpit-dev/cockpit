@@ -305,7 +305,7 @@ final class CockpitSystemTestAutomationAdapter
       );
     }
     final nativePath = point.nativePath;
-    final processId = _target.processId;
+    final processId = _target.processId ?? _lastNativeProcessId;
     if (_target.platform.trim().toLowerCase() == 'macos' &&
         processId != null &&
         processId > 0 &&
@@ -964,9 +964,7 @@ final class CockpitSystemTestAutomationAdapter
         stopwatch,
         CockpitCommandError.timeout(
           message: 'Native UI could not be observed before the deadline.',
-          details: <String, Object?>{
-            'lastError': '$lastObservationError',
-          },
+          details: <String, Object?>{'lastError': '$lastObservationError'},
         ),
       );
     }
