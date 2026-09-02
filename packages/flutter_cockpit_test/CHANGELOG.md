@@ -1,5 +1,10 @@
 # Changelog
 
+## 4.4.2
+
+- Synchronized the integration-test facade release with the iOS native
+  capability probe fix.
+
 ## 4.4.1
 
 - Corrected cross-platform performance contracts so unavailable native process

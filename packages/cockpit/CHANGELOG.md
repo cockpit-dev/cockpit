@@ -1,5 +1,11 @@
 # Changelog
 
+## 4.4.2
+
+- Fixed iOS simulator native capability probing by reading the foreground UI
+  tree before attempting app activation, avoiding Xcode 26/WebDriverAgent
+  activation hangs on a healthy launch.
+
 ## 4.4.1
 
 - Synchronized the CLI release with corrected cross-platform package metadata
