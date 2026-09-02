@@ -909,6 +909,7 @@ final class CockpitSystemTestAutomationAdapter
     _ResolvedPoint? lastPoint;
     Object? lastObservationError;
     var consecutiveMisses = 0;
+    var fullSourceFallbackAttempted = false;
     var activationAttempted = false;
     do {
       late final _ResolvedPoint point;
@@ -956,6 +957,46 @@ final class CockpitSystemTestAutomationAdapter
         consecutiveMisses = 0;
       } else {
         consecutiveMisses += 1;
+        // The lightweight XML source is intentionally used for iOS polling,
+        // but some XCTest/WDA versions omit Flutter semantic attributes from
+        // that projection immediately after a simulator handoff. Before the
+        // final activation fallback, take one short, non-activating full-source
+        // sample. This preserves the fast, foreground-safe path while still
+        // allowing a real semantic tree to settle without requiring a second
+        // app launch or a guessed coordinate.
+        if (!absent &&
+            _isIos &&
+            _flutterAwareNative &&
+            !fullSourceFallbackAttempted &&
+            consecutiveMisses >= 2) {
+          fullSourceFallbackAttempted = true;
+          final fallbackDeadline = _boundedDeadline(
+            deadline,
+            const Duration(seconds: 2),
+          );
+          try {
+            final refreshed = await _resolvePoint(
+              command,
+              fallbackDeadline,
+              stabilitySnapshot: false,
+              allowActivation: false,
+            );
+            if (refreshed.error == null) {
+              return _success(
+                command,
+                stopwatch,
+                resolution: refreshed.resolution,
+                artifacts: refreshed.artifacts,
+                artifactSourcePaths: refreshed.artifactSourcePaths,
+              );
+            }
+            lastPoint = refreshed;
+          } on StateError catch (error) {
+            lastObservationError = error;
+          } on TimeoutException catch (error) {
+            lastObservationError = error;
+          }
+        }
         // simctl launch can leave an existing WDA session with a stale
         // accessibility snapshot even though the app is already foreground.
         // Refresh that same app once after two bounded misses. This keeps
@@ -2079,6 +2120,11 @@ final class CockpitSystemTestAutomationAdapter
     final requested = Duration(milliseconds: milliseconds);
     await _delay(remaining < requested ? remaining : requested);
     return _utcNow().isBefore(deadline);
+  }
+
+  DateTime _boundedDeadline(DateTime deadline, Duration maximum) {
+    final candidate = _utcNow().add(maximum);
+    return candidate.isBefore(deadline) ? candidate : deadline;
   }
 }
 
