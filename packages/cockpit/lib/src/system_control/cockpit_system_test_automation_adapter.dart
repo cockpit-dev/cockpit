@@ -1641,8 +1641,10 @@ final class CockpitSystemTestAutomationAdapter
           } on TimeoutException {
             // A condition probe must remain responsive while XCTest is
             // rebuilding its accessibility tree. A slow native lookup is a
-            // miss for this probe; the outer wait loop will sample again.
-            if (allowActivation) rethrow;
+            // miss for this probe; the outer wait loop will sample again. A
+            // stability recovery pass still needs to reach its one explicit
+            // activation attempt after a timed-out non-activating query.
+            if (allowActivation && !stabilitySnapshot) rethrow;
             continue;
           } on Object {
             // WDA uses a failed element lookup for a non-matching query. Try
