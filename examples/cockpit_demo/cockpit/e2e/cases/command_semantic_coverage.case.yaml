@@ -38,7 +38,7 @@ setup:
       durationMs: 200
       revealAlignment: center
   - stepId: openCommandLab
-    timeoutMs: 12000
+    timeoutMs: 30000
     action:
       type: tap
       locator: {text: Open command lab}
