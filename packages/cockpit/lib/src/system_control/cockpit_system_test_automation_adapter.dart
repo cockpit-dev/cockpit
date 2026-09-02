@@ -908,6 +908,8 @@ final class CockpitSystemTestAutomationAdapter
     final deadline = _deadline(command);
     _ResolvedPoint? lastPoint;
     Object? lastObservationError;
+    var consecutiveMisses = 0;
+    var activationAttempted = false;
     do {
       late final _ResolvedPoint point;
       try {
@@ -949,6 +951,47 @@ final class CockpitSystemTestAutomationAdapter
           artifacts: point.artifacts,
           artifactSourcePaths: point.artifactSourcePaths,
         );
+      }
+      if (found) {
+        consecutiveMisses = 0;
+      } else {
+        consecutiveMisses += 1;
+        // simctl launch can leave an existing WDA session with a stale
+        // accessibility snapshot even though the app is already foreground.
+        // Refresh that same app once after two bounded misses. This keeps
+        // waits side-effect free in the normal case while avoiding a false
+        // timeout immediately after an explicit recoverToApp step.
+        if (!absent &&
+            _isIos &&
+            _flutterAwareNative &&
+            !activationAttempted &&
+            consecutiveMisses >= 2) {
+          activationAttempted = true;
+          try {
+            final refreshed = await _resolvePoint(
+              command,
+              deadline,
+              // Keep the lightweight XML source while explicitly allowing a
+              // single WDA activation fallback for this recovery pass.
+              stabilitySnapshot: true,
+              allowActivation: true,
+            );
+            if (refreshed.error == null) {
+              return _success(
+                command,
+                stopwatch,
+                resolution: refreshed.resolution,
+                artifacts: refreshed.artifacts,
+                artifactSourcePaths: refreshed.artifactSourcePaths,
+              );
+            }
+            lastPoint = refreshed;
+          } on StateError catch (error) {
+            lastObservationError = error;
+          } on TimeoutException catch (error) {
+            lastObservationError = error;
+          }
+        }
       }
       if (found != absent) {
         return _success(
@@ -1473,7 +1516,11 @@ final class CockpitSystemTestAutomationAdapter
         locator,
         snapshot,
         deadline,
-        allowActivation: allowActivation && !stabilitySnapshot,
+        // Activation is controlled solely by allowActivation. A caller may
+        // explicitly request both a lightweight stability snapshot and one
+        // recovery activation; the normal wait path passes false here and
+        // remains side-effect free.
+        allowActivation: allowActivation,
         stabilitySnapshot: stabilitySnapshot,
       );
       if (resolved != null) return resolved;
