@@ -1,5 +1,12 @@
 # Changelog
 
+## 4.4.3
+
+- Hardened Flutter+iOS native condition waits after app recovery with one
+  bounded full-source fallback when the lightweight WDA snapshot is incomplete.
+- Kept mixed-plane acceptance on the real native tap path without relaunching
+  the app or switching its session.
+
 ## 4.4.2
 
 - Fixed iOS simulator native capability probing by reading the foreground UI
