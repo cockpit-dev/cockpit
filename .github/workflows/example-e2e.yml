@@ -473,6 +473,16 @@ jobs:
         if: matrix.platform == 'linux' || matrix.platform == 'web'
         shell: bash
         run: |
+          # Hosted Ubuntu images may ship Microsoft feeds that intermittently
+          # return 403 from GitHub Actions. They are unrelated to Cockpit's
+          # Linux/Web test dependencies; disable only those transient feeds so
+          # the official Ubuntu indexes can be refreshed reliably.
+          while IFS= read -r source; do
+            sudo mv "$source" "$source.cockpit-disabled"
+          done < <(
+            sudo find /etc/apt/sources.list.d -maxdepth 1 -type f \
+              \( -iname '*microsoft*' -o -iname '*azure*' \) -print
+          )
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends xvfb x11-utils xdotool imagemagick ffmpeg clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev
 
