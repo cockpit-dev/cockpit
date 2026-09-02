@@ -129,8 +129,13 @@ Run from inside the Flutter project that contains the bridge shell:
 
 ```bash
 cockpit target discover
-cockpit dev start --device <deviceId>
+cockpit dev start --device <chosenId>
 ```
+
+Read the discovered `id`, `name`, `platform`, `emulator`, and `sdk` rows before
+starting. If more than one row is available, ask the user for one exact id;
+never let the host platform or Flutter's default target decide. Keep the same
+id for the session and every integration-test command.
 
 From a monorepo common ancestor or for a non-default entrypoint, enter the
 intended project directory when possible. If you must start at the ancestor,

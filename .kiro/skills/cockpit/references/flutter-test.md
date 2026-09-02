@@ -409,11 +409,15 @@ full tree contents.
 ## Run and choose the layer
 
 Always choose the test device explicitly. First run `cockpit target discover`
-when more than one target may be available, then use the exact discovered id;
-Flutter's default target is not a safe selection. If the user has not selected
-among multiple compatible rows, stop and ask for the id. Keep that id for every
-test and performance command; do not fall through to another device after a
-disconnect.
+before every new or ambiguous target, read the `id`/`name`/`platform`/`emulator`
+rows, and use the exact selected id; the host platform and Flutter's default
+target are not safe selections. If the user has not selected among multiple
+compatible rows, stop and ask for the exact id. Keep that id for every test and
+performance command; do not fall through to another device after a disconnect.
+
+After a physical device is selected, prove its native and VM-backed capabilities
+with `cockpit target inspect --target-id <targetId> --profile evidence` after
+registration, then run the test. Discovery alone proves connectivity only.
 
 Run with Flutter's normal command for the actual target:
 

@@ -85,7 +85,9 @@ entrypoint。Cockpit 会管理发现、Supervisor、workspace/target 注册、�
 创建仅开发使用的 `cockpit/main.dart` bridge shell：
 
 ```bash
-cockpit dev start
+cockpit target discover
+# 从 targets 列表选择一个精确 id
+cockpit dev start --device <deviceId>
 cockpit dev inspect
 cockpit dev tap 'FilledButton["Save"]'
 cockpit dev type "hello" --into '@message'
@@ -97,7 +99,8 @@ cockpit dev reload
 cockpit dev diagnose --view more
 ```
 
-入口和平台可推断时直接省略。Cockpit 会按 canonical Flutter project 保存一个 active
+设备明确选定后，入口和平台可推断时可以省略；绝不能让宿主平台或 Flutter 默认目标在多
+设备之间替你选择。Cockpit 会按 canonical Flutter project 保存一个 active
 短小写 base-36 handle，并用 checkout identity 保证隔离；同一项目可以保留不同平台或
 target 的多个 handle。需要确认或切换时使用 `cockpit session list`、`cockpit session show
 HANDLE` 和 `cockpit dev use HANDLE`。显式 `--session` 只选择当前命令，不会改变已保存

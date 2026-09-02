@@ -416,9 +416,7 @@ void main() {
     final protocol = read('${_skillRoots.first}/references/protocol.md');
     expect(flutter, contains('native driver or system action'));
     expect(flutter, isNot(contains('native/system')));
-    final flutterTest = read(
-      '${_skillRoots.first}/references/flutter-test.md',
-    );
+    final flutterTest = read('${_skillRoots.first}/references/flutter-test.md');
     expect(flutterTest, contains('cockpit.debugger.status'));
     expect(flutterTest, contains('cockpit.debugger.evaluateInFrame'));
     expect(flutterTest, contains('`callServiceExtension`'));

@@ -44,9 +44,11 @@ checkout intentionally uses one.
 
 ## Select The Device Explicitly
 
-Never infer a device from host order, the last Flutter target, a platform name,
-or a remembered session. Before the first launch in a project, and whenever the
-target is ambiguous, discover the current devices:
+Device choice is a deliberate input, not a host heuristic. Never infer a device
+from row order, the last Flutter target, a platform name, the host platform, or
+a remembered session. A connected macOS host must not win over an iOS/Android
+simulator or physical device. Before the first launch in a project, and whenever
+the target is ambiguous, discover the current devices:
 
 ```bash
 cockpit target discover
@@ -55,10 +57,25 @@ cockpit target discover
 This returns a bounded `targets` list with the exact `id`, `name`, `platform`,
 `emulator`, and `sdk`. Use the exact `id` in the next command. If the user did
 not provide a device and more than one compatible target is listed, stop and
-ask which row to use; never choose the first, last, or an emulator implicitly.
-If exactly one compatible target exists, state the selected id/name/platform
-and use that exact id. Never silently switch between a simulator and a
-physical device.
+ask which exact row to use; never choose the first, last, host, or an emulator
+implicitly. If exactly one compatible target exists, state its id, name, and
+platform before using that exact id. Never silently switch between a simulator
+and a physical device.
+
+The copy-ready selection flow is always:
+
+```bash
+cockpit target discover
+# choose one row by its exact id; do not guess from the name alone
+cockpit dev start --device <chosenId>
+cockpit session show <handle>
+```
+
+If `dev start` reports `deviceAmbiguous`, use the listed candidates and rerun
+with one exact `--device`; if it reports `deviceNotFound`, reconnect or boot
+that same intended device and rediscover it. Do not fall through to another
+device or start a second app. For a fresh project with multiple active sessions,
+inspect `cockpit session list` and select the intended handle before reusing it.
 
 ```bash
 cockpit target discover
@@ -79,14 +96,15 @@ cockpit target inspect --target-id <targetId> --profile evidence
 
 Physical-device work requires an online, unlocked, trusted device and its
 native control path (Android ADB; iOS WDA/devicectl where native control is
-needed). A connected row alone is not proof of E2E readiness: inspect must
-advertise the required tree, input, capture, and lifecycle capabilities. Probe
-with a read-only inspect, a screenshot, and `dev wait` before running a real
-flow. Keep the same selected device id and session handle for Flutter launches,
-reloads, screenshots, network reads, and recovery.
+needed). A connected row alone is not proof of E2E readiness: after the app is
+registered, `target inspect --profile evidence` must advertise the required
+tree, input, capture, lifecycle, and (for integration tests) VM capabilities.
+Probe with a read-only inspect, a system-first screenshot, and `dev wait` before
+running a real flow. Keep the same selected device id and session handle for
+Flutter launches, tests, reloads, screenshots, network reads, and recovery.
 
-Integration tests follow the same explicit selection; never rely on Flutter's
-default device when more than one is available:
+Integration tests follow the same explicit selection; always pass the exact
+discovered id even when Flutter currently reports a single default:
 
 ```bash
 flutter test integration_test/<test>.dart -d <deviceId>
@@ -95,11 +113,13 @@ flutter drive --profile --no-dds --driver=integration_test/driver.dart \
 ```
 
 Use `flutter test` for ordinary integration tests and `flutter drive --profile
---no-dds` for VM-backed performance evidence. Before a physical run, verify
-the exact device again; after it starts, require a live status, a current
-screen/anchor, and no disqualifying runtime or native-driver error. If the
-device disappears, repair that device and rediscover it; do not fall through to
-another target or create a second session.
+--no-dds` for VM-backed performance evidence. Before a physical run, verify the
+exact device again; after it starts, require a live status, a current
+screen/anchor, and no disqualifying runtime or native-driver error. For a
+source-owned test, `flutter_cockpit_test` still uses Flutter's official runner;
+it does not select a device for you. If the device disappears, repair that
+device and rediscover it; do not fall through to another target or create a
+second session.
 
 A wirelessly connected iOS device is a distinct case. Current Flutter
 `flutter test integration_test/...` cannot publish its VM service port and may
@@ -938,25 +958,43 @@ results keep only plugin counts and drops, while complete JSON, HTML, and
 `Download timeline` retain the bounded attributable events. Example:
 
 ```dart
+final class CheckoutPlugin extends CockpitPerformancePlugin {
+  CheckoutPlugin() : super(id: 'checkout-aop');
+
+  @override
+  CockpitPerformancePluginRun open(CockpitPerformancePluginContext context) =>
+      _CheckoutRun(context.sink);
+}
+
+final class _CheckoutRun extends CockpitPerformancePluginRun {
+  _CheckoutRun(this.sink);
+
+  final CockpitPerformanceSink sink;
+
+  @override
+  void start() {
+    CheckoutHooks.onSpan = (name, startUs, endUs) {
+      sink.span(name, category: 'business', startUs: startUs, endUs: endUs);
+    };
+  }
+
+  @override
+  void stop(CockpitPerformancePluginStats stats) {
+    CheckoutHooks.onSpan = null;
+  }
+}
+
 final report = await cockpit.profile(
   () => runCheckoutFlow(),
   plugins: <CockpitPerformancePlugin>[
-    CockpitPerformancePlugin(
-      id: 'checkout-aop',
-      start: (context) {
-        CheckoutHooks.onSpan = (name, startUs, endUs) {
-          context.sink.span(
-            name,
-            category: 'business',
-            startUs: startUs,
-            endUs: endUs,
-          );
-        };
-      },
-    ),
+    CheckoutPlugin(),
   ],
 );
 ```
+
+`open` runs for each capture and must return a new Run. Keep mutable
+subscriptions, timers, counters, and buffers on the Run. For a small stateless
+hook, use `CockpitPerformancePlugin.callbacks(setup: ..., cleanup: ...)`.
 
 Plugin setup and cleanup have a bounded lifecycle timeout (two seconds by
 default). The profile closes frame, memory, VM, and plugin windows immediately

@@ -90,7 +90,9 @@ Before the first start, the project must already contain the development-only
 [`flutter_cockpit` integration guide](https://pub.dev/packages/flutter_cockpit#recommended-integration):
 
 ```bash
-cockpit dev start
+cockpit target discover
+# choose one exact id from the targets list
+cockpit dev start --device <deviceId>
 cockpit dev inspect
 cockpit dev tap 'FilledButton["Save"]'
 cockpit dev type "hello" --into '@message'
@@ -102,7 +104,9 @@ cockpit dev reload
 cockpit dev diagnose --view more
 ```
 
-Omit the entrypoint and platform when they are inferable. Cockpit stores one
+Omit the entrypoint and platform when they are inferable after the device has
+been selected. Never let the host platform or Flutter's default target choose
+between multiple devices. Cockpit stores one
 active short lowercase base-36 handle per canonical Flutter project, guarded
 by checkout identity; the same project may keep separate platform/target
 handles. Use `cockpit session list`, `cockpit session show HANDLE`, and
