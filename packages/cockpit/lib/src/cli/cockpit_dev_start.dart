@@ -3,11 +3,13 @@ import 'dart:io';
 import 'package:cockpit_protocol/cockpit_protocol.dart';
 import 'package:path/path.dart' as p;
 
+import '../application/cockpit_list_launch_targets_service.dart';
 import '../development/cockpit_checkout_identity.dart';
 import '../supervisor/cockpit_supervisor_api_client.dart';
 import 'cockpit_cli_runtime.dart';
 import 'cockpit_cli_session_handles.dart';
 import 'cockpit_dev_runtime.dart';
+import 'cockpit_flutter_device_selection.dart';
 import 'cockpit_flutter_bridge_shell_inspector.dart';
 
 final class CockpitDevStartRequest {
@@ -515,48 +517,16 @@ final class CockpitDevStartService {
         message: 'Flutter device discovery returned no target list.',
       );
     }
-    final candidates = <({String id, String platform})>[];
-    for (final value in rawTargets.whereType<Map<Object?, Object?>>()) {
-      final id = value['id'];
-      final platform = value['platform'];
-      if (id is String && platform is String) {
-        if (request.deviceId != null && id != request.deviceId) continue;
-        if (request.platform != null && platform != request.platform) continue;
-        candidates.add((id: id, platform: platform));
-      }
-    }
-    if (request.deviceId == null && request.platform == null) {
-      final hostPlatform = Platform.isMacOS
-          ? 'macos'
-          : Platform.isWindows
-          ? 'windows'
-          : Platform.isLinux
-          ? 'linux'
-          : null;
-      final host = candidates
-          .where((item) => item.platform == hostPlatform)
-          .toList(growable: false);
-      if (host.length == 1) return host.single;
-      final exact = host.where((item) => item.id == hostPlatform).toList();
-      if (exact.length == 1) return exact.single;
-    }
-    if (candidates.length != 1) {
-      final commands = candidates
-          .take(8)
-          .map(
-            (item) =>
-                'cockpit dev start --platform ${item.platform} '
-                '--device ${item.id}',
-          )
-          .join('; ');
-      throw CockpitSupervisorClientException(
-        code: candidates.isEmpty ? 'deviceNotFound' : 'deviceAmbiguous',
-        message: candidates.isEmpty
-            ? 'No matching Flutter device is available.'
-            : 'Choose one Flutter device: $commands',
-      );
-    }
-    return candidates.single;
+    final candidates = rawTargets
+        .whereType<Map<Object?, Object?>>()
+        .map(CockpitLaunchTarget.fromMachineJson)
+        .where((target) => target.id.isNotEmpty && target.name.isNotEmpty);
+    final selected = cockpitSelectFlutterDevice(
+      candidates,
+      deviceId: request.deviceId,
+      platform: request.platform,
+    );
+    return (id: selected.id, platform: selected.platform);
   }
 
   Future<CockpitOperationResult> _invokeWorkspace(

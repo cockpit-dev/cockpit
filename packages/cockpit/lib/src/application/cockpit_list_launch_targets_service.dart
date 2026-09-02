@@ -27,6 +27,19 @@ final class CockpitLaunchTarget {
   final bool ephemeral;
   final String? sdk;
 
+  factory CockpitLaunchTarget.fromMachineJson(Map<Object?, Object?> raw) {
+    final item = Map<String, Object?>.from(raw);
+    return CockpitLaunchTarget(
+      id: item['id'] as String? ?? '',
+      name: item['name'] as String? ?? '',
+      platform: CockpitListLaunchTargetsService._normalizeLaunchPlatform(item),
+      platformType: CockpitListLaunchTargetsService._rawPlatformType(item),
+      emulator: item['emulator'] as bool? ?? false,
+      ephemeral: item['ephemeral'] as bool? ?? false,
+      sdk: item['sdk'] as String?,
+    );
+  }
+
   Map<String, Object?> toJson() => <String, Object?>{
     'id': id,
     'name': name,
@@ -123,18 +136,7 @@ final class CockpitListLaunchTargetsService {
 
     final targets = decoded
         .whereType<Map<Object?, Object?>>()
-        .map((item) => Map<String, Object?>.from(item))
-        .map(
-          (item) => CockpitLaunchTarget(
-            id: item['id'] as String? ?? '',
-            name: item['name'] as String? ?? '',
-            platform: _normalizeLaunchPlatform(item),
-            platformType: _rawPlatformType(item),
-            emulator: item['emulator'] as bool? ?? false,
-            ephemeral: item['ephemeral'] as bool? ?? false,
-            sdk: item['sdk'] as String?,
-          ),
-        )
+        .map(CockpitLaunchTarget.fromMachineJson)
         .where((target) => target.id.isNotEmpty && target.name.isNotEmpty)
         .toList(growable: false);
 
