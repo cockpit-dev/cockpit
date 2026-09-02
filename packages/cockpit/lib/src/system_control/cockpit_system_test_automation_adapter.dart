@@ -980,6 +980,12 @@ final class CockpitSystemTestAutomationAdapter
               fallbackDeadline,
               stabilitySnapshot: false,
               allowActivation: false,
+              // XCUITest can retain false visibility/accessibility flags for
+              // Flutter semantic nodes after a foreground handoff even while
+              // their bounds and labels are current. This is a one-shot,
+              // source-level recovery sample; normal reads and mutations keep
+              // strict visibility filtering.
+              ignoreVisibility: true,
             );
             if (refreshed.error == null) {
               return _success(
@@ -1365,6 +1371,7 @@ final class CockpitSystemTestAutomationAdapter
     DateTime deadline, {
     bool stabilitySnapshot = false,
     bool allowActivation = true,
+    bool ignoreVisibility = false,
   }) async {
     final locator = _locator(command);
     if (locator == null) {
@@ -1467,6 +1474,7 @@ final class CockpitSystemTestAutomationAdapter
       final resolution = snapshot.resolveSingle(
         candidate,
         flutterAware: _flutterAwareNative,
+        ignoreVisibility: ignoreVisibility,
       );
       if (resolution.ambiguous) {
         // A foreground WDA source can transiently contain duplicate semantic
@@ -1534,6 +1542,7 @@ final class CockpitSystemTestAutomationAdapter
           final resolution = sessionSnapshot.resolveSingle(
             candidate,
             flutterAware: _flutterAwareNative,
+            ignoreVisibility: ignoreVisibility,
           );
           if (resolution.ambiguous || !resolution.found) continue;
           final x = resolution.centerX;
@@ -1563,6 +1572,7 @@ final class CockpitSystemTestAutomationAdapter
         // remains side-effect free.
         allowActivation: allowActivation,
         stabilitySnapshot: stabilitySnapshot,
+        ignoreVisibility: ignoreVisibility,
       );
       if (resolved != null) return resolved;
     }
@@ -1595,6 +1605,7 @@ final class CockpitSystemTestAutomationAdapter
     DateTime deadline, {
     bool allowActivation = true,
     bool stabilitySnapshot = false,
+    bool ignoreVisibility = false,
   }) async {
     final baseUri = await _resolveIosWdaBaseUri(deadline);
     if (baseUri == null) return null;
@@ -1718,6 +1729,7 @@ final class CockpitSystemTestAutomationAdapter
         final resolution = refreshed.resolveSingle(
           candidate,
           flutterAware: _flutterAwareNative,
+          ignoreVisibility: ignoreVisibility,
         );
         if (resolution.ambiguous || !resolution.found) continue;
         final x = resolution.centerX;
