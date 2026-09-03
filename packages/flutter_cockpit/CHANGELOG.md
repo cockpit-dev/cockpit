@@ -2,6 +2,8 @@
 
 ## 4.4.5
 
+- Serialized executor settle and wait callbacks so concurrent in-app commands
+  cannot overlap guarded Flutter test pumps.
 - Synchronized the Flutter bridge release with the iOS native source recovery
   fix and updated native package metadata.
 

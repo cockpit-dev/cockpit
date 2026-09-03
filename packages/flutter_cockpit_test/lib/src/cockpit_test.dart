@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:collection';
 import 'dart:convert';
 import 'dart:developer' as developer;
 
@@ -113,6 +114,66 @@ void _publishIntegrationReport(Map<String, Object?> report) {
   binding.reportData = <String, dynamic>{...existing, 'cockpit': report};
 }
 
+/// Serializes test-binding frame pumps shared by concurrent Cockpit commands.
+///
+/// [WidgetTester.pump] is guarded by [TestAsyncUtils]. Remote-style callers
+/// may issue more than one command before the first one finishes, so invoking
+/// the guarded callback directly would create a cross-zone guard conflict.
+/// Keeping the queue here preserves the official test binding while ensuring
+/// every pump starts only after the previous one has fully closed its guard.
+final class _CockpitTestPumpQueue {
+  _CockpitTestPumpQueue(this._testerPump);
+
+  final Future<void> Function(Duration?) _testerPump;
+  final Queue<_CockpitQueuedPump> _pending = Queue<_CockpitQueuedPump>();
+  bool _active = false;
+
+  Future<void> call([Duration? duration]) {
+    final completion = Completer<void>();
+    _pending.add(
+      _CockpitQueuedPump(
+        duration: duration,
+        completion: completion,
+        zone: Zone.current,
+      ),
+    );
+    _startNext();
+    return completion.future;
+  }
+
+  void _startNext() {
+    if (_active || _pending.isEmpty) return;
+    _active = true;
+    final task = _pending.removeFirst();
+    task.zone
+        .run<Future<void>>(
+          () => Future<void>.sync(() => _testerPump(task.duration)),
+        )
+        .then<void>(
+          (_) => task.completion.complete(),
+          onError: (Object error, StackTrace stackTrace) {
+            task.completion.completeError(error, stackTrace);
+          },
+        )
+        .whenComplete(() {
+          _active = false;
+          scheduleMicrotask(_startNext);
+        });
+  }
+}
+
+final class _CockpitQueuedPump {
+  const _CockpitQueuedPump({
+    required this.duration,
+    required this.completion,
+    required this.zone,
+  });
+
+  final Duration? duration;
+  final Completer<void> completion;
+  final Zone zone;
+}
+
 /// A compact, selector-first facade over Cockpit's in-app command executor.
 final class CockpitTester {
   CockpitTester._({
@@ -164,6 +225,9 @@ final class CockpitTester {
       <CockpitPerformanceReport>[];
   final Set<CockpitPerformanceArchive> _performanceArchives =
       <CockpitPerformanceArchive>{};
+  late final _CockpitTestPumpQueue _pumpQueue = _CockpitTestPumpQueue(
+    flutter.pump,
+  );
 
   /// All captures completed by this tester, in capture order.
   List<CockpitPerformanceReport> get performanceReports =>
@@ -299,9 +363,9 @@ final class CockpitTester {
     // animations, lazy lists, and async state changes. Supplying these hooks
     // keeps the executor's commit/reveal logic identical to the live bridge
     // while making Dart integration tests advance the test clock correctly.
-    postActionSettler: flutter.pump,
-    waitTickHandler: flutter.pump,
-    gestureDelay: flutter.pump,
+    postActionSettler: _pumpQueue.call,
+    waitTickHandler: _pumpQueue.call,
+    gestureDelay: _pumpQueue.call,
   );
 
   /// Describes the live in-app commands and locator strategies available to
@@ -994,7 +1058,7 @@ final class CockpitTester {
       execution.result,
     );
     if (options.pumpAfterCommand) {
-      await flutter.pump();
+      await _pumpQueue.call();
     }
     if (check ?? options.failFast) {
       _checkSuccess(effectiveCommand, execution.result);
@@ -1852,7 +1916,7 @@ final class CockpitTester {
       final remaining = duration - logicalElapsed;
       final step = interval < remaining ? interval : remaining;
       try {
-        await flutter.pump(step).timeout(remainingTimeout);
+        await _pumpQueue.call(step).timeout(remainingTimeout);
       } on TimeoutException {
         endedBy = 'timeout';
         break;
@@ -1953,7 +2017,7 @@ final class CockpitTester {
       execution.result,
     );
     if (options.pumpAfterCommand) {
-      await flutter.pump();
+      await _pumpQueue.call();
     }
     if (options.failFast) {
       _checkSuccess(effectiveCommand, execution.result);

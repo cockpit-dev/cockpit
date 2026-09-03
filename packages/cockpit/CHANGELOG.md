@@ -2,6 +2,9 @@
 
 ## 4.4.5
 
+- Keep iOS condition polling source-only until the bounded recovery sample has
+  run, avoiding slow WDA element predicates while XCTest rebuilds a handoff
+  tree.
 - Use a bounded complete XML WDA source for iOS Flutter recovery waits so
   handoff snapshots retain locator attributes without the JSON snapshot stall.
 - Added coverage for stale visibility flags in the complete XML recovery path.

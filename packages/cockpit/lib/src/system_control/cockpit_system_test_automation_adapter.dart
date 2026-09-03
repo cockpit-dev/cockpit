@@ -929,6 +929,7 @@ final class CockpitSystemTestAutomationAdapter
           // attributes are absent; precise element queries remain a fallback.
           stabilitySnapshot: _isIos,
           allowActivation: false,
+          allowElementLookup: false,
         );
       } on StateError catch (error) {
         lastObservationError = error;
@@ -980,6 +981,7 @@ final class CockpitSystemTestAutomationAdapter
               fallbackDeadline,
               stabilitySnapshot: false,
               allowActivation: false,
+              allowElementLookup: false,
               // XCUITest can retain false visibility/accessibility flags for
               // Flutter semantic nodes after a foreground handoff even while
               // their bounds and labels are current. This is a one-shot,
@@ -1374,6 +1376,7 @@ final class CockpitSystemTestAutomationAdapter
     bool allowActivation = true,
     bool ignoreVisibility = false,
     bool fullSource = false,
+    bool allowElementLookup = true,
   }) async {
     final locator = _locator(command);
     if (locator == null) {
@@ -1566,6 +1569,17 @@ final class CockpitSystemTestAutomationAdapter
             resolution: _locatorResolution(resolution),
           );
         }
+      }
+      if (!allowElementLookup) {
+        return _ResolvedPoint.error(
+          CockpitCommandError.targetNotFound(
+            message: 'No locator candidate matched the current application UI.',
+          ),
+          artifacts: artifacts,
+          artifactSourcePaths: sourcePaths,
+          viewportWidth: visualViewportWidth ?? snapshot.viewportWidth,
+          viewportHeight: visualViewportHeight ?? snapshot.viewportHeight,
+        );
       }
       final resolved = await _resolveIosAccessibilityElement(
         locator,
