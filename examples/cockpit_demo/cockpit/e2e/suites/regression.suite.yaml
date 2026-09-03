@@ -106,17 +106,16 @@ cases:
       kind: file
       relativePath: e2e/cases/recording_lifecycle.case.yaml
       caseId: demoRecordingLifecycle
-  # Keep command semantic coverage behind the native-plane cases: it is the
-  # only case that drives the platform text-input keyboard, and on iOS the
-  # Flutter engine (3.47.x) tears down the exposed accessibility tree a few
-  # seconds after a focused text input on a pushed route loses its keyboard.
-  # Until that engine bug is fixed, every case that reads the app through
-  # the native accessibility plane must run before the keyboard coverage
-  # leaves the tree broken. The explicit dependsOn edges keep this true even
-  # though the planner schedules declaration order only as a hint.
+  # Keep command semantic coverage declared last: it is the only case that
+  # drives the platform text-input keyboard, and on iOS the Flutter engine
+  # (3.47.x) tears down the exposed accessibility tree a few seconds after a
+  # focused text input on a pushed route loses its keyboard. The acceptance
+  # runner enforces ordering against the native-plane cases on iOS (see
+  # tool/src/cockpit_demo_acceptance_runner.dart); declaration order alone is
+  # only a scheduling hint, and hard dependsOn edges here would block this
+  # case on platforms where the native-plane cases are excluded.
   - id: commandSemanticCoverage
     fixtures: [suiteBaseline]
-    dependsOn: [mixedPlaneBlackBox, nativeBlackBox]
     source:
       kind: file
       relativePath: e2e/cases/command_semantic_coverage.case.yaml
