@@ -16,7 +16,9 @@ void main() {
       fullSource: true,
     );
     final encoded = CockpitIosWebDriverAgentClient.commandToArguments(command);
-    final decoded = CockpitIosWebDriverAgentClient.commandFromArguments(encoded);
+    final decoded = CockpitIosWebDriverAgentClient.commandFromArguments(
+      encoded,
+    );
 
     expect(decoded.fullSource, isTrue);
     expect(decoded.stabilitySnapshot, isFalse);

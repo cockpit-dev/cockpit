@@ -2,6 +2,8 @@
 
 ## 4.4.5
 
+- Serialized all harness-owned frame pumps so concurrent commands, watches,
+  resident timers, and active animations remain safe under Flutter test guards.
 - Synchronized the integration-test facade release with the iOS native source
   recovery fix.
 

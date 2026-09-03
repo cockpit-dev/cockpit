@@ -920,6 +920,61 @@ names only from `explain` under `input.fields`.
 
 ## Flutter E2E And Black-Box E2E
 
+### Integration-Test Development Loop
+
+Use this loop while authoring a Flutter integration test or a black-box case;
+it keeps failures diagnosable and avoids guessing:
+
+1. **Prepare one target.** Confirm the development shell, discover devices, and
+   select one exact device id. Start or reuse one session and record its handle;
+   never let a test silently switch targets.
+2. **Author from source.** For `flutter_cockpit_test`, read the build method and
+   callback first, then use the smallest structural selector (`#id`, `@key`,
+   exact text, type/ancestor). Use `case`/`suite` for black-box flows and put
+   native/system actions on the explicit native plane.
+3. **Prove the baseline.** Run the smallest focused test, then check
+   `cockpit dev status`, `cockpit dev inspect`, and a current
+   `cockpit dev screenshot`. Screenshots are evidence paths only; do not print
+   image bytes. On Android/iOS, inspect the system capture first for dialogs or
+   keyboards; on desktop/web, inspect the Flutter capture first.
+4. **Add one step and one postcondition.** Run the exact interaction, settle
+   with `dev wait`, and assert the route, target state, text, or screenshot that
+   the step promises. For lazy or animated surfaces, use direct `dev scroll`,
+   animation checkpoints, or bounded `dev watch`; do not add sleeps.
+5. **Diagnose a failure once.** Preserve the same session and collect the
+   failure screenshot, focused `inspect`/`tree`, `dev diagnose`, and the test
+   artifact path. Read source locations and the smallest relevant artifact
+   before changing a selector. If an OS overlay is proven, apply one matching
+   `dev recover`/host action and re-prove the original anchor; never blindly
+   repeat a tap or accept a prompt.
+6. **Harden and promote.** Re-run the focused flow, then the complete case or
+   suite with its terminal report and artifacts. Keep screenshots for visual
+   checkpoints and failure evidence, keep large logs/network/timeline data in
+   files, and verify the same test on every CI platform that advertises its
+   capabilities. A passing process exit alone is not a passing E2E test.
+
+Typical focused loop:
+
+```bash
+cockpit target discover
+cockpit dev start --device <deviceId>
+flutter test integration_test/<test>.dart -d <deviceId>
+cockpit dev screenshot --save /absolute/evidence/baseline.png
+cockpit dev inspect "EXPECTED_ANCHOR"
+cockpit dev wait
+cockpit dev screenshot --save /absolute/evidence/after.png
+```
+
+For a durable black-box flow, validate before running and inspect its terminal
+run rather than polling a process:
+
+```bash
+cockpit case validate --file /absolute/case.yaml
+cockpit case run --file /absolute/case.yaml --idempotency-key <key>
+cockpit run events --run-id <run>
+cockpit run get --run-id <run>
+```
+
 For Dart-authored Flutter integration tests, use the development-only
 `flutter_cockpit_test` package. It keeps Flutter's official
 `integration_test` runner while reusing Cockpit's source-first Element

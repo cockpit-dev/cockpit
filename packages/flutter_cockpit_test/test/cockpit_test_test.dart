@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
@@ -318,6 +320,21 @@ void main() {
       expect(input.control?.value, isEmpty);
     },
   );
+
+  cockpitTestWidgets(
+    'keeps concurrent commands safe with resident async work',
+    app: () => const _ResidentAsyncTestApp(),
+    body: (cockpit) async {
+      final results = await Future.wait<CockpitCommandExecution>(
+        <Future<CockpitCommandExecution>>[
+          cockpit.tap('First'),
+          cockpit.tap('Second'),
+        ],
+      );
+      expect(results, hasLength(2));
+      expect(results.every((result) => result.result.success), isTrue);
+    },
+  );
 }
 
 Future<CockpitCommandExecution> _successfulHostCommand(
@@ -507,6 +524,56 @@ final class _TextInputTestApp extends StatelessWidget {
         body: const Padding(
           padding: EdgeInsets.all(24),
           child: TextField(decoration: InputDecoration(labelText: 'Message')),
+        ),
+      ),
+    );
+  }
+}
+
+final class _ResidentAsyncTestApp extends StatefulWidget {
+  const _ResidentAsyncTestApp();
+
+  @override
+  State<_ResidentAsyncTestApp> createState() => _ResidentAsyncTestAppState();
+}
+
+final class _ResidentAsyncTestAppState extends State<_ResidentAsyncTestApp>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _animation = AnimationController(
+    vsync: this,
+    duration: const Duration(seconds: 2),
+  )..repeat();
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer.periodic(const Duration(milliseconds: 25), (_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    _animation.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      home: Scaffold(
+        body: AnimatedBuilder(
+          animation: _animation,
+          builder: (context, child) => Column(
+            children: <Widget>[
+              TextButton(onPressed: () {}, child: const Text('First')),
+              TextButton(onPressed: () {}, child: const Text('Second')),
+              Opacity(opacity: 0.5 + (_animation.value / 2), child: child),
+            ],
+          ),
+          child: const Text('resident'),
         ),
       ),
     );

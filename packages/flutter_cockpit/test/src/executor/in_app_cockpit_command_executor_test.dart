@@ -8,6 +8,57 @@ import 'package:flutter_cockpit/flutter_cockpit_flutter.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  testWidgets('serializes guarded test pumps across concurrent commands', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      CockpitSurface(
+        routeName: '/concurrent',
+        child: MaterialApp(
+          home: Scaffold(
+            body: Column(
+              children: <Widget>[
+                TextButton(onPressed: () {}, child: const Text('First')),
+                TextButton(onPressed: () {}, child: const Text('Second')),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final surface = tester.state<CockpitSurfaceState>(
+      find.byType(CockpitSurface),
+    );
+    final executor = InAppCockpitCommandExecutor(
+      registry: surface.registry,
+      postActionSettler: tester.pump,
+      waitTickHandler: tester.pump,
+      gestureHandler: surface.performGesture,
+    );
+    final results =
+        await Future.wait<CockpitCommandResult>(<Future<CockpitCommandResult>>[
+          executor.execute(
+            CockpitCommand(
+              commandId: 'first',
+              commandType: CockpitCommandType.tap,
+              locator: const CockpitLocator(text: 'First'),
+            ),
+          ),
+          executor.execute(
+            CockpitCommand(
+              commandId: 'second',
+              commandType: CockpitCommandType.tap,
+              locator: const CockpitLocator(text: 'Second'),
+            ),
+          ),
+        ]);
+
+    expect(results, hasLength(2));
+    expect(results.every((result) => result.success), isTrue);
+  });
+
   test('describeCapabilities exposes assertion and wait commands', () async {
     final registry = CockpitTargetRegistry(routeName: '/checkout');
     registry.register(
