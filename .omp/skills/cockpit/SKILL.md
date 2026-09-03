@@ -939,13 +939,15 @@ it keeps failures diagnosable and avoids guessing:
    keyboards; on desktop/web, inspect the Flutter capture first.
 4. **Add one step and one postcondition.** Run the exact interaction, settle
    with `dev wait`, and assert the route, target state, text, or screenshot that
-   the step promises. Make evidence part of high-risk steps: in
-   `flutter_cockpit_test` call `cockpit.screenshot(name: 'after-<step>')` after
-   the postcondition and keep its artifact path; for a live/black-box flow use
-   `dev screenshot`. Use `snapshot`/assertions for cheap state facts and
-   bounded logs, `dev diagnose --view more`, or run artifacts for runtime
-   evidence. Do not screenshot every animation tick or print image/log bytes.
-   For lazy or animated surfaces, use direct `dev scroll`, animation
+   the step promises. Screenshots are opt-in: keep ordinary steps compact and
+   capture only when the user requests a visual checkpoint or the step fails,
+   is ambiguous, or reports a missing target. For `flutter_cockpit_test`, use
+   `cockpit.screenshot(name: 'failure-<step>')`; for a live/black-box flow use
+   `dev screenshot`, then retain only the artifact path. Use
+   `snapshot`/assertions for cheap state facts and bounded logs,
+   `dev diagnose --view more`, or run artifacts for runtime evidence. Do not
+   screenshot every animation tick or print image/log bytes. For lazy or
+   animated surfaces, use direct `dev scroll`, animation
    checkpoints, or bounded `dev watch`; do not add sleeps.
 5. **Diagnose a failure once.** Preserve the same session and collect the
    failure screenshot, focused `inspect`/`tree`, `dev diagnose`, and the test
