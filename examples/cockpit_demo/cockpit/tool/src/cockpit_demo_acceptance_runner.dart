@@ -850,8 +850,7 @@ CockpitTestSuite _suiteForRuntime(
               ...?declared,
               'mixedPlaneBlackBox',
               'nativeBlackBox',
-            }.toList(growable: false)
-              ..sort();
+            }.toList(growable: false)..sort();
           }
           return entry;
         }()
