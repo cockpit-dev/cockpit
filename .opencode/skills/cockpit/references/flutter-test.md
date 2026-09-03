@@ -159,6 +159,15 @@ For animation verification, trigger the mutation without settling it, then use
 custom assertion. This separates process evidence from the final idle proof and
 never retains every full animation frame.
 
+Treat evidence as part of each meaningful test step, not as an emergency-only
+debug action. After a high-risk native, navigation, or visual mutation, save a
+named screenshot and retain the returned artifact path alongside the step
+result; use `snapshot` or a focused assertion for cheap state facts. For a
+failure, collect the same step's screenshot, bounded logs/timeline, focused
+tree, and `diagnose` artifact before changing the selector. Keep logs and
+timelines in artifacts, never dump image bytes or an unbounded log stream into
+test output, and do not capture every animation frame.
+
 ```dart
 await cockpit.flutter.tap(find.text('Expand'));
 await cockpit.flutter.pump();
@@ -169,6 +178,8 @@ final motion = await cockpit.watch(
 );
 expect(motion.changed, isTrue);
 await cockpit.waitForUi();
+final evidence = await cockpit.screenshot(name: 'after-expand');
+expect(evidence.result.success, isTrue);
 ```
 
 `cockpit.flutter` remains the underlying `WidgetTester` for custom matchers,
