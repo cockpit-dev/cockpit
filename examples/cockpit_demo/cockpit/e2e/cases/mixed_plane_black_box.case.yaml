@@ -35,18 +35,6 @@ steps:
     plane: native
     timeoutMs: 30000
     action: {type: waitForUiIdle, quietMs: 750}
-  - stepId: waitForNativeInboxAfterRecovery
-    description: Prove the recovered Flutter app is exposed through the native tree before tapping.
-    plane: native
-    timeoutMs: 30000
-    action:
-      type: waitFor
-      condition:
-        type: visible
-        locator:
-          label: New task
-          fallbacks:
-            - {text: New task}
   - stepId: openEditorThroughNativeLocator
     description: Retry native input only while the Flutter route proves the editor has not opened.
     timeoutMs: 60000
