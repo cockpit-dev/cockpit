@@ -70,12 +70,6 @@ cases:
       kind: file
       relativePath: e2e/cases/command_gesture_coverage.case.yaml
       caseId: demoCommandGestureCoverage
-  - id: commandSemanticCoverage
-    fixtures: [suiteBaseline]
-    source:
-      kind: file
-      relativePath: e2e/cases/command_semantic_coverage.case.yaml
-      caseId: demoCommandSemanticCoverage
   - id: mixedPlaneBlackBox
     fixtures: [suiteBaseline]
     tags: [requires-system-control]
@@ -112,3 +106,18 @@ cases:
       kind: file
       relativePath: e2e/cases/recording_lifecycle.case.yaml
       caseId: demoRecordingLifecycle
+  # Keep command semantic coverage behind the native-plane cases: it is the
+  # only case that drives the platform text-input keyboard, and on iOS the
+  # Flutter engine (3.47.x) tears down the exposed accessibility tree a few
+  # seconds after a focused text input on a pushed route loses its keyboard.
+  # Until that engine bug is fixed, every case that reads the app through
+  # the native accessibility plane must run before the keyboard coverage
+  # leaves the tree broken. The explicit dependsOn edges keep this true even
+  # though the planner schedules declaration order only as a hint.
+  - id: commandSemanticCoverage
+    fixtures: [suiteBaseline]
+    dependsOn: [mixedPlaneBlackBox, nativeBlackBox]
+    source:
+      kind: file
+      relativePath: e2e/cases/command_semantic_coverage.case.yaml
+      caseId: demoCommandSemanticCoverage

@@ -271,15 +271,17 @@ final class _CommandLabScreenState extends State<CommandLabScreen> {
               'slider:${(_sliderValue * 100).round()}',
               theme,
             ),
+            // An explicit `Semantics.value` alongside `onIncrease` and
+            // `onDecrease` marks the node as adjustable, and an adjustable
+            // semantics node detaches the Flutter engine's iOS accessibility
+            // bridge on iOS 26: every later XCTest/WDA snapshot of the app
+            // collapses to a bare window tree, which broke the mixed-plane
+            // regression suite right after this screen was exercised. The
+            // status text below carries the value for assertions instead.
             Semantics(
               key: const Key('lab-slider-semantics'),
               container: true,
               label: 'Lab slider',
-              value: '${(_sliderValue * 100).round()}',
-              increasedValue:
-                  '${((_sliderValue + 0.1).clamp(0.0, 1.0) * 100).round()}',
-              decreasedValue:
-                  '${((_sliderValue - 0.1).clamp(0.0, 1.0) * 100).round()}',
               onIncrease: () {
                 setState(() {
                   _sliderValue = (_sliderValue + 0.1).clamp(0.0, 1.0);
