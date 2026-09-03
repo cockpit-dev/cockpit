@@ -1635,15 +1635,15 @@ final class CockpitSystemTestAutomationAdapter
       final value? => value.trim().isNotEmpty,
       null => false,
     };
-    // An explicit recovery pass combines a lightweight source snapshot with
-    // activation. On iOS, querying a stale element before activation can
-    // block XCTest for the whole command deadline, so activate first in that
-    // one case. Normal actions retain the cheaper non-activating lookup and
-    // only activate as a bounded fallback.
+    // A condition wait must remain side-effect free whenever the existing
+    // foreground tree is sufficient. When a Flutter semantic node is missing
+    // from that tree after an app handoff, try the same WDA element query
+    // without activation first, then allow one explicit, target-scoped
+    // activation pass. The non-activating query is important for WDA builds
+    // that can resolve an already-foreground element even while /source lags.
     final activationPasses = <bool>[
-      if (stabilitySnapshot && allowActivation && hasAppId) true,
-      if (!stabilitySnapshot || !allowActivation || !hasAppId) false,
-      if (!stabilitySnapshot && allowActivation && hasAppId) true,
+      false,
+      if (allowActivation && hasAppId) true,
     ];
     for (final activate in activationPasses) {
       var activateTarget = activate;
@@ -1659,7 +1659,11 @@ final class CockpitSystemTestAutomationAdapter
         if (value == null || value.trim().isEmpty) continue;
         for (final query in _iosWdaElementQueries(strategy, value)) {
           final remaining = _remaining(deadline);
-          final queryTimeout = allowActivation
+          final queryTimeout = stabilitySnapshot && allowActivation
+              ? remaining < const Duration(seconds: 2)
+                    ? remaining
+                    : const Duration(seconds: 2)
+              : allowActivation
               ? remaining
               : remaining < const Duration(seconds: 1)
               ? remaining
