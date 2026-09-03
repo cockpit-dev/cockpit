@@ -834,6 +834,25 @@ CockpitTestSuite _suiteForRuntime(
             };
             recordingLifecycleBound = true;
           }
+
+          if (entry['id'] == 'commandSemanticCoverage' && platform == 'ios') {
+            // The Flutter engine (3.47.x) tears down the accessibility tree
+            // exposed to XCTest a few seconds after a focused text input on a
+            // pushed route loses its keyboard. command semantic coverage is
+            // the only case that drives the platform keyboard, so on iOS it
+            // must run after the cases that read the app through the native
+            // accessibility plane. The planner treats declaration order as a
+            // hint only, and the edges cannot live in the suite document
+            // because the native-plane cases are excluded on other platforms.
+            final declared = (entry['dependsOn'] as List<Object?>?)
+                ?.whereType<String>();
+            entry['dependsOn'] = <String>{
+              ...?declared,
+              'mixedPlaneBlackBox',
+              'nativeBlackBox',
+            }.toList(growable: false)
+              ..sort();
+          }
           return entry;
         }()
       else
