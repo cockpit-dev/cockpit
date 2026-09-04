@@ -1,5 +1,10 @@
 # Changelog
 
+## 4.4.6
+
+- Discovers asynchronously mounted Router providers without an unbounded
+  per-frame tree scan, while preserving automatic route tracking.
+
 ## 4.4.5
 
 - Serialized executor settle and wait callbacks so concurrent in-app commands

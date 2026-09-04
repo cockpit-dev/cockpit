@@ -202,6 +202,39 @@ void main() {
     },
   );
 
+  testWidgets(
+    'FlutterCockpitRoot discovers a Router mounted by a descendant rebuild',
+    (tester) async {
+      final provider = _TestRouteInformationProvider(
+        RouteInformation(uri: Uri(path: '/delayed-router')),
+      );
+      addTearDown(provider.dispose);
+
+      await tester.pumpWidget(
+        FlutterCockpitApp(
+          config: const FlutterCockpitConfig(initialRouteName: '/bootstrap'),
+          child: _DelayedRouterHost(provider: provider),
+        ),
+      );
+
+      expect(FlutterCockpit.binding.currentRouteName.value, '/bootstrap');
+
+      // Exhaust the startup-frame retries so this also covers the backed-off
+      // discovery path used by hosts that reveal their router later.
+      for (var frame = 0; frame < 4; frame++) {
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+
+      final host = tester.state<_DelayedRouterHostState>(
+        find.byType(_DelayedRouterHost),
+      );
+      host.mountRouter();
+      await tester.pump(const Duration(seconds: 1));
+
+      expect(FlutterCockpit.binding.currentRouteName.value, '/delayed-router');
+    },
+  );
+
   testWidgets('FlutterCockpit.navigatorObserver normalizes route names', (
     tester,
   ) async {
@@ -629,6 +662,37 @@ final class _TestRouterDelegate extends RouterDelegate<Object?>
 
   @override
   Future<bool> popRoute() => Future<bool>.value(false);
+}
+
+final class _DelayedRouterHost extends StatefulWidget {
+  const _DelayedRouterHost({required this.provider});
+
+  final RouteInformationProvider provider;
+
+  @override
+  State<_DelayedRouterHost> createState() => _DelayedRouterHostState();
+}
+
+final class _DelayedRouterHostState extends State<_DelayedRouterHost> {
+  bool _showRouter = false;
+
+  void mountRouter() {
+    setState(() {
+      _showRouter = true;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_showRouter) {
+      return const SizedBox.shrink();
+    }
+    return Router<Object?>(
+      routeInformationProvider: widget.provider,
+      routeInformationParser: _TestRouteInformationParser(),
+      routerDelegate: _TestRouterDelegate(),
+    );
+  }
 }
 
 final class _TestRouteInformationProvider extends RouteInformationProvider

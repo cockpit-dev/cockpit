@@ -14,6 +14,41 @@ void main() {
     expect(cockpitDemoLaunchModeForPlatform('android'), 'automation');
   });
 
+  test('iOS semantic coverage depends only on enabled native cases', () {
+    expect(
+      cockpitDemoIosSemanticDependencies(
+        platform: 'ios',
+        mixedPlaneSupported: true,
+        nativeBlackBoxSupported: true,
+      ),
+      <String>['mixedPlaneBlackBox', 'nativeBlackBox'],
+    );
+    expect(
+      cockpitDemoIosSemanticDependencies(
+        platform: 'ios',
+        mixedPlaneSupported: true,
+        nativeBlackBoxSupported: false,
+      ),
+      <String>['mixedPlaneBlackBox'],
+    );
+    expect(
+      cockpitDemoIosSemanticDependencies(
+        platform: 'ios',
+        mixedPlaneSupported: false,
+        nativeBlackBoxSupported: false,
+      ),
+      isEmpty,
+    );
+    expect(
+      cockpitDemoIosSemanticDependencies(
+        platform: 'web',
+        mixedPlaneSupported: true,
+        nativeBlackBoxSupported: true,
+      ),
+      isEmpty,
+    );
+  });
+
   test('Acceptance CLI allows three minutes for target discovery', () async {
     final root = _cockpitRoot();
     final result = await Process.run('dart', const <String>[

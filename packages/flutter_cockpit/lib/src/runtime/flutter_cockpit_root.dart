@@ -45,6 +45,9 @@ import 'cockpit_surface.dart';
 import 'cockpit_ui_idle_waiter.dart';
 import 'cockpit_visual_frame_driver.dart';
 
+const int _routeInformationImmediateDiscoveryRetries = 4;
+const Duration _routeInformationDiscoveryRetryDelay = Duration(seconds: 1);
+
 final class FlutterCockpitRoot extends StatefulWidget {
   const FlutterCockpitRoot({required this.child, super.key});
 
@@ -67,6 +70,8 @@ final class FlutterCockpitRootState extends State<FlutterCockpitRoot> {
   final Map<RouteInformationProvider, VoidCallback> _routeInformationUnbinders =
       <RouteInformationProvider, VoidCallback>{};
   bool _routeInformationDiscoveryScheduled = false;
+  Timer? _routeInformationDiscoveryRetryTimer;
+  int _routeInformationDiscoveryRetryCount = 0;
   Object? _remoteSessionStartError;
   StackTrace? _remoteSessionStartErrorStackTrace;
   bool _reportedRemoteSessionStartFailure = false;
@@ -78,7 +83,7 @@ final class FlutterCockpitRootState extends State<FlutterCockpitRoot> {
   @override
   void initState() {
     super.initState();
-    _scheduleRouteInformationDiscovery();
+    _scheduleRouteInformationDiscovery(restart: true);
     _syncTapFeedbackController();
     final configuration = FlutterCockpit.binding.configuration.remoteSession;
     if (configuration != null &&
@@ -92,7 +97,7 @@ final class FlutterCockpitRootState extends State<FlutterCockpitRoot> {
   void didUpdateWidget(covariant FlutterCockpitRoot oldWidget) {
     super.didUpdateWidget(oldWidget);
     _syncTapFeedbackController();
-    _scheduleRouteInformationDiscovery();
+    _scheduleRouteInformationDiscovery(restart: true);
   }
 
   @override
@@ -102,7 +107,15 @@ final class FlutterCockpitRootState extends State<FlutterCockpitRoot> {
     FlutterCockpit.clearRecordedSteps();
   }
 
-  void _scheduleRouteInformationDiscovery() {
+  void _scheduleRouteInformationDiscovery({bool restart = false}) {
+    if (!mounted) {
+      return;
+    }
+    if (restart) {
+      _routeInformationDiscoveryRetryTimer?.cancel();
+      _routeInformationDiscoveryRetryTimer = null;
+      _routeInformationDiscoveryRetryCount = 0;
+    }
     if (_routeInformationDiscoveryScheduled) {
       return;
     }
@@ -125,6 +138,34 @@ final class FlutterCockpitRootState extends State<FlutterCockpitRoot> {
         _routeInformationUnbinders.putIfAbsent(
           provider,
           () => FlutterCockpit.bindRouteInformationProvider(provider),
+        );
+      }
+
+      if (providers.isNotEmpty) {
+        _routeInformationDiscoveryRetryTimer?.cancel();
+        _routeInformationDiscoveryRetryTimer = null;
+        _routeInformationDiscoveryRetryCount = 0;
+        return;
+      }
+
+      // A host can mount its real app subtree asynchronously (for example,
+      // go_router's MaterialApp.router can appear after a delayed setState).
+      // Descendant rebuilds do not invoke this State's lifecycle hooks, so a
+      // single post-frame scan would miss the provider permanently. Retry a
+      // few frames during startup for fast convergence, then back off while
+      // still allowing a later frame to complete the discovery. The timer
+      // only queues a post-frame callback; it never forces a new frame.
+      if (_routeInformationDiscoveryRetryCount <
+          _routeInformationImmediateDiscoveryRetries) {
+        _routeInformationDiscoveryRetryCount++;
+        _scheduleRouteInformationDiscovery();
+      } else if (_routeInformationDiscoveryRetryTimer == null && mounted) {
+        _routeInformationDiscoveryRetryTimer = Timer(
+          _routeInformationDiscoveryRetryDelay,
+          () {
+            _routeInformationDiscoveryRetryTimer = null;
+            _scheduleRouteInformationDiscovery();
+          },
         );
       }
     });
@@ -414,6 +455,8 @@ final class FlutterCockpitRootState extends State<FlutterCockpitRoot> {
 
   @override
   void dispose() {
+    _routeInformationDiscoveryRetryTimer?.cancel();
+    _routeInformationDiscoveryRetryTimer = null;
     for (final unbind in _routeInformationUnbinders.values) {
       unbind();
     }

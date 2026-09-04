@@ -2,8 +2,10 @@ import 'package:flutter/widgets.dart';
 
 /// Returns public Router providers in tree order, with nested routers last.
 ///
-/// The scan is intentionally explicit and one-shot. Route changes are then
-/// delivered by each provider's public listenable contract.
+/// Each scan is intentionally explicit and bounded to the mounted runtime
+/// tree. Route changes are then delivered by each provider's public listenable
+/// contract; the root may repeat the scan while an asynchronously mounted
+/// router has not appeared yet.
 Iterable<RouteInformationProvider>
 cockpitRouteInformationProvidersInRuntimeTree(Element rootElement) {
   final candidates = <({RouteInformationProvider provider, int depth})>[];

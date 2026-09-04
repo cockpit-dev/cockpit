@@ -1,5 +1,10 @@
 # Changelog
 
+## 4.4.6
+
+- Aligns the performance test facade with the published performance schema and
+  adds a validated plugin memory/JSONL capture workflow.
+
 ## 4.4.5
 
 - Serialized all harness-owned frame pumps so concurrent commands, watches,
