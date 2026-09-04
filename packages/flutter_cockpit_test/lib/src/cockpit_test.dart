@@ -817,7 +817,11 @@ final class CockpitTester {
     final instrumentation = _PerformanceInstrumentation();
     final pluginCapture = FlutterCockpit.binding.performancePlugins.capture(
       additional: plugins,
-      maxEvents: maxEvents,
+      // In streaming mode `maxEvents` belongs to the bounded VM/report
+      // projection. Do not use that smaller projection budget as the plugin
+      // capture's global limit; plugin options and the archive remain the
+      // source-of-truth for plugin retention.
+      maxEvents: archive == null ? maxEvents : 200000,
       onEvent: archive?.addEvent,
     );
     late final CockpitDevToolsProfiler devToolsProfiler;
@@ -988,13 +992,25 @@ final class CockpitTester {
                     : timelineOldGcCount,
               )
             : _parsePerformanceTimeline(timelineData, maxEvents: maxEvents);
+        // An archive receives plugin events while the measured window is
+        // active. Its report is still a bounded projection, but the plugin
+        // projection must not inherit the VM timeline's remaining budget:
+        // when the VM list is full, passing zero here used to remove every
+        // plugin event from the report and falsely mark those already-archived
+        // events as dropped. Keep the plugin capture's own retention policy
+        // independent in streaming mode, then apply one deterministic report
+        // budget after both sources are available.
         final pluginEvents = await pluginCapture.stop(
-          maxEvents: maxEvents - parsed.events.length,
+          maxEvents: archive == null
+              ? maxEvents - parsed.events.length
+              : maxEvents,
         );
-        final mergedEvents = <CockpitPerformanceEvent>[
-          ...parsed.events,
-          ...pluginEvents,
-        ]..sort((left, right) => left.timestampUs.compareTo(right.timestampUs));
+        final bounded = _boundPerformanceEvents(
+          timeline: parsed.events,
+          plugins: pluginEvents,
+          maxEvents: maxEvents,
+        );
+        final mergedEvents = bounded.events;
         final devTools = await devToolsProfiler.finish(
           cpu: cpu,
           heap: heap,
@@ -1009,7 +1025,11 @@ final class CockpitTester {
           stepId: normalizedName,
           newGenGcCount: parsed.newGenGcCount,
           oldGenGcCount: parsed.oldGenGcCount,
-          droppedEvents: parsed.droppedEvents + pluginCapture.retentionDrops,
+          droppedEvents:
+              parsed.droppedEvents +
+              bounded.droppedTimelineEvents +
+              bounded.droppedPluginEvents +
+              pluginCapture.retentionDrops,
           invalidEvents: parsed.invalidEvents,
           memory: memoryReport,
           devTools: devTools,
@@ -2429,6 +2449,52 @@ bool _isJsonValue(Object? value) {
     );
   }
   return false;
+}
+
+/// Applies the report-wide event budget after VM and plugin events are known.
+///
+/// Streaming archives keep the complete accepted event stream on disk, so the
+/// in-memory report can reserve space for attributable plugin events without
+/// treating the projection boundary as a plugin capture failure. VM events are
+/// retained in their existing chronological order; the final merge restores
+/// one chronological view for callers.
+_BoundedPerformanceEvents _boundPerformanceEvents({
+  required List<CockpitPerformanceEvent> timeline,
+  required List<CockpitPerformanceEvent> plugins,
+  required int maxEvents,
+}) {
+  if (maxEvents < 1) {
+    throw ArgumentError.value(maxEvents, 'maxEvents', 'Must be positive.');
+  }
+  final pluginCount = plugins.length > maxEvents ? maxEvents : plugins.length;
+  final timelineBudget = maxEvents - pluginCount;
+  final retainedTimeline = timeline.length <= timelineBudget
+      ? timeline
+      : timeline.take(timelineBudget).toList(growable: false);
+  final retainedPlugins = plugins.length <= pluginCount
+      ? plugins
+      : plugins.take(pluginCount).toList(growable: false);
+  final events = <CockpitPerformanceEvent>[
+    ...retainedTimeline,
+    ...retainedPlugins,
+  ]..sort((left, right) => left.timestampUs.compareTo(right.timestampUs));
+  return _BoundedPerformanceEvents(
+    events: List<CockpitPerformanceEvent>.unmodifiable(events),
+    droppedTimelineEvents: timeline.length - retainedTimeline.length,
+    droppedPluginEvents: plugins.length - retainedPlugins.length,
+  );
+}
+
+final class _BoundedPerformanceEvents {
+  const _BoundedPerformanceEvents({
+    required this.events,
+    required this.droppedTimelineEvents,
+    required this.droppedPluginEvents,
+  });
+
+  final List<CockpitPerformanceEvent> events;
+  final int droppedTimelineEvents;
+  final int droppedPluginEvents;
 }
 
 final class _ParsedPerformanceTimeline {
