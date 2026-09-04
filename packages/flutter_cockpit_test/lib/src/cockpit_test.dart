@@ -825,7 +825,12 @@ final class CockpitTester {
       if (archive == null || !canTraceTimeline) return;
       final raw = await devToolsProfiler.drainTimeline();
       if (raw.isEmpty) return;
-      final parsed = _parsePerformanceTimeline(raw, maxEvents: raw.length);
+      final parsed = _parsePerformanceTimeline(
+        // The drain returns bare event maps, while the parser accepts the
+        // timeline document shape used by both VM and binding captures.
+        <String, Object?>{'traceEvents': raw},
+        maxEvents: raw.length,
+      );
       timelineInvalidEvents += parsed.invalidEvents;
       timelineNewGcCount += parsed.newGenGcCount ?? 0;
       timelineOldGcCount += parsed.oldGenGcCount ?? 0;
@@ -2283,7 +2288,11 @@ _ParsedPerformanceTimeline _parsePerformanceTimeline(
   }
   final Object? rawEvents;
   try {
-    rawEvents = (timeline as dynamic).traceEvents;
+    // VM and binding captures expose the event list as a `traceEvents` field;
+    // streamed drains hand over a plain timeline document map.
+    rawEvents = timeline is Map
+        ? timeline['traceEvents']
+        : (timeline as dynamic).traceEvents;
   } catch (_) {
     return const _ParsedPerformanceTimeline(invalidEvents: 1);
   }
