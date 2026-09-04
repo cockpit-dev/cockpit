@@ -497,6 +497,12 @@ final jsonPath = await cockpit.exportPerformanceJson(
 );
 ```
 
+The exported JSON conforms to the published `cockpit.performance/v2` schema,
+[`cockpit_protocol/schema/cockpit.performance.v2.schema.json`](https://github.com/cockpit-dev/cockpit/blob/main/packages/cockpit_protocol/schema/cockpit.performance.v2.schema.json).
+The schema also validates the single-capture JSON stored under
+`cockpit.performance.<name>` in `IntegrationTestWidgetsFlutterBinding.reportData`,
+so downstream consumers can validate either surface with one document.
+
 Both export methods preserve all retained frames, VM events and arguments,
 memory samples, VM heap samples, allocation classes, isolate snapshots,
 timeline stream lists, startup milestones, and explicit retention/drop counts. The

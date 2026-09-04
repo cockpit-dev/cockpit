@@ -101,6 +101,21 @@ work composes from suite fixtures, case `setup`/`finally`, per-step `evidence`,
 and explicit recording operations; control flow remains available inside each
 scope.
 
+## Performance report contract
+
+`cockpit.performance/v2` is the canonical JSON shape of a Cockpit performance
+capture. The published schema is
+[`schema/cockpit.performance.v2.schema.json`](schema/cockpit.performance.v2.schema.json).
+It validates both output surfaces: one complete capture as stored under
+`cockpit.performance.<name>` in `IntegrationTestWidgetsFlutterBinding.reportData`,
+and the multi-capture export bundle written by
+`performanceJson()`/`exportPerformanceJson()` in `flutter_cockpit_test`.
+
+The schema keeps every retained frame, VM event, memory sample, DevTools
+projection, plugin statistic, and explicit drop count. Missing metrics stay
+absent instead of becoming zero, retention boundaries are explicit, and the
+Dart models round-trip the same JSON they emit.
+
 ## Supervisor foundation contract
 
 `cockpit.foundation/v2` is the stable client contract for the per-user
