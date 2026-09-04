@@ -297,11 +297,16 @@ void main() {
           milestonePlugin,
         ],
         archive: archive,
+        // Keep the in-memory report deliberately small so the streamed path
+        // proves plugin events are retained independently of a full VM
+        // timeline. The archive still contains the complete event stream.
+        maxEvents: 32,
         timeout: const Duration(minutes: 2),
       );
 
       expect(report.stepId, 'plugin-streamed');
       expect(report.archive, isNotNull);
+      expect(report.events.length, lessThanOrEqualTo(32));
       final CockpitPerformanceArchiveInfo activeInfo = report.archive!;
       expect(activeInfo.errors, 0);
       expect(activeInfo.events, greaterThan(0));
