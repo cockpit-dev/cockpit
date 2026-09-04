@@ -846,11 +846,19 @@ CockpitTestSuite _suiteForRuntime(
             // because the native-plane cases are excluded on other platforms.
             final declared = (entry['dependsOn'] as List<Object?>?)
                 ?.whereType<String>();
-            entry['dependsOn'] = <String>{
+            final dependencies = <String>{
               ...?declared,
-              'mixedPlaneBlackBox',
-              'nativeBlackBox',
+              ...cockpitDemoIosSemanticDependencies(
+                platform: platform,
+                mixedPlaneSupported: mixedPlaneSupported,
+                nativeBlackBoxSupported: nativeBlackBoxSupported,
+              ),
             }.toList(growable: false)..sort();
+            if (dependencies.isEmpty) {
+              entry.remove('dependsOn');
+            } else {
+              entry['dependsOn'] = dependencies;
+            }
           }
           return entry;
         }()
@@ -947,6 +955,24 @@ CockpitTestSuite _suiteForRuntime(
     },
   };
   return CockpitTestSuite.fromJson(json);
+}
+
+/// Returns only the native cases that are actually part of this iOS run.
+///
+/// The semantic command coverage must run after native-plane coverage on iOS
+/// because focusing a text input can tear down Flutter's XCTest tree. A
+/// capability can be unavailable, however (for example when WDA is absent),
+/// and a dependency on an excluded case would block the semantic case too.
+List<String> cockpitDemoIosSemanticDependencies({
+  required String platform,
+  required bool mixedPlaneSupported,
+  required bool nativeBlackBoxSupported,
+}) {
+  if (platform != 'ios') return const <String>[];
+  return <String>[
+    if (mixedPlaneSupported) 'mixedPlaneBlackBox',
+    if (nativeBlackBoxSupported) 'nativeBlackBox',
+  ];
 }
 
 typedef _CockpitDemoVisualBaseline = ({

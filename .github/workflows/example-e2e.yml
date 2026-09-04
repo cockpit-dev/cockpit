@@ -191,6 +191,26 @@ jobs:
             grep -q 'Frame pacing' performance-artifacts/report.html &&
             grep -q 'Cold start milestones' performance-artifacts/report.html
 
+      - name: Run performance plugin modes
+        working-directory: examples/cockpit_demo/cockpit
+        env:
+          COCKPIT_NATIVE_REPORT_PATH: ${{ github.workspace }}/performance-artifacts/plugin-modes.json
+          COCKPIT_NATIVE_HTML_PATH: ${{ github.workspace }}/performance-artifacts/plugin-modes.html
+        run: >-
+          flutter drive --no-dds --profile
+          --driver=integration_test/driver.dart
+          --target=integration_test/performance_plugin_modes_test.dart
+          -d macos
+
+      - name: Validate performance plugin report
+        run: >-
+          test -s performance-artifacts/plugin-modes.json &&
+          test -s performance-artifacts/plugin-modes.html &&
+          grep -q 'plugin-inmemory' performance-artifacts/plugin-modes.json &&
+          grep -q 'plugin-streamed' performance-artifacts/plugin-modes.json &&
+          grep -q 'plugin-inmemory' performance-artifacts/plugin-modes.html &&
+          grep -q 'plugin-streamed' performance-artifacts/plugin-modes.html
+
       - name: Validate performance capability states
         env:
           REPORT_PATH: performance-artifacts/report.json

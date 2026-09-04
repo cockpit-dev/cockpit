@@ -1,5 +1,10 @@
 # Changelog
 
+## 4.4.6
+
+- Published the complete `cockpit.performance/v2` schema and validated both
+  single-capture and multi-capture export shapes.
+
 ## 4.4.5
 
 - Synchronized the protocol release with the iOS native source recovery fix.

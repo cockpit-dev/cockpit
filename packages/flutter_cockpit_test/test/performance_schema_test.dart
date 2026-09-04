@@ -449,15 +449,25 @@ CockpitPerformanceReport _richReport({
 }
 
 File _locateSchema() {
-  final candidates = <String>[
-    'schema/cockpit.performance.v2.schema.json',
-    '../../packages/cockpit_protocol/schema/cockpit.performance.v2.schema.json',
-  ];
-  for (final candidate in candidates) {
-    final file = File(candidate);
-    if (file.existsSync()) {
-      return file;
+  var directory = Directory.current;
+  for (var depth = 0; depth < 8; depth++) {
+    final candidates = <File>[
+      File('${directory.path}/schema/cockpit.performance.v2.schema.json'),
+      File(
+        '${directory.path}/packages/cockpit_protocol/schema/'
+        'cockpit.performance.v2.schema.json',
+      ),
+    ];
+    for (final file in candidates) {
+      if (file.existsSync()) {
+        return file;
+      }
     }
+    final parent = directory.parent;
+    if (parent.path == directory.path) {
+      break;
+    }
+    directory = parent;
   }
   throw StateError(
     'Cannot locate cockpit.performance.v2.schema.json from '

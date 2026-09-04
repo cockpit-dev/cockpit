@@ -1,5 +1,9 @@
 # Changelog
 
+## 4.4.6
+
+- Aligns the supervisor package with the validated 4.4.6 protocol release.
+
 ## 4.4.5
 
 - Keep iOS condition polling source-only until the bounded recovery sample has
