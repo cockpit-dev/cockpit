@@ -383,6 +383,11 @@ final jsonPath = await cockpit.exportPerformanceJson(
 );
 ```
 
+导出的 JSON 遵循已发布的 `cockpit.performance/v2` schema：
+[`cockpit_protocol/schema/cockpit.performance.v2.schema.json`](https://github.com/cockpit-dev/cockpit/blob/main/packages/cockpit_protocol/schema/cockpit.performance.v2.schema.json)。
+同一份 schema 也校验 `IntegrationTestWidgetsFlutterBinding.reportData` 中
+`cockpit.performance.<name>` 存放的单次采集 JSON，下游消费者用一份文档即可校验两种形态。
+
 两个导出 API 都会保留所有 retained 帧、VM 事件及参数、内存样本、VM heap 样本、分配类、isolate
 快照、timeline stream 列表、启动里程碑和明确
 的 retention/drop 计数。终端和普通测试结果继续保持紧凑；导出保留完整的已记录细节。

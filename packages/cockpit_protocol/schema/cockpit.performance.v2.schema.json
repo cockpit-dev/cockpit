@@ -1,0 +1,1956 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/cockpit-dev/cockpit/packages/cockpit_protocol/schema/cockpit.performance.v2.schema.json",
+  "title": "Cockpit performance report",
+  "description": "Canonical `cockpit.performance/v2` JSON output. The document is either one complete capture (the value stored under `cockpit.performance.<name>` in `IntegrationTestWidgetsFlutterBinding.reportData`, produced by `CockpitPerformanceReport.toJson()`) or the complete export bundle written by `performanceJson()`/`exportPerformanceJson()` (produced by `CockpitPerformanceHtml.fullJson()`, which embeds every capture with raw Perfetto and CPU payloads included). Durations are microseconds, byte sizes are bytes, and timestamps inside frames/events are engine- or VM-epoch microseconds unless a field name says otherwise. Missing metrics are unavailable, never zero: empty phases omit their aggregates, `fps` is omitted without a strictly increasing frame cadence, and `dropped`/`drop*` counts are present only when something was actually dropped.",
+  "oneOf": [
+    { "$ref": "#/$defs/bundle" },
+    { "$ref": "#/$defs/report" }
+  ],
+  "$defs": {
+    "nonEmptyString": {
+      "type": "string",
+      "pattern": "\\S"
+    },
+    "utcTimestamp": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T.*Z$",
+      "description": "ISO-8601 UTC instant with an explicit `Z` timezone."
+    },
+    "bundle": {
+      "type": "object",
+      "description": "The complete canonical export bundle for every completed capture in one test, produced by `CockpitPerformanceHtml.fullJson(...)`, `performanceJson()`, and `exportPerformanceJson()`. Unlike the single-capture `report` shape, each embedded report keeps raw Perfetto bytes and CPU sampling arrays.",
+      "properties": {
+        "title": {
+          "$ref": "#/$defs/nonEmptyString",
+          "description": "Human-readable export title."
+        },
+        "startup": {
+          "$ref": "#/$defs/startup"
+        },
+        "reports": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/bundleCapture" }
+        }
+      },
+      "required": ["title", "reports"],
+      "additionalProperties": false
+    },
+    "bundleCapture": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^p[0-9]+$",
+          "description": "Stable capture id (`p<index>`)."
+        },
+        "label": {
+          "$ref": "#/$defs/nonEmptyString",
+          "description": "Capture label: the report's `step` id when present, otherwise `Capture <index + 1>`."
+        },
+        "report": {
+          "$ref": "#/$defs/report"
+        },
+        "analysis": {
+          "$ref": "#/$defs/analysis"
+        }
+      },
+      "required": ["id", "label", "report", "analysis"],
+      "additionalProperties": false
+    },
+    "startup": {
+      "type": "object",
+      "description": "Cold-start milestones. The harness clock starts immediately before the app builder runs, so native process launch time is outside these values.",
+      "properties": {
+        "kind": { "const": "cold" },
+        "source": {
+          "$ref": "#/$defs/nonEmptyString",
+          "description": "Origin of the timing clock; `harness` for the Dart test harness."
+        },
+        "appMs": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Milliseconds spent building and mounting the application."
+        },
+        "firstMs": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Milliseconds from harness clock start until the first pumped frame."
+        },
+        "readyMs": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Milliseconds until the configured initial bootstrap pump completes."
+        }
+      },
+      "required": ["kind", "source", "appMs", "firstMs", "readyMs"],
+      "additionalProperties": false
+    },
+    "analysis": {
+      "type": "object",
+      "description": "Bounded derived projections computed from the retained events of one capture. Original events remain unchanged in `report.events`.",
+      "properties": {
+        "hotspots": {
+          "type": "array",
+          "maxItems": 100,
+          "items": { "$ref": "#/$defs/hotspot" },
+          "description": "Operation hotspots aggregated by event category and name, ordered by total duration."
+        },
+        "gc": { "$ref": "#/$defs/gcAnalysis" }
+      },
+      "required": ["hotspots", "gc"],
+      "additionalProperties": false
+    },
+    "hotspot": {
+      "type": "object",
+      "properties": {
+        "c": {
+          "$ref": "#/$defs/nonEmptyString",
+          "description": "Event category."
+        },
+        "n": {
+          "$ref": "#/$defs/nonEmptyString",
+          "description": "Event name."
+        },
+        "count": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Total observed events for this category/name pair."
+        },
+        "timed": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Events that carried a positive duration."
+        },
+        "total": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Sum of durations in microseconds; omitted when zero."
+        },
+        "p90": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "90th percentile duration in microseconds; omitted when zero."
+        },
+        "max": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Longest observed duration in microseconds; omitted when zero."
+        }
+      },
+      "required": ["c", "n", "count", "timed"],
+      "additionalProperties": false
+    },
+    "gcAnalysis": {
+      "type": "object",
+      "description": "GC pause analysis derived only from real GC timeline events. `count: 0` means the retained timeline exposed no verifiable GC marker; it never means a zero-cost collection cycle.",
+      "properties": {
+        "count": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "GC events found in the retained timeline."
+        },
+        "timed": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "GC events with a measurable pause duration."
+        },
+        "new": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "New-generation collections; omitted when zero."
+        },
+        "old": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Old-generation collections; omitted when zero."
+        },
+        "total": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Total timed pause in microseconds; present only when at least one pause is timed."
+        },
+        "p50": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Median pause in microseconds; present only when at least one pause is timed."
+        },
+        "p90": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "90th percentile pause in microseconds; present only when at least one pause is timed."
+        },
+        "max": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Longest pause in microseconds; present only when at least one pause is timed."
+        }
+      },
+      "required": ["count"],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "required": ["count"],
+            "properties": { "count": { "minimum": 1 } }
+          },
+          "then": { "required": ["timed"] }
+        },
+        {
+          "if": {
+            "required": ["timed"],
+            "properties": { "timed": { "minimum": 1 } }
+          },
+          "then": { "required": ["total", "p50", "p90", "max"] }
+        },
+        {
+          "if": {
+            "required": ["count"],
+            "properties": { "count": { "maximum": 0 } }
+          },
+          "then": {
+            "not": {
+              "anyOf": [
+                { "required": ["timed"] },
+                { "required": ["new"] },
+                { "required": ["old"] },
+                { "required": ["total"] },
+                { "required": ["p50"] },
+                { "required": ["p90"] },
+                { "required": ["max"] }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "report": {
+      "type": "object",
+      "description": "One complete bounded performance capture produced by `CockpitPerformanceReport.toJson()`. Frames and events arrays appear only when non-empty; retention boundaries are explicit in `dropped`.",
+      "properties": {
+        "schema": {
+          "const": "cockpit.performance/v2"
+        },
+        "started": {
+          "$ref": "#/$defs/utcTimestamp",
+          "description": "Capture start instant."
+        },
+        "finished": {
+          "$ref": "#/$defs/utcTimestamp",
+          "description": "Capture end instant; never before `started`."
+        },
+        "durationUs": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Exact capture duration in microseconds; equals `finished` minus `started`."
+        },
+        "durationMs": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Capture duration in whole milliseconds (`durationUs ~/ 1000`)."
+        },
+        "platform": {
+          "$ref": "#/$defs/nonEmptyString",
+          "description": "Target platform id, for example `macos`, `android`, `ios`, `web`."
+        },
+        "build": {
+          "enum": ["debug", "profile", "release"],
+          "description": "Flutter build mode. Debug timings are diagnostic only; profile timings support performance decisions; release timings require a native release harness."
+        },
+        "mode": {
+          "enum": ["light", "profile"],
+          "description": "Retention mode: `light` keeps a smaller bounded window, `profile` retains the fuller capture."
+        },
+        "summary": { "$ref": "#/$defs/summary" },
+        "frames": {
+          "type": "array",
+          "maxItems": 100000,
+          "items": { "$ref": "#/$defs/frame" },
+          "description": "Retained frame timings ordered by strictly increasing `i`; omitted when empty."
+        },
+        "events": {
+          "type": "array",
+          "maxItems": 200000,
+          "items": { "$ref": "#/$defs/event" },
+          "description": "Retained VM timeline and plugin events; omitted when empty."
+        },
+        "dropped": { "$ref": "#/$defs/dropped" },
+        "memory": { "$ref": "#/$defs/memoryReport" },
+        "devtools": { "$ref": "#/$defs/devtools" },
+        "source": {
+          "$ref": "#/$defs/nonEmptyString",
+          "description": "Timeline source, for example `vm`."
+        },
+        "step": {
+          "$ref": "#/$defs/nonEmptyString",
+          "description": "Explicit step id this capture is attributed to."
+        },
+        "stream": { "$ref": "#/$defs/archiveInfo" },
+        "plugins": {
+          "type": "array",
+          "maxItems": 128,
+          "items": { "$ref": "#/$defs/pluginStats" },
+          "description": "Bounded statistics for each explicitly registered performance plugin; omitted when empty."
+        }
+      },
+      "required": [
+        "schema",
+        "started",
+        "finished",
+        "durationUs",
+        "durationMs",
+        "platform",
+        "build",
+        "mode",
+        "summary"
+      ],
+      "additionalProperties": false
+    },
+    "dropped": {
+      "type": "object",
+      "minProperties": 1,
+      "description": "Explicit retention boundary. Present only when at least one count is positive; aggregates then describe the retained sample only.",
+      "properties": {
+        "frames": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Valid frames observed but not retained."
+        },
+        "events": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Valid events observed but not retained."
+        },
+        "badFrames": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Frames rejected as invalid."
+        },
+        "badEvents": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Events rejected as invalid."
+        }
+      },
+      "additionalProperties": false
+    },
+    "summary": {
+      "type": "object",
+      "description": "Aggregate metrics over the retained frames. Each phase's `n` equals `frames`; when frames were dropped these are retained-sample aggregates, not whole-capture percentiles.",
+      "properties": {
+        "frames": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of retained frames represented by this aggregate."
+        },
+        "jank": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Frames whose total span exceeded the frame budget."
+        },
+        "fps": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Observed frame cadence from strictly increasing engine timestamps; omitted when fewer than two such timestamps exist. No wall-clock estimate is substituted."
+        },
+        "build": { "$ref": "#/$defs/phase" },
+        "raster": { "$ref": "#/$defs/phase" },
+        "vsync": { "$ref": "#/$defs/phase" },
+        "total": { "$ref": "#/$defs/phase" },
+        "layerCache": { "$ref": "#/$defs/cacheMax" },
+        "pictureCache": { "$ref": "#/$defs/cacheMax" },
+        "gc": {
+          "type": "object",
+          "minProperties": 1,
+          "description": "Observed collections; present only when at least one generation count is known.",
+          "properties": {
+            "new": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "New-generation collections."
+            },
+            "old": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Old-generation collections."
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "frames",
+        "jank",
+        "build",
+        "raster",
+        "vsync",
+        "total",
+        "layerCache",
+        "pictureCache"
+      ],
+      "additionalProperties": false
+    },
+    "phase": {
+      "type": "object",
+      "description": "Percentiles for one frame phase. With no samples the numeric aggregates are omitted rather than reported as zero.",
+      "properties": {
+        "n": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Retained frames used for this phase."
+        },
+        "bud": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Frame budget in microseconds this phase is compared against."
+        },
+        "avg": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Mean duration in microseconds."
+        },
+        "p50": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "50th percentile duration in microseconds."
+        },
+        "p90": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "90th percentile duration in microseconds."
+        },
+        "p99": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "99th percentile duration in microseconds."
+        },
+        "max": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Worst duration in microseconds."
+        },
+        "miss": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Samples over budget. The vsync phase reports zero by definition."
+        }
+      },
+      "required": ["n", "bud"],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "required": ["n"],
+            "properties": { "n": { "minimum": 1 } }
+          },
+          "then": { "required": ["avg", "p50", "p90", "p99", "max", "miss"] }
+        },
+        {
+          "if": {
+            "required": ["n"],
+            "properties": { "n": { "maximum": 0 } }
+          },
+          "then": {
+            "not": {
+              "anyOf": [
+                { "required": ["avg"] },
+                { "required": ["p50"] },
+                { "required": ["p90"] },
+                { "required": ["p99"] },
+                { "required": ["max"] },
+                { "required": ["miss"] }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "cacheMax": {
+      "type": "object",
+      "description": "Peak retained raster-cache occupancy across frames.",
+      "properties": {
+        "count": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Maximum number of cached entries."
+        },
+        "bytes": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Maximum cached bytes."
+        }
+      },
+      "required": ["count", "bytes"],
+      "additionalProperties": false
+    },
+    "frame": {
+      "type": "object",
+      "description": "One frame from Flutter's frame timing pipeline. Timestamps use an engine-defined epoch, are not DateTime values, and may be negative in synthetic data.",
+      "properties": {
+        "i": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Frame index within the capture; strictly increasing across `frames`."
+        },
+        "t": {
+          "type": "integer",
+          "description": "Engine timestamp of vsync start in microseconds."
+        },
+        "w": {
+          "type": "integer",
+          "description": "Wall-time timestamp of raster finish in microseconds, same engine epoch."
+        },
+        "b": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Build phase duration in microseconds."
+        },
+        "r": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Raster phase duration in microseconds."
+        },
+        "v": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Vsync overhead in microseconds."
+        },
+        "s": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Total frame span in microseconds; the value jank is measured against."
+        },
+        "l": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Layer count."
+        },
+        "lb": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Layer bytes."
+        },
+        "p": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Picture count."
+        },
+        "pb": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Picture bytes."
+        },
+        "n": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Engine frame number when the runtime exposes one."
+        },
+        "bs": {
+          "type": "integer",
+          "description": "Raw build-phase start timestamp in microseconds; absent when the host provides only aggregate durations."
+        },
+        "bf": {
+          "type": "integer",
+          "description": "Raw build-phase finish timestamp in microseconds."
+        },
+        "rs": {
+          "type": "integer",
+          "description": "Raw raster-phase start timestamp in microseconds."
+        },
+        "rf": {
+          "type": "integer",
+          "description": "Raw raster-phase finish timestamp in microseconds."
+        }
+      },
+      "required": ["i", "t", "w", "b", "r", "v", "s", "l", "lb", "p", "pb"],
+      "additionalProperties": false
+    },
+    "event": {
+      "type": "object",
+      "description": "One bounded VM timeline event or plugin instrumentation event.",
+      "properties": {
+        "n": {
+          "$ref": "#/$defs/nonEmptyString",
+          "description": "Event name."
+        },
+        "c": {
+          "$ref": "#/$defs/nonEmptyString",
+          "description": "Timeline category, for example `Dart`, `GC`, `Embedder`, or a plugin category."
+        },
+        "t": {
+          "type": "integer",
+          "description": "Timestamp in microseconds on the same monotonic clock the VM timeline uses."
+        },
+        "d": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Duration in microseconds; omitted for instant events."
+        },
+        "p": {
+          "$ref": "#/$defs/nonEmptyString",
+          "description": "Trace phase marker such as `B`/`E`/`X` when retained."
+        },
+        "pid": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Process id copied from the VM trace."
+        },
+        "tid": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Thread id copied from the VM trace."
+        },
+        "id": {
+          "$ref": "#/$defs/nonEmptyString",
+          "description": "Async trace event id."
+        },
+        "scope": {
+          "$ref": "#/$defs/nonEmptyString",
+          "description": "Async trace scope."
+        },
+        "bid": {
+          "$ref": "#/$defs/nonEmptyString",
+          "description": "Flow bind id."
+        },
+        "src": {
+          "$ref": "#/$defs/nonEmptyString",
+          "description": "Instrumentation source, normally a registered plugin id. VM-originated events leave this absent."
+        },
+        "iso": {
+          "$ref": "#/$defs/nonEmptyString",
+          "description": "Originating isolate id."
+        },
+        "u": {
+          "$ref": "#/$defs/nonEmptyString",
+          "description": "Source URI supplied by the instrumentation source."
+        },
+        "l": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Source line number (1-based)."
+        },
+        "col": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Source column number."
+        },
+        "a": {
+          "type": "object",
+          "description": "Event arguments as a plain JSON object; omitted when empty."
+        }
+      },
+      "required": ["n", "c", "t"],
+      "additionalProperties": false
+    },
+    "memoryReport": {
+      "type": "object",
+      "description": "Bounded process-memory timeline captured alongside frame timings. RSS values come from the platform process API and include Dart, engine, native, and mapped memory under that platform's accounting rules.",
+      "properties": {
+        "source": {
+          "$ref": "#/$defs/nonEmptyString",
+          "description": "Sampler origin, for example `processInfo`."
+        },
+        "intervalMs": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Requested sampling interval in milliseconds."
+        },
+        "summary": { "$ref": "#/$defs/memorySummary" },
+        "samples": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 10000,
+          "items": { "$ref": "#/$defs/memorySample" },
+          "description": "Retained samples ordered by non-decreasing `t`."
+        },
+        "dropped": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Samples observed but not retained; omitted when zero."
+        }
+      },
+      "required": ["source", "intervalMs", "summary", "samples"],
+      "additionalProperties": false
+    },
+    "memorySummary": {
+      "type": "object",
+      "description": "Aggregate memory pressure over the retained samples.",
+      "properties": {
+        "n": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Retained sample count."
+        },
+        "start": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "First sample RSS bytes."
+        },
+        "end": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Last sample RSS bytes."
+        },
+        "min": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Minimum observed RSS bytes."
+        },
+        "max": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Maximum observed RSS bytes."
+        },
+        "avg": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Mean RSS bytes over retained samples."
+        },
+        "peak": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Process-peak RSS bytes; at least `max`."
+        },
+        "delta": {
+          "type": "integer",
+          "description": "`end` minus `start` bytes; may be negative."
+        }
+      },
+      "required": ["n", "start", "end", "min", "max", "avg", "peak", "delta"],
+      "additionalProperties": false
+    },
+    "memorySample": {
+      "type": "object",
+      "properties": {
+        "t": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Offset from capture start in microseconds."
+        },
+        "rss": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Process RSS bytes."
+        },
+        "peak": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Process peak RSS bytes; at least `rss`."
+        }
+      },
+      "required": ["t", "rss", "peak"],
+      "additionalProperties": false
+    },
+    "archiveInfo": {
+      "type": "object",
+      "description": "Metadata for an append-only JSONL event archive. The report retains only a bounded in-memory window while the complete capture streams to chunks; use `manifest` and `chunks` as artifact paths instead of expecting event payloads inline.",
+      "properties": {
+        "fmt": { "const": "jsonl" },
+        "mode": {
+          "enum": ["low", "lossless"],
+          "description": "`lossless` keeps every record; `low` enforces a bounded queue with counted drops."
+        },
+        "state": {
+          "enum": ["active", "done", "failed"],
+          "description": "Archive lifecycle state."
+        },
+        "manifest": {
+          "$ref": "#/$defs/nonEmptyString",
+          "description": "Path to the chunk-set manifest; the single entry point for the complete stream."
+        },
+        "chunks": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/nonEmptyString" },
+          "description": "Chunk file paths; omitted when empty."
+        },
+        "events": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Archived event records; omitted when zero."
+        },
+        "frames": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Archived frame records; omitted when zero."
+        },
+        "records": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Total archived records; omitted when zero."
+        },
+        "bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Total archived bytes; omitted when zero."
+        },
+        "drop": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Records dropped by a `low` backlog bound; omitted when zero."
+        },
+        "errors": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Archive write errors; omitted when zero."
+        },
+        "why": {
+          "$ref": "#/$defs/nonEmptyString",
+          "description": "Reason for a `failed` state."
+        }
+      },
+      "required": ["fmt", "mode", "state", "manifest"],
+      "additionalProperties": false
+    },
+    "pluginStats": {
+      "type": "object",
+      "description": "Bounded statistics for one explicitly registered performance plugin. The event list in `report.events` remains the source of truth; this projection exposes attribution and cost without loading every event. A failed plugin is isolated and reported here; it never fails the measured action.",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/nonEmptyString",
+          "description": "Plugin id."
+        },
+        "state": {
+          "enum": ["available", "failed", "unavailable"],
+          "description": "Plugin outcome for this capture."
+        },
+        "ver": {
+          "$ref": "#/$defs/nonEmptyString",
+          "description": "Plugin-reported version."
+        },
+        "why": {
+          "$ref": "#/$defs/nonEmptyString",
+          "description": "Reason for a `failed` or `unavailable` state."
+        },
+        "n": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Accepted events; omitted when zero."
+        },
+        "span": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Begin/end span events; omitted when zero."
+        },
+        "instant": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Instant events; omitted when zero."
+        },
+        "counter": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Counter samples; omitted when zero."
+        },
+        "drop": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Events dropped by retention limits; omitted when zero."
+        },
+        "bad": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Events rejected as invalid; omitted when zero."
+        },
+        "trunc": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Events truncated by payload bounds; omitted when zero."
+        },
+        "dur": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Total span duration in microseconds; omitted when zero."
+        },
+        "max": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Longest span duration in microseconds; omitted when zero."
+        },
+        "cat": {
+          "type": "object",
+          "maxProperties": 256,
+          "additionalProperties": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "description": "Accepted events grouped by plugin category."
+        }
+      },
+      "required": ["id", "state"],
+      "additionalProperties": false
+    },
+    "devtools": {
+      "type": "object",
+      "description": "Bounded projections of the VM data exposed by Flutter DevTools. Unsupported data is an explicit state; an absent metric is never zero. The `f`/`s` arrays of CPU profiles, allocation traces, and Perfetto `data` bytes are retained only by complete exports (`fullJson`, HTML) and omitted from compact integration-test output.",
+      "properties": {
+        "source": {
+          "$ref": "#/$defs/nonEmptyString",
+          "description": "Data origin, for example `vm` or `unavailable:web` on web where VM timeline data does not exist."
+        },
+        "state": {
+          "$ref": "#/$defs/nonEmptyString",
+          "description": "Collection outcome, for example `available` or `unavailable`."
+        },
+        "why": {
+          "$ref": "#/$defs/nonEmptyString",
+          "description": "Reason for a non-available state."
+        },
+        "cpu": { "$ref": "#/$defs/cpuProfile" },
+        "heap": { "$ref": "#/$defs/heapProfile" },
+        "gc": { "$ref": "#/$defs/gcProfile" },
+        "gpu": { "$ref": "#/$defs/gpuProfile" },
+        "isolate": { "$ref": "#/$defs/isolateProfile" },
+        "timeline": { "$ref": "#/$defs/timelineProfile" },
+        "display": { "$ref": "#/$defs/displayProfile" },
+        "rebuild": { "$ref": "#/$defs/rebuildProfile" },
+        "vm": { "$ref": "#/$defs/vmRuntimeProfile" },
+        "vmem": { "$ref": "#/$defs/vmMemoryProfile" },
+        "alloc": {
+          "type": "array",
+          "maxItems": 20,
+          "items": { "$ref": "#/$defs/allocationTrace" },
+          "description": "Opt-in allocation call stacks for explicitly selected VM class ids."
+        },
+        "log": {
+          "type": "array",
+          "maxItems": 2000,
+          "items": { "$ref": "#/$defs/vmLogEvent" },
+          "description": "Bounded VM Logging-stream records."
+        },
+        "dbg": {
+          "type": "array",
+          "maxItems": 2000,
+          "items": { "$ref": "#/$defs/vmDebugEvent" },
+          "description": "Bounded VM Debug-stream events; metadata only."
+        },
+        "dropLog": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Log records dropped at the retention limit; omitted when zero."
+        },
+        "dropDbg": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Debug events dropped at the retention limit; omitted when zero."
+        },
+        "perfetto": { "$ref": "#/$defs/perfettoProfile" }
+      },
+      "required": ["source", "state"],
+      "additionalProperties": false
+    },
+    "cpuProfile": {
+      "type": "object",
+      "description": "Dart VM CPU sampling profile. Stack entries in samples are indexes into `f`.",
+      "properties": {
+        "period": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Sampling period in microseconds."
+        },
+        "depth": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Maximum stack depth retained per sample."
+        },
+        "n": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Total samples the VM reports for the window."
+        },
+        "start": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Time origin in microseconds."
+        },
+        "span": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Time extent in microseconds."
+        },
+        "pid": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Profiled process id when reported."
+        },
+        "f": {
+          "type": "array",
+          "maxItems": 50000,
+          "items": { "$ref": "#/$defs/cpuFunction" },
+          "description": "Sampled functions; complete exports only."
+        },
+        "s": {
+          "type": "array",
+          "maxItems": 50000,
+          "items": { "$ref": "#/$defs/cpuSample" },
+          "description": "Stack samples; complete exports only."
+        },
+        "dropped": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Samples dropped by retention limits; omitted when zero."
+        }
+      },
+      "required": ["period", "depth", "n", "start", "span"],
+      "additionalProperties": false
+    },
+    "cpuFunction": {
+      "type": "object",
+      "properties": {
+        "n": {
+          "$ref": "#/$defs/nonEmptyString",
+          "description": "Function name."
+        },
+        "in": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Inclusive ticks."
+        },
+        "ex": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Exclusive ticks."
+        },
+        "k": {
+          "$ref": "#/$defs/nonEmptyString",
+          "description": "Function kind when reported."
+        },
+        "u": {
+          "$ref": "#/$defs/nonEmptyString",
+          "description": "Source URI."
+        },
+        "l": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Source line (1-based)."
+        },
+        "c": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Source column."
+        }
+      },
+      "required": ["n", "in", "ex"],
+      "additionalProperties": false
+    },
+    "cpuSample": {
+      "type": "object",
+      "properties": {
+        "t": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Sample timestamp in microseconds."
+        },
+        "tid": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Thread id."
+        },
+        "s": {
+          "type": "array",
+          "items": { "type": "integer", "minimum": 0 },
+          "description": "Stack as indexes into `cpuProfile.f`; omitted when empty."
+        },
+        "vm": {
+          "$ref": "#/$defs/nonEmptyString",
+          "description": "VM tag."
+        },
+        "user": {
+          "$ref": "#/$defs/nonEmptyString",
+          "description": "User tag."
+        },
+        "trunc": {
+          "const": true,
+          "description": "Present only when the stack was truncated at the depth bound."
+        }
+      },
+      "required": ["t"],
+      "additionalProperties": false
+    },
+    "heapPoint": {
+      "type": "object",
+      "description": "One heap usage reading; `use` never exceeds `cap`.",
+      "properties": {
+        "use": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Used bytes."
+        },
+        "cap": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Capacity bytes."
+        },
+        "ext": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "External bytes."
+        }
+      },
+      "required": ["use", "cap", "ext"],
+      "additionalProperties": false
+    },
+    "heapProfile": {
+      "type": "object",
+      "description": "Before/after isolate heap state, bounded allocation classes, and an optional sampled usage trend.",
+      "properties": {
+        "before": { "$ref": "#/$defs/heapPoint" },
+        "after": { "$ref": "#/$defs/heapPoint" },
+        "classes": {
+          "type": "array",
+          "maxItems": 1000,
+          "items": { "$ref": "#/$defs/heapClass" },
+          "description": "Retained allocation classes."
+        },
+        "dropped": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Classes dropped by the class bound; omitted when zero."
+        },
+        "samples": {
+          "type": "array",
+          "maxItems": 10000,
+          "items": { "$ref": "#/$defs/heapSample" },
+          "description": "Sampled heap usage trend ordered by non-decreasing `t`."
+        },
+        "interval": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Sampling interval in milliseconds; omitted when no samples were taken."
+        },
+        "drop": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Usage samples dropped by retention limits; omitted when zero."
+        },
+        "gb": { "$ref": "#/$defs/heapPoint", "description": "Isolate-group heap before the capture." },
+        "ga": { "$ref": "#/$defs/heapPoint", "description": "Isolate-group heap after the capture." },
+        "reset": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "VM-native timestamp of the last allocation accumulator reset."
+        },
+        "gcAt": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "VM-native timestamp of the last service-triggered GC."
+        }
+      },
+      "required": ["before", "after"],
+      "additionalProperties": false
+    },
+    "heapClass": {
+      "type": "object",
+      "properties": {
+        "n": {
+          "$ref": "#/$defs/nonEmptyString",
+          "description": "Class name."
+        },
+        "id": {
+          "$ref": "#/$defs/nonEmptyString",
+          "description": "VM class id; present when needed for opt-in allocation tracing."
+        },
+        "lib": {
+          "$ref": "#/$defs/nonEmptyString",
+          "description": "Defining library."
+        },
+        "bytes": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Current retained bytes."
+        },
+        "count": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Current instances."
+        },
+        "allocBytes": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Accumulated allocated bytes since the last reset."
+        },
+        "allocCount": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Accumulated instances since the last reset."
+        }
+      },
+      "required": ["n", "bytes", "count", "allocBytes", "allocCount"],
+      "additionalProperties": false
+    },
+    "heapSample": {
+      "type": "object",
+      "properties": {
+        "t": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Offset from capture start in microseconds."
+        },
+        "use": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Used bytes."
+        },
+        "cap": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Capacity bytes; at least `use`."
+        },
+        "ext": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "External bytes."
+        }
+      },
+      "required": ["t", "use", "cap", "ext"],
+      "additionalProperties": false
+    },
+    "gcProfile": {
+      "type": "object",
+      "description": "GC pauses derived only from real GC timeline events. Presence proves verifiable GC events; absence never means zero-cost collections.",
+      "properties": {
+        "n": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "GC events found in the retained timeline."
+        },
+        "timed": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "GC events with a measurable pause duration."
+        },
+        "new": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "New-generation collections; omitted when zero."
+        },
+        "old": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Old-generation collections; omitted when zero."
+        },
+        "total": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Total pause in microseconds; present only when at least one pause is timed."
+        },
+        "p50": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Median pause in microseconds; present only when at least one pause is timed."
+        },
+        "p90": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "90th percentile pause in microseconds; present only when at least one pause is timed."
+        },
+        "max": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Longest pause in microseconds; present only when at least one pause is timed."
+        },
+        "newUs": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Total new-generation pause in microseconds; present only when positive."
+        },
+        "oldUs": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Total old-generation pause in microseconds; present only when positive."
+        }
+      },
+      "required": ["n", "timed"],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "required": ["timed"],
+            "properties": { "timed": { "minimum": 1 } }
+          },
+          "then": { "required": ["total", "p50", "p90", "max"] }
+        },
+        {
+          "if": {
+            "required": ["timed"],
+            "properties": { "timed": { "maximum": 0 } }
+          },
+          "then": {
+            "not": {
+              "anyOf": [
+                { "required": ["total"] },
+                { "required": ["p50"] },
+                { "required": ["p90"] },
+                { "required": ["max"] },
+                { "required": ["newUs"] },
+                { "required": ["oldUs"] }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "gpuProfile": {
+      "type": "object",
+      "description": "Evidence-only GPU and shader counts from the retained timeline. These are signals, not decoded GPU timing.",
+      "properties": {
+        "source": {
+          "$ref": "#/$defs/nonEmptyString",
+          "description": "Signal origin, for example `vmTimeline`."
+        },
+        "events": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Matching GPU timeline events."
+        },
+        "shaders": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Matching shader-compilation events."
+        },
+        "time": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Total matched duration in microseconds; omitted when zero."
+        }
+      },
+      "required": ["source", "events", "shaders"],
+      "additionalProperties": false
+    },
+    "isolateProfile": {
+      "type": "object",
+      "description": "Before/after isolate state around the capture, including an all-isolate inventory and bounded lifecycle events.",
+      "properties": {
+        "before": { "$ref": "#/$defs/isolateStats" },
+        "after": { "$ref": "#/$defs/isolateStats" },
+        "allB": {
+          "type": "array",
+          "maxItems": 64,
+          "items": { "$ref": "#/$defs/isolateStats" },
+          "description": "All-isolate inventory before the capture."
+        },
+        "allA": {
+          "type": "array",
+          "maxItems": 64,
+          "items": { "$ref": "#/$defs/isolateStats" },
+          "description": "All-isolate inventory after the capture."
+        },
+        "dropB": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Isolates omitted from `allB` by the bound; omitted when zero."
+        },
+        "dropA": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Isolates omitted from `allA` by the bound; omitted when zero."
+        },
+        "events": {
+          "type": "array",
+          "maxItems": 1000,
+          "items": { "$ref": "#/$defs/isolateEvent" },
+          "description": "Bounded VM Isolate-stream lifecycle events."
+        },
+        "dropE": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Lifecycle events dropped by the bound; omitted when zero."
+        }
+      },
+      "additionalProperties": false
+    },
+    "isolateStats": {
+      "type": "object",
+      "description": "One bounded snapshot of an isolate's runtime health.",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/nonEmptyString",
+          "description": "Isolate id, for example `isolates/1`."
+        },
+        "name": {
+          "$ref": "#/$defs/nonEmptyString",
+          "description": "Isolate name."
+        },
+        "num": {
+          "$ref": "#/$defs/nonEmptyString",
+          "description": "VM isolate number when reported."
+        },
+        "group": {
+          "$ref": "#/$defs/nonEmptyString",
+          "description": "Isolate group id."
+        },
+        "run": {
+          "type": "boolean",
+          "description": "Runnable state."
+        },
+        "ports": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Live ports."
+        },
+        "libs": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Loaded library count."
+        },
+        "ext": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Registered extension count."
+        },
+        "rpcs": {
+          "type": "array",
+          "maxItems": 500,
+          "items": { "$ref": "#/$defs/nonEmptyString" },
+          "description": "Registered extension RPC names."
+        },
+        "start": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Isolate start time in milliseconds."
+        },
+        "sys": {
+          "type": "boolean",
+          "description": "Whether this is a system isolate."
+        },
+        "pause": {
+          "$ref": "#/$defs/nonEmptyString",
+          "description": "Current pause kind."
+        },
+        "pauseT": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Pause timestamp in milliseconds."
+        },
+        "async": {
+          "type": "boolean",
+          "description": "Whether the pause is async."
+        },
+        "error": {
+          "$ref": "#/$defs/nonEmptyString",
+          "description": "Isolate error text."
+        },
+        "exit": {
+          "type": "boolean",
+          "description": "Pause-on-exit state."
+        },
+        "ex": {
+          "$ref": "#/$defs/nonEmptyString",
+          "description": "Exception pause mode."
+        },
+        "root": {
+          "$ref": "#/$defs/nonEmptyString",
+          "description": "Root library URI."
+        },
+        "bp": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Breakpoint count."
+        },
+        "new": {
+          "$ref": "#/$defs/heapPoint",
+          "description": "New-generation heap spaces."
+        },
+        "old": {
+          "$ref": "#/$defs/heapPoint",
+          "description": "Old-generation heap spaces."
+        }
+      },
+      "required": ["id", "name"],
+      "additionalProperties": false
+    },
+    "isolateEvent": {
+      "type": "object",
+      "description": "One lifecycle notification from the VM Isolate stream.",
+      "properties": {
+        "k": {
+          "$ref": "#/$defs/nonEmptyString",
+          "description": "Event kind, for example `IsolateStart`."
+        },
+        "t": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Event timestamp in milliseconds."
+        },
+        "id": {
+          "$ref": "#/$defs/nonEmptyString",
+          "description": "Isolate id."
+        },
+        "name": {
+          "$ref": "#/$defs/nonEmptyString",
+          "description": "Isolate name."
+        },
+        "group": {
+          "$ref": "#/$defs/nonEmptyString",
+          "description": "Isolate group id."
+        },
+        "rpc": {
+          "$ref": "#/$defs/nonEmptyString",
+          "description": "Extension RPC registered by the event."
+        }
+      },
+      "required": ["k"],
+      "additionalProperties": false
+    },
+    "timelineProfile": {
+      "type": "object",
+      "description": "Timeline recorder and stream metadata observed from VM Service.",
+      "properties": {
+        "recorder": {
+          "$ref": "#/$defs/nonEmptyString",
+          "description": "Active timeline recorder, for example `ring`."
+        },
+        "available": {
+          "type": "array",
+          "maxItems": 500,
+          "items": { "$ref": "#/$defs/nonEmptyString" },
+          "description": "Streams the VM can record."
+        },
+        "recorded": {
+          "type": "array",
+          "maxItems": 500,
+          "items": { "$ref": "#/$defs/nonEmptyString" },
+          "description": "Streams actually selected for this capture."
+        }
+      },
+      "required": ["recorder"],
+      "additionalProperties": false
+    },
+    "displayProfile": {
+      "type": "object",
+      "description": "Display timing metadata from the engine. An unknown refresh rate stays absent; a 60 Hz fallback is never guessed here.",
+      "properties": {
+        "hz": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Effective refresh rate in hertz for the selected view."
+        },
+        "bud": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Derived frame budget in microseconds."
+        },
+        "view": {
+          "$ref": "#/$defs/nonEmptyString",
+          "description": "Flutter view id."
+        }
+      },
+      "additionalProperties": false
+    },
+    "rebuildProfile": {
+      "type": "object",
+      "description": "Bounded DevTools-compatible `Flutter.RebuiltWidgets` evidence; collected only with explicit opt-in, never by default.",
+      "properties": {
+        "frames": {
+          "type": "array",
+          "maxItems": 10000,
+          "items": { "$ref": "#/$defs/rebuildFrame" },
+          "description": "Per-frame rebuild counts ordered by strictly increasing frame number."
+        },
+        "loc": {
+          "type": "array",
+          "maxItems": 50000,
+          "items": { "$ref": "#/$defs/rebuildLocation" },
+          "description": "Widget source locations referenced by `frames`."
+        },
+        "tot": {
+          "type": "array",
+          "maxItems": 50000,
+          "items": { "$ref": "#/$defs/rebuildTotal" },
+          "description": "Aggregate rebuild totals per location."
+        },
+        "dropF": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Frames dropped by the bound; omitted when zero."
+        },
+        "dropE": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Entries dropped by per-frame bounds; omitted when zero."
+        },
+        "unknown": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Entries whose source location stayed unresolved; omitted when zero."
+        }
+      },
+      "additionalProperties": false
+    },
+    "rebuildFrame": {
+      "type": "object",
+      "properties": {
+        "n": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Flutter frame number."
+        },
+        "e": {
+          "type": "array",
+          "items": { "type": "integer", "minimum": 0 },
+          "description": "Flutter's compact wire form: a flat even-length `[locationId, count, ...]` sequence. Counts are strictly positive; the pairing is enforced by the Dart model, which rejects odd lengths."
+        }
+      },
+      "required": ["n"],
+      "additionalProperties": false
+    },
+    "rebuildLocation": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Location id referenced by `rebuildFrame.e`."
+        },
+        "u": {
+          "$ref": "#/$defs/nonEmptyString",
+          "description": "Source URI."
+        },
+        "l": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Source line."
+        },
+        "c": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Source column."
+        },
+        "n": {
+          "$ref": "#/$defs/nonEmptyString",
+          "description": "Widget name."
+        }
+      },
+      "required": ["id"],
+      "additionalProperties": false
+    },
+    "rebuildTotal": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Location id."
+        },
+        "n": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Total rebuilds observed for this location."
+        }
+      },
+      "required": ["id", "n"],
+      "additionalProperties": false
+    },
+    "vmRuntimeProfile": {
+      "type": "object",
+      "description": "VM runtime identity and isolate inventory. Descriptive evidence only; missing VM fields stay absent.",
+      "properties": {
+        "name": { "$ref": "#/$defs/nonEmptyString", "description": "VM name." },
+        "ver": { "$ref": "#/$defs/nonEmptyString", "description": "VM version." },
+        "os": { "$ref": "#/$defs/nonEmptyString", "description": "Host operating system." },
+        "host": { "$ref": "#/$defs/nonEmptyString", "description": "Host CPU architecture." },
+        "target": { "$ref": "#/$defs/nonEmptyString", "description": "Target CPU architecture." },
+        "arch": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Architecture pointer width in bits."
+        },
+        "pid": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "VM process id."
+        },
+        "start": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "VM start time in milliseconds."
+        },
+        "isolates": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Isolate count."
+        },
+        "groups": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Isolate-group count."
+        },
+        "sys": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "System-isolate count."
+        },
+        "ext": {
+          "type": "array",
+          "maxItems": 500,
+          "items": { "$ref": "#/$defs/nonEmptyString" },
+          "description": "Registered VM service extensions."
+        }
+      },
+      "additionalProperties": false
+    },
+    "vmMemoryProfile": {
+      "type": "object",
+      "description": "Before/after process-memory accounting trees from VM Service.",
+      "properties": {
+        "before": { "$ref": "#/$defs/vmMemorySnapshot" },
+        "after": { "$ref": "#/$defs/vmMemorySnapshot" }
+      },
+      "additionalProperties": false
+    },
+    "vmMemorySnapshot": {
+      "type": "object",
+      "properties": {
+        "t": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Offset from capture start in microseconds."
+        },
+        "root": { "$ref": "#/$defs/vmMemoryNode" }
+      },
+      "required": ["t", "root"],
+      "additionalProperties": false
+    },
+    "vmMemoryNode": {
+      "type": "object",
+      "description": "One node of the VM process-memory tree. A child never exceeds its parent's size; the Dart model bounds depth at 8 levels and 512 total nodes.",
+      "properties": {
+        "n": {
+          "$ref": "#/$defs/nonEmptyString",
+          "description": "Accounting bucket name."
+        },
+        "s": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Bucket size in bytes."
+        },
+        "c": {
+          "type": "array",
+          "maxItems": 64,
+          "items": { "$ref": "#/$defs/vmMemoryNode" },
+          "description": "Child buckets; omitted when empty."
+        },
+        "drop": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Children omitted by the node bound; omitted when zero."
+        }
+      },
+      "required": ["n", "s"],
+      "additionalProperties": false
+    },
+    "allocationTrace": {
+      "type": "object",
+      "description": "Opt-in allocation call stacks for one explicitly selected VM class; never collected without an explicit class id.",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/nonEmptyString",
+          "description": "VM class id."
+        },
+        "name": {
+          "$ref": "#/$defs/nonEmptyString",
+          "description": "Class name when resolved."
+        },
+        "trace": { "$ref": "#/$defs/cpuProfile" }
+      },
+      "required": ["id", "trace"],
+      "additionalProperties": false
+    },
+    "vmLogEvent": {
+      "type": "object",
+      "description": "One bounded VM Logging-stream record. Text is copied only when the VM already includes it; no extra object fetch is performed.",
+      "properties": {
+        "t": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Timestamp in milliseconds."
+        },
+        "lvl": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Log level."
+        },
+        "seq": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Log sequence number."
+        },
+        "msg": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 65536,
+          "description": "Message text."
+        },
+        "logger": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 65536,
+          "description": "Logger name."
+        },
+        "zone": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 65536,
+          "description": "Zone name."
+        },
+        "err": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 65536,
+          "description": "Error text."
+        },
+        "stack": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 65536,
+          "description": "Stack text."
+        },
+        "iso": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 65536,
+          "description": "Originating isolate id."
+        }
+      },
+      "additionalProperties": false
+    },
+    "vmDebugEvent": {
+      "type": "object",
+      "description": "One bounded VM Debug-stream event with only the source context already present in the notification; variable evaluation stays an explicit debugger operation.",
+      "properties": {
+        "k": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256,
+          "description": "Event kind, for example `PauseStart`, `PauseException`."
+        },
+        "t": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Timestamp in milliseconds."
+        },
+        "iso": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 65536,
+          "description": "Isolate id."
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 65536,
+          "description": "Isolate name."
+        },
+        "status": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 65536,
+          "description": "VM status detail."
+        },
+        "details": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 65536,
+          "description": "Additional event detail."
+        },
+        "async": {
+          "type": "boolean",
+          "description": "Whether the pause is async."
+        },
+        "fn": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 65536,
+          "description": "Paused function name."
+        },
+        "uri": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 65536,
+          "description": "Paused source URI."
+        },
+        "line": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Paused source line."
+        },
+        "col": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Paused source column."
+        },
+        "err": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 65536,
+          "description": "Exception text."
+        },
+        "bp": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Breakpoint id."
+        }
+      },
+      "required": ["k"],
+      "additionalProperties": false
+    },
+    "perfettoProfile": {
+      "type": "object",
+      "description": "Opt-in raw Perfetto traces. Base64 payloads stay absent from compact output and appear only in complete exports.",
+      "properties": {
+        "cpu": { "$ref": "#/$defs/perfettoTrace" },
+        "timeline": { "$ref": "#/$defs/perfettoTrace" }
+      },
+      "minProperties": 1,
+      "additionalProperties": false
+    },
+    "perfettoTrace": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "enum": ["cpu", "timeline"],
+          "description": "Which VM tracing surface produced this trace."
+        },
+        "start": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Trace time origin in microseconds."
+        },
+        "span": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Trace time extent in microseconds."
+        },
+        "period": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Sampling period in microseconds."
+        },
+        "depth": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Maximum stack depth."
+        },
+        "n": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Sample count."
+        },
+        "pid": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Profiled process id."
+        },
+        "data": {
+          "type": "string",
+          "contentEncoding": "base64",
+          "pattern": "^[A-Za-z0-9+/]+={0,2}$",
+          "description": "Base64 Perfetto protobuf bytes (bounded to 64 MiB); complete exports only."
+        }
+      },
+      "required": ["kind", "start", "span"],
+      "additionalProperties": false
+    }
+  }
+}
