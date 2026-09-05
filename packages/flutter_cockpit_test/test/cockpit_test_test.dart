@@ -141,6 +141,21 @@ void main() {
     },
   );
 
+  cockpitTestWidgets(
+    'watch rejects an unbounded sampling request before pumping the app',
+    app: () => const _TestApp(),
+    body: (cockpit) async {
+      await expectLater(
+        cockpit.watch(
+          duration: const Duration(seconds: 20),
+          interval: const Duration(milliseconds: 1),
+          timeout: const Duration(seconds: 30),
+        ),
+        throwsArgumentError,
+      );
+    },
+  );
+
   var lastScale = 1.0;
   cockpitTestWidgets(
     'multi-touch facade dispatches a real two-pointer scale',

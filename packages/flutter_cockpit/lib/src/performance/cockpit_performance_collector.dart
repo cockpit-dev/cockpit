@@ -264,19 +264,11 @@ final class CockpitPerformanceCollector {
     start();
     CockpitPerformanceReport? report;
     try {
-      final future = action();
+      final future = Future<void>.sync(action);
       if (timeout == null) {
         await future;
       } else {
-        try {
-          await future.timeout(timeout);
-        } on TimeoutException {
-          // A Dart Future cannot be cancelled. Let the owned action finish so
-          // that its late frame timings are not attributed to the next
-          // capture, then propagate the timeout.
-          await future;
-          rethrow;
-        }
+        await _awaitCaptureAction(future, timeout);
       }
     } finally {
       if (_running) {
@@ -385,6 +377,30 @@ final class CockpitPerformanceCollector {
     _windowEnded = false;
     _elapsed = null;
     _finishedAt = null;
+  }
+}
+
+const Duration _captureTimeoutGrace = Duration(seconds: 2);
+
+/// Applies a hard public timeout to an uncancellable Dart action. The action
+/// gets a small cleanup grace period, but a hung future can never keep the
+/// collector (and therefore the caller) blocked forever. A terminal listener
+/// absorbs a late failure after the timeout has been reported.
+Future<void> _awaitCaptureAction(Future<void> action, Duration timeout) async {
+  try {
+    await action.timeout(timeout);
+  } on TimeoutException catch (error, stack) {
+    try {
+      await action.timeout(_captureTimeoutGrace);
+    } on Object {
+      unawaited(
+        action.then<void>(
+          (_) {},
+          onError: (Object lateError, StackTrace lateStack) {},
+        ),
+      );
+    }
+    Error.throwWithStackTrace(error, stack);
   }
 }
 

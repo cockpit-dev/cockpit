@@ -81,6 +81,23 @@ void main() {
     expect(CockpitSelector.parse(selector), locator);
   });
 
+  test('parses and formats layered structural scopes without losing order', () {
+    const locator = CockpitLocator(
+      type: 'TextButton',
+      text: 'Buy',
+      index: 1,
+      ancestor: CockpitLocator(
+        type: 'Positioned',
+        ancestor: CockpitLocator(type: 'Stack'),
+      ),
+    );
+
+    const selector = 'Stack >> Positioned >> TextButton["Buy"]:nth(2)';
+    expect(CockpitSelector.parse(selector), locator);
+    expect(CockpitSelector.format(locator), selector);
+    expect(CockpitSelector.isExplicit(selector), isTrue);
+  });
+
   test('preserves stable index on a plain text locator', () {
     const locator = CockpitLocator(text: 'Continue', index: 1);
 

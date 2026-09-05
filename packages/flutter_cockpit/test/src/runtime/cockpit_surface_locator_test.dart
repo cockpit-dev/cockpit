@@ -182,6 +182,61 @@ void main() {
     expect(second.target?.keyValue, 'lower-button');
   });
 
+  testWidgets(
+    'layered equal labels use hit testing to choose the top actionable control',
+    (tester) async {
+      var baseTaps = 0;
+      var popupTaps = 0;
+      await tester.pumpWidget(
+        WidgetsApp(
+          color: const Color(0xFFFFFFFF),
+          builder: (context, child) => CockpitSurface(
+            routeName: '/layered-hit-test',
+            child: Material(
+              child: Directionality(
+                textDirection: TextDirection.ltr,
+                child: Stack(
+                  children: <Widget>[
+                    Positioned.fill(
+                      child: TextButton(
+                        key: const ValueKey<String>('base-buy'),
+                        onPressed: () => baseTaps += 1,
+                        child: const Text('Buy'),
+                      ),
+                    ),
+                    Positioned.fill(
+                      child: TextButton(
+                        key: const ValueKey<String>('popup-buy'),
+                        onPressed: () => popupTaps += 1,
+                        child: const Text('Buy'),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final surface = tester.state<CockpitSurfaceState>(
+        find.byType(CockpitSurface),
+      );
+      final result = surface.probeVisibleLocator(
+        const CockpitLocator(text: 'Buy'),
+        requiredCommand: CockpitCommandType.tap,
+      );
+      expect(result.isSuccess, isTrue, reason: '${result.error?.details}');
+      expect(result.target?.keyValue, 'popup-buy');
+      result.target?.onTap?.call();
+      await tester.pump();
+
+      expect(popupTaps, 1);
+      expect(baseTaps, 0);
+    },
+  );
+
   testWidgets('fuzzy probes prefer the tightest matching element', (
     tester,
   ) async {
@@ -538,6 +593,62 @@ void main() {
     expect(targetTaps, 1);
     expect(overlayTaps, 0);
   });
+
+  testWidgets(
+    'layered Overlay entries use hit testing to choose the top matching action',
+    (tester) async {
+      var baseTaps = 0;
+      var topTaps = 0;
+      final base = OverlayEntry(
+        builder: (context) => Positioned.fill(
+          child: TextButton(
+            onPressed: () => baseTaps += 1,
+            child: const Text('Checkout'),
+          ),
+        ),
+      );
+      final top = OverlayEntry(
+        builder: (context) => Positioned.fill(
+          child: TextButton(
+            onPressed: () => topTaps += 1,
+            child: const Text('Checkout'),
+          ),
+        ),
+      );
+      addTearDown(base.remove);
+      addTearDown(top.remove);
+
+      await tester.pumpWidget(
+        WidgetsApp(
+          color: const Color(0xFFFFFFFF),
+          builder: (context, child) => CockpitSurface(
+            routeName: '/overlay-entries',
+            child: Material(
+              child: Directionality(
+                textDirection: TextDirection.ltr,
+                child: Overlay(initialEntries: <OverlayEntry>[base, top]),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final surface = tester.state<CockpitSurfaceState>(
+        find.byType(CockpitSurface),
+      );
+      final result = surface.probeVisibleLocator(
+        const CockpitLocator(text: 'Checkout'),
+        requiredCommand: CockpitCommandType.tap,
+      );
+      expect(result.isSuccess, isTrue, reason: result.error?.message);
+      result.target?.onTap?.call();
+      await tester.pump();
+
+      expect(topTaps, 1);
+      expect(baseTaps, 0);
+    },
+  );
 }
 
 final class SourceOnlyButton extends StatelessWidget {

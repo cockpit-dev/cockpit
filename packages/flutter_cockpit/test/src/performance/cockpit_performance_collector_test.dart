@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui';
 
 import 'package:flutter_cockpit/flutter_cockpit_flutter.dart';
@@ -89,5 +90,26 @@ void main() {
     expect(report.invalidFrames, 1);
     expect(report.frames, isEmpty);
     expect(report.summary.fps, isNull);
+  });
+
+  testWidgets('capture timeout detaches without waiting for a hung action', (
+    tester,
+  ) async {
+    final collector = CockpitPerformanceCollector(platform: 'test');
+    addTearDown(collector.dispose);
+    final release = Completer<void>();
+    final action = collector.capture(
+      () => release.future,
+      timeout: const Duration(milliseconds: 1),
+    );
+    final expectation = expectLater(action, throwsA(isA<TimeoutException>()));
+
+    // Advance the test clock through the public timeout and finite grace
+    // period. This keeps the test deterministic without real sleeping.
+    await tester.pump(const Duration(milliseconds: 1));
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 2));
+    await expectation;
+    expect(collector.isRunning, isFalse);
   });
 }

@@ -75,7 +75,28 @@ bool cockpitIsVisibleInRuntimeTree(Element element) {
 bool cockpitHidesRuntimeSubtree(Element element) {
   final widget = element.widget;
   return (widget is Offstage && widget.offstage) ||
+      cockpitVisibilityForWidget(widget) == false ||
       _belongsToInactiveModalRoute(widget);
+}
+
+/// Reads Flutter's internal visibility scope without depending on it or
+/// registering an inherited-widget dependency during a tree scan.
+///
+/// [IndexedStack] and `Visibility` keep stateful children mounted and expose
+/// their active state through the private `_VisibilityScope`. Treating that
+/// scope as a first-class visibility signal prevents inactive layers from
+/// being offered as actionable locator candidates.
+bool? cockpitVisibilityForWidget(Widget widget) {
+  if (widget.runtimeType.toString() != '_VisibilityScope') {
+    return null;
+  }
+  try {
+    final dynamic scope = widget;
+    final value = scope.isVisible;
+    return value is bool ? value : null;
+  } on Object {
+    return null;
+  }
 }
 
 bool _isVisibleInAncestorTree(Element element) {

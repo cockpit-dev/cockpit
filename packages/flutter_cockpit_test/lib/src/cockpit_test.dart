@@ -19,11 +19,36 @@ import 'cockpit_performance_archive.dart';
 import 'cockpit_performance_html_io.dart'
     if (dart.library.html) 'cockpit_performance_html_web.dart';
 import 'cockpit_performance_memory_sampler.dart';
+import 'cockpit_performance_memory_sampler_contract.dart';
 import 'cockpit_startup_report.dart';
 import 'cockpit_timeline_analysis.dart';
 import 'cockpit_test_options.dart';
 import 'cockpit_watch.dart';
 import 'cockpit_vm_debugger.dart';
+
+const Duration _cockpitPerformanceTimeoutGrace = Duration(seconds: 2);
+
+/// Futures cannot be cancelled in Dart. Give an action a short grace period
+/// after its public timeout so normal cleanup can finish, then return the
+/// timeout instead of hanging the test forever on an uncooperative action.
+Future<T> _awaitPerformanceAction<T>(Future<T> action, Duration timeout) async {
+  try {
+    return await action.timeout(timeout);
+  } on TimeoutException catch (timeoutError, timeoutStack) {
+    try {
+      await action.timeout(_cockpitPerformanceTimeoutGrace);
+    } on Object {
+      // The action is still running. Attach a terminal listener so a late
+      // failure does not become an unhandled asynchronous error after the
+      // performance window has already been closed.
+      unawaited(
+        action.then<void>((_) {}, onError: (Object error, StackTrace stack) {}),
+      );
+      Error.throwWithStackTrace(timeoutError, timeoutStack);
+    }
+    Error.throwWithStackTrace(timeoutError, timeoutStack);
+  }
+}
 
 /// Registers an integration test that runs the real Cockpit in-app executor.
 ///
@@ -257,6 +282,7 @@ final class CockpitTester {
       <CockpitPerformanceArchive>{};
   final List<CockpitPerformanceCapture> _manualCaptures =
       <CockpitPerformanceCapture>[];
+  Future<void>? _unfinishedProfileAction;
   late final _CockpitTestPumpQueue _pumpQueue = _CockpitTestPumpQueue(
     flutter.pump,
   );
@@ -405,10 +431,10 @@ final class CockpitTester {
     List<String> allocationClassIds = const <String>[],
     bool perfetto = false,
     Duration sampleEvery = const Duration(milliseconds: 100),
-    int maxEvents = 200000,
-    int maxCpuSamples = 50000,
+    int maxEvents = 20000,
+    int maxCpuSamples = 20000,
     int maxHeapClasses = 200,
-    int maxHeapSamples = 10000,
+    int maxHeapSamples = 2000,
     bool trackBuilds = false,
     bool trackUserBuilds = false,
     bool trackLayouts = false,
@@ -416,8 +442,8 @@ final class CockpitTester {
     bool trackRebuilds = false,
     bool logs = true,
     bool debug = true,
-    int maxRebuildFrames = 10000,
-    int maxRebuildEntries = 100000,
+    int maxRebuildFrames = 2000,
+    int maxRebuildEntries = 20000,
     int maxLogs = 2000,
     int maxDebug = 2000,
     List<CockpitPerformancePlugin> plugins = const <CockpitPerformancePlugin>[],
@@ -487,6 +513,36 @@ final class CockpitTester {
       }
     }
     _manualCaptures.clear();
+  }
+
+  Future<void> _trackProfileAction(Future<void> Function() action) {
+    if (_unfinishedProfileAction != null) {
+      throw StateError(
+        'A previous timed-out performance action is still running. '
+        'Wait for it to finish before starting another capture.',
+      );
+    }
+    final completed = Completer<void>();
+    final done = completed.future;
+    _unfinishedProfileAction = done;
+    final future = Future<void>.sync(action);
+    unawaited(
+      future.then<void>(
+        (_) {
+          if (!completed.isCompleted) completed.complete();
+          if (identical(_unfinishedProfileAction, done)) {
+            _unfinishedProfileAction = null;
+          }
+        },
+        onError: (Object error, StackTrace stack) {
+          if (!completed.isCompleted) completed.complete();
+          if (identical(_unfinishedProfileAction, done)) {
+            _unfinishedProfileAction = null;
+          }
+        },
+      ),
+    );
+    return future;
   }
 
   late final InAppCockpitCommandExecutor _executor = root.createCommandExecutor(
@@ -809,9 +865,13 @@ final class CockpitTester {
   /// are enabled by default because the VM already emits these notifications;
   /// set them to false for a capture that must exclude runtime event evidence.
   ///
-  /// The complete bounded report is placed in [IntegrationTestWidgetsFlutterBinding.reportData]
-  /// under `cockpit.performance.<name>`. The value returned to normal test
-  /// output is the compact summary exposed by [report].
+  /// The bounded report is placed in
+  /// [IntegrationTestWidgetsFlutterBinding.reportData] under
+  /// `cockpit.performance.<name>`. Without an archive it includes the
+  /// retained frame/event window; with an archive the result is a compact
+  /// projection and the manifest/chunks are the lossless source of truth.
+  /// The value returned to normal test output is the compact summary exposed
+  /// by [report].
   Future<CockpitPerformanceReport> profile(
     Future<void> Function() action, {
     String name = 'performance',
@@ -825,10 +885,10 @@ final class CockpitTester {
     List<String> allocationClassIds = const <String>[],
     bool perfetto = false,
     Duration sampleEvery = const Duration(milliseconds: 100),
-    int maxEvents = 200000,
-    int maxCpuSamples = 50000,
+    int maxEvents = 20000,
+    int maxCpuSamples = 20000,
     int maxHeapClasses = 200,
-    int maxHeapSamples = 10000,
+    int maxHeapSamples = 2000,
     bool trackBuilds = false,
     bool trackUserBuilds = false,
     bool trackLayouts = false,
@@ -836,8 +896,8 @@ final class CockpitTester {
     bool trackRebuilds = false,
     bool logs = true,
     bool debug = true,
-    int maxRebuildFrames = 10000,
-    int maxRebuildEntries = 100000,
+    int maxRebuildFrames = 2000,
+    int maxRebuildEntries = 20000,
     int maxLogs = 2000,
     int maxDebug = 2000,
     List<CockpitPerformancePlugin> plugins = const <CockpitPerformancePlugin>[],
@@ -929,6 +989,12 @@ final class CockpitTester {
     }
     final effectiveTimeout = timeout ?? options.commandTimeout;
     _validateTimeout(effectiveTimeout, name: 'timeout');
+    if (_unfinishedProfileAction != null) {
+      throw StateError(
+        'A previous timed-out performance action is still running. '
+        'Wait for it to finish before starting another capture.',
+      );
+    }
     final collector = FlutterCockpit.binding.performanceCollector;
     if (collector.isRunning) {
       throw StateError('Another performance capture is already running.');
@@ -948,14 +1014,24 @@ final class CockpitTester {
     Future<void>? timelinePoll;
     String? archiveCaptureId;
     CockpitPerformanceFrameListener? frameListener;
+    CockpitPerformanceMemorySampler? memorySampler;
+    CockpitPerformanceMemoryReport? memoryReport;
+    var profilerStarted = false;
+    var profilerWindowStarted = false;
+    var profilerWindowEnded = false;
+    var collectorStarted = false;
+    var pluginWindowStarted = false;
+    var memorySamplerStopped = false;
+    var profilerFinished = false;
+    var reportFinalized = false;
     final instrumentation = _PerformanceInstrumentation();
     final pluginCapture = FlutterCockpit.binding.performancePlugins.capture(
       additional: plugins,
-      // In streaming mode `maxEvents` belongs to the bounded VM/report
-      // projection. Do not use that smaller projection budget as the plugin
-      // capture's global limit; plugin options and the archive remain the
-      // source-of-truth for plugin retention.
-      maxEvents: archive == null ? maxEvents : 200000,
+      // In streaming mode the archive sink receives every accepted event,
+      // while this in-memory list remains bounded by the same compact report
+      // budget. This prevents plugin events from recreating the OOM path that
+      // the archive is meant to avoid.
+      maxEvents: maxEvents,
       onEvent: archive?.addEvent,
     );
     late final CockpitDevToolsProfiler devToolsProfiler;
@@ -1018,27 +1094,7 @@ final class CockpitTester {
         trackLayouts: trackLayouts,
         trackPaints: trackPaints,
       );
-      collector.start(mode: mode);
-      void onFrame(CockpitPerformanceFrame frame) {
-        archive?.addFrame(frame);
-      }
-
-      if (archive != null) {
-        frameListener = onFrame;
-        collector.addFrameListener(onFrame);
-        archiveCaptureId = archive.beginCapture(
-          id: normalizedName,
-          startedAt: collector.startedAt,
-        );
-      }
-      pluginCapture.beginWindow();
-      final memorySampler = memory
-          ? createCockpitPerformanceMemorySampler(
-              interval: sampleEvery,
-              onSample: archive?.addMemory,
-            )
-          : null;
-      memorySampler?.start();
+      profilerStarted = true;
       await devToolsProfiler.start(
         cpu: cpu,
         heap: heap,
@@ -1053,7 +1109,34 @@ final class CockpitTester {
         timelineStreams: List<String>.unmodifiable(streams),
         streamTimeline: archive != null && canTraceTimeline,
       );
+      await devToolsProfiler.beginWindow();
+      profilerWindowStarted = true;
+      collector.start(mode: mode);
+      collectorStarted = true;
+      void onFrame(CockpitPerformanceFrame frame) {
+        archive?.addFrame(frame);
+      }
+
+      if (archive != null) {
+        frameListener = onFrame;
+        collector.addFrameListener(onFrame);
+      }
+      pluginCapture.beginWindow();
+      pluginWindowStarted = true;
+      memorySampler = memory
+          ? createCockpitPerformanceMemorySampler(
+              interval: sampleEvery,
+              onSample: archive?.addMemory,
+            )
+          : null;
+      memorySampler?.start();
       onStarted?.call();
+      if (archive != null) {
+        archiveCaptureId = archive.beginCapture(
+          id: normalizedName,
+          startedAt: collector.startedAt,
+        );
+      }
       var timelineSource = collectTimeline
           ? kIsWeb
                 ? 'unavailable:web'
@@ -1070,50 +1153,47 @@ final class CockpitTester {
       try {
         if (canTraceTimeline) {
           if (archive != null) {
-            final run = action();
-            try {
-              await run.timeout(effectiveTimeout);
-            } on TimeoutException {
-              await run;
-              rethrow;
-            }
+            final run = _trackProfileAction(action);
+            await _awaitPerformanceAction(run, effectiveTimeout);
           } else {
             final integrationBinding =
                 IntegrationTestWidgetsFlutterBinding.ensureInitialized();
             final traced = integrationBinding.traceTimeline(
-              action,
+              () => _trackProfileAction(action),
               streams: List<String>.unmodifiable(streams),
             );
-            try {
-              timelineData = await traced.timeout(effectiveTimeout);
-            } on TimeoutException {
-              // Future.timeout cannot cancel the VM-service action. Wait for
-              // the owned action to finish before detaching callbacks.
-              await traced;
-              rethrow;
-            }
+            timelineData = await _awaitPerformanceAction(
+              traced,
+              effectiveTimeout,
+            );
           }
           timelineSource = 'vm';
         } else {
-          final run = action();
-          try {
-            await run.timeout(effectiveTimeout);
-          } on TimeoutException {
-            // Futures are not cancellable. Drain the owned action before
-            // detaching the collector so late frames cannot leak into the next
-            // profile.
-            await run;
-            rethrow;
-          }
+          final run = _trackProfileAction(action);
+          await _awaitPerformanceAction(run, effectiveTimeout);
         }
       } finally {
         timelineTimer?.cancel();
         timelineTimer = null;
-        await pollTimeline();
-        collector.endWindow();
-        pluginCapture.endWindow();
-        final memoryReport = memorySampler?.stop();
-        await devToolsProfiler.endWindow();
+        try {
+          await pollTimeline();
+        } on Object {
+          // A disconnected VM must not prevent frame/plugin cleanup.
+        }
+        if (collectorStarted && collector.isRunning) {
+          collector.endWindow();
+        }
+        if (pluginWindowStarted) {
+          pluginCapture.endWindow();
+        }
+        if (!memorySamplerStopped) {
+          memoryReport = memorySampler?.stop();
+          memorySamplerStopped = true;
+        }
+        if (profilerWindowStarted && !profilerWindowEnded) {
+          await devToolsProfiler.endWindow();
+          profilerWindowEnded = true;
+        }
         final parsed = archive != null && canTraceTimeline
             ? _ParsedPerformanceTimeline(
                 events: retainedTimelineEvents,
@@ -1146,14 +1226,19 @@ final class CockpitTester {
           maxEvents: maxEvents,
         );
         final mergedEvents = bounded.events;
-        final devTools = await devToolsProfiler.finish(
-          cpu: cpu,
-          heap: heap,
-          timeline: collectTimeline,
-          vmMemory: vmMemory,
-          perfetto: perfetto,
-          events: mergedEvents,
-        );
+        CockpitDevToolsProfile? devTools;
+        try {
+          devTools = await devToolsProfiler.finish(
+            cpu: cpu,
+            heap: heap,
+            timeline: collectTimeline,
+            vmMemory: vmMemory,
+            perfetto: perfetto,
+            events: mergedEvents,
+          );
+        } finally {
+          profilerFinished = true;
+        }
         final report = collector.stop(
           events: mergedEvents,
           timelineSource: timelineSource,
@@ -1170,6 +1255,7 @@ final class CockpitTester {
           devTools: devTools,
           plugins: pluginCapture.stats(),
         );
+        reportFinalized = true;
         var completedReport = report;
         if (archive != null && archiveCaptureId != null) {
           archive.endCapture(archiveCaptureId, report);
@@ -1180,17 +1266,91 @@ final class CockpitTester {
         final binding =
             IntegrationTestWidgetsFlutterBinding.ensureInitialized();
         final existing = binding.reportData ?? <String, dynamic>{};
+        final resultPayload = completedReport.toJson();
+        if (archive != null) {
+          // The archive is the lossless source of truth for long captures.
+          // Keep integration_test's in-memory result compact so serializing a
+          // multi-hour run cannot duplicate hundreds of thousands of frames
+          // and events at teardown. Callers can read the manifest/chunks or
+          // use exportPerformance* for the complete data set.
+          resultPayload.remove('frames');
+          resultPayload.remove('events');
+        }
         binding.reportData = <String, dynamic>{
           ...existing,
-          'cockpit.performance.$normalizedName': completedReport.toJson(),
+          'cockpit.performance.$normalizedName': resultPayload,
         };
       }
     } finally {
+      timelineTimer?.cancel();
+      timelineTimer = null;
+      if (!reportFinalized) {
+        try {
+          await pollTimeline();
+        } on Object {
+          // Best effort: a disconnected VM cannot be drained during teardown.
+        }
+        if (collectorStarted && collector.isRunning) {
+          try {
+            collector.endWindow();
+          } on Object {
+            // The collector is detached again below when possible.
+          }
+        }
+        if (pluginWindowStarted) {
+          try {
+            pluginCapture.endWindow();
+          } on Object {
+            // Plugin cleanup below still runs even if the window was closed.
+          }
+        }
+        if (!memorySamplerStopped) {
+          try {
+            memorySampler?.stop();
+          } on Object {
+            // A sampler failure must never mask the original test failure.
+          }
+          memorySamplerStopped = true;
+        }
+        if (profilerWindowStarted && !profilerWindowEnded) {
+          try {
+            await devToolsProfiler.endWindow();
+          } on Object {
+            // The profiler's finish/close path remains best effort.
+          }
+          profilerWindowEnded = true;
+        }
+        if (profilerStarted && !profilerFinished) {
+          try {
+            await devToolsProfiler.finish(
+              cpu: cpu,
+              heap: heap,
+              timeline: collectTimeline,
+              vmMemory: vmMemory,
+              perfetto: perfetto,
+            );
+          } on Object {
+            // Preserve the setup/action exception that caused teardown.
+          }
+          profilerFinished = true;
+        }
+        if (collectorStarted && collector.isRunning) {
+          try {
+            collector.stop(stepId: normalizedName);
+          } on Object {
+            // Nothing else can be safely recovered from a failed collector.
+          }
+        }
+      }
       final listener = frameListener;
       if (listener != null) collector.removeFrameListener(listener);
       instrumentation.restore();
       if (pluginCapture.isRunning) {
-        await pluginCapture.stop();
+        try {
+          await pluginCapture.stop();
+        } on Object {
+          // Plugin cleanup is diagnostic and must not mask the test failure.
+        }
       }
     }
     return _performances.last;
@@ -2003,11 +2163,15 @@ final class CockpitTester {
   /// Samples the mounted surface at bounded intervals and returns only
   /// compact changes. Use this for animation checkpoints and pages whose
   /// content changes over time; it never retains a full snapshot history.
+  /// [maxSamples] protects long-running watches from accidentally scheduling
+  /// millions of expensive tree snapshots when a very small interval is
+  /// supplied.
   Future<CockpitWatchResult> watch({
     String? query,
     Duration duration = const Duration(seconds: 5),
     Duration interval = const Duration(milliseconds: 200),
     int maxChanges = 64,
+    int maxSamples = 10000,
     Duration? quiet,
     Duration? timeout,
     CockpitSnapshotOptions options = const CockpitSnapshotOptions.baseline(),
@@ -2020,6 +2184,24 @@ final class CockpitTester {
         maxChanges,
         'maxChanges',
         'Must be between 1 and 1000.',
+      );
+    }
+    if (maxSamples < 1 || maxSamples > 100000) {
+      throw ArgumentError.value(
+        maxSamples,
+        'maxSamples',
+        'Must be between 1 and 100000.',
+      );
+    }
+    final estimatedSamples =
+        (duration.inMicroseconds + interval.inMicroseconds - 1) ~/
+        interval.inMicroseconds;
+    if (estimatedSamples > maxSamples) {
+      throw ArgumentError.value(
+        interval,
+        'interval',
+        'The requested watch would require $estimatedSamples samples; '
+            'increase interval or maxSamples (maximum 100000).',
       );
     }
     if (quiet != null && (quiet <= Duration.zero || quiet >= duration)) {
@@ -2436,7 +2618,7 @@ final class _PerformanceInstrumentation {
 
 _ParsedPerformanceTimeline _parsePerformanceTimeline(
   dynamic timeline, {
-  int maxEvents = 200000,
+  int maxEvents = 20000,
 }) {
   if (timeline == null) {
     return const _ParsedPerformanceTimeline();

@@ -20,6 +20,7 @@ import '../gesture/cockpit_gesture_profile.dart';
 import 'cockpit_discovery_engine.dart';
 import 'cockpit_discovery_policy.dart';
 import 'cockpit_focus_snapshot_builder.dart';
+import 'cockpit_locator_scope.dart';
 import 'cockpit_rebuild_tracker.dart';
 import 'cockpit_reveal_alignment.dart';
 import 'cockpit_tap_feedback_overlay.dart';
@@ -1421,6 +1422,22 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
       );
     }
 
+    // Equal labels are common in layered UIs: a route may retain the page
+    // underneath a modal, popup, or tooltip while the overlay paints above it.
+    // Use a real Flutter hit test as an additional piece of evidence when it
+    // identifies exactly one winner. This never guesses between two equally
+    // hittable controls; those remain ambiguous and require a stronger
+    // selector (key, path, ancestor, or index).
+    final hitTestWinners = bestMatches
+        .where((candidate) => _mountedElementHitTest(candidate.element) == true)
+        .toList(growable: false);
+    if (hitTestWinners.length == 1) {
+      return _CockpitMountedLocatorProbe(
+        element: hitTestWinners.single.element,
+        matchCount: bestMatches.length,
+      );
+    }
+
     // A single logical control commonly repeats its label through a Semantics
     // container and one or more descendant Text widgets. Collapse only when
     // one matching ancestor contains every equal match. Equal matches in
@@ -2286,6 +2303,12 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
     if (typeName.startsWith('_')) {
       return true;
     }
+    // Positioned carries Stack parent data, yet it is a useful public scope
+    // for resolving layered controls. Preserve it before the generic
+    // ParentDataWidget filter removes structural wrappers.
+    if (cockpitIsLocatorScopeWidget(widget)) {
+      return false;
+    }
     return widget is InheritedWidget ||
         widget is ParentDataWidget<ParentData> ||
         widget is Focus ||
@@ -2301,6 +2324,12 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
     final typeName = widget.runtimeType.toString();
     if (typeName.startsWith('_')) {
       return true;
+    }
+    // Preserve only public branching layout scopes in compact paths. This
+    // lets a selector express Stack/Overlay/custom-layout context while
+    // avoiding a noisy path segment for every ordinary visual wrapper.
+    if (cockpitIsLocatorScopeWidget(widget)) {
+      return false;
     }
     if (_isNoisyPathTypeName(typeName)) {
       return true;
@@ -3243,14 +3272,22 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
   }
 
   bool _elementWinsHitTest(Element element) {
+    final result = _mountedElementHitTest(element);
+    return result == null || result;
+  }
+
+  bool? _mountedElementHitTest(Element element) {
     final result = CockpitTargetHitTestInspector.inspect(
       CockpitTarget(
-        registrationId: 'reveal:${identityHashCode(element)}',
+        registrationId: 'probe:${identityHashCode(element)}',
         routeName: widget.routeName,
         diagnosticNodeProvider: () => element,
       ),
     );
-    return result == null || (result.withinTargetBounds && result.hit);
+    if (result == null) {
+      return null;
+    }
+    return result.withinTargetBounds && result.hit;
   }
 
   RenderObject? _resolveViewportRenderObject(RenderObject? targetRenderObject) {

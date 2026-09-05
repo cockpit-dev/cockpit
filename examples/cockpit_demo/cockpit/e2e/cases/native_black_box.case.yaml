@@ -77,8 +77,6 @@ steps:
             locator:
               label: Back
               type: Button
-              fallbacks:
-                - {text: Create task}
   - stepId: tapBackThroughNativeTree
     description: Commit the native back mutation once.
     timeoutMs: 30000

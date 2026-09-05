@@ -490,6 +490,79 @@ void main() {
     },
   );
 
+  test(
+    'iOS tap converges when WDA loses the response after dispatch',
+    () async {
+      final commands = <CockpitIosWdaCommand>[];
+      var tapped = false;
+      final controls = CockpitSystemControlService(
+        iosWdaEndpointProbe: (baseUri, {required timeout}) async => true,
+      );
+      Future<String> runner(
+        CockpitIosWdaCommand command, {
+        required Duration timeout,
+      }) async {
+        commands.add(command);
+        if (command.action == CockpitIosWdaAction.readUiTree) {
+          return tapped ? _iosInboxTree : _iosEditorBackTree;
+        }
+        if (command.action == CockpitIosWdaAction.tap) {
+          tapped = true;
+          throw StateError('WDA response lost after tap dispatch');
+        }
+        return 'ok';
+      }
+
+      final adapter = CockpitSystemTestAutomationAdapter(
+        target: CockpitSystemTestTarget(
+          platform: 'ios',
+          deviceId: 'D3884373-E926-49AF-92E6-7A241C50B64C',
+          appId: 'dev.cockpit.demo',
+          targetKind: CockpitTargetKind.flutterApp,
+          metadata: const <String, Object?>{
+            'wdaUrl': 'http://127.0.0.1:8100',
+            'wdaReachable': true,
+          },
+        ),
+        controlService: controls,
+        actionService: CockpitSystemControlActionService(
+          systemControlService: controls,
+          iosWdaRunner: runner,
+        ),
+        iosWdaRunner: runner,
+        workspaceRoot: Directory.current.path,
+        delay: (_) async {},
+      );
+
+      final execution = await adapter.execute(
+        CockpitCommand(
+          commandId: 'tap-back-after-wda-dispatch',
+          commandType: CockpitCommandType.tap,
+          parameters: const <String, Object?>{
+            'cockpitTestLocator': <String, Object?>{
+              'label': 'Back',
+              'type': 'Button',
+            },
+          },
+          timeoutMs: 5000,
+        ),
+      );
+
+      expect(execution.result.success, isTrue);
+      expect(tapped, isTrue);
+      expect(
+        commands.where((command) => command.action == CockpitIosWdaAction.tap),
+        hasLength(1),
+      );
+      expect(
+        commands.where(
+          (command) => command.action == CockpitIosWdaAction.readUiTree,
+        ),
+        isNotEmpty,
+      );
+    },
+  );
+
   test('iOS UI idle waits use lightweight WDA source snapshots', () async {
     final commands = <CockpitIosWdaCommand>[];
     final controls = CockpitSystemControlService(
@@ -1495,6 +1568,21 @@ const _iosDuplicateNewTaskTree = '''<?xml version="1.0" encoding="UTF-8"?>
 const _iosVisualViewportTree = '''<?xml version="1.0" encoding="UTF-8"?>
 <XCUIElementTypeApplication type="XCUIElementTypeApplication" x="0" y="0" width="30" height="60">
   <XCUIElementTypeWindow type="XCUIElementTypeWindow" x="0" y="0" width="30" height="60" />
+</XCUIElementTypeApplication>''';
+
+const _iosEditorBackTree = '''<?xml version="1.0" encoding="UTF-8"?>
+<XCUIElementTypeApplication type="XCUIElementTypeApplication" x="0" y="0" width="402" height="874">
+  <XCUIElementTypeWindow type="XCUIElementTypeWindow" x="0" y="0" width="402" height="874">
+    <XCUIElementTypeButton type="XCUIElementTypeButton" name="Back" label="Back" enabled="true" visible="true" accessible="true" x="16" y="48" width="48" height="48" />
+    <XCUIElementTypeStaticText type="XCUIElementTypeStaticText" name="Create task" label="Create task" visible="true" x="80" y="48" width="200" height="48" />
+  </XCUIElementTypeWindow>
+</XCUIElementTypeApplication>''';
+
+const _iosInboxTree = '''<?xml version="1.0" encoding="UTF-8"?>
+<XCUIElementTypeApplication type="XCUIElementTypeApplication" x="0" y="0" width="402" height="874">
+  <XCUIElementTypeWindow type="XCUIElementTypeWindow" x="0" y="0" width="402" height="874">
+    <XCUIElementTypeButton type="XCUIElementTypeButton" name="New task" label="New task" enabled="true" visible="true" accessible="true" x="233" y="75" width="117" height="48" />
+  </XCUIElementTypeWindow>
 </XCUIElementTypeApplication>''';
 
 const _iosStaleVisibilityJsonNewTaskTree = '''{
