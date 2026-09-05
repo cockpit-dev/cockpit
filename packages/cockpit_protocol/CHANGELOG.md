@@ -1,5 +1,10 @@
 # Changelog
 
+## 4.6.1
+
+- Accepted compact streamed performance reports that omit retained frame arrays
+  while strictly validating their JSONL archive frame totals.
+
 ## 4.6.0
 
 - Synchronized the protocol release with the bounded selector and long-running

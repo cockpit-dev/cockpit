@@ -1,5 +1,12 @@
 # Changelog
 
+## 4.6.1
+
+- Kept plugin telemetry independent from VM timeline retention so bounded
+  reports do not record false plugin drops.
+- Fixed compact streamed report reconstruction and portable JSONL manifest
+  paths across Windows and device integration-test environments.
+
 ## 4.6.0
 
 - Hardened long-running integration and performance captures with bounded

@@ -1,5 +1,10 @@
 # Changelog
 
+## 4.6.1
+
+- Synchronized the Flutter bridge release with the corrected streamed
+  performance contracts and AI integration guidance.
+
 ## 4.6.0
 
 - Improved locator traversal and visibility handling for nested and layered

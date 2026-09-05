@@ -1,5 +1,12 @@
 # Changelog
 
+## 4.6.1
+
+- Refined the bundled AI workflow for layered Flutter selectors, concurrent
+  gestures, and long-running JSONL performance archives.
+- Hardened cross-platform release validation for iOS WebDriverAgent discovery
+  and Windows performance archive paths.
+
 ## 4.6.0
 
 - Hardened source-first Flutter locator resolution for nested Stack, Overlay,
