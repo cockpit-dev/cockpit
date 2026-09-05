@@ -16,12 +16,12 @@ dependencies:
 
 dev_dependencies:
   args: ^2.7.0
-  cockpit: ^4.4.6
-  cockpit_protocol: ^4.4.6
+  cockpit: ^4.5.0
+  cockpit_protocol: ^4.5.0
   crypto: ^3.0.7
   drift: ">=2.29.0 <2.30.0"
-  flutter_cockpit: ^4.4.6
-  flutter_cockpit_test: ^4.4.6
+  flutter_cockpit: ^4.5.0
+  flutter_cockpit_test: ^4.5.0
   flutter_lints: ^6.0.0
   flutter_test:
     sdk: flutter

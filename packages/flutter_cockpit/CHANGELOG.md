@@ -1,5 +1,10 @@
 # Changelog
 
+## 4.5.0
+
+- Added the Flutter bridge lifecycle for sequential performance capture
+  segments and exposed active capture/build-mode status to remote clients.
+
 ## 4.4.6
 
 - Discovers asynchronously mounted Router providers without an unbounded

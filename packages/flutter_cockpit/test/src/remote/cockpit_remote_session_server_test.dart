@@ -158,108 +158,114 @@ void main() {
     },
   );
 
-  test('remote performance endpoints keep capture state and enforce exclusivity', () async {
-    final startedAt = DateTime.utc(2026, 9, 5);
-    final report = CockpitPerformanceReport(
-      startedAt: startedAt,
-      finishedAt: startedAt,
-      durationUs: 0,
-      durationMs: 0,
-      platform: 'ios',
-      buildMode: 'debug',
-      mode: CockpitPerformanceMode.light,
-      summary: CockpitPerformanceSummary.fromFrames(
-        const <CockpitPerformanceFrame>[],
-        frameBudgetUs: 16667,
-      ),
-    );
-    final handler = CockpitRemoteSessionEndpointHandler(
-      configuration: const CockpitRemoteSessionConfiguration(
-        enabled: true,
-        autoStart: false,
-        port: 0,
-      ),
-      statusProvider: () async => CockpitRemoteSessionStatus(
-        sessionId: 'performance-session',
+  test(
+    'remote performance endpoints keep capture state and enforce exclusivity',
+    () async {
+      final startedAt = DateTime.utc(2026, 9, 5);
+      final report = CockpitPerformanceReport(
+        startedAt: startedAt,
+        finishedAt: startedAt,
+        durationUs: 0,
+        durationMs: 0,
         platform: 'ios',
-        transportType: 'remoteHttp',
-        currentRouteName: '/home',
-        capabilities: CockpitCapabilities(
+        buildMode: 'debug',
+        mode: CockpitPerformanceMode.light,
+        summary: CockpitPerformanceSummary.fromFrames(
+          const <CockpitPerformanceFrame>[],
+          frameBudgetUs: 16667,
+        ),
+      );
+      final handler = CockpitRemoteSessionEndpointHandler(
+        configuration: const CockpitRemoteSessionConfiguration(
+          enabled: true,
+          autoStart: false,
+          port: 0,
+        ),
+        statusProvider: () async => CockpitRemoteSessionStatus(
+          sessionId: 'performance-session',
           platform: 'ios',
           transportType: 'remoteHttp',
-          supportsInAppControl: true,
-          supportsFlutterViewCapture: true,
-          supportsNativeScreenCapture: true,
-          supportsHostAutomation: false,
+          currentRouteName: '/home',
+          capabilities: CockpitCapabilities(
+            platform: 'ios',
+            transportType: 'remoteHttp',
+            supportsInAppControl: true,
+            supportsFlutterViewCapture: true,
+            supportsNativeScreenCapture: true,
+            supportsHostAutomation: false,
+          ),
+          recordingCapabilities: CockpitRecordingCapabilities(
+            supportsNativeRecording: true,
+          ),
+          snapshot: CockpitSnapshot(routeName: '/home'),
+          performanceCapture: true,
+          buildMode: 'debug',
         ),
-        recordingCapabilities: CockpitRecordingCapabilities(
-          supportsNativeRecording: true,
+        snapshotProvider: ({required options}) async =>
+            CockpitSnapshot(routeName: '/home'),
+        commandExecutor: (_) async => throw StateError('unused'),
+        startRecording: (_) async => throw StateError('unused'),
+        stopRecording: () async => throw StateError('unused'),
+        startPerformance: (request) async => CockpitPerformanceCaptureSession(
+          request: request,
+          startedAt: startedAt,
+          buildMode: 'debug',
         ),
-        snapshot: CockpitSnapshot(routeName: '/home'),
-        performanceCapture: true,
-        buildMode: 'debug',
-      ),
-      snapshotProvider: ({required options}) async =>
-          CockpitSnapshot(routeName: '/home'),
-      commandExecutor: (_) async => throw StateError('unused'),
-      startRecording: (_) async => throw StateError('unused'),
-      stopRecording: () async => throw StateError('unused'),
-      startPerformance: (request) async => CockpitPerformanceCaptureSession(
-        request: request,
-        startedAt: startedAt,
-        buildMode: 'debug',
-      ),
-      stopPerformance: () async => report,
-    );
+        stopPerformance: () async => report,
+      );
 
-    final start = await handler.handle(
-      CockpitRemoteSessionEndpointRequest(
-        method: 'POST',
-        uri: Uri.parse('/performance/start'),
-        jsonBody: const <String, Object?>{'name': 'open-list'},
-      ),
-    );
-    expect(start.statusCode, HttpStatus.ok);
-    expect(
-      CockpitPerformanceCaptureSession.fromJson(start.jsonBody),
-      isNotNull,
-    );
+      final start = await handler.handle(
+        CockpitRemoteSessionEndpointRequest(
+          method: 'POST',
+          uri: Uri.parse('/performance/start'),
+          jsonBody: const <String, Object?>{'name': 'open-list'},
+        ),
+      );
+      expect(start.statusCode, HttpStatus.ok);
+      expect(
+        CockpitPerformanceCaptureSession.fromJson(start.jsonBody),
+        isNotNull,
+      );
 
-    final recordingWhileProfiling = await handler.handle(
-      CockpitRemoteSessionEndpointRequest(
-        method: 'POST',
-        uri: Uri.parse('/recording/start'),
-        jsonBody: const <String, Object?>{
-          'purpose': 'acceptance',
-          'name': 'blocked-recording',
-        },
-      ),
-    );
-    expect(recordingWhileProfiling.statusCode, HttpStatus.internalServerError);
-    expect(recordingWhileProfiling.jsonBody?['error'], 'serverError');
+      final recordingWhileProfiling = await handler.handle(
+        CockpitRemoteSessionEndpointRequest(
+          method: 'POST',
+          uri: Uri.parse('/recording/start'),
+          jsonBody: const <String, Object?>{
+            'purpose': 'acceptance',
+            'name': 'blocked-recording',
+          },
+        ),
+      );
+      expect(
+        recordingWhileProfiling.statusCode,
+        HttpStatus.internalServerError,
+      );
+      expect(recordingWhileProfiling.jsonBody?['error'], 'serverError');
 
-    final stop = await handler.handle(
-      CockpitRemoteSessionEndpointRequest(
-        method: 'POST',
-        uri: Uri.parse('/performance/stop'),
-        jsonBody: const <String, Object?>{},
-      ),
-    );
-    expect(stop.statusCode, HttpStatus.ok);
-    expect(
-      CockpitPerformanceReport.fromJson(stop.jsonBody?['report']),
-      isNotNull,
-    );
+      final stop = await handler.handle(
+        CockpitRemoteSessionEndpointRequest(
+          method: 'POST',
+          uri: Uri.parse('/performance/stop'),
+          jsonBody: const <String, Object?>{},
+        ),
+      );
+      expect(stop.statusCode, HttpStatus.ok);
+      expect(
+        CockpitPerformanceReport.fromJson(stop.jsonBody?['report']),
+        isNotNull,
+      );
 
-    final stopAgain = await handler.handle(
-      CockpitRemoteSessionEndpointRequest(
-        method: 'POST',
-        uri: Uri.parse('/performance/stop'),
-        jsonBody: const <String, Object?>{},
-      ),
-    );
-    expect(stopAgain.statusCode, HttpStatus.internalServerError);
-  });
+      final stopAgain = await handler.handle(
+        CockpitRemoteSessionEndpointRequest(
+          method: 'POST',
+          uri: Uri.parse('/performance/stop'),
+          jsonBody: const <String, Object?>{},
+        ),
+      );
+      expect(stopAgain.statusCode, HttpStatus.internalServerError);
+    },
+  );
 
   testWidgets(
     'remote session executes commands against native-discovered widgets',
