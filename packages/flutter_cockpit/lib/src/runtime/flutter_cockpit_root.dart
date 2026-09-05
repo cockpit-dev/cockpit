@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
+import 'package:cockpit_protocol/cockpit_protocol.dart';
 
 import '../capture/cockpit_capture_kind.dart';
 import '../capture/cockpit_capture_profile.dart';
@@ -416,6 +417,16 @@ final class FlutterCockpitRootState extends State<FlutterCockpitRoot> {
     return FlutterCockpit.binding.stopRecording();
   }
 
+  Future<CockpitPerformanceCaptureSession> startPerformance(
+    CockpitPerformanceCaptureRequest request,
+  ) {
+    return FlutterCockpit.binding.startPerformance(request);
+  }
+
+  Future<CockpitPerformanceReport> stopPerformance() {
+    return FlutterCockpit.binding.stopPerformance();
+  }
+
   /// Resizes the native viewport when the current platform exposes that
   /// capability. The result reports an unavailable capability instead of
   /// pretending that the logical size changed.
@@ -693,6 +704,8 @@ final class FlutterCockpitRootState extends State<FlutterCockpitRoot> {
       },
       startRecording: startRecording,
       stopRecording: stopRecording,
+      startPerformance: startPerformance,
+      stopPerformance: stopPerformance,
     );
     if (kIsWeb) {
       final bridgeClient = CockpitRemoteSessionBridgeClient(
@@ -718,6 +731,8 @@ final class FlutterCockpitRootState extends State<FlutterCockpitRoot> {
       },
       startRecording: startRecording,
       stopRecording: stopRecording,
+      startPerformance: startPerformance,
+      stopPerformance: stopPerformance,
     );
     await server.start();
     _remoteSessionServer = server;
@@ -860,9 +875,12 @@ final class FlutterCockpitRootState extends State<FlutterCockpitRoot> {
       ),
       recordingCapabilities:
           await _recordingCapabilitiesForRemoteSessionHealth(),
+      performanceCapture: true,
+      buildMode: FlutterCockpit.binding.performanceCollector.buildMode,
       snapshot: _snapshotForRemoteSessionHealth(currentRouteName),
       environment: _runtimeEnvironmentForRemoteSessionHealth(),
       activeRecording: FlutterCockpit.binding.activeRecordingSession,
+      activePerformance: FlutterCockpit.binding.activePerformanceSession,
     );
   }
 

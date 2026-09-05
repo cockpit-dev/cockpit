@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
+import 'package:cockpit_protocol/cockpit_protocol.dart';
 
 import '../model/cockpit_environment.dart';
 import '../capture/cockpit_native_capture.dart';
@@ -109,6 +110,9 @@ final class FlutterCockpitBinding {
   final Set<_FlutterCockpitRouteInformationBinding> _routeInformationBindings =
       <_FlutterCockpitRouteInformationBinding>{};
   CockpitRecordingSession? _activeRecordingSession;
+  CockpitPerformanceCaptureSession? _activePerformanceSession;
+  bool _recordingStarting = false;
+  bool _performanceStarting = false;
   bool _isDisposed = false;
   HttpOverrides? _previousHttpOverrides;
   bool _installedGlobalNetworkOverride = false;
@@ -126,6 +130,9 @@ final class FlutterCockpitBinding {
 
   CockpitRecordingSession? get activeRecordingSession =>
       _activeRecordingSession;
+
+  CockpitPerformanceCaptureSession? get activePerformanceSession =>
+      _activePerformanceSession;
 
   Future<bool> queryNativeCaptureAvailability() async {
     try {
@@ -151,11 +158,24 @@ final class FlutterCockpitBinding {
   Future<CockpitRecordingSession> startRecording(
     CockpitRecordingRequest request,
   ) async {
-    final session = await nativeRecording.startRecording(request: request);
-    _activeRecordingSession = session.state == CockpitRecordingState.recording
-        ? session
-        : null;
-    return session;
+    if (_recordingStarting ||
+        _performanceStarting ||
+        _activePerformanceSession != null ||
+        performanceCollector.isRunning) {
+      throw StateError(
+        'Screen recording cannot overlap a performance capture.',
+      );
+    }
+    _recordingStarting = true;
+    try {
+      final session = await nativeRecording.startRecording(request: request);
+      _activeRecordingSession = session.state == CockpitRecordingState.recording
+          ? session
+          : null;
+      return session;
+    } finally {
+      _recordingStarting = false;
+    }
   }
 
   Future<bool> cancelRecordingStart() {
@@ -174,6 +194,52 @@ final class FlutterCockpitBinding {
     final result = await nativeRecording.stopRecording(session: session);
     _activeRecordingSession = null;
     return result;
+  }
+
+  Future<CockpitPerformanceCaptureSession> startPerformance(
+    CockpitPerformanceCaptureRequest request,
+  ) async {
+    if (_performanceStarting ||
+        _recordingStarting ||
+        _activePerformanceSession != null ||
+        performanceCollector.isRunning) {
+      throw StateError('A performance capture is already active.');
+    }
+    if (_activeRecordingSession != null) {
+      throw StateError(
+        'Performance capture cannot overlap a screen recording.',
+      );
+    }
+    _performanceStarting = true;
+    try {
+      performanceCollector.start(mode: request.mode);
+      final startedAt = performanceCollector.startedAt;
+      if (startedAt == null) {
+        performanceCollector.dispose();
+        throw StateError('Performance capture did not report a start time.');
+      }
+      final session = CockpitPerformanceCaptureSession(
+        request: request,
+        startedAt: startedAt,
+        buildMode: performanceCollector.buildMode,
+      );
+      _activePerformanceSession = session;
+      return session;
+    } finally {
+      _performanceStarting = false;
+    }
+  }
+
+  Future<CockpitPerformanceReport> stopPerformance() async {
+    final session = _activePerformanceSession;
+    if (session == null || !performanceCollector.isRunning) {
+      throw StateError('No performance capture is active.');
+    }
+    try {
+      return performanceCollector.stop(stepId: session.request.name);
+    } finally {
+      _activePerformanceSession = null;
+    }
   }
 
   CockpitEnvironment? resolveRuntimeEnvironment({required String platform}) {
@@ -209,6 +275,7 @@ final class FlutterCockpitBinding {
     }
     _routeInformationBindings.clear();
     _activeRecordingSession = null;
+    _activePerformanceSession = null;
     rebuildTracker?.dispose();
     runtimeObserver?.dispose();
     performanceCollector.dispose();

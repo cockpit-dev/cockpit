@@ -41,6 +41,12 @@ typedef CockpitRemoteRecordingStarter =
     Future<CockpitRecordingSession> Function(CockpitRecordingRequest request);
 typedef CockpitRemoteRecordingStopper =
     Future<CockpitRecordingResult> Function();
+typedef CockpitRemotePerformanceStarter =
+    Future<CockpitPerformanceCaptureSession> Function(
+      CockpitPerformanceCaptureRequest request,
+    );
+typedef CockpitRemotePerformanceStopper =
+    Future<CockpitPerformanceReport> Function();
 typedef CockpitRemoteArtifactTempFileFactory =
     Future<File> Function(String basename);
 
@@ -141,6 +147,8 @@ final class CockpitRemoteSessionEndpointHandler {
     CockpitRemoteRuntimeStepDrainer? runtimeStepDrainer,
     required CockpitRemoteRecordingStarter startRecording,
     required CockpitRemoteRecordingStopper stopRecording,
+    CockpitRemotePerformanceStarter? startPerformance,
+    CockpitRemotePerformanceStopper? stopPerformance,
     CockpitRemoteArtifactTempFileFactory? artifactTempFileFactory,
   }) : _configuration = configuration,
        _statusProvider = statusProvider,
@@ -151,6 +159,8 @@ final class CockpitRemoteSessionEndpointHandler {
        _runtimeStepDrainer = runtimeStepDrainer,
        _startRecording = startRecording,
        _stopRecording = stopRecording,
+       _startPerformance = startPerformance,
+       _stopPerformance = stopPerformance,
        _artifactTempFileFactory =
            artifactTempFileFactory ?? _defaultArtifactTempFileFactory;
 
@@ -163,13 +173,20 @@ final class CockpitRemoteSessionEndpointHandler {
   final CockpitRemoteRuntimeStepDrainer? _runtimeStepDrainer;
   final CockpitRemoteRecordingStarter _startRecording;
   final CockpitRemoteRecordingStopper _stopRecording;
+  final CockpitRemotePerformanceStarter? _startPerformance;
+  final CockpitRemotePerformanceStopper? _stopPerformance;
   final CockpitRemoteArtifactTempFileFactory _artifactTempFileFactory;
   final Map<String, _RemoteArtifactEntry> _downloadableArtifacts =
       <String, _RemoteArtifactEntry>{};
   CockpitRecordingSession? _activeRecordingSession;
+  CockpitPerformanceCaptureSession? _activePerformanceSession;
+  bool _recordingStarting = false;
+  bool _performanceStarting = false;
+  bool _performanceStopping = false;
 
   Future<void> close() async {
     await _bestEffortStopActiveRecording();
+    await _bestEffortStopActivePerformance();
     final artifacts = _downloadableArtifacts.values.toList(growable: false);
     _downloadableArtifacts.clear();
     for (final artifact in artifacts) {
@@ -276,6 +293,27 @@ final class CockpitRemoteSessionEndpointHandler {
           final result = await _handleStopRecording();
           final response = await _recordingResponseFor(result);
           return CockpitRemoteSessionEndpointResponse.json(response.toJson());
+        case ('POST', '/performance/start'):
+          final starter = _startPerformance;
+          if (starter == null) {
+            return const CockpitRemoteSessionEndpointResponse.json(<
+              String,
+              Object?
+            >{
+              'error': 'performanceUnsupported',
+              'message': 'Performance capture is unavailable in this session.',
+            }, statusCode: HttpStatus.notImplemented);
+          }
+          final performanceRequest = _decodePayload(
+            () => CockpitPerformanceCaptureRequest.fromJson(request.jsonBody),
+          );
+          final session = await _handleStartPerformance(performanceRequest);
+          return CockpitRemoteSessionEndpointResponse.json(session.toJson());
+        case ('POST', '/performance/stop'):
+          final result = await _handleStopPerformance();
+          return CockpitRemoteSessionEndpointResponse.json(<String, Object?>{
+            'report': result.toJson(),
+          });
         default:
           return const CockpitRemoteSessionEndpointResponse.json(
             <String, Object?>{
@@ -662,9 +700,23 @@ final class CockpitRemoteSessionEndpointHandler {
   Future<CockpitRecordingSession> _handleStartRecording(
     CockpitRecordingRequest request,
   ) async {
-    final session = await _startRecording(request);
-    _activeRecordingSession = session;
-    return session;
+    if (_recordingStarting ||
+        _performanceStarting ||
+        _performanceStopping ||
+        _activeRecordingSession != null ||
+        _activePerformanceSession != null) {
+      throw StateError(
+        'Screen recording cannot overlap a performance capture.',
+      );
+    }
+    _recordingStarting = true;
+    try {
+      final session = await _startRecording(request);
+      _activeRecordingSession = session;
+      return session;
+    } finally {
+      _recordingStarting = false;
+    }
   }
 
   Future<CockpitRecordingResult> _handleStopRecording() async {
@@ -675,6 +727,58 @@ final class CockpitRemoteSessionEndpointHandler {
     } on StateError {
       _activeRecordingSession = null;
       rethrow;
+    }
+  }
+
+  Future<CockpitPerformanceCaptureSession> _handleStartPerformance(
+    CockpitPerformanceCaptureRequest request,
+  ) async {
+    if (_activePerformanceSession != null || _performanceStopping) {
+      throw StateError('A performance capture is already active.');
+    }
+    if (_activeRecordingSession != null) {
+      throw StateError(
+        'Performance capture cannot overlap a screen recording.',
+      );
+    }
+    if (_recordingStarting || _performanceStarting) {
+      throw StateError('A capture operation is already starting.');
+    }
+    final starter = _startPerformance;
+    if (starter == null) {
+      throw StateError('Performance capture is unavailable in this session.');
+    }
+    _performanceStarting = true;
+    try {
+      final session = await starter(request);
+      _activePerformanceSession = session;
+      return session;
+    } finally {
+      _performanceStarting = false;
+    }
+  }
+
+  Future<CockpitPerformanceReport> _handleStopPerformance() async {
+    final stopper = _stopPerformance;
+    if (stopper == null || _activePerformanceSession == null) {
+      throw StateError('No performance capture is active.');
+    }
+    if (_performanceStopping) {
+      throw StateError('Performance capture stop is already in progress.');
+    }
+    _performanceStopping = true;
+    try {
+      final result = await stopper();
+      _activePerformanceSession = null;
+      return result;
+    } on StateError {
+      // A target-side inactive error proves that the capture is no longer
+      // owned by this endpoint. Other failures retain ownership for retry or
+      // shutdown cleanup.
+      _activePerformanceSession = null;
+      rethrow;
+    } finally {
+      _performanceStopping = false;
     }
   }
 
@@ -893,6 +997,18 @@ final class CockpitRemoteSessionEndpointHandler {
     _activeRecordingSession = null;
     try {
       await _stopRecording();
+    } on Object {
+      // Cleanup is best-effort during server shutdown.
+    }
+  }
+
+  Future<void> _bestEffortStopActivePerformance() async {
+    if (_activePerformanceSession == null || _stopPerformance == null) {
+      return;
+    }
+    _activePerformanceSession = null;
+    try {
+      await _stopPerformance();
     } on Object {
       // Cleanup is best-effort during server shutdown.
     }

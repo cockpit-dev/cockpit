@@ -34,6 +34,35 @@ void main() {
       expect(result.uiSummary, isNull);
     });
 
+    test('preserves active performance capture status', () async {
+      final started = DateTime.utc(2026, 9, 5, 12, 0);
+      final service = CockpitReadRemoteStatusService(
+        readStatus: (_) async => _status(
+          snapshot: CockpitSnapshot(routeName: '/profile'),
+          performanceCapture: true,
+          buildMode: 'profile',
+          activePerformance: CockpitPerformanceCaptureSession(
+            request: CockpitPerformanceCaptureRequest(name: 'profile'),
+            startedAt: started,
+            buildMode: 'profile',
+          ),
+        ),
+      );
+
+      final result = await service.read(
+        CockpitReadRemoteStatusRequest(
+          sessionHandle: _sessionHandle(),
+          resultProfile: const CockpitInteractiveResultProfile.minimal(),
+        ),
+      );
+
+      expect(result.performanceCapture, isTrue);
+      expect(result.buildMode, 'profile');
+      expect(result.activePerformance?.request.name, 'profile');
+      expect(result.toJson()['build'], 'profile');
+      expect(result.toJson()['activePerformance'], isNotNull);
+    });
+
     test('reads a richer snapshot when the profile requires it', () async {
       CockpitSnapshotOptions? capturedOptions;
       final service = CockpitReadRemoteStatusService(
@@ -193,7 +222,12 @@ void main() {
   });
 }
 
-CockpitRemoteSessionStatus _status({required CockpitSnapshot snapshot}) {
+CockpitRemoteSessionStatus _status({
+  required CockpitSnapshot snapshot,
+  CockpitPerformanceCaptureSession? activePerformance,
+  bool performanceCapture = false,
+  String? buildMode,
+}) {
   return CockpitRemoteSessionStatus(
     sessionId: 'session-1',
     platform: 'macos',
@@ -214,6 +248,9 @@ CockpitRemoteSessionStatus _status({required CockpitSnapshot snapshot}) {
       preferredAcceptanceRecordingKind: CockpitRecordingKind.nativeScreen,
     ),
     snapshot: snapshot,
+    activePerformance: activePerformance,
+    performanceCapture: performanceCapture,
+    buildMode: buildMode,
   );
 }
 

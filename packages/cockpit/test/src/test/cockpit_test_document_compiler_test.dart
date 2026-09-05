@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:cockpit/cockpit.dart';
 import 'package:cockpit/src/test/cockpit_test_variable_binder.dart';
+import 'package:cockpit/src/test/cockpit_test_execution_plan.dart';
 import 'package:cockpit_protocol/cockpit_protocol.dart';
 import 'package:lon/lon.dart';
 import 'package:test/test.dart';
@@ -35,6 +36,90 @@ void main() {
     expect(
       yaml.requireCase().locationFor(r'$.steps[0].action.type'),
       isNotNull,
+    );
+  });
+
+  test(
+    'performance segments bind in order and preserve the required build mode',
+    () {
+      final result = compiler.compile('''
+schemaVersion: cockpit.test/v2
+kind: case
+id: segmentedPerformance
+target: {platform: flutter, targetKind: flutterApp, plane: semantic, buildMode: profile}
+steps:
+  - stepId: startOne
+    startPerformance: {name: first}
+  - stepId: stopOne
+    stopPerformance: {}
+  - stepId: startTwo
+    startPerformance: {name: second, mode: light}
+  - stepId: stopTwo
+    stopPerformance: {}
+''');
+      expect(result.isSuccess, isTrue, reason: _diagnostics(result));
+
+      final plan = CockpitTestVariableBinder().bind(result.requireCase());
+      expect(plan.target.buildMode, CockpitTestBuildMode.profile);
+      expect(
+        plan.steps.map((node) => node.operation),
+        everyElement(isA<CockpitTestPlanOperation>()),
+      );
+      final starts = plan.steps
+          .map((node) => node.operation)
+          .whereType<CockpitTestStartPerformancePlanOperation>()
+          .toList();
+      expect(starts.map((operation) => operation.name), <String>[
+        'first',
+        'second',
+      ]);
+      expect(starts.map((operation) => operation.mode), <String>[
+        'profile',
+        'light',
+      ]);
+      expect(
+        plan.steps
+            .map((node) => node.operation)
+            .whereType<CockpitTestStopPerformancePlanOperation>(),
+        hasLength(2),
+      );
+      expect(
+        plan.steps.first.operation,
+        isA<CockpitTestStartPerformancePlanOperation>(),
+      );
+      final canonicalSteps =
+          result.requireCase().testCase.toJson()['steps']! as List<Object?>;
+      expect(
+        (canonicalSteps.first as Map<Object?, Object?>)['startPerformance'],
+        <String, Object?>{'name': 'first'},
+      );
+      expect(
+        (canonicalSteps[1] as Map<Object?, Object?>)['stopPerformance'],
+        isEmpty,
+      );
+    },
+  );
+
+  test('duplicate performance segment names are rejected before execution', () {
+    final result = compiler.compile('''
+schemaVersion: cockpit.test/v2
+kind: case
+id: duplicatePerformance
+target: {platform: flutter, targetKind: flutterApp, plane: semantic}
+steps:
+  - stepId: startOne
+    startPerformance: {name: same}
+  - stepId: stopOne
+    stopPerformance: {}
+  - stepId: startTwo
+    startPerformance: {name: same}
+  - stepId: stopTwo
+    stopPerformance: {}
+''');
+    expect(result.isSuccess, isFalse);
+    expect(
+      result.diagnostics.map((diagnostic) => diagnostic.code),
+      contains('duplicatePerformanceName'),
     );
   });
 

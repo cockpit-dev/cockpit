@@ -2,6 +2,45 @@ import 'package:cockpit_protocol/cockpit_protocol.dart';
 import 'package:test/test.dart';
 
 void main() {
+  test('performance capture request omits the default density', () {
+    final request = CockpitPerformanceCaptureRequest(name: 'checkout');
+    expect(request.toJson(), <String, Object?>{'name': 'checkout'});
+    expect(
+      CockpitPerformanceCaptureRequest.fromJson(request.toJson()).mode,
+      CockpitPerformanceMode.profile,
+    );
+  });
+
+  test('performance capture request rejects unknown fields', () {
+    expect(
+      () => CockpitPerformanceCaptureRequest.fromJson(const <String, Object?>{
+        'name': 'checkout',
+        'unexpected': true,
+      }),
+      throwsFormatException,
+    );
+  });
+
+  test('performance capture session requires UTC metadata', () {
+    const payload = <String, Object?>{
+      'request': <String, Object?>{'name': 'checkout'},
+      'started': '2026-09-05T12:00:00',
+      'build': 'profile',
+    };
+    expect(
+      () => CockpitPerformanceCaptureSession.fromJson(payload),
+      throwsFormatException,
+    );
+    expect(
+      () => CockpitPerformanceCaptureSession.fromJson(<String, Object?>{
+        ...payload,
+        'started': '2026-09-05T12:00:00Z',
+        'extra': true,
+      }),
+      throwsFormatException,
+    );
+  });
+
   final frames = <CockpitPerformanceFrame>[
     const CockpitPerformanceFrame(
       index: 0,

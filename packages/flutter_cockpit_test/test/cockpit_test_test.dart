@@ -50,6 +50,31 @@ void main() {
   );
 
   cockpitTestWidgets(
+    'supports sequential performance segments in one integration test',
+    app: () => const _TestApp(),
+    body: (cockpit) async {
+      final first = await cockpit.beginPerformance(name: 'first');
+      await cockpit.flutter.pump();
+      final firstReport = await first.end();
+
+      final second = await cockpit.beginPerformance(
+        name: 'second',
+        mode: CockpitPerformanceMode.light,
+      );
+      await cockpit.flutter.pump();
+      final secondReport = await second.end();
+
+      expect(firstReport.stepId, 'first');
+      expect(secondReport.stepId, 'second');
+      expect(cockpit.performanceReports, hasLength(2));
+      expect(
+        cockpit.performanceReports.map((report) => report.stepId),
+        <String?>['first', 'second'],
+      );
+    },
+  );
+
+  cockpitTestWidgets(
     'uses the native timeout for explicit host actions',
     app: () => const _TestApp(),
     options: CockpitTestOptions(hostCommand: _successfulHostCommand),

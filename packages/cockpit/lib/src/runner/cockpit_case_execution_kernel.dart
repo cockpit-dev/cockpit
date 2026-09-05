@@ -91,6 +91,22 @@ abstract interface class CockpitCaseExecutionDelegate {
     required CockpitCaseOperationLease lease,
   });
 
+  Future<CockpitTestKernelOperationResult> startPerformance({
+    required CockpitTestExecutionNode node,
+    required CockpitTestStartPerformancePlanOperation operation,
+    required Duration timeout,
+    required bool cleanup,
+    required CockpitCaseOperationLease lease,
+  });
+
+  Future<CockpitTestKernelOperationResult> stopPerformance({
+    required CockpitTestExecutionNode node,
+    required CockpitTestStopPerformancePlanOperation operation,
+    required Duration timeout,
+    required bool cleanup,
+    required CockpitCaseOperationLease lease,
+  });
+
   CockpitTestExecutionNode? get residualCleanupNode;
 
   Future<CockpitTestKernelOperationResult> cleanupResidual({
@@ -513,6 +529,56 @@ final class CockpitCaseExecutionKernel {
           degradationReason: result.degradationReason,
           evidence: result.evidence,
         );
+      case CockpitTestStartPerformancePlanOperation():
+        final result = await _controlled(
+          (lease) => _delegate.startPerformance(
+            node: node,
+            operation: operation,
+            timeout: deadline.remaining,
+            cleanup: cleanupControl != null,
+            lease: lease,
+          ),
+          control: control,
+          cleanupControl: cleanupControl,
+          deadline: deadline,
+        );
+        return _KernelNodeOutcome(
+          error: result.error,
+          actualPlane: result.actualPlane,
+          driverId: result.driverId,
+          locatorResolution: result.locatorResolution,
+          degradationReason: result.degradationReason,
+          evidence: result.evidence,
+        );
+      case CockpitTestStopPerformancePlanOperation():
+        if (operation.settleMs > 0) {
+          await _controlled(
+            (_) => _clock.delay(Duration(milliseconds: operation.settleMs)),
+            control: control,
+            cleanupControl: cleanupControl,
+            deadline: deadline,
+          );
+        }
+        final result = await _controlled(
+          (lease) => _delegate.stopPerformance(
+            node: node,
+            operation: operation,
+            timeout: deadline.remaining,
+            cleanup: cleanupControl != null,
+            lease: lease,
+          ),
+          control: control,
+          cleanupControl: cleanupControl,
+          deadline: deadline,
+        );
+        return _KernelNodeOutcome(
+          error: result.error,
+          actualPlane: result.actualPlane,
+          driverId: result.driverId,
+          locatorResolution: result.locatorResolution,
+          degradationReason: result.degradationReason,
+          evidence: result.evidence,
+        );
       case CockpitTestIfPlanOperation():
         final conditionResult = await _evaluateCondition(
           node,
@@ -754,7 +820,9 @@ final class CockpitCaseExecutionKernel {
         :final steps,
       ) => _maximumNodeCommandReturnGrace(steps),
       CockpitTestStartRecordingPlanOperation() ||
-      CockpitTestStopRecordingPlanOperation() => Duration.zero,
+      CockpitTestStopRecordingPlanOperation() ||
+      CockpitTestStartPerformancePlanOperation() ||
+      CockpitTestStopPerformancePlanOperation() => Duration.zero,
     };
   }
 

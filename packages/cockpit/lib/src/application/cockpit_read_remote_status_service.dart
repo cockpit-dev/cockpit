@@ -45,6 +45,9 @@ final class CockpitReadRemoteStatusResult {
     required this.capabilities,
     required this.recordingCapabilities,
     this.activeRecording,
+    this.activePerformance,
+    this.performanceCapture = false,
+    this.buildMode,
     this.environment,
     this.uiSummary,
     this.snapshot,
@@ -61,6 +64,9 @@ final class CockpitReadRemoteStatusResult {
   final CockpitCapabilities capabilities;
   final CockpitRecordingCapabilities recordingCapabilities;
   final CockpitRecordingSession? activeRecording;
+  final CockpitPerformanceCaptureSession? activePerformance;
+  final bool performanceCapture;
+  final String? buildMode;
   final CockpitEnvironment? environment;
   final CockpitInteractiveSnapshotSummary? uiSummary;
   final CockpitSnapshot? snapshot;
@@ -77,6 +83,10 @@ final class CockpitReadRemoteStatusResult {
     'capabilities': capabilities.toJson(),
     'recordingCapabilities': recordingCapabilities.toJson(),
     if (activeRecording != null) 'activeRecording': activeRecording!.toJson(),
+    if (activePerformance != null)
+      'activePerformance': activePerformance!.toJson(),
+    if (performanceCapture) 'performanceCapture': true,
+    if (buildMode != null) 'build': buildMode,
     if (environment != null) 'environment': environment!.toJson(),
     if (uiSummary != null) 'uiSummary': uiSummary!.toJson(),
     if (snapshot != null) 'snapshot': snapshot!.toJson(),
@@ -168,6 +178,9 @@ final class CockpitReadRemoteStatusService {
       capabilities: status.capabilities,
       recordingCapabilities: status.recordingCapabilities,
       activeRecording: status.activeRecording,
+      activePerformance: status.activePerformance,
+      performanceCapture: status.performanceCapture,
+      buildMode: status.buildMode,
       environment: status.environment,
       uiSummary: request.resultProfile.emitsUiSummary
           ? cockpitInteractiveSummarizeSnapshot(snapshot)

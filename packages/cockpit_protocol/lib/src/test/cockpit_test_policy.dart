@@ -2,6 +2,13 @@ import 'cockpit_test_value_reader.dart';
 
 enum CockpitTestPlane { semantic, native, visual, coordinate }
 
+/// Build mode required by a test target.
+///
+/// A null requirement means that any target build mode is acceptable. The
+/// runner still reports the actual mode; it never substitutes a requested mode
+/// for one that the target did not provide.
+enum CockpitTestBuildMode { debug, profile, release }
+
 enum CockpitTestEvidenceMode { none, onFailure, always }
 
 enum CockpitTestEvidenceFailurePolicy { failStep, recordWarning }
@@ -138,6 +145,7 @@ final class CockpitTestTargetRequirements {
     required this.targetKind,
     required this.plane,
     this.appId,
+    this.buildMode,
     Iterable<String> requiredCapabilities = const <String>[],
   }) : requiredCapabilities = Set<String>.unmodifiable(
          _validatedCapabilities(requiredCapabilities),
@@ -153,6 +161,7 @@ final class CockpitTestTargetRequirements {
   final String targetKind;
   final CockpitTestPlane plane;
   final String? appId;
+  final CockpitTestBuildMode? buildMode;
   final Set<String> requiredCapabilities;
 
   /// Encodes this CockpitTestTargetRequirements as a JSON object.
@@ -161,6 +170,7 @@ final class CockpitTestTargetRequirements {
     'targetKind': targetKind,
     'plane': plane.name,
     if (appId != null) 'appId': appId,
+    if (buildMode != null) 'buildMode': buildMode!.name,
     if (requiredCapabilities.isNotEmpty)
       'requiredCapabilities': requiredCapabilities.toList(growable: false),
   };
@@ -178,6 +188,7 @@ final class CockpitTestTargetRequirements {
         'targetKind',
         'plane',
         'appId',
+        'buildMode',
         'requiredCapabilities',
       },
       path,
@@ -207,6 +218,13 @@ final class CockpitTestTargetRequirements {
         json['appId'],
         '$path.appId',
       ),
+      buildMode: json['buildMode'] == null
+          ? null
+          : CockpitTestValueReader.enumeration(
+              json['buildMode'],
+              CockpitTestBuildMode.values,
+              '$path.buildMode',
+            ),
       requiredCapabilities: <String>[
         for (var index = 0; index < rawCapabilities.length; index += 1)
           CockpitTestValueReader.string(

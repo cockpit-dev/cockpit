@@ -213,6 +213,8 @@ String _operationName(CockpitTestPlanOperation operation) =>
         'action.${action.kind.name}',
       CockpitTestStartRecordingPlanOperation() => 'recording.start',
       CockpitTestStopRecordingPlanOperation() => 'recording.stop',
+      CockpitTestStartPerformancePlanOperation() => 'performance.start',
+      CockpitTestStopPerformancePlanOperation() => 'performance.stop',
       CockpitTestIfPlanOperation() => 'control.if',
       CockpitTestRetryPlanOperation() => 'control.retry',
       CockpitTestLoopPlanOperation() => 'control.loop',

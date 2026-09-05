@@ -237,6 +237,10 @@ final class _BindingContext {
       ),
     CockpitTestStopRecordingOperationTemplate(:final settleMs) =>
       CockpitTestStopRecordingPlanOperation(settleMs: settleMs),
+    CockpitTestStartPerformanceOperationTemplate(:final name, :final mode) =>
+      CockpitTestStartPerformancePlanOperation(name: name, mode: mode),
+    CockpitTestStopPerformanceOperationTemplate(:final settleMs) =>
+      CockpitTestStopPerformancePlanOperation(settleMs: settleMs),
     CockpitTestIfOperationTemplate(
       :final condition,
       :final thenSteps,

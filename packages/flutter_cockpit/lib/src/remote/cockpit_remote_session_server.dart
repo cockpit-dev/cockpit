@@ -16,6 +16,8 @@ final class CockpitRemoteSessionServer {
     CockpitRemoteRuntimeStepDrainer? runtimeStepDrainer,
     required CockpitRemoteRecordingStarter startRecording,
     required CockpitRemoteRecordingStopper stopRecording,
+    CockpitRemotePerformanceStarter? startPerformance,
+    CockpitRemotePerformanceStopper? stopPerformance,
     CockpitRemoteArtifactTempFileFactory? artifactTempFileFactory,
   }) : _configuration = configuration,
        _endpointHandler = CockpitRemoteSessionEndpointHandler(
@@ -28,6 +30,8 @@ final class CockpitRemoteSessionServer {
          runtimeStepDrainer: runtimeStepDrainer,
          startRecording: startRecording,
          stopRecording: stopRecording,
+         startPerformance: startPerformance,
+         stopPerformance: stopPerformance,
          artifactTempFileFactory: artifactTempFileFactory,
        );
 

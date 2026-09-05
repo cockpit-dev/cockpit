@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:cockpit_protocol/cockpit_protocol.dart';
 
 import '../application/cockpit_application_service_exception.dart';
@@ -5,6 +7,7 @@ import '../adapters/cockpit_automation_adapter.dart';
 import '../adapters/cockpit_active_operation_aborter.dart';
 import '../adapters/cockpit_capture_adapter.dart';
 import '../adapters/cockpit_recording_adapter.dart';
+import '../adapters/cockpit_performance_adapter.dart';
 import '../artifacts/cockpit_test_attempt_recorder.dart';
 import '../test/cockpit_test_action_lowerer.dart';
 import '../test/cockpit_test_execution_plan.dart';
@@ -18,6 +21,7 @@ final class CockpitCaseDriverDelegate implements CockpitCaseExecutionDelegate {
     required CockpitAutomationAdapter automationAdapter,
     CockpitCaptureAdapter? captureAdapter,
     CockpitRecordingAdapter? recordingAdapter,
+    CockpitPerformanceAdapter? performanceAdapter,
     required CockpitTestSecretResolver secretResolver,
     required CockpitTestSafetyPolicy safetyPolicy,
     required CockpitTestActionLowerer lowerer,
@@ -33,6 +37,7 @@ final class CockpitCaseDriverDelegate implements CockpitCaseExecutionDelegate {
   }) : _automationAdapter = automationAdapter,
        _captureAdapter = captureAdapter,
        _recordingAdapter = recordingAdapter,
+       _performanceAdapter = performanceAdapter,
        _secretResolver = secretResolver,
        _safetyPolicy = safetyPolicy,
        _lowerer = lowerer,
@@ -49,6 +54,7 @@ final class CockpitCaseDriverDelegate implements CockpitCaseExecutionDelegate {
   final CockpitAutomationAdapter _automationAdapter;
   final CockpitCaptureAdapter? _captureAdapter;
   final CockpitRecordingAdapter? _recordingAdapter;
+  final CockpitPerformanceAdapter? _performanceAdapter;
   final CockpitTestSecretResolver _secretResolver;
   final CockpitTestSafetyPolicy _safetyPolicy;
   final CockpitTestActionLowerer _lowerer;
@@ -66,6 +72,7 @@ final class CockpitCaseDriverDelegate implements CockpitCaseExecutionDelegate {
   CockpitTestPlane? _activeRecordingPlane;
   String? _activeRecordingDriverId;
   String? _activeRecordingDegradationReason;
+  CockpitPerformanceCaptureSession? _performanceSession;
 
   @override
   Future<CockpitTestKernelOperationResult> executeAction({
@@ -336,6 +343,14 @@ final class CockpitCaseDriverDelegate implements CockpitCaseExecutionDelegate {
         _recordingError(node, 'A recording session is already active.'),
       );
     }
+    if (_performanceSession != null) {
+      return CockpitTestKernelOperationResult.failure(
+        _recordingError(
+          node,
+          'Screen recording cannot overlap a performance capture.',
+        ),
+      );
+    }
     if (!lease.isActive) {
       return _abortedOperation(node);
     }
@@ -414,8 +429,135 @@ final class CockpitCaseDriverDelegate implements CockpitCaseExecutionDelegate {
   }
 
   @override
+  Future<CockpitTestKernelOperationResult> startPerformance({
+    required CockpitTestExecutionNode node,
+    required CockpitTestStartPerformancePlanOperation operation,
+    required Duration timeout,
+    required bool cleanup,
+    required CockpitCaseOperationLease lease,
+  }) async {
+    final adapter = _performanceAdapter;
+    if (adapter == null) {
+      return CockpitTestKernelOperationResult.failure(
+        _performanceError(node, 'Performance adapter is unavailable.'),
+      );
+    }
+    if (_performanceSession != null) {
+      return CockpitTestKernelOperationResult.failure(
+        _performanceError(node, 'A performance capture is already active.'),
+      );
+    }
+    if (_recordingSession != null) {
+      return CockpitTestKernelOperationResult.failure(
+        _performanceError(
+          node,
+          'Performance capture cannot overlap a screen recording.',
+        ),
+      );
+    }
+    if (!lease.isActive) return _abortedOperation(node);
+    try {
+      _registerAbort(lease, adapter);
+      final session = await adapter.startPerformance(
+        CockpitPerformanceCaptureRequest(
+          name: operation.name,
+          mode: CockpitPerformanceMode.fromJson(operation.mode),
+        ),
+      );
+      lease.clearAbort();
+      if (!lease.tryCommit(() => _performanceSession = session)) {
+        await _stopUnownedPerformance(adapter);
+        return _abortedOperation(node);
+      }
+      return CockpitTestKernelOperationResult.success(
+        actualPlane: CockpitTestPlane.semantic,
+        driverId: 'flutterPerformance',
+      );
+    } on Object catch (error) {
+      lease.clearAbort();
+      if (!lease.isActive) return _abortedOperation(node);
+      return CockpitTestKernelOperationResult.failure(
+        _performanceError(
+          node,
+          'Performance capture failed to start.',
+          details: <String, Object?>{'error': error.toString()},
+        ),
+      );
+    }
+  }
+
+  @override
+  Future<CockpitTestKernelOperationResult> stopPerformance({
+    required CockpitTestExecutionNode node,
+    required CockpitTestStopPerformancePlanOperation operation,
+    required Duration timeout,
+    required bool cleanup,
+    required CockpitCaseOperationLease lease,
+  }) async {
+    final adapter = _performanceAdapter;
+    final session = _performanceSession;
+    if (adapter == null || session == null) {
+      return CockpitTestKernelOperationResult.failure(
+        _performanceError(node, 'No performance capture is active.'),
+      );
+    }
+    if (!lease.isActive) return _abortedOperation(node);
+    try {
+      _registerAbort(lease, adapter);
+      final report = await adapter.stopPerformance();
+      lease.clearAbort();
+      // The target has completed the stop. Release local ownership even when
+      // the execution lease expired while the report was being fetched, so
+      // residual cleanup does not issue a second stop.
+      if (identical(_performanceSession, session)) {
+        _performanceSession = null;
+      }
+      if (!lease.isActive) return _abortedOperation(node);
+      String? artifactId;
+      if (!lease.tryCommit(() {
+        artifactId = _recorder.addArtifact(
+          kind: 'performance',
+          relativePath: 'performance/${session.request.name}.json',
+          stepExecutionId: node.executionId,
+          bytes: utf8.encode(jsonEncode(report.toJson(includeRaw: true))),
+        );
+      })) {
+        return _abortedOperation(node);
+      }
+      return CockpitTestKernelOperationResult.success(
+        actualPlane: CockpitTestPlane.semantic,
+        driverId: 'flutterPerformance',
+        evidence: <String>[?artifactId],
+      );
+    } on Object catch (error) {
+      lease.clearAbort();
+      if (!lease.isActive) return _abortedOperation(node);
+      return CockpitTestKernelOperationResult.failure(
+        _performanceError(
+          node,
+          'Performance capture failed to stop.',
+          details: <String, Object?>{'error': error.toString()},
+        ),
+      );
+    }
+  }
+
+  @override
   CockpitTestExecutionNode? get residualCleanupNode => _recordingSession == null
-      ? null
+      ? (_performanceSession == null
+            ? null
+            : CockpitTestExecutionNode(
+                stepId: 'residualPerformance',
+                executionId: 'finally/residualPerformance',
+                section: 'finally',
+                timeoutMs: _plan.defaults.cleanupTimeoutMs,
+                evidence: _plan.defaults.evidence,
+                safety: CockpitTestSafetyDeclaration(),
+                sourcePath: r'$.finally',
+                operation: const CockpitTestStopPerformancePlanOperation(
+                  settleMs: 0,
+                ),
+              ))
       : CockpitTestExecutionNode(
           stepId: 'residualRecording',
           executionId: 'finally/residualRecording',
@@ -436,7 +578,17 @@ final class CockpitCaseDriverDelegate implements CockpitCaseExecutionDelegate {
     if (node == null) {
       return const CockpitTestKernelOperationResult.success();
     }
-    return _stopRecording(node, lease);
+    if (_recordingSession != null) return _stopRecording(node, lease);
+    if (_performanceSession != null) {
+      return stopPerformance(
+        node: node,
+        operation: const CockpitTestStopPerformancePlanOperation(settleMs: 0),
+        timeout: timeout,
+        cleanup: true,
+        lease: lease,
+      );
+    }
+    return const CockpitTestKernelOperationResult.success();
   }
 
   Future<CockpitTestKernelOperationResult> _stopRecording(
@@ -672,6 +824,14 @@ final class CockpitCaseDriverDelegate implements CockpitCaseExecutionDelegate {
     }
   }
 
+  Future<void> _stopUnownedPerformance(CockpitPerformanceAdapter adapter) async {
+    try {
+      await adapter.stopPerformance();
+    } catch (_) {
+      // The owning operation has already ended; the runner cannot report this.
+    }
+  }
+
   Future<_EvidenceCollection> _collectEvidence({
     required CockpitTestExecutionNode node,
     required bool commandSucceeded,
@@ -857,6 +1017,17 @@ CockpitTestError _recordingError(
   Map<String, Object?> details = const <String, Object?>{},
 }) => CockpitTestError(
   code: CockpitTestErrorCode.recordingFailed,
+  message: message,
+  stepId: node.stepId,
+  details: details,
+);
+
+CockpitTestError _performanceError(
+  CockpitTestExecutionNode node,
+  String message, {
+  Map<String, Object?> details = const <String, Object?>{},
+}) => CockpitTestError(
+  code: CockpitTestErrorCode.driverFailed,
   message: message,
   stepId: node.stepId,
   details: details,

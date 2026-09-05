@@ -83,6 +83,39 @@ The schema includes:
 - screenshots, snapshots, recording start/stop
 - bounded travel and advertised system actions
 
+Performance is a first-class case operation. A case may contain multiple
+sequential performance windows around separate parts of the journey:
+
+```yaml
+target:
+  platform: flutter
+  targetKind: flutterApp
+  plane: semantic
+  buildMode: profile
+steps:
+  - stepId: perf-start-list
+    startPerformance: {name: open-list}
+  - stepId: open-list
+    action: {type: tap, locator: {text: Open list}}
+  - stepId: perf-stop-list
+    stopPerformance: {}
+  - stepId: perf-start-checkout
+    startPerformance: {name: checkout, mode: light}
+  - stepId: checkout
+    action: {type: tap, locator: {text: Checkout}}
+  - stepId: perf-stop-checkout
+    stopPerformance: {}
+```
+
+`target.buildMode` verifies the mode actually used by the selected session;
+it never changes or fakes the target. `startPerformance.mode` controls capture
+density (`light` or `profile`) and is independent of the app build mode. One
+window may be active at a time, windows cannot overlap, and every completed
+window is stored as `performance/<name>.json`. A failed, cancelled, or timed
+out case attempts to stop the active window during cleanup. If the selected
+target does not advertise performance capture, validation/run is blocked with
+a capability error instead of guessing.
+
 Search the bundled schema by action name for exact fields, for example:
 
 ```bash

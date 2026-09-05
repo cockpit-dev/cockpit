@@ -3,6 +3,7 @@ import '../recording/cockpit_recording_session.dart';
 import '../model/cockpit_environment.dart';
 import '../runtime/cockpit_capabilities.dart';
 import '../runtime/cockpit_snapshot.dart';
+import '../performance/cockpit_performance_capture.dart';
 
 final class CockpitRemoteSessionStatus {
   /// Creates a CockpitRemoteSessionStatus.
@@ -17,6 +18,9 @@ final class CockpitRemoteSessionStatus {
     this.environment,
     this.processId,
     this.activeRecording,
+    this.activePerformance,
+    this.performanceCapture = false,
+    this.buildMode,
   });
 
   final String sessionId;
@@ -29,6 +33,9 @@ final class CockpitRemoteSessionStatus {
   final CockpitEnvironment? environment;
   final int? processId;
   final CockpitRecordingSession? activeRecording;
+  final CockpitPerformanceCaptureSession? activePerformance;
+  final bool performanceCapture;
+  final String? buildMode;
 
   /// Encodes this CockpitRemoteSessionStatus as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
@@ -42,6 +49,10 @@ final class CockpitRemoteSessionStatus {
     if (environment != null) 'environment': environment!.toJson(),
     if (processId != null) 'processId': processId,
     if (activeRecording != null) 'activeRecording': activeRecording!.toJson(),
+    if (activePerformance != null)
+      'activePerformance': activePerformance!.toJson(),
+    if (performanceCapture) 'performanceCapture': true,
+    if (buildMode != null) 'build': buildMode,
   };
 
   /// Decodes a CockpitRemoteSessionStatus from a JSON object.
@@ -52,6 +63,8 @@ final class CockpitRemoteSessionStatus {
     final snapshotJson = json['snapshot'] as Map<Object?, Object?>;
     final environmentJson = json['environment'];
     final activeRecordingJson = json['activeRecording'];
+    final activePerformanceJson = json['activePerformance'];
+    final buildMode = json['build'];
 
     return CockpitRemoteSessionStatus(
       sessionId: json['sessionId']! as String,
@@ -82,6 +95,15 @@ final class CockpitRemoteSessionStatus {
                 activeRecordingJson as Map<Object?, Object?>,
               ),
             ),
+      activePerformance: activePerformanceJson == null
+          ? null
+          : CockpitPerformanceCaptureSession.fromJson(
+              Map<String, Object?>.from(
+                activePerformanceJson as Map<Object?, Object?>,
+              ),
+            ),
+      performanceCapture: json['performanceCapture'] as bool? ?? false,
+      buildMode: buildMode as String?,
     );
   }
 
@@ -98,7 +120,10 @@ final class CockpitRemoteSessionStatus {
             other.snapshot == snapshot &&
             other.environment == environment &&
             other.processId == processId &&
-            other.activeRecording == activeRecording;
+            other.activeRecording == activeRecording &&
+            other.activePerformance == activePerformance &&
+            other.performanceCapture == performanceCapture &&
+            other.buildMode == buildMode;
   }
 
   @override
@@ -113,5 +138,8 @@ final class CockpitRemoteSessionStatus {
     environment,
     processId,
     activeRecording,
+    activePerformance,
+    performanceCapture,
+    buildMode,
   );
 }

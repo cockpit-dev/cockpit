@@ -238,6 +238,9 @@ const String cockpitTestV2SchemaJson = r'''
         "appId": {
           "$ref": "#/$defs/nonEmptyString"
         },
+        "buildMode": {
+          "enum": ["debug", "profile", "release"]
+        },
         "requiredCapabilities": {
           "type": "array",
           "items": {
@@ -2049,6 +2052,12 @@ const String cockpitTestV2SchemaJson = r'''
         "stopRecording": {
           "$ref": "#/$defs/stopRecordingOperation"
         },
+        "startPerformance": {
+          "$ref": "#/$defs/startPerformanceOperation"
+        },
+        "stopPerformance": {
+          "$ref": "#/$defs/stopPerformanceOperation"
+        },
         "if": {
           "$ref": "#/$defs/ifOperation"
         },
@@ -2075,6 +2084,12 @@ const String cockpitTestV2SchemaJson = r'''
         },
         {
           "required": ["stopRecording"]
+        },
+        {
+          "required": ["startPerformance"]
+        },
+        {
+          "required": ["stopPerformance"]
         },
         {
           "required": ["if"]
@@ -2117,6 +2132,30 @@ const String cockpitTestV2SchemaJson = r'''
       "additionalProperties": false
     },
     "stopRecordingOperation": {
+      "type": "object",
+      "properties": {
+        "settleMs": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 60000
+        }
+      },
+      "additionalProperties": false
+    },
+    "startPerformanceOperation": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "$ref": "#/$defs/id"
+        },
+        "mode": {
+          "enum": ["light", "profile"]
+        }
+      },
+      "required": ["name"],
+      "additionalProperties": false
+    },
+    "stopPerformanceOperation": {
       "type": "object",
       "properties": {
         "settleMs": {

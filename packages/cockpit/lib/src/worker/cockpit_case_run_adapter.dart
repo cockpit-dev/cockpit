@@ -12,6 +12,7 @@ import '../application/cockpit_application_service_exception.dart';
 import '../adapters/cockpit_automation_adapter.dart';
 import '../adapters/cockpit_capture_adapter.dart';
 import '../adapters/cockpit_recording_adapter.dart';
+import '../adapters/cockpit_performance_adapter.dart';
 import '../runner/cockpit_case_execution_control.dart';
 import '../runner/cockpit_case_runner.dart';
 import '../test/cockpit_test_document_compiler.dart';
@@ -41,10 +42,12 @@ final class CockpitWorkerHealthySession {
     required this.deviceResourceId,
     required this.resourceId,
     required this.environment,
+    this.buildMode,
     required this.automationAdapter,
     required this.healthCheck,
     this.captureAdapter,
     this.recordingAdapter,
+    this.performanceAdapter,
     this.systemAutomationAdapter,
     this.systemCaptureAdapter,
     this.systemRecordingAdapter,
@@ -59,9 +62,11 @@ final class CockpitWorkerHealthySession {
   final String deviceResourceId;
   final String resourceId;
   final CockpitTestTargetEnvironment environment;
+  final String? buildMode;
   final CockpitAutomationAdapter automationAdapter;
   final CockpitCaptureAdapter? captureAdapter;
   final CockpitRecordingAdapter? recordingAdapter;
+  final CockpitPerformanceAdapter? performanceAdapter;
   final CockpitAutomationAdapter? systemAutomationAdapter;
   final CockpitCaptureAdapter? systemCaptureAdapter;
   final CockpitRecordingAdapter? systemRecordingAdapter;
@@ -810,6 +815,7 @@ final class CockpitCaseRunAdapterFactory {
         automationAdapter: session.automationAdapter,
         captureAdapter: session.captureAdapter,
         recordingAdapter: session.recordingAdapter,
+        performanceAdapter: session.performanceAdapter,
         systemAutomationAdapter: session.systemAutomationAdapter,
         systemCaptureAdapter: session.systemCaptureAdapter,
         systemRecordingAdapter: session.systemRecordingAdapter,
@@ -834,6 +840,7 @@ final class CockpitCaseRunAdapterFactory {
           ),
           targetId: session.targetId,
           targetEnvironment: session.environment,
+          targetBuildMode: session.buildMode,
           reportRoot: attemptRoot,
           control: control,
         );

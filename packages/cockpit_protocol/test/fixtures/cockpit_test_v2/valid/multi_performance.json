@@ -1,0 +1,35 @@
+{
+  "schemaVersion": "cockpit.test/v2",
+  "kind": "case",
+  "id": "multi-performance",
+  "target": {
+    "platform": "flutter",
+    "targetKind": "flutterApp",
+    "plane": "semantic",
+    "buildMode": "profile"
+  },
+  "steps": [
+    {
+      "stepId": "start-one",
+      "startPerformance": {
+        "name": "first",
+        "mode": "profile"
+      }
+    },
+    {
+      "stepId": "stop-one",
+      "stopPerformance": {}
+    },
+    {
+      "stepId": "start-two",
+      "startPerformance": {
+        "name": "second",
+        "mode": "light"
+      }
+    },
+    {
+      "stepId": "stop-two",
+      "stopPerformance": {}
+    }
+  ]
+}

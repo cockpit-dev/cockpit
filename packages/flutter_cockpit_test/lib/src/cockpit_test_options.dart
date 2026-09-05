@@ -36,6 +36,7 @@ final class CockpitTestOptions {
     this.pumpAfterCommand = true,
     this.failFast = true,
     this.hostCommand,
+    this.requiredBuildMode,
   });
 
   /// Runtime configuration used by the development-only Cockpit wrapper.
@@ -63,4 +64,9 @@ final class CockpitTestOptions {
 
   /// Optional explicit bridge for host/system-plane actions.
   final CockpitHostCommandHandler? hostCommand;
+
+  /// Fails the test before the body when the runner is not using this mode.
+  /// Flutter's official integration runner chooses the mode; this option only
+  /// verifies it and never pretends that a debug run is profile or release.
+  final CockpitTestBuildMode? requiredBuildMode;
 }

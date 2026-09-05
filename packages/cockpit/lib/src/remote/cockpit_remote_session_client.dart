@@ -314,6 +314,34 @@ final class CockpitRemoteSessionClient {
     return (await stopRecordingDetailed()).result;
   }
 
+  Future<CockpitPerformanceCaptureSession> startPerformance(
+    CockpitPerformanceCaptureRequest request,
+  ) async {
+    final payload = await _send(
+      method: 'POST',
+      path: '/performance/start',
+      body: request.toJson(),
+    );
+    return CockpitPerformanceCaptureSession.fromJson(payload);
+  }
+
+  Future<CockpitPerformanceReport> stopPerformance() async {
+    final payload = await _send(
+      method: 'POST',
+      path: '/performance/stop',
+      body: const <String, Object?>{},
+    );
+    final rawReport = payload['report'];
+    if (rawReport is! Map<Object?, Object?>) {
+      throw const FormatException(
+        'Remote performance stop response is missing its report.',
+      );
+    }
+    return CockpitPerformanceReport.fromJson(
+      Map<String, Object?>.from(rawReport),
+    );
+  }
+
   Future<CockpitRemoteRecordingResponse> stopRecordingDetailed() async {
     final payload = await _send(
       method: 'POST',
