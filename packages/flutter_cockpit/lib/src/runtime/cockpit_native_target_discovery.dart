@@ -7,6 +7,8 @@ import 'package:flutter/rendering.dart';
 
 import '../control/cockpit_command_type.dart';
 import 'cockpit_discovery_policy.dart';
+import 'cockpit_locator_scope.dart';
+import 'cockpit_runtime_tree_visibility.dart';
 import 'cockpit_semantics_bridge.dart';
 import 'cockpit_snapshot.dart';
 import 'cockpit_target.dart';
@@ -769,6 +771,9 @@ final class CockpitNativeTargetDiscovery {
       rootElement.visitAncestorElements((ancestor) {
         final widget = ancestor.widget;
         if (widget is Offstage && widget.offstage) {
+          ancestorHidden = true;
+        }
+        if (cockpitVisibilityForWidget(widget) == false) {
           ancestorHidden = true;
         }
         // A registered explicit target above the discovery root covers the
@@ -1775,6 +1780,12 @@ final class CockpitNativeTargetDiscovery {
     if (typeName.startsWith('_')) {
       return true;
     }
+    // Positioned is a ParentDataWidget, but it is also the branch boundary
+    // that explains which Stack layer owns a target. Keep public branching
+    // scopes before applying the generic ParentDataWidget noise filter.
+    if (cockpitIsLocatorScopeWidget(ancestor.widget)) {
+      return false;
+    }
     return ancestor.widget is InheritedWidget ||
         ancestor.widget is ParentDataWidget<ParentData> ||
         ancestor.widget is Focus ||
@@ -1856,6 +1867,14 @@ final class CockpitNativeTargetDiscovery {
     final typeName = widget.runtimeType.toString();
     if (typeName.startsWith('_')) {
       return true;
+    }
+    // Keep public layout scopes that describe a real branching layer. They
+    // are especially valuable in key/semantics-free UIs where the same
+    // control is repeated in a Stack, popup, or custom multi-child layout.
+    // Retaining only these scopes keeps paths compact without throwing away
+    // the information needed to distinguish layered branches.
+    if (cockpitIsLocatorScopeWidget(widget)) {
+      return false;
     }
     if (_isNoisyPathTypeName(typeName)) {
       return true;
@@ -3569,7 +3588,10 @@ final class _InheritedDiscoveryScope {
     required Rect? effectiveViewport,
   }) {
     final widget = element.widget;
-    final hidden = ancestorHidden || (widget is Offstage && widget.offstage);
+    final hidden =
+        ancestorHidden ||
+        (widget is Offstage && widget.offstage) ||
+        cockpitVisibilityForWidget(widget) == false;
     final pointerBlocked =
         this.pointerBlocked || _blocksPointerForDescendants(widget);
     final routeScope = _cockpitRouteScopeForWidget(widget) ?? this.routeScope;

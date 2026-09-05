@@ -341,6 +341,26 @@ final class CockpitSystemTestAutomationAdapter
       <String, Object?>{'x': point.x, 'y': point.y},
       deadline,
     );
+    if (!result.success &&
+        await _iosTapCommittedAfterDriverFailure(
+          command,
+          point,
+          result,
+          deadline,
+        )) {
+      // WebDriverAgent can dispatch a tap and then lose the response while
+      // XCTest rebuilds the accessibility tree. If the same target has
+      // disappeared from a changed foreground surface, the mutation is
+      // already committed; retrying it would press a different control or
+      // navigate back twice.
+      return _success(
+        command,
+        stopwatch,
+        resolution: point.resolution,
+        artifacts: point.artifacts,
+        artifactSourcePaths: point.artifactSourcePaths,
+      );
+    }
     return _fromAction(
       command,
       stopwatch,
@@ -349,6 +369,38 @@ final class CockpitSystemTestAutomationAdapter
       artifacts: point.artifacts,
       artifactSourcePaths: point.artifactSourcePaths,
     );
+  }
+
+  Future<bool> _iosTapCommittedAfterDriverFailure(
+    CockpitCommand command,
+    _ResolvedPoint point,
+    CockpitSystemControlActionResult action,
+    DateTime deadline,
+  ) async {
+    if (!_isIos ||
+        action.success ||
+        action.errorCode != 'webDriverAgentActionFailed' ||
+        point.surfaceFingerprint == null) {
+      return false;
+    }
+    CockpitNativeUiSnapshot current;
+    try {
+      current = await _readSnapshot(deadline);
+    } on Object {
+      return false;
+    }
+    if (_surfaceFingerprint(current) == point.surfaceFingerprint) return false;
+    final locator = _locator(command);
+    if (locator == null) return false;
+    for (final candidate in locator.flattened) {
+      if (candidate.strategy == CockpitTestLocatorStrategy.visual) continue;
+      final resolution = current.resolveSingle(
+        candidate,
+        flutterAware: _flutterAwareNative,
+      );
+      if (resolution.found || resolution.ambiguous) return false;
+    }
+    return true;
   }
 
   Duration _remaining(DateTime deadline) {
@@ -1507,6 +1559,7 @@ final class CockpitSystemTestAutomationAdapter
         y: y,
         viewportWidth: snapshot.viewportWidth,
         viewportHeight: snapshot.viewportHeight,
+        surfaceFingerprint: _isIos ? _surfaceFingerprint(snapshot) : null,
         nativePath: resolution.node?.attributes['nativepath'],
         treePath: resolution.node?.path,
         textLength: resolution.node?.textValues
@@ -1561,6 +1614,9 @@ final class CockpitSystemTestAutomationAdapter
             y: y,
             viewportWidth: sessionSnapshot.viewportWidth,
             viewportHeight: sessionSnapshot.viewportHeight,
+            surfaceFingerprint: _isIos
+                ? _surfaceFingerprint(sessionSnapshot)
+                : null,
             nativePath: resolution.node?.attributes['nativepath'],
             treePath: resolution.node?.path,
             textLength: resolution.node?.textValues
@@ -1715,6 +1771,7 @@ final class CockpitSystemTestAutomationAdapter
               y: (y + height / 2).round(),
               viewportWidth: snapshot.viewportWidth,
               viewportHeight: snapshot.viewportHeight,
+              surfaceFingerprint: _isIos ? _surfaceFingerprint(snapshot) : null,
               resolution: CockpitLocatorResolution(
                 matchedKind: matchedKind,
                 matchedValue: value,
@@ -1766,6 +1823,7 @@ final class CockpitSystemTestAutomationAdapter
           y: y,
           viewportWidth: refreshed.viewportWidth,
           viewportHeight: refreshed.viewportHeight,
+          surfaceFingerprint: _isIos ? _surfaceFingerprint(refreshed) : null,
           nativePath: resolution.node?.attributes['nativepath'],
           treePath: resolution.node?.path,
           textLength: resolution.node?.textValues
@@ -2174,6 +2232,7 @@ final class _ResolvedPoint {
     required this.y,
     required this.viewportWidth,
     required this.viewportHeight,
+    this.surfaceFingerprint,
     this.nativePath,
     this.treePath,
     this.textLength,
@@ -2201,12 +2260,14 @@ final class _ResolvedPoint {
        nativePath = null,
        treePath = null,
        textLength = null,
+       surfaceFingerprint = null,
        resolution = null;
 
   final int? x;
   final int? y;
   final int? viewportWidth;
   final int? viewportHeight;
+  final String? surfaceFingerprint;
   final String? nativePath;
   final String? treePath;
   final int? textLength;
@@ -2234,6 +2295,9 @@ final class _SystemObservationException implements Exception {
 
   final CockpitCommandError error;
 }
+
+String _surfaceFingerprint(CockpitNativeUiSnapshot snapshot) =>
+    sha256.convert(utf8.encode(snapshot.raw)).toString();
 
 String _artifactStem(String value) {
   final normalized = p

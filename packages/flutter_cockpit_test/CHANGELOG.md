@@ -1,5 +1,13 @@
 # Changelog
 
+## 4.6.0
+
+- Hardened long-running integration and performance captures with bounded
+  action timeouts, cleanup grace, sampling limits, and lossless JSONL archive
+  support.
+- Preserved complete segmented performance evidence while keeping normal
+  in-memory reports compact and safe for multi-hour flows.
+
 ## 4.5.0
 
 - Added multiple ordered performance segments per integration test with

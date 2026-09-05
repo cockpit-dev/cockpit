@@ -967,6 +967,447 @@ void main() {
     );
   });
 
+  testWidgets('retains nested Stack scopes for key-free layered selectors', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      CockpitSurface(
+        routeName: '/layered',
+        child: MaterialApp(
+          home: Scaffold(
+            body: ExcludeSemantics(
+              child: Stack(
+                children: <Widget>[
+                  const Positioned(
+                    left: 16,
+                    top: 16,
+                    child: TextButton(onPressed: null, child: Text('Buy')),
+                  ),
+                  Positioned(
+                    left: 16,
+                    top: 88,
+                    child: Stack(
+                      children: <Widget>[
+                        TextButton(onPressed: () {}, child: const Text('Buy')),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final surface = tester.state<CockpitSurfaceState>(
+      find.byType(CockpitSurface),
+    );
+    final buyTargets = surface.registry.visibleTargets
+        .where(
+          (target) => target.typeName == 'TextButton' && target.text == 'Buy',
+        )
+        .toList(growable: false);
+    expect(buyTargets, hasLength(2));
+    for (final target in buyTargets) {
+      expect(
+        target.locatorAncestors.map((ancestor) => ancestor.typeName),
+        containsAll(<String>['Positioned', 'Stack']),
+      );
+    }
+
+    final nested = surface.registry.resolve(
+      CockpitSelector.parse('Stack >> Stack >> TextButton["Buy"]'),
+      requiredCommand: CockpitCommandType.tap,
+    );
+    expect(nested.isSuccess, isTrue, reason: nested.error?.message);
+    expect(nested.target?.typeName, 'TextButton');
+    expect(
+      nested.target?.locatorAncestors
+          .where((ancestor) => ancestor.typeName == 'Stack')
+          .length,
+      greaterThanOrEqualTo(2),
+    );
+  });
+
+  testWidgets(
+    'keeps equal controls in separate Stack branches ambiguous without scope',
+    (tester) async {
+      await tester.pumpWidget(
+        CockpitSurface(
+          routeName: '/layered-ambiguous',
+          child: MaterialApp(
+            home: Scaffold(
+              body: ExcludeSemantics(
+                child: Stack(
+                  children: <Widget>[
+                    const Positioned(
+                      left: 16,
+                      top: 16,
+                      child: TextButton(onPressed: null, child: Text('Buy')),
+                    ),
+                    const Positioned(
+                      left: 16,
+                      top: 88,
+                      child: TextButton(onPressed: null, child: Text('Buy')),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final surface = tester.state<CockpitSurfaceState>(
+        find.byType(CockpitSurface),
+      );
+      final resolution = surface.registry.resolve(
+        const CockpitLocator(
+          text: 'Buy',
+          type: 'TextButton',
+          ancestor: CockpitLocator(type: 'Stack'),
+        ),
+        requiredCommand: CockpitCommandType.tap,
+      );
+      expect(resolution.isSuccess, isFalse);
+      expect(resolution.error?.code, CockpitCommandError.ambiguousTargetCode);
+      expect(resolution.error?.details['candidateCount'], 2);
+    },
+  );
+
+  testWidgets(
+    'excludes inactive IndexedStack layers while keeping the active layer addressable',
+    (tester) async {
+      await tester.pumpWidget(
+        CockpitSurface(
+          routeName: '/indexed',
+          child: MaterialApp(
+            home: Scaffold(
+              body: IndexedStack(
+                index: 1,
+                children: <Widget>[
+                  TextButton(
+                    key: const ValueKey<String>('inactive-layer'),
+                    onPressed: () {},
+                    child: const Text('Layer action'),
+                  ),
+                  TextButton(
+                    key: const ValueKey<String>('active-layer'),
+                    onPressed: () {},
+                    child: const Text('Layer action'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final surface = tester.state<CockpitSurfaceState>(
+        find.byType(CockpitSurface),
+      );
+      final targets = surface.registry.visibleTargets
+          .where((target) => target.typeName == 'TextButton')
+          .toList(growable: false);
+      expect(targets, hasLength(1));
+      expect(targets.single.keyValue, 'active-layer');
+
+      final active = surface.probeVisibleLocator(
+        const CockpitLocator(text: 'Layer action'),
+        requiredCommand: CockpitCommandType.tap,
+      );
+      expect(active.isSuccess, isTrue, reason: active.error?.message);
+      expect(active.target?.keyValue, 'active-layer');
+    },
+  );
+
+  testWidgets(
+    'does not let a hidden maintained Visibility layer create locator ambiguity',
+    (tester) async {
+      await tester.pumpWidget(
+        CockpitSurface(
+          routeName: '/visibility',
+          child: MaterialApp(
+            home: Scaffold(
+              body: Stack(
+                children: <Widget>[
+                  TextButton(
+                    key: const ValueKey<String>('visible-action'),
+                    onPressed: () {},
+                    child: const Text('Refresh data'),
+                  ),
+                  Visibility(
+                    visible: false,
+                    maintainState: true,
+                    maintainAnimation: true,
+                    maintainSize: true,
+                    child: TextButton(
+                      key: const ValueKey<String>('hidden-action'),
+                      onPressed: () {},
+                      child: const Text('Refresh data'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final surface = tester.state<CockpitSurfaceState>(
+        find.byType(CockpitSurface),
+      );
+      final targets = surface.registry.visibleTargets
+          .where((target) => target.typeName == 'TextButton')
+          .toList(growable: false);
+      expect(targets, hasLength(1));
+      expect(targets.single.keyValue, 'visible-action');
+      final resolution = surface.probeVisibleLocator(
+        const CockpitLocator(text: 'Refresh data'),
+        requiredCommand: CockpitCommandType.tap,
+      );
+      expect(resolution.isSuccess, isTrue);
+      expect(resolution.target?.keyValue, 'visible-action');
+    },
+  );
+
+  testWidgets('retains Overlay as a selector scope for popup content', (
+    tester,
+  ) async {
+    final entry = OverlayEntry(
+      builder: (context) => Positioned(
+        left: 20,
+        top: 20,
+        child: TextButton(
+          onPressed: () {},
+          child: const Text('Overlay action'),
+        ),
+      ),
+    );
+    addTearDown(entry.remove);
+
+    await tester.pumpWidget(
+      CockpitSurface(
+        routeName: '/popup',
+        child: MaterialApp(
+          home: Scaffold(body: Overlay(initialEntries: <OverlayEntry>[entry])),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final surface = tester.state<CockpitSurfaceState>(
+      find.byType(CockpitSurface),
+    );
+    final target = surface.registry.resolve(
+      CockpitSelector.parse('Overlay >> TextButton["Overlay action"]'),
+      requiredCommand: CockpitCommandType.tap,
+    );
+    expect(target.isSuccess, isTrue, reason: target.error?.message);
+    expect(target.target?.text, 'Overlay action');
+    expect(
+      target.target?.locatorAncestors.map((ancestor) => ancestor.typeName),
+      contains('Overlay'),
+    );
+  });
+
+  testWidgets('retains OverlayPortal scope for anchored overlay content', (
+    tester,
+  ) async {
+    final controller = OverlayPortalController();
+    await tester.pumpWidget(
+      CockpitSurface(
+        routeName: '/portal',
+        child: MaterialApp(
+          home: Scaffold(
+            body: OverlayPortal(
+              controller: controller,
+              overlayChildBuilder: (context) => Positioned(
+                left: 24,
+                top: 24,
+                child: TextButton(
+                  onPressed: () {},
+                  child: const Text('Portal action'),
+                ),
+              ),
+              child: const SizedBox(width: 48, height: 48),
+            ),
+          ),
+        ),
+      ),
+    );
+    controller.show();
+    await tester.pumpAndSettle();
+
+    final surface = tester.state<CockpitSurfaceState>(
+      find.byType(CockpitSurface),
+    );
+    final target = surface.registry.resolve(
+      CockpitSelector.parse('OverlayPortal >> TextButton["Portal action"]'),
+      requiredCommand: CockpitCommandType.tap,
+    );
+    expect(target.isSuccess, isTrue, reason: target.error?.message);
+    expect(target.target?.text, 'Portal action');
+    expect(
+      target.target?.locatorAncestors.map((ancestor) => ancestor.typeName),
+      contains('OverlayPortal'),
+    );
+  });
+
+  testWidgets(
+    'retains custom layout and transform scopes for key-free selectors',
+    (tester) async {
+      var flowTaps = 0;
+      var layoutTaps = 0;
+      var followerTaps = 0;
+      final link = LayerLink();
+
+      await tester.pumpWidget(
+        CockpitSurface(
+          routeName: '/custom-layouts',
+          child: MaterialApp(
+            home: Scaffold(
+              body: SizedBox(
+                width: 360,
+                height: 360,
+                child: Stack(
+                  children: <Widget>[
+                    Flow(
+                      delegate: const _CockpitTestFlowDelegate(),
+                      children: <Widget>[
+                        TextButton(
+                          onPressed: () => flowTaps += 1,
+                          child: const Text('Flow action'),
+                        ),
+                      ],
+                    ),
+                    CustomMultiChildLayout(
+                      delegate: _CockpitTestMultiChildDelegate(),
+                      children: <Widget>[
+                        LayoutId(
+                          id: 'layout-action',
+                          child: TextButton(
+                            onPressed: () => layoutTaps += 1,
+                            child: const Text('Layout action'),
+                          ),
+                        ),
+                      ],
+                    ),
+                    CompositedTransformTarget(
+                      link: link,
+                      child: const SizedBox(width: 1, height: 1),
+                    ),
+                    CompositedTransformFollower(
+                      link: link,
+                      showWhenUnlinked: true,
+                      offset: const Offset(120, 80),
+                      child: TextButton(
+                        onPressed: () => followerTaps += 1,
+                        child: const Text('Follower action'),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final surface = tester.state<CockpitSurfaceState>(
+        find.byType(CockpitSurface),
+      );
+      final flow = surface.registry.resolve(
+        CockpitSelector.parse('Flow >> TextButton["Flow action"]'),
+        requiredCommand: CockpitCommandType.tap,
+      );
+      final layout = surface.registry.resolve(
+        CockpitSelector.parse(
+          'CustomMultiChildLayout >> TextButton["Layout action"]',
+        ),
+        requiredCommand: CockpitCommandType.tap,
+      );
+      final follower = surface.registry.resolve(
+        CockpitSelector.parse(
+          'CompositedTransformFollower >> TextButton["Follower action"]',
+        ),
+        requiredCommand: CockpitCommandType.tap,
+      );
+
+      expect(flow.isSuccess, isTrue, reason: flow.error?.message);
+      expect(layout.isSuccess, isTrue, reason: layout.error?.message);
+      expect(follower.isSuccess, isTrue, reason: follower.error?.message);
+      expect(
+        flow.target?.locatorAncestors.map((ancestor) => ancestor.typeName),
+        contains('Flow'),
+      );
+      expect(
+        layout.target?.locatorAncestors.map((ancestor) => ancestor.typeName),
+        contains('CustomMultiChildLayout'),
+      );
+      expect(
+        follower.target?.locatorAncestors.map((ancestor) => ancestor.typeName),
+        contains('CompositedTransformFollower'),
+      );
+
+      flow.target?.onTap?.call();
+      layout.target?.onTap?.call();
+      follower.target?.onTap?.call();
+      expect(flowTaps, 1);
+      expect(layoutTaps, 1);
+      expect(followerTaps, 1);
+    },
+  );
+
+  testWidgets(
+    'keeps inactive IndexedStack branches out of key-free selector matches',
+    (tester) async {
+      await tester.pumpWidget(
+        CockpitSurface(
+          routeName: '/indexed-null',
+          child: MaterialApp(
+            home: Scaffold(
+              body: IndexedStack(
+                index: null,
+                children: <Widget>[
+                  TextButton(
+                    onPressed: () {},
+                    child: const Text('Inactive action'),
+                  ),
+                  TextButton(
+                    onPressed: () {},
+                    child: const Text('Inactive action'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final surface = tester.state<CockpitSurfaceState>(
+        find.byType(CockpitSurface),
+      );
+      final targets = surface.registry.visibleTargets
+          .where((target) => target.text == 'Inactive action')
+          .toList(growable: false);
+      expect(targets, isEmpty);
+      final resolution = surface.probeVisibleLocator(
+        const CockpitLocator(text: 'Inactive action'),
+        requiredCommand: CockpitCommandType.tap,
+      );
+      expect(resolution.isSuccess, isFalse);
+      expect(resolution.error?.code, CockpitCommandError.targetNotFoundCode);
+    },
+  );
+
   testWidgets('collapses a framework control wrapper into its live child', (
     tester,
   ) async {
@@ -1851,6 +2292,34 @@ void main() {
       );
     },
   );
+}
+
+final class _CockpitTestFlowDelegate extends FlowDelegate {
+  const _CockpitTestFlowDelegate();
+
+  @override
+  void paintChildren(FlowPaintingContext context) {
+    context.paintChild(0, transform: Matrix4.translationValues(16, 16, 0));
+  }
+
+  @override
+  bool shouldRepaint(covariant _CockpitTestFlowDelegate oldDelegate) => false;
+}
+
+final class _CockpitTestMultiChildDelegate extends MultiChildLayoutDelegate {
+  _CockpitTestMultiChildDelegate();
+
+  @override
+  void performLayout(Size size) {
+    if (hasChild('layout-action')) {
+      layoutChild('layout-action', BoxConstraints.loose(size));
+      positionChild('layout-action', const Offset(16, 120));
+    }
+  }
+
+  @override
+  bool shouldRelayout(covariant _CockpitTestMultiChildDelegate oldDelegate) =>
+      false;
 }
 
 class _TestWaveformPainter extends CustomPainter {

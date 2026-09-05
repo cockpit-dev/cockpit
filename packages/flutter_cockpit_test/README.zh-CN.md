@@ -262,8 +262,13 @@ await cockpit.profile(
 如需硬性限制，可改用 `CockpitPerformanceArchiveMode.low` 并设置
 `maxPendingBytes`；超出上限的记录会被丢弃，manifest 和报告会记录准确数量。
 分片大小、刷新间隔、轮询间隔和积压上限都可以配置。`archive.info.manifest` 是定位全部
-分片所需的唯一路径。对已完成报告调用 `exportPerformanceJsonl()` 也会逐条写出 JSONL，
+分片所需的唯一路径。manifest 内保存相对于自身的分片路径，因此 CI 下载后整个目录可以
+直接移动；`archive.info.chunks` 仍返回本机直接访问用的绝对路径。对已完成报告调用 `exportPerformanceJsonl()` 也会逐条写出 JSONL，
 不会构造巨大的 JSON 数组。独立 HTML 只加载内存摘要，避免数 GB 事件拖垮浏览器。
+当 Android、iOS、macOS 或 CI worker 分别产出归档时，可以使用
+`CockpitPerformanceArchive.merge([...])` 增量合并 manifest 或单独的
+`.jsonl`/`.jsonl.part` 分片。它会逐行校验并写入新的分片，保留每个来源的顺序、隔离重复
+capture id，并返回新的 manifest 路径；不同设备的单调时钟没有共同基准，因此不会伪造全局排序。
 HTML 内嵌的是小体量内存报告。直接以 `file://` 打开时，浏览器安全策略不允许它扫描项目路径
 或自动读取外部 JSON/JSONL；需要用本地 HTTP 服务打开，或通过浏览器文件选择器明确选择
 manifest/分片。不要把数 GB 的流直接嵌入 HTML。
@@ -397,6 +402,8 @@ final jsonPath = await cockpit.exportPerformanceJson(
 不传 `path` 时会在 `build/cockpit/performance/` 下生成唯一文件。自定义宿主可以使用
 `CockpitPerformanceHtml.render(report)` 或
 `CockpitPerformanceHtml.renderMany(reports)` 直接得到 HTML 字符串，不访问文件系统；
+`renderMany` 会在采集选择器和对比表中保留每个报告真实的平台与构建模式，Android/iOS/macOS/Web
+可以放在同一视图中比较，不会把不可用指标折叠成 0。
 `CockpitPerformanceHtml.fullJson(reports)` 返回同一份完整规范 JSON。JSON 是机器读取的
 规范导出，HTML 是给人查看的完整视图。
 HTML 还提供相对时间 hover 图表、jank 分布、帧节奏、Raster cache 趋势、VM 分类耗时、Operation hotspots、卡顿/阻塞证据表、分开的 memory/cache/GC 视图，以及在存在持续区间时展示的 VM duration 火焰时间视图；没有区间时不会伪造调用栈。

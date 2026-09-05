@@ -15,12 +15,14 @@ export 'cockpit_performance_archive_options.dart';
 ///
 /// JSONL is intentionally the first format: each line is independently
 /// parseable, files rotate at a configurable size, and an index is updated as
-/// chunks complete. The writer accepts records synchronously so instrumentation
-/// does not await disk I/O on the measured path. The default
-/// [CockpitPerformanceArchiveMode.lossless] mode keeps every accepted record
-/// and leaves the pending queue uncapped. Use [CockpitPerformanceArchiveMode.low]
-/// with [CockpitPerformanceArchiveOptions.maxPendingBytes] when a runner must
-/// enforce a queue limit; records beyond that limit are dropped and counted.
+/// chunks complete. The writer accepts records synchronously and swaps to a
+/// fresh chunk before awaiting a slow flush/rename, so instrumentation does
+/// not accumulate an in-memory queue on the measured path. The default
+/// [CockpitPerformanceArchiveMode.lossless] mode keeps every accepted record.
+/// Use [CockpitPerformanceArchiveOptions.maxPendingBytes] to tune the
+/// in-memory back-pressure window. In `low` mode records beyond it are
+/// dropped and counted; in `lossless` mode they spill to a recoverable JSONL
+/// sidecar instead of growing the Dart heap.
 final class CockpitPerformanceArchive {
   CockpitPerformanceArchive._(this._backend, this.options);
 
@@ -112,6 +114,29 @@ final class CockpitPerformanceArchive {
       rethrow;
     }
   }
+
+  /// Merges one or more JSONL archives (or individual JSONL chunks) into a
+  /// new chunked archive and returns its manifest path.
+  ///
+  /// Sources are consumed incrementally in the order supplied. A source may
+  /// be an archive manifest, a completed `.jsonl` chunk, or a recoverable
+  /// `.jsonl.part` chunk. Records are validated before they enter the output;
+  /// no complete source is loaded into memory. Capture ids are namespaced by
+  /// source so combining parallel platform runs cannot create duplicate
+  /// start/end identities. The event/frame/sample order inside each source is
+  /// preserved; timestamps from different devices are not globally sorted.
+  static Future<String> merge(
+    Iterable<String> sources, {
+    String? directory,
+    String name = 'performance-merged',
+    CockpitPerformanceArchiveOptions options =
+        const CockpitPerformanceArchiveOptions(),
+  }) => platform.mergeCockpitPerformanceArchives(
+    sources,
+    directory: directory,
+    name: _slug(name),
+    options: options,
+  );
 
   CockpitPerformanceArchiveInfo get info => _backend.snapshot();
 

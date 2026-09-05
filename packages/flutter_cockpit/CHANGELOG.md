@@ -1,5 +1,13 @@
 # Changelog
 
+## 4.6.0
+
+- Improved locator traversal and visibility handling for nested and layered
+  Flutter surfaces, including structurally addressable Stack and Overlay
+  branches without test-only keys.
+- Added bounded command/gesture execution cleanup so failed or concurrent
+  actions leave no active pointer or pump state behind.
+
 ## 4.5.0
 
 - Added the Flutter bridge lifecycle for sequential performance capture

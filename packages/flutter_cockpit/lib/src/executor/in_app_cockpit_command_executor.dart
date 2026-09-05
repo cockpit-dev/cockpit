@@ -1,6 +1,7 @@
 // ignore_for_file: deprecated_member_use
 
 import 'dart:async';
+import 'dart:collection';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
@@ -205,6 +206,7 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
   late final CockpitTextInputCommandExecutor _textInputCommandExecutor;
   late final CockpitGestureCommandExecutor _gestureCommandExecutor;
   late final CockpitWaitAndAssertExecutor _waitAndAssertExecutor;
+  late final _CockpitCommandQueue _commandQueue = _CockpitCommandQueue();
   String? _inAppClipboardText;
 
   CockpitTargetRegistry get _registry => _context.registry;
@@ -315,6 +317,17 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
   }
 
   Future<CockpitCommandExecution> executeWithArtifacts(
+    CockpitCommand command,
+  ) => _commandQueue.run(() => _executeWithArtifacts(command));
+
+  /// Executes one command after all previously submitted commands have
+  /// finished.  Flutter's test binding and several platform-backed gesture
+  /// handlers are stateful even when the public API is asynchronous; allowing
+  /// two complete commands to overlap can re-enter a guarded pump, release a
+  /// pointer sequence out of order, or resolve a target against a half-applied
+  /// route transition.  Callback-level pump serialization alone is not enough
+  /// because target resolution and gesture dispatch also mutate shared state.
+  Future<CockpitCommandExecution> _executeWithArtifacts(
     CockpitCommand command,
   ) async {
     final stopwatch = Stopwatch()..start();
@@ -4755,7 +4768,12 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
     );
     final stopwatch = Stopwatch()..start();
     var retryCount = 0;
-    while (retryCount < attempts - 1 || stopwatch.elapsed < resolveTimeout) {
+    // `attempts` is the complete retry budget. The previous `OR` condition
+    // kept polling until the full resolve timeout even after every retry had
+    // been exhausted, so a selector that could never match consumed minutes
+    // for each candidate. A delayed mount still gets all requested attempts,
+    // while a permanently missing target fails immediately afterwards.
+    while (retryCount < attempts && stopwatch.elapsed < resolveTimeout) {
       await _postActionSettler();
       if (_usesTestBinding() && !_hasCustomWaitTickHandler) {
         await Future<void>.microtask(() {});
@@ -6863,4 +6881,53 @@ final class _ActionCommitResult {
   final String? beforeActionFingerprint;
   final CockpitTarget? interactedTarget;
   final String? beforeTargetInteractionState;
+}
+
+/// Serializes complete in-app commands, not only the frame-pump callbacks they
+/// happen to use.  A command owns target resolution, pointer dispatch, route
+/// settling, and post-action observation as one transaction; interleaving any
+/// of those phases with another command can produce a false target miss or a
+/// Flutter test-guard violation.  The queue deliberately preserves the caller
+/// zone so test-binding guard ownership remains attached to the originating
+/// async context.
+final class _CockpitCommandQueue {
+  final Queue<_CockpitQueuedCommand> _pending = Queue<_CockpitQueuedCommand>();
+  bool _active = false;
+
+  Future<T> run<T>(Future<T> Function() operation) {
+    final completion = Completer<T>();
+    _pending.add(
+      _CockpitQueuedCommand(
+        operation: () async {
+          try {
+            completion.complete(await operation());
+          } on Object catch (error, stackTrace) {
+            completion.completeError(error, stackTrace);
+          }
+        },
+        zone: Zone.current,
+      ),
+    );
+    _startNext();
+    return completion.future;
+  }
+
+  void _startNext() {
+    if (_active || _pending.isEmpty) return;
+    _active = true;
+    final task = _pending.removeFirst();
+    task.zone
+        .run<Future<void>>(() => Future<void>.sync(task.operation))
+        .whenComplete(() {
+          _active = false;
+          scheduleMicrotask(_startNext);
+        });
+  }
+}
+
+final class _CockpitQueuedCommand {
+  const _CockpitQueuedCommand({required this.operation, required this.zone});
+
+  final Future<void> Function() operation;
+  final Zone zone;
 }

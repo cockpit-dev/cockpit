@@ -1120,6 +1120,52 @@ void main() {
     expect(scopedSelectors, contains('Sidebar >> Continue'));
   });
 
+  test(
+    'dev locator advice uses nested structural scopes for layered targets',
+    () {
+      Map<String, Object?> target({
+        required String registrationId,
+        required List<String> scopes,
+      }) => <String, Object?>{
+        'registrationId': registrationId,
+        'text': 'Buy',
+        'typeName': 'TextButton',
+        'routeName': '/market',
+        'supportedCommands': <Object?>['tap'],
+        'ancestors': scopes
+            .map(
+              (typeName) => <String, Object?>{
+                'typeName': typeName,
+                'routeName': '/market',
+              },
+            )
+            .toList(growable: false),
+      };
+
+      final result = cockpitBuildUiLocatorMatchesFromOutput(<String, Object?>{
+        'snapshot': <String, Object?>{
+          'visibleTargets': <Object?>[
+            target(
+              registrationId: 'nested',
+              scopes: <String>['Stack', 'Stack'],
+            ),
+            target(registrationId: 'flat', scopes: <String>['Stack']),
+          ],
+        },
+      }, 'Buy');
+      final matches = (result['matches']! as List<Object?>)
+          .cast<Map<String, Object?>>();
+
+      expect(matches, hasLength(2));
+      expect(
+        matches.firstWhere(
+          (match) => match['sel']!.toString().contains('Stack >> Stack'),
+        )['sel'],
+        'Stack >> Stack >> Buy',
+      );
+    },
+  );
+
   test('dev locator search prefers a stable ancestor over a widget path', () {
     Map<String, Object?> target({
       required String registrationId,

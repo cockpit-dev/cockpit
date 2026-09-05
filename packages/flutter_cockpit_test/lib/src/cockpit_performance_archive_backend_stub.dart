@@ -37,3 +37,13 @@ CockpitPerformanceArchiveBackend createCockpitPerformanceArchiveBackend({
   required String name,
   required CockpitPerformanceArchiveOptions options,
 }) => _UnsupportedPerformanceArchive(directory);
+
+Future<String> mergeCockpitPerformanceArchives(
+  Iterable<String> sources, {
+  required String? directory,
+  required String name,
+  required CockpitPerformanceArchiveOptions options,
+}) => throw UnsupportedError(
+  'Performance JSONL archives require a dart:io host. '
+  'Use CockpitPerformanceHtml.fullJson(...) on web.',
+);

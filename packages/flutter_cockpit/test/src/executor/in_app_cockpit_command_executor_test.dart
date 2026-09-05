@@ -1009,6 +1009,39 @@ void main() {
   );
 
   test(
+    'missing selectors exhaust bounded resolution attempts instead of timeout',
+    () async {
+      var tickCount = 0;
+      final executor = InAppCockpitCommandExecutor(
+        registry: CockpitTargetRegistry(routeName: '/checkout'),
+        postActionSettler: () async {},
+        waitTickHandler: (_) async {
+          tickCount += 1;
+        },
+        interactionPolicy: const CockpitInteractionPolicy(
+          targetResolveTimeout: Duration(minutes: 3),
+          targetResolvePollInterval: Duration(milliseconds: 1),
+        ),
+      );
+
+      final stopwatch = Stopwatch()..start();
+      final result = await executor.execute(
+        CockpitCommand(
+          commandId: 'cmd-missing-selector',
+          commandType: CockpitCommandType.tap,
+          locator: const CockpitLocator(key: 'never-mounted'),
+          timeoutMs: 30000,
+        ),
+      );
+
+      expect(result.success, isFalse);
+      expect(result.error?.code, CockpitCommandError.targetNotFoundCode);
+      expect(tickCount, 3);
+      expect(stopwatch.elapsed, lessThan(const Duration(seconds: 1)));
+    },
+  );
+
+  test(
     'waits through an empty route transition before resolving the next target',
     () async {
       final registry = CockpitTargetRegistry(routeName: '/editor');

@@ -361,9 +361,18 @@ queue limit and preserves every record. If a constrained runner needs a hard
 queue bound, opt into `CockpitPerformanceArchiveMode.low` and set
 `maxPendingBytes`; drops are counted in the manifest and report. Chunk size,
 flush interval, polling interval, and queue limit are all configurable.
-`archive.info.manifest` is the only path needed to locate the chunk set.
+`archive.info.manifest` is the only path needed to locate the chunk set. The
+manifest stores chunk names relative to itself, so a downloaded CI artifact
+can be moved as one directory without rewriting paths; `archive.info.chunks`
+still returns absolute local paths for direct file access.
 `exportPerformanceJsonl()` provides the same format for already completed
 reports without constructing one giant JSON array.
+When Android, iOS, macOS, or CI workers produce separate archives, combine
+them incrementally with `CockpitPerformanceArchive.merge([...])`. Inputs may
+be manifests or individual `.jsonl`/`.jsonl.part` chunks; the output preserves
+source order, validates each record, namespaces duplicate capture ids, and
+returns a new manifest path. It does not globally sort events from different
+devices because their monotonic clocks are unrelated.
 The generated HTML embeds the small in-memory report. When opened directly as
 `file://`, browser security prevents it from scanning project paths or fetching
 external JSON/JSONL automatically; serve the report from a local HTTP server or
@@ -538,7 +547,10 @@ retention, and memory sampling), and those limits are recorded in the export.
 The default path is a unique file under `build/cockpit/performance/`. For a
 custom host, `CockpitPerformanceHtml.render(report)` or
 `CockpitPerformanceHtml.renderMany(reports)` returns the HTML string without
-touching the file system. `CockpitPerformanceHtml.fullJson(reports)` returns
+touching the file system. `renderMany` keeps each capture's real platform and
+build mode in the selector and comparison table, so Android/iOS/macOS/Web
+results can share one view without collapsing unavailable metrics into zeros.
+`CockpitPerformanceHtml.fullJson(reports)` returns
 the same complete canonical bundle as a JSON string. JSON remains the
 canonical machine-readable export;
 the HTML is the human-facing view with relative-time hover charts, jank

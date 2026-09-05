@@ -323,6 +323,29 @@ void main() {
       expect(debugProfilePaintsEnabled, beforePaints);
     },
   );
+
+  cockpitTestWidgets(
+    'profile setup failures release every capture resource',
+    app: () => const MaterialApp(home: _ProfilePage()),
+    body: (cockpit) async {
+      await expectLater(
+        cockpit.profile(
+          () async {},
+          name: 'setup-failure',
+          timeline: false,
+          onStarted: () => throw StateError('setup failed'),
+        ),
+        throwsA(isA<StateError>()),
+      );
+
+      final report = await cockpit.profile(
+        () async {},
+        name: 'after-failure',
+        timeline: false,
+      );
+      expect(report.stepId, 'after-failure');
+    },
+  );
 }
 
 CockpitPerformanceSink _firstSink(_StatefulPlugin plugin) =>

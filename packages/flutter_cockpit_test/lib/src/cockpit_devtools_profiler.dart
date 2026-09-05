@@ -13,11 +13,11 @@ import 'cockpit_timeline_analysis.dart';
 final class CockpitDevToolsProfiler {
   CockpitDevToolsProfiler({
     this.timeout = const Duration(seconds: 3),
-    this.maxCpuSamples = 50000,
+    this.maxCpuSamples = 20000,
     this.maxHeapClasses = 200,
-    this.maxHeapSamples = 10000,
-    this.maxRebuildFrames = 10000,
-    this.maxRebuildEntries = 100000,
+    this.maxHeapSamples = 2000,
+    this.maxRebuildFrames = 2000,
+    this.maxRebuildEntries = 20000,
     this.maxLogEvents = 2000,
     this.maxDebugEvents = 2000,
     this.onIsolateEvent,
@@ -146,9 +146,12 @@ final class CockpitDevToolsProfiler {
   bool _profilerChanged = false;
   bool _requested = false;
   bool _windowEnded = false;
+  bool _windowStarted = false;
   int? _captureEndUs;
   final List<String> _failures = <String>[];
   bool _streamTimeline = false;
+  bool _timelineFlagsChanged = false;
+  List<String>? _timelineStreamsBefore;
   int? _timelineCursorUs;
   Future<List<Object?>>? _timelineDrainPending;
 
@@ -226,8 +229,11 @@ final class CockpitDevToolsProfiler {
     _profilerWasEnabled = false;
     _profilerChanged = false;
     _windowEnded = false;
+    _windowStarted = false;
     _captureEndUs = null;
     _streamTimeline = streamTimeline;
+    _timelineFlagsChanged = false;
+    _timelineStreamsBefore = null;
     _timelineCursorUs = null;
     _timelineDrainPending = null;
     _requested =
@@ -258,6 +264,7 @@ final class CockpitDevToolsProfiler {
       final isolateId = _mainIsolateId(vm);
       if (isolateId == null) {
         await service.dispose();
+        _service = null;
         _recordFailure('vm', StateError('No runnable isolate is available.'));
         return;
       }
@@ -290,13 +297,25 @@ final class CockpitDevToolsProfiler {
       } on Object catch (error) {
         _recordFailure('isolate', error);
       }
+      TimelineFlags? timelineFlags;
+      if (streamTimeline) {
+        try {
+          timelineFlags = await service.getVMTimelineFlags().timeout(timeout);
+          _timelineStreamsBefore = List<String>.unmodifiable(
+            timelineFlags.recordedStreams ?? const <String>[],
+          );
+          await service.setVMTimelineFlags(timelineStreams).timeout(timeout);
+          _timelineFlagsChanged = true;
+          await service.clearVMTimeline().timeout(timeout);
+        } on Object catch (error) {
+          _recordFailure('timeline-stream', error);
+        }
+      }
       if (timeline) {
         try {
-          if (streamTimeline) {
-            await service.setVMTimelineFlags(timelineStreams).timeout(timeout);
-            await service.clearVMTimeline().timeout(timeout);
-          }
-          final flags = await service.getVMTimelineFlags().timeout(timeout);
+          final flags =
+              timelineFlags ??
+              await service.getVMTimelineFlags().timeout(timeout);
           _timeline = CockpitTimelineProfile(
             recorder: _timelineRecorder(flags.recorderName),
             availableStreams: flags.availableStreams ?? const <String>[],
@@ -366,6 +385,24 @@ final class CockpitDevToolsProfiler {
     }
   }
 
+  /// Starts the measured window after VM setup and baseline reads complete.
+  /// Events emitted while connecting, subscribing, or reading baselines are
+  /// intentionally excluded from the action evidence.
+  Future<void> beginWindow() async {
+    if (_windowStarted || _windowEnded) return;
+    final service = _service;
+    if (_streamTimeline && service != null) {
+      try {
+        final now = await service.getVMTimelineMicros().timeout(timeout);
+        final timestamp = now.timestamp;
+        if (timestamp != null) _timelineCursorUs = timestamp;
+      } on Object catch (error) {
+        _recordFailure('timeline-window', error);
+      }
+    }
+    _windowStarted = true;
+  }
+
   /// Reads only the VM timeline interval since the previous drain. This is
   /// used by long-running archives so the integration_test binding never
   /// materializes the entire action timeline in one object.
@@ -384,7 +421,9 @@ final class CockpitDevToolsProfiler {
   }
 
   Future<List<Object?>> _drainTimeline() async {
-    if (!_streamTimeline) return const <Object>[];
+    if (!_streamTimeline || !_windowStarted || _windowEnded) {
+      return const <Object>[];
+    }
     final service = _service;
     final cursor = _timelineCursorUs;
     if (service == null || cursor == null) return const <Object>[];
@@ -413,7 +452,7 @@ final class CockpitDevToolsProfiler {
   /// while assembling the report are excluded from event streams and CPU
   /// sampling extents.
   Future<void> endWindow() async {
-    if (_windowEnded) return;
+    if (!_windowStarted || _windowEnded) return;
     _windowEnded = true;
     await _stopHeapSampling();
     final service = _service;
@@ -1091,7 +1130,7 @@ final class CockpitDevToolsProfiler {
   }
 
   void _recordIsolateEvent(Event event) {
-    if (_windowEnded) return;
+    if (!_windowStarted || _windowEnded) return;
     final kind = event.kind?.trim();
     if (kind == null || kind.isEmpty) return;
     _addRuntimeExtension(event.extensionRPC);
@@ -1128,7 +1167,7 @@ final class CockpitDevToolsProfiler {
   }
 
   void _recordLoggingEvent(Event event) {
-    if (_windowEnded) return;
+    if (!_windowStarted || _windowEnded) return;
     if (_logEvents.length >= maxLogEvents) {
       _droppedLogEvents += 1;
       return;
@@ -1167,7 +1206,7 @@ final class CockpitDevToolsProfiler {
   }
 
   void _recordDebugEvent(Event event) {
-    if (_windowEnded) return;
+    if (!_windowStarted || _windowEnded) return;
     if (_debugEvents.length >= maxDebugEvents) {
       _droppedDebugEvents += 1;
       return;
@@ -1255,7 +1294,7 @@ final class CockpitDevToolsProfiler {
   }
 
   void _recordExtensionEvent(Event event) {
-    if (_windowEnded) return;
+    if (!_windowStarted || _windowEnded) return;
     if (event.extensionKind != _rebuiltWidgetsEvent) return;
     final data = event.extensionData?.data;
     if (data == null) return;
@@ -1601,7 +1640,7 @@ final class CockpitDevToolsProfiler {
   }
 
   Future<void> _sampleHeap() async {
-    if (_windowEnded) return;
+    if (!_windowStarted || _windowEnded) return;
     final service = _service;
     final isolateId = _isolateId;
     final originUs = _originUs;
@@ -1898,11 +1937,26 @@ final class CockpitDevToolsProfiler {
       }
     }
     _enabledAllocationClassIds.clear();
+    final previousTimelineStreams = _timelineStreamsBefore;
+    if (service != null &&
+        _timelineFlagsChanged &&
+        previousTimelineStreams != null) {
+      try {
+        await service
+            .setVMTimelineFlags(previousTimelineStreams)
+            .timeout(timeout);
+      } on Object catch (error) {
+        _recordFailure('timeline-restore', error);
+      }
+    }
+    _timelineFlagsChanged = false;
+    _timelineStreamsBefore = null;
     _service = null;
     _isolateId = null;
     _originUs = null;
     _timelineCursorUs = null;
     _streamTimeline = false;
+    _windowStarted = false;
     _beforeHeap = null;
     _vmMemoryBefore = null;
     _vmMemoryAfter = null;

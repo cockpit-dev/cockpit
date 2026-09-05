@@ -1,5 +1,10 @@
 # Changelog
 
+## 4.6.0
+
+- Synchronized the protocol release with the bounded selector and long-running
+  integration/performance execution contracts.
+
 ## 4.5.0
 
 - Added strict protocol contracts and schema coverage for segmented performance

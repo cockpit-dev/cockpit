@@ -32,12 +32,13 @@ final class CockpitPerformanceArchiveOptions {
   final CockpitPerformanceArchiveMode mode;
   final int chunkBytes;
 
-  /// Maximum queued bytes for [CockpitPerformanceArchiveMode.low].
+  /// Maximum bytes retained in memory while a flush/rotation is in progress.
   ///
-  /// `null` leaves the archive uncapped. It is the default for the explicit
-  /// lossless streaming path; set a value together with `low` when bounded
-  /// memory and non-blocking capture are more important than retaining every
-  /// record.
+  /// In [CockpitPerformanceArchiveMode.low], records beyond this bound are
+  /// dropped and counted. In [CockpitPerformanceArchiveMode.lossless], the
+  /// bound only controls the in-memory window; excess records spill to a
+  /// recoverable JSONL file and are drained before close. `null` uses the
+  /// built-in lossless window.
   final int? maxPendingBytes;
   final Duration flushEvery;
   final Duration pollEvery;

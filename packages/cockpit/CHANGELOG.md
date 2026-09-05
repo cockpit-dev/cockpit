@@ -1,5 +1,12 @@
 # Changelog
 
+## 4.6.0
+
+- Hardened source-first Flutter locator resolution for nested Stack, Overlay,
+  lazy, offstage, and structurally ambiguous targets with bounded retries.
+- Serialized complete in-app commands and strengthened gesture cancellation so
+  concurrent actions cannot corrupt Flutter state or leave active pointers.
+
 ## 4.5.0
 
 - Added sequential segmented performance capture for Flutter and black-box

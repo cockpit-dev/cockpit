@@ -289,22 +289,42 @@ final class CockpitGestureEngine {
     required PointerDeviceKind pointerDeviceKind,
     required int buttons,
   }) async {
-    _dispatchDown(
-      pointer: 1,
-      geometry: geometry,
-      position: origin,
-      pointerDeviceKind: pointerDeviceKind,
-      buttons: buttons,
-      timeStamp: Duration.zero,
-    );
-    await _delay(Duration.zero);
-    _dispatchUp(
-      pointer: 1,
-      geometry: geometry,
-      position: origin,
-      pointerDeviceKind: pointerDeviceKind,
-      timeStamp: const Duration(milliseconds: 32),
-    );
+    var active = false;
+    try {
+      _dispatchDown(
+        pointer: 1,
+        geometry: geometry,
+        position: origin,
+        pointerDeviceKind: pointerDeviceKind,
+        buttons: buttons,
+        timeStamp: Duration.zero,
+      );
+      active = true;
+      await _delay(Duration.zero);
+      _dispatchUp(
+        pointer: 1,
+        geometry: geometry,
+        position: origin,
+        pointerDeviceKind: pointerDeviceKind,
+        timeStamp: const Duration(milliseconds: 32),
+      );
+      active = false;
+    } catch (_) {
+      if (active) {
+        try {
+          _dispatchCancel(
+            pointer: 1,
+            geometry: geometry,
+            position: origin,
+            pointerDeviceKind: pointerDeviceKind,
+            timeStamp: const Duration(milliseconds: 32),
+          );
+        } on Object {
+          // Best effort: preserve the original gesture failure.
+        }
+      }
+      rethrow;
+    }
     await _delay(Duration.zero);
     // Flutter keeps a first tap in the gesture arena while a sibling
     // DoubleTapGestureRecognizer waits for a possible second contact. A
@@ -327,23 +347,43 @@ final class CockpitGestureEngine {
     required PointerDeviceKind pointerDeviceKind,
     required int buttons,
   }) async {
-    _dispatchDown(
-      pointer: 1,
-      geometry: geometry,
-      position: origin,
-      pointerDeviceKind: pointerDeviceKind,
-      buttons: buttons,
-      timeStamp: Duration.zero,
-    );
-    await _delay(Duration.zero);
-    await _delay(duration);
-    _dispatchUp(
-      pointer: 1,
-      geometry: geometry,
-      position: origin,
-      pointerDeviceKind: pointerDeviceKind,
-      timeStamp: duration,
-    );
+    var active = false;
+    try {
+      _dispatchDown(
+        pointer: 1,
+        geometry: geometry,
+        position: origin,
+        pointerDeviceKind: pointerDeviceKind,
+        buttons: buttons,
+        timeStamp: Duration.zero,
+      );
+      active = true;
+      await _delay(Duration.zero);
+      await _delay(duration);
+      _dispatchUp(
+        pointer: 1,
+        geometry: geometry,
+        position: origin,
+        pointerDeviceKind: pointerDeviceKind,
+        timeStamp: duration,
+      );
+      active = false;
+    } catch (_) {
+      if (active) {
+        try {
+          _dispatchCancel(
+            pointer: 1,
+            geometry: geometry,
+            position: origin,
+            pointerDeviceKind: pointerDeviceKind,
+            timeStamp: duration,
+          );
+        } on Object {
+          // Best effort: preserve the original gesture failure.
+        }
+      }
+      rethrow;
+    }
     await _delay(Duration.zero);
   }
 
@@ -362,39 +402,53 @@ final class CockpitGestureEngine {
     // that lifecycle here.
     const firstPointer = 1;
     const secondPointer = 2;
-    _dispatchDown(
-      pointer: firstPointer,
-      geometry: geometry,
-      position: origin,
-      pointerDeviceKind: pointerDeviceKind,
-      buttons: buttons,
-      timeStamp: Duration.zero,
-    );
-    await _delay(Duration.zero);
-    _dispatchUp(
-      pointer: firstPointer,
-      geometry: geometry,
-      position: origin,
-      pointerDeviceKind: pointerDeviceKind,
-      timeStamp: const Duration(milliseconds: 32),
-    );
-    await _delay(interval);
-    _dispatchDown(
-      pointer: secondPointer,
-      geometry: geometry,
-      position: origin,
-      pointerDeviceKind: pointerDeviceKind,
-      buttons: buttons,
-      timeStamp: interval + const Duration(milliseconds: 32),
-    );
-    await _delay(Duration.zero);
-    _dispatchUp(
-      pointer: secondPointer,
-      geometry: geometry,
-      position: origin,
-      pointerDeviceKind: pointerDeviceKind,
-      timeStamp: interval + const Duration(milliseconds: 64),
-    );
+    final active = <int, Offset>{};
+    try {
+      _dispatchDown(
+        pointer: firstPointer,
+        geometry: geometry,
+        position: origin,
+        pointerDeviceKind: pointerDeviceKind,
+        buttons: buttons,
+        timeStamp: Duration.zero,
+      );
+      active[firstPointer] = origin;
+      await _delay(Duration.zero);
+      _dispatchUp(
+        pointer: firstPointer,
+        geometry: geometry,
+        position: origin,
+        pointerDeviceKind: pointerDeviceKind,
+        timeStamp: const Duration(milliseconds: 32),
+      );
+      active.remove(firstPointer);
+      await _delay(interval);
+      _dispatchDown(
+        pointer: secondPointer,
+        geometry: geometry,
+        position: origin,
+        pointerDeviceKind: pointerDeviceKind,
+        buttons: buttons,
+        timeStamp: interval + const Duration(milliseconds: 32),
+      );
+      active[secondPointer] = origin;
+      await _delay(Duration.zero);
+      _dispatchUp(
+        pointer: secondPointer,
+        geometry: geometry,
+        position: origin,
+        pointerDeviceKind: pointerDeviceKind,
+        timeStamp: interval + const Duration(milliseconds: 64),
+      );
+      active.remove(secondPointer);
+    } catch (_) {
+      _cancelActivePointers(
+        active,
+        geometry: geometry,
+        timeStamp: interval + const Duration(milliseconds: 64),
+      );
+      rethrow;
+    }
     await _delay(Duration.zero);
   }
 
@@ -567,23 +621,30 @@ final class CockpitGestureEngine {
     final endRadius =
         (useRecognitionPrelude ? recognitionRadius : baseSpan / 2) *
         clampedScale;
+    final startOffsets = <int, Offset>{
+      1: Offset(-baseSpan / 2, 0),
+      2: Offset(baseSpan / 2, 0),
+    };
+    final recognitionOffsets = useRecognitionPrelude
+        ? <int, Offset>{
+            1: Offset(-recognitionRadius, 0),
+            2: Offset(recognitionRadius, 0),
+          }
+        : null;
+    final endOffsets = <int, Offset>{
+      1: Offset(-endRadius, 0),
+      2: Offset(endRadius, 0),
+    };
     await _performInterpolatedMultiPointerGesture(
       geometry: geometry,
-      origin: origin,
-      startOffsets: <int, Offset>{
-        1: Offset(-baseSpan / 2, 0),
-        2: Offset(baseSpan / 2, 0),
-      },
-      recognitionOffsets: useRecognitionPrelude
-          ? <int, Offset>{
-              1: Offset(-recognitionRadius, 0),
-              2: Offset(recognitionRadius, 0),
-            }
-          : null,
-      endOffsets: <int, Offset>{
-        1: Offset(-endRadius, 0),
-        2: Offset(endRadius, 0),
-      },
+      origin: _fitMultiPointerOrigin(geometry, origin, <Offset>[
+        ...startOffsets.values,
+        ...?recognitionOffsets?.values,
+        ...endOffsets.values,
+      ]),
+      startOffsets: startOffsets,
+      recognitionOffsets: recognitionOffsets,
+      endOffsets: endOffsets,
       duration: duration,
       moveEventCount: moveEventCount,
       profile: profile,
@@ -619,15 +680,25 @@ final class CockpitGestureEngine {
       recognitionRadius * math.cos(rotation),
       recognitionRadius * math.sin(rotation),
     );
+    final startOffsets = <int, Offset>{
+      1: Offset(-radius, 0),
+      2: Offset(radius, 0),
+    };
+    final recognitionOffsets = <int, Offset>{
+      1: Offset(-recognitionRadius, 0),
+      2: Offset(recognitionRadius, 0),
+    };
+    final endOffsets = <int, Offset>{1: endLeft, 2: endRight};
     await _performInterpolatedMultiPointerGesture(
       geometry: geometry,
-      origin: origin,
-      startOffsets: <int, Offset>{1: Offset(-radius, 0), 2: Offset(radius, 0)},
-      recognitionOffsets: <int, Offset>{
-        1: Offset(-recognitionRadius, 0),
-        2: Offset(recognitionRadius, 0),
-      },
-      endOffsets: <int, Offset>{1: endLeft, 2: endRight},
+      origin: _fitMultiPointerOrigin(geometry, origin, <Offset>[
+        ...startOffsets.values,
+        ...recognitionOffsets.values,
+        ...endOffsets.values,
+      ]),
+      startOffsets: startOffsets,
+      recognitionOffsets: recognitionOffsets,
+      endOffsets: endOffsets,
       duration: duration,
       moveEventCount: moveEventCount,
       profile: profile,
@@ -646,6 +717,39 @@ final class CockpitGestureEngine {
         : math.min(geometry.viewportWidth, geometry.viewportHeight);
     final maxSpan = math.max(12.0, referenceShortestSide * 0.85);
     return requestedSpan.clamp(12.0, maxSpan).toDouble();
+  }
+
+  /// Keeps generated two-finger gestures inside the active viewport. A target
+  /// can legitimately be near an edge, but independently clamping each finger
+  /// would collapse the span and change the authored scale/rotation. Move the
+  /// focal point inward as needed while preserving the target's position when
+  /// the complete gesture already fits.
+  Offset _fitMultiPointerOrigin(
+    CockpitTargetGeometry geometry,
+    Offset origin,
+    Iterable<Offset> offsets,
+  ) {
+    var minDx = 0.0;
+    var maxDx = 0.0;
+    var minDy = 0.0;
+    var maxDy = 0.0;
+    for (final offset in offsets) {
+      minDx = math.min(minDx, offset.dx);
+      maxDx = math.max(maxDx, offset.dx);
+      minDy = math.min(minDy, offset.dy);
+      maxDy = math.max(maxDy, offset.dy);
+    }
+    final minOriginX = geometry.viewportLeft + 1 - minDx;
+    final maxOriginX = geometry.viewportRight - 1 - maxDx;
+    final minOriginY = geometry.viewportTop + 1 - minDy;
+    final maxOriginY = geometry.viewportBottom - 1 - maxDy;
+    final fittedX = minOriginX <= maxOriginX
+        ? origin.dx.clamp(minOriginX, maxOriginX).toDouble()
+        : geometry.viewportLeft + geometry.viewportWidth / 2;
+    final fittedY = minOriginY <= maxOriginY
+        ? origin.dy.clamp(minOriginY, maxOriginY).toDouble()
+        : geometry.viewportTop + geometry.viewportHeight / 2;
+    return Offset(fittedX, fittedY);
   }
 
   Future<void> _performPanZoom({
@@ -669,43 +773,65 @@ final class CockpitGestureEngine {
       sampleHz: sampleHz,
       frameInterval: frameInterval,
     );
-    _dispatchPanZoomStart(
-      pointer: pointer,
-      geometry: geometry,
-      position: origin,
-      timeStamp: Duration.zero,
-    );
-    await _delay(Duration.zero);
-    if (initialHoldDuration > Duration.zero) {
-      await _delay(initialHoldDuration);
-    }
-    var previousPan = Offset.zero;
-    var previousUs = 0;
-    for (var step = 1; step <= stepCount; step += 1) {
-      final t = step / stepCount;
-      final nextUs = (duration.inMicroseconds * t).round();
-      final pan = delta * t;
-      _dispatchPanZoomUpdate(
+    var active = false;
+    try {
+      _dispatchPanZoomStart(
         pointer: pointer,
         geometry: geometry,
         position: origin,
-        pan: pan,
-        panDelta: pan - previousPan,
-        scale: 1 + ((scale - 1) * t),
-        rotation: rotation * t,
-        timeStamp: initialHoldDuration + Duration(microseconds: nextUs),
+        timeStamp: Duration.zero,
       );
-      previousPan = pan;
-      await _delay(Duration(microseconds: nextUs - previousUs));
-      previousUs = nextUs;
+      active = true;
+      await _delay(Duration.zero);
+      if (initialHoldDuration > Duration.zero) {
+        await _delay(initialHoldDuration);
+      }
+      var previousPan = Offset.zero;
+      var previousUs = 0;
+      for (var step = 1; step <= stepCount; step += 1) {
+        final t = step / stepCount;
+        final nextUs = (duration.inMicroseconds * t).round();
+        final pan = delta * t;
+        _dispatchPanZoomUpdate(
+          pointer: pointer,
+          geometry: geometry,
+          position: origin,
+          pan: pan,
+          panDelta: pan - previousPan,
+          scale: 1 + ((scale - 1) * t),
+          rotation: rotation * t,
+          timeStamp: initialHoldDuration + Duration(microseconds: nextUs),
+        );
+        previousPan = pan;
+        await _delay(Duration(microseconds: nextUs - previousUs));
+        previousUs = nextUs;
+      }
+      _dispatchPanZoomEnd(
+        pointer: pointer,
+        geometry: geometry,
+        position: origin,
+        timeStamp:
+            initialHoldDuration + duration + const Duration(milliseconds: 24),
+      );
+      active = false;
+    } catch (_) {
+      if (active) {
+        try {
+          _dispatchPanZoomEnd(
+            pointer: pointer,
+            geometry: geometry,
+            position: origin,
+            timeStamp:
+                initialHoldDuration +
+                duration +
+                const Duration(milliseconds: 24),
+          );
+        } on Object {
+          // Best effort: preserve the original gesture failure.
+        }
+      }
+      rethrow;
     }
-    _dispatchPanZoomEnd(
-      pointer: pointer,
-      geometry: geometry,
-      position: origin,
-      timeStamp:
-          initialHoldDuration + duration + const Duration(milliseconds: 24),
-    );
     await _delay(Duration.zero);
   }
 
@@ -909,109 +1035,127 @@ final class CockpitGestureEngine {
       frameInterval: frameInterval,
     );
     final previousPositions = <int, Offset>{};
-    for (final pointer in pointerIds) {
-      final start = startOffsets[pointer];
-      final end = endOffsets[pointer];
-      if (start == null || end == null) {
-        throw ArgumentError(
-          'Multi-pointer gestures require matching start and end offsets.',
+    final activePointers = <int, Offset>{};
+    try {
+      for (final pointer in pointerIds) {
+        final start = startOffsets[pointer];
+        final end = endOffsets[pointer];
+        if (start == null || end == null) {
+          throw ArgumentError(
+            'Multi-pointer gestures require matching start and end offsets.',
+          );
+        }
+        previousPositions[pointer] = start;
+        final position = Offset(origin.dx + start.dx, origin.dy + start.dy);
+        _dispatchDown(
+          pointer: pointer,
+          geometry: geometry,
+          position: position,
+          pointerDeviceKind: PointerDeviceKind.touch,
+          buttons: kPrimaryButton,
+          timeStamp: Duration.zero,
         );
+        activePointers[pointer] = position;
       }
-      previousPositions[pointer] = start;
-      _dispatchDown(
-        pointer: pointer,
-        geometry: geometry,
-        position: Offset(origin.dx + start.dx, origin.dy + start.dy),
-        pointerDeviceKind: PointerDeviceKind.touch,
-        buttons: kPrimaryButton,
-        timeStamp: Duration.zero,
-      );
-    }
-    await _delay(Duration.zero);
-    if (initialHoldDuration > Duration.zero) {
-      await _delay(initialHoldDuration);
-    }
-    var previousUs = 0;
-    Future<void> dispatchPhase({
-      required Map<int, Offset> phaseStart,
-      required Map<int, Offset> phaseEnd,
-      required int eventCount,
-      required int durationUs,
-    }) async {
-      final phaseStartUs = previousUs;
-      for (var step = 1; step <= eventCount; step += 1) {
-        final t = step / eventCount;
-        final nextUs = phaseStartUs + (durationUs * t).round();
-        for (final pointer in pointerIds) {
-          final start = phaseStart[pointer];
-          final end = phaseEnd[pointer];
-          if (start == null || end == null) {
-            throw ArgumentError(
-              'Multi-pointer gesture phases require matching pointer offsets.',
+      await _delay(Duration.zero);
+      if (initialHoldDuration > Duration.zero) {
+        await _delay(initialHoldDuration);
+      }
+      var previousUs = 0;
+      Future<void> dispatchPhase({
+        required Map<int, Offset> phaseStart,
+        required Map<int, Offset> phaseEnd,
+        required int eventCount,
+        required int durationUs,
+      }) async {
+        final phaseStartUs = previousUs;
+        for (var step = 1; step <= eventCount; step += 1) {
+          final t = step / eventCount;
+          final nextUs = phaseStartUs + (durationUs * t).round();
+          for (final pointer in pointerIds) {
+            final start = phaseStart[pointer];
+            final end = phaseEnd[pointer];
+            if (start == null || end == null) {
+              throw ArgumentError(
+                'Multi-pointer gesture phases require matching pointer offsets.',
+              );
+            }
+            final previousOffset = previousPositions[pointer]!;
+            final nextOffset = Offset.lerp(start, end, t)!;
+            _dispatchMove(
+              pointer: pointer,
+              geometry: geometry,
+              previousPosition: Offset(
+                origin.dx + previousOffset.dx,
+                origin.dy + previousOffset.dy,
+              ),
+              nextPosition: Offset(
+                origin.dx + nextOffset.dx,
+                origin.dy + nextOffset.dy,
+              ),
+              pointerDeviceKind: PointerDeviceKind.touch,
+              buttons: kPrimaryButton,
+              timeStamp: initialHoldDuration + Duration(microseconds: nextUs),
             );
-          }
-          final previousOffset = previousPositions[pointer]!;
-          final nextOffset = Offset.lerp(start, end, t)!;
-          _dispatchMove(
-            pointer: pointer,
-            geometry: geometry,
-            previousPosition: Offset(
-              origin.dx + previousOffset.dx,
-              origin.dy + previousOffset.dy,
-            ),
-            nextPosition: Offset(
+            previousPositions[pointer] = nextOffset;
+            activePointers[pointer] = Offset(
               origin.dx + nextOffset.dx,
               origin.dy + nextOffset.dy,
-            ),
-            pointerDeviceKind: PointerDeviceKind.touch,
-            buttons: kPrimaryButton,
-            timeStamp: initialHoldDuration + Duration(microseconds: nextUs),
-          );
-          previousPositions[pointer] = nextOffset;
+            );
+          }
+          await _delay(Duration(microseconds: nextUs - previousUs));
+          previousUs = nextUs;
         }
-        await _delay(Duration(microseconds: nextUs - previousUs));
-        previousUs = nextUs;
       }
-    }
 
-    if (recognitionOffsets == null) {
-      await dispatchPhase(
-        phaseStart: startOffsets,
-        phaseEnd: endOffsets,
-        eventCount: stepCount,
-        durationUs: duration.inMicroseconds,
-      );
-    } else {
-      final recognitionStepCount = math.max(2, (stepCount * 0.35).round());
-      final actionStepCount = math.max(2, stepCount - recognitionStepCount);
-      final recognitionDurationUs = (duration.inMicroseconds * 0.35).round();
-      await dispatchPhase(
-        phaseStart: startOffsets,
-        phaseEnd: recognitionOffsets,
-        eventCount: recognitionStepCount,
-        durationUs: recognitionDurationUs,
-      );
+      if (recognitionOffsets == null) {
+        await dispatchPhase(
+          phaseStart: startOffsets,
+          phaseEnd: endOffsets,
+          eventCount: stepCount,
+          durationUs: duration.inMicroseconds,
+        );
+      } else {
+        final recognitionStepCount = math.max(2, (stepCount * 0.35).round());
+        final actionStepCount = math.max(2, stepCount - recognitionStepCount);
+        final recognitionDurationUs = (duration.inMicroseconds * 0.35).round();
+        await dispatchPhase(
+          phaseStart: startOffsets,
+          phaseEnd: recognitionOffsets,
+          eventCount: recognitionStepCount,
+          durationUs: recognitionDurationUs,
+        );
+        await _delay(Duration.zero);
+        await dispatchPhase(
+          phaseStart: recognitionOffsets,
+          phaseEnd: endOffsets,
+          eventCount: actionStepCount,
+          durationUs: duration.inMicroseconds - recognitionDurationUs,
+        );
+      }
+
+      for (final pointer in pointerIds.reversed) {
+        final end = previousPositions[pointer]!;
+        _dispatchUp(
+          pointer: pointer,
+          geometry: geometry,
+          position: Offset(origin.dx + end.dx, origin.dy + end.dy),
+          pointerDeviceKind: PointerDeviceKind.touch,
+          timeStamp:
+              initialHoldDuration + duration + const Duration(milliseconds: 24),
+        );
+        activePointers.remove(pointer);
+      }
       await _delay(Duration.zero);
-      await dispatchPhase(
-        phaseStart: recognitionOffsets,
-        phaseEnd: endOffsets,
-        eventCount: actionStepCount,
-        durationUs: duration.inMicroseconds - recognitionDurationUs,
-      );
-    }
-
-    for (final pointer in pointerIds.reversed) {
-      final end = previousPositions[pointer]!;
-      _dispatchUp(
-        pointer: pointer,
+    } catch (_) {
+      _cancelActivePointers(
+        activePointers,
         geometry: geometry,
-        position: Offset(origin.dx + end.dx, origin.dy + end.dy),
-        pointerDeviceKind: PointerDeviceKind.touch,
         timeStamp:
             initialHoldDuration + duration + const Duration(milliseconds: 24),
       );
+      rethrow;
     }
-    await _delay(Duration.zero);
   }
 
   Future<void> _dispatchPolylineDrag({
@@ -1047,46 +1191,66 @@ final class CockpitGestureEngine {
       ),
     );
 
-    _dispatchDown(
-      pointer: 1,
-      geometry: geometry,
-      position: start,
-      pointerDeviceKind: pointerDeviceKind,
-      buttons: buttons,
-      timeStamp: Duration.zero,
-    );
-    await _delay(Duration.zero);
-    if (holdDuration > Duration.zero) {
-      await _delay(holdDuration);
-    }
-
+    var active = false;
     var previous = start;
-    var previousUs = 0;
-    for (var index = 0; index < sampledPositions.length; index += 1) {
-      final t = (index + 1) / sampledPositions.length;
-      final nextUs = (duration.inMicroseconds * t).round();
-      final next = sampledPositions[index];
-      _dispatchMove(
+    try {
+      _dispatchDown(
         pointer: 1,
         geometry: geometry,
-        previousPosition: previous,
-        nextPosition: next,
+        position: start,
         pointerDeviceKind: pointerDeviceKind,
         buttons: buttons,
-        timeStamp: holdDuration + Duration(microseconds: nextUs),
+        timeStamp: Duration.zero,
       );
-      previous = next;
-      await _delay(Duration(microseconds: nextUs - previousUs));
-      previousUs = nextUs;
-    }
+      active = true;
+      await _delay(Duration.zero);
+      if (holdDuration > Duration.zero) {
+        await _delay(holdDuration);
+      }
 
-    _dispatchUp(
-      pointer: 1,
-      geometry: geometry,
-      position: end,
-      pointerDeviceKind: pointerDeviceKind,
-      timeStamp: holdDuration + duration,
-    );
+      var previousUs = 0;
+      for (var index = 0; index < sampledPositions.length; index += 1) {
+        final t = (index + 1) / sampledPositions.length;
+        final nextUs = (duration.inMicroseconds * t).round();
+        final next = sampledPositions[index];
+        _dispatchMove(
+          pointer: 1,
+          geometry: geometry,
+          previousPosition: previous,
+          nextPosition: next,
+          pointerDeviceKind: pointerDeviceKind,
+          buttons: buttons,
+          timeStamp: holdDuration + Duration(microseconds: nextUs),
+        );
+        previous = next;
+        await _delay(Duration(microseconds: nextUs - previousUs));
+        previousUs = nextUs;
+      }
+
+      _dispatchUp(
+        pointer: 1,
+        geometry: geometry,
+        position: end,
+        pointerDeviceKind: pointerDeviceKind,
+        timeStamp: holdDuration + duration,
+      );
+      active = false;
+    } catch (_) {
+      if (active) {
+        try {
+          _dispatchCancel(
+            pointer: 1,
+            geometry: geometry,
+            position: previous,
+            pointerDeviceKind: pointerDeviceKind,
+            timeStamp: holdDuration + duration,
+          );
+        } on Object {
+          // Best effort: preserve the original gesture failure.
+        }
+      }
+      rethrow;
+    }
     await _delay(Duration.zero);
   }
 
@@ -1479,7 +1643,7 @@ final class CockpitGestureEngine {
       PointerPanZoomStartEvent(
         timeStamp: timeStamp,
         pointer: pointer,
-        device: 0,
+        device: _deviceForKind(PointerDeviceKind.trackpad),
         position: _clampToViewport(geometry, position),
         viewId: geometry.viewId,
       ),
@@ -1500,7 +1664,7 @@ final class CockpitGestureEngine {
       PointerPanZoomUpdateEvent(
         timeStamp: timeStamp,
         pointer: pointer,
-        device: 0,
+        device: _deviceForKind(PointerDeviceKind.trackpad),
         position: _clampToViewport(geometry, position),
         pan: pan,
         panDelta: panDelta,
@@ -1521,7 +1685,7 @@ final class CockpitGestureEngine {
       PointerPanZoomEndEvent(
         timeStamp: timeStamp,
         pointer: pointer,
-        device: 0,
+        device: _deviceForKind(PointerDeviceKind.trackpad),
         position: _clampToViewport(geometry, position),
         viewId: geometry.viewId,
       ),
