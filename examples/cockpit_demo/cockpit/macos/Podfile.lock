@@ -1,5 +1,5 @@
 PODS:
-  - flutter_cockpit (4.6.0):
+  - flutter_cockpit (4.6.1):
     - FlutterMacOS
   - FlutterMacOS (1.0.0)
   - path_provider_foundation (0.0.1):

@@ -207,7 +207,7 @@ Future<Map<String, Object?>> expectBundleExport(
   // A device integration-test process may have `/` as its current directory;
   // use its writable temp area instead of relying on a relative `build/` path.
   final exportPath =
-      '${Directory.systemTemp.path}/cockpit-${title.replaceAll(RegExp(r'[^a-zA-Z0-9_-]+'), '-')}-${pid}-${DateTime.now().microsecondsSinceEpoch}.json';
+      '${Directory.systemTemp.path}/cockpit-${title.replaceAll(RegExp(r'[^a-zA-Z0-9_-]+'), '-')}-$pid-${DateTime.now().microsecondsSinceEpoch}.json';
   final String writtenPath = await cockpit.exportPerformanceJson(
     title: title,
     path: exportPath,
@@ -296,7 +296,7 @@ void main() {
       final CockpitPerformanceArchive
       archive = await cockpit.openPerformanceArchive(
         directory:
-            '${Directory.systemTemp.path}/cockpit-plugin-modes-${pid}-${DateTime.now().microsecondsSinceEpoch}',
+            '${Directory.systemTemp.path}/cockpit-plugin-modes-$pid-${DateTime.now().microsecondsSinceEpoch}',
         name: 'plugin-modes',
       );
       final CockpitPerformanceReport report = await cockpit.profile(
