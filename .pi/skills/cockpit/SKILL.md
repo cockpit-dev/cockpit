@@ -1005,6 +1005,38 @@ CPU, heap, GC, and DevTools data are unavailable there. The complete platform
 commands and the release-harness boundary are in
 [flutter-test.md](references/flutter-test.md).
 
+Black-box `case` files can mark more than one performance segment in the same
+journey. Keep segments sequential and give each a unique name:
+
+```yaml
+target:
+  platform: flutter
+  targetKind: flutterApp
+  plane: semantic
+  buildMode: profile
+steps:
+  - stepId: perf-start
+    startPerformance: {name: open-list, mode: profile}
+  - stepId: open-list
+    action: {type: tap, locator: {text: Open list}}
+  - stepId: perf-stop
+    stopPerformance: {}
+  - stepId: perf-start-checkout
+    startPerformance: {name: checkout, mode: light}
+  - stepId: checkout
+    action: {type: tap, locator: {text: Checkout}}
+  - stepId: perf-stop-checkout
+    stopPerformance: {}
+```
+
+`target.buildMode` checks the selected session's actual `debug`, `profile`, or
+`release` mode; it never substitutes a requested value. `startPerformance.mode`
+is capture density (`light` or `profile`), not the app build mode. Only one
+segment may be active, segments may not overlap, and each completed segment is
+published as `performance/<name>.json`. Failure, cancellation, and timeout
+attempt residual performance cleanup. A target without the advertised
+performance capability is blocked before execution.
+
 For Flutter performance work, use `cockpit.profile` around the smallest
 meaningful interaction. It records the engine's original `FrameTiming` values,
 including vsync and raster-finish wall-time timestamps, and, on native targets,

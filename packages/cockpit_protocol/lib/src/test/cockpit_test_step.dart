@@ -58,6 +58,8 @@ final class CockpitTestStepTemplate {
       'action',
       'startRecording',
       'stopRecording',
+      'startPerformance',
+      'stopPerformance',
       'if',
       'retry',
       'loop',
@@ -95,6 +97,15 @@ final class CockpitTestStepTemplate {
         path: '$path.$operationName',
       ),
       'stopRecording' => CockpitTestStopRecordingOperationTemplate.fromJson(
+        json[operationName],
+        path: '$path.$operationName',
+      ),
+      'startPerformance' =>
+        CockpitTestStartPerformanceOperationTemplate.fromJson(
+          json[operationName],
+          path: '$path.$operationName',
+        ),
+      'stopPerformance' => CockpitTestStopPerformanceOperationTemplate.fromJson(
         json[operationName],
         path: '$path.$operationName',
       ),
@@ -323,6 +334,93 @@ final class CockpitTestStopRecordingOperationTemplate
     return CockpitTestStopRecordingOperationTemplate(
       settleMs: json['settleMs'] == null
           ? 1400
+          : CockpitTestValueReader.integer(
+              json['settleMs'],
+              '$path.settleMs',
+              minimum: 0,
+              maximum: 60000,
+            ),
+    );
+  }
+}
+
+/// Starts an in-app performance capture window.
+///
+/// Performance captures are runner-owned metadata operations rather than
+/// ordinary UI commands. Only one window may be active at a time, but a case
+/// may contain any number of sequential windows.
+final class CockpitTestStartPerformanceOperationTemplate
+    extends CockpitTestOperationTemplate {
+  CockpitTestStartPerformanceOperationTemplate({
+    required this.name,
+    this.mode = 'profile',
+  }) {
+    CockpitTestValueReader.string(name, r'$.name', id: true);
+    if (!const <String>{'light', 'profile'}.contains(mode)) {
+      throw const FormatException('Performance mode must be light or profile.');
+    }
+  }
+
+  final String name;
+  final String mode;
+
+  @override
+  String get wireName => 'startPerformance';
+
+  @override
+  Object? toJson() => <String, Object?>{
+    'name': name,
+    if (mode != 'profile') 'mode': mode,
+  };
+
+  factory CockpitTestStartPerformanceOperationTemplate.fromJson(
+    Object? value, {
+    required String path,
+  }) {
+    final json = CockpitTestValueReader.object(value, path);
+    CockpitTestValueReader.keys(
+      json,
+      const <String>{'name', 'mode'},
+      path,
+      required: const <String>{'name'},
+    );
+    return CockpitTestStartPerformanceOperationTemplate(
+      name: CockpitTestValueReader.string(json['name'], '$path.name', id: true),
+      mode: json['mode'] == null
+          ? 'profile'
+          : CockpitTestValueReader.string(json['mode'], '$path.mode'),
+    );
+  }
+}
+
+/// Stops the currently active performance capture window.
+final class CockpitTestStopPerformanceOperationTemplate
+    extends CockpitTestOperationTemplate {
+  CockpitTestStopPerformanceOperationTemplate({this.settleMs = 0}) {
+    if (settleMs < 0 || settleMs > 60000) {
+      throw const FormatException('stopPerformance settleMs is invalid.');
+    }
+  }
+
+  final int settleMs;
+
+  @override
+  String get wireName => 'stopPerformance';
+
+  @override
+  Object? toJson() => <String, Object?>{
+    if (settleMs != 0) 'settleMs': settleMs,
+  };
+
+  factory CockpitTestStopPerformanceOperationTemplate.fromJson(
+    Object? value, {
+    required String path,
+  }) {
+    final json = CockpitTestValueReader.object(value, path);
+    CockpitTestValueReader.keys(json, const <String>{'settleMs'}, path);
+    return CockpitTestStopPerformanceOperationTemplate(
+      settleMs: json['settleMs'] == null
+          ? 0
           : CockpitTestValueReader.integer(
               json['settleMs'],
               '$path.settleMs',

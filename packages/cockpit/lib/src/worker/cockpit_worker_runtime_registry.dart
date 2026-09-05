@@ -16,6 +16,7 @@ import '../development/cockpit_development_session_handle.dart';
 import '../foundation/cockpit_ids.dart';
 import '../remote/cockpit_remote_automation_adapter.dart';
 import '../remote/cockpit_remote_capture_adapter.dart';
+import '../remote/cockpit_remote_performance_adapter.dart';
 import '../remote/cockpit_remote_recording_adapter.dart';
 import '../remote/cockpit_remote_session_client.dart';
 import '../session/cockpit_remote_session_handle.dart';
@@ -1280,6 +1281,10 @@ final class CockpitWorkerRuntimeRegistry
       try {
         if (!await client.ping() || !await client.ready()) continue;
         final status = await client.readStatus();
+        if (requirements.buildMode != null &&
+            status.buildMode != requirements.buildMode!.name) {
+          continue;
+        }
         final systemDriver = await _secondarySystemDriver(candidate);
         final available = <String>{
           ...status.capabilities.supportedCommands.map(
@@ -1298,12 +1303,16 @@ final class CockpitWorkerRuntimeRegistry
           deviceResourceId: candidate.deviceResourceId,
           resourceId: candidate.resourceId,
           environment: candidate.environment,
+          buildMode: status.buildMode,
           automationAdapter: CockpitRemoteAutomationAdapter(
             client: client,
             workspaceRoot: workspaceRoot,
           ),
           captureAdapter: CockpitRemoteCaptureAdapter(client: client),
           recordingAdapter: CockpitRemoteRecordingAdapter(client: client),
+          performanceAdapter: status.performanceCapture
+              ? CockpitRemotePerformanceAdapter(client: client)
+              : null,
           systemAutomationAdapter: systemDriver?.automation,
           systemCaptureAdapter: systemDriver?.capture,
           systemRecordingAdapter: systemDriver?.recording,

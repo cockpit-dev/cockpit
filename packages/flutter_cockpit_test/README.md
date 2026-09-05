@@ -233,6 +233,31 @@ final report = await cockpit.profile(
 expect(report.summary.jankCount, 0);
 ```
 
+Use `beginPerformance`/`end` when one integration test needs separate
+performance windows. Windows are sequential and each `end` returns the real
+report for that segment; an unclosed window is closed automatically during test
+teardown:
+
+```dart
+final openList = await cockpit.beginPerformance(name: 'open-list');
+await cockpit.tap('Open list');
+final openListReport = await openList.end();
+
+final checkout = await cockpit.beginPerformance(
+  name: 'checkout',
+  mode: CockpitPerformanceMode.light,
+);
+await cockpit.tap('Checkout');
+final checkoutReport = await checkout.end();
+```
+
+`CockpitTestOptions.requiredBuildMode` only verifies the runner's actual
+`debug`, `profile`, or `release` mode. It does not relaunch the app or claim a
+different mode. `flutter test integration_test/...` is debug; use
+`flutter drive --profile --no-dds` for VM-backed profile evidence. The non-web
+Flutter driver rejects release mode, so release performance evidence must come
+from a native release harness.
+
 Native captures also sample process RSS every 100ms by default and retain the
 start/end/min/max/average/peak/delta summary plus the bounded sample timeline.
 Set `memory: false` when the extra process metric is irrelevant; use

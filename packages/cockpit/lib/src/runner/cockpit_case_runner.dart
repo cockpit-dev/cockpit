@@ -3,6 +3,7 @@ import 'package:cockpit_protocol/cockpit_protocol.dart';
 import '../adapters/cockpit_automation_adapter.dart';
 import '../adapters/cockpit_capture_adapter.dart';
 import '../adapters/cockpit_recording_adapter.dart';
+import '../adapters/cockpit_performance_adapter.dart';
 import '../artifacts/cockpit_test_attempt_bundle_writer.dart';
 import '../artifacts/cockpit_test_attempt_recorder.dart';
 import '../infrastructure/cockpit_monotonic_clock.dart';
@@ -21,6 +22,7 @@ final class CockpitCaseRunner {
     required CockpitAutomationAdapter automationAdapter,
     CockpitCaptureAdapter? captureAdapter,
     CockpitRecordingAdapter? recordingAdapter,
+    CockpitPerformanceAdapter? performanceAdapter,
     CockpitAutomationAdapter? systemAutomationAdapter,
     CockpitCaptureAdapter? systemCaptureAdapter,
     CockpitRecordingAdapter? systemRecordingAdapter,
@@ -32,6 +34,7 @@ final class CockpitCaseRunner {
   }) : _automationAdapter = automationAdapter,
        _captureAdapter = captureAdapter,
        _recordingAdapter = recordingAdapter,
+       _performanceAdapter = performanceAdapter,
        _systemAutomationAdapter = systemAutomationAdapter,
        _systemCaptureAdapter = systemCaptureAdapter,
        _systemRecordingAdapter = systemRecordingAdapter,
@@ -44,6 +47,7 @@ final class CockpitCaseRunner {
   final CockpitAutomationAdapter _automationAdapter;
   final CockpitCaptureAdapter? _captureAdapter;
   final CockpitRecordingAdapter? _recordingAdapter;
+  final CockpitPerformanceAdapter? _performanceAdapter;
   final CockpitAutomationAdapter? _systemAutomationAdapter;
   final CockpitCaptureAdapter? _systemCaptureAdapter;
   final CockpitRecordingAdapter? _systemRecordingAdapter;
@@ -61,6 +65,7 @@ final class CockpitCaseRunner {
     required CockpitTestRunContext context,
     required String targetId,
     required CockpitTestTargetEnvironment targetEnvironment,
+    String? targetBuildMode,
     required String reportRoot,
     Map<String, Object?> inputs = const <String, Object?>{},
     CockpitTestExecutionPlan? preparedPlan,
@@ -155,6 +160,7 @@ final class CockpitCaseRunner {
       capabilities: capabilities,
       systemCapabilities: systemCapabilities,
       targetEnvironment: targetEnvironment,
+      targetBuildMode: targetBuildMode,
     );
     if (preflightError != null) {
       return _publishPreparationFailure(
@@ -173,6 +179,7 @@ final class CockpitCaseRunner {
       automationAdapter: _automationAdapter,
       captureAdapter: _captureAdapter,
       recordingAdapter: _recordingAdapter,
+      performanceAdapter: _performanceAdapter,
       secretResolver: _secretResolver,
       safetyPolicy: _safetyPolicy,
       lowerer: _lowerer,
@@ -218,6 +225,7 @@ final class CockpitCaseRunner {
     required CockpitCapabilities capabilities,
     required CockpitCapabilities? systemCapabilities,
     required CockpitTestTargetEnvironment targetEnvironment,
+    required String? targetBuildMode,
   }) async {
     final target = plan.target;
     final acceptsTargetKind = switch (_lowerer.backend) {
@@ -243,6 +251,14 @@ final class CockpitCaseRunner {
         message:
             'Required platform ${target.platform} does not match the '
             'driver platform ${capabilities.platform}.',
+      );
+    }
+    if (target.buildMode != null && target.buildMode!.name != targetBuildMode) {
+      return CockpitTestError(
+        code: CockpitTestErrorCode.targetMismatch,
+        message:
+            'Required build mode ${target.buildMode!.name} does not match '
+            '${targetBuildMode ?? 'unavailable'}.',
       );
     }
     final available = <String>{
@@ -327,6 +343,16 @@ final class CockpitCaseRunner {
           code: CockpitTestErrorCode.unsupportedAction,
           message:
               'Recording is requested but no recording adapter is configured.',
+          stepId: node.stepId,
+        );
+      } else if ((operation is CockpitTestStartPerformancePlanOperation ||
+              operation is CockpitTestStopPerformancePlanOperation) &&
+          _performanceAdapter == null) {
+        return CockpitTestError(
+          code: CockpitTestErrorCode.unsupportedAction,
+          message:
+              'Performance capture is requested but no performance adapter '
+              'is configured.',
           stepId: node.stepId,
         );
       }

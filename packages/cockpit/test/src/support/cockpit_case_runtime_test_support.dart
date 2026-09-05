@@ -119,6 +119,30 @@ final class DeterministicCaseDelegate implements CockpitCaseExecutionDelegate {
   }
 
   @override
+  Future<CockpitTestKernelOperationResult> startPerformance({
+    required CockpitTestExecutionNode node,
+    required CockpitTestStartPerformancePlanOperation operation,
+    required Duration timeout,
+    required bool cleanup,
+    required CockpitCaseOperationLease lease,
+  }) async {
+    events.add('performance:start:${node.stepId}');
+    return const CockpitTestKernelOperationResult.success();
+  }
+
+  @override
+  Future<CockpitTestKernelOperationResult> stopPerformance({
+    required CockpitTestExecutionNode node,
+    required CockpitTestStopPerformancePlanOperation operation,
+    required Duration timeout,
+    required bool cleanup,
+    required CockpitCaseOperationLease lease,
+  }) async {
+    events.add('performance:stop:${node.stepId}');
+    return const CockpitTestKernelOperationResult.success();
+  }
+
+  @override
   Future<CockpitTestKernelOperationResult> cleanupResidual({
     required Duration timeout,
     required CockpitCaseOperationLease lease,

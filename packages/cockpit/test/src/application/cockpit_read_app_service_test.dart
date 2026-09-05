@@ -147,6 +147,60 @@ void main() {
     expect(result.toJson()['selectedPlane'], 'flutterSemanticPlane');
   });
 
+  test('read app preserves performance capability and active capture', () async {
+    final started = DateTime.utc(2026, 9, 5, 12, 0);
+    final service = CockpitReadAppService(
+      remoteStatusService: CockpitReadRemoteStatusService(
+        readStatus: (_) async => CockpitRemoteSessionStatus(
+          sessionId: 'session-1',
+          platform: 'android',
+          transportType: 'remoteHttp',
+          currentRouteName: '/home',
+          capabilities: CockpitCapabilities(
+            platform: 'android',
+            transportType: 'remoteHttp',
+            supportsInAppControl: true,
+            supportsFlutterViewCapture: true,
+            supportsNativeScreenCapture: true,
+            supportsHostAutomation: false,
+          ),
+          recordingCapabilities: CockpitRecordingCapabilities(
+            supportsNativeRecording: true,
+          ),
+          snapshot: CockpitSnapshot(routeName: '/home'),
+          performanceCapture: true,
+          buildMode: 'profile',
+          activePerformance: CockpitPerformanceCaptureSession(
+            request: CockpitPerformanceCaptureRequest(name: 'home'),
+            startedAt: started,
+            buildMode: 'profile',
+          ),
+        ),
+      ),
+    );
+
+    final result = await service.read(
+      CockpitReadAppRequest(
+        app: CockpitAppHandle(
+          appId: 'dev.cockpit.demo',
+          mode: CockpitAppMode.automation,
+          platform: 'android',
+          deviceId: 'emulator-5554',
+          projectDir: '/workspace/examples/cockpit_demo',
+          target: 'cockpit/main.dart',
+          baseUrl: 'http://127.0.0.1:47331',
+          launchedAt: DateTime.utc(2026, 4, 11),
+        ),
+        resultProfile: const CockpitInteractiveResultProfile.minimal(),
+      ),
+    );
+
+    expect(result.performanceCapture, isTrue);
+    expect(result.buildMode, 'profile');
+    expect(result.activePerformance?.request.name, 'home');
+    expect(result.toJson()['activePerformance'], isNotNull);
+  });
+
   test('read app preserves diagnostics artifact download metadata', () async {
     final app = CockpitAppHandle(
       appId: 'dev.cockpit.demo',

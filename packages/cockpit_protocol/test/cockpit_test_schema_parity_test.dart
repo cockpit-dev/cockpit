@@ -16,6 +16,43 @@ void main() {
     );
   });
 
+  test('repository skill schema mirrors stay byte-identical', () {
+    final canonical = File(
+      p.join(_packageRoot().path, 'schema', 'cockpit.test.v2.schema.json'),
+    ).readAsStringSync();
+    final workspaceRoot = Directory(p.dirname(_packageRoot().path)).parent;
+    final mirrorRoots = <String>[
+      'skills/cockpit',
+      '.agents/skills/cockpit',
+      '.claude/skills/cockpit',
+      '.cline/skills/cockpit',
+      '.cursor/skills/cockpit',
+      '.kiro/skills/cockpit',
+      '.omp/skills/cockpit',
+      '.opencode/skills/cockpit',
+      '.pi/skills/cockpit',
+      'plugins/codex/cockpit/skills/cockpit',
+      'plugins/claude-code/cockpit/skills/cockpit',
+      'plugins/kiro/cockpit/skills/cockpit',
+    ];
+    final mirrorPaths = mirrorRoots
+        .map(
+          (root) => p.join(
+            workspaceRoot.path,
+            root,
+            'references',
+            'cockpit.test.v2.schema.json',
+          ),
+        )
+        .toList(growable: false);
+    for (final path in mirrorPaths) {
+      final mirror = File(path);
+      if (mirror.existsSync()) {
+        expect(mirror.readAsStringSync(), canonical, reason: path);
+      }
+    }
+  });
+
   final packageRoot = _packageRoot();
   final schemaPath = p.join(
     packageRoot.path,

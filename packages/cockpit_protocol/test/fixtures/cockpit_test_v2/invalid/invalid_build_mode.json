@@ -1,0 +1,12 @@
+{
+  "schemaVersion": "cockpit.test/v2",
+  "kind": "case",
+  "id": "invalid-build-mode",
+  "target": {
+    "platform": "flutter",
+    "targetKind": "flutterApp",
+    "plane": "semantic",
+    "buildMode": "instrumented"
+  },
+  "steps": []
+}

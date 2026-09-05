@@ -504,6 +504,7 @@ List<CockpitTestDiagnostic> _validate(
   final diagnostics = <CockpitTestDiagnostic>[];
   final stepPaths = <String, String>{};
   final calls = <String, Set<String>>{};
+  final performanceNames = <String, String>{};
   final limits = testCase.defaults.limits;
 
   void add(String code, String message, String path) {
@@ -616,7 +617,23 @@ List<CockpitTestDiagnostic> _validate(
             );
           }
         case CockpitTestStartRecordingOperationTemplate() ||
-            CockpitTestStopRecordingOperationTemplate():
+            CockpitTestStopRecordingOperationTemplate() ||
+            CockpitTestStartPerformanceOperationTemplate() ||
+            CockpitTestStopPerformanceOperationTemplate():
+          if (operation case CockpitTestStartPerformanceOperationTemplate(
+            :final name,
+          )) {
+            final previous = performanceNames[name];
+            if (previous != null) {
+              add(
+                'duplicatePerformanceName',
+                'Performance segment $name is already declared at $previous.',
+                '$stepPath.startPerformance.name',
+              );
+            } else {
+              performanceNames[name] = '$stepPath.startPerformance.name';
+            }
+          }
           break;
       }
     }
@@ -952,7 +969,9 @@ int _expandedStepCount(
           }
         case CockpitTestActionOperationTemplate() ||
             CockpitTestStartRecordingOperationTemplate() ||
-            CockpitTestStopRecordingOperationTemplate():
+            CockpitTestStopRecordingOperationTemplate() ||
+            CockpitTestStartPerformanceOperationTemplate() ||
+            CockpitTestStopPerformanceOperationTemplate():
           break;
       }
     }

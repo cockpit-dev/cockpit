@@ -9,10 +9,12 @@ import 'package:test/test.dart';
 
 void main() {
   setUp(() {
+    cockpitClearActiveHostRecordingSession('macos:dev.cockpit.cockpitDemo');
     cockpitClearActiveHostRecordingSession('macos:com.google.Chrome');
   });
 
   tearDown(() {
+    cockpitClearActiveHostRecordingSession('macos:dev.cockpit.cockpitDemo');
     cockpitClearActiveHostRecordingSession('macos:com.google.Chrome');
   });
 

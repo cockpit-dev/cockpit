@@ -37,6 +37,10 @@ final class CockpitReadAppResult {
     required this.transportType,
     required this.capabilities,
     required this.recordingCapabilities,
+    this.activeRecording,
+    this.activePerformance,
+    this.performanceCapture = false,
+    this.buildMode,
     this.selectedPlane = CockpitPlaneKind.flutterSemanticPlane,
     this.fallbackTrail = const <CockpitPlaneKind>[],
     this.recommendedNextStep = 'runNextCommand',
@@ -57,6 +61,10 @@ final class CockpitReadAppResult {
   final String transportType;
   final CockpitCapabilities capabilities;
   final CockpitRecordingCapabilities recordingCapabilities;
+  final CockpitRecordingSession? activeRecording;
+  final CockpitPerformanceCaptureSession? activePerformance;
+  final bool performanceCapture;
+  final String? buildMode;
   final CockpitPlaneKind selectedPlane;
   final List<CockpitPlaneKind> fallbackTrail;
   final String recommendedNextStep;
@@ -77,6 +85,11 @@ final class CockpitReadAppResult {
     'transportType': transportType,
     'capabilities': capabilities.toJson(),
     'recordingCapabilities': recordingCapabilities.toJson(),
+    if (activeRecording != null) 'activeRecording': activeRecording!.toJson(),
+    if (activePerformance != null)
+      'activePerformance': activePerformance!.toJson(),
+    if (performanceCapture) 'performanceCapture': true,
+    if (buildMode != null) 'build': buildMode,
     'selectedPlane': selectedPlane.name,
     'fallbackTrail': fallbackTrail.map((planeKind) => planeKind.name).toList(),
     'recommendedNextStep': recommendedNextStep,
@@ -156,6 +169,10 @@ final class CockpitReadAppService {
       transportType: result.transportType,
       capabilities: capabilities,
       recordingCapabilities: recordingCapabilities,
+      activeRecording: result.activeRecording,
+      activePerformance: result.activePerformance,
+      performanceCapture: result.performanceCapture,
+      buildMode: result.buildMode,
       selectedPlane: _selectedPlaneFor(capabilities),
       fallbackTrail: _fallbackTrailFor(capabilities),
       recommendedNextStep: _recommendedNextStep(

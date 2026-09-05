@@ -85,7 +85,16 @@ void cockpitTestWidgets(
       options: options,
       startup: startup,
     );
+    final requiredBuildMode = options.requiredBuildMode;
+    if (requiredBuildMode != null &&
+        cockpit.buildMode != requiredBuildMode.name) {
+      fail(
+        'This test requires ${requiredBuildMode.name} mode, but the runner '
+        'is using ${cockpit.buildMode}.',
+      );
+    }
     addTearDown(() async {
+      await cockpit._closeManualPerformanceCaptures();
       _publishIntegrationReport(cockpit.report);
       await cockpit._closePerformanceArchives();
       await cockpit.debugger.close();
@@ -174,6 +183,20 @@ final class _CockpitQueuedPump {
   final Zone zone;
 }
 
+/// A manually delimited performance capture window.
+final class CockpitPerformanceCapture {
+  CockpitPerformanceCapture._({
+    required Future<CockpitPerformanceReport> Function() endAction,
+  }) : _endAction = endAction;
+
+  final Future<CockpitPerformanceReport> Function() _endAction;
+  Future<CockpitPerformanceReport>? _result;
+
+  /// Ends this window and returns its report. Repeated calls share one result.
+  Future<CockpitPerformanceReport> end() =>
+      _result ??= Future<CockpitPerformanceReport>.sync(_endAction);
+}
+
 /// A compact, selector-first facade over Cockpit's in-app command executor.
 final class CockpitTester {
   CockpitTester._({
@@ -205,6 +228,13 @@ final class CockpitTester {
   /// Supported app-native capture, recording, and viewport controls.
   final CockpitNativeTester native;
 
+  /// The actual Flutter build mode selected by the test runner.
+  String get buildMode => kDebugMode
+      ? 'debug'
+      : kProfileMode
+      ? 'profile'
+      : 'release';
+
   /// Flutter visual, timeline, overlay, and animation switches mirrored from
   /// the DevTools controls.
   late final CockpitDebugTools debug = CockpitDebugTools();
@@ -225,6 +255,8 @@ final class CockpitTester {
       <CockpitPerformanceReport>[];
   final Set<CockpitPerformanceArchive> _performanceArchives =
       <CockpitPerformanceArchive>{};
+  final List<CockpitPerformanceCapture> _manualCaptures =
+      <CockpitPerformanceCapture>[];
   late final _CockpitTestPumpQueue _pumpQueue = _CockpitTestPumpQueue(
     flutter.pump,
   );
@@ -356,6 +388,107 @@ final class CockpitTester {
   }
 
   var _sequence = 0;
+
+  /// Opens a performance capture window that can be closed later with
+  /// [CockpitPerformanceCapture.end]. Multiple windows may be opened in one
+  /// test, but they are intentionally sequential: a new window cannot start
+  /// until the previous one has ended.
+  Future<CockpitPerformanceCapture> beginPerformance({
+    String name = 'performance',
+    CockpitPerformanceMode mode = CockpitPerformanceMode.profile,
+    List<String> streams = const <String>['all'],
+    bool timeline = true,
+    bool memory = true,
+    bool vmMemory = true,
+    bool cpu = true,
+    bool heap = true,
+    List<String> allocationClassIds = const <String>[],
+    bool perfetto = false,
+    Duration sampleEvery = const Duration(milliseconds: 100),
+    int maxEvents = 200000,
+    int maxCpuSamples = 50000,
+    int maxHeapClasses = 200,
+    int maxHeapSamples = 10000,
+    bool trackBuilds = false,
+    bool trackUserBuilds = false,
+    bool trackLayouts = false,
+    bool trackPaints = false,
+    bool trackRebuilds = false,
+    bool logs = true,
+    bool debug = true,
+    int maxRebuildFrames = 10000,
+    int maxRebuildEntries = 100000,
+    int maxLogs = 2000,
+    int maxDebug = 2000,
+    List<CockpitPerformancePlugin> plugins = const <CockpitPerformancePlugin>[],
+    CockpitPerformanceArchive? archive,
+    Duration? timeout,
+  }) async {
+    final finished = Completer<void>();
+    final started = Completer<CockpitPerformanceCapture>();
+    late Future<CockpitPerformanceReport> reportFuture;
+    final capture = CockpitPerformanceCapture._(
+      endAction: () {
+        if (!finished.isCompleted) finished.complete();
+        return reportFuture;
+      },
+    );
+    _manualCaptures.add(capture);
+    reportFuture = profile(
+      () => finished.future,
+      name: name,
+      mode: mode,
+      streams: streams,
+      timeline: timeline,
+      memory: memory,
+      vmMemory: vmMemory,
+      cpu: cpu,
+      heap: heap,
+      allocationClassIds: allocationClassIds,
+      perfetto: perfetto,
+      sampleEvery: sampleEvery,
+      maxEvents: maxEvents,
+      maxCpuSamples: maxCpuSamples,
+      maxHeapClasses: maxHeapClasses,
+      maxHeapSamples: maxHeapSamples,
+      trackBuilds: trackBuilds,
+      trackUserBuilds: trackUserBuilds,
+      trackLayouts: trackLayouts,
+      trackPaints: trackPaints,
+      trackRebuilds: trackRebuilds,
+      logs: logs,
+      debug: debug,
+      maxRebuildFrames: maxRebuildFrames,
+      maxRebuildEntries: maxRebuildEntries,
+      maxLogs: maxLogs,
+      maxDebug: maxDebug,
+      plugins: plugins,
+      archive: archive,
+      timeout: timeout,
+      onStarted: () {
+        if (!started.isCompleted) started.complete(capture);
+      },
+    );
+    reportFuture.then<void>(
+      (_) {},
+      onError: (Object error, StackTrace stackTrace) {
+        if (!started.isCompleted) started.completeError(error, stackTrace);
+      },
+    );
+    return started.future;
+  }
+
+  Future<void> _closeManualPerformanceCaptures() async {
+    for (final capture in List<CockpitPerformanceCapture>.of(_manualCaptures)) {
+      try {
+        await capture.end();
+      } on Object {
+        // Preserve the primary test result; the profile future owns its error.
+      }
+    }
+    _manualCaptures.clear();
+  }
+
   late final InAppCockpitCommandExecutor _executor = root.createCommandExecutor(
     platform: options.platform,
     transportType: 'inAppTest',
@@ -710,6 +843,7 @@ final class CockpitTester {
     List<CockpitPerformancePlugin> plugins = const <CockpitPerformancePlugin>[],
     CockpitPerformanceArchive? archive,
     Duration? timeout,
+    void Function()? onStarted,
   }) async {
     final normalizedName = name.trim();
     if (normalizedName.isEmpty) {
@@ -919,6 +1053,7 @@ final class CockpitTester {
         timelineStreams: List<String>.unmodifiable(streams),
         streamTimeline: archive != null && canTraceTimeline,
       );
+      onStarted?.call();
       var timelineSource = collectTimeline
           ? kIsWeb
                 ? 'unavailable:web'

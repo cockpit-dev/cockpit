@@ -170,6 +170,24 @@ final class CockpitTestStopRecordingPlanOperation
   final int settleMs;
 }
 
+final class CockpitTestStartPerformancePlanOperation
+    extends CockpitTestPlanOperation {
+  const CockpitTestStartPerformancePlanOperation({
+    required this.name,
+    required this.mode,
+  });
+
+  final String name;
+  final String mode;
+}
+
+final class CockpitTestStopPerformancePlanOperation
+    extends CockpitTestPlanOperation {
+  const CockpitTestStopPerformancePlanOperation({required this.settleMs});
+
+  final int settleMs;
+}
+
 final class CockpitTestIfPlanOperation extends CockpitTestPlanOperation {
   CockpitTestIfPlanOperation({
     required this.condition,

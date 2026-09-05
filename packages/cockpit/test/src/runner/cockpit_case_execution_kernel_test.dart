@@ -527,6 +527,50 @@ void main() {
     expect(result.primaryError?.code, CockpitTestErrorCode.timeout);
     expect(delegate.events, isNot(contains('recording:stop:stopRecording')));
   });
+
+  test('multiple performance segments execute in order', () async {
+    final clock = ManualCockpitClock();
+    final delegate = DeterministicCaseDelegate();
+    final recorder = CockpitTestAttemptRecorder(clock: clock);
+    final result = await _kernel(clock, delegate, recorder).run(
+      plan: testExecutionPlan(
+        steps: <CockpitTestExecutionNode>[
+          _controlNode(
+            'startOne',
+            const CockpitTestStartPerformancePlanOperation(
+              name: 'first',
+              mode: 'profile',
+            ),
+          ),
+          _controlNode(
+            'stopOne',
+            const CockpitTestStopPerformancePlanOperation(settleMs: 0),
+          ),
+          _controlNode(
+            'startTwo',
+            const CockpitTestStartPerformancePlanOperation(
+              name: 'second',
+              mode: 'light',
+            ),
+          ),
+          _controlNode(
+            'stopTwo',
+            const CockpitTestStopPerformancePlanOperation(settleMs: 0),
+          ),
+        ],
+      ),
+      control: CockpitCaseExecutionControl(),
+    );
+
+    expect(result.outcome, CockpitTestOutcome.passed);
+    expect(delegate.events, <String>[
+      'performance:start:startOne',
+      'performance:stop:stopOne',
+      'performance:start:startTwo',
+      'performance:stop:stopTwo',
+      'cleanup:residual',
+    ]);
+  });
 }
 
 CockpitCaseExecutionKernel _kernel(

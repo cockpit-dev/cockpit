@@ -1,0 +1,19 @@
+{
+  "schemaVersion": "cockpit.test/v2",
+  "kind": "case",
+  "id": "invalid-performance-mode",
+  "target": {
+    "platform": "flutter",
+    "targetKind": "flutterApp",
+    "plane": "semantic"
+  },
+  "steps": [
+    {
+      "stepId": "start",
+      "startPerformance": {
+        "name": "capture",
+        "mode": "heavy"
+      }
+    }
+  ]
+}
