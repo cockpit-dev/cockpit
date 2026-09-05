@@ -1,5 +1,11 @@
 # Changelog
 
+## 4.5.0
+
+- Added sequential segmented performance capture for Flutter and black-box
+  journeys, including build-mode validation, session status, and automatic
+  cleanup after failures, cancellation, or timeout.
+
 ## 4.4.6
 
 - Aligns the supervisor package with the validated 4.4.6 protocol release.

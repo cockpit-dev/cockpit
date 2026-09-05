@@ -1,5 +1,10 @@
 # Changelog
 
+## 4.5.0
+
+- Added multiple ordered performance segments per integration test with
+  profile/debug/release validation and automatic cleanup on failed runs.
+
 ## 4.4.6
 
 - Aligns the performance test facade with the published performance schema and

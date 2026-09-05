@@ -1,5 +1,10 @@
 # Changelog
 
+## 4.5.0
+
+- Added strict protocol contracts and schema coverage for segmented performance
+  captures, including profile/debug/release build modes and session metadata.
+
 ## 4.4.6
 
 - Published the complete `cockpit.performance/v2` schema and validated both

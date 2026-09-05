@@ -824,7 +824,9 @@ final class CockpitCaseDriverDelegate implements CockpitCaseExecutionDelegate {
     }
   }
 
-  Future<void> _stopUnownedPerformance(CockpitPerformanceAdapter adapter) async {
+  Future<void> _stopUnownedPerformance(
+    CockpitPerformanceAdapter adapter,
+  ) async {
     try {
       await adapter.stopPerformance();
     } catch (_) {
