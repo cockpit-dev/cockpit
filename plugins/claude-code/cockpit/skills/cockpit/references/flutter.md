@@ -220,10 +220,19 @@ of guessing. Execute only the selector whose own `can` advertises the command.
 
 Selectors are conjunctive: `#id`, `@key`, `Type["text"]`, named filters such as
 `[tip="Save"][route="/edit"]`, and ancestor chains such as
-`Dialog >> TextButton["Continue"]`. `[*="text"]` and `[~="text"]` opt into
+`Dialog >> TextButton["Continue"]`. Public branching scopes are retained even
+without keys or Semantics, so layered UI can use selectors such as
+`Stack >> Positioned >> TextButton["Buy"]`,
+`Stack >> Stack >> TextButton["Buy"]`, or
+`Overlay >> MenuItemButton["Delete"]`. Anchored portal content can further use
+`OverlayPortal >> CompositedTransformFollower >> Text["Help"]`. `[*="text"]` and `[~="text"]` opt into
 contains and fuzzy matching. `:nth(2)` is 1-based and only for stable ordered
-items. Equal candidates remain ambiguous. The source-defined live postcondition,
-not command success alone, proves the action.
+items. For equal actionable matches, Cockpit uses a real hit test only when it
+identifies exactly one visible winner (for example, a popup above the page);
+otherwise it returns `ambiguousTarget` and requires a stronger scope or index.
+Inactive `IndexedStack`/`Visibility` layers are excluded even when Flutter
+keeps their elements mounted. The source-defined live postcondition, not
+command success alone, proves the action.
 
 Use the tree only when target inspection is insufficient:
 

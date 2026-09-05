@@ -178,6 +178,48 @@ void main() {
     );
   });
 
+  test('streamed compact report validates archive frame count', () {
+    final summary = CockpitPerformanceSummary.fromFrames(
+      frames,
+      frameBudgetUs: 16667,
+    );
+    final start = DateTime.utc(2026, 1, 1);
+    final json = <String, Object?>{
+      'schema': 'cockpit.performance/v2',
+      'started': start.toIso8601String(),
+      'finished': start.add(const Duration(milliseconds: 10)).toIso8601String(),
+      'durationUs': 10000,
+      'durationMs': 10,
+      'platform': 'test',
+      'build': 'profile',
+      'mode': 'light',
+      'summary': summary.toJson(),
+      'dropped': <String, Object?>{'frames': 2},
+      'stream': <String, Object?>{
+        'fmt': 'jsonl',
+        'mode': 'lossless',
+        'state': 'done',
+        'manifest': '/tmp/cockpit/performance/manifest.json',
+        'frames': 4,
+      },
+    };
+    final report = CockpitPerformanceReport.fromJson(json);
+    expect(report.frames, isEmpty);
+    expect(report.summary.frameCount, 2);
+    expect(report.archive!.frames, 4);
+
+    expect(
+      () => CockpitPerformanceReport.fromJson(<String, Object?>{
+        ...json,
+        'stream': <String, Object?>{
+          ...(json['stream']! as Map<String, Object?>),
+          'frames': 3,
+        },
+      }),
+      throwsFormatException,
+    );
+  });
+
   test('round trip preserves raw frame timestamps and compact fields', () {
     final summary = CockpitPerformanceSummary.fromFrames(
       frames,

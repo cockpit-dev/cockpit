@@ -422,16 +422,26 @@ final class _JsonlPerformanceArchive
   }
 
   String _relativeToRoot(String path) {
-    final root = _root.absolute.path;
-    final absolute = File(path).absolute.path;
-    final prefix = root.endsWith(Platform.pathSeparator)
-        ? root
-        : '$root${Platform.pathSeparator}';
-    if (!absolute.startsWith(prefix)) return absolute;
-    return absolute
-        .substring(prefix.length)
-        .replaceAll(Platform.pathSeparator, '/');
+    final root = _portablePath(_root.absolute.path);
+    final absolute = _portablePath(File(path).absolute.path);
+    // Windows paths are case-insensitive and Dart may return either slash
+    // direction depending on which API produced the path. Normalize before
+    // comparing so portable manifests never leak an in-root absolute path.
+    final comparisonRoot = Platform.isWindows ? root.toLowerCase() : root;
+    final comparisonAbsolute = Platform.isWindows
+        ? absolute.toLowerCase()
+        : absolute;
+    final prefix = comparisonRoot == '/'
+        ? '/'
+        : comparisonRoot.endsWith('/')
+        ? comparisonRoot
+        : '$comparisonRoot/';
+    if (comparisonAbsolute == comparisonRoot) return '';
+    if (!comparisonAbsolute.startsWith(prefix)) return absolute;
+    return absolute.substring(prefix.length);
   }
+
+  String _portablePath(String path) => path.replaceAll('\\', '/');
 }
 
 final class _ArchiveRecord {

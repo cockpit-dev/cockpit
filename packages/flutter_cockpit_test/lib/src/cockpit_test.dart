@@ -1216,9 +1216,12 @@ final class CockpitTester {
         // independent in streaming mode, then apply one deterministic report
         // budget after both sources are available.
         final pluginEvents = await pluginCapture.stop(
-          maxEvents: archive == null
-              ? maxEvents - parsed.events.length
-              : maxEvents,
+          // The final report budget is applied by [_boundPerformanceEvents]
+          // after VM and plugin events are merged. Giving the plugin the
+          // timeline's remaining budget here makes collection order affect
+          // plugin stats (and can report false plugin drops), especially when
+          // the VM timeline already filled the bound.
+          maxEvents: maxEvents,
         );
         final bounded = _boundPerformanceEvents(
           timeline: parsed.events,

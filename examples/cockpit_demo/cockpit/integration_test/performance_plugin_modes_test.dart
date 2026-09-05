@@ -204,9 +204,16 @@ Future<Map<String, Object?>> expectBundleExport(
   required bool streamed,
   String? Function(Map<String, Object?> report)? extraReportChecks,
 }) async {
-  final String exportPath = await cockpit.exportPerformanceJson(title: title);
+  // A device integration-test process may have `/` as its current directory;
+  // use its writable temp area instead of relying on a relative `build/` path.
+  final exportPath =
+      '${Directory.systemTemp.path}/cockpit-${title.replaceAll(RegExp(r'[^a-zA-Z0-9_-]+'), '-')}-${pid}-${DateTime.now().microsecondsSinceEpoch}.json';
+  final String writtenPath = await cockpit.exportPerformanceJson(
+    title: title,
+    path: exportPath,
+  );
   final Map<String, Object?> bundle =
-      jsonDecode(File(exportPath).readAsStringSync()) as Map<String, Object?>;
+      jsonDecode(File(writtenPath).readAsStringSync()) as Map<String, Object?>;
   final List<Map<String, Object?>> bundleReports =
       (bundle['reports']! as List<Object?>).cast<Map<String, Object?>>();
   expect(bundleReports, hasLength(1));
@@ -286,8 +293,12 @@ void main() {
     },
     body: (CockpitTester cockpit) async {
       final taskTitle = 'Plugin instrumented flow - streamed';
-      final CockpitPerformanceArchive archive = await cockpit
-          .openPerformanceArchive(name: 'plugin-modes');
+      final CockpitPerformanceArchive
+      archive = await cockpit.openPerformanceArchive(
+        directory:
+            '${Directory.systemTemp.path}/cockpit-plugin-modes-${pid}-${DateTime.now().microsecondsSinceEpoch}',
+        name: 'plugin-modes',
+      );
       final CockpitPerformanceReport report = await cockpit.profile(
         () => runComplexFlow(cockpit, taskTitle),
         name: 'plugin-streamed',
@@ -332,8 +343,21 @@ void main() {
       expect(manifest['frames'], closedInfo.frames);
       expect(manifest['bytes'], closedInfo.bytes);
       final List<String> chunkPaths = (manifest['chunks']! as List<Object?>)
-          .cast<String>();
-      expect(chunkPaths, closedInfo.chunks);
+          .cast<String>()
+          .map(
+            (path) => File(path).isAbsolute
+                ? File(path).absolute.path
+                : File(
+                    '${File(closedInfo.manifest).parent.path}/$path',
+                  ).absolute.path,
+          )
+          .toList(growable: false);
+      expect(
+        chunkPaths,
+        closedInfo.chunks
+            .map((path) => File(path).absolute.path)
+            .toList(growable: false),
+      );
 
       final Map<String, int> kindCounts = <String, int>{};
       final List<Map<String, Object?>> streamEvents = <Map<String, Object?>>[];

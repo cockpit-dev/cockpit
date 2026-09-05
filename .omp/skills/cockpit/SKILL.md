@@ -730,6 +730,9 @@ Selector quick reference:
 | Source-only custom type | `[type="CompanyIconButton"]` |
 | Multiple conditions | `#save[type="FilledButton"][route="/edit"]` |
 | Ancestor scope | `Dialog >> FilledButton["Continue"]` |
+| Layered Stack scope | `Stack >> Positioned >> TextButton["Buy"]` |
+| Nested branch scope | `Stack >> Stack >> TextButton["Buy"]` |
+| Popup/overlay scope | `Overlay >> MenuItemButton["Delete"]` |
 | Keyed row scope | `@task-row >> FilledButton["Open"]` |
 | Contains / fuzzy text | `[*="Save"]` / `[~="Svae"]` |
 | Contains / fuzzy tooltip | `[tip*="Save"]` / `[tip~="Svae"]` |
@@ -737,8 +740,15 @@ Selector quick reference:
 
 Selector string values use JSON quoting and `:nth()` is 1-based. Plain positional
 text is exact. Prefer `#id`, exact text, `@key`, type/ancestor, route, then path;
-use `:nth()` only for a real ordered list. Do not invent selector syntax: use the
-table or copy `sel` from `inspect`.
+use `:nth()` only for a real ordered list. Public branching scopes such as
+`Stack`, `Positioned`, `IndexedStack`, `Overlay`, `OverlayPortal`,
+`CompositedTransformTarget`, `CompositedTransformFollower`, `Flow`, and
+`CustomMultiChildLayout` are retained in key-free paths so nested overlays and
+custom layouts can be addressed without adding test-only keys. Equal actionable
+matches use hit testing only when exactly one visible control wins; otherwise
+Cockpit returns `ambiguousTarget`. Inactive `IndexedStack`/`Visibility` layers
+are excluded even when their elements remain mounted. Do not invent selector
+syntax: use the table or copy `sel` from `inspect`.
 
 ```bash
 cockpit dev inspect
@@ -1047,21 +1057,33 @@ Tune collection only when it changes the decision: `sampleEvery` controls native
 RSS frequency, `streams` and `timeline` select VM tracing, `memory` disables RSS,
 and `maxEvents` bounds retained VM events. Keep the defaults for normal captures;
 use a shorter interval or narrower streams only for a targeted investigation.
+Normal in-memory retention is intentionally compact (20,000 timeline events,
+20,000 CPU samples, 2,000 heap samples, and 2,000 rebuild frames); it does not
+reduce the lossless JSONL archive when `archive` is supplied.
 Short captures may keep the complete report in memory. For multi-hour flows,
 open a `CockpitPerformanceArchive` and pass it as `archive` so records stream
 to rotating JSONL chunks while the report remains a quick in-memory projection.
-The explicit archive defaults to lossless; choose `low` with
-`maxPendingBytes` only when a runner needs a hard queue bound and accepts
-counted drops. The manifest path is the entry point for the complete stream.
+The explicit archive defaults to lossless. Set `maxPendingBytes` to tune the
+in-memory back-pressure window: `lossless` spills excess records to a
+recoverable JSONL sidecar, while `low` drops and counts records beyond the
+bound. The manifest path is the entry point for the complete stream; its chunk
+entries are relative to the manifest, so a downloaded CI artifact directory
+can be moved without rewriting paths.
+Combine manifests or individual JSONL chunks from multiple platform/CI runs
+with `CockpitPerformanceArchive.merge([...])`; it validates and rewrites the
+stream incrementally, preserves each source order, and namespaces duplicate
+capture handles. It does not globally sort events from different devices
+because their monotonic clocks are unrelated.
 A standalone HTML opened with `file://` can read only its embedded payload; it
 cannot silently read arbitrary project JSON/JSONL paths. Use an HTTP server or
 a browser file picker for external JSONL files, and load chunks incrementally
 instead of embedding a multi-gigabyte stream.
-The complete bounded report is stored in
+The bounded result is stored in
 `IntegrationTestWidgetsFlutterBinding.reportData` under
-`cockpit.performance.NAME`; normal Cockpit output stays compact. `dropped`
-counts expose retention limits; aggregates describe retained frames when a
-retention limit is reached. Empty phases omit duration aggregates, `fps` is
+`cockpit.performance.NAME`; normal Cockpit output stays compact. With a JSONL
+archive, the result omits retained frame/event arrays and the manifest/chunks
+are the lossless source of truth. `dropped` counts expose retention limits;
+aggregates describe retained frames when a retention limit is reached. Empty phases omit duration aggregates, `fps` is
 omitted when source timestamps cannot prove a strictly increasing cadence, and
 Web reports VM timeline as `unavailable:web`. Treat missing metrics as
 unavailable, never as zero. Reports include the Flutter build mode. Debug
