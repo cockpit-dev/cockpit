@@ -92,6 +92,15 @@ same input as a mouse or trackpad. Its `delta` is per event; use `steps` and
 `interval` for a bounded sequence, `device` for device-kind-sensitive code,
 and `at` only when the signal owner is not discoverable as a mounted target.
 
+Complex gestures may be concurrent inside one sequence: use `multiTouch` for
+two fingers down at the same timestamp, a held pointer plus another pointer's
+drag, crosshair tracking while the chart is zoomed, or any gesture that must
+preserve pointer lifetimes. Do not run two mutating Cockpit calls with
+`Future.wait`; the executor serializes complete commands to protect Flutter's
+test guard, route state, and pointer lifecycle. A `watch` or `profile` window
+may run around the gesture as an observer, but it must not inject extra pumps
+or sleeps into the gesture itself.
+
 ```dart
 await cockpit.longPress('#card', duration: const Duration(milliseconds: 900));
 await cockpit.doubleTap('#card', interval: const Duration(milliseconds: 120));
@@ -259,6 +268,11 @@ bound is reached; those aggregates describe the retained sample only. Empty
 phases omit duration aggregates rather than reporting a fabricated zero, and
 `fps` is omitted unless the original timestamps establish a strictly increasing
 cadence. Never interpret omitted or unavailable metrics as zero.
+
+Normal in-memory captures use compact retention defaults (20,000 timeline
+events, 20,000 CPU samples, 2,000 heap samples, and 2,000 rebuild frames).
+These are retention limits, not sampling limits; use `CockpitPerformanceArchive`
+for long or high-volume flows when the complete JSONL stream is required.
 The same VM capture also retains the data behind the DevTools runtime views:
 `devtools.heap.samples` is a bounded used/capacity/external heap timeline;
 `devtools.isolate` contains the selected isolate plus all-isolate before/after
@@ -288,13 +302,21 @@ await cockpit.profile(
 
 The archive writes frames, VM/plugin events, RSS and heap samples, logs, and
 debug records incrementally. It rotates 64 MiB JSONL chunks and updates one
-manifest path. The default `lossless` mode leaves the pending queue uncapped
-and preserves every accepted record. If a constrained runner needs a hard
-queue bound, choose `CockpitPerformanceArchiveMode.low` and set
-`maxPendingBytes`; drops are counted rather than hidden. Chunk size, flush and
-poll intervals, and the queue limit are configurable. Use
+manifest path. Manifest chunk entries are relative to the manifest, so a CI
+artifact directory can be moved without rewriting paths; the Dart info object
+still exposes absolute local paths. The default `lossless` mode preserves every accepted record;
+when a flush is slow, records beyond the in-memory window spill to a
+recoverable JSONL sidecar. Set `maxPendingBytes` to tune that window. In
+`low` mode records beyond the bound are dropped and counted rather than
+hidden. Chunk size, flush and poll intervals, and the queue limit are
+configurable. Use
 `exportPerformanceJsonl()` for completed reports. The HTML viewer displays
 archive metadata and paths, not the entire multi-gigabyte stream.
+Use `CockpitPerformanceArchive.merge([...])` to combine manifests or JSONL
+chunks from Android, iOS, macOS, or CI workers into a new streamed archive. It
+reads incrementally, validates record envelopes, preserves each source's
+order, and namespaces duplicate capture ids. It does not globally sort events
+from different devices because their monotonic clocks are unrelated.
 `devtools.display` records the Flutter engine's effective refresh rate, derived
 frame budget, and selected Flutter view. Set `trackRebuilds: true` only when
 you need DevTools-compatible `Flutter.RebuiltWidgets` frame counts and source

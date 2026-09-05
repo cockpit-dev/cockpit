@@ -648,12 +648,24 @@ jobs:
             test >"$WDA_LOG" 2>&1 &
           WDA_PID=$!
           echo "WDA_PID=$WDA_PID" >> "$GITHUB_ENV"
-          echo 'IOS_WDA_URL=http://127.0.0.1:8100' >> "$GITHUB_ENV"
+          # WDA may advertise the simulator's reachable host address instead
+          # of loopback (for example 192.168.x.x:8100). Use the address it
+          # actually publishes, falling back to loopback only when no URL has
+          # appeared yet. Hard-coding 127.0.0.1 can make the later native
+          # locator probe report a false unavailable capability.
           for _ in $(seq 1 600); do
-            if curl --silent --fail \
-              http://127.0.0.1:8100/status >/dev/null; then
-              exit 0
-            fi
+            WDA_URL="$(sed -n 's/.*ServerURLHere->\(https\?:\/\/[^<]*\)<-ServerURLHere.*/\1/p' "$WDA_LOG" | tail -1)"
+            candidates=()
+            if [[ -n "$WDA_URL" ]]; then candidates+=("$WDA_URL"); fi
+            candidates+=("http://127.0.0.1:8100")
+            for candidate in "${candidates[@]}"; do
+              if curl --silent --fail --max-time 2 \
+                "$candidate/status" >/dev/null; then
+                echo "IOS_WDA_URL=$candidate" >> "$GITHUB_ENV"
+                echo "WebDriverAgent reachable at $candidate"
+                exit 0
+              fi
+            done
             if ! kill -0 "$WDA_PID" 2>/dev/null; then
               tail -200 "$WDA_LOG" >&2
               exit 1
@@ -750,7 +762,11 @@ jobs:
         if: always() && matrix.platform == 'windows'
         shell: pwsh
         run: |
-          $source = Join-Path $env:COCKPIT_WINDOWS_WORKSPACE 'examples\cockpit_demo\cockpit\build\windows\x64'
+          $workspace = $env:COCKPIT_WINDOWS_WORKSPACE
+          if ([string]::IsNullOrWhiteSpace($workspace)) {
+            $workspace = $env:GITHUB_WORKSPACE
+          }
+          $source = Join-Path $workspace 'examples\cockpit_demo\cockpit\build\windows\x64'
           $destination = Join-Path $env:ACCEPTANCE_OUTPUT 'cmake'
           New-Item -ItemType Directory -Path $destination -Force | Out-Null
           @(

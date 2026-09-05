@@ -1012,9 +1012,21 @@ final class CockpitPerformanceReport {
         'Performance report duration is inconsistent.',
       );
     }
-    if (summary.frameCount != this.frames.length) {
+    // A streamed integration-test result intentionally omits the retained
+    // frame array from the in-memory payload; the JSONL archive is the source
+    // of truth for those samples. Full/non-streamed reports still require an
+    // exact summary-to-array match, while compact streamed reports validate
+    // the archive's complete frame count against retained and dropped frames.
+    final compactStream = archive != null && this.frames.isEmpty;
+    if (!compactStream && summary.frameCount != this.frames.length) {
       throw const FormatException(
         'Performance summary sample count is inconsistent.',
+      );
+    }
+    if (compactStream &&
+        archive!.frames != summary.frameCount + droppedFrames) {
+      throw const FormatException(
+        'Performance stream frame count is inconsistent.',
       );
     }
     if (frames.length > 100000 || events.length > 200000) {
