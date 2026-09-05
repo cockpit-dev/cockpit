@@ -170,6 +170,30 @@ visible as blocked rather than switching devices.
 
 ## Choose The Command
 
+### Choose One AI Control Surface
+
+CLI and MCP are two transports over the same authenticated Supervisor API; they
+do not provide separate runtime state or extra capabilities. Install the
+Cockpit runtime once because it supplies both `cockpit` and `cockpit_mcp`, but
+choose one surface as the primary interface for a task. CLI + Skill is the
+default because it is portable, compact, scriptable, and does not inject a
+large tool catalog into every turn:
+
+- Use the CLI with this Skill for normal development, CI, batch actions, and
+  hosts that can execute shell commands.
+- Choose MCP only when the host cannot reliably run shell commands or when
+  typed tool/resource discovery is materially useful. Keep its profile limited
+  to the domains needed by the task (`core`, `flutter`, or `e2e`) and do not
+  shell out to the CLI for the same operation.
+- A native plugin may bundle Skill + MCP; that is one logical integration. Do
+  not add a second standalone Skill copy or MCP server on top of it.
+
+The Skill is guidance, not a third control plane. When both surfaces are
+installed, one Supervisor, one selected session, and one request path remain
+the source of truth. Never execute the same mutation through CLI and MCP, and
+never load the full MCP catalog when a narrow profile or one CLI command proves
+the next state.
+
 Use the highest-level command that owns the task:
 
 | Need | Command |
@@ -581,8 +605,8 @@ version is informational until the user explicitly asks to upgrade: never run
 `cockpit update` or change project dependencies automatically. After explicit
 upgrade approval, `cockpit update` updates the CLI and Supervisor while
 preserving authorization and durable state; then run `cockpit skill` and give its
-prompt to the current AI host so the complete Skill, native adapter, and MCP
-integration can be refreshed. Do not manually delete Cockpit home data, Pub
+prompt to the current AI host so the complete Skill and selected integration
+surface can be refreshed. Do not manually delete Cockpit home data, Pub
 caches, sessions, executables, or ports.
 When a Flutter project uses Cockpit packages, upgrade its development shell and
 `cockpit_protocol`, `flutter_cockpit`, and `flutter_cockpit_test` constraints to

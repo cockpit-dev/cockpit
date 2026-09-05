@@ -28,9 +28,9 @@ final class CockpitMcpProtocolServer extends MCPServer
            version: serverVersion,
          ),
          instructions:
-             'Use the resources to read workspace context, the prompts to '
-             'follow the repository workflow, and the tools to execute '
-             'flutter_cockpit sessions, task workflows, and evidence bundles.',
+             'Use the resources to read workspace context and the tools to '
+             'execute flutter_cockpit sessions, task workflows, and evidence '
+             'bundles.',
        ) {
     for (final tool in _enabledTools) {
       registerTool(

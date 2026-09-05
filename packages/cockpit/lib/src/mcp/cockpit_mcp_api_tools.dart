@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:cockpit_protocol/cockpit_protocol.dart';
@@ -9,6 +10,51 @@ import 'cockpit_mcp_api_tool.dart';
 import 'cockpit_mcp_error.dart';
 import 'cockpit_mcp_tool.dart';
 
+const _mcpReadOnly = CockpitMcpToolAnnotations(
+  readOnly: true,
+  destructive: false,
+  idempotent: true,
+  longRunning: false,
+  requiresSession: false,
+  producesBundleEvidence: false,
+);
+
+const _mcpWrite = CockpitMcpToolAnnotations(
+  readOnly: false,
+  destructive: false,
+  idempotent: false,
+  longRunning: false,
+  requiresSession: false,
+  producesBundleEvidence: false,
+);
+
+const _mcpDestructive = CockpitMcpToolAnnotations(
+  readOnly: false,
+  destructive: true,
+  idempotent: false,
+  longRunning: true,
+  requiresSession: false,
+  producesBundleEvidence: false,
+);
+
+const _mcpIdempotentWrite = CockpitMcpToolAnnotations(
+  readOnly: false,
+  destructive: false,
+  idempotent: true,
+  longRunning: true,
+  requiresSession: false,
+  producesBundleEvidence: false,
+);
+
+const _mcpFileWrite = CockpitMcpToolAnnotations(
+  readOnly: false,
+  destructive: false,
+  idempotent: false,
+  longRunning: false,
+  requiresSession: false,
+  producesBundleEvidence: false,
+);
+
 List<CockpitMcpTool> cockpitMcpApiTools(
   CockpitMcpClientProvider client,
 ) => <CockpitMcpTool>[
@@ -16,6 +62,7 @@ List<CockpitMcpTool> cockpitMcpApiTools(
     client: client,
     name: 'root_register',
     description: 'Register an absolute project root with Supervisor.',
+    toolAnnotations: _mcpWrite,
     inputSchema: _schema(
       properties: <String, Object?>{'path': _string(), 'label': _string()},
       required: const <String>['path'],
@@ -34,6 +81,7 @@ List<CockpitMcpTool> cockpitMcpApiTools(
     client: client,
     name: 'root_remove',
     description: 'Unregister an explicit project root.',
+    toolAnnotations: _mcpDestructive,
     inputSchema: _schema(
       properties: <String, Object?>{
         'rootId': _string(),
@@ -57,6 +105,7 @@ List<CockpitMcpTool> cockpitMcpApiTools(
     client: client,
     name: 'workspace_register',
     description: 'Register an explicit workspace checkout.',
+    toolAnnotations: _mcpWrite,
     inputSchema: _schema(
       properties: <String, Object?>{'rootId': _string(), 'path': _string()},
       required: const <String>['rootId', 'path'],
@@ -75,6 +124,7 @@ List<CockpitMcpTool> cockpitMcpApiTools(
     client: client,
     name: 'workspace_rebind',
     description: 'Rebind an explicit workspace to a checkout identity.',
+    toolAnnotations: _mcpWrite,
     inputSchema: _schema(
       properties: <String, Object?>{
         'workspaceId': _string(),
@@ -102,6 +152,7 @@ List<CockpitMcpTool> cockpitMcpApiTools(
     client: client,
     name: 'workspace_unregister',
     description: 'Unregister an explicit workspace.',
+    toolAnnotations: _mcpDestructive,
     inputSchema: _schema(
       properties: <String, Object?>{
         'workspaceId': _string(),
@@ -137,6 +188,7 @@ List<CockpitMcpTool> _executionTools(
     client: client,
     name: 'target_discover',
     description: 'Discover locally available launch targets.',
+    toolAnnotations: _mcpReadOnly,
     inputSchema: _schema(
       properties: <String, Object?>{
         'timeoutMs': _integer(minimum: 1, maximum: 300000),
@@ -160,6 +212,7 @@ List<CockpitMcpTool> _executionTools(
     client: client,
     name: 'target_list',
     description: 'List registered targets for an explicit workspace.',
+    toolAnnotations: _mcpReadOnly,
     inputSchema: _schema(
       properties: <String, Object?>{'workspaceId': _string()},
       required: const <String>['workspaceId'],
@@ -177,6 +230,7 @@ List<CockpitMcpTool> _executionTools(
     client: client,
     name: 'target_get',
     description: 'Read one registered workspace automation target.',
+    toolAnnotations: _mcpReadOnly,
     inputSchema: _schema(
       properties: <String, Object?>{
         'workspaceId': _string(),
@@ -196,6 +250,7 @@ List<CockpitMcpTool> _executionTools(
     client: client,
     name: 'target_inspect',
     description: 'Inspect live capabilities and state for a target.',
+    toolAnnotations: _mcpReadOnly,
     inputSchema: _schema(
       properties: <String, Object?>{
         'workspaceId': _string(),
@@ -232,6 +287,7 @@ List<CockpitMcpTool> _executionTools(
     client: client,
     name: 'target_register',
     description: 'Register a workspace-owned native or host automation target.',
+    toolAnnotations: _mcpIdempotentWrite,
     inputSchema: _schema(
       properties: <String, Object?>{
         'workspaceId': _string(),
@@ -264,17 +320,25 @@ List<CockpitMcpTool> _executionTools(
         'idempotencyKey',
       ],
       extra: <String, Object?>{
-        'allOf': <Object?>[
+        'oneOf': <Object?>[
           <String, Object?>{
-            'if': <String, Object?>{
-              'properties': <String, Object?>{
-                'targetKind': <String, Object?>{
-                  'enum': <String>['nativeApp', 'desktopApp', 'browserPage'],
-                },
+            'properties': <String, Object?>{
+              'targetKind': <String, Object?>{
+                'enum': <String>['nativeApp', 'desktopApp', 'browserPage'],
               },
             },
-            'then': <String, Object?>{
-              'required': <String>['appId'],
+            'required': <String>['appId'],
+          },
+          <String, Object?>{
+            'properties': <String, Object?>{
+              'targetKind': <String, Object?>{
+                'enum': <String>[
+                  'flutterApp',
+                  'systemSurface',
+                  'device',
+                  'hostWorkspace',
+                ],
+              },
             },
           },
         ],
@@ -345,6 +409,7 @@ List<CockpitMcpTool> _executionTools(
     client: client,
     name: 'target_launch',
     description: 'Launch or activate one registered automation target.',
+    toolAnnotations: _mcpIdempotentWrite,
     inputSchema: _schema(
       properties: <String, Object?>{
         'workspaceId': _string(),
@@ -398,6 +463,7 @@ List<CockpitMcpTool> _executionTools(
     client: client,
     name: 'operation_execute',
     description: 'Execute an advertised typed Supervisor operation.',
+    toolAnnotations: _mcpDestructive,
     inputSchema: _schema(
       properties: <String, Object?>{
         'kind': _string(),
@@ -451,6 +517,7 @@ List<CockpitMcpTool> _executionTools(
     client: client,
     name: 'case_validate',
     description: 'Validate a bounded case document in a workspace.',
+    toolAnnotations: _mcpReadOnly,
     inputSchema: _schema(
       properties: <String, Object?>{
         'workspaceId': _string(),
@@ -488,6 +555,7 @@ List<CockpitMcpTool> _executionTools(
     client: client,
     name: 'case_run',
     description: 'Run an explicitly identified canonical indexed case.',
+    toolAnnotations: _mcpIdempotentWrite,
     inputSchema: _schema(
       properties: <String, Object?>{
         'workspaceId': _string(),
@@ -541,149 +609,211 @@ List<CockpitMcpTool> _executionTools(
   ),
 ];
 
-List<CockpitMcpTool> _runTools(CockpitMcpClientProvider client) =>
-    <CockpitMcpTool>[
-      CockpitMcpApiTool(
-        client: client,
-        name: 'run_get',
-        description: 'Read an explicitly identified run.',
-        inputSchema: _schema(
-          properties: <String, Object?>{'runId': _string()},
-          required: const <String>['runId'],
+List<CockpitMcpTool> _runTools(
+  CockpitMcpClientProvider client,
+) => <CockpitMcpTool>[
+  CockpitMcpApiTool(
+    client: client,
+    name: 'run_list',
+    description: 'List recent runs for an explicit workspace.',
+    toolAnnotations: _mcpReadOnly,
+    inputSchema: _schema(
+      properties: <String, Object?>{
+        'workspaceId': _string(),
+        'limit': _integer(minimum: 1, maximum: 100),
+        'cursor': _string(),
+      },
+      required: const <String>['workspaceId'],
+    ),
+    action: (api, arguments) async {
+      _only(arguments, const <String>{'workspaceId', 'limit', 'cursor'});
+      final page = await api.runs(
+        _requiredString(arguments, 'workspaceId'),
+        limit: _optionalInt(arguments, 'limit') ?? 12,
+        cursor: _optionalString(arguments, 'cursor'),
+      );
+      return page.toJson((run) => run.toJson());
+    },
+  ),
+  CockpitMcpApiTool(
+    client: client,
+    name: 'run_get',
+    description: 'Read an explicitly identified run.',
+    toolAnnotations: _mcpReadOnly,
+    inputSchema: _schema(
+      properties: <String, Object?>{'runId': _string()},
+      required: const <String>['runId'],
+    ),
+    action: (api, arguments) async {
+      _only(arguments, const <String>{'runId'});
+      return (await api.run(_requiredString(arguments, 'runId'))).toJson();
+    },
+  ),
+  CockpitMcpApiTool(
+    client: client,
+    name: 'run_cancel',
+    description: 'Cancel an explicitly identified run.',
+    toolAnnotations: _mcpIdempotentWrite,
+    inputSchema: _schema(
+      properties: <String, Object?>{
+        'runId': _string(),
+        'idempotencyKey': _string(),
+        'reason': _string(),
+      },
+      required: const <String>['runId', 'idempotencyKey'],
+    ),
+    action: (api, arguments) async {
+      _only(arguments, const <String>{'runId', 'idempotencyKey', 'reason'});
+      return (await api.cancelRun(
+        _requiredString(arguments, 'runId'),
+        CockpitRunCancellationRequest(
+          idempotencyKey: CockpitIdempotencyKey(
+            _requiredString(arguments, 'idempotencyKey'),
+          ),
+          reason: _optionalString(arguments, 'reason'),
         ),
-        action: (api, arguments) async {
-          _only(arguments, const <String>{'runId'});
-          return (await api.run(_requiredString(arguments, 'runId'))).toJson();
-        },
-      ),
-      CockpitMcpApiTool(
-        client: client,
-        name: 'run_cancel',
-        description: 'Cancel an explicitly identified run.',
-        inputSchema: _schema(
-          properties: <String, Object?>{
-            'runId': _string(),
-            'idempotencyKey': _string(),
-            'reason': _string(),
-          },
-          required: const <String>['runId', 'idempotencyKey'],
-        ),
-        action: (api, arguments) async {
-          _only(arguments, const <String>{'runId', 'idempotencyKey', 'reason'});
-          return (await api.cancelRun(
-            _requiredString(arguments, 'runId'),
-            CockpitRunCancellationRequest(
-              idempotencyKey: CockpitIdempotencyKey(
-                _requiredString(arguments, 'idempotencyKey'),
-              ),
-              reason: _optionalString(arguments, 'reason'),
-            ),
-          )).toJson();
-        },
-      ),
-      CockpitMcpApiTool(
-        client: client,
-        name: 'run_events',
-        description: 'Read bounded run events through the Supervisor SSE API.',
-        inputSchema: _schema(
-          properties: <String, Object?>{
-            'runId': _string(),
-            'afterSequence': _integer(minimum: 0),
-            'lastEventId': _string(),
-            'maxEvents': _integer(minimum: 1, maximum: 1000),
-          },
-          required: const <String>['runId'],
-        ),
-        action: (api, arguments) async {
-          _only(arguments, const <String>{
-            'runId',
-            'afterSequence',
-            'lastEventId',
-            'maxEvents',
-          });
-          final items = <Map<String, Object?>>[];
-          final maximum = _optionalInt(arguments, 'maxEvents') ?? 1000;
-          if (maximum < 1 || maximum > 1000) {
-            throw CockpitMcpError.invalidArguments(
-              'maxEvents must be between 1 and 1000.',
-            );
+      )).toJson();
+    },
+  ),
+  CockpitMcpApiTool(
+    client: client,
+    name: 'run_events',
+    description: 'Read bounded run events through the Supervisor SSE API.',
+    toolAnnotations: _mcpReadOnly,
+    inputSchema: _schema(
+      properties: <String, Object?>{
+        'runId': _string(),
+        'afterSequence': _integer(minimum: 0),
+        'lastEventId': _string(),
+        'maxEvents': _integer(minimum: 1, maximum: 1000),
+        'timeoutMs': _integer(minimum: 1000, maximum: 300000),
+      },
+      required: const <String>['runId'],
+    ),
+    action: (api, arguments) async {
+      _only(arguments, const <String>{
+        'runId',
+        'afterSequence',
+        'lastEventId',
+        'maxEvents',
+        'timeoutMs',
+      });
+      final items = <Map<String, Object?>>[];
+      final maximum = _optionalInt(arguments, 'maxEvents') ?? 100;
+      if (maximum < 1 || maximum > 1000) {
+        throw CockpitMcpError.invalidArguments(
+          'maxEvents must be between 1 and 1000.',
+        );
+      }
+      final afterSequence = _optionalInt(arguments, 'afterSequence') ?? 0;
+      if (afterSequence < 0) {
+        throw CockpitMcpError.invalidArguments(
+          'afterSequence cannot be negative.',
+        );
+      }
+      final timeoutMs = _optionalInt(arguments, 'timeoutMs') ?? 30000;
+      var nextSequence = afterSequence;
+      var complete = false;
+      var disconnected = false;
+      var timedOut = false;
+      try {
+        await for (final item
+            in api
+                .events(
+                  _requiredString(arguments, 'runId'),
+                  afterSequence: afterSequence,
+                  lastEventId: _optionalString(arguments, 'lastEventId'),
+                )
+                .timeout(Duration(milliseconds: timeoutMs))) {
+          items.add(_streamItem(item));
+          switch (item) {
+            case CockpitRunStreamEvent(:final event):
+              nextSequence = event.sequence;
+            case CockpitRunStreamGap(:final boundary):
+              nextSequence = boundary.requestedAfterSequence;
+            case CockpitRunStreamTerminal(:final afterSequence):
+              nextSequence = afterSequence;
+              complete = true;
+            case CockpitRunStreamDisconnected(:final afterSequence):
+              nextSequence = afterSequence;
+              disconnected = true;
           }
-          final afterSequence = _optionalInt(arguments, 'afterSequence') ?? 0;
-          if (afterSequence < 0) {
-            throw CockpitMcpError.invalidArguments(
-              'afterSequence cannot be negative.',
-            );
-          }
-          await for (final item in api.events(
-            _requiredString(arguments, 'runId'),
-            afterSequence: afterSequence,
-            lastEventId: _optionalString(arguments, 'lastEventId'),
-          )) {
-            items.add(_streamItem(item));
-            if (items.length >= maximum) break;
-          }
-          return <String, Object?>{'items': items};
-        },
-      ),
-      CockpitMcpApiTool(
-        client: client,
-        name: 'artifact_list',
-        description: 'List immutable artifact metadata for an explicit run.',
-        inputSchema: _schema(
-          properties: <String, Object?>{'runId': _string()},
-          required: const <String>['runId'],
-        ),
-        action: (api, arguments) async {
-          _only(arguments, const <String>{'runId'});
-          return <String, Object?>{
-            'items': (await api.artifacts(
-              _requiredString(arguments, 'runId'),
-            )).map((artifact) => artifact.toJson()).toList(),
-          };
-        },
-      ),
-      CockpitMcpApiTool(
-        client: client,
-        name: 'artifact_read',
-        description: 'Download a verified artifact to an explicit local file.',
-        inputSchema: _schema(
-          properties: <String, Object?>{
-            'runId': _string(),
-            'artifactId': _string(),
-            'outputPath': _string(),
-          },
-          required: const <String>['runId', 'artifactId', 'outputPath'],
-        ),
-        action: (api, arguments) async {
-          _only(arguments, const <String>{'runId', 'artifactId', 'outputPath'});
-          final runId = _requiredString(arguments, 'runId');
-          final artifactId = _requiredString(arguments, 'artifactId');
-          final outputPath = _requiredString(arguments, 'outputPath');
-          if (!p.isAbsolute(outputPath)) {
-            throw const FormatException('outputPath must be absolute.');
-          }
-          final matches = (await api.artifacts(runId))
-              .where((artifact) => artifact.artifactId == artifactId)
-              .toList(growable: false);
-          if (matches.length != 1) {
-            throw CockpitSupervisorClientException(
-              code: 'artifactNotFound',
-              message: 'Artifact $artifactId was not found for run $runId.',
-            );
-          }
-          final receipt = await api.downloadArtifactToFile(
-            artifact: matches.single,
-            destination: File(p.normalize(outputPath)),
-          );
-          return <String, Object?>{
-            'path': receipt.file.path,
-            'mediaType': receipt.mediaType,
-            'sizeBytes': receipt.sizeBytes,
-            'sha256': receipt.sha256,
-          };
-        },
-      ),
-    ];
+          if (items.length >= maximum) break;
+        }
+      } on TimeoutException {
+        timedOut = true;
+      }
+      final receiving =
+          timedOut || (items.length >= maximum && !complete && !disconnected);
+      return <String, Object?>{
+        'items': items,
+        'afterSequence': nextSequence,
+        if (complete) 'complete': true,
+        if (receiving) 'receiving': true,
+      };
+    },
+  ),
+  CockpitMcpApiTool(
+    client: client,
+    name: 'artifact_list',
+    description: 'List immutable artifact metadata for an explicit run.',
+    toolAnnotations: _mcpReadOnly,
+    inputSchema: _schema(
+      properties: <String, Object?>{'runId': _string()},
+      required: const <String>['runId'],
+    ),
+    action: (api, arguments) async {
+      _only(arguments, const <String>{'runId'});
+      return <String, Object?>{
+        'items': (await api.artifacts(
+          _requiredString(arguments, 'runId'),
+        )).map((artifact) => artifact.toJson()).toList(),
+      };
+    },
+  ),
+  CockpitMcpApiTool(
+    client: client,
+    name: 'artifact_read',
+    description: 'Download a verified artifact to an explicit local file.',
+    toolAnnotations: _mcpFileWrite,
+    inputSchema: _schema(
+      properties: <String, Object?>{
+        'runId': _string(),
+        'artifactId': _string(),
+        'outputPath': _string(),
+      },
+      required: const <String>['runId', 'artifactId', 'outputPath'],
+    ),
+    action: (api, arguments) async {
+      _only(arguments, const <String>{'runId', 'artifactId', 'outputPath'});
+      final runId = _requiredString(arguments, 'runId');
+      final artifactId = _requiredString(arguments, 'artifactId');
+      final outputPath = _requiredString(arguments, 'outputPath');
+      if (!p.isAbsolute(outputPath)) {
+        throw const FormatException('outputPath must be absolute.');
+      }
+      final matches = (await api.artifacts(runId))
+          .where((artifact) => artifact.artifactId == artifactId)
+          .toList(growable: false);
+      if (matches.length != 1) {
+        throw CockpitSupervisorClientException(
+          code: 'artifactNotFound',
+          message: 'Artifact $artifactId was not found for run $runId.',
+        );
+      }
+      final receipt = await api.downloadArtifactToFile(
+        artifact: matches.single,
+        destination: File(p.normalize(outputPath)),
+      );
+      return <String, Object?>{
+        'path': receipt.file.path,
+        'mediaType': receipt.mediaType,
+        'sizeBytes': receipt.sizeBytes,
+        'sha256': receipt.sha256,
+      };
+    },
+  ),
+];
 
 List<CockpitMcpTool> _suiteTools(
   CockpitMcpClientProvider client,
@@ -692,6 +822,7 @@ List<CockpitMcpTool> _suiteTools(
     client: client,
     name: 'suite_validate',
     description: 'Validate a bounded suite document in a workspace.',
+    toolAnnotations: _mcpReadOnly,
     inputSchema: _schema(
       properties: <String, Object?>{
         'workspaceId': _string(),
@@ -729,6 +860,7 @@ List<CockpitMcpTool> _suiteTools(
     client: client,
     name: 'suite_run',
     description: 'Run an explicitly identified canonical indexed suite.',
+    toolAnnotations: _mcpIdempotentWrite,
     inputSchema: _schema(
       properties: <String, Object?>{
         'workspaceId': _string(),
@@ -784,6 +916,7 @@ List<CockpitMcpTool> _suiteTools(
     client: client,
     name: 'suite_report',
     description: 'Read the finalized canonical suite report for a run.',
+    toolAnnotations: _mcpReadOnly,
     inputSchema: _schema(
       properties: <String, Object?>{'runId': _string()},
       required: const <String>['runId'],

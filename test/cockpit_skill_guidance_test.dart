@@ -340,8 +340,11 @@ void main() {
       'First fetch and read the complete Cockpit installation guide',
       'curl -fsSL https://raw.githubusercontent.com/cockpit-dev/cockpit/main/'
           'skills/cockpit/INSTALL.md',
-      'install or update the CLI, complete cockpit Skill, native adapter, and '
-          'cockpit_mcp for the current AI host',
+      'install or update the Cockpit runtime once',
+      'Use CLI + Skill as the default control surface',
+      'configure one Cockpit MCP server',
+      'Do not configure a second MCP server or duplicate Skill copy',
+      'one active AI control surface',
       'whole directory',
       'dart pub global activate cockpit any',
       'codex plugin marketplace upgrade cockpit',

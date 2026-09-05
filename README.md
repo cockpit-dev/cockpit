@@ -115,13 +115,18 @@ For host-specific setup, fetch and read the complete guide before changing
 configuration:
 
 ```text
-First fetch and read the complete Cockpit installation guide with `curl -fsSL https://raw.githubusercontent.com/cockpit-dev/cockpit/main/skills/cockpit/INSTALL.md`, then install or update the CLI, complete cockpit Skill, native adapter, and cockpit_mcp for the current AI host exactly as that guide directs.
+First fetch and read the complete Cockpit installation guide with `curl -fsSL https://raw.githubusercontent.com/cockpit-dev/cockpit/main/skills/cockpit/INSTALL.md`, then install or update the Cockpit runtime once and load the complete Skill. Use CLI + Skill as the default control surface; configure one Cockpit MCP server only if this host cannot reliably run shell commands or typed tools are explicitly needed. Do not configure a second MCP server or duplicate Skill copy.
 ```
 
 The canonical guide is [`skills/cockpit/INSTALL.md`](skills/cockpit/INSTALL.md).
 It covers Codex, Claude Code, Cursor, Gemini CLI, Kiro, OpenCode, GitHub Copilot,
 Windsurf, Cline, Roo Code, Pi, OMP, and Oh My Pi. The full integration
 reference is [`docs/agent-integrations.md`](docs/agent-integrations.md).
+
+CLI and MCP share one Supervisor, session registry, and artifact store. Use CLI +
+Skill as the default control surface; choose MCP only when typed tools are
+needed. Keep one active surface per task and never repeat a mutation through
+both.
 
 ## Cases, suites, and API
 

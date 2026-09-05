@@ -105,12 +105,16 @@ cockpit --help
 修改宿主配置前，先用下面的提示词获取并阅读完整安装文档：
 
 ```text
-First fetch and read the complete Cockpit installation guide with `curl -fsSL https://raw.githubusercontent.com/cockpit-dev/cockpit/main/skills/cockpit/INSTALL.md`, then install or update the CLI, complete cockpit Skill, native adapter, and cockpit_mcp for the current AI host exactly as that guide directs.
+First fetch and read the complete Cockpit installation guide with `curl -fsSL https://raw.githubusercontent.com/cockpit-dev/cockpit/main/skills/cockpit/INSTALL.md`, then install or update the Cockpit runtime once and load the complete Skill. Use CLI + Skill as the default control surface; configure one Cockpit MCP server only if this host cannot reliably run shell commands or typed tools are explicitly needed. Do not configure a second MCP server or duplicate Skill copy.
 ```
 
 规范入口是 [`skills/cockpit/INSTALL.md`](skills/cockpit/INSTALL.md)，覆盖 Codex、Claude Code、
 Cursor、Gemini CLI、Kiro、OpenCode、GitHub Copilot、Windsurf、Cline、Roo Code、Pi、OMP 和
 Oh My Pi。完整接入说明见 [`docs/agent-integrations.md`](docs/agent-integrations.md)。
+
+CLI 和 MCP 共享同一个 Supervisor、session registry 和 artifact store。默认使用 CLI +
+Skill；只有明确需要 typed tools 时才选择 MCP。每个任务只启用一个主入口，不要通过两者
+重复执行同一个修改操作。
 
 ## Case、Suite 与 API
 
