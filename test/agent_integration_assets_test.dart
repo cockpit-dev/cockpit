@@ -207,9 +207,12 @@ void main() {
     const prompt =
         'First fetch and read the complete Cockpit installation guide with '
         '`curl -fsSL https://raw.githubusercontent.com/cockpit-dev/cockpit/'
-        'main/skills/cockpit/INSTALL.md`, then install or update the CLI, '
-        'complete cockpit Skill, native adapter, and cockpit_mcp for the current '
-        'AI host exactly as that guide directs.';
+        'main/skills/cockpit/INSTALL.md`, then install or update the Cockpit '
+        'runtime once and load the complete Skill. Use CLI + Skill as the '
+        'default control surface; configure one Cockpit MCP server only if '
+        'this host cannot reliably run shell commands or typed tools are '
+        'explicitly needed. Do not configure a second MCP server or duplicate '
+        'Skill copy.';
     for (final host in <String>[
       'Codex',
       'Claude Code',

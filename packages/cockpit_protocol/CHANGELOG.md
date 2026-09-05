@@ -1,5 +1,10 @@
 # Changelog
 
+## 4.7.0
+
+- Synchronized protocol package identity with the MCP run-discovery and
+  resumable event-access release.
+
 ## 4.6.1
 
 - Accepted compact streamed performance reports that omit retained frame arrays

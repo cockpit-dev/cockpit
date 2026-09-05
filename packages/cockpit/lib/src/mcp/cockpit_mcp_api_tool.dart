@@ -101,7 +101,6 @@ String cockpitMcpCompactToolSummary(
   for (final key in const <String>[
     'outcome',
     'status',
-    'success',
     'runId',
     'operationId',
     'workspaceId',
@@ -118,7 +117,6 @@ String cockpitMcpCompactToolSummary(
   final output = value['output'];
   if (output is Map<Object?, Object?>) {
     for (final key in const <String>[
-      'success',
       'exitCode',
       'diagnosticCount',
       'errorCount',

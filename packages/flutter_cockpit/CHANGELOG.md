@@ -1,5 +1,10 @@
 # Changelog
 
+## 4.7.0
+
+- Synchronized the Flutter bridge release and AI integration guidance with the
+  hardened Cockpit MCP and CLI control surfaces.
+
 ## 4.6.1
 
 - Synchronized the Flutter bridge release with the corrected streamed

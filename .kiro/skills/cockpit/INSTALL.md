@@ -1,24 +1,30 @@
 # Install Cockpit For An AI Host
 
 This directory is the complete, self-contained `cockpit` Skill. A complete AI
-host integration has four parts:
+host integration has a shared runtime and one active AI control surface:
 
-1. the globally installed `cockpit` CLI and `cockpit_mcp` executable;
+1. the globally installed Cockpit runtime (`cockpit` and `cockpit_mcp`);
 2. the whole Skill directory, including `SKILL.md`, `INSTALL.md`, `agents/`,
    `assets/`, and `references/`;
-3. the host-native plugin, rule, steering, or MCP configuration it supports;
-4. a host reload followed by CLI, Skill, and MCP verification.
+3. the CLI + Skill as the default control surface, or an optional host-native
+   MCP configuration when typed tools are needed; a native plugin may bundle
+   both;
+4. a host reload followed by verification through the selected surface.
 
-Do not report a complete installation after copying only `SKILL.md`. Configure
-MCP by default when the host supports it; use the CLI as the complete fallback
-when it does not or when the user explicitly declines MCP.
+Do not report a complete installation after copying only `SKILL.md`. Use CLI +
+Skill by default. Enable MCP only when the host cannot reliably run shell
+commands or the user explicitly requests typed tools. Installing both
+executables is not duplicate runtime state—`cockpit_mcp` is another transport
+over the same Supervisor—but exposing both as active AI entry points is
+unnecessary context and can cause duplicate mutations.
 
 ## Preferred AI Prompt
 
-Ask the current AI host to install every supported integration surface:
+Ask the current AI host to install the shared runtime and the default CLI +
+Skill integration; enable MCP only when the host needs typed tools:
 
 ```text
-First fetch and read the complete Cockpit installation guide with `curl -fsSL https://raw.githubusercontent.com/cockpit-dev/cockpit/main/skills/cockpit/INSTALL.md`, then install or update the CLI, complete cockpit Skill, native adapter, and cockpit_mcp for the current AI host exactly as that guide directs.
+First fetch and read the complete Cockpit installation guide with `curl -fsSL https://raw.githubusercontent.com/cockpit-dev/cockpit/main/skills/cockpit/INSTALL.md`, then install or update the Cockpit runtime once and load the complete Skill. Use CLI + Skill as the default control surface; configure one Cockpit MCP server only if this host cannot reliably run shell commands or typed tools are explicitly needed. Do not configure a second MCP server or duplicate Skill copy.
 ```
 
 Use the manual guidance below only when the host cannot complete the request.
@@ -65,7 +71,7 @@ cockpit skill
 ```
 
 `cockpit skill` prints the stable prompt for refreshing the current host's
-complete Skill, native adapter, and MCP integration.
+complete Skill and default CLI integration; MCP is an optional typed transport.
 
 The host runtime resolves only Cockpit's own global Pub package graph. If an
 upgrade error mentions an unrelated Flutter plugin such as
@@ -89,7 +95,8 @@ cockpit help
 
 Every stdio MCP adapter launches `cockpit_mcp` with no arguments. It uses the
 same per-user Supervisor, authorization, workspace isolation, and artifacts as
-the CLI.
+the CLI. MCP and CLI calls must not be run twice for one mutation; choose one
+surface per task and keep the other as a fallback.
 
 ## Installation Rules
 

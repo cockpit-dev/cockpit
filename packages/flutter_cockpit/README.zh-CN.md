@@ -61,10 +61,10 @@ runtime 包会为 Android、iOS、macOS、Linux、Windows 和 web 声明原生�
 
 ### 接入 AI Agent
 
-让当前 AI 宿主安装 CLI、完整 Skill、原生适配器和 MCP：
+让当前 AI 宿主安装共享运行时，并默认使用 CLI + Skill：
 
 ```text
-First fetch and read the complete Cockpit installation guide with `curl -fsSL https://raw.githubusercontent.com/cockpit-dev/cockpit/main/skills/cockpit/INSTALL.md`, then install or update the CLI, complete cockpit Skill, native adapter, and cockpit_mcp for the current AI host exactly as that guide directs.
+First fetch and read the complete Cockpit installation guide with `curl -fsSL https://raw.githubusercontent.com/cockpit-dev/cockpit/main/skills/cockpit/INSTALL.md`, then install or update the Cockpit runtime once and load the complete Skill. Use CLI + Skill as the default control surface; configure one Cockpit MCP server only if this host cannot reliably run shell commands or typed tools are explicitly needed. Do not configure a second MCP server or duplicate Skill copy.
 ```
 
 指南覆盖 Codex、Claude Code、Cursor、Gemini CLI、Kiro、OpenCode、Pi、

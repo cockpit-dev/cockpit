@@ -120,6 +120,16 @@ List<CockpitMcpResource> cockpitMcpApiResources(
   ),
   _CockpitApiResource.template(
     client: client,
+    name: 'workspace_runs',
+    uriTemplate: 'cockpit://workspaces/{workspaceId}/runs',
+    description: 'Recent runs for an explicit workspace.',
+    read: (api, uri) async {
+      final page = await api.runs(_identifier(uri, 0, 'workspaceId'));
+      return page.toJson((run) => run.toJson());
+    },
+  ),
+  _CockpitApiResource.template(
+    client: client,
     name: 'run_artifacts',
     uriTemplate: 'cockpit://runs/{runId}/artifacts',
     description: 'Immutable artifact metadata for an explicit run.',
@@ -244,6 +254,10 @@ bool _matchesTemplate(Uri uri, String name) {
       uri.host == 'workspaces' &&
           uri.pathSegments.length == 2 &&
           uri.pathSegments[1] == 'cases',
+    'workspace_runs' =>
+      uri.host == 'workspaces' &&
+          uri.pathSegments.length == 2 &&
+          uri.pathSegments[1] == 'runs',
     'workspace_suites' =>
       uri.host == 'workspaces' &&
           uri.pathSegments.length == 2 &&

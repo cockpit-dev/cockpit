@@ -1,5 +1,10 @@
 # Changelog
 
+## 4.7.0
+
+- Synchronized the integration-test facade with the Cockpit control-surface
+  release and version-aligned development workflow.
+
 ## 4.6.1
 
 - Kept plugin telemetry independent from VM timeline retention so bounded

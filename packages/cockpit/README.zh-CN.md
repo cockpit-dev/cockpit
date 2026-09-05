@@ -65,16 +65,24 @@ cockpit --help
 
 ### 接入 AI Agent
 
-推荐让当前 AI 宿主直接安装 CLI、完整 Skill、原生适配器和 MCP，复制下面的提示词：
+推荐让当前 AI 宿主安装共享运行时，并默认使用 CLI + Skill。复制下面的提示词：
 
 ```text
-First fetch and read the complete Cockpit installation guide with `curl -fsSL https://raw.githubusercontent.com/cockpit-dev/cockpit/main/skills/cockpit/INSTALL.md`, then install or update the CLI, complete cockpit Skill, native adapter, and cockpit_mcp for the current AI host exactly as that guide directs.
+First fetch and read the complete Cockpit installation guide with `curl -fsSL https://raw.githubusercontent.com/cockpit-dev/cockpit/main/skills/cockpit/INSTALL.md`, then install or update the Cockpit runtime once and load the complete Skill. Use CLI + Skill as the default control surface; configure one Cockpit MCP server only if this host cannot reliably run shell commands or typed tools are explicitly needed. Do not configure a second MCP server or duplicate Skill copy.
 ```
 
 完整的宿主安装与验收说明见
 [`skills/cockpit/INSTALL.md`](https://github.com/cockpit-dev/cockpit/blob/main/skills/cockpit/INSTALL.md)，
 原生适配器和 MCP 配置见
 [Agent 接入指南](https://github.com/cockpit-dev/cockpit/blob/main/docs/agent-integrations.md)。
+
+### CLI 还是 MCP？
+
+两者只是同一个 Supervisor 的不同传输入口，并不是两套实现。运行时只需安装一次
+（它同时提供两个可执行文件），默认使用 CLI + Skill；只有明确需要 typed tools 时才
+选择 MCP。插件如果已经捆绑 Skill 和 MCP，就算一套集成，不要再
+额外添加 MCP server 或重复 Skill。MCP 已启用时不要再用 CLI 重复执行同一个修改
+操作；session 和 artifacts 由两者共享，始终以同一份状态为准。
 
 ## Flutter 快速路径
 
@@ -423,8 +431,9 @@ cockpit serve-mcp --profile dart
 ```
 
 MCP 提供 server、capabilities、roots、workspaces、operations、targets、documents、
-cases、suites、runs 和 artifacts 的 bounded resources；tools 覆盖 target 生命周期、
-case/suite 验证执行、run get/cancel/events、artifact list 和校验式 artifact 文件下载。所有调用都经过认证
+cases、suites、workspace runs 和 artifacts 的 bounded resources；tools 覆盖 target 生命周期、
+case/suite 验证执行、run list/get/cancel/events、artifact list 和校验式 artifact 文件下载。`run_events`
+带有有限读取超时并返回 `afterSequence`，活动中的事件流可以继续恢复而不会无限占用 MCP 请求。所有调用都经过认证
 Supervisor HTTP boundary，MCP 进程不直接构造 application services。
 
 profile 用于控制注入的工具域：默认是 `core`，可选 `dart`、`flutter`、`app`、

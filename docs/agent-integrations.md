@@ -14,13 +14,22 @@ global executable directory is on `PATH`:
 dart pub global activate cockpit any
 ```
 
+The installed runtime provides both `cockpit` and `cockpit_mcp`, but an AI task
+should use only one as its active control surface. CLI + Skill is the default:
+it is portable, compact, scriptable, and works consistently in local and CI
+shells. Enable MCP only when the host cannot reliably run shell commands or
+typed tools/resources are explicitly useful. Both reach the same Supervisor,
+sessions, and artifacts; invoking both for one operation adds context and can
+duplicate a mutation. A native plugin that bundles Skill + MCP is one
+integration—do not layer a second direct MCP registration or Skill copy on top.
+
 ## Install With The Agent
 
-Ask the current AI host to install the runtime and every integration surface
-it supports by following the self-contained guide:
+Ask the current AI host to install the runtime and default CLI + Skill
+integration by following the self-contained guide; enable MCP only when needed:
 
 ```text
-First fetch and read the complete Cockpit installation guide with `curl -fsSL https://raw.githubusercontent.com/cockpit-dev/cockpit/main/skills/cockpit/INSTALL.md`, then install or update the CLI, complete cockpit Skill, native adapter, and cockpit_mcp for the current AI host exactly as that guide directs.
+First fetch and read the complete Cockpit installation guide with `curl -fsSL https://raw.githubusercontent.com/cockpit-dev/cockpit/main/skills/cockpit/INSTALL.md`, then install or update the Cockpit runtime once and load the complete Skill. Use CLI + Skill as the default control surface; configure one Cockpit MCP server only if this host cannot reliably run shell commands or typed tools are explicitly needed. Do not configure a second MCP server or duplicate Skill copy.
 ```
 
 The portable host-selection, CLI, Skill/plugin, MCP, and verification instructions

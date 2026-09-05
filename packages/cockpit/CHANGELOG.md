@@ -1,5 +1,14 @@
 # Changelog
 
+## 4.7.0
+
+- Hardened MCP tool contracts with accurate safety annotations, strict target
+  registration schemas, bounded resumable run events, and workspace run
+  discovery through both tools and resources.
+- Fixed workspace-root development paths, removed redundant compact success
+  output, and made CLI + Skill the default AI control surface while keeping MCP
+  as an explicit typed alternative.
+
 ## 4.6.1
 
 - Refined the bundled AI workflow for layered Flutter selectors, concurrent

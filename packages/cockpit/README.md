@@ -67,17 +67,27 @@ The package publishes four executables:
 
 ### Install For AI Agents
 
-Preferred: ask the current AI host to install the CLI, complete Skill, native
-adapter, and MCP surface. Copy this prompt:
+Preferred: ask the current AI host to install the shared runtime and use the
+default CLI + Skill control surface. Copy this prompt:
 
 ```text
-First fetch and read the complete Cockpit installation guide with `curl -fsSL https://raw.githubusercontent.com/cockpit-dev/cockpit/main/skills/cockpit/INSTALL.md`, then install or update the CLI, complete cockpit Skill, native adapter, and cockpit_mcp for the current AI host exactly as that guide directs.
+First fetch and read the complete Cockpit installation guide with `curl -fsSL https://raw.githubusercontent.com/cockpit-dev/cockpit/main/skills/cockpit/INSTALL.md`, then install or update the Cockpit runtime once and load the complete Skill. Use CLI + Skill as the default control surface; configure one Cockpit MCP server only if this host cannot reliably run shell commands or typed tools are explicitly needed. Do not configure a second MCP server or duplicate Skill copy.
 ```
 
 Complete host-specific installation and verification instructions live in
 [`skills/cockpit/INSTALL.md`](https://github.com/cockpit-dev/cockpit/blob/main/skills/cockpit/INSTALL.md).
 Native adapter and MCP details are documented in the
 [agent integration guide](https://github.com/cockpit-dev/cockpit/blob/main/docs/agent-integrations.md).
+
+### CLI or MCP?
+
+They are transports over the same Supervisor, not two implementations. Install
+the runtime once (it supplies both executables), then use CLI + Skill by default.
+Choose MCP only when typed tools are explicitly needed. A plugin
+that bundles Skill and MCP counts as one integration; do not add a second MCP
+server or duplicate Skill copy. When MCP is active, do not repeat the same
+mutation through the CLI—the shared session and artifacts are already the
+source of truth.
 
 ## Flutter Fast Path
 
@@ -476,10 +486,12 @@ cockpit serve-mcp --profile dart
 ```
 
 MCP exposes bounded resources for server, capabilities, roots, workspaces,
-operations, targets, documents, cases, suites, runs, and artifacts. Its tools
+operations, targets, documents, cases, suites, workspace runs, and artifacts. Its tools
 cover root/workspace lifecycle, advertised operations, target lifecycle,
-case/suite validation and execution, run get/cancel/events, artifact listing,
-and verified artifact downloads to explicit files.
+case/suite validation and execution, run list/get/cancel/events, artifact listing,
+and verified artifact downloads to explicit files. `run_events` is bounded by a
+short read timeout and returns `afterSequence` so an active stream can be
+resumed without keeping an MCP request open indefinitely.
 Every tool crosses the authenticated Supervisor HTTP boundary; the MCP process
 does not construct application services.
 

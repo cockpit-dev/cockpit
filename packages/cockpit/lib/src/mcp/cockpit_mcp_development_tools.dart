@@ -625,6 +625,7 @@ String _workspaceRelativePosixPath(String value, String? workspacePath) {
     if (!p.equals(candidate, root) && !p.isWithin(root, candidate)) {
       throw const FormatException('paths must stay inside the workspace.');
     }
+    if (p.equals(candidate, root)) return '.';
     return _relativePosixPath(p.relative(candidate, from: root));
   }
   return _relativePosixPath(value);
