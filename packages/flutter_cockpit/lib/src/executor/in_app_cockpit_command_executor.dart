@@ -1297,7 +1297,7 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
         touchSlopY:
             _doubleParameter(command, 'touchSlopY') ??
             cockpitDefaultDragTouchSlop,
-        moveEventCount: _intParameter(command, 'moveEventCount') ?? 0,
+        moveEventCount: _intParameter(command, 'moveEventCount') ?? 20,
         fallbackType: CockpitCommandType.drag,
       ),
     );
