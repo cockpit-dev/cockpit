@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:cockpit_demo/src/data/cockpit_demo_database.dart';
 import 'package:cockpit_demo/src/data/todo_repository.dart';
-import 'package:cockpit_demo/src/model/todo_filter.dart';
+import 'package:cockpit_demo/src/ui/screens/todo_collection_screen.dart';
 
 import 'support/cockpit_demo_test_support.dart';
 
@@ -92,6 +92,9 @@ void main() {
     await repository.createTask(title: 'Queue third');
 
     await pumpTodoApp(tester, database: database);
+    final service = tester
+        .widget<TodoCollectionScreen>(find.byType(TodoCollectionScreen))
+        .service;
 
     await scrollTodoCollectionUntilVisible(tester, find.text('Manual queue'));
     final handleFinder = manualQueueReorderHandle('Queue third');
@@ -106,9 +109,8 @@ void main() {
     await gesture.up();
     await tester.pumpAndSettle();
 
-    final reordered = await repository.fetchTasks(const TodoFilter.inbox());
     expect(
-      reordered.map((task) => task.title).toList(growable: false),
+      service.listState.tasks.map((task) => task.title).toList(growable: false),
       <String>['Queue third', 'Queue first', 'Queue second'],
     );
   });
