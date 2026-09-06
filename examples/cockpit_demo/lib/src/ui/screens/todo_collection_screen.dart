@@ -1594,9 +1594,7 @@ final class _ManualQueuePanelState extends State<_ManualQueuePanel> {
       widget.tasks.length - 1,
     );
     if (_pendingTargetIndex != targetIndex) {
-      setState(() {
-        _pendingTargetIndex = targetIndex;
-      });
+      _pendingTargetIndex = targetIndex;
     }
   }
 
