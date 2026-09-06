@@ -550,9 +550,13 @@ final class _ReorderTestAppState extends State<_ReorderTestApp> {
         body: ReorderableListView.builder(
           buildDefaultDragHandles: false,
           itemCount: _labels.length,
-          onReorderItem: (oldIndex, newIndex) {
+          // Flutter 3.32 exposes the original callback; newer Flutter releases
+          // prefer onReorderItem, so keep the floor-compatible API here.
+          // ignore: deprecated_member_use
+          onReorder: (oldIndex, newIndex) {
             final value = _labels.removeAt(oldIndex);
-            _labels.insert(newIndex, value);
+            final adjustedIndex = newIndex > oldIndex ? newIndex - 1 : newIndex;
+            _labels.insert(adjustedIndex, value);
             widget.onReordered(List<String>.of(_labels));
             setState(() {});
           },
