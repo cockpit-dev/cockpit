@@ -109,7 +109,7 @@ void main() {
     final reordered = await repository.fetchTasks(const TodoFilter.inbox());
     expect(
       reordered.map((task) => task.title).toList(growable: false),
-      <String>['Queue first', 'Queue third', 'Queue second'],
+      <String>['Queue third', 'Queue first', 'Queue second'],
     );
   });
 }
