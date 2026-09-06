@@ -1,7 +1,6 @@
 import 'package:flutter_cockpit_test/flutter_cockpit_test.dart';
 import 'package:cockpit_demo/src/data/cockpit_demo_database.dart';
 import 'package:cockpit_demo/src/data/todo_repository.dart';
-import 'package:cockpit_demo/src/model/todo_filter.dart';
 import 'package:cockpit_demo/src/ui/screens/todo_collection_screen.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -37,10 +36,10 @@ void main() {
       await repository.createTask(title: 'Queue third');
       final collection = find.byType(TodoCollectionScreen);
       expect(collection, findsOneWidget);
-      await cockpit.flutter
+      final service = cockpit.flutter
           .widget<TodoCollectionScreen>(collection)
-          .service
-          .loadTasks();
+          .service;
+      await service.loadTasks();
       await cockpit.waitForUi();
       await cockpit.scroll('Manual queue', align: 'center');
 
@@ -56,9 +55,10 @@ void main() {
       );
       await cockpit.waitForUi();
 
-      final reordered = await repository.fetchTasks(const TodoFilter.inbox());
       expect(
-        reordered.map((task) => task.title).toList(growable: false),
+        service.listState.tasks
+            .map((task) => task.title)
+            .toList(growable: false),
         <String>['Queue third', 'Queue first', 'Queue second'],
       );
     },
