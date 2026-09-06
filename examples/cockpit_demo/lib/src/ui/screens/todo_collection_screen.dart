@@ -1548,20 +1548,29 @@ final class _ManualQueuePanel extends StatefulWidget {
 final class _ManualQueuePanelState extends State<_ManualQueuePanel> {
   String? _draggedTaskId;
   double _dragDeltaY = 0;
+  int? _dragStartIndex;
+  int? _pendingTargetIndex;
 
   void _clearDragState() {
     if (mounted) {
       setState(() {
         _draggedTaskId = null;
         _dragDeltaY = 0;
+        _dragStartIndex = null;
+        _pendingTargetIndex = null;
       });
     }
   }
 
   void _handleDragStart(String taskId) {
+    final startIndex = widget.tasks.indexWhere(
+      (candidate) => candidate.id == taskId,
+    );
     setState(() {
       _draggedTaskId = taskId;
       _dragDeltaY = 0;
+      _dragStartIndex = startIndex == -1 ? null : startIndex;
+      _pendingTargetIndex = startIndex == -1 ? null : startIndex;
     });
   }
 
@@ -1571,29 +1580,35 @@ final class _ManualQueuePanelState extends State<_ManualQueuePanel> {
     }
     final stepExtent = widget.compactMode ? 104.0 : 116.0;
     _dragDeltaY += details.delta.dy;
-    if (_dragDeltaY.abs() < stepExtent * 0.72) {
-      setState(() {});
-      return;
-    }
-
-    final currentIndex = widget.tasks.indexWhere(
-      (candidate) => candidate.id == task.id,
-    );
-    if (currentIndex == -1) {
+    final startIndex = _dragStartIndex;
+    if (startIndex == null) {
       _clearDragState();
       return;
     }
 
+    final stepThreshold = stepExtent * 0.72;
+    final steps = (_dragDeltaY.abs() / stepThreshold).floor();
     final direction = _dragDeltaY.isNegative ? -1 : 1;
-    final targetIndex = (currentIndex + direction).clamp(
+    final targetIndex = (startIndex + direction * steps).clamp(
       0,
       widget.tasks.length - 1,
     );
-    _dragDeltaY = 0;
-    if (targetIndex != currentIndex) {
-      unawaited(widget.onMoveToIndex(task.id, targetIndex));
+    if (_pendingTargetIndex != targetIndex) {
+      setState(() {
+        _pendingTargetIndex = targetIndex;
+      });
     }
-    setState(() {});
+  }
+
+  void _handleDragEnd(String taskId) {
+    final startIndex = _dragStartIndex;
+    final targetIndex = _pendingTargetIndex;
+    if (startIndex != null &&
+        targetIndex != null &&
+        targetIndex != startIndex) {
+      unawaited(widget.onMoveToIndex(taskId, targetIndex));
+    }
+    _clearDragState();
   }
 
   @override
@@ -1624,20 +1639,23 @@ final class _ManualQueuePanelState extends State<_ManualQueuePanel> {
               separatorBuilder: (context, index) => const SizedBox(height: 12),
               itemBuilder: (context, index) {
                 final task = widget.tasks[index];
-                return Opacity(
-                  opacity: _draggedTaskId == task.id ? 0.62 : 1,
-                  child: _ManualQueueCard(
-                    index: index,
-                    task: task,
-                    compactMode: widget.compactMode,
-                    highlightDropTarget: _draggedTaskId == task.id,
-                    dragHandle: _ManualQueueHandle(
-                      label: 'Reorder task ${task.title}',
-                      faded: _draggedTaskId == task.id,
-                      onVerticalDragStart: (_) => _handleDragStart(task.id),
-                      onVerticalDragUpdate: (details) =>
-                          _handleDragUpdate(task, details),
-                      onVerticalDragEnd: (_) => _clearDragState(),
+                return KeyedSubtree(
+                  key: ValueKey<String>(task.id),
+                  child: Opacity(
+                    opacity: _draggedTaskId == task.id ? 0.62 : 1,
+                    child: _ManualQueueCard(
+                      index: index,
+                      task: task,
+                      compactMode: widget.compactMode,
+                      highlightDropTarget: _draggedTaskId == task.id,
+                      dragHandle: _ManualQueueHandle(
+                        label: 'Reorder task ${task.title}',
+                        faded: _draggedTaskId == task.id,
+                        onVerticalDragStart: (_) => _handleDragStart(task.id),
+                        onVerticalDragUpdate: (details) =>
+                            _handleDragUpdate(task, details),
+                        onVerticalDragEnd: (_) => _handleDragEnd(task.id),
+                      ),
                     ),
                   ),
                 );

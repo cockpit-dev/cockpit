@@ -2,6 +2,7 @@ import 'package:flutter_cockpit_test/flutter_cockpit_test.dart';
 import 'package:cockpit_demo/src/data/cockpit_demo_database.dart';
 import 'package:cockpit_demo/src/data/todo_repository.dart';
 import 'package:cockpit_demo/src/model/todo_filter.dart';
+import 'package:cockpit_demo/src/ui/screens/todo_collection_screen.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../test/support/cockpit_demo_test_support.dart';
@@ -34,6 +35,12 @@ void main() {
       await repository.createTask(title: 'Queue first');
       await repository.createTask(title: 'Queue second');
       await repository.createTask(title: 'Queue third');
+      final collection = find.byType(TodoCollectionScreen);
+      expect(collection, findsOneWidget);
+      await cockpit.flutter
+          .widget<TodoCollectionScreen>(collection)
+          .service
+          .loadTasks();
       await cockpit.waitForUi();
       await cockpit.scroll('Manual queue', align: 'center');
 
