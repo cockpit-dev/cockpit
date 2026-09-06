@@ -24,18 +24,29 @@ are authoritative.
 ## Flutter Preflight
 
 Before running any `cockpit dev` command in a Flutter source checkout, first
-confirm that its development-only Cockpit shell is integrated. A normal Flutter
-app does not expose a Cockpit bridge by itself, so `dev start` rejects it during
+confirm that its Cockpit bridge entrypoint is integrated. A normal Flutter app
+does not expose a Cockpit bridge by itself, so `dev start` rejects it during
 bridge-shell preflight before launching Flutter.
 
-Check `cockpit/pubspec.yaml` and `cockpit/main.dart`. The non-published shell
-package must keep the production package graph untouched, depend on the real
-application locally by path or Pub workspace constraint, resolve
-`flutter_cockpit` as a development dependency, wrap the real application root
-in `FlutterCockpitApp`, and install the Cockpit navigator observer for every
-Navigator the app owns. Run `flutter pub get` in the package-resolution root
-after changing dependencies. If any part is absent or does not match the app's
-actual public bootstrap/router API, read and complete
+Cockpit accepts two layouts:
+
+- **Direct entrypoint (recommended):** `cockpit/main.dart` and its bootstrap
+  are ordinary Dart files in the application's existing Flutter package. Put
+  `flutter_cockpit` in that package's `dev_dependencies`, run `flutter pub get`
+  at the application root, and keep the production `lib/` entrypoint unchanged.
+  This preserves the real Android/iOS/macOS host, identifiers, entitlements,
+  permissions, flavors, and deep links.
+- **Separate module:** `cockpit/pubspec.yaml` plus `cockpit/main.dart` form a
+  non-published Flutter package that depends on the real application locally.
+  Use this only when package and native-host isolation is intentional; it has a
+  separate Dart package name and, with platform folders, a separate native app
+  identity that must be configured deliberately.
+
+In either layout, the entrypoint must resolve `flutter_cockpit`, wrap the real
+application root in `FlutterCockpitApp`, and install the Cockpit navigator
+observer for every Navigator the app owns. Run `flutter pub get` in the package
+resolution root after changing dependencies. If any part is absent or does not
+match the app's actual public bootstrap/router API, read and complete
 [flutter.md](references/flutter.md) before `cockpit dev start`.
 
 Only an already integrated checkout takes the fast path below. `cockpit/main.dart`
@@ -238,6 +249,7 @@ cockpit dev hover "More options"
 cockpit dev hold "Documents" --duration 900ms
 cockpit dev double "Card" --interval 120ms
 cockpit dev drag "Canvas" --dx 120 --dy 0
+cockpit dev drag "Reorder task Third" --to "Reorder task First" --place before
 cockpit dev swipe "List" up
 cockpit dev pinch "Map" 1.5
 cockpit dev rotate "Canvas" 1.5708
@@ -325,11 +337,12 @@ cockpit session show 2 --view more
 cockpit dev status --session 2
 ```
 
-Before blaming a Flutter launch hang, verify the development shell and then run
-`flutter pub get` from its package root:
+Before blaming a Flutter launch hang, verify the bridge layout and then run
+`flutter pub get` from the package-resolution root:
 
 ```bash
-rg -n "flutter_cockpit|FlutterCockpitApp|NavigatorObserver" cockpit/pubspec.yaml cockpit/main.dart
+rg -n "flutter_cockpit|FlutterCockpitApp|NavigatorObserver" \
+  pubspec.yaml cockpit/main.dart cockpit/cockpit_bootstrap.dart
 flutter pub get
 cockpit target discover
 cockpit dev start --device <deviceId>
@@ -608,11 +621,13 @@ preserving authorization and durable state; then run `cockpit skill` and give it
 prompt to the current AI host so the complete Skill and selected integration
 surface can be refreshed. Do not manually delete Cockpit home data, Pub
 caches, sessions, executables, or ports.
-When a Flutter project uses Cockpit packages, upgrade its development shell and
-`cockpit_protocol`, `flutter_cockpit`, and `flutter_cockpit_test` constraints to
-the exact same Cockpit version only after the user explicitly requests the
-upgrade, then run `flutter pub get`; read [upgrade.md](references/upgrade.md) for
-the ordered project upgrade and verification flow.
+When a Flutter project uses Cockpit packages, upgrade the active integration
+(the root application's direct `dev_dependencies` or the optional development
+shell) and `cockpit_protocol`, `flutter_cockpit`, and `flutter_cockpit_test`
+constraints to the exact same Cockpit version only after the user explicitly
+requests the upgrade, then run `flutter pub get`; read
+[upgrade.md](references/upgrade.md) for the ordered project upgrade and
+verification flow.
 
 `cockpit daemon start` and an unflagged
 `daemon restart` preserve the authorization of a healthy running daemon; with no
@@ -727,7 +742,7 @@ of guessing. Execute only the `sel` whose own `can` advertises the command.
 | `select` | `dev select TARGET START END` |
 | `hold` | `dev hold [TARGET] [--duration TIME]` or `--at X,Y` |
 | `double` | `dev double [TARGET] [--interval TIME]` or `--at X,Y` |
-| `drag` | `dev drag TARGET --dx PX --dy PX` |
+| `drag` | `dev drag TARGET --dx PX --dy PX` or `dev drag TARGET --to DEST [--place before|center|after]` |
 | `fling` | `dev fling TARGET --dx PX --dy PX --velocity PX_PER_S` |
 | `swipe` | `dev swipe TARGET up|down|left|right` |
 | `pinch` | `dev pinch TARGET SCALE` |
@@ -784,6 +799,7 @@ cockpit dev inspect "Save changes"
 cockpit dev tap '#save-button'
 cockpit dev hold ':k4m2p8'
 cockpit dev drag 'Canvas' --dx 120 --dy 0
+cockpit dev drag 'Reorder task Third' --to 'Reorder task First' --place before
 cockpit dev swipe 'List' up
 cockpit dev pinch 'Map' 1.5
 cockpit dev inc ':v8c1r6'
@@ -822,7 +838,15 @@ Use `dev tree` only when bounded target inspection cannot explain the structure:
 cockpit dev tree
 cockpit dev tree --view more
 cockpit dev tree --view full
+cockpit dev tree --view more --under 'Settings >> List'
+cockpit dev tree --view full --under '@task-list' --depth 2
 ```
+
+Use `--under` to inspect only one mounted subtree and `--depth` to cap its
+descendants relative to that root (`0` means the root only). The scope must
+resolve to exactly one element; missing or ambiguous scopes fail explicitly and
+never expand into a full-tree response. Both options require `--view more` or
+`--view full`; `--max-nodes` remains the final artifact bound.
 
 The default tree is a compact actionable target index with reusable `sel`, not a
 partial raw tree. `more` writes the mounted public Widget structure to an artifact;
@@ -959,7 +983,7 @@ names only from `explain` under `input.fields`.
 Use this loop while authoring a Flutter integration test or a black-box case;
 it keeps failures diagnosable and avoids guessing:
 
-1. **Prepare one target.** Confirm the development shell, discover devices, and
+1. **Prepare one target.** Confirm the Cockpit bridge layout, discover devices, and
    select one exact device id. Start or reuse one session and record its handle;
    never let a test silently switch targets.
 2. **Author from source.** For `flutter_cockpit_test`, read the build method and
@@ -1131,7 +1155,8 @@ timeline payloads are opt-in (`allocationClassIds` and `perfetto: true`) because
 they change profiling overhead.
 
 For application-owned attribution, register `CockpitPerformancePlugin` in the
-development shell or pass `plugins: [...]` to one `cockpit.profile()` call. A
+direct `cockpit/` entrypoint or optional development module, or pass
+`plugins: [...]` to one `cockpit.profile()` call. A
 plugin is inert outside an explicit capture. Its sink exposes `instant`,
 `begin/end`, `trace`, `counter`, and `sample`; every event uses the same
 monotonic clock as VM timeline events and carries `src` plus optional isolate

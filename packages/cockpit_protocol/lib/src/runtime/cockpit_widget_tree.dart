@@ -1,6 +1,7 @@
 import 'package:collection/collection.dart';
 
 import '../control/cockpit_command_type.dart';
+import '../control/cockpit_locator.dart';
 import '../foundation/cockpit_foundation_value_reader.dart';
 
 enum CockpitWidgetTreeProfile {
@@ -33,6 +34,8 @@ final class CockpitWidgetTreeOptions {
     this.profile = CockpitWidgetTreeProfile.minimal,
     this.maxNodes = 800,
     this.maxProps = 0,
+    this.under,
+    this.depth,
   });
 
   /// Creates the concise actionable/content tree profile.
@@ -60,11 +63,21 @@ final class CockpitWidgetTreeOptions {
   /// Maximum diagnostic properties emitted per node.
   final int maxProps;
 
+  /// Optional mounted element selector whose subtree becomes the tree root.
+  /// The selector must resolve to exactly one mounted element.
+  final CockpitLocator? under;
+
+  /// Maximum descendant depth relative to [under] (or the surface root).
+  /// `0` emits only the selected root.
+  final int? depth;
+
   /// Encodes these options as a JSON object.
   Map<String, Object?> toJson() => <String, Object?>{
     'profile': profile.jsonValue,
     'maxNodes': maxNodes,
     'maxProps': maxProps,
+    if (under != null) 'under': under!.toJson(),
+    if (depth != null) 'depth': depth,
   };
 
   /// Decodes widget-tree capture options from a JSON object.
@@ -73,7 +86,12 @@ final class CockpitWidgetTreeOptions {
       'profile',
       'maxNodes',
       'maxProps',
+      'under',
+      'depth',
     }, r'$');
+    final underJson = json['under'] == null
+        ? null
+        : CockpitFoundationValueReader.object(json['under'], r'$.under');
     return CockpitWidgetTreeOptions(
       profile: json['profile'] == null
           ? CockpitWidgetTreeProfile.minimal
@@ -94,6 +112,17 @@ final class CockpitWidgetTreeOptions {
               min: 0,
               max: 256,
             ),
+      under: underJson == null
+          ? null
+          : CockpitLocator.fromJson(Map<String, Object?>.from(underJson)),
+      depth: json['depth'] == null
+          ? null
+          : CockpitFoundationValueReader.integer(
+              json['depth'],
+              r'$.depth',
+              min: 0,
+              max: 256,
+            ),
     );
   }
 
@@ -102,10 +131,16 @@ final class CockpitWidgetTreeOptions {
     CockpitWidgetTreeProfile? profile,
     int? maxNodes,
     int? maxProps,
+    CockpitLocator? under,
+    bool clearUnder = false,
+    int? depth,
+    bool clearDepth = false,
   }) => CockpitWidgetTreeOptions(
     profile: profile ?? this.profile,
     maxNodes: maxNodes ?? this.maxNodes,
     maxProps: maxProps ?? this.maxProps,
+    under: clearUnder ? null : under ?? this.under,
+    depth: clearDepth ? null : depth ?? this.depth,
   );
 
   @override
@@ -114,11 +149,13 @@ final class CockpitWidgetTreeOptions {
         other is CockpitWidgetTreeOptions &&
             other.profile == profile &&
             other.maxNodes == maxNodes &&
-            other.maxProps == maxProps;
+            other.maxProps == maxProps &&
+            other.under == under &&
+            other.depth == depth;
   }
 
   @override
-  int get hashCode => Object.hash(profile, maxNodes, maxProps);
+  int get hashCode => Object.hash(profile, maxNodes, maxProps, under, depth);
 }
 
 final class CockpitWidgetBounds {
@@ -432,6 +469,8 @@ final class CockpitWidgetTree {
     required this.total,
     required this.visible,
     required this.truncated,
+    this.under,
+    this.depth,
     int? emitted,
     List<CockpitWidgetNode> nodes = const <CockpitWidgetNode>[],
   }) : nodes = List.unmodifiable(nodes),
@@ -449,6 +488,12 @@ final class CockpitWidgetTree {
   /// Whether profile-selected nodes exceeded the emitted node limit.
   final bool truncated;
 
+  /// Selector used as the subtree root, when a scoped tree was requested.
+  final CockpitLocator? under;
+
+  /// Maximum emitted descendant depth, when bounded by the request.
+  final int? depth;
+
   /// Number of nodes emitted in [nodes].
   final int emitted;
 
@@ -465,16 +510,23 @@ final class CockpitWidgetTree {
     'visible': visible,
     'emitted': emitted,
     'truncated': truncated,
+    if (under != null) 'under': under!.toJson(),
+    if (depth != null) 'depth': depth,
     'nodes': nodes.map((node) => node.toJson()).toList(growable: false),
   };
 
   /// Decodes a Widget tree from a JSON object.
   factory CockpitWidgetTree.fromJson(Map<String, Object?> json) {
+    final underJson = json['under'] as Map<Object?, Object?>?;
     return CockpitWidgetTree(
       profile: CockpitWidgetTreeProfile.fromJson(json['profile']),
       total: json['total']! as int,
       visible: json['visible']! as int,
       truncated: json['truncated'] as bool? ?? false,
+      under: underJson == null
+          ? null
+          : CockpitLocator.fromJson(Map<String, Object?>.from(underJson)),
+      depth: json['depth'] as int?,
       emitted: json['emitted'] as int?,
       nodes: (json['nodes'] as List<Object?>? ?? const <Object?>[])
           .cast<Map<Object?, Object?>>()
@@ -494,6 +546,8 @@ final class CockpitWidgetTree {
             other.total == total &&
             other.visible == visible &&
             other.truncated == truncated &&
+            other.under == under &&
+            other.depth == depth &&
             other.emitted == emitted &&
             _nodeEquality.equals(other.nodes, nodes);
   }
@@ -504,6 +558,8 @@ final class CockpitWidgetTree {
     total,
     visible,
     truncated,
+    under,
+    depth,
     emitted,
     _nodeEquality.hash(nodes),
   );

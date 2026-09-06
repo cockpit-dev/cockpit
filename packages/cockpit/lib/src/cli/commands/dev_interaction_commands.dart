@@ -181,32 +181,76 @@ CockpitLeafCommand cockpitDevDragCommand(
 ) => CockpitLeafCommand(
   runtime: runtime,
   name: 'drag',
-  description: 'Drag one Flutter target by a real pointer path.',
+  description:
+      'Drag one Flutter target by a real pointer path, or drag it to a '
+      'resolved destination for reorder/drop interactions.',
   invocationSuffix: 'SELECTOR [arguments]',
-  example: 'cockpit dev drag "Canvas" --dx 120 --dy 0',
+  example:
+      'cockpit dev drag "Reorder task Third" --to "Reorder task First" '
+      '--place before',
   configure: (parser) {
     _targetOptions(parser);
     parser
       ..addOption('dx', help: 'Horizontal movement in logical pixels.')
       ..addOption('dy', help: 'Vertical movement in logical pixels.')
+      ..addOption(
+        'to',
+        help:
+            'Optional destination selector. Resolves a target-to-target drag '
+            'for reorder/drop interactions.',
+      )
+      ..addOption(
+        'place',
+        defaultsTo: 'center',
+        allowed: const <String>['before', 'center', 'after'],
+        help: 'Destination placement when --to is used.',
+      )
+      ..addOption(
+        'axis',
+        defaultsTo: 'auto',
+        allowed: const <String>['auto', 'horizontal', 'vertical'],
+        help: 'Drop axis when --to is used; auto follows the target geometry.',
+      )
       ..addOption('duration', defaultsTo: '220ms')
       ..addOption('hold', help: 'Optional hold before moving.')
       ..addOption('moves', help: 'Optional number of move events.')
       ..addOption('at', help: 'Optional start point as X,Y.');
   },
   action: (arguments) async {
-    final dx = _finiteDouble(arguments, 'dx');
-    final dy = _finiteDouble(arguments, 'dy');
-    if (dx == 0 && dy == 0) {
-      throw const FormatException('dev drag requires non-zero movement.');
+    final destinationSelector = arguments.option('to')?.trim();
+    final hasDestination =
+        destinationSelector != null && destinationSelector.isNotEmpty;
+    final hasDx = arguments.option('dx')?.trim().isNotEmpty ?? false;
+    final hasDy = arguments.option('dy')?.trim().isNotEmpty ?? false;
+    if (hasDestination && (hasDx || hasDy)) {
+      throw const FormatException(
+        'dev drag accepts either --dx/--dy or --to, not both.',
+      );
+    }
+    if (!hasDestination && (!hasDx || !hasDy)) {
+      throw const FormatException(
+        'dev drag requires --dx and --dy, or a destination --to selector.',
+      );
     }
     final parameters = <String, Object?>{
-      'dx': dx,
-      'dy': dy,
       'durationMs': _positiveDuration(arguments, 'duration').inMilliseconds,
       ..._optionalGestureTiming(arguments),
       ..._optionalPoint(arguments),
+      if (hasDestination) ...<String, Object?>{
+        'toLocator': cockpitReadDevLocator(
+          arguments,
+          selector: destinationSelector,
+        )!.toJson(),
+        'dropPlacement': arguments.option('place'),
+        'dropAxis': arguments.option('axis'),
+      } else ...<String, Object?>{
+        'dx': _finiteDouble(arguments, 'dx'),
+        'dy': _finiteDouble(arguments, 'dy'),
+      },
     };
+    if (!hasDestination && parameters['dx'] == 0 && parameters['dy'] == 0) {
+      throw const FormatException('dev drag requires non-zero movement.');
+    }
     return _targetGestureAction(
       runtime,
       dev,

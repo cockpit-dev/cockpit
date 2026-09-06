@@ -19,13 +19,15 @@ Element 选择器、真实命中测试操作、懒加载列表滚动、紧凑快
 
 ## 安装
 
-把它添加到开发 shell 或仅测试 package 中，不要加入生产应用代码：
+把它添加到应用的开发依赖、可选开发 module 或仅测试 package 中，不要在生产应用代码中
+import：
 
 ```bash
 flutter pub add --dev flutter_cockpit_test
 ```
 
-这个包用于已经接入 `flutter_cockpit` 的不发布 `cockpit/` shell。它不依赖 Cockpit
+这个包用于已经接入 `flutter_cockpit` 的纯 Dart `cockpit/` 入口或不发布 Cockpit
+module。它不依赖 Cockpit
 CLI、daemon、MCP server 或任何 secret store。
 
 ## 快速开始
@@ -72,12 +74,17 @@ await cockpit.wheel(
   delta: const Offset(0, 120),
   steps: 2,
 );
+await cockpit.dragTo(
+  from: 'Drag third',
+  to: 'Drop first',
+  placement: 'before',
+);
 ```
 
 普通文本是精确匹配。源码已知时优先使用 `#id`、`@key`、Widget 类型、祖先链和多条件
 定位，不需要为了 Cockpit 修改业务 `Key` 或 `Semantics`。
 
-facade 直接覆盖完整 Flutter 交互闭环：指针手势（`tap`、`hover`、`longPress`、`doubleTap`、`drag`、`fling`、`swipe`、
+facade 直接覆盖完整 Flutter 交互闭环：指针手势（`tap`、`hover`、`longPress`、`doubleTap`、`drag`、`dragTo`、`fling`、`swipe`、
 `pinch`、`rotate`、`panZoom`、`multiTouch`、`wheel`）、文本和键盘输入（`type`、`clear`、`copy`、`paste`、`focus`、
 `setTextEditingValue`、`selectText`、`keyDown`、`keyUp`、`hotkey`、`press`）、控件和导航（`increase`、`decrease`、
 `showOnScreen`、`scroll`、`waitFor`、`waitForUi`、`waitForRoute`、`back`、`dismiss`、`dismissKeyboard`），以及断言和证据
@@ -86,10 +93,16 @@ facade 直接覆盖完整 Flutter 交互闭环：指针手势（`tap`、`hover`�
 不需要手写 sleep。只有在确实需要 Flutter 专属 matcher 或自定义 pump 时，才使用
 `cockpit.flutter`。
 
+需要把快照记录成命令步骤时使用 `collectSnapshot()`；需要隔离本次流程的
+HTTP/SSE/WebSocket 索引时先调用 `clearNetworkActivity()`。宿主专属的
+`expectScreenshot()` 和 `travel()` 只有在显式配置 `hostCommand` adapter 后可用，
+不会猜测或隐藏原生副作用。
+
 所有手势都会发送真实且经过 hit-test 的指针事件。目标无法被定位时可用 `at` 坐标；`device` 和 `buttons` 可覆盖
 鼠标、触控笔和触摸行为，无需修改业务代码。`wheel` 会发送真实的 `PointerScrollEvent`，因此 `Scrollable`、自定义
 `Listener(onPointerSignal: ...)` 和支持触控板的组件都会收到与实际鼠标/触控板一致的输入。每个 `delta` 对应一个事件；
-只有场景确实需要时才设置 `steps`、`interval`、`device` 或显式 `at` 坐标。
+只有场景确实需要时才设置 `steps`、`interval`、`device` 或显式 `at` 坐标。`dragTo` 会同时解析拖拽源和目标，
+并为可排序列表、看板和拖放区域计算落点；只有落点语义重要时才指定 `before|center|after`。
 
 每条 facade 命令默认超时 10 秒。已知较慢的单次操作直接传入 `timeout` 覆盖，必须为正数且
 不超过 1 小时：
@@ -156,6 +169,26 @@ await cockpit.host.action(
 每条命令都会记录到应用内 Cockpit session，并把紧凑的 `cockpit` 条目合并到
 `integration_test` 的 `reportData`。大快照和二进制证据保存在 artifact 中，不会倾倒
 到测试输出。
+
+需要把快照作为测试步骤记录时使用 `collectSnapshot()`；需要隔离本次流程的
+HTTP/SSE/WebSocket 请求索引时，先调用 `clearNetworkActivity()`。`snapshot()` 仍是
+低开销同步读取。宿主能力保持显式：`expectScreenshot()` 交给配置好的宿主 adapter
+做基线比较，`travel()` 使用 `CockpitTravelPoint` 回放经过校验的模拟位置路线；没有
+配置 `hostCommand` 时不会猜测或隐藏任何原生副作用。
+
+```dart
+await cockpit.clearNetworkActivity();
+final before = await cockpit.collectSnapshot();
+await cockpit.tap('#open-chart');
+final after = await cockpit.collectSnapshot();
+expect(after.routeName, before.routeName);
+
+await cockpit.expectScreenshot(baseline: 'test/baselines/chart.png');
+await cockpit.travel(const [
+  CockpitTravelPoint(latitude: 31.20, longitude: 121.50),
+  CockpitTravelPoint(latitude: 31.21, longitude: 121.51),
+]);
+```
 
 ## VM 调试控制
 

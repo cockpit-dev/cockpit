@@ -31,7 +31,7 @@ Cockpit 让 AI 操作正在运行的应用，而不是对截图猜测。Flutter 
 
 ## 60 秒 Flutter 流程
 
-在完成 development shell 接入的 Flutter 项目中执行：
+在完成纯 Dart bridge 入口或可选独立开发 module 接入的 Flutter 项目中执行：
 
 ```bash
 cockpit dev start
@@ -91,7 +91,8 @@ void main() {
 | [`cockpit_console`](packages/cockpit_console) | 独立桌面 UI：session、run、operation、日志和网络活动 |
 
 已发布包最低需要 Dart 3.8.0；Flutter 包最低需要 Flutter 3.32.0。不要在生产
-`lib/` 代码中添加 `flutter_cockpit` import，应放在 development shell 或仅测试 package。
+`lib/` 代码中添加 `flutter_cockpit` import，应放在纯 Dart `cockpit/` 入口、可选独立
+module 或仅测试 package。
 
 ## 给 AI Agent 安装
 

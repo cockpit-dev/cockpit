@@ -14,11 +14,70 @@ bridge. Once the shell exists, use the short `cockpit dev` workflow from
 - [Router integration](#router-integration)
 - [Debugging](#debugging)
 
-## Keep Production Untouched
+## Choose A Layout
 
-Keep Cockpit imports and wiring under `cockpit/`. Do not import
-`flutter_cockpit` from production `lib/` code and do not replace the production
-entrypoint.
+Cockpit supports two layouts. The default is a Dart-only entrypoint inside the
+real Flutter project; use a separate module only when dependency isolation is
+more important than sharing the application's native host configuration.
+
+### Direct entrypoint (recommended)
+
+Keep Cockpit imports and wiring under `cockpit/`, but do not create another
+Flutter package:
+
+```text
+pubspec.yaml
+lib/
+  ... production code ...
+cockpit/
+  main.dart
+  cockpit_bootstrap.dart
+```
+
+Add the bridge to the application's development dependencies. Flutter excludes
+development-only plugins from release plugin registration, while debug/profile
+launches keep the same Android/iOS/macOS host, application identifiers,
+entitlements, flavors, permissions, and deep-link configuration as the real app.
+
+```yaml
+# app/pubspec.yaml
+dev_dependencies:
+  flutter_cockpit: any
+```
+
+Run `flutter pub get` from the application root. The production `lib/` entrypoint
+does not change, and `cockpit dev start` automatically selects
+`cockpit/main.dart` when it exists.
+
+`cockpit/main.dart` can stay tiny; the bootstrap imports the application's
+public root widget through its normal package name:
+
+```dart
+// cockpit/main.dart
+import 'package:flutter/widgets.dart';
+import 'package:your_app/app.dart';
+import 'package:flutter_cockpit/flutter_cockpit_flutter.dart';
+
+void main() {
+  runApp(
+    FlutterCockpitApp(
+      child: YourApp(
+        navigatorObservers: <NavigatorObserver>[
+          FlutterCockpit.createNavigatorObserver(),
+        ],
+      ),
+    ),
+  );
+}
+```
+
+### Separate development module
+
+Create `cockpit/pubspec.yaml` only when an isolated Flutter package is
+intentional. This creates a second Dart package and, when platform folders are
+present, a second native application identity. It is useful for a clean
+development shell, but its platform configuration must be kept in sync with the
+real app.
 
 ```text
 cockpit/
@@ -29,13 +88,13 @@ lib/
   ... unchanged production code ...
 ```
 
-The non-published shell is its own Flutter package. It imports the application's
-existing public root widget or bootstrap through a path dependency.
+The module imports the application's existing public root widget or bootstrap
+through a path dependency.
 
-## Add The Dependency
+## Add The Dependency (module mode)
 
 Create `cockpit/pubspec.yaml`, replace `your_app` with the real package name,
-and add the bridge only to this shell:
+and add the bridge only to this module:
 
 ```yaml
 name: your_app_cockpit
@@ -55,8 +114,9 @@ dev_dependencies:
   flutter_cockpit: any
 ```
 
-Run `flutter pub get` inside `cockpit/`. The globally installed `cockpit` CLI
-does not belong in either package's dependencies.
+Run `flutter pub get` inside `cockpit/` for module mode. In direct mode, run it
+from the application root. The globally installed `cockpit` CLI does not
+belong in either package's dependencies.
 
 If the application participates in a Pub workspace, register `cockpit/` in the
 root `workspace` list, add `resolution: workspace` to this shell manifest, and
@@ -70,7 +130,9 @@ dependencies:
 ```
 
 Use the application's real version constraint and run `flutter pub get` from
-the workspace root. Do not declare both path and workspace forms.
+the workspace root. Do not declare both path and workspace forms. A direct
+entrypoint does not need a workspace member for `cockpit/` because it is only
+source code inside the application package.
 
 ## Create The Entrypoint
 
@@ -253,6 +315,14 @@ The bridge exposes Element/RenderObject targets, optional Semantics, route and f
 and isolate errors, app logs, HTTP activity, rebuild signals, screenshots,
 recording, idle state, and typed command results. Cockpit reads these through
 the same handle.
+
+On native Flutter targets, HTTP activity is collected at the `dart:io`
+`HttpOverrides` boundary. This covers `package:http` `IOClient`, Dio's native
+`IOHttpClientAdapter`, and direct `HttpClient` calls without app code changes;
+initialize the bridge before constructing long-lived clients. If a client must
+be created earlier, inject `CockpitHttpNetworkObserver.createHttpClient` (or
+Dio's `IOHttpClientAdapter(createHttpClient: ...)`). Browser `fetch` and
+`BrowserClient` traffic use the browser/host evidence path instead.
 
 ## Platform Behavior
 

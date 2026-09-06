@@ -2,7 +2,9 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:dio/dio.dart';
 import 'package:flutter_cockpit/flutter_cockpit_flutter.dart';
+import 'package:http/io_client.dart';
 import 'package:test/test.dart';
 
 void main() {
@@ -98,6 +100,97 @@ void main() {
       expect(snapshot.endpointSummaries.single.method, 'POST');
       expect(snapshot.endpointSummaries.single.uriPattern, '/probe');
       expect(snapshot.endpointSummaries.single.requestCount, 1);
+    },
+  );
+
+  test(
+    'CockpitHttpNetworkObserver captures package:http, Dio, and direct clients',
+    () async {
+      final observer = CockpitHttpNetworkObserver(maxRetainedEntries: 10);
+      FlutterCockpit.initialize(
+        FlutterCockpitConfiguration(networkObserver: observer),
+      );
+      addTearDown(FlutterCockpit.dispose);
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() async {
+        await server.close(force: true);
+      });
+      server.listen((request) async {
+        final body = await utf8.decoder.bind(request).join();
+        request.response
+          ..statusCode = HttpStatus.ok
+          ..headers.contentType = ContentType.json;
+        request.response.write(
+          jsonEncode(<String, Object?>{
+            'method': request.method,
+            'path': request.uri.path,
+            'body': body,
+          }),
+        );
+        await request.response.close();
+      });
+
+      final baseUri = Uri.parse('http://127.0.0.1:${server.port}');
+      final httpClient = IOClient();
+      final dio = Dio();
+      final directClient = HttpClient();
+      addTearDown(() async {
+        httpClient.close();
+        dio.close(force: true);
+        directClient.close(force: true);
+      });
+
+      final httpResponse = await httpClient.post(
+        baseUri.resolve('/http'),
+        headers: <String, String>{'content-type': 'application/json'},
+        body: '{"source":"http"}',
+      );
+      expect(httpResponse.statusCode, HttpStatus.ok);
+
+      final dioResponse = await dio.postUri(
+        baseUri.resolve('/dio'),
+        data: <String, String>{'source': 'dio'},
+      );
+      expect(dioResponse.statusCode, HttpStatus.ok);
+
+      final directRequest = await directClient.get(
+        baseUri.host,
+        baseUri.port,
+        '/direct',
+      );
+      final directResponse = await directRequest.close();
+      expect(directResponse.statusCode, HttpStatus.ok);
+      await directResponse.drain<void>();
+
+      final snapshot = observer.snapshot(maxEntries: 10);
+      expect(snapshot.totalEntryCount, 3);
+      expect(snapshot.failureCount, 0);
+      expect(
+        snapshot.entries.map((entry) => entry.method),
+        containsAll(<String>['POST', 'POST', 'GET']),
+      );
+
+      final httpEntry = snapshot.entries.singleWhere(
+        (entry) => entry.uri.contains('/http'),
+      );
+      expect(httpEntry.method, 'POST');
+      expect(httpEntry.requestBodyPreview, contains('"source":"http"'));
+      expect(httpEntry.responseBodyPreview, contains('"method":"POST"'));
+      expect(httpEntry.responseBodyPreview, contains('"path":"/http"'));
+
+      final dioEntry = snapshot.entries.singleWhere(
+        (entry) => entry.uri.contains('/dio'),
+      );
+      expect(dioEntry.method, 'POST');
+      expect(dioEntry.requestBodyPreview, contains('"source":"dio"'));
+      expect(dioEntry.responseBodyPreview, contains('"path":"/dio"'));
+
+      final directEntry = snapshot.entries.singleWhere(
+        (entry) => entry.uri.contains('/direct'),
+      );
+      expect(directEntry.method, 'GET');
+      expect(directEntry.requestBodyBytes, 0);
+      expect(directEntry.responseBodyPreview, contains('"path":"/direct"'));
     },
   );
 

@@ -37,7 +37,8 @@ targets.
 
 ## 60-second Flutter loop
 
-From the Flutter project (after the development shell is wired):
+From the Flutter project (after the Dart-only bridge entrypoint or optional
+development module is wired):
 
 ```bash
 cockpit dev start
@@ -99,8 +100,10 @@ recording, viewport control, system actions, and per-call timeouts.
 | [`cockpit_protocol`](packages/cockpit_protocol) | Shared DTOs, schemas, test DSL, and OpenAPI |
 | [`cockpit_console`](packages/cockpit_console) | Independent desktop UI for sessions, runs, operations, logs, and network activity |
 
-The published packages require Dart 3.8.0; Flutter packages require Flutter 3.32.0. Do not add `flutter_cockpit` imports to production `lib/` code. The
-bridge belongs in a development shell or test-only package.
+The published packages require Dart 3.8.0; Flutter packages require Flutter 3.32.0.
+Do not add `flutter_cockpit` imports to production `lib/` code. Keep
+them in a Dart-only `cockpit/` entrypoint, an optional isolated module, or a
+test-only package.
 
 ## Install for an AI agent
 

@@ -14,6 +14,38 @@ export 'package:cockpit_protocol/cockpit_protocol.dart'
         CockpitPerformanceArchiveInfo;
 export 'package:cockpit_protocol/cockpit_protocol.dart'
     show CockpitPerformancePluginStats;
+export 'package:cockpit_protocol/cockpit_protocol.dart'
+    show
+        CockpitCapabilities,
+        CockpitCommand,
+        CockpitCommandExecution,
+        CockpitCommandResult,
+        CockpitCommandType,
+        CockpitLocator,
+        CockpitSelector,
+        CockpitSnapshot,
+        CockpitSnapshotOptions,
+        CockpitSnapshotProfile,
+        CockpitSnapshotArtifactMode,
+        CockpitWidgetTreeOptions,
+        CockpitWidgetTreeProfile,
+        CockpitMultiTouchPhase,
+        CockpitMultiTouchStep,
+        CockpitMultiTouchSequence,
+        CockpitTextInputAction,
+        CockpitTextMatchMode,
+        CockpitScreenshotReason,
+        CockpitScreenshotRequest,
+        CockpitCaptureProfile,
+        CockpitCaptureResult,
+        CockpitRecordingCapabilities,
+        CockpitRecordingPurpose,
+        CockpitRecordingMode,
+        CockpitRecordingLayer,
+        CockpitRecordingRequest,
+        CockpitRecordingResult,
+        CockpitRecordingSession,
+        CockpitRecordingState;
 export 'package:flutter_cockpit/flutter_cockpit.dart'
     show
         CockpitPerformancePlugin,

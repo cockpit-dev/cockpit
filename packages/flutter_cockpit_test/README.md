@@ -20,14 +20,16 @@ viewport control, and explicit host/system actions.
 
 ## Install
 
-Add it to the development shell or test-only package, never to production
+Add it to the application's development dependencies, an optional development
+module, or another test-only package; never import it from production
 application code:
 
 ```bash
 flutter pub add --dev flutter_cockpit_test
 ```
 
-The package is intended for a non-published `cockpit/` shell that already uses
+The package is intended for a direct `cockpit/` entrypoint or non-published
+Cockpit module that already uses
 `flutter_cockpit`. It does not depend on the Cockpit CLI, daemon, MCP server, or
 any secret store.
 
@@ -76,6 +78,11 @@ await cockpit.wheel(
   delta: const Offset(0, 120),
   steps: 2,
 );
+await cockpit.dragTo(
+  from: 'Drag third',
+  to: 'Drop first',
+  placement: 'before',
+);
 ```
 
 Plain text is exact. Use `#id`, `@key`, widget type, ancestor chains, and
@@ -83,13 +90,16 @@ multiple conditions when source context gives you a stronger locator. No
 business `Key` or `Semantics` changes are required for Cockpit's Element plane.
 
 The facade covers the complete Flutter interaction loop directly: pointer
-gestures (`tap`, `hover`, `longPress`, `doubleTap`, `drag`, `fling`, `swipe`,
+gestures (`tap`, `hover`, `longPress`, `doubleTap`, `drag`, `dragTo`, `fling`, `swipe`,
 `pinch`, `rotate`, `panZoom`, `multiTouch`, `wheel`), text and keyboard input
 (`type`, `clear`, `copy`, `paste`, `focus`, `setTextEditingValue`, `selectText`,
 `keyDown`, `keyUp`, `hotkey`, `press`), controls and navigation (`increase`,
 `decrease`, `showOnScreen`, `scroll`, `waitFor`, `waitForUi`, `waitForRoute`,
 `back`, `dismiss`, `dismissKeyboard`), assertions and evidence (`expectVisible`,
-`expectText`, `screenshot`, `snapshot`, `watch`, `execute`).
+`expectText`, `screenshot`, `snapshot`, `watch`, `execute`). The facade also
+provides command-recorded `collectSnapshot()` and `clearNetworkActivity()`;
+host-only `expectScreenshot()` and `travel()` are available when an explicit
+`hostCommand` adapter is configured.
 Each command advances Flutter's test clock through the same commit and reveal
 logic used by the live bridge, so route pushes and async UI updates do not need
 hand-written sleeps. Use `cockpit.flutter` when a test intentionally needs a
@@ -101,7 +111,9 @@ stylus, and touch-sensitive behavior without changing the app. `wheel` sends
 real `PointerScrollEvent` signals to `Scrollable`, custom
 `Listener(onPointerSignal: ...)`, and trackpad-aware widgets. Its `delta` is
 applied per event; use `steps`, `interval`, `device`, or `at` only when the
-scenario needs them.
+scenario needs them. `dragTo` resolves both targets and computes a drop point
+for reorderable lists, kanban boards, and drop zones; choose
+`before|center|after` only when placement matters.
 
 Every facade command has a 10-second default timeout. Override one known-slow
 call with `timeout`; the value must be positive and no longer than one hour:
@@ -175,6 +187,28 @@ Every executed command is recorded into the in-app Cockpit session and a
 compact `cockpit` entry is merged into `integration_test`'s `reportData`. Large
 snapshots and binary evidence are kept as artifacts; they are not dumped into
 test output.
+
+For command-level evidence, use `collectSnapshot()` when the snapshot itself
+must be recorded as a step, and `clearNetworkActivity()` before a flow that
+needs an isolated HTTP/SSE/WebSocket index. `snapshot()` remains the synchronous
+low-overhead read. Host-only capabilities stay explicit: `expectScreenshot()`
+delegates baseline comparison to the configured host adapter and `travel()`
+replays a validated simulated-location route with `CockpitTravelPoint` values.
+Neither host method guesses a native action when `hostCommand` is absent.
+
+```dart
+await cockpit.clearNetworkActivity();
+final before = await cockpit.collectSnapshot();
+await cockpit.tap('#open-chart');
+final after = await cockpit.collectSnapshot();
+expect(after.routeName, before.routeName);
+
+await cockpit.expectScreenshot(baseline: 'test/baselines/chart.png');
+await cockpit.travel(const [
+  CockpitTravelPoint(latitude: 31.20, longitude: 121.50),
+  CockpitTravelPoint(latitude: 31.21, longitude: 121.51),
+]);
+```
 
 ## VM debugger controls
 
@@ -606,7 +640,7 @@ flutter test integration_test/task_flow_test.dart -d <device>
 ```
 
 For Cockpit-managed development sessions, the same test can run from the
-development shell and its steps remain visible in the session timeline and
-artifacts. Case/Suite documents remain available for AI-generated, black-box,
+direct application project or optional development module and its steps remain
+visible in the session timeline and artifacts. Case/Suite documents remain available for AI-generated, black-box,
 matrix, and cross-platform journeys; this package is the ergonomic Dart layer
 for Flutter source projects.

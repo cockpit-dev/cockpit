@@ -40,15 +40,34 @@ It provides:
 
 Requires Flutter 3.32.0 or newer.
 
+The default integration is a Dart-only entrypoint in the real Flutter project:
+
 ```yaml
-# cockpit/pubspec.yaml
+# app/pubspec.yaml
 dev_dependencies:
   flutter_cockpit: any
 ```
 
-Keep the runtime development-only. Put every `flutter_cockpit` import and all
-integration code under `cockpit/`; production `lib/` code and production
-entrypoints remain unchanged.
+```text
+app/
+  pubspec.yaml
+  lib/                  # production code
+  cockpit/
+    main.dart
+    cockpit_bootstrap.dart
+```
+
+Do not add `flutter_cockpit` imports to production `lib/` code. Keep every
+integration import and all integration code under `cockpit/`; the production
+entrypoint remains unchanged. This
+mode keeps the real native host, application identifiers, permissions,
+entitlements, flavors, and deep-link configuration.
+
+If package isolation is intentional, `cockpit/` may instead be a separate
+non-published Flutter module with its own `pubspec.yaml` and a path/workspace
+dependency on the application. That module has its own Dart package name and,
+when it owns platform folders, its own native application identity; keep its
+native configuration synchronized with the real app.
 
 Darwin integration supports both CocoaPods and Swift Package Manager. The
 package includes an iOS and macOS `.podspec` as well as `Package.swift`
@@ -80,14 +99,11 @@ The guide covers Codex, Claude Code, Cursor, Gemini CLI, Kiro, OpenCode, Pi,
 Oh My Pi, Cline, GitHub Copilot, Windsurf, Roo Code, and portable fallback
 installation.
 
-## Recommended Integration
+## Optional Isolated Module
 
-Create a non-published Flutter package under `cockpit/`. It depends locally on
-the real application and keeps `flutter_cockpit` in the shell's
-`dev_dependencies`; neither dependency enters the production package graph.
-The globally installed `cockpit` CLI is not an application dependency. Keep
-the normal production entrypoint and production `lib/` untouched.
-Do not add `flutter_cockpit` imports to production `lib/` code.
+Create a non-published Flutter package under `cockpit/` only when an isolated
+development host is required. It depends locally on the real application and
+keeps `flutter_cockpit` in the module's `dev_dependencies`. The globally installed `cockpit` CLI is not an application dependency.
 
 ```yaml
 # cockpit/pubspec.yaml
@@ -297,6 +313,17 @@ field names. A development-only entrypoint can explicitly use
 `CockpitHttpNetworkObserverConfiguration(redact: false)` when raw bounded
 payloads are required; never enable raw capture in a production entrypoint or
 an evidence-producing CI run.
+
+On native Flutter targets, the observer is installed through `dart:io`
+`HttpOverrides`, so `package:http`'s `IOClient`, Dio's default
+`IOHttpClientAdapter`, and direct `HttpClient` calls are captured together with
+the same request/response metadata, bounded previews, byte counts, failures,
+SSE progress, and WebSocket activity. Initialize `FlutterCockpit` before
+creating long-lived clients; if a client must be constructed earlier, inject a
+client from `CockpitHttpNetworkObserver.createHttpClient` (Dio accepts this via
+`IOHttpClientAdapter(createHttpClient: ...)`). Browser `BrowserClient`/`fetch`
+traffic does not pass through `dart:io`; use the browser/host network evidence
+path for web targets.
 
 `FlutterCockpitRoot` treats Flutter hot reload as a runtime-diagnostic generation
 boundary. Errors and unconsumed recorded steps from the previous generation are

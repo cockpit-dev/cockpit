@@ -1,5 +1,12 @@
 # Changelog
 
+## 4.8.0
+
+- Added command-recorded snapshots, network reset, host-backed screenshot
+  assertions, simulated travel routes, and typed target-to-target drag/drop.
+- Kept native actions explicit, bounded, and separate from the official
+  integration_test runner while preserving compact reports and artifacts.
+
 ## 4.7.0
 
 - Synchronized the integration-test facade with the Cockpit control-surface

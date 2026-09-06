@@ -219,8 +219,9 @@ Reload Kiro and confirm the steering file can load
 `.kiro/skills/cockpit/SKILL.md` before testing MCP. From Kiro's terminal, run
 `cockpit --version` and `cockpit session list` to confirm its process inherits
 Dart's global executable directory without requiring an active app. After a
-Flutter project has the development shell described in `references/flutter.md`,
-run `cockpit target discover`, choose the exact device id, then run
+Flutter project has the direct bridge entrypoint or optional development module
+described in `references/flutter.md`, run `cockpit target discover`, choose the
+exact device id, then run
 `cockpit dev start --device <id>` and `cockpit dev status` as the live CLI
 smoke. In Kiro's MCP resource browser, confirm the server can list Cockpit
 operations and read `cockpit://operations/schema`.

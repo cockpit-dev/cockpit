@@ -1,5 +1,10 @@
 # Changelog
 
+## 4.8.0
+
+- Published the bounded Widget-tree scope contract, including structural
+  locators, optional ancestors/fallbacks, and validated descendant depth.
+
 ## 4.7.0
 
 - Synchronized protocol package identity with the MCP run-discovery and

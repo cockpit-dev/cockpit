@@ -1,5 +1,14 @@
 # Changelog
 
+## 4.8.0
+
+- Added strict mounted-subtree Widget-tree capture with depth bounds and
+  explicit failure for missing or ambiguous scope roots.
+- Captured direct `HttpClient` convenience methods alongside package:http and
+  Dio traffic without changing application networking code.
+- Added source-aware target-to-target drag/drop dispatch for complex Flutter
+  reorder and drop interactions.
+
 ## 4.7.0
 
 - Synchronized the Flutter bridge release and AI integration guidance with the

@@ -1,6 +1,5 @@
 import 'package:cockpit_demo/src/data/cockpit_demo_database.dart';
 import 'package:cockpit_demo/src/cockpit_demo_app.dart';
-import 'package:cockpit_protocol/cockpit_protocol.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_cockpit_test/flutter_cockpit_test.dart';
 import 'package:flutter_test/flutter_test.dart';
