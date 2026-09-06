@@ -46,7 +46,7 @@ final class CockpitWidgetTreeBuilder {
 
     visit(root, parent: null, depth: 0, scroll: null);
 
-    final included = _includedNodes(rawNodes, options.profile);
+    final included = _includedNodes(rawNodes, options);
     final emitted = <CockpitWidgetNode>[];
     for (final raw in rawNodes) {
       if (!included.contains(raw) || emitted.length >= options.maxNodes) {
@@ -66,6 +66,8 @@ final class CockpitWidgetTreeBuilder {
       total: rawNodes.length,
       visible: rawNodes.where((node) => node.visible).length,
       truncated: included.length > emitted.length,
+      under: options.under,
+      depth: options.depth,
       nodes: emitted,
     );
   }
@@ -86,22 +88,28 @@ final class CockpitWidgetTreeBuilder {
 
   Set<_RawWidgetNode> _includedNodes(
     List<_RawWidgetNode> nodes,
-    CockpitWidgetTreeProfile profile,
+    CockpitWidgetTreeOptions options,
   ) {
+    final scopedNodes = options.depth == null
+        ? nodes
+        : nodes.where((node) => node.depth <= options.depth!).toList();
+    final profile = options.profile;
     if (profile == CockpitWidgetTreeProfile.full) {
-      return Set<_RawWidgetNode>.identity()..addAll(nodes);
+      return Set<_RawWidgetNode>.identity()..addAll(scopedNodes);
     }
     if (profile == CockpitWidgetTreeProfile.standard) {
       return Set<_RawWidgetNode>.identity()
-        ..addAll(nodes.where((node) => node.isPublicStructure));
+        ..addAll(scopedNodes.where((node) => node.isPublicStructure));
     }
 
     final included = Set<_RawWidgetNode>.identity();
-    for (final node in nodes.where((candidate) => candidate.isMeaningful)) {
+    for (final node in scopedNodes.where(
+      (candidate) => candidate.isMeaningful,
+    )) {
       _includePublicChain(node, included);
     }
-    if (nodes.isNotEmpty && included.isEmpty) {
-      _includePublicChain(nodes.first, included);
+    if (scopedNodes.isNotEmpty && included.isEmpty) {
+      _includePublicChain(scopedNodes.first, included);
     }
     return included;
   }

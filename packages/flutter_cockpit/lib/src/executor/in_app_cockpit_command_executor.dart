@@ -46,6 +46,7 @@ import '../runtime/cockpit_scroll_step_result.dart';
 import '../runtime/cockpit_snapshot.dart';
 import '../runtime/cockpit_snapshot_options.dart';
 import '../runtime/cockpit_target.dart';
+import '../runtime/cockpit_target_geometry.dart';
 import '../runtime/cockpit_target_geometry_resolver.dart';
 import '../runtime/cockpit_target_hit_test_inspector.dart';
 import '../runtime/cockpit_target_registry.dart';
@@ -1120,6 +1121,10 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
     CockpitCommand command,
     Stopwatch stopwatch,
   ) async {
+    final destinationLocator = _locatorParameter(command, 'toLocator');
+    if (destinationLocator != null) {
+      return _executeTargetToTargetDrag(command, stopwatch, destinationLocator);
+    }
     final dx = _doubleParameter(command, 'dx');
     final dy = _doubleParameter(command, 'dy');
     if (dx == null || dy == null) {
@@ -1154,6 +1159,194 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
         moveEventCount: _intParameter(command, 'moveEventCount') ?? 0,
         fallbackType: CockpitCommandType.drag,
       ),
+    );
+  }
+
+  Future<CockpitCommandExecution> _executeTargetToTargetDrag(
+    CockpitCommand command,
+    Stopwatch stopwatch,
+    CockpitLocator destinationLocator,
+  ) async {
+    if (command.locator == null) {
+      return _failureExecution(
+        command: command,
+        durationMs: stopwatch.elapsedMilliseconds,
+        error: CockpitCommandError.invalidGestureParameters(
+          message: 'target-to-target drag requires a source selector.',
+        ),
+      );
+    }
+
+    final sourceResolution = await _resolveInteractiveTarget(command);
+    if (!sourceResolution.isSuccess) {
+      return _failureExecution(
+        command: command,
+        durationMs: stopwatch.elapsedMilliseconds,
+        snapshot: _liveSnapshot().toJson(),
+        error: sourceResolution.error!,
+      );
+    }
+
+    final destinationCommand = command.copyWith(
+      commandId: '${command.commandId}:destination',
+      locator: destinationLocator,
+    );
+    final destinationResolution = await _resolveInteractiveTarget(
+      destinationCommand,
+    );
+    if (!destinationResolution.isSuccess) {
+      return _failureExecution(
+        command: command,
+        durationMs: stopwatch.elapsedMilliseconds,
+        snapshot: _liveSnapshot().toJson(),
+        error: CockpitCommandError.targetNotFound(
+          message: 'Drag destination could not be resolved.',
+          details: <String, Object?>{
+            'source': command.locator!.toJson(),
+            'destination': destinationLocator.toJson(),
+            'cause': destinationResolution.error!.toJson(),
+          },
+        ),
+      );
+    }
+
+    final source = sourceResolution.target!;
+    final destination = destinationResolution.target!;
+    if (source.registrationId == destination.registrationId) {
+      return _failureExecution(
+        command: command,
+        durationMs: stopwatch.elapsedMilliseconds,
+        error: CockpitCommandError.invalidGestureParameters(
+          message:
+              'Drag source and destination must resolve to different targets.',
+        ),
+      );
+    }
+
+    final sourceGeometry = CockpitTargetGeometryResolver.maybeFromTarget(
+      source,
+    );
+    final destinationGeometry = CockpitTargetGeometryResolver.maybeFromTarget(
+      destination,
+    );
+    if (sourceGeometry == null || destinationGeometry == null) {
+      return _failureExecution(
+        command: command,
+        durationMs: stopwatch.elapsedMilliseconds,
+        snapshot: _liveSnapshot().toJson(),
+        error: CockpitCommandError.targetNotHittable(
+          message:
+              'Drag source and destination must both expose current geometry.',
+          details: <String, Object?>{
+            'sourceGeometry': sourceGeometry != null,
+            'destinationGeometry': destinationGeometry != null,
+          },
+        ),
+      );
+    }
+    if (sourceGeometry.viewId != destinationGeometry.viewId) {
+      return _failureExecution(
+        command: command,
+        durationMs: stopwatch.elapsedMilliseconds,
+        error: CockpitCommandError.invalidGestureParameters(
+          message: 'Drag source and destination must belong to the same view.',
+          details: <String, Object?>{
+            'sourceView': sourceGeometry.viewId,
+            'destinationView': destinationGeometry.viewId,
+          },
+        ),
+      );
+    }
+
+    final sourcePoint =
+        _pointParameter(command) ??
+        _geometryAnchor(sourceGeometry, _gestureAnchorParameter(command));
+    final destinationPoint = _dropPoint(
+      destinationGeometry,
+      axis: _dropAxis(command, sourceGeometry, destinationGeometry),
+      placement: _dropPlacement(command),
+    );
+    final delta = destinationPoint - sourcePoint;
+    if (delta.distance < 1) {
+      return _failureExecution(
+        command: command,
+        durationMs: stopwatch.elapsedMilliseconds,
+        error: CockpitCommandError.invalidGestureParameters(
+          message: 'Drag source and destination resolve to the same point.',
+        ),
+      );
+    }
+
+    return _executeResolvedGesture(
+      command: command,
+      stopwatch: stopwatch,
+      resolution: sourceResolution,
+      actionBuilder: () => _buildDirectionalGesture(
+        command: command,
+        target: source,
+        delta: delta,
+        duration: _durationParameter(
+          command,
+          key: 'durationMs',
+          fallbackMs: 220,
+        ),
+        holdDuration: _optionalDurationParameter(command, 'holdDurationMs'),
+        touchSlopX:
+            _doubleParameter(command, 'touchSlopX') ??
+            cockpitDefaultDragTouchSlop,
+        touchSlopY:
+            _doubleParameter(command, 'touchSlopY') ??
+            cockpitDefaultDragTouchSlop,
+        moveEventCount: _intParameter(command, 'moveEventCount') ?? 0,
+        fallbackType: CockpitCommandType.drag,
+      ),
+    );
+  }
+
+  Offset _geometryAnchor(
+    CockpitTargetGeometry geometry,
+    CockpitGestureAnchor anchor,
+  ) {
+    final resolved = geometry.resolveAnchorPosition(anchor);
+    return Offset(resolved.dx, resolved.dy);
+  }
+
+  String _dropAxis(
+    CockpitCommand command,
+    CockpitTargetGeometry source,
+    CockpitTargetGeometry destination,
+  ) {
+    final requested = _stringParameter(command, 'dropAxis')?.toLowerCase();
+    if (requested == 'horizontal' || requested == 'vertical') {
+      return requested!;
+    }
+    final dx = (destination.centerX - source.centerX).abs();
+    final dy = (destination.centerY - source.centerY).abs();
+    return dx > dy && dx > 1 ? 'horizontal' : 'vertical';
+  }
+
+  String _dropPlacement(CockpitCommand command) {
+    final requested = _stringParameter(command, 'dropPlacement')?.toLowerCase();
+    if (requested == 'before' || requested == 'after') return requested!;
+    return 'center';
+  }
+
+  Offset _dropPoint(
+    CockpitTargetGeometry geometry, {
+    required String axis,
+    required String placement,
+  }) {
+    final fraction = switch (placement) {
+      'before' => 0.18,
+      'after' => 0.82,
+      _ => 0.5,
+    };
+    final raw = axis == 'horizontal'
+        ? Offset(geometry.left + geometry.width * fraction, geometry.centerY)
+        : Offset(geometry.centerX, geometry.top + geometry.height * fraction);
+    return Offset(
+      geometry.clampXToViewport(raw.dx),
+      geometry.clampYToViewport(raw.dy),
     );
   }
 

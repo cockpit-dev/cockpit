@@ -33,9 +33,9 @@ or ports manually.
 
 ## Flutter project packages
 
-Update the development shell and all Cockpit packages to one exact version
-number. Do not mix patch versions between the CLI, bridge, protocol, test facade,
-or shell:
+Update the active Flutter integration and all Cockpit packages to one exact
+version number. Do not mix patch versions between the CLI, bridge, protocol,
+test facade, or optional shell:
 
 - `cockpit_protocol` — shared DTO and operation contracts;
 - `flutter_cockpit` — the in-app bridge and native plugin;
@@ -43,10 +43,9 @@ or shell:
 - `cockpit` — the shell CLI/worker dependency when the project has a
   `cockpit/` development package.
 
-Keep these dependencies out of the production application package whenever the
-project uses a separate development shell. After explicit upgrade approval,
-update the shell or test package `pubspec.yaml` constraints, then resolve from
-the workspace root:
+For direct mode, update the application's `dev_dependencies`. For module mode,
+update the shell manifest. After explicit upgrade approval, resolve from the
+workspace root:
 
 ```bash
 flutter pub get

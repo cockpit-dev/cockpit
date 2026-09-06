@@ -341,9 +341,12 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
     final treeOptions = options.tree;
     final rootContext = _boundaryKey.currentContext;
     if (treeOptions != null && rootContext is Element) {
+      final treeRoot = treeOptions.under == null
+          ? rootContext
+          : _resolveTreeScopeElement(rootContext, treeOptions.under!);
       snapshot = snapshot.copyWith(
         tree: _widgetTreeBuilder.build(
-          root: rootContext,
+          root: treeRoot,
           route: _registry.routeName,
           targets: visibleTargets,
           options: treeOptions,
@@ -358,6 +361,46 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
       rebuild: widget.rebuildTracker!.snapshot(
         maxEntries: options.maxRebuildEntries,
       ),
+    );
+  }
+
+  Element _resolveTreeScopeElement(Element root, CockpitLocator locator) {
+    for (final candidate in _flatten(locator)) {
+      final probe = _probeForLocator(root, candidate);
+      if (probe.ambiguous) {
+        throw StateError(
+          'Widget tree scope matched multiple mounted elements for '
+          '${candidate.kind.name} "${candidate.value}". '
+          'Strengthen --under with a real ancestor, key, type, or index.',
+        );
+      }
+      final element = probe.element;
+      if (element != null) return element;
+    }
+
+    // Registered targets can represent custom widgets that do not expose a
+    // directly discoverable element signal. Reuse their diagnostic provider,
+    // but still require the resolved element to be inside this surface.
+    final resolution = _registry.resolve(locator);
+    final element = resolution.target?.diagnosticNodeProvider?.call();
+    if (resolution.isSuccess && element is Element && element.mounted) {
+      var inside = identical(element, root);
+      if (!inside) {
+        element.visitAncestorElements((ancestor) {
+          if (identical(ancestor, root)) {
+            inside = true;
+            return false;
+          }
+          return true;
+        });
+      }
+      if (inside) return element;
+    }
+
+    final detail = resolution.error?.message;
+    throw StateError(
+      'Widget tree scope did not match one mounted element'
+      '${detail == null ? '.' : ': $detail'}',
     );
   }
 

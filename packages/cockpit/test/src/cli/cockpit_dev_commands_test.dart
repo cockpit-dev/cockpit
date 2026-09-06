@@ -170,6 +170,10 @@ void main() {
     expect(dev.subcommands['hold']!.argParser.options.keys, contains('at'));
     expect(dev.subcommands['double']!.argParser.options.keys, contains('at'));
     expect(
+      dev.subcommands['tree']!.argParser.options.keys,
+      containsAll(<String>['under', 'depth', 'max-nodes']),
+    );
+    expect(
       dev.subcommands['wait']!.argParser.options['network']!.defaultsTo,
       false,
     );
@@ -401,6 +405,20 @@ void main() {
     expect(drag.option('hold'), '600ms');
     expect(drag.option('moves'), '12');
     expect(drag.option('at'), '40,80');
+
+    final reorder = dev.subcommands['drag']!.argParser.parse(const <String>[
+      'Drag Third',
+      '--to',
+      'Drop First',
+      '--place',
+      'before',
+      '--axis',
+      'vertical',
+    ]);
+    expect(reorder.rest, <String>['Drag Third']);
+    expect(reorder.option('to'), 'Drop First');
+    expect(reorder.option('place'), 'before');
+    expect(reorder.option('axis'), 'vertical');
 
     final multi = dev.subcommands['multi']!.argParser.parse(const <String>[
       'Canvas',

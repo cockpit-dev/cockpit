@@ -342,6 +342,38 @@ final class _CockpitObservedHttpClient implements HttpClient {
   }
 
   @override
+  Future<HttpClientRequest> open(
+    String method,
+    String host,
+    int port,
+    String path,
+  ) => openUrl(method, _httpUri(host, port, path));
+
+  @override
+  Future<HttpClientRequest> get(String host, int port, String path) =>
+      open('GET', host, port, path);
+
+  @override
+  Future<HttpClientRequest> post(String host, int port, String path) =>
+      open('POST', host, port, path);
+
+  @override
+  Future<HttpClientRequest> put(String host, int port, String path) =>
+      open('PUT', host, port, path);
+
+  @override
+  Future<HttpClientRequest> patch(String host, int port, String path) =>
+      open('PATCH', host, port, path);
+
+  @override
+  Future<HttpClientRequest> delete(String host, int port, String path) =>
+      open('DELETE', host, port, path);
+
+  @override
+  Future<HttpClientRequest> head(String host, int port, String path) =>
+      open('HEAD', host, port, path);
+
+  @override
   Future<HttpClientRequest> getUrl(Uri url) => openUrl('GET', url);
 
   @override
@@ -429,6 +461,14 @@ final class _CockpitObservedHttpClient implements HttpClient {
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+Uri _httpUri(String host, int port, String path) {
+  final authorityHost = host.contains(':') && !host.startsWith('[')
+      ? '[$host]'
+      : host;
+  final normalizedPath = path.startsWith('/') ? path : '/$path';
+  return Uri.parse('http://$authorityHost:$port$normalizedPath');
 }
 
 final class _CockpitObservedHttpClientRequest implements HttpClientRequest {

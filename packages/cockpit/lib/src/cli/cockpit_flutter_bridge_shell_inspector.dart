@@ -20,6 +20,18 @@ final class CockpitFlutterBridgeShellInspector {
   final int maximumDepth;
   final int maximumSourceBytes;
 
+  /// Validates a Cockpit entrypoint in either supported Flutter integration
+  /// layout:
+  ///
+  /// * direct mode: `cockpit/main.dart` belongs to the application's own
+  ///   Flutter package;
+  /// * module mode: `cockpit/` is a separate non-published Flutter package.
+  ///
+  /// The bridge contract is identical in both modes. The distinction is
+  /// intentionally resolved by Flutter project discovery rather than by a
+  /// user-facing flag, so a nested `pubspec.yaml` cannot accidentally make
+  /// Cockpit launch the wrong native application.
+
   void validate({
     required String checkoutRoot,
     required String projectPath,
@@ -113,8 +125,9 @@ final class CockpitFlutterBridgeShellInspector {
     throw CockpitSupervisorClientException(
       code: 'flutterBridgeShellMissing',
       message:
-          'Flutter entrypoint $entrypoint $reason. Use a development-only '
-          'cockpit/main.dart bridge shell before cockpit dev start.',
+          'Flutter entrypoint $entrypoint $reason. Add a Cockpit bridge '
+          'entrypoint at cockpit/main.dart (direct mode) or use a separate '
+          'cockpit module (module mode) before cockpit dev start.',
     );
   }
 

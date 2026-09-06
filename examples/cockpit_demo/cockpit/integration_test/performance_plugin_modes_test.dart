@@ -4,7 +4,6 @@ import 'dart:io';
 
 import 'package:cockpit_demo/src/cockpit_demo_app.dart';
 import 'package:cockpit_demo/src/data/cockpit_demo_database.dart';
-import 'package:cockpit_protocol/cockpit_protocol.dart';
 import 'package:drift/drift.dart'
     show TableUpdate, TableUpdateQuery, UpdateKind;
 import 'package:flutter/foundation.dart';

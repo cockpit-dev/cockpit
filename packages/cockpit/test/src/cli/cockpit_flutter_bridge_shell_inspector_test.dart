@@ -7,7 +7,7 @@ import 'package:file/memory.dart';
 import 'package:test/test.dart';
 
 void main() {
-  test('accepts an indirect development bridge shell', () {
+  test('accepts a Dart-only bridge in the application package', () {
     final fileSystem = MemoryFileSystem();
     _writePackageConfig(fileSystem, includeFlutterCockpit: true);
     fileSystem.file('/workspace/cockpit/main.dart')
@@ -27,6 +27,33 @@ void main() {
       checkoutRoot: '/workspace',
       projectPath: '/workspace',
       entrypoint: 'cockpit/main.dart',
+    );
+  });
+
+  test('accepts a separate non-published cockpit module', () {
+    final fileSystem = MemoryFileSystem();
+    _writePackageConfig(
+      fileSystem,
+      root: '/workspace/cockpit',
+      includeFlutterCockpit: true,
+    );
+    fileSystem.file('/workspace/cockpit/main.dart')
+      ..createSync(recursive: true)
+      ..writeAsStringSync(
+        "import 'cockpit_bootstrap.dart';\n"
+        'void main() => runApp(buildCockpitApp());\n',
+      );
+    fileSystem.file('/workspace/cockpit/cockpit_bootstrap.dart')
+      ..createSync(recursive: true)
+      ..writeAsStringSync(
+        "import 'package:flutter_cockpit/flutter_cockpit_flutter.dart';\n"
+        'Widget buildCockpitApp() => FlutterCockpitApp(child: App());\n',
+      );
+
+    _inspector(fileSystem).validate(
+      checkoutRoot: '/workspace',
+      projectPath: '/workspace/cockpit',
+      entrypoint: 'main.dart',
     );
   });
 
@@ -121,9 +148,10 @@ Matcher _errorCode(String code) {
 
 void _writePackageConfig(
   MemoryFileSystem fileSystem, {
+  String root = '/workspace',
   required bool includeFlutterCockpit,
 }) {
-  fileSystem.file('/workspace/.dart_tool/package_config.json')
+  fileSystem.file('$root/.dart_tool/package_config.json')
     ..createSync(recursive: true)
     ..writeAsStringSync(
       jsonEncode(<String, Object?>{
@@ -131,7 +159,7 @@ void _writePackageConfig(
         'packages': <Map<String, Object?>>[
           <String, Object?>{
             'name': 'demo',
-            'rootUri': 'file:///workspace/',
+            'rootUri': 'file://$root/',
             'packageUri': 'lib/',
           },
           if (includeFlutterCockpit)

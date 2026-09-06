@@ -1,4 +1,5 @@
 import 'package:args/command_runner.dart';
+import 'package:cockpit_protocol/cockpit_protocol.dart';
 
 import '../cockpit_cli_runtime.dart';
 import '../cockpit_cli_timeout.dart';
@@ -177,6 +178,14 @@ CockpitLeafCommand _tree(CockpitCliRuntime runtime, CockpitDevRuntime dev) =>
           'max-nodes',
           help: 'Override the selected tree profile node limit.',
         );
+        parser.addOption(
+          'under',
+          help: 'Limit the tree to one mounted selector and its descendants.',
+        );
+        parser.addOption(
+          'depth',
+          help: 'Limit emitted descendants relative to the tree root (0-256).',
+        );
       },
       action: (arguments) async {
         final rawMaxNodes = arguments.option('max-nodes');
@@ -193,6 +202,19 @@ CockpitLeafCommand _tree(CockpitCliRuntime runtime, CockpitDevRuntime dev) =>
             '--max-nodes requires --view more or --view full.',
           );
         }
+        final rawUnder = arguments.option('under');
+        final under = rawUnder == null ? null : CockpitSelector.parse(rawUnder);
+        final rawDepth = arguments.option('depth');
+        final depth = rawDepth == null ? null : int.tryParse(rawDepth);
+        if (rawDepth != null && (depth == null || depth < 0 || depth > 256)) {
+          throw const FormatException('--depth must be between 0 and 256.');
+        }
+        if ((under != null || depth != null) &&
+            runtime.outputSelection.view == CockpitCliOutputView.brief) {
+          throw const FormatException(
+            '--under and --depth require --view more or --view full.',
+          );
+        }
         if (runtime.outputSelection.view != CockpitCliOutputView.brief &&
             !arguments.wasParsed('format') &&
             !arguments.wasParsed('output')) {
@@ -207,6 +229,8 @@ CockpitLeafCommand _tree(CockpitCliRuntime runtime, CockpitDevRuntime dev) =>
         return dev.tree(
           await runtime.resolveDevelopmentSession(arguments.option('session')),
           maxNodes: maxNodes,
+          under: under,
+          depth: depth,
         );
       },
     );

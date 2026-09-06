@@ -818,7 +818,12 @@ final class CockpitDevRuntime {
     );
   }
 
-  Future<int> tree(CockpitCliSessionHandle session, {int? maxNodes}) async {
+  Future<int> tree(
+    CockpitCliSessionHandle session, {
+    int? maxNodes,
+    CockpitLocator? under,
+    int? depth,
+  }) async {
     final view = runtime.outputSelection.view;
     if (view == CockpitCliOutputView.brief) {
       final read = await invokeRead(session, 'ui.inspect', <String, Object?>{
@@ -855,6 +860,12 @@ final class CockpitDevRuntime {
     };
     if (maxNodes != null) {
       treeOptions = treeOptions.copyWith(maxNodes: maxNodes);
+    }
+    if (under != null) {
+      treeOptions = treeOptions.copyWith(under: under);
+    }
+    if (depth != null) {
+      treeOptions = treeOptions.copyWith(depth: depth);
     }
     final read = await invokeRead(session, 'ui.inspect', <String, Object?>{
       'profile': 'tree',
@@ -914,6 +925,8 @@ final class CockpitDevRuntime {
       if (tree?['visible'] != null) 'visible': tree!['visible'],
       if (tree?['emitted'] != null) 'emitted': tree!['emitted'],
       if (tree?['truncated'] != null) 'truncated': tree!['truncated'],
+      if (under case final scope?) 'under': CockpitSelector.format(scope),
+      'depth': ?depth,
       'path': path,
     };
     return writeEnvelope(

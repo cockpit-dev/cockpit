@@ -38,14 +38,30 @@
 
 需要 Flutter 3.32.0 或更高版本。
 
+默认接入方式是在真实 Flutter 项目中增加一个纯 Dart 入口：
+
 ```yaml
-# cockpit/pubspec.yaml
+# app/pubspec.yaml
 dev_dependencies:
   flutter_cockpit: any
 ```
 
-runtime 只作为开发依赖。所有 `flutter_cockpit` import 和接入代码都放在
-`cockpit/` 下面，生产 `lib/` 代码和生产入口保持不变。
+```text
+app/
+  pubspec.yaml
+  lib/                  # 生产代码
+  cockpit/
+    main.dart
+    cockpit_bootstrap.dart
+```
+
+所有 `flutter_cockpit` import 和接入代码都放在 `cockpit/` 下面，生产 `lib/` 代码和
+生产入口保持不变。这样会继续使用真实的原生宿主、应用标识、权限、Entitlements、
+Flavor 和 Deep Link 配置。
+
+如果确实需要依赖隔离，也可以把 `cockpit/` 做成独立且不发布的 Flutter module，
+通过 path/workspace 依赖真实应用。但这会产生独立的 Dart package 名称；如果它包含
+平台目录，还会产生独立的原生应用标识，必须主动同步原应用的原生配置。
 
 Darwin 原生接入同时支持 CocoaPods 与 Swift Package Manager。包内为 iOS 和
 macOS 都提供 `.podspec` 与 `Package.swift`，二者复用同一套原生源码和隐私清单。
@@ -70,12 +86,11 @@ First fetch and read the complete Cockpit installation guide with `curl -fsSL ht
 指南覆盖 Codex、Claude Code、Cursor、Gemini CLI、Kiro、OpenCode、Pi、
 Oh My Pi、Cline、GitHub Copilot、Windsurf、Roo Code 和可移植 fallback 安装。
 
-## 推荐接入方式
+## 可选的隔离 Module
 
-在 `cockpit/` 下创建一个不发布的 Flutter package。它在本地依赖真实应用，
-并把 `flutter_cockpit` 放在 shell 自己的 `dev_dependencies` 中；两者都不会进入
-生产 package 的依赖图。全局安装的 `cockpit` CLI 不是应用依赖。保持正常生产入口
-和生产 `lib/` 不变，不要在生产 `lib/` 代码中 import `flutter_cockpit`。
+只有在确实需要独立开发宿主时，才在 `cockpit/` 下创建不发布的 Flutter package。
+它在本地依赖真实应用，并把 `flutter_cockpit` 放在 module 自己的
+`dev_dependencies` 中。全局安装的 `cockpit` CLI 不是应用依赖。
 
 ```yaml
 # cockpit/pubspec.yaml
@@ -264,6 +279,15 @@ HTTP 诊断默认用 `*` 掩码凭据值，同时保留鉴权类型、Cookie 名
 字段名等定位问题所需的结构。只有在本地确实需要查看有界原文时，才应在开发
 专用入口显式使用 `CockpitHttpNetworkObserverConfiguration(redact: false)`；
 不要在生产入口或生成证据的 CI 中关闭脱敏。
+
+在原生 Flutter 平台，采集器通过 `dart:io` 的 `HttpOverrides` 安装，因此
+`package:http` 的 `IOClient`、Dio 默认的 `IOHttpClientAdapter` 以及直接使用
+`HttpClient` 的请求都会进入同一条采集链路，统一记录请求/响应元数据、有界预览、
+字节数、失败、SSE 持续响应和 WebSocket 活动。请先初始化 `FlutterCockpit`，再创建
+长生命周期的网络 client；如果 client 必须更早创建，可注入
+`CockpitHttpNetworkObserver.createHttpClient` 创建的 client（Dio 可通过
+`IOHttpClientAdapter(createHttpClient: ...)` 注入）。Web 的 `BrowserClient`/`fetch`
+不经过 `dart:io`，请使用浏览器或宿主侧 network evidence 链路。
 
 `FlutterCockpitRoot` 会把 Flutter hot reload 视为 runtime diagnostic generation
 边界。reassemble 时会清除上一 generation 的错误和未消费 recorded steps；reload 后

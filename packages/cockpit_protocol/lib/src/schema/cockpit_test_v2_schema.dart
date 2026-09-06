@@ -495,6 +495,41 @@ const String cockpitTestV2SchemaJson = r'''
       "required": ["source", "type", "reference"],
       "additionalProperties": false
     },
+    "treeScopeLocator": {
+      "type": "object",
+      "properties": {
+        "ref": {"$ref": "#/$defs/nonEmptyString"},
+        "cockpitId": {"$ref": "#/$defs/nonEmptyString"},
+        "semanticId": {"$ref": "#/$defs/nonEmptyString"},
+        "key": {"$ref": "#/$defs/nonEmptyString"},
+        "text": {"$ref": "#/$defs/nonEmptyString"},
+        "tooltip": {"$ref": "#/$defs/nonEmptyString"},
+        "type": {"$ref": "#/$defs/nonEmptyString"},
+        "route": {"$ref": "#/$defs/nonEmptyString"},
+        "registrationId": {"$ref": "#/$defs/nonEmptyString"},
+        "path": {"$ref": "#/$defs/nonEmptyString"},
+        "matchMode": {"enum": ["exact", "contains", "fuzzy", "regex"]},
+        "index": {"type": "integer", "minimum": 0},
+        "ancestor": {"$ref": "#/$defs/treeScopeLocator"},
+        "fallbacks": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/treeScopeLocator"}
+        }
+      },
+      "anyOf": [
+        {"required": ["ref"]},
+        {"required": ["cockpitId"]},
+        {"required": ["semanticId"]},
+        {"required": ["key"]},
+        {"required": ["text"]},
+        {"required": ["tooltip"]},
+        {"required": ["type"]},
+        {"required": ["route"]},
+        {"required": ["registrationId"]},
+        {"required": ["path"]}
+      ],
+      "additionalProperties": false
+    },
     "locator": {
       "oneOf": [
         {
@@ -1031,6 +1066,14 @@ const String cockpitTestV2SchemaJson = r'''
               "maximum": 500000
             },
             "maxProps": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 256
+            },
+            "under": {
+              "$ref": "#/$defs/treeScopeLocator"
+            },
+            "depth": {
               "type": "integer",
               "minimum": 0,
               "maximum": 256

@@ -107,6 +107,22 @@ Flutter in-app control walks the mounted Element/RenderObject tree and does not
 require application-authored Semantics. Use `dev inspect QUERY` for bounded target
 discovery. Use `dev tree` only for structural ambiguity; full output is path-based.
 
+Structural tree reads support a bounded subtree scope when a page contains large
+nested stacks, overlays, or lazy branches. `--under` uses the same selector syntax
+as every other Flutter action and requires exactly one mounted element; `--depth`
+limits descendants relative to that root (`0` emits only the root). Both options
+require a structural view, so use `--view more` for the public Widget structure or
+`--view full` for complete Element diagnostics:
+
+```bash
+cockpit dev tree --view more --under 'Settings >> List'
+cockpit dev tree --view full --under '@task-list' --depth 2
+```
+
+An absent or ambiguous scope is an explicit failure; Cockpit never falls back to
+the full tree. `--max-nodes` remains the final response bound, and the artifact
+records the requested scope and depth so a saved tree is self-describing.
+
 Re-inspect after crossing a boundary. A native action is complete only after a
 Flutter or native observable postcondition proves the result. Do not use host
 accessibility automation to resize a Flutter development window; use
@@ -266,6 +282,7 @@ cockpit dev hover --at 480,96
 cockpit dev hold --at 320,640 --duration 900ms
 cockpit dev double --at 320,640 --interval 120ms
 cockpit dev drag "Canvas" --dx 120 --dy 0
+cockpit dev drag "Reorder task Third" --to "Reorder task First" --place before
 cockpit dev fling "List" --dx 0 --dy -400 --velocity 1600
 cockpit dev swipe "List" up
 cockpit dev pinch "Map" 1.5
@@ -284,6 +301,13 @@ uses radians. `multi` accepts LON, JSON, or YAML with a `steps` array containing
 `pointer`, `phase` (`down|move|up`), `atMs`, `dx`, and `dy`. Every pointer must
 end with `up`; failed sequences are cancelled so no pointer leaks into the next
 command. Keep the same `--session` for concurrent apps.
+
+For reorderable lists, kanban boards, and drop zones, use `drag --to` instead
+of guessing a pixel delta. Cockpit resolves both mounted targets in the same
+Flutter view, reveals lazy targets when needed, and drops at the destination's
+`before`, `center`, or `after` position. `--axis auto` follows the dominant
+distance; set `--axis horizontal|vertical` only when the layout needs an
+explicit axis. `--to` is mutually exclusive with `--dx/--dy`.
 
 Use `dev wait` for the final animation/settle proof. To inspect the animation or
 any continuously changing page without flooding stdout, use bounded incremental

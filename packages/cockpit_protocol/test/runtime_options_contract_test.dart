@@ -17,11 +17,19 @@ void main() {
         onlyErrors: true,
         messageContains: 'RenderFlex',
       ),
-      tree: const CockpitWidgetTreeOptions.full(),
+      tree: const CockpitWidgetTreeOptions(
+        profile: CockpitWidgetTreeProfile.full,
+        maxNodes: 100000,
+        maxProps: 24,
+        under: CockpitLocator(key: 'settings-root'),
+        depth: 3,
+      ),
     );
 
     expect(CockpitSnapshotOptions.fromJson(options.toJson()), options);
     expect(options.copyWith(clearQuery: true).query, isNull);
+    expect(options.tree!.under, const CockpitLocator(key: 'settings-root'));
+    expect(options.tree!.depth, 3);
   });
 
   test('snapshot options reject unknown, mistyped, and unbounded input', () {
@@ -58,6 +66,21 @@ void main() {
     expect(
       () => CockpitSnapshotOptions.fromJson(const <String, Object?>{
         'tree': <String, Object?>{'maxNodes': 0},
+      }),
+      throwsFormatException,
+    );
+    expect(
+      () => CockpitSnapshotOptions.fromJson(const <String, Object?>{
+        'tree': <String, Object?>{'depth': -1},
+      }),
+      throwsFormatException,
+    );
+    expect(
+      () => CockpitSnapshotOptions.fromJson(const <String, Object?>{
+        'tree': <String, Object?>{
+          'under': <String, Object?>{'key': 'settings-root'},
+          'depth': 257,
+        },
       }),
       throwsFormatException,
     );

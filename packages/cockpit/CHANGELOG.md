@@ -1,5 +1,11 @@
 # Changelog
 
+## 4.8.0
+
+- Added fail-closed subtree exports with `dev tree --under` and `--depth`,
+  preserving exact session scope and bounded structural artifacts.
+- Added target-to-target drag/drop execution for reorder and drop-zone flows.
+
 ## 4.7.0
 
 - Hardened MCP tool contracts with accurate safety annotations, strict target

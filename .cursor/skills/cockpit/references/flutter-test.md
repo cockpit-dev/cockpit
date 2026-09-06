@@ -7,7 +7,8 @@ black-box, generated from a document, or targets an app without source access.
 
 ## Install and bootstrap
 
-Add the package only to a development shell or test-only package:
+Add the package only to a direct Flutter project's development dependencies or
+to a separate development shell/test-only package:
 
 ```bash
 flutter pub add --dev flutter_cockpit_test
@@ -69,7 +70,8 @@ await cockpit.wheel(
 );
 ```
 
-Available facade methods cover `tap`, `hover`, `longPress`, `doubleTap`, `drag`, `fling`,
+Available facade methods cover `tap`, `hover`, `longPress`, `doubleTap`, `drag`,
+`dragTo`, `fling`,
 `swipe`, `pinch`, `rotate`, `panZoom`, `multiTouch`, `type`, `clear`, `copy`,
 `paste`, `focus`, `setTextEditingValue`, `selectText`, `keyDown`, `keyUp`,
 `press`, `increase`, `decrease`, `showOnScreen`, `scroll`,
@@ -81,8 +83,36 @@ ancestor; pass `direction`, `align` (`start|center|end`), `offset`, an
 explicit `scrollable` selector, or `maxScrolls` only when the default search
 does not express the required placement. Do not add sleeps.
 
+Use `collectSnapshot()` when the snapshot must be recorded as a command step;
+use `clearNetworkActivity()` before a flow that needs a clean HTTP/SSE/WebSocket
+index. Host-only assertions remain explicit: `expectScreenshot()` requires the
+configured `hostCommand` adapter and returns actual/baseline/diff artifact paths;
+`travel()` replays a validated simulated-location route made of
+`CockpitTravelPoint` values. These methods never guess native actions.
+
+```dart
+await cockpit.clearNetworkActivity();
+final baseline = await cockpit.collectSnapshot();
+await cockpit.tap('#open-chart');
+final current = await cockpit.collectSnapshot();
+await cockpit.expectScreenshot(baseline: 'test/baselines/chart.png');
+await cockpit.travel(const [
+  CockpitTravelPoint(latitude: 31.20, longitude: 121.50),
+  CockpitTravelPoint(latitude: 31.21, longitude: 121.51),
+]);
+```
+
+For large pages, pass `CockpitSnapshotOptions(tree: ...)` with
+`CockpitWidgetTreeOptions(under: CockpitLocator(...), depth: N)` to collect only
+one mounted subtree. The scope must resolve to one element; missing or ambiguous
+scopes fail instead of silently returning a full tree.
+
 Gestures use real hit-tested pointer events. A target is optional only when an
 explicit `at` point is supplied; source-owned tests should prefer a selector.
+`dragTo` resolves both the drag handle and the destination target in the same
+live tree and computes a geometry-based drop point. Use it for
+`ReorderableListView`, kanban, and drop-zone flows; `placement` accepts
+`before|center|after`, and `axis` accepts `auto|horizontal|vertical`.
 `pinch` uses a scale greater than 1 to spread and less than 1 to pinch. `rotate`
 uses radians. `multiTouch` accepts a validated `CockpitMultiTouchSequence` and
 always releases every pointer, cancelling active pointers if a sequence fails.
@@ -105,6 +135,11 @@ or sleeps into the gesture itself.
 await cockpit.longPress('#card', duration: const Duration(milliseconds: 900));
 await cockpit.doubleTap('#card', interval: const Duration(milliseconds: 120));
 await cockpit.drag(target: '#slider', delta: const Offset(120, 0));
+await cockpit.dragTo(
+  from: 'Drag third',
+  to: 'Drop first',
+  placement: 'before',
+);
 await cockpit.swipe(target: '#list', direction: AxisDirection.up);
 await cockpit.pinch(target: '#map', scale: 1.5);
 await cockpit.rotate(target: '#canvas', radians: 1.5708);
@@ -513,8 +548,9 @@ This flag is only needed for `flutter drive`; ordinary `flutter test` does not
 need it. Start one simulator at a time when resources are limited and shut it
 down after the run.
 
-Use `cockpit dev` around a development shell when the same steps must be
-visible in a live session timeline. Use `cockpit case`/`cockpit suite` for
+Use `cockpit dev` around the direct application project or optional development
+module when the same steps must be visible in a live session timeline. Use
+`cockpit case`/`cockpit suite` for
 black-box, matrix, CI, or cross-technology journeys. The Dart facade and the
 document runner share selectors and command semantics, but they do not share
 an implicit session: select the exact Cockpit session when the host bridge

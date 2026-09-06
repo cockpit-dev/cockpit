@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:cockpit_protocol/cockpit_protocol.dart';
 import 'package:flutter_cockpit_test/flutter_cockpit_test.dart';
 
 void main() {
@@ -49,6 +48,32 @@ void main() {
     },
   );
 
+  final reorderedLabels = <String>[];
+  cockpitTestWidgets(
+    'dragTo reorders a list from one resolved target to another',
+    app: () => _ReorderTestApp(
+      onReordered: (labels) {
+        reorderedLabels
+          ..clear()
+          ..addAll(labels);
+      },
+    ),
+    body: (cockpit) async {
+      final result = await cockpit.dragTo(
+        from: 'Drag Third',
+        to: 'Drop First',
+        placement: 'before',
+        duration: const Duration(milliseconds: 240),
+      );
+      expect(
+        result.result.success,
+        isTrue,
+        reason: result.result.error?.message,
+      );
+      expect(reorderedLabels, <String>['Third', 'First', 'Second']);
+    },
+  );
+
   cockpitTestWidgets(
     'supports sequential performance segments in one integration test',
     app: () => const _TestApp(),
@@ -83,6 +108,50 @@ void main() {
       expect(result.result.success, isTrue);
       expect(result.result.commandType, CockpitCommandType.system);
       expect(result.result.durationMs, isNonNegative);
+    },
+  );
+
+  cockpitTestWidgets(
+    'collects a command snapshot and clears network activity',
+    app: () => const _TestApp(),
+    options: CockpitTestOptions(failFast: false),
+    body: (cockpit) async {
+      final snapshot = await cockpit.collectSnapshot();
+      expect(snapshot.visibleTargets, isNotEmpty);
+      final cleared = await cockpit.clearNetworkActivity();
+      expect(cleared.result.success, isFalse);
+      expect(cleared.result.error?.code, 'unsupportedCapability');
+      expect(
+        cockpit.report['steps'],
+        contains(
+          predicate<Object?>((value) {
+            final step = value! as Map<Object?, Object?>;
+            return step['type'] == CockpitCommandType.collectSnapshot.name;
+          }),
+        ),
+      );
+    },
+  );
+
+  cockpitTestWidgets(
+    'exposes typed host screenshot assertion and travel actions',
+    app: () => const _TestApp(),
+    options: CockpitTestOptions(hostCommand: _typedHostCommand),
+    body: (cockpit) async {
+      final screenshot = await cockpit.expectScreenshot(
+        baseline: 'test/baselines/home.png',
+        name: 'home',
+      );
+      expect(screenshot.result.success, isTrue);
+      final travel = await cockpit.travel(const <CockpitTravelPoint>[
+        CockpitTravelPoint(latitude: 31.2, longitude: 121.5),
+        CockpitTravelPoint(
+          latitude: 31.21,
+          longitude: 121.51,
+          delay: Duration(milliseconds: 10),
+        ),
+      ]);
+      expect(travel.result.success, isTrue);
     },
   );
 
@@ -391,6 +460,30 @@ Future<CockpitCommandExecution> _successfulHostCommand(
   );
 }
 
+Future<CockpitCommandExecution> _typedHostCommand(
+  CockpitCommand command,
+) async {
+  expect(command.timeoutMs, cockpitIntegrationTestNativeTimeout.inMilliseconds);
+  switch (command.commandType) {
+    case CockpitCommandType.assertScreenshot:
+      expect(command.parameters['baseline'], 'test/baselines/home.png');
+      expect(command.parameters['name'], 'home');
+    case CockpitCommandType.travel:
+      final route = command.parameters['route']! as List<Object?>;
+      expect(route, hasLength(2));
+    default:
+      fail('Unexpected host command ${command.commandType.name}.');
+  }
+  return CockpitCommandExecution(
+    result: CockpitCommandResult(
+      success: true,
+      commandId: command.commandId,
+      commandType: command.commandType,
+      durationMs: 0,
+    ),
+  );
+}
+
 final class _WheelTestApp extends StatelessWidget {
   const _WheelTestApp({required this.onWheel});
 
@@ -432,6 +525,64 @@ final class _ScrollTestApp extends StatelessWidget {
           itemExtent: 48,
           itemCount: 40,
           itemBuilder: (context, index) => Text('Row $index'),
+        ),
+      ),
+    );
+  }
+}
+
+final class _ReorderTestApp extends StatefulWidget {
+  const _ReorderTestApp({required this.onReordered});
+
+  final ValueChanged<List<String>> onReordered;
+
+  @override
+  State<_ReorderTestApp> createState() => _ReorderTestAppState();
+}
+
+final class _ReorderTestAppState extends State<_ReorderTestApp> {
+  final _labels = <String>['First', 'Second', 'Third'];
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      home: Scaffold(
+        body: ReorderableListView.builder(
+          buildDefaultDragHandles: false,
+          itemCount: _labels.length,
+          onReorderItem: (oldIndex, newIndex) {
+            final value = _labels.removeAt(oldIndex);
+            _labels.insert(newIndex, value);
+            widget.onReordered(List<String>.of(_labels));
+            setState(() {});
+          },
+          itemBuilder: (context, index) {
+            final label = _labels[index];
+            return Semantics(
+              key: ValueKey<String>('drop-$label'),
+              label: 'Drop $label',
+              container: true,
+              child: SizedBox(
+                height: 96,
+                child: Row(
+                  children: <Widget>[
+                    Expanded(child: Center(child: Text(label))),
+                    Semantics(
+                      label: 'Drag $label',
+                      button: true,
+                      child: ReorderableDragStartListener(
+                        index: index,
+                        child: const Padding(
+                          padding: EdgeInsets.all(16),
+                          child: Icon(Icons.drag_indicator),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
         ),
       ),
     );

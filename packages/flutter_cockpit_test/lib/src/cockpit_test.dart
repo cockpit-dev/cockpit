@@ -222,6 +222,25 @@ final class CockpitPerformanceCapture {
       _result ??= Future<CockpitPerformanceReport>.sync(_endAction);
 }
 
+/// One geographic point used by the explicit host/device travel action.
+final class CockpitTravelPoint {
+  const CockpitTravelPoint({
+    required this.latitude,
+    required this.longitude,
+    this.delay = Duration.zero,
+  });
+
+  final double latitude;
+  final double longitude;
+  final Duration delay;
+
+  Map<String, Object?> toJson() => <String, Object?>{
+    'latitude': latitude,
+    'longitude': longitude,
+    if (delay > Duration.zero) 'delayMs': delay.inMilliseconds,
+  };
+}
+
 /// A compact, selector-first facade over Cockpit's in-app command executor.
 final class CockpitTester {
   CockpitTester._({
@@ -1789,6 +1808,54 @@ final class CockpitTester {
     );
   }
 
+  /// Drags one resolved target to another resolved target.
+  ///
+  /// This is intended for reorderable lists, kanban drops, and other
+  /// target-to-target interactions where deriving a pixel delta in test code
+  /// would be brittle. Both selectors are resolved against the same live
+  /// Flutter tree; the in-app executor computes the hit-tested drop point.
+  Future<CockpitCommandExecution> dragTo({
+    required Object from,
+    required Object to,
+    String placement = 'center',
+    String axis = 'auto',
+    Duration duration = const Duration(milliseconds: 220),
+    Duration? hold,
+    int? moveEvents,
+    PointerDeviceKind device = PointerDeviceKind.touch,
+    int buttons = kPrimaryButton,
+    Duration? timeout,
+  }) {
+    _validateDropPlacement(placement);
+    _validateDropAxis(axis);
+    _validateGestureDuration(duration, 'duration');
+    if (hold != null) _validateGestureDuration(hold, 'hold');
+    _validateMoveEvents(moveEvents);
+    _validateButtons(buttons);
+    final destination = _locator(to);
+    if (destination == null) {
+      throw ArgumentError.value(
+        to,
+        'to',
+        'A destination selector is required.',
+      );
+    }
+    return _run(
+      CockpitCommandType.drag,
+      target: from,
+      timeout: timeout,
+      parameters: <String, Object?>{
+        'toLocator': destination.toJson(),
+        'dropPlacement': placement,
+        'dropAxis': axis,
+        'durationMs': duration.inMilliseconds,
+        'holdDurationMs': ?hold?.inMilliseconds,
+        'moveEventCount': ?moveEvents,
+        ..._pointerParameters(device: device, buttons: buttons),
+      },
+    );
+  }
+
   /// Performs a fling-like drag using the requested velocity profile.
   Future<CockpitCommandExecution> fling({
     Object? target,
@@ -2159,9 +2226,130 @@ final class CockpitTester {
     );
   }
 
+  /// Runs a host-backed screenshot assertion against a baseline image.
+  ///
+  /// The configured host adapter performs capture and pixel comparison,
+  /// returning actual, baseline, and diff paths as artifacts. Image bytes are
+  /// never placed in the integration-test result.
+  Future<CockpitCommandExecution> expectScreenshot({
+    required String baseline,
+    String name = 'screenshot',
+    Object? target,
+    double pixelTolerance = 0.1,
+    double maxDifferingPixelRatio = 0.01,
+    CockpitCaptureProfile profile = CockpitCaptureProfile.flutterPreferred,
+    bool includeSnapshot = true,
+    bool allowFallback = false,
+    Duration? timeout,
+  }) {
+    final normalizedBaseline = baseline.trim();
+    if (normalizedBaseline.isEmpty) {
+      throw ArgumentError.value(baseline, 'baseline', 'Must not be empty.');
+    }
+    _validateRatio(pixelTolerance, 'pixelTolerance');
+    _validateRatio(maxDifferingPixelRatio, 'maxDifferingPixelRatio');
+    final locator = _locator(target);
+    final request = CockpitScreenshotRequest(
+      reason: CockpitScreenshotReason.baseline,
+      name: name,
+      includeSnapshot: includeSnapshot,
+      attachToStep: true,
+      profile: profile,
+      allowFallback: allowFallback,
+      cropLocator: locator,
+    );
+    return host.execute(
+      CockpitCommand(
+        commandId: _nextId('assert-screenshot'),
+        commandType: CockpitCommandType.assertScreenshot,
+        locator: locator,
+        timeoutMs: _nativeTimeoutMs(timeout),
+        parameters: <String, Object?>{
+          'baseline': normalizedBaseline,
+          'name': name,
+          'pixelTolerance': pixelTolerance,
+          'maxDifferingPixelRatio': maxDifferingPixelRatio,
+        },
+        screenshotRequest: request,
+      ),
+    );
+  }
+
+  /// Replays a host/device location route through the explicit host bridge.
+  Future<CockpitCommandExecution> travel(
+    Iterable<CockpitTravelPoint> route, {
+    Duration interval = Duration.zero,
+    Duration? timeout,
+  }) {
+    final points = List<CockpitTravelPoint>.of(route, growable: false);
+    if (points.length < 2 || points.length > 10000) {
+      throw ArgumentError.value(
+        points.length,
+        'route',
+        'Must contain between 2 and 10000 points.',
+      );
+    }
+    if (interval < Duration.zero) {
+      throw ArgumentError.value(interval, 'interval', 'Must not be negative.');
+    }
+    for (final point in points) {
+      if (!point.latitude.isFinite ||
+          point.latitude < -90 ||
+          point.latitude > 90 ||
+          !point.longitude.isFinite ||
+          point.longitude < -180 ||
+          point.longitude > 180 ||
+          point.delay < Duration.zero) {
+        throw ArgumentError.value(point, 'route', 'Contains invalid point.');
+      }
+    }
+    return host.execute(
+      CockpitCommand(
+        commandId: _nextId('travel'),
+        commandType: CockpitCommandType.travel,
+        timeoutMs: _nativeTimeoutMs(timeout),
+        parameters: <String, Object?>{
+          'route': points
+              .map((point) => point.toJson())
+              .toList(growable: false),
+          if (interval > Duration.zero) 'intervalMs': interval.inMilliseconds,
+        },
+      ),
+    );
+  }
+
   CockpitSnapshot snapshot({
     CockpitSnapshotOptions options = const CockpitSnapshotOptions(),
   }) => root.snapshot(options: options);
+
+  /// Executes a bounded snapshot command through the same in-app executor
+  /// used by the live bridge and returns the decoded snapshot.
+  ///
+  /// Unlike [snapshot], this records a command step for integration-test
+  /// reports and failure diagnostics.
+  Future<CockpitSnapshot> collectSnapshot({
+    CockpitSnapshotOptions options = const CockpitSnapshotOptions.baseline(),
+    Duration? timeout,
+  }) async {
+    final execution = await execute(
+      CockpitCommand(
+        commandId: _nextId('snapshot'),
+        commandType: CockpitCommandType.collectSnapshot,
+        timeoutMs: _timeoutMs(timeout),
+        snapshotOptions: options,
+      ),
+      check: true,
+    );
+    final snapshot = execution.result.snapshot;
+    if (snapshot == null) {
+      throw StateError('Cockpit snapshot command returned no snapshot.');
+    }
+    return CockpitSnapshot.fromJson(snapshot);
+  }
+
+  /// Clears the in-app HTTP/SSE/WebSocket activity index before a flow.
+  Future<CockpitCommandExecution> clearNetworkActivity({Duration? timeout}) =>
+      _run(CockpitCommandType.clearNetworkActivity, timeout: timeout);
 
   /// Samples the mounted surface at bounded intervals and returns only
   /// compact changes. Use this for animation checkpoints and pages whose
@@ -2508,12 +2696,38 @@ void _validatePositiveFinite(double value, String name) {
   }
 }
 
+void _validateRatio(double value, String name) {
+  if (!value.isFinite || value < 0 || value > 1) {
+    throw ArgumentError.value(value, name, 'Must be between 0 and 1.');
+  }
+}
+
 void _validateMoveEvents(int? value) {
   if (value != null && (value < 0 || value > 10000)) {
     throw ArgumentError.value(
       value,
       'moveEvents',
       'Must be between 0 and 10000.',
+    );
+  }
+}
+
+void _validateDropPlacement(String value) {
+  if (!const <String>{'before', 'center', 'after'}.contains(value)) {
+    throw ArgumentError.value(
+      value,
+      'placement',
+      'Must be before, center, or after.',
+    );
+  }
+}
+
+void _validateDropAxis(String value) {
+  if (!const <String>{'auto', 'horizontal', 'vertical'}.contains(value)) {
+    throw ArgumentError.value(
+      value,
+      'axis',
+      'Must be auto, horizontal, or vertical.',
     );
   }
 }
