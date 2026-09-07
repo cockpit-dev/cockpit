@@ -213,6 +213,71 @@ void main() {
     },
   );
 
+  test('explains compound type and descendant text misses', () {
+    final registry = CockpitTargetRegistry(routeName: '/checkout')
+      ..register(
+        const CockpitTarget(
+          registrationId: 'continue-label',
+          text: 'Continue',
+          typeName: 'Text',
+          routeName: '/checkout',
+          locatorAncestors: <CockpitSnapshotAncestor>[
+            CockpitSnapshotAncestor(typeName: 'RoundedButton'),
+          ],
+        ),
+      );
+
+    final resolution = registry.resolve(
+      const CockpitLocator(type: 'RoundedButton', text: 'Continue'),
+    );
+
+    expect(resolution.isSuccess, isFalse);
+    expect(resolution.error?.code, CockpitCommandError.targetNotFoundCode);
+    final details = resolution.error!.details;
+    final signalMatches = (details['signalMatches']! as List<Object?>)
+        .cast<Map<Object?, Object?>>()
+        .map((entry) => Map<String, Object?>.from(entry))
+        .toList(growable: false);
+    expect(
+      signalMatches.firstWhere((entry) => entry['kind'] == 'text')['count'],
+      1,
+    );
+    expect(
+      signalMatches.firstWhere((entry) => entry['kind'] == 'type')['count'],
+      0,
+    );
+    final selectorHints = (details['selectorHints']! as List<Object?>)
+        .cast<Map<Object?, Object?>>()
+        .map((entry) => Map<String, Object?>.from(entry))
+        .toList(growable: false);
+    expect(
+      selectorHints.single['selector'],
+      'RoundedButton >> Text["Continue"]',
+    );
+    expect(selectorHints.single['reason'], 'text is on a descendant Text node');
+  });
+
+  test('Text selectors match Flutter RichText labels', () {
+    final registry = CockpitTargetRegistry(routeName: '/periods')
+      ..register(
+        const CockpitTarget(
+          registrationId: 'period-4h',
+          typeName: 'RichText',
+          text: '4h',
+          routeName: '/periods',
+          supportedCommands: <CockpitCommandType>{CockpitCommandType.tap},
+        ),
+      );
+
+    final result = registry.resolve(
+      const CockpitLocator(type: 'Text', text: '4h'),
+      requiredCommand: CockpitCommandType.tap,
+    );
+
+    expect(result.isSuccess, isTrue, reason: '${result.error?.details}');
+    expect(result.target?.registrationId, 'period-4h');
+  });
+
   test('caps raw ambiguous candidate ids while preserving the total count', () {
     final registry = CockpitTargetRegistry(routeName: '/checkout');
 

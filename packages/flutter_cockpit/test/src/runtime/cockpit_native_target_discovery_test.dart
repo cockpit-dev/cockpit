@@ -1430,7 +1430,6 @@ void main() {
     final backTargets = registry.visibleTargets
         .where((target) => target.tooltip == 'Back')
         .toList(growable: false);
-
     expect(backTargets, hasLength(1));
     expect(
       backTargets.single.supportedCommands,

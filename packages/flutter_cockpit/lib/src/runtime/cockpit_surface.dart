@@ -2892,7 +2892,15 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
     if (normalizedCandidate == null || normalizedExpected == null) {
       return false;
     }
-    return normalizedCandidate == normalizedExpected;
+    if (normalizedCandidate == normalizedExpected) {
+      return true;
+    }
+    // Match Flutter's official text finder across the concrete widgets used
+    // by Material/Cupertino labels. A `Text["..."]` selector must still work
+    // when the mounted element is represented by RichText or SelectableText.
+    const textTypes = <String>{'text', 'richtext', 'selectabletext'};
+    return textTypes.contains(normalizedCandidate) &&
+        textTypes.contains(normalizedExpected);
   }
 
   bool _matchesPath(String? candidate, String expected) {

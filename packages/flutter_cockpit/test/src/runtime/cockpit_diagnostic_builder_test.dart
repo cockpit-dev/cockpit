@@ -96,6 +96,52 @@ void main() {
     expect(snapshot.truncated, isFalse);
   });
 
+  testWidgets(
+    'snapshots retain descendant Text selectors under compound controls',
+    (tester) async {
+      final rootKey = GlobalKey<CockpitSurfaceState>();
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: CockpitSurface(
+            key: rootKey,
+            routeName: '/periods',
+            child: DefaultTabController(
+              length: 3,
+              child: Scaffold(
+                appBar: AppBar(
+                  bottom: const TabBar(
+                    tabs: <Widget>[
+                      Tab(text: '15m'),
+                      Tab(text: '4h'),
+                      Tab(text: '1d'),
+                    ],
+                  ),
+                ),
+                body: const TabBarView(
+                  children: <Widget>[Text('15m'), Text('4h'), Text('1d')],
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final snapshot = rootKey.currentState!.snapshot(
+        options: const CockpitSnapshotOptions(
+          profile: CockpitSnapshotProfile.baseline,
+          maxTargets: 100,
+        ),
+      );
+      final periodText = snapshot.visibleTargets.firstWhere(
+        (target) => target.typeName == 'RichText' && target.text == '4h',
+      );
+
+      expect(periodText.supportedCommands, isEmpty);
+    },
+  );
+
   testWidgets('baseline style reads current render paint state', (
     tester,
   ) async {

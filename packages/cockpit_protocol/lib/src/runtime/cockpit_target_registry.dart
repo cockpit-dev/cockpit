@@ -319,9 +319,126 @@ final class CockpitTargetRegistry {
     return CockpitTargetResolutionResult.failure(
       error: CockpitCommandError.targetNotFound(
         message: 'No visible target matched the requested locator chain.',
-        details: <String, Object?>{'requestedLocator': locator.toJson()},
+        details: <String, Object?>{
+          'requestedLocator': locator.toJson(),
+          ..._locatorFailureDetails(locator, targets),
+        },
       ),
     );
+  }
+
+  /// Explains a compound miss without expanding the full mounted tree.
+  ///
+  /// A common Flutter shape puts the label on a descendant Text while the
+  /// public widget type belongs to an ancestor (Tab, custom button, or a
+  /// gesture wrapper). The selector probe can still reach that Text element,
+  /// but an all-signals-on-one-target lookup cannot. Returning per-signal
+  /// counts and a bounded structural hint lets the caller correct the
+  /// selector immediately instead of waiting through another blind timeout.
+  Map<String, Object?> _locatorFailureDetails(
+    CockpitLocator locator,
+    List<CockpitTarget> targets,
+  ) {
+    final signals = locator.signals.toList(growable: false);
+    if (signals.length < 2 && locator.ancestor == null) {
+      return const <String, Object?>{};
+    }
+
+    final signalMatches = <Map<String, Object?>>[];
+    for (final signal in signals) {
+      final matches = targets
+          .where(
+            (target) => _matchesSignal(
+              target,
+              signal.kind,
+              signal.value,
+              locator.matchMode,
+            ),
+          )
+          .toList(growable: false);
+      signalMatches.add(<String, Object?>{
+        'kind': signal.kind.name,
+        'value': signal.value,
+        'count': matches.length,
+        if (matches.isNotEmpty)
+          'candidates': _targetHintsFor(matches, limit: 4),
+      });
+    }
+
+    final textSignals = signals
+        .where((signal) => signal.kind == CockpitLocatorKind.text)
+        .toList(growable: false);
+    final typeSignals = signals
+        .where((signal) => signal.kind == CockpitLocatorKind.type)
+        .toList(growable: false);
+    final selectorHints = <Map<String, Object?>>[];
+    final seenSelectorHints = <String>{};
+    if (textSignals.isNotEmpty && typeSignals.isNotEmpty) {
+      for (final textSignal in textSignals) {
+        final textMatches = targets
+            .where(
+              (target) => _matchesSignal(
+                target,
+                CockpitLocatorKind.text,
+                textSignal.value,
+                locator.matchMode,
+              ),
+            )
+            .take(4);
+        for (final textTarget in textMatches) {
+          for (final typeSignal in typeSignals) {
+            final ancestorMatch = textTarget.locatorAncestors.any(
+              (ancestor) =>
+                  _matchesTypeSignal(ancestor.typeName, typeSignal.value),
+            );
+            if (!ancestorMatch) {
+              final directSelector =
+                  'Text[${_quoteSelectorValue(textSignal.value)}]';
+              if (seenSelectorHints.add(directSelector)) {
+                selectorHints.add(<String, Object?>{
+                  'selector': directSelector,
+                  'reason':
+                      'text matched, but the requested type was not the same target',
+                  'target': _targetHintFor(textTarget),
+                });
+              }
+              if (selectorHints.length >= 4) {
+                break;
+              }
+              continue;
+            }
+            final scopedSelector =
+                '${typeSignal.value} >> Text[${_quoteSelectorValue(textSignal.value)}]';
+            if (!seenSelectorHints.add(scopedSelector)) {
+              continue;
+            }
+            selectorHints.add(<String, Object?>{
+              'selector': scopedSelector,
+              'reason': 'text is on a descendant Text node',
+              'target': _targetHintFor(textTarget),
+            });
+            if (selectorHints.length >= 4) {
+              break;
+            }
+          }
+          if (selectorHints.length >= 4) {
+            break;
+          }
+        }
+        if (selectorHints.length >= 4) {
+          break;
+        }
+      }
+    }
+
+    return <String, Object?>{
+      'signalMatches': signalMatches,
+      if (selectorHints.isNotEmpty) 'selectorHints': selectorHints,
+    };
+  }
+
+  String _quoteSelectorValue(String value) {
+    return '"${value.replaceAll(r'\\', r'\\\\').replaceAll('"', r'\\"')}"';
   }
 
   CockpitTargetResolutionResult resolveCommand(CockpitCommandType commandType) {
@@ -620,7 +737,15 @@ final class CockpitTargetRegistry {
     if (normalizedCandidate == null || normalizedExpected == null) {
       return false;
     }
-    return normalizedCandidate == normalizedExpected;
+    if (normalizedCandidate == normalizedExpected) {
+      return true;
+    }
+    // Flutter's official text finder treats Text, RichText, and
+    // SelectableText as one text surface. Keep the selector grammar equally
+    // useful when Material/Cupertino widgets materialize a label as RichText.
+    const textTypes = <String>{'text', 'richtext', 'selectabletext'};
+    return textTypes.contains(normalizedCandidate) &&
+        textTypes.contains(normalizedExpected);
   }
 
   String? _normalizeText(String? value) {

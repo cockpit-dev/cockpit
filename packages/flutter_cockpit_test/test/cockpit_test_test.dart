@@ -2,8 +2,10 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:cockpit_protocol/cockpit_protocol.dart';
 import 'package:flutter_cockpit_test/flutter_cockpit_test.dart';
 
 void main() {
@@ -45,6 +47,45 @@ void main() {
       final tap = await cockpit.tap('Save');
       expect(tap.result.success, isTrue, reason: tap.result.error?.message);
       await cockpit.expectText('Saved', 'Saved');
+    },
+  );
+
+  final locale = ValueNotifier<String>('en');
+  final saved = ValueNotifier<bool>(false);
+  cockpitTestWidgets(
+    're-resolves translated selectors after the app switches language',
+    app: () => _LocaleTestApp(locale: locale, saved: saved),
+    body: (cockpit) async {
+      await cockpit.tap(_localeLabels(locale.value).switchToChinese);
+      await cockpit.waitForUi();
+      expect(locale.value, 'zh-CN');
+
+      final staleEnglish = await cockpit.execute(
+        CockpitCommand(
+          commandId: 'stale-locale-label',
+          commandType: CockpitCommandType.tap,
+          locator: CockpitSelector.parse('Save'),
+        ),
+        check: false,
+      );
+      expect(staleEnglish.result.success, isFalse);
+      expect(
+        staleEnglish.result.error?.code,
+        CockpitCommandError.targetNotFoundCode,
+      );
+
+      final labels = _localeLabels(locale.value);
+      await cockpit.tap(labels.save);
+      await cockpit.expectText(labels.saved, labels.saved);
+      await cockpit.type('买入', into: labels.message);
+
+      await cockpit.tap(labels.switchToChinese);
+      await cockpit.waitForUi();
+      expect(locale.value, 'en');
+      final englishLabels = _localeLabels(locale.value);
+      await cockpit.tap(englishLabels.save);
+      await cockpit.expectText(englishLabels.saved, englishLabels.saved);
+      await cockpit.type('buy', into: englishLabels.message);
     },
   );
 
@@ -589,6 +630,81 @@ final class _ReorderTestAppState extends State<_ReorderTestApp> {
           },
         ),
       ),
+    );
+  }
+}
+
+({String switchToChinese, String save, String saved, String message})
+_localeLabels(String locale) {
+  return locale == 'zh-CN'
+      ? (switchToChinese: 'English', save: '保存', saved: '已保存', message: '消息')
+      : (
+          switchToChinese: '中文',
+          save: 'Save',
+          saved: 'Saved',
+          message: 'Message',
+        );
+}
+
+final class _LocaleTestApp extends StatelessWidget {
+  const _LocaleTestApp({required this.locale, required this.saved});
+
+  final ValueNotifier<String> locale;
+  final ValueNotifier<bool> saved;
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<String>(
+      valueListenable: locale,
+      builder: (context, value, child) {
+        final labels = _localeLabels(value);
+        final parts = value.split('-');
+        final appLocale = parts.length > 1
+            ? Locale(parts.first, parts[1])
+            : Locale(parts.first);
+        return MaterialApp(
+          locale: appLocale,
+          supportedLocales: const <Locale>[Locale('en'), Locale('zh', 'CN')],
+          localizationsDelegates: const <LocalizationsDelegate<dynamic>>[
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          home: Material(
+            child: Center(
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    GestureDetector(
+                      onTap: () {
+                        locale.value = value == 'en' ? 'zh-CN' : 'en';
+                      },
+                      child: Text(labels.switchToChinese),
+                    ),
+                    GestureDetector(
+                      onTap: () => saved.value = true,
+                      child: Text(labels.save),
+                    ),
+                    ValueListenableBuilder<bool>(
+                      valueListenable: saved,
+                      builder: (context, value, child) =>
+                          Text(value ? labels.saved : ''),
+                    ),
+                    SizedBox(
+                      width: 320,
+                      child: TextField(
+                        key: const ValueKey<String>('locale-message'),
+                        decoration: InputDecoration(labelText: labels.message),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }

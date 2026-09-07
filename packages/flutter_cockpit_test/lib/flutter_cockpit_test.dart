@@ -46,6 +46,8 @@ export 'package:cockpit_protocol/cockpit_protocol.dart'
         CockpitRecordingResult,
         CockpitRecordingSession,
         CockpitRecordingState;
+export 'package:flutter_cockpit/flutter_cockpit_flutter.dart'
+    show FlutterCockpitConfig, FlutterCockpitConfiguration;
 export 'package:flutter_cockpit/flutter_cockpit.dart'
     show
         CockpitPerformancePlugin,
