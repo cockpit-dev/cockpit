@@ -79,6 +79,51 @@ void main() {
     expect(result.target?.keyValue, 'continue-button');
   });
 
+  testWidgets('Text selectors reach labels materialized as RichText', (
+    tester,
+  ) async {
+    var selected = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: CockpitSurface(
+          routeName: '/periods',
+          child: DefaultTabController(
+            length: 2,
+            child: Scaffold(
+              appBar: AppBar(
+                bottom: TabBar(
+                  onTap: (index) => selected = index,
+                  tabs: const <Widget>[
+                    Tab(text: '15m'),
+                    Tab(text: '4h'),
+                  ],
+                ),
+              ),
+              body: const TabBarView(
+                children: <Widget>[Text('15m'), Text('4h')],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final surface = tester.state<CockpitSurfaceState>(
+      find.byType(CockpitSurface),
+    );
+    final locator = CockpitSelector.parse('Text["4h"]');
+    final result = surface.probeVisibleLocator(
+      locator,
+      requiredCommand: CockpitCommandType.tap,
+    );
+    expect(result.isSuccess, isTrue, reason: '${result.error?.details}');
+
+    result.target!.onTap!.call();
+    await tester.pumpAndSettle();
+    expect(selected, 1);
+  });
+
   testWidgets('unique keyed action probes skip full target discovery', (
     tester,
   ) async {

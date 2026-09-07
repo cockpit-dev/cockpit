@@ -684,6 +684,11 @@ final class CockpitNativeTargetDiscovery {
     CockpitTarget existing,
     CockpitTarget candidate,
   ) {
+    final existingIsActionable = existing.supportedCommands.isNotEmpty;
+    final candidateIsActionable = candidate.supportedCommands.isNotEmpty;
+    if (existingIsActionable != candidateIsActionable) {
+      return existingIsActionable ? existing : candidate;
+    }
     final existingHasKey = _hasStableKey(existing);
     final candidateHasKey = _hasStableKey(candidate);
     if (existingHasKey != candidateHasKey) {
@@ -926,12 +931,18 @@ final class CockpitNativeTargetDiscovery {
     final typeName = _publicTypeNameForElement(element);
 
     if (actionableOwner != null) {
+      final canExposePassiveSelectorNode =
+          !pointerBlocked &&
+          _isPassiveSelectorNode(element) &&
+          supportedCommands.isEmpty &&
+          control == null;
       if (pointerBlocked ||
-          !_isIndependentNestedControl(
-            actionableOwner.widget,
-            element.widget,
-            control,
-          )) {
+          (!canExposePassiveSelectorNode &&
+              !_isIndependentNestedControl(
+                actionableOwner.widget,
+                element.widget,
+                control,
+              ))) {
         return null;
       }
     }
@@ -1128,6 +1139,21 @@ final class CockpitNativeTargetDiscovery {
   bool _isControlTarget(CockpitTarget? target) =>
       target != null &&
       (target.control != null || target.supportedCommands.isNotEmpty);
+
+  /// Keeps the public text element addressable when an outer control owns the
+  /// interaction. Flutter's official text selectors resolve the descendant
+  /// element directly, while the outer button/tab owns the actual tap. If we
+  /// drop this node during discovery, selector probes and snapshots disagree:
+  /// `Text["4h"]` can work but the same target is absent from `snapshot()`.
+  ///
+  /// Only concrete text widgets are exposed here. They never receive action
+  /// capabilities; the parent control remains the sole executable target.
+  bool _isPassiveSelectorNode(Element element) {
+    if (element.widget is! Text && element.widget is! RichText) {
+      return false;
+    }
+    return _passiveTextForElement(element)?.isNotEmpty == true;
+  }
 
   bool _hasOwnedInteraction(Set<CockpitCommandType> commands) => commands.any(
     const <CockpitCommandType>{
