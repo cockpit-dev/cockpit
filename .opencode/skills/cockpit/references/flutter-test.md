@@ -43,6 +43,33 @@ void main() {
 The app builder must return the real application root. Do not create a second
 fake screen just to make a selector pass.
 
+## Internationalized flows
+
+Changing language through the app UI is an ordinary test flow. Resolve every
+translated label from the application's current localization object after the
+language step; Cockpit parses and resolves the supplied string for that command
+and does not cache an earlier text match.
+
+```dart
+final settingsContext = cockpit.flutter.element(
+  find.byKey(const ValueKey('settings')),
+);
+await cockpit.tap(appTranslationsOf(settingsContext).settings.language);
+await cockpit.tap(appTranslationsOf(settingsContext).language.chinese);
+await cockpit.waitForUi();
+
+final currentTranslations = appTranslationsOf(settingsContext);
+await cockpit.tap(currentTranslations.settings.save);
+```
+
+`appTranslationsOf` is application code in this example; replace it with the
+current getter for slang (`context.t`), intl, easy_localization, or a custom
+delegate. Cockpit receives only the final current string. Re-read the
+context/getter after the locale mutation instead of caching the old translated
+value or a transient `:ref`. When text is not the behavior under test, prefer a
+source-known key, type, or structural selector so the same step is
+language-independent.
+
 ## Locators and actions
 
 The facade uses the same selector grammar as `cockpit dev` and traverses the

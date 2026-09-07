@@ -182,6 +182,13 @@ Widget buildCockpitDevelopmentApp() {
 }
 ```
 
+For internationalized flows, switch language through the real application UI.
+After the switch settles, read the application's current translation getter
+again before every subsequent text-based action. Cockpit resolves each command
+against the current mounted Element tree and does not cache the old translated
+string or a transient `:ref`; slang, intl, easy_localization, and custom
+delegates therefore need no Cockpit integration.
+
 Replace only the application import, root widget, and observer parameter with
 the application's real public API. Create one Cockpit observer per Navigator.
 
