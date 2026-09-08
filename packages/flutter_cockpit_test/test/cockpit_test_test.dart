@@ -52,13 +52,22 @@ void main() {
 
   final locale = ValueNotifier<String>('en');
   final saved = ValueNotifier<bool>(false);
+  final confirmed = ValueNotifier<bool>(false);
+  final selectedPeriod = ValueNotifier<int>(0);
   cockpitTestWidgets(
-    're-resolves translated selectors after the app switches language',
-    app: () => _LocaleTestApp(locale: locale, saved: saved),
+    're-resolves complex translated selectors after repeated locale changes',
+    app: () => _LocaleTestApp(
+      locale: locale,
+      saved: saved,
+      confirmed: confirmed,
+      selectedPeriod: selectedPeriod,
+    ),
     body: (cockpit) async {
-      await cockpit.tap(_localeLabels(locale.value).switchToChinese);
+      expect(Localizations.localeOf(cockpit.context), const Locale('en'));
+      await cockpit.tap(_localeLabels(locale.value).switchLanguage);
       await cockpit.waitForUi();
       expect(locale.value, 'zh-CN');
+      expect(Localizations.localeOf(cockpit.context), const Locale('zh', 'CN'));
 
       final staleEnglish = await cockpit.execute(
         CockpitCommand(
@@ -78,14 +87,56 @@ void main() {
       await cockpit.tap(labels.save);
       await cockpit.expectText(labels.saved, labels.saved);
       await cockpit.type('买入', into: labels.message);
+      await cockpit.tap('Text["${labels.period4h}"]');
+      expect(selectedPeriod.value, 1);
+      await cockpit.tap(labels.openDialog);
+      await cockpit.waitForUi();
+      await cockpit.tap('Dialog >> Text["${labels.confirm}"]');
+      await cockpit.expectText(labels.confirmed, labels.confirmed);
 
-      await cockpit.tap(labels.switchToChinese);
+      await cockpit.tap(labels.switchLanguage);
+      await cockpit.waitForUi();
+      expect(locale.value, 'ar');
+      expect(Localizations.localeOf(cockpit.context), const Locale('ar'));
+      final arabicLabels = _localeLabels(locale.value);
+      expect(find.text(labels.save), findsNothing);
+      await cockpit.tap(arabicLabels.save);
+      await cockpit.expectText(arabicLabels.saved, arabicLabels.saved);
+      await cockpit.type('شراء', into: arabicLabels.message);
+      await cockpit.tap('Text["${arabicLabels.period4h}"]');
+      expect(selectedPeriod.value, 1);
+      await cockpit.tap(arabicLabels.openDialog);
+      await cockpit.waitForUi();
+      await cockpit.tap('Dialog >> Text["${arabicLabels.confirm}"]');
+      await cockpit.expectText(arabicLabels.confirmed, arabicLabels.confirmed);
+
+      await cockpit.tap(arabicLabels.switchLanguage);
       await cockpit.waitForUi();
       expect(locale.value, 'en');
+      expect(Localizations.localeOf(cockpit.context), const Locale('en'));
       final englishLabels = _localeLabels(locale.value);
       await cockpit.tap(englishLabels.save);
       await cockpit.expectText(englishLabels.saved, englishLabels.saved);
       await cockpit.type('buy', into: englishLabels.message);
+      await cockpit.tap('Text["${englishLabels.period4h}"]');
+      expect(selectedPeriod.value, 1);
+    },
+  );
+
+  cockpitTestWidgets(
+    'context reports a missing localization boundary clearly',
+    app: () => const SizedBox.expand(),
+    body: (cockpit) async {
+      expect(
+        () => cockpit.context,
+        throwsA(
+          isA<StateError>().having(
+            (error) => error.message,
+            'message',
+            contains('No visible application Localizations boundary'),
+          ),
+        ),
+      );
     },
   );
 
@@ -634,23 +685,71 @@ final class _ReorderTestAppState extends State<_ReorderTestApp> {
   }
 }
 
-({String switchToChinese, String save, String saved, String message})
+({
+  String switchLanguage,
+  String save,
+  String saved,
+  String message,
+  String period15m,
+  String period4h,
+  String openDialog,
+  String dialogTitle,
+  String confirm,
+  String confirmed,
+})
 _localeLabels(String locale) {
-  return locale == 'zh-CN'
-      ? (switchToChinese: 'English', save: '保存', saved: '已保存', message: '消息')
-      : (
-          switchToChinese: '中文',
-          save: 'Save',
-          saved: 'Saved',
-          message: 'Message',
-        );
+  return switch (locale) {
+    'zh-CN' => (
+      switchLanguage: 'العربية',
+      save: '保存',
+      saved: '已保存',
+      message: '消息',
+      period15m: '15分钟',
+      period4h: '4小时',
+      openDialog: '打开确认',
+      dialogTitle: '确认订单',
+      confirm: '确认',
+      confirmed: '已确认',
+    ),
+    'ar' => (
+      switchLanguage: 'English',
+      save: 'حفظ',
+      saved: 'تم الحفظ',
+      message: 'رسالة',
+      period15m: '١٥ دقيقة',
+      period4h: '٤ ساعات',
+      openDialog: 'فتح التأكيد',
+      dialogTitle: 'تأكيد الطلب',
+      confirm: 'تأكيد',
+      confirmed: 'تم التأكيد',
+    ),
+    _ => (
+      switchLanguage: '中文',
+      save: 'Save',
+      saved: 'Saved',
+      message: 'Message',
+      period15m: '15m',
+      period4h: '4h',
+      openDialog: 'Open confirmation',
+      dialogTitle: 'Confirm order',
+      confirm: 'Confirm',
+      confirmed: 'Confirmed',
+    ),
+  };
 }
 
 final class _LocaleTestApp extends StatelessWidget {
-  const _LocaleTestApp({required this.locale, required this.saved});
+  const _LocaleTestApp({
+    required this.locale,
+    required this.saved,
+    required this.confirmed,
+    required this.selectedPeriod,
+  });
 
   final ValueNotifier<String> locale;
   final ValueNotifier<bool> saved;
+  final ValueNotifier<bool> confirmed;
+  final ValueNotifier<int> selectedPeriod;
 
   @override
   Widget build(BuildContext context) {
@@ -664,41 +763,88 @@ final class _LocaleTestApp extends StatelessWidget {
             : Locale(parts.first);
         return MaterialApp(
           locale: appLocale,
-          supportedLocales: const <Locale>[Locale('en'), Locale('zh', 'CN')],
+          supportedLocales: const <Locale>[
+            Locale('en'),
+            Locale('zh', 'CN'),
+            Locale('ar'),
+          ],
           localizationsDelegates: const <LocalizationsDelegate<dynamic>>[
             GlobalMaterialLocalizations.delegate,
             GlobalWidgetsLocalizations.delegate,
             GlobalCupertinoLocalizations.delegate,
           ],
-          home: Material(
-            child: Center(
+          home: Scaffold(
+            body: Center(
               child: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: <Widget>[
-                    GestureDetector(
-                      onTap: () {
-                        locale.value = value == 'en' ? 'zh-CN' : 'en';
-                      },
-                      child: Text(labels.switchToChinese),
-                    ),
-                    GestureDetector(
-                      onTap: () => saved.value = true,
-                      child: Text(labels.save),
-                    ),
-                    ValueListenableBuilder<bool>(
-                      valueListenable: saved,
-                      builder: (context, value, child) =>
-                          Text(value ? labels.saved : ''),
-                    ),
-                    SizedBox(
-                      width: 320,
-                      child: TextField(
-                        key: const ValueKey<String>('locale-message'),
-                        decoration: InputDecoration(labelText: labels.message),
+                child: Builder(
+                  builder: (context) => Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: <Widget>[
+                      GestureDetector(
+                        onTap: () {
+                          locale.value = switch (value) {
+                            'en' => 'zh-CN',
+                            'zh-CN' => 'ar',
+                            _ => 'en',
+                          };
+                          saved.value = false;
+                          confirmed.value = false;
+                          selectedPeriod.value = 0;
+                        },
+                        child: Text(labels.switchLanguage),
                       ),
-                    ),
-                  ],
+                      GestureDetector(
+                        onTap: () => saved.value = true,
+                        child: Text(labels.save),
+                      ),
+                      ValueListenableBuilder<bool>(
+                        valueListenable: saved,
+                        builder: (context, value, child) =>
+                            Text(value ? labels.saved : ''),
+                      ),
+                      GestureDetector(
+                        onTap: () => selectedPeriod.value = 0,
+                        child: RichText(text: TextSpan(text: labels.period15m)),
+                      ),
+                      GestureDetector(
+                        onTap: () => selectedPeriod.value = 1,
+                        child: RichText(text: TextSpan(text: labels.period4h)),
+                      ),
+                      GestureDetector(
+                        onTap: () => showDialog<void>(
+                          context: context,
+                          builder: (dialogContext) => AlertDialog(
+                            title: Text(labels.dialogTitle),
+                            actions: <Widget>[
+                              TextButton(
+                                onPressed: () {
+                                  confirmed.value = true;
+                                  Navigator.of(dialogContext).pop();
+                                },
+                                child: Text(labels.confirm),
+                              ),
+                            ],
+                          ),
+                        ),
+                        child: Text(labels.openDialog),
+                      ),
+                      Text(labels.confirm),
+                      ValueListenableBuilder<bool>(
+                        valueListenable: confirmed,
+                        builder: (context, value, child) =>
+                            Text(value ? labels.confirmed : ''),
+                      ),
+                      SizedBox(
+                        width: 320,
+                        child: TextField(
+                          key: const ValueKey<String>('locale-message'),
+                          decoration: InputDecoration(
+                            labelText: labels.message,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),

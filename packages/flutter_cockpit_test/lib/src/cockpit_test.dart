@@ -142,6 +142,21 @@ FlutterCockpitRootState? _findRoot(WidgetTester tester) {
   return tester.state<FlutterCockpitRootState>(finder);
 }
 
+int? _depthBelow(Element element, Element ancestor) {
+  if (identical(element, ancestor)) return 0;
+  var depth = 0;
+  var found = false;
+  element.visitAncestorElements((candidate) {
+    depth++;
+    if (identical(candidate, ancestor)) {
+      found = true;
+      return false;
+    }
+    return true;
+  });
+  return found ? depth : null;
+}
+
 void _publishIntegrationReport(Map<String, Object?> report) {
   final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
   final existing = binding.reportData ?? <String, dynamic>{};
@@ -258,6 +273,53 @@ final class CockpitTester {
 
   /// The underlying official Flutter tester for advanced widget assertions.
   final WidgetTester flutter;
+
+  /// A freshly resolved visible application context below [Localizations].
+  ///
+  /// This avoids test-only keys when an application-owned localization getter
+  /// needs a [BuildContext], for example `cockpit.context.t` with slang or
+  /// `AppLocalizations.of(cockpit.context)!` with intl. The lookup runs on
+  /// every access, so callers must not cache the returned context across
+  /// navigation, overlays, or locale changes.
+  BuildContext get context {
+    final rootElement = root.context as Element;
+    Element? resolved;
+    var resolvedDepth = 1 << 30;
+    for (final element in find.byWidgetPredicate((_) => true).evaluate()) {
+      if (!element.mounted) continue;
+      final depth = _depthBelow(element, rootElement);
+      if (depth == null || element.widget is InheritedWidget) continue;
+
+      var belowLocalizationsScope = false;
+      var inheritedBelowLocalizations = false;
+      element.visitAncestorElements((ancestor) {
+        if (ancestor.widget is Localizations) {
+          belowLocalizationsScope = inheritedBelowLocalizations;
+          return false;
+        }
+        // Localizations inserts a Semantics wrapper before its private
+        // _LocalizationsScope. Requiring an inherited element between the
+        // candidate and Localizations skips that wrapper and guarantees that
+        // Localizations.of/localeOf can see the actual resource scope.
+        if (ancestor.widget is InheritedWidget) {
+          inheritedBelowLocalizations = true;
+        }
+        return true;
+      });
+      if (belowLocalizationsScope && depth < resolvedDepth) {
+        resolved = element;
+        resolvedDepth = depth;
+      }
+    }
+    if (resolved == null) {
+      throw StateError(
+        'No visible application Localizations boundary was found. '
+        'Mount a WidgetsApp, MaterialApp, CupertinoApp, or Localizations '
+        'before reading CockpitTester.context.',
+      );
+    }
+    return resolved;
+  }
 
   /// The mounted Cockpit root used by this test.
   final FlutterCockpitRootState root;
