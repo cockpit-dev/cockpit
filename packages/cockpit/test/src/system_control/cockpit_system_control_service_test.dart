@@ -569,6 +569,46 @@ void main() {
     },
   );
 
+  test(
+    'ios WebDriverAgent reachability cache is isolated per device',
+    () async {
+      final results = <String, bool>{'device-a': true, 'device-b': false};
+      var probes = 0;
+      final service = CockpitSystemControlService(
+        iosWdaEndpointProbe: (_, {required timeout}) async {
+          probes += 1;
+          return results[probes == 1 ? 'device-a' : 'device-b']!;
+        },
+      );
+      const metadata = <String, Object?>{'wdaUrl': 'http://127.0.0.1:8100'};
+
+      final first = await service.describe(
+        const CockpitSystemControlDescribeRequest(
+          platform: 'ios',
+          deviceId: 'device-a',
+          metadata: metadata,
+        ),
+      );
+      final second = await service.describe(
+        const CockpitSystemControlDescribeRequest(
+          platform: 'ios',
+          deviceId: 'device-b',
+          metadata: metadata,
+        ),
+      );
+
+      expect(
+        first.profile.availableActions,
+        contains(CockpitSystemControlAction.readUiTree),
+      );
+      expect(
+        second.profile.blockedActions,
+        contains(CockpitSystemControlAction.readUiTree),
+      );
+      expect(probes, 2);
+    },
+  );
+
   test('ios WebDriverAgent reachability merges concurrent describes', () async {
     var probes = 0;
     final probeCompleter = Completer<bool>();

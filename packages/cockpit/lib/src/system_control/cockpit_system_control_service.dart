@@ -200,12 +200,16 @@ final class CockpitSystemControlService {
     if (wdaUrl is! String || wdaUrl.trim().isEmpty) {
       final configured = _environment['FLUTTER_COCKPIT_IOS_WDA_URL']?.trim();
       if (configured == null || configured.isEmpty) {
-        return _discoverLocalWdaMetadata(metadata);
+        return _discoverLocalWdaMetadata(metadata, deviceId: request.deviceId);
       }
       metadata['wdaUrl'] = configured;
       wdaUrl = configured;
     }
-    return _resolveExplicitWdaMetadata(metadata, wdaUrl.trim());
+    return _resolveExplicitWdaMetadata(
+      metadata,
+      wdaUrl.trim(),
+      deviceId: request.deviceId,
+    );
   }
 
   Future<Map<String, Object?>> _resolveLinuxMetadata(
@@ -310,12 +314,14 @@ final class CockpitSystemControlService {
   }
 
   Future<Map<String, Object?>> _discoverLocalWdaMetadata(
-    Map<String, Object?> metadata,
-  ) async {
+    Map<String, Object?> metadata, {
+    String? deviceId,
+  }) async {
     for (final uri in _defaultIosWdaUris) {
       final reachable = await _probeIosWda(
         uri,
         timeout: const Duration(milliseconds: 250),
+        deviceId: deviceId,
       );
       if (reachable) {
         metadata['wdaUrl'] = uri.toString();
@@ -331,8 +337,9 @@ final class CockpitSystemControlService {
 
   Future<Map<String, Object?>> _resolveExplicitWdaMetadata(
     Map<String, Object?> metadata,
-    String wdaUrl,
-  ) async {
+    String wdaUrl, {
+    String? deviceId,
+  }) async {
     if (wdaUrl.isEmpty) {
       return metadata;
     }
@@ -345,6 +352,7 @@ final class CockpitSystemControlService {
     final reachable = await _probeIosWda(
       uri,
       timeout: const Duration(seconds: 2),
+      deviceId: deviceId,
     );
     metadata['wdaReachable'] = reachable;
     if (!reachable) {
@@ -353,8 +361,16 @@ final class CockpitSystemControlService {
     return metadata;
   }
 
-  Future<bool> _probeIosWda(Uri uri, {required Duration timeout}) async {
-    final key = uri.toString();
+  Future<bool> _probeIosWda(
+    Uri uri, {
+    required Duration timeout,
+    String? deviceId,
+  }) async {
+    // A forwarded WDA URL can be reused for different devices over the
+    // lifetime of one workspace. Keep reachability scoped to the canonical
+    // device identity so one session cannot inherit another session's probe
+    // result during the short cache window.
+    final key = '${deviceId?.trim() ?? '<unknown>'}|${uri.toString()}';
     final now = DateTime.now();
     final cached = _iosWdaProbeCache[key];
     final cacheValid =
