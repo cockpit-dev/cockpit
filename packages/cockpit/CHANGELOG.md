@@ -1,5 +1,14 @@
 # Changelog
 
+## 4.9.0
+
+- Improved Flutter localized text selectors across `Text`, `RichText`, and
+  `SelectableText`, including descendant labels inside compound controls.
+- Added bounded compound-locator diagnostics with per-signal counts and
+  actionable selector hints instead of opaque timeout-only failures.
+- Isolated iOS WebDriverAgent reachability caching by device for safe parallel
+  sessions and hardened transient capability probing.
+
 ## 4.8.0
 
 - Added fail-closed subtree exports with `dev tree --under` and `--depth`,
