@@ -155,6 +155,10 @@ final class CockpitSystemControlService {
   final Map<String, ({CockpitWebCdpProbeResult result, DateTime at})>
   _webCdpProbeCache =
       <String, ({CockpitWebCdpProbeResult result, DateTime at})>{};
+  final Map<String, ({bool reachable, DateTime at})> _iosWdaProbeCache =
+      <String, ({bool reachable, DateTime at})>{};
+  final Map<String, Future<bool>> _iosWdaProbeInFlight =
+      <String, Future<bool>>{};
 
   Future<CockpitSystemControlDescribeResult> describe(
     CockpitSystemControlDescribeRequest request,
@@ -309,7 +313,7 @@ final class CockpitSystemControlService {
     Map<String, Object?> metadata,
   ) async {
     for (final uri in _defaultIosWdaUris) {
-      final reachable = await _iosWdaEndpointProbe(
+      final reachable = await _probeIosWda(
         uri,
         timeout: const Duration(milliseconds: 250),
       );
@@ -338,7 +342,7 @@ final class CockpitSystemControlService {
       metadata['wdaFailureReason'] = 'invalidWdaUrl';
       return metadata;
     }
-    final reachable = await _iosWdaEndpointProbe(
+    final reachable = await _probeIosWda(
       uri,
       timeout: const Duration(seconds: 2),
     );
@@ -347,6 +351,48 @@ final class CockpitSystemControlService {
       metadata['wdaFailureReason'] = 'wdaEndpointUnreachable';
     }
     return metadata;
+  }
+
+  Future<bool> _probeIosWda(Uri uri, {required Duration timeout}) async {
+    final key = uri.toString();
+    final now = DateTime.now();
+    final cached = _iosWdaProbeCache[key];
+    final cacheValid =
+        cached != null &&
+        now.difference(cached.at) <
+            (cached.reachable
+                ? const Duration(seconds: 5)
+                : const Duration(seconds: 1));
+    if (cacheValid) {
+      return cached.reachable;
+    }
+    final inFlight = _iosWdaProbeInFlight[key];
+    if (inFlight != null) {
+      return inFlight;
+    }
+    // Start on the next microtask so the in-flight entry is installed before
+    // an injected probe can complete or throw synchronously. Otherwise a
+    // synchronously completed probe could remove an entry that has not yet
+    // been inserted, leaving a stale completed future in the map.
+    final probe = Future<bool>.microtask(
+      () => _runIosWdaProbe(uri, timeout: timeout, key: key),
+    );
+    _iosWdaProbeInFlight[key] = probe;
+    return probe;
+  }
+
+  Future<bool> _runIosWdaProbe(
+    Uri uri, {
+    required Duration timeout,
+    required String key,
+  }) async {
+    try {
+      final reachable = await _iosWdaEndpointProbe(uri, timeout: timeout);
+      _iosWdaProbeCache[key] = (reachable: reachable, at: DateTime.now());
+      return reachable;
+    } finally {
+      _iosWdaProbeInFlight.remove(key);
+    }
   }
 }
 
