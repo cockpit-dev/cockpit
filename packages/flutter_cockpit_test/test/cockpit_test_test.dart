@@ -140,6 +140,24 @@ void main() {
     },
   );
 
+  cockpitTestWidgets(
+    'context keeps the app locale when an overlay has a nested override',
+    app: () => const _NestedLocaleOverrideApp(),
+    body: (cockpit) async {
+      expect(Localizations.localeOf(cockpit.context), const Locale('en'));
+      expect(find.text('Nested override'), findsOneWidget);
+
+      await cockpit.flutter.tap(find.text('Open dialog'));
+      await cockpit.flutter.pumpAndSettle();
+      expect(find.text('Dialog override'), findsOneWidget);
+      expect(Localizations.localeOf(cockpit.context), const Locale('en'));
+      await cockpit.tap('Dialog >> Text["Close"]');
+      await cockpit.waitForUi();
+      expect(find.text('Dialog override'), findsNothing);
+      expect(Localizations.localeOf(cockpit.context), const Locale('en'));
+    },
+  );
+
   final reorderedLabels = <String>[];
   cockpitTestWidgets(
     'dragTo reorders a list from one resolved target to another',
@@ -851,6 +869,58 @@ final class _LocaleTestApp extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+}
+
+final class _NestedLocaleOverrideApp extends StatelessWidget {
+  const _NestedLocaleOverrideApp();
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      locale: const Locale('en'),
+      supportedLocales: const <Locale>[Locale('en'), Locale('zh')],
+      localizationsDelegates: const <LocalizationsDelegate<dynamic>>[
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      home: Builder(
+        builder: (context) => Localizations.override(
+          context: context,
+          locale: const Locale('zh'),
+          child: Builder(
+            builder: (context) => Scaffold(
+              body: Column(
+                children: <Widget>[
+                  const Text('Nested override'),
+                  TextButton(
+                    onPressed: () => showDialog<void>(
+                      context: context,
+                      builder: (dialogContext) => Localizations.override(
+                        context: dialogContext,
+                        locale: const Locale('zh'),
+                        child: AlertDialog(
+                          content: const Text('Dialog override'),
+                          actions: <Widget>[
+                            TextButton(
+                              onPressed: () =>
+                                  Navigator.of(dialogContext).pop(),
+                              child: const Text('Close'),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    child: const Text('Open dialog'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

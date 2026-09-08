@@ -173,7 +173,20 @@ final class CockpitSystemControlActionService {
             '${request.action.name} is not declared for ${profile.platform}.',
       );
     }
-    if (capability.availability != CockpitSystemControlAvailability.available) {
+    // Capability discovery is intentionally read-only and uses a short WDA
+    // probe. XCTest/WDA can report a transiently unavailable /status while it
+    // is handing the foreground app to XCTest or rebuilding a snapshot. If a
+    // caller supplied a valid WDA endpoint for a WDA-backed action, let the
+    // action use its own full deadline; the driver response is authoritative.
+    // This avoids turning a TOCTOU probe miss into a false hard block while
+    // preserving blocked status in inspect/capability output.
+    final attemptConfiguredWda = _canAttemptConfiguredWda(
+      request,
+      describe,
+      capability,
+    );
+    if (capability.availability != CockpitSystemControlAvailability.available &&
+        !attemptConfiguredWda) {
       final issue = _unavailableCapabilityIssue(request, describe, capability);
       return _notExecutable(
         request,
@@ -244,7 +257,48 @@ final class CockpitSystemControlActionService {
       );
     }
 
-    return _runResolvedCommand(effectiveRequest, capability, command);
+    final executionCapability = attemptConfiguredWda
+        ? _availableExecutionCapability(capability)
+        : capability;
+    return _runResolvedCommand(effectiveRequest, executionCapability, command);
+  }
+
+  bool _canAttemptConfiguredWda(
+    CockpitSystemControlActionRequest request,
+    CockpitSystemControlDescribeResult describe,
+    CockpitSystemControlCapability capability,
+  ) {
+    if (request.platform.trim().toLowerCase() != 'ios' ||
+        capability.availability ==
+            CockpitSystemControlAvailability.unsupported ||
+        !capability.strategy.startsWith('webdriveragent.')) {
+      return false;
+    }
+    final rawUrl = describe.metadata['wdaUrl'];
+    if (rawUrl is! String || rawUrl.trim().isEmpty) {
+      return false;
+    }
+    final uri = Uri.tryParse(rawUrl.trim());
+    return uri != null && uri.hasScheme && uri.host.isNotEmpty;
+  }
+
+  CockpitSystemControlCapability _availableExecutionCapability(
+    CockpitSystemControlCapability capability,
+  ) {
+    if (capability.availability == CockpitSystemControlAvailability.available) {
+      return capability;
+    }
+    return CockpitSystemControlCapability(
+      action: capability.action,
+      plane: capability.plane,
+      availability: CockpitSystemControlAvailability.available,
+      strategy: capability.strategy,
+      groups: capability.groups,
+      requires: capability.requires,
+      limitations: capability.limitations,
+      parameters: capability.parameters,
+      fallbackActions: capability.fallbackActions,
+    );
   }
 
   Future<CockpitSystemControlActionResult> _runWindowsFocusStateCommand(

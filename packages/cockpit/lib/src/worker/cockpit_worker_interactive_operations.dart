@@ -76,6 +76,13 @@ final class CockpitWorkerInteractiveOperations {
   }) {
     final snapshots = snapshotStore ?? CockpitInteractiveSnapshotStore();
     final retainedRegistry = CockpitSessionRegistry();
+    final effectiveSystemControlService =
+        systemControlService ?? CockpitSystemControlService();
+    final effectiveSystemActionService =
+        systemActionService ??
+        CockpitSystemControlActionService(
+          systemControlService: effectiveSystemControlService,
+        );
     final artifactTempFileFactory = cockpitWorkerArtifactTempFileFactory(
       producerRoot,
     );
@@ -149,10 +156,8 @@ final class CockpitWorkerInteractiveOperations {
       runShellService:
           runShellService ??
           CockpitRunShellService(processManager: processManager),
-      systemControlService:
-          systemControlService ?? CockpitSystemControlService(),
-      systemActionService:
-          systemActionService ?? CockpitSystemControlActionService(),
+      systemControlService: effectiveSystemControlService,
+      systemActionService: effectiveSystemActionService,
       waitIdleService: waitIdleService ?? CockpitWaitIdleService(),
       startRecordingService:
           startRecordingService ?? CockpitStartRecordingService(),

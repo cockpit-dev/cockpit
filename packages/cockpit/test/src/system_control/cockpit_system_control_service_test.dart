@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -536,6 +537,72 @@ void main() {
       );
     },
   );
+
+  test(
+    'ios WebDriverAgent reachability is reused across adjacent describes',
+    () async {
+      var probes = 0;
+      final service = CockpitSystemControlService(
+        iosWdaEndpointProbe: (_, {required timeout}) async {
+          probes += 1;
+          return true;
+        },
+      );
+      const request = CockpitSystemControlDescribeRequest(
+        platform: 'ios',
+        deviceId: '6FD25DED-11E9-4AE9-B4B5-EDF4601981DC',
+        metadata: <String, Object?>{'wdaUrl': 'http://127.0.0.1:8100'},
+      );
+
+      final first = await service.describe(request);
+      final second = await service.describe(request);
+
+      expect(
+        first.profile.availableActions,
+        contains(CockpitSystemControlAction.readUiTree),
+      );
+      expect(
+        second.profile.availableActions,
+        contains(CockpitSystemControlAction.readUiTree),
+      );
+      expect(probes, 1);
+    },
+  );
+
+  test('ios WebDriverAgent reachability merges concurrent describes', () async {
+    var probes = 0;
+    final probeCompleter = Completer<bool>();
+    final service = CockpitSystemControlService(
+      iosWdaEndpointProbe: (_, {required timeout}) {
+        probes += 1;
+        return probeCompleter.future;
+      },
+    );
+    const request = CockpitSystemControlDescribeRequest(
+      platform: 'ios',
+      deviceId: '6FD25DED-11E9-4AE9-B4B5-EDF4601981DC',
+      metadata: <String, Object?>{'wdaUrl': 'http://127.0.0.1:8100'},
+    );
+
+    final first = service.describe(request);
+    final second = service.describe(request);
+    await Future<void>.delayed(Duration.zero);
+    expect(probes, 1);
+    probeCompleter.complete(true);
+
+    final results = await Future.wait(
+      <Future<CockpitSystemControlDescribeResult>>[first, second],
+    );
+    expect(results, hasLength(2));
+    expect(
+      results.every(
+        (result) => result.profile.availableActions.contains(
+          CockpitSystemControlAction.readUiTree,
+        ),
+      ),
+      isTrue,
+    );
+  });
 
   test('WebDriverAgent auto-discovery only runs for iOS', () async {
     var probeCount = 0;

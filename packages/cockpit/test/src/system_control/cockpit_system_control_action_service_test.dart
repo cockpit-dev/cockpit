@@ -334,6 +334,43 @@ void main() {
   });
 
   test(
+    'ios WDA action attempts a configured endpoint after a transient probe miss',
+    () async {
+      final processManager = _FakeProcessManager();
+      var probes = 0;
+      CockpitIosWdaCommand? capturedCommand;
+      final systemControl = CockpitSystemControlService(
+        iosWdaEndpointProbe: (_, {required timeout}) async {
+          probes += 1;
+          return false;
+        },
+      );
+      final service = CockpitSystemControlActionService(
+        processManager: processManager,
+        systemControlService: systemControl,
+        iosWdaRunner: (command, {required timeout}) async {
+          capturedCommand = command;
+          return 'tap x=42 y=88';
+        },
+      );
+      const request = CockpitSystemControlActionRequest(
+        platform: 'ios',
+        deviceId: '6FD25DED-11E9-4AE9-B4B5-EDF4601981DC',
+        metadata: <String, Object?>{'wdaUrl': 'http://127.0.0.1:8100'},
+        action: CockpitSystemControlAction.tap,
+        parameters: <String, Object?>{'x': 42, 'y': 88},
+      );
+
+      final result = await service.run(request);
+
+      expect(result.success, isTrue);
+      expect(result.availability, CockpitSystemControlAvailability.available);
+      expect(capturedCommand?.action, CockpitIosWdaAction.tap);
+      expect(probes, 1);
+    },
+  );
+
+  test(
     'ios simulator native action uses auto-discovered WebDriverAgent endpoint',
     () async {
       final processManager = _FakeProcessManager();

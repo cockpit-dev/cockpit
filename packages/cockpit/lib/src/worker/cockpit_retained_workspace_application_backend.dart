@@ -4,6 +4,8 @@ import '../application/cockpit_application_service_exception.dart';
 import '../application/cockpit_app_temp_store.dart';
 import '../application/cockpit_interactive_snapshot_store.dart';
 import '../development/cockpit_vm_network_profiler.dart';
+import '../system_control/cockpit_system_control_action_service.dart';
+import '../system_control/cockpit_system_control_service.dart';
 import 'cockpit_worker_application_support.dart';
 import 'cockpit_worker_development_session_runtime.dart';
 import 'cockpit_worker_document_index.dart';
@@ -42,6 +44,10 @@ final class CockpitRetainedWorkspaceApplicationBackend
       );
     }
     final snapshots = CockpitInteractiveSnapshotStore();
+    final systemControlService = CockpitSystemControlService();
+    final systemActionService = CockpitSystemControlActionService(
+      systemControlService: systemControlService,
+    );
     return CockpitRetainedWorkspaceApplicationBackend._(
       workspaceId: workspaceId,
       workspaceRoot: workspaceRoot,
@@ -52,6 +58,8 @@ final class CockpitRetainedWorkspaceApplicationBackend
         portHandoff: portHandoff,
         developmentRuntime: developmentRuntime,
         appTempStore: appTempStore,
+        systemControlService: systemControlService,
+        systemActionService: systemActionService,
       ),
       remote: CockpitWorkerRemoteOperations(
         workspaceId: workspaceId,
@@ -73,6 +81,8 @@ final class CockpitRetainedWorkspaceApplicationBackend
         processManager: processManager,
         snapshotStore: snapshots,
         networkProfiler: networkProfiler,
+        systemControlService: systemControlService,
+        systemActionService: systemActionService,
       ),
       sanitizer: resultSanitizer,
     );
