@@ -451,10 +451,59 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - uses: ilammy/msvc-dev-cmd@v1
+      - name: Configure MSVC developer environment
         if: matrix.platform == 'windows'
-        with:
-          arch: x64
+        shell: pwsh
+        run: |
+          # Keep this setup native to the runner so the regression matrix does
+          # not depend on a JavaScript action pinned to the retired Node 20
+          # runtime.
+          $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
+          if (-not (Test-Path -LiteralPath $vswhere)) {
+            throw "Visual Studio locator was not found: $vswhere"
+          }
+
+          $installationPath = & $vswhere -latest -products * `
+            -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 `
+            -property installationPath |
+            Select-Object -First 1
+          if ([string]::IsNullOrWhiteSpace($installationPath)) {
+            throw 'No Visual Studio installation with the MSVC toolset was found.'
+          }
+          $vcvars = Join-Path $installationPath 'VC\Auxiliary\Build\vcvarsall.bat'
+          if (-not (Test-Path -LiteralPath $vcvars)) {
+            throw "MSVC environment script was not found: $vcvars"
+          }
+
+          function Read-CmdEnvironment([string] $command) {
+            $values = @{}
+            foreach ($line in (& cmd.exe /d /s /c $command)) {
+              $separator = $line.IndexOf('=')
+              if ($separator -le 0) {
+                continue
+              }
+              $name = $line.Substring(0, $separator)
+              if ($name -notmatch '^[A-Za-z_][A-Za-z0-9_]*$') {
+                continue
+              }
+              $values[$name] = $line.Substring($separator + 1)
+            }
+            return $values
+          }
+
+          $before = Read-CmdEnvironment 'set'
+          $after = Read-CmdEnvironment ('call "' + $vcvars + '" x64 >nul && set')
+          $pathVariables = @('PATH', 'INCLUDE', 'LIB', 'LIBPATH')
+          foreach ($name in $after.Keys) {
+            $value = $after[$name]
+            if ($before.ContainsKey($name) -and $before[$name] -eq $value) {
+              continue
+            }
+            if ($pathVariables -contains $name.ToUpperInvariant()) {
+              $value = ($value -split ';' | Select-Object -Unique) -join ';'
+            }
+            "$name=$value" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          }
 
       - uses: actions/setup-java@v5
         if: matrix.platform == 'android'
