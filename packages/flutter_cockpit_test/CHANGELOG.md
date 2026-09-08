@@ -1,5 +1,12 @@
 # Changelog
 
+## 4.9.0
+
+- Added a key-free, freshly resolved `cockpit.context` for app-owned
+  localization getters such as slang, intl, and custom delegates.
+- Added locale-switch coverage that resolves translated controls after each
+  rebuild without caching stale contexts or selectors.
+
 ## 4.8.0
 
 - Added command-recorded snapshots, network reset, host-backed screenshot

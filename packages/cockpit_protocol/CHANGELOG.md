@@ -1,5 +1,11 @@
 # Changelog
 
+## 4.9.0
+
+- Added structured compound-locator failure details with bounded signal
+  matches, candidate summaries, and selector hints for descendant labels.
+- Kept text matching aligned across Flutter text widget representations.
+
 ## 4.8.0
 
 - Published the bounded Widget-tree scope contract, including structural

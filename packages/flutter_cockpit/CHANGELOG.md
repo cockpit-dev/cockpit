@@ -1,5 +1,13 @@
 # Changelog
 
+## 4.9.0
+
+- Kept Flutter snapshots and selectors consistent for labels materialized as
+  `Text`, `RichText`, or `SelectableText`, including nested TabBar labels and
+  other compound controls.
+- Preserved passive descendant text targets without granting them interaction
+  capabilities owned by their parent controls.
+
 ## 4.8.0
 
 - Added strict mounted-subtree Widget-tree capture with depth bounds and
