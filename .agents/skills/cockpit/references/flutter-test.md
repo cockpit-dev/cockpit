@@ -48,27 +48,25 @@ fake screen just to make a selector pass.
 Changing language through the app UI is an ordinary test flow. Resolve every
 translated label from the application's current localization object after the
 language step; Cockpit parses and resolves the supplied string for that command
-and does not cache an earlier text match.
+and does not cache an earlier text match. `cockpit.context` is a fresh visible
+application context below `Localizations`, so no business Key or Semantics
+label is needed and a stale context is never reused across a rebuild.
 
 ```dart
-final settingsContext = cockpit.flutter.element(
-  find.byKey(const ValueKey('settings')),
-);
-await cockpit.tap(appTranslationsOf(settingsContext).settings.language);
-await cockpit.tap(appTranslationsOf(settingsContext).language.chinese);
+await cockpit.tap(cockpit.context.t.settings.language);
+await cockpit.tap(cockpit.context.t.language.chinese);
 await cockpit.waitForUi();
 
-final currentTranslations = appTranslationsOf(settingsContext);
-await cockpit.tap(currentTranslations.settings.save);
+await cockpit.tap(cockpit.context.t.settings.save);
 ```
 
-`appTranslationsOf` is application code in this example; replace it with the
-current getter for slang (`context.t`), intl, easy_localization, or a custom
-delegate. Cockpit receives only the final current string. Re-read the
-context/getter after the locale mutation instead of caching the old translated
-value or a transient `:ref`. When text is not the behavior under test, prefer a
-source-known key, type, or structural selector so the same step is
-language-independent.
+Here `.t` is slang's application-owned extension, not a Cockpit API. For
+`intl`, use `AppLocalizations.of(cockpit.context)!`; for easy_localization or a
+custom delegate, call that app's existing getter with `cockpit.context`.
+Re-read the context/getter after the locale mutation instead of caching the old
+translated value or a transient `:ref`. When text is not the behavior under
+test, prefer a source-known key, type, or structural selector so the same step
+is language-independent.
 
 ## Locators and actions
 

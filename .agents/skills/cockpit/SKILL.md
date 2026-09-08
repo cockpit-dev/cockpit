@@ -993,7 +993,7 @@ it keeps failures diagnosable and avoids guessing:
    For an internationalized flow, make the language switch a real step, then
    obtain every later translated label from the app's current translation
    getter at the moment of the action. Cockpit resolves every selector again
-   for each command, so `cockpit.tap(context.t.checkout.pay)` follows slang,
+   for each command, so `cockpit.tap(cockpit.context.t.checkout.pay)` follows slang,
    intl, easy_localization, or a custom localization context after the switch.
    Do not cache translated strings or transient `:ref` values across a locale
    change; re-inspect after the language mutation. Prefer keys, Cockpit IDs,
@@ -1028,24 +1028,26 @@ it keeps failures diagnosable and avoids guessing:
    capabilities. A passing process exit alone is not a passing E2E test.
 
 For locale coverage, verify the actual UI path and read translation getters
-again after the language mutation. The selector is resolved when each command
-runs, so an old translated string or `:ref` must never be reused:
+again after the language mutation. `flutter_cockpit_test` exposes
+`cockpit.context`, a freshly resolved visible application context below the
+current `Localizations`; it needs no business Key, Semantics label, or cached
+context. The selector is resolved when each command runs, so an old translated
+string or `:ref` must never be reused:
 
 ```dart
-await cockpit.tap(appTranslations.current.settings.language);
-await cockpit.tap(appTranslations.current.language.chinese);
-await cockpit.waitForUiIdle();
-final current = appTranslations.current;
-await cockpit.tap(current.settings.save);
+await cockpit.tap(cockpit.context.t.settings.language);
+await cockpit.tap(cockpit.context.t.language.chinese);
+await cockpit.waitForUi();
+await cockpit.tap(cockpit.context.t.settings.save);
 ```
 
-`appTranslations.current` above is an application-owned generated translation
-getter (for example slang's `context.t`);
-Cockpit does not import slang or inspect generated code. The same rule applies
-to intl, easy_localization, and custom delegates: perform the real language
-switch, wait for the rebuilt UI, then obtain the next label from the app's
-current translation context. For language-independent controls, prefer keys,
-Cockpit IDs, types, and structural scopes.
+Here `.t` is slang's application-owned translation extension, not a Cockpit
+API. For `intl`, use `AppLocalizations.of(cockpit.context)!`; for
+`easy_localization` or a custom delegate, call that app's existing getter with
+`cockpit.context`. Cockpit does not import any localization package. Perform
+the real language switch, wait for the rebuilt UI, then obtain the next label
+from a freshly read context/getter. For language-independent controls, prefer
+keys, Cockpit IDs, types, and structural scopes.
 
 Typical focused loop:
 
