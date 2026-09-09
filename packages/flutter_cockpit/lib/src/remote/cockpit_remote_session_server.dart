@@ -140,15 +140,22 @@ final class CockpitRemoteSessionServer {
 
   Future<String> _readRequestBody(HttpRequest request) async {
     if (request.contentLength > _maxRequestBytes) {
+      await request.drain<void>();
       throw const _CockpitRequestTooLarge();
     }
     final bytes = BytesBuilder(copy: false);
     var length = 0;
+    var tooLarge = false;
     await for (final chunk in request) {
+      if (tooLarge) continue;
       length += chunk.length;
-      if (length > _maxRequestBytes) throw const _CockpitRequestTooLarge();
+      if (length > _maxRequestBytes) {
+        tooLarge = true;
+        continue;
+      }
       bytes.add(chunk);
     }
+    if (tooLarge) throw const _CockpitRequestTooLarge();
     return utf8.decode(bytes.takeBytes());
   }
 

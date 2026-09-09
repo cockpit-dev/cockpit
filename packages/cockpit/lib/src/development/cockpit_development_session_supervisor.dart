@@ -851,17 +851,22 @@ final class CockpitDevelopmentSessionSupervisor {
 
   Future<Map<String, Object?>> _readJsonBody(HttpRequest request) async {
     if (request.contentLength > _maxSupervisorRequestBytes) {
+      await request.drain<void>();
       throw const _SupervisorRequestTooLarge();
     }
     final bytes = BytesBuilder(copy: false);
     var length = 0;
+    var tooLarge = false;
     await for (final chunk in request) {
+      if (tooLarge) continue;
       length += chunk.length;
       if (length > _maxSupervisorRequestBytes) {
-        throw const _SupervisorRequestTooLarge();
+        tooLarge = true;
+        continue;
       }
       bytes.add(chunk);
     }
+    if (tooLarge) throw const _SupervisorRequestTooLarge();
     final payload = utf8.decode(bytes.takeBytes());
     if (payload.isEmpty) {
       return const <String, Object?>{};

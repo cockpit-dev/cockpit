@@ -1125,17 +1125,22 @@ final class _BridgeRequestTooLarge implements Exception {
 
 Future<String> _readBoundedRequestText(HttpRequest request) async {
   if (request.contentLength > _maxBridgeRequestBytes) {
+    await request.drain<void>();
     throw const _BridgeRequestTooLarge();
   }
   final bytes = BytesBuilder(copy: false);
   var length = 0;
+  var tooLarge = false;
   await for (final chunk in request) {
+    if (tooLarge) continue;
     length += chunk.length;
     if (length > _maxBridgeRequestBytes) {
-      throw const _BridgeRequestTooLarge();
+      tooLarge = true;
+      continue;
     }
     bytes.add(chunk);
   }
+  if (tooLarge) throw const _BridgeRequestTooLarge();
   return utf8.decode(bytes.takeBytes());
 }
 
