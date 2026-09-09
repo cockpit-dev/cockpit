@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import '../bridge/cockpit_web_remote_session_bridge_server.dart';
 import 'cockpit_development_session_handle.dart';
@@ -45,6 +46,7 @@ final class CockpitDevelopmentSessionSupervisor {
     Duration? startupSettleTimeout,
     Duration settlePollInterval = const Duration(milliseconds: 500),
     Duration settleProbeTimeout = const Duration(seconds: 2),
+    Duration reloadTimeout = const Duration(seconds: 30),
   }) : _handle = initialHandle,
        _machineClient = machineClient,
        _remoteReachabilityProbe = remoteReachabilityProbe,
@@ -65,6 +67,7 @@ final class CockpitDevelopmentSessionSupervisor {
        _startupSettleTimeout = startupSettleTimeout ?? settleTimeout,
        _settlePollInterval = settlePollInterval,
        _settleProbeTimeout = settleProbeTimeout,
+       _reloadTimeout = reloadTimeout,
        _status = CockpitDevelopmentSessionStatus(
          developmentSessionId: initialHandle.developmentSessionId,
          state: CockpitDevelopmentSessionState.starting,
@@ -92,6 +95,7 @@ final class CockpitDevelopmentSessionSupervisor {
   final Duration _startupSettleTimeout;
   final Duration _settlePollInterval;
   final Duration _settleProbeTimeout;
+  final Duration _reloadTimeout;
   CockpitDevelopmentSessionStatus _status;
   final Completer<void> _doneCompleter = Completer<void>();
   HttpServer? _server;
@@ -203,7 +207,7 @@ final class CockpitDevelopmentSessionSupervisor {
     CockpitRemoteSessionHandle remoteSessionHandle,
   ) async {
     _handle = _handle.copyWith(
-      appBaseUrl: remoteSessionHandle.baseUrl,
+      appBaseUrl: remoteSessionHandle.baseUri.toString(),
       remoteSessionHandle: remoteSessionHandle,
     );
     _setStatus(
@@ -240,7 +244,7 @@ final class CockpitDevelopmentSessionSupervisor {
     final remoteSessionHandle = fallbackError?.remoteSessionHandle;
     if (remoteSessionHandle != null) {
       _handle = _handle.copyWith(
-        appBaseUrl: remoteSessionHandle.baseUrl,
+        appBaseUrl: remoteSessionHandle.baseUri.toString(),
         remoteSessionHandle: remoteSessionHandle,
       );
     }
@@ -297,11 +301,15 @@ final class CockpitDevelopmentSessionSupervisor {
     try {
       switch (mode) {
         case CockpitDevelopmentReloadMode.hotReload:
-          await machineClient.hotReload(appId: appId);
+          await machineClient.hotReload(appId: appId).timeout(
+            _reloadTimeout,
+          );
         case CockpitDevelopmentReloadMode.hotRestart:
-          await machineClient.hotRestart(appId: appId);
+          await machineClient.hotRestart(appId: appId).timeout(
+            _reloadTimeout,
+          );
       }
-      final settled = await _settleReadyState(
+      final settled = await _requestSettle(
         lastReloadMode: mode,
         bumpGeneration: true,
       );
@@ -324,6 +332,8 @@ final class CockpitDevelopmentSessionSupervisor {
               ? CockpitDevelopmentSessionState.ready
               : _status.state == CockpitDevelopmentSessionState.failed
               ? CockpitDevelopmentSessionState.failed
+              : _status.state == CockpitDevelopmentSessionState.stopped
+              ? CockpitDevelopmentSessionState.stopped
               : CockpitDevelopmentSessionState.starting,
           lastReloadMode: mode,
           lastReloadSucceeded: false,
@@ -431,6 +441,7 @@ final class CockpitDevelopmentSessionSupervisor {
         _log('machine event app.started');
         _beginStartupRecovery();
       case CockpitFlutterRunMachineEventKind.appStop:
+        _appStartedObserved = false;
         final error = event.params?['error'] as String?;
         _log('machine event app.stop error=${error ?? ''}');
         if (_detachRequested) {
@@ -465,6 +476,7 @@ final class CockpitDevelopmentSessionSupervisor {
         _log('machine stderr ${event.message ?? ''}');
         _setStatus(_status.copyWith(lastError: event.message));
       case CockpitFlutterRunMachineEventKind.processExit:
+        _appStartedObserved = false;
         _log('machine exit code=${event.exitCode?.toString() ?? ''}');
         if (_detachRequested) {
           break;
@@ -535,7 +547,13 @@ final class CockpitDevelopmentSessionSupervisor {
     var stableRemoteReachableChecks = 0;
     var stableRemoteControlReadyChecks = 0;
 
-    while (!ready && _now().isBefore(deadline)) {
+    while (
+      !ready &&
+      !_controlPlaneClosed &&
+      !_explicitStopRequested &&
+      !_detachRequested &&
+      _now().isBefore(deadline)
+    ) {
       remoteReachable = await _runSettleProbe(
         label: 'remote_reachability',
         probe: () => _remoteReachabilityProbe(_handle.baseUri),
@@ -565,6 +583,14 @@ final class CockpitDevelopmentSessionSupervisor {
         reloadGeneration: _handle.reloadGeneration + 1,
         lastReloadAt: _now().toUtc(),
       );
+    }
+    if (_controlPlaneClosed || _explicitStopRequested || _detachRequested) {
+      return false;
+    }
+    if (!ready &&
+        (_status.state == CockpitDevelopmentSessionState.failed ||
+            _status.state == CockpitDevelopmentSessionState.stopped)) {
+      return false;
     }
     final appReachability = ready ? true : await _probeAppReachability();
     final appReachable = appReachability == true;
@@ -601,7 +627,6 @@ final class CockpitDevelopmentSessionSupervisor {
       'control_ready=$remoteControlReady '
       'error=${_status.lastError ?? ''}',
     );
-    _pendingStartupSettle = null;
     return ready;
   }
 
@@ -656,10 +681,31 @@ final class CockpitDevelopmentSessionSupervisor {
     if (!_canProbeRemoteSession) {
       return;
     }
-    _pendingStartupSettle ??= _settleReadyState(
+    _requestSettle(
       bumpGeneration: false,
       timeout: _startupSettleTimeout,
     );
+  }
+
+  Future<bool> _requestSettle({
+    CockpitDevelopmentReloadMode? lastReloadMode,
+    required bool bumpGeneration,
+    Duration? timeout,
+  }) {
+    final pending = _pendingStartupSettle;
+    if (pending != null) return pending;
+    late final Future<bool> settle;
+    settle = _settleReadyState(
+      lastReloadMode: lastReloadMode,
+      bumpGeneration: bumpGeneration,
+      timeout: timeout,
+    ).whenComplete(() {
+      if (identical(_pendingStartupSettle, settle)) {
+        _pendingStartupSettle = null;
+      }
+    });
+    _pendingStartupSettle = settle;
+    return settle;
   }
 
   bool get _canProbeRemoteSession {
@@ -788,6 +834,12 @@ final class CockpitDevelopmentSessionSupervisor {
             'error': 'not_found',
           });
       }
+    } on _SupervisorRequestTooLarge {
+      request.response.statusCode = HttpStatus.requestEntityTooLarge;
+      await _writeJson(request.response, <String, Object?>{
+        'error': 'request_too_large',
+        'message': 'Request body exceeds the 1 MiB limit.',
+      });
     } catch (error) {
       _log('http ${request.method} ${request.uri.path} failed error=$error');
       request.response.statusCode = HttpStatus.internalServerError;
@@ -798,7 +850,19 @@ final class CockpitDevelopmentSessionSupervisor {
   }
 
   Future<Map<String, Object?>> _readJsonBody(HttpRequest request) async {
-    final payload = await utf8.decoder.bind(request).join();
+    if (request.contentLength > _maxSupervisorRequestBytes) {
+      throw const _SupervisorRequestTooLarge();
+    }
+    final bytes = BytesBuilder(copy: false);
+    var length = 0;
+    await for (final chunk in request) {
+      length += chunk.length;
+      if (length > _maxSupervisorRequestBytes) {
+        throw const _SupervisorRequestTooLarge();
+      }
+      bytes.add(chunk);
+    }
+    final payload = utf8.decode(bytes.takeBytes());
     if (payload.isEmpty) {
       return const <String, Object?>{};
     }
@@ -845,6 +909,13 @@ final class CockpitDevelopmentSessionSupervisor {
       return;
     }
     _resourcesDisposed = true;
+    final pendingSettle = _pendingStartupSettle;
+    if (pendingSettle != null) {
+      await pendingSettle.then<void>(
+        (_) {},
+        onError: (Object _, StackTrace _) {},
+      );
+    }
     await _eventSubscription?.cancel();
     await _requestSubscription?.cancel();
     await _server?.close(force: true);
@@ -857,6 +928,17 @@ final class CockpitDevelopmentSessionSupervisor {
     if (logger == null) {
       return;
     }
-    unawaited(logger(message));
+    unawaited(
+      logger(message).then<void>(
+        (_) {},
+        onError: (Object _, StackTrace _) {},
+      ),
+    );
   }
+}
+
+const int _maxSupervisorRequestBytes = 1 << 20;
+
+final class _SupervisorRequestTooLarge implements Exception {
+  const _SupervisorRequestTooLarge();
 }

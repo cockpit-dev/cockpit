@@ -7,6 +7,8 @@ final class CockpitRemoteSessionConfiguration {
     this.port = 47331,
     this.routePrefix = '',
     this.launchId = '',
+    this.authToken = '',
+    this.allowedOrigin,
   });
 
   final bool enabled;
@@ -15,6 +17,8 @@ final class CockpitRemoteSessionConfiguration {
   final int port;
   final String routePrefix;
   final String launchId;
+  final String authToken;
+  final String? allowedOrigin;
 
   static const String _defaultHost = '127.0.0.1';
   static const int _defaultPort = 47331;
@@ -25,9 +29,19 @@ final class CockpitRemoteSessionConfiguration {
   static const String _routePrefixDefine =
       'FLUTTER_COCKPIT_REMOTE_ROUTE_PREFIX';
   static const String _launchIdDefine = 'FLUTTER_COCKPIT_REMOTE_LAUNCH_ID';
+  static const String _authTokenDefine = 'FLUTTER_COCKPIT_REMOTE_AUTH_TOKEN';
+  static const String _allowedOriginDefine =
+      'FLUTTER_COCKPIT_REMOTE_ALLOWED_ORIGIN';
 
-  Uri get baseUri =>
-      Uri(scheme: 'http', host: host, port: port, path: _normalizedRoutePrefix);
+  Uri get baseUri => Uri(
+    scheme: 'http',
+    host: host,
+    port: port,
+    path: _normalizedRoutePrefix,
+    queryParameters: authToken.isEmpty
+        ? null
+        : <String, String>{'token': authToken},
+  );
 
   String get normalizedRoutePrefix => _normalizedRoutePrefix;
 
@@ -52,6 +66,8 @@ final class CockpitRemoteSessionConfiguration {
     'port': port,
     'routePrefix': routePrefix,
     if (launchId.isNotEmpty) 'launchId': launchId,
+    if (authToken.isNotEmpty) 'authToken': authToken,
+    if (allowedOrigin != null) 'allowedOrigin': allowedOrigin,
   };
 
   /// Decodes a CockpitRemoteSessionConfiguration from a JSON object.
@@ -65,6 +81,8 @@ final class CockpitRemoteSessionConfiguration {
       port: json['port'] as int? ?? _defaultPort,
       routePrefix: json['routePrefix'] as String? ?? _defaultRoutePrefix,
       launchId: json['launchId'] as String? ?? '',
+      authToken: json['authToken'] as String? ?? '',
+      allowedOrigin: json['allowedOrigin'] as String?,
     );
   }
 
@@ -77,7 +95,9 @@ final class CockpitRemoteSessionConfiguration {
         defines.containsKey(_hostDefine) ||
         defines.containsKey(_portDefine) ||
         defines.containsKey(_routePrefixDefine) ||
-        defines.containsKey(_launchIdDefine);
+        defines.containsKey(_launchIdDefine) ||
+        defines.containsKey(_authTokenDefine) ||
+        defines.containsKey(_allowedOriginDefine);
     if (!hasAnyOverrides) {
       return fallback;
     }
@@ -98,6 +118,10 @@ final class CockpitRemoteSessionConfiguration {
           _defaultRoutePrefix,
       launchId:
           _readString(defines[_launchIdDefine]) ?? fallback?.launchId ?? '',
+      authToken:
+          _readString(defines[_authTokenDefine]) ?? fallback?.authToken ?? '',
+      allowedOrigin:
+          _readString(defines[_allowedOriginDefine]) ?? fallback?.allowedOrigin,
     );
   }
 
@@ -108,13 +132,19 @@ final class CockpitRemoteSessionConfiguration {
   }
 
   static Map<String, String> _currentDartDefines() {
-    return <String, String>{
+    final values = <String, String>{
       _enabledDefine: const String.fromEnvironment(_enabledDefine),
       _hostDefine: const String.fromEnvironment(_hostDefine),
       _portDefine: const String.fromEnvironment(_portDefine),
       _routePrefixDefine: const String.fromEnvironment(_routePrefixDefine),
       _launchIdDefine: const String.fromEnvironment(_launchIdDefine),
+      _authTokenDefine: const String.fromEnvironment(_authTokenDefine),
+      _allowedOriginDefine: const String.fromEnvironment(
+        _allowedOriginDefine,
+      ),
     };
+    values.removeWhere((_, value) => value.isEmpty);
+    return values;
   }
 
   static bool? _parseBool(String? value) {
@@ -155,10 +185,20 @@ final class CockpitRemoteSessionConfiguration {
             other.host == host &&
             other.port == port &&
             other.routePrefix == routePrefix &&
-            other.launchId == launchId;
+            other.launchId == launchId &&
+            other.authToken == authToken &&
+            other.allowedOrigin == allowedOrigin;
   }
 
   @override
-  int get hashCode =>
-      Object.hash(enabled, autoStart, host, port, routePrefix, launchId);
+  int get hashCode => Object.hash(
+    enabled,
+    autoStart,
+    host,
+    port,
+    routePrefix,
+    launchId,
+    authToken,
+    allowedOrigin,
+  );
 }

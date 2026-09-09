@@ -4,6 +4,8 @@ abstract interface class CockpitHttpClient {
   Future<String> read(Uri uri);
 
   Future<List<int>> readBytes(Uri uri);
+
+  Future<void> close() async {}
 }
 
 final class DefaultCockpitHttpClient implements CockpitHttpClient {
@@ -11,6 +13,9 @@ final class DefaultCockpitHttpClient implements CockpitHttpClient {
     : _client = client ?? http.Client();
 
   final http.Client _client;
+
+  @override
+  Future<void> close() async => _client.close();
 
   @override
   Future<String> read(Uri uri) async {

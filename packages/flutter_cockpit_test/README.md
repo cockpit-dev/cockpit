@@ -255,6 +255,16 @@ device-lab harness for release artifacts; VM-backed timeline, CPU, heap, GC,
 and DevTools data are unavailable unless that harness provides an equivalent
 collector:
 
+The default timeline stream selection is full-fidelity `['all']`. Cockpit does
+not silently disable stream categories or narrow the collection scope to save
+memory. The in-memory report is still deliberately bounded by its documented
+default retention limits; use `archive` when a long capture must retain the
+complete lossless event stream in JSONL. Collection scope or retention changes
+only when the caller explicitly supplies `streams`, `timeline`, `memory`,
+`cpu`, `heap`, `archive`, or one of the `max*` limits. Post-capture cleanup and
+JSONL archiving reduce lifecycle peak memory without changing the default
+evidence set.
+
 ```dart
 final report = await cockpit.profile(
   () async {

@@ -364,6 +364,19 @@ final class CockpitLocator {
     final text = json['text'] as String?;
     final semanticId = json['semanticId'] as String?;
     final tooltip = json['tooltip'] as String?;
+    final rawIndex = json['index'];
+    int? index;
+    if (rawIndex != null) {
+      if (rawIndex is! num || !rawIndex.isFinite || rawIndex % 1 != 0) {
+        throw const FormatException('Locator index must be an integer.');
+      }
+      index = rawIndex.toInt();
+      if (index < 0 || index > 10000) {
+        throw const FormatException(
+          'Locator index must be between 0 and 10000.',
+        );
+      }
+    }
     if (matchMode != CockpitTextMatchMode.exact &&
         text == null &&
         semanticId == null &&
@@ -390,7 +403,7 @@ final class CockpitLocator {
       registrationId: json['registrationId'] as String?,
       path: json['path'] as String?,
       matchMode: matchMode,
-      index: (json['index'] as num?)?.toInt(),
+      index: index,
       ancestor: ancestorJson == null
           ? null
           : CockpitLocator.fromJson(Map<String, Object?>.from(ancestorJson)),

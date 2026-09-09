@@ -220,6 +220,12 @@ p50/p90/p99/最大值）。原生 Flutter 平台还会采集官方 integration-t
 事件和有界进程 RSS 样本；Web 不支持这些来源时会明确标记 unavailable，不会伪造数据：
 如果本地直接用 `flutter test` 运行且进程没有暴露 VM Service URI，操作仍会正常执行，报告会标记 `unavailable:vm`；使用 `flutter drive` 或原生 instrumentation 时继续采集官方 VM timeline：
 
+默认 timeline streams 是全量的 `['all']`，不会为了降低内存而偷偷关闭流类别或缩小
+采集范围。内存中的报告仍按文档约定采用有界保留；长时间采集如果需要无损保留完整
+事件流，应显式传入 `archive` 写入 JSONL。只有调用方显式传入 `streams`、`timeline`、
+`memory`、`cpu`、`heap`、`archive` 或各类 `max*` 限制时，采集范围或保留策略才会改变。
+采集结束后的对象释放和 JSONL 归档只优化生命周期峰值，不改变默认采集证据。
+
 ```dart
 final report = await cockpit.profile(
   () async {

@@ -138,6 +138,7 @@ void main() {
         '--dart-define=FLUTTER_COCKPIT_REMOTE_HOST=::',
         '--dart-define=FLUTTER_COCKPIT_REMOTE_PORT=47331',
         '--dart-define=FLUTTER_COCKPIT_REMOTE_LAUNCH_ID=launch-1',
+        '--dart-define=FLUTTER_COCKPIT_REMOTE_AUTH_TOKEN=launch-1',
         '--dart-define=FLUTTER_COCKPIT_ENABLE_HTTP_NETWORK_OBSERVER=false',
         '--dart-define=FLUTTER_COCKPIT_ENABLE_RUNTIME_OBSERVER=false',
         '--dart-define=FLUTTER_COCKPIT_FLUTTER_VERSION=3.32.0',

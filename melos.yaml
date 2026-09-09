@@ -4,6 +4,7 @@ packages:
   - packages/cockpit_protocol
   - packages/flutter_cockpit
   - packages/flutter_cockpit_test
+  - packages/cockpit_test
   - packages/cockpit
   - packages/cockpit_console
   - examples/cockpit_demo
@@ -15,8 +16,11 @@ scripts:
   test:
     run: >-
       (dart test test) &&
+      (cd packages/cockpit_protocol && dart test) &&
+      (cd packages/cockpit_test && dart test) &&
       (flutter test --no-pub packages/flutter_cockpit/test) &&
       (flutter test --no-pub packages/flutter_cockpit_test/test) &&
       (cd packages/cockpit && dart test test) &&
+      (cd packages/cockpit_console && flutter test --no-pub) &&
       (cd examples/cockpit_demo && flutter test --no-pub) &&
       (cd examples/cockpit_demo/cockpit && flutter test --no-pub)

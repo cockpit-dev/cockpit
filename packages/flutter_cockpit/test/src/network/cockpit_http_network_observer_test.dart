@@ -37,6 +37,12 @@ void main() {
     expect(uri.toString(), isNot(contains('url-password-secret')));
     expect(uri.queryParameters['signature'], CockpitNetworkRedactor.masked);
     expect(uri.queryParameters['visible'], 'yes');
+    final credentialUri = redactor.uri(
+      Uri.parse('https://example.test/callback?key=k&code=c&pwd=p'),
+    );
+    expect(credentialUri.queryParameters['key'], CockpitNetworkRedactor.masked);
+    expect(credentialUri.queryParameters['code'], CockpitNetworkRedactor.masked);
+    expect(credentialUri.queryParameters['pwd'], CockpitNetworkRedactor.masked);
     expect(Uri(query: form).queryParameters['username'], 'visible-user');
     expect(
       Uri(query: form).queryParameters['password'],

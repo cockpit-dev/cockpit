@@ -47,6 +47,7 @@ void main() {
     final report = collector.stop(stepId: 'scroll');
 
     expect(report.mode, CockpitPerformanceMode.profile);
+    expect(collector.retainedFrameCount, 0);
     expect(report.summary.frameCount, report.frames.length);
     expect(report.frames, hasLength(1));
     expect(report.droppedFrames, 1);

@@ -158,3 +158,7 @@ export 'src/test/cockpit_test_document_compiler.dart';
 export 'src/test/cockpit_test_safety_policy.dart';
 export 'src/test/cockpit_test_secret_resolver.dart'
     show CockpitTestSecretResolver;
+export 'src/test/cockpit_automation_tester.dart';
+export 'src/test/cockpit_remote_tester.dart';
+export 'src/test/cockpit_system_tester.dart';
+export 'src/test/cockpit_programmatic_runner.dart';

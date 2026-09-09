@@ -1389,4 +1389,27 @@ void main() {
       );
     },
   );
+
+  test('remote session client sends configured bearer and origin headers', () async {
+    String? token;
+    String? origin;
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() async => server.close(force: true));
+    server.listen((request) async {
+      token = request.headers.value('x-cockpit-token');
+      origin = request.headers.value('origin');
+      request.response.headers.contentType = ContentType.json;
+      request.response.write(jsonEncode(const <String, Object?>{'ok': true}));
+      await request.response.close();
+    });
+
+    final client = CockpitRemoteSessionClient(
+      baseUri: Uri.parse('http://127.0.0.1:${server.port}'),
+      authToken: 'secret-token',
+      origin: 'https://runner.example',
+    );
+    expect(await client.ping(), isTrue);
+    expect(token, 'secret-token');
+    expect(origin, 'https://runner.example');
+  });
 }

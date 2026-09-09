@@ -57,7 +57,14 @@ final class CockpitFlutterRuntimeObserver implements CockpitRuntimeObserver {
       },
       (error, stackTrace) {
         recordUnhandledError(error, stackTrace, source: 'Zone');
-        onError?.call(error, stackTrace);
+        final handler = onError;
+        if (handler != null) {
+          handler(error, stackTrace);
+        } else {
+          FlutterError.reportError(
+            FlutterErrorDetails(exception: error, stack: stackTrace),
+          );
+        }
       },
       zoneSpecification: capturePrint
           ? ZoneSpecification(

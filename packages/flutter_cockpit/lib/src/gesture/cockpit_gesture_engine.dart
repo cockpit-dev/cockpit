@@ -1385,7 +1385,7 @@ final class CockpitGestureEngine {
     Duration? frameInterval,
   }) {
     if (requestedCount > 0) {
-      return requestedCount;
+      return requestedCount.clamp(1, 10000);
     }
     final hasExplicitSampling =
         (sampleHz != null && sampleHz > 0) ||

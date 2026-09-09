@@ -171,6 +171,25 @@ void main() {
     );
   });
 
+  test('remote auth token is carried in the base URI for bridge clients', () {
+    const configuration = CockpitRemoteSessionConfiguration(
+      enabled: true,
+      authToken: 'session-secret',
+      allowedOrigin: 'https://runner.example',
+    );
+
+    expect(configuration.baseUri.queryParameters['token'], 'session-secret');
+    expect(
+      CockpitRemoteSessionConfiguration.resolve(
+        fallback: configuration,
+        defines: const <String, String>{
+          'FLUTTER_COCKPIT_REMOTE_ALLOWED_ORIGIN': 'https://override.example',
+        },
+      )?.allowedOrigin,
+      'https://override.example',
+    );
+  });
+
   test(
     'CockpitRemoteSessionStatus preserves optional environment metadata',
     () {

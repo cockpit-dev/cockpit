@@ -8,7 +8,11 @@ extension CockpitPortReservationOperations on CockpitPortReservation {
     Duration timeout = const Duration(seconds: 10),
   }) async {
     while (_transition != null) {
-      await _transition;
+      try {
+        await _transition;
+      } on Object {
+        // A failed transition can be safely superseded by a new handoff.
+      }
     }
     if (_verifiedLease != null) return _verifiedLease!;
     if ((_state != CockpitPortReservationState.reserved &&
@@ -225,7 +229,11 @@ extension CockpitPortReservationOperations on CockpitPortReservation {
 
   Future<CockpitLeaseResource> release() async {
     while (_transition != null) {
-      await _transition;
+      try {
+        await _transition;
+      } on Object {
+        // A failed concurrent transition must not prevent release cleanup.
+      }
     }
     if (_state == CockpitPortReservationState.released) return _lease;
     final operation = _performRelease();
@@ -239,7 +247,11 @@ extension CockpitPortReservationOperations on CockpitPortReservation {
 
   Future<CockpitLeaseResource> relinquish() async {
     while (_transition != null) {
-      await _transition;
+      try {
+        await _transition;
+      } on Object {
+        // Continue with this caller's own state transition.
+      }
     }
     if (_state == CockpitPortReservationState.released) return _lease;
     if (_state != CockpitPortReservationState.handedOff ||

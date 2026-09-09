@@ -248,6 +248,78 @@ void main() {
   );
 
   test(
+    'web bridge protects HTTP and websocket endpoints with token, origin, and connection limits',
+    () async {
+      final server = CockpitWebRemoteSessionBridgeServer(
+        bindHost: '127.0.0.1',
+        bindPort: 0,
+        authToken: 'bridge-secret',
+        allowedOrigin: 'https://trusted.example',
+        maxConnections: 1,
+        recordingAdapter: _FakeHostRecordingAdapter(
+          onStart: (request) async => CockpitRecordingSession(
+            request: request,
+            state: CockpitRecordingState.recording,
+          ),
+          onStop: () async =>
+              CockpitRecordingResult(state: CockpitRecordingState.failed),
+        ),
+      );
+      await server.start();
+      addTearDown(server.close);
+
+      final missingToken = await _readJsonResponse(
+        server.baseUri.resolve('/health'),
+      );
+      expect(missingToken.statusCode, HttpStatus.unauthorized);
+
+      final wrongToken = await _readJsonResponse(
+        server.baseUri.replace(
+          path: '${server.baseUri.path}/health',
+          queryParameters: const <String, String>{'token': 'wrong'},
+        ),
+      );
+      expect(wrongToken.statusCode, HttpStatus.unauthorized);
+
+      final wrongOrigin = await _readJsonResponse(
+        server.baseUri.replace(
+          path: '${server.baseUri.path}/health',
+          queryParameters: const <String, String>{'token': 'bridge-secret'},
+        ),
+        headers: const <String, String>{'origin': 'https://untrusted.example'},
+      );
+      expect(wrongOrigin.statusCode, HttpStatus.unauthorized);
+
+      final authorizedHealth = await _readJsonResponse(
+        server.baseUri.replace(
+          path: '${server.baseUri.path}/health',
+          queryParameters: const <String, String>{'token': 'bridge-secret'},
+        ),
+        headers: const <String, String>{'origin': 'https://trusted.example'},
+      );
+      expect(authorizedHealth.statusCode, HttpStatus.serviceUnavailable);
+      expect(authorizedHealth.body['error'], 'bridgeUnavailable');
+
+      final oversized = await _postRawResponse(
+        server.baseUri.replace(
+          path: '${server.baseUri.path}/recording/start',
+          queryParameters: const <String, String>{'token': 'bridge-secret'},
+        ),
+        List<int>.filled((1 << 20) + 1, 65),
+      );
+      expect(oversized.statusCode, HttpStatus.requestEntityTooLarge);
+      expect(oversized.body['error'], 'requestTooLarge');
+
+      final socket = await WebSocket.connect(server.connectUri.toString());
+      addTearDown(socket.close);
+      final tooManyConnections = await _webSocketHandshakeResponse(
+        server.connectUri,
+      );
+      expect(tooManyConnections.statusCode, HttpStatus.tooManyRequests);
+    },
+  );
+
+  test(
     'web bridge returns a structured prerequisite failure when host recording cannot start',
     () async {
       final server = CockpitWebRemoteSessionBridgeServer(
@@ -983,17 +1055,68 @@ Future<Map<String, Object?>> _readJson(Uri uri) async {
   return (await _readJsonResponse(uri)).body;
 }
 
-Future<_HttpJsonResponse> _readJsonResponse(Uri uri) async {
+Future<_HttpJsonResponse> _readJsonResponse(
+  Uri uri, {
+  Map<String, String> headers = const <String, String>{},
+}) async {
   final client = HttpClient();
   try {
     final request = await client.getUrl(uri);
+    headers.forEach(request.headers.set);
+    final response = await request.close();
+    final rawPayload = await utf8.decoder.bind(response).join();
+    return _HttpJsonResponse(
+      statusCode: response.statusCode,
+      body: rawPayload.isEmpty
+          ? const <String, Object?>{}
+          : Map<String, Object?>.from(
+              jsonDecode(rawPayload) as Map<Object?, Object?>,
+            ),
+    );
+  } finally {
+    client.close(force: true);
+  }
+}
+
+Future<_HttpJsonResponse> _webSocketHandshakeResponse(Uri uri) async {
+  final client = HttpClient();
+  try {
+    final request = await client.getUrl(
+      uri.replace(scheme: uri.scheme == 'wss' ? 'https' : 'http'),
+    );
+    request.headers
+      ..set(HttpHeaders.connectionHeader, HttpHeaders.upgradeHeader)
+      ..set(HttpHeaders.upgradeHeader, 'websocket')
+      ..set('sec-websocket-version', '13')
+      ..set('sec-websocket-key', base64Encode(List<int>.filled(16, 7)));
+    final response = await request.close();
+    final payload = await utf8.decoder.bind(response).join();
+    final decoded = payload.isEmpty
+        ? const <String, Object?>{}
+        : Map<String, Object?>.from(
+            jsonDecode(payload) as Map<Object?, Object?>,
+          );
+    return _HttpJsonResponse(statusCode: response.statusCode, body: decoded);
+  } finally {
+    client.close(force: true);
+  }
+}
+
+Future<_HttpJsonResponse> _postRawResponse(Uri uri, List<int> bytes) async {
+  final client = HttpClient();
+  try {
+    final request = await client.postUrl(uri);
+    request.headers.contentType = ContentType.json;
+    request.add(bytes);
     final response = await request.close();
     final payload = await utf8.decoder.bind(response).join();
     return _HttpJsonResponse(
       statusCode: response.statusCode,
-      body: Map<String, Object?>.from(
-        jsonDecode(payload) as Map<Object?, Object?>,
-      ),
+      body: payload.isEmpty
+          ? const <String, Object?>{}
+          : Map<String, Object?>.from(
+              jsonDecode(payload) as Map<Object?, Object?>,
+            ),
     );
   } finally {
     client.close(force: true);

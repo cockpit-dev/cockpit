@@ -19,6 +19,7 @@ environment:
 resolution: workspace
 
 dependencies:
+  cockpit_test: ^4.9.0
   cockpit_protocol: ^4.9.0
   flutter:
     sdk: flutter

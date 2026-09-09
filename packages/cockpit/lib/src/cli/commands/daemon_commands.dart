@@ -111,8 +111,13 @@ final class CockpitDaemonCommand extends Command<int> {
           help: 'Maximum number of trailing log lines (1-2000).',
         ),
         action: (arguments) async {
-          final count = int.tryParse(arguments.option('lines')!);
-          if (count == null) throw const FormatException('--lines is invalid.');
+          final raw = arguments.option('lines')!;
+          final count = int.tryParse(raw);
+          if (count == null || count < 1 || count > 2000) {
+            throw const FormatException(
+              '--lines must be an integer from 1 to 2000.',
+            );
+          }
           await runtime.success(<String, Object?>{
             'lines': await (await runtime.client()).lifecycle.logs(
               maximumLines: count,

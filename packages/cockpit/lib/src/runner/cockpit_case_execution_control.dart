@@ -87,16 +87,23 @@ Future<T> cockpitRacePrimaryControl<T>({
     case _PrimaryHardShutdown<T>():
       throw const CockpitCaseHardShutdown();
     case _PrimaryCancellation<T>():
+      var operationSettled = false;
       final settled = operation.then<void>(
-        (_) {},
-        onError: (Object _, StackTrace _) {},
+        (_) {
+          operationSettled = true;
+        },
+        onError: (Object _, StackTrace _) {
+          operationSettled = true;
+        },
       );
       final graceExpired = clock.delay(control.cancellationGrace).then<void>((
         _,
       ) {
-        unawaited(
-          control.forceAbortActive().catchError((Object _, StackTrace _) {}),
-        );
+        if (!operationSettled) {
+          unawaited(
+            control.forceAbortActive().catchError((Object _, StackTrace _) {}),
+          );
+        }
       });
       await Future.any<void>(<Future<void>>[
         settled,

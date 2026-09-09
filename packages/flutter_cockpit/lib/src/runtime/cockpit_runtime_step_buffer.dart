@@ -15,11 +15,19 @@ import 'cockpit_target_kind.dart';
 typedef CockpitRuntimeStepTimestampProvider = DateTime Function();
 
 final class CockpitRuntimeStepBuffer {
-  CockpitRuntimeStepBuffer({CockpitRuntimeStepTimestampProvider? now})
-    : _now = now ?? _systemNow;
+  CockpitRuntimeStepBuffer({
+    CockpitRuntimeStepTimestampProvider? now,
+    this.maxRetainedSteps = 120,
+  }) : _now = now ?? _systemNow {
+    if (maxRetainedSteps < 1) {
+      throw ArgumentError.value(maxRetainedSteps, 'maxRetainedSteps');
+    }
+  }
 
   final CockpitRuntimeStepTimestampProvider _now;
+  final int maxRetainedSteps;
   final List<CockpitStepRecord> _steps = <CockpitStepRecord>[];
+  int droppedSteps = 0;
 
   void recordStep({
     required String actionType,
@@ -43,6 +51,10 @@ final class CockpitRuntimeStepBuffer {
     String? degradationReason,
     List<CockpitArtifactRef> captureRefs = const [],
   }) {
+    if (_steps.length >= maxRetainedSteps) {
+      _steps.removeAt(0);
+      droppedSteps += 1;
+    }
     _steps.add(
       CockpitStepRecord(
         index: _steps.length,

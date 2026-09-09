@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'cockpit_remote_session_configuration.dart';
 import 'cockpit_remote_session_endpoint_handler.dart';
@@ -75,7 +76,12 @@ final class CockpitRemoteSessionServer {
 
   Future<void> _handleRequest(HttpRequest request) async {
     try {
-      final bodyText = await utf8.decoder.bind(request).join();
+      if (!_isAuthorized(request)) {
+        request.response.statusCode = HttpStatus.unauthorized;
+        await request.response.close();
+        return;
+      }
+      final bodyText = await _readRequestBody(request);
       Map<String, Object?> jsonBody = const <String, Object?>{};
       if (bodyText.isNotEmpty) {
         final decoded = jsonDecode(bodyText);
@@ -92,22 +98,82 @@ final class CockpitRemoteSessionServer {
         ),
       );
       await _writeResponse(request.response, response);
+    } on _CockpitRequestTooLarge {
+      await _bestEffortErrorResponse(
+        request.response,
+        HttpStatus.requestEntityTooLarge,
+        {
+          'error': 'requestTooLarge',
+          'message': 'Request body exceeds the 1 MiB limit.',
+        },
+      );
     } on FormatException catch (error) {
-      await _writeResponse(
-        request.response,
-        CockpitRemoteSessionEndpointResponse.json(<String, Object?>{
-          'error': 'invalidPayload',
-          'message': error.message,
-        }, statusCode: HttpStatus.badRequest),
-      );
+      await _bestEffortErrorResponse(request.response, HttpStatus.badRequest, {
+        'error': 'invalidPayload',
+        'message': error.message,
+      });
     } catch (error) {
-      await _writeResponse(
+      await _bestEffortErrorResponse(
         request.response,
-        CockpitRemoteSessionEndpointResponse.json(<String, Object?>{
-          'error': 'serverError',
-          'message': error.toString(),
-        }, statusCode: HttpStatus.internalServerError),
+        HttpStatus.internalServerError,
+        {'error': 'serverError', 'message': error.toString()},
       );
+    }
+  }
+
+  bool _isAuthorized(HttpRequest request) {
+    final expected = _configuration.authToken;
+    final origin = request.headers.value('origin');
+    if (origin != null && origin != 'null') {
+      final allowed = _configuration.allowedOrigin;
+      if (allowed == null || origin != allowed) return false;
+    }
+    if (expected.isEmpty) return true;
+    final provided =
+        request.headers.value('x-cockpit-token') ??
+        request.headers
+            .value(HttpHeaders.authorizationHeader)
+            ?.replaceFirst(RegExp('^Bearer\\s+'), '') ??
+        request.uri.queryParameters['token'];
+    return _constantTimeEquals(provided ?? '', expected);
+  }
+
+  Future<String> _readRequestBody(HttpRequest request) async {
+    if (request.contentLength > _maxRequestBytes) {
+      throw const _CockpitRequestTooLarge();
+    }
+    final bytes = BytesBuilder(copy: false);
+    var length = 0;
+    await for (final chunk in request) {
+      length += chunk.length;
+      if (length > _maxRequestBytes) throw const _CockpitRequestTooLarge();
+      bytes.add(chunk);
+    }
+    return utf8.decode(bytes.takeBytes());
+  }
+
+  Future<void> _bestEffortErrorResponse(
+    HttpResponse response,
+    int statusCode,
+    Map<String, Object?> body,
+  ) async {
+    try {
+      // HttpResponse exposes a default text/plain content type even before
+      // any application response has been written. Do not use that header as
+      // a proxy for "already committed": doing so would close malformed or
+      // oversized requests with the default 200 status. Always attempt the
+      // explicit structured error response and fall back to close only when
+      // the peer has already committed/closed the response.
+      await _writeResponse(
+        response,
+        CockpitRemoteSessionEndpointResponse.json(body, statusCode: statusCode),
+      );
+    } on Object {
+      try {
+        await response.close();
+      } on Object {
+        // The peer may already have closed the socket.
+      }
     }
   }
 
@@ -138,6 +204,23 @@ final class CockpitRemoteSessionServer {
     }
     await response.close();
   }
+}
+
+const int _maxRequestBytes = 1 << 20;
+
+final class _CockpitRequestTooLarge implements Exception {
+  const _CockpitRequestTooLarge();
+}
+
+bool _constantTimeEquals(String actual, String expected) {
+  var difference = actual.length ^ expected.length;
+  final length = actual.length < expected.length
+      ? actual.length
+      : expected.length;
+  for (var index = 0; index < length; index += 1) {
+    difference |= actual.codeUnitAt(index) ^ expected.codeUnitAt(index);
+  }
+  return difference == 0;
 }
 
 Object? _compactJsonValue(Object? value) {

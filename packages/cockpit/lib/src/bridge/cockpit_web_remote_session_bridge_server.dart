@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:cockpit_protocol/cockpit_protocol.dart';
 import 'package:cockpit_protocol/cockpit_remote_bridge_protocol.dart';
@@ -26,6 +27,7 @@ CockpitWebRemoteSessionBridgeServer? cockpitCreateWebRemoteSessionBridgeServer({
     recordingAdapter: cockpitResolveBrowserRecordingAdapter(
       deviceId: handle.deviceId,
     ),
+    authToken: handle.baseUri.queryParameters['token'] ?? '',
   );
 }
 
@@ -37,14 +39,24 @@ final class CockpitWebRemoteSessionBridgeServer {
     this.recordingAdapter,
     CockpitBridgeArtifactTempFileFactory? artifactTempFileFactory,
     this.requestTimeout = const Duration(seconds: 20),
+    this.authToken = '',
+    this.allowedOrigin,
+    this.maxConnections = 4,
   }) : _artifactTempFileFactory =
-           artifactTempFileFactory ?? _defaultBridgeArtifactTempFileFactory;
+           artifactTempFileFactory ?? _defaultBridgeArtifactTempFileFactory {
+    if (maxConnections < 1 || maxConnections > 32) {
+      throw ArgumentError.value(maxConnections, 'maxConnections');
+    }
+  }
 
   final String bindHost;
   final int bindPort;
   final String routePrefix;
   final CockpitHostRecordingAdapter? recordingAdapter;
   final Duration requestTimeout;
+  final String authToken;
+  final String? allowedOrigin;
+  final int maxConnections;
   final CockpitBridgeArtifactTempFileFactory _artifactTempFileFactory;
 
   HttpServer? _server;
@@ -63,6 +75,9 @@ final class CockpitWebRemoteSessionBridgeServer {
   Uri get connectUri => baseUri.replace(
     scheme: baseUri.scheme == 'https' ? 'wss' : 'ws',
     path: _joinPath(_normalizedRoutePrefix, 'connect'),
+    queryParameters: authToken.isEmpty
+        ? null
+        : <String, String>{'token': authToken},
   );
 
   Future<void> start() async {
@@ -103,29 +118,61 @@ final class CockpitWebRemoteSessionBridgeServer {
     try {
       if (WebSocketTransformer.isUpgradeRequest(request) &&
           _routePathFor(request.uri.path) == '/connect') {
+        if (!_isAuthorized(request)) {
+          request.response.statusCode = HttpStatus.unauthorized;
+          await request.response.close();
+          return;
+        }
+        if (_connections.where((connection) => !connection.closed).length >=
+            maxConnections) {
+          request.response.statusCode = HttpStatus.tooManyRequests;
+          await request.response.close();
+          return;
+        }
         await _handleConnect(request);
+        return;
+      }
+
+      if (!_isAuthorized(request)) {
+        request.response.statusCode = HttpStatus.unauthorized;
+        await request.response.close();
         return;
       }
 
       final response = await _resolveResponse(request);
       await _writeResponse(request.response, response);
     } on FormatException catch (error) {
-      await _writeResponse(
+      await _bestEffortErrorResponse(request.response, HttpStatus.badRequest, {
+        'error': 'invalidPayload',
+        'message': error.message,
+      });
+    } on _BridgeRequestTooLarge {
+      await _bestEffortErrorResponse(
         request.response,
-        CockpitRemoteSessionEndpointResponse.json(<String, Object?>{
-          'error': 'invalidPayload',
-          'message': error.message,
-        }, statusCode: HttpStatus.badRequest),
+        HttpStatus.requestEntityTooLarge,
+        {
+          'error': 'requestTooLarge',
+          'message': 'Request body exceeds the 1 MiB limit.',
+        },
       );
     } catch (error) {
-      await _writeResponse(
+      await _bestEffortErrorResponse(
         request.response,
-        CockpitRemoteSessionEndpointResponse.json(<String, Object?>{
-          'error': 'serverError',
-          'message': error.toString(),
-        }, statusCode: HttpStatus.internalServerError),
+        HttpStatus.internalServerError,
+        {'error': 'serverError', 'message': error.toString()},
       );
     }
+  }
+
+  bool _isAuthorized(HttpRequest request) {
+    final origin = request.headers.value('origin');
+    final expectedOrigin = allowedOrigin;
+    if (origin != null && origin != 'null' && origin != expectedOrigin) {
+      return false;
+    }
+    if (authToken.isEmpty) return true;
+    final provided = request.uri.queryParameters['token'];
+    return _constantTimeEquals(provided ?? '', authToken);
   }
 
   Future<void> _handleConnect(HttpRequest request) async {
@@ -156,6 +203,13 @@ final class CockpitWebRemoteSessionBridgeServer {
 
   void _handleSocketPayload(_BridgeConnection connection, Object? payload) {
     if (payload == null) {
+      return;
+    }
+    if ('$payload'.length > _maxBridgeMessageBytes) {
+      _removeConnection(
+        connection,
+        StateError('Bridge message exceeds the 4 MiB limit.'),
+      );
       return;
     }
     try {
@@ -217,6 +271,25 @@ final class CockpitWebRemoteSessionBridgeServer {
     }
   }
 
+  Future<void> _bestEffortErrorResponse(
+    HttpResponse response,
+    int statusCode,
+    Map<String, Object?> body,
+  ) async {
+    try {
+      await _writeResponse(
+        response,
+        CockpitRemoteSessionEndpointResponse.json(body, statusCode: statusCode),
+      );
+    } on Object {
+      try {
+        await response.close();
+      } on Object {
+        // The peer may have closed the response already.
+      }
+    }
+  }
+
   Future<CockpitRemoteSessionEndpointResponse> _resolveResponse(
     HttpRequest request,
   ) async {
@@ -263,7 +336,7 @@ final class CockpitWebRemoteSessionBridgeServer {
         'message': 'The browser bridge is not connected.',
       }, statusCode: HttpStatus.serviceUnavailable);
     }
-    final bodyText = await utf8.decoder.bind(request).join();
+    final bodyText = await _readBoundedRequestText(request);
     Map<String, Object?>? jsonBody;
     if (bodyText.isNotEmpty) {
       final decoded = jsonDecode(bodyText);
@@ -664,7 +737,7 @@ final class CockpitWebRemoteSessionBridgeServer {
         'message': 'Host recording is unavailable for this bridge.',
       }, statusCode: HttpStatus.notImplemented);
     }
-    final bodyText = await utf8.decoder.bind(request).join();
+    final bodyText = await _readBoundedRequestText(request);
     final decoded = bodyText.isEmpty
         ? const <String, Object?>{}
         : Map<String, Object?>.from(
@@ -1041,6 +1114,40 @@ String _joinPath(String basePath, String segment) {
     return '/$segment';
   }
   return '$basePath/$segment';
+}
+
+const int _maxBridgeMessageBytes = 4 * 1024 * 1024;
+const int _maxBridgeRequestBytes = 1 << 20;
+
+final class _BridgeRequestTooLarge implements Exception {
+  const _BridgeRequestTooLarge();
+}
+
+Future<String> _readBoundedRequestText(HttpRequest request) async {
+  if (request.contentLength > _maxBridgeRequestBytes) {
+    throw const _BridgeRequestTooLarge();
+  }
+  final bytes = BytesBuilder(copy: false);
+  var length = 0;
+  await for (final chunk in request) {
+    length += chunk.length;
+    if (length > _maxBridgeRequestBytes) {
+      throw const _BridgeRequestTooLarge();
+    }
+    bytes.add(chunk);
+  }
+  return utf8.decode(bytes.takeBytes());
+}
+
+bool _constantTimeEquals(String actual, String expected) {
+  var difference = actual.length ^ expected.length;
+  final length = actual.length < expected.length
+      ? actual.length
+      : expected.length;
+  for (var index = 0; index < length; index += 1) {
+    difference |= actual.codeUnitAt(index) ^ expected.codeUnitAt(index);
+  }
+  return difference == 0;
 }
 
 Object? _compactJsonValue(Object? value) {

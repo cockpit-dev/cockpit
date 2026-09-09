@@ -81,6 +81,13 @@ final class CockpitTestTemplateValue {
     switch (expectedType) {
       case CockpitTestValueType.string:
         CockpitTestValueReader.string(value, path);
+        if (value is String && value.contains(r'${')) {
+          const marker = r'${';
+          throw FormatException(
+            'String literal at $path contains $marker; use an explicit '
+            'stringTemplate value instead.',
+          );
+        }
       case CockpitTestValueType.integer:
         CockpitTestValueReader.integer(value, path);
       case CockpitTestValueType.number:

@@ -24,4 +24,11 @@ final class CockpitNativeSemantics {
       );
     }
   }
+
+  Future<void> disable() async {
+    if (kIsWeb || defaultTargetPlatform != TargetPlatform.macOS) {
+      return;
+    }
+    await _channel.invokeMethod<void>('disableSemantics');
+  }
 }

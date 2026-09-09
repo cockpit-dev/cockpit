@@ -1075,31 +1075,57 @@ final class CockpitPerformanceReport {
   int get observedFrameCount => frames.length + droppedFrames;
 
   /// Returns the same immutable report with live-archive metadata attached.
+  ///
+  /// Set [retainSamples] to false when the archive is the source of truth for
+  /// frame/event records. The returned projection releases those arrays while
+  /// preserving the summary and explicit archive counts, which prevents report
+  /// finalization and JSON encoding from retaining a second long-capture copy.
   CockpitPerformanceReport copyWithArchive(
-    CockpitPerformanceArchiveInfo? value,
-  ) => CockpitPerformanceReport(
-    schemaVersion: schemaVersion,
-    startedAt: startedAt,
-    finishedAt: finishedAt,
-    durationUs: durationUs,
-    durationMs: durationMs,
-    platform: platform,
-    buildMode: buildMode,
-    mode: mode,
-    summary: summary,
-    frames: frames,
-    events: events,
-    droppedFrames: droppedFrames,
-    droppedEvents: droppedEvents,
-    invalidFrames: invalidFrames,
-    invalidEvents: invalidEvents,
-    memory: memory,
-    devTools: devTools,
-    timelineSource: timelineSource,
-    stepId: stepId,
-    archive: value,
-    plugins: plugins,
-  );
+    CockpitPerformanceArchiveInfo? value, {
+    bool retainSamples = true,
+  }) {
+    final nextFrames = retainSamples
+        ? frames
+        : const <CockpitPerformanceFrame>[];
+    final nextEvents = retainSamples
+        ? events
+        : const <CockpitPerformanceEvent>[];
+    final archiveFrameCount = value?.frames ?? 0;
+    final archiveEventCount = value?.events ?? 0;
+    final nextDroppedFrames = !retainSamples && value != null
+        ? archiveFrameCount < summary.frameCount
+              ? droppedFrames
+              : archiveFrameCount - summary.frameCount
+        : droppedFrames;
+    final nextDroppedEvents = !retainSamples && value != null
+        ? archiveEventCount < events.length
+              ? droppedEvents
+              : archiveEventCount - events.length
+        : droppedEvents;
+    return CockpitPerformanceReport(
+      schemaVersion: schemaVersion,
+      startedAt: startedAt,
+      finishedAt: finishedAt,
+      durationUs: durationUs,
+      durationMs: durationMs,
+      platform: platform,
+      buildMode: buildMode,
+      mode: mode,
+      summary: summary,
+      frames: nextFrames,
+      events: nextEvents,
+      droppedFrames: nextDroppedFrames,
+      droppedEvents: nextDroppedEvents,
+      invalidFrames: invalidFrames,
+      invalidEvents: invalidEvents,
+      memory: memory,
+      devTools: devTools,
+      timelineSource: timelineSource,
+      stepId: stepId,
+      archive: value,
+      plugins: plugins,
+    );
+  }
 
   Map<String, Object?> toJson({bool includeRaw = false}) => <String, Object?>{
     'schema': schemaVersion,

@@ -481,6 +481,7 @@ final class _CockpitObservedHttpClientRequest implements HttpClientRequest {
   final HttpClientRequest _delegate;
   final CockpitHttpNetworkObserver observer;
   final _CockpitPendingNetworkRecord pending;
+  Future<HttpClientResponse>? _completion;
 
   @override
   HttpHeaders get headers => _delegate.headers;
@@ -526,7 +527,8 @@ final class _CockpitObservedHttpClientRequest implements HttpClientRequest {
   List<Cookie> get cookies => _delegate.cookies;
 
   @override
-  Future<HttpClientResponse> get done => _delegate.done;
+  Future<HttpClientResponse> get done =>
+      _completion ??= _observeCompletion(_delegate.done);
 
   @override
   void add(List<int> data) {
@@ -609,7 +611,12 @@ final class _CockpitObservedHttpClientRequest implements HttpClientRequest {
   }
 
   @override
-  Future<HttpClientResponse> close() async {
+  Future<HttpClientResponse> close() =>
+      _completion ??= _observeCompletion(_delegate.close());
+
+  Future<HttpClientResponse> _observeCompletion(
+    Future<HttpClientResponse> completion,
+  ) async {
     _captureSafely(
       () => pending.captureRequestHeaders(
         observer.snapshotHeaders(_delegate.headers),
@@ -618,7 +625,7 @@ final class _CockpitObservedHttpClientRequest implements HttpClientRequest {
     pending.requestClosed = true;
     _captureSafely(() => observer._markActivity(pending));
     try {
-      final response = await _delegate.close();
+      final response = await completion;
       pending.statusCode = response.statusCode;
       pending.responseStarted = true;
       _captureSafely(

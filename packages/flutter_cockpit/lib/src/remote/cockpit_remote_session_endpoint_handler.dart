@@ -351,8 +351,12 @@ final class CockpitRemoteSessionEndpointHandler {
   ) async {
     final declaredTimeout = _declaredCommandExecutionTimeout(command);
     final enforcedTimeout = declaredTimeout + _commandExecutionTimeoutGrace;
+    final execution = _commandExecutor(command);
+    unawaited(
+      execution.then<void>((_) {}, onError: (Object _, StackTrace _) {}),
+    );
     try {
-      return await _commandExecutor(command).timeout(enforcedTimeout);
+      return await execution.timeout(enforcedTimeout);
     } on TimeoutException {
       return CockpitCommandExecution(
         result: CockpitCommandResult(
@@ -618,8 +622,9 @@ final class CockpitRemoteSessionEndpointHandler {
       if (sourceFilePath != null && sourceFilePath.isNotEmpty) {
         final sourceFile = File(sourceFilePath);
         if (sourceFile.existsSync() && sourceFile.lengthSync() > 0) {
-          _downloadableArtifacts[artifact.relativePath] = _RemoteArtifactEntry(
-            sourceFilePath: sourceFile.path,
+          await _retainArtifact(
+            artifact.relativePath,
+            _RemoteArtifactEntry(sourceFilePath: sourceFile.path),
           );
           downloads.add(
             CockpitRemoteArtifactDownload(
@@ -643,11 +648,13 @@ final class CockpitRemoteSessionEndpointHandler {
         continue;
       }
       try {
-        _downloadableArtifacts[artifact.relativePath] =
-            await _persistArtifactBytes(
-              cockpitSanitizeRemoteArtifactBasename(artifact.relativePath),
-              bytes,
-            );
+        await _retainArtifact(
+          artifact.relativePath,
+          await _persistArtifactBytes(
+            cockpitSanitizeRemoteArtifactBasename(artifact.relativePath),
+            bytes,
+          ),
+        );
       } on Object {
         // Constrained runtimes, especially web, may not support temp-file
         // persistence. Preserve evidence inline so the caller can externalize
@@ -685,7 +692,7 @@ final class CockpitRemoteSessionEndpointHandler {
       );
     }
 
-    _downloadableArtifacts[artifact.relativePath] = artifactEntry;
+    await _retainArtifact(artifact.relativePath, artifactEntry);
     return CockpitRemoteRecordingResponse(
       result: _recordingResultForTransport(result),
       artifactDownloads: <CockpitRemoteArtifactDownload>[
@@ -819,11 +826,13 @@ final class CockpitRemoteSessionEndpointHandler {
                 relativePath:
                     'diagnostics/${cockpitSortableTimestampToken(DateTime.now())}_remote_snapshot.json',
               );
-    _downloadableArtifacts[artifactRef.relativePath] =
-        await _persistArtifactBytes(
-          cockpitSanitizeRemoteArtifactBasename(artifactRef.relativePath),
-          artifactBytes,
-        );
+    await _retainArtifact(
+      artifactRef.relativePath,
+      await _persistArtifactBytes(
+        cockpitSanitizeRemoteArtifactBasename(artifactRef.relativePath),
+        artifactBytes,
+      ),
+    );
 
     return CockpitRemoteSnapshotResponse(
       snapshot: _summarizedSnapshot(snapshot).copyWith(
@@ -945,6 +954,27 @@ final class CockpitRemoteSessionEndpointHandler {
     }
   }
 
+  Future<void> _retainArtifact(String path, _RemoteArtifactEntry entry) async {
+    final previous = _downloadableArtifacts.remove(path);
+    if (previous != null) await _deleteArtifactIfNeeded(previous);
+    _downloadableArtifacts[path] = entry;
+    while (_downloadableArtifacts.length > _maxRetainedArtifacts) {
+      final oldestPath = _downloadableArtifacts.keys.first;
+      final oldest = _downloadableArtifacts.remove(oldestPath);
+      if (oldest != null) await _deleteArtifactIfNeeded(oldest);
+    }
+  }
+
+  Future<void> _deleteArtifactIfNeeded(_RemoteArtifactEntry artifact) async {
+    if (!artifact.deleteOnClose || artifact.sourceFilePath == null) return;
+    try {
+      final file = File(artifact.sourceFilePath!);
+      if (await file.exists()) await file.delete();
+    } on Object {
+      // Artifact eviction is best-effort and must not fail the command.
+    }
+  }
+
   Future<CockpitRemoteSessionEndpointResponse> _artifactResponseFor(
     CockpitRemoteSessionEndpointRequest request,
   ) async {
@@ -1020,6 +1050,8 @@ final class CockpitRemoteSessionEndpointHandler {
     return '$endpoint?path=${Uri.encodeQueryComponent(relativePath)}';
   }
 }
+
+const int _maxRetainedArtifacts = 256;
 
 Future<File> _defaultArtifactTempFileFactory(String basename) async {
   final safeBasename = basename.isEmpty ? 'artifact.bin' : basename;

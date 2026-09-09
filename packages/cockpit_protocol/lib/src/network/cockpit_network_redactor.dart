@@ -7,7 +7,7 @@ final class CockpitNetworkRedactor {
   static const String masked = '********';
 
   static final RegExp _inlineCredential = RegExp(
-    r'''((?:bearer|basic)\s+|(?:authorization|password|passwd|secret|token|api[-_ ]?key|private[-_ ]?key|credential|signature|csrf|xsrf)\s*["']?\s*[=:]\s*["']?)([^"'\s,;&]+)''',
+    r'''((?:bearer|basic)\s+|(?:authorization|password|passwd|pwd|secret|token|key|code|api[-_ ]?key|private[-_ ]?key|credential|signature|csrf|xsrf)\s*["']?\s*[=:]\s*["']?)([^"'\s,;&]+)''',
     caseSensitive: false,
   );
   static final RegExp _cookieCredential = RegExp(
@@ -144,6 +144,9 @@ final class CockpitNetworkRedactor {
         normalized == 'hmac' ||
         normalized == 'csrf' ||
         normalized == 'xsrf' ||
+        normalized == 'key' ||
+        normalized == 'code' ||
+        normalized == 'pwd' ||
         normalized.contains('password') ||
         normalized.contains('passwd') ||
         normalized.contains('secret') ||

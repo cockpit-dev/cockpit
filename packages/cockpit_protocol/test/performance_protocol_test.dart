@@ -220,6 +220,54 @@ void main() {
     );
   });
 
+  test('archive projection can release retained frames and events', () {
+    final summary = CockpitPerformanceSummary.fromFrames(
+      frames,
+      frameBudgetUs: 16667,
+    );
+    final start = DateTime.utc(2026, 1, 1);
+    final report = CockpitPerformanceReport(
+      startedAt: start,
+      finishedAt: start.add(const Duration(milliseconds: 10)),
+      durationUs: 10000,
+      durationMs: 10,
+      platform: 'test',
+      buildMode: 'profile',
+      mode: CockpitPerformanceMode.light,
+      summary: summary,
+      frames: frames,
+      events: <CockpitPerformanceEvent>[
+        CockpitPerformanceEvent(
+          name: 'frame',
+          category: 'Dart',
+          timestampUs: 100,
+          durationUs: 0,
+          args: const <String, Object?>{},
+        ),
+      ],
+    );
+    final compact = report.copyWithArchive(
+      CockpitPerformanceArchiveInfo(
+        format: 'jsonl',
+        mode: 'lossless',
+        state: 'done',
+        manifest: '/tmp/performance.json',
+        chunks: const <String>[],
+        events: 8,
+        frames: 12,
+        records: 20,
+        bytes: 1024,
+      ),
+      retainSamples: false,
+    );
+
+    expect(compact.frames, isEmpty);
+    expect(compact.events, isEmpty);
+    expect(compact.droppedFrames, 10);
+    expect(compact.droppedEvents, 7);
+    expect(compact.archive!.frames, 12);
+  });
+
   test('round trip preserves raw frame timestamps and compact fields', () {
     final summary = CockpitPerformanceSummary.fromFrames(
       frames,

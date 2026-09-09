@@ -489,53 +489,7 @@ final class CockpitDevRuntime {
         failureExitCode: cockpitTemporaryExitCode,
       );
     }
-    final results = await Future.wait(<Future<CockpitOperationResult>>[
-      invoke(session, 'target.inspect', <String, Object?>{
-        'targetId': session.targetId,
-        'profile': 'minimal',
-      }),
-      invoke(session, 'ui.inspect', <String, Object?>{
-        'sessionId': session.sessionId,
-        'profile': 'minimal',
-      }),
-      invoke(session, 'errors.read', <String, Object?>{
-        'sessionId': session.sessionId,
-        'maxErrors': diagnose ? 32 : 8,
-      }),
-      invoke(session, 'network.read', <String, Object?>{
-        'sessionId': session.sessionId,
-        'onlyFailures': !diagnose,
-        'maxEntries': diagnose ? 64 : 12,
-      }),
-      invoke(session, 'logs.read', <String, Object?>{
-        'sessionId': session.sessionId,
-        'maxLines': 120,
-      }),
-    ]);
-    final target = results[0];
-    final ui = results[1];
-    final errors = results[2];
-    final network = results[3];
-    final logs = results[4];
-    final ok = results.every(_operationSucceeded);
-    return writeEnvelope(
-      action: diagnose ? 'diagnose' : 'status',
-      session: session,
-      ok: ok,
-      state: <String, Object?>{
-        'lifecycle': session.lifecycle,
-        ..._sessionIdentity(session),
-        'target': target.output,
-        'ui': ui.output,
-        'runtimeErrors': errors.output,
-        'network': network.output,
-        'logs': logs.output,
-      },
-      changed: resolution.changed,
-      errors: _operationErrors(results),
-      next: ok ? null : 'cockpit dev diagnose --session ${session.handleId}',
-      failureExitCode: cockpitTemporaryExitCode,
-    );
+    return _diagnose(session);
   }
 
   Future<int> _diagnose(CockpitCliSessionHandle session) async {

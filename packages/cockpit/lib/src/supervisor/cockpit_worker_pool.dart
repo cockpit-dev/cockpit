@@ -297,6 +297,14 @@ final class CockpitWorkerPool {
     if (slot == null) return;
     slot.desired = false;
     slot.restartTimer?.cancel();
+    if (!slot.readyCompleter.isCompleted) {
+      slot.readyCompleter.completeError(
+        const CockpitWorkerPoolException(
+          'workerPoolClosed',
+          'The worker workspace was shut down before it became ready.',
+        ),
+      );
+    }
     CockpitWorkspaceWorkerConnection? connection;
     var forceShutdown = force;
     var forceTermination = force;
@@ -355,7 +363,7 @@ final class CockpitWorkerPool {
         if (!slot.desired ||
             generation != slot.generation ||
             _slots[slot.spec.key] != slot) {
-          unawaited(connection.terminate(force: false));
+          unawaited(connection.terminate(force: false).catchError((_) {}));
           return;
         }
         slot.connection = connection;
@@ -480,7 +488,11 @@ final class CockpitWorkerPool {
     } on Object {
       slot.heartbeatFailures += 1;
       if (slot.heartbeatFailures >= _heartbeatFailureThreshold) {
-        await connection.terminate(force: true);
+        try {
+          await connection.terminate(force: true);
+        } on Object {
+          // Never let a periodic heartbeat callback escape an async error.
+        }
       }
     } finally {
       slot.heartbeatInFlight = false;

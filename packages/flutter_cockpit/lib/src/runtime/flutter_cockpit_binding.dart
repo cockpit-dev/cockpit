@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -159,12 +160,11 @@ final class FlutterCockpitBinding {
     CockpitRecordingRequest request,
   ) async {
     if (_recordingStarting ||
+        _activeRecordingSession != null ||
         _performanceStarting ||
         _activePerformanceSession != null ||
         performanceCollector.isRunning) {
-      throw StateError(
-        'Screen recording cannot overlap a performance capture.',
-      );
+      throw StateError('A screen recording is already active.');
     }
     _recordingStarting = true;
     try {
@@ -192,7 +192,16 @@ final class FlutterCockpitBinding {
     }
 
     final result = await nativeRecording.stopRecording(session: session);
+    final recording = _activeRecordingSession;
     _activeRecordingSession = null;
+    if (recording != null) {
+      unawaited(
+        nativeRecording.stopRecording(session: recording).then<void>(
+          (_) {},
+          onError: (Object _, StackTrace _) {},
+        ),
+      );
+    }
     return result;
   }
 
@@ -316,8 +325,12 @@ final class FlutterCockpitBinding {
     final nextPerformance = nextConfiguration.performanceCollector;
     if (nextPerformance != null &&
         !identical(nextPerformance, performanceCollector)) {
-      performanceCollector.dispose();
-      performanceCollector = nextPerformance;
+      if (!performanceCollector.isRunning) {
+        performanceCollector.dispose();
+        performanceCollector = nextPerformance;
+      } else {
+        nextPerformance.dispose();
+      }
     }
 
     _configuration = nextConfiguration.copyWith(
@@ -357,6 +370,15 @@ final class FlutterCockpitBinding {
     final nextNativeRecording = nextConfiguration.nativeRecording;
     if (nextNativeRecording != null &&
         !identical(nextNativeRecording, nativeRecording)) {
+      final active = _activeRecordingSession;
+      if (active != null) {
+        unawaited(
+          nativeRecording.stopRecording(session: active).then<void>(
+            (_) {},
+            onError: (Object _, StackTrace _) {},
+          ),
+        );
+      }
       nativeRecording = nextNativeRecording;
       _activeRecordingSession = null;
     }

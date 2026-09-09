@@ -50,6 +50,7 @@ final class CockpitDaemonHost {
   CockpitDaemonDiscovery? _discovery;
   bool _stopping = false;
   Future<void>? _stopOperation;
+  CockpitDaemonShutdownMode? _requestedStopMode;
 
   CockpitDaemonDiscovery get discovery =>
       _discovery ?? (throw StateError('Daemon host has not started.'));
@@ -131,7 +132,21 @@ final class CockpitDaemonHost {
 
   Future<void> stop(CockpitDaemonShutdownMode mode) {
     final existing = _stopOperation;
-    if (existing != null) return existing;
+    final requested = _requestedStopMode;
+    if (requested == null || _shutdownSeverity(mode) > _shutdownSeverity(requested)) {
+      _requestedStopMode = mode;
+    }
+    if (existing != null) {
+      if (mode == CockpitDaemonShutdownMode.emergency &&
+          _server != null) {
+        // Do not silently downgrade a later emergency request to an earlier
+        // drain. Force-closing the listener immediately stops accepting new
+        // control requests while the original shutdown future finishes its
+        // cleanup and releases the daemon lock.
+        unawaited(_server!.close(force: true));
+      }
+      return existing;
+    }
     final operation = _stop(mode);
     _stopOperation = operation;
     return operation;
@@ -143,8 +158,9 @@ final class CockpitDaemonHost {
       await shutdownHandler(mode);
     } finally {
       try {
+        final effectiveMode = _requestedStopMode ?? mode;
         await _server?.close(
-          force: mode == CockpitDaemonShutdownMode.emergency,
+          force: effectiveMode == CockpitDaemonShutdownMode.emergency,
         );
         final discovery = _discovery;
         if (discovery != null) {
@@ -160,6 +176,12 @@ final class CockpitDaemonHost {
       }
     }
   }
+
+  int _shutdownSeverity(CockpitDaemonShutdownMode mode) => switch (mode) {
+    CockpitDaemonShutdownMode.drain => 0,
+    CockpitDaemonShutdownMode.cancel => 1,
+    CockpitDaemonShutdownMode.emergency => 2,
+  };
 
   Future<void> _releaseDaemonLock() async {
     final lock = _daemonLock;
@@ -186,7 +208,10 @@ final class CockpitDaemonHost {
       final authorization = request.headers.value(
         HttpHeaders.authorizationHeader,
       );
-      if (authorization != 'Bearer ${discovery.bearerToken}') {
+      final bearer = authorization != null && authorization.startsWith('Bearer ')
+          ? authorization.substring('Bearer '.length)
+          : '';
+      if (!_constantTimeEquals(bearer, discovery.bearerToken)) {
         request.response.headers.set(
           HttpHeaders.wwwAuthenticateHeader,
           'Bearer',
@@ -287,4 +312,13 @@ final class CockpitDaemonHost {
       'redactedDetails': <String, Object?>{},
     },
   });
+}
+
+bool _constantTimeEquals(String actual, String expected) {
+  var difference = actual.length ^ expected.length;
+  final length = actual.length < expected.length ? actual.length : expected.length;
+  for (var index = 0; index < length; index += 1) {
+    difference |= actual.codeUnitAt(index) ^ expected.codeUnitAt(index);
+  }
+  return difference == 0;
 }

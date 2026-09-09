@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:collection';
 import 'dart:convert';
 import 'dart:io';
 
@@ -117,7 +118,9 @@ final class CockpitSupervisorRuntime
   final Map<String, CockpitSupervisorRunProjection> _projections;
   final Map<String, Future<void>> _workerInitialization = {};
   final Map<String, _ActiveRun> _activeRuns = {};
-  final Map<String, String> _validatedRunOwners = {};
+  static const int _validatedRunOwnerLimit = 1024;
+  final LinkedHashMap<String, String> _validatedRunOwners =
+      LinkedHashMap<String, String>();
   final Map<String, Future<void>> _runOwnerValidations = {};
   bool _draining = false;
 
@@ -946,17 +949,38 @@ final class CockpitSupervisorRuntime
     } on Object catch (error) {
       dispatchError = error;
     }
+    var terminalTruthWritten = false;
+    for (var attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        await _ensureTerminalRunTruth(
+          run,
+          operation: operation,
+          dispatchError: dispatchError,
+        );
+        terminalTruthWritten = true;
+        break;
+      } on Object {
+        if (attempt == 2) break;
+        await Future<void>.delayed(
+          Duration(milliseconds: 50 * (attempt + 1)),
+        );
+      }
+    }
+    if (!terminalTruthWritten) {
+      // Keep the run addressable when durable terminal truth could not be
+      // published. A later projection read or explicit cancellation can then
+      // recover it; silently removing it would leave only a phantom running
+      // record in persistent state.
+      return;
+    }
     try {
-      await _ensureTerminalRunTruth(
-        run,
-        operation: operation,
-        dispatchError: dispatchError,
-      );
-    } finally {
       run.terminal = true;
       if (identical(_activeRuns[run.runId], run)) {
         _activeRuns.remove(run.runId);
       }
+    } catch (_) {
+      // In-memory cleanup must never turn a successfully persisted terminal
+      // event into an unhandled asynchronous error.
     }
   }
 
@@ -1537,7 +1561,7 @@ final class CockpitSupervisorRuntime
   );
 
   Future<String> _findRunOwner(String runId) async {
-    final validatedOwner = _validatedRunOwners[runId];
+    final validatedOwner = _validatedOwnerFor(runId);
     if (validatedOwner != null) return validatedOwner;
 
     final admission = await runAdmissions.findRun(runId);
@@ -1576,7 +1600,7 @@ final class CockpitSupervisorRuntime
     final waiting = <Future<void>>[];
     final pending = <String, CockpitSupervisorRunAdmission>{};
     for (final entry in byRunId.entries) {
-      final validatedOwner = _validatedRunOwners[entry.key];
+      final validatedOwner = _validatedOwnerFor(entry.key);
       if (validatedOwner != null) {
         if (validatedOwner != entry.value.workspaceId) {
           throw StateError(
@@ -1613,7 +1637,7 @@ final class CockpitSupervisorRuntime
       }
     }
     for (final entry in byRunId.entries) {
-      if (_validatedRunOwners[entry.key] != entry.value.workspaceId) {
+      if (_validatedOwnerFor(entry.key) != entry.value.workspaceId) {
         throw StateError(
           'Projected run ownership conflicts with admission truth.',
         );
@@ -1622,7 +1646,7 @@ final class CockpitSupervisorRuntime
   }
 
   Future<void> _ensureProjectedOwner(String runId, String admittedOwner) async {
-    final validatedOwner = _validatedRunOwners[runId];
+    final validatedOwner = _validatedOwnerFor(runId);
     if (validatedOwner != null) {
       if (validatedOwner != admittedOwner) {
         throw StateError(
@@ -1634,7 +1658,7 @@ final class CockpitSupervisorRuntime
     final active = _runOwnerValidations[runId];
     if (active != null) {
       await active;
-      if (_validatedRunOwners[runId] != admittedOwner) {
+      if (_validatedOwnerFor(runId) != admittedOwner) {
         throw StateError(
           'Projected run ownership conflicts with admission truth.',
         );
@@ -1644,7 +1668,7 @@ final class CockpitSupervisorRuntime
     late final Future<void> validation;
     validation = (() async {
       await _validateProjectedOwner(runId, admittedOwner);
-      _validatedRunOwners[runId] = admittedOwner;
+      _rememberValidatedOwner(runId, admittedOwner);
     })();
     _runOwnerValidations[runId] = validation;
     try {
@@ -1672,7 +1696,7 @@ final class CockpitSupervisorRuntime
       }
     }
     for (final admission in admissions.values) {
-      _validatedRunOwners[admission.runId] = admission.workspaceId;
+      _rememberValidatedOwner(admission.runId, admission.workspaceId);
     }
   }
 
@@ -1683,6 +1707,20 @@ final class CockpitSupervisorRuntime
             event.lifecycle == CockpitRunLifecycle.completed,
       )
       .lastOrNull;
+
+  String? _validatedOwnerFor(String runId) {
+    final owner = _validatedRunOwners.remove(runId);
+    if (owner != null) _validatedRunOwners[runId] = owner;
+    return owner;
+  }
+
+  void _rememberValidatedOwner(String runId, String workspaceId) {
+    _validatedRunOwners.remove(runId);
+    _validatedRunOwners[runId] = workspaceId;
+    while (_validatedRunOwners.length > _validatedRunOwnerLimit) {
+      _validatedRunOwners.remove(_validatedRunOwners.keys.first);
+    }
+  }
 
   void _requireAccepting() {
     if (_draining) throw const FormatException('Supervisor is draining.');

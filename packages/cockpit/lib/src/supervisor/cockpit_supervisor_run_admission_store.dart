@@ -133,7 +133,10 @@ final class CockpitSupervisorRunAdmissionStore {
     required CockpitDirectorySyncer directorySyncer,
     CockpitTokenGenerator? tokenGenerator,
     this.maximumAdmissions = 10000,
+    this.admissionRetention = const Duration(days: 7),
+    DateTime Function()? now,
   }) : _tokenGenerator = tokenGenerator ?? CockpitSecureTokenGenerator(),
+       _now = now ?? DateTime.now,
        _store = CockpitLockedJsonStore<_AdmissionState>(
          path: p.join(paths.runsDirectory, 'admissions.json'),
          codec: const _AdmissionStateCodec(),
@@ -145,10 +148,15 @@ final class CockpitSupervisorRunAdmissionStore {
     if (maximumAdmissions < 1 || maximumAdmissions > 100000) {
       throw ArgumentError.value(maximumAdmissions, 'maximumAdmissions');
     }
+    if (admissionRetention <= Duration.zero) {
+      throw ArgumentError.value(admissionRetention, 'admissionRetention');
+    }
   }
 
   final int maximumAdmissions;
+  final Duration admissionRetention;
   final CockpitTokenGenerator _tokenGenerator;
+  final DateTime Function() _now;
   final CockpitLockedJsonStore<_AdmissionState> _store;
 
   Future<CockpitSupervisorRunAdmissionResult> admit({
@@ -161,6 +169,9 @@ final class CockpitSupervisorRunAdmissionStore {
     required String sourceSha256,
     required DateTime submittedAt,
   }) => _store.transact((state) {
+    if (state.byKey.length >= maximumAdmissions) {
+      _pruneExpired(state);
+    }
     final key = _admissionKey(workspaceId, idempotencyKey);
     final existing = state.byKey[key];
     if (existing != null) {
@@ -202,6 +213,16 @@ final class CockpitSupervisorRunAdmissionStore {
       ),
     );
   });
+
+  void _pruneExpired(_AdmissionState state) {
+    final cutoff = _now().toUtc().subtract(admissionRetention);
+    for (final entry in state.byKey.entries.toList(growable: false)) {
+      if (entry.value.submittedAt.isBefore(cutoff)) {
+        state.byKey.remove(entry.key);
+        state.byRunId.remove(entry.value.runId);
+      }
+    }
+  }
 
   String _nextRunId(_AdmissionState state) {
     for (var attempt = 0; attempt < 32; attempt += 1) {

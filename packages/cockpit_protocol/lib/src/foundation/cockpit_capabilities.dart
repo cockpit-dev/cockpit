@@ -1,5 +1,6 @@
 import 'cockpit_api_version.dart';
 import 'cockpit_decode_policy.dart';
+import 'cockpit_enum.dart';
 import 'cockpit_foundation_value_reader.dart';
 import 'cockpit_operation_descriptor.dart';
 
@@ -62,12 +63,11 @@ final class CockpitResourceDescriptor {
     );
     return CockpitResourceDescriptor(
       kind: CockpitFoundationValueReader.kind(json['kind'], '$path.kind'),
-      scope: CockpitEnumValue<CockpitOperationScope>.parse(
+      scope: cockpitEnumFromJson(
         json['scope'],
         CockpitOperationScope.values,
         '$path.scope',
-        policy: CockpitDecodePolicy.requests,
-      ).requireKnown(),
+      ),
       uriTemplate: CockpitFoundationValueReader.apiTemplate(
         json['uriTemplate'],
         '$path.uriTemplate',

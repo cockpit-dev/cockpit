@@ -28,6 +28,8 @@ final class CockpitRemoteSessionClient {
     Duration? artifactDownloadTimeout,
     CockpitRemoteArtifactTempFileFactory? artifactTempFileFactory,
     bool downloadDiagnosticsArtifacts = false,
+    String authToken = '',
+    String? origin,
   }) : _baseUri = _normalizedBaseUri(baseUri),
        _httpClientFactory = httpClientFactory ?? HttpClient.new,
        _requestTimeout = requestTimeout ?? const Duration(seconds: 30),
@@ -35,7 +37,9 @@ final class CockpitRemoteSessionClient {
            artifactDownloadTimeout ?? const Duration(seconds: 30),
        _artifactTempFileFactory =
            artifactTempFileFactory ?? _defaultArtifactTempFileFactory,
-       _downloadDiagnosticsArtifacts = downloadDiagnosticsArtifacts;
+       _downloadDiagnosticsArtifacts = downloadDiagnosticsArtifacts,
+       _authToken = authToken.trim(),
+       _origin = origin?.trim();
 
   final Uri _baseUri;
   final HttpClient Function() _httpClientFactory;
@@ -43,6 +47,8 @@ final class CockpitRemoteSessionClient {
   final Duration _artifactDownloadTimeout;
   final CockpitRemoteArtifactTempFileFactory _artifactTempFileFactory;
   final bool _downloadDiagnosticsArtifacts;
+  final String _authToken;
+  final String? _origin;
 
   Uri get baseUri => _baseUri;
 
@@ -430,6 +436,7 @@ final class CockpitRemoteSessionClient {
               method,
               _resolveRemotePath(path),
             );
+            _applyAuthenticationHeaders(request);
             if (body != null) {
               request.headers.contentType = ContentType.json;
               request.write(jsonEncode(body));
@@ -528,6 +535,7 @@ final class CockpitRemoteSessionClient {
             final request = await client.getUrl(
               _resolveRemotePath(relativePath),
             );
+            _applyAuthenticationHeaders(request);
             final response = await request.close();
             if (response.statusCode < 200 || response.statusCode >= 300) {
               final payload = await utf8.decoder.bind(response).join();
@@ -611,6 +619,7 @@ final class CockpitRemoteSessionClient {
             final request = await client.getUrl(
               _resolveRemotePath(relativePath),
             );
+            _applyAuthenticationHeaders(request);
             final response = await request.close();
             if (response.statusCode < 200 || response.statusCode >= 300) {
               final payload = await utf8.decoder.bind(response).join();
@@ -681,6 +690,19 @@ final class CockpitRemoteSessionClient {
       rethrow;
     } finally {
       client.close(force: true);
+    }
+  }
+
+  void _applyAuthenticationHeaders(HttpClientRequest request) {
+    final token = _authToken.isNotEmpty
+        ? _authToken
+        : _baseUri.queryParameters['token'] ?? '';
+    if (token.isNotEmpty) {
+      request.headers.set('x-cockpit-token', token);
+    }
+    final origin = _origin;
+    if (origin != null && origin.isNotEmpty) {
+      request.headers.set('origin', origin);
     }
   }
 
@@ -823,7 +845,9 @@ final class CockpitRemoteSessionClient {
     if (alreadyScoped || basePath.isEmpty || basePath == '/') {
       return _baseUri.replace(
         path: uri.path,
-        query: uri.hasQuery ? uri.query : null,
+        query: uri.hasQuery
+            ? uri.query
+            : (_baseUri.hasQuery ? _baseUri.query : null),
         fragment: uri.hasFragment ? uri.fragment : null,
       );
     }

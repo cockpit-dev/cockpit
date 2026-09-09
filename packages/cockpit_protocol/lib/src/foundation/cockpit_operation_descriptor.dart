@@ -167,21 +167,29 @@ final class CockpitOperationDescriptor {
         '$path.description',
         maximum: 1024,
       ),
-      scope: _enum(json['scope'], CockpitOperationScope.values, '$path.scope'),
+      scope: _enum(
+        json['scope'],
+        CockpitOperationScope.values,
+        '$path.scope',
+        decodePolicy,
+      ),
       mutationClass: _enum(
         json['mutationClass'],
         CockpitMutationClass.values,
         '$path.mutationClass',
+        decodePolicy,
       ),
       idempotency: _enum(
         json['idempotency'],
         CockpitIdempotencyBehavior.values,
         '$path.idempotency',
+        decodePolicy,
       ),
       executionMode: _enum(
         json['executionMode'],
         CockpitOperationExecutionMode.values,
         '$path.executionMode',
+        decodePolicy,
       ),
       defaultTimeoutMs: CockpitFoundationValueReader.integer(
         json['defaultTimeoutMs'],
@@ -221,11 +229,17 @@ final class CockpitOperationDescriptor {
   }
 }
 
-T _enum<T extends Enum>(Object? value, List<T> values, String path) {
+T _enum<T extends Enum>(
+  Object? value,
+  List<T> values,
+  String path,
+  CockpitDecodePolicy decodePolicy,
+) {
   return CockpitEnumValue<T>.parse(
     value,
     values,
     path,
-    policy: CockpitDecodePolicy.requests,
+    policy: decodePolicy,
+    extensibleResponse: true,
   ).requireKnown();
 }

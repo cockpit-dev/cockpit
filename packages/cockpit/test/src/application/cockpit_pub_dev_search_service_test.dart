@@ -155,6 +155,9 @@ final class _FakeHttpClient implements CockpitHttpClient {
   final Set<String> failingUris;
 
   @override
+  Future<void> close() async {}
+
+  @override
   Future<String> read(Uri uri) async {
     if (failingUris.contains(uri.toString())) {
       throw StateError('network failed');
@@ -168,6 +171,9 @@ final class _FakeHttpClient implements CockpitHttpClient {
 
 final class _HangingHttpClient implements CockpitHttpClient {
   @override
+  Future<void> close() async {}
+
+  @override
   Future<String> read(Uri uri) => Completer<String>().future;
 
   @override
@@ -175,6 +181,9 @@ final class _HangingHttpClient implements CockpitHttpClient {
 }
 
 final class _AlwaysFailingHttpClient implements CockpitHttpClient {
+  @override
+  Future<void> close() async {}
+
   @override
   Future<String> read(Uri uri) async {
     throw const HandshakeException('terminated during handshake');

@@ -652,7 +652,18 @@ List<CockpitTestDiagnostic> _validate(
   }
 
   _validateCallGraph(testCase, calls, add);
-  final expanded = _expandedStepCount(testCase, '<root>', calls);
+  late final int expanded;
+  try {
+    expanded = _expandedStepCount(
+      testCase,
+      '<root>',
+      calls,
+      maxExpandedSteps: limits.maxExpandedSteps,
+    );
+  } on FormatException catch (error) {
+    if (error.message != 'expandedStepLimitExceeded') rethrow;
+    expanded = limits.maxExpandedSteps + 1;
+  }
   if (expanded > limits.maxExpandedSteps) {
     add(
       'expandedStepLimitExceeded',
@@ -943,8 +954,11 @@ String? _parentPath(String path) {
 int _expandedStepCount(
   CockpitTestCase testCase,
   String owner,
-  Map<String, Set<String>> calls,
-) {
+  Map<String, Set<String>> calls, {
+  required int maxExpandedSteps,
+}) {
+  var runningTotal = 0;
+
   int countSteps(
     List<CockpitTestStepTemplate> steps,
     Set<String> fragmentStack,
@@ -952,6 +966,10 @@ int _expandedStepCount(
     var count = 0;
     for (final step in steps) {
       count += 1;
+      runningTotal += 1;
+      if (runningTotal > maxExpandedSteps) {
+        throw const FormatException('expandedStepLimitExceeded');
+      }
       switch (step.operation) {
         case CockpitTestIfOperationTemplate(:final thenSteps, :final elseSteps):
           count += countSteps(thenSteps, fragmentStack);

@@ -474,6 +474,7 @@ final class FlutterCockpitRootState extends State<FlutterCockpitRoot> {
     _routeInformationUnbinders.clear();
     unawaited(_remoteSessionServer?.close());
     unawaited(_remoteSessionBridgeClient?.close());
+    unawaited(_nativeSemantics.disable().catchError((_) {}));
     _semanticsHandle?.dispose();
     _tapFeedbackController?.dispose();
     super.dispose();
@@ -716,6 +717,10 @@ final class FlutterCockpitRootState extends State<FlutterCockpitRoot> {
         ),
       );
       await bridgeClient.start();
+      if (!mounted) {
+        await bridgeClient.close();
+        return;
+      }
       _remoteSessionBridgeClient = bridgeClient;
       return;
     }
@@ -735,6 +740,10 @@ final class FlutterCockpitRootState extends State<FlutterCockpitRoot> {
       stopPerformance: stopPerformance,
     );
     await server.start();
+    if (!mounted) {
+      await server.close();
+      return;
+    }
     _remoteSessionServer = server;
   }
 

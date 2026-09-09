@@ -10,6 +10,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_cockpit/flutter_cockpit_flutter.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
+import 'package:cockpit_test/cockpit_test.dart' as shared_test;
 
 import 'cockpit_native_tester.dart';
 import 'cockpit_debug_tools.dart';
@@ -257,7 +258,7 @@ final class CockpitTravelPoint {
 }
 
 /// A compact, selector-first facade over Cockpit's in-app command executor.
-final class CockpitTester {
+final class CockpitTester implements shared_test.CockpitTester {
   CockpitTester._({
     required this.flutter,
     required this.root,
@@ -321,6 +322,17 @@ final class CockpitTester {
     return resolved;
   }
 
+  /// Locale currently applied by the mounted application. This is resolved on
+  /// every access so an in-app language switch is visible to the next command.
+  @override
+  shared_test.CockpitLocaleProfile get locale {
+    final current = Localizations.localeOf(context);
+    final tag = current.countryCode == null || current.countryCode!.isEmpty
+        ? current.languageCode
+        : '${current.languageCode}-${current.countryCode}';
+    return shared_test.CockpitLocaleProfile(tag);
+  }
+
   /// The mounted Cockpit root used by this test.
   final FlutterCockpitRootState root;
 
@@ -343,7 +355,7 @@ final class CockpitTester {
 
   /// Flutter visual, timeline, overlay, and animation switches mirrored from
   /// the DevTools controls.
-  late final CockpitDebugTools debug = CockpitDebugTools();
+  final CockpitDebugTools debug = CockpitDebugTools();
 
   /// Lazy Dart VM debugger session for source-aware pause, stack, evaluate,
   /// breakpoint, and Flutter service-extension operations. It is inert unless
@@ -641,6 +653,7 @@ final class CockpitTester {
   /// Describes the live in-app commands and locator strategies available to
   /// this test. The result is generated from the same executor used by the
   /// Cockpit bridge, so platform-specific capabilities stay truthful.
+  @override
   Future<CockpitCapabilities> describeCapabilities() {
     return _executor.describeCapabilities();
   }
@@ -953,6 +966,7 @@ final class CockpitTester {
   /// projection and the manifest/chunks are the lossless source of truth.
   /// The value returned to normal test output is the compact summary exposed
   /// by [report].
+  @override
   Future<CockpitPerformanceReport> profile(
     Future<void> Function() action, {
     String name = 'performance',
@@ -1288,6 +1302,10 @@ final class CockpitTester {
                     : timelineOldGcCount,
               )
             : _parsePerformanceTimeline(timelineData, maxEvents: maxEvents);
+        // traceTimeline returns a potentially very large raw document. Drop
+        // the source graph before DevTools finalization and report encoding so
+        // those phases cannot overlap with the parser's bounded projection.
+        timelineData = null;
         // An archive receives plugin events while the measured window is
         // active. Its report is still a bounded projection, but the plugin
         // projection must not inherit the VM timeline's remaining budget:
@@ -1344,7 +1362,10 @@ final class CockpitTester {
         if (archive != null && archiveCaptureId != null) {
           archive.endCapture(archiveCaptureId, report);
           await archive.flush();
-          completedReport = report.copyWithArchive(archive.info);
+          completedReport = report.copyWithArchive(
+            archive.info,
+            retainSamples: false,
+          );
         }
         _performances.add(completedReport);
         final binding =
@@ -1366,6 +1387,9 @@ final class CockpitTester {
         };
       }
     } finally {
+      // Release any unparsed trace document even when action or finalization
+      // fails before the normal report path can clear it.
+      timelineData = null;
       timelineTimer?.cancel();
       timelineTimer = null;
       if (!reportFinalized) {
@@ -1450,6 +1474,7 @@ final class CockpitTester {
   }
 
   /// Executes a fully specified Cockpit command.
+  @override
   Future<CockpitCommandExecution> execute(
     CockpitCommand command, {
     bool? check,
@@ -1457,10 +1482,15 @@ final class CockpitTester {
     final effectiveCommand = _withTimeout(command);
     final execution = await _executor.executeWithArtifacts(effectiveCommand);
     _results.add(execution.result);
-    FlutterCockpit.binding.sessionController.recordCommandResult(
-      effectiveCommand,
-      execution.result,
-    );
+    try {
+      FlutterCockpit.binding.sessionController.recordCommandResult(
+        effectiveCommand,
+        execution.result,
+      );
+    } on StateError {
+      // The command result remains available in the tester report even when
+      // the application session has already closed during asynchronous work.
+    }
     if (options.pumpAfterCommand) {
       await _pumpQueue.call();
     }
@@ -1470,6 +1500,7 @@ final class CockpitTester {
     return execution;
   }
 
+  @override
   Future<CockpitCommandExecution> tap(
     Object? target, {
     Offset? at,
@@ -1554,6 +1585,7 @@ final class CockpitTester {
     );
   }
 
+  @override
   Future<CockpitCommandExecution> type(
     String value, {
     required Object into,
@@ -1565,6 +1597,7 @@ final class CockpitTester {
     parameters: <String, Object?>{'text': value},
   );
 
+  @override
   Future<CockpitCommandExecution> clear(Object target, {Duration? timeout}) =>
       _run(CockpitCommandType.eraseText, target: target, timeout: timeout);
 
@@ -1578,6 +1611,7 @@ final class CockpitTester {
       _run(CockpitCommandType.pasteText, target: target, timeout: timeout);
 
   /// Gives focus to an editable target without changing its value.
+  @override
   Future<CockpitCommandExecution> focus(Object target, {Duration? timeout}) =>
       _run(CockpitCommandType.focusTextInput, target: target, timeout: timeout);
 
@@ -1732,15 +1766,20 @@ final class CockpitTester {
       }
     } finally {
       for (final key in pressed.reversed) {
-        results.add(
-          await _keyEvent(
-            CockpitCommandType.sendKeyUpEvent,
-            key,
-            timeout: timeout,
-            allowUnhandled: true,
-            check: false,
-          ),
-        );
+        try {
+          results.add(
+            await _keyEvent(
+              CockpitCommandType.sendKeyUpEvent,
+              key,
+              timeout: timeout,
+              allowUnhandled: true,
+              check: false,
+            ),
+          );
+        } on Object {
+          // Keep releasing remaining modifiers; the primary hotkey failure
+          // remains authoritative and cleanup errors must not mask it.
+        }
       }
     }
     if (options.failFast) {
@@ -2165,6 +2204,7 @@ final class CockpitTester {
     Duration? timeout,
   }) => _run(CockpitCommandType.showOnScreen, target: target, timeout: timeout);
 
+  @override
   Future<CockpitCommandExecution> press(
     CockpitTextInputAction action, {
     Object? target,
@@ -2176,6 +2216,7 @@ final class CockpitTester {
     parameters: <String, Object?>{'inputAction': action.name},
   );
 
+  @override
   Future<CockpitCommandExecution> scroll(
     Object target, {
     String? direction,
@@ -2201,6 +2242,7 @@ final class CockpitTester {
     );
   }
 
+  @override
   Future<CockpitCommandExecution> waitForUi({
     bool network = false,
     Duration? timeout,
@@ -2242,27 +2284,35 @@ final class CockpitTester {
   Future<CockpitCommandExecution> dismissKeyboard({Duration? timeout}) =>
       _run(CockpitCommandType.dismissKeyboard, timeout: timeout);
 
+  @override
   Future<CockpitCommandExecution> expectVisible(
     Object target, {
     Duration? timeout,
   }) =>
       _run(CockpitCommandType.assertVisible, target: target, timeout: timeout);
 
+  @override
   Future<CockpitCommandExecution> expectText(
     Object target,
-    String value, {
+    Object value, {
     CockpitTextMatchMode match = CockpitTextMatchMode.exact,
     Duration? timeout,
-  }) => _run(
-    CockpitCommandType.assertText,
-    target: target,
-    timeout: timeout,
-    parameters: <String, Object?>{
-      'text': value,
-      if (match != CockpitTextMatchMode.exact) 'matchMode': match.name,
-    },
-  );
+  }) {
+    final resolved = value is shared_test.CockpitLocalizedText
+        ? value.resolve(locale)
+        : value.toString();
+    return _run(
+      CockpitCommandType.assertText,
+      target: target,
+      timeout: timeout,
+      parameters: <String, Object?>{
+        'text': resolved,
+        if (match != CockpitTextMatchMode.exact) 'matchMode': match.name,
+      },
+    );
+  }
 
+  @override
   Future<CockpitCommandExecution> screenshot({
     String name = 'integration_test',
     CockpitCaptureProfile profile = CockpitCaptureProfile.acceptance,

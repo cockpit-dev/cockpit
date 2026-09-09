@@ -98,6 +98,13 @@ final class CockpitPerformanceCollector {
   int get frameCount => _seenFrames;
   int get invalidFrameCount => _invalidFrames;
 
+  /// Number of frame samples still retained by the active collector.
+  ///
+  /// A completed report owns its own immutable frame list. The collector
+  /// releases its working samples as soon as [stop] returns so report
+  /// serialization cannot overlap with a second copy held by the collector.
+  int get retainedFrameCount => _frames.length;
+
   /// Registers a low-overhead observer for every valid frame, including
   /// frames that are outside the bounded in-memory retention window. The
   /// listener is intended for append-only archives and must not throw or do
@@ -245,6 +252,7 @@ final class CockpitPerformanceCollector {
       );
     } finally {
       _detach();
+      _frames.clear();
     }
   }
 

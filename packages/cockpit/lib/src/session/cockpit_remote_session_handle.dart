@@ -17,6 +17,7 @@ final class CockpitRemoteSessionHandle {
     required this.devicePort,
     required this.baseUrl,
     required this.launchedAt,
+    this.authToken = '',
   });
 
   final String platform;
@@ -32,8 +33,15 @@ final class CockpitRemoteSessionHandle {
   final int devicePort;
   final String baseUrl;
   final DateTime launchedAt;
+  final String authToken;
 
-  Uri get baseUri => Uri.parse(baseUrl);
+  Uri get baseUri {
+    final uri = Uri.parse(baseUrl);
+    if (authToken.isEmpty) return uri;
+    return uri.replace(
+      queryParameters: <String, String>{...uri.queryParameters, 'token': authToken},
+    );
+  }
 
   String? get effectivePlatformAppId {
     if (!platformAppIdKnown) {
@@ -61,6 +69,7 @@ final class CockpitRemoteSessionHandle {
     'devicePort': devicePort,
     'baseUrl': baseUrl,
     'launchedAt': launchedAt.toUtc().toIso8601String(),
+    if (authToken.isNotEmpty) 'authToken': authToken,
   };
 
   factory CockpitRemoteSessionHandle.fromJson(Map<String, Object?> json) {
@@ -78,6 +87,7 @@ final class CockpitRemoteSessionHandle {
       devicePort: json['devicePort']! as int,
       baseUrl: json['baseUrl']! as String,
       launchedAt: DateTime.parse(json['launchedAt']! as String).toUtc(),
+      authToken: json['authToken'] as String? ?? '',
     );
   }
 
@@ -95,6 +105,7 @@ final class CockpitRemoteSessionHandle {
     int? devicePort,
     String? baseUrl,
     DateTime? launchedAt,
+    String? authToken,
   }) {
     return CockpitRemoteSessionHandle(
       platform: platform ?? this.platform,
@@ -115,6 +126,7 @@ final class CockpitRemoteSessionHandle {
       devicePort: devicePort ?? this.devicePort,
       baseUrl: baseUrl ?? this.baseUrl,
       launchedAt: launchedAt ?? this.launchedAt,
+      authToken: authToken ?? this.authToken,
     );
   }
 
@@ -131,6 +143,7 @@ final class CockpitRemoteSessionHandle {
     required int devicePort,
     required CockpitRemoteSessionStatus status,
     DateTime? launchedAt,
+    String? authToken,
   }) {
     return CockpitRemoteSessionHandle(
       platform: status.platform.toLowerCase(),
@@ -146,6 +159,7 @@ final class CockpitRemoteSessionHandle {
       devicePort: devicePort,
       baseUrl: Uri(scheme: 'http', host: host, port: hostPort).toString(),
       launchedAt: (launchedAt ?? DateTime.now()).toUtc(),
+      authToken: authToken ?? status.sessionId,
     );
   }
 }

@@ -137,23 +137,27 @@ abstract final class FlutterCockpit {
       degradationReason: degradationReason,
       captureRefs: captureRefs,
     );
-    binding.sessionController.recordStep(
-      actionType: actionType,
-      actionArgs: actionArgs,
-      observation: observation,
-      snapshot: snapshot,
-      artifactRefs: artifactRefs,
-      commandType: commandType,
-      locator: locator,
-      locatorResolution: locatorResolution,
-      durationMs: durationMs,
-      status: status,
-      requestedCaptureProfile: requestedCaptureProfile,
-      resolvedCaptureKind: resolvedCaptureKind,
-      usedCaptureFallback: usedCaptureFallback,
-      degradationReason: degradationReason,
-      captureRefs: captureRefs,
-    );
+    try {
+      binding.sessionController.recordStep(
+        actionType: actionType,
+        actionArgs: actionArgs,
+        observation: observation,
+        snapshot: snapshot,
+        artifactRefs: artifactRefs,
+        commandType: commandType,
+        locator: locator,
+        locatorResolution: locatorResolution,
+        durationMs: durationMs,
+        status: status,
+        requestedCaptureProfile: requestedCaptureProfile,
+        resolvedCaptureKind: resolvedCaptureKind,
+        usedCaptureFallback: usedCaptureFallback,
+        degradationReason: degradationReason,
+        captureRefs: captureRefs,
+      );
+    } on StateError {
+      // Runtime observation remains best-effort after a session closes.
+    }
   }
 
   static List<CockpitStepRecord> drainRecordedSteps({bool clear = true}) {

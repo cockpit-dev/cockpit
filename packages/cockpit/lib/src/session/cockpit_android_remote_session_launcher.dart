@@ -386,7 +386,14 @@ final class CockpitAndroidRemoteSessionLauncher
     required String? flavor,
     required p.Context pathContext,
   }) async {
-    final decoded = jsonDecode(await file.readAsString());
+    Object? decoded;
+    try {
+      decoded = jsonDecode(await file.readAsString());
+    } on FileSystemException {
+      return null;
+    } on FormatException {
+      return null;
+    }
     if (decoded is! Map<Object?, Object?>) {
       return null;
     }

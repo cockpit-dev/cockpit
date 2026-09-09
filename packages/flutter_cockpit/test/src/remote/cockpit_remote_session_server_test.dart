@@ -700,6 +700,65 @@ void main() {
     expect(healthJson.containsKey('activeRecording'), isFalse);
   });
 
+  test(
+    'remote session server enforces token and origin before decoding requests',
+    () async {
+      final server = CockpitRemoteSessionServer(
+        configuration: const CockpitRemoteSessionConfiguration(
+          enabled: true,
+          autoStart: false,
+          port: 0,
+          authToken: 'remote-secret',
+          allowedOrigin: 'https://trusted.example',
+        ),
+        statusProvider: () async => throw StateError('status should not run'),
+        snapshotProvider: ({required options}) async =>
+            throw StateError('snapshot should not run'),
+        commandExecutor: (_) async =>
+            throw StateError('command should not run'),
+        startRecording: (_) async =>
+            throw StateError('recording should not run'),
+        stopRecording: () async => throw StateError('recording should not run'),
+      );
+      await server.start();
+      addTearDown(server.close);
+
+      final missingToken = await _readJsonResponse(
+        server.baseUri!.resolve('/ping'),
+      );
+      expect(missingToken.statusCode, HttpStatus.unauthorized);
+
+      final wrongToken = await _readJsonResponse(
+        server.baseUri!.resolve('/ping?token=wrong'),
+      );
+      expect(wrongToken.statusCode, HttpStatus.unauthorized);
+
+      final wrongOrigin = await _readJsonResponse(
+        server.baseUri!.resolve('/ping?token=remote-secret'),
+        headers: const <String, String>{'origin': 'https://untrusted.example'},
+      );
+      expect(wrongOrigin.statusCode, HttpStatus.unauthorized);
+
+      final authorized = await _readJsonResponse(
+        server.baseUri!.resolve('/ping'),
+        headers: const <String, String>{
+          'x-cockpit-token': 'remote-secret',
+          'origin': 'https://trusted.example',
+        },
+      );
+      expect(authorized.statusCode, HttpStatus.ok);
+      expect(authorized.body['ok'], isTrue);
+
+      final oversized = await _postRawResponse(
+        server.baseUri!.resolve('/commands/execute'),
+        List<int>.filled((1 << 20) + 1, 65),
+        headers: const <String, String>{'x-cockpit-token': 'remote-secret'},
+      );
+      expect(oversized.statusCode, HttpStatus.requestEntityTooLarge);
+      expect(oversized.body['error'], 'requestTooLarge');
+    },
+  );
+
   test('remote session ping avoids heavyweight status construction', () async {
     var statusCalls = 0;
     final server = CockpitRemoteSessionServer(
@@ -2293,13 +2352,55 @@ CockpitRemoteSessionEndpointHandler _recordingEndpointHandler({
 }
 
 Future<Map<String, Object?>> _readJson(Uri uri) async {
+  return (await _readJsonResponse(uri)).body;
+}
+
+Future<_HttpJsonResponse> _readJsonResponse(
+  Uri uri, {
+  Map<String, String> headers = const <String, String>{},
+}) async {
   return HttpOverrides.runZoned(() async {
     final client = HttpClient();
     try {
       final request = await client.getUrl(uri);
+      headers.forEach(request.headers.set);
       final response = await request.close();
-      final payload = jsonDecode(await utf8.decoder.bind(response).join());
-      return Map<String, Object?>.from(payload as Map<Object?, Object?>);
+      final rawPayload = await utf8.decoder.bind(response).join();
+      final payload = rawPayload.isEmpty
+          ? const <String, Object?>{}
+          : jsonDecode(rawPayload);
+      return _HttpJsonResponse(
+        statusCode: response.statusCode,
+        body: Map<String, Object?>.from(payload as Map<Object?, Object?>),
+      );
+    } finally {
+      client.close(force: true);
+    }
+  }, createHttpClient: _RealHttpOverrides().createHttpClient);
+}
+
+Future<_HttpJsonResponse> _postRawResponse(
+  Uri uri,
+  List<int> bytes, {
+  Map<String, String> headers = const <String, String>{},
+}) async {
+  return HttpOverrides.runZoned(() async {
+    final client = HttpClient();
+    try {
+      final request = await client.postUrl(uri);
+      request.headers.contentType = ContentType.json;
+      request.headers.contentLength = bytes.length;
+      headers.forEach(request.headers.set);
+      request.add(bytes);
+      final response = await request.close();
+      final rawPayload = await utf8.decoder.bind(response).join();
+      final payload = rawPayload.isEmpty
+          ? const <String, Object?>{}
+          : jsonDecode(rawPayload);
+      return _HttpJsonResponse(
+        statusCode: response.statusCode,
+        body: Map<String, Object?>.from(payload as Map<Object?, Object?>),
+      );
     } finally {
       client.close(force: true);
     }
@@ -2355,6 +2456,13 @@ final class _HttpBinaryResponse {
 
   final int statusCode;
   final List<int> bytes;
+}
+
+final class _HttpJsonResponse {
+  const _HttpJsonResponse({required this.statusCode, required this.body});
+
+  final int statusCode;
+  final Map<String, Object?> body;
 }
 
 final class _RealHttpOverrides extends HttpOverrides {}

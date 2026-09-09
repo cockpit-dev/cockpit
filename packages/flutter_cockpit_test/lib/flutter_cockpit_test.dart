@@ -1,5 +1,7 @@
 library;
 
+import 'src/cockpit_test.dart';
+
 export 'package:cockpit_protocol/cockpit_protocol.dart'
     show
         CockpitPerformanceEvent,
@@ -101,3 +103,5 @@ export 'src/cockpit_performance_html.dart';
 export 'src/cockpit_performance_archive.dart';
 export 'src/cockpit_startup_report.dart';
 export 'src/cockpit_watch.dart';
+
+typedef FlutterCockpitTester = CockpitTester;
