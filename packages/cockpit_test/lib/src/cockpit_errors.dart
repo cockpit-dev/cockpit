@@ -30,13 +30,11 @@ final class CockpitTestCapabilityException extends CockpitTestException {
 
 /// Raised when a command executed by a programmatic tester fails.
 final class CockpitTestCommandException extends CockpitTestException {
-  CockpitTestCommandException({
-    required this.command,
-    required this.execution,
-  }) : super(
-         'Cockpit command ${command.commandType.name} failed'
-         '${execution.result.error == null ? '' : ': ${execution.result.error!.message}'}.',
-       );
+  CockpitTestCommandException({required this.command, required this.execution})
+    : super(
+        'Cockpit command ${command.commandType.name} failed'
+        '${execution.result.error == null ? '' : ': ${execution.result.error!.message}'}.',
+      );
 
   final CockpitCommand command;
   final CockpitCommandExecution execution;

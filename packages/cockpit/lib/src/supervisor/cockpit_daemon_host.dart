@@ -133,12 +133,12 @@ final class CockpitDaemonHost {
   Future<void> stop(CockpitDaemonShutdownMode mode) {
     final existing = _stopOperation;
     final requested = _requestedStopMode;
-    if (requested == null || _shutdownSeverity(mode) > _shutdownSeverity(requested)) {
+    if (requested == null ||
+        _shutdownSeverity(mode) > _shutdownSeverity(requested)) {
       _requestedStopMode = mode;
     }
     if (existing != null) {
-      if (mode == CockpitDaemonShutdownMode.emergency &&
-          _server != null) {
+      if (mode == CockpitDaemonShutdownMode.emergency && _server != null) {
         // Do not silently downgrade a later emergency request to an earlier
         // drain. Force-closing the listener immediately stops accepting new
         // control requests while the original shutdown future finishes its
@@ -208,7 +208,8 @@ final class CockpitDaemonHost {
       final authorization = request.headers.value(
         HttpHeaders.authorizationHeader,
       );
-      final bearer = authorization != null && authorization.startsWith('Bearer ')
+      final bearer =
+          authorization != null && authorization.startsWith('Bearer ')
           ? authorization.substring('Bearer '.length)
           : '';
       if (!_constantTimeEquals(bearer, discovery.bearerToken)) {
@@ -316,7 +317,9 @@ final class CockpitDaemonHost {
 
 bool _constantTimeEquals(String actual, String expected) {
   var difference = actual.length ^ expected.length;
-  final length = actual.length < expected.length ? actual.length : expected.length;
+  final length = actual.length < expected.length
+      ? actual.length
+      : expected.length;
   for (var index = 0; index < length; index += 1) {
     difference |= actual.codeUnitAt(index) ^ expected.codeUnitAt(index);
   }

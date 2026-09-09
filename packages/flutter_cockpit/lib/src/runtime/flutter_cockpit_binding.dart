@@ -196,10 +196,9 @@ final class FlutterCockpitBinding {
     _activeRecordingSession = null;
     if (recording != null) {
       unawaited(
-        nativeRecording.stopRecording(session: recording).then<void>(
-          (_) {},
-          onError: (Object _, StackTrace _) {},
-        ),
+        nativeRecording
+            .stopRecording(session: recording)
+            .then<void>((_) {}, onError: (Object _, StackTrace _) {}),
       );
     }
     return result;
@@ -373,10 +372,9 @@ final class FlutterCockpitBinding {
       final active = _activeRecordingSession;
       if (active != null) {
         unawaited(
-          nativeRecording.stopRecording(session: active).then<void>(
-            (_) {},
-            onError: (Object _, StackTrace _) {},
-          ),
+          nativeRecording
+              .stopRecording(session: active)
+              .then<void>((_) {}, onError: (Object _, StackTrace _) {}),
         );
       }
       nativeRecording = nextNativeRecording;

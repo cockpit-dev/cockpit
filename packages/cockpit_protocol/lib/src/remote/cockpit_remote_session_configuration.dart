@@ -139,9 +139,7 @@ final class CockpitRemoteSessionConfiguration {
       _routePrefixDefine: const String.fromEnvironment(_routePrefixDefine),
       _launchIdDefine: const String.fromEnvironment(_launchIdDefine),
       _authTokenDefine: const String.fromEnvironment(_authTokenDefine),
-      _allowedOriginDefine: const String.fromEnvironment(
-        _allowedOriginDefine,
-      ),
+      _allowedOriginDefine: const String.fromEnvironment(_allowedOriginDefine),
     };
     values.removeWhere((_, value) => value.isEmpty);
     return values;

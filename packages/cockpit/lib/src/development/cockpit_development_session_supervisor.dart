@@ -301,13 +301,9 @@ final class CockpitDevelopmentSessionSupervisor {
     try {
       switch (mode) {
         case CockpitDevelopmentReloadMode.hotReload:
-          await machineClient.hotReload(appId: appId).timeout(
-            _reloadTimeout,
-          );
+          await machineClient.hotReload(appId: appId).timeout(_reloadTimeout);
         case CockpitDevelopmentReloadMode.hotRestart:
-          await machineClient.hotRestart(appId: appId).timeout(
-            _reloadTimeout,
-          );
+          await machineClient.hotRestart(appId: appId).timeout(_reloadTimeout);
       }
       final settled = await _requestSettle(
         lastReloadMode: mode,
@@ -547,13 +543,11 @@ final class CockpitDevelopmentSessionSupervisor {
     var stableRemoteReachableChecks = 0;
     var stableRemoteControlReadyChecks = 0;
 
-    while (
-      !ready &&
-      !_controlPlaneClosed &&
-      !_explicitStopRequested &&
-      !_detachRequested &&
-      _now().isBefore(deadline)
-    ) {
+    while (!ready &&
+        !_controlPlaneClosed &&
+        !_explicitStopRequested &&
+        !_detachRequested &&
+        _now().isBefore(deadline)) {
       remoteReachable = await _runSettleProbe(
         label: 'remote_reachability',
         probe: () => _remoteReachabilityProbe(_handle.baseUri),
@@ -681,10 +675,7 @@ final class CockpitDevelopmentSessionSupervisor {
     if (!_canProbeRemoteSession) {
       return;
     }
-    _requestSettle(
-      bumpGeneration: false,
-      timeout: _startupSettleTimeout,
-    );
+    _requestSettle(bumpGeneration: false, timeout: _startupSettleTimeout);
   }
 
   Future<bool> _requestSettle({
@@ -695,15 +686,16 @@ final class CockpitDevelopmentSessionSupervisor {
     final pending = _pendingStartupSettle;
     if (pending != null) return pending;
     late final Future<bool> settle;
-    settle = _settleReadyState(
-      lastReloadMode: lastReloadMode,
-      bumpGeneration: bumpGeneration,
-      timeout: timeout,
-    ).whenComplete(() {
-      if (identical(_pendingStartupSettle, settle)) {
-        _pendingStartupSettle = null;
-      }
-    });
+    settle =
+        _settleReadyState(
+          lastReloadMode: lastReloadMode,
+          bumpGeneration: bumpGeneration,
+          timeout: timeout,
+        ).whenComplete(() {
+          if (identical(_pendingStartupSettle, settle)) {
+            _pendingStartupSettle = null;
+          }
+        });
     _pendingStartupSettle = settle;
     return settle;
   }
@@ -934,10 +926,7 @@ final class CockpitDevelopmentSessionSupervisor {
       return;
     }
     unawaited(
-      logger(message).then<void>(
-        (_) {},
-        onError: (Object _, StackTrace _) {},
-      ),
+      logger(message).then<void>((_) {}, onError: (Object _, StackTrace _) {}),
     );
   }
 }

@@ -961,9 +961,7 @@ final class CockpitSupervisorRuntime
         break;
       } on Object {
         if (attempt == 2) break;
-        await Future<void>.delayed(
-          Duration(milliseconds: 50 * (attempt + 1)),
-        );
+        await Future<void>.delayed(Duration(milliseconds: 50 * (attempt + 1)));
       }
     }
     if (!terminalTruthWritten) {

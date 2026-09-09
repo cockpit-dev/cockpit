@@ -68,9 +68,12 @@ void main() {
       cases: <CockpitTestCaseProgram>[
         CockpitTestCaseProgram(
           id: 'save',
-          scenario: CockpitTestScenario(id: 'save-flow', body: (tester) async {
-            await tester.tap('#save');
-          }),
+          scenario: CockpitTestScenario(
+            id: 'save-flow',
+            body: (tester) async {
+              await tester.tap('#save');
+            },
+          ),
         ),
       ],
     );
@@ -90,32 +93,38 @@ void main() {
     expect(result.passed, isTrue);
   });
 
-  test('profile returns the adapter report and always stops the window', () async {
-    final performance = _FakePerformanceAdapter();
-    final tester = CockpitAutomationTester(
-      automation: _FakeAutomationAdapter(),
-      initialLocale: const CockpitLocaleProfile('en-US'),
-      performance: performance,
-    );
+  test(
+    'profile returns the adapter report and always stops the window',
+    () async {
+      final performance = _FakePerformanceAdapter();
+      final tester = CockpitAutomationTester(
+        automation: _FakeAutomationAdapter(),
+        initialLocale: const CockpitLocaleProfile('en-US'),
+        performance: performance,
+      );
 
-    final report = await tester.profile(() async {}, name: 'smoke');
+      final report = await tester.profile(() async {}, name: 'smoke');
 
-    expect(report.platform, 'android');
-    expect(performance.started, 1);
-    expect(performance.stopped, 1);
-  });
+      expect(report.platform, 'android');
+      expect(performance.started, 1);
+      expect(performance.stopped, 1);
+    },
+  );
 
-  test('profile reports an explicit capability failure without an adapter', () async {
-    final tester = CockpitAutomationTester(
-      automation: _FakeAutomationAdapter(),
-      initialLocale: const CockpitLocaleProfile('en-US'),
-    );
+  test(
+    'profile reports an explicit capability failure without an adapter',
+    () async {
+      final tester = CockpitAutomationTester(
+        automation: _FakeAutomationAdapter(),
+        initialLocale: const CockpitLocaleProfile('en-US'),
+      );
 
-    await expectLater(
-      tester.profile(() async {}),
-      throwsA(isA<CockpitTestCapabilityException>()),
-    );
-  });
+      await expectLater(
+        tester.profile(() async {}),
+        throwsA(isA<CockpitTestCapabilityException>()),
+      );
+    },
+  );
 }
 
 final class _FakeAutomationAdapter implements CockpitAutomationAdapter {

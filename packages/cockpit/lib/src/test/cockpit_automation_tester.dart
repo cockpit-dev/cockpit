@@ -65,18 +65,15 @@ class CockpitAutomationTester implements CockpitTester {
   Future<CockpitCommandExecution> press(
     CockpitTextInputAction action, {
     Object? target,
-  }) =>
-      _run(
-        CockpitCommandType.sendTextInputAction,
-        target: target,
-        parameters: <String, Object?>{'inputAction': action.name},
-      );
+  }) => _run(
+    CockpitCommandType.sendTextInputAction,
+    target: target,
+    parameters: <String, Object?>{'inputAction': action.name},
+  );
 
   @override
-  Future<CockpitCommandExecution> scroll(Object target) => _run(
-    CockpitCommandType.scrollUntilVisible,
-    target: target,
-  );
+  Future<CockpitCommandExecution> scroll(Object target) =>
+      _run(CockpitCommandType.scrollUntilVisible, target: target);
 
   @override
   Future<CockpitCommandExecution> waitForUi() =>
@@ -137,10 +134,7 @@ class CockpitAutomationTester implements CockpitTester {
     );
     final execution = await execute(command);
     if (!execution.result.success) {
-      throw CockpitTestCommandException(
-        command: command,
-        execution: execution,
-      );
+      throw CockpitTestCommandException(command: command, execution: execution);
     }
     return execution;
   }

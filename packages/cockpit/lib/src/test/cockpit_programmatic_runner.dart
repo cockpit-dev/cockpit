@@ -5,10 +5,7 @@ import 'cockpit_automation_tester.dart';
 
 /// Result for every case/locale attempt in a programmatic suite.
 final class CockpitSuiteRunResult {
-  const CockpitSuiteRunResult({
-    required this.suiteId,
-    required this.attempts,
-  });
+  const CockpitSuiteRunResult({required this.suiteId, required this.attempts});
 
   final String suiteId;
   final List<CockpitTestRunResult> attempts;
@@ -137,20 +134,23 @@ final class CockpitProgrammaticTestRunner implements CockpitTestRunner {
     }
     return switch (normalized.toLowerCase()) {
       'inappcontrol' || 'in-app-control' => capabilities.supportsInAppControl,
-      'flutterviewcapture' || 'flutter-view-capture' =>
-        capabilities.supportsFlutterViewCapture,
-      'nativescreencapture' || 'native-screen-capture' =>
-        capabilities.supportsNativeScreenCapture,
-      'hostautomation' || 'host-automation' =>
-        capabilities.supportsHostAutomation,
-      'viewportresize' || 'viewport-resize' =>
-        capabilities.supportsViewportResize,
+      'flutterviewcapture' ||
+      'flutter-view-capture' => capabilities.supportsFlutterViewCapture,
+      'nativescreencapture' ||
+      'native-screen-capture' => capabilities.supportsNativeScreenCapture,
+      'hostautomation' ||
+      'host-automation' => capabilities.supportsHostAutomation,
+      'viewportresize' ||
+      'viewport-resize' => capabilities.supportsViewportResize,
       _ => false,
     };
   }
 
   CockpitCommandType? _commandByName(String value) {
-    final normalized = value.toLowerCase().replaceAll('-', '').replaceAll('_', '');
+    final normalized = value
+        .toLowerCase()
+        .replaceAll('-', '')
+        .replaceAll('_', '');
     for (final command in CockpitCommandType.values) {
       if (command.name.toLowerCase() == normalized) return command;
     }
@@ -158,7 +158,10 @@ final class CockpitProgrammaticTestRunner implements CockpitTestRunner {
   }
 
   CockpitLocatorKind? _locatorByName(String value) {
-    final normalized = value.toLowerCase().replaceAll('-', '').replaceAll('_', '');
+    final normalized = value
+        .toLowerCase()
+        .replaceAll('-', '')
+        .replaceAll('_', '');
     final alias = switch (normalized) {
       'semantic' || 'semantics' => CockpitLocatorKind.semanticId,
       'testid' => CockpitLocatorKind.testId,

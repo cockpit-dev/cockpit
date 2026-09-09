@@ -39,7 +39,10 @@ final class CockpitRemoteSessionHandle {
     final uri = Uri.parse(baseUrl);
     if (authToken.isEmpty) return uri;
     return uri.replace(
-      queryParameters: <String, String>{...uri.queryParameters, 'token': authToken},
+      queryParameters: <String, String>{
+        ...uri.queryParameters,
+        'token': authToken,
+      },
     );
   }
 
