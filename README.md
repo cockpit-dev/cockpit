@@ -88,7 +88,9 @@ void main() {
 
 The facade supports structural and multi-condition selectors, hit-tested
 gestures, lazy and nested scrolling, assertions, snapshots, native screenshots,
-recording, viewport control, system actions, and per-call timeouts.
+recording, viewport control, system actions, and per-call timeouts. To reuse
+the same scenario on release builds and native black-box targets, author it
+against the platform-neutral [`cockpit_test`](packages/cockpit_test) contract.
 
 ## Choose a package
 
@@ -97,6 +99,7 @@ recording, viewport control, system actions, and per-call timeouts.
 | [`cockpit`](packages/cockpit) | CLI, Supervisor, drivers, MCP, REST/SSE, cases, suites, reports, and artifacts |
 | [`flutter_cockpit`](packages/flutter_cockpit) | In-app Flutter inspection and control bridge |
 | [`flutter_cockpit_test`](packages/flutter_cockpit_test) | Flutter `integration_test` with Cockpit selectors and native evidence |
+| [`cockpit_test`](packages/cockpit_test) | Platform-neutral programmatic scenarios reused across Flutter, remote, and system runners |
 | [`cockpit_protocol`](packages/cockpit_protocol) | Shared DTOs, schemas, test DSL, and OpenAPI |
 | [`cockpit_console`](packages/cockpit_console) | Independent desktop UI for sessions, runs, operations, logs, and network activity |
 
@@ -192,6 +195,7 @@ secret store.
 - [`cockpit` guide](packages/cockpit/README.md)
 - [`flutter_cockpit` guide](packages/flutter_cockpit/README.md)
 - [`flutter_cockpit_test` guide](packages/flutter_cockpit_test/README.md)
+- [`cockpit_test` guide](packages/cockpit_test/README.md)
 - [`cockpit_protocol` guide](packages/cockpit_protocol/README.md)
 - [`Cockpit Skill`](skills/cockpit/SKILL.md)
 - [`Agent integration guide`](docs/agent-integrations.md)

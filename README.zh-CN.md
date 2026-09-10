@@ -78,7 +78,8 @@ void main() {
 ```
 
 支持结构与多条件选择器、真实 hit-test 手势、懒加载和嵌套滚动、断言、快照、原生截图、
-录屏、viewport、系统操作，以及每次调用独立的 timeout。
+录屏、viewport、系统操作，以及每次调用独立的 timeout。如需把同一条场景复用到
+release 产物和原生黑盒目标，请使用平台中立的 [`cockpit_test`](packages/cockpit_test) 契约。
 
 ## 选择合适的包
 
@@ -87,6 +88,7 @@ void main() {
 | [`cockpit`](packages/cockpit) | CLI、Supervisor、driver、MCP、REST/SSE、case、suite、报告和 artifact |
 | [`flutter_cockpit`](packages/flutter_cockpit) | 应用内 Flutter 检查与控制 bridge |
 | [`flutter_cockpit_test`](packages/flutter_cockpit_test) | 带 Cockpit 选择器和原生证据的 Flutter `integration_test` |
+| [`cockpit_test`](packages/cockpit_test) | 平台中立的程序化测试场景，可跨 Flutter、远程和系统 runner 复用 |
 | [`cockpit_protocol`](packages/cockpit_protocol) | 共享 DTO、schema、测试 DSL 和 OpenAPI |
 | [`cockpit_console`](packages/cockpit_console) | 独立桌面 UI：session、run、operation、日志和网络活动 |
 
@@ -173,6 +175,7 @@ keychain 或 secret store。
 - [`cockpit` 指南](packages/cockpit/README.zh-CN.md)
 - [`flutter_cockpit` 指南](packages/flutter_cockpit/README.zh-CN.md)
 - [`flutter_cockpit_test` 指南](packages/flutter_cockpit_test/README.zh-CN.md)
+- [`cockpit_test` 指南](packages/cockpit_test/README.md)
 - [`cockpit_protocol` 指南](packages/cockpit_protocol/README.md)
 - [`Cockpit Skill`](skills/cockpit/SKILL.md)
 - [`Agent 接入指南`](docs/agent-integrations.md)

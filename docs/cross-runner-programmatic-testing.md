@@ -4,6 +4,16 @@
 only use selectors, protocol values, and the current locale; it must not import
 `WidgetTester`, `BuildContext`, or a native SDK.
 
+The authoring contract lives in
+[`packages/cockpit_test`](../packages/cockpit_test) (see its README for the
+full contract). Concrete execution ships one layer up:
+
+- [`packages/cockpit`](../packages/cockpit) provides
+  `CockpitProgrammaticTestRunner`, `RemoteCockpitTester`, and
+  `SystemCockpitTester` plus the process and device lifecycle around them.
+- [`packages/flutter_cockpit_test`](../packages/flutter_cockpit_test) keeps
+  the in-process `cockpitTestWidgets` facade for Flutter `integration_test`.
+
 ```dart
 final smoke = CockpitTestScenario(
   id: 'save-settings',
