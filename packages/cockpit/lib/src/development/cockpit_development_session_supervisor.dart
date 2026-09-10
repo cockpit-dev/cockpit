@@ -206,8 +206,11 @@ final class CockpitDevelopmentSessionSupervisor {
   Future<void> bindRemoteSession(
     CockpitRemoteSessionHandle remoteSessionHandle,
   ) async {
+    // Stored URLs stay raw so ownership invariants can compare them against
+    // the remote handle verbatim; the development handle's baseUri getter
+    // re-attaches the session token for authenticated clients.
     _handle = _handle.copyWith(
-      appBaseUrl: remoteSessionHandle.baseUri.toString(),
+      appBaseUrl: remoteSessionHandle.baseUrl,
       remoteSessionHandle: remoteSessionHandle,
     );
     _setStatus(
@@ -244,7 +247,7 @@ final class CockpitDevelopmentSessionSupervisor {
     final remoteSessionHandle = fallbackError?.remoteSessionHandle;
     if (remoteSessionHandle != null) {
       _handle = _handle.copyWith(
-        appBaseUrl: remoteSessionHandle.baseUri.toString(),
+        appBaseUrl: remoteSessionHandle.baseUrl,
         remoteSessionHandle: remoteSessionHandle,
       );
     }

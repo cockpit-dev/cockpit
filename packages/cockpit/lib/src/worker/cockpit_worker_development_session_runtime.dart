@@ -7,6 +7,7 @@ import '../application/cockpit_application_service_exception.dart';
 import '../application/cockpit_entrypoint_resolver.dart';
 import '../application/cockpit_launch_development_session_service.dart';
 import '../application/cockpit_platform_app_stopper.dart';
+import '../bridge/cockpit_web_remote_session_bridge_server.dart';
 import '../development/cockpit_development_session_handle.dart';
 import '../development/cockpit_development_session_machine_launcher.dart';
 import '../development/cockpit_platform_app_reachability.dart';
@@ -247,6 +248,14 @@ final class CockpitWorkerDevelopmentSessionRuntime {
         readiness: true,
       ),
       appReachabilityProbe: _appReachabilityProbe,
+      // The web bridge authenticates with the same launch token the app
+      // receives through FLUTTER_COCKPIT_REMOTE_AUTH_TOKEN, so the page's
+      // bridge connection and host probes share one credential.
+      webBridgeServerFactory: ({required handle}) =>
+          cockpitCreateWebRemoteSessionBridgeServer(
+            handle: handle,
+            authToken: developmentSessionId,
+          ),
       logger: (message) => _logSession(developmentSessionId, message),
       vmServiceObserver: (uri) {
         final profiler = _networkProfiler;

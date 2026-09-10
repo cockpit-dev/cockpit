@@ -66,6 +66,52 @@ void main() {
   );
 
   test(
+    'supervisor keeps the bound appBaseUrl raw when the remote session carries a token',
+    () async {
+      final harness = _MachineHarness(
+        remoteSessionHandle: CockpitRemoteSessionHandle(
+          platform: 'android',
+          deviceId: 'emulator-5554',
+          projectDir: '/workspace/examples/cockpit_demo',
+          target: 'lib/main.dart',
+          appId: 'dev.cockpit.cockpit_demo',
+          host: '127.0.0.1',
+          hostPort: 57331,
+          devicePort: 47331,
+          baseUrl: 'http://127.0.0.1:57331',
+          launchedAt: DateTime.utc(2026, 3, 23, 0, 0),
+          authToken: 'launch-token-9',
+        ),
+      );
+      addTearDown(harness.dispose);
+
+      final supervisor = CockpitDevelopmentSessionSupervisor(
+        initialHandle: harness.handle.copyWith(
+          appId: '',
+          remoteSessionHandle: null,
+        ),
+        machineClient: harness.client,
+        remoteReachabilityProbe: (_) async => true,
+        now: () => DateTime.utc(2026, 3, 23, 2, 30),
+        settleTimeout: const Duration(seconds: 2),
+        settlePollInterval: const Duration(milliseconds: 10),
+      );
+      addTearDown(supervisor.dispose);
+
+      await supervisor.start();
+      await supervisor.bindRemoteSession(harness.handle.remoteSessionHandle!);
+      await supervisor.waitForState(CockpitDevelopmentSessionState.ready);
+
+      final currentHandle = await supervisor.currentHandle();
+      // Ownership audits compare the stored appBaseUrl against the remote
+      // handle's raw baseUrl verbatim, so binding must not embed the token;
+      // the handle's baseUri getter attaches it for authenticated clients.
+      expect(currentHandle.appBaseUrl, 'http://127.0.0.1:57331');
+      expect(currentHandle.baseUri.queryParameters['token'], 'launch-token-9');
+    },
+  );
+
+  test(
     'supervisor clears stale lastError after bind and ready recovery',
     () async {
       final harness = _MachineHarness();

@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:cockpit_protocol/cockpit_protocol.dart';
 import 'package:cockpit_protocol/cockpit_remote_bridge_protocol.dart';
 import 'package:cockpit/src/bridge/cockpit_web_remote_session_bridge_server.dart';
+import 'package:cockpit/src/development/cockpit_development_session_handle.dart';
 import 'package:cockpit/src/recording/cockpit_host_recording_adapter.dart';
 import 'package:test/test.dart';
 
@@ -318,6 +319,99 @@ void main() {
       expect(tooManyConnections.statusCode, HttpStatus.tooManyRequests);
     },
   );
+
+  test(
+    'web bridge accepts browser origins when no origin allowlist is configured',
+    () async {
+      // Development launches never configure an allowlist: the Flutter tool
+      // serves the page from an ephemeral origin. Rejecting browser origins
+      // outright would keep the page's bridge connection out forever, so the
+      // session token stays the only gate.
+      final server = CockpitWebRemoteSessionBridgeServer(
+        bindHost: '127.0.0.1',
+        bindPort: 0,
+        authToken: 'bridge-secret',
+      );
+      await server.start();
+      addTearDown(server.close);
+
+      final browserOriginWithoutToken = await _readJsonResponse(
+        server.baseUri.resolve('/health'),
+        headers: const <String, String>{'origin': 'http://localhost:63119'},
+      );
+      expect(browserOriginWithoutToken.statusCode, HttpStatus.unauthorized);
+
+      final browserOriginWithToken = await _readJsonResponse(
+        server.baseUri.replace(
+          path: '${server.baseUri.path}/health',
+          queryParameters: const <String, String>{'token': 'bridge-secret'},
+        ),
+        headers: const <String, String>{'origin': 'http://localhost:63119'},
+      );
+      expect(browserOriginWithToken.statusCode, HttpStatus.serviceUnavailable);
+      expect(browserOriginWithToken.body['error'], 'bridgeUnavailable');
+
+      // Host-side probes authenticate with headers instead of the query
+      // string, mirroring the in-app remote session server's transports.
+      final headerToken = await _readJsonResponse(
+        server.baseUri.resolve('/health'),
+        headers: const <String, String>{'x-cockpit-token': 'bridge-secret'},
+      );
+      expect(headerToken.statusCode, HttpStatus.serviceUnavailable);
+      expect(headerToken.body['error'], 'bridgeUnavailable');
+
+      final bearerToken = await _readJsonResponse(
+        server.baseUri.resolve('/health'),
+        headers: const <String, String>{
+          HttpHeaders.authorizationHeader: 'Bearer bridge-secret',
+        },
+      );
+      expect(bearerToken.statusCode, HttpStatus.serviceUnavailable);
+      expect(bearerToken.body['error'], 'bridgeUnavailable');
+    },
+  );
+
+  test('web bridge factory prefers the explicit launch token', () async {
+    final handle = CockpitDevelopmentSessionHandle(
+      developmentSessionId: 'dev-session-1',
+      platform: 'web',
+      deviceId: 'chrome',
+      projectDir: '/workspace/app',
+      target: 'cockpit/main.dart',
+      appId: '',
+      appBaseUrl: 'http://127.0.0.1:40477',
+      supervisorBaseUrl: 'cockpit-worker://development/dev-session-1',
+      launchedAt: DateTime.utc(2026, 9, 10),
+      reloadGeneration: 0,
+    );
+
+    final bridge = cockpitCreateWebRemoteSessionBridgeServer(
+      handle: handle,
+      authToken: 'launch-token-9',
+    )!;
+    await bridge.start();
+    addTearDown(bridge.close);
+
+    expect(bridge.authToken, 'launch-token-9');
+    expect(bridge.connectUri.queryParameters['token'], 'launch-token-9');
+
+    final nativeHandle = CockpitDevelopmentSessionHandle(
+      developmentSessionId: 'dev-session-2',
+      platform: 'macos',
+      deviceId: 'macos',
+      projectDir: '/workspace/app',
+      target: 'cockpit/main.dart',
+      appId: '',
+      appBaseUrl: 'http://127.0.0.1:40478',
+      supervisorBaseUrl: 'cockpit-worker://development/dev-session-2',
+      launchedAt: DateTime.utc(2026, 9, 10),
+      reloadGeneration: 0,
+    );
+    expect(
+      cockpitCreateWebRemoteSessionBridgeServer(handle: nativeHandle),
+      isNull,
+    );
+  });
 
   test(
     'web bridge returns a structured prerequisite failure when host recording cannot start',

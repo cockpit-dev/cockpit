@@ -16,6 +16,7 @@ typedef CockpitBridgeArtifactTempFileFactory =
 
 CockpitWebRemoteSessionBridgeServer? cockpitCreateWebRemoteSessionBridgeServer({
   required CockpitDevelopmentSessionHandle handle,
+  String authToken = '',
 }) {
   if (handle.platform != 'web') {
     return null;
@@ -27,7 +28,9 @@ CockpitWebRemoteSessionBridgeServer? cockpitCreateWebRemoteSessionBridgeServer({
     recordingAdapter: cockpitResolveBrowserRecordingAdapter(
       deviceId: handle.deviceId,
     ),
-    authToken: handle.baseUri.queryParameters['token'] ?? '',
+    authToken: authToken.isNotEmpty
+        ? authToken
+        : handle.baseUri.queryParameters['token'] ?? '',
   );
 }
 
@@ -165,13 +168,28 @@ final class CockpitWebRemoteSessionBridgeServer {
   }
 
   bool _isAuthorized(HttpRequest request) {
-    final origin = request.headers.value('origin');
+    // The origin allowlist is enforced only when it is configured, and only
+    // against requests that carry a browser origin. The development bridge
+    // serves pages launched by the Flutter tool whose origins are not known
+    // up front, and host-side probes authenticate with the session token, so
+    // the credential remains the gate whenever no allowlist applies.
     final expectedOrigin = allowedOrigin;
-    if (origin != null && origin != 'null' && origin != expectedOrigin) {
-      return false;
+    if (expectedOrigin != null) {
+      final origin = request.headers.value('origin');
+      if (origin != null && origin != 'null' && origin != expectedOrigin) {
+        return false;
+      }
     }
     if (authToken.isEmpty) return true;
-    final provided = request.uri.queryParameters['token'];
+    // Browsers cannot attach headers to a WebSocket upgrade, so the page
+    // authenticates through the query string while host-side clients use the
+    // same header transports as the in-app remote session server.
+    final provided =
+        request.headers.value('x-cockpit-token') ??
+        request.headers
+            .value(HttpHeaders.authorizationHeader)
+            ?.replaceFirst(RegExp('^Bearer\\s+'), '') ??
+        request.uri.queryParameters['token'];
     return _constantTimeEquals(provided ?? '', authToken);
   }
 
