@@ -141,7 +141,8 @@ Future<void> runComplexFlow(CockpitTester cockpit, String taskTitle) async {
   await cockpit.waitForUi();
 }
 
-/// Asserts the plugin telemetry contract shared by both capture modes.
+/// Asserts plugin statistics and the retention contract shared by both
+/// capture modes.
 void expectPluginTelemetry(CockpitPerformanceReport report, String taskTitle) {
   final CockpitPerformancePluginStats dbStats = report.plugins.singleWhere(
     (CockpitPerformancePluginStats stats) => stats.id == dbWatcherPluginId,
@@ -158,12 +159,27 @@ void expectPluginTelemetry(CockpitPerformanceReport report, String taskTitle) {
   expect(uiStats.spanCount, greaterThan(0));
   expect(uiStats.counterCount, greaterThan(0));
 
-  final List<CockpitPerformanceEvent> dbEvents = report.events
+  if (report.archive != null) {
+    // A streamed report deliberately releases its in-memory event projection;
+    // the JSONL archive is the lossless source of truth for those records.
+    expect(report.events, isEmpty);
+    return;
+  }
+  expectPluginEvents(report.events, taskTitle);
+}
+
+/// Asserts the lossless plugin event contract from either a memory projection
+/// or the JSONL archive stream.
+void expectPluginEvents(
+  Iterable<CockpitPerformanceEvent> events,
+  String taskTitle,
+) {
+  final List<CockpitPerformanceEvent> dbEvents = events
       .where(
         (CockpitPerformanceEvent event) => event.source == dbWatcherPluginId,
       )
       .toList(growable: false);
-  final List<CockpitPerformanceEvent> uiEvents = report.events
+  final List<CockpitPerformanceEvent> uiEvents = events
       .where(
         (CockpitPerformanceEvent event) => event.source == milestonePluginId,
       )
@@ -229,12 +245,19 @@ Future<Map<String, Object?>> expectBundleExport(
     pluginIds,
     containsAll(<String>[dbWatcherPluginId, milestonePluginId]),
   );
-  expect(
-    (report['events']! as List<Object?>).cast<Map<String, Object?>>().any(
-      (Map<String, Object?> event) => event['src'] == dbWatcherPluginId,
-    ),
-    isTrue,
-  );
+  if (streamed) {
+    // A streamed export releases the in-memory event projection by design;
+    // the stream metadata is the pointer to the lossless JSONL records.
+    expect(report.containsKey('events'), isFalse);
+    expect(report.containsKey('frames'), isFalse);
+  } else {
+    expect(
+      (report['events']! as List<Object?>).cast<Map<String, Object?>>().any(
+        (Map<String, Object?> event) => event['src'] == dbWatcherPluginId,
+      ),
+      isTrue,
+    );
+  }
   final Object? extraError = extraReportChecks?.call(report);
   expect(extraError, isNull, reason: extraError?.toString());
   return report;
@@ -398,14 +421,13 @@ void main() {
       expect(endRecord['step'], 'plugin-streamed');
       expect(endRecord['build'], report.buildMode);
       expect(endRecord['mode'], report.mode.jsonValue);
-      expect(
-        (endRecord['retained']! as Map<String, Object?>)['events'],
-        report.events.length,
-      );
-      expect(
-        (endRecord['retained']! as Map<String, Object?>)['frames'],
-        report.frames.length,
-      );
+      final Map<String, Object?> retained =
+          endRecord['retained']! as Map<String, Object?>;
+      // The end record describes the bounded projection before the report
+      // releases its arrays for streamed captures.
+      expect(retained['events'], greaterThan(0));
+      expect(retained['events'], lessThanOrEqualTo(32));
+      expect(retained['frames'], greaterThan(0));
       expect(
         streamEvents.any(
           (Map<String, Object?> event) => event['src'] == dbWatcherPluginId,
@@ -420,6 +442,10 @@ void main() {
               event['p'] == 'X',
         ),
         isTrue,
+      );
+      expectPluginEvents(
+        streamEvents.map(CockpitPerformanceEvent.fromJson),
+        taskTitle,
       );
 
       // Regression guard for the streaming timeline parser: VM timeline
