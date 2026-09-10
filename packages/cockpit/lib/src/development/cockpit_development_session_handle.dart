@@ -62,7 +62,24 @@ final class CockpitDevelopmentSessionHandle {
   final DateTime? lastReloadAt;
   final int reloadGeneration;
 
-  Uri get baseUri => Uri.parse(appBaseUrl);
+  /// The app endpoint, authenticated for the remote control session.
+  ///
+  /// Development apps can expose a remote control plane that requires the
+  /// session token; probes and clients built from this view must stay
+  /// authenticated, while the stored [appBaseUrl] remains unauthenticated.
+  Uri get baseUri {
+    final uri = Uri.parse(appBaseUrl);
+    final authToken = remoteSessionHandle?.authToken ?? '';
+    if (authToken.isEmpty || uri.queryParameters['token'] != null) {
+      return uri;
+    }
+    return uri.replace(
+      queryParameters: <String, String>{
+        ...uri.queryParameters,
+        'token': authToken,
+      },
+    );
+  }
 
   Uri get supervisorBaseUri => Uri.parse(supervisorBaseUrl);
 

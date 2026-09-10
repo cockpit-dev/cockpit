@@ -55,7 +55,10 @@ final class CockpitQueryRemoteSessionService {
       androidDeviceId: request.androidDeviceId,
       iosDeviceId: request.iosDeviceId,
     );
-    final status = await _statusReader(resolved.baseUri);
+    final status = await _statusReader(
+      resolved.baseUri,
+      authToken: resolved.sessionHandle?.authToken ?? '',
+    );
 
     return CockpitQueryRemoteSessionResult(
       status: status,

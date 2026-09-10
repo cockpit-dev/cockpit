@@ -148,7 +148,10 @@ final class CockpitLaunchRemoteSessionService {
       }
       Error.throwWithStackTrace(error, stackTrace);
     }
-    final health = await _statusReader(sessionHandle.baseUri);
+    final health = await _statusReader(
+      sessionHandle.baseUri,
+      authToken: sessionHandle.authToken,
+    );
     final persistedHandlePath = await _persistHandleIfRequested(
       path: request.persistHandlePath,
       handle: sessionHandle,

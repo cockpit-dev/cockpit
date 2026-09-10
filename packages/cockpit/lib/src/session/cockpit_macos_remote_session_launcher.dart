@@ -151,6 +151,7 @@ final class CockpitMacosRemoteSessionLauncher
         statusReader: _statusReader,
         expectedSessionId: options.launchId,
         expectedPlatform: options.platform,
+        authToken: options.launchId,
       );
       return CockpitRemoteSessionHandle.fromRemoteStatus(
         projectDir: options.projectDir,
@@ -163,6 +164,7 @@ final class CockpitMacosRemoteSessionLauncher
         devicePort: options.sessionPort,
         status: status,
         launchedAt: _now(),
+        authToken: options.launchId,
       );
     } on Object {
       await _bestEffortStopRunningApp(

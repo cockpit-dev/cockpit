@@ -198,7 +198,10 @@ final class CockpitLaunchAppService {
       return error.remoteStatus;
     }
     try {
-      return await _remoteStatusReader(remoteSessionHandle.baseUri);
+      return await _remoteStatusReader(
+        remoteSessionHandle.baseUri,
+        authToken: remoteSessionHandle.authToken,
+      );
     } on Object {
       return null;
     }

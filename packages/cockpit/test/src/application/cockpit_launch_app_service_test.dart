@@ -112,24 +112,25 @@ void main() {
         remoteService: CockpitLaunchRemoteSessionService(
           entrypointResolver: CockpitEntrypointResolver(exists: (_) => true),
           launcher: _FakeRemoteSessionLauncher(remoteHandle),
-          statusReader: (_) async => CockpitRemoteSessionStatus(
-            sessionId: 'ios-profile-session',
-            platform: 'ios',
-            transportType: 'remoteHttp',
-            currentRouteName: '/inbox',
-            capabilities: CockpitCapabilities(
-              platform: 'ios',
-              transportType: 'remoteHttp',
-              supportsInAppControl: true,
-              supportsFlutterViewCapture: true,
-              supportsNativeScreenCapture: true,
-              supportsHostAutomation: false,
-            ),
-            recordingCapabilities: CockpitRecordingCapabilities(
-              supportsNativeRecording: true,
-            ),
-            snapshot: CockpitSnapshot(routeName: '/inbox'),
-          ),
+          statusReader: (_, {String authToken = ''}) async =>
+              CockpitRemoteSessionStatus(
+                sessionId: 'ios-profile-session',
+                platform: 'ios',
+                transportType: 'remoteHttp',
+                currentRouteName: '/inbox',
+                capabilities: CockpitCapabilities(
+                  platform: 'ios',
+                  transportType: 'remoteHttp',
+                  supportsInAppControl: true,
+                  supportsFlutterViewCapture: true,
+                  supportsNativeScreenCapture: true,
+                  supportsHostAutomation: false,
+                ),
+                recordingCapabilities: CockpitRecordingCapabilities(
+                  supportsNativeRecording: true,
+                ),
+                snapshot: CockpitSnapshot(routeName: '/inbox'),
+              ),
         ),
       );
 
@@ -228,24 +229,25 @@ void main() {
         remoteService: CockpitLaunchRemoteSessionService(
           entrypointResolver: CockpitEntrypointResolver(exists: (_) => true),
           launcher: _FakeRemoteSessionLauncher(remoteHandle),
-          statusReader: (_) async => CockpitRemoteSessionStatus(
-            sessionId: 'ios-profile-session',
-            platform: 'ios',
-            transportType: 'remoteHttp',
-            currentRouteName: '/inbox',
-            capabilities: CockpitCapabilities(
-              platform: 'ios',
-              transportType: 'remoteHttp',
-              supportsInAppControl: true,
-              supportsFlutterViewCapture: true,
-              supportsNativeScreenCapture: true,
-              supportsHostAutomation: false,
-            ),
-            recordingCapabilities: CockpitRecordingCapabilities(
-              supportsNativeRecording: true,
-            ),
-            snapshot: CockpitSnapshot(routeName: '/inbox'),
-          ),
+          statusReader: (_, {String authToken = ''}) async =>
+              CockpitRemoteSessionStatus(
+                sessionId: 'ios-profile-session',
+                platform: 'ios',
+                transportType: 'remoteHttp',
+                currentRouteName: '/inbox',
+                capabilities: CockpitCapabilities(
+                  platform: 'ios',
+                  transportType: 'remoteHttp',
+                  supportsInAppControl: true,
+                  supportsFlutterViewCapture: true,
+                  supportsNativeScreenCapture: true,
+                  supportsHostAutomation: false,
+                ),
+                recordingCapabilities: CockpitRecordingCapabilities(
+                  supportsNativeRecording: true,
+                ),
+                snapshot: CockpitSnapshot(routeName: '/inbox'),
+              ),
         ),
       );
 
@@ -299,7 +301,7 @@ void main() {
             onLaunch: (_) => remoteLaunchCount += 1,
           ),
         ),
-        remoteStatusReader: (baseUri) async {
+        remoteStatusReader: (baseUri, {String authToken = ''}) async {
           remoteStatusReadCount += 1;
           expect(baseUri, remoteHandle.baseUri);
           return CockpitRemoteSessionStatus(
@@ -374,7 +376,7 @@ void main() {
             onLaunch: (_) => remoteLaunchCount += 1,
           ),
         ),
-        remoteStatusReader: (_) async {
+        remoteStatusReader: (_, {String authToken = ''}) async {
           throw StateError('transient health probe failure');
         },
       );
@@ -427,24 +429,25 @@ void main() {
           entrypointResolver: CockpitEntrypointResolver(exists: (_) => true),
           launcher: _CapturingRemoteSessionLauncher(onLaunch: (_) {}),
         ),
-        remoteStatusReader: (_) async => CockpitRemoteSessionStatus(
-          sessionId: 'ios-profile-session',
-          platform: 'ios',
-          transportType: 'remoteHttp',
-          currentRouteName: '/inbox',
-          capabilities: CockpitCapabilities(
-            platform: 'ios',
-            transportType: 'remoteHttp',
-            supportsInAppControl: true,
-            supportsFlutterViewCapture: true,
-            supportsNativeScreenCapture: true,
-            supportsHostAutomation: false,
-          ),
-          recordingCapabilities: CockpitRecordingCapabilities(
-            supportsNativeRecording: true,
-          ),
-          snapshot: CockpitSnapshot(routeName: '/inbox'),
-        ),
+        remoteStatusReader: (_, {String authToken = ''}) async =>
+            CockpitRemoteSessionStatus(
+              sessionId: 'ios-profile-session',
+              platform: 'ios',
+              transportType: 'remoteHttp',
+              currentRouteName: '/inbox',
+              capabilities: CockpitCapabilities(
+                platform: 'ios',
+                transportType: 'remoteHttp',
+                supportsInAppControl: true,
+                supportsFlutterViewCapture: true,
+                supportsNativeScreenCapture: true,
+                supportsHostAutomation: false,
+              ),
+              recordingCapabilities: CockpitRecordingCapabilities(
+                supportsNativeRecording: true,
+              ),
+              snapshot: CockpitSnapshot(routeName: '/inbox'),
+            ),
       );
 
       final result = await service.launch(
@@ -504,24 +507,25 @@ void main() {
             onLaunch: (_) => remoteLaunchCount += 1,
           ),
         ),
-        remoteStatusReader: (_) async => CockpitRemoteSessionStatus(
-          sessionId: 'ios-profile-session',
-          platform: 'ios',
-          transportType: 'remoteHttp',
-          currentRouteName: '/inbox',
-          capabilities: CockpitCapabilities(
-            platform: 'ios',
-            transportType: 'remoteHttp',
-            supportsInAppControl: true,
-            supportsFlutterViewCapture: true,
-            supportsNativeScreenCapture: true,
-            supportsHostAutomation: false,
-          ),
-          recordingCapabilities: CockpitRecordingCapabilities(
-            supportsNativeRecording: true,
-          ),
-          snapshot: CockpitSnapshot(routeName: '/inbox'),
-        ),
+        remoteStatusReader: (_, {String authToken = ''}) async =>
+            CockpitRemoteSessionStatus(
+              sessionId: 'ios-profile-session',
+              platform: 'ios',
+              transportType: 'remoteHttp',
+              currentRouteName: '/inbox',
+              capabilities: CockpitCapabilities(
+                platform: 'ios',
+                transportType: 'remoteHttp',
+                supportsInAppControl: true,
+                supportsFlutterViewCapture: true,
+                supportsNativeScreenCapture: true,
+                supportsHostAutomation: false,
+              ),
+              recordingCapabilities: CockpitRecordingCapabilities(
+                supportsNativeRecording: true,
+              ),
+              snapshot: CockpitSnapshot(routeName: '/inbox'),
+            ),
       );
 
       await expectLater(

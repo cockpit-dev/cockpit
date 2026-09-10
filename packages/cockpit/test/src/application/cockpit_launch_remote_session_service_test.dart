@@ -107,7 +107,7 @@ void main() {
       final service = CockpitLaunchRemoteSessionService(
         entrypointResolver: CockpitEntrypointResolver(exists: (_) => true),
         launcher: _FakeRemoteSessionLauncher(expectedHandle),
-        statusReader: (baseUri) async {
+        statusReader: (baseUri, {String authToken = ''}) async {
           expect(baseUri.toString(), expectedHandle.baseUrl);
           return expectedStatus;
         },
@@ -180,7 +180,7 @@ void main() {
               path == '/workspace/examples/cockpit_demo/cockpit/main.dart',
         ),
         launcher: _FakeRemoteSessionLauncher(expectedHandle),
-        statusReader: (_) async => expectedStatus,
+        statusReader: (_, {String authToken = ''}) async => expectedStatus,
       );
 
       final result = await service.launch(
@@ -228,24 +228,25 @@ void main() {
           capturedOptions = options;
         },
       ),
-      statusReader: (_) async => CockpitRemoteSessionStatus(
-        sessionId: 'launch-demo',
-        platform: 'macos',
-        transportType: 'remoteHttp',
-        currentRouteName: '/home',
-        capabilities: CockpitCapabilities(
-          platform: 'macos',
-          transportType: 'remoteHttp',
-          supportsInAppControl: true,
-          supportsFlutterViewCapture: true,
-          supportsNativeScreenCapture: true,
-          supportsHostAutomation: true,
-        ),
-        recordingCapabilities: CockpitRecordingCapabilities(
-          supportsNativeRecording: true,
-        ),
-        snapshot: CockpitSnapshot(routeName: '/home'),
-      ),
+      statusReader: (_, {String authToken = ''}) async =>
+          CockpitRemoteSessionStatus(
+            sessionId: 'launch-demo',
+            platform: 'macos',
+            transportType: 'remoteHttp',
+            currentRouteName: '/home',
+            capabilities: CockpitCapabilities(
+              platform: 'macos',
+              transportType: 'remoteHttp',
+              supportsInAppControl: true,
+              supportsFlutterViewCapture: true,
+              supportsNativeScreenCapture: true,
+              supportsHostAutomation: true,
+            ),
+            recordingCapabilities: CockpitRecordingCapabilities(
+              supportsNativeRecording: true,
+            ),
+            snapshot: CockpitSnapshot(routeName: '/home'),
+          ),
     );
 
     await service.launch(
@@ -288,24 +289,25 @@ void main() {
             capturedOptions = options;
           },
         ),
-        statusReader: (_) async => CockpitRemoteSessionStatus(
-          sessionId: 'remote-ios-sim',
-          platform: 'ios',
-          transportType: 'remoteHttp',
-          currentRouteName: '/',
-          capabilities: CockpitCapabilities(
-            platform: 'ios',
-            transportType: 'remoteHttp',
-            supportsInAppControl: true,
-            supportsFlutterViewCapture: true,
-            supportsNativeScreenCapture: true,
-            supportsHostAutomation: false,
-          ),
-          recordingCapabilities: CockpitRecordingCapabilities(
-            supportsNativeRecording: true,
-          ),
-          snapshot: CockpitSnapshot(routeName: '/'),
-        ),
+        statusReader: (_, {String authToken = ''}) async =>
+            CockpitRemoteSessionStatus(
+              sessionId: 'remote-ios-sim',
+              platform: 'ios',
+              transportType: 'remoteHttp',
+              currentRouteName: '/',
+              capabilities: CockpitCapabilities(
+                platform: 'ios',
+                transportType: 'remoteHttp',
+                supportsInAppControl: true,
+                supportsFlutterViewCapture: true,
+                supportsNativeScreenCapture: true,
+                supportsHostAutomation: false,
+              ),
+              recordingCapabilities: CockpitRecordingCapabilities(
+                supportsNativeRecording: true,
+              ),
+              snapshot: CockpitSnapshot(routeName: '/'),
+            ),
         sessionPortAvailabilityChecker: (_) async => false,
         sessionPortAllocator: () async => 59331,
       );
@@ -363,7 +365,8 @@ void main() {
             capturedOptions = options;
           },
         ),
-        statusReader: (_) async => _status(platform: 'linux'),
+        statusReader: (_, {String authToken = ''}) async =>
+            _status(platform: 'linux'),
       );
 
       await service.launch(

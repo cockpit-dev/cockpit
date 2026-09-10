@@ -39,8 +39,9 @@ final class CockpitSessionReferenceResolver {
     String? iosDeviceId,
   }) async {
     if (sessionHandle != null) {
-      final resolvedBaseUri =
-          baseUri ?? await _resolvedBaseUriForSession(sessionHandle);
+      final resolvedBaseUri = baseUri == null
+          ? await _resolvedBaseUriForSession(sessionHandle)
+          : _withSessionToken(baseUri, sessionHandle);
       return CockpitResolvedSessionReference(
         baseUri: resolvedBaseUri,
         sessionHandle: _withResolvedBaseUri(sessionHandle, resolvedBaseUri),
@@ -49,8 +50,9 @@ final class CockpitSessionReferenceResolver {
 
     if (sessionHandlePath != null && sessionHandlePath.isNotEmpty) {
       final resolvedHandle = await readSessionHandle(sessionHandlePath);
-      final resolvedBaseUri =
-          baseUri ?? await _resolvedBaseUriForSession(resolvedHandle);
+      final resolvedBaseUri = baseUri == null
+          ? await _resolvedBaseUriForSession(resolvedHandle)
+          : _withSessionToken(baseUri, resolvedHandle);
       return CockpitResolvedSessionReference(
         baseUri: resolvedBaseUri,
         sessionHandle: _withResolvedBaseUri(resolvedHandle, resolvedBaseUri),
@@ -114,6 +116,22 @@ final class CockpitSessionReferenceResolver {
     return baseUri.replace(host: connection.tunnelIpAddress);
   }
 
+  /// An explicit baseUri may come from an app reference that carries the raw
+  /// endpoint without credentials; a session handle knows its own token, so
+  /// merge the token query parameter back in before any client call.
+  Uri _withSessionToken(Uri baseUri, CockpitRemoteSessionHandle handle) {
+    final authToken = handle.authToken;
+    if (authToken.isEmpty || baseUri.queryParameters['token'] != null) {
+      return baseUri;
+    }
+    return baseUri.replace(
+      queryParameters: <String, String>{
+        ...baseUri.queryParameters,
+        'token': authToken,
+      },
+    );
+  }
+
   Future<Uri> _resolvedBaseUriForSession(
     CockpitRemoteSessionHandle handle,
   ) async {
@@ -125,12 +143,9 @@ final class CockpitSessionReferenceResolver {
       preferredHostPort: handle.hostPort,
       devicePort: handle.devicePort,
     );
-    return Uri(
-      scheme: handle.baseUri.scheme,
-      host: '127.0.0.1',
-      port: hostPort,
-      path: handle.baseUri.path,
-    );
+    // Keep the full resolved URI, including any token query parameter, so the
+    // forwarded endpoint stays authenticated exactly like the original one.
+    return handle.baseUri.replace(host: '127.0.0.1', port: hostPort);
   }
 
   CockpitRemoteSessionHandle _withResolvedBaseUri(

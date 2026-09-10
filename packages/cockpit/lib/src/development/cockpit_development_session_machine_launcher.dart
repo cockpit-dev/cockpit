@@ -362,6 +362,7 @@ final class CockpitDevelopmentSessionMachineLauncher {
       devicePort: request.sessionPort,
       status: status,
       launchedAt: _now(),
+      authToken: request.launchId,
     );
   }
 
@@ -472,7 +473,10 @@ final class CockpitDevelopmentSessionMachineLauncher {
       }
       probeAttempts += 1;
       try {
-        final status = await _statusReader(baseUri).timeout(remaining);
+        final status = await _statusReader(
+          baseUri,
+          authToken: request.launchId ?? '',
+        ).timeout(remaining);
         if (_remoteStatusMatchesRequest(request: request, status: status)) {
           await _logDiagnostic(
             'remote_status_probe ready base_url=$baseUri '
@@ -641,6 +645,7 @@ final class CockpitDevelopmentSessionMachineLauncher {
       devicePort: request.sessionPort,
       status: status,
       launchedAt: _now(),
+      authToken: request.launchId,
     );
   }
 

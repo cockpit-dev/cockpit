@@ -286,12 +286,10 @@ final class CockpitAppReferenceResolver {
       preferredHostPort: preferredHostPort,
       devicePort: devicePort,
     );
-    return Uri(
-      scheme: app.baseUri.scheme,
-      host: '127.0.0.1',
-      port: hostPort,
-      path: app.baseUri.path,
-    );
+    // Keep the full source URI, including any token query parameter, so the
+    // forwarded endpoint stays authenticated exactly like the original one.
+    final sourceUri = remoteSessionHandle?.baseUri ?? app.baseUri;
+    return sourceUri.replace(host: '127.0.0.1', port: hostPort);
   }
 
   Future<Uri> _resolvedPhysicalIosBaseUri(
@@ -308,11 +306,10 @@ final class CockpitAppReferenceResolver {
     if (connection == null || !connection.hasReachableTunnel) {
       return remoteSessionHandle?.baseUri ?? app.baseUri;
     }
-    return Uri(
-      scheme: (remoteSessionHandle?.baseUri ?? app.baseUri).scheme,
+    final sourceUri = remoteSessionHandle?.baseUri ?? app.baseUri;
+    return sourceUri.replace(
       host: connection.tunnelIpAddress!,
       port: remoteSessionHandle?.hostPort ?? app.baseUri.port,
-      path: (remoteSessionHandle?.baseUri ?? app.baseUri).path,
     );
   }
 

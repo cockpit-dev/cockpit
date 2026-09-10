@@ -136,4 +136,84 @@ void main() {
       expect(handle.platformAppId, isNull);
     },
   );
+
+  test('app handle baseUri carries the remote session token', () {
+    final remoteSession = CockpitRemoteSessionHandle(
+      platform: 'macos',
+      deviceId: 'macos',
+      projectDir: '/workspace/app',
+      target: 'cockpit/main.dart',
+      appId: 'dev.example.app',
+      host: '127.0.0.1',
+      hostPort: 57331,
+      devicePort: 57331,
+      baseUrl: 'http://127.0.0.1:57331',
+      launchedAt: DateTime.utc(2026, 4, 5),
+      authToken: 'launch-token-1',
+    );
+    final handle = CockpitAppHandle(
+      appId: 'dev.example.app',
+      mode: CockpitAppMode.automation,
+      platform: 'macos',
+      deviceId: 'macos',
+      projectDir: '/workspace/app',
+      target: 'cockpit/main.dart',
+      baseUrl: 'http://127.0.0.1:57331',
+      launchedAt: DateTime.utc(2026, 4, 5),
+      remoteSession: remoteSession,
+    );
+
+    expect(
+      handle.baseUri,
+      Uri.parse('http://127.0.0.1:57331?token=launch-token-1'),
+    );
+    // The stored endpoint stays unauthenticated; only the view merges the
+    // token so persisted handles keep a stable identity.
+    expect(handle.baseUrl, 'http://127.0.0.1:57331');
+  });
+
+  test('app handle baseUri keeps an existing token and existing query', () {
+    final remoteSession = CockpitRemoteSessionHandle(
+      platform: 'android',
+      deviceId: 'emulator-5554',
+      projectDir: '/workspace/app',
+      target: 'cockpit/main.dart',
+      appId: 'dev.example.app',
+      host: '127.0.0.1',
+      hostPort: 57331,
+      devicePort: 47331,
+      baseUrl: 'http://127.0.0.1:57331',
+      launchedAt: DateTime.utc(2026, 4, 5),
+      authToken: 'launch-token-1',
+    );
+    final tokenized = CockpitAppHandle(
+      appId: 'dev.example.app',
+      mode: CockpitAppMode.automation,
+      platform: 'android',
+      deviceId: 'emulator-5554',
+      projectDir: '/workspace/app',
+      target: 'cockpit/main.dart',
+      baseUrl: 'http://127.0.0.1:57331?token=launch-token-1',
+      launchedAt: DateTime.utc(2026, 4, 5),
+      remoteSession: remoteSession,
+    );
+    final unauthenticated = CockpitAppHandle(
+      appId: 'dev.example.app',
+      mode: CockpitAppMode.automation,
+      platform: 'android',
+      deviceId: 'emulator-5554',
+      projectDir: '/workspace/app',
+      target: 'cockpit/main.dart',
+      baseUrl: 'http://127.0.0.1:57331',
+      launchedAt: DateTime.utc(2026, 4, 5),
+    );
+
+    // Merging is idempotent: an endpoint that already carries the token is
+    // returned unchanged, so re-resolving a tokenized handle cannot stack
+    // duplicate query parameters.
+    expect(tokenized.baseUri.queryParametersAll['token'], <String>[
+      'launch-token-1',
+    ]);
+    expect(unauthenticated.baseUri, Uri.parse('http://127.0.0.1:57331'));
+  });
 }

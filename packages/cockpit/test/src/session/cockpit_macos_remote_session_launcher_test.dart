@@ -12,6 +12,7 @@ void main() {
     'macos remote session launcher builds, opens, and returns a handle',
     () async {
       final invocations = <String>[];
+      final readerAuthTokens = <String>[];
       Map<String, Object?>? startInvocation;
       final launcher = CockpitMacosRemoteSessionLauncher(
         flutterVersionReader: () async => '3.38.9',
@@ -46,27 +47,31 @@ void main() {
               };
               return null;
             },
-        statusReader: (baseUri) async => CockpitRemoteSessionStatus(
-          sessionId: 'macos-bootstrap-session',
-          platform: 'macos',
-          transportType: 'remoteHttp',
-          currentRouteName: '/home',
-          capabilities: CockpitCapabilities(
+        statusReader: (baseUri, {String authToken = ''}) async {
+          readerAuthTokens.add(authToken);
+          return CockpitRemoteSessionStatus(
+            sessionId: 'launch-token-9',
             platform: 'macos',
             transportType: 'remoteHttp',
-            supportsInAppControl: true,
-            supportsFlutterViewCapture: true,
-            supportsNativeScreenCapture: true,
-            supportsHostAutomation: true,
-            supportedCommands: <CockpitCommandType>[CockpitCommandType.tap],
-            supportedLocatorStrategies: CockpitLocatorKind.values,
-          ),
-          recordingCapabilities: CockpitRecordingCapabilities(
-            supportsNativeRecording: true,
-            preferredAcceptanceRecordingKind: CockpitRecordingKind.nativeScreen,
-          ),
-          snapshot: CockpitSnapshot(routeName: '/home'),
-        ),
+            currentRouteName: '/home',
+            capabilities: CockpitCapabilities(
+              platform: 'macos',
+              transportType: 'remoteHttp',
+              supportsInAppControl: true,
+              supportsFlutterViewCapture: true,
+              supportsNativeScreenCapture: true,
+              supportsHostAutomation: true,
+              supportedCommands: <CockpitCommandType>[CockpitCommandType.tap],
+              supportedLocatorStrategies: CockpitLocatorKind.values,
+            ),
+            recordingCapabilities: CockpitRecordingCapabilities(
+              supportsNativeRecording: true,
+              preferredAcceptanceRecordingKind:
+                  CockpitRecordingKind.nativeScreen,
+            ),
+            snapshot: CockpitSnapshot(routeName: '/home'),
+          );
+        },
       );
 
       final handle = await launcher.launch(
@@ -76,6 +81,7 @@ void main() {
           platform: 'macos',
           deviceId: 'macos',
           sessionPort: 47331,
+          launchId: 'launch-token-9',
         ),
       );
 
@@ -83,10 +89,18 @@ void main() {
       expect(handle.deviceId, 'macos');
       expect(handle.appId, 'dev.cockpit.cockpitDemo');
       expect(handle.baseUrl, 'http://127.0.0.1:47331');
+      // Readiness probes and the returned handle must authenticate with the
+      // launch token, not with the session id reported by the app.
+      expect(readerAuthTokens, isNotEmpty);
+      expect(
+        readerAuthTokens.every((token) => token == 'launch-token-9'),
+        isTrue,
+      );
+      expect(handle.authToken, 'launch-token-9');
       expect(
         invocations,
         contains(
-          'flutter build macos --debug --target cockpit/main.dart --dart-define=FLUTTER_COCKPIT_REMOTE_ENABLED=true --dart-define=FLUTTER_COCKPIT_REMOTE_HOST=127.0.0.1 --dart-define=FLUTTER_COCKPIT_REMOTE_PORT=47331 --dart-define=FLUTTER_COCKPIT_FLUTTER_VERSION=3.38.9',
+          'flutter build macos --debug --target cockpit/main.dart --dart-define=FLUTTER_COCKPIT_REMOTE_ENABLED=true --dart-define=FLUTTER_COCKPIT_REMOTE_HOST=127.0.0.1 --dart-define=FLUTTER_COCKPIT_REMOTE_PORT=47331 --dart-define=FLUTTER_COCKPIT_REMOTE_LAUNCH_ID=launch-token-9 --dart-define=FLUTTER_COCKPIT_REMOTE_AUTH_TOKEN=launch-token-9 --dart-define=FLUTTER_COCKPIT_FLUTTER_VERSION=3.38.9',
         ),
       );
       expect(
@@ -130,24 +144,25 @@ void main() {
                 '$projectDir/build/macos/Build/Products/Debug/cockpit_demo.app',
         bundleIdResolver: ({required String appBundlePath}) async =>
             'dev.cockpit.cockpitDemo',
-        statusReader: (baseUri) async => CockpitRemoteSessionStatus(
-          sessionId: 'macos-sdk-session',
-          platform: 'macos',
-          transportType: 'remoteHttp',
-          currentRouteName: '/home',
-          capabilities: CockpitCapabilities(
-            platform: 'macos',
-            transportType: 'remoteHttp',
-            supportsInAppControl: true,
-            supportsFlutterViewCapture: true,
-            supportsNativeScreenCapture: true,
-            supportsHostAutomation: true,
-          ),
-          recordingCapabilities: CockpitRecordingCapabilities(
-            supportsNativeRecording: true,
-          ),
-          snapshot: CockpitSnapshot(routeName: '/home'),
-        ),
+        statusReader: (baseUri, {String authToken = ''}) async =>
+            CockpitRemoteSessionStatus(
+              sessionId: 'macos-sdk-session',
+              platform: 'macos',
+              transportType: 'remoteHttp',
+              currentRouteName: '/home',
+              capabilities: CockpitCapabilities(
+                platform: 'macos',
+                transportType: 'remoteHttp',
+                supportsInAppControl: true,
+                supportsFlutterViewCapture: true,
+                supportsNativeScreenCapture: true,
+                supportsHostAutomation: true,
+              ),
+              recordingCapabilities: CockpitRecordingCapabilities(
+                supportsNativeRecording: true,
+              ),
+              snapshot: CockpitSnapshot(routeName: '/home'),
+            ),
       );
 
       await launcher.launch(
@@ -209,24 +224,25 @@ void main() {
                 '$projectDir/build/macos/Build/Products/Debug/cockpit_demo.app',
         bundleIdResolver: ({required String appBundlePath}) async =>
             'dev.cockpit.cockpitDemo',
-        statusReader: (baseUri) async => CockpitRemoteSessionStatus(
-          sessionId: 'macos-cache-retry-session',
-          platform: 'macos',
-          transportType: 'remoteHttp',
-          currentRouteName: '/home',
-          capabilities: CockpitCapabilities(
-            platform: 'macos',
-            transportType: 'remoteHttp',
-            supportsInAppControl: true,
-            supportsFlutterViewCapture: true,
-            supportsNativeScreenCapture: true,
-            supportsHostAutomation: true,
-          ),
-          recordingCapabilities: CockpitRecordingCapabilities(
-            supportsNativeRecording: true,
-          ),
-          snapshot: CockpitSnapshot(routeName: '/home'),
-        ),
+        statusReader: (baseUri, {String authToken = ''}) async =>
+            CockpitRemoteSessionStatus(
+              sessionId: 'macos-cache-retry-session',
+              platform: 'macos',
+              transportType: 'remoteHttp',
+              currentRouteName: '/home',
+              capabilities: CockpitCapabilities(
+                platform: 'macos',
+                transportType: 'remoteHttp',
+                supportsInAppControl: true,
+                supportsFlutterViewCapture: true,
+                supportsNativeScreenCapture: true,
+                supportsHostAutomation: true,
+              ),
+              recordingCapabilities: CockpitRecordingCapabilities(
+                supportsNativeRecording: true,
+              ),
+              snapshot: CockpitSnapshot(routeName: '/home'),
+            ),
       );
 
       await launcher.launch(
@@ -326,24 +342,25 @@ void main() {
           resolvedBundlePath = appBundlePath;
           return 'dev.cockpit.orbitStaging';
         },
-        statusReader: (baseUri) async => CockpitRemoteSessionStatus(
-          sessionId: 'macos-staging-session',
-          platform: 'macos',
-          transportType: 'remoteHttp',
-          currentRouteName: '/home',
-          capabilities: CockpitCapabilities(
-            platform: 'macos',
-            transportType: 'remoteHttp',
-            supportsInAppControl: true,
-            supportsFlutterViewCapture: true,
-            supportsNativeScreenCapture: true,
-            supportsHostAutomation: true,
-          ),
-          recordingCapabilities: CockpitRecordingCapabilities(
-            supportsNativeRecording: true,
-          ),
-          snapshot: CockpitSnapshot(routeName: '/home'),
-        ),
+        statusReader: (baseUri, {String authToken = ''}) async =>
+            CockpitRemoteSessionStatus(
+              sessionId: 'macos-staging-session',
+              platform: 'macos',
+              transportType: 'remoteHttp',
+              currentRouteName: '/home',
+              capabilities: CockpitCapabilities(
+                platform: 'macos',
+                transportType: 'remoteHttp',
+                supportsInAppControl: true,
+                supportsFlutterViewCapture: true,
+                supportsNativeScreenCapture: true,
+                supportsHostAutomation: true,
+              ),
+              recordingCapabilities: CockpitRecordingCapabilities(
+                supportsNativeRecording: true,
+              ),
+              snapshot: CockpitSnapshot(routeName: '/home'),
+            ),
       );
 
       await launcher.launch(
@@ -409,24 +426,25 @@ void main() {
           resolvedBundlePath = appBundlePath;
           return 'dev.cockpit.cockpitDemo';
         },
-        statusReader: (baseUri) async => CockpitRemoteSessionStatus(
-          sessionId: 'macos-latest-session',
-          platform: 'macos',
-          transportType: 'remoteHttp',
-          currentRouteName: '/home',
-          capabilities: CockpitCapabilities(
-            platform: 'macos',
-            transportType: 'remoteHttp',
-            supportsInAppControl: true,
-            supportsFlutterViewCapture: true,
-            supportsNativeScreenCapture: true,
-            supportsHostAutomation: true,
-          ),
-          recordingCapabilities: CockpitRecordingCapabilities(
-            supportsNativeRecording: true,
-          ),
-          snapshot: CockpitSnapshot(routeName: '/home'),
-        ),
+        statusReader: (baseUri, {String authToken = ''}) async =>
+            CockpitRemoteSessionStatus(
+              sessionId: 'macos-latest-session',
+              platform: 'macos',
+              transportType: 'remoteHttp',
+              currentRouteName: '/home',
+              capabilities: CockpitCapabilities(
+                platform: 'macos',
+                transportType: 'remoteHttp',
+                supportsInAppControl: true,
+                supportsFlutterViewCapture: true,
+                supportsNativeScreenCapture: true,
+                supportsHostAutomation: true,
+              ),
+              recordingCapabilities: CockpitRecordingCapabilities(
+                supportsNativeRecording: true,
+              ),
+              snapshot: CockpitSnapshot(routeName: '/home'),
+            ),
       );
 
       await launcher.launch(
@@ -495,24 +513,25 @@ void main() {
           resolvedBundlePath = appBundlePath;
           return 'dev.cockpit.orbit';
         },
-        statusReader: (baseUri) async => CockpitRemoteSessionStatus(
-          sessionId: 'macos-nested-session',
-          platform: 'macos',
-          transportType: 'remoteHttp',
-          currentRouteName: '/home',
-          capabilities: CockpitCapabilities(
-            platform: 'macos',
-            transportType: 'remoteHttp',
-            supportsInAppControl: true,
-            supportsFlutterViewCapture: true,
-            supportsNativeScreenCapture: true,
-            supportsHostAutomation: true,
-          ),
-          recordingCapabilities: CockpitRecordingCapabilities(
-            supportsNativeRecording: true,
-          ),
-          snapshot: CockpitSnapshot(routeName: '/home'),
-        ),
+        statusReader: (baseUri, {String authToken = ''}) async =>
+            CockpitRemoteSessionStatus(
+              sessionId: 'macos-nested-session',
+              platform: 'macos',
+              transportType: 'remoteHttp',
+              currentRouteName: '/home',
+              capabilities: CockpitCapabilities(
+                platform: 'macos',
+                transportType: 'remoteHttp',
+                supportsInAppControl: true,
+                supportsFlutterViewCapture: true,
+                supportsNativeScreenCapture: true,
+                supportsHostAutomation: true,
+              ),
+              recordingCapabilities: CockpitRecordingCapabilities(
+                supportsNativeRecording: true,
+              ),
+              snapshot: CockpitSnapshot(routeName: '/home'),
+            ),
       );
 
       await launcher.launch(
@@ -571,24 +590,25 @@ void main() {
               };
               return 6101;
             },
-        statusReader: (baseUri) async => CockpitRemoteSessionStatus(
-          sessionId: 'macos-launch-config',
-          platform: 'macos',
-          transportType: 'remoteHttp',
-          currentRouteName: '/home',
-          capabilities: CockpitCapabilities(
-            platform: 'macos',
-            transportType: 'remoteHttp',
-            supportsInAppControl: true,
-            supportsFlutterViewCapture: true,
-            supportsNativeScreenCapture: true,
-            supportsHostAutomation: true,
-          ),
-          recordingCapabilities: CockpitRecordingCapabilities(
-            supportsNativeRecording: true,
-          ),
-          snapshot: CockpitSnapshot(routeName: '/home'),
-        ),
+        statusReader: (baseUri, {String authToken = ''}) async =>
+            CockpitRemoteSessionStatus(
+              sessionId: 'macos-launch-config',
+              platform: 'macos',
+              transportType: 'remoteHttp',
+              currentRouteName: '/home',
+              capabilities: CockpitCapabilities(
+                platform: 'macos',
+                transportType: 'remoteHttp',
+                supportsInAppControl: true,
+                supportsFlutterViewCapture: true,
+                supportsNativeScreenCapture: true,
+                supportsHostAutomation: true,
+              ),
+              recordingCapabilities: CockpitRecordingCapabilities(
+                supportsNativeRecording: true,
+              ),
+              snapshot: CockpitSnapshot(routeName: '/home'),
+            ),
       );
 
       final handle = await launcher.launch(

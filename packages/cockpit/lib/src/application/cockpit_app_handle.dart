@@ -51,7 +51,25 @@ final class CockpitAppHandle {
   final CockpitDevelopmentSessionHandle? developmentSession;
   final CockpitRemoteSessionHandle? remoteSession;
 
-  Uri get baseUri => Uri.parse(baseUrl);
+  /// The network endpoint for this app, authenticated for its remote session.
+  ///
+  /// Remote-control apps reject requests that lack the session token, so the
+  /// endpoint handed to clients carries the token query parameter whenever the
+  /// app is bound to a remote session that knows one. The stored [baseUrl]
+  /// stays unauthenticated; only this view merges credentials.
+  Uri get baseUri {
+    final uri = Uri.parse(baseUrl);
+    final authToken = remoteSession?.authToken ?? '';
+    if (authToken.isEmpty || uri.queryParameters['token'] != null) {
+      return uri;
+    }
+    return uri.replace(
+      queryParameters: <String, String>{
+        ...uri.queryParameters,
+        'token': authToken,
+      },
+    );
+  }
 
   bool get supportsHotReload => mode == CockpitAppMode.development;
 

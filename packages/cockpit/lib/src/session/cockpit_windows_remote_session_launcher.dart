@@ -124,6 +124,7 @@ final class CockpitWindowsRemoteSessionLauncher
         statusReader: _statusReader,
         expectedSessionId: options.launchId,
         expectedPlatform: options.platform,
+        authToken: options.launchId,
       );
       return CockpitRemoteSessionHandle.fromRemoteStatus(
         projectDir: options.projectDir,
@@ -136,6 +137,7 @@ final class CockpitWindowsRemoteSessionLauncher
         devicePort: options.sessionPort,
         status: status,
         launchedAt: _now(),
+        authToken: options.launchId,
       );
     } on Object {
       _bestEffortKillLaunchedApp(processId);

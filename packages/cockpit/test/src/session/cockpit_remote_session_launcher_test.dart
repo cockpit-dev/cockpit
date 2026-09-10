@@ -152,27 +152,29 @@ exit 0
               apkPath:
                   '/workspace/examples/cockpit_demo/build/app/outputs/flutter-apk/app-debug.apk',
             ),
-        statusReader: (baseUri) async => CockpitRemoteSessionStatus(
-          sessionId: 'android-bootstrap-session',
-          platform: 'android',
-          transportType: 'remoteHttp',
-          currentRouteName: '/home',
-          capabilities: CockpitCapabilities(
-            platform: 'android',
-            transportType: 'remoteHttp',
-            supportsInAppControl: true,
-            supportsFlutterViewCapture: true,
-            supportsNativeScreenCapture: true,
-            supportsHostAutomation: false,
-            supportedCommands: <CockpitCommandType>[CockpitCommandType.tap],
-            supportedLocatorStrategies: CockpitLocatorKind.values,
-          ),
-          recordingCapabilities: CockpitRecordingCapabilities(
-            supportsNativeRecording: true,
-            preferredAcceptanceRecordingKind: CockpitRecordingKind.nativeScreen,
-          ),
-          snapshot: CockpitSnapshot(routeName: '/home'),
-        ),
+        statusReader: (baseUri, {String authToken = ''}) async =>
+            CockpitRemoteSessionStatus(
+              sessionId: 'android-bootstrap-session',
+              platform: 'android',
+              transportType: 'remoteHttp',
+              currentRouteName: '/home',
+              capabilities: CockpitCapabilities(
+                platform: 'android',
+                transportType: 'remoteHttp',
+                supportsInAppControl: true,
+                supportsFlutterViewCapture: true,
+                supportsNativeScreenCapture: true,
+                supportsHostAutomation: false,
+                supportedCommands: <CockpitCommandType>[CockpitCommandType.tap],
+                supportedLocatorStrategies: CockpitLocatorKind.values,
+              ),
+              recordingCapabilities: CockpitRecordingCapabilities(
+                supportsNativeRecording: true,
+                preferredAcceptanceRecordingKind:
+                    CockpitRecordingKind.nativeScreen,
+              ),
+              snapshot: CockpitSnapshot(routeName: '/home'),
+            ),
       );
 
       final handle = await launcher.launch(
@@ -242,7 +244,8 @@ exit 0
               apkPath:
                   '/workspace/examples/cockpit_demo/build/app/outputs/flutter-apk/app-debug.apk',
             ),
-        statusReader: (baseUri) async => _readyStatus('android'),
+        statusReader: (baseUri, {String authToken = ''}) async =>
+            _readyStatus('android'),
       );
 
       await launcher.launch(
@@ -291,27 +294,29 @@ exit 0
         },
         bundleIdResolver: ({required String appBundlePath}) async =>
             'dev.cockpit.cockpitDemo',
-        statusReader: (baseUri) async => CockpitRemoteSessionStatus(
-          sessionId: 'ios-bootstrap-session',
-          platform: 'ios',
-          transportType: 'remoteHttp',
-          currentRouteName: '/home',
-          capabilities: CockpitCapabilities(
-            platform: 'ios',
-            transportType: 'remoteHttp',
-            supportsInAppControl: true,
-            supportsFlutterViewCapture: true,
-            supportsNativeScreenCapture: true,
-            supportsHostAutomation: false,
-            supportedCommands: <CockpitCommandType>[CockpitCommandType.tap],
-            supportedLocatorStrategies: CockpitLocatorKind.values,
-          ),
-          recordingCapabilities: CockpitRecordingCapabilities(
-            supportsNativeRecording: true,
-            preferredAcceptanceRecordingKind: CockpitRecordingKind.nativeScreen,
-          ),
-          snapshot: CockpitSnapshot(routeName: '/home'),
-        ),
+        statusReader: (baseUri, {String authToken = ''}) async =>
+            CockpitRemoteSessionStatus(
+              sessionId: 'ios-bootstrap-session',
+              platform: 'ios',
+              transportType: 'remoteHttp',
+              currentRouteName: '/home',
+              capabilities: CockpitCapabilities(
+                platform: 'ios',
+                transportType: 'remoteHttp',
+                supportsInAppControl: true,
+                supportsFlutterViewCapture: true,
+                supportsNativeScreenCapture: true,
+                supportsHostAutomation: false,
+                supportedCommands: <CockpitCommandType>[CockpitCommandType.tap],
+                supportedLocatorStrategies: CockpitLocatorKind.values,
+              ),
+              recordingCapabilities: CockpitRecordingCapabilities(
+                supportsNativeRecording: true,
+                preferredAcceptanceRecordingKind:
+                    CockpitRecordingKind.nativeScreen,
+              ),
+              snapshot: CockpitSnapshot(routeName: '/home'),
+            ),
       );
 
       final handle = await launcher.launch(
@@ -375,7 +380,8 @@ exit 0
         },
         bundleIdResolver: ({required String appBundlePath}) async =>
             'dev.cockpit.cockpitDemo',
-        statusReader: (baseUri) async => _readyStatus('ios'),
+        statusReader: (baseUri, {String authToken = ''}) async =>
+            _readyStatus('ios'),
       );
 
       await launcher.launch(
@@ -418,7 +424,7 @@ exit 0
             '/workspace/examples/cockpit_demo/build/ios/iphonesimulator/Runner.app',
         bundleIdResolver: ({required String appBundlePath}) async =>
             'dev.cockpit.cockpitDemo',
-        statusReader: (_) async =>
+        statusReader: (_, {String authToken = ''}) async =>
             throw StateError('status should not be read'),
         now: () => DateTime.utc(2026, 3, 24, 12),
       );
@@ -475,7 +481,8 @@ exit 0
         },
         bundleIdResolver: ({required String appBundlePath}) async =>
             'dev.cockpit.cockpitDemo',
-        statusReader: (baseUri) async => _readyStatus('ios'),
+        statusReader: (baseUri, {String authToken = ''}) async =>
+            _readyStatus('ios'),
       );
 
       await launcher.launch(
@@ -531,27 +538,29 @@ exit 0
         },
         bundleIdResolver: ({required String appBundlePath}) async =>
             'dev.cockpit.cockpitDemo',
-        statusReader: (baseUri) async => CockpitRemoteSessionStatus(
-          sessionId: 'ios-device-bootstrap-session',
-          platform: 'ios',
-          transportType: 'remoteHttp',
-          currentRouteName: '/home',
-          capabilities: CockpitCapabilities(
-            platform: 'ios',
-            transportType: 'remoteHttp',
-            supportsInAppControl: true,
-            supportsFlutterViewCapture: true,
-            supportsNativeScreenCapture: true,
-            supportsHostAutomation: false,
-            supportedCommands: <CockpitCommandType>[CockpitCommandType.tap],
-            supportedLocatorStrategies: CockpitLocatorKind.values,
-          ),
-          recordingCapabilities: CockpitRecordingCapabilities(
-            supportsNativeRecording: true,
-            preferredAcceptanceRecordingKind: CockpitRecordingKind.nativeScreen,
-          ),
-          snapshot: CockpitSnapshot(routeName: '/home'),
-        ),
+        statusReader: (baseUri, {String authToken = ''}) async =>
+            CockpitRemoteSessionStatus(
+              sessionId: 'ios-device-bootstrap-session',
+              platform: 'ios',
+              transportType: 'remoteHttp',
+              currentRouteName: '/home',
+              capabilities: CockpitCapabilities(
+                platform: 'ios',
+                transportType: 'remoteHttp',
+                supportsInAppControl: true,
+                supportsFlutterViewCapture: true,
+                supportsNativeScreenCapture: true,
+                supportsHostAutomation: false,
+                supportedCommands: <CockpitCommandType>[CockpitCommandType.tap],
+                supportedLocatorStrategies: CockpitLocatorKind.values,
+              ),
+              recordingCapabilities: CockpitRecordingCapabilities(
+                supportsNativeRecording: true,
+                preferredAcceptanceRecordingKind:
+                    CockpitRecordingKind.nativeScreen,
+              ),
+              snapshot: CockpitSnapshot(routeName: '/home'),
+            ),
       );
 
       final handle = await launcher.launch(
@@ -597,7 +606,7 @@ exit 0
             '/workspace/examples/cockpit_demo/build/ios/iphoneos/Runner.app',
         bundleIdResolver: ({required String appBundlePath}) async =>
             'dev.cockpit.cockpitDemo',
-        statusReader: (_) async =>
+        statusReader: (_, {String authToken = ''}) async =>
             throw StateError('status should not be read'),
         now: () => DateTime.utc(2026, 3, 24, 12),
       );
@@ -662,7 +671,8 @@ exit 0
               return ProcessResult(0, 0, '', '');
             },
         portForwarder: _FakeAndroidPortForwarder(forwardedHostPort: 58421),
-        statusReader: (baseUri) async => _readyStatus('android'),
+        statusReader: (baseUri, {String authToken = ''}) async =>
+            _readyStatus('android'),
       );
 
       final handle = await launcher.launch(
@@ -713,7 +723,8 @@ exit 0
             apkPath:
                 '/workspace/examples/cockpit_demo/build/app/outputs/flutter-apk/app-debug.apk',
           ),
-      statusReader: (_) async => throw StateError('status should not be read'),
+      statusReader: (_, {String authToken = ''}) async =>
+          throw StateError('status should not be read'),
       now: () => DateTime.utc(2026, 3, 24, 12),
     );
 
@@ -779,7 +790,8 @@ exit 0
           resolvedAppBundlePath = appBundlePath;
           return 'dev.cockpit.orbitStaging';
         },
-        statusReader: (baseUri) async => _readyStatus('ios'),
+        statusReader: (baseUri, {String authToken = ''}) async =>
+            _readyStatus('ios'),
       );
 
       final handle = await launcher.launch(
@@ -846,7 +858,8 @@ exit 0
         resolvedAppBundlePath = appBundlePath;
         return 'dev.cockpit.cockpitDemo';
       },
-      statusReader: (baseUri) async => _readyStatus('ios'),
+      statusReader: (baseUri, {String authToken = ''}) async =>
+          _readyStatus('ios'),
     );
 
     await launcher.launch(
@@ -902,7 +915,8 @@ exit 0
         resolvedAppBundlePath = appBundlePath;
         return 'dev.cockpit.cockpitDemo';
       },
-      statusReader: (baseUri) async => _readyStatus('ios'),
+      statusReader: (baseUri, {String authToken = ''}) async =>
+          _readyStatus('ios'),
     );
 
     await launcher.launch(
@@ -1140,7 +1154,7 @@ exit 0
             cockpitWaitForRemoteSessionReady(
               baseUri: Uri.parse('http://127.0.0.1:47331'),
               timeout: const Duration(milliseconds: 50),
-              statusReader: (_) =>
+              statusReader: (_, {String authToken = ''}) =>
                   Completer<CockpitRemoteSessionStatus>().future,
             ).timeout(
               const Duration(milliseconds: 120),
@@ -1160,7 +1174,8 @@ exit 0
             cockpitWaitForRemoteSessionReady(
               baseUri: Uri.parse('http://127.0.0.1:47331'),
               timeout: const Duration(milliseconds: 50),
-              statusReader: (_) async => throw StateError('still booting'),
+              statusReader: (_, {String authToken = ''}) async =>
+                  throw StateError('still booting'),
             ).timeout(
               const Duration(milliseconds: 120),
               onTimeout: () => throw StateError(
@@ -1182,7 +1197,7 @@ exit 0
         timeout: const Duration(seconds: 1),
         expectedSessionId: 'new-session',
         expectedPlatform: 'macos',
-        statusReader: (_) async {
+        statusReader: (_, {String authToken = ''}) async {
           reads += 1;
           if (reads == 1) {
             return _readyStatus('macos', sessionId: 'old-session');
@@ -1225,7 +1240,8 @@ exit 0
                   applicationId: 'dev.cockpit.demo',
                   apkPath: '/tmp/app-debug.apk',
                 ),
-        statusReader: (_) async => _readyStatus('android'),
+        statusReader: (_, {String authToken = ''}) async =>
+            _readyStatus('android'),
       );
 
       await launcher.launch(

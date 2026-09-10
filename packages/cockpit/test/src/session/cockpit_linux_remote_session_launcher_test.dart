@@ -41,27 +41,29 @@ void main() {
               );
               return 5101;
             },
-        statusReader: (baseUri) async => CockpitRemoteSessionStatus(
-          sessionId: 'linux-bootstrap-session',
-          platform: 'linux',
-          transportType: 'remoteHttp',
-          currentRouteName: '/home',
-          capabilities: CockpitCapabilities(
-            platform: 'linux',
-            transportType: 'remoteHttp',
-            supportsInAppControl: true,
-            supportsFlutterViewCapture: true,
-            supportsNativeScreenCapture: true,
-            supportsHostAutomation: true,
-            supportedCommands: <CockpitCommandType>[CockpitCommandType.tap],
-            supportedLocatorStrategies: CockpitLocatorKind.values,
-          ),
-          recordingCapabilities: CockpitRecordingCapabilities(
-            supportsNativeRecording: true,
-            preferredAcceptanceRecordingKind: CockpitRecordingKind.nativeScreen,
-          ),
-          snapshot: CockpitSnapshot(routeName: '/home'),
-        ),
+        statusReader: (baseUri, {String authToken = ''}) async =>
+            CockpitRemoteSessionStatus(
+              sessionId: 'linux-bootstrap-session',
+              platform: 'linux',
+              transportType: 'remoteHttp',
+              currentRouteName: '/home',
+              capabilities: CockpitCapabilities(
+                platform: 'linux',
+                transportType: 'remoteHttp',
+                supportsInAppControl: true,
+                supportsFlutterViewCapture: true,
+                supportsNativeScreenCapture: true,
+                supportsHostAutomation: true,
+                supportedCommands: <CockpitCommandType>[CockpitCommandType.tap],
+                supportedLocatorStrategies: CockpitLocatorKind.values,
+              ),
+              recordingCapabilities: CockpitRecordingCapabilities(
+                supportsNativeRecording: true,
+                preferredAcceptanceRecordingKind:
+                    CockpitRecordingKind.nativeScreen,
+              ),
+              snapshot: CockpitSnapshot(routeName: '/home'),
+            ),
       );
 
       final handle = await launcher.launch(
@@ -125,24 +127,25 @@ void main() {
               Map<String, String>? environment,
               required Duration timeout,
             }) async => 5101,
-        statusReader: (baseUri) async => CockpitRemoteSessionStatus(
-          sessionId: 'linux-sdk-session',
-          platform: 'linux',
-          transportType: 'remoteHttp',
-          currentRouteName: '/home',
-          capabilities: CockpitCapabilities(
-            platform: 'linux',
-            transportType: 'remoteHttp',
-            supportsInAppControl: true,
-            supportsFlutterViewCapture: true,
-            supportsNativeScreenCapture: true,
-            supportsHostAutomation: true,
-          ),
-          recordingCapabilities: CockpitRecordingCapabilities(
-            supportsNativeRecording: true,
-          ),
-          snapshot: CockpitSnapshot(routeName: '/home'),
-        ),
+        statusReader: (baseUri, {String authToken = ''}) async =>
+            CockpitRemoteSessionStatus(
+              sessionId: 'linux-sdk-session',
+              platform: 'linux',
+              transportType: 'remoteHttp',
+              currentRouteName: '/home',
+              capabilities: CockpitCapabilities(
+                platform: 'linux',
+                transportType: 'remoteHttp',
+                supportsInAppControl: true,
+                supportsFlutterViewCapture: true,
+                supportsNativeScreenCapture: true,
+                supportsHostAutomation: true,
+              ),
+              recordingCapabilities: CockpitRecordingCapabilities(
+                supportsNativeRecording: true,
+              ),
+              snapshot: CockpitSnapshot(routeName: '/home'),
+            ),
       );
 
       await launcher.launch(
@@ -257,24 +260,25 @@ void main() {
               launchedExecutable = executablePath;
               return 9002;
             },
-        statusReader: (baseUri) async => CockpitRemoteSessionStatus(
-          sessionId: 'linux-bootstrap-session',
-          platform: 'linux',
-          transportType: 'remoteHttp',
-          currentRouteName: '/home',
-          capabilities: CockpitCapabilities(
-            platform: 'linux',
-            transportType: 'remoteHttp',
-            supportsInAppControl: true,
-            supportsFlutterViewCapture: true,
-            supportsNativeScreenCapture: true,
-            supportsHostAutomation: true,
-          ),
-          recordingCapabilities: CockpitRecordingCapabilities(
-            supportsNativeRecording: true,
-          ),
-          snapshot: CockpitSnapshot(routeName: '/home'),
-        ),
+        statusReader: (baseUri, {String authToken = ''}) async =>
+            CockpitRemoteSessionStatus(
+              sessionId: 'linux-bootstrap-session',
+              platform: 'linux',
+              transportType: 'remoteHttp',
+              currentRouteName: '/home',
+              capabilities: CockpitCapabilities(
+                platform: 'linux',
+                transportType: 'remoteHttp',
+                supportsInAppControl: true,
+                supportsFlutterViewCapture: true,
+                supportsNativeScreenCapture: true,
+                supportsHostAutomation: true,
+              ),
+              recordingCapabilities: CockpitRecordingCapabilities(
+                supportsNativeRecording: true,
+              ),
+              snapshot: CockpitSnapshot(routeName: '/home'),
+            ),
       );
 
       await launcher.launch(
@@ -325,24 +329,25 @@ void main() {
               runtimeEnvironment = environment;
               return 5101;
             },
-        statusReader: (baseUri) async => CockpitRemoteSessionStatus(
-          sessionId: 'linux-launch-config',
-          platform: 'linux',
-          transportType: 'remoteHttp',
-          currentRouteName: '/home',
-          capabilities: CockpitCapabilities(
-            platform: 'linux',
-            transportType: 'remoteHttp',
-            supportsInAppControl: true,
-            supportsFlutterViewCapture: true,
-            supportsNativeScreenCapture: true,
-            supportsHostAutomation: true,
-          ),
-          recordingCapabilities: CockpitRecordingCapabilities(
-            supportsNativeRecording: true,
-          ),
-          snapshot: CockpitSnapshot(routeName: '/home'),
-        ),
+        statusReader: (baseUri, {String authToken = ''}) async =>
+            CockpitRemoteSessionStatus(
+              sessionId: 'linux-launch-config',
+              platform: 'linux',
+              transportType: 'remoteHttp',
+              currentRouteName: '/home',
+              capabilities: CockpitCapabilities(
+                platform: 'linux',
+                transportType: 'remoteHttp',
+                supportsInAppControl: true,
+                supportsFlutterViewCapture: true,
+                supportsNativeScreenCapture: true,
+                supportsHostAutomation: true,
+              ),
+              recordingCapabilities: CockpitRecordingCapabilities(
+                supportsNativeRecording: true,
+              ),
+              snapshot: CockpitSnapshot(routeName: '/home'),
+            ),
       );
 
       await launcher.launch(

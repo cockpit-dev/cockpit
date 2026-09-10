@@ -178,6 +178,7 @@ final class CockpitIosPhysicalRemoteSessionLauncher
         statusReader: _statusReader,
         expectedSessionId: options.launchId,
         expectedPlatform: options.platform,
+        authToken: options.launchId,
       );
 
       return CockpitRemoteSessionHandle.fromRemoteStatus(
@@ -190,6 +191,7 @@ final class CockpitIosPhysicalRemoteSessionLauncher
         devicePort: options.sessionPort,
         status: status,
         launchedAt: _now(),
+        authToken: options.launchId,
       );
     } on Object {
       if (connection.isWired) {

@@ -42,27 +42,29 @@ void main() {
               );
               return 4101;
             },
-        statusReader: (baseUri) async => CockpitRemoteSessionStatus(
-          sessionId: 'windows-bootstrap-session',
-          platform: 'windows',
-          transportType: 'remoteHttp',
-          currentRouteName: '/home',
-          capabilities: CockpitCapabilities(
-            platform: 'windows',
-            transportType: 'remoteHttp',
-            supportsInAppControl: true,
-            supportsFlutterViewCapture: true,
-            supportsNativeScreenCapture: true,
-            supportsHostAutomation: true,
-            supportedCommands: <CockpitCommandType>[CockpitCommandType.tap],
-            supportedLocatorStrategies: CockpitLocatorKind.values,
-          ),
-          recordingCapabilities: CockpitRecordingCapabilities(
-            supportsNativeRecording: true,
-            preferredAcceptanceRecordingKind: CockpitRecordingKind.nativeScreen,
-          ),
-          snapshot: CockpitSnapshot(routeName: '/home'),
-        ),
+        statusReader: (baseUri, {String authToken = ''}) async =>
+            CockpitRemoteSessionStatus(
+              sessionId: 'windows-bootstrap-session',
+              platform: 'windows',
+              transportType: 'remoteHttp',
+              currentRouteName: '/home',
+              capabilities: CockpitCapabilities(
+                platform: 'windows',
+                transportType: 'remoteHttp',
+                supportsInAppControl: true,
+                supportsFlutterViewCapture: true,
+                supportsNativeScreenCapture: true,
+                supportsHostAutomation: true,
+                supportedCommands: <CockpitCommandType>[CockpitCommandType.tap],
+                supportedLocatorStrategies: CockpitLocatorKind.values,
+              ),
+              recordingCapabilities: CockpitRecordingCapabilities(
+                supportsNativeRecording: true,
+                preferredAcceptanceRecordingKind:
+                    CockpitRecordingKind.nativeScreen,
+              ),
+              snapshot: CockpitSnapshot(routeName: '/home'),
+            ),
       );
 
       final handle = await launcher.launch(
@@ -126,24 +128,25 @@ void main() {
               Map<String, String>? environment,
               required Duration timeout,
             }) async => 4101,
-        statusReader: (baseUri) async => CockpitRemoteSessionStatus(
-          sessionId: 'windows-sdk-session',
-          platform: 'windows',
-          transportType: 'remoteHttp',
-          currentRouteName: '/home',
-          capabilities: CockpitCapabilities(
-            platform: 'windows',
-            transportType: 'remoteHttp',
-            supportsInAppControl: true,
-            supportsFlutterViewCapture: true,
-            supportsNativeScreenCapture: true,
-            supportsHostAutomation: true,
-          ),
-          recordingCapabilities: CockpitRecordingCapabilities(
-            supportsNativeRecording: true,
-          ),
-          snapshot: CockpitSnapshot(routeName: '/home'),
-        ),
+        statusReader: (baseUri, {String authToken = ''}) async =>
+            CockpitRemoteSessionStatus(
+              sessionId: 'windows-sdk-session',
+              platform: 'windows',
+              transportType: 'remoteHttp',
+              currentRouteName: '/home',
+              capabilities: CockpitCapabilities(
+                platform: 'windows',
+                transportType: 'remoteHttp',
+                supportsInAppControl: true,
+                supportsFlutterViewCapture: true,
+                supportsNativeScreenCapture: true,
+                supportsHostAutomation: true,
+              ),
+              recordingCapabilities: CockpitRecordingCapabilities(
+                supportsNativeRecording: true,
+              ),
+              snapshot: CockpitSnapshot(routeName: '/home'),
+            ),
       );
 
       await launcher.launch(
@@ -249,24 +252,25 @@ void main() {
               launchedExecutable = executablePath;
               return 9001;
             },
-        statusReader: (baseUri) async => CockpitRemoteSessionStatus(
-          sessionId: 'windows-bootstrap-session',
-          platform: 'windows',
-          transportType: 'remoteHttp',
-          currentRouteName: '/home',
-          capabilities: CockpitCapabilities(
-            platform: 'windows',
-            transportType: 'remoteHttp',
-            supportsInAppControl: true,
-            supportsFlutterViewCapture: true,
-            supportsNativeScreenCapture: true,
-            supportsHostAutomation: true,
-          ),
-          recordingCapabilities: CockpitRecordingCapabilities(
-            supportsNativeRecording: true,
-          ),
-          snapshot: CockpitSnapshot(routeName: '/home'),
-        ),
+        statusReader: (baseUri, {String authToken = ''}) async =>
+            CockpitRemoteSessionStatus(
+              sessionId: 'windows-bootstrap-session',
+              platform: 'windows',
+              transportType: 'remoteHttp',
+              currentRouteName: '/home',
+              capabilities: CockpitCapabilities(
+                platform: 'windows',
+                transportType: 'remoteHttp',
+                supportsInAppControl: true,
+                supportsFlutterViewCapture: true,
+                supportsNativeScreenCapture: true,
+                supportsHostAutomation: true,
+              ),
+              recordingCapabilities: CockpitRecordingCapabilities(
+                supportsNativeRecording: true,
+              ),
+              snapshot: CockpitSnapshot(routeName: '/home'),
+            ),
       );
 
       await launcher.launch(
@@ -318,24 +322,25 @@ void main() {
               runtimeEnvironment = environment;
               return 4101;
             },
-        statusReader: (baseUri) async => CockpitRemoteSessionStatus(
-          sessionId: 'windows-launch-config',
-          platform: 'windows',
-          transportType: 'remoteHttp',
-          currentRouteName: '/home',
-          capabilities: CockpitCapabilities(
-            platform: 'windows',
-            transportType: 'remoteHttp',
-            supportsInAppControl: true,
-            supportsFlutterViewCapture: true,
-            supportsNativeScreenCapture: true,
-            supportsHostAutomation: true,
-          ),
-          recordingCapabilities: CockpitRecordingCapabilities(
-            supportsNativeRecording: true,
-          ),
-          snapshot: CockpitSnapshot(routeName: '/home'),
-        ),
+        statusReader: (baseUri, {String authToken = ''}) async =>
+            CockpitRemoteSessionStatus(
+              sessionId: 'windows-launch-config',
+              platform: 'windows',
+              transportType: 'remoteHttp',
+              currentRouteName: '/home',
+              capabilities: CockpitCapabilities(
+                platform: 'windows',
+                transportType: 'remoteHttp',
+                supportsInAppControl: true,
+                supportsFlutterViewCapture: true,
+                supportsNativeScreenCapture: true,
+                supportsHostAutomation: true,
+              ),
+              recordingCapabilities: CockpitRecordingCapabilities(
+                supportsNativeRecording: true,
+              ),
+              snapshot: CockpitSnapshot(routeName: '/home'),
+            ),
       );
 
       await launcher.launch(
