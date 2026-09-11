@@ -4,6 +4,13 @@ version: 4.9.0
 publish_to: none
 homepage: https://github.com/cockpit-dev/cockpit
 repository: https://github.com/cockpit-dev/cockpit
+issue_tracker: https://github.com/cockpit-dev/cockpit/issues
+documentation: https://github.com/cockpit-dev/cockpit/tree/main/packages/cockpit_test
+topics:
+  - testing
+  - integration-test
+  - automation
+  - i18n
 
 environment:
   sdk: '>=3.8.0 <4.0.0'

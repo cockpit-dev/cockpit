@@ -1,5 +1,7 @@
 # cockpit_test
 
+[English](README.md) · [简体中文](README.zh-CN.md)
+
 Platform-neutral programmatic test scenarios shared by every Cockpit runner.
 A scenario is authored once against the `CockpitTester` contract and then runs
 unchanged against a Flutter integration test, a release/profile app with the
@@ -90,6 +92,10 @@ lazily against the active locale, so a language switch made inside a scenario
 is observed by the next assertion instead of a snapshot taken at construction
 time. A missing translation raises `CockpitTestLocalizationException` rather
 than falling back to a wrong-language string.
+
+A runnable tour of the authoring contract — scenario, locale matrix, and the
+serialized suite program — lives in
+[`example/settings_smoke.dart`](example/settings_smoke.dart).
 
 ## Learn more
 
