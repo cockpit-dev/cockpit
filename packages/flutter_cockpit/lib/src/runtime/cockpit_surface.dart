@@ -2019,51 +2019,60 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
                     _targetScrollableDistance(targetElement, candidate) != null,
               )
               .toList(growable: false);
-    final ordered =
-        (targetScrollableCandidates.isEmpty
-                ? matchingScrollableCandidates
-                : targetScrollableCandidates)
-            .toList(growable: false)
-          ..sort((left, right) {
-            if (targetElement != null) {
-              final distanceCompare =
-                  (_targetScrollableDistance(targetElement, left) ?? 1 << 30)
-                      .compareTo(
-                        _targetScrollableDistance(targetElement, right) ??
-                            1 << 30,
-                      );
-              if (distanceCompare != 0) {
-                return distanceCompare;
-              }
-            }
-            final rightScore = _scrollablePriorityScore(
-              right,
-              targetLocator: targetLocator,
-              scrollableLocator: scrollableLocator,
+    final selectionPool = targetScrollableCandidates.isEmpty
+        ? matchingScrollableCandidates
+        : targetScrollableCandidates;
+    // Sort inputs are computed once per candidate: the previous comparator
+    // re-derived the target distance and the priority score per comparison,
+    // and each priority score walks the candidate subtree, which made the
+    // sort quadratic on large scrollable sets.
+    final decorated =
+        [
+          for (final candidate in selectionPool)
+            (
+              candidate: candidate,
+              distance: targetElement == null
+                  ? null
+                  : _targetScrollableDistance(targetElement, candidate),
+              score: _scrollablePriorityScore(
+                candidate,
+                targetLocator: targetLocator,
+                scrollableLocator: scrollableLocator,
+              ),
+              maxScrollExtent: candidate.state.position.maxScrollExtent,
+              viewportDimension: candidate.state.position.viewportDimension,
+              depth: candidate.depth,
+            ),
+        ]..sort((left, right) {
+          if (targetElement != null) {
+            final distanceCompare = (left.distance ?? 1 << 30).compareTo(
+              right.distance ?? 1 << 30,
             );
-            final leftScore = _scrollablePriorityScore(
-              left,
-              targetLocator: targetLocator,
-              scrollableLocator: scrollableLocator,
-            );
-            final scoreCompare = rightScore.compareTo(leftScore);
-            if (scoreCompare != 0) {
-              return scoreCompare;
+            if (distanceCompare != 0) {
+              return distanceCompare;
             }
+          }
+          final scoreCompare = right.score.compareTo(left.score);
+          if (scoreCompare != 0) {
+            return scoreCompare;
+          }
 
-            final maxExtentCompare = right.state.position.maxScrollExtent
-                .compareTo(left.state.position.maxScrollExtent);
-            if (maxExtentCompare != 0) {
-              return maxExtentCompare;
-            }
+          final maxExtentCompare = right.maxScrollExtent.compareTo(
+            left.maxScrollExtent,
+          );
+          if (maxExtentCompare != 0) {
+            return maxExtentCompare;
+          }
 
-            final viewportCompare = right.state.position.viewportDimension
-                .compareTo(left.state.position.viewportDimension);
-            if (viewportCompare != 0) {
-              return viewportCompare;
-            }
-            return right.depth.compareTo(left.depth);
-          });
+          final viewportCompare = right.viewportDimension.compareTo(
+            left.viewportDimension,
+          );
+          if (viewportCompare != 0) {
+            return viewportCompare;
+          }
+          return right.depth.compareTo(left.depth);
+        });
+    final ordered = [for (final entry in decorated) entry.candidate];
     if (scrollableLocator?.index case final index?) {
       if (index < 0 || index >= ordered.length) {
         return null;
@@ -2818,6 +2827,13 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
     CockpitLocator targetLocator,
   ) {
     const maxVisitedElements = 1200;
+    final flattened = _flatten(targetLocator).toList(growable: false);
+    // The per-element score only derives from context-bearing signal fields,
+    // so a locator without any of them (e.g. path/ancestor-only) cannot
+    // score and the subtree walk is skipped entirely.
+    if (!flattened.any(_locatorHasTargetContextSignals)) {
+      return 0;
+    }
     var visitedElements = 0;
     var bestScore = 0;
 
@@ -2826,7 +2842,7 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
         return;
       }
       visitedElements += 1;
-      for (final locator in _flatten(targetLocator)) {
+      for (final locator in flattened) {
         bestScore = math.max(
           bestScore,
           _elementTargetContextScore(element, locator),
@@ -2841,12 +2857,35 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
     return bestScore;
   }
 
+  bool _locatorHasTargetContextSignals(CockpitLocator locator) {
+    return locator.cockpitId != null ||
+        locator.semanticId != null ||
+        locator.key != null ||
+        locator.text != null ||
+        locator.tooltip != null ||
+        locator.type != null;
+  }
+
   int _elementTargetContextScore(Element element, CockpitLocator locator) {
     var score = 0;
-    final keyValue = _stableKeyValue(element.widget.key);
-    final semanticSignal = _elementSemanticSignal(element);
-    final textSignal = _elementTextSignal(element);
-    final tooltipSignal = _elementTooltipSignal(element);
+    // Each signal derivation is gated on the locator fields that can consume
+    // it; the semantic and tooltip derivations walk the ancestor chain, so a
+    // type-only locator must not pay for them per visited element.
+    final keyValue = locator.cockpitId == null && locator.key == null
+        ? null
+        : _stableKeyValue(element.widget.key);
+    final semanticSignal =
+        locator.cockpitId == null &&
+            locator.semanticId == null &&
+            locator.text == null
+        ? null
+        : _elementSemanticSignal(element);
+    final textSignal = locator.cockpitId == null && locator.text == null
+        ? null
+        : _elementTextSignal(element);
+    final tooltipSignal = locator.tooltip == null
+        ? null
+        : _elementTooltipSignal(element);
 
     if (locator.cockpitId case final expected?) {
       if (keyValue == expected ||
