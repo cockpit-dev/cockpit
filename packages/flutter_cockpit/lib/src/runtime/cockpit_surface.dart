@@ -2095,14 +2095,27 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
     final candidates = <_CockpitScrollableCandidate>[];
     final policy = widget.discoveryPolicy;
 
-    void visit(Element element, int depth) {
+    // The locator path prefix is threaded down the walk instead of being
+    // rebuilt from the ancestor chain per candidate, which keeps discovery
+    // linear on large element trees.
+    void visit(Element element, int depth, _PathNode? parentPath) {
       if (!element.mounted ||
           cockpitHidesRuntimeSubtree(element) ||
           policy.ignoresSubtree(element)) {
         return;
       }
+      final path = _PathNode(
+        element,
+        _pathSegmentForElement(element),
+        parentPath,
+      );
       if (element is StatefulElement && element.state is ScrollableState) {
         final locatorBoundary = _scrollableLocatorBoundary(element);
+        final boundaryPath = _pathNodeForBoundary(
+          locatorBoundary,
+          from: element,
+          fromPath: path,
+        );
         candidates.add(
           _CockpitScrollableCandidate(
             state: element.state as ScrollableState,
@@ -2111,9 +2124,10 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
             typeName: _scrollableLocatorTypeName(
               locatorBoundary,
               fallbackElement: element,
+              fallbackPath: _locatorPathFromNode(path),
             ),
-            path: _locatorPathForElement(locatorBoundary),
-            locatorAncestors: _extractLocatorAncestors(locatorBoundary),
+            path: _locatorPathFromNode(boundaryPath),
+            locatorAncestors: _locatorAncestorsFromNode(boundaryPath),
             element: locatorBoundary,
             semanticsElement: element,
           ),
@@ -2126,13 +2140,58 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
         return;
       }
 
-      element.visitChildElements((child) => visit(child, depth + 1));
+      element.visitChildElements((child) => visit(child, depth + 1, path));
     }
 
     if (cockpitIsVisibleInRuntimeTree(rootElement)) {
-      visit(rootElement, 0);
+      visit(rootElement, 0, _ancestorPathNode(rootElement));
     }
     return candidates;
+  }
+
+  _PathNode? _ancestorPathNode(Element element) {
+    final ancestors = <Element>[];
+    element.visitAncestorElements((ancestor) {
+      ancestors.add(ancestor);
+      return true;
+    });
+    _PathNode? node;
+    for (final ancestor in ancestors.reversed) {
+      node = _PathNode(ancestor, _pathSegmentForElement(ancestor), node);
+    }
+    return node;
+  }
+
+  /// Resolves the path node for [boundary], which `_scrollableLocatorBoundary`
+  /// derived either from [from] itself, one of its ancestors, or its subtree.
+  _PathNode _pathNodeForBoundary(
+    Element boundary, {
+    required Element from,
+    required _PathNode fromPath,
+  }) {
+    for (_PathNode? node = fromPath; node != null; node = node.parent) {
+      if (identical(node.element, boundary)) {
+        return node;
+      }
+    }
+
+    _PathNode? match;
+    void search(Element element, _PathNode path) {
+      element.visitChildElements((child) {
+        if (match != null) {
+          return;
+        }
+        final childPath = _PathNode(child, _pathSegmentForElement(child), path);
+        if (identical(child, boundary)) {
+          match = childPath;
+          return;
+        }
+        search(child, childPath);
+      });
+    }
+
+    search(from, fromPath);
+    return match!;
   }
 
   List<_CockpitScrollableCandidate> _scrollableCandidatesForSearch(
@@ -2253,21 +2312,22 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
   String _scrollableLocatorTypeName(
     Element element, {
     required Element fallbackElement,
+    String? fallbackPath,
   }) {
     final typeName = element.widget.runtimeType.toString();
     if (_isSemanticScrollableBoundary(element) && typeName != 'Scrollable') {
       return typeName;
     }
-    return _scrollableTypeName(fallbackElement);
+    return _scrollableTypeName(fallbackElement, fallbackPath: fallbackPath);
   }
 
-  String _scrollableTypeName(Element element) {
+  String _scrollableTypeName(Element element, {String? fallbackPath}) {
     final ownType = element.widget.runtimeType.toString();
     if (ownType != 'Scrollable') {
       return ownType;
     }
     final pathHint = _scrollableTypeNameFromPath(
-      _locatorPathForElement(element),
+      fallbackPath ?? _locatorPathForElement(element),
     );
     return pathHint ?? ownType;
   }
@@ -2297,22 +2357,88 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
       return true;
     });
     for (final candidate in chain.reversed) {
-      if (_shouldSkipPathElement(candidate)) {
-        continue;
+      final segment = _pathSegmentForElement(candidate);
+      if (segment != null) {
+        segments.add(segment);
       }
-      final segment = _locatorPathSegment(
-        candidate.widget.runtimeType.toString(),
+    }
+    return _joinLocatorPath(_trimMeaningfulPathSegments(segments));
+  }
+
+  String? _pathSegmentForElement(Element element) {
+    if (_shouldSkipPathElement(element)) {
+      return null;
+    }
+    return _locatorPathSegment(element.widget.runtimeType.toString());
+  }
+
+  String _locatorPathFromNode(_PathNode node) {
+    final segments = <String>[];
+    for (_PathNode? current = node; current != null; current = current.parent) {
+      final segment = current.segment;
+      if (segment != null) {
+        segments.add(segment);
+      }
+    }
+    return _joinLocatorPath(
+      _trimMeaningfulPathSegments(segments.reversed.toList(growable: false)),
+    );
+  }
+
+  List<CockpitSnapshotAncestor> _locatorAncestorsFromNode(_PathNode node) {
+    // chain[0] is the nearest ancestor; the prefix walk below runs root-first
+    // so each ancestor's trimmed path can be extended incrementally.
+    final chain = <_PathNode>[];
+    for (
+      _PathNode? current = node.parent;
+      current != null;
+      current = current.parent
+    ) {
+      chain.add(current);
+    }
+
+    final segments = <String>[];
+    var scaffoldIndex = -1;
+    var screenIndex = -1;
+    final paths = List<String>.filled(chain.length, '');
+    for (var index = chain.length - 1; index >= 0; index -= 1) {
+      final segment = chain[index].segment;
+      if (segment != null) {
+        segments.add(segment);
+        final segmentIndex = segments.length - 1;
+        if (segment == 'scaffold') {
+          scaffoldIndex = segmentIndex;
+        } else if (_isScreenPathSegment(segment)) {
+          screenIndex = segmentIndex;
+        }
+      }
+      paths[index] = _joinLocatorPath(
+        _trimPathSegments(segments, scaffoldIndex, screenIndex),
       );
-      if (segment == null) {
+    }
+
+    final ancestors = <CockpitSnapshotAncestor>[];
+    for (var index = 0; index < chain.length; index += 1) {
+      final ancestor = chain[index].element;
+      if (_shouldSkipAncestorElement(ancestor)) {
         continue;
       }
-      segments.add(segment);
+      final keyValue = _stableKeyValue(ancestor.widget.key);
+      final semanticId = _semanticIdForAncestor(ancestor);
+      ancestors.add(
+        CockpitSnapshotAncestor(
+          typeName: ancestor.widget.runtimeType.toString(),
+          cockpitId: semanticId ?? keyValue,
+          semanticId: semanticId,
+          keyValue: keyValue,
+          textPreview: _textPreviewForAncestor(ancestor),
+          tooltip: _tooltipForAncestor(ancestor),
+          routeName: widget.routeName,
+          path: paths[index],
+        ),
+      );
     }
-    final trimmedSegments = _trimMeaningfulPathSegments(segments);
-    if (trimmedSegments.isEmpty) {
-      return '/scrollable';
-    }
-    return '/${trimmedSegments.join('/')}';
+    return List<CockpitSnapshotAncestor>.unmodifiable(ancestors);
   }
 
   List<CockpitSnapshotAncestor> _extractLocatorAncestors(Element element) {
@@ -2438,17 +2564,23 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
     if (segments.isEmpty) {
       return segments;
     }
-    final scaffoldIndex = segments.lastIndexOf('scaffold');
+    return _trimPathSegments(
+      segments,
+      segments.lastIndexOf('scaffold'),
+      segments.lastIndexWhere(_isScreenPathSegment),
+    );
+  }
+
+  /// Trimmed variant of [_trimMeaningfulPathSegments] for a growing segment
+  /// list whose scaffold and screen indices are tracked incrementally.
+  List<String> _trimPathSegments(
+    List<String> segments,
+    int scaffoldIndex,
+    int screenIndex,
+  ) {
     if (scaffoldIndex >= 0) {
       return segments.sublist(scaffoldIndex);
     }
-    final screenIndex = segments.lastIndexWhere(
-      (segment) =>
-          segment.endsWith('screen') ||
-          segment.endsWith('page') ||
-          segment.endsWith('dialog') ||
-          segment.endsWith('drawer'),
-    );
     if (screenIndex >= 0) {
       return segments.sublist(screenIndex);
     }
@@ -2456,6 +2588,20 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
       return segments.sublist(segments.length - 8);
     }
     return segments;
+  }
+
+  bool _isScreenPathSegment(String segment) {
+    return segment.endsWith('screen') ||
+        segment.endsWith('page') ||
+        segment.endsWith('dialog') ||
+        segment.endsWith('drawer');
+  }
+
+  String _joinLocatorPath(List<String> segments) {
+    if (segments.isEmpty) {
+      return '/scrollable';
+    }
+    return '/${segments.join('/')}';
   }
 
   bool _isNoisyPathTypeName(String typeName) {
@@ -3377,6 +3523,20 @@ final class _CockpitRevealRequest {
 
   final double alignment;
   final ScrollPositionAlignmentPolicy alignmentPolicy;
+}
+
+/// A link in the locator-path prefix threaded through scrollable discovery.
+///
+/// Each node holds the element's own already-filtered path segment (or null
+/// when the element contributes none), so extending the prefix while walking
+/// the tree is constant-time and full path strings are materialized only for
+/// scrollable candidates.
+final class _PathNode {
+  const _PathNode(this.element, this.segment, this.parent);
+
+  final Element element;
+  final String? segment;
+  final _PathNode? parent;
 }
 
 final class _CockpitScrollableCandidate {
