@@ -559,16 +559,33 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
     if (_isTestBinding(binding)) {
       return;
     }
+    var producedFrame = false;
     final platform = kIsWeb ? 'web' : defaultTargetPlatform.name;
     if (cockpitSupportsSyntheticVisualFrames(platform)) {
-      await ensureCockpitVisualFrame(
-        platform: platform,
-        force: true,
-        budget: const Duration(milliseconds: 250),
-        stallTimeout: const Duration(milliseconds: 250),
-      );
+      // The visual-frame flight is shared process-wide and joined without a
+      // bound of its own, so a flight armed by unrelated op traffic can park
+      // this settle on a frame an engine that stopped delivering vsync will
+      // never produce. The settle must cut itself loose instead of holding
+      // the surface op on that flight.
+      try {
+        producedFrame = await ensureCockpitVisualFrame(
+          platform: platform,
+          force: true,
+          budget: const Duration(milliseconds: 250),
+          stallTimeout: const Duration(milliseconds: 250),
+        ).timeout(const Duration(milliseconds: 750));
+      } on TimeoutException {
+        // Callers revalidate geometry from the live tree; a wedged frame
+        // pipeline must not turn one deterministic settle into an unbounded
+        // wait.
+      }
+    }
+    if (producedFrame) {
       return;
     }
+    // `endOfFrame` only schedules a frame itself while armed from an idle
+    // phase, so the wait is always armed with an explicit frame request and
+    // stays bounded for engines that never deliver one.
     if (!binding.hasScheduledFrame &&
         binding.schedulerPhase == SchedulerPhase.idle) {
       binding.scheduleFrame();
