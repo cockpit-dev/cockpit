@@ -46,6 +46,7 @@ final class CockpitNativeTargetDiscovery {
 
     void visit(
       Element element,
+      Element? parent,
       String path,
       Element? actionableOwner,
       _InheritedDiscoveryScope scope,
@@ -78,6 +79,7 @@ final class CockpitNativeTargetDiscovery {
               element,
               routeName: targetRouteName,
               path: path,
+              parent: parent,
               actionableOwner: actionableOwner,
               pointerBlocked: scope.pointerBlocked,
               session: session,
@@ -117,6 +119,7 @@ final class CockpitNativeTargetDiscovery {
       element.visitChildElements((child) {
         visit(
           child,
+          element,
           '$path.$childIndex',
           createsActionableScope ? element : actionableOwner,
           childScope,
@@ -125,7 +128,7 @@ final class CockpitNativeTargetDiscovery {
       });
     }
 
-    visit(rootElement, 'root', null, rootScope);
+    visit(rootElement, null, 'root', null, rootScope);
     return _deduplicateDiscoveredTargets(discoveredTargets);
   }
 
@@ -148,6 +151,7 @@ final class CockpitNativeTargetDiscovery {
 
     void visit(
       Element element,
+      Element? parent,
       String path,
       Element? actionableOwner,
       _InheritedDiscoveryScope scope,
@@ -185,6 +189,7 @@ final class CockpitNativeTargetDiscovery {
               element,
               routeName: targetRouteName,
               path: path,
+              parent: parent,
               actionableOwner: actionableOwner,
               pointerBlocked: scope.pointerBlocked,
               session: session,
@@ -220,6 +225,7 @@ final class CockpitNativeTargetDiscovery {
       element.visitChildElements((child) {
         visit(
           child,
+          element,
           '$path.$childIndex',
           createsActionableScope ? element : actionableOwner,
           childScope,
@@ -228,7 +234,7 @@ final class CockpitNativeTargetDiscovery {
       });
     }
 
-    visit(rootElement, 'root', null, rootScope);
+    visit(rootElement, null, 'root', null, rootScope);
     return found;
   }
 
@@ -274,6 +280,7 @@ final class CockpitNativeTargetDiscovery {
       explicitTargetsByElement: explicitTargetsByElement,
     );
     Element? actionableOwner;
+    Element? chainParent;
     final ancestorActions = <CockpitTarget>[];
 
     for (final candidateElement in chain.reversed) {
@@ -300,6 +307,7 @@ final class CockpitNativeTargetDiscovery {
               candidateElement,
               routeName: targetRouteName,
               path: _locatorPathForElement(candidateElement, session),
+              parent: chainParent,
               actionableOwner: actionableOwner,
               pointerBlocked: scope.pointerBlocked,
               session: session,
@@ -340,6 +348,7 @@ final class CockpitNativeTargetDiscovery {
         candidateElement,
         effectiveViewport: effectiveViewport,
       );
+      chainParent = candidateElement;
     }
 
     if (ancestorActions.isNotEmpty || actionableOwner != null) {
@@ -819,6 +828,7 @@ final class CockpitNativeTargetDiscovery {
     required Element? actionableOwner,
     required bool pointerBlocked,
     required _DiscoverySession session,
+    Element? parent,
     bool includeInferredInteraction = false,
   }) {
     final resolvedSemantics = cockpitResolveSemanticsTargetInfo(element);
@@ -999,6 +1009,7 @@ final class CockpitNativeTargetDiscovery {
           element,
           routeName: routeName,
           session: session,
+          parent: parent,
         ),
         onTap: tapHandler,
         onLongPress: longPressHandler,
@@ -1089,6 +1100,7 @@ final class CockpitNativeTargetDiscovery {
         element,
         routeName: routeName,
         session: session,
+        parent: parent,
       ),
       diagnosticNodeProvider: () => element,
       geometryProvider: () =>
@@ -1758,47 +1770,154 @@ final class CockpitNativeTargetDiscovery {
     return _normalizeText(value.toString());
   }
 
+  /// Resolves the filtered ancestor list of [element], nearest to root.
+  ///
+  /// A single ancestor element is shared by all of its descendants, so the
+  /// list for an element is derived from its parent's memoized list:
+  /// `ancestors(E) = keep(parent) ? [record(parent), ...ancestors(parent)]
+  /// : ancestors(parent)`. Records and lists are memoized per discovery
+  /// session (keyed by route name, which each record embeds), keeping the
+  /// full discovery pass linear instead of quadratic on deep trees.
   List<CockpitSnapshotAncestor> _extractLocatorAncestors(
     Element element, {
     required String? routeName,
     required _DiscoverySession session,
+    Element? parent,
   }) {
-    final ancestors = <CockpitSnapshotAncestor>[];
-    element.visitAncestorElements((ancestor) {
-      if (_shouldSkipAncestorElementForLocator(ancestor)) {
-        return true;
-      }
-      final semanticId = _semanticIdForElement(ancestor, session);
-      final keyValue = _keyValueForElement(ancestor);
-      final tooltip = _tooltipForElement(ancestor, session);
-      final textPreview = _firstNonEmpty(<String?>[
-        _passiveTextForElement(ancestor),
-        tooltip,
-      ]);
-      final hasStableScopeSignal = <String?>[
-        semanticId,
-        keyValue,
-        tooltip,
-        textPreview,
-      ].any((value) => value != null);
-      if (!hasStableScopeSignal && _shouldSkipPathElement(ancestor)) {
-        return true;
-      }
-      ancestors.add(
-        CockpitSnapshotAncestor(
-          typeName: ancestor.widget.runtimeType.toString(),
-          cockpitId: _firstNonEmpty(<String?>[semanticId, keyValue]),
-          semanticId: semanticId,
-          keyValue: keyValue,
-          textPreview: textPreview,
-          tooltip: tooltip,
+    final key = (element: element, routeName: routeName);
+    final cached = session.locatorAncestorLists[key];
+    if (cached != null) {
+      return cached;
+    }
+
+    // The discovery walk hands us the element-tree parent; once any earlier
+    // sibling target memoized its list, this element's list conses onto it
+    // without re-walking the ancestor chain.
+    if (parent != null) {
+      final parentList =
+          session.locatorAncestorLists[(element: parent, routeName: routeName)];
+      if (parentList != null) {
+        final list = _consLocatorAncestor(
+          parent,
+          parentList,
           routeName: routeName,
-          path: _locatorPathForElement(ancestor, session),
-        ),
-      );
+          session: session,
+        );
+        session.locatorAncestorLists[key] = list;
+        return list;
+      }
+    }
+
+    // Cold chain: walk up until the nearest memoized ancestor list,
+    // collecting the un-memoized chain (nearest → root). The walk fills
+    // every chain member's memo, so it is paid at most once per element.
+    // Mirrors _pathNodeForElement.
+    final chain = <Element>[element];
+    List<CockpitSnapshotAncestor>? base;
+    Element? baseParent;
+    element.visitAncestorElements((ancestor) {
+      final hit = session
+          .locatorAncestorLists[(element: ancestor, routeName: routeName)];
+      if (hit != null) {
+        base = hit;
+        baseParent = ancestor;
+        return false;
+      }
+      chain.add(ancestor);
       return true;
     });
-    return List<CockpitSnapshotAncestor>.unmodifiable(ancestors);
+
+    // Assemble root → nearest: when a candidate is about to be resolved,
+    // [current] already holds its parent's memoized list.
+    var current = base ?? const <CockpitSnapshotAncestor>[];
+    Element? parentAbove = baseParent;
+    for (final candidate in chain.reversed) {
+      final list = _consLocatorAncestor(
+        parentAbove,
+        current,
+        routeName: routeName,
+        session: session,
+      );
+      session.locatorAncestorLists[(element: candidate, routeName: routeName)] =
+          list;
+      current = list;
+      parentAbove = candidate;
+    }
+    return current;
+  }
+
+  List<CockpitSnapshotAncestor> _consLocatorAncestor(
+    Element? parent,
+    List<CockpitSnapshotAncestor> parentList, {
+    required String? routeName,
+    required _DiscoverySession session,
+  }) {
+    if (parent == null) {
+      return parentList;
+    }
+    final record = _locatorAncestorRecord(
+      parent,
+      routeName: routeName,
+      session: session,
+    );
+    if (record == null) {
+      return parentList;
+    }
+    return List<CockpitSnapshotAncestor>.unmodifiable([record, ...parentList]);
+  }
+
+  CockpitSnapshotAncestor? _locatorAncestorRecord(
+    Element ancestor, {
+    required String? routeName,
+    required _DiscoverySession session,
+  }) {
+    final key = (element: ancestor, routeName: routeName);
+    if (session.locatorAncestorRecords.containsKey(key)) {
+      return session.locatorAncestorRecords[key];
+    }
+    final record = _buildLocatorAncestorRecord(
+      ancestor,
+      routeName: routeName,
+      session: session,
+    );
+    session.locatorAncestorRecords[key] = record;
+    return record;
+  }
+
+  CockpitSnapshotAncestor? _buildLocatorAncestorRecord(
+    Element ancestor, {
+    required String? routeName,
+    required _DiscoverySession session,
+  }) {
+    if (_shouldSkipAncestorElementForLocator(ancestor)) {
+      return null;
+    }
+    final semanticId = _semanticIdForElement(ancestor, session);
+    final keyValue = _keyValueForElement(ancestor);
+    final tooltip = _tooltipForElement(ancestor, session);
+    final textPreview = _firstNonEmpty(<String?>[
+      _passiveTextForElement(ancestor),
+      tooltip,
+    ]);
+    final hasStableScopeSignal = <String?>[
+      semanticId,
+      keyValue,
+      tooltip,
+      textPreview,
+    ].any((value) => value != null);
+    if (!hasStableScopeSignal && _shouldSkipPathElement(ancestor)) {
+      return null;
+    }
+    return CockpitSnapshotAncestor(
+      typeName: ancestor.widget.runtimeType.toString(),
+      cockpitId: _firstNonEmpty(<String?>[semanticId, keyValue]),
+      semanticId: semanticId,
+      keyValue: keyValue,
+      textPreview: textPreview,
+      tooltip: tooltip,
+      routeName: routeName,
+      path: _locatorPathForElement(ancestor, session),
+    );
   }
 
   bool _shouldSkipAncestorElementForLocator(Element ancestor) {
@@ -3705,6 +3824,21 @@ final class _DiscoverySession {
       Map<Element, _DelegatedSelectionSummary>.identity();
   final Map<Element, _DelegatedSelectionSummary> blockedSelectionSummaries =
       Map<Element, _DelegatedSelectionSummary>.identity();
+
+  /// Locator ancestor records (null = the ancestor is filtered out) and
+  /// assembled ancestor lists, keyed by route name as well because each
+  /// record embeds the discovering target's effective route name: shared
+  /// ancestors under different route scopes must not reuse each other's
+  /// entries.
+  final Map<({Element element, String? routeName}), CockpitSnapshotAncestor?>
+  locatorAncestorRecords =
+      <({Element element, String? routeName}), CockpitSnapshotAncestor?>{};
+  final Map<
+    ({Element element, String? routeName}),
+    List<CockpitSnapshotAncestor>
+  >
+  locatorAncestorLists =
+      <({Element element, String? routeName}), List<CockpitSnapshotAncestor>>{};
 }
 
 /// Parent-linked locator path segment chain shared across sibling subtrees.
