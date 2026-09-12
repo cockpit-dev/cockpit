@@ -222,19 +222,33 @@ final class FlutterCockpitRootState extends State<FlutterCockpitRoot> {
     );
   }
 
-  Future<CockpitSnapshot> _remoteSnapshot({
+  /// Serves remote snapshot requests after flushing any pending frame work.
+  ///
+  /// This is the snapshot provider wired into the remote session endpoint. It
+  /// is intentionally exposed for development-only frame-regression tests,
+  /// like [createCommandExecutor].
+  @visibleForTesting
+  Future<CockpitSnapshot> remoteSnapshot({
     required CockpitSnapshotOptions options,
   }) async {
     final binding = WidgetsBinding.instance;
     if (_isTestBinding(binding)) {
       return snapshot(options: options);
     }
-    await ensureCockpitVisualFrame(
-      platform: resolveCockpitRemoteSessionPlatform(
-        isWeb: kIsWeb,
-        targetPlatform: defaultTargetPlatform,
-      ),
-    );
+    // The visual-frame flight is shared process-wide and joined without a
+    // bound of its own, so a flight parked on a frame a wedged engine will
+    // never produce must not park the snapshot behind it.
+    try {
+      await ensureCockpitVisualFrame(
+        platform: resolveCockpitRemoteSessionPlatform(
+          isWeb: kIsWeb,
+          targetPlatform: defaultTargetPlatform,
+        ),
+      ).timeout(const Duration(milliseconds: 750));
+    } on TimeoutException {
+      // The mounted Element tree remains safe to inspect without the
+      // flushed frame.
+    }
     await waitForPendingCockpitFrame(
       phase: binding.schedulerPhase,
       hasScheduledFrame: binding.hasScheduledFrame,
@@ -697,7 +711,7 @@ final class FlutterCockpitRootState extends State<FlutterCockpitRoot> {
       configuration: configuration,
       statusProvider: _buildRemoteSessionStatus,
       readyProvider: _buildRemoteSessionReady,
-      snapshotProvider: _remoteSnapshot,
+      snapshotProvider: remoteSnapshot,
       commandExecutor: executor.executeWithArtifacts,
       viewportResizer: _resizeRemoteViewport,
       runtimeStepDrainer: ({required clear}) {
@@ -728,7 +742,7 @@ final class FlutterCockpitRootState extends State<FlutterCockpitRoot> {
       configuration: configuration,
       statusProvider: _buildRemoteSessionStatus,
       readyProvider: _buildRemoteSessionReady,
-      snapshotProvider: _remoteSnapshot,
+      snapshotProvider: remoteSnapshot,
       commandExecutor: executor.executeWithArtifacts,
       viewportResizer: _resizeRemoteViewport,
       runtimeStepDrainer: ({required clear}) {

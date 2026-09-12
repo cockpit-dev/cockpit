@@ -1418,32 +1418,41 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
       }
     }
 
-    void visit(Element element) {
+    // A path signal derives every element's full locator path, so the walk
+    // threads the path prefix down as parent-pointer nodes instead of
+    // re-walking each element's ancestor chain (mirrors _discoverScrollables).
+    final needsPath = locator.path != null || fallbackLocator?.path != null;
+
+    void visit(Element element, _PathNode? parentPath) {
       if (!element.mounted ||
           cockpitHidesRuntimeSubtree(element) ||
           widget.discoveryPolicy.ignoresSubtree(element)) {
         return;
       }
+      final pathNode = needsPath
+          ? _PathNode(element, _pathSegmentForElement(element), parentPath)
+          : null;
+      final path = pathNode == null ? null : _locatorPathFromNode(pathNode);
       recordMatch(
         matchesByRenderObject,
         element,
-        _locatorMatchScore(element, locator),
+        _locatorMatchScore(element, locator, path),
       );
       if (fallbackLocator != null) {
         recordMatch(
           fallbackMatchesByRenderObject,
           element,
-          _locatorMatchScore(element, fallbackLocator),
+          _locatorMatchScore(element, fallbackLocator, path),
         );
       }
       if (visibleOnly) {
-        element.debugVisitOnstageChildren(visit);
+        element.debugVisitOnstageChildren((child) => visit(child, pathNode));
       } else {
-        element.visitChildElements(visit);
+        element.visitChildElements((child) => visit(child, pathNode));
       }
     }
 
-    visit(rootElement);
+    visit(rootElement, needsPath ? _ancestorPathNode(rootElement) : null);
     final primary = _resolveMountedLocatorProbe(matchesByRenderObject, locator);
     if (primary.element != null ||
         primary.ambiguous ||
@@ -1807,18 +1816,19 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
     return matched;
   }
 
-  int _locatorMatchScore(Element element, CockpitLocator locator) {
-    if (!_matchesElementLocator(element, locator)) {
+  int _locatorMatchScore(
+    Element element,
+    CockpitLocator locator,
+    String? path,
+  ) {
+    if (!_matchesElementLocator(element, locator, path)) {
       return -1;
     }
 
     var score = locator.signalMap.length * 10;
     final pathSignal = locator.path;
     if (pathSignal != null) {
-      score += _pathMatchPriorityScore(
-        _locatorPathForElement(element),
-        pathSignal,
-      );
+      score += _pathMatchPriorityScore(path, pathSignal);
     }
     final keyValue = _stableKeyValue(element.widget.key);
     if (locator.key != null && keyValue != null) {
@@ -1851,7 +1861,11 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
     return score;
   }
 
-  bool _matchesElementLocator(Element element, CockpitLocator locator) {
+  bool _matchesElementLocator(
+    Element element,
+    CockpitLocator locator,
+    String? path,
+  ) {
     if (!locator.hasSignals) {
       return false;
     }
@@ -1861,6 +1875,7 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
         signal.kind,
         signal.value,
         locator.matchMode,
+        path,
       )) {
         return false;
       }
@@ -1878,6 +1893,7 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
     CockpitLocatorKind kind,
     String value,
     CockpitTextMatchMode matchMode,
+    String? path,
   ) {
     return switch (kind) {
       CockpitLocatorKind.ref => false,
@@ -1910,10 +1926,7 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
       ),
       CockpitLocatorKind.route => widget.routeName == value,
       CockpitLocatorKind.registrationId => false,
-      CockpitLocatorKind.path => _matchesPath(
-        _locatorPathForElement(element),
-        value,
-      ),
+      CockpitLocatorKind.path => _matchesPath(path, value),
       CockpitLocatorKind.nativeId ||
       CockpitLocatorKind.testId ||
       CockpitLocatorKind.role ||
@@ -2390,16 +2403,46 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
   }
 
   String _locatorPathFromNode(_PathNode node) {
-    final segments = <String>[];
-    for (_PathNode? current = node; current != null; current = current.parent) {
-      final segment = current.segment;
-      if (segment != null) {
-        segments.add(segment);
-      }
+    return _joinLocatorPath(_trimmedSegmentsForNode(node));
+  }
+
+  /// Trimmed path segments for [node], derived incrementally from the
+  /// parent's cached segments so each node's locator path materializes in
+  /// O(path window) instead of re-walking the whole ancestor chain. Matches
+  /// [_trimMeaningfulPathSegments] applied to the node's full segment chain.
+  List<String> _trimmedSegmentsForNode(_PathNode node) {
+    final cached = node.trimmedSegments;
+    if (cached != null) {
+      return cached;
     }
-    return _joinLocatorPath(
-      _trimMeaningfulPathSegments(segments.reversed.toList(growable: false)),
-    );
+    final parent = node.parent;
+    final parentSegments = parent == null
+        ? null
+        : _trimmedSegmentsForNode(parent);
+    final parentAnchor = parent?.trimAnchor ?? _PathNode.anchorNone;
+    final segment = node.segment;
+    final List<String> segments;
+    var anchor = parentAnchor;
+    if (segment == null) {
+      segments = parentSegments ?? const <String>[];
+    } else if (segment == 'scaffold') {
+      segments = <String>[segment];
+      anchor = _PathNode.anchorScaffold;
+    } else if (_isScreenPathSegment(segment) &&
+        parentAnchor != _PathNode.anchorScaffold) {
+      segments = <String>[segment];
+      anchor = _PathNode.anchorScreen;
+    } else if (parentSegments == null) {
+      segments = <String>[segment];
+    } else if (parentAnchor == _PathNode.anchorNone &&
+        parentSegments.length >= 8) {
+      segments = <String>[...parentSegments.sublist(1), segment];
+    } else {
+      segments = <String>[...parentSegments, segment];
+    }
+    node.trimmedSegments = segments;
+    node.trimAnchor = anchor;
+    return segments;
   }
 
   List<CockpitSnapshotAncestor> _locatorAncestorsFromNode(_PathNode node) {
@@ -3120,7 +3163,25 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
     return true;
   }
 
+  // Normalization is pure, so repeated path strings - the same selector on
+  // every probed element, or the shared windows of a deep tree - can reuse
+  // earlier results instead of re-running the segment pipeline.
+  static final Map<String, String?> _normalizedPathMemo = <String, String?>{};
+
   String? _normalizePath(String? value) {
+    if (value == null) {
+      return null;
+    }
+    if (_normalizedPathMemo.length > 512) {
+      _normalizedPathMemo.clear();
+    }
+    return _normalizedPathMemo.putIfAbsent(
+      value,
+      () => _normalizePathUncached(value),
+    );
+  }
+
+  String? _normalizePathUncached(String value) {
     final segments = _pathSegments(value);
     if (segments.isEmpty) {
       return null;
@@ -3549,11 +3610,20 @@ final class _CockpitRevealRequest {
 /// the tree is constant-time and full path strings are materialized only for
 /// scrollable candidates.
 final class _PathNode {
-  const _PathNode(this.element, this.segment, this.parent);
+  _PathNode(this.element, this.segment, this.parent);
+
+  static const int anchorNone = 0;
+  static const int anchorScaffold = 1;
+  static const int anchorScreen = 2;
 
   final Element element;
   final String? segment;
   final _PathNode? parent;
+
+  // Lazily derived by CockpitSurfaceState._trimmedSegmentsForNode; nodes
+  // without a segment share their parent's cached list untouched.
+  List<String>? trimmedSegments;
+  int trimAnchor = anchorNone;
 }
 
 final class _CockpitScrollableCandidate {

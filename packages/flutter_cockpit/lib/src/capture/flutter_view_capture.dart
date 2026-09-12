@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui' as ui;
 
 import 'package:flutter/scheduler.dart';
@@ -21,7 +22,17 @@ final class FlutterViewCapture {
     ui.Rect? cropRect,
   }) async {
     if (SchedulerBinding.instance.schedulerPhase != SchedulerPhase.idle) {
-      await WidgetsBinding.instance.endOfFrame;
+      // The in-flight frame may belong to an engine that stopped delivering
+      // vsync (occluded desktop surface) or park on an already-armed
+      // completer that never fires, so the wait stays bounded and the
+      // capture proceeds with what the boundary currently shows.
+      try {
+        await WidgetsBinding.instance.endOfFrame.timeout(
+          const Duration(milliseconds: 250),
+        );
+      } on TimeoutException {
+        // A paused or wedged engine may never finish the in-flight frame.
+      }
     }
 
     final context = repaintBoundaryKey.currentContext;
