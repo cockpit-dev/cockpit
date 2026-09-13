@@ -39,6 +39,16 @@ import 'cockpit_visual_frame_driver.dart';
 import 'cockpit_widget_tree_builder.dart';
 import 'flutter_cockpit.dart';
 
+// Per-element helpers (text signals, type names, locator paths) run these on
+// every visited element during probes and discovery, so the patterns live at
+// module level instead of being recompiled per call.
+final RegExp _whitespacePattern = RegExp(r'\s+');
+final RegExp _nonAlphanumericPattern = RegExp(r'[^a-z0-9]+');
+final RegExp _trailingSlugDashes = RegExp(r'-+$');
+final RegExp _pathCanonicalSeparators = RegExp(r'[>\[\]():\s]+');
+final RegExp _pathSlashRuns = RegExp(r'/+');
+final RegExp _digitsOnlyPattern = RegExp(r'^\d+$');
+
 final class CockpitSurface extends StatefulWidget {
   const CockpitSurface({
     required this.routeName,
@@ -814,81 +824,23 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
     }
 
     final rootElement = rootContext as Element;
-    final targetElement = targetLocator == null
-        ? null
-        : _findResolvedElementForLocator(rootElement, targetLocator);
-    final scrollables =
-        _scrollableCandidatesForSearch(
-              rootElement,
-              targetLocator: targetLocator,
-              targetElement: targetElement,
-            )
-            .where((candidate) {
-              final position = candidate.state.position;
-              if (!position.haveDimensions || position.maxScrollExtent <= 0) {
-                return false;
-              }
-              if (targetLocator != null &&
-                  !position.physics.allowUserScrolling) {
-                return false;
-              }
-              if (scrollableKey == null || scrollableKey.isEmpty) {
-                return true;
-              }
-              return candidate.keyValue == scrollableKey;
-            })
-            .toList(growable: false);
-    if (scrollables.isEmpty) {
-      return const CockpitScrollStepResult(didScroll: false);
-    }
-    final selection = _selectScrollableCandidate(
-      scrollables,
+    final search = _scrollStepSearch(
+      rootElement,
+      scrollableKey: scrollableKey,
       targetLocator: targetLocator,
-      targetElement: targetElement,
       scrollableLocator: scrollableLocator,
     );
-    if (selection == null) {
-      final targetMounted = targetElement != null;
-      return CockpitScrollStepResult(
-        didScroll: false,
-        scrollableCandidateCount: scrollables.length,
-        targetVisibilityObserved: targetLocator != null,
-        targetMounted: targetMounted,
-        targetVisible: targetMounted && _locatorIsVisible(targetLocator),
-      );
+    if (search.earlyResult case final CockpitScrollStepResult earlyResult) {
+      return earlyResult;
     }
+    final targetElement = search.targetElement;
+    final selection = search.selection!;
     final scrollable = selection.candidate;
     final position = scrollable.state.position;
-    final targetAlreadyVisible = targetLocator?.kind == CockpitLocatorKind.route
-        ? widget.routeName == targetLocator?.value
-        : targetElement != null && _elementIsFullyVisible(targetElement);
-    if (targetAlreadyVisible) {
-      return _withScrollableSelection(
-        CockpitScrollStepResult(
-          didScroll: false,
-          strategy: 'alreadyVisible',
-          scrollableKey: scrollable.keyValue,
-          scrollablePath: scrollable.path,
-          scrollableTypeName: scrollable.typeName,
-          pixelsBefore: position.pixels,
-          pixelsAfter: position.pixels,
-          nextPixels: position.pixels,
-          minScrollExtent: position.minScrollExtent,
-          maxScrollExtent: position.maxScrollExtent,
-          viewportDimension: position.viewportDimension,
-          acceptsUserOffset: position.physics.shouldAcceptUserOffset(position),
-          allowsProgrammaticScroll: position.physics.allowUserScrolling,
-          targetMounted: true,
-          targetVisible: true,
-        ),
-        selection,
-        targetLocator: targetLocator,
-        targetMounted: targetElement != null,
-      );
-    }
 
     var scrollResult = await _scrollScrollableByViewport(
       scrollable,
+      scrollableRegistryTarget: search.registryTarget,
       reverse: reverse,
       viewportFraction: viewportFraction,
       duration: duration,
@@ -904,6 +856,7 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
         _scrollExtentExpanded(scrollResult, position, reverse: reverse)) {
       final expandedResult = await _scrollScrollableByViewport(
         scrollable,
+        scrollableRegistryTarget: search.registryTarget,
         reverse: reverse,
         viewportFraction: viewportFraction,
         duration: duration,
@@ -918,7 +871,12 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
       }
     }
     scrollResult = _refreshScrollExtents(scrollResult, position);
+    // The pre-scroll resolution stays authoritative while its element remains
+    // mounted; the full-tree re-probe only runs when the scroll actually
+    // evicted the resolved element (lazy list rebuild).
     final resolvedTarget = targetLocator == null
+        ? targetElement
+        : targetElement != null && targetElement.mounted
         ? targetElement
         : _findResolvedElementForLocator(rootElement, targetLocator);
     final targetVisible =
@@ -932,8 +890,125 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
     );
   }
 
+  ({
+    CockpitScrollStepResult? earlyResult,
+    Element? targetElement,
+    _CockpitScrollableSelection? selection,
+    CockpitTarget? registryTarget,
+  })
+  _scrollStepSearch(
+    Element rootElement, {
+    required String? scrollableKey,
+    required CockpitLocator? targetLocator,
+    required CockpitLocator? scrollableLocator,
+  }) {
+    // Every synchronous pre-scroll registry read in one scroll step — target
+    // resolution, the no-selection visibility check, and the selected
+    // scrollable's registry match — shares one discovery snapshot, so native
+    // discovery runs at most once per step instead of once per read.
+    return _registry.withDiscoverySnapshot(() {
+      final targetElement = targetLocator == null
+          ? null
+          : _findResolvedElementForLocator(rootElement, targetLocator);
+      final scrollables =
+          _scrollableCandidatesForSearch(
+                rootElement,
+                targetLocator: targetLocator,
+                targetElement: targetElement,
+              )
+              .where((candidate) {
+                final position = candidate.state.position;
+                if (!position.haveDimensions || position.maxScrollExtent <= 0) {
+                  return false;
+                }
+                if (targetLocator != null &&
+                    !position.physics.allowUserScrolling) {
+                  return false;
+                }
+                if (scrollableKey == null || scrollableKey.isEmpty) {
+                  return true;
+                }
+                return candidate.keyValue == scrollableKey;
+              })
+              .toList(growable: false);
+      if (scrollables.isEmpty) {
+        return (
+          earlyResult: const CockpitScrollStepResult(didScroll: false),
+          targetElement: targetElement,
+          selection: null,
+          registryTarget: null,
+        );
+      }
+      final selection = _selectScrollableCandidate(
+        scrollables,
+        targetLocator: targetLocator,
+        targetElement: targetElement,
+        scrollableLocator: scrollableLocator,
+      );
+      if (selection == null) {
+        final targetMounted = targetElement != null;
+        return (
+          earlyResult: CockpitScrollStepResult(
+            didScroll: false,
+            scrollableCandidateCount: scrollables.length,
+            targetVisibilityObserved: targetLocator != null,
+            targetMounted: targetMounted,
+            targetVisible: targetMounted && _locatorIsVisible(targetLocator),
+          ),
+          targetElement: targetElement,
+          selection: null,
+          registryTarget: null,
+        );
+      }
+      final scrollable = selection.candidate;
+      final position = scrollable.state.position;
+      final targetAlreadyVisible =
+          targetLocator?.kind == CockpitLocatorKind.route
+          ? widget.routeName == targetLocator?.value
+          : targetElement != null && _elementIsFullyVisible(targetElement);
+      if (targetAlreadyVisible) {
+        return (
+          earlyResult: _withScrollableSelection(
+            CockpitScrollStepResult(
+              didScroll: false,
+              strategy: 'alreadyVisible',
+              scrollableKey: scrollable.keyValue,
+              scrollablePath: scrollable.path,
+              scrollableTypeName: scrollable.typeName,
+              pixelsBefore: position.pixels,
+              pixelsAfter: position.pixels,
+              nextPixels: position.pixels,
+              minScrollExtent: position.minScrollExtent,
+              maxScrollExtent: position.maxScrollExtent,
+              viewportDimension: position.viewportDimension,
+              acceptsUserOffset: position.physics.shouldAcceptUserOffset(
+                position,
+              ),
+              allowsProgrammaticScroll: position.physics.allowUserScrolling,
+              targetMounted: true,
+              targetVisible: true,
+            ),
+            selection,
+            targetLocator: targetLocator,
+            targetMounted: targetElement != null,
+          ),
+          targetElement: targetElement,
+          selection: selection,
+          registryTarget: null,
+        );
+      }
+      return (
+        earlyResult: null,
+        targetElement: targetElement,
+        selection: selection,
+        registryTarget: _registryTargetForScrollableCandidate(scrollable),
+      );
+    });
+  }
+
   Future<CockpitScrollStepResult> _scrollScrollableByViewport(
     _CockpitScrollableCandidate scrollable, {
+    required CockpitTarget? scrollableRegistryTarget,
     required bool reverse,
     required double viewportFraction,
     required Duration duration,
@@ -985,8 +1060,7 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
     );
     final hadSemanticAction =
         !preferProgrammatic && semanticScrollAction != null;
-    final scrollableTarget = _registryTargetForScrollableCandidate(scrollable);
-    final scrollGeometry = scrollableTarget == null
+    final scrollGeometry = scrollableRegistryTarget == null
         ? CockpitTargetGeometryResolver.maybeFromElement(scrollable.element)
         : null;
     if (!preferProgrammatic && scrollGeometry != null) {
@@ -995,7 +1069,7 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
         await _gestureEngine
             .perform(
               CockpitGestureAction.drag(
-                target: scrollableTarget,
+                target: scrollableRegistryTarget,
                 geometry: scrollGeometry,
                 delta: _scrollDragDelta(
                   axisDirection: position.axisDirection,
@@ -1030,7 +1104,7 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
             allowsProgrammaticScroll: allowsProgrammaticScroll,
             hadGestureTarget: true,
             hadSemanticAction: false,
-            matchedRegistryTarget: scrollableTarget != null,
+            matchedRegistryTarget: scrollableRegistryTarget != null,
           );
         }
       } on StateError {
@@ -1065,9 +1139,9 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
             acceptsUserOffset: acceptsUserOffset,
             allowsProgrammaticScroll: allowsProgrammaticScroll,
             hadGestureTarget:
-                scrollGeometry != null || scrollableTarget != null,
+                scrollGeometry != null || scrollableRegistryTarget != null,
             hadSemanticAction: true,
-            matchedRegistryTarget: scrollableTarget != null,
+            matchedRegistryTarget: scrollableRegistryTarget != null,
           );
         }
       }
@@ -1096,9 +1170,9 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
             acceptsUserOffset: acceptsUserOffset,
             allowsProgrammaticScroll: allowsProgrammaticScroll,
             hadGestureTarget:
-                scrollGeometry != null || scrollableTarget != null,
+                scrollGeometry != null || scrollableRegistryTarget != null,
             hadSemanticAction: hadSemanticAction,
-            matchedRegistryTarget: scrollableTarget != null,
+            matchedRegistryTarget: scrollableRegistryTarget != null,
           );
         }
         var animationTimedOut = false;
@@ -1131,9 +1205,9 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
             acceptsUserOffset: acceptsUserOffset,
             allowsProgrammaticScroll: allowsProgrammaticScroll,
             hadGestureTarget:
-                scrollGeometry != null || scrollableTarget != null,
+                scrollGeometry != null || scrollableRegistryTarget != null,
             hadSemanticAction: hadSemanticAction,
-            matchedRegistryTarget: scrollableTarget != null,
+            matchedRegistryTarget: scrollableRegistryTarget != null,
           );
         }
         position.jumpTo(nextPixels);
@@ -1154,9 +1228,9 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
             acceptsUserOffset: acceptsUserOffset,
             allowsProgrammaticScroll: allowsProgrammaticScroll,
             hadGestureTarget:
-                scrollGeometry != null || scrollableTarget != null,
+                scrollGeometry != null || scrollableRegistryTarget != null,
             hadSemanticAction: hadSemanticAction,
-            matchedRegistryTarget: scrollableTarget != null,
+            matchedRegistryTarget: scrollableRegistryTarget != null,
           );
         }
       } on StateError {
@@ -1180,9 +1254,10 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
       viewportDimension: position.viewportDimension,
       acceptsUserOffset: acceptsUserOffset,
       allowsProgrammaticScroll: allowsProgrammaticScroll,
-      hadGestureTarget: scrollGeometry != null || scrollableTarget != null,
+      hadGestureTarget:
+          scrollGeometry != null || scrollableRegistryTarget != null,
       hadSemanticAction: hadSemanticAction,
-      matchedRegistryTarget: scrollableTarget != null,
+      matchedRegistryTarget: scrollableRegistryTarget != null,
     );
   }
 
@@ -1418,10 +1493,20 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
       }
     }
 
+    // `CockpitLocator.signals` is a sync* generator: scoring against it
+    // allocates and re-enumerates the iterator for every visited element.
+    // The walk instead scores against a prepared snapshot that flattens the
+    // signals and per-field presence once per probe.
+    final prepared = _PreparedLocator(locator);
+    final preparedFallback = fallbackLocator == null
+        ? null
+        : _PreparedLocator(fallbackLocator);
+
     // A path signal derives every element's full locator path, so the walk
     // threads the path prefix down as parent-pointer nodes instead of
     // re-walking each element's ancestor chain (mirrors _discoverScrollables).
-    final needsPath = locator.path != null || fallbackLocator?.path != null;
+    final needsPath =
+        prepared.pathSignal != null || preparedFallback?.pathSignal != null;
 
     void visit(Element element, _PathNode? parentPath) {
       if (!element.mounted ||
@@ -1436,13 +1521,13 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
       recordMatch(
         matchesByRenderObject,
         element,
-        _locatorMatchScore(element, locator, path),
+        _locatorMatchScore(element, prepared, path),
       );
-      if (fallbackLocator != null) {
+      if (preparedFallback != null) {
         recordMatch(
           fallbackMatchesByRenderObject,
           element,
-          _locatorMatchScore(element, fallbackLocator, path),
+          _locatorMatchScore(element, preparedFallback, path),
         );
       }
       if (visibleOnly) {
@@ -1818,37 +1903,36 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
 
   int _locatorMatchScore(
     Element element,
-    CockpitLocator locator,
+    _PreparedLocator locator,
     String? path,
   ) {
     if (!_matchesElementLocator(element, locator, path)) {
       return -1;
     }
 
-    var score = locator.signalMap.length * 10;
-    final pathSignal = locator.path;
-    if (pathSignal != null) {
+    var score = locator.signalCount * 10;
+    if (locator.pathSignal case final String pathSignal) {
       score += _pathMatchPriorityScore(path, pathSignal);
     }
     final keyValue = _stableKeyValue(element.widget.key);
-    if (locator.key != null && keyValue != null) {
+    if (locator.keySignal != null && keyValue != null) {
       score += 8;
     }
-    if (locator.text case final expectedText?) {
+    if (locator.textSignal case final expectedText?) {
       score += _textMatchPriorityScore(
         _elementTextSignal(element),
         expectedText,
         locator.matchMode,
       );
     }
-    if (locator.tooltip case final expectedTooltip?) {
+    if (locator.tooltipSignal case final expectedTooltip?) {
       score += _textMatchPriorityScore(
         _elementTooltipSignal(element),
         expectedTooltip,
         locator.matchMode,
       );
     }
-    if (locator.semanticId case final expectedSemanticId?) {
+    if (locator.semanticIdSignal case final expectedSemanticId?) {
       score += _textMatchPriorityScore(
         _elementSemanticSignal(element),
         expectedSemanticId,
@@ -1863,7 +1947,7 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
 
   bool _matchesElementLocator(
     Element element,
-    CockpitLocator locator,
+    _PreparedLocator locator,
     String? path,
   ) {
     if (!locator.hasSignals) {
@@ -1882,7 +1966,10 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
     }
     final ancestor = locator.ancestor;
     if (ancestor != null &&
-        !_matchesAncestorChain(_extractLocatorAncestors(element), ancestor)) {
+        !_matchesPreparedAncestorChain(
+          _extractLocatorAncestors(element),
+          ancestor,
+        )) {
       return false;
     }
     return true;
@@ -2625,7 +2712,7 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
         buffer.write('-');
       }
     }
-    final slug = buffer.toString().replaceAll(RegExp(r'-+$'), '');
+    final slug = buffer.toString().replaceAll(_trailingSlugDashes, '');
     return slug.isEmpty ? 'value' : slug;
   }
 
@@ -2722,16 +2809,29 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
     if (value == null) {
       return null;
     }
-    final normalized = value.replaceAll(RegExp(r'\s+'), ' ').trim();
+    final normalized = value.replaceAll(_whitespacePattern, ' ').trim();
     return normalized.isEmpty ? null : normalized;
   }
 
   String? _normalizeTypeName(String? value) {
+    if (value == null) {
+      return null;
+    }
+    if (_normalizedTypeNameMemo.length > 512) {
+      _normalizedTypeNameMemo.clear();
+    }
+    return _normalizedTypeNameMemo.putIfAbsent(
+      value,
+      () => _normalizeTypeNameUncached(value),
+    );
+  }
+
+  String? _normalizeTypeNameUncached(String value) {
     final normalized = _normalizeText(value)?.toLowerCase();
     if (normalized == null) {
       return null;
     }
-    final compact = normalized.replaceAll(RegExp(r'[^a-z0-9]+'), '');
+    final compact = normalized.replaceAll(_nonAlphanumericPattern, '');
     return compact.isEmpty ? null : compact;
   }
 
@@ -3059,42 +3159,57 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
     return false;
   }
 
+  /// [_matchesAncestorChain] against a prepared locator so the per-element
+  /// probe walk never allocates the ancestor locator's signal generator.
+  bool _matchesPreparedAncestorChain(
+    List<CockpitSnapshotAncestor> ancestors,
+    _PreparedLocator locator,
+  ) {
+    for (var index = 0; index < ancestors.length; index += 1) {
+      if (!_matchesAncestorSignals(
+        ancestors[index],
+        locator.signals,
+        locator.matchMode,
+      )) {
+        continue;
+      }
+      final nested = locator.ancestor;
+      if (nested == null) {
+        return true;
+      }
+      if (_matchesPreparedAncestorChain(ancestors.sublist(index + 1), nested)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   bool _matchesAncestor(
     CockpitSnapshotAncestor ancestor,
     CockpitLocator locator,
+  ) => _matchesAncestorSignals(ancestor, locator.signals, locator.matchMode);
+
+  bool _matchesAncestorSignals(
+    CockpitSnapshotAncestor ancestor,
+    Iterable<CockpitLocatorSignal> signals,
+    CockpitTextMatchMode matchMode,
   ) {
-    for (final signal in locator.signals) {
+    for (final signal in signals) {
       final matched = switch (signal.kind) {
         CockpitLocatorKind.cockpitId => ancestor.cockpitId == signal.value,
         CockpitLocatorKind.semanticId =>
-          _matchesTextSignal(
-                ancestor.semanticId,
-                signal.value,
-                locator.matchMode,
-              ) ||
-              _matchesTextSignal(
-                ancestor.cockpitId,
-                signal.value,
-                locator.matchMode,
-              ),
+          _matchesTextSignal(ancestor.semanticId, signal.value, matchMode) ||
+              _matchesTextSignal(ancestor.cockpitId, signal.value, matchMode),
         CockpitLocatorKind.key =>
           ancestor.keyValue == signal.value ||
               ancestor.cockpitId == signal.value,
         CockpitLocatorKind.text =>
-          _matchesTextSignal(
-                ancestor.textPreview,
-                signal.value,
-                locator.matchMode,
-              ) ||
-              _matchesTextSignal(
-                ancestor.tooltip,
-                signal.value,
-                locator.matchMode,
-              ),
+          _matchesTextSignal(ancestor.textPreview, signal.value, matchMode) ||
+              _matchesTextSignal(ancestor.tooltip, signal.value, matchMode),
         CockpitLocatorKind.tooltip => _matchesTextSignal(
           ancestor.tooltip,
           signal.value,
-          locator.matchMode,
+          matchMode,
         ),
         CockpitLocatorKind.type => _matchesTypeSignal(
           ancestor.typeName,
@@ -3207,6 +3322,11 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
   // earlier results instead of re-running the segment pipeline.
   static final Map<String, String?> _normalizedPathMemo = <String, String?>{};
 
+  // The mounted tree repeats a handful of widget type names thousands of
+  // times, so per-element type matching reuses earlier normalization results.
+  static final Map<String, String?> _normalizedTypeNameMemo =
+      <String, String?>{};
+
   String? _normalizePath(String? value) {
     if (value == null) {
       return null;
@@ -3235,16 +3355,19 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
     }
 
     final canonical = normalized
-        .replaceAll(RegExp(r'[>\[\]():\s]+'), '/')
+        .replaceAll(_pathCanonicalSeparators, '/')
         .replaceAll('.', '/');
     return canonical
-        .split(RegExp(r'/+'))
+        .split(_pathSlashRuns)
         .map((segment) {
           final lower = segment.trim().toLowerCase();
-          if (lower.isEmpty || RegExp(r'^\d+$').hasMatch(lower)) {
+          if (lower.isEmpty || _digitsOnlyPattern.hasMatch(lower)) {
             return null;
           }
-          final alphanumericOnly = lower.replaceAll(RegExp(r'[^a-z0-9]+'), '');
+          final alphanumericOnly = lower.replaceAll(
+            _nonAlphanumericPattern,
+            '',
+          );
           if (alphanumericOnly.isEmpty ||
               _pathNoiseSegments.contains(alphanumericOnly)) {
             return null;
@@ -3663,6 +3786,44 @@ final class _PathNode {
   // without a segment share their parent's cached list untouched.
   List<String>? trimmedSegments;
   int trimAnchor = anchorNone;
+}
+
+/// A locator flattened once for the element-probe walk.
+///
+/// `CockpitLocator.signals` is a sync* generator that re-runs normalization
+/// and deduplication on every iteration; a probe that scores every mounted
+/// element would allocate and enumerate that iterator per element. This
+/// record materializes the signals, match mode, per-field presence, and the
+/// recursively prepared ancestor chain once per probe instead. Score values
+/// are identical to scoring the original locator directly.
+final class _PreparedLocator {
+  _PreparedLocator(this.source)
+    : hasSignals = source.hasSignals,
+      signals = source.signals.toList(growable: false),
+      matchMode = source.matchMode,
+      pathSignal = source.path,
+      keySignal = source.key,
+      textSignal = source.text,
+      tooltipSignal = source.tooltip,
+      semanticIdSignal = source.semanticId,
+      ancestor = source.ancestor == null
+          ? null
+          : _PreparedLocator(source.ancestor!);
+
+  final CockpitLocator source;
+
+  /// Equivalent to `source.signalMap.length`: the generator deduplicates by
+  /// kind, so the flattened signal list has exactly one entry per signal.
+  late final int signalCount = signals.length;
+  final bool hasSignals;
+  final List<CockpitLocatorSignal> signals;
+  final CockpitTextMatchMode matchMode;
+  final String? pathSignal;
+  final String? keySignal;
+  final String? textSignal;
+  final String? tooltipSignal;
+  final String? semanticIdSignal;
+  final _PreparedLocator? ancestor;
 }
 
 final class _CockpitScrollableCandidate {

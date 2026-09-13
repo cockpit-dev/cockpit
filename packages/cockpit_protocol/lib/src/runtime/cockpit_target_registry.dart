@@ -15,6 +15,14 @@ typedef CockpitDiscoveredTargetsProvider = List<CockpitTarget> Function();
 typedef CockpitDiscoveredTargetsReadinessProbe =
     bool Function({bool allowRouteFallback, String? routeName});
 
+// Matching normalizes text, type names, and locator paths for every compared
+// target; module-level patterns avoid recompiling them per comparison.
+final RegExp _whitespacePattern = RegExp(r'\s+');
+final RegExp _nonAlphanumericPattern = RegExp(r'[^a-z0-9]+');
+final RegExp _pathCanonicalSeparators = RegExp(r'[>\[\]():\s]+');
+final RegExp _pathSlashRuns = RegExp(r'/+');
+final RegExp _digitsOnlyPattern = RegExp(r'^\d+$');
+
 final class CockpitTargetResolutionResult {
   const CockpitTargetResolutionResult._({
     this.target,
@@ -752,7 +760,7 @@ final class CockpitTargetRegistry {
     if (value == null) {
       return null;
     }
-    final normalized = value.replaceAll(RegExp(r'\s+'), ' ').trim();
+    final normalized = value.replaceAll(_whitespacePattern, ' ').trim();
     return normalized.isEmpty ? null : normalized;
   }
 
@@ -761,7 +769,7 @@ final class CockpitTargetRegistry {
     if (normalized == null) {
       return null;
     }
-    final compact = normalized.replaceAll(RegExp(r'[^a-z0-9]+'), '');
+    final compact = normalized.replaceAll(_nonAlphanumericPattern, '');
     return compact.isEmpty ? null : compact;
   }
 
@@ -1241,10 +1249,10 @@ final class CockpitTargetRegistry {
     }
 
     final canonical = normalized
-        .replaceAll(RegExp(r'[>\[\]():\s]+'), '/')
+        .replaceAll(_pathCanonicalSeparators, '/')
         .replaceAll('.', '/');
     return canonical
-        .split(RegExp(r'/+'))
+        .split(_pathSlashRuns)
         .map(_normalizePathSegment)
         .whereType<String>()
         .where((segment) => !_pathNoiseSegments.contains(segment))
@@ -1256,10 +1264,10 @@ final class CockpitTargetRegistry {
     if (lower.isEmpty) {
       return null;
     }
-    if (RegExp(r'^\d+$').hasMatch(lower)) {
+    if (_digitsOnlyPattern.hasMatch(lower)) {
       return null;
     }
-    final alphanumericOnly = lower.replaceAll(RegExp(r'[^a-z0-9]+'), '');
+    final alphanumericOnly = lower.replaceAll(_nonAlphanumericPattern, '');
     return alphanumericOnly.isEmpty ? null : alphanumericOnly;
   }
 

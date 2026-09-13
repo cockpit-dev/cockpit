@@ -760,4 +760,125 @@ void main() {
       expect(result.targetVisible, isFalse);
     },
   );
+
+  testWidgets(
+    'scrollByViewport reuses a still-mounted resolved target for the visibility check',
+    (tester) async {
+      final controller = ScrollController();
+      addTearDown(controller.dispose);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: CockpitSurface(
+            routeName: '/reuse-mounted',
+            child: Material(
+              child: SingleChildScrollView(
+                key: const ValueKey<String>('reuse-scrollable'),
+                controller: controller,
+                child: Column(
+                  children: const <Widget>[
+                    SizedBox(height: 900),
+                    SizedBox(
+                      height: 64,
+                      key: ValueKey<String>('mounted-anchor'),
+                      child: Center(child: Text('Mounted anchor')),
+                    ),
+                    SizedBox(height: 900),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final surfaceState = tester.state<CockpitSurfaceState>(
+        find.byType(CockpitSurface),
+      );
+      const locator = CockpitLocator(text: 'Mounted anchor');
+
+      // The anchor is mounted but offscreen before scrolling, so the step
+      // resolves it up front and scrolls it into view. A SingleChildScrollView
+      // keeps every child mounted, so the step must reuse the pre-scroll
+      // resolution instead of re-walking the tree.
+      final step = await surfaceState.scrollByViewport(
+        targetLocator: locator,
+        duration: Duration.zero,
+      );
+      await tester.pumpAndSettle();
+
+      expect(step.didScroll, isTrue);
+      expect(step.targetMounted, isTrue);
+      expect(step.targetVisible, isTrue);
+      expect(controller.offset, greaterThan(0));
+
+      // The reused pre-scroll resolution must agree with a fresh full probe
+      // of the same locator after the scroll, and with real geometry.
+      final reprobe = surfaceState.probeVisibleLocator(locator);
+      expect(reprobe.isSuccess, isTrue);
+      expect(reprobe.target?.text, 'Mounted anchor');
+      final anchorRect = tester.getRect(
+        find.byKey(const ValueKey<String>('mounted-anchor')),
+      );
+      expect(anchorRect.top, greaterThanOrEqualTo(0));
+      expect(anchorRect.bottom, lessThanOrEqualTo(600));
+    },
+  );
+
+  testWidgets(
+    'scrollByViewport falls back to the full re-probe when the entry resolution found nothing',
+    (tester) async {
+      final controller = ScrollController();
+      addTearDown(controller.dispose);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: CockpitSurface(
+            routeName: '/lazy-reprobe',
+            child: Material(
+              child: ListView.builder(
+                key: const ValueKey<String>('lazy-scrollable'),
+                controller: controller,
+                itemCount: 40,
+                itemBuilder: (context, index) => SizedBox(
+                  height: 120,
+                  child: ListTile(title: Text('Lazy item $index')),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final surfaceState = tester.state<CockpitSurfaceState>(
+        find.byType(CockpitSurface),
+      );
+
+      // Item 8 sits below the lazy build window (viewport plus the scroll
+      // cache), so the pre-scroll resolution finds nothing. The post-scroll
+      // re-probe runs before the test binding pumps the newly revealed
+      // frame, so the step honestly reports the target as not mounted yet;
+      // the next probe after the frame lands observes it.
+      expect(find.text('Lazy item 8').evaluate(), isEmpty);
+      final step = await surfaceState.scrollByViewport(
+        targetLocator: const CockpitLocator(text: 'Lazy item 8'),
+        duration: Duration.zero,
+      );
+      expect(step.didScroll, isTrue);
+      expect(step.strategy, 'jumpTo');
+      expect(step.targetVisibilityObserved, isTrue);
+      expect(step.targetMounted, isFalse);
+      expect(step.targetVisible, isFalse);
+
+      await tester.pumpAndSettle();
+      expect(find.text('Lazy item 8').evaluate(), isNotEmpty);
+      final afterFrame = surfaceState.probeVisibleLocator(
+        const CockpitLocator(text: 'Lazy item 8'),
+      );
+      expect(afterFrame.isSuccess, isTrue);
+      expect(afterFrame.target?.text, 'Lazy item 8');
+    },
+  );
 }

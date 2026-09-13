@@ -44,6 +44,10 @@ enum CockpitTextMatchMode {
 
 const double cockpitFuzzyTextMatchThreshold = 0.72;
 
+// Text matching normalizes both sides on every comparison, and probes run it
+// per element, so the pattern is compiled once at module level.
+final RegExp _whitespacePattern = RegExp(r'\s+');
+
 bool cockpitTextMatches(
   String actual,
   String expected,
@@ -110,7 +114,7 @@ int cockpitTextMatchScore(
 }
 
 String cockpitNormalizeText(String value) =>
-    value.replaceAll(RegExp(r'\s+'), ' ').trim();
+    value.replaceAll(_whitespacePattern, ' ').trim();
 
 bool cockpitFuzzyTextMatches(String actual, String expected) {
   final normalizedExpected = _normalizeFuzzyText(expected);
@@ -162,7 +166,7 @@ double _fuzzyRuneSimilarity(List<int> actualRunes, List<int> expectedRunes) {
 }
 
 String _normalizeFuzzyText(String value) =>
-    value.replaceAll(RegExp(r'\s+'), ' ').trim().toLowerCase();
+    value.replaceAll(_whitespacePattern, ' ').trim().toLowerCase();
 
 int _damerauLevenshteinDistance(List<int> left, List<int> right) {
   final rows = List<List<int>>.generate(

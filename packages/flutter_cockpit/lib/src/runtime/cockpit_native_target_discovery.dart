@@ -15,6 +15,15 @@ import 'cockpit_target.dart';
 import 'cockpit_target_geometry_resolver.dart';
 import 'cockpit_text_input_request.dart';
 
+// Discovery normalizes text, type names, and locator paths for every visited
+// element; module-level patterns avoid recompiling these per call.
+final RegExp _whitespacePattern = RegExp(r'\s+');
+final RegExp _nonAlphanumericPattern = RegExp(r'[^a-z0-9]+');
+final RegExp _trailingSlugDashes = RegExp(r'-+$');
+final RegExp _pathCanonicalSeparators = RegExp(r'[>\[\]():\s]+');
+final RegExp _pathSlashRuns = RegExp(r'/+');
+final RegExp _digitsOnlyPattern = RegExp(r'^\d+$');
+
 final class CockpitNativeTargetDiscovery {
   const CockpitNativeTargetDiscovery({
     this.policy = const CockpitDiscoveryPolicy(),
@@ -3802,7 +3811,7 @@ final class CockpitNativeTargetDiscovery {
     if (value.length <= maxLength) {
       return value;
     }
-    return value.substring(0, maxLength).replaceAll(RegExp(r'-+$'), '');
+    return value.substring(0, maxLength).replaceAll(_trailingSlugDashes, '');
   }
 
   String _stableHashHex(String value) {
@@ -3828,7 +3837,7 @@ final class CockpitNativeTargetDiscovery {
     if (value == null) {
       return null;
     }
-    final normalized = value.replaceAll(RegExp(r'\s+'), ' ').trim();
+    final normalized = value.replaceAll(_whitespacePattern, ' ').trim();
     return normalized.isEmpty ? null : normalized;
   }
 
@@ -3852,16 +3861,19 @@ final class CockpitNativeTargetDiscovery {
     }
 
     final canonical = normalized
-        .replaceAll(RegExp(r'[>\[\]():\s]+'), '/')
+        .replaceAll(_pathCanonicalSeparators, '/')
         .replaceAll('.', '/');
     return canonical
-        .split(RegExp(r'/+'))
+        .split(_pathSlashRuns)
         .map((segment) {
           final lower = segment.trim().toLowerCase();
-          if (lower.isEmpty || RegExp(r'^\d+$').hasMatch(lower)) {
+          if (lower.isEmpty || _digitsOnlyPattern.hasMatch(lower)) {
             return null;
           }
-          final alphanumericOnly = lower.replaceAll(RegExp(r'[^a-z0-9]+'), '');
+          final alphanumericOnly = lower.replaceAll(
+            _nonAlphanumericPattern,
+            '',
+          );
           if (alphanumericOnly.isEmpty ||
               _pathNoiseSegments.contains(alphanumericOnly)) {
             return null;
