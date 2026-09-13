@@ -30,7 +30,6 @@ final class CockpitNativeTargetDiscovery {
     bool includeClippedTargets = false,
   }) {
     final rootElement = rootContext as Element;
-    final rootViewport = _viewportBoundsFor(rootElement);
     final explicitTargetsByElement = _explicitTargetsByElement(explicitTargets);
     final discoveredTargets = <CockpitTarget>[];
     final session = _DiscoverySession();
@@ -40,8 +39,9 @@ final class CockpitNativeTargetDiscovery {
     // keeps discovery O(tree) instead of O(tree × depth) on deep trees.
     final rootScope = _seedInheritedScope(
       rootElement,
-      rootViewport: rootViewport,
+      rootViewport: _globalBoundsFor(rootElement, session),
       explicitTargetsByElement: explicitTargetsByElement,
+      session: session,
     );
 
     void visit(
@@ -66,7 +66,7 @@ final class CockpitNativeTargetDiscovery {
       _deriveAncestorScanResults(element, parent, session);
 
       final effectiveViewport = _marksViewportBoundary(element)
-          ? _intersectViewports(scope.effectiveViewport, element)
+          ? _intersectViewports(scope.effectiveViewport, element, session)
           : scope.effectiveViewport;
 
       final isRenderable = _isRenderable(element);
@@ -78,7 +78,7 @@ final class CockpitNativeTargetDiscovery {
           explicitTarget == null &&
               isRenderable &&
               (includeClippedTargets ||
-                  _overlapsClippedViewport(element, effectiveViewport))
+                  _overlapsClippedViewport(element, effectiveViewport, session))
           ? _buildTarget(
               element,
               routeName: targetRouteName,
@@ -97,6 +97,7 @@ final class CockpitNativeTargetDiscovery {
             strictVisibility:
                 candidate.supportedCommands.isEmpty &&
                 candidate.control == null,
+            session: session,
           );
       final createsActionableScope =
           candidate != null &&
@@ -143,14 +144,14 @@ final class CockpitNativeTargetDiscovery {
     bool allowInactiveRouteFallback = false,
   }) {
     final rootElement = rootContext as Element;
-    final rootViewport = _viewportBoundsFor(rootElement);
     final explicitTargetsByElement = _explicitTargetsByElement(explicitTargets);
     var found = false;
     final session = _DiscoverySession();
     final rootScope = _seedInheritedScope(
       rootElement,
-      rootViewport: rootViewport,
+      rootViewport: _globalBoundsFor(rootElement, session),
       explicitTargetsByElement: explicitTargetsByElement,
+      session: session,
     );
 
     void visit(
@@ -186,13 +187,13 @@ final class CockpitNativeTargetDiscovery {
         allowInactiveRouteFallback: allowInactiveRouteFallback,
       );
       final effectiveViewport = _marksViewportBoundary(element)
-          ? _intersectViewports(scope.effectiveViewport, element)
+          ? _intersectViewports(scope.effectiveViewport, element, session)
           : scope.effectiveViewport;
       final candidate =
           explicitTarget == null &&
               candidateRouteMatches &&
               isRenderable &&
-              _overlapsClippedViewport(element, effectiveViewport)
+              _overlapsClippedViewport(element, effectiveViewport, session)
           ? _buildTarget(
               element,
               routeName: targetRouteName,
@@ -211,6 +212,7 @@ final class CockpitNativeTargetDiscovery {
             strictVisibility:
                 candidate.supportedCommands.isEmpty &&
                 candidate.control == null,
+            session: session,
           );
       final createsActionableScope =
           candidate != null &&
@@ -284,8 +286,9 @@ final class CockpitNativeTargetDiscovery {
     final session = _DiscoverySession();
     var scope = _seedInheritedScope(
       rootElement,
-      rootViewport: _viewportBoundsFor(rootElement),
+      rootViewport: _globalBoundsFor(rootElement, session),
       explicitTargetsByElement: explicitTargetsByElement,
+      session: session,
     );
     Element? actionableOwner;
     Element? chainParent;
@@ -305,7 +308,11 @@ final class CockpitNativeTargetDiscovery {
       _deriveAncestorScanResults(candidateElement, chainParent, session);
 
       final effectiveViewport = _marksViewportBoundary(candidateElement)
-          ? _intersectViewports(scope.effectiveViewport, candidateElement)
+          ? _intersectViewports(
+              scope.effectiveViewport,
+              candidateElement,
+              session,
+            )
           : scope.effectiveViewport;
       final targetRouteName = _effectiveDiscoveryRouteName(
         scope.routeScope,
@@ -314,7 +321,11 @@ final class CockpitNativeTargetDiscovery {
       final target =
           explicitTarget == null &&
               _isRenderable(candidateElement) &&
-              _overlapsClippedViewport(candidateElement, effectiveViewport)
+              _overlapsClippedViewport(
+                candidateElement,
+                effectiveViewport,
+                session,
+              )
           ? _buildTarget(
               candidateElement,
               routeName: targetRouteName,
@@ -332,6 +343,7 @@ final class CockpitNativeTargetDiscovery {
             candidateElement,
             effectiveViewport,
             strictVisibility: false,
+            session: session,
           );
       final ownsRequestedCommand =
           target != null &&
@@ -778,13 +790,86 @@ final class CockpitNativeTargetDiscovery {
     return isAncestor;
   }
 
-  Rect? _viewportBoundsFor(Element rootElement) {
-    final renderObject = rootElement.findRenderObject();
-    if (renderObject is! RenderBox || !renderObject.hasSize) {
-      return null;
+  /// Global paint bounds of [element]'s render box, memoized per element for
+  /// one session (null = no RenderBox / no size yet).
+  ///
+  /// Every geometry consumer in a pass (viewport-overlap gate, meaningful
+  /// exposure ratios, viewport intersections) asks for the same bounds, and a
+  /// raw `localToGlobal` walks the whole render tree to the root per call. On
+  /// deep trees that made one discovery pass cost O(elements x render depth);
+  /// threading the transform per render edge instead collapses it to O(tree).
+  Rect? _globalBoundsFor(Element element, _DiscoverySession session) {
+    final boundsByElement = session.globalBounds;
+    if (boundsByElement.containsKey(element)) {
+      return boundsByElement[element];
     }
-    final origin = renderObject.localToGlobal(Offset.zero);
-    return origin & renderObject.size;
+    final renderObject = element.findRenderObject();
+    final bounds = renderObject is RenderBox && renderObject.hasSize
+        ? MatrixUtils.transformPoint(
+                _globalTransformFor(renderObject, session),
+                Offset.zero,
+              ) &
+              renderObject.size
+        : null;
+    boundsByElement[element] = bounds;
+    return bounds;
+  }
+
+  /// Transform from [renderObject]'s paint space to the root render node's
+  /// space — the matrix behind `RenderBox.localToGlobal(_, ancestor: null)` —
+  /// computed by threading the accumulated matrix down the render chain so
+  /// each render edge's paint transform is applied once per session instead
+  /// of once per queried descendant.
+  ///
+  /// Replicates `RenderObject.getTransformTo(null)` exactly: every ancestor's
+  /// [RenderObject.applyPaintTransform] hook (parentData offsets, transform
+  /// matrices, fitted boxes, zeroed-out edges) is applied top-down into the
+  /// accumulated matrix in the same order `getTransformTo` applies them, and
+  /// the pipeline root node's own transform is excluded because
+  /// `localToGlobal` reports the root's logical-pixel coordinates.
+  Matrix4 _globalTransformFor(
+    RenderObject renderObject,
+    _DiscoverySession session,
+  ) {
+    final transforms = session.globalTransforms;
+    final memoized = transforms[renderObject];
+    if (memoized != null) {
+      return memoized;
+    }
+
+    // Collect the un-memoized chain child-first. The topmost node seeds the
+    // replay: either a memoized ancestor or the pipeline root (identity).
+    final chain = <RenderObject>[renderObject];
+    Matrix4 seed;
+    RenderObject current = renderObject;
+    while (true) {
+      final parent = current.parent;
+      if (parent == null) {
+        seed = Matrix4.identity();
+        transforms[current] = seed;
+        break;
+      }
+      final memo = transforms[parent];
+      if (memo != null) {
+        seed = memo;
+        break;
+      }
+      chain.add(parent);
+      current = parent;
+    }
+
+    var transform = seed;
+    for (var index = chain.length - 1; index >= 0; index -= 1) {
+      final child = chain[index];
+      final parent = child.parent;
+      final childTransform = transform.clone();
+      if (parent != null && parent.parent != null) {
+        parent.applyPaintTransform(child, childTransform);
+      }
+      transforms[child] = childTransform;
+      transform = childTransform;
+    }
+    return transform;
   }
 
   /// Walks [element]'s ancestors lazily, nearest → root, excluding the
@@ -880,6 +965,7 @@ final class CockpitNativeTargetDiscovery {
     required Rect? rootViewport,
     Map<Element, CockpitTarget> explicitTargetsByElement =
         const <Element, CockpitTarget>{},
+    required _DiscoverySession session,
   }) {
     var ancestorHidden = false;
     var pointerBlocked = false;
@@ -904,7 +990,11 @@ final class CockpitNativeTargetDiscovery {
         pointerBlocked = pointerBlocked || _blocksPointerForDescendants(widget);
         routeScope ??= _cockpitRouteScopeForWidget(widget);
         if (_marksViewportBoundary(ancestor)) {
-          effectiveViewport = _intersectViewports(effectiveViewport, ancestor);
+          effectiveViewport = _intersectViewports(
+            effectiveViewport,
+            ancestor,
+            session,
+          );
         }
         return true;
       });
@@ -918,8 +1008,12 @@ final class CockpitNativeTargetDiscovery {
     );
   }
 
-  Rect? _intersectViewports(Rect? current, Element boundaryElement) {
-    final viewport = _viewportBoundsFor(boundaryElement);
+  Rect? _intersectViewports(
+    Rect? current,
+    Element boundaryElement,
+    _DiscoverySession session,
+  ) {
+    final viewport = _globalBoundsFor(boundaryElement, session);
     if (viewport == null) {
       return current;
     }
@@ -2309,16 +2403,18 @@ final class CockpitNativeTargetDiscovery {
     return true;
   }
 
-  bool _overlapsClippedViewport(Element element, Rect? effectiveViewport) {
+  bool _overlapsClippedViewport(
+    Element element,
+    Rect? effectiveViewport,
+    _DiscoverySession session,
+  ) {
     if (effectiveViewport == null) {
       return true;
     }
-    final renderObject = element.findRenderObject();
-    if (renderObject is! RenderBox || !renderObject.hasSize) {
+    final bounds = _globalBoundsFor(element, session);
+    if (bounds == null) {
       return false;
     }
-    final origin = renderObject.localToGlobal(Offset.zero);
-    final bounds = origin & renderObject.size;
     return bounds.overlaps(effectiveViewport);
   }
 
@@ -2326,16 +2422,15 @@ final class CockpitNativeTargetDiscovery {
     Element element,
     Rect? effectiveViewport, {
     required bool strictVisibility,
+    required _DiscoverySession session,
   }) {
     if (effectiveViewport == null) {
       return true;
     }
-    final renderObject = element.findRenderObject();
-    if (renderObject is! RenderBox || !renderObject.hasSize) {
+    final bounds = _globalBoundsFor(element, session);
+    if (bounds == null) {
       return false;
     }
-    final origin = renderObject.localToGlobal(Offset.zero);
-    final bounds = origin & renderObject.size;
     if (!bounds.overlaps(effectiveViewport)) {
       return false;
     }
@@ -4024,6 +4119,15 @@ String? _effectiveDiscoveryRouteName(
 /// Per-discovery-pass memo so ancestor-derived metadata (locator paths,
 /// inherited semantic ids and tooltips) is computed at most once per element.
 final class _DiscoverySession {
+  /// Global paint bounds per element (null = no RenderBox / no size yet),
+  /// shared by every geometry question in one synchronous discovery pass.
+  final Map<Element, Rect?> globalBounds = Map<Element, Rect?>.identity();
+
+  /// Root-space transform per render object, threaded edge-by-edge so every
+  /// render edge's paint transform is applied once per session.
+  final Map<RenderObject, Matrix4> globalTransforms =
+      Map<RenderObject, Matrix4>.identity();
+
   final Map<Element, _LocatorPathNode> pathNodes =
       Map<Element, _LocatorPathNode>.identity();
   final Map<Element, String> locatorPaths = Map<Element, String>.identity();
