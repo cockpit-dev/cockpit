@@ -1,5 +1,6 @@
 // ignore_for_file: deprecated_member_use
 
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_cockpit/flutter_cockpit_flutter.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -25,6 +26,192 @@ class AncestorScopeData extends InheritedWidget {
 }
 
 void main() {
+  testWidgets(
+    'handler family resolves identically through the shared ancestor chains',
+    (tester) async {
+      var filledTapped = false;
+      var iconTapped = false;
+      var gestureTapped = false;
+      var tileTapped = false;
+      var tileLongPressed = false;
+      var segmentGestureTapped = false;
+      var selectedSegment = 0;
+      var tooltipButtonTapped = false;
+      var tooltipIconTapped = false;
+      final editor = TextEditingController();
+      addTearDown(editor.dispose);
+
+      await tester.pumpWidget(
+        CockpitSurface(
+          routeName: '/handlers',
+          child: MaterialApp(
+            home: Scaffold(
+              body: ListView(
+                children: <Widget>[
+                  FilledButton(
+                    key: const ValueKey<String>('filled'),
+                    onPressed: () => filledTapped = true,
+                    child: const Text('Filled'),
+                  ),
+                  IconButton(
+                    key: const ValueKey<String>('icon'),
+                    onPressed: () => iconTapped = true,
+                    icon: const SizedBox(width: 24, height: 24),
+                  ),
+                  GestureDetector(
+                    key: const ValueKey<String>('gesture'),
+                    onTap: () => gestureTapped = true,
+                    onDoubleTap: () {},
+                    child: const Text('Gesture'),
+                  ),
+                  ListTile(
+                    key: const ValueKey<String>('tile'),
+                    title: const Text('Tile'),
+                    onTap: () => tileTapped = true,
+                    onLongPress: () => tileLongPressed = true,
+                  ),
+                  CupertinoSegmentedControl<int>(
+                    key: const ValueKey<String>('segments'),
+                    children: <int, Widget>{
+                      0: GestureDetector(
+                        key: const ValueKey<String>('segment-gesture'),
+                        onTap: () => segmentGestureTapped = true,
+                        child: const Text('Segment Zero'),
+                      ),
+                      1: const Text('Segment One'),
+                    },
+                    groupValue: selectedSegment,
+                    onValueChanged: (value) => selectedSegment = value,
+                  ),
+                  Tooltip(
+                    message: 'save-hint',
+                    child: FilledButton(
+                      key: const ValueKey<String>('tooltip-button'),
+                      onPressed: () => tooltipButtonTapped = true,
+                      child: const Text('Save'),
+                    ),
+                  ),
+                  Tooltip(
+                    message: 'star-hint',
+                    child: IconButton(
+                      key: const ValueKey<String>('tooltip-icon'),
+                      onPressed: () => tooltipIconTapped = true,
+                      icon: const SizedBox(width: 24, height: 24),
+                    ),
+                  ),
+                  TextField(
+                    key: const ValueKey<String>('editor'),
+                    controller: editor,
+                    decoration: const InputDecoration(labelText: 'Editor'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final state = tester.state<CockpitSurfaceState>(
+        find.byType(CockpitSurface),
+      );
+      CockpitTarget targetForKey(String key) =>
+          state.registry.resolve(CockpitLocator(key: key)).target!;
+
+      final filled = targetForKey('filled');
+      expect(filled.typeName, 'FilledButton');
+      expect(filled.supportedCommands, contains(CockpitCommandType.tap));
+      filled.onTap?.call();
+      expect(filledTapped, isTrue);
+
+      final icon = targetForKey('icon');
+      expect(icon.typeName, 'IconButton');
+      icon.onTap?.call();
+      expect(iconTapped, isTrue);
+
+      final gesture = targetForKey('gesture');
+      expect(
+        gesture.supportedCommands,
+        containsAll(<CockpitCommandType>[
+          CockpitCommandType.tap,
+          CockpitCommandType.doubleTap,
+        ]),
+      );
+      gesture.onTap?.call();
+      expect(gestureTapped, isTrue);
+
+      final tile = targetForKey('tile');
+      expect(tile.typeName, 'ListTile');
+      expect(
+        tile.supportedCommands,
+        containsAll(<CockpitCommandType>[
+          CockpitCommandType.tap,
+          CockpitCommandType.longPress,
+        ]),
+      );
+      tile.onTap?.call();
+      tile.onLongPress?.call();
+      expect(tileTapped, isTrue);
+      expect(tileLongPressed, isTrue);
+
+      // The enclosing segment control owns the tap before the local
+      // GestureDetector: the child surfaces as a CupertinoSegment whose
+      // handler routes to onValueChanged, never to the local onTap.
+      final segmentZero = state.registry
+          .resolve(const CockpitLocator(text: 'Segment Zero'))
+          .target!;
+      expect(segmentZero.typeName, 'CupertinoSegment');
+      expect(segmentZero.supportedCommands, contains(CockpitCommandType.tap));
+      segmentZero.onTap?.call();
+      await tester.pumpAndSettle();
+      expect(selectedSegment, 0); // tapping the selected segment is a no-op.
+      expect(segmentGestureTapped, isFalse);
+
+      state.registry
+          .resolve(const CockpitLocator(text: 'Segment One'))
+          .target!
+          .onTap
+          ?.call();
+      await tester.pumpAndSettle();
+      expect(selectedSegment, 1);
+      expect(segmentGestureTapped, isFalse);
+      // The keyed GestureDetector leaf never surfaces as its own target; the
+      // segment owns the interaction.
+      expect(
+        state.registry.visibleTargets.where(
+          (target) => target.keyValue == 'segment-gesture',
+        ),
+        isEmpty,
+      );
+
+      // Tooltip inheritance rides the same shared ancestor chain.
+      final tooltipButton = targetForKey('tooltip-button');
+      expect(tooltipButton.tooltip, 'save-hint');
+      expect(tooltipButton.supportedCommands, contains(CockpitCommandType.tap));
+      tooltipButton.onTap?.call();
+      expect(tooltipButtonTapped, isTrue);
+
+      final tooltipIcon = targetForKey('tooltip-icon');
+      expect(tooltipIcon.tooltip, 'star-hint');
+      tooltipIcon.onTap?.call();
+      expect(tooltipIconTapped, isTrue);
+
+      final editorTarget = targetForKey('editor');
+      expect(editorTarget.typeName, 'TextField');
+      expect(
+        editorTarget.supportedCommands,
+        containsAll(<CockpitCommandType>[
+          CockpitCommandType.tap,
+          CockpitCommandType.enterText,
+          CockpitCommandType.setTextEditingValue,
+        ]),
+      );
+      editorTarget.onEnterText?.call('typed');
+      await tester.pumpAndSettle();
+      expect(editor.text, 'typed');
+    },
+  );
+
   testWidgets('locator ancestors keep scope order and filter wrapper noise', (
     tester,
   ) async {
@@ -192,14 +379,45 @@ void main() {
     tester,
   ) async {
     const spineDepth = 350;
-    const leavesPerLevel = 6;
+    const leavesPerLevel = 2;
+    // Component-only wrappers stretch the element chain without adding render
+    // objects, so the per-element ancestor scans dominate discovery the same
+    // way they do on real deep element trees.
+    const componentWrappersPerLevel = 6;
+
+    Widget wrapComponents(int remaining, Widget child) => remaining == 0
+        ? child
+        : KeyedSubtree(
+            child: Builder(
+              builder: (_) => wrapComponents(remaining - 1, child),
+            ),
+          );
 
     Widget buildLevel(int remaining) {
       return AncestorSpine(
         children: <Widget>[
           for (var index = 0; index < leavesPerLevel; index += 1)
             Text('leaf-$remaining-$index'),
-          if (remaining > 0) buildLevel(remaining - 1),
+          // Actionable leaves keep the per-element handler family (segment,
+          // scrollable, label, hover ancestor scans) hot at every depth.
+          FilledButton(
+            onPressed: () {},
+            child: const SizedBox(width: 24, height: 24),
+          ),
+          ChoiceChip(
+            label: const SizedBox(width: 24, height: 24),
+            selected: false,
+            onSelected: (_) {},
+          ),
+          GestureDetector(
+            onDoubleTap: () {},
+            child: const SizedBox(width: 24, height: 24),
+          ),
+          if (remaining > 0)
+            wrapComponents(
+              componentWrappersPerLevel,
+              buildLevel(remaining - 1),
+            ),
         ],
       );
     }
@@ -208,7 +426,9 @@ void main() {
       MaterialApp(
         home: CockpitSurface(
           routeName: '/discovery-scale',
-          child: SingleChildScrollView(child: buildLevel(spineDepth - 1)),
+          child: Material(
+            child: SingleChildScrollView(child: buildLevel(spineDepth - 1)),
+          ),
         ),
       ),
     );
@@ -227,10 +447,25 @@ void main() {
       targets.where((target) => target.typeName == 'RichText'),
       hasLength(spineDepth * leavesPerLevel),
     );
-    // Ancestor extraction used to re-walk every target's full ancestor
-    // chain and rebuild each shared ancestor record, which kept this
-    // discovery above two seconds on ~5k-element trees (measured 2.25s);
-    // memoizing the shared chains keeps discovery linear.
-    expect(stopwatch.elapsed, lessThan(const Duration(seconds: 2)));
+    expect(
+      targets.where((target) => target.typeName == 'FilledButton'),
+      hasLength(spineDepth),
+    );
+    expect(
+      targets.where((target) => target.typeName == 'ChoiceChip'),
+      hasLength(spineDepth),
+    );
+    expect(
+      targets.where((target) => target.typeName == 'GestureDetector').length,
+      greaterThanOrEqualTo(spineDepth),
+    );
+    // Before the session-level ancestor memoization, every actionable leaf
+    // re-walked its full ancestor chain per handler family (segment control,
+    // scrollable, inherited label, key), which measured 15.2s on this tree
+    // and scaled quadratically with depth (390ms/744ms/1448ms at depths
+    // 50/100/150). Memoized discovery runs ~1.5-1.8s here; the 3s guard
+    // keeps ~40% margin for slower CI hardware while still failing by 5x
+    // against the un-memoized implementation.
+    expect(stopwatch.elapsed, lessThan(const Duration(seconds: 3)));
   });
 }

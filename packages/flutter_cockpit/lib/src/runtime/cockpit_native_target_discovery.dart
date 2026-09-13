@@ -61,6 +61,10 @@ final class CockpitNativeTargetDiscovery {
         return;
       }
 
+      // Ancestor-derived results flow down the DFS from the parent's memos,
+      // keeping the per-element handler family O(1).
+      _deriveAncestorScanResults(element, parent, session);
+
       final effectiveViewport = _marksViewportBoundary(element)
           ? _intersectViewports(scope.effectiveViewport, element)
           : scope.effectiveViewport;
@@ -166,6 +170,10 @@ final class CockpitNativeTargetDiscovery {
           _isControlTarget(explicitTarget)) {
         return;
       }
+
+      // Ancestor-derived results flow down the DFS from the parent's memos,
+      // keeping the per-element handler family O(1).
+      _deriveAncestorScanResults(element, parent, session);
 
       final isRenderable = _isRenderable(element);
       final targetRouteName = _effectiveDiscoveryRouteName(
@@ -292,6 +300,10 @@ final class CockpitNativeTargetDiscovery {
         return const <CockpitTarget>[];
       }
 
+      // The chain iteration knows each candidate's parent, so the
+      // ancestor-derived results flow down exactly like the DFS.
+      _deriveAncestorScanResults(candidateElement, chainParent, session);
+
       final effectiveViewport = _marksViewportBoundary(candidateElement)
           ? _intersectViewports(scope.effectiveViewport, candidateElement)
           : scope.effectiveViewport;
@@ -324,7 +336,12 @@ final class CockpitNativeTargetDiscovery {
       final ownsRequestedCommand =
           target != null &&
           exposed &&
-          _ownsRelatedCommand(candidateElement, target, requiredCommand);
+          _ownsRelatedCommand(
+            candidateElement,
+            target,
+            requiredCommand,
+            session,
+          );
       if (ownsRequestedCommand) {
         ancestorActions.add(target);
       }
@@ -372,6 +389,7 @@ final class CockpitNativeTargetDiscovery {
     Element element,
     CockpitTarget target,
     CockpitCommandType requiredCommand,
+    _DiscoverySession session,
   ) {
     if (!target.supportedCommands.contains(requiredCommand)) {
       return false;
@@ -384,7 +402,7 @@ final class CockpitNativeTargetDiscovery {
     final hasCompleteContact =
         listener.onPointerDown != null && listener.onPointerUp != null;
     return hasCompleteContact ||
-        _cupertinoSegmentControlAncestor(element) != null;
+        _cupertinoSegmentControlAncestor(element, session) != null;
   }
 
   bool _matchesDiscoveryRoute(
@@ -769,6 +787,93 @@ final class CockpitNativeTargetDiscovery {
     return origin & renderObject.size;
   }
 
+  /// Walks [element]'s ancestors lazily, nearest → root, excluding the
+  /// element itself.
+  ///
+  /// Every consumer breaks at its first memo hit (or finding predicate), so
+  /// the chain is deliberately NOT materialized per element: materializing
+  /// copies the parent's full chain — O(depth) per element — while a lazy
+  /// walk only pays for the steps each resolver actually takes. Repeated
+  /// whole-chain questions (segment ancestors, nearest scrollable, labels,
+  /// hover, …) are memoized in the session instead, derived parent-first by
+  /// the discovery DFS.
+  Iterable<Element> _ancestorChainFor(Element element) sync* {
+    for (
+      Element? current = _parentElementOf(element);
+      current != null;
+      current = _parentElementOf(current)
+    ) {
+      yield current;
+    }
+  }
+
+  Element? _parentElementOf(Element element) {
+    Element? parent;
+    element.visitAncestorElements((ancestor) {
+      parent = ancestor;
+      return false;
+    });
+    return parent;
+  }
+
+  /// Memoized `element.widget.runtimeType.toString()` for one session, so the
+  /// ancestor-scan predicates never allocate the same type name twice.
+  String _typeNameFor(Element element, _DiscoverySession session) =>
+      session.typeNames[element] ??= element.widget.runtimeType.toString();
+
+  /// Derives [element]'s per-element ancestor-scan results from its parent's
+  /// memoized results, so the handler family costs O(1) per element instead
+  /// of one chain scan per family member.
+  ///
+  /// Each result is pure w.r.t. (element, session) — the underlying widget
+  /// state is frozen for the synchronous discovery pass — so the DFS carries
+  /// them down like the inherited scope. Query paths without a known parent
+  /// fall back to the chain scan inside each resolver.
+  void _deriveAncestorScanResults(
+    Element element,
+    Element? parent,
+    _DiscoverySession session,
+  ) {
+    final cupertinoSegments = session.cupertinoSegmentAncestors;
+    if (!cupertinoSegments.containsKey(element)) {
+      cupertinoSegments[element] = parent == null
+          ? _cupertinoSegmentControlAncestor(element, session)
+          : _isCupertinoSegmentControlWidget(parent.widget)
+          ? parent
+          : _cupertinoSegmentControlAncestor(parent, session);
+    }
+    final materialSegments = session.materialSegmentAncestors;
+    if (!materialSegments.containsKey(element)) {
+      materialSegments[element] = parent == null
+          ? _materialSegmentControlAncestor(element, session)
+          : parent.widget is SegmentedButton
+          ? parent
+          : _materialSegmentControlAncestor(parent, session);
+    }
+    final scrollables = session.nearestScrollables;
+    if (!scrollables.containsKey(element)) {
+      scrollables[element] = _marksViewportBoundary(element)
+          ? element
+          : parent == null
+          ? _nearestScrollableElement(element, session)
+          : _nearestScrollableElement(parent, session);
+    }
+    final inputLabels = session.inheritedInputLabels;
+    if (!inputLabels.containsKey(element)) {
+      inputLabels[element] = parent == null
+          ? _inheritedInputLabelForElement(element, session)
+          : _inputLabelFromWidget(parent.widget) ??
+                _inheritedInputLabelForElement(parent, session);
+    }
+    final inputErrors = session.inheritedInputErrors;
+    if (!inputErrors.containsKey(element)) {
+      inputErrors[element] = parent == null
+          ? _inheritedInputErrorForElement(element, session)
+          : _inputErrorFromWidget(parent.widget) ??
+                _inheritedInputErrorForElement(parent, session);
+    }
+  }
+
   /// Resolves the inherited offstage and viewport state for the discovery root.
   _InheritedDiscoveryScope _seedInheritedScope(
     Element rootElement, {
@@ -835,7 +940,7 @@ final class CockpitNativeTargetDiscovery {
     final semantics = resolvedSemantics?.inheritedFromAncestor == false
         ? resolvedSemantics
         : null;
-    var tapHandler = _tapHandlerForElement(element);
+    var tapHandler = _tapHandlerForElement(element, session);
     var longPressHandler = _longPressHandlerForElement(element);
     var doubleTapHandler = _doubleTapHandlerForElement(element);
     var enterTextHandler = _enterTextHandlerForElement(element);
@@ -845,6 +950,7 @@ final class CockpitNativeTargetDiscovery {
         _hoverableForElement(
           element,
           includeAncestors: includeInferredInteraction,
+          session: session,
         );
     if (pointerBlocked) {
       tapHandler = null;
@@ -882,7 +988,7 @@ final class CockpitNativeTargetDiscovery {
         _supportsGestureTapFallback(element.widget);
     final gestureCommands = pointerBlocked || !includeInferredInteraction
         ? const <CockpitCommandType>{}
-        : _gestureCommandsForElement(element);
+        : _gestureCommandsForElement(element, session);
     if (!enabled) {
       tapHandler = null;
       longPressHandler = null;
@@ -938,7 +1044,7 @@ final class CockpitNativeTargetDiscovery {
           ),
         ),
     };
-    final typeName = _publicTypeNameForElement(element);
+    final typeName = _publicTypeNameForElement(element, session);
 
     if (actionableOwner != null) {
       final canExposePassiveSelectorNode =
@@ -985,7 +1091,7 @@ final class CockpitNativeTargetDiscovery {
           path: path,
           typeName: typeName,
           bestLabel: isTextInput
-              ? _inputLabelForElement(element) ?? metadata.displayLabel
+              ? _inputLabelForElement(element, session) ?? metadata.displayLabel
               : metadata.displayLabel,
         ),
         cockpitId: _firstNonEmpty(<String?>[
@@ -1397,8 +1503,8 @@ final class CockpitNativeTargetDiscovery {
     final widget = element.widget;
     final semanticState = semantics?.control;
     final segmentState =
-        _materialSegmentControlStateForElement(element) ??
-        _cupertinoSegmentControlStateForElement(element);
+        _materialSegmentControlStateForElement(element, session) ??
+        _cupertinoSegmentControlStateForElement(element, session);
     final delegatedState = hasDirectHandlers
         ? _blockedDescendantSelectionState(element, session)
         : null;
@@ -1410,7 +1516,7 @@ final class CockpitNativeTargetDiscovery {
     } else if (editableState != null) {
       final obscured = editableState.widget.obscureText;
       directState = CockpitControlState(
-        enabled: _textInputEnabledForElement(element),
+        enabled: _textInputEnabledForElement(element, session),
         focused: editableState.widget.focusNode.hasFocus,
         readOnly: editableState.widget.readOnly,
         obscured: obscured,
@@ -1635,8 +1741,11 @@ final class CockpitNativeTargetDiscovery {
     return null;
   }
 
-  CockpitControlState? _materialSegmentControlStateForElement(Element element) {
-    final control = _materialSegmentControlAncestor(element);
+  CockpitControlState? _materialSegmentControlStateForElement(
+    Element element,
+    _DiscoverySession session,
+  ) {
+    final control = _materialSegmentControlAncestor(element, session);
     if (control == null) return null;
     final widget = control.widget;
     if (widget is! SegmentedButton) return null;
@@ -1662,8 +1771,9 @@ final class CockpitNativeTargetDiscovery {
 
   CockpitControlState? _cupertinoSegmentControlStateForElement(
     Element element,
+    _DiscoverySession session,
   ) {
-    final control = _cupertinoSegmentControlAncestor(element);
+    final control = _cupertinoSegmentControlAncestor(element, session);
     if (control == null) return null;
     final widget = control.widget;
     final children = switch (widget) {
@@ -1737,7 +1847,7 @@ final class CockpitNativeTargetDiscovery {
     null => CockpitCheckState.mixed,
   };
 
-  bool _textInputEnabledForElement(Element element) {
+  bool _textInputEnabledForElement(Element element, _DiscoverySession session) {
     bool? enabled;
     void read(Widget widget) {
       enabled ??= switch (widget) {
@@ -1752,10 +1862,12 @@ final class CockpitNativeTargetDiscovery {
 
     read(element.widget);
     if (enabled == null) {
-      element.visitAncestorElements((ancestor) {
+      for (final ancestor in _ancestorChainFor(element)) {
         read(ancestor.widget);
-        return enabled == null;
-      });
+        if (enabled != null) {
+          break;
+        }
+      }
     }
     return enabled ?? true;
   }
@@ -1815,17 +1927,16 @@ final class CockpitNativeTargetDiscovery {
     final chain = <Element>[element];
     List<CockpitSnapshotAncestor>? base;
     Element? baseParent;
-    element.visitAncestorElements((ancestor) {
+    for (final ancestor in _ancestorChainFor(element)) {
       final hit = session
           .locatorAncestorLists[(element: ancestor, routeName: routeName)];
       if (hit != null) {
         base = hit;
         baseParent = ancestor;
-        return false;
+        break;
       }
       chain.add(ancestor);
-      return true;
-    });
+    }
 
     // Assemble root → nearest: when a candidate is about to be resolved,
     // [current] already holds its parent's memoized list.
@@ -1889,7 +2000,7 @@ final class CockpitNativeTargetDiscovery {
     required String? routeName,
     required _DiscoverySession session,
   }) {
-    if (_shouldSkipAncestorElementForLocator(ancestor)) {
+    if (_shouldSkipAncestorElementForLocator(ancestor, session)) {
       return null;
     }
     final semanticId = _semanticIdForElement(ancestor, session);
@@ -1905,11 +2016,11 @@ final class CockpitNativeTargetDiscovery {
       tooltip,
       textPreview,
     ].any((value) => value != null);
-    if (!hasStableScopeSignal && _shouldSkipPathElement(ancestor)) {
+    if (!hasStableScopeSignal && _shouldSkipPathElement(ancestor, session)) {
       return null;
     }
     return CockpitSnapshotAncestor(
-      typeName: ancestor.widget.runtimeType.toString(),
+      typeName: _typeNameFor(ancestor, session),
       cockpitId: _firstNonEmpty(<String?>[semanticId, keyValue]),
       semanticId: semanticId,
       keyValue: keyValue,
@@ -1920,8 +2031,11 @@ final class CockpitNativeTargetDiscovery {
     );
   }
 
-  bool _shouldSkipAncestorElementForLocator(Element ancestor) {
-    final typeName = ancestor.widget.runtimeType.toString();
+  bool _shouldSkipAncestorElementForLocator(
+    Element ancestor,
+    _DiscoverySession session,
+  ) {
+    final typeName = _typeNameFor(ancestor, session);
     if (typeName.startsWith('_')) {
       return true;
     }
@@ -1952,9 +2066,7 @@ final class CockpitNativeTargetDiscovery {
     final trimmedSegments = _trimMeaningfulPathSegments(segments);
     String result;
     if (trimmedSegments.isEmpty) {
-      final fallback = _locatorPathSegment(
-        element.widget.runtimeType.toString(),
-      );
+      final fallback = _locatorPathSegment(_typeNameFor(element, session));
       result = fallback == null ? '/target' : '/$fallback';
     } else {
       result = '/${trimmedSegments.join('/')}';
@@ -1975,21 +2087,18 @@ final class CockpitNativeTargetDiscovery {
     }
     final pendingChain = <Element>[element];
     var base = _LocatorPathNode.root;
-    element.visitAncestorElements((ancestor) {
+    for (final ancestor in _ancestorChainFor(element)) {
       final hit = session.pathNodes[ancestor];
       if (hit != null) {
         base = hit;
-        return false;
+        break;
       }
       pendingChain.add(ancestor);
-      return true;
-    });
+    }
     var node = base;
     for (final candidate in pendingChain.reversed) {
-      if (!_shouldSkipPathElement(candidate)) {
-        final segment = _locatorPathSegment(
-          candidate.widget.runtimeType.toString(),
-        );
+      if (!_shouldSkipPathElement(candidate, session)) {
+        final segment = _locatorPathSegment(_typeNameFor(candidate, session));
         if (segment != null) {
           node = _LocatorPathNode(node, segment);
         }
@@ -2007,9 +2116,9 @@ final class CockpitNativeTargetDiscovery {
     return slug.isEmpty ? null : slug;
   }
 
-  bool _shouldSkipPathElement(Element element) {
+  bool _shouldSkipPathElement(Element element, _DiscoverySession session) {
     final widget = element.widget;
-    final typeName = widget.runtimeType.toString();
+    final typeName = _typeNameFor(element, session);
     if (typeName.startsWith('_')) {
       return true;
     }
@@ -2059,19 +2168,19 @@ final class CockpitNativeTargetDiscovery {
     Element element,
     _DiscoverySession session,
   ) {
-    final scrollable = _nearestScrollableElement(element);
+    final scrollable = _nearestScrollableElement(element, session);
     if (scrollable == null) {
       return const _ScrollableLocatorMetadata();
     }
     return _ScrollableLocatorMetadata(
       path: _locatorPathForElement(scrollable, session),
-      keyValue: _scrollableKeyValue(scrollable),
+      keyValue: _scrollableKeyValue(scrollable, session),
       typeName: _scrollableTypeName(scrollable, session),
     );
   }
 
   String _scrollableTypeName(Element element, _DiscoverySession session) {
-    final ownType = element.widget.runtimeType.toString();
+    final ownType = _typeNameFor(element, session);
     if (ownType != 'Scrollable') {
       return ownType;
     }
@@ -2098,34 +2207,53 @@ final class CockpitNativeTargetDiscovery {
     };
   }
 
-  Element? _nearestScrollableElement(Element element) {
-    if (_marksViewportBoundary(element)) {
-      return element;
+  Element? _nearestScrollableElement(
+    Element element,
+    _DiscoverySession session,
+  ) {
+    final memo = session.nearestScrollables;
+    if (memo.containsKey(element)) {
+      return memo[element];
     }
-
-    Element? scrollable;
-    element.visitAncestorElements((ancestor) {
-      if (_marksViewportBoundary(ancestor)) {
-        scrollable = ancestor;
-        return false;
+    Element? result;
+    if (_marksViewportBoundary(element)) {
+      result = element;
+    } else {
+      for (final ancestor in _ancestorChainFor(element)) {
+        if (_marksViewportBoundary(ancestor)) {
+          result = ancestor;
+          break;
+        }
       }
-      return true;
-    });
-    return scrollable;
+    }
+    memo[element] = result;
+    return result;
   }
 
-  String? _scrollableKeyValue(Element element) {
-    final ownKey = _keyValueForElement(element);
-    if (ownKey != null && ownKey.isNotEmpty) {
-      return ownKey;
+  /// First non-empty key on [element] or its ancestors. Memoized per session:
+  /// every target under the same scrollable asks the same scrollable element
+  /// for its key, and keyless spines would otherwise re-walk the whole chain
+  /// per target.
+  String? _scrollableKeyValue(Element element, _DiscoverySession session) {
+    final memo = session.scrollableKeyValues;
+    if (memo.containsKey(element)) {
+      return memo[element];
     }
-
-    String? ancestorKey;
-    element.visitAncestorElements((ancestor) {
-      ancestorKey = _keyValueForElement(ancestor);
-      return ancestorKey == null || ancestorKey!.isEmpty;
-    });
-    return ancestorKey;
+    final ownKey = _keyValueForElement(element);
+    String? result;
+    if (ownKey != null && ownKey.isNotEmpty) {
+      result = ownKey;
+    } else {
+      for (final ancestor in _ancestorChainFor(element)) {
+        final ancestorKey = _keyValueForElement(ancestor);
+        if (ancestorKey != null && ancestorKey.isNotEmpty) {
+          result = ancestorKey;
+          break;
+        }
+      }
+    }
+    memo[element] = result;
+    return result;
   }
 
   List<String> _trimMeaningfulPathSegments(List<String> segments) {
@@ -2245,7 +2373,7 @@ final class CockpitNativeTargetDiscovery {
     _DiscoverySession session,
   ) {
     final widget = element.widget;
-    final typeName = widget.runtimeType.toString();
+    final typeName = _typeNameFor(element, session);
     if (typeName.startsWith('_')) {
       return true;
     }
@@ -2324,7 +2452,7 @@ final class CockpitNativeTargetDiscovery {
     _DiscoverySession session,
   ) {
     final widget = element.widget;
-    final typeName = widget.runtimeType.toString();
+    final typeName = _typeNameFor(element, session);
     if (typeName.startsWith('_') || _isFrameworkMirroredKeyedSubtree(widget)) {
       return true;
     }
@@ -2360,13 +2488,17 @@ final class CockpitNativeTargetDiscovery {
     return key is ValueKey<Object?> && key.value is Key;
   }
 
-  CockpitTapHandler? _tapHandlerForElement(Element element) {
+  CockpitTapHandler? _tapHandlerForElement(
+    Element element,
+    _DiscoverySession session,
+  ) {
     final customHandler = policy.tapHandlerForElement?.call(element);
     if (customHandler != null) {
       return customHandler;
     }
     final cupertinoSegmentHandler = _cupertinoSegmentTapHandlerForElement(
       element,
+      session,
     );
     if (cupertinoSegmentHandler != null) {
       return cupertinoSegmentHandler;
@@ -2477,22 +2609,23 @@ final class CockpitNativeTargetDiscovery {
     return null;
   }
 
-  bool _hoverableForElement(Element element, {bool includeAncestors = false}) {
+  bool _hoverableForElement(
+    Element element, {
+    bool includeAncestors = false,
+    required _DiscoverySession session,
+  }) {
     if (_widgetHandlesHover(element.widget)) {
       return true;
     }
     if (!includeAncestors) {
       return false;
     }
-    var found = false;
-    element.visitAncestorElements((ancestor) {
+    for (final ancestor in _ancestorChainFor(element)) {
       if (_widgetHandlesHover(ancestor.widget)) {
-        found = true;
-        return false;
+        return true;
       }
-      return true;
-    });
-    return found;
+    }
+    return false;
   }
 
   bool _widgetHandlesHover(Widget widget) {
@@ -2507,16 +2640,32 @@ final class CockpitNativeTargetDiscovery {
     return false;
   }
 
-  bool _hasScrollableAncestor(Element element) {
-    var found = false;
-    element.visitAncestorElements((ancestor) {
-      if (ancestor.widget is Scrollable) {
-        found = true;
-        return false;
+  /// Whether any strict ancestor of [element] is a Scrollable. Memoized with
+  /// backfill like the semantic-id walk: every member between [element] and
+  /// the resolving ancestor shares the answer, so the chain is paid once per
+  /// session instead of once per gesture candidate.
+  bool _hasScrollableAncestor(Element element, _DiscoverySession session) {
+    final memo = session.scrollableAncestors;
+    if (memo.containsKey(element)) {
+      return memo[element]!;
+    }
+    final pending = <Element>[element];
+    var resolved = false;
+    for (final ancestor in _ancestorChainFor(element)) {
+      if (memo.containsKey(ancestor)) {
+        resolved = memo[ancestor]!;
+        break;
       }
-      return true;
-    });
-    return found;
+      if (ancestor.widget is Scrollable) {
+        resolved = true;
+        break;
+      }
+      pending.add(ancestor);
+    }
+    for (final candidate in pending) {
+      memo[candidate] = resolved;
+    }
+    return resolved;
   }
 
   /// Infers pointer capabilities from public Flutter widget contracts.
@@ -2525,7 +2674,10 @@ final class CockpitNativeTargetDiscovery {
   /// Listener without Semantics or a Key. Publishing the recognizer-backed
   /// commands keeps those controls locatable and lets the executor deliver
   /// real pointer events instead of forcing coordinate guesses.
-  Set<CockpitCommandType> _gestureCommandsForElement(Element element) {
+  Set<CockpitCommandType> _gestureCommandsForElement(
+    Element element,
+    _DiscoverySession session,
+  ) {
     final widget = element.widget;
     final commands = <CockpitCommandType>{};
 
@@ -2608,7 +2760,7 @@ final class CockpitNativeTargetDiscovery {
       // controls and must not become the action owner for every descendant.
       // The public Scrollable target and source-known descendant probes remain
       // responsible for scroll and gesture actions respectively.
-      if (_hasScrollableAncestor(element)) {
+      if (_hasScrollableAncestor(element, session)) {
         return commands;
       }
       for (final type in widget.gestures.keys) {
@@ -2690,8 +2842,11 @@ final class CockpitNativeTargetDiscovery {
     return commands;
   }
 
-  CockpitTapHandler? _cupertinoSegmentTapHandlerForElement(Element element) {
-    final control = _cupertinoSegmentControlAncestor(element);
+  CockpitTapHandler? _cupertinoSegmentTapHandlerForElement(
+    Element element,
+    _DiscoverySession session,
+  ) {
+    final control = _cupertinoSegmentControlAncestor(element, session);
     if (control == null) {
       return null;
     }
@@ -2949,9 +3104,9 @@ final class CockpitNativeTargetDiscovery {
     required bool isTextInput,
     required _DiscoverySession session,
   }) {
-    final inputLabel = _inputLabelForElement(element);
-    final inputError = _inputErrorForElement(element);
-    final directText = _interactiveTextForElement(element);
+    final inputLabel = _inputLabelForElement(element, session);
+    final inputError = _inputErrorForElement(element, session);
+    final directText = _interactiveTextForElement(element, session);
     final text = isTextInput && inputLabel != null
         ? _joinTextSignals(<String?>[inputLabel, inputError])
         : _firstNonEmpty(<String?>[
@@ -2997,12 +3152,15 @@ final class CockpitNativeTargetDiscovery {
     );
   }
 
-  String? _interactiveTextForElement(Element element) {
+  String? _interactiveTextForElement(
+    Element element,
+    _DiscoverySession session,
+  ) {
     return _firstNonEmpty(<String?>[
       policy.extractText?.call(element),
       _textFromWidget(element.widget),
       _collectDescendantText(element),
-      _inputLabelForElement(element),
+      _inputLabelForElement(element, session),
     ]);
   }
 
@@ -3070,7 +3228,7 @@ final class CockpitNativeTargetDiscovery {
     return null;
   }
 
-  String? _inputLabelForElement(Element element) {
+  String? _inputLabelForElement(Element element, _DiscoverySession session) {
     final selfLabel = _inputLabelFromWidget(element.widget);
     if (selfLabel != null) {
       return selfLabel;
@@ -3079,13 +3237,29 @@ final class CockpitNativeTargetDiscovery {
     if (descendantLabel != null) {
       return descendantLabel;
     }
+    return _inheritedInputLabelForElement(element, session);
+  }
 
-    String? label;
-    element.visitAncestorElements((ancestor) {
-      label = _inputLabelFromWidget(ancestor.widget);
-      return label == null;
-    });
-    return label;
+  /// First input label found among [element]'s ancestors (nearest → root),
+  /// memoized per session and derived parent-first during the DFS.
+  String? _inheritedInputLabelForElement(
+    Element element,
+    _DiscoverySession session,
+  ) {
+    final memo = session.inheritedInputLabels;
+    if (memo.containsKey(element)) {
+      return memo[element];
+    }
+    String? result;
+    for (final ancestor in _ancestorChainFor(element)) {
+      final label = _inputLabelFromWidget(ancestor.widget);
+      if (label != null) {
+        result = label;
+        break;
+      }
+    }
+    memo[element] = result;
+    return result;
   }
 
   String? _inputLabelFromWidget(Widget widget) {
@@ -3103,7 +3277,7 @@ final class CockpitNativeTargetDiscovery {
     return null;
   }
 
-  String? _inputErrorForElement(Element element) {
+  String? _inputErrorForElement(Element element, _DiscoverySession session) {
     final selfError = _inputErrorFromWidget(element.widget);
     if (selfError != null) return selfError;
 
@@ -3116,11 +3290,29 @@ final class CockpitNativeTargetDiscovery {
 
     element.visitChildElements(visit);
     if (error != null) return error;
-    element.visitAncestorElements((ancestor) {
-      error = _inputErrorFromWidget(ancestor.widget);
-      return error == null;
-    });
-    return error;
+    return _inheritedInputErrorForElement(element, session);
+  }
+
+  /// First input error found among [element]'s ancestors (nearest → root),
+  /// memoized per session and derived parent-first during the DFS.
+  String? _inheritedInputErrorForElement(
+    Element element,
+    _DiscoverySession session,
+  ) {
+    final memo = session.inheritedInputErrors;
+    if (memo.containsKey(element)) {
+      return memo[element];
+    }
+    String? result;
+    for (final ancestor in _ancestorChainFor(element)) {
+      final error = _inputErrorFromWidget(ancestor.widget);
+      if (error != null) {
+        result = error;
+        break;
+      }
+    }
+    memo[element] = result;
+    return result;
   }
 
   String? _inputErrorFromWidget(Widget widget) {
@@ -3186,13 +3378,13 @@ final class CockpitNativeTargetDiscovery {
 
     final pendingChain = <Element>[element];
     String? resolved;
-    element.visitAncestorElements((ancestor) {
+    for (final ancestor in _ancestorChainFor(element)) {
       if (_separatesSemanticChildren(ancestor.widget)) {
-        return false;
+        break;
       }
       if (session.semanticIds.containsKey(ancestor)) {
         resolved = session.semanticIds[ancestor];
-        return false;
+        break;
       }
       final value =
           _normalizeText(policy.extractSemanticId?.call(ancestor)) ??
@@ -3200,11 +3392,10 @@ final class CockpitNativeTargetDiscovery {
       if (value != null) {
         resolved = value;
         session.semanticIds[ancestor] = value;
-        return false;
+        break;
       }
       pendingChain.add(ancestor);
-      return true;
-    });
+    }
     for (final pending in pendingChain) {
       session.semanticIds[pending] = resolved;
     }
@@ -3236,13 +3427,13 @@ final class CockpitNativeTargetDiscovery {
 
     final pendingChain = <Element>[element];
     String? resolved;
-    element.visitAncestorElements((ancestor) {
+    for (final ancestor in _ancestorChainFor(element)) {
       if (_separatesSemanticChildren(ancestor.widget)) {
-        return false;
+        break;
       }
       if (session.tooltips.containsKey(ancestor)) {
         resolved = session.tooltips[ancestor];
-        return false;
+        break;
       }
       final value =
           _normalizeText(policy.extractTooltip?.call(ancestor)) ??
@@ -3250,11 +3441,10 @@ final class CockpitNativeTargetDiscovery {
       if (value != null) {
         resolved = value;
         session.tooltips[ancestor] = value;
-        return false;
+        break;
       }
       pendingChain.add(ancestor);
-      return true;
-    });
+    }
     for (final pending in pendingChain) {
       session.tooltips[pending] = resolved;
     }
@@ -3282,7 +3472,7 @@ final class CockpitNativeTargetDiscovery {
     return null;
   }
 
-  String _publicTypeNameForElement(Element element) {
+  String _publicTypeNameForElement(Element element, _DiscoverySession session) {
     final widget = element.widget;
     if (widget is TextButton) {
       return 'TextButton';
@@ -3362,7 +3552,7 @@ final class CockpitNativeTargetDiscovery {
     if (widget is CupertinoSlidingSegmentedControl) {
       return 'CupertinoSlidingSegmentedControl';
     }
-    if (_cupertinoSegmentControlAncestor(element) != null) {
+    if (_cupertinoSegmentControlAncestor(element, session) != null) {
       return 'CupertinoSegment';
     }
     if (widget is TextField) {
@@ -3374,34 +3564,53 @@ final class CockpitNativeTargetDiscovery {
     if (widget is EditableText) {
       return 'EditableText';
     }
-    return widget.runtimeType.toString();
+    return _typeNameFor(element, session);
   }
 
-  Element? _materialSegmentControlAncestor(Element element) {
+  /// Memoized per discovery session: the segment-control ancestor scan is
+  /// pure w.r.t. (element, session) and consulted by several handler-family
+  /// members (tap handler, control state, public type name) per element.
+  Element? _materialSegmentControlAncestor(
+    Element element,
+    _DiscoverySession session,
+  ) {
+    final memo = session.materialSegmentAncestors;
+    if (memo.containsKey(element)) {
+      return memo[element];
+    }
     Element? result;
-    element.visitAncestorElements((ancestor) {
+    for (final ancestor in _ancestorChainFor(element)) {
       if (ancestor.widget is SegmentedButton) {
         result = ancestor;
-        return false;
+        break;
       }
-      return true;
-    });
+    }
+    memo[element] = result;
     return result;
   }
 
-  Element? _cupertinoSegmentControlAncestor(Element element) {
+  Element? _cupertinoSegmentControlAncestor(
+    Element element,
+    _DiscoverySession session,
+  ) {
+    final memo = session.cupertinoSegmentAncestors;
+    if (memo.containsKey(element)) {
+      return memo[element];
+    }
     Element? result;
-    element.visitAncestorElements((ancestor) {
-      final widget = ancestor.widget;
-      if (widget is CupertinoSegmentedControl ||
-          widget is CupertinoSlidingSegmentedControl) {
+    for (final ancestor in _ancestorChainFor(element)) {
+      if (_isCupertinoSegmentControlWidget(ancestor.widget)) {
         result = ancestor;
-        return false;
+        break;
       }
-      return true;
-    });
+    }
+    memo[element] = result;
     return result;
   }
+
+  bool _isCupertinoSegmentControlWidget(Widget widget) =>
+      widget is CupertinoSegmentedControl ||
+      widget is CupertinoSlidingSegmentedControl;
 
   String? _collectDescendantText(Element element) {
     final values = _collectDescendantTextParts(element);
@@ -3824,6 +4033,33 @@ final class _DiscoverySession {
       Map<Element, _DelegatedSelectionSummary>.identity();
   final Map<Element, _DelegatedSelectionSummary> blockedSelectionSummaries =
       Map<Element, _DelegatedSelectionSummary>.identity();
+
+  /// Memoized `widget.runtimeType.toString()` per element.
+  final Map<Element, String> typeNames = Map<Element, String>.identity();
+
+  /// Segment-control ancestor lookups (null = no such ancestor) shared by
+  /// the tap handler, control state, and public type name resolutions.
+  final Map<Element, Element?> cupertinoSegmentAncestors =
+      Map<Element, Element?>.identity();
+  final Map<Element, Element?> materialSegmentAncestors =
+      Map<Element, Element?>.identity();
+
+  /// Nearest scrollable boundary per element (null = none above).
+  final Map<Element, Element?> nearestScrollables =
+      Map<Element, Element?>.identity();
+
+  /// Whether any strict ancestor is a Scrollable, per element.
+  final Map<Element, bool> scrollableAncestors = Map<Element, bool>.identity();
+
+  /// First non-empty key on a scrollable or its ancestors, per element.
+  final Map<Element, String?> scrollableKeyValues =
+      Map<Element, String?>.identity();
+
+  /// Ancestor-inherited input labels/errors (null = none above).
+  final Map<Element, String?> inheritedInputLabels =
+      Map<Element, String?>.identity();
+  final Map<Element, String?> inheritedInputErrors =
+      Map<Element, String?>.identity();
 
   /// Locator ancestor records (null = the ancestor is filtered out) and
   /// assembled ancestor lists, keyed by route name as well because each
