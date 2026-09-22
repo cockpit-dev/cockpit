@@ -59,6 +59,7 @@ final class CockpitFlutterBridgeShellInspector {
     var wrapsApplication = false;
 
     for (var cursor = 0; cursor < pending.length; cursor += 1) {
+      if (importsBridge && wrapsApplication) return;
       final current = pending[cursor];
       if (current.depth > maximumDepth) {
         throw _scanLimit(entrypoint, 'depth', maximumDepth);

@@ -98,6 +98,57 @@ void main() => runApp(const App());
     );
   });
 
+  test('stops scanning once the bridge shell is confirmed', () {
+    final fileSystem = MemoryFileSystem();
+    _writePackageConfig(fileSystem, includeFlutterCockpit: true);
+    fileSystem.file('/workspace/cockpit/main.dart')
+      ..createSync(recursive: true)
+      ..writeAsStringSync(
+        "import 'package:flutter_cockpit/flutter_cockpit_flutter.dart';\n"
+        "import 'app_shell.dart';\n"
+        'void main() => runApp(const FlutterCockpitApp(child: App()));\n',
+      );
+    fileSystem.file('/workspace/cockpit/app_shell.dart')
+      ..createSync(recursive: true)
+      ..writeAsStringSync('class App extends StatelessWidget {}\n');
+
+    CockpitFlutterBridgeShellInspector(
+      fileSystem: LocalCockpitFileSystem(fileSystem: fileSystem),
+      maximumFiles: 1,
+    ).validate(
+      checkoutRoot: '/workspace',
+      projectPath: '/workspace',
+      entrypoint: 'cockpit/main.dart',
+    );
+  });
+
+  test('still enforces scan limits without a confirmed bridge shell', () {
+    final fileSystem = MemoryFileSystem();
+    _writePackageConfig(fileSystem, includeFlutterCockpit: true);
+    fileSystem.file('/workspace/cockpit/main.dart')
+      ..createSync(recursive: true)
+      ..writeAsStringSync(
+        "import 'app_shell.dart';\n"
+        'void main() => runApp(const App());\n',
+      );
+    fileSystem.file('/workspace/cockpit/app_shell.dart')
+      ..createSync(recursive: true)
+      ..writeAsStringSync('class App extends StatelessWidget {}\n');
+
+    expect(
+      () =>
+          CockpitFlutterBridgeShellInspector(
+            fileSystem: LocalCockpitFileSystem(fileSystem: fileSystem),
+            maximumFiles: 1,
+          ).validate(
+            checkoutRoot: '/workspace',
+            projectPath: '/workspace',
+            entrypoint: 'cockpit/main.dart',
+          ),
+      throwsA(_errorCode('flutterBridgeShellScanLimit')),
+    );
+  });
+
   test('requires flutter pub get before bridge inspection', () {
     final fileSystem = MemoryFileSystem();
     fileSystem.file('/workspace/cockpit/main.dart')
