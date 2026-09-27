@@ -108,6 +108,18 @@ final class TodoRepository implements TodoRepositoryClient {
   TodoRepository(this._database);
 
   final CockpitDemoDatabase _database;
+  int _lastIdMicros = 0;
+
+  /// Windows clocks can return identical timestamps for consecutive reads,
+  /// so entity ids advance monotonically past the last issued value.
+  String _nextEntityId(String prefix) {
+    var micros = DateTime.now().toUtc().microsecondsSinceEpoch;
+    if (micros <= _lastIdMicros) {
+      micros = _lastIdMicros + 1;
+    }
+    _lastIdMicros = micros;
+    return '$prefix-$micros';
+  }
 
   @override
   Future<TodoTag> createTag({required String name, String? colorHex}) async {
@@ -124,7 +136,7 @@ final class TodoRepository implements TodoRepositoryClient {
     }
 
     final createdAt = DateTime.now().toUtc();
-    final tagId = 'tag-${createdAt.microsecondsSinceEpoch}';
+    final tagId = _nextEntityId('tag');
     await _database
         .into(_database.tags)
         .insert(
@@ -166,7 +178,7 @@ final class TodoRepository implements TodoRepositoryClient {
 
     final now = DateTime.now().toUtc();
     final displayOrder = await _nextDisplayOrder();
-    final taskId = 'task-${now.microsecondsSinceEpoch}';
+    final taskId = _nextEntityId('task');
     await _database
         .into(_database.tasks)
         .insert(
