@@ -169,7 +169,7 @@ final class CockpitWebRemoteSessionBridgeServer {
     // The origin allowlist is enforced only when it is configured, and only
     // against requests that carry a browser origin. The development bridge
     // serves pages launched by the Flutter tool whose origins are not known
-    // up front, and host-side probes authenticate with the session token, so
+    // up front, and host-side probes authenticate with the session password, so
     // the credential remains the gate whenever no allowlist applies.
     final expectedOrigin = allowedOrigin;
     if (expectedOrigin != null) {
