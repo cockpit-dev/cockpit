@@ -53,7 +53,7 @@ void main() {
         expect(completed, isTrue);
 
         final result = await snapshot;
-        expect(result, isA<CockpitSnapshot>());
+        expect(result.degradationReason, 'frameTimeout');
 
         // Let the parked flight finish so no fake timer outlives the test.
         await binding.delayed(const Duration(seconds: 25));

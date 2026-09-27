@@ -7,8 +7,14 @@ void main() {
     final runtimePubspec = File(
       'packages/flutter_cockpit/pubspec.yaml',
     ).readAsStringSync();
+    final flutterTestPubspec = File(
+      'packages/flutter_cockpit_test/pubspec.yaml',
+    ).readAsStringSync();
     final protocolPubspec = File(
       'packages/cockpit_protocol/pubspec.yaml',
+    ).readAsStringSync();
+    final programmaticTestPubspec = File(
+      'packages/cockpit_test/pubspec.yaml',
     ).readAsStringSync();
     final devtoolsPubspec = File(
       'packages/cockpit/pubspec.yaml',
@@ -17,7 +23,13 @@ void main() {
       'packages/cockpit/lib/src/supervisor/cockpit_supervisor_runtime.dart',
     ).readAsStringSync();
     final runtimeVersion = _readPackageVersion('packages/flutter_cockpit');
+    final flutterTestVersion = _readPackageVersion(
+      'packages/flutter_cockpit_test',
+    );
     final protocolVersion = _readPackageVersion('packages/cockpit_protocol');
+    final programmaticTestVersion = _readPackageVersion(
+      'packages/cockpit_test',
+    );
     final devtoolsVersion = _readPackageVersion('packages/cockpit');
     final iosDevelopmentPodLock = File(
       'examples/cockpit_demo/cockpit/ios/Podfile.lock',
@@ -36,12 +48,66 @@ void main() {
 
     expect(runtimePubspec, contains('name: flutter_cockpit'));
     expect(runtimePubspec, isNot(contains('name: flutter_pilot')));
+    expect(flutterTestPubspec, contains('name: flutter_cockpit_test'));
     expect(protocolPubspec, contains('name: cockpit_protocol'));
+    expect(programmaticTestPubspec, contains('name: cockpit_test'));
     expect(devtoolsPubspec, contains('name: cockpit'));
     expect(runtimeVersion, protocolVersion);
+    expect(flutterTestVersion, protocolVersion);
+    expect(programmaticTestVersion, protocolVersion);
     expect(devtoolsVersion, protocolVersion);
     expect(runtimePubspec, contains('cockpit_protocol: ^$protocolVersion'));
+    expect(
+      programmaticTestPubspec,
+      contains('cockpit_protocol: ^$protocolVersion'),
+    );
+    expect(flutterTestPubspec, contains('cockpit_protocol: ^$protocolVersion'));
+    expect(
+      flutterTestPubspec,
+      contains('cockpit_test: ^$programmaticTestVersion'),
+    );
+    expect(flutterTestPubspec, contains('flutter_cockpit: ^$runtimeVersion'));
     expect(devtoolsPubspec, contains('cockpit_protocol: ^$protocolVersion'));
+    expect(
+      devtoolsPubspec,
+      contains('cockpit_test: ^$programmaticTestVersion'),
+    );
+    expect(programmaticTestPubspec, isNot(contains('publish_to: none')));
+    for (final package in <String>[
+      'cockpit_protocol',
+      'cockpit_test',
+      'flutter_cockpit',
+      'flutter_cockpit_test',
+      'cockpit',
+    ]) {
+      expect(
+        File('packages/$package/CHANGELOG.md').readAsStringSync(),
+        startsWith('# Changelog\n\n## $protocolVersion\n'),
+        reason: '$package changelog must start with the package version.',
+      );
+    }
+    expect(
+      File(
+        'packages/flutter_cockpit/ios/flutter_cockpit.podspec',
+      ).readAsStringSync(),
+      contains("s.version          = '$runtimeVersion'"),
+    );
+    expect(
+      File(
+        'packages/flutter_cockpit/macos/flutter_cockpit.podspec',
+      ).readAsStringSync(),
+      contains("s.version          = '$runtimeVersion'"),
+    );
+    expect(
+      File(
+        'packages/cockpit/tool/android_driver/build.gradle.kts',
+      ).readAsStringSync(),
+      contains('versionName = "$devtoolsVersion"'),
+    );
+    expect(
+      File('plugins/kiro/cockpit/plugin.json').readAsStringSync(),
+      contains('"version": "$devtoolsVersion"'),
+    );
     final iosUsesCocoaPods = iosDevelopmentPodLock.contains(
       'flutter_cockpit ($runtimeVersion)',
     );
@@ -120,6 +186,12 @@ void main() {
     final runtimePubspec = File(
       'packages/flutter_cockpit/pubspec.yaml',
     ).readAsStringSync();
+    final flutterTestPubspec = File(
+      'packages/flutter_cockpit_test/pubspec.yaml',
+    ).readAsStringSync();
+    final programmaticTestPubspec = File(
+      'packages/cockpit_test/pubspec.yaml',
+    ).readAsStringSync();
     final devtoolsPubspec = File(
       'packages/cockpit/pubspec.yaml',
     ).readAsStringSync();
@@ -169,7 +241,9 @@ void main() {
     for (final pubspec in <String>[
       workspacePubspec,
       protocolPubspec,
+      programmaticTestPubspec,
       runtimePubspec,
+      flutterTestPubspec,
       devtoolsPubspec,
       demoPubspec,
       shellPubspec,
@@ -191,6 +265,19 @@ void main() {
     }
     expect(acceptanceWorkflow, contains("MINIMUM_FLUTTER_VERSION: '3.32.0'"));
     expect(acceptanceWorkflow, contains("CURRENT_FLUTTER_VERSION: '3.47.1'"));
+    for (final package in const <String>[
+      'cockpit_protocol',
+      'cockpit_test',
+      'flutter_cockpit',
+      'flutter_cockpit_test',
+      'cockpit',
+    ]) {
+      expect(
+        acceptanceWorkflow,
+        contains('- package: $package'),
+        reason: '$package must have a publication dry-run gate.',
+      );
+    }
     for (final job in const <String>[
       'static_analysis',
       'minimum_flutter',

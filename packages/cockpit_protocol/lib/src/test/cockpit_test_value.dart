@@ -43,7 +43,9 @@ final class CockpitTestTemplateValue {
     CockpitTestTemplateValueKind.variable => <String, Object?>{
       r'$var': variable,
     },
-    CockpitTestTemplateValueKind.stringTemplate => value,
+    CockpitTestTemplateValueKind.stringTemplate => <String, Object?>{
+      r'$template': value,
+    },
   };
 
   /// Decodes a CockpitTestTemplateValue from a JSON object.
@@ -55,16 +57,29 @@ final class CockpitTestTemplateValue {
     if (value is Map<Object?, Object?>) {
       final json = CockpitTestValueReader.object(value, path);
       if (json.length == 1 && json.containsKey(r'$var')) {
+        CockpitTestValueReader.keys(
+          json,
+          const <String>{r'$var'},
+          path,
+          required: const <String>{r'$var'},
+        );
         return CockpitTestTemplateValue.variable(
           CockpitTestValueReader.string(json[r'$var'], '$path.\$var', id: true),
           expectedType: expectedType,
         );
       }
-    }
-    if (expectedType == CockpitTestValueType.string &&
-        value is String &&
-        value.contains(r'${')) {
-      return CockpitTestTemplateValue.stringTemplate(value);
+      if (expectedType == CockpitTestValueType.string &&
+          json.containsKey(r'$template')) {
+        CockpitTestValueReader.keys(
+          json,
+          const <String>{r'$template'},
+          path,
+          required: const <String>{r'$template'},
+        );
+        return CockpitTestTemplateValue.stringTemplate(
+          CockpitTestValueReader.string(json[r'$template'], '$path.\$template'),
+        );
+      }
     }
     _validateLiteral(value, expectedType, path);
     return CockpitTestTemplateValue.literal(
@@ -81,13 +96,6 @@ final class CockpitTestTemplateValue {
     switch (expectedType) {
       case CockpitTestValueType.string:
         CockpitTestValueReader.string(value, path);
-        if (value is String && value.contains(r'${')) {
-          const marker = r'${';
-          throw FormatException(
-            'String literal at $path contains $marker; use an explicit '
-            'stringTemplate value instead.',
-          );
-        }
       case CockpitTestValueType.integer:
         CockpitTestValueReader.integer(value, path);
       case CockpitTestValueType.number:

@@ -37,15 +37,31 @@ void main() {
     expect(uri.toString(), isNot(contains('url-password-secret')));
     expect(uri.queryParameters['signature'], CockpitNetworkRedactor.masked);
     expect(uri.queryParameters['visible'], 'yes');
+    // Bare "key" and "code" name ordinary data far more often than
+    // credentials, so they stay visible; high-confidence compound names do
+    // not.
     final credentialUri = redactor.uri(
-      Uri.parse('https://example.test/callback?key=k&code=c&pwd=p'),
+      Uri.parse(
+        'https://example.test/callback'
+        '?key=sort-order&code=US&pwd=p&apiKey=ak&access_key=sk'
+        '&authorizationCode=ac',
+      ),
     );
-    expect(credentialUri.queryParameters['key'], CockpitNetworkRedactor.masked);
+    expect(credentialUri.queryParameters['key'], 'sort-order');
+    expect(credentialUri.queryParameters['code'], 'US');
+    expect(credentialUri.queryParameters['pwd'], CockpitNetworkRedactor.masked);
     expect(
-      credentialUri.queryParameters['code'],
+      credentialUri.queryParameters['apiKey'],
       CockpitNetworkRedactor.masked,
     );
-    expect(credentialUri.queryParameters['pwd'], CockpitNetworkRedactor.masked);
+    expect(
+      credentialUri.queryParameters['access_key'],
+      CockpitNetworkRedactor.masked,
+    );
+    expect(
+      credentialUri.queryParameters['authorizationCode'],
+      CockpitNetworkRedactor.masked,
+    );
     expect(Uri(query: form).queryParameters['username'], 'visible-user');
     expect(
       Uri(query: form).queryParameters['password'],

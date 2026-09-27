@@ -1,3 +1,9 @@
+// This file asserts wall-clock-sensitive discovery timings, so it carries the
+// `perf` tag and runs in a dedicated serial invocation without concurrent
+// suites (see the melos and CI test gates).
+@Tags(['perf'])
+library;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_cockpit/flutter_cockpit_flutter.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -253,8 +259,6 @@ void main() {
   testWidgets('scrollable selection stays linear on a deep wide element tree', (
     tester,
   ) async {
-    const spineDepth = 200;
-
     Widget buildLevel(int remaining) {
       return SelectionSpine(
         children: <Widget>[
@@ -285,37 +289,43 @@ void main() {
       );
     }
 
-    await tester.pumpWidget(
-      MaterialApp(
-        home: CockpitSurface(
-          routeName: '/scroll-selection-scale',
-          child: Material(
-            child: SingleChildScrollView(child: buildLevel(spineDepth - 1)),
+    // The absent type keeps the target element null so every candidate stays
+    // in the ordered field, each with a type-signal context walk.
+    Future<Duration> measureScrollableSelection(int spineDepth) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: CockpitSurface(
+            routeName: '/scroll-selection-scale',
+            child: Material(
+              child: SingleChildScrollView(child: buildLevel(spineDepth - 1)),
+            ),
           ),
         ),
-      ),
-    );
-    await tester.pumpAndSettle();
+      );
+      await tester.pumpAndSettle();
+      final surfaceState = tester.state<CockpitSurfaceState>(
+        find.byType(CockpitSurface),
+      );
 
-    final surfaceState = tester.state<CockpitSurfaceState>(
-      find.byType(CockpitSurface),
-    );
+      final stopwatch = Stopwatch()..start();
+      final selected = await surfaceState.scrollByViewport(
+        duration: Duration.zero,
+        targetLocator: const CockpitLocator(type: 'NestedScrollView'),
+      );
+      stopwatch.stop();
+      await tester.pumpAndSettle();
+      expect(selected.scrollableCandidateCount, spineDepth * 2 + 2);
+      return stopwatch.elapsed;
+    }
 
-    // The absent type keeps the target element null so every candidate
-    // stays in the ordered field, each with a type-signal context walk.
-    final stopwatch = Stopwatch()..start();
-    final selected = await surfaceState.scrollByViewport(
-      duration: Duration.zero,
-      targetLocator: const CockpitLocator(type: 'NestedScrollView'),
-    );
-    stopwatch.stop();
-    await tester.pumpAndSettle();
+    final shallow = await measureScrollableSelection(50);
+    final deep = await measureScrollableSelection(200);
 
-    expect(selected.scrollableCandidateCount, spineDepth * 2 + 2);
-    // The comparator used to recompute each candidate's context-walking
-    // priority score per comparison, which kept this call near six seconds;
-    // the stopwatch still covers discovery and the target probes, so the
-    // bound stays generous relative to the measured post-fix time.
-    expect(stopwatch.elapsed, lessThan(const Duration(seconds: 3)));
+    // Selection cost must scale linearly with the candidate count: a 4x
+    // deeper tree may cost at most 10x, while the comparator that used to
+    // recompute each candidate's context-walking priority per comparison was
+    // quadratic (~16x) and kept one call near six seconds. Comparing two
+    // sizes keeps the guard independent of absolute machine speed.
+    expect(deep, lessThan(shallow * 10));
   });
 }

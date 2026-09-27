@@ -1391,7 +1391,7 @@ void main() {
   );
 
   test(
-    'remote session client sends configured bearer and origin headers',
+    'remote session client sends configured token and origin headers',
     () async {
       String? token;
       String? origin;
@@ -1413,6 +1413,50 @@ void main() {
       expect(await client.ping(), isTrue);
       expect(token, 'secret-token');
       expect(origin, 'https://runner.example');
+    },
+  );
+
+  test(
+    'remote session client migrates a legacy query token to a header',
+    () async {
+      String? token;
+      Uri? requestUri;
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() async => server.close(force: true));
+      server.listen((request) async {
+        token = request.headers.value('x-cockpit-token');
+        requestUri = request.uri;
+        request.response.headers.contentType = ContentType.json;
+        request.response.write(jsonEncode(const <String, Object?>{'ok': true}));
+        await request.response.close();
+      });
+
+      final client = CockpitRemoteSessionClient(
+        baseUri: Uri.parse(
+          'http://127.0.0.1:${server.port}?channel=stable&token=legacy-token',
+        ),
+      );
+      expect(await client.ping(), isTrue);
+      expect(client.baseUri.queryParameters, <String, String>{
+        'channel': 'stable',
+      });
+      expect(token, 'legacy-token');
+      expect(requestUri?.queryParameters, <String, String>{
+        'channel': 'stable',
+      });
+    },
+  );
+
+  test(
+    'remote session client rejects conflicting query and explicit tokens',
+    () {
+      expect(
+        () => CockpitRemoteSessionClient(
+          baseUri: Uri.parse('http://127.0.0.1:47331?token=query-token'),
+          authToken: 'explicit-token',
+        ),
+        throwsA(isA<FormatException>()),
+      );
     },
   );
 }

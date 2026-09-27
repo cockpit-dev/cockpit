@@ -2,6 +2,7 @@ library;
 
 export 'package:args/args.dart' show ArgParser, ArgResults;
 export 'package:args/command_runner.dart' show UsageException;
+export 'package:cockpit_test/cockpit_test.dart';
 
 export 'src/infrastructure/cockpit_clock.dart';
 export 'src/infrastructure/cockpit_file_system.dart';
@@ -161,4 +162,3 @@ export 'src/test/cockpit_test_secret_resolver.dart'
 export 'src/test/cockpit_automation_tester.dart';
 export 'src/test/cockpit_remote_tester.dart';
 export 'src/test/cockpit_system_tester.dart';
-export 'src/test/cockpit_programmatic_runner.dart';

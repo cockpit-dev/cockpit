@@ -266,6 +266,11 @@ void main() {
     expect(compact.droppedFrames, 10);
     expect(compact.droppedEvents, 7);
     expect(compact.archive!.frames, 12);
+    expect(compact.observedFrameCount, 12);
+
+    final roundTrip = CockpitPerformanceReport.fromJson(compact.toJson());
+    expect(roundTrip.observedFrameCount, 12);
+    expect(roundTrip.archive!.frames, 12);
   });
 
   test('round trip preserves raw frame timestamps and compact fields', () {

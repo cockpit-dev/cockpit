@@ -399,11 +399,13 @@ void main() {
     'mutation reconciliation relaunches an exited app at most once',
     () async {
       final calls = <String>[];
+      Map<String, Object?>? launchInput;
       final dev = CockpitDevRuntime(
         runtime,
-        operationInvoker: (_, kind, _) async {
+        operationInvoker: (_, kind, input) async {
           calls.add(kind);
           if (kind == 'target.launch') {
+            launchInput = Map<String, Object?>.from(input);
             return _result(
               kind,
               output: const <String, Object?>{
@@ -434,9 +436,68 @@ void main() {
       expect(resolved.ready, isTrue);
       expect(resolved.changed, 'relaunched');
       expect(resolved.session.handleId, session.handleId);
+      expect(launchInput, isNot(contains('authenticationEnabled')));
       expect(calls.where((kind) => kind == 'target.launch'), hasLength(1));
     },
   );
+
+  test('automatic relaunch preserves opt-in authentication', () async {
+    final checkout = await runtime.checkoutIdentity();
+    session = await runtime.bindDevelopmentSession(
+      checkout: checkout,
+      projectPath: checkout.canonicalRoot,
+      workspaceId: 'workspace-1',
+      sessionId: 'session-authenticated',
+      targetId: 'target-1',
+      appId: 'app-authenticated',
+      entrypoint: 'lib/main.dart',
+      platform: 'macos',
+      deviceId: 'macos',
+      authenticationEnabled: true,
+    );
+    Map<String, Object?>? launchInput;
+    final dev = CockpitDevRuntime(
+      runtime,
+      operationInvoker: (_, kind, input) async {
+        if (kind == 'session.development.get') {
+          return _result(
+            kind,
+            output: const <String, Object?>{
+              'status': <String, Object?>{
+                'state': 'failed',
+                'appReachable': false,
+                'remoteSessionReachable': false,
+              },
+            },
+          );
+        }
+        if (kind == 'target.launch') {
+          launchInput = Map<String, Object?>.from(input);
+          return _result(
+            kind,
+            output: const <String, Object?>{
+              'sessionId': 'session-authenticated-new',
+              'targetId': 'target-1',
+              'appId': 'app-authenticated-new',
+            },
+          );
+        }
+        throw StateError('Unexpected operation $kind');
+      },
+    );
+
+    final resolved = await dev.reconcile(session, allowRelaunch: true);
+
+    expect(resolved.ready, isTrue);
+    expect(launchInput?['authenticationEnabled'], isTrue);
+    expect(resolved.session.authenticationEnabled, isTrue);
+    expect(
+      (await runtime.resolveDevelopmentSession(
+        session.handleId,
+      )).authenticationEnabled,
+      isTrue,
+    );
+  });
 
   test('custom launch values require an explicit restart after exit', () async {
     final checkout = await runtime.checkoutIdentity();
@@ -600,6 +661,23 @@ void main() {
         session: session,
       ),
       'cockpit dev start --session ${session.handleId}',
+    );
+    expect(
+      cockpitDevStartFailureNext(
+        request: const CockpitDevStartRequest(authenticationEnabled: true),
+        session: null,
+      ),
+      'cockpit dev start --auth',
+    );
+    expect(
+      cockpitDevStartFailureNext(
+        request: const CockpitDevStartRequest(
+          sessionReference: '1',
+          authenticationEnabled: false,
+        ),
+        session: session,
+      ),
+      'cockpit dev start --session ${session.handleId} --no-auth',
     );
     expect(
       cockpitDevStartFailureNext(

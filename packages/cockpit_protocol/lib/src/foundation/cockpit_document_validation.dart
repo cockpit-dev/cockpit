@@ -4,6 +4,7 @@ import '../test/cockpit_test_document.dart';
 import '../test/cockpit_test_project.dart';
 import '../test/cockpit_test_suite.dart';
 import 'cockpit_decode_policy.dart';
+import 'cockpit_enum.dart';
 import 'cockpit_foundation_value_reader.dart';
 
 enum CockpitDocumentFormat { lon, json, yaml }
@@ -52,12 +53,11 @@ final class CockpitDocumentValidationRequest {
       required: const <String>{'format', 'sourceText'},
     );
     return CockpitDocumentValidationRequest(
-      format: CockpitEnumValue<CockpitDocumentFormat>.parse(
+      format: cockpitEnumFromJson(
         json['format'],
         CockpitDocumentFormat.values,
         '$path.format',
-        policy: CockpitDecodePolicy.requests,
-      ).requireKnown(),
+      ),
       sourceText: CockpitFoundationValueReader.boundedString(
         json['sourceText'],
         '$path.sourceText',

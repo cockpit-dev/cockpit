@@ -1,3 +1,9 @@
+// This file asserts wall-clock-sensitive probe timings, so it carries the
+// `perf` tag and runs in a dedicated serial invocation without concurrent
+// suites (see the melos and CI test gates).
+@Tags(['perf'])
+library;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_cockpit/flutter_cockpit_flutter.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -205,8 +211,6 @@ void main() {
   testWidgets('probe with a path signal stays linear on a deep element tree', (
     tester,
   ) async {
-    const spineDepth = 200;
-
     Widget buildLevel(int remaining) {
       return SpineSection(
         children: <Widget>[
@@ -237,34 +241,52 @@ void main() {
       );
     }
 
-    await tester.pumpWidget(
-      MaterialApp(
-        home: CockpitSurface(
-          routeName: '/probe-scale',
-          child: Material(
-            child: SingleChildScrollView(child: buildLevel(spineDepth - 1)),
-          ),
-        ),
-      ),
-    );
-    await tester.pumpAndSettle();
-
-    final surfaceState = tester.state<CockpitSurfaceState>(
-      find.byType(CockpitSurface),
-    );
-
     // A path signal forces a locator-path derivation for every visited
     // element; the absent value keeps the resolution trivial so the timing
     // isolates the walk itself.
-    final stopwatch = Stopwatch()..start();
-    final probed = surfaceState.probeVisibleLocator(
-      const CockpitLocator(path: 'absent/nowhere'),
-    );
-    stopwatch.stop();
+    Future<Duration> measureAbsentPathProbe(int spineDepth) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: CockpitSurface(
+            routeName: '/probe-scale',
+            child: Material(
+              child: SingleChildScrollView(child: buildLevel(spineDepth - 1)),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final surfaceState = tester.state<CockpitSurfaceState>(
+        find.byType(CockpitSurface),
+      );
 
-    expect(probed.isSuccess, isFalse);
-    // The old per-element ancestor re-walks made this single probe take
-    // more than six seconds on this tree.
-    expect(stopwatch.elapsed, lessThan(const Duration(seconds: 3)));
+      // Warm once, then keep the fastest of three probes so scheduler noise
+      // cannot distort the scaling comparison.
+      surfaceState.probeVisibleLocator(
+        const CockpitLocator(path: 'absent/nowhere'),
+      );
+      var best = const Duration(days: 1);
+      for (var attempt = 0; attempt < 3; attempt += 1) {
+        final stopwatch = Stopwatch()..start();
+        final probed = surfaceState.probeVisibleLocator(
+          const CockpitLocator(path: 'absent/nowhere'),
+        );
+        stopwatch.stop();
+        expect(probed.isSuccess, isFalse);
+        if (stopwatch.elapsed < best) {
+          best = stopwatch.elapsed;
+        }
+      }
+      return best;
+    }
+
+    final shallow = await measureAbsentPathProbe(50);
+    final deep = await measureAbsentPathProbe(200);
+
+    // The walk must scale linearly with tree size: a 4x deeper tree may cost
+    // at most 10x, while the old per-element ancestor re-walks made the cost
+    // quadratic (~16x) and pushed a single probe past six seconds. Comparing
+    // two sizes keeps the guard independent of absolute machine speed.
+    expect(deep, lessThan(shallow * 10));
   });
 }

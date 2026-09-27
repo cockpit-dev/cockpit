@@ -417,7 +417,7 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
   Future<CockpitCapturedScreenshot> captureScreenshot(
     CockpitScreenshotRequest request, {
     double pixelRatio = 1.0,
-  }) {
+  }) async {
     Rect? cropRect;
     final cropLocator = request.cropLocator;
     if (cropLocator != null) {
@@ -449,18 +449,25 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
       }
       cropRect = visible.shift(Offset(-viewport.left, -viewport.top));
     }
-    return _capture.capture(
+    final screenshot = await _capture.capture(
       repaintBoundaryKey: _boundaryKey,
       request: request,
-      snapshot: request.includeSnapshot
-          ? snapshot(
-              options:
-                  request.snapshotOptions ??
-                  const CockpitSnapshotOptions.live(),
-            )
-          : null,
       pixelRatio: pixelRatio,
       cropRect: cropRect,
+    );
+    if (!request.includeSnapshot) return screenshot;
+
+    final attachedSnapshot = snapshot(
+      options: request.snapshotOptions ?? const CockpitSnapshotOptions.live(),
+    );
+    final degradationReason = screenshot.degradationReason;
+    return CockpitCapturedScreenshot(
+      artifact: screenshot.artifact,
+      bytes: screenshot.bytes,
+      snapshot: degradationReason == null
+          ? attachedSnapshot
+          : attachedSnapshot.copyWith(degradationReason: degradationReason),
+      degradationReason: degradationReason,
     );
   }
 

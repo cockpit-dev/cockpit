@@ -29,6 +29,7 @@ final class CockpitCliSessionHandle {
     this.flavor,
     this.lifecycle = 'ready',
     this.recoverable = true,
+    this.authenticationEnabled = false,
     this.launchTimeoutMilliseconds = 600000,
   });
 
@@ -47,6 +48,7 @@ final class CockpitCliSessionHandle {
   final String? flavor;
   final String lifecycle;
   final bool recoverable;
+  final bool authenticationEnabled;
   final int launchTimeoutMilliseconds;
 
   bool get isDevelopment => checkoutIdentity != null;
@@ -66,6 +68,7 @@ final class CockpitCliSessionHandle {
     String? flavor,
     String? lifecycle,
     bool? recoverable,
+    bool? authenticationEnabled,
     int? launchTimeoutMilliseconds,
     bool replaceLaunchIdentity = false,
   }) => CockpitCliSessionHandle(
@@ -86,6 +89,7 @@ final class CockpitCliSessionHandle {
     flavor: replaceLaunchIdentity ? flavor : flavor ?? this.flavor,
     lifecycle: lifecycle ?? this.lifecycle,
     recoverable: recoverable ?? this.recoverable,
+    authenticationEnabled: authenticationEnabled ?? this.authenticationEnabled,
     launchTimeoutMilliseconds:
         launchTimeoutMilliseconds ?? this.launchTimeoutMilliseconds,
   );
@@ -105,6 +109,7 @@ final class CockpitCliSessionHandle {
     if (flavor != null) 'flavor': flavor,
     'lifecycle': lifecycle,
     'recoverable': recoverable,
+    'authenticationEnabled': authenticationEnabled,
     'launchTimeoutMilliseconds': launchTimeoutMilliseconds,
     'updatedAt': updatedAt.toUtc().toIso8601String(),
   };
@@ -176,6 +181,7 @@ final class CockpitCliSessionHandleStore {
     String? flavor,
     String lifecycle = 'ready',
     bool? recoverable,
+    bool? authenticationEnabled,
     int? launchTimeoutMilliseconds,
     bool replaceLaunchIdentity = false,
     String? handleId,
@@ -246,6 +252,7 @@ final class CockpitCliSessionHandleStore {
         flavor: flavor,
         lifecycle: lifecycle,
         recoverable: recoverable ?? true,
+        authenticationEnabled: authenticationEnabled ?? false,
         launchTimeoutMilliseconds: launchTimeoutMilliseconds ?? 600000,
       );
     } else {
@@ -280,6 +287,7 @@ final class CockpitCliSessionHandleStore {
         flavor: flavor,
         lifecycle: lifecycle,
         recoverable: recoverable,
+        authenticationEnabled: authenticationEnabled,
         launchTimeoutMilliseconds: launchTimeoutMilliseconds,
         replaceLaunchIdentity: replaceLaunchIdentity,
         updatedAt: _utcNow().toUtc(),
@@ -424,6 +432,7 @@ final class CockpitCliSessionHandleStore {
     String? flavor,
     String lifecycle = 'ready',
     bool recoverable = true,
+    bool authenticationEnabled = false,
     int launchTimeoutMilliseconds = 600000,
   }) {
     if (state.handles.length >= maximumHandles) {
@@ -453,6 +462,7 @@ final class CockpitCliSessionHandleStore {
       flavor: flavor,
       lifecycle: lifecycle,
       recoverable: recoverable,
+      authenticationEnabled: authenticationEnabled,
       launchTimeoutMilliseconds: launchTimeoutMilliseconds,
       updatedAt: _utcNow().toUtc(),
     );
@@ -598,6 +608,7 @@ final class _SessionHandleStateCodec
           'flavor',
           'lifecycle',
           'recoverable',
+          'authenticationEnabled',
           'launchTimeoutMilliseconds',
           'updatedAt',
         },
@@ -612,6 +623,7 @@ final class _SessionHandleStateCodec
           'platform',
           'deviceId',
           'flavor',
+          'authenticationEnabled',
         },
       );
       final handleId = _identifier(item['handleId'], '$path.handleId');
@@ -659,6 +671,10 @@ final class _SessionHandleStateCodec
       if (recoverable is! bool) {
         throw FormatException('Invalid recoverable state at $path.');
       }
+      final authenticationEnabled = item['authenticationEnabled'] ?? false;
+      if (authenticationEnabled is! bool) {
+        throw FormatException('Invalid authentication state at $path.');
+      }
       final launchTimeoutMilliseconds = _launchTimeout(
         item['launchTimeoutMilliseconds'],
         '$path.launchTimeoutMilliseconds',
@@ -703,6 +719,7 @@ final class _SessionHandleStateCodec
           flavor: flavor,
           lifecycle: lifecycle,
           recoverable: recoverable,
+          authenticationEnabled: authenticationEnabled,
           launchTimeoutMilliseconds: launchTimeoutMilliseconds,
           updatedAt: updatedAt,
         ),

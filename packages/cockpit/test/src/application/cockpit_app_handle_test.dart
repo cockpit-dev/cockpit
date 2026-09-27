@@ -137,7 +137,7 @@ void main() {
     },
   );
 
-  test('app handle baseUri carries the remote session token', () {
+  test('app handle keeps the remote session token out of the base URI', () {
     final remoteSession = CockpitRemoteSessionHandle(
       platform: 'macos',
       deviceId: 'macos',
@@ -163,16 +163,14 @@ void main() {
       remoteSession: remoteSession,
     );
 
-    expect(
-      handle.baseUri,
-      Uri.parse('http://127.0.0.1:57331?token=launch-token-1'),
-    );
-    // The stored endpoint stays unauthenticated; only the view merges the
-    // token so persisted handles keep a stable identity.
+    // The secret is exposed through authToken only; URIs and persisted
+    // values stay clean.
+    expect(handle.baseUri, Uri.parse('http://127.0.0.1:57331'));
     expect(handle.baseUrl, 'http://127.0.0.1:57331');
+    expect(handle.authToken, 'launch-token-1');
   });
 
-  test('app handle baseUri keeps an existing token and existing query', () {
+  test('app handle strips a legacy tokenized base URL on resolve', () {
     final remoteSession = CockpitRemoteSessionHandle(
       platform: 'android',
       deviceId: 'emulator-5554',
@@ -208,12 +206,11 @@ void main() {
       launchedAt: DateTime.utc(2026, 4, 5),
     );
 
-    // Merging is idempotent: an endpoint that already carries the token is
-    // returned unchanged, so re-resolving a tokenized handle cannot stack
-    // duplicate query parameters.
-    expect(tokenized.baseUri.queryParametersAll['token'], <String>[
-      'launch-token-1',
-    ]);
+    // Legacy tokenized URLs resolve clean; a duplicate token would instead
+    // surface as a FormatException from the endpoint resolver.
+    expect(tokenized.baseUri, Uri.parse('http://127.0.0.1:57331'));
+    expect(tokenized.authToken, 'launch-token-1');
     expect(unauthenticated.baseUri, Uri.parse('http://127.0.0.1:57331'));
+    expect(unauthenticated.authToken, isEmpty);
   });
 }

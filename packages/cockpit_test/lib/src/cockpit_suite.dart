@@ -1,36 +1,39 @@
+import 'cockpit_json.dart';
 import 'cockpit_locale.dart';
 import 'cockpit_scenario.dart';
 
 final class CockpitTestCaseProgram {
   CockpitTestCaseProgram({
-    required this.id,
+    required String id,
     required this.scenario,
-    Map<String, Object?> targetOverrides = const <String, Object?>{},
-  }) : targetOverrides = Map.unmodifiable(targetOverrides) {
-    if (id.trim().isEmpty) throw ArgumentError.value(id, 'id');
-  }
+    Map<String, Object?> metadata = const <String, Object?>{},
+  }) : id = _validatedId(id),
+       metadata = freezeCockpitJson(metadata, path: r'$.metadata');
 
   final String id;
   final CockpitTestScenario scenario;
-  final Map<String, Object?> targetOverrides;
+  final Map<String, Object?> metadata;
 
-  Map<String, Object?> toJson() => <String, Object?>{
+  Map<String, Object?> toManifestJson() => <String, Object?>{
     'id': id,
-    'scenario': scenario.toJson(),
-    if (targetOverrides.isNotEmpty) 'targetOverrides': targetOverrides,
+    'scenario': scenario.toManifestJson(),
+    if (metadata.isNotEmpty) 'metadata': metadata,
   };
 }
 
 final class CockpitTestSuiteProgram {
   CockpitTestSuiteProgram({
-    required this.id,
+    required String id,
     required Iterable<CockpitTestCaseProgram> cases,
     Iterable<CockpitLocaleProfile> locales = const <CockpitLocaleProfile>[],
     Map<String, Object?> metadata = const <String, Object?>{},
-  }) : cases = List.unmodifiable(cases),
-       locales = List.unmodifiable(locales),
-       metadata = Map.unmodifiable(metadata) {
-    if (id.trim().isEmpty) throw ArgumentError.value(id, 'id');
+  }) : id = _validatedId(id),
+       cases = List<CockpitTestCaseProgram>.unmodifiable(cases),
+       locales = List<CockpitLocaleProfile>.unmodifiable(locales),
+       metadata = freezeCockpitJson(metadata, path: r'$.metadata') {
+    if (this.cases.isEmpty) {
+      throw ArgumentError.value(cases, 'cases', 'Must not be empty.');
+    }
     _unique(this.cases.map((item) => item.id), 'case');
     _unique(this.locales.map((item) => item.toLanguageTag()), 'locale');
   }
@@ -40,13 +43,19 @@ final class CockpitTestSuiteProgram {
   final List<CockpitLocaleProfile> locales;
   final Map<String, Object?> metadata;
 
-  Map<String, Object?> toJson() => <String, Object?>{
+  Map<String, Object?> toManifestJson() => <String, Object?>{
     'id': id,
-    'cases': cases.map((item) => item.toJson()).toList(growable: false),
+    'cases': cases.map((item) => item.toManifestJson()).toList(growable: false),
     if (locales.isNotEmpty)
       'locales': locales.map((item) => item.toJson()).toList(growable: false),
     if (metadata.isNotEmpty) 'metadata': metadata,
   };
+}
+
+String _validatedId(String value) {
+  final normalized = value.trim();
+  if (normalized.isEmpty) throw ArgumentError.value(value, 'id');
+  return normalized;
 }
 
 void _unique(Iterable<String> values, String kind) {

@@ -126,12 +126,20 @@ Future<void> _waitForState(
   CockpitLeaseTestFixture fixture, {
   required String holderId,
   required CockpitLeaseState state,
-}) => waitForLeaseCondition(() async {
-  final leases = await fixture.registry.list(resourceId: 'multiprocess-device');
-  return leases.any(
-    (lease) => lease.holderId == holderId && lease.state == state,
-  );
-});
+}) => waitForLeaseCondition(
+  () async {
+    final leases = await fixture.registry.list(
+      resourceId: 'multiprocess-device',
+    );
+    return leases.any(
+      (lease) => lease.holderId == holderId && lease.state == state,
+    );
+  },
+  // Each helper is a fresh Dart VM process, so its first lease transition
+  // also covers kernel compilation; budget the same 20s the helper event
+  // reads allow instead of the in-process 3s default.
+  timeout: const Duration(seconds: 20),
+);
 
 Future<_HelperProcess> _spawnHelper(
   CockpitLeaseTestFixture fixture, {

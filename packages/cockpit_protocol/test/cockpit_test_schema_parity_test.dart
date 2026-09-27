@@ -63,6 +63,32 @@ void main() {
       jsonDecode(File(schemaPath).readAsStringSync()) as Map<String, Object?>;
   final schema = JsonSchema.create(schemaJson);
 
+  test('string interpolation is explicit in both schema and Dart model', () {
+    for (final source in <Object?>[
+      r'Hello ${name}',
+      const <String, Object?>{r'$var': 'name'},
+      const <String, Object?>{r'$template': r'Hello ${name}'},
+    ]) {
+      final result = schema.validate(_caseWithActionText(source));
+      expect(result.isValid, isTrue, reason: '${result.errors}');
+      final canonical = CockpitTestCase.fromJson(
+        _caseWithActionText(source),
+      ).toJson();
+      final action =
+          ((canonical['steps']! as List<Object?>).single
+                  as Map<String, Object?>)['action']!
+              as Map<String, Object?>;
+      expect(action['text'], source);
+      expect(CockpitTestCase.fromJson(canonical).toJson(), canonical);
+    }
+
+    final malformed = _caseWithActionText(const <String, Object?>{
+      r'$template': 1,
+    });
+    expect(schema.validate(malformed).isValid, isFalse);
+    expect(() => CockpitTestCase.fromJson(malformed), throwsFormatException);
+  });
+
   test('published schema is valid JSON Schema 2020-12 with a stable id', () {
     expect(
       schemaJson[r'$schema'],
@@ -125,6 +151,31 @@ void main() {
     }
   });
 }
+
+Map<String, Object?> _caseWithActionText(Object? text) => <String, Object?>{
+  'schemaVersion': 'cockpit.test/v2',
+  'kind': 'case',
+  'id': 'templateCase',
+  'target': <String, Object?>{
+    'platform': 'android',
+    'targetKind': 'flutterApp',
+    'plane': 'semantic',
+  },
+  'variables': <String, Object?>{
+    'name': <String, Object?>{
+      'source': 'input',
+      'type': 'string',
+      'required': false,
+      'default': 'Cockpit',
+    },
+  },
+  'steps': <Object?>[
+    <String, Object?>{
+      'stepId': 'greet',
+      'action': <String, Object?>{'type': 'enterText', 'text': text},
+    },
+  ],
+};
 
 Directory _packageRoot() {
   final current = Directory.current;

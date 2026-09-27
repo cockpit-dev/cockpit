@@ -225,6 +225,7 @@ final class CockpitWorkerRuntime {
     final developmentRuntime = CockpitWorkerDevelopmentSessionRuntime(
       appTempStore: appTempStore,
       networkProfiler: networkProfiler,
+      sensitiveValueRegistrar: _logger.redactor.registerSensitiveValue,
       sessionLogStore: CockpitWorkerSessionLogStore(
         root: p.join(roots.stateRoot, 'session_logs'),
         redactor: _logger.redactor,
@@ -349,6 +350,15 @@ final class CockpitWorkerRuntime {
       processManager: childProcessManager,
       resultSanitizer: resultSanitizer,
       networkProfiler: networkProfiler,
+      sensitiveValueRegistrar: _logger.redactor.registerSensitiveValue,
+      diagnosticLogger: (message) => _logger.log(
+        'warning',
+        'Application launch cleanup failed.',
+        fields: <String, Object?>{
+          'workspaceId': configuration.workspaceId,
+          'detail': message,
+        },
+      ),
     );
     final secretResolver = _secretResolver(_logger.redactor);
     final caseAdapters = CockpitCaseRunAdapterFactory(

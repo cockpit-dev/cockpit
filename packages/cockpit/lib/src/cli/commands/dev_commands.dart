@@ -80,7 +80,12 @@ CockpitLeafCommand _start(CockpitCliRuntime runtime) => CockpitLeafCommand(
     parser
       ..addOption('platform')
       ..addOption('device')
-      ..addOption('flavor');
+      ..addOption('flavor')
+      ..addFlag(
+        'auth',
+        defaultsTo: false,
+        help: 'Require an authentication token for the remote bridge.',
+      );
     cockpitAddFlutterLaunchConfigurationOptions(parser);
   },
   action: (arguments) async {
@@ -97,6 +102,9 @@ CockpitLeafCommand _start(CockpitCliRuntime runtime) => CockpitLeafCommand(
         deviceId: arguments.option('device'),
         flavor: arguments.option('flavor'),
         launchConfiguration: cockpitReadFlutterLaunchConfiguration(arguments),
+        authenticationEnabled: arguments.wasParsed('auth')
+            ? arguments.flag('auth')
+            : null,
         launchTimeoutMilliseconds: runtime
             .operationBudget(maximum: const Duration(minutes: 30))
             .inMilliseconds,

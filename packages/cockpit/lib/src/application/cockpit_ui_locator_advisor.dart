@@ -43,6 +43,7 @@ CockpitSnapshot _snapshotFromInspectOutput(Map<String, Object?> output) {
         )
         .toList(growable: false),
     truncated: value['truncated'] == true || output['truncated'] == true,
+    degradationReason: value['degradationReason'] as String?,
     summary: visibleTargetCount is int
         ? CockpitSnapshotSummary(
             visibleTargetCount: visibleTargetCount,

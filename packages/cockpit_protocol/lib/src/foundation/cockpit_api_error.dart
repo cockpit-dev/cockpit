@@ -1,4 +1,5 @@
 import 'cockpit_decode_policy.dart';
+import 'cockpit_enum.dart';
 import 'cockpit_foundation_artifact.dart';
 import 'cockpit_foundation_value_reader.dart';
 
@@ -351,11 +352,5 @@ final class CockpitApiException implements Exception {
   String toString() => '${error.code}: ${error.message}';
 }
 
-T _closedEnum<T extends Enum>(Object? value, List<T> values, String path) {
-  return CockpitEnumValue<T>.parse(
-    value,
-    values,
-    path,
-    policy: CockpitDecodePolicy.requests,
-  ).requireKnown();
-}
+T _closedEnum<T extends Enum>(Object? value, List<T> values, String path) =>
+    cockpitEnumFromJson(value, values, path);

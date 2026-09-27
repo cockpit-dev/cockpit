@@ -155,8 +155,9 @@ abstract final class FlutterCockpit {
         degradationReason: degradationReason,
         captureRefs: captureRefs,
       );
-    } on StateError {
+    } on CockpitSessionClosedError {
       // Runtime observation remains best-effort after a session closes.
+      // Other StateErrors are real invariant bugs and must stay visible.
     }
   }
 

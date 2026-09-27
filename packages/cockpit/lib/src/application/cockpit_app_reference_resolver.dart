@@ -3,6 +3,7 @@ import 'dart:io';
 
 import '../platform/ios/cockpit_ios_device_connection.dart';
 import '../remote/cockpit_android_port_forwarder.dart';
+import '../remote/cockpit_remote_endpoint.dart';
 import '../development/cockpit_development_session_handle.dart';
 import '../session/cockpit_remote_session_handle.dart';
 import 'cockpit_app_handle.dart';
@@ -13,14 +14,28 @@ typedef CockpitIosDeviceConnectionReader =
     Future<CockpitIosDeviceConnection?> Function(String deviceId);
 
 final class CockpitResolvedAppReference {
-  const CockpitResolvedAppReference({
-    required this.baseUri,
+  CockpitResolvedAppReference({
+    required Uri baseUri,
+    String authToken = '',
     this.app,
     this.developmentRecord,
     this.remoteRecord,
-  });
+  }) : endpoint = cockpitResolveRemoteEndpoint(
+         baseUri: baseUri,
+         authTokens: <String?>[
+           authToken,
+           app?.authToken,
+           developmentRecord?.handle.authToken,
+           remoteRecord?.handle.authToken,
+         ],
+         path: 'app reference',
+       );
 
-  final Uri baseUri;
+  final CockpitRemoteEndpoint endpoint;
+
+  Uri get baseUri => endpoint.baseUri;
+
+  String get authToken => endpoint.authToken;
   final CockpitAppHandle? app;
   final CockpitDevelopmentSessionRecord? developmentRecord;
   final CockpitRemoteSessionRecord? remoteRecord;
@@ -46,19 +61,29 @@ final class CockpitAppReferenceResolver {
     CockpitAppHandle? app,
     String? appHandlePath,
     Uri? baseUri,
+    String authToken = '',
     String? androidDeviceId,
     String? iosDeviceId,
   }) async {
+    final explicitEndpoint = baseUri == null
+        ? null
+        : cockpitResolveRemoteEndpoint(
+            baseUri: baseUri,
+            authTokens: <String?>[authToken],
+            path: 'app reference',
+          );
     final explicitBaseUri = await _resolvedExplicitBaseUri(
-      baseUri: baseUri,
+      baseUri: explicitEndpoint?.baseUri,
       androidDeviceId: androidDeviceId,
       iosDeviceId: iosDeviceId,
     );
+    final explicitAuthToken = explicitEndpoint?.authToken ?? authToken;
     if (app != null) {
       final resolvedBaseUri =
           explicitBaseUri ?? await _resolvedBaseUriForApp(app);
       return CockpitResolvedAppReference(
         baseUri: resolvedBaseUri,
+        authToken: explicitAuthToken,
         app: _withResolvedBaseUri(app, resolvedBaseUri),
       );
     }
@@ -79,6 +104,7 @@ final class CockpitAppReferenceResolver {
           );
       return CockpitResolvedAppReference(
         baseUri: resolvedBaseUri,
+        authToken: explicitAuthToken,
         app: _withResolvedBaseUri(resolvedApp, resolvedBaseUri),
         developmentRecord: developmentRecord,
         remoteRecord: remoteRecord,
@@ -89,7 +115,10 @@ final class CockpitAppReferenceResolver {
       final registry = _registry;
       if (registry == null) {
         if (explicitBaseUri != null) {
-          return CockpitResolvedAppReference(baseUri: explicitBaseUri);
+          return CockpitResolvedAppReference(
+            baseUri: explicitBaseUri,
+            authToken: explicitAuthToken,
+          );
         }
         throw const CockpitApplicationServiceException(
           code: 'appLookupUnavailable',
@@ -146,7 +175,10 @@ final class CockpitAppReferenceResolver {
         );
       }
       if (explicitBaseUri != null) {
-        return CockpitResolvedAppReference(baseUri: explicitBaseUri);
+        return CockpitResolvedAppReference(
+          baseUri: explicitBaseUri,
+          authToken: explicitAuthToken,
+        );
       }
       throw CockpitApplicationServiceException(
         code: 'unknownAppId',
@@ -156,7 +188,10 @@ final class CockpitAppReferenceResolver {
     }
 
     if (explicitBaseUri != null) {
-      return CockpitResolvedAppReference(baseUri: explicitBaseUri);
+      return CockpitResolvedAppReference(
+        baseUri: explicitBaseUri,
+        authToken: explicitAuthToken,
+      );
     }
 
     throw const CockpitApplicationServiceException(
@@ -286,8 +321,6 @@ final class CockpitAppReferenceResolver {
       preferredHostPort: preferredHostPort,
       devicePort: devicePort,
     );
-    // Keep the full source URI, including any token query parameter, so the
-    // forwarded endpoint stays authenticated exactly like the original one.
     final sourceUri = remoteSessionHandle?.baseUri ?? app.baseUri;
     return sourceUri.replace(host: '127.0.0.1', port: hostPort);
   }

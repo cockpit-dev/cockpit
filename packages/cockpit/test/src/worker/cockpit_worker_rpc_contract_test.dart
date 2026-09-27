@@ -252,13 +252,17 @@ void main() {
         '${direction.name} closes when terminal cleanup never arrives',
         () async {
           final never = Completer<Object?>();
+          // The windows are intentionally wide relative to each other: the
+          // call deadline must always fire before the forced abort, even on
+          // a machine whose event loop stalls for hundreds of milliseconds
+          // under a full parallel test load.
           final harness = direction.open(
             decorate: (base) =>
                 (request, cancellation) => request.id == 'neverA'
                 ? never.future
                 : base(request, cancellation),
-            clientCancellationGrace: const Duration(milliseconds: 5),
-            clientForcedAbortGrace: const Duration(milliseconds: 20),
+            clientCancellationGrace: const Duration(milliseconds: 50),
+            clientForcedAbortGrace: const Duration(milliseconds: 750),
           );
           await harness.start();
           addTearDown(harness.close);
@@ -271,7 +275,7 @@ void main() {
               eventSequence: 1,
             ),
             deadline: DateTime.now().toUtc().add(
-              const Duration(milliseconds: 10),
+              const Duration(milliseconds: 250),
             ),
             requestId: 'neverA',
           );

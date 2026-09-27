@@ -427,6 +427,7 @@ final class CockpitCliRuntime {
     String? flavor,
     String lifecycle = 'ready',
     bool? recoverable,
+    bool? authenticationEnabled,
     int? launchTimeoutMilliseconds,
     bool replaceLaunchIdentity = false,
   }) => sessionHandleStore().then(
@@ -445,6 +446,7 @@ final class CockpitCliRuntime {
       flavor: flavor,
       lifecycle: lifecycle,
       recoverable: recoverable,
+      authenticationEnabled: authenticationEnabled,
       launchTimeoutMilliseconds: launchTimeoutMilliseconds,
       replaceLaunchIdentity: replaceLaunchIdentity,
     ),
@@ -463,6 +465,7 @@ final class CockpitCliRuntime {
     String? flavor,
     String lifecycle = 'ready',
     bool? recoverable,
+    bool? authenticationEnabled,
     int? launchTimeoutMilliseconds,
     bool replaceLaunchIdentity = false,
   }) {
@@ -492,6 +495,7 @@ final class CockpitCliRuntime {
         flavor: flavor,
         lifecycle: lifecycle,
         recoverable: recoverable,
+        authenticationEnabled: authenticationEnabled,
         launchTimeoutMilliseconds: launchTimeoutMilliseconds,
         replaceLaunchIdentity: replaceLaunchIdentity,
         handleId: previous.handleId,

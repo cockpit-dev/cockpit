@@ -1,5 +1,21 @@
 # Changelog
 
+## 4.10.0
+
+- Separated public session identity from authentication credentials:
+  `CockpitRemoteSessionConfiguration.baseUri` never carries a token, `toJson()`
+  omits `authToken`, and only the owner-only `toPrivateJson()` retains it.
+- Added explicit string interpolation values (`$template` and `$var`); plain
+  strings containing `${...}` now round-trip as literals without forced
+  template interpretation.
+- Hardened scalar enum decoding as closed enums that reject unknown wire
+  values with path-carrying `FormatException`s.
+- Fixed compact performance archives to report `observedFrameCount` from the
+  summary, dropped, and archived frame facts.
+- Added `CockpitSessionClosedError`, thrown instead of a bare `StateError`
+  when recording targets a finished session; it still extends `StateError`
+  for compatibility with existing catchers.
+
 ## 4.9.0
 
 - Added structured compound-locator failure details with bounded signal

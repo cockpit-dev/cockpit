@@ -1,12 +1,11 @@
-import 'dart:async';
 import 'dart:ui' as ui;
 
-import 'package:flutter/scheduler.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
 
 import '../control/cockpit_screenshot_request.dart';
 import '../model/cockpit_artifact_ref.dart';
+import '../runtime/cockpit_pending_frame_waiter.dart';
 import '../runtime/cockpit_snapshot.dart';
 import 'cockpit_captured_screenshot.dart';
 import 'cockpit_capture_paths.dart';
@@ -21,19 +20,16 @@ final class FlutterViewCapture {
     double pixelRatio = 1.0,
     ui.Rect? cropRect,
   }) async {
-    if (SchedulerBinding.instance.schedulerPhase != SchedulerPhase.idle) {
-      // The in-flight frame may belong to an engine that stopped delivering
-      // vsync (occluded desktop surface) or park on an already-armed
-      // completer that never fires, so the wait stays bounded and the
-      // capture proceeds with what the boundary currently shows.
-      try {
-        await WidgetsBinding.instance.endOfFrame.timeout(
-          const Duration(milliseconds: 250),
-        );
-      } on TimeoutException {
-        // A paused or wedged engine may never finish the in-flight frame.
-      }
-    }
+    final binding = WidgetsBinding.instance;
+    final frameWait = await waitForPendingCockpitFrame(
+      phase: binding.schedulerPhase,
+      hasScheduledFrame: binding.hasScheduledFrame,
+      waitForEndOfFrame: () => binding.endOfFrame,
+    );
+    final degradationReason =
+        frameWait == CockpitPendingFrameWaitResult.timedOut
+        ? cockpitFrameTimeoutDegradationReason
+        : null;
 
     final context = repaintBoundaryKey.currentContext;
     if (context == null) {
@@ -103,7 +99,22 @@ final class FlutterViewCapture {
         relativePath: cockpitScreenshotRelativePathFor(request),
       ),
       bytes: bytes,
-      snapshot: snapshot,
+      snapshot: degradationReason == null
+          ? snapshot
+          : snapshot?.copyWith(
+              degradationReason: _mergeDegradationReasons(
+                snapshot.degradationReason,
+                degradationReason,
+              ),
+            ),
+      degradationReason: degradationReason,
     );
+  }
+
+  String _mergeDegradationReasons(String? primary, String secondary) {
+    if (primary == null || primary.isEmpty || primary == secondary) {
+      return secondary;
+    }
+    return '$primary; $secondary';
   }
 }

@@ -1,3 +1,9 @@
+// This file asserts absolute probe timings, so it carries the `perf` tag and
+// runs in a dedicated invocation without concurrent suites (see the melos and
+// CI test gates).
+@Tags(['perf'])
+library;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_cockpit/flutter_cockpit_flutter.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -84,6 +90,7 @@ void main() {
     final surfaceState = tester.state<CockpitSurfaceState>(
       find.byType(CockpitSurface),
     );
+    final engine = const CockpitDiscoveryEngine();
     // Roughly 5k mounted elements: 42 branches x 15 rows of wrapped text
     // plus the main scroll spine.
     expect(tester.allElements.length, greaterThan(4500));
@@ -95,28 +102,63 @@ void main() {
     );
     surfaceState.probeVisibleLocator(const CockpitLocator(text: 'Perf needle'));
 
-    final typeStopwatch = Stopwatch()..start();
     final byType = surfaceState.probeVisibleLocator(
       const CockpitLocator(type: 'CustomScrollView'),
     );
-    typeStopwatch.stop();
-
-    final textStopwatch = Stopwatch()..start();
     final byText = surfaceState.probeVisibleLocator(
       const CockpitLocator(text: 'Perf needle'),
     );
-    textStopwatch.stop();
 
     expect(byType.isSuccess, isTrue, reason: 'type probe must stay correct');
     expect(byType.target?.typeName, 'CustomScrollView');
     expect(byText.isSuccess, isTrue, reason: 'text probe must stay correct');
     expect(byText.target?.text, 'Perf needle');
 
-    // Before the prepared-locator walk (flattened signals, static patterns,
-    // memoized type-name normalization), these probes took ~40ms (type) and
-    // ~31ms (text) on this tree; the bound leaves ~2x headroom over the
-    // post-fix numbers (~8ms and ~13ms).
-    expect(typeStopwatch.elapsed, lessThan(const Duration(milliseconds: 25)));
-    expect(textStopwatch.elapsed, lessThan(const Duration(milliseconds: 25)));
+    // Best-of-five keeps the guard meaningful under load: the minimum
+    // approaches the unloaded cost, so transient scheduler spikes cannot
+    // fail a healthy build.
+    Duration bestOf(void Function() measure, {int attempts = 5}) {
+      var best = const Duration(days: 1);
+      for (var attempt = 0; attempt < attempts; attempt += 1) {
+        final stopwatch = Stopwatch()..start();
+        measure();
+        stopwatch.stop();
+        if (stopwatch.elapsed < best) {
+          best = stopwatch.elapsed;
+        }
+      }
+      return best;
+    }
+
+    // Absolute probe timings shift several-fold with sustained CPU load and
+    // thermal state, so the guard is expressed relative to a full discovery
+    // pass over the same tree, measured in the same process: both scale with
+    // the machine's current speed, while a scoring regression inflates only
+    // the probes. Before the prepared-locator walk (flattened signals,
+    // static patterns, memoized type-name normalization) the type probe ran
+    // ~5x slower on this tree; healthy probes measure ~0.08 (type) and
+    // ~0.05 (text) of a discovery pass even on a fully heat-soaked machine,
+    // while the un-prepared type probe lands near ~0.4 of it.
+    final discoverBaseline = bestOf(
+      () => engine.discover(
+        rootContext: tester.element(find.byType(CockpitSurface)),
+        routeName: '/probe-perf',
+        includeClippedTargets: true,
+      ),
+      attempts: 3,
+    );
+    final typeProbe = bestOf(() {
+      surfaceState.probeVisibleLocator(
+        const CockpitLocator(type: 'CustomScrollView'),
+      );
+    });
+    final textProbe = bestOf(() {
+      surfaceState.probeVisibleLocator(
+        const CockpitLocator(text: 'Perf needle'),
+      );
+    });
+
+    expect(typeProbe, lessThan(discoverBaseline * 0.2));
+    expect(textProbe, lessThan(discoverBaseline * 0.2));
   });
 }

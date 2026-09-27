@@ -40,6 +40,8 @@ final class CockpitWorkerRemoteOperations {
     CockpitExecuteRemoteCommandService? executeCommandService,
     CockpitExecuteRemoteCommandBatchService? executeBatchService,
     CockpitWaitRemoteUiIdleService? waitIdleService,
+    void Function(String value)? sensitiveValueRegistrar,
+    void Function(String message)? diagnosticLogger,
   }) {
     final snapshots = snapshotStore ?? CockpitInteractiveSnapshotStore();
     final artifactTempFileFactory = cockpitWorkerArtifactTempFileFactory(
@@ -52,7 +54,11 @@ final class CockpitWorkerRemoteOperations {
       portHandoff: portHandoff,
       launchService:
           launchService ??
-          CockpitLaunchRemoteSessionService(appTempStore: appTempStore),
+          CockpitLaunchRemoteSessionService(
+            appTempStore: appTempStore,
+            sensitiveValueRegistrar: sensitiveValueRegistrar,
+            diagnosticLogger: diagnosticLogger,
+          ),
       stopAppService:
           stopAppService ?? CockpitStopAppService(appTempStore: appTempStore),
       queryService: queryService ?? CockpitQueryRemoteSessionService(),
@@ -190,6 +196,7 @@ final class CockpitWorkerRemoteOperations {
         'targetId',
         'launchTimeoutMs',
         'launchConfiguration',
+        'authenticationEnabled',
       },
       required: const <String>{'targetId'},
     );
@@ -244,6 +251,7 @@ final class CockpitWorkerRemoteOperations {
             sessionPort: port,
             launchTimeout: timeout,
             allowSessionPortFallback: false,
+            authenticationEnabled: values.boolean('authenticationEnabled'),
             launchConfiguration: launchConfiguration,
           ),
         ),

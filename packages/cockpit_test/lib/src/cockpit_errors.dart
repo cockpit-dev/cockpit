@@ -39,3 +39,21 @@ final class CockpitTestCommandException extends CockpitTestException {
   final CockpitCommand command;
   final CockpitCommandExecution execution;
 }
+
+/// Preserves the primary action failure when cleanup also fails.
+final class CockpitTestCleanupException extends CockpitTestException {
+  CockpitTestCleanupException({
+    required this.primaryError,
+    required this.primaryStackTrace,
+    required this.cleanupError,
+    required this.cleanupStackTrace,
+  }) : super(
+         'The test action failed and cleanup also failed. '
+         'Action: $primaryError. Cleanup: $cleanupError.',
+       );
+
+  final Object primaryError;
+  final StackTrace primaryStackTrace;
+  final Object cleanupError;
+  final StackTrace cleanupStackTrace;
+}

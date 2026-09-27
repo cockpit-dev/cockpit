@@ -1,71 +1,162 @@
-import 'package:cockpit_protocol/cockpit_protocol.dart';
 import 'package:cockpit_test/cockpit_test.dart';
 import 'package:test/test.dart';
 
 void main() {
-  test('localized text resolves against the locale at dispatch time', () {
-    const text = CockpitLocalizedText(
-      'settings.saved',
-      values: <String, String>{'en-US': 'Saved', 'zh-CN': '已保存'},
-    );
+  test(
+    'localized text uses exact, language-script, then language fallback',
+    () {
+      final text = CockpitLocalizedText(
+        'settings.saved',
+        values: const <String, String>{
+          'zh-Hant-HK': '已儲存（香港）',
+          'zh-Hant': '已儲存',
+          'zh': '已保存',
+        },
+      );
 
-    expect(text.resolve(const CockpitLocaleProfile('en-US')), 'Saved');
-    expect(text.resolve(const CockpitLocaleProfile('zh-CN')), '已保存');
-  });
+      expect(text.resolve(CockpitLocaleProfile('zh-Hant-HK')), '已儲存（香港）');
+      expect(text.resolve(CockpitLocaleProfile('zh-Hant-TW')), '已儲存');
+      expect(text.resolve(CockpitLocaleProfile('zh-CN')), '已保存');
+    },
+  );
 
   test('localized text fails explicitly when a locale value is missing', () {
-    const text = CockpitLocalizedText(
+    final text = CockpitLocalizedText(
       'settings.saved',
-      values: <String, String>{'en-US': 'Saved'},
+      values: const <String, String>{'en-US': 'Saved'},
     );
 
     expect(
-      () => text.resolve(const CockpitLocaleProfile('fr-FR')),
+      () => text.resolve(CockpitLocaleProfile('fr-FR')),
       throwsA(isA<CockpitTestLocalizationException>()),
     );
   });
 
-  test('scenario metadata validates required capabilities', () {
+  test('locale profile validates and canonicalizes language tags', () {
+    final locale = CockpitLocaleProfile('ZH-hant-tw');
+    final languageAndRegion = CockpitLocaleProfile('en', region: 'us');
+
+    expect(locale.toLanguageTag(), 'zh-Hant-TW');
+    expect(locale.languageCode, 'zh');
+    expect(locale.scriptCode, 'Hant');
+    expect(locale.regionCode, 'TW');
+    expect(languageAndRegion.toLanguageTag(), 'en-US');
+    expect(() => CockpitLocaleProfile('zh_Hant_TW'), throwsArgumentError);
+    expect(
+      () => CockpitLocaleProfile('zh-Hant-TW', region: 'CN'),
+      throwsArgumentError,
+    );
+  });
+
+  test('locale and translation metadata are immutable by value', () {
+    final metadata = <String, String>{'market': 'consumer'};
+    final translations = <String, String>{'en-us': 'Saved'};
+    final locale = CockpitLocaleProfile('en-US', metadata: metadata);
+    final equal = CockpitLocaleProfile(
+      'EN-us',
+      metadata: const <String, String>{'market': 'consumer'},
+    );
+    final text = CockpitLocalizedText('saved', values: translations);
+
+    metadata['market'] = 'enterprise';
+    translations['en-us'] = 'Changed';
+
+    expect(locale.metadata, const <String, String>{'market': 'consumer'});
+    expect(text.resolve(locale), 'Saved');
+    expect(locale, equal);
+    expect(locale.hashCode, equal.hashCode);
+    expect(<CockpitLocaleProfile>{locale, equal}, hasLength(1));
+    expect(() => locale.metadata['new'] = 'value', throwsUnsupportedError);
+    expect(() => text.values['en-US'] = 'Changed', throwsUnsupportedError);
+  });
+
+  test('scenario uses typed requirements and immutable metadata', () {
+    final commands = <CockpitCommandType>[CockpitCommandType.enterText];
+    final metadata = <String, Object?>{
+      'labels': <Object?>['smoke'],
+    };
     final scenario = CockpitTestScenario(
-      id: 'create-task',
+      id: ' create-task ',
       body: (_) async {},
-      requiredCapabilities: const <String>{'semantic', 'input'},
+      requirements: CockpitTestRequirements(
+        commands: commands,
+        locators: const <CockpitLocatorKind>{CockpitLocatorKind.cockpitId},
+        features: const <CockpitTestFeature>{CockpitTestFeature.inAppControl},
+      ),
+      metadata: metadata,
     );
 
+    commands.add(CockpitCommandType.tap);
+    (metadata['labels']! as List<Object?>).add('changed');
+
     expect(scenario.id, 'create-task');
-    expect(scenario.requiredCapabilities, contains('semantic'));
+    expect(scenario.requirements.commands, const <CockpitCommandType>{
+      CockpitCommandType.enterText,
+    });
+    expect(scenario.metadata['labels'], const <Object?>['smoke']);
+    expect(
+      scenario.toManifestJson()['requirements'],
+      isA<Map<String, Object?>>(),
+    );
     expect(
       () => CockpitTestScenario(id: ' ', body: (_) async {}),
       throwsArgumentError,
     );
   });
 
-  test('programmatic suite preserves case order and locale matrix', () {
-    final suite = CockpitTestSuiteProgram(
-      id: 'smoke',
-      cases: <CockpitTestCaseProgram>[
-        CockpitTestCaseProgram(
-          id: 'a',
-          scenario: CockpitTestScenario(id: 'a', body: (_) async {}),
-        ),
-        CockpitTestCaseProgram(
-          id: 'b',
-          scenario: CockpitTestScenario(id: 'b', body: (_) async {}),
-        ),
-      ],
-      locales: const <CockpitLocaleProfile>[
-        CockpitLocaleProfile('en-US'),
-        CockpitLocaleProfile('zh-CN'),
-      ],
-    );
+  test(
+    'programmatic suite preserves order and rejects empty or duplicate cases',
+    () {
+      final suite = CockpitTestSuiteProgram(
+        id: ' smoke ',
+        cases: <CockpitTestCaseProgram>[
+          CockpitTestCaseProgram(
+            id: 'a',
+            scenario: CockpitTestScenario(id: 'a', body: (_) async {}),
+          ),
+          CockpitTestCaseProgram(
+            id: 'b',
+            scenario: CockpitTestScenario(id: 'b', body: (_) async {}),
+          ),
+        ],
+        locales: <CockpitLocaleProfile>[
+          CockpitLocaleProfile('en-US'),
+          CockpitLocaleProfile('zh-CN'),
+        ],
+      );
 
-    expect(suite.cases.map((item) => item.id), <String>['a', 'b']);
-    expect(suite.locales.map((locale) => locale.toLanguageTag()), <String>[
-      'en-US',
-      'zh-CN',
-    ]);
-    expect(suite.toJson()['locales'], hasLength(2));
-  });
+      expect(suite.id, 'smoke');
+      expect(suite.cases.map((item) => item.id), <String>['a', 'b']);
+      expect(suite.locales.map((locale) => locale.toLanguageTag()), <String>[
+        'en-US',
+        'zh-CN',
+      ]);
+      expect(suite.toManifestJson()['locales'], hasLength(2));
+      expect(
+        () => CockpitTestSuiteProgram(
+          id: 'empty',
+          cases: const <CockpitTestCaseProgram>[],
+        ),
+        throwsArgumentError,
+      );
+      expect(
+        () => CockpitTestSuiteProgram(
+          id: 'duplicate',
+          cases: <CockpitTestCaseProgram>[
+            CockpitTestCaseProgram(
+              id: 'same',
+              scenario: CockpitTestScenario(id: 'a', body: (_) async {}),
+            ),
+            CockpitTestCaseProgram(
+              id: ' same ',
+              scenario: CockpitTestScenario(id: 'b', body: (_) async {}),
+            ),
+          ],
+        ),
+        throwsArgumentError,
+      );
+    },
+  );
 
   test('tester command contract can execute a neutral command', () async {
     final tester = _RecordingTester();
@@ -79,7 +170,7 @@ final class _RecordingTester implements CockpitTester {
   final commands = <CockpitCommand>[];
 
   @override
-  CockpitLocaleProfile get locale => const CockpitLocaleProfile('en-US');
+  CockpitLocaleProfile get locale => CockpitLocaleProfile('en-US');
 
   @override
   Future<CockpitCommandExecution> execute(CockpitCommand command) async {
@@ -102,28 +193,6 @@ final class _RecordingTester implements CockpitTester {
       locator: target is String ? CockpitLocator(key: target) : null,
     ),
   );
-
-  @override
-  Future<CockpitCommandExecution> type(String value, {required Object into}) =>
-      execute(
-        CockpitCommand(
-          commandId: '2',
-          commandType: CockpitCommandType.enterText,
-          locator: into is String ? CockpitLocator(key: into) : null,
-          parameters: <String, Object?>{'text': value},
-        ),
-      );
-
-  @override
-  Future<CockpitCommandExecution> expectText(Object target, Object expected) =>
-      execute(
-        CockpitCommand(
-          commandId: '3',
-          commandType: CockpitCommandType.assertText,
-          locator: target is String ? CockpitLocator(key: target) : null,
-          parameters: <String, Object?>{'text': expected.toString()},
-        ),
-      );
 
   @override
   dynamic noSuchMethod(Invocation invocation) =>

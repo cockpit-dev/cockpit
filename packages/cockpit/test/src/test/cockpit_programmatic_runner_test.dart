@@ -1,12 +1,11 @@
 import 'package:cockpit/cockpit.dart';
 import 'package:cockpit_protocol/cockpit_protocol.dart';
-import 'package:cockpit_test/cockpit_test.dart';
 import 'package:test/test.dart';
 
 void main() {
   test('automation tester maps selectors and localized assertions', () async {
     final adapter = _FakeAutomationAdapter();
-    var activeLocale = const CockpitLocaleProfile('en-US');
+    var activeLocale = CockpitLocaleProfile('en-US');
     final tester = CockpitAutomationTester(
       automation: adapter,
       initialLocale: activeLocale,
@@ -14,12 +13,12 @@ void main() {
     );
 
     await tester.tap('#save');
-    activeLocale = const CockpitLocaleProfile('zh-CN');
+    activeLocale = CockpitLocaleProfile('zh-CN');
     await tester.expectText(
       '#status',
-      const CockpitLocalizedText(
+      CockpitLocalizedText(
         'status.saved',
-        values: <String, String>{'en-US': 'Saved', 'zh-CN': '已保存'},
+        values: const <String, String>{'en-US': 'Saved', 'zh-CN': '已保存'},
       ),
     );
 
@@ -27,15 +26,40 @@ void main() {
     expect(adapter.commands[1].parameters['text'], '已保存');
   });
 
-  test('programmatic runner blocks unsupported capabilities', () async {
-    final runner = const CockpitProgrammaticTestRunner();
-    final result = await runner.run(
+  test('typed command requirements use protocol command names', () async {
+    var executed = false;
+    final result = await const CockpitProgrammaticTestRunner().run(
+      CockpitTestScenario(
+        id: 'enter-text',
+        requirements: CockpitTestRequirements(
+          commands: const <CockpitCommandType>{CockpitCommandType.enterText},
+        ),
+        body: (_) async {
+          executed = true;
+        },
+      ),
+      locale: CockpitLocaleProfile('en-US'),
+      createTester: (locale) async => CockpitAutomationTester(
+        automation: _FakeAutomationAdapter(),
+        initialLocale: locale,
+      ),
+    );
+
+    expect(executed, isTrue);
+    expect(result.status, CockpitTestRunStatus.passed);
+    expect(result.error, isNull);
+  });
+
+  test('programmatic runner blocks unsupported typed requirements', () async {
+    final result = await const CockpitProgrammaticTestRunner().run(
       CockpitTestScenario(
         id: 'needs-semantic',
-        requiredCapabilities: const <String>{'semantic'},
+        requirements: CockpitTestRequirements(
+          locators: const <CockpitLocatorKind>{CockpitLocatorKind.semanticId},
+        ),
         body: (_) async {},
       ),
-      locale: const CockpitLocaleProfile('en-US'),
+      locale: CockpitLocaleProfile('en-US'),
       createTester: (locale) async => CockpitAutomationTester(
         automation: _FakeAutomationAdapter(
           capabilities: CockpitCapabilities(
@@ -45,8 +69,6 @@ void main() {
             supportsFlutterViewCapture: false,
             supportsNativeScreenCapture: true,
             supportsHostAutomation: true,
-            supportedCommands: const <CockpitCommandType>[],
-            supportedLocatorStrategies: const <CockpitLocatorKind>[],
           ),
         ),
         initialLocale: locale,
@@ -54,77 +76,181 @@ void main() {
     );
 
     expect(result.status, CockpitTestRunStatus.blocked);
-    expect(result.error, isA<CockpitTestCapabilityException>());
+    expect(result.error?.code, CockpitTestErrorCode.targetMismatch);
+    expect(result.error?.details['missingRequirements'], <Object?>[
+      <String, Object?>{'kind': 'locator', 'value': 'semanticId'},
+    ]);
+    expect(result.toJson()['error'], isA<Map<String, Object?>>());
   });
 
-  test('suite runner executes deterministic locale matrix', () async {
+  test('performance requirements use tester feature support', () async {
     final runner = const CockpitProgrammaticTestRunner();
-    final suite = CockpitTestSuiteProgram(
-      id: 'smoke',
-      locales: const <CockpitLocaleProfile>[
-        CockpitLocaleProfile('en-US'),
-        CockpitLocaleProfile('zh-CN'),
-      ],
-      cases: <CockpitTestCaseProgram>[
-        CockpitTestCaseProgram(
-          id: 'save',
-          scenario: CockpitTestScenario(
-            id: 'save-flow',
-            body: (tester) async {
-              await tester.tap('#save');
-            },
-          ),
-        ),
-      ],
+    final scenario = CockpitTestScenario(
+      id: 'profile',
+      requirements: CockpitTestRequirements(
+        features: const <CockpitTestFeature>{
+          CockpitTestFeature.performanceCapture,
+        },
+      ),
+      body: (_) async {},
     );
 
-    final result = await runner.runSuite(
-      suite,
+    final blocked = await runner.run(
+      scenario,
+      locale: CockpitLocaleProfile('en-US'),
       createTester: (locale) async => CockpitAutomationTester(
         automation: _FakeAutomationAdapter(),
         initialLocale: locale,
       ),
     );
+    final passed = await runner.run(
+      scenario,
+      locale: CockpitLocaleProfile('en-US'),
+      createTester: (locale) async => CockpitAutomationTester(
+        automation: _FakeAutomationAdapter(),
+        initialLocale: locale,
+        performance: _FakePerformanceAdapter(),
+      ),
+    );
 
-    expect(result.attempts.map((attempt) => attempt.scenarioId), <String>[
-      'save/save-flow',
-      'save/save-flow',
-    ]);
-    expect(result.passed, isTrue);
+    expect(blocked.status, CockpitTestRunStatus.blocked);
+    expect(passed.status, CockpitTestRunStatus.passed);
   });
 
   test(
-    'profile returns the adapter report and always stops the window',
+    'suite runner executes deterministic locale matrix and metadata',
+    () async {
+      final suite = CockpitTestSuiteProgram(
+        id: 'smoke',
+        locales: <CockpitLocaleProfile>[
+          CockpitLocaleProfile('en-US'),
+          CockpitLocaleProfile('zh-CN'),
+        ],
+        metadata: const <String, Object?>{'scope': 'suite'},
+        cases: <CockpitTestCaseProgram>[
+          CockpitTestCaseProgram(
+            id: 'save',
+            metadata: const <String, Object?>{'case': 'settings'},
+            scenario: CockpitTestScenario(
+              id: 'save-flow',
+              metadata: const <String, Object?>{'surface': 'settings'},
+              body: (tester) async {
+                await tester.tap('#save');
+              },
+            ),
+          ),
+        ],
+      );
+
+      final result = await const CockpitProgrammaticTestRunner().runSuite(
+        suite,
+        createTester: (locale) async => CockpitAutomationTester(
+          automation: _FakeAutomationAdapter(),
+          initialLocale: locale,
+        ),
+      );
+
+      expect(result.attempts.map((attempt) => attempt.scenarioId), <String>[
+        'save/save-flow',
+        'save/save-flow',
+      ]);
+      expect(
+        result.attempts
+            .singleWhere((attempt) => attempt.locale.languageTag == 'en-US')
+            .metadata,
+        <String, Object?>{
+          'scope': 'suite',
+          'case': 'settings',
+          'surface': 'settings',
+        },
+      );
+      expect(result.passed, isTrue);
+    },
+  );
+
+  test('suite result never reports an empty attempt set as passed', () {
+    final result = CockpitSuiteRunResult(
+      suiteId: 'empty-result',
+      attempts: const <CockpitTestRunResult>[],
+    );
+
+    expect(result.passed, isFalse);
+  });
+
+  test('profile returns the report and closes the capture window', () async {
+    final performance = _FakePerformanceAdapter();
+    final tester = CockpitAutomationTester(
+      automation: _FakeAutomationAdapter(),
+      initialLocale: CockpitLocaleProfile('en-US'),
+      performance: performance,
+    );
+
+    final report = await tester.profile(() async {}, name: 'smoke');
+
+    expect(report.platform, 'android');
+    expect(performance.started, 1);
+    expect(performance.stopped, 1);
+  });
+
+  test(
+    'profile preserves the action failure after successful cleanup',
     () async {
       final performance = _FakePerformanceAdapter();
       final tester = CockpitAutomationTester(
         automation: _FakeAutomationAdapter(),
-        initialLocale: const CockpitLocaleProfile('en-US'),
+        initialLocale: CockpitLocaleProfile('en-US'),
         performance: performance,
       );
+      final primary = StateError('action failed');
 
-      final report = await tester.profile(() async {}, name: 'smoke');
-
-      expect(report.platform, 'android');
-      expect(performance.started, 1);
+      await expectLater(
+        tester.profile(() async => throw primary),
+        throwsA(same(primary)),
+      );
       expect(performance.stopped, 1);
     },
   );
 
-  test(
-    'profile reports an explicit capability failure without an adapter',
-    () async {
-      final tester = CockpitAutomationTester(
-        automation: _FakeAutomationAdapter(),
-        initialLocale: const CockpitLocaleProfile('en-US'),
-      );
+  test('profile preserves action and cleanup failures', () async {
+    final cleanup = StateError('cleanup failed');
+    final performance = _FakePerformanceAdapter(stopError: cleanup);
+    final tester = CockpitAutomationTester(
+      automation: _FakeAutomationAdapter(),
+      initialLocale: CockpitLocaleProfile('en-US'),
+      performance: performance,
+    );
+    final primary = StateError('action failed');
 
-      await expectLater(
-        tester.profile(() async {}),
-        throwsA(isA<CockpitTestCapabilityException>()),
-      );
-    },
-  );
+    await expectLater(
+      tester.profile(() async => throw primary),
+      throwsA(
+        isA<CockpitTestCleanupException>()
+            .having(
+              (error) => error.primaryError,
+              'primaryError',
+              same(primary),
+            )
+            .having(
+              (error) => error.cleanupError,
+              'cleanupError',
+              same(cleanup),
+            ),
+      ),
+    );
+    expect(performance.stopped, 1);
+  });
+
+  test('profile fails explicitly without a performance adapter', () async {
+    final tester = CockpitAutomationTester(
+      automation: _FakeAutomationAdapter(),
+      initialLocale: CockpitLocaleProfile('en-US'),
+    );
+
+    await expectLater(
+      tester.profile(() async {}),
+      throwsA(isA<CockpitTestCapabilityException>()),
+    );
+  });
 }
 
 final class _FakeAutomationAdapter implements CockpitAutomationAdapter {
@@ -163,6 +289,9 @@ final class _FakeAutomationAdapter implements CockpitAutomationAdapter {
 }
 
 final class _FakePerformanceAdapter implements CockpitPerformanceAdapter {
+  _FakePerformanceAdapter({this.stopError});
+
+  final Object? stopError;
   int started = 0;
   int stopped = 0;
 
@@ -181,6 +310,7 @@ final class _FakePerformanceAdapter implements CockpitPerformanceAdapter {
   @override
   Future<CockpitPerformanceReport> stopPerformance() async {
     stopped += 1;
+    if (stopError case final error?) throw error;
     final phase = const CockpitPerformancePhaseSummary(
       sampleCount: 0,
       averageUs: 0,

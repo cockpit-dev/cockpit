@@ -1,3 +1,5 @@
+import '../foundation/cockpit_enum.dart';
+
 enum CockpitCommandType {
   tap,
   hover,
@@ -40,7 +42,8 @@ enum CockpitCommandType {
   captureScreenshot,
   collectSnapshot;
 
-  static CockpitCommandType fromJson(Object? json) {
-    return values.byName(json! as String);
-  }
+  static CockpitCommandType fromJson(
+    Object? json, {
+    String path = r'$.commandType',
+  }) => cockpitEnumFromJson(json, values, path);
 }

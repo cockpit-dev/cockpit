@@ -1,5 +1,6 @@
 import 'cockpit_api_error.dart';
 import 'cockpit_decode_policy.dart';
+import 'cockpit_enum.dart';
 import 'cockpit_foundation_value_reader.dart';
 
 enum CockpitRunLifecycle { queued, running, finalizing, completed }
@@ -374,11 +375,5 @@ CockpitRunDocumentKind _runDocumentKind(Object? value, String path) {
   return _enum(name, CockpitRunDocumentKind.values, path);
 }
 
-T _enum<T extends Enum>(Object? value, List<T> values, String path) {
-  return CockpitEnumValue<T>.parse(
-    value,
-    values,
-    path,
-    policy: CockpitDecodePolicy.requests,
-  ).requireKnown();
-}
+T _enum<T extends Enum>(Object? value, List<T> values, String path) =>
+    cockpitEnumFromJson(value, values, path);

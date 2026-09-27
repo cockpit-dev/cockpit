@@ -22,10 +22,16 @@ final class CockpitLocatorResolution {
   };
 
   /// Decodes a CockpitLocatorResolution from a JSON object.
-  factory CockpitLocatorResolution.fromJson(Map<String, Object?> json) {
+  factory CockpitLocatorResolution.fromJson(
+    Map<String, Object?> json, {
+    String path = r'$',
+  }) {
     final matchedSignalsJson = json['matchedSignals'] as Map<Object?, Object?>?;
     return CockpitLocatorResolution(
-      matchedKind: CockpitLocatorKind.fromJson(json['matchedKind']),
+      matchedKind: CockpitLocatorKind.fromJson(
+        json['matchedKind'],
+        path: '$path.matchedKind',
+      ),
       matchedValue: json['matchedValue']! as String,
       matchedSignals: matchedSignalsJson == null
           ? const <String, String>{}

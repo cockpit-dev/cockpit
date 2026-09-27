@@ -108,7 +108,10 @@ final class CockpitStepRecord {
   };
 
   /// Decodes a CockpitStepRecord from a JSON object.
-  factory CockpitStepRecord.fromJson(Map<String, Object?> json) {
+  factory CockpitStepRecord.fromJson(
+    Map<String, Object?> json, {
+    String path = r'$',
+  }) {
     final actionArgs = Map<String, Object?>.from(
       (json['actionArgs'] as Map<Object?, Object?>?) ??
           const <Object?, Object?>{},
@@ -148,11 +151,17 @@ final class CockpitStepRecord {
             ),
       snapshot: snapshotJson == null
           ? null
-          : CockpitSnapshot.fromJson(Map<String, Object?>.from(snapshotJson)),
+          : CockpitSnapshot.fromJson(
+              Map<String, Object?>.from(snapshotJson),
+              path: '$path.snapshot',
+            ),
       artifactRefs: artifactRefs,
       commandType: json['commandType'] == null
           ? null
-          : CockpitCommandType.fromJson(json['commandType']),
+          : CockpitCommandType.fromJson(
+              json['commandType'],
+              path: '$path.commandType',
+            ),
       locator: locatorJson == null
           ? null
           : CockpitLocator.fromJson(Map<String, Object?>.from(locatorJson)),
@@ -160,6 +169,7 @@ final class CockpitStepRecord {
           ? null
           : CockpitLocatorResolution.fromJson(
               Map<String, Object?>.from(locatorResolutionJson),
+              path: '$path.locatorResolution',
             ),
       commandError: commandErrorJson == null
           ? null

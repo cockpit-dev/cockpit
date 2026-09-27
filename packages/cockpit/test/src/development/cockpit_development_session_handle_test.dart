@@ -62,7 +62,7 @@ void main() {
     expect(cleared.lastReloadAt, isNull);
   });
 
-  test('development session handle baseUri carries the remote token', () {
+  test('development session handle keeps the remote token out of the URI', () {
     CockpitRemoteSessionHandle remoteWithoutToken() =>
         CockpitRemoteSessionHandle(
           platform: 'macos',
@@ -105,12 +105,12 @@ void main() {
       remoteSessionHandle: remoteWithoutToken(),
     );
 
-    expect(
-      handle.baseUri,
-      Uri.parse('http://127.0.0.1:57331?token=launch-token-1'),
-    );
+    // The secret is exposed through authToken only; the endpoint view stays
+    // exactly as stored with or without a token.
+    expect(handle.baseUri, Uri.parse('http://127.0.0.1:57331'));
     expect(handle.appBaseUrl, 'http://127.0.0.1:57331');
-    // Without a known token the endpoint view stays exactly as stored.
+    expect(handle.authToken, 'launch-token-1');
     expect(withoutRemote.baseUri, Uri.parse('http://127.0.0.1:57331'));
+    expect(withoutRemote.authToken, isEmpty);
   });
 }

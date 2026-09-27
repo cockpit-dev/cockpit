@@ -7,7 +7,7 @@ final class CockpitNetworkRedactor {
   static const String masked = '********';
 
   static final RegExp _inlineCredential = RegExp(
-    r'''((?:bearer|basic)\s+|(?:authorization|password|passwd|pwd|secret|token|key|code|api[-_ ]?key|private[-_ ]?key|credential|signature|csrf|xsrf)\s*["']?\s*[=:]\s*["']?)([^"'\s,;&]+)''',
+    r'''((?:bearer|basic)\s+|(?:authorization|password|passwd|pwd|secret|token|api[-_ ]?key|access[-_ ]?key|private[-_ ]?key|authorization[-_ ]?code|credential|signature|csrf|xsrf)\s*["']?\s*[=:]\s*["']?)([^"'\s,;&]+)''',
     caseSensitive: false,
   );
   static final RegExp _cookieCredential = RegExp(
@@ -133,19 +133,21 @@ final class CockpitNetworkRedactor {
 
   bool isSensitiveName(String name) {
     final normalized = _normalizedName(name);
+    // Bare "key" and "code" are deliberately excluded: they name ordinary
+    // data (map keys, country or status codes) far more often than
+    // credentials. Only high-confidence compound names are masked.
     return normalized.endsWith('authorization') ||
         normalized.endsWith('cookie') ||
         normalized.endsWith('apikey') ||
         normalized.endsWith('privatekey') ||
         normalized.endsWith('accesskey') ||
+        normalized.endsWith('authorizationcode') ||
         normalized.endsWith('signature') ||
         normalized == 'bearer' ||
         normalized == 'sig' ||
         normalized == 'hmac' ||
         normalized == 'csrf' ||
         normalized == 'xsrf' ||
-        normalized == 'key' ||
-        normalized == 'code' ||
         normalized == 'pwd' ||
         normalized.contains('password') ||
         normalized.contains('passwd') ||

@@ -1,5 +1,4 @@
 import 'package:cockpit/cockpit.dart';
-import 'package:cockpit_protocol/cockpit_protocol.dart';
 
 final class RecordingAutomationAdapter implements CockpitAutomationAdapter {
   RecordingAutomationAdapter({List<bool> outcomes = const <bool>[]})

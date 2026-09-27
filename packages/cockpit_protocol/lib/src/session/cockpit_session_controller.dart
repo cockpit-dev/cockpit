@@ -19,6 +19,7 @@ import '../runtime/cockpit_snapshot.dart';
 import 'cockpit_bundle_summary_assembler.dart';
 import 'cockpit_observation_assembler.dart';
 import 'cockpit_session.dart';
+import 'cockpit_session_closed_error.dart';
 import 'cockpit_step_recorder.dart';
 import 'cockpit_timestamp_provider.dart';
 
@@ -144,7 +145,7 @@ final class CockpitSessionController {
 
   void _ensureOpen() {
     if (_isClosed) {
-      throw StateError('Cockpit session is already closed.');
+      throw CockpitSessionClosedError();
     }
   }
 

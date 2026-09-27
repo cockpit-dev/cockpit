@@ -129,6 +129,7 @@ final class CockpitAndroidRemoteSessionLauncher
             port: options.sessionPort,
             flutterVersion: flutterVersion,
             launchId: options.launchId,
+            authTokenDartDefineFile: options.authTokenDartDefineFile,
           ),
         ),
       ],
@@ -193,7 +194,7 @@ final class CockpitAndroidRemoteSessionLauncher
         statusReader: _statusReader,
         expectedSessionId: options.launchId,
         expectedPlatform: options.platform,
-        authToken: options.launchId,
+        authToken: options.authToken,
       );
       return CockpitRemoteSessionHandle.fromRemoteStatus(
         projectDir: options.projectDir,
@@ -205,7 +206,7 @@ final class CockpitAndroidRemoteSessionLauncher
         devicePort: options.sessionPort,
         status: status,
         launchedAt: _now(),
-        authToken: options.launchId,
+        authToken: options.authToken,
       );
     } on Object {
       await _bestEffortStopLaunchedApp(

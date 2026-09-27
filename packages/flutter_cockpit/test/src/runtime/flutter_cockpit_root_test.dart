@@ -446,6 +446,8 @@ void main() {
       expect(capture, isNotNull);
       expect(capture!.screenshot.bytes.length, greaterThan(8));
       expect(capture.resolvedCaptureKind, CockpitCaptureKind.flutterView);
+      expect(capture.screenshot.degradationReason, isNull);
+      expect(capture.screenshot.snapshot?.degradationReason, isNull);
       expect(capture.screenshot.snapshot?.routeName, '/');
       expect(
         capture.screenshot.snapshot?.diagnosticLevel,
@@ -597,6 +599,61 @@ void main() {
       expect(capture.degradationReason, 'nativeCaptureUnavailable');
       expect(capture.screenshot.bytes.length, greaterThan(8));
     },
+  );
+
+  testWidgets(
+    'FlutterCockpitRoot preserves native fallback and frame timeout degradation',
+    (tester) async {
+      final messenger =
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+      const channel = MethodChannel('dev.cockpit.flutter_cockpit/capture');
+      messenger.setMockMethodCallHandler(channel, (call) async {
+        expect(call.method, 'queryNativeCaptureAvailability');
+        return false;
+      });
+      addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+
+      FlutterCockpit.initialize(
+        const FlutterCockpitConfiguration(
+          initialRouteName: '/',
+          nativeCapture: CockpitNativeCapture(channel: channel),
+        ),
+      );
+      final rootKey = GlobalKey<FlutterCockpitRootState>();
+      await tester.pumpWidget(
+        FlutterCockpitRoot(
+          key: rootKey,
+          child: const MaterialApp(
+            home: Scaffold(body: Center(child: Text('Cockpit Root'))),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final capture = await tester.runAsync(() async {
+        final binding = tester.binding;
+        binding.handleBeginFrame(binding.currentSystemFrameTimeStamp);
+        final result = await rootKey.currentState!.captureScreenshot(
+          const CockpitScreenshotRequest(
+            reason: CockpitScreenshotReason.acceptance,
+            name: 'root-home-wedged-frame',
+            includeSnapshot: true,
+          ),
+          waitForIdle: false,
+        );
+        binding.handleDrawFrame();
+        return result;
+      });
+
+      expect(capture, isNotNull);
+      expect(
+        capture!.degradationReason,
+        'nativeCaptureUnavailable; frameTimeout',
+      );
+      expect(capture.screenshot.degradationReason, 'frameTimeout');
+      expect(capture.screenshot.snapshot?.degradationReason, 'frameTimeout');
+    },
+    timeout: const Timeout(Duration(seconds: 30)),
   );
 
   testWidgets(

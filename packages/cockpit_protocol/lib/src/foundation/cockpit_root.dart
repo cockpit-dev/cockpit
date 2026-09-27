@@ -1,4 +1,5 @@
 import 'cockpit_decode_policy.dart';
+import 'cockpit_enum.dart';
 import 'cockpit_foundation_value_reader.dart';
 
 enum CockpitRootState { active, draining, retired }
@@ -221,11 +222,5 @@ final class CockpitRootRemoval {
   }
 }
 
-CockpitRootState _rootState(Object? value, String path) {
-  return CockpitEnumValue<CockpitRootState>.parse(
-    value,
-    CockpitRootState.values,
-    path,
-    policy: CockpitDecodePolicy.requests,
-  ).requireKnown();
-}
+CockpitRootState _rootState(Object? value, String path) =>
+    cockpitEnumFromJson(value, CockpitRootState.values, path);

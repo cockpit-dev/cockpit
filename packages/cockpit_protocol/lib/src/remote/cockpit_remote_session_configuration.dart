@@ -33,15 +33,8 @@ final class CockpitRemoteSessionConfiguration {
   static const String _allowedOriginDefine =
       'FLUTTER_COCKPIT_REMOTE_ALLOWED_ORIGIN';
 
-  Uri get baseUri => Uri(
-    scheme: 'http',
-    host: host,
-    port: port,
-    path: _normalizedRoutePrefix,
-    queryParameters: authToken.isEmpty
-        ? null
-        : <String, String>{'token': authToken},
-  );
+  Uri get baseUri =>
+      Uri(scheme: 'http', host: host, port: port, path: _normalizedRoutePrefix);
 
   String get normalizedRoutePrefix => _normalizedRoutePrefix;
 
@@ -58,17 +51,23 @@ final class CockpitRemoteSessionConfiguration {
         : withLeadingSlash;
   }
 
-  /// Encodes this CockpitRemoteSessionConfiguration as a JSON object.
-  Map<String, Object?> toJson() => <String, Object?>{
-    'enabled': enabled,
-    'autoStart': autoStart,
-    'host': host,
-    'port': port,
-    'routePrefix': routePrefix,
-    if (launchId.isNotEmpty) 'launchId': launchId,
-    if (authToken.isNotEmpty) 'authToken': authToken,
-    if (allowedOrigin != null) 'allowedOrigin': allowedOrigin,
-  };
+  /// Encodes this CockpitRemoteSessionConfiguration as a public JSON object.
+  Map<String, Object?> toJson() => _toJson(includeAuthToken: false);
+
+  /// Encodes owner-only runtime state, including the authentication token.
+  Map<String, Object?> toPrivateJson() => _toJson(includeAuthToken: true);
+
+  Map<String, Object?> _toJson({required bool includeAuthToken}) =>
+      <String, Object?>{
+        'enabled': enabled,
+        'autoStart': autoStart,
+        'host': host,
+        'port': port,
+        'routePrefix': routePrefix,
+        if (launchId.isNotEmpty) 'launchId': launchId,
+        if (includeAuthToken && authToken.isNotEmpty) 'authToken': authToken,
+        if (allowedOrigin != null) 'allowedOrigin': allowedOrigin,
+      };
 
   /// Decodes a CockpitRemoteSessionConfiguration from a JSON object.
   factory CockpitRemoteSessionConfiguration.fromJson(

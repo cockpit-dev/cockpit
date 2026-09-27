@@ -304,6 +304,7 @@ final class CockpitDevRuntime {
       'targetId': previous.targetId,
       'mode': 'development',
       'launchTimeoutMs': previous.launchTimeoutMilliseconds,
+      if (previous.authenticationEnabled) 'authenticationEnabled': true,
     });
     if (!_operationSucceeded(launched)) {
       final crashed = await _setLifecycle(previous, 'crashed');
@@ -328,6 +329,7 @@ final class CockpitDevRuntime {
       appId: output['appId'] as String,
       lifecycle: 'ready',
       recoverable: previous.recoverable,
+      authenticationEnabled: previous.authenticationEnabled,
       launchTimeoutMilliseconds: previous.launchTimeoutMilliseconds,
     );
     return CockpitDevSessionResolution(

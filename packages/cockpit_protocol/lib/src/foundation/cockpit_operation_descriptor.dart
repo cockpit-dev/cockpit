@@ -1,4 +1,5 @@
 import 'cockpit_decode_policy.dart';
+import 'cockpit_enum.dart';
 import 'cockpit_foundation_value_reader.dart';
 
 enum CockpitOperationScope { supervisor, root, workspace }
@@ -167,29 +168,25 @@ final class CockpitOperationDescriptor {
         '$path.description',
         maximum: 1024,
       ),
-      scope: _enum(
+      scope: cockpitEnumFromJson(
         json['scope'],
         CockpitOperationScope.values,
         '$path.scope',
-        decodePolicy,
       ),
-      mutationClass: _enum(
+      mutationClass: cockpitEnumFromJson(
         json['mutationClass'],
         CockpitMutationClass.values,
         '$path.mutationClass',
-        decodePolicy,
       ),
-      idempotency: _enum(
+      idempotency: cockpitEnumFromJson(
         json['idempotency'],
         CockpitIdempotencyBehavior.values,
         '$path.idempotency',
-        decodePolicy,
       ),
-      executionMode: _enum(
+      executionMode: cockpitEnumFromJson(
         json['executionMode'],
         CockpitOperationExecutionMode.values,
         '$path.executionMode',
-        decodePolicy,
       ),
       defaultTimeoutMs: CockpitFoundationValueReader.integer(
         json['defaultTimeoutMs'],
@@ -227,19 +224,4 @@ final class CockpitOperationDescriptor {
       ),
     );
   }
-}
-
-T _enum<T extends Enum>(
-  Object? value,
-  List<T> values,
-  String path,
-  CockpitDecodePolicy decodePolicy,
-) {
-  return CockpitEnumValue<T>.parse(
-    value,
-    values,
-    path,
-    policy: decodePolicy,
-    extensibleResponse: true,
-  ).requireKnown();
 }

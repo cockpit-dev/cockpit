@@ -1,5 +1,7 @@
 import 'package:collection/collection.dart';
 
+import '../foundation/cockpit_enum.dart';
+
 enum CockpitLocatorKind {
   ref,
   cockpitId,
@@ -17,9 +19,10 @@ enum CockpitLocatorKind {
   coordinate,
   visual;
 
-  static CockpitLocatorKind fromJson(Object? json) {
-    return values.byName(json! as String);
-  }
+  static CockpitLocatorKind fromJson(
+    Object? json, {
+    String path = r'$.locator.kind',
+  }) => cockpitEnumFromJson(json, values, path);
 }
 
 typedef CockpitLocatorSignal = ({CockpitLocatorKind kind, String value});

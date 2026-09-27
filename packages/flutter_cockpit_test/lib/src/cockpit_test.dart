@@ -137,6 +137,31 @@ void cockpitTestWidgets(
   });
 }
 
+/// Registers a shared platform-neutral scenario on Flutter's official test runner.
+void cockpitScenarioWidgets(
+  String description, {
+  required CockpitTestAppBuilder app,
+  required shared_test.CockpitTestScenario scenario,
+  CockpitTestOptions options = const CockpitTestOptions(),
+}) {
+  cockpitTestWidgets(
+    description,
+    app: app,
+    options: options,
+    body: (tester) async {
+      final result = await const shared_test.CockpitProgrammaticTestRunner()
+          .run(
+            scenario,
+            locale: tester.locale,
+            createTester: (_) async => tester,
+          );
+      if (result.status != shared_test.CockpitTestRunStatus.passed) {
+        fail(result.error!.message);
+      }
+    },
+  );
+}
+
 FlutterCockpitRootState? _findRoot(WidgetTester tester) {
   final finder = find.byType(FlutterCockpitRoot);
   if (finder.evaluate().length != 1) return null;
@@ -258,7 +283,10 @@ final class CockpitTravelPoint {
 }
 
 /// A compact, selector-first facade over Cockpit's in-app command executor.
-final class CockpitTester implements shared_test.CockpitTester {
+final class CockpitTester
+    implements
+        shared_test.CockpitTester,
+        shared_test.CockpitTestFeatureProvider {
   CockpitTester._({
     required this.flutter,
     required this.root,
@@ -327,9 +355,11 @@ final class CockpitTester implements shared_test.CockpitTester {
   @override
   shared_test.CockpitLocaleProfile get locale {
     final current = Localizations.localeOf(context);
-    final tag = current.countryCode == null || current.countryCode!.isEmpty
-        ? current.languageCode
-        : '${current.languageCode}-${current.countryCode}';
+    final tag = <String>[
+      current.languageCode,
+      if (current.scriptCode case final script? when script.isNotEmpty) script,
+      if (current.countryCode case final region? when region.isNotEmpty) region,
+    ].join('-');
     return shared_test.CockpitLocaleProfile(tag);
   }
 
@@ -656,6 +686,26 @@ final class CockpitTester implements shared_test.CockpitTester {
   @override
   Future<CockpitCapabilities> describeCapabilities() {
     return _executor.describeCapabilities();
+  }
+
+  @override
+  Future<Set<shared_test.CockpitTestFeature>> describeFeatures() async {
+    final capabilities = await describeCapabilities();
+    return Set<shared_test.CockpitTestFeature>.unmodifiable(
+      <shared_test.CockpitTestFeature>{
+        if (capabilities.supportsInAppControl)
+          shared_test.CockpitTestFeature.inAppControl,
+        if (capabilities.supportsFlutterViewCapture)
+          shared_test.CockpitTestFeature.flutterViewCapture,
+        if (capabilities.supportsNativeScreenCapture)
+          shared_test.CockpitTestFeature.nativeScreenCapture,
+        if (capabilities.supportsHostAutomation)
+          shared_test.CockpitTestFeature.hostAutomation,
+        if (capabilities.supportsViewportResize)
+          shared_test.CockpitTestFeature.viewportResize,
+        shared_test.CockpitTestFeature.performanceCapture,
+      },
+    );
   }
 
   /// A compact report suitable for integration_test's JSON result payload.

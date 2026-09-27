@@ -105,9 +105,10 @@ void main() {
       final currentHandle = await supervisor.currentHandle();
       // Ownership audits compare the stored appBaseUrl against the remote
       // handle's raw baseUrl verbatim, so binding must not embed the token;
-      // the handle's baseUri getter attaches it for authenticated clients.
+      // the handle keeps the secret separate from the clean base URI.
       expect(currentHandle.appBaseUrl, 'http://127.0.0.1:57331');
-      expect(currentHandle.baseUri.queryParameters['token'], 'launch-token-9');
+      expect(currentHandle.baseUri.queryParameters['token'], isNull);
+      expect(currentHandle.authToken, 'launch-token-9');
     },
   );
 
@@ -1164,6 +1165,101 @@ void main() {
       );
       expect(harness.closeProcessCallCount, 0);
       expect(harness.stoppedAppIds, isEmpty);
+    },
+  );
+
+  test(
+    'supervisor control plane bounds request bodies without dying',
+    () async {
+      final harness = _MachineHarness();
+      addTearDown(harness.dispose);
+      final supervisor = CockpitDevelopmentSessionSupervisor(
+        initialHandle: harness.handle.copyWith(
+          appId: '',
+          remoteSessionHandle: null,
+        ),
+        machineClient: null,
+        remoteReachabilityProbe: (_) async => true,
+        settleTimeout: const Duration(seconds: 2),
+      );
+      addTearDown(supervisor.dispose);
+      await supervisor.start();
+      final baseUri = (await supervisor.currentHandle()).supervisorBaseUri;
+
+      final client = HttpClient();
+      addTearDown(() => client.close(force: true));
+
+      Future<(int, Map<Object?, Object?>)> postReload(
+        List<int> body, {
+        bool declareContentLength = true,
+      }) async {
+        final request = await client.postUrl(baseUri.resolve('/reload'));
+        if (declareContentLength) {
+          request.contentLength = body.length;
+        }
+        request.headers.contentType = ContentType.json;
+        request.add(body);
+        final response = await request.close();
+        final text = await utf8.decoder.bind(response).join();
+        return (
+          response.statusCode,
+          text.isEmpty
+              ? const <Object?, Object?>{}
+              : Map<Object?, Object?>.from(
+                  jsonDecode(text) as Map<Object?, Object?>,
+                ),
+        );
+      }
+
+      Future<int> healthStatus() async {
+        final request = await client.getUrl(baseUri.resolve('/health'));
+        return (await request.close()).statusCode;
+      }
+
+      const limit = 1 << 20;
+      final prefix = utf8.encode('{"mode":"hot_reload"}');
+      final exactLimit = <int>[
+        ...prefix,
+        ...List<int>.filled(limit - prefix.length, 0x20),
+      ];
+
+      // A body of exactly the limit is accepted (and then fails reload
+      // because the harness has no machine client, which is not a transport
+      // rejection).
+      final (exactStatus, _) = await postReload(exactLimit);
+      expect(exactStatus, isNot(HttpStatus.requestEntityTooLarge));
+
+      final (oversizedStatus, oversizedBody) = await postReload(
+        List<int>.filled(limit + 1, 65),
+      );
+      expect(oversizedStatus, HttpStatus.requestEntityTooLarge);
+      expect(oversizedBody['error'], 'request_too_large');
+
+      // Oversized chunked bodies without a declared length take the
+      // streaming path to the same structured rejection.
+      final (chunkedStatus, chunkedBody) = await postReload(
+        List<int>.filled(limit + 1, 65),
+        declareContentLength: false,
+      );
+      expect(chunkedStatus, HttpStatus.requestEntityTooLarge);
+      expect(chunkedBody['error'], 'request_too_large');
+
+      // The drained connection keeps serving afterwards.
+      expect(await healthStatus(), HttpStatus.ok);
+
+      // A client that abandons a partial body must not wedge the server.
+      final socket = await Socket.connect(baseUri.host, baseUri.port);
+      socket.write(
+        'POST /reload HTTP/1.1\r\n'
+        'Host: ${baseUri.host}:${baseUri.port}\r\n'
+        'Content-Type: application/json\r\n'
+        'Content-Length: $limit\r\n\r\n',
+      );
+      socket.add(List<int>.filled(16, 65));
+      await socket.flush();
+      await socket.close();
+      await socket.drain<void>();
+      expect(await healthStatus(), HttpStatus.ok);
     },
   );
 }

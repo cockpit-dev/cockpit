@@ -1,5 +1,6 @@
 import '../test/cockpit_test_diagnostic.dart';
 import 'cockpit_decode_policy.dart';
+import 'cockpit_enum.dart';
 import 'cockpit_foundation_value_reader.dart';
 
 enum CockpitIndexedDocumentKind { source, testCase, suite, project }
@@ -232,12 +233,7 @@ final class CockpitDocumentResource {
 CockpitIndexedDocumentKind _documentKind(Object? value, String path) {
   final name = CockpitFoundationValueReader.string(value, path);
   if (name == 'case') return CockpitIndexedDocumentKind.testCase;
-  return CockpitEnumValue<CockpitIndexedDocumentKind>.parse(
-    name,
-    CockpitIndexedDocumentKind.values,
-    path,
-    policy: CockpitDecodePolicy.requests,
-  ).requireKnown();
+  return cockpitEnumFromJson(name, CockpitIndexedDocumentKind.values, path);
 }
 
 final class CockpitIndexedCaseReference {

@@ -120,18 +120,27 @@ jobs:
           - name: Flutter bridge tests
             directory: packages/flutter_cockpit
             flutter-version: '3.32.0'
+            # Wall-clock-sensitive `perf` tests run in a dedicated serial
+            # invocation so concurrent suites cannot distort their timings.
+            command: >-
+              flutter test --exclude-tags=perf &&
+              flutter test --tags=perf -j 1
           - name: Flutter Cockpit test facade
             directory: packages/flutter_cockpit_test
             flutter-version: '3.32.0'
+            command: flutter test
           - name: production example tests
             directory: examples/cockpit_demo
             flutter-version: '3.32.0'
+            command: flutter test
           - name: development shell tests
             directory: examples/cockpit_demo/cockpit
             flutter-version: '3.32.0'
+            command: flutter test
           - name: Cockpit Console tests
             directory: packages/cockpit_console
             flutter-version: '3.47.1'
+            command: flutter test
     steps:
       - uses: actions/checkout@v6
 
@@ -149,7 +158,7 @@ jobs:
 
       - name: Run ${{ matrix.name }}
         working-directory: ${{ matrix.directory }}
-        run: flutter test
+        run: ${{ matrix.command }}
 
   performance_reports:
     name: Flutter performance report export
@@ -273,6 +282,9 @@ jobs:
         include:
           - package: cockpit_protocol
             directory: packages/cockpit_protocol
+            command: dart pub publish --dry-run
+          - package: cockpit_test
+            directory: packages/cockpit_test
             command: dart pub publish --dry-run
           - package: flutter_cockpit
             directory: packages/flutter_cockpit
@@ -779,6 +791,14 @@ jobs:
           flutter drive --no-dds
           --driver=integration_test/driver.dart
           --target=integration_test/cockpit_facade_test.dart
+          -d macos
+
+      - name: Run native plugin conformance
+        if: matrix.platform == 'macos'
+        working-directory: examples/cockpit_demo/cockpit
+        shell: bash
+        run: >-
+          flutter test --no-pub integration_test/native_plugin_conformance_test.dart
           -d macos
 
       - name: Run headless regression

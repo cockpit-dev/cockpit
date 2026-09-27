@@ -31,6 +31,10 @@ void main() {
             reason: CockpitScreenshotReason.afterAction,
             name: 'wedged-frame',
           ),
+          snapshot: CockpitSnapshot(
+            routeName: '/wedged',
+            degradationReason: 'sourceDegraded',
+          ),
         );
         binding.handleDrawFrame();
         return captured;
@@ -38,6 +42,8 @@ void main() {
 
       expect(shot, isNotNull);
       expect(shot!.bytes, isNotEmpty);
+      expect(shot.degradationReason, 'frameTimeout');
+      expect(shot.snapshot?.degradationReason, 'sourceDegraded; frameTimeout');
     },
     timeout: const Timeout(Duration(seconds: 30)),
   );

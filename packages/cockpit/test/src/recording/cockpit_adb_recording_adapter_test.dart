@@ -194,7 +194,6 @@ exit 1
       final adapter = CockpitAdbRecordingAdapter(
         deviceId: 'emulator-5554',
         executable: executable.path,
-        startupTimeout: const Duration(milliseconds: 500),
       );
 
       final session = await adapter.startRecording(

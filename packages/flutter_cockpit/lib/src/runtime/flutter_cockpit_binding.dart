@@ -111,6 +111,7 @@ final class FlutterCockpitBinding {
   final Set<_FlutterCockpitRouteInformationBinding> _routeInformationBindings =
       <_FlutterCockpitRouteInformationBinding>{};
   CockpitRecordingSession? _activeRecordingSession;
+  Future<CockpitRecordingResult>? _recordingStop;
   CockpitPerformanceCaptureSession? _activePerformanceSession;
   bool _recordingStarting = false;
   bool _performanceStarting = false;
@@ -159,12 +160,18 @@ final class FlutterCockpitBinding {
   Future<CockpitRecordingSession> startRecording(
     CockpitRecordingRequest request,
   ) async {
-    if (_recordingStarting ||
-        _activeRecordingSession != null ||
-        _performanceStarting ||
+    if (_recordingStarting) {
+      throw StateError('A screen recording is already starting.');
+    }
+    if (_activeRecordingSession != null) {
+      throw StateError('A screen recording is already active.');
+    }
+    if (_performanceStarting ||
         _activePerformanceSession != null ||
         performanceCollector.isRunning) {
-      throw StateError('A screen recording is already active.');
+      throw StateError(
+        'Screen recording cannot overlap a performance capture.',
+      );
     }
     _recordingStarting = true;
     try {
@@ -182,26 +189,35 @@ final class FlutterCockpitBinding {
     return nativeRecording.cancelStart();
   }
 
-  Future<CockpitRecordingResult> stopRecording() async {
+  Future<CockpitRecordingResult> stopRecording() {
+    final stopping = _recordingStop;
+    if (stopping != null) return stopping;
+
     final session = _activeRecordingSession;
     if (session == null) {
-      return CockpitRecordingResult(
-        state: CockpitRecordingState.failed,
-        failureReason: 'recordingNotActive',
+      return Future<CockpitRecordingResult>.value(
+        CockpitRecordingResult(
+          state: CockpitRecordingState.failed,
+          failureReason: 'recordingNotActive',
+        ),
       );
     }
 
-    final result = await nativeRecording.stopRecording(session: session);
-    final recording = _activeRecordingSession;
-    _activeRecordingSession = null;
-    if (recording != null) {
-      unawaited(
-        nativeRecording
-            .stopRecording(session: recording)
-            .then<void>((_) {}, onError: (Object _, StackTrace _) {}),
-      );
-    }
-    return result;
+    final recorder = nativeRecording;
+    late final Future<CockpitRecordingResult> operation;
+    operation =
+        Future<CockpitRecordingResult>.sync(
+          () => recorder.stopRecording(session: session),
+        ).whenComplete(() {
+          if (identical(_activeRecordingSession, session)) {
+            _activeRecordingSession = null;
+          }
+          if (identical(_recordingStop, operation)) {
+            _recordingStop = null;
+          }
+        });
+    _recordingStop = operation;
+    return operation;
   }
 
   Future<CockpitPerformanceCaptureSession> startPerformance(
@@ -283,6 +299,7 @@ final class FlutterCockpitBinding {
     }
     _routeInformationBindings.clear();
     _activeRecordingSession = null;
+    _recordingStop = null;
     _activePerformanceSession = null;
     rebuildTracker?.dispose();
     runtimeObserver?.dispose();
@@ -369,16 +386,14 @@ final class FlutterCockpitBinding {
     final nextNativeRecording = nextConfiguration.nativeRecording;
     if (nextNativeRecording != null &&
         !identical(nextNativeRecording, nativeRecording)) {
-      final active = _activeRecordingSession;
-      if (active != null) {
-        unawaited(
-          nativeRecording
-              .stopRecording(session: active)
-              .then<void>((_) {}, onError: (Object _, StackTrace _) {}),
+      if (_recordingStarting ||
+          _activeRecordingSession != null ||
+          _recordingStop != null) {
+        throw StateError(
+          'Native recording cannot be reconfigured while recording is active.',
         );
       }
       nativeRecording = nextNativeRecording;
-      _activeRecordingSession = null;
     }
   }
 
@@ -781,8 +796,9 @@ final class FlutterCockpitBinding {
         actionArgs: actionArgs,
         observation: observation,
       );
-    } on StateError {
-      // Runtime observation must never crash the app after a session has closed.
+    } on CockpitSessionClosedError {
+      // Runtime observation must never crash the app after a session has
+      // closed. Other StateErrors are real invariant bugs and stay visible.
     }
   }
 }

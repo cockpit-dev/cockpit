@@ -1,33 +1,33 @@
+import 'cockpit_json.dart';
+import 'cockpit_requirements.dart';
 import 'cockpit_tester.dart';
 
 typedef CockpitTestScenarioBody = Future<void> Function(CockpitTester tester);
 
 final class CockpitTestScenario {
   CockpitTestScenario({
-    required this.id,
+    required String id,
     required this.body,
-    Iterable<String> requiredCapabilities = const <String>[],
+    CockpitTestRequirements? requirements,
     Map<String, Object?> metadata = const <String, Object?>{},
-  }) : requiredCapabilities = Set.unmodifiable(
-         requiredCapabilities.map(_validateId),
-       ),
-       metadata = Map.unmodifiable(metadata) {
-    if (id.trim().isEmpty) throw ArgumentError.value(id, 'id');
-  }
+  }) : id = _validatedId(id),
+       requirements = requirements ?? CockpitTestRequirements(),
+       metadata = freezeCockpitJson(metadata, path: r'$.metadata');
 
   final String id;
   final CockpitTestScenarioBody body;
-  final Set<String> requiredCapabilities;
+  final CockpitTestRequirements requirements;
   final Map<String, Object?> metadata;
 
-  Map<String, Object?> toJson() => <String, Object?>{
+  Map<String, Object?> toManifestJson() => <String, Object?>{
     'id': id,
-    'requiredCapabilities': requiredCapabilities.toList(growable: false),
+    if (!requirements.isEmpty) 'requirements': requirements.toManifestJson(),
     if (metadata.isNotEmpty) 'metadata': metadata,
   };
 }
 
-String _validateId(String value) {
-  if (value.trim().isEmpty) throw ArgumentError.value(value, 'capability');
-  return value;
+String _validatedId(String value) {
+  final normalized = value.trim();
+  if (normalized.isEmpty) throw ArgumentError.value(value, 'id');
+  return normalized;
 }

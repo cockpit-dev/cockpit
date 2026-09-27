@@ -20,6 +20,7 @@ final class CockpitDevStartRequest {
     this.deviceId,
     this.flavor,
     this.launchConfiguration,
+    this.authenticationEnabled,
     this.launchTimeoutMilliseconds = 600000,
   });
 
@@ -29,6 +30,7 @@ final class CockpitDevStartRequest {
   final String? deviceId;
   final String? flavor;
   final Map<String, Object?>? launchConfiguration;
+  final bool? authenticationEnabled;
   final int launchTimeoutMilliseconds;
 
   bool get hasExplicitSelection =>
@@ -36,7 +38,8 @@ final class CockpitDevStartRequest {
       platform != null ||
       deviceId != null ||
       flavor != null ||
-      launchConfiguration != null;
+      launchConfiguration != null ||
+      authenticationEnabled != null;
 }
 
 final class CockpitDevStartService {
@@ -107,6 +110,8 @@ final class CockpitDevStartService {
             deviceId: request.deviceId ?? active.deviceId,
             flavor: request.flavor ?? active.flavor,
             launchConfiguration: request.launchConfiguration,
+            authenticationEnabled:
+                request.authenticationEnabled ?? active.authenticationEnabled,
             launchTimeoutMilliseconds: request.launchTimeoutMilliseconds,
           );
     runtime.progress('Preparing Flutter target...');
@@ -277,6 +282,10 @@ final class CockpitDevStartService {
       'Building and launching Flutter on ${device.id}; '
       'waiting for the Cockpit bridge...',
     );
+    final authenticationEnabled =
+        launchRequest.authenticationEnabled ??
+        active?.authenticationEnabled ??
+        false;
     final launched = await _invokeWorkspace(
       client,
       workspace.workspaceId,
@@ -285,6 +294,7 @@ final class CockpitDevStartService {
         'targetId': target.targetId,
         'mode': 'development',
         'launchTimeoutMs': request.launchTimeoutMilliseconds,
+        if (authenticationEnabled) 'authenticationEnabled': true,
         'launchConfiguration': ?launchConfiguration,
       },
     );
@@ -321,6 +331,7 @@ final class CockpitDevStartService {
             deviceId: device.id,
             flavor: launchRequest.flavor,
             recoverable: recoverable,
+            authenticationEnabled: authenticationEnabled,
             launchTimeoutMilliseconds: launchRequest.launchTimeoutMilliseconds,
             replaceLaunchIdentity: true,
           )
@@ -336,6 +347,7 @@ final class CockpitDevStartService {
             deviceId: device.id,
             flavor: launchRequest.flavor,
             recoverable: recoverable,
+            authenticationEnabled: authenticationEnabled,
             launchTimeoutMilliseconds: launchRequest.launchTimeoutMilliseconds,
             replaceLaunchIdentity: true,
           );
@@ -596,11 +608,22 @@ String? cockpitDevStartFailureNext({
   required CockpitCliSessionHandle? session,
 }) {
   if (request.launchConfiguration != null) return null;
+  final authenticationOption = switch (request.authenticationEnabled) {
+    true => ' --auth',
+    false => ' --no-auth',
+    null => '',
+  };
   if (session != null) {
-    return 'cockpit dev start --session ${session.handleId}';
+    return 'cockpit dev start --session ${session.handleId}'
+        '$authenticationOption';
   }
-  if (request.sessionReference == null && !request.hasExplicitSelection) {
-    return 'cockpit dev start';
+  final hasUnrepeatableSelection =
+      request.entrypoint != null ||
+      request.platform != null ||
+      request.deviceId != null ||
+      request.flavor != null;
+  if (request.sessionReference == null && !hasUnrepeatableSelection) {
+    return 'cockpit dev start$authenticationOption';
   }
   return null;
 }

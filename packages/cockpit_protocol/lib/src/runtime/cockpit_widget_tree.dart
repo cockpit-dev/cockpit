@@ -374,8 +374,12 @@ final class CockpitWidgetNode {
   };
 
   /// Decodes a Widget node from a JSON object.
-  factory CockpitWidgetNode.fromJson(Map<String, Object?> json) {
+  factory CockpitWidgetNode.fromJson(
+    Map<String, Object?> json, {
+    String path = r'$',
+  }) {
     final boundsJson = json['bounds'] as Map<Object?, Object?>?;
+    final rawActions = json['actions'] as List<Object?>? ?? const <Object?>[];
     return CockpitWidgetNode(
       node: json['node']! as int,
       loc: json['loc'] as String?,
@@ -397,9 +401,13 @@ final class CockpitWidgetNode {
           ? null
           : CockpitWidgetBounds.fromJson(Map<String, Object?>.from(boundsJson)),
       scroll: json['scroll'] as int?,
-      actions: (json['actions'] as List<Object?>? ?? const <Object?>[])
-          .map(CockpitCommandType.fromJson)
-          .toList(growable: false),
+      actions: <CockpitCommandType>[
+        for (var index = 0; index < rawActions.length; index += 1)
+          CockpitCommandType.fromJson(
+            rawActions[index],
+            path: '$path.actions[$index]',
+          ),
+      ],
       props: (json['props'] as List<Object?>? ?? const <Object?>[])
           .cast<Map<Object?, Object?>>()
           .map(
@@ -516,8 +524,12 @@ final class CockpitWidgetTree {
   };
 
   /// Decodes a Widget tree from a JSON object.
-  factory CockpitWidgetTree.fromJson(Map<String, Object?> json) {
+  factory CockpitWidgetTree.fromJson(
+    Map<String, Object?> json, {
+    String path = r'$',
+  }) {
     final underJson = json['under'] as Map<Object?, Object?>?;
+    final rawNodes = json['nodes'] as List<Object?>? ?? const <Object?>[];
     return CockpitWidgetTree(
       profile: CockpitWidgetTreeProfile.fromJson(json['profile']),
       total: json['total']! as int,
@@ -528,13 +540,13 @@ final class CockpitWidgetTree {
           : CockpitLocator.fromJson(Map<String, Object?>.from(underJson)),
       depth: json['depth'] as int?,
       emitted: json['emitted'] as int?,
-      nodes: (json['nodes'] as List<Object?>? ?? const <Object?>[])
-          .cast<Map<Object?, Object?>>()
-          .map(
-            (node) =>
-                CockpitWidgetNode.fromJson(Map<String, Object?>.from(node)),
-          )
-          .toList(growable: false),
+      nodes: <CockpitWidgetNode>[
+        for (var index = 0; index < rawNodes.length; index += 1)
+          CockpitWidgetNode.fromJson(
+            Map<String, Object?>.from(rawNodes[index] as Map<Object?, Object?>),
+            path: '$path.nodes[$index]',
+          ),
+      ],
     );
   }
 

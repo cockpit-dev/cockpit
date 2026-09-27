@@ -9,6 +9,7 @@ import 'package:path/path.dart' as p;
 import '../application/cockpit_application_service_exception.dart';
 import '../foundation/cockpit_ids.dart';
 import 'cockpit_remote_command_timeout_budget.dart';
+import 'cockpit_remote_endpoint.dart';
 
 typedef CockpitRemoteArtifactTempFileFactory =
     Future<File> Function(String basename);
@@ -21,7 +22,7 @@ final class CockpitRemoteCommandCancelledException implements Exception {
 }
 
 final class CockpitRemoteSessionClient {
-  CockpitRemoteSessionClient({
+  factory CockpitRemoteSessionClient({
     required Uri baseUri,
     HttpClient Function()? httpClientFactory,
     Duration? requestTimeout,
@@ -29,6 +30,33 @@ final class CockpitRemoteSessionClient {
     CockpitRemoteArtifactTempFileFactory? artifactTempFileFactory,
     bool downloadDiagnosticsArtifacts = false,
     String authToken = '',
+    String? origin,
+  }) {
+    final endpoint = cockpitResolveRemoteEndpoint(
+      baseUri: baseUri,
+      authTokens: <String?>[authToken],
+      path: 'CockpitRemoteSessionClient.baseUri',
+    );
+    return CockpitRemoteSessionClient._(
+      baseUri: endpoint.baseUri,
+      httpClientFactory: httpClientFactory,
+      requestTimeout: requestTimeout,
+      artifactDownloadTimeout: artifactDownloadTimeout,
+      artifactTempFileFactory: artifactTempFileFactory,
+      downloadDiagnosticsArtifacts: downloadDiagnosticsArtifacts,
+      authToken: endpoint.authToken,
+      origin: origin,
+    );
+  }
+
+  CockpitRemoteSessionClient._({
+    required Uri baseUri,
+    HttpClient Function()? httpClientFactory,
+    Duration? requestTimeout,
+    Duration? artifactDownloadTimeout,
+    CockpitRemoteArtifactTempFileFactory? artifactTempFileFactory,
+    required bool downloadDiagnosticsArtifacts,
+    required String authToken,
     String? origin,
   }) : _baseUri = _normalizedBaseUri(baseUri),
        _httpClientFactory = httpClientFactory ?? HttpClient.new,
@@ -38,7 +66,7 @@ final class CockpitRemoteSessionClient {
        _artifactTempFileFactory =
            artifactTempFileFactory ?? _defaultArtifactTempFileFactory,
        _downloadDiagnosticsArtifacts = downloadDiagnosticsArtifacts,
-       _authToken = authToken.trim(),
+       _authToken = authToken,
        _origin = origin?.trim();
 
   final Uri _baseUri;
@@ -694,11 +722,8 @@ final class CockpitRemoteSessionClient {
   }
 
   void _applyAuthenticationHeaders(HttpClientRequest request) {
-    final token = _authToken.isNotEmpty
-        ? _authToken
-        : _baseUri.queryParameters['token'] ?? '';
-    if (token.isNotEmpty) {
-      request.headers.set('x-cockpit-token', token);
+    if (_authToken.isNotEmpty) {
+      request.headers.set('x-cockpit-token', _authToken);
     }
     final origin = _origin;
     if (origin != null && origin.isNotEmpty) {

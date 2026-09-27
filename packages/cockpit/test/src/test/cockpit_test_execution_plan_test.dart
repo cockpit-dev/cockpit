@@ -95,7 +95,7 @@ steps:
   - stepId: greet
     action:
       type: enterText
-      text: hello \${username}
+      text: {\$template: "hello \${username}"}
 ''';
 
 String _secretCase() => '''

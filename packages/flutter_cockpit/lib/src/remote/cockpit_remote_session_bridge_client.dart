@@ -122,9 +122,14 @@ final class CockpitRemoteSessionBridgeClient {
     final path = normalizedRoutePrefix.isEmpty
         ? '/connect'
         : '$normalizedRoutePrefix/connect';
+    // Browsers cannot attach headers to a WebSocket upgrade, so the token is
+    // confined to this handshake query; the configuration's URI stays clean.
     return baseUri.replace(
       scheme: baseUri.scheme == 'https' ? 'wss' : 'ws',
       path: path,
+      queryParameters: _configuration.authToken.isEmpty
+          ? null
+          : <String, String>{'token': _configuration.authToken},
     );
   }
 }

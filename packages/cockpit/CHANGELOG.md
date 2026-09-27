@@ -1,5 +1,28 @@
 # Changelog
 
+## 4.10.0
+
+- Added opt-in remote bridge authentication with `cockpit dev start --auth`
+  (default off; `--no-auth` forces it off). Enabled launches use an
+  independent 256-bit token that never derives from the session id, travels
+  only through an owner-only `--dart-define-from-file`, and is persisted per
+  session so automatic relaunches keep the selection.
+- Confined the web bridge's query token to the `/connect` WebSocket
+  handshake, matched the `Bearer` scheme case-insensitively, and answered
+  unauthorized requests with structured JSON on both bridge and probe paths.
+- Made an explicit `baseUri` authoritative in the session reference resolver:
+  callers that already know the reachable endpoint no longer trigger Android
+  port re-forwarding from session handle metadata.
+- Hardened development launch cleanup into one transaction: early failures
+  after credential creation release the private define file and port
+  forwards, cleanup failures never mask the authoritative launch result, and
+  their diagnostics flow through the redacted worker log.
+- Drained oversized control-plane requests before rejecting them so
+  keep-alive connections survive 413 responses.
+- Memoized locator ancestor chains and discovery transforms, coalesced
+  per-step registry reads, and stopped the bridge shell scan once the shell
+  is confirmed, keeping bridge-driven discovery linear on large trees.
+
 ## 4.9.0
 
 - Improved Flutter localized text selectors across `Text`, `RichText`, and

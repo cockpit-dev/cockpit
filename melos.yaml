@@ -18,7 +18,8 @@ scripts:
       (dart test test) &&
       (cd packages/cockpit_protocol && dart test) &&
       (cd packages/cockpit_test && dart test) &&
-      (flutter test --no-pub packages/flutter_cockpit/test) &&
+      (flutter test --no-pub --exclude-tags=perf packages/flutter_cockpit/test) &&
+      (flutter test --no-pub --tags=perf -j 1 packages/flutter_cockpit/test) &&
       (flutter test --no-pub packages/flutter_cockpit_test/test) &&
       (cd packages/cockpit && dart test test) &&
       (cd packages/cockpit_console && flutter test --no-pub) &&

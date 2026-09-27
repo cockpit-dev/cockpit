@@ -549,11 +549,16 @@ final class CockpitSnapshotTarget {
   };
 
   /// Decodes a CockpitSnapshotTarget from a JSON object.
-  factory CockpitSnapshotTarget.fromJson(Map<String, Object?> json) {
+  factory CockpitSnapshotTarget.fromJson(
+    Map<String, Object?> json, {
+    String path = r'$',
+  }) {
     final layoutJson = json['layout'] as Map<Object?, Object?>?;
     final contentJson = json['content'] as Map<Object?, Object?>?;
     final styleJson = json['style'] as Map<Object?, Object?>?;
     final controlJson = json['control'] as Map<Object?, Object?>?;
+    final rawCommands =
+        json['supportedCommands'] as List<Object?>? ?? const <Object?>[];
     return CockpitSnapshotTarget(
       registrationId: json['registrationId']! as String,
       cockpitId: json['cockpitId'] as String?,
@@ -571,10 +576,13 @@ final class CockpitSnapshotTarget {
       scrollableTypeName: json['scrollableTypeName'] as String?,
       routeName: json['routeName']! as String,
       visible: json['visible'] as bool? ?? true,
-      supportedCommands:
-          (json['supportedCommands'] as List<Object?>? ?? const <Object?>[])
-              .map(CockpitCommandType.fromJson)
-              .toList(growable: false),
+      supportedCommands: <CockpitCommandType>[
+        for (var index = 0; index < rawCommands.length; index += 1)
+          CockpitCommandType.fromJson(
+            rawCommands[index],
+            path: '$path.supportedCommands[$index]',
+          ),
+      ],
       control: controlJson == null
           ? null
           : CockpitControlState.fromJson(
@@ -680,6 +688,7 @@ final class CockpitSnapshot {
         const <CockpitSnapshotTarget>[],
     this.diagnosticLevel = CockpitSnapshotProfile.live,
     this.truncated = false,
+    this.degradationReason,
     this.diagnosticsArtifactRef,
     this.treeArtifactRef,
     this.summary,
@@ -695,6 +704,9 @@ final class CockpitSnapshot {
   final List<CockpitSnapshotTarget> visibleTargets;
   final CockpitSnapshotProfile diagnosticLevel;
   final bool truncated;
+
+  /// Why this snapshot may not reflect the latest completed visual frame.
+  final String? degradationReason;
   final CockpitArtifactRef? diagnosticsArtifactRef;
   final CockpitArtifactRef? treeArtifactRef;
   final CockpitSnapshotSummary? summary;
@@ -714,6 +726,7 @@ final class CockpitSnapshot {
     'visibleTargets': visibleTargets.map((target) => target.toJson()).toList(),
     'diagnosticLevel': diagnosticLevel.jsonValue,
     'truncated': truncated,
+    if (degradationReason != null) 'degradationReason': degradationReason,
     if (diagnosticsArtifactRef != null)
       'diagnosticsArtifactRef': diagnosticsArtifactRef!.toJson(),
     if (treeArtifactRef != null) 'treeArtifactRef': treeArtifactRef!.toJson(),
@@ -727,7 +740,10 @@ final class CockpitSnapshot {
   };
 
   /// Decodes a CockpitSnapshot from a JSON object.
-  factory CockpitSnapshot.fromJson(Map<String, Object?> json) {
+  factory CockpitSnapshot.fromJson(
+    Map<String, Object?> json, {
+    String path = r'$',
+  }) {
     final diagnosticsArtifactJson =
         json['diagnosticsArtifactRef'] as Map<Object?, Object?>?;
     final treeArtifactJson = json['treeArtifactRef'] as Map<Object?, Object?>?;
@@ -738,21 +754,24 @@ final class CockpitSnapshot {
     final accessibilityJson = json['accessibility'] as Map<Object?, Object?>?;
     final focusJson = json['focus'] as Map<Object?, Object?>?;
     final treeJson = json['tree'] as Map<Object?, Object?>?;
+    final rawTargets =
+        json['visibleTargets'] as List<Object?>? ?? const <Object?>[];
     return CockpitSnapshot(
       routeName: json['routeName'] as String?,
-      visibleTargets:
-          (json['visibleTargets'] as List<Object?>? ?? const <Object?>[])
-              .cast<Map<Object?, Object?>>()
-              .map(
-                (item) => CockpitSnapshotTarget.fromJson(
-                  Map<String, Object?>.from(item),
-                ),
-              )
-              .toList(growable: false),
+      visibleTargets: <CockpitSnapshotTarget>[
+        for (var index = 0; index < rawTargets.length; index += 1)
+          CockpitSnapshotTarget.fromJson(
+            Map<String, Object?>.from(
+              rawTargets[index] as Map<Object?, Object?>,
+            ),
+            path: '$path.visibleTargets[$index]',
+          ),
+      ],
       diagnosticLevel: json['diagnosticLevel'] == null
           ? CockpitSnapshotProfile.live
           : CockpitSnapshotProfile.fromJson(json['diagnosticLevel']),
       truncated: json['truncated'] as bool? ?? false,
+      degradationReason: json['degradationReason'] as String?,
       diagnosticsArtifactRef: diagnosticsArtifactJson == null
           ? null
           : CockpitArtifactRef.fromJson(
@@ -793,7 +812,10 @@ final class CockpitSnapshot {
           : CockpitFocusSnapshot.fromJson(Map<String, Object?>.from(focusJson)),
       tree: treeJson == null
           ? null
-          : CockpitWidgetTree.fromJson(Map<String, Object?>.from(treeJson)),
+          : CockpitWidgetTree.fromJson(
+              Map<String, Object?>.from(treeJson),
+              path: '$path.tree',
+            ),
     );
   }
 
@@ -803,6 +825,7 @@ final class CockpitSnapshot {
     List<CockpitSnapshotTarget>? visibleTargets,
     CockpitSnapshotProfile? diagnosticLevel,
     bool? truncated,
+    String? degradationReason,
     CockpitArtifactRef? diagnosticsArtifactRef,
     CockpitArtifactRef? treeArtifactRef,
     CockpitSnapshotSummary? summary,
@@ -818,6 +841,7 @@ final class CockpitSnapshot {
       visibleTargets: visibleTargets ?? this.visibleTargets,
       diagnosticLevel: diagnosticLevel ?? this.diagnosticLevel,
       truncated: truncated ?? this.truncated,
+      degradationReason: degradationReason ?? this.degradationReason,
       diagnosticsArtifactRef:
           diagnosticsArtifactRef ?? this.diagnosticsArtifactRef,
       treeArtifactRef: treeArtifactRef ?? this.treeArtifactRef,
@@ -838,6 +862,7 @@ final class CockpitSnapshot {
             other.routeName == routeName &&
             other.diagnosticLevel == diagnosticLevel &&
             other.truncated == truncated &&
+            other.degradationReason == degradationReason &&
             other.diagnosticsArtifactRef == diagnosticsArtifactRef &&
             other.treeArtifactRef == treeArtifactRef &&
             other.summary == summary &&
@@ -855,6 +880,7 @@ final class CockpitSnapshot {
     routeName,
     diagnosticLevel,
     truncated,
+    degradationReason,
     diagnosticsArtifactRef,
     treeArtifactRef,
     summary,

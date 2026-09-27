@@ -6,11 +6,11 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   test(
-    'remote snapshot does not request a frame while Flutter is idle',
+    'reports no pending frame without waiting while Flutter is idle',
     () async {
       var waitCount = 0;
 
-      await waitForPendingCockpitFrame(
+      final result = await waitForPendingCockpitFrame(
         phase: SchedulerPhase.idle,
         hasScheduledFrame: false,
         waitForEndOfFrame: () async {
@@ -18,21 +18,31 @@ void main() {
         },
       );
 
+      expect(result, CockpitPendingFrameWaitResult.noPendingFrame);
       expect(waitCount, 0);
     },
   );
 
-  test(
-    'remote snapshot continues when a pending frame cannot finish',
-    () async {
-      final frame = Completer<void>();
+  test('reports completion when a pending frame finishes', () async {
+    final result = await waitForPendingCockpitFrame(
+      phase: SchedulerPhase.transientCallbacks,
+      hasScheduledFrame: true,
+      waitForEndOfFrame: () async {},
+    );
 
-      await waitForPendingCockpitFrame(
-        phase: SchedulerPhase.transientCallbacks,
-        hasScheduledFrame: true,
-        waitForEndOfFrame: () => frame.future,
-        timeout: const Duration(milliseconds: 1),
-      );
-    },
-  );
+    expect(result, CockpitPendingFrameWaitResult.completed);
+  });
+
+  test('reports timeout when a pending frame cannot finish', () async {
+    final frame = Completer<void>();
+
+    final result = await waitForPendingCockpitFrame(
+      phase: SchedulerPhase.transientCallbacks,
+      hasScheduledFrame: true,
+      waitForEndOfFrame: () => frame.future,
+      timeout: const Duration(milliseconds: 1),
+    );
+
+    expect(result, CockpitPendingFrameWaitResult.timedOut);
+  });
 }

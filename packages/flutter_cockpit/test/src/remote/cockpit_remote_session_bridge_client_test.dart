@@ -50,7 +50,55 @@ void main() {
       expect(secondChannel.closeCount, 0);
     },
   );
+
+  test(
+    'bridge client authenticates the handshake query only when a token exists',
+    () async {
+      final connectedUris = <Uri>[];
+      final buildClient = _buildRecordingClient(connectedUris);
+
+      final unauthenticated = buildClient(authToken: '');
+      await unauthenticated.start();
+      expect(connectedUris.single.queryParameters, isEmpty);
+
+      connectedUris.clear();
+      final authenticated = buildClient(authToken: 'bridge-secret');
+      await authenticated.start();
+      expect(connectedUris.single.queryParameters['token'], 'bridge-secret');
+      expect(authenticated.publicBaseUri.hasQuery, isFalse);
+    },
+  );
 }
+
+_CockpitRemoteSessionBridgeClientFactory _buildRecordingClient(
+  List<Uri> connectedUris,
+) {
+  return ({required String authToken}) {
+    final client = CockpitRemoteSessionBridgeClient(
+      configuration: CockpitRemoteSessionConfiguration(
+        enabled: true,
+        autoStart: false,
+        host: '127.0.0.1',
+        port: 59331,
+        routePrefix: '/cockpit',
+        authToken: authToken,
+      ),
+      protocol: CockpitRemoteSessionBridgeProtocol(
+        requestHandler: (_) async {
+          throw UnimplementedError();
+        },
+      ),
+      channelConnector: (uri) {
+        connectedUris.add(uri);
+        return _FakeWebSocketChannel(ready: Future<void>.value());
+      },
+    );
+    return client;
+  };
+}
+
+typedef _CockpitRemoteSessionBridgeClientFactory =
+    CockpitRemoteSessionBridgeClient Function({required String authToken});
 
 final class _FakeWebSocketChannel implements WebSocketChannel {
   _FakeWebSocketChannel({required this.ready});

@@ -1,3 +1,4 @@
+import '../remote/cockpit_remote_endpoint.dart';
 import '../session/cockpit_remote_session_handle.dart';
 
 const Object _cockpitUnsetDevelopmentSessionHandleField = Object();
@@ -29,7 +30,7 @@ final class CockpitDevelopmentSessionHandle {
     required this.projectDir,
     required this.target,
     required this.appId,
-    required this.appBaseUrl,
+    required String appBaseUrl,
     required this.supervisorBaseUrl,
     required this.launchedAt,
     required this.reloadGeneration,
@@ -41,7 +42,7 @@ final class CockpitDevelopmentSessionHandle {
     this.remoteSessionHandle,
     this.vmServiceUri,
     this.lastReloadAt,
-  });
+  }) : _appBaseUrl = appBaseUrl;
 
   final String developmentSessionId;
   final String platform;
@@ -49,7 +50,7 @@ final class CockpitDevelopmentSessionHandle {
   final String projectDir;
   final String target;
   final String appId;
-  final String appBaseUrl;
+  final String _appBaseUrl;
   final String supervisorBaseUrl;
   final CockpitDevelopmentLaunchMode launchMode;
   final String? flavor;
@@ -62,49 +63,49 @@ final class CockpitDevelopmentSessionHandle {
   final DateTime? lastReloadAt;
   final int reloadGeneration;
 
-  /// The app endpoint, authenticated for the remote control session.
-  ///
-  /// Development apps can expose a remote control plane that requires the
-  /// session token; probes and clients built from this view must stay
-  /// authenticated, while the stored [appBaseUrl] remains unauthenticated.
-  Uri get baseUri {
-    final uri = Uri.parse(appBaseUrl);
-    final authToken = remoteSessionHandle?.authToken ?? '';
-    if (authToken.isEmpty || uri.queryParameters['token'] != null) {
-      return uri;
-    }
-    return uri.replace(
-      queryParameters: <String, String>{
-        ...uri.queryParameters,
-        'token': authToken,
-      },
-    );
-  }
+  CockpitRemoteEndpoint get endpoint => cockpitResolveRemoteEndpoint(
+    baseUri: Uri.parse(_appBaseUrl),
+    authTokens: <String?>[remoteSessionHandle?.authToken],
+    path: r'$.appBaseUrl',
+  );
+
+  String get appBaseUrl => endpoint.baseUri.toString();
+
+  Uri get baseUri => endpoint.baseUri;
+
+  String get authToken => endpoint.authToken;
 
   Uri get supervisorBaseUri => Uri.parse(supervisorBaseUrl);
 
-  Map<String, Object?> toJson() => <String, Object?>{
-    'developmentSessionId': developmentSessionId,
-    'platform': platform,
-    'deviceId': deviceId,
-    'projectDir': projectDir,
-    'target': target,
-    'appId': appId,
-    'appBaseUrl': appBaseUrl,
-    'supervisorBaseUrl': supervisorBaseUrl,
-    'launchMode': launchMode.jsonValue,
-    if (flavor != null) 'flavor': flavor,
-    if (flutterVersion != null) 'flutterVersion': flutterVersion,
-    if (bindHost != null) 'bindHost': bindHost,
-    'reloadRecoverable': reloadRecoverable,
-    if (remoteSessionHandle != null)
-      'remoteSessionHandle': remoteSessionHandle!.toJson(),
-    if (vmServiceUri != null) 'vmServiceUri': vmServiceUri!.toString(),
-    'launchedAt': launchedAt.toUtc().toIso8601String(),
-    if (lastReloadAt != null)
-      'lastReloadAt': lastReloadAt!.toUtc().toIso8601String(),
-    'reloadGeneration': reloadGeneration,
-  };
+  Map<String, Object?> toJson() => _toJson(includeAuthToken: false);
+
+  Map<String, Object?> toPrivateJson() => _toJson(includeAuthToken: true);
+
+  Map<String, Object?> _toJson({required bool includeAuthToken}) =>
+      <String, Object?>{
+        'developmentSessionId': developmentSessionId,
+        'platform': platform,
+        'deviceId': deviceId,
+        'projectDir': projectDir,
+        'target': target,
+        'appId': appId,
+        'appBaseUrl': baseUri.toString(),
+        'supervisorBaseUrl': supervisorBaseUrl,
+        'launchMode': launchMode.jsonValue,
+        if (flavor != null) 'flavor': flavor,
+        if (flutterVersion != null) 'flutterVersion': flutterVersion,
+        if (bindHost != null) 'bindHost': bindHost,
+        'reloadRecoverable': reloadRecoverable,
+        if (remoteSessionHandle != null)
+          'remoteSessionHandle': includeAuthToken
+              ? remoteSessionHandle!.toPrivateJson()
+              : remoteSessionHandle!.toJson(),
+        if (vmServiceUri != null) 'vmServiceUri': vmServiceUri!.toString(),
+        'launchedAt': launchedAt.toUtc().toIso8601String(),
+        if (lastReloadAt != null)
+          'lastReloadAt': lastReloadAt!.toUtc().toIso8601String(),
+        'reloadGeneration': reloadGeneration,
+      };
 
   factory CockpitDevelopmentSessionHandle.fromJson(Map<String, Object?> json) {
     final remoteSessionHandleJson =

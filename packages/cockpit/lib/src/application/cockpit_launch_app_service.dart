@@ -32,6 +32,7 @@ final class CockpitLaunchAppRequest {
     this.mode = CockpitAppMode.development,
     this.launchTimeout = const Duration(seconds: 600),
     this.allowSessionPortFallback = true,
+    this.authenticationEnabled = false,
     this.appHandlePath,
     this.launchConfiguration = CockpitFlutterLaunchConfiguration.empty,
   });
@@ -45,6 +46,7 @@ final class CockpitLaunchAppRequest {
   final CockpitAppMode mode;
   final Duration launchTimeout;
   final bool allowSessionPortFallback;
+  final bool authenticationEnabled;
   final String? appHandlePath;
   final CockpitFlutterLaunchConfiguration launchConfiguration;
 }
@@ -76,11 +78,17 @@ final class CockpitLaunchAppService {
     CockpitSessionRegistry? registry,
     CockpitExistingDesktopAppStopper? stopExistingDesktopApp,
     CockpitAppTempStore? appTempStore,
+    void Function(String value)? sensitiveValueRegistrar,
+    void Function(String message)? diagnosticLogger,
   }) : _developmentService =
            developmentService ?? CockpitLaunchDevelopmentSessionService(),
        _remoteService =
            remoteService ??
-           CockpitLaunchRemoteSessionService(appTempStore: appTempStore),
+           CockpitLaunchRemoteSessionService(
+             appTempStore: appTempStore,
+             sensitiveValueRegistrar: sensitiveValueRegistrar,
+             diagnosticLogger: diagnosticLogger,
+           ),
        _remoteStatusReader = remoteStatusReader,
        _registry = registry,
        _stopExistingDesktopApp =
@@ -115,6 +123,7 @@ final class CockpitLaunchAppService {
           sessionPort: request.sessionPort,
           launchTimeout: request.launchTimeout,
           allowSessionPortFallback: request.allowSessionPortFallback,
+          authenticationEnabled: request.authenticationEnabled,
           persistAppHandlePath: request.appHandlePath,
           launchConfiguration: request.launchConfiguration,
         ),
@@ -220,6 +229,7 @@ final class CockpitLaunchAppService {
         sessionPort: request.sessionPort,
         launchTimeout: request.launchTimeout,
         allowSessionPortFallback: request.allowSessionPortFallback,
+        authenticationEnabled: request.authenticationEnabled,
         launchConfiguration: request.launchConfiguration,
       ),
     );

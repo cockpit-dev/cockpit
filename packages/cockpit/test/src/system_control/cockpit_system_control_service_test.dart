@@ -644,6 +644,129 @@ void main() {
     );
   });
 
+  test(
+    'ios describes without a device id share the forwarded WebDriverAgent cache',
+    () async {
+      var probes = 0;
+      final service = CockpitSystemControlService(
+        iosWdaEndpointProbe: (_, {required timeout}) async {
+          probes += 1;
+          return true;
+        },
+      );
+      const metadata = <String, Object?>{'wdaUrl': 'http://127.0.0.1:8100'};
+
+      final first = await service.describe(
+        const CockpitSystemControlDescribeRequest(
+          platform: 'ios',
+          metadata: metadata,
+        ),
+      );
+      final second = await service.describe(
+        const CockpitSystemControlDescribeRequest(
+          platform: 'ios',
+          metadata: metadata,
+        ),
+      );
+
+      expect(
+        first.profile.availableActions,
+        contains(CockpitSystemControlAction.readUiTree),
+      );
+      expect(
+        second.profile.availableActions,
+        contains(CockpitSystemControlAction.readUiTree),
+      );
+      expect(probes, 1);
+    },
+  );
+
+  test(
+    'a thrown WebDriverAgent probe is not cached and the next describe retries',
+    () async {
+      var probes = 0;
+      final service = CockpitSystemControlService(
+        iosWdaEndpointProbe: (_, {required timeout}) async {
+          probes += 1;
+          if (probes == 1) {
+            throw StateError('probe endpoint exploded');
+          }
+          return true;
+        },
+      );
+      const request = CockpitSystemControlDescribeRequest(
+        platform: 'ios',
+        deviceId: '6FD25DED-11E9-4AE9-B4B5-EDF4601981DC',
+        metadata: <String, Object?>{'wdaUrl': 'http://127.0.0.1:8100'},
+      );
+
+      await expectLater(service.describe(request), throwsStateError);
+
+      final second = await service.describe(request);
+      expect(
+        second.profile.availableActions,
+        contains(CockpitSystemControlAction.readUiTree),
+      );
+      expect(probes, 2);
+    },
+  );
+
+  test(
+    'unreachable WebDriverAgent results expire after the short TTL',
+    () async {
+      var now = DateTime.utc(2026, 1, 1);
+      var probes = 0;
+      final reachability = <bool>[false, true, true];
+      final service = CockpitSystemControlService(
+        clock: () => now,
+        iosWdaEndpointProbe: (_, {required timeout}) async {
+          probes += 1;
+          return reachability[probes - 1];
+        },
+      );
+      const request = CockpitSystemControlDescribeRequest(
+        platform: 'ios',
+        deviceId: '6FD25DED-11E9-4AE9-B4B5-EDF4601981DC',
+        metadata: <String, Object?>{'wdaUrl': 'http://127.0.0.1:8100'},
+      );
+
+      final first = await service.describe(request);
+      expect(
+        first.profile.blockedActions,
+        contains(CockpitSystemControlAction.readUiTree),
+      );
+      expect(probes, 1);
+
+      now = now.add(const Duration(milliseconds: 900));
+      final stillCached = await service.describe(request);
+      expect(
+        stillCached.profile.blockedActions,
+        contains(CockpitSystemControlAction.readUiTree),
+      );
+      expect(probes, 1);
+
+      now = now.add(const Duration(milliseconds: 200));
+      final recovered = await service.describe(request);
+      expect(
+        recovered.profile.availableActions,
+        contains(CockpitSystemControlAction.readUiTree),
+      );
+      expect(probes, 2);
+
+      now = now.add(const Duration(seconds: 4));
+      final reachableCached = await service.describe(request);
+      expect(
+        reachableCached.profile.availableActions,
+        contains(CockpitSystemControlAction.readUiTree),
+      );
+      expect(probes, 2);
+
+      now = now.add(const Duration(seconds: 2));
+      await service.describe(request);
+      expect(probes, 3);
+    },
+  );
+
   test('WebDriverAgent auto-discovery only runs for iOS', () async {
     var probeCount = 0;
     final service = CockpitSystemControlService(

@@ -238,6 +238,7 @@ final class FlutterCockpitRootState extends State<FlutterCockpitRoot> {
     // The visual-frame flight is shared process-wide and joined without a
     // bound of its own, so a flight parked on a frame a wedged engine will
     // never produce must not park the snapshot behind it.
+    String? degradationReason;
     try {
       await ensureCockpitVisualFrame(
         platform: resolveCockpitRemoteSessionPlatform(
@@ -246,15 +247,23 @@ final class FlutterCockpitRootState extends State<FlutterCockpitRoot> {
         ),
       ).timeout(const Duration(milliseconds: 750));
     } on TimeoutException {
-      // The mounted Element tree remains safe to inspect without the
-      // flushed frame.
+      degradationReason = cockpitFrameTimeoutDegradationReason;
     }
-    await waitForPendingCockpitFrame(
+    final frameWait = await waitForPendingCockpitFrame(
       phase: binding.schedulerPhase,
       hasScheduledFrame: binding.hasScheduledFrame,
       waitForEndOfFrame: () => binding.endOfFrame,
     );
-    return snapshot(options: options);
+    if (frameWait == CockpitPendingFrameWaitResult.timedOut) {
+      degradationReason = cockpitFrameTimeoutDegradationReason;
+    }
+    final currentSnapshot = snapshot(options: options);
+    return currentSnapshot.copyWith(
+      degradationReason: _mergeDegradationReasons(
+        currentSnapshot.degradationReason,
+        degradationReason,
+      ),
+    );
   }
 
   Future<bool> waitForUiIdle({
@@ -336,7 +345,10 @@ final class FlutterCockpitRootState extends State<FlutterCockpitRoot> {
           requestedProfile: effectiveProfile,
           resolvedCaptureKind: CockpitCaptureKind.flutterView,
           usedFallback: true,
-          degradationReason: 'nativeElementCropUnavailable',
+          degradationReason: _mergeDegradationReasons(
+            'nativeElementCropUnavailable',
+            screenshot.degradationReason,
+          ),
         );
       }
       final nativeCaptureAvailable = await FlutterCockpit.binding
@@ -356,7 +368,10 @@ final class FlutterCockpitRootState extends State<FlutterCockpitRoot> {
           requestedProfile: effectiveProfile,
           resolvedCaptureKind: CockpitCaptureKind.flutterView,
           usedFallback: true,
-          degradationReason: 'nativeCaptureUnavailable',
+          degradationReason: _mergeDegradationReasons(
+            'nativeCaptureUnavailable',
+            screenshot.degradationReason,
+          ),
         );
       }
 
@@ -395,7 +410,10 @@ final class FlutterCockpitRootState extends State<FlutterCockpitRoot> {
           requestedProfile: effectiveProfile,
           resolvedCaptureKind: CockpitCaptureKind.flutterView,
           usedFallback: true,
-          degradationReason: _captureFailureReason(error),
+          degradationReason: _mergeDegradationReasons(
+            _captureFailureReason(error),
+            screenshot.degradationReason,
+          ),
         );
       }
     }
@@ -405,7 +423,16 @@ final class FlutterCockpitRootState extends State<FlutterCockpitRoot> {
       screenshot: screenshot,
       requestedProfile: effectiveProfile,
       resolvedCaptureKind: CockpitCaptureKind.flutterView,
+      degradationReason: screenshot.degradationReason,
     );
+  }
+
+  String? _mergeDegradationReasons(String? primary, String? secondary) {
+    if (primary == null || primary.isEmpty) return secondary;
+    if (secondary == null || secondary.isEmpty || primary == secondary) {
+      return primary;
+    }
+    return '$primary; $secondary';
   }
 
   String _captureFailureReason(Object error) {

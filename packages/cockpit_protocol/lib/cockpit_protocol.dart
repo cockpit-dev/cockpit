@@ -118,6 +118,7 @@ export 'src/session/cockpit_bundle_summary_assembler.dart';
 export 'src/session/cockpit_evidence_index.dart';
 export 'src/session/cockpit_observation_assembler.dart';
 export 'src/session/cockpit_session_controller.dart';
+export 'src/session/cockpit_session_closed_error.dart';
 export 'src/session/cockpit_step_recorder.dart';
 export 'src/session/cockpit_timestamp_provider.dart';
 export 'src/test/cockpit_test_action.dart';

@@ -1,83 +1,119 @@
 # Cross-runner programmatic tests
 
-`cockpit_test` contains the platform-neutral scenario API. A scenario should
-only use selectors, protocol values, and the current locale; it must not import
+`cockpit_test` is an in-process Dart DSL for scenarios that share one
+`CockpitTester` surface across Flutter integration tests, bridge-connected
+release/profile apps, and native black-box targets. Scenario code should use
+only selectors, protocol values, and the active locale; it should not import
 `WidgetTester`, `BuildContext`, or a native SDK.
 
-The authoring contract lives in
-[`packages/cockpit_test`](../packages/cockpit_test) (see its README for the
-full contract). Concrete execution ships one layer up:
+The shared runner and contracts live in
+[`packages/cockpit_test`](../packages/cockpit_test). Concrete execution remains
+at the platform boundary:
 
-- [`packages/cockpit`](../packages/cockpit) provides
-  `CockpitProgrammaticTestRunner`, `RemoteCockpitTester`, and
-  `SystemCockpitTester` plus the process and device lifecycle around them.
-- [`packages/flutter_cockpit_test`](../packages/flutter_cockpit_test) keeps
-  the in-process `cockpitTestWidgets` facade for Flutter `integration_test`.
+- [`packages/cockpit`](../packages/cockpit) provides `RemoteCockpitTester` and
+  `SystemCockpitTester` plus process and device lifecycle.
+- [`packages/flutter_cockpit_test`](../packages/flutter_cockpit_test) provides
+  `cockpitScenarioWidgets`, which reuses `cockpitTestWidgets` and Flutter's
+  official `integration_test` lifecycle.
 
 ```dart
 final smoke = CockpitTestScenario(
   id: 'save-settings',
-  requiredCapabilities: const {'tap', 'assertText'},
+  requirements: CockpitTestRequirements(
+    commands: const {
+      CockpitCommandType.tap,
+      CockpitCommandType.enterText,
+      CockpitCommandType.assertText,
+    },
+    locators: const {CockpitLocatorKind.cockpitId},
+  ),
   body: (tester) async {
     await tester.tap('#settings');
     await tester.type('Alice', into: '#name');
     await tester.tap('#save');
     await tester.expectText(
       '#status',
-      const CockpitLocalizedText(
+      CockpitLocalizedText(
         'settings.saved',
-        values: {'en-US': 'Saved', 'zh-CN': '已保存'},
+        values: const {'en-US': 'Saved', 'zh-CN': '已保存'},
       ),
     );
   },
 );
 ```
 
-The same scenario can be run as a locale matrix:
+The same scenario can run as a locale matrix:
 
 ```dart
 final suite = CockpitTestSuiteProgram(
   id: 'settings-smoke',
-  locales: const [
+  locales: [
     CockpitLocaleProfile('en-US'),
-    CockpitLocaleProfile('zh-CN'),
+    CockpitLocaleProfile('zh-Hant-TW'),
   ],
   cases: [CockpitTestCaseProgram(id: 'save', scenario: smoke)],
 );
+
 final result = await const CockpitProgrammaticTestRunner().runSuite(
   suite,
   createTester: (locale) async => RemoteCockpitTester(
-    client: CockpitRemoteSessionClient(
-      baseUri: endpoint,
-      authToken: remoteToken,
-    ),
+    client: client,
     workspaceRoot: workspaceRoot,
     initialLocale: locale,
   ),
 );
 ```
 
+For a source-owned Flutter test, reuse the same object directly:
+
+```dart
+cockpitScenarioWidgets(
+  'saves settings',
+  app: buildDevelopmentApp,
+  scenario: smoke,
+);
+```
+
+## Capability preflight
+
+Commands and locator strategies use `CockpitCommandType` and
+`CockpitLocatorKind`; non-command target features use the small
+`CockpitTestFeature` enum. This keeps method names such as `type()` from being
+mistaken for protocol command names such as `enterText`.
+
+Unsupported requirements return a `blocked` result with a structured
+`CockpitTestError` before the body runs. A supported scenario that throws returns
+`failed`; a completed scenario returns `passed`. Empty suites are rejected.
+
+## Locale behavior
+
+Locale tags are validated and canonicalized at runtime, including language,
+script, and region subtags. Translation fallback is exact tag, then
+language-script, then language. Flutter conversion preserves `Locale.scriptCode`,
+so `zh-Hant-TW` does not degrade to `zh-TW`.
+
+## Persistence boundary
+
+`CockpitTestScenario.body` is executable Dart code and is intentionally not a
+wire protocol. `toManifestJson()` is a diagnostic projection only. Persisted,
+queued, or language-neutral execution must use the declarative
+`cockpit.test/v2` model.
+
 ## Targets
 
-- Existing local integration tests use `cockpitTestWidgets`. Its `locale` and
-  localized assertions resolve through the mounted `Localizations` boundary on
-  every command, so a language switch is observed by the next assertion.
-- A release/profile app that includes `flutter_cockpit` uses
-  `RemoteCockpitTester`. Enable the remote session only for the test build,
-  provide a per-session token, and keep the endpoint on loopback or a private
-  device tunnel.
-- A release app without Cockpit uses `SystemCockpitTester`. It routes through
-  the platform system-control adapter and never assumes a Flutter VM or
-  DevTools service exists.
+- Flutter source tests use `cockpitScenarioWidgets` or `cockpitTestWidgets`.
+- A test build that embeds `flutter_cockpit` uses `RemoteCockpitTester`.
+- An app without Cockpit uses `SystemCockpitTester` through platform system
+  control.
 
-Performance is capability-based. `profile()` returns the report collected by
-the target; if the target cannot produce a real report it throws an explicit
-`CockpitTestCapabilityException` rather than returning zero-valued data.
+Performance is feature-based. `profile()` returns a real target report; targets
+without performance capture fail explicitly instead of returning synthetic
+zero-valued data. Remote preflight reads the live session status rather than
+assuming that the presence of an adapter proves support.
 
 ## Release-test build
 
-For an integrated app, inject the remote endpoint and token only in the test
-variant, for example:
+Enable a remote bridge only in the test variant and provide a per-session token:
 
 ```bash
 flutter build apk --release \
@@ -85,6 +121,5 @@ flutter build apk --release \
   --dart-define=FLUTTER_COCKPIT_REMOTE_AUTH_TOKEN="$COCKPIT_TOKEN"
 ```
 
-Production releases should leave `FLUTTER_COCKPIT_REMOTE_ENABLED` disabled.
-For a native-only app, build the normal release artifact and use the system
-driver target; no Cockpit plugin registration is required.
+Production releases should leave `FLUTTER_COCKPIT_REMOTE_ENABLED` disabled. A
+native-only app needs no Cockpit plugin registration.

@@ -10,6 +10,7 @@ import 'package:cockpit/src/development/cockpit_development_session_machine_laun
 import 'package:cockpit/src/development/cockpit_development_session_status.dart';
 import 'package:cockpit/src/development/cockpit_flutter_run_machine_client.dart';
 import 'package:cockpit/src/development/cockpit_vm_network_profiler.dart';
+import 'package:cockpit/src/foundation/cockpit_ids.dart';
 import 'package:cockpit/src/foundation/cockpit_permissions.dart';
 import 'package:cockpit/src/foundation/cockpit_locked_json_store.dart';
 import 'package:cockpit/src/remote/cockpit_android_port_forwarder.dart';
@@ -62,6 +63,59 @@ void main() {
       ),
     );
     expect(forwarded, isFalse);
+  });
+
+  test('early endpoint failure removes the opt-in auth file', () async {
+    final project = await Directory.systemTemp.createTemp(
+      'cockpit-worker-auth-endpoint-failure-',
+    );
+    addTearDown(() => project.delete(recursive: true));
+    final entrypoint = File(p.join(project.path, 'cockpit', 'main.dart'));
+    await entrypoint.parent.create(recursive: true);
+    await entrypoint.writeAsString('void main() {}');
+    final appTempStore = _appTempStore(project);
+    final tokenGenerator = _DevelopmentTokenGenerator();
+    final registeredSecrets = <String>[];
+    final runtime = CockpitWorkerDevelopmentSessionRuntime(
+      appTempStore: appTempStore,
+      tokenGenerator: tokenGenerator,
+      sensitiveValueRegistrar: registeredSecrets.add,
+      flutterVersionReader: (_) async => '3.44.0',
+      machineLauncher: CockpitDevelopmentSessionMachineLauncher(
+        iosDeviceConnectionResolver: (_) async => null,
+      ),
+    );
+
+    await expectLater(
+      runtime.launch(
+        CockpitLaunchDevelopmentSessionRequest(
+          projectDir: project.path,
+          target: 'cockpit/main.dart',
+          platform: 'ios',
+          deviceId: 'physical-iphone',
+          sessionPort: 47331,
+          authenticationEnabled: true,
+        ),
+      ),
+      throwsA(
+        isA<CockpitApplicationServiceException>()
+            .having((error) => error.code, 'code', 'flutterLaunchFailed')
+            .having(
+              (error) => error.message,
+              'message',
+              contains('Unable to resolve a reachable iOS tunnel address'),
+            ),
+      ),
+    );
+
+    expect(tokenGenerator.byteLengths, <int>[16, 32]);
+    expect(registeredSecrets, <String>[_DevelopmentTokenGenerator.authToken]);
+    expect(
+      await Directory(
+        p.join(appTempStore.root, _DevelopmentTokenGenerator.sessionId),
+      ).exists(),
+      isFalse,
+    );
   });
 
   test('launch exposes the Flutter machine failure', () async {
@@ -378,6 +432,27 @@ void main() {
       );
     },
   );
+}
+
+final class _DevelopmentTokenGenerator
+    implements CockpitTokenGenerator, CockpitResourceIdTokenGenerator {
+  static const String sessionId = 'sdevelop001';
+  static const String authToken =
+      'development-auth-token-with-thirty-two-bytes-0001';
+
+  final List<int> byteLengths = <int>[];
+
+  @override
+  String nextIdToken() {
+    byteLengths.add(16);
+    return sessionId.substring(1);
+  }
+
+  @override
+  String nextToken({int byteLength = 32}) {
+    byteLengths.add(byteLength);
+    return authToken;
+  }
 }
 
 final class _WorkerRecordingPortForwarder extends CockpitAndroidPortForwarder {

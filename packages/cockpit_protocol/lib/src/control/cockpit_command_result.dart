@@ -70,7 +70,10 @@ final class CockpitCommandResult {
   };
 
   /// Decodes a CockpitCommandResult from a JSON object.
-  factory CockpitCommandResult.fromJson(Map<String, Object?> json) {
+  factory CockpitCommandResult.fromJson(
+    Map<String, Object?> json, {
+    String path = r'$',
+  }) {
     final locatorResolutionJson =
         json['locatorResolution'] as Map<Object?, Object?>?;
     final errorJson = json['error'] as Map<Object?, Object?>?;
@@ -82,11 +85,15 @@ final class CockpitCommandResult {
     return CockpitCommandResult(
       success: json['success']! as bool,
       commandId: json['commandId']! as String,
-      commandType: CockpitCommandType.fromJson(json['commandType']),
+      commandType: CockpitCommandType.fromJson(
+        json['commandType'],
+        path: '$path.commandType',
+      ),
       locatorResolution: locatorResolutionJson == null
           ? null
           : CockpitLocatorResolution.fromJson(
               Map<String, Object?>.from(locatorResolutionJson),
+              path: '$path.locatorResolution',
             ),
       durationMs: json['durationMs']! as int,
       artifacts: (json['artifacts'] as List<Object?>? ?? const <Object?>[])

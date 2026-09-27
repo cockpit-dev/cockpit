@@ -582,6 +582,21 @@ void main() {
         );
         expect(decodedFutureDescriptor.safetyEffects.single.isKnown, isFalse);
 
+        final futureScopeDescriptor = <String, Object?>{
+          ..._runDescriptor().toJson(),
+          'scope': 'futureScope',
+        };
+        expect(
+          () => CockpitOperationDescriptor.fromJson(
+            futureScopeDescriptor,
+            path: r'$.descriptor',
+            decodePolicy: CockpitDecodePolicy.negotiatedResponse(<String>[
+              CockpitFoundationFeature.extensibleResponseEnums.id,
+            ]),
+          ),
+          throwsA(_formatExceptionAt(r'$.descriptor.scope')),
+        );
+
         final validSubmission = _runSubmission();
         final validInvocation = CockpitOperationInvocation(
           kind: 'case.run',

@@ -419,6 +419,7 @@ final class CockpitTestStepResult {
                   '$path.locatorResolution',
                 ),
               ),
+              path: '$path.locatorResolution',
             ),
       degradationReason: json['degradationReason'] == null
           ? null

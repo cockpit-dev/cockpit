@@ -17,6 +17,8 @@ workspace:
 dev_dependencies:
   cockpit:
     path: packages/cockpit
+  cockpit_protocol:
+    path: packages/cockpit_protocol
   lints: ^6.1.0
   melos: 6.3.3
   test: '>=1.25.15 <2.0.0'

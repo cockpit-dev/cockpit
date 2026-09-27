@@ -727,17 +727,36 @@ void main() {
         server.baseUri!.resolve('/ping'),
       );
       expect(missingToken.statusCode, HttpStatus.unauthorized);
+      expect(missingToken.body['error'], 'unauthorized');
+
+      final queryToken = await _readJsonResponse(
+        server.baseUri!.resolve('/ping?token=remote-secret'),
+      );
+      expect(queryToken.statusCode, HttpStatus.unauthorized);
+      expect(queryToken.body['error'], 'unauthorized');
 
       final wrongToken = await _readJsonResponse(
-        server.baseUri!.resolve('/ping?token=wrong'),
+        server.baseUri!.resolve('/ping'),
+        headers: const <String, String>{'x-cockpit-token': 'wrong'},
       );
       expect(wrongToken.statusCode, HttpStatus.unauthorized);
 
       final wrongOrigin = await _readJsonResponse(
-        server.baseUri!.resolve('/ping?token=remote-secret'),
-        headers: const <String, String>{'origin': 'https://untrusted.example'},
+        server.baseUri!.resolve('/ping'),
+        headers: const <String, String>{
+          'x-cockpit-token': 'remote-secret',
+          'origin': 'https://untrusted.example',
+        },
       );
       expect(wrongOrigin.statusCode, HttpStatus.unauthorized);
+
+      final lowerCaseBearer = await _readJsonResponse(
+        server.baseUri!.resolve('/ping'),
+        headers: const <String, String>{
+          HttpHeaders.authorizationHeader: 'bearer remote-secret',
+        },
+      );
+      expect(lowerCaseBearer.statusCode, HttpStatus.ok);
 
       final authorized = await _readJsonResponse(
         server.baseUri!.resolve('/ping'),

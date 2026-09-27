@@ -50,6 +50,55 @@ void main() {
     },
   );
 
+  cockpitScenarioWidgets(
+    'runs a shared platform-neutral scenario',
+    app: () => const _TestApp(),
+    scenario: CockpitTestScenario(
+      id: 'shared-save',
+      requirements: CockpitTestRequirements(
+        commands: const <CockpitCommandType>{
+          CockpitCommandType.tap,
+          CockpitCommandType.assertText,
+        },
+        locators: const <CockpitLocatorKind>{CockpitLocatorKind.text},
+        features: const <CockpitTestFeature>{CockpitTestFeature.inAppControl},
+      ),
+      body: (tester) async {
+        await tester.tap('Save');
+        await tester.expectText('Saved', 'Saved');
+      },
+    ),
+  );
+
+  cockpitTestWidgets(
+    'preserves Flutter locale script and region subtags',
+    app: () => const MaterialApp(
+      locale: Locale.fromSubtags(
+        languageCode: 'zh',
+        scriptCode: 'Hant',
+        countryCode: 'TW',
+      ),
+      supportedLocales: <Locale>[
+        Locale.fromSubtags(
+          languageCode: 'zh',
+          scriptCode: 'Hant',
+          countryCode: 'TW',
+        ),
+      ],
+      localizationsDelegates: <LocalizationsDelegate<dynamic>>[
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      home: SizedBox.expand(),
+    ),
+    body: (cockpit) async {
+      expect(cockpit.locale.toLanguageTag(), 'zh-Hant-TW');
+      expect(cockpit.locale.scriptCode, 'Hant');
+      expect(cockpit.locale.regionCode, 'TW');
+    },
+  );
+
   final locale = ValueNotifier<String>('en');
   final saved = ValueNotifier<bool>(false);
   final confirmed = ValueNotifier<bool>(false);

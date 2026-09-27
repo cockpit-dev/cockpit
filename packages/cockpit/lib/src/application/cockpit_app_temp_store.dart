@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:path/path.dart' as p;
@@ -49,6 +50,28 @@ final class CockpitAppTempStore {
       }
       Error.throwWithStackTrace(error, stackTrace);
     }
+  }
+
+  /// Writes an owner-only JSON file inside the stable directory for [key].
+  Future<String> writePrivateJson(
+    String key, {
+    required String fileName,
+    required Object? value,
+  }) async {
+    if (p.basename(fileName) != fileName ||
+        fileName == '.' ||
+        fileName == '..') {
+      throw ArgumentError.value(
+        fileName,
+        'fileName',
+        'File name must not contain path separators.',
+      );
+    }
+    final directory = await prepare(key);
+    final file = File(p.join(directory, fileName));
+    await file.writeAsString('${jsonEncode(value)}\n', flush: true);
+    await _permissionHardener.hardenFile(file);
+    return file.path;
   }
 
   /// Removes the stable temporary directory for [key], when present.

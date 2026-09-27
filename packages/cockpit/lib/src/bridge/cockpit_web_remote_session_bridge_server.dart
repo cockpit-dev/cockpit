@@ -121,9 +121,8 @@ final class CockpitWebRemoteSessionBridgeServer {
     try {
       if (WebSocketTransformer.isUpgradeRequest(request) &&
           _routePathFor(request.uri.path) == '/connect') {
-        if (!_isAuthorized(request)) {
-          request.response.statusCode = HttpStatus.unauthorized;
-          await request.response.close();
+        if (!_isAuthorized(request, allowQueryToken: true)) {
+          await _unauthorizedResponse(request.response);
           return;
         }
         if (_connections.where((connection) => !connection.closed).length >=
@@ -137,8 +136,7 @@ final class CockpitWebRemoteSessionBridgeServer {
       }
 
       if (!_isAuthorized(request)) {
-        request.response.statusCode = HttpStatus.unauthorized;
-        await request.response.close();
+        await _unauthorizedResponse(request.response);
         return;
       }
 
@@ -167,7 +165,7 @@ final class CockpitWebRemoteSessionBridgeServer {
     }
   }
 
-  bool _isAuthorized(HttpRequest request) {
+  bool _isAuthorized(HttpRequest request, {bool allowQueryToken = false}) {
     // The origin allowlist is enforced only when it is configured, and only
     // against requests that carry a browser origin. The development bridge
     // serves pages launched by the Flutter tool whose origins are not known
@@ -182,15 +180,29 @@ final class CockpitWebRemoteSessionBridgeServer {
     }
     if (authToken.isEmpty) return true;
     // Browsers cannot attach headers to a WebSocket upgrade, so the page
-    // authenticates through the query string while host-side clients use the
-    // same header transports as the in-app remote session server.
-    final provided =
+    // authenticates through the handshake query string on /connect only.
+    // Every other endpoint accepts header credentials, matching the in-app
+    // remote session server.
+    final headerToken =
         request.headers.value('x-cockpit-token') ??
         request.headers
             .value(HttpHeaders.authorizationHeader)
-            ?.replaceFirst(RegExp('^Bearer\\s+'), '') ??
-        request.uri.queryParameters['token'];
+            ?.replaceFirst(RegExp('^bearer\\s+', caseSensitive: false), '');
+    final provided =
+        headerToken ??
+        (allowQueryToken ? request.uri.queryParameters['token'] : null);
     return _constantTimeEquals(provided ?? '', authToken);
+  }
+
+  Future<void> _unauthorizedResponse(HttpResponse response) {
+    return _bestEffortErrorResponse(
+      response,
+      HttpStatus.unauthorized,
+      const <String, Object?>{
+        'error': 'unauthorized',
+        'message': 'Missing or invalid bridge credentials.',
+      },
+    );
   }
 
   Future<void> _handleConnect(HttpRequest request) async {

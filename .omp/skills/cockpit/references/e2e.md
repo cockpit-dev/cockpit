@@ -166,10 +166,13 @@ apply only the cleanup action proven necessary by that evidence.
 ## Variables And Secrets
 
 Case variables may be constants, run inputs, or secret references. Use
-`{$var: name}` in supported fields. Secrets remain references such as
-`env:COCKPIT_TEST_PASSWORD`; do not put secret values into source files,
-stdout, screenshots, or report metadata. Suite case entries bind `inputs`; a
-suite matrix can bind selected axes with `{$matrix: axis}`.
+`{$var: name}` when the whole field value comes from one variable. Plain strings
+are always literals, including text such as `Hello ${name}`. Use the explicit
+`{$template: "Hello ${name}"}` form only when string interpolation is intended.
+Secrets remain references such as `env:COCKPIT_TEST_PASSWORD`; do not put secret
+values into source files, stdout, screenshots, or report metadata. Secret
+variables cannot be interpolated into templates. Suite case entries bind
+`inputs`; a suite matrix can bind selected axes with `{$matrix: axis}`.
 
 Policy must authorize referenced environment secret names and sensitive
 effects. Declare step `safety.effects` for credential-sensitive, permission,

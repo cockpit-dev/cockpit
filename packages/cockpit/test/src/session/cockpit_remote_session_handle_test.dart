@@ -24,11 +24,27 @@ CockpitRemoteSessionStatus _status({required String sessionId}) {
   );
 }
 
+CockpitRemoteSessionHandle _handle({
+  String baseUrl = 'http://127.0.0.1:57331',
+  String authToken = '',
+}) {
+  return CockpitRemoteSessionHandle(
+    platform: 'macos',
+    deviceId: 'macos',
+    projectDir: '/workspace/app',
+    target: 'cockpit/main.dart',
+    appId: 'dev.example.app',
+    host: '127.0.0.1',
+    hostPort: 57331,
+    devicePort: 57331,
+    baseUrl: baseUrl,
+    launchedAt: DateTime.utc(2026, 9, 10),
+    authToken: authToken,
+  );
+}
+
 void main() {
-  test('fromRemoteStatus prefers the explicit launch token', () {
-    // The app reports its session id; the launch token is a separate
-    // credential. A handle must authenticate with the token it was launched
-    // with, never with an incidental session id.
+  test('fromRemoteStatus keeps an explicit launch token out of the URI', () {
     final handle = CockpitRemoteSessionHandle.fromRemoteStatus(
       projectDir: '/workspace/app',
       target: 'cockpit/main.dart',
@@ -43,13 +59,11 @@ void main() {
     );
 
     expect(handle.authToken, 'launch-token-9');
-    expect(
-      handle.baseUri,
-      Uri.parse('http://127.0.0.1:57331?token=launch-token-9'),
-    );
+    expect(handle.baseUri, Uri.parse('http://127.0.0.1:57331'));
+    expect(handle.baseUrl, 'http://127.0.0.1:57331');
   });
 
-  test('fromRemoteStatus falls back to the session id without a token', () {
+  test('fromRemoteStatus never treats the public session id as a token', () {
     final handle = CockpitRemoteSessionHandle.fromRemoteStatus(
       projectDir: '/workspace/app',
       target: 'cockpit/main.dart',
@@ -62,10 +76,65 @@ void main() {
       launchedAt: DateTime.utc(2026, 9, 10),
     );
 
-    expect(handle.authToken, 'app-session-id');
+    expect(handle.authToken, isEmpty);
+    expect(handle.baseUri, Uri.parse('http://127.0.0.1:57331'));
+  });
+
+  test('public JSON omits credentials and private JSON restores them', () {
+    final handle = _handle(authToken: 'launch-token-9');
+
+    final publicJson = handle.toJson();
+    expect(publicJson.containsKey('authToken'), isFalse);
+    expect(publicJson['baseUrl'], 'http://127.0.0.1:57331');
+    expect(publicJson.toString(), isNot(contains('launch-token-9')));
+
+    final privateJson = handle.toPrivateJson();
+    expect(privateJson['authToken'], 'launch-token-9');
+    final restored = CockpitRemoteSessionHandle.fromJson(privateJson);
+    expect(restored.authToken, 'launch-token-9');
+    expect(restored.baseUri, Uri.parse('http://127.0.0.1:57331'));
+  });
+
+  test('legacy query credentials migrate to a clean endpoint', () {
+    final handle = CockpitRemoteSessionHandle.fromJson(<String, Object?>{
+      ..._handle().toJson(),
+      'baseUrl':
+          'http://127.0.0.1:57331/cockpit?channel=stable&token=legacy-token',
+    });
+
+    expect(handle.authToken, 'legacy-token');
     expect(
       handle.baseUri,
-      Uri.parse('http://127.0.0.1:57331?token=app-session-id'),
+      Uri.parse('http://127.0.0.1:57331/cockpit?channel=stable'),
+    );
+    expect(handle.toJson().toString(), isNot(contains('legacy-token')));
+  });
+
+  test('matching legacy field and query credentials migrate once', () {
+    final handle = CockpitRemoteSessionHandle.fromJson(<String, Object?>{
+      ..._handle().toJson(),
+      'baseUrl': 'http://127.0.0.1:57331?token=legacy-token',
+      'authToken': 'legacy-token',
+    });
+
+    expect(handle.authToken, 'legacy-token');
+    expect(handle.baseUri, Uri.parse('http://127.0.0.1:57331'));
+  });
+
+  test('conflicting legacy credentials fail closed', () {
+    expect(
+      () => CockpitRemoteSessionHandle.fromJson(<String, Object?>{
+        ..._handle().toJson(),
+        'baseUrl': 'http://127.0.0.1:57331?token=query-token',
+        'authToken': 'field-token',
+      }),
+      throwsA(
+        isA<FormatException>().having(
+          (error) => error.message,
+          'message',
+          contains('Conflicting remote authentication tokens'),
+        ),
+      ),
     );
   });
 }

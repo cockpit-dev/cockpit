@@ -3,6 +3,7 @@ import 'dart:io';
 
 import '../platform/ios/cockpit_ios_device_connection.dart';
 import '../remote/cockpit_android_port_forwarder.dart';
+import '../remote/cockpit_remote_endpoint.dart';
 import '../session/cockpit_remote_session_handle.dart';
 import 'cockpit_application_service_exception.dart';
 
@@ -12,10 +13,12 @@ typedef CockpitSessionIosDeviceConnectionReader =
 final class CockpitResolvedSessionReference {
   const CockpitResolvedSessionReference({
     required this.baseUri,
+    this.authToken = '',
     this.sessionHandle,
   });
 
   final Uri baseUri;
+  final String authToken;
   final CockpitRemoteSessionHandle? sessionHandle;
 }
 
@@ -33,47 +36,72 @@ final class CockpitSessionReferenceResolver {
 
   Future<CockpitResolvedSessionReference> resolve({
     Uri? baseUri,
+    String authToken = '',
     CockpitRemoteSessionHandle? sessionHandle,
     String? sessionHandlePath,
     String? androidDeviceId,
     String? iosDeviceId,
   }) async {
     if (sessionHandle != null) {
+      final endpoint = cockpitResolveRemoteEndpoint(
+        baseUri: baseUri ?? sessionHandle.baseUri,
+        authTokens: <String?>[authToken, sessionHandle.authToken],
+        path: 'session reference',
+      );
+      // An explicit base URI is authoritative: the caller already knows the
+      // reachable endpoint, so forwarding is refreshed only when the address
+      // comes from the session handle itself.
       final resolvedBaseUri = baseUri == null
-          ? await _resolvedBaseUriForSession(sessionHandle)
-          : _withSessionToken(baseUri, sessionHandle);
+          ? await _resolvedBaseUriForSession(sessionHandle, endpoint.baseUri)
+          : endpoint.baseUri;
       return CockpitResolvedSessionReference(
         baseUri: resolvedBaseUri,
+        authToken: endpoint.authToken,
         sessionHandle: _withResolvedBaseUri(sessionHandle, resolvedBaseUri),
       );
     }
 
     if (sessionHandlePath != null && sessionHandlePath.isNotEmpty) {
       final resolvedHandle = await readSessionHandle(sessionHandlePath);
+      final endpoint = cockpitResolveRemoteEndpoint(
+        baseUri: baseUri ?? resolvedHandle.baseUri,
+        authTokens: <String?>[authToken, resolvedHandle.authToken],
+        path: 'session reference',
+      );
       final resolvedBaseUri = baseUri == null
-          ? await _resolvedBaseUriForSession(resolvedHandle)
-          : _withSessionToken(baseUri, resolvedHandle);
+          ? await _resolvedBaseUriForSession(resolvedHandle, endpoint.baseUri)
+          : endpoint.baseUri;
       return CockpitResolvedSessionReference(
         baseUri: resolvedBaseUri,
+        authToken: endpoint.authToken,
         sessionHandle: _withResolvedBaseUri(resolvedHandle, resolvedBaseUri),
       );
     }
 
     if (baseUri != null) {
-      final resolvedAndroidBaseUri = await _resolvedBaseUriForAndroidDevice(
+      final endpoint = cockpitResolveRemoteEndpoint(
         baseUri: baseUri,
+        authTokens: <String?>[authToken],
+        path: 'session reference',
+      );
+      final resolvedAndroidBaseUri = await _resolvedBaseUriForAndroidDevice(
+        baseUri: endpoint.baseUri,
         androidDeviceId: androidDeviceId,
       );
       if (resolvedAndroidBaseUri != null) {
-        return CockpitResolvedSessionReference(baseUri: resolvedAndroidBaseUri);
+        return CockpitResolvedSessionReference(
+          baseUri: resolvedAndroidBaseUri,
+          authToken: endpoint.authToken,
+        );
       }
 
       final resolvedIosBaseUri = await _resolvedBaseUriForIosDevice(
-        baseUri: baseUri,
+        baseUri: endpoint.baseUri,
         iosDeviceId: iosDeviceId,
       );
       return CockpitResolvedSessionReference(
-        baseUri: resolvedIosBaseUri ?? baseUri,
+        baseUri: resolvedIosBaseUri ?? endpoint.baseUri,
+        authToken: endpoint.authToken,
       );
     }
 
@@ -116,36 +144,19 @@ final class CockpitSessionReferenceResolver {
     return baseUri.replace(host: connection.tunnelIpAddress);
   }
 
-  /// An explicit baseUri may come from an app reference that carries the raw
-  /// endpoint without credentials; a session handle knows its own token, so
-  /// merge the token query parameter back in before any client call.
-  Uri _withSessionToken(Uri baseUri, CockpitRemoteSessionHandle handle) {
-    final authToken = handle.authToken;
-    if (authToken.isEmpty || baseUri.queryParameters['token'] != null) {
-      return baseUri;
-    }
-    return baseUri.replace(
-      queryParameters: <String, String>{
-        ...baseUri.queryParameters,
-        'token': authToken,
-      },
-    );
-  }
-
   Future<Uri> _resolvedBaseUriForSession(
     CockpitRemoteSessionHandle handle,
+    Uri baseUri,
   ) async {
     if (handle.platform != 'android') {
-      return handle.baseUri;
+      return baseUri;
     }
     final hostPort = await _portForwarder.ensureForwarded(
       deviceId: handle.deviceId,
       preferredHostPort: handle.hostPort,
       devicePort: handle.devicePort,
     );
-    // Keep the full resolved URI, including any token query parameter, so the
-    // forwarded endpoint stays authenticated exactly like the original one.
-    return handle.baseUri.replace(host: '127.0.0.1', port: hostPort);
+    return baseUri.replace(host: '127.0.0.1', port: hostPort);
   }
 
   CockpitRemoteSessionHandle _withResolvedBaseUri(

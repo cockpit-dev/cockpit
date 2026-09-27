@@ -3,6 +3,7 @@ import '../test/cockpit_test_policy.dart';
 import '../test/cockpit_test_run.dart';
 import 'cockpit_api_error.dart';
 import 'cockpit_decode_policy.dart';
+import 'cockpit_enum.dart';
 import 'cockpit_foundation_artifact.dart';
 import 'cockpit_foundation_value_reader.dart';
 import 'cockpit_run.dart';
@@ -631,11 +632,5 @@ CockpitRunEventEntityKind _entityKind(Object? value, String path) {
       (throw FormatException('Unknown event entity kind at $path.'));
 }
 
-T _enum<T extends Enum>(Object? value, List<T> values, String path) {
-  return CockpitEnumValue<T>.parse(
-    value,
-    values,
-    path,
-    policy: CockpitDecodePolicy.requests,
-  ).requireKnown();
-}
+T _enum<T extends Enum>(Object? value, List<T> values, String path) =>
+    cockpitEnumFromJson(value, values, path);

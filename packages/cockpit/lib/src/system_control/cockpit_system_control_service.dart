@@ -133,6 +133,7 @@ final class CockpitSystemControlService {
     CockpitWebCdpProbe webCdpProbe = cockpitProbeWebCdp,
     bool? linuxHost,
     Map<String, String>? environment,
+    DateTime Function()? clock,
   }) : _processManager = processManager ?? const LocalCockpitProcessManager(),
        _registry = registry,
        _iosWdaEndpointProbe = iosWdaEndpointProbe,
@@ -140,7 +141,8 @@ final class CockpitSystemControlService {
        _linuxAtSpiProbe = linuxAtSpiProbe,
        _webCdpProbe = webCdpProbe,
        _linuxHost = linuxHost ?? Platform.isLinux,
-       _environment = environment ?? Platform.environment;
+       _environment = environment ?? Platform.environment,
+       _clock = clock ?? DateTime.now;
 
   final CockpitProcessManager _processManager;
   final CockpitSystemControlRegistry _registry;
@@ -150,6 +152,7 @@ final class CockpitSystemControlService {
   final CockpitWebCdpProbe _webCdpProbe;
   final bool _linuxHost;
   final Map<String, String> _environment;
+  final DateTime Function() _clock;
   CockpitLinuxAtSpiProbeResult? _linuxAtSpiProbeCache;
   DateTime? _linuxAtSpiProbeCachedAt;
   final Map<String, ({CockpitWebCdpProbeResult result, DateTime at})>
@@ -371,7 +374,7 @@ final class CockpitSystemControlService {
     // device identity so one session cannot inherit another session's probe
     // result during the short cache window.
     final key = '${deviceId?.trim() ?? '<unknown>'}|${uri.toString()}';
-    final now = DateTime.now();
+    final now = _clock();
     final cached = _iosWdaProbeCache[key];
     final cacheValid =
         cached != null &&
@@ -404,7 +407,7 @@ final class CockpitSystemControlService {
   }) async {
     try {
       final reachable = await _iosWdaEndpointProbe(uri, timeout: timeout);
-      _iosWdaProbeCache[key] = (reachable: reachable, at: DateTime.now());
+      _iosWdaProbeCache[key] = (reachable: reachable, at: _clock());
       return reachable;
     } finally {
       _iosWdaProbeInFlight.remove(key);

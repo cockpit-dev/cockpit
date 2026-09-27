@@ -273,40 +273,45 @@ void main() {
         server.baseUri.resolve('/health'),
       );
       expect(missingToken.statusCode, HttpStatus.unauthorized);
+      expect(missingToken.body['error'], 'unauthorized');
 
-      final wrongToken = await _readJsonResponse(
+      final queryTokenOnHttpEndpoint = await _readJsonResponse(
         server.baseUri.replace(
           path: '${server.baseUri.path}/health',
-          queryParameters: const <String, String>{'token': 'wrong'},
+          queryParameters: const <String, String>{'token': 'bridge-secret'},
         ),
+      );
+      expect(queryTokenOnHttpEndpoint.statusCode, HttpStatus.unauthorized);
+
+      final wrongToken = await _readJsonResponse(
+        server.baseUri.resolve('/health'),
+        headers: const <String, String>{'x-cockpit-token': 'wrong'},
       );
       expect(wrongToken.statusCode, HttpStatus.unauthorized);
 
       final wrongOrigin = await _readJsonResponse(
-        server.baseUri.replace(
-          path: '${server.baseUri.path}/health',
-          queryParameters: const <String, String>{'token': 'bridge-secret'},
-        ),
-        headers: const <String, String>{'origin': 'https://untrusted.example'},
+        server.baseUri.resolve('/health'),
+        headers: const <String, String>{
+          'x-cockpit-token': 'bridge-secret',
+          'origin': 'https://untrusted.example',
+        },
       );
       expect(wrongOrigin.statusCode, HttpStatus.unauthorized);
 
       final authorizedHealth = await _readJsonResponse(
-        server.baseUri.replace(
-          path: '${server.baseUri.path}/health',
-          queryParameters: const <String, String>{'token': 'bridge-secret'},
-        ),
-        headers: const <String, String>{'origin': 'https://trusted.example'},
+        server.baseUri.resolve('/health'),
+        headers: const <String, String>{
+          'x-cockpit-token': 'bridge-secret',
+          'origin': 'https://trusted.example',
+        },
       );
       expect(authorizedHealth.statusCode, HttpStatus.serviceUnavailable);
       expect(authorizedHealth.body['error'], 'bridgeUnavailable');
 
       final oversized = await _postRawResponse(
-        server.baseUri.replace(
-          path: '${server.baseUri.path}/recording/start',
-          queryParameters: const <String, String>{'token': 'bridge-secret'},
-        ),
+        server.baseUri.resolve('/recording/start'),
         List<int>.filled((1 << 20) + 1, 65),
+        headers: const <String, String>{'x-cockpit-token': 'bridge-secret'},
       );
       expect(oversized.statusCode, HttpStatus.requestEntityTooLarge);
       expect(oversized.body['error'], 'requestTooLarge');
@@ -341,12 +346,23 @@ void main() {
       );
       expect(browserOriginWithoutToken.statusCode, HttpStatus.unauthorized);
 
-      final browserOriginWithToken = await _readJsonResponse(
+      // The browser's query credential is confined to the /connect
+      // handshake; ordinary endpoints reject it even when correct.
+      final browserOriginWithQueryToken = await _readJsonResponse(
         server.baseUri.replace(
           path: '${server.baseUri.path}/health',
           queryParameters: const <String, String>{'token': 'bridge-secret'},
         ),
         headers: const <String, String>{'origin': 'http://localhost:63119'},
+      );
+      expect(browserOriginWithQueryToken.statusCode, HttpStatus.unauthorized);
+
+      final browserOriginWithToken = await _readJsonResponse(
+        server.baseUri.resolve('/health'),
+        headers: const <String, String>{
+          'x-cockpit-token': 'bridge-secret',
+          'origin': 'http://localhost:63119',
+        },
       );
       expect(browserOriginWithToken.statusCode, HttpStatus.serviceUnavailable);
       expect(browserOriginWithToken.body['error'], 'bridgeUnavailable');
@@ -363,11 +379,16 @@ void main() {
       final bearerToken = await _readJsonResponse(
         server.baseUri.resolve('/health'),
         headers: const <String, String>{
-          HttpHeaders.authorizationHeader: 'Bearer bridge-secret',
+          HttpHeaders.authorizationHeader: 'bearer bridge-secret',
         },
       );
       expect(bearerToken.statusCode, HttpStatus.serviceUnavailable);
       expect(bearerToken.body['error'], 'bridgeUnavailable');
+
+      // The /connect handshake keeps accepting the query credential that
+      // browsers are forced to use.
+      final socket = await WebSocket.connect(server.connectUri.toString());
+      await socket.close();
     },
   );
 
@@ -1196,11 +1217,16 @@ Future<_HttpJsonResponse> _webSocketHandshakeResponse(Uri uri) async {
   }
 }
 
-Future<_HttpJsonResponse> _postRawResponse(Uri uri, List<int> bytes) async {
+Future<_HttpJsonResponse> _postRawResponse(
+  Uri uri,
+  List<int> bytes, {
+  Map<String, String> headers = const <String, String>{},
+}) async {
   final client = HttpClient();
   try {
     final request = await client.postUrl(uri);
     request.headers.contentType = ContentType.json;
+    headers.forEach(request.headers.set);
     request.add(bytes);
     final response = await request.close();
     final payload = await utf8.decoder.bind(response).join();

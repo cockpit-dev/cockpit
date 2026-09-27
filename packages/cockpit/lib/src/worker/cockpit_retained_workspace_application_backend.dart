@@ -34,6 +34,8 @@ final class CockpitRetainedWorkspaceApplicationBackend
     required CockpitWorkerProcessManager processManager,
     required CockpitWorkerResultSanitizer resultSanitizer,
     CockpitVmNetworkProfiler? networkProfiler,
+    void Function(String value)? sensitiveValueRegistrar,
+    void Function(String message)? diagnosticLogger,
   }) {
     workerId(workspaceId, r'$.workspaceId');
     workerString(workspaceRoot, r'$.workspaceRoot', maximum: 32768);
@@ -60,6 +62,8 @@ final class CockpitRetainedWorkspaceApplicationBackend
         appTempStore: appTempStore,
         systemControlService: systemControlService,
         systemActionService: systemActionService,
+        sensitiveValueRegistrar: sensitiveValueRegistrar,
+        diagnosticLogger: diagnosticLogger,
       ),
       remote: CockpitWorkerRemoteOperations(
         workspaceId: workspaceId,
@@ -69,6 +73,8 @@ final class CockpitRetainedWorkspaceApplicationBackend
         portHandoff: portHandoff,
         appTempStore: appTempStore,
         snapshotStore: snapshots,
+        sensitiveValueRegistrar: sensitiveValueRegistrar,
+        diagnosticLogger: diagnosticLogger,
       ),
       interactive: CockpitWorkerInteractiveOperations(
         workspaceId: workspaceId,

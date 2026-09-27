@@ -614,6 +614,7 @@ Map<String, Object?> _launchRequest({bool allowMode = false}) => _object(
     if (allowMode) 'mode': _enum(<String>['development', 'automation']),
     'launchTimeoutMs': _positiveTimeout,
     'launchConfiguration': _launchConfiguration,
+    'authenticationEnabled': <String, Object?>{..._boolean, 'default': false},
   },
   required: const <String>['targetId'],
 );

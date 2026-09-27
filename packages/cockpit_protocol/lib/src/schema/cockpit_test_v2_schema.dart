@@ -30,6 +30,16 @@ const String cockpitTestV2SchemaJson = r'''
       "required": ["$var"],
       "additionalProperties": false
     },
+    "stringInterpolation": {
+      "type": "object",
+      "properties": {
+        "$template": {
+          "$ref": "#/$defs/nonEmptyString"
+        }
+      },
+      "required": ["$template"],
+      "additionalProperties": false
+    },
     "stringTemplate": {
       "oneOf": [
         {
@@ -37,6 +47,9 @@ const String cockpitTestV2SchemaJson = r'''
         },
         {
           "$ref": "#/$defs/variableReference"
+        },
+        {
+          "$ref": "#/$defs/stringInterpolation"
         }
       ]
     },

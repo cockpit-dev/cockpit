@@ -7,6 +7,7 @@ import 'package:cockpit/src/application/cockpit_launch_remote_session_service.da
 import 'package:cockpit/src/application/cockpit_application_service_exception.dart';
 import 'package:cockpit/src/platform/android/cockpit_android_device_readiness.dart';
 import 'package:cockpit/src/application/cockpit_entrypoint_resolver.dart';
+import 'package:cockpit/src/foundation/cockpit_ids.dart';
 import 'package:cockpit/src/foundation/cockpit_permissions.dart';
 import 'package:cockpit/src/infrastructure/cockpit_sdk_environment.dart';
 import 'package:cockpit/src/session/cockpit_flutter_launch_configuration.dart';
@@ -262,6 +263,225 @@ void main() {
     expect(capturedOptions?.flutterExecutable, '/opt/flutter/bin/flutter');
     expect(capturedOptions?.flutterVersion, '3.32.0');
     expect(capturedOptions?.launchId, matches(RegExp(r'^r[a-z0-9]{10}$')));
+  });
+
+  test('authentication is disabled by default', () async {
+    CockpitRemoteSessionLaunchOptions? capturedOptions;
+    final tokenGenerator = _RecordingTokenGenerator();
+    final expectedHandle = CockpitRemoteSessionHandle(
+      platform: 'macos',
+      deviceId: 'macos',
+      projectDir: '/workspace/example',
+      target: 'cockpit/main.dart',
+      appId: 'dev.example.app',
+      host: '127.0.0.1',
+      hostPort: 47331,
+      devicePort: 47331,
+      baseUrl: 'http://127.0.0.1:47331',
+      launchedAt: DateTime.utc(2026, 9, 27),
+    );
+    final service = CockpitLaunchRemoteSessionService(
+      tokenGenerator: tokenGenerator,
+      entrypointResolver: CockpitEntrypointResolver(exists: (_) => true),
+      flutterVersionForExecutableReader: (_) async => '3.44.0',
+      sessionPortAvailabilityChecker: (_) async => true,
+      launcher: _CapturingRemoteSessionLauncher(
+        handle: expectedHandle,
+        onLaunch: (options) => capturedOptions = options,
+      ),
+      statusReader: (_, {String authToken = ''}) async {
+        expect(authToken, isEmpty);
+        return _status(platform: 'macos');
+      },
+    );
+
+    final result = await service.launch(
+      const CockpitLaunchRemoteSessionRequest(
+        projectDir: '/workspace/example',
+        platform: 'macos',
+        deviceId: 'macos',
+        sessionPort: 47331,
+      ),
+    );
+
+    expect(tokenGenerator.byteLengths, <int>[16]);
+    expect(capturedOptions?.authToken, isEmpty);
+    expect(capturedOptions?.authTokenDartDefineFile, isNull);
+    expect(result.sessionHandle.authToken, isEmpty);
+  });
+
+  test(
+    'opt-in authentication uses an independent private define file',
+    () async {
+      CockpitRemoteSessionLaunchOptions? capturedOptions;
+      String? defineFilePath;
+      final tokenGenerator = _RecordingTokenGenerator();
+      final registeredSecrets = <String>[];
+      final expectedHandle = CockpitRemoteSessionHandle(
+        platform: 'macos',
+        deviceId: 'macos',
+        projectDir: '/workspace/example',
+        target: 'cockpit/main.dart',
+        appId: 'dev.example.app',
+        host: '127.0.0.1',
+        hostPort: 47331,
+        devicePort: 47331,
+        baseUrl: 'http://127.0.0.1:47331',
+        launchedAt: DateTime.utc(2026, 9, 27),
+        authToken: _RecordingTokenGenerator.authToken,
+      );
+      final service = CockpitLaunchRemoteSessionService(
+        tokenGenerator: tokenGenerator,
+        authFilePermissionHardener: const _NoopPermissionHardener(),
+        sensitiveValueRegistrar: registeredSecrets.add,
+        entrypointResolver: CockpitEntrypointResolver(exists: (_) => true),
+        flutterVersionForExecutableReader: (_) async => '3.44.0',
+        sessionPortAvailabilityChecker: (_) async => true,
+        launcher: _CapturingRemoteSessionLauncher(
+          handle: expectedHandle,
+          onLaunch: (options) {
+            capturedOptions = options;
+            defineFilePath = options.authTokenDartDefineFile;
+            expect(defineFilePath, isNotNull);
+            final defineFile = File(defineFilePath!);
+            expect(defineFile.existsSync(), isTrue);
+            expect(jsonDecode(defineFile.readAsStringSync()), <String, Object?>{
+              'FLUTTER_COCKPIT_REMOTE_AUTH_TOKEN':
+                  _RecordingTokenGenerator.authToken,
+            });
+          },
+        ),
+        statusReader: (_, {String authToken = ''}) async {
+          expect(authToken, _RecordingTokenGenerator.authToken);
+          return _status(platform: 'macos');
+        },
+      );
+
+      final result = await service.launch(
+        const CockpitLaunchRemoteSessionRequest(
+          projectDir: '/workspace/example',
+          platform: 'macos',
+          deviceId: 'macos',
+          sessionPort: 47331,
+          authenticationEnabled: true,
+        ),
+      );
+
+      expect(tokenGenerator.byteLengths, <int>[16, 32]);
+      expect(capturedOptions?.launchId, _RecordingTokenGenerator.resourceId);
+      expect(capturedOptions?.authToken, _RecordingTokenGenerator.authToken);
+      expect(capturedOptions?.authToken, isNot(capturedOptions?.launchId));
+      expect(registeredSecrets, <String>[_RecordingTokenGenerator.authToken]);
+      expect(await File(defineFilePath!).exists(), isFalse);
+      expect(result.sessionHandle.baseUri.queryParameters, isEmpty);
+      expect(
+        result.sessionHandle.toJson().toString(),
+        isNot(contains(_RecordingTokenGenerator.authToken)),
+      );
+    },
+  );
+
+  test('auth cleanup failure does not replace a successful launch', () async {
+    final diagnostics = <String>[];
+    String? blockedAuthPath;
+    addTearDown(() async {
+      final path = blockedAuthPath;
+      if (path != null && await File(path).exists()) {
+        await File(path).delete();
+      }
+    });
+    final expectedHandle = CockpitRemoteSessionHandle(
+      platform: 'macos',
+      deviceId: 'macos',
+      projectDir: '/workspace/example',
+      target: 'cockpit/main.dart',
+      appId: 'dev.example.app',
+      host: '127.0.0.1',
+      hostPort: 47331,
+      devicePort: 47331,
+      baseUrl: 'http://127.0.0.1:47331',
+      launchedAt: DateTime.utc(2026, 9, 27),
+      authToken: _RecordingTokenGenerator.authToken,
+    );
+    final service = CockpitLaunchRemoteSessionService(
+      tokenGenerator: _RecordingTokenGenerator(),
+      authFilePermissionHardener: const _NoopPermissionHardener(),
+      diagnosticLogger: diagnostics.add,
+      entrypointResolver: CockpitEntrypointResolver(exists: (_) => true),
+      flutterVersionForExecutableReader: (_) async => '3.44.0',
+      sessionPortAvailabilityChecker: (_) async => true,
+      launcher: _CapturingRemoteSessionLauncher(
+        handle: expectedHandle,
+        onLaunch: (options) {
+          blockedAuthPath = _replaceAuthDirectoryWithFile(options);
+        },
+      ),
+      statusReader: (_, {String authToken = ''}) async =>
+          _status(platform: 'macos'),
+    );
+
+    final result = await service.launch(
+      const CockpitLaunchRemoteSessionRequest(
+        projectDir: '/workspace/example',
+        platform: 'macos',
+        deviceId: 'macos',
+        sessionPort: 47331,
+        authenticationEnabled: true,
+      ),
+    );
+
+    expect(result.sessionHandle.appId, expectedHandle.appId);
+    expect(
+      diagnostics,
+      contains(contains('authentication define file cleanup failed')),
+    );
+  });
+
+  test('auth cleanup failure preserves the original launch error', () async {
+    final diagnostics = <String>[];
+    String? blockedAuthPath;
+    addTearDown(() async {
+      final path = blockedAuthPath;
+      if (path != null && await File(path).exists()) {
+        await File(path).delete();
+      }
+    });
+    final service = CockpitLaunchRemoteSessionService(
+      tokenGenerator: _RecordingTokenGenerator(),
+      authFilePermissionHardener: const _NoopPermissionHardener(),
+      diagnosticLogger: diagnostics.add,
+      entrypointResolver: CockpitEntrypointResolver(exists: (_) => true),
+      flutterVersionForExecutableReader: (_) async => '3.44.0',
+      sessionPortAvailabilityChecker: (_) async => true,
+      launcher: _CallbackThrowingRemoteSessionLauncher(
+        onLaunch: (options) {
+          blockedAuthPath = _replaceAuthDirectoryWithFile(options);
+        },
+      ),
+    );
+
+    await expectLater(
+      service.launch(
+        const CockpitLaunchRemoteSessionRequest(
+          projectDir: '/workspace/example',
+          platform: 'macos',
+          deviceId: 'macos',
+          sessionPort: 47331,
+          authenticationEnabled: true,
+        ),
+      ),
+      throwsA(
+        isA<StateError>().having(
+          (error) => error.message,
+          'message',
+          'launch failed',
+        ),
+      ),
+    );
+    expect(
+      diagnostics,
+      contains(contains('authentication define file cleanup failed')),
+    );
   });
 
   test(
@@ -527,6 +747,52 @@ final class _ThrowingLauncher implements CockpitRemoteSessionLauncher {
   Future<CockpitRemoteSessionHandle> launch(
     CockpitRemoteSessionLaunchOptions options,
   ) => Future<CockpitRemoteSessionHandle>.error(error);
+}
+
+final class _CallbackThrowingRemoteSessionLauncher
+    implements CockpitRemoteSessionLauncher {
+  const _CallbackThrowingRemoteSessionLauncher({required this.onLaunch});
+
+  final void Function(CockpitRemoteSessionLaunchOptions options) onLaunch;
+
+  @override
+  Future<CockpitRemoteSessionHandle> launch(
+    CockpitRemoteSessionLaunchOptions options,
+  ) async {
+    onLaunch(options);
+    throw StateError('launch failed');
+  }
+}
+
+String _replaceAuthDirectoryWithFile(
+  CockpitRemoteSessionLaunchOptions options,
+) {
+  final authFilePath = options.authTokenDartDefineFile!;
+  final directory = File(authFilePath).parent;
+  directory.deleteSync(recursive: true);
+  File(directory.path).writeAsStringSync('blocked');
+  return directory.path;
+}
+
+final class _RecordingTokenGenerator
+    implements CockpitTokenGenerator, CockpitResourceIdTokenGenerator {
+  static const String resourceId = 'rlaunchid01';
+  static const String authToken =
+      'auth-token-with-at-least-thirty-two-bytes-0001';
+
+  final List<int> byteLengths = <int>[];
+
+  @override
+  String nextIdToken() {
+    byteLengths.add(16);
+    return resourceId.substring(1);
+  }
+
+  @override
+  String nextToken({int byteLength = 32}) {
+    byteLengths.add(byteLength);
+    return authToken;
+  }
 }
 
 final class _NoopPermissionHardener implements CockpitPermissionHardener {

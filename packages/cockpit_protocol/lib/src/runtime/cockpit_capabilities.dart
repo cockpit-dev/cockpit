@@ -63,9 +63,17 @@ final class CockpitCapabilities {
   };
 
   /// Decodes a CockpitCapabilities from a JSON object.
-  factory CockpitCapabilities.fromJson(Map<String, Object?> json) {
+  factory CockpitCapabilities.fromJson(
+    Map<String, Object?> json, {
+    String path = r'$',
+  }) {
     final capabilityProfileJson =
         json['capabilityProfile'] as Map<Object?, Object?>?;
+    final rawCommands =
+        json['supportedCommands'] as List<Object?>? ?? const <Object?>[];
+    final rawLocators =
+        json['supportedLocatorStrategies'] as List<Object?>? ??
+        const <Object?>[];
     return CockpitCapabilities(
       platform: json['platform']! as String,
       transportType: json['transportType']! as String,
@@ -75,15 +83,20 @@ final class CockpitCapabilities {
       supportsHostAutomation: json['supportsHostAutomation']! as bool,
       supportsViewportResize: json['supportsViewportResize'] as bool? ?? false,
       viewportResizeAlternative: json['viewportResizeAlternative'] as String?,
-      supportedCommands:
-          (json['supportedCommands'] as List<Object?>? ?? const <Object?>[])
-              .map(CockpitCommandType.fromJson)
-              .toList(growable: false),
-      supportedLocatorStrategies:
-          (json['supportedLocatorStrategies'] as List<Object?>? ??
-                  const <Object?>[])
-              .map(CockpitLocatorKind.fromJson)
-              .toList(growable: false),
+      supportedCommands: <CockpitCommandType>[
+        for (var index = 0; index < rawCommands.length; index += 1)
+          CockpitCommandType.fromJson(
+            rawCommands[index],
+            path: '$path.supportedCommands[$index]',
+          ),
+      ],
+      supportedLocatorStrategies: <CockpitLocatorKind>[
+        for (var index = 0; index < rawLocators.length; index += 1)
+          CockpitLocatorKind.fromJson(
+            rawLocators[index],
+            path: '$path.supportedLocatorStrategies[$index]',
+          ),
+      ],
       capabilityProfile: capabilityProfileJson == null
           ? null
           : CockpitCapabilityProfile.fromJson(

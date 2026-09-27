@@ -1,4 +1,5 @@
 import 'cockpit_decode_policy.dart';
+import 'cockpit_enum.dart';
 import 'cockpit_foundation_value_reader.dart';
 
 enum CockpitWorkspaceState { active, draining, retired }
@@ -200,12 +201,11 @@ final class CockpitWorkspaceResource {
         '$path.filesystemIdentity',
         maximum: 512,
       ),
-      state: CockpitEnumValue<CockpitWorkspaceState>.parse(
+      state: cockpitEnumFromJson(
         json['state'],
         CockpitWorkspaceState.values,
         '$path.state',
-        policy: CockpitDecodePolicy.requests,
-      ).requireKnown(),
+      ),
       registeredAt: CockpitFoundationValueReader.dateTime(
         json['registeredAt'],
         '$path.registeredAt',

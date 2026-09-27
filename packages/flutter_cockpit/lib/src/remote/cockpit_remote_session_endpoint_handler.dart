@@ -873,6 +873,7 @@ final class CockpitRemoteSessionEndpointHandler {
       truncated:
           snapshot.truncated ||
           visibleTargets.length < snapshot.visibleTargets.length,
+      degradationReason: snapshot.degradationReason,
       diagnosticsArtifactRef: snapshot.diagnosticsArtifactRef,
       treeArtifactRef: snapshot.treeArtifactRef,
       summary: snapshot.summary,

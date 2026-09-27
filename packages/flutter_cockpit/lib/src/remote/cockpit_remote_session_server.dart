@@ -77,8 +77,14 @@ final class CockpitRemoteSessionServer {
   Future<void> _handleRequest(HttpRequest request) async {
     try {
       if (!_isAuthorized(request)) {
-        request.response.statusCode = HttpStatus.unauthorized;
-        await request.response.close();
+        await _bestEffortErrorResponse(
+          request.response,
+          HttpStatus.unauthorized,
+          {
+            'error': 'unauthorized',
+            'message': 'Missing or invalid remote session credentials.',
+          },
+        );
         return;
       }
       final bodyText = await _readRequestBody(request);
@@ -129,12 +135,14 @@ final class CockpitRemoteSessionServer {
       if (allowed == null || origin != allowed) return false;
     }
     if (expected.isEmpty) return true;
+    // Native clients authenticate through headers. Query-string credentials
+    // exist only for browser WebSocket handshakes, which never target the
+    // in-app HTTP server.
     final provided =
         request.headers.value('x-cockpit-token') ??
         request.headers
             .value(HttpHeaders.authorizationHeader)
-            ?.replaceFirst(RegExp('^Bearer\\s+'), '') ??
-        request.uri.queryParameters['token'];
+            ?.replaceFirst(RegExp('^bearer\\s+', caseSensitive: false), '');
     return _constantTimeEquals(provided ?? '', expected);
   }
 

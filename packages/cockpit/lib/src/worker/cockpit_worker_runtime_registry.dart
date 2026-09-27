@@ -3129,7 +3129,7 @@ final class _CockpitWorkerHandlePersistenceCodec {
       metadata['remoteSession'] = decodeRemote(
         workerObject(remote, '$path.metadata.remoteSession'),
         '$path.metadata.remoteSession',
-      ).toJson();
+      ).toPrivateJson();
     }
     if (metadata.containsKey('supervisorLogPath')) {
       throw FormatException(
@@ -3180,14 +3180,14 @@ final class _CockpitWorkerHandlePersistenceCodec {
       json['developmentSession'] = decodeDevelopment(
         workerObject(development, '$path.developmentSession'),
         '$path.developmentSession',
-      ).toJson();
+      ).toPrivateJson();
     }
     final remote = json['remoteSession'];
     if (remote != null) {
       json['remoteSession'] = decodeRemote(
         workerObject(remote, '$path.remoteSession'),
         '$path.remoteSession',
-      ).toJson();
+      ).toPrivateJson();
     }
     return CockpitAppHandle.fromJson(json);
   }
@@ -3218,13 +3218,13 @@ final class _CockpitWorkerHandlePersistenceCodec {
       json['remoteSessionHandle'] = decodeRemote(
         workerObject(remote, '$path.remoteSessionHandle'),
         '$path.remoteSessionHandle',
-      ).toJson();
+      ).toPrivateJson();
     }
     return CockpitDevelopmentSessionHandle.fromJson(json);
   }
 
   Map<String, Object?> encodeRemote(CockpitRemoteSessionHandle handle) {
-    final json = Map<String, Object?>.from(handle.toJson());
+    final json = Map<String, Object?>.from(handle.toPrivateJson());
     json['projectIdentity'] = _encodeWorkspaceProject(handle.projectDir);
     json.remove('projectDir');
     return json;

@@ -1072,7 +1072,7 @@ final class CockpitPerformanceReport {
   final List<CockpitPerformancePluginStats> plugins;
 
   /// Number of valid frames observed before bounded retention was applied.
-  int get observedFrameCount => frames.length + droppedFrames;
+  int get observedFrameCount => summary.frameCount + droppedFrames;
 
   /// Returns the same immutable report with live-archive metadata attached.
   ///

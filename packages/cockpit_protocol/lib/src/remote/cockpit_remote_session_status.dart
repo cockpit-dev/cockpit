@@ -56,7 +56,10 @@ final class CockpitRemoteSessionStatus {
   };
 
   /// Decodes a CockpitRemoteSessionStatus from a JSON object.
-  factory CockpitRemoteSessionStatus.fromJson(Map<String, Object?> json) {
+  factory CockpitRemoteSessionStatus.fromJson(
+    Map<String, Object?> json, {
+    String path = r'$',
+  }) {
     final capabilitiesJson = json['capabilities'] as Map<Object?, Object?>;
     final recordingCapabilitiesJson =
         json['recordingCapabilities'] as Map<Object?, Object?>;
@@ -73,12 +76,14 @@ final class CockpitRemoteSessionStatus {
       currentRouteName: json['currentRouteName'] as String?,
       capabilities: CockpitCapabilities.fromJson(
         Map<String, Object?>.from(capabilitiesJson),
+        path: '$path.capabilities',
       ),
       recordingCapabilities: CockpitRecordingCapabilities.fromJson(
         Map<String, Object?>.from(recordingCapabilitiesJson),
       ),
       snapshot: CockpitSnapshot.fromJson(
         Map<String, Object?>.from(snapshotJson),
+        path: '$path.snapshot',
       ),
       environment: environmentJson == null
           ? null

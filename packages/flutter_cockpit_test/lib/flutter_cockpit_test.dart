@@ -16,6 +16,20 @@ export 'package:cockpit_protocol/cockpit_protocol.dart'
         CockpitPerformanceArchiveInfo;
 export 'package:cockpit_protocol/cockpit_protocol.dart'
     show CockpitPerformancePluginStats;
+export 'package:cockpit_test/cockpit_test.dart'
+    show
+        CockpitLocaleProfile,
+        CockpitLocalizedText,
+        CockpitProgrammaticTestRunner,
+        CockpitSuiteRunResult,
+        CockpitTestCaseProgram,
+        CockpitTestFeature,
+        CockpitTestRequirements,
+        CockpitTestRunResult,
+        CockpitTestRunStatus,
+        CockpitTestScenario,
+        CockpitTestScenarioBody,
+        CockpitTestSuiteProgram;
 export 'package:cockpit_protocol/cockpit_protocol.dart'
     show
         CockpitCapabilities,

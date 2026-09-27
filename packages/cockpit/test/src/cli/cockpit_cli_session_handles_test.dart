@@ -219,10 +219,12 @@ void main() {
         deviceId: 'iphone-1',
         flavor: 'staging',
         recoverable: false,
+        authenticationEnabled: true,
         launchTimeoutMilliseconds: 123456,
       );
 
       expect(handle.recoverable, isFalse);
+      expect(handle.authenticationEnabled, isTrue);
       expect(handle.launchTimeoutMilliseconds, 123456);
       final persisted = await File(
         p.join(temporaryDirectory.path, 'sessions.json'),
@@ -242,9 +244,45 @@ void main() {
       );
       expect(rebound.handleId, handle.handleId);
       expect(rebound.recoverable, isFalse);
+      expect(rebound.authenticationEnabled, isTrue);
       expect(rebound.launchTimeoutMilliseconds, 123456);
     },
   );
+
+  test('legacy session state defaults authentication to disabled', () async {
+    final checkout = p.normalize(temporaryDirectory.path);
+    final handle = await store.bindDevelopment(
+      checkoutIdentity: 'd' * 64,
+      checkoutPath: checkout,
+      projectPath: checkout,
+      workspaceId: 'workspace-legacy',
+      sessionId: 'session-legacy',
+      targetId: 'target-legacy',
+      appId: 'app-legacy',
+      entrypoint: 'lib/main.dart',
+      platform: 'macos',
+      deviceId: 'macos',
+      authenticationEnabled: true,
+    );
+    final stateFile = File(p.join(temporaryDirectory.path, 'sessions.json'));
+    final state =
+        jsonDecode(await stateFile.readAsString()) as Map<String, Object?>;
+    final handles = state['handles']! as List<Object?>;
+    final persistedHandle = handles.single! as Map<String, Object?>;
+    persistedHandle.remove('authenticationEnabled');
+    await stateFile.writeAsString('${jsonEncode(state)}\n', flush: true);
+
+    final reopened = CockpitCliSessionHandleStore.file(
+      path: stateFile.path,
+      permissionHardener: const _NoopPermissionHardener(),
+      directorySyncer: const _NoopDirectorySyncer(),
+    );
+
+    expect(
+      (await reopened.find(handle.handleId))?.authenticationEnabled,
+      isFalse,
+    );
+  });
 
   test('keeps implicit selection isolated across checkouts', () async {
     final firstIdentity = 'a' * 64;

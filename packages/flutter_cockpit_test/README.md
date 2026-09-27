@@ -63,6 +63,41 @@ already returns `FlutterCockpitApp`, it is mounted as-is and its existing
 Cockpit root is reused. This makes migration from an existing development
 shell incremental.
 
+## Shared cross-runner scenarios
+
+Use `cockpitScenarioWidgets` to execute a platform-neutral `cockpit_test`
+scenario through the same Flutter mount, teardown, report, and integration-test
+lifecycle:
+
+```dart
+final saveSettings = CockpitTestScenario(
+  id: 'save-settings',
+  requirements: CockpitTestRequirements(
+    commands: const {
+      CockpitCommandType.tap,
+      CockpitCommandType.assertText,
+    },
+    locators: const {CockpitLocatorKind.cockpitId},
+  ),
+  body: (tester) async {
+    await tester.tap('#save');
+    await tester.expectText('#status', 'Saved');
+  },
+);
+
+void main() {
+  cockpitScenarioWidgets(
+    'saves settings',
+    app: buildDevelopmentApp,
+    scenario: saveSettings,
+  );
+}
+```
+
+The same scenario object can run through `RemoteCockpitTester` or
+`SystemCockpitTester`. Use `cockpitTestWidgets` when the body intentionally
+needs Flutter-only APIs such as `WidgetTester` or `BuildContext`.
+
 Selectors use the same syntax as `cockpit dev`:
 
 ```dart

@@ -3,12 +3,14 @@ import 'dart:io';
 import 'package:cockpit_protocol/cockpit_protocol.dart';
 import 'package:path/path.dart' as p;
 
-import '../infrastructure/cockpit_sdk_environment.dart';
 import '../foundation/cockpit_ids.dart';
+import '../foundation/cockpit_permissions.dart';
+import '../infrastructure/cockpit_sdk_environment.dart';
 import '../platform/android/cockpit_android_device_readiness.dart';
 import '../remote/cockpit_android_port_forwarder.dart';
 import '../remote/cockpit_local_session_port_resolver.dart';
 import '../session/cockpit_flutter_launch_configuration.dart';
+import '../session/cockpit_remote_auth_dart_define_file.dart';
 import '../session/cockpit_remote_session_handle.dart';
 import '../session/cockpit_remote_session_launch_options.dart';
 import '../session/cockpit_remote_session_launcher.dart';
@@ -27,6 +29,7 @@ final class CockpitLaunchRemoteSessionRequest {
     this.flavor,
     this.launchTimeout = const Duration(seconds: 120),
     this.allowSessionPortFallback = true,
+    this.authenticationEnabled = false,
     this.persistHandlePath,
     this.launchConfiguration = CockpitFlutterLaunchConfiguration.empty,
   });
@@ -39,6 +42,7 @@ final class CockpitLaunchRemoteSessionRequest {
   final int sessionPort;
   final Duration launchTimeout;
   final bool allowSessionPortFallback;
+  final bool authenticationEnabled;
   final String? persistHandlePath;
   final CockpitFlutterLaunchConfiguration launchConfiguration;
 }
@@ -66,6 +70,10 @@ final class CockpitLaunchRemoteSessionService {
     CockpitHostPortAvailabilityChecker sessionPortAvailabilityChecker =
         cockpitIsHostPortAvailable,
     CockpitAppTempStore? appTempStore,
+    CockpitTokenGenerator? tokenGenerator,
+    CockpitPermissionHardener? authFilePermissionHardener,
+    void Function(String value)? sensitiveValueRegistrar,
+    void Function(String message)? diagnosticLogger,
   }) : _launcher = launcher ?? CockpitPlatformRemoteSessionLauncher(),
        _statusReader = statusReader ?? cockpitReadRemoteSessionStatus,
        _sdkEnvironment = sdkEnvironment ?? CockpitSdkEnvironment.current(),
@@ -73,7 +81,11 @@ final class CockpitLaunchRemoteSessionService {
        _entrypointResolver = entrypointResolver ?? CockpitEntrypointResolver(),
        _sessionPortAllocator = sessionPortAllocator,
        _sessionPortAvailabilityChecker = sessionPortAvailabilityChecker,
-       _appTempStore = appTempStore;
+       _appTempStore = appTempStore,
+       _tokenGenerator = tokenGenerator ?? CockpitSecureTokenGenerator(),
+       _authFilePermissionHardener = authFilePermissionHardener,
+       _sensitiveValueRegistrar = sensitiveValueRegistrar,
+       _diagnosticLogger = diagnosticLogger;
 
   final CockpitRemoteSessionLauncher _launcher;
   final CockpitRemoteSessionStatusReader _statusReader;
@@ -84,6 +96,10 @@ final class CockpitLaunchRemoteSessionService {
   final CockpitHostPortAllocator _sessionPortAllocator;
   final CockpitHostPortAvailabilityChecker _sessionPortAvailabilityChecker;
   final CockpitAppTempStore? _appTempStore;
+  final CockpitTokenGenerator _tokenGenerator;
+  final CockpitPermissionHardener? _authFilePermissionHardener;
+  final void Function(String value)? _sensitiveValueRegistrar;
+  final void Function(String message)? _diagnosticLogger;
 
   Future<CockpitLaunchRemoteSessionResult> launch(
     CockpitLaunchRemoteSessionRequest request,
@@ -111,14 +127,27 @@ final class CockpitLaunchRemoteSessionService {
             workingDirectory: normalizedProjectDir,
           )
         : _flutterVersionForExecutableReader(flutterExecutable));
-    final launchId = _newRemoteLaunchId();
+    final launchId = _tokenGenerator.nextResourceId('r');
+    final authToken = request.authenticationEnabled
+        ? _tokenGenerator.nextToken(byteLength: 32)
+        : '';
+    if (authToken.isNotEmpty) {
+      _sensitiveValueRegistrar?.call(authToken);
+    }
     final prepared = await _prepareAppEnvironment(
       platform: request.platform,
       hostPort: resolvedSessionPort,
       configuration: request.launchConfiguration,
     );
+    CockpitRemoteAuthDartDefineFile? authFile;
     late final CockpitRemoteSessionHandle sessionHandle;
     try {
+      if (authToken.isNotEmpty) {
+        authFile = await CockpitRemoteAuthDartDefineFile.create(
+          authToken,
+          permissionHardener: _authFilePermissionHardener,
+        );
+      }
       sessionHandle = await _launcher.launch(
         CockpitRemoteSessionLaunchOptions(
           projectDir: normalizedProjectDir,
@@ -131,6 +160,8 @@ final class CockpitLaunchRemoteSessionService {
           flutterExecutable: flutterExecutable,
           flutterVersion: flutterVersion,
           launchId: launchId,
+          authToken: authToken,
+          authTokenDartDefineFile: authFile?.path,
           launchConfiguration: request.launchConfiguration,
           appEnvironment: prepared.environment,
         ),
@@ -147,6 +178,8 @@ final class CockpitLaunchRemoteSessionService {
         );
       }
       Error.throwWithStackTrace(error, stackTrace);
+    } finally {
+      await _deleteAuthFile(authFile);
     }
     final health = await _statusReader(
       sessionHandle.baseUri,
@@ -198,9 +231,29 @@ final class CockpitLaunchRemoteSessionService {
     if (store == null || key == null) return;
     try {
       await store.release(key);
+    } on Object catch (error) {
+      _reportCleanupFailure(
+        'Remote application temporary directory cleanup failed: $error',
+      );
+    }
+  }
+
+  Future<void> _deleteAuthFile(CockpitRemoteAuthDartDefineFile? file) async {
+    if (file == null) return;
+    try {
+      await file.delete();
+    } on Object catch (error) {
+      _reportCleanupFailure(
+        'Remote authentication define file cleanup failed: $error',
+      );
+    }
+  }
+
+  void _reportCleanupFailure(String message) {
+    try {
+      _diagnosticLogger?.call(message);
     } on Object {
-      // The launch error is authoritative. A later lifecycle pass can retry
-      // cleanup without hiding the reason the app did not start.
+      // Cleanup diagnostics must never replace the authoritative launch result.
     }
   }
 
@@ -237,7 +290,3 @@ bool _needsManagedRemoteAppTemp({
   'macos' => hasUserEnvironment,
   _ => false,
 };
-
-String _newRemoteLaunchId() {
-  return CockpitSecureTokenGenerator().nextResourceId('r');
-}

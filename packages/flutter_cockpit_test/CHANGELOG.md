@@ -1,5 +1,13 @@
 # Changelog
 
+## 4.10.0
+
+- Switched to the published `cockpit_test` package for the shared
+  programmatic runner, scenario contract, and structured error results.
+- Kept `cockpitTestWidgets` as the thin Flutter entry that mounts the app,
+  runs shared scenarios unchanged, and reports through the common result
+  model.
+
 ## 4.9.0
 
 - Added a key-free, freshly resolved `cockpit.context` for app-owned

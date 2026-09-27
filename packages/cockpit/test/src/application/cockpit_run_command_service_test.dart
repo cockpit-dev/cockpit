@@ -6,6 +6,7 @@ import 'package:cockpit/src/application/cockpit_app_reference_resolver.dart';
 import 'package:cockpit/src/application/cockpit_execute_remote_command_service.dart';
 import 'package:cockpit/src/application/cockpit_interactive_result_profile.dart';
 import 'package:cockpit/src/application/cockpit_run_command_service.dart';
+import 'package:cockpit/src/application/cockpit_session_reference_resolver.dart';
 import 'package:cockpit/src/remote/cockpit_android_port_forwarder.dart';
 import 'package:cockpit/src/session/cockpit_remote_session_handle.dart';
 import 'package:test/test.dart';
@@ -15,16 +16,20 @@ void main() {
     'app-first commands return the refreshed remote session handle',
     () async {
       Uri? capturedBaseUri;
+      final portForwarder = CockpitAndroidPortForwarder(
+        processRunner: (_, _) async =>
+            ProcessResult(0, 0, 'emulator-5554 tcp:61331 tcp:47331\n', ''),
+        hostPortAllocator: () async => 61331,
+        hostPortAvailabilityChecker: (_) async => false,
+      );
       final service = CockpitRunCommandService(
         appReferenceResolver: CockpitAppReferenceResolver(
-          portForwarder: CockpitAndroidPortForwarder(
-            processRunner: (_, _) async =>
-                ProcessResult(0, 0, 'emulator-5554 tcp:61331 tcp:47331\n', ''),
-            hostPortAllocator: () async => 61331,
-            hostPortAvailabilityChecker: (_) async => false,
-          ),
+          portForwarder: portForwarder,
         ),
         executeService: CockpitExecuteRemoteCommandService(
+          sessionReferenceResolver: CockpitSessionReferenceResolver(
+            portForwarder: portForwarder,
+          ),
           executeCommand: (baseUri, command) async {
             capturedBaseUri = baseUri;
             return CockpitCommandExecution(

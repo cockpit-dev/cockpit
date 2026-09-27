@@ -72,7 +72,10 @@ final class CockpitRemoteCommandResponse {
   };
 
   /// Decodes a CockpitRemoteCommandResponse from a JSON object.
-  factory CockpitRemoteCommandResponse.fromJson(Map<String, Object?> json) {
+  factory CockpitRemoteCommandResponse.fromJson(
+    Map<String, Object?> json, {
+    String path = r'$',
+  }) {
     final resultJson = json['result'] as Map<Object?, Object?>;
     final payloadJson =
         json['artifactPayloads'] as List<Object?>? ?? const <Object?>[];
@@ -84,6 +87,7 @@ final class CockpitRemoteCommandResponse {
     return CockpitRemoteCommandResponse(
       result: CockpitCommandResult.fromJson(
         Map<String, Object?>.from(resultJson),
+        path: '$path.result',
       ),
       artifactPayloads: payloadJson
           .cast<Map<Object?, Object?>>()
@@ -93,13 +97,15 @@ final class CockpitRemoteCommandResponse {
             ),
           )
           .toList(growable: false),
-      runtimeSteps: runtimeStepsJson
-          .cast<Map<Object?, Object?>>()
-          .map(
-            (step) =>
-                CockpitStepRecord.fromJson(Map<String, Object?>.from(step)),
-          )
-          .toList(growable: false),
+      runtimeSteps: <CockpitStepRecord>[
+        for (var index = 0; index < runtimeStepsJson.length; index += 1)
+          CockpitStepRecord.fromJson(
+            Map<String, Object?>.from(
+              runtimeStepsJson[index] as Map<Object?, Object?>,
+            ),
+            path: '$path.runtimeSteps[$index]',
+          ),
+      ],
       artifactDownloads: downloadsJson
           .cast<Map<Object?, Object?>>()
           .map(

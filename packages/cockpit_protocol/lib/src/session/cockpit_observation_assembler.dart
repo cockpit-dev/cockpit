@@ -75,16 +75,7 @@ final class CockpitObservationAssembler {
       return snapshot;
     }
 
-    return CockpitSnapshot(
-      routeName: snapshot.routeName,
-      visibleTargets: snapshot.visibleTargets,
-      diagnosticLevel: snapshot.diagnosticLevel,
-      truncated: snapshot.truncated,
-      diagnosticsArtifactRef: diagnosticsArtifactRef,
-      summary: snapshot.summary,
-      network: snapshot.network,
-      runtime: snapshot.runtime,
-    );
+    return snapshot.copyWith(diagnosticsArtifactRef: diagnosticsArtifactRef);
   }
 
   CockpitArtifactRef? _diagnosticsArtifactRefFor(

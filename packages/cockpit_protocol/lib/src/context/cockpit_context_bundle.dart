@@ -49,7 +49,10 @@ final class CockpitContextBundle {
   };
 
   /// Decodes a CockpitContextBundle from a JSON object.
-  factory CockpitContextBundle.fromJson(Map<String, Object?> json) {
+  factory CockpitContextBundle.fromJson(
+    Map<String, Object?> json, {
+    String path = r'$',
+  }) {
     final manifestJson = Map<String, Object?>.from(
       json['manifest']! as Map<Object?, Object?>,
     );
@@ -65,12 +68,13 @@ final class CockpitContextBundle {
     return CockpitContextBundle(
       manifest: CockpitRunManifest.fromJson(manifestJson),
       environment: CockpitEnvironment.fromJson(environmentJson),
-      steps: stepJson
-          .map(
-            (item) =>
-                CockpitStepRecord.fromJson(Map<String, Object?>.from(item)),
-          )
-          .toList(),
+      steps: <CockpitStepRecord>[
+        for (var index = 0; index < stepJson.length; index += 1)
+          CockpitStepRecord.fromJson(
+            Map<String, Object?>.from(stepJson.elementAt(index)),
+            path: '$path.steps[$index]',
+          ),
+      ],
       observations: observationJson
           .map(
             (item) =>

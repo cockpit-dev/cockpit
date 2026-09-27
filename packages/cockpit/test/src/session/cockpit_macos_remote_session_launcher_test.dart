@@ -82,6 +82,7 @@ void main() {
           deviceId: 'macos',
           sessionPort: 47331,
           launchId: 'launch-token-9',
+          authToken: 'auth-token-9',
         ),
       );
 
@@ -90,17 +91,17 @@ void main() {
       expect(handle.appId, 'dev.cockpit.cockpitDemo');
       expect(handle.baseUrl, 'http://127.0.0.1:47331');
       // Readiness probes and the returned handle must authenticate with the
-      // launch token, not with the session id reported by the app.
+      // independent auth token, never with the public launch id.
       expect(readerAuthTokens, isNotEmpty);
       expect(
-        readerAuthTokens.every((token) => token == 'launch-token-9'),
+        readerAuthTokens.every((token) => token == 'auth-token-9'),
         isTrue,
       );
-      expect(handle.authToken, 'launch-token-9');
+      expect(handle.authToken, 'auth-token-9');
       expect(
         invocations,
         contains(
-          'flutter build macos --debug --target cockpit/main.dart --dart-define=FLUTTER_COCKPIT_REMOTE_ENABLED=true --dart-define=FLUTTER_COCKPIT_REMOTE_HOST=127.0.0.1 --dart-define=FLUTTER_COCKPIT_REMOTE_PORT=47331 --dart-define=FLUTTER_COCKPIT_REMOTE_LAUNCH_ID=launch-token-9 --dart-define=FLUTTER_COCKPIT_REMOTE_AUTH_TOKEN=launch-token-9 --dart-define=FLUTTER_COCKPIT_FLUTTER_VERSION=3.38.9',
+          'flutter build macos --debug --target cockpit/main.dart --dart-define=FLUTTER_COCKPIT_REMOTE_ENABLED=true --dart-define=FLUTTER_COCKPIT_REMOTE_HOST=127.0.0.1 --dart-define=FLUTTER_COCKPIT_REMOTE_PORT=47331 --dart-define=FLUTTER_COCKPIT_REMOTE_LAUNCH_ID=launch-token-9 --dart-define=FLUTTER_COCKPIT_FLUTTER_VERSION=3.38.9',
         ),
       );
       expect(

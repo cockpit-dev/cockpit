@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:path/path.dart' as p;
+
 import '../application/cockpit_app_temp_store.dart';
 import '../application/cockpit_app_handle.dart';
 import '../application/cockpit_application_service_exception.dart';
@@ -21,6 +23,7 @@ import '../infrastructure/cockpit_sdk_environment.dart';
 import '../remote/cockpit_android_port_forwarder.dart';
 import '../remote/cockpit_ios_port_forwarder.dart';
 import '../remote/cockpit_remote_session_client.dart';
+import '../session/cockpit_remote_auth_dart_define_file.dart';
 import '../session/cockpit_remote_session_launcher.dart';
 import '../session/cockpit_flutter_launch_configuration.dart';
 import '../session/cockpit_session_process_runner.dart';
@@ -50,6 +53,7 @@ final class CockpitWorkerDevelopmentSessionRuntime {
     CockpitFlutterExecutableVersionReader? flutterVersionReader,
     CockpitTokenGenerator? tokenGenerator,
     CockpitDevelopmentMachineDiagnosticLogger? logger,
+    void Function(String value)? sensitiveValueRegistrar,
     CockpitWorkerSessionLogStore? sessionLogStore,
     CockpitAndroidDeviceProbeRunner androidDeviceProbeRunner =
         cockpitRunProcessWithTimeout,
@@ -77,6 +81,7 @@ final class CockpitWorkerDevelopmentSessionRuntime {
        _flutterVersionReader = flutterVersionReader,
        _tokenGenerator = tokenGenerator ?? CockpitSecureTokenGenerator(),
        _logger = logger,
+       _sensitiveValueRegistrar = sensitiveValueRegistrar,
        _sessionLogStore = sessionLogStore,
        _androidDeviceProbeRunner = androidDeviceProbeRunner,
        _networkProfiler = networkProfiler,
@@ -95,6 +100,7 @@ final class CockpitWorkerDevelopmentSessionRuntime {
   final CockpitFlutterExecutableVersionReader? _flutterVersionReader;
   final CockpitTokenGenerator _tokenGenerator;
   final CockpitDevelopmentMachineDiagnosticLogger? _logger;
+  final void Function(String value)? _sensitiveValueRegistrar;
   final CockpitWorkerSessionLogStore? _sessionLogStore;
   final CockpitAndroidDeviceProbeRunner _androidDeviceProbeRunner;
   final CockpitNetworkProfiler? _networkProfiler;
@@ -121,158 +127,181 @@ final class CockpitWorkerDevelopmentSessionRuntime {
       target: request.target,
     );
     final developmentSessionId = _tokenGenerator.nextResourceId('s');
+    final authToken = request.authenticationEnabled
+        ? _tokenGenerator.nextToken(byteLength: 32)
+        : '';
+    if (authToken.isNotEmpty) {
+      _sensitiveValueRegistrar?.call(authToken);
+    }
     final supervisorLogPath = _sessionLogStore?.pathFor(developmentSessionId);
-    await _createSessionLog(developmentSessionId);
-    await _logSession(
-      developmentSessionId,
-      'launch requested platform=${request.platform} '
-      'device=${request.deviceId} target=$target',
-    );
-    final flutterExecutable = _sdkEnvironment.flutterExecutable;
-    final flutterVersion = await (_flutterVersionReader == null
-        ? cockpitReadFlutterVersion(
-            flutterExecutable,
-            workingDirectory: projectDir,
-          )
-        : _flutterVersionReader(flutterExecutable));
-    if (request.platform == 'android') {
-      try {
-        await cockpitRequireAndroidDeviceReady(
-          deviceId: request.deviceId,
-          timeout: request.launchTimeout < const Duration(seconds: 8)
-              ? request.launchTimeout
-              : const Duration(seconds: 8),
-          processRunner: _androidDeviceProbeRunner,
-        );
-      } on CockpitAndroidDeviceReadinessException catch (error) {
-        throw CockpitApplicationServiceException(
-          code: error.code,
-          message: error.message,
-        );
-      }
-    }
-    var hostPort = request.platform == 'android'
-        ? await _portForwarder.ensureForwarded(
+    CockpitDevelopmentSessionSupervisor? startupSupervisor;
+    var hostPort = request.sessionPort;
+    var iosPortForwarded = false;
+    try {
+      await _createSessionLog(developmentSessionId);
+      await _logSession(
+        developmentSessionId,
+        'launch requested platform=${request.platform} '
+        'device=${request.deviceId} target=$target',
+      );
+      final flutterExecutable = _sdkEnvironment.flutterExecutable;
+      final flutterVersion = await (_flutterVersionReader == null
+          ? cockpitReadFlutterVersion(
+              flutterExecutable,
+              workingDirectory: projectDir,
+            )
+          : _flutterVersionReader(flutterExecutable));
+      if (request.platform == 'android') {
+        try {
+          await cockpitRequireAndroidDeviceReady(
             deviceId: request.deviceId,
-            preferredHostPort: request.sessionPort,
-            devicePort: request.sessionPort,
-          )
-        : request.sessionPort;
-    final endpointRequest = CockpitLaunchDevelopmentMachineSessionRequest(
-      projectDir: projectDir,
-      target: target,
-      flavor: request.flavor,
-      platform: request.platform,
-      deviceId: request.deviceId,
-      sessionPort: request.sessionPort,
-      hostPort: hostPort,
-      launchTimeout: request.launchTimeout,
-      flutterExecutable: flutterExecutable,
-      flutterVersion: flutterVersion,
-      launchId: developmentSessionId,
-      launchConfiguration: request.launchConfiguration,
-    );
-    final endpoint = await _machineLauncher.resolveRemoteSessionEndpoint(
-      endpointRequest,
-    );
-    if (endpoint.usePortForward) {
-      try {
-        hostPort = await _iosPortForwarder.ensureForwarded(
-          deviceId: request.deviceId,
-          preferredHostPort: hostPort,
-          devicePort: request.sessionPort,
-          flutterExecutable: flutterExecutable,
-        );
-      } on Object catch (error) {
-        await _logSession(
-          developmentSessionId,
-          'iOS port forwarding failed: $error',
-        );
-        rethrow;
+            timeout: request.launchTimeout < const Duration(seconds: 8)
+                ? request.launchTimeout
+                : const Duration(seconds: 8),
+            processRunner: _androidDeviceProbeRunner,
+          );
+        } on CockpitAndroidDeviceReadinessException catch (error) {
+          throw CockpitApplicationServiceException(
+            code: error.code,
+            message: error.message,
+          );
+        }
       }
-    }
-    final machineRequest = CockpitLaunchDevelopmentMachineSessionRequest(
-      projectDir: projectDir,
-      target: target,
-      flavor: request.flavor,
-      platform: request.platform,
-      deviceId: request.deviceId,
-      sessionPort: request.sessionPort,
-      hostPort: hostPort,
-      launchTimeout: request.launchTimeout,
-      flutterExecutable: flutterExecutable,
-      flutterVersion: flutterVersion,
-      launchId: developmentSessionId,
-      launchConfiguration: await _launchConfiguration(
-        developmentSessionId: developmentSessionId,
-        platform: request.platform,
-        configuration: request.launchConfiguration,
-      ),
-    );
-    final supervisor = CockpitDevelopmentSessionSupervisor(
-      initialHandle: CockpitDevelopmentSessionHandle(
-        developmentSessionId: developmentSessionId,
-        platform: request.platform,
-        deviceId: request.deviceId,
+      hostPort = request.platform == 'android'
+          ? await _portForwarder.ensureForwarded(
+              deviceId: request.deviceId,
+              preferredHostPort: request.sessionPort,
+              devicePort: request.sessionPort,
+            )
+          : request.sessionPort;
+      final authTokenDartDefineFile = authToken.isEmpty
+          ? null
+          : await _writeAuthTokenDartDefineFile(
+              developmentSessionId: developmentSessionId,
+              authToken: authToken,
+            );
+      final endpointRequest = CockpitLaunchDevelopmentMachineSessionRequest(
         projectDir: projectDir,
         target: target,
-        appId: '',
-        appBaseUrl: Uri(
-          scheme: 'http',
-          host: endpoint.publicHost,
-          port: hostPort,
-        ).toString(),
-        supervisorBaseUrl: 'cockpit-worker://development/$developmentSessionId',
         flavor: request.flavor,
+        platform: request.platform,
+        deviceId: request.deviceId,
+        sessionPort: request.sessionPort,
+        hostPort: hostPort,
+        launchTimeout: request.launchTimeout,
+        flutterExecutable: flutterExecutable,
         flutterVersion: flutterVersion,
-        bindHost: endpoint.bindHost,
-        reloadRecoverable: request.launchConfiguration.isEmpty,
-        launchedAt: _utcNow(),
-        reloadGeneration: 0,
-      ),
-      machineClient: null,
-      remoteReachabilityProbe: (baseUri) => _probe(
+        launchId: developmentSessionId,
+        authToken: authToken,
+        authTokenDartDefineFile: authTokenDartDefineFile,
+        launchConfiguration: request.launchConfiguration,
+      );
+      final endpoint = await _machineLauncher.resolveRemoteSessionEndpoint(
+        endpointRequest,
+      );
+      if (endpoint.usePortForward) {
+        try {
+          hostPort = await _iosPortForwarder.ensureForwarded(
+            deviceId: request.deviceId,
+            preferredHostPort: hostPort,
+            devicePort: request.sessionPort,
+            flutterExecutable: flutterExecutable,
+          );
+          iosPortForwarded = true;
+        } on Object catch (error) {
+          await _logSession(
+            developmentSessionId,
+            'iOS port forwarding failed: $error',
+          );
+          rethrow;
+        }
+      }
+      final machineRequest = CockpitLaunchDevelopmentMachineSessionRequest(
+        projectDir: projectDir,
+        target: target,
+        flavor: request.flavor,
         platform: request.platform,
         deviceId: request.deviceId,
+        sessionPort: request.sessionPort,
         hostPort: hostPort,
-        devicePort: request.sessionPort,
-        baseUri: baseUri,
-        readiness: false,
-      ),
-      remoteControlReadinessProbe: (baseUri) => _probe(
-        platform: request.platform,
-        deviceId: request.deviceId,
-        hostPort: hostPort,
-        devicePort: request.sessionPort,
-        baseUri: baseUri,
-        readiness: true,
-      ),
-      appReachabilityProbe: _appReachabilityProbe,
-      // The web bridge authenticates with the same launch token the app
-      // receives through FLUTTER_COCKPIT_REMOTE_AUTH_TOKEN, so the page's
-      // bridge connection and host probes share one credential.
-      webBridgeServerFactory: ({required handle}) =>
-          cockpitCreateWebRemoteSessionBridgeServer(
-            handle: handle,
-            authToken: developmentSessionId,
-          ),
-      logger: (message) => _logSession(developmentSessionId, message),
-      vmServiceObserver: (uri) {
-        final profiler = _networkProfiler;
-        if (profiler == null) return;
-        unawaited(
-          profiler
-              .enable(sessionId: developmentSessionId, vmServiceUri: uri)
-              .catchError((Object error) async {
-                await _logger?.call('VM network profiling unavailable: $error');
-              }),
-        );
-      },
-      bindControlPlane: false,
-      settleTimeout: request.launchTimeout,
-    );
-    final deadline = _utcNow().add(request.launchTimeout);
-    try {
+        launchTimeout: request.launchTimeout,
+        flutterExecutable: flutterExecutable,
+        flutterVersion: flutterVersion,
+        launchId: developmentSessionId,
+        authToken: authToken,
+        authTokenDartDefineFile: authTokenDartDefineFile,
+        launchConfiguration: await _launchConfiguration(
+          developmentSessionId: developmentSessionId,
+          platform: request.platform,
+          configuration: request.launchConfiguration,
+        ),
+      );
+      final supervisor = CockpitDevelopmentSessionSupervisor(
+        initialHandle: CockpitDevelopmentSessionHandle(
+          developmentSessionId: developmentSessionId,
+          platform: request.platform,
+          deviceId: request.deviceId,
+          projectDir: projectDir,
+          target: target,
+          appId: '',
+          appBaseUrl: Uri(
+            scheme: 'http',
+            host: endpoint.publicHost,
+            port: hostPort,
+          ).toString(),
+          supervisorBaseUrl:
+              'cockpit-worker://development/$developmentSessionId',
+          flavor: request.flavor,
+          flutterVersion: flutterVersion,
+          bindHost: endpoint.bindHost,
+          reloadRecoverable: request.launchConfiguration.isEmpty,
+          launchedAt: _utcNow(),
+          reloadGeneration: 0,
+        ),
+        machineClient: null,
+        remoteReachabilityProbe: (baseUri) => _probe(
+          platform: request.platform,
+          deviceId: request.deviceId,
+          hostPort: hostPort,
+          devicePort: request.sessionPort,
+          baseUri: baseUri,
+          authToken: authToken,
+          readiness: false,
+        ),
+        remoteControlReadinessProbe: (baseUri) => _probe(
+          platform: request.platform,
+          deviceId: request.deviceId,
+          hostPort: hostPort,
+          devicePort: request.sessionPort,
+          baseUri: baseUri,
+          authToken: authToken,
+          readiness: true,
+        ),
+        appReachabilityProbe: _appReachabilityProbe,
+        webBridgeServerFactory: ({required handle}) =>
+            cockpitCreateWebRemoteSessionBridgeServer(
+              handle: handle,
+              authToken: authToken,
+            ),
+        logger: (message) => _logSession(developmentSessionId, message),
+        vmServiceObserver: (uri) {
+          final profiler = _networkProfiler;
+          if (profiler == null) return;
+          unawaited(
+            profiler
+                .enable(sessionId: developmentSessionId, vmServiceUri: uri)
+                .catchError((Object error) async {
+                  await _logger?.call(
+                    'VM network profiling unavailable: $error',
+                  );
+                }),
+          );
+        },
+        bindControlPlane: false,
+        settleTimeout: request.launchTimeout,
+      );
+      startupSupervisor = supervisor;
+      final deadline = _utcNow().add(request.launchTimeout);
       await supervisor.start();
       final launched = await _machineLauncher.launchWithLifecycle(
         machineRequest,
@@ -298,26 +327,37 @@ final class CockpitWorkerDevelopmentSessionRuntime {
         supervisorLogPath: supervisorLogPath,
       );
     } on Object catch (error, stackTrace) {
-      supervisor.reportStartupFailure(error);
-      try {
-        await supervisor.dispose();
-      } on Object catch (disposeError) {
-        await _logger?.call(
-          'Development session startup cleanup failed: $disposeError',
+      final supervisor = startupSupervisor;
+      if (supervisor != null) {
+        try {
+          supervisor.reportStartupFailure(error);
+        } on Object catch (reportError) {
+          await _logCleanupFailure(
+            'Development session startup failure reporting failed: '
+            '$reportError',
+          );
+        }
+        try {
+          await supervisor.dispose();
+        } on Object catch (disposeError) {
+          await _logCleanupFailure(
+            'Development session startup cleanup failed: $disposeError',
+          );
+        }
+      }
+      await _releaseAppTemp(developmentSessionId);
+      if (iosPortForwarded) {
+        await _releasePortForward(
+          platform: request.platform,
+          deviceId: request.deviceId,
+          hostPort: hostPort,
         );
       }
-      await _releaseAppTemp(
-        developmentSessionId: developmentSessionId,
-        platform: request.platform,
-      );
-      await _releasePortForward(
-        platform: request.platform,
-        deviceId: request.deviceId,
-        hostPort: hostPort,
-      );
       await _flushSessionLog(developmentSessionId);
       final mapped = _developmentLaunchFailure(error);
-      if (identical(mapped, error)) rethrow;
+      if (identical(mapped, error)) {
+        Error.throwWithStackTrace(error, stackTrace);
+      }
       Error.throwWithStackTrace(mapped, stackTrace);
     }
   }
@@ -377,10 +417,7 @@ final class CockpitWorkerDevelopmentSessionRuntime {
     } finally {
       _sessions.remove(handle.developmentSessionId);
       _reloadsNeedingRelaunch.remove(handle.developmentSessionId);
-      await _releaseAppTemp(
-        developmentSessionId: handle.developmentSessionId,
-        platform: handle.platform,
-      );
+      await _releaseAppTemp(handle.developmentSessionId);
       await _releasePortForwardForHandle(handle);
       await _flushSessionLog(handle.developmentSessionId);
     }
@@ -395,10 +432,7 @@ final class CockpitWorkerDevelopmentSessionRuntime {
     } finally {
       _sessions.remove(handle.developmentSessionId);
       _reloadsNeedingRelaunch.remove(handle.developmentSessionId);
-      await _releaseAppTemp(
-        developmentSessionId: handle.developmentSessionId,
-        platform: handle.platform,
-      );
+      await _releaseAppTemp(handle.developmentSessionId);
       await _releasePortForwardForHandle(handle);
       await _flushSessionLog(handle.developmentSessionId);
     }
@@ -464,6 +498,10 @@ final class CockpitWorkerDevelopmentSessionRuntime {
         message: 'Development session has no remote runtime identity.',
       );
     }
+    final recoveredAuthToken = handle.authToken;
+    if (recoveredAuthToken.isNotEmpty) {
+      _sensitiveValueRegistrar?.call(recoveredAuthToken);
+    }
     await _logSession(
       handle.developmentSessionId,
       'recovery requested platform=${handle.platform} '
@@ -477,6 +515,11 @@ final class CockpitWorkerDevelopmentSessionRuntime {
           _probeHandle(handle, baseUri: baseUri, readiness: false),
       remoteControlReadinessProbe: (baseUri) =>
           _probeHandle(handle, baseUri: baseUri, readiness: true),
+      webBridgeServerFactory: ({required handle}) =>
+          cockpitCreateWebRemoteSessionBridgeServer(
+            handle: handle,
+            authToken: recoveredAuthToken,
+          ),
       appReachabilityProbe: _appReachabilityProbe,
       logger: (message) => _logSession(handle.developmentSessionId, message),
       vmServiceObserver: (uri) {
@@ -612,10 +655,37 @@ final class CockpitWorkerDevelopmentSessionRuntime {
         port: remote.devicePort,
         flutterVersion: flutterVersion,
         launchId: handle.developmentSessionId,
+        authTokenDartDefineFile: await _existingAuthTokenDartDefineFile(handle),
         disableHttpNetworkObserver: disableIpv6UnsafeObservers,
         disableRuntimeObserver: disableIpv6UnsafeObservers,
       ),
     ];
+  }
+
+  Future<String> _writeAuthTokenDartDefineFile({
+    required String developmentSessionId,
+    required String authToken,
+  }) => _appTempStore.writePrivateJson(
+    developmentSessionId,
+    fileName: 'remote-auth-defines.json',
+    value: <String, String>{cockpitRemoteAuthDartDefineName: authToken},
+  );
+
+  Future<String?> _existingAuthTokenDartDefineFile(
+    CockpitDevelopmentSessionHandle handle,
+  ) async {
+    final authToken = handle.authToken;
+    if (authToken.isEmpty) return null;
+    final path = p.join(
+      _appTempStore.root,
+      handle.developmentSessionId,
+      'remote-auth-defines.json',
+    );
+    if (await File(path).exists()) return path;
+    return _writeAuthTokenDartDefineFile(
+      developmentSessionId: handle.developmentSessionId,
+      authToken: authToken,
+    );
   }
 
   Future<CockpitFlutterLaunchConfiguration> _launchConfiguration({
@@ -640,15 +710,11 @@ final class CockpitWorkerDevelopmentSessionRuntime {
     return cockpitAppTempEnvironment(path);
   }
 
-  Future<void> _releaseAppTemp({
-    required String developmentSessionId,
-    required String platform,
-  }) async {
-    if (!cockpitUsesManagedAppTemp(platform)) return;
+  Future<void> _releaseAppTemp(String developmentSessionId) async {
     try {
       await _appTempStore.release(developmentSessionId);
     } on Object catch (error) {
-      await _logger?.call(
+      await _logCleanupFailure(
         'Development application temporary directory cleanup failed: $error',
       );
     }
@@ -666,6 +732,7 @@ final class CockpitWorkerDevelopmentSessionRuntime {
       hostPort: remote.hostPort,
       devicePort: remote.devicePort,
       baseUri: baseUri,
+      authToken: handle.authToken,
       readiness: readiness,
     );
   }
@@ -695,6 +762,7 @@ final class CockpitWorkerDevelopmentSessionRuntime {
     required int hostPort,
     required int devicePort,
     required Uri baseUri,
+    required String authToken,
     required bool readiness,
   }) async {
     if (platform == 'android') {
@@ -712,7 +780,10 @@ final class CockpitWorkerDevelopmentSessionRuntime {
       );
     }
     try {
-      final client = CockpitRemoteSessionClient(baseUri: baseUri);
+      final client = CockpitRemoteSessionClient(
+        baseUri: baseUri,
+        authToken: authToken,
+      );
       return readiness ? await client.ready() : await client.ping();
     } on Object {
       return false;
@@ -743,7 +814,15 @@ final class CockpitWorkerDevelopmentSessionRuntime {
         hostPort: hostPort,
       );
     } on Object catch (error) {
-      await _logger?.call('iOS port forwarding cleanup failed: $error');
+      await _logCleanupFailure('iOS port forwarding cleanup failed: $error');
+    }
+  }
+
+  Future<void> _logCleanupFailure(String message) async {
+    try {
+      await _logger?.call(message);
+    } on Object {
+      // Cleanup diagnostics must never replace the authoritative launch error.
     }
   }
 
@@ -820,7 +899,7 @@ final class CockpitWorkerDevelopmentSessionRuntime {
     try {
       await store.flush(developmentSessionId);
     } on Object catch (error) {
-      await _logger?.call('Development session log flush failed: $error');
+      await _logCleanupFailure('Development session log flush failed: $error');
     }
   }
 
@@ -830,7 +909,7 @@ final class CockpitWorkerDevelopmentSessionRuntime {
     try {
       await store.flushAll();
     } on Object catch (error) {
-      await _logger?.call('Development session log flush failed: $error');
+      await _logCleanupFailure('Development session log flush failed: $error');
     }
   }
 }

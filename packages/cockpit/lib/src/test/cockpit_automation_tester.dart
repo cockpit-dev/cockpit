@@ -10,7 +10,8 @@ import '../adapters/cockpit_performance_adapter.dart';
 /// stable, platform-neutral tester API to protocol commands, so scenarios can
 /// run unchanged against a Flutter in-app bridge, an integrated release app,
 /// or a native black-box driver.
-class CockpitAutomationTester implements CockpitTester {
+class CockpitAutomationTester
+    implements CockpitTester, CockpitTestFeatureProvider {
   CockpitAutomationTester({
     required CockpitAutomationAdapter automation,
     required CockpitLocaleProfile initialLocale,
@@ -27,15 +28,29 @@ class CockpitAutomationTester implements CockpitTester {
   final CockpitPerformanceAdapter? _performance;
   int _sequence = 0;
 
-  /// Whether this target can collect a real performance report.
-  bool get supportsPerformance => _performance != null;
-
   @override
   CockpitLocaleProfile get locale => _localeProvider?.call() ?? _initialLocale;
 
   @override
   Future<CockpitCapabilities> describeCapabilities() =>
       _automation.describeCapabilities();
+
+  @override
+  Future<Set<CockpitTestFeature>> describeFeatures() async {
+    final capabilities = await describeCapabilities();
+    return <CockpitTestFeature>{
+      if (capabilities.supportsInAppControl) CockpitTestFeature.inAppControl,
+      if (capabilities.supportsFlutterViewCapture)
+        CockpitTestFeature.flutterViewCapture,
+      if (capabilities.supportsNativeScreenCapture)
+        CockpitTestFeature.nativeScreenCapture,
+      if (capabilities.supportsHostAutomation)
+        CockpitTestFeature.hostAutomation,
+      if (capabilities.supportsViewportResize)
+        CockpitTestFeature.viewportResize,
+      if (_performance != null) CockpitTestFeature.performanceCapture,
+    };
+  }
 
   @override
   Future<CockpitCommandExecution> execute(CockpitCommand command) =>
@@ -110,13 +125,31 @@ class CockpitAutomationTester implements CockpitTester {
     }
     final request = CockpitPerformanceCaptureRequest(name: name);
     await performance.startPerformance(request);
-    CockpitPerformanceReport? report;
+    Object? actionError;
+    StackTrace? actionStackTrace;
     try {
       await action();
-    } finally {
-      // Stop is deliberately awaited even when the action fails so a target
-      // never retains an active capture window after a failed scenario.
+    } on Object catch (error, stackTrace) {
+      actionError = error;
+      actionStackTrace = stackTrace;
+    }
+
+    late final CockpitPerformanceReport report;
+    try {
       report = await performance.stopPerformance();
+    } on Object catch (cleanupError, cleanupStackTrace) {
+      if (actionError != null) {
+        throw CockpitTestCleanupException(
+          primaryError: actionError,
+          primaryStackTrace: actionStackTrace!,
+          cleanupError: cleanupError,
+          cleanupStackTrace: cleanupStackTrace,
+        );
+      }
+      rethrow;
+    }
+    if (actionError != null) {
+      Error.throwWithStackTrace(actionError, actionStackTrace!);
     }
     return report;
   }

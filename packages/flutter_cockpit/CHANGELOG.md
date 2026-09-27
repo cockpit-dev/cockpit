@@ -1,5 +1,23 @@
 # Changelog
 
+## 4.10.0
+
+- Tightened the remote session authentication boundary: HTTP endpoints accept
+  `x-cockpit-token` or `Authorization: Bearer` (case-insensitive scheme) only
+  and answer unauthorized requests with stable structured JSON instead of a
+  bare close; query-string tokens are no longer accepted outside the browser
+  WebSocket `/connect` handshake.
+- Confined the bridge client's token to the locally constructed `/connect`
+  handshake URI while `publicBaseUri` stays clean.
+- Made bounded frame waits report their outcome through
+  `CockpitPendingFrameWaitResult` so timeouts surface instead of silently
+  returning stale snapshots, and bounded the post-scroll settle so frameless
+  surfaces cannot hang.
+- Linearized scrollable discovery, locator probe scoring, and capture frame
+  waits on large widget trees.
+- Stopped double-invoking the native recording stop for a single recording
+  session; concurrent stops now share one native call.
+
 ## 4.9.0
 
 - Kept Flutter snapshots and selectors consistent for labels materialized as

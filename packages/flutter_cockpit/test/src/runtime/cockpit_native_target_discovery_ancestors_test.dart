@@ -1,5 +1,11 @@
 // ignore_for_file: deprecated_member_use
 
+// This file asserts wall-clock-sensitive discovery timings, so it carries the
+// `perf` tag and runs in a dedicated serial invocation without concurrent
+// suites (see the melos and CI test gates).
+@Tags(['perf'])
+library;
+
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_cockpit/flutter_cockpit_flutter.dart';
@@ -378,7 +384,8 @@ void main() {
   testWidgets('locator ancestor extraction stays linear on a deep wide tree', (
     tester,
   ) async {
-    const spineDepth = 350;
+    const shallowSpineDepth = 50;
+    const deepSpineDepth = 200;
     const leavesPerLevel = 2;
     // Component-only wrappers stretch the element chain without adding render
     // objects, so the per-element ancestor scans dominate discovery the same
@@ -422,50 +429,65 @@ void main() {
       );
     }
 
-    await tester.pumpWidget(
-      MaterialApp(
-        home: CockpitSurface(
-          routeName: '/discovery-scale',
-          child: Material(
-            child: SingleChildScrollView(child: buildLevel(spineDepth - 1)),
+    final engine = const CockpitDiscoveryEngine();
+
+    Future<Duration> measureDiscovery(int spineDepth) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: CockpitSurface(
+            routeName: '/discovery-scale',
+            child: Material(
+              child: SingleChildScrollView(child: buildLevel(spineDepth - 1)),
+            ),
           ),
         ),
-      ),
-    );
-    await tester.pumpAndSettle();
+      );
+      await tester.pumpAndSettle();
+      // One warm pass absorbs lazy cache population and JIT warmup so the
+      // shallow and deep measurements stay comparable; each discover call is
+      // its own session, so per-session ancestor memoization is not warmed.
+      engine.discover(
+        rootContext: tester.element(find.byType(CockpitSurface)),
+        routeName: '/discovery-scale',
+        includeClippedTargets: true,
+      );
+      final stopwatch = Stopwatch()..start();
+      final targets = engine.discover(
+        rootContext: tester.element(find.byType(CockpitSurface)),
+        routeName: '/discovery-scale',
+        includeClippedTargets: true,
+      );
+      stopwatch.stop();
 
-    final engine = const CockpitDiscoveryEngine();
-    final stopwatch = Stopwatch()..start();
-    final targets = engine.discover(
-      rootContext: tester.element(find.byType(CockpitSurface)),
-      routeName: '/discovery-scale',
-      includeClippedTargets: true,
-    );
-    stopwatch.stop();
+      expect(
+        targets.where((target) => target.typeName == 'RichText'),
+        hasLength(spineDepth * leavesPerLevel),
+      );
+      expect(
+        targets.where((target) => target.typeName == 'FilledButton'),
+        hasLength(spineDepth),
+      );
+      expect(
+        targets.where((target) => target.typeName == 'ChoiceChip'),
+        hasLength(spineDepth),
+      );
+      expect(
+        targets.where((target) => target.typeName == 'GestureDetector').length,
+        greaterThanOrEqualTo(spineDepth),
+      );
+      return stopwatch.elapsed;
+    }
 
-    expect(
-      targets.where((target) => target.typeName == 'RichText'),
-      hasLength(spineDepth * leavesPerLevel),
-    );
-    expect(
-      targets.where((target) => target.typeName == 'FilledButton'),
-      hasLength(spineDepth),
-    );
-    expect(
-      targets.where((target) => target.typeName == 'ChoiceChip'),
-      hasLength(spineDepth),
-    );
-    expect(
-      targets.where((target) => target.typeName == 'GestureDetector').length,
-      greaterThanOrEqualTo(spineDepth),
-    );
+    final shallow = await measureDiscovery(shallowSpineDepth);
+    final deep = await measureDiscovery(deepSpineDepth);
     // Before the session-level ancestor memoization, every actionable leaf
     // re-walked its full ancestor chain per handler family (segment control,
-    // scrollable, inherited label, key), which measured 15.2s on this tree
-    // and scaled quadratically with depth (390ms/744ms/1448ms at depths
-    // 50/100/150). Memoized discovery runs ~1.5-1.8s here; the 3s guard
-    // keeps ~40% margin for slower CI hardware while still failing by 5x
-    // against the un-memoized implementation.
-    expect(stopwatch.elapsed, lessThan(const Duration(seconds: 3)));
+    // scrollable, inherited label, key), which scaled quadratically with
+    // depth and measured 15.2s on a 350-level tree. Memoized extraction is
+    // linear, so the 4x deeper tree must stay well under the ~16x a
+    // quadratic regression would show; the 10x bound separates both regimes
+    // and, unlike an absolute wall-clock threshold, stays reproducible while
+    // other test suites run concurrently.
+    expect(deep, lessThan(shallow * 10));
   });
 }

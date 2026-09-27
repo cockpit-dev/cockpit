@@ -138,11 +138,22 @@ void main() {
         '--dart-define=FLUTTER_COCKPIT_REMOTE_HOST=::',
         '--dart-define=FLUTTER_COCKPIT_REMOTE_PORT=47331',
         '--dart-define=FLUTTER_COCKPIT_REMOTE_LAUNCH_ID=launch-1',
-        '--dart-define=FLUTTER_COCKPIT_REMOTE_AUTH_TOKEN=launch-1',
         '--dart-define=FLUTTER_COCKPIT_ENABLE_HTTP_NETWORK_OBSERVER=false',
         '--dart-define=FLUTTER_COCKPIT_ENABLE_RUNTIME_OBSERVER=false',
         '--dart-define=FLUTTER_COCKPIT_FLUTTER_VERSION=3.32.0',
       ],
+    );
+
+    // Opt-in authentication transports the secret through an owner-only
+    // define file so argv never carries the raw token.
+    expect(
+      cockpitBuildRemoteControlDartDefineArguments(
+        host: '::',
+        port: 47331,
+        flutterVersion: '3.32.0',
+        authTokenDartDefineFile: '/tmp/cockpit/auth.json',
+      ),
+      contains('--dart-define-from-file=/tmp/cockpit/auth.json'),
     );
   });
 }

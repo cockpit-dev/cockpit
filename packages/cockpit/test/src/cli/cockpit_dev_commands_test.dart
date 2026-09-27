@@ -94,6 +94,18 @@ void main() {
       dev.subcommands['start']!.invocation,
       'cockpit dev start [ENTRYPOINT] [arguments]',
     );
+    final startParser = dev.subcommands['start']!.argParser;
+    final implicitAuthentication = startParser.parse(const <String>[]);
+    final enabledAuthentication = startParser.parse(const <String>['--auth']);
+    final disabledAuthentication = startParser.parse(const <String>[
+      '--no-auth',
+    ]);
+    expect(implicitAuthentication.flag('auth'), isFalse);
+    expect(implicitAuthentication.wasParsed('auth'), isFalse);
+    expect(enabledAuthentication.flag('auth'), isTrue);
+    expect(enabledAuthentication.wasParsed('auth'), isTrue);
+    expect(disabledAuthentication.flag('auth'), isFalse);
+    expect(disabledAuthentication.wasParsed('auth'), isTrue);
     expect(
       dev.subcommands['viewport']!.invocation,
       'cockpit dev viewport WIDTHxHEIGHT [arguments]',

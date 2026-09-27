@@ -96,6 +96,7 @@ final class CockpitIosSimulatorRemoteSessionLauncher
             port: options.sessionPort,
             flutterVersion: flutterVersion,
             launchId: options.launchId,
+            authTokenDartDefineFile: options.authTokenDartDefineFile,
           ),
         ),
       ],
@@ -145,7 +146,7 @@ final class CockpitIosSimulatorRemoteSessionLauncher
         statusReader: _statusReader,
         expectedSessionId: options.launchId,
         expectedPlatform: options.platform,
-        authToken: options.launchId,
+        authToken: options.authToken,
       );
       return CockpitRemoteSessionHandle.fromRemoteStatus(
         projectDir: options.projectDir,
@@ -157,7 +158,7 @@ final class CockpitIosSimulatorRemoteSessionLauncher
         devicePort: options.sessionPort,
         status: status,
         launchedAt: _now(),
-        authToken: options.launchId,
+        authToken: options.authToken,
       );
     } on Object {
       await _bestEffortTerminateLaunchedApp(

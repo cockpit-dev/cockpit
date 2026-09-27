@@ -2,53 +2,64 @@
 
 [English](README.md) · [简体中文](README.zh-CN.md)
 
-Platform-neutral programmatic test scenarios shared by every Cockpit runner.
-A scenario is authored once against the `CockpitTester` contract and then runs
-unchanged against a Flutter integration test, a release/profile app with the
-Cockpit bridge, or a native black-box target.
+Platform-neutral, in-process test scenarios shared by Cockpit runners. Author a
+scenario once against `CockpitTester`, then execute the same Dart closure in a
+Flutter integration test, a bridge-connected release/profile app, or a native
+black-box target.
 
-This package is intentionally small and dependency-free beyond
-`cockpit_protocol`: it owns the authoring contract only. Concrete testers,
-runners, process ownership, and platform drivers live in dependent packages.
+`cockpit_test` depends only on `cockpit_protocol`. It owns the shared authoring,
+preflight, locale, runner, and result contracts; concrete testers and platform
+lifecycle remain in dependent packages.
 
-## The contract
+## Author a scenario
 
 ```dart
 import 'package:cockpit_test/cockpit_test.dart';
 
 final smoke = CockpitTestScenario(
   id: 'save-settings',
-  requiredCapabilities: const {'tap', 'type', 'assertText'},
+  requirements: CockpitTestRequirements(
+    commands: const {
+      CockpitCommandType.tap,
+      CockpitCommandType.enterText,
+      CockpitCommandType.assertText,
+    },
+    locators: const {CockpitLocatorKind.cockpitId},
+  ),
   body: (tester) async {
     await tester.tap('#settings');
     await tester.type('Alice', into: '#name');
     await tester.tap('#save');
     await tester.expectText(
       '#status',
-      const CockpitLocalizedText(
+      CockpitLocalizedText(
         'settings.saved',
-        values: {'en-US': 'Saved', 'zh-CN': '已保存'},
+        values: const {'en-US': 'Saved', 'zh-CN': '已保存'},
       ),
     );
   },
 );
 ```
 
-Scenarios compose into a locale matrix:
+Requirements use protocol enums, so the tester method `type()` correctly
+preflights `CockpitCommandType.enterText`; string aliases cannot drift from the
+wire contract. Commands, locator strategies, and the small set of non-command
+features are separate typed sets.
+
+Compose scenarios into a non-empty locale matrix:
 
 ```dart
 final suite = CockpitTestSuiteProgram(
   id: 'settings-smoke',
-  locales: const [
+  locales: [
     CockpitLocaleProfile('en-US'),
-    CockpitLocaleProfile('zh-CN'),
+    CockpitLocaleProfile('zh-Hant-TW'),
   ],
   cases: [CockpitTestCaseProgram(id: 'save', scenario: smoke)],
 );
 ```
 
-Execution goes through a `CockpitTestRunner`. The default lifecycle runner and
-the concrete testers ship in the [`cockpit`](../cockpit) package:
+Run it with any concrete tester:
 
 ```dart
 import 'package:cockpit/cockpit.dart';
@@ -56,49 +67,61 @@ import 'package:cockpit/cockpit.dart';
 final result = await const CockpitProgrammaticTestRunner().runSuite(
   suite,
   createTester: (locale) async => RemoteCockpitTester(
-    client: CockpitRemoteSessionClient(
-      baseUri: endpoint,
-      authToken: remoteToken,
-    ),
+    client: client,
     workspaceRoot: workspaceRoot,
     initialLocale: locale,
   ),
 );
 ```
 
-Every case/locale attempt reports `passed`, `failed`, or `blocked`. A scenario
-whose `requiredCapabilities` cannot be satisfied by the target is `blocked`
-with a `CockpitTestCapabilityException` before its body runs; it never passes
-by silently skipping work or substituting zero-valued data.
+Every attempt is `passed`, `failed`, or `blocked` and carries a structured
+`CockpitTestError`. Unsupported typed requirements block the attempt before its
+body runs. Empty suites are rejected, and an empty attempt collection never
+reports success.
 
-## Scenario rules
+## Flutter integration tests
 
-A scenario may only use selectors, protocol values, and the active locale. It
-must not import `WidgetTester`, `BuildContext`, or a native SDK. Runner
-lifecycle, installation, and cleanup stay outside the scenario body so the
-same code path is exercised on every target:
+`flutter_cockpit_test` reuses Flutter's official `integration_test` runner and
+mount/teardown lifecycle:
 
-- Flutter integration tests reuse scenarios through
-  [`flutter_cockpit_test`](../flutter_cockpit_test).
-- Release/profile apps with the Cockpit bridge use `RemoteCockpitTester`.
-- Apps without Cockpit use `SystemCockpitTester` through the platform
-  system-control adapter.
+```dart
+cockpitScenarioWidgets(
+  'saves settings',
+  app: buildDevelopmentApp,
+  scenario: smoke,
+);
+```
 
-## Locale-first internationalization
+Use `cockpitTestWidgets` instead when a test intentionally needs Flutter-only
+APIs in addition to the shared `CockpitTester` surface.
 
-`CockpitLocaleProfile` carries a validated BCP-47 tag, region, and text
-direction with each attempt. `CockpitLocalizedText` resolves translations
-lazily against the active locale, so a language switch made inside a scenario
-is observed by the next assertion instead of a snapshot taken at construction
-time. A missing translation raises `CockpitTestLocalizationException` rather
-than falling back to a wrong-language string.
+## Locale behavior
 
-A runnable tour of the authoring contract — scenario, locale matrix, and the
-serialized suite program — lives in
+`CockpitLocaleProfile` validates and canonicalizes language, script, and region
+subtags at runtime. For example, `ZH-hant-tw` becomes `zh-Hant-TW`. Metadata and
+translation maps are copied into immutable values.
+
+`CockpitLocalizedText` resolves lazily against the current locale using:
+
+1. exact tag, such as `zh-Hant-TW`;
+2. language and script, such as `zh-Hant`;
+3. language, such as `zh`.
+
+A missing translation raises `CockpitTestLocalizationException`; it never
+silently selects an unrelated language.
+
+## In-process boundary
+
+A scenario body is a Dart closure. `toManifestJson()` is only a diagnostic
+projection of IDs, requirements, locale matrix, and metadata; it cannot contain
+or reconstruct executable code. Use the declarative `cockpit.test/v2` document
+model for persisted, queued, or language-neutral test execution.
+
+A runnable tour lives in
 [`example/settings_smoke.dart`](example/settings_smoke.dart).
 
 ## Learn more
 
 - [Cross-runner programmatic tests](../../docs/cross-runner-programmatic-testing.md)
 - [`cockpit_protocol` contracts](../cockpit_protocol/README.md)
-- [`cockpit` runners and testers](../cockpit/README.md)
+- [`cockpit` concrete testers](../cockpit/README.md)

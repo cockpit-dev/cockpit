@@ -5,22 +5,28 @@
 //   dart run package:cockpit_test/example/settings_smoke.dart
 //
 // Execution on real targets (Flutter integration tests, bridge-connected
-// release apps, native black-box apps) stays in the cockpit package runners;
-// see README.md for that wiring.
+// release apps, native black-box apps) stays in dependent runner packages.
 import 'dart:convert';
 
 import 'package:cockpit_test/cockpit_test.dart';
 
-const _savedStatus = CockpitLocalizedText(
+final _savedStatus = CockpitLocalizedText(
   'settings.saved',
-  values: {'en-US': 'Saved', 'zh-CN': '已保存'},
+  values: const <String, String>{'en-US': 'Saved', 'zh-CN': '已保存'},
 );
 
 /// A scenario only uses selectors, protocol values, and the active locale.
 final saveSettings = CockpitTestScenario(
   id: 'save-settings',
-  requiredCapabilities: const {'tap', 'type', 'assertText'},
-  metadata: const {'surface': 'settings'},
+  requirements: CockpitTestRequirements(
+    commands: const <CockpitCommandType>{
+      CockpitCommandType.tap,
+      CockpitCommandType.enterText,
+      CockpitCommandType.assertText,
+    },
+    locators: const <CockpitLocatorKind>{CockpitLocatorKind.cockpitId},
+  ),
+  metadata: const <String, Object?>{'surface': 'settings'},
   body: (tester) async {
     await tester.tap('#settings');
     await tester.type('Alice', into: '#name');
@@ -32,15 +38,22 @@ final saveSettings = CockpitTestScenario(
 /// The same scenario is crossed with a locale matrix once, not per target.
 final settingsSmokeSuite = CockpitTestSuiteProgram(
   id: 'settings-smoke',
-  locales: const [CockpitLocaleProfile('en-US'), CockpitLocaleProfile('zh-CN')],
-  cases: [CockpitTestCaseProgram(id: 'save', scenario: saveSettings)],
+  locales: <CockpitLocaleProfile>[
+    CockpitLocaleProfile('en-US'),
+    CockpitLocaleProfile('zh-CN'),
+  ],
+  cases: <CockpitTestCaseProgram>[
+    CockpitTestCaseProgram(id: 'save', scenario: saveSettings),
+  ],
 );
 
 void main() {
-  // The suite program serializes to the protocol shape every runner accepts,
-  // which is what a registry or queue would persist for cross-runner reuse.
+  // A manifest is a diagnostic description of the in-process code program. The
+  // executable scenario body remains a Dart closure and is not serialized.
   print(
-    const JsonEncoder.withIndent('  ').convert(settingsSmokeSuite.toJson()),
+    const JsonEncoder.withIndent(
+      '  ',
+    ).convert(settingsSmokeSuite.toManifestJson()),
   );
 
   // Translations resolve lazily against the active locale, so a language

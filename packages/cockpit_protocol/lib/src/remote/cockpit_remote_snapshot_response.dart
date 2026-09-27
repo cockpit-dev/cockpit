@@ -32,13 +32,17 @@ final class CockpitRemoteSnapshotResponse {
   };
 
   /// Decodes a CockpitRemoteSnapshotResponse from a JSON object.
-  factory CockpitRemoteSnapshotResponse.fromJson(Map<String, Object?> json) {
+  factory CockpitRemoteSnapshotResponse.fromJson(
+    Map<String, Object?> json, {
+    String path = r'$',
+  }) {
     final snapshotJson = json['snapshot'] as Map<Object?, Object?>;
     final downloadsJson =
         json['artifactDownloads'] as List<Object?>? ?? const <Object?>[];
     return CockpitRemoteSnapshotResponse(
       snapshot: CockpitSnapshot.fromJson(
         Map<String, Object?>.from(snapshotJson),
+        path: '$path.snapshot',
       ),
       artifactDownloads: downloadsJson
           .cast<Map<Object?, Object?>>()

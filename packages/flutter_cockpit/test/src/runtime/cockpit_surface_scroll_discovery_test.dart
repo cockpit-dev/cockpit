@@ -1,3 +1,9 @@
+// This file asserts wall-clock-sensitive discovery timings, so it carries the
+// `perf` tag and runs in a dedicated serial invocation without concurrent
+// suites (see the melos and CI test gates).
+@Tags(['perf'])
+library;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_cockpit/flutter_cockpit_flutter.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -330,7 +336,8 @@ void main() {
   testWidgets('scrollable discovery stays linear on a deep wide element tree', (
     tester,
   ) async {
-    const spineDepth = 200;
+    const shallowSpineDepth = 50;
+    const deepSpineDepth = 200;
 
     Widget buildLevel(int remaining) {
       return SpineSection(
@@ -362,39 +369,49 @@ void main() {
       );
     }
 
-    await tester.pumpWidget(
-      MaterialApp(
-        home: CockpitSurface(
-          routeName: '/scroll-discovery-scale',
-          child: Material(
-            child: SingleChildScrollView(child: buildLevel(spineDepth - 1)),
+    Future<Duration> measureScrollDiscovery(int spineDepth) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: CockpitSurface(
+            routeName: '/scroll-discovery-scale',
+            child: Material(
+              child: SingleChildScrollView(child: buildLevel(spineDepth - 1)),
+            ),
           ),
         ),
-      ),
-    );
-    await tester.pumpAndSettle();
+      );
+      await tester.pumpAndSettle();
 
-    final surfaceState = tester.state<CockpitSurfaceState>(
-      find.byType(CockpitSurface),
-    );
+      final surfaceState = tester.state<CockpitSurfaceState>(
+        find.byType(CockpitSurface),
+      );
 
-    final stopwatch = Stopwatch()..start();
-    final counted = await surfaceState.scrollByViewport(
-      duration: Duration.zero,
-      scrollableLocator: const CockpitLocator(index: 0),
-    );
-    final deep = await surfaceState.scrollByViewport(
-      duration: Duration.zero,
-      scrollableKey: 'deep-scroll',
-    );
-    stopwatch.stop();
-    await tester.pumpAndSettle();
+      final stopwatch = Stopwatch()..start();
+      // Both calls re-run full discovery.
+      final counted = await surfaceState.scrollByViewport(
+        duration: Duration.zero,
+        scrollableLocator: const CockpitLocator(index: 0),
+      );
+      final deepResult = await surfaceState.scrollByViewport(
+        duration: Duration.zero,
+        scrollableKey: 'deep-scroll',
+      );
+      stopwatch.stop();
+      await tester.pumpAndSettle();
 
-    // Both calls re-run full discovery; the old per-candidate ancestor
-    // re-walks made this take well over half a minute on this tree.
-    expect(counted.scrollableCandidateCount, spineDepth * 2 + 2);
-    expect(deep.didScroll, isTrue);
-    expect(deep.scrollableKey, 'deep-scroll');
-    expect(stopwatch.elapsed, lessThan(const Duration(seconds: 10)));
+      expect(counted.scrollableCandidateCount, spineDepth * 2 + 2);
+      expect(deepResult.didScroll, isTrue);
+      expect(deepResult.scrollableKey, 'deep-scroll');
+      return stopwatch.elapsed;
+    }
+
+    final shallow = await measureScrollDiscovery(shallowSpineDepth);
+    final deep = await measureScrollDiscovery(deepSpineDepth);
+    // The old per-candidate ancestor re-walks scaled quadratically and took
+    // well over half a minute on the deep tree. Linear discovery grows ~4x
+    // with this 4x depth, so the 10x bound separates both regimes and,
+    // unlike an absolute wall-clock threshold, stays reproducible while
+    // other test suites run concurrently.
+    expect(deep, lessThan(shallow * 10));
   });
 }

@@ -59,6 +59,40 @@ helper 会把普通 Flutter widget 包在 `FlutterCockpitApp` 中。如果 build
 返回 `FlutterCockpitApp`，则会原样挂载并复用已有 Cockpit root，方便从现有开发 shell
 渐进迁移。
 
+## 跨 runner 共享场景
+
+使用 `cockpitScenarioWidgets` 运行平台无关的 `cockpit_test` 场景。它复用同一套 Flutter
+mount、teardown、report 与 integration-test 生命周期：
+
+```dart
+final saveSettings = CockpitTestScenario(
+  id: 'save-settings',
+  requirements: CockpitTestRequirements(
+    commands: const {
+      CockpitCommandType.tap,
+      CockpitCommandType.assertText,
+    },
+    locators: const {CockpitLocatorKind.cockpitId},
+  ),
+  body: (tester) async {
+    await tester.tap('#save');
+    await tester.expectText('#status', 'Saved');
+  },
+);
+
+void main() {
+  cockpitScenarioWidgets(
+    '保存设置',
+    app: buildDevelopmentApp,
+    scenario: saveSettings,
+  );
+}
+```
+
+同一个场景对象也可以交给 `RemoteCockpitTester` 或 `SystemCockpitTester`。只有 body
+确实需要 `WidgetTester`、`BuildContext` 等 Flutter 专属 API 时，才使用
+`cockpitTestWidgets`。
+
 选择器与 `cockpit dev` 使用同一套语法：
 
 ```dart

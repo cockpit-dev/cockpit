@@ -27,6 +27,16 @@
       "required": ["$var"],
       "additionalProperties": false
     },
+    "stringInterpolation": {
+      "type": "object",
+      "properties": {
+        "$template": {
+          "$ref": "#/$defs/nonEmptyString"
+        }
+      },
+      "required": ["$template"],
+      "additionalProperties": false
+    },
     "stringTemplate": {
       "oneOf": [
         {
@@ -34,6 +44,9 @@
         },
         {
           "$ref": "#/$defs/variableReference"
+        },
+        {
+          "$ref": "#/$defs/stringInterpolation"
         }
       ]
     },

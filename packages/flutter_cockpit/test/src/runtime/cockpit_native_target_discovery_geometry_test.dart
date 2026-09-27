@@ -1,5 +1,11 @@
 // ignore_for_file: deprecated_member_use
 
+// This file asserts wall-clock-sensitive discovery timings, so it carries the
+// `perf` tag and runs in a dedicated serial invocation without concurrent
+// suites (see the melos and CI test gates).
+@Tags(['perf'])
+library;
+
 import 'dart:math';
 
 import 'package:flutter/material.dart';
@@ -442,11 +448,10 @@ void main() {
     // Nested Padding/ColoredBox wrappers grow the RENDER depth one box per
     // wrapper, so every element's bounds sit ~3 boxes per level deeper than
     // its parent. A per-element `localToGlobal` root walk then costs
-    // O(elements x depth): this ~29k-element / ~4.2k-render-deep tree
-    // measured 2742ms per discovery pass before threaded transforms and
-    // ~83ms after. The 300ms guard keeps ~3.6x margin for slower CI
-    // hardware while still failing the un-threaded implementation by 9x.
-    const spineDepth = 600;
+    // O(elements x depth): the deep tree below measured 2742ms per discovery
+    // pass before threaded transforms and ~83ms after.
+    const shallowSpineDepth = 150;
+    const deepSpineDepth = 600;
 
     Widget renderWrappers(int remaining, Widget child) => remaining == 0
         ? child
@@ -473,44 +478,55 @@ void main() {
       );
     }
 
-    await tester.pumpWidget(
-      MaterialApp(
-        home: CockpitSurface(
-          routeName: '/geometry-scale',
-          child: Material(
-            child: SingleChildScrollView(child: buildLevel(spineDepth - 1)),
+    final engine = const CockpitDiscoveryEngine();
+
+    Future<Duration> measureDiscovery(int spineDepth) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: CockpitSurface(
+            routeName: '/geometry-scale',
+            child: Material(
+              child: SingleChildScrollView(child: buildLevel(spineDepth - 1)),
+            ),
           ),
         ),
-      ),
-    );
-    await tester.pumpAndSettle();
+      );
+      await tester.pumpAndSettle();
+      final rootContext = tester.element(find.byType(CockpitSurface));
+      // An unclipped pass proves the tree is real before timing, and one
+      // extra clipped pass absorbs JIT warmup and lazy caches so both sizes
+      // measure steady state on the clipped wheel path.
+      final unclipped = engine.discover(
+        rootContext: rootContext,
+        routeName: '/geometry-scale',
+        includeClippedTargets: true,
+      );
+      expect(
+        unclipped.where((target) => target.typeName == 'RichText'),
+        hasLength(spineDepth),
+      );
+      expect(
+        unclipped.where((target) => target.typeName == 'FilledButton'),
+        hasLength(spineDepth),
+      );
+      engine.discover(rootContext: rootContext, routeName: '/geometry-scale');
 
-    final rootContext = tester.element(find.byType(CockpitSurface));
-    final engine = const CockpitDiscoveryEngine();
-    // Verify the tree is real with an unclipped pass, then warm up the JIT
-    // so the guard measures steady state on the clipped wheel path.
-    final unclipped = engine.discover(
-      rootContext: rootContext,
-      routeName: '/geometry-scale',
-      includeClippedTargets: true,
-    );
-    expect(
-      unclipped.where((target) => target.typeName == 'RichText'),
-      hasLength(spineDepth),
-    );
-    expect(
-      unclipped.where((target) => target.typeName == 'FilledButton'),
-      hasLength(spineDepth),
-    );
-    engine.discover(rootContext: rootContext, routeName: '/geometry-scale');
+      final stopwatch = Stopwatch()..start();
+      final targets = engine.discover(
+        rootContext: rootContext,
+        routeName: '/geometry-scale',
+      );
+      stopwatch.stop();
+      expect(targets, isNotEmpty);
+      return stopwatch.elapsed;
+    }
 
-    final stopwatch = Stopwatch()..start();
-    final targets = engine.discover(
-      rootContext: rootContext,
-      routeName: '/geometry-scale',
-    );
-    stopwatch.stop();
-    expect(targets, isNotEmpty);
-    expect(stopwatch.elapsed, lessThan(const Duration(milliseconds: 300)));
+    final shallow = await measureDiscovery(shallowSpineDepth);
+    final deep = await measureDiscovery(deepSpineDepth);
+    // The 4x deeper tree must stay far under the ~16x that per-element root
+    // walks would cost; the 10x bound separates both regimes and, unlike an
+    // absolute wall-clock threshold, stays reproducible while other test
+    // suites run concurrently.
+    expect(deep, lessThan(shallow * 10));
   });
 }

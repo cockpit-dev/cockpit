@@ -1,5 +1,6 @@
 import '../runtime/cockpit_target_kind.dart';
 import 'cockpit_decode_policy.dart';
+import 'cockpit_enum.dart';
 import 'cockpit_foundation_value_reader.dart';
 
 enum CockpitAutomationTargetMode { development, automation }
@@ -204,9 +205,4 @@ bool _targetKindRequiresAppId(CockpitTargetKind kind) => switch (kind) {
 };
 
 T _enumValue<T extends Enum>(Object? value, List<T> values, String path) =>
-    CockpitEnumValue<T>.parse(
-      value,
-      values,
-      path,
-      policy: CockpitDecodePolicy.requests,
-    ).requireKnown();
+    cockpitEnumFromJson(value, values, path);

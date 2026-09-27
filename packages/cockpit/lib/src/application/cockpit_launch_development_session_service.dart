@@ -26,6 +26,7 @@ final class CockpitLaunchDevelopmentSessionRequest {
     this.flavor,
     this.launchTimeout = const Duration(seconds: 120),
     this.allowSessionPortFallback = true,
+    this.authenticationEnabled = false,
     this.persistHandlePath,
     this.persistAppHandlePath,
     this.launchConfiguration = CockpitFlutterLaunchConfiguration.empty,
@@ -39,6 +40,7 @@ final class CockpitLaunchDevelopmentSessionRequest {
   final int sessionPort;
   final Duration launchTimeout;
   final bool allowSessionPortFallback;
+  final bool authenticationEnabled;
   final String? persistHandlePath;
   final String? persistAppHandlePath;
   final CockpitFlutterLaunchConfiguration launchConfiguration;
@@ -123,6 +125,7 @@ final class CockpitLaunchDevelopmentSessionService {
       sessionPort: resolvedSessionPort,
       launchTimeout: request.launchTimeout,
       allowSessionPortFallback: request.allowSessionPortFallback,
+      authenticationEnabled: request.authenticationEnabled,
       persistHandlePath: request.persistHandlePath,
       persistAppHandlePath: request.persistAppHandlePath,
       launchConfiguration: request.launchConfiguration,
