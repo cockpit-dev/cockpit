@@ -129,7 +129,7 @@ final class CockpitIosPhysicalRemoteSessionLauncher
             port: options.sessionPort,
             flutterVersion: flutterVersion,
             launchId: options.launchId,
-            authTokenDartDefineFile: options.authTokenDartDefineFile,
+            passwordDartDefineFile: options.passwordDartDefineFile,
             disableHttpNetworkObserver: true,
             disableRuntimeObserver: true,
           ),
@@ -179,7 +179,7 @@ final class CockpitIosPhysicalRemoteSessionLauncher
         statusReader: _statusReader,
         expectedSessionId: options.launchId,
         expectedPlatform: options.platform,
-        authToken: options.authToken,
+        password: options.password,
       );
 
       return CockpitRemoteSessionHandle.fromRemoteStatus(
@@ -192,7 +192,7 @@ final class CockpitIosPhysicalRemoteSessionLauncher
         devicePort: options.sessionPort,
         status: status,
         launchedAt: _now(),
-        authToken: options.authToken,
+        password: options.password,
       );
     } on Object {
       if (connection.isWired) {

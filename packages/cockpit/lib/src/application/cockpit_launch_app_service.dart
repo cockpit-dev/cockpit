@@ -32,7 +32,7 @@ final class CockpitLaunchAppRequest {
     this.mode = CockpitAppMode.development,
     this.launchTimeout = const Duration(seconds: 600),
     this.allowSessionPortFallback = true,
-    this.authenticationEnabled = false,
+    this.authPassword = '',
     this.appHandlePath,
     this.launchConfiguration = CockpitFlutterLaunchConfiguration.empty,
   });
@@ -46,7 +46,7 @@ final class CockpitLaunchAppRequest {
   final CockpitAppMode mode;
   final Duration launchTimeout;
   final bool allowSessionPortFallback;
-  final bool authenticationEnabled;
+  final String authPassword;
   final String? appHandlePath;
   final CockpitFlutterLaunchConfiguration launchConfiguration;
 }
@@ -123,7 +123,7 @@ final class CockpitLaunchAppService {
           sessionPort: request.sessionPort,
           launchTimeout: request.launchTimeout,
           allowSessionPortFallback: request.allowSessionPortFallback,
-          authenticationEnabled: request.authenticationEnabled,
+          authPassword: request.authPassword,
           persistAppHandlePath: request.appHandlePath,
           launchConfiguration: request.launchConfiguration,
         ),
@@ -209,7 +209,7 @@ final class CockpitLaunchAppService {
     try {
       return await _remoteStatusReader(
         remoteSessionHandle.baseUri,
-        authToken: remoteSessionHandle.authToken,
+        password: remoteSessionHandle.password,
       );
     } on Object {
       return null;
@@ -229,7 +229,7 @@ final class CockpitLaunchAppService {
         sessionPort: request.sessionPort,
         launchTimeout: request.launchTimeout,
         allowSessionPortFallback: request.allowSessionPortFallback,
-        authenticationEnabled: request.authenticationEnabled,
+        authPassword: request.authPassword,
         launchConfiguration: request.launchConfiguration,
       ),
     );

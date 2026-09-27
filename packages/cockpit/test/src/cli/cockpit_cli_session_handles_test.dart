@@ -219,12 +219,12 @@ void main() {
         deviceId: 'iphone-1',
         flavor: 'staging',
         recoverable: false,
-        authenticationEnabled: true,
+        authPassword: 'unit-dev-password',
         launchTimeoutMilliseconds: 123456,
       );
 
       expect(handle.recoverable, isFalse);
-      expect(handle.authenticationEnabled, isTrue);
+      expect(handle.authPassword, 'unit-dev-password');
       expect(handle.launchTimeoutMilliseconds, 123456);
       final persisted = await File(
         p.join(temporaryDirectory.path, 'sessions.json'),
@@ -244,7 +244,7 @@ void main() {
       );
       expect(rebound.handleId, handle.handleId);
       expect(rebound.recoverable, isFalse);
-      expect(rebound.authenticationEnabled, isTrue);
+      expect(rebound.authPassword, 'unit-dev-password');
       expect(rebound.launchTimeoutMilliseconds, 123456);
     },
   );
@@ -262,14 +262,14 @@ void main() {
       entrypoint: 'lib/main.dart',
       platform: 'macos',
       deviceId: 'macos',
-      authenticationEnabled: true,
+      authPassword: 'unit-dev-password',
     );
     final stateFile = File(p.join(temporaryDirectory.path, 'sessions.json'));
     final state =
         jsonDecode(await stateFile.readAsString()) as Map<String, Object?>;
     final handles = state['handles']! as List<Object?>;
     final persistedHandle = handles.single! as Map<String, Object?>;
-    persistedHandle.remove('authenticationEnabled');
+    persistedHandle.remove('authPassword');
     await stateFile.writeAsString('${jsonEncode(state)}\n', flush: true);
 
     final reopened = CockpitCliSessionHandleStore.file(
@@ -278,10 +278,7 @@ void main() {
       directorySyncer: const _NoopDirectorySyncer(),
     );
 
-    expect(
-      (await reopened.find(handle.handleId))?.authenticationEnabled,
-      isFalse,
-    );
+    expect((await reopened.find(handle.handleId))?.authPassword, isEmpty);
   });
 
   test('keeps implicit selection isolated across checkouts', () async {

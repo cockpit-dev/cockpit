@@ -19,10 +19,7 @@ import 'cockpit_remote_session_launch_options.dart';
 import 'cockpit_windows_remote_session_launcher.dart';
 
 typedef CockpitRemoteSessionStatusReader =
-    Future<CockpitRemoteSessionStatus> Function(
-      Uri baseUri, {
-      String authToken,
-    });
+    Future<CockpitRemoteSessionStatus> Function(Uri baseUri, {String password});
 typedef CockpitFlutterVersionReader = Future<String> Function();
 typedef CockpitFlutterExecutableVersionReader =
     Future<String> Function(String flutterExecutable);
@@ -105,11 +102,11 @@ final class CockpitPlatformRemoteSessionLauncher
 
 Future<CockpitRemoteSessionStatus> cockpitReadRemoteSessionStatus(
   Uri baseUri, {
-  String authToken = '',
+  String password = '',
 }) {
   return CockpitRemoteSessionClient(
     baseUri: baseUri,
-    authToken: authToken,
+    password: password,
   ).readStatus();
 }
 
@@ -260,7 +257,7 @@ Future<CockpitRemoteSessionStatus> cockpitWaitForRemoteSessionReady({
   required CockpitRemoteSessionStatusReader statusReader,
   String? expectedSessionId,
   String? expectedPlatform,
-  String? authToken,
+  String? password,
   Duration pollInterval = const Duration(milliseconds: 500),
 }) async {
   final deadline = DateTime.now().add(timeout);
@@ -274,7 +271,7 @@ Future<CockpitRemoteSessionStatus> cockpitWaitForRemoteSessionReady({
     try {
       final status = await statusReader(
         baseUri,
-        authToken: authToken ?? '',
+        password: password ?? '',
       ).timeout(remaining);
       if (_remoteSessionStatusMatches(
         status,

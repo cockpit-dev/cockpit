@@ -94,7 +94,7 @@ void main() {
           platform: 'ios',
           deviceId: 'physical-iphone',
           sessionPort: 47331,
-          authenticationEnabled: true,
+          authPassword: 'unit-dev-password',
         ),
       ),
       throwsA(
@@ -108,8 +108,8 @@ void main() {
       ),
     );
 
-    expect(tokenGenerator.byteLengths, <int>[16, 32]);
-    expect(registeredSecrets, <String>[_DevelopmentTokenGenerator.authToken]);
+    expect(tokenGenerator.byteLengths, <int>[16]);
+    expect(registeredSecrets, <String>[_DevelopmentTokenGenerator.password]);
     expect(
       await Directory(
         p.join(appTempStore.root, _DevelopmentTokenGenerator.sessionId),
@@ -437,8 +437,7 @@ void main() {
 final class _DevelopmentTokenGenerator
     implements CockpitTokenGenerator, CockpitResourceIdTokenGenerator {
   static const String sessionId = 'sdevelop001';
-  static const String authToken =
-      'development-auth-token-with-thirty-two-bytes-0001';
+  static const String password = 'unit-dev-password';
 
   final List<int> byteLengths = <int>[];
 
@@ -451,7 +450,7 @@ final class _DevelopmentTokenGenerator
   @override
   String nextToken({int byteLength = 32}) {
     byteLengths.add(byteLength);
-    return authToken;
+    return password;
   }
 }
 

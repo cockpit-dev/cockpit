@@ -58,7 +58,7 @@ void main() {
       );
 
       final service = CockpitQueryRemoteSessionService(
-        statusReader: (baseUri, {String authToken = ''}) async {
+        statusReader: (baseUri, {String password = ''}) async {
           expect(baseUri.toString(), handle.baseUrl);
           return expectedStatus;
         },
@@ -78,7 +78,7 @@ void main() {
 
   test('query service rejects requests without a session reference', () async {
     final service = CockpitQueryRemoteSessionService(
-      statusReader: (_, {String authToken = ''}) async =>
+      statusReader: (_, {String password = ''}) async =>
           throw UnimplementedError(),
     );
 

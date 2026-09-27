@@ -57,7 +57,7 @@ final class CockpitQueryRemoteSessionService {
     );
     final status = await _statusReader(
       resolved.baseUri,
-      authToken: resolved.sessionHandle?.authToken ?? '',
+      password: resolved.sessionHandle?.password ?? '',
     );
 
     return CockpitQueryRemoteSessionResult(

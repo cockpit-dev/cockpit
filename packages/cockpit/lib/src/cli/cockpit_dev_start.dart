@@ -20,7 +20,7 @@ final class CockpitDevStartRequest {
     this.deviceId,
     this.flavor,
     this.launchConfiguration,
-    this.authenticationEnabled,
+    this.authPassword,
     this.launchTimeoutMilliseconds = 600000,
   });
 
@@ -30,7 +30,7 @@ final class CockpitDevStartRequest {
   final String? deviceId;
   final String? flavor;
   final Map<String, Object?>? launchConfiguration;
-  final bool? authenticationEnabled;
+  final String? authPassword;
   final int launchTimeoutMilliseconds;
 
   bool get hasExplicitSelection =>
@@ -39,7 +39,7 @@ final class CockpitDevStartRequest {
       deviceId != null ||
       flavor != null ||
       launchConfiguration != null ||
-      authenticationEnabled != null;
+      authPassword != null;
 }
 
 final class CockpitDevStartService {
@@ -110,8 +110,7 @@ final class CockpitDevStartService {
             deviceId: request.deviceId ?? active.deviceId,
             flavor: request.flavor ?? active.flavor,
             launchConfiguration: request.launchConfiguration,
-            authenticationEnabled:
-                request.authenticationEnabled ?? active.authenticationEnabled,
+            authPassword: request.authPassword ?? active.authPassword,
             launchTimeoutMilliseconds: request.launchTimeoutMilliseconds,
           );
     runtime.progress('Preparing Flutter target...');
@@ -282,10 +281,8 @@ final class CockpitDevStartService {
       'Building and launching Flutter on ${device.id}; '
       'waiting for the Cockpit bridge...',
     );
-    final authenticationEnabled =
-        launchRequest.authenticationEnabled ??
-        active?.authenticationEnabled ??
-        false;
+    final authPassword =
+        launchRequest.authPassword ?? active?.authPassword ?? '';
     final launched = await _invokeWorkspace(
       client,
       workspace.workspaceId,
@@ -294,7 +291,7 @@ final class CockpitDevStartService {
         'targetId': target.targetId,
         'mode': 'development',
         'launchTimeoutMs': request.launchTimeoutMilliseconds,
-        if (authenticationEnabled) 'authenticationEnabled': true,
+        if (authPassword.isNotEmpty) 'authPassword': authPassword,
         'launchConfiguration': ?launchConfiguration,
       },
     );
@@ -331,7 +328,7 @@ final class CockpitDevStartService {
             deviceId: device.id,
             flavor: launchRequest.flavor,
             recoverable: recoverable,
-            authenticationEnabled: authenticationEnabled,
+            authPassword: authPassword,
             launchTimeoutMilliseconds: launchRequest.launchTimeoutMilliseconds,
             replaceLaunchIdentity: true,
           )
@@ -347,7 +344,7 @@ final class CockpitDevStartService {
             deviceId: device.id,
             flavor: launchRequest.flavor,
             recoverable: recoverable,
-            authenticationEnabled: authenticationEnabled,
+            authPassword: authPassword,
             launchTimeoutMilliseconds: launchRequest.launchTimeoutMilliseconds,
             replaceLaunchIdentity: true,
           );
@@ -608,10 +605,12 @@ String? cockpitDevStartFailureNext({
   required CockpitCliSessionHandle? session,
 }) {
   if (request.launchConfiguration != null) return null;
-  final authenticationOption = switch (request.authenticationEnabled) {
-    true => ' --auth',
-    false => ' --no-auth',
+  // The password itself stays out of the suggested command; it is a
+  // secret, and the stored session already remembers the selection.
+  final authenticationOption = switch (request.authPassword) {
     null => '',
+    '' => ' --no-auth',
+    _ => ' --auth <password>',
   };
   if (session != null) {
     return 'cockpit dev start --session ${session.handleId}'

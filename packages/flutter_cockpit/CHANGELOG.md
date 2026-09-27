@@ -9,6 +9,9 @@
   WebSocket `/connect` handshake.
 - Confined the bridge client's token to the locally constructed `/connect`
   handshake URI while `publicBaseUri` stays clean.
+- Renamed the session credential to `password` across the remote
+  configuration and client surfaces: it is chosen by the operator that
+  starts the session, never generated, and empty means unauthenticated.
 - Made bounded frame waits report their outcome through
   `CockpitPendingFrameWaitResult` so timeouts surface instead of silently
   returning stale snapshots, and bounded the post-scroll settle so frameless

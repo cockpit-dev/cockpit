@@ -1,18 +1,18 @@
 final class CockpitRemoteEndpoint {
-  const CockpitRemoteEndpoint({required this.baseUri, required this.authToken});
+  const CockpitRemoteEndpoint({required this.baseUri, required this.password});
 
   final Uri baseUri;
-  final String authToken;
+  final String password;
 }
 
 CockpitRemoteEndpoint cockpitResolveRemoteEndpoint({
   required Uri baseUri,
-  Iterable<String?> authTokens = const <String?>[],
+  Iterable<String?> passwords = const <String?>[],
   String path = 'remote endpoint',
 }) {
   final tokens = <String>{};
-  for (final authToken in authTokens) {
-    final normalized = authToken?.trim();
+  for (final password in passwords) {
+    final normalized = password?.trim();
     if (normalized != null && normalized.isNotEmpty) {
       tokens.add(normalized);
     }
@@ -34,7 +34,7 @@ CockpitRemoteEndpoint cockpitResolveRemoteEndpoint({
 
   return CockpitRemoteEndpoint(
     baseUri: queryTokens == null ? baseUri : _withoutTokenQuery(baseUri),
-    authToken: tokens.isEmpty ? '' : tokens.first,
+    password: tokens.isEmpty ? '' : tokens.first,
   );
 }
 

@@ -2,11 +2,11 @@
 
 ## 4.10.0
 
-- Added opt-in remote bridge authentication with `cockpit dev start --auth`
-  (default off; `--no-auth` forces it off). Enabled launches use an
-  independent 256-bit token that never derives from the session id, travels
-  only through an owner-only `--dart-define-from-file`, and is persisted per
-  session so automatic relaunches keep the selection.
+- Added opt-in remote bridge authentication with `cockpit dev start --auth
+  <password>` (default off; `--no-auth` forces it off). The password is chosen
+  by the operator, never generated, persisted per session so automatic
+  relaunches keep it, and travels to the app only through an owner-only
+  `--dart-define-from-file`.
 - Confined the web bridge's query token to the `/connect` WebSocket
   handshake, matched the `Bearer` scheme case-insensitively, and answered
   unauthorized requests with structured JSON on both bridge and probe paths.

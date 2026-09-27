@@ -152,7 +152,7 @@ exit 0
               apkPath:
                   '/workspace/examples/cockpit_demo/build/app/outputs/flutter-apk/app-debug.apk',
             ),
-        statusReader: (baseUri, {String authToken = ''}) async =>
+        statusReader: (baseUri, {String password = ''}) async =>
             CockpitRemoteSessionStatus(
               sessionId: 'android-bootstrap-session',
               platform: 'android',
@@ -244,7 +244,7 @@ exit 0
               apkPath:
                   '/workspace/examples/cockpit_demo/build/app/outputs/flutter-apk/app-debug.apk',
             ),
-        statusReader: (baseUri, {String authToken = ''}) async =>
+        statusReader: (baseUri, {String password = ''}) async =>
             _readyStatus('android'),
       );
 
@@ -294,7 +294,7 @@ exit 0
         },
         bundleIdResolver: ({required String appBundlePath}) async =>
             'dev.cockpit.cockpitDemo',
-        statusReader: (baseUri, {String authToken = ''}) async =>
+        statusReader: (baseUri, {String password = ''}) async =>
             CockpitRemoteSessionStatus(
               sessionId: 'ios-bootstrap-session',
               platform: 'ios',
@@ -380,7 +380,7 @@ exit 0
         },
         bundleIdResolver: ({required String appBundlePath}) async =>
             'dev.cockpit.cockpitDemo',
-        statusReader: (baseUri, {String authToken = ''}) async =>
+        statusReader: (baseUri, {String password = ''}) async =>
             _readyStatus('ios'),
       );
 
@@ -424,7 +424,7 @@ exit 0
             '/workspace/examples/cockpit_demo/build/ios/iphonesimulator/Runner.app',
         bundleIdResolver: ({required String appBundlePath}) async =>
             'dev.cockpit.cockpitDemo',
-        statusReader: (_, {String authToken = ''}) async =>
+        statusReader: (_, {String password = ''}) async =>
             throw StateError('status should not be read'),
         now: () => DateTime.utc(2026, 3, 24, 12),
       );
@@ -481,7 +481,7 @@ exit 0
         },
         bundleIdResolver: ({required String appBundlePath}) async =>
             'dev.cockpit.cockpitDemo',
-        statusReader: (baseUri, {String authToken = ''}) async =>
+        statusReader: (baseUri, {String password = ''}) async =>
             _readyStatus('ios'),
       );
 
@@ -538,7 +538,7 @@ exit 0
         },
         bundleIdResolver: ({required String appBundlePath}) async =>
             'dev.cockpit.cockpitDemo',
-        statusReader: (baseUri, {String authToken = ''}) async =>
+        statusReader: (baseUri, {String password = ''}) async =>
             CockpitRemoteSessionStatus(
               sessionId: 'ios-device-bootstrap-session',
               platform: 'ios',
@@ -606,7 +606,7 @@ exit 0
             '/workspace/examples/cockpit_demo/build/ios/iphoneos/Runner.app',
         bundleIdResolver: ({required String appBundlePath}) async =>
             'dev.cockpit.cockpitDemo',
-        statusReader: (_, {String authToken = ''}) async =>
+        statusReader: (_, {String password = ''}) async =>
             throw StateError('status should not be read'),
         now: () => DateTime.utc(2026, 3, 24, 12),
       );
@@ -671,7 +671,7 @@ exit 0
               return ProcessResult(0, 0, '', '');
             },
         portForwarder: _FakeAndroidPortForwarder(forwardedHostPort: 58421),
-        statusReader: (baseUri, {String authToken = ''}) async =>
+        statusReader: (baseUri, {String password = ''}) async =>
             _readyStatus('android'),
       );
 
@@ -723,7 +723,7 @@ exit 0
             apkPath:
                 '/workspace/examples/cockpit_demo/build/app/outputs/flutter-apk/app-debug.apk',
           ),
-      statusReader: (_, {String authToken = ''}) async =>
+      statusReader: (_, {String password = ''}) async =>
           throw StateError('status should not be read'),
       now: () => DateTime.utc(2026, 3, 24, 12),
     );
@@ -790,7 +790,7 @@ exit 0
           resolvedAppBundlePath = appBundlePath;
           return 'dev.cockpit.orbitStaging';
         },
-        statusReader: (baseUri, {String authToken = ''}) async =>
+        statusReader: (baseUri, {String password = ''}) async =>
             _readyStatus('ios'),
       );
 
@@ -858,7 +858,7 @@ exit 0
         resolvedAppBundlePath = appBundlePath;
         return 'dev.cockpit.cockpitDemo';
       },
-      statusReader: (baseUri, {String authToken = ''}) async =>
+      statusReader: (baseUri, {String password = ''}) async =>
           _readyStatus('ios'),
     );
 
@@ -915,7 +915,7 @@ exit 0
         resolvedAppBundlePath = appBundlePath;
         return 'dev.cockpit.cockpitDemo';
       },
-      statusReader: (baseUri, {String authToken = ''}) async =>
+      statusReader: (baseUri, {String password = ''}) async =>
           _readyStatus('ios'),
     );
 
@@ -1154,7 +1154,7 @@ exit 0
             cockpitWaitForRemoteSessionReady(
               baseUri: Uri.parse('http://127.0.0.1:47331'),
               timeout: const Duration(milliseconds: 50),
-              statusReader: (_, {String authToken = ''}) =>
+              statusReader: (_, {String password = ''}) =>
                   Completer<CockpitRemoteSessionStatus>().future,
             ).timeout(
               const Duration(milliseconds: 120),
@@ -1174,7 +1174,7 @@ exit 0
             cockpitWaitForRemoteSessionReady(
               baseUri: Uri.parse('http://127.0.0.1:47331'),
               timeout: const Duration(milliseconds: 50),
-              statusReader: (_, {String authToken = ''}) async =>
+              statusReader: (_, {String password = ''}) async =>
                   throw StateError('still booting'),
             ).timeout(
               const Duration(milliseconds: 120),
@@ -1197,7 +1197,7 @@ exit 0
         timeout: const Duration(seconds: 1),
         expectedSessionId: 'new-session',
         expectedPlatform: 'macos',
-        statusReader: (_, {String authToken = ''}) async {
+        statusReader: (_, {String password = ''}) async {
           reads += 1;
           if (reads == 1) {
             return _readyStatus('macos', sessionId: 'old-session');
@@ -1240,7 +1240,7 @@ exit 0
                   applicationId: 'dev.cockpit.demo',
                   apkPath: '/tmp/app-debug.apk',
                 ),
-        statusReader: (_, {String authToken = ''}) async =>
+        statusReader: (_, {String password = ''}) async =>
             _readyStatus('android'),
       );
 

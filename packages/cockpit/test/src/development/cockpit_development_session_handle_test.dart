@@ -88,7 +88,7 @@ void main() {
       launchedAt: DateTime.utc(2026, 4, 5),
       reloadGeneration: 2,
       remoteSessionHandle: remoteWithoutToken().copyWith(
-        authToken: 'launch-token-1',
+        password: 'launch-token-1',
       ),
     );
     final withoutRemote = CockpitDevelopmentSessionHandle(
@@ -105,12 +105,12 @@ void main() {
       remoteSessionHandle: remoteWithoutToken(),
     );
 
-    // The secret is exposed through authToken only; the endpoint view stays
+    // The secret is exposed through password only; the endpoint view stays
     // exactly as stored with or without a token.
     expect(handle.baseUri, Uri.parse('http://127.0.0.1:57331'));
     expect(handle.appBaseUrl, 'http://127.0.0.1:57331');
-    expect(handle.authToken, 'launch-token-1');
+    expect(handle.password, 'launch-token-1');
     expect(withoutRemote.baseUri, Uri.parse('http://127.0.0.1:57331'));
-    expect(withoutRemote.authToken, isEmpty);
+    expect(withoutRemote.password, isEmpty);
   });
 }

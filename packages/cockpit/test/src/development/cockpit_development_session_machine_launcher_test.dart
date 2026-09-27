@@ -52,7 +52,7 @@ void main() {
               );
               return client;
             },
-        statusReader: (baseUri, {String authToken = ''}) async {
+        statusReader: (baseUri, {String password = ''}) async {
           probedBaseUris.add(baseUri);
           return _readyStatus('android', processId: 4242);
         },
@@ -146,7 +146,7 @@ void main() {
               );
               return client;
             },
-        statusReader: (_, {String authToken = ''}) async =>
+        statusReader: (_, {String password = ''}) async =>
             _readyStatus('android'),
         portForwarder: const _RecordingPortForwarder(58331),
         platformAppIdResolver:
@@ -237,7 +237,7 @@ void main() {
               );
               return client;
             },
-        statusReader: (_, {String authToken = ''}) async => _readyStatus('ios'),
+        statusReader: (_, {String password = ''}) async => _readyStatus('ios'),
         platformAppIdResolver:
             ({required projectDir, required platform, flavor}) async {
               expect(projectDir, '/workspace/examples/cockpit_demo');
@@ -327,7 +327,7 @@ void main() {
               );
               return client;
             },
-        statusReader: (baseUri, {String authToken = ''}) async {
+        statusReader: (baseUri, {String password = ''}) async {
           probedBaseUris.add(baseUri);
           return _readyStatus('web');
         },
@@ -400,7 +400,7 @@ void main() {
                 requestWriter: (_) async {},
               );
             },
-        statusReader: (_, {String authToken = ''}) async {
+        statusReader: (_, {String password = ''}) async {
           statusReadCount += 1;
           if (statusReadCount == 1) {
             return _readyStatus('macos', sessionId: 'old-macos-session');
@@ -513,7 +513,7 @@ void main() {
               );
               return ProcessResult(321, 0, '', '');
             },
-        statusReader: (_, {String authToken = ''}) async =>
+        statusReader: (_, {String password = ''}) async =>
             _readyStatus('macos'),
         platformAppIdResolver:
             ({required projectDir, required platform, flavor}) async {
@@ -611,7 +611,7 @@ void main() {
             cleans += 1;
             return ProcessResult(1, 0, '', '');
           },
-      statusReader: (_, {String authToken = ''}) async => _readyStatus('macos'),
+      statusReader: (_, {String password = ''}) async => _readyStatus('macos'),
       platformAppIdResolver:
           ({required projectDir, required platform, flavor}) async =>
               'dev.example.macos',
@@ -683,7 +683,7 @@ void main() {
             );
             return client;
           },
-      statusReader: (_, {String authToken = ''}) async =>
+      statusReader: (_, {String password = ''}) async =>
           _readyStatus('android'),
       portForwarder: const _RecordingPortForwarder(58331),
       now: () => DateTime.utc(2026, 4, 4, 17, 30),
@@ -754,7 +754,7 @@ void main() {
               );
               return client;
             },
-        statusReader: (baseUri, {String authToken = ''}) async {
+        statusReader: (baseUri, {String password = ''}) async {
           probedBaseUris.add(baseUri);
           return _readyStatus('ios');
         },
@@ -838,7 +838,7 @@ void main() {
               });
               return client;
             },
-        statusReader: (_, {String authToken = ''}) async =>
+        statusReader: (_, {String password = ''}) async =>
             throw StateError('connection refused'),
         portForwarder: const _RecordingPortForwarder(58331),
         now: () => DateTime.utc(2026, 4, 4, 19),
@@ -902,7 +902,7 @@ void main() {
               });
               return client;
             },
-        statusReader: (_, {String authToken = ''}) async => _readyStatus('ios'),
+        statusReader: (_, {String password = ''}) async => _readyStatus('ios'),
         iosDeviceConnectionResolver: (_) async =>
             const CockpitIosDeviceConnection(
               isPhysical: true,
@@ -977,7 +977,7 @@ void main() {
               });
               return client;
             },
-        statusReader: (_, {String authToken = ''}) async {
+        statusReader: (_, {String password = ''}) async {
           statusReadCount += 1;
           if (statusReadCount < 3) {
             throw StateError('connection refused');
@@ -1060,7 +1060,7 @@ void main() {
               });
               return client;
             },
-        statusReader: (_, {String authToken = ''}) async => _readyStatus('ios'),
+        statusReader: (_, {String password = ''}) async => _readyStatus('ios'),
         iosDeviceConnectionResolver: (_) async =>
             const CockpitIosDeviceConnection(
               isPhysical: true,
@@ -1143,7 +1143,7 @@ void main() {
               );
               return client;
             },
-        statusReader: (_, {String authToken = ''}) async =>
+        statusReader: (_, {String password = ''}) async =>
             throw StateError('connection refused'),
         portForwarder: const _RecordingPortForwarder(58331),
         diagnosticLogger: diagnosticLog.add,
@@ -1204,7 +1204,7 @@ void main() {
               exitCode: Completer<int>().future,
               requestWriter: (_) async {},
             ),
-        statusReader: (_, {String authToken = ''}) =>
+        statusReader: (_, {String password = ''}) =>
             Completer<CockpitRemoteSessionStatus>().future,
         portForwarder: const _RecordingPortForwarder(58331),
       );
@@ -1254,7 +1254,7 @@ void main() {
               exitCode: Completer<int>().future,
               requestWriter: (_) async {},
             ),
-        statusReader: (_, {String authToken = ''}) async =>
+        statusReader: (_, {String password = ''}) async =>
             throw StateError('still booting'),
         portForwarder: const _RecordingPortForwarder(58331),
       );

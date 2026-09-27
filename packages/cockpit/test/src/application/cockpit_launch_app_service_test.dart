@@ -112,7 +112,7 @@ void main() {
         remoteService: CockpitLaunchRemoteSessionService(
           entrypointResolver: CockpitEntrypointResolver(exists: (_) => true),
           launcher: _FakeRemoteSessionLauncher(remoteHandle),
-          statusReader: (_, {String authToken = ''}) async =>
+          statusReader: (_, {String password = ''}) async =>
               CockpitRemoteSessionStatus(
                 sessionId: 'ios-profile-session',
                 platform: 'ios',
@@ -229,7 +229,7 @@ void main() {
         remoteService: CockpitLaunchRemoteSessionService(
           entrypointResolver: CockpitEntrypointResolver(exists: (_) => true),
           launcher: _FakeRemoteSessionLauncher(remoteHandle),
-          statusReader: (_, {String authToken = ''}) async =>
+          statusReader: (_, {String password = ''}) async =>
               CockpitRemoteSessionStatus(
                 sessionId: 'ios-profile-session',
                 platform: 'ios',
@@ -301,7 +301,7 @@ void main() {
             onLaunch: (_) => remoteLaunchCount += 1,
           ),
         ),
-        remoteStatusReader: (baseUri, {String authToken = ''}) async {
+        remoteStatusReader: (baseUri, {String password = ''}) async {
           remoteStatusReadCount += 1;
           expect(baseUri, remoteHandle.baseUri);
           return CockpitRemoteSessionStatus(
@@ -376,7 +376,7 @@ void main() {
             onLaunch: (_) => remoteLaunchCount += 1,
           ),
         ),
-        remoteStatusReader: (_, {String authToken = ''}) async {
+        remoteStatusReader: (_, {String password = ''}) async {
           throw StateError('transient health probe failure');
         },
       );
@@ -429,7 +429,7 @@ void main() {
           entrypointResolver: CockpitEntrypointResolver(exists: (_) => true),
           launcher: _CapturingRemoteSessionLauncher(onLaunch: (_) {}),
         ),
-        remoteStatusReader: (_, {String authToken = ''}) async =>
+        remoteStatusReader: (_, {String password = ''}) async =>
             CockpitRemoteSessionStatus(
               sessionId: 'ios-profile-session',
               platform: 'ios',
@@ -507,7 +507,7 @@ void main() {
             onLaunch: (_) => remoteLaunchCount += 1,
           ),
         ),
-        remoteStatusReader: (_, {String authToken = ''}) async =>
+        remoteStatusReader: (_, {String password = ''}) async =>
             CockpitRemoteSessionStatus(
               sessionId: 'ios-profile-session',
               platform: 'ios',

@@ -29,7 +29,7 @@ final class CockpitCliSessionHandle {
     this.flavor,
     this.lifecycle = 'ready',
     this.recoverable = true,
-    this.authenticationEnabled = false,
+    this.authPassword = '',
     this.launchTimeoutMilliseconds = 600000,
   });
 
@@ -48,7 +48,10 @@ final class CockpitCliSessionHandle {
   final String? flavor;
   final String lifecycle;
   final bool recoverable;
-  final bool authenticationEnabled;
+
+  /// Operator-chosen password for the session's remote boundary; empty means
+  /// authentication is off.
+  final String authPassword;
   final int launchTimeoutMilliseconds;
 
   bool get isDevelopment => checkoutIdentity != null;
@@ -68,7 +71,7 @@ final class CockpitCliSessionHandle {
     String? flavor,
     String? lifecycle,
     bool? recoverable,
-    bool? authenticationEnabled,
+    String? authPassword,
     int? launchTimeoutMilliseconds,
     bool replaceLaunchIdentity = false,
   }) => CockpitCliSessionHandle(
@@ -89,7 +92,7 @@ final class CockpitCliSessionHandle {
     flavor: replaceLaunchIdentity ? flavor : flavor ?? this.flavor,
     lifecycle: lifecycle ?? this.lifecycle,
     recoverable: recoverable ?? this.recoverable,
-    authenticationEnabled: authenticationEnabled ?? this.authenticationEnabled,
+    authPassword: authPassword ?? this.authPassword,
     launchTimeoutMilliseconds:
         launchTimeoutMilliseconds ?? this.launchTimeoutMilliseconds,
   );
@@ -109,7 +112,7 @@ final class CockpitCliSessionHandle {
     if (flavor != null) 'flavor': flavor,
     'lifecycle': lifecycle,
     'recoverable': recoverable,
-    'authenticationEnabled': authenticationEnabled,
+    if (authPassword.isNotEmpty) 'authPassword': authPassword,
     'launchTimeoutMilliseconds': launchTimeoutMilliseconds,
     'updatedAt': updatedAt.toUtc().toIso8601String(),
   };
@@ -181,7 +184,7 @@ final class CockpitCliSessionHandleStore {
     String? flavor,
     String lifecycle = 'ready',
     bool? recoverable,
-    bool? authenticationEnabled,
+    String? authPassword,
     int? launchTimeoutMilliseconds,
     bool replaceLaunchIdentity = false,
     String? handleId,
@@ -252,7 +255,7 @@ final class CockpitCliSessionHandleStore {
         flavor: flavor,
         lifecycle: lifecycle,
         recoverable: recoverable ?? true,
-        authenticationEnabled: authenticationEnabled ?? false,
+        authPassword: authPassword ?? '',
         launchTimeoutMilliseconds: launchTimeoutMilliseconds ?? 600000,
       );
     } else {
@@ -287,7 +290,7 @@ final class CockpitCliSessionHandleStore {
         flavor: flavor,
         lifecycle: lifecycle,
         recoverable: recoverable,
-        authenticationEnabled: authenticationEnabled,
+        authPassword: authPassword,
         launchTimeoutMilliseconds: launchTimeoutMilliseconds,
         replaceLaunchIdentity: replaceLaunchIdentity,
         updatedAt: _utcNow().toUtc(),
@@ -432,7 +435,7 @@ final class CockpitCliSessionHandleStore {
     String? flavor,
     String lifecycle = 'ready',
     bool recoverable = true,
-    bool authenticationEnabled = false,
+    String authPassword = '',
     int launchTimeoutMilliseconds = 600000,
   }) {
     if (state.handles.length >= maximumHandles) {
@@ -462,7 +465,7 @@ final class CockpitCliSessionHandleStore {
       flavor: flavor,
       lifecycle: lifecycle,
       recoverable: recoverable,
-      authenticationEnabled: authenticationEnabled,
+      authPassword: authPassword,
       launchTimeoutMilliseconds: launchTimeoutMilliseconds,
       updatedAt: _utcNow().toUtc(),
     );
@@ -608,6 +611,9 @@ final class _SessionHandleStateCodec
           'flavor',
           'lifecycle',
           'recoverable',
+          'authPassword',
+          // Pre-4.10.0 development builds persisted a bool here; keep the
+          // legacy key recognized so those state files still load.
           'authenticationEnabled',
           'launchTimeoutMilliseconds',
           'updatedAt',
@@ -623,6 +629,9 @@ final class _SessionHandleStateCodec
           'platform',
           'deviceId',
           'flavor',
+          'authPassword',
+          // Legacy pre-4.10.0 development-build key; optional on read and
+          // ignored in favour of authPassword above.
           'authenticationEnabled',
         },
       );
@@ -671,8 +680,8 @@ final class _SessionHandleStateCodec
       if (recoverable is! bool) {
         throw FormatException('Invalid recoverable state at $path.');
       }
-      final authenticationEnabled = item['authenticationEnabled'] ?? false;
-      if (authenticationEnabled is! bool) {
+      final authPassword = item['authPassword'] ?? '';
+      if (authPassword is! String || authPassword.length > 256) {
         throw FormatException('Invalid authentication state at $path.');
       }
       final launchTimeoutMilliseconds = _launchTimeout(
@@ -719,7 +728,7 @@ final class _SessionHandleStateCodec
           flavor: flavor,
           lifecycle: lifecycle,
           recoverable: recoverable,
-          authenticationEnabled: authenticationEnabled,
+          authPassword: authPassword,
           launchTimeoutMilliseconds: launchTimeoutMilliseconds,
           updatedAt: updatedAt,
         ),

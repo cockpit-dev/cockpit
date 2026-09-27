@@ -42,7 +42,7 @@ void main() {
               );
               return 4101;
             },
-        statusReader: (baseUri, {String authToken = ''}) async =>
+        statusReader: (baseUri, {String password = ''}) async =>
             CockpitRemoteSessionStatus(
               sessionId: 'windows-bootstrap-session',
               platform: 'windows',
@@ -128,7 +128,7 @@ void main() {
               Map<String, String>? environment,
               required Duration timeout,
             }) async => 4101,
-        statusReader: (baseUri, {String authToken = ''}) async =>
+        statusReader: (baseUri, {String password = ''}) async =>
             CockpitRemoteSessionStatus(
               sessionId: 'windows-sdk-session',
               platform: 'windows',
@@ -252,7 +252,7 @@ void main() {
               launchedExecutable = executablePath;
               return 9001;
             },
-        statusReader: (baseUri, {String authToken = ''}) async =>
+        statusReader: (baseUri, {String password = ''}) async =>
             CockpitRemoteSessionStatus(
               sessionId: 'windows-bootstrap-session',
               platform: 'windows',
@@ -322,7 +322,7 @@ void main() {
               runtimeEnvironment = environment;
               return 4101;
             },
-        statusReader: (baseUri, {String authToken = ''}) async =>
+        statusReader: (baseUri, {String password = ''}) async =>
             CockpitRemoteSessionStatus(
               sessionId: 'windows-launch-config',
               platform: 'windows',

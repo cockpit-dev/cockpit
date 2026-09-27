@@ -16,17 +16,17 @@ typedef CockpitIosDeviceConnectionReader =
 final class CockpitResolvedAppReference {
   CockpitResolvedAppReference({
     required Uri baseUri,
-    String authToken = '',
+    String password = '',
     this.app,
     this.developmentRecord,
     this.remoteRecord,
   }) : endpoint = cockpitResolveRemoteEndpoint(
          baseUri: baseUri,
-         authTokens: <String?>[
-           authToken,
-           app?.authToken,
-           developmentRecord?.handle.authToken,
-           remoteRecord?.handle.authToken,
+         passwords: <String?>[
+           password,
+           app?.password,
+           developmentRecord?.handle.password,
+           remoteRecord?.handle.password,
          ],
          path: 'app reference',
        );
@@ -35,7 +35,7 @@ final class CockpitResolvedAppReference {
 
   Uri get baseUri => endpoint.baseUri;
 
-  String get authToken => endpoint.authToken;
+  String get password => endpoint.password;
   final CockpitAppHandle? app;
   final CockpitDevelopmentSessionRecord? developmentRecord;
   final CockpitRemoteSessionRecord? remoteRecord;
@@ -61,7 +61,7 @@ final class CockpitAppReferenceResolver {
     CockpitAppHandle? app,
     String? appHandlePath,
     Uri? baseUri,
-    String authToken = '',
+    String password = '',
     String? androidDeviceId,
     String? iosDeviceId,
   }) async {
@@ -69,7 +69,7 @@ final class CockpitAppReferenceResolver {
         ? null
         : cockpitResolveRemoteEndpoint(
             baseUri: baseUri,
-            authTokens: <String?>[authToken],
+            passwords: <String?>[password],
             path: 'app reference',
           );
     final explicitBaseUri = await _resolvedExplicitBaseUri(
@@ -77,13 +77,13 @@ final class CockpitAppReferenceResolver {
       androidDeviceId: androidDeviceId,
       iosDeviceId: iosDeviceId,
     );
-    final explicitAuthToken = explicitEndpoint?.authToken ?? authToken;
+    final explicitPassword = explicitEndpoint?.password ?? password;
     if (app != null) {
       final resolvedBaseUri =
           explicitBaseUri ?? await _resolvedBaseUriForApp(app);
       return CockpitResolvedAppReference(
         baseUri: resolvedBaseUri,
-        authToken: explicitAuthToken,
+        password: explicitPassword,
         app: _withResolvedBaseUri(app, resolvedBaseUri),
       );
     }
@@ -104,7 +104,7 @@ final class CockpitAppReferenceResolver {
           );
       return CockpitResolvedAppReference(
         baseUri: resolvedBaseUri,
-        authToken: explicitAuthToken,
+        password: explicitPassword,
         app: _withResolvedBaseUri(resolvedApp, resolvedBaseUri),
         developmentRecord: developmentRecord,
         remoteRecord: remoteRecord,
@@ -117,7 +117,7 @@ final class CockpitAppReferenceResolver {
         if (explicitBaseUri != null) {
           return CockpitResolvedAppReference(
             baseUri: explicitBaseUri,
-            authToken: explicitAuthToken,
+            password: explicitPassword,
           );
         }
         throw const CockpitApplicationServiceException(
@@ -177,7 +177,7 @@ final class CockpitAppReferenceResolver {
       if (explicitBaseUri != null) {
         return CockpitResolvedAppReference(
           baseUri: explicitBaseUri,
-          authToken: explicitAuthToken,
+          password: explicitPassword,
         );
       }
       throw CockpitApplicationServiceException(
@@ -190,7 +190,7 @@ final class CockpitAppReferenceResolver {
     if (explicitBaseUri != null) {
       return CockpitResolvedAppReference(
         baseUri: explicitBaseUri,
-        authToken: explicitAuthToken,
+        password: explicitPassword,
       );
     }
 

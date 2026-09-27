@@ -108,7 +108,7 @@ void main() {
       final service = CockpitLaunchRemoteSessionService(
         entrypointResolver: CockpitEntrypointResolver(exists: (_) => true),
         launcher: _FakeRemoteSessionLauncher(expectedHandle),
-        statusReader: (baseUri, {String authToken = ''}) async {
+        statusReader: (baseUri, {String password = ''}) async {
           expect(baseUri.toString(), expectedHandle.baseUrl);
           return expectedStatus;
         },
@@ -181,7 +181,7 @@ void main() {
               path == '/workspace/examples/cockpit_demo/cockpit/main.dart',
         ),
         launcher: _FakeRemoteSessionLauncher(expectedHandle),
-        statusReader: (_, {String authToken = ''}) async => expectedStatus,
+        statusReader: (_, {String password = ''}) async => expectedStatus,
       );
 
       final result = await service.launch(
@@ -229,7 +229,7 @@ void main() {
           capturedOptions = options;
         },
       ),
-      statusReader: (_, {String authToken = ''}) async =>
+      statusReader: (_, {String password = ''}) async =>
           CockpitRemoteSessionStatus(
             sessionId: 'launch-demo',
             platform: 'macos',
@@ -289,8 +289,8 @@ void main() {
         handle: expectedHandle,
         onLaunch: (options) => capturedOptions = options,
       ),
-      statusReader: (_, {String authToken = ''}) async {
-        expect(authToken, isEmpty);
+      statusReader: (_, {String password = ''}) async {
+        expect(password, isEmpty);
         return _status(platform: 'macos');
       },
     );
@@ -305,9 +305,9 @@ void main() {
     );
 
     expect(tokenGenerator.byteLengths, <int>[16]);
-    expect(capturedOptions?.authToken, isEmpty);
-    expect(capturedOptions?.authTokenDartDefineFile, isNull);
-    expect(result.sessionHandle.authToken, isEmpty);
+    expect(capturedOptions?.password, isEmpty);
+    expect(capturedOptions?.passwordDartDefineFile, isNull);
+    expect(result.sessionHandle.password, isEmpty);
   });
 
   test(
@@ -328,7 +328,7 @@ void main() {
         devicePort: 47331,
         baseUrl: 'http://127.0.0.1:47331',
         launchedAt: DateTime.utc(2026, 9, 27),
-        authToken: _RecordingTokenGenerator.authToken,
+        password: _RecordingTokenGenerator.password,
       );
       final service = CockpitLaunchRemoteSessionService(
         tokenGenerator: tokenGenerator,
@@ -341,18 +341,18 @@ void main() {
           handle: expectedHandle,
           onLaunch: (options) {
             capturedOptions = options;
-            defineFilePath = options.authTokenDartDefineFile;
+            defineFilePath = options.passwordDartDefineFile;
             expect(defineFilePath, isNotNull);
             final defineFile = File(defineFilePath!);
             expect(defineFile.existsSync(), isTrue);
             expect(jsonDecode(defineFile.readAsStringSync()), <String, Object?>{
-              'FLUTTER_COCKPIT_REMOTE_AUTH_TOKEN':
-                  _RecordingTokenGenerator.authToken,
+              'FLUTTER_COCKPIT_REMOTE_PASSWORD':
+                  _RecordingTokenGenerator.password,
             });
           },
         ),
-        statusReader: (_, {String authToken = ''}) async {
-          expect(authToken, _RecordingTokenGenerator.authToken);
+        statusReader: (_, {String password = ''}) async {
+          expect(password, _RecordingTokenGenerator.password);
           return _status(platform: 'macos');
         },
       );
@@ -363,20 +363,20 @@ void main() {
           platform: 'macos',
           deviceId: 'macos',
           sessionPort: 47331,
-          authenticationEnabled: true,
+          authPassword: 'unit-dev-password',
         ),
       );
 
-      expect(tokenGenerator.byteLengths, <int>[16, 32]);
+      expect(tokenGenerator.byteLengths, <int>[16]);
       expect(capturedOptions?.launchId, _RecordingTokenGenerator.resourceId);
-      expect(capturedOptions?.authToken, _RecordingTokenGenerator.authToken);
-      expect(capturedOptions?.authToken, isNot(capturedOptions?.launchId));
-      expect(registeredSecrets, <String>[_RecordingTokenGenerator.authToken]);
+      expect(capturedOptions?.password, _RecordingTokenGenerator.password);
+      expect(capturedOptions?.password, isNot(capturedOptions?.launchId));
+      expect(registeredSecrets, <String>[_RecordingTokenGenerator.password]);
       expect(await File(defineFilePath!).exists(), isFalse);
       expect(result.sessionHandle.baseUri.queryParameters, isEmpty);
       expect(
         result.sessionHandle.toJson().toString(),
-        isNot(contains(_RecordingTokenGenerator.authToken)),
+        isNot(contains(_RecordingTokenGenerator.password)),
       );
     },
   );
@@ -401,7 +401,7 @@ void main() {
       devicePort: 47331,
       baseUrl: 'http://127.0.0.1:47331',
       launchedAt: DateTime.utc(2026, 9, 27),
-      authToken: _RecordingTokenGenerator.authToken,
+      password: _RecordingTokenGenerator.password,
     );
     final service = CockpitLaunchRemoteSessionService(
       tokenGenerator: _RecordingTokenGenerator(),
@@ -416,7 +416,7 @@ void main() {
           blockedAuthPath = _replaceAuthDirectoryWithFile(options);
         },
       ),
-      statusReader: (_, {String authToken = ''}) async =>
+      statusReader: (_, {String password = ''}) async =>
           _status(platform: 'macos'),
     );
 
@@ -426,7 +426,7 @@ void main() {
         platform: 'macos',
         deviceId: 'macos',
         sessionPort: 47331,
-        authenticationEnabled: true,
+        authPassword: 'unit-dev-password',
       ),
     );
 
@@ -467,7 +467,7 @@ void main() {
           platform: 'macos',
           deviceId: 'macos',
           sessionPort: 47331,
-          authenticationEnabled: true,
+          authPassword: 'unit-dev-password',
         ),
       ),
       throwsA(
@@ -509,7 +509,7 @@ void main() {
             capturedOptions = options;
           },
         ),
-        statusReader: (_, {String authToken = ''}) async =>
+        statusReader: (_, {String password = ''}) async =>
             CockpitRemoteSessionStatus(
               sessionId: 'remote-ios-sim',
               platform: 'ios',
@@ -585,7 +585,7 @@ void main() {
             capturedOptions = options;
           },
         ),
-        statusReader: (_, {String authToken = ''}) async =>
+        statusReader: (_, {String password = ''}) async =>
             _status(platform: 'linux'),
       );
 
@@ -767,7 +767,7 @@ final class _CallbackThrowingRemoteSessionLauncher
 String _replaceAuthDirectoryWithFile(
   CockpitRemoteSessionLaunchOptions options,
 ) {
-  final authFilePath = options.authTokenDartDefineFile!;
+  final authFilePath = options.passwordDartDefineFile!;
   final directory = File(authFilePath).parent;
   directory.deleteSync(recursive: true);
   File(directory.path).writeAsStringSync('blocked');
@@ -777,8 +777,7 @@ String _replaceAuthDirectoryWithFile(
 final class _RecordingTokenGenerator
     implements CockpitTokenGenerator, CockpitResourceIdTokenGenerator {
   static const String resourceId = 'rlaunchid01';
-  static const String authToken =
-      'auth-token-with-at-least-thirty-two-bytes-0001';
+  static const String password = 'unit-dev-password';
 
   final List<int> byteLengths = <int>[];
 
@@ -791,7 +790,7 @@ final class _RecordingTokenGenerator
   @override
   String nextToken({int byteLength = 32}) {
     byteLengths.add(byteLength);
-    return authToken;
+    return password;
   }
 }
 

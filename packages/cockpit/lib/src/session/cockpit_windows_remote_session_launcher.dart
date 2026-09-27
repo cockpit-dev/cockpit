@@ -95,7 +95,7 @@ final class CockpitWindowsRemoteSessionLauncher
             port: options.sessionPort,
             flutterVersion: flutterVersion,
             launchId: options.launchId,
-            authTokenDartDefineFile: options.authTokenDartDefineFile,
+            passwordDartDefineFile: options.passwordDartDefineFile,
           ),
         ),
       ],
@@ -125,7 +125,7 @@ final class CockpitWindowsRemoteSessionLauncher
         statusReader: _statusReader,
         expectedSessionId: options.launchId,
         expectedPlatform: options.platform,
-        authToken: options.authToken,
+        password: options.password,
       );
       return CockpitRemoteSessionHandle.fromRemoteStatus(
         projectDir: options.projectDir,
@@ -138,7 +138,7 @@ final class CockpitWindowsRemoteSessionLauncher
         devicePort: options.sessionPort,
         status: status,
         launchedAt: _now(),
-        authToken: options.authToken,
+        password: options.password,
       );
     } on Object {
       _bestEffortKillLaunchedApp(processId);

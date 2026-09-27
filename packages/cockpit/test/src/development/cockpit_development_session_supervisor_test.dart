@@ -80,7 +80,7 @@ void main() {
           devicePort: 47331,
           baseUrl: 'http://127.0.0.1:57331',
           launchedAt: DateTime.utc(2026, 3, 23, 0, 0),
-          authToken: 'launch-token-9',
+          password: 'launch-token-9',
         ),
       );
       addTearDown(harness.dispose);
@@ -108,7 +108,7 @@ void main() {
       // the handle keeps the secret separate from the clean base URI.
       expect(currentHandle.appBaseUrl, 'http://127.0.0.1:57331');
       expect(currentHandle.baseUri.queryParameters['token'], isNull);
-      expect(currentHandle.authToken, 'launch-token-9');
+      expect(currentHandle.password, 'launch-token-9');
     },
   );
 

@@ -29,12 +29,12 @@ final class CockpitRemoteSessionClient {
     Duration? artifactDownloadTimeout,
     CockpitRemoteArtifactTempFileFactory? artifactTempFileFactory,
     bool downloadDiagnosticsArtifacts = false,
-    String authToken = '',
+    String password = '',
     String? origin,
   }) {
     final endpoint = cockpitResolveRemoteEndpoint(
       baseUri: baseUri,
-      authTokens: <String?>[authToken],
+      passwords: <String?>[password],
       path: 'CockpitRemoteSessionClient.baseUri',
     );
     return CockpitRemoteSessionClient._(
@@ -44,7 +44,7 @@ final class CockpitRemoteSessionClient {
       artifactDownloadTimeout: artifactDownloadTimeout,
       artifactTempFileFactory: artifactTempFileFactory,
       downloadDiagnosticsArtifacts: downloadDiagnosticsArtifacts,
-      authToken: endpoint.authToken,
+      password: endpoint.password,
       origin: origin,
     );
   }
@@ -56,7 +56,7 @@ final class CockpitRemoteSessionClient {
     Duration? artifactDownloadTimeout,
     CockpitRemoteArtifactTempFileFactory? artifactTempFileFactory,
     required bool downloadDiagnosticsArtifacts,
-    required String authToken,
+    required String password,
     String? origin,
   }) : _baseUri = _normalizedBaseUri(baseUri),
        _httpClientFactory = httpClientFactory ?? HttpClient.new,
@@ -66,7 +66,7 @@ final class CockpitRemoteSessionClient {
        _artifactTempFileFactory =
            artifactTempFileFactory ?? _defaultArtifactTempFileFactory,
        _downloadDiagnosticsArtifacts = downloadDiagnosticsArtifacts,
-       _authToken = authToken,
+       _password = password,
        _origin = origin?.trim();
 
   final Uri _baseUri;
@@ -75,7 +75,7 @@ final class CockpitRemoteSessionClient {
   final Duration _artifactDownloadTimeout;
   final CockpitRemoteArtifactTempFileFactory _artifactTempFileFactory;
   final bool _downloadDiagnosticsArtifacts;
-  final String _authToken;
+  final String _password;
   final String? _origin;
 
   Uri get baseUri => _baseUri;
@@ -722,8 +722,8 @@ final class CockpitRemoteSessionClient {
   }
 
   void _applyAuthenticationHeaders(HttpClientRequest request) {
-    if (_authToken.isNotEmpty) {
-      request.headers.set('x-cockpit-token', _authToken);
+    if (_password.isNotEmpty) {
+      request.headers.set('x-cockpit-token', _password);
     }
     final origin = _origin;
     if (origin != null && origin.isNotEmpty) {

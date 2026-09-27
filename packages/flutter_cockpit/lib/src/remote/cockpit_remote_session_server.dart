@@ -128,7 +128,7 @@ final class CockpitRemoteSessionServer {
   }
 
   bool _isAuthorized(HttpRequest request) {
-    final expected = _configuration.authToken;
+    final expected = _configuration.password;
     final origin = request.headers.value('origin');
     if (origin != null && origin != 'null') {
       final allowed = _configuration.allowedOrigin;

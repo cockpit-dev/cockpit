@@ -113,12 +113,12 @@ assuming that the presence of an adapter proves support.
 
 ## Release-test build
 
-Enable a remote bridge only in the test variant and provide a per-session token:
+Enable a remote bridge only in the test variant and provide its password:
 
 ```bash
 flutter build apk --release \
   --dart-define=FLUTTER_COCKPIT_REMOTE_ENABLED=true \
-  --dart-define=FLUTTER_COCKPIT_REMOTE_AUTH_TOKEN="$COCKPIT_TOKEN"
+  --dart-define=FLUTTER_COCKPIT_REMOTE_PASSWORD="$COCKPIT_PASSWORD"
 ```
 
 Production releases should leave `FLUTTER_COCKPIT_REMOTE_ENABLED` disabled. A

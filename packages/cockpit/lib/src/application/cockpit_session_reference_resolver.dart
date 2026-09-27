@@ -13,12 +13,12 @@ typedef CockpitSessionIosDeviceConnectionReader =
 final class CockpitResolvedSessionReference {
   const CockpitResolvedSessionReference({
     required this.baseUri,
-    this.authToken = '',
+    this.password = '',
     this.sessionHandle,
   });
 
   final Uri baseUri;
-  final String authToken;
+  final String password;
   final CockpitRemoteSessionHandle? sessionHandle;
 }
 
@@ -36,7 +36,7 @@ final class CockpitSessionReferenceResolver {
 
   Future<CockpitResolvedSessionReference> resolve({
     Uri? baseUri,
-    String authToken = '',
+    String password = '',
     CockpitRemoteSessionHandle? sessionHandle,
     String? sessionHandlePath,
     String? androidDeviceId,
@@ -45,7 +45,7 @@ final class CockpitSessionReferenceResolver {
     if (sessionHandle != null) {
       final endpoint = cockpitResolveRemoteEndpoint(
         baseUri: baseUri ?? sessionHandle.baseUri,
-        authTokens: <String?>[authToken, sessionHandle.authToken],
+        passwords: <String?>[password, sessionHandle.password],
         path: 'session reference',
       );
       // An explicit base URI is authoritative: the caller already knows the
@@ -56,7 +56,7 @@ final class CockpitSessionReferenceResolver {
           : endpoint.baseUri;
       return CockpitResolvedSessionReference(
         baseUri: resolvedBaseUri,
-        authToken: endpoint.authToken,
+        password: endpoint.password,
         sessionHandle: _withResolvedBaseUri(sessionHandle, resolvedBaseUri),
       );
     }
@@ -65,7 +65,7 @@ final class CockpitSessionReferenceResolver {
       final resolvedHandle = await readSessionHandle(sessionHandlePath);
       final endpoint = cockpitResolveRemoteEndpoint(
         baseUri: baseUri ?? resolvedHandle.baseUri,
-        authTokens: <String?>[authToken, resolvedHandle.authToken],
+        passwords: <String?>[password, resolvedHandle.password],
         path: 'session reference',
       );
       final resolvedBaseUri = baseUri == null
@@ -73,7 +73,7 @@ final class CockpitSessionReferenceResolver {
           : endpoint.baseUri;
       return CockpitResolvedSessionReference(
         baseUri: resolvedBaseUri,
-        authToken: endpoint.authToken,
+        password: endpoint.password,
         sessionHandle: _withResolvedBaseUri(resolvedHandle, resolvedBaseUri),
       );
     }
@@ -81,7 +81,7 @@ final class CockpitSessionReferenceResolver {
     if (baseUri != null) {
       final endpoint = cockpitResolveRemoteEndpoint(
         baseUri: baseUri,
-        authTokens: <String?>[authToken],
+        passwords: <String?>[password],
         path: 'session reference',
       );
       final resolvedAndroidBaseUri = await _resolvedBaseUriForAndroidDevice(
@@ -91,7 +91,7 @@ final class CockpitSessionReferenceResolver {
       if (resolvedAndroidBaseUri != null) {
         return CockpitResolvedSessionReference(
           baseUri: resolvedAndroidBaseUri,
-          authToken: endpoint.authToken,
+          password: endpoint.password,
         );
       }
 
@@ -101,7 +101,7 @@ final class CockpitSessionReferenceResolver {
       );
       return CockpitResolvedSessionReference(
         baseUri: resolvedIosBaseUri ?? endpoint.baseUri,
-        authToken: endpoint.authToken,
+        password: endpoint.password,
       );
     }
 

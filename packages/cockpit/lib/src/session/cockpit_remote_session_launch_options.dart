@@ -12,8 +12,8 @@ final class CockpitRemoteSessionLaunchOptions {
     this.flutterVersion,
     this.flutterExecutable,
     this.launchId,
-    this.authToken = '',
-    this.authTokenDartDefineFile,
+    this.password = '',
+    this.passwordDartDefineFile,
     this.launchConfiguration = CockpitFlutterLaunchConfiguration.empty,
     this.appEnvironment,
   });
@@ -28,8 +28,8 @@ final class CockpitRemoteSessionLaunchOptions {
   final String? flutterVersion;
   final String? flutterExecutable;
   final String? launchId;
-  final String authToken;
-  final String? authTokenDartDefineFile;
+  final String password;
+  final String? passwordDartDefineFile;
   final CockpitFlutterLaunchConfiguration launchConfiguration;
 
   /// Environment applied only to the detached desktop app process.

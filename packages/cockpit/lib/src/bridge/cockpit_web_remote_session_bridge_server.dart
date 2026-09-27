@@ -16,7 +16,7 @@ typedef CockpitBridgeArtifactTempFileFactory =
 
 CockpitWebRemoteSessionBridgeServer? cockpitCreateWebRemoteSessionBridgeServer({
   required CockpitDevelopmentSessionHandle handle,
-  String authToken = '',
+  String password = '',
 }) {
   if (handle.platform != 'web') {
     return null;
@@ -28,8 +28,8 @@ CockpitWebRemoteSessionBridgeServer? cockpitCreateWebRemoteSessionBridgeServer({
     recordingAdapter: cockpitResolveBrowserRecordingAdapter(
       deviceId: handle.deviceId,
     ),
-    authToken: authToken.isNotEmpty
-        ? authToken
+    password: password.isNotEmpty
+        ? password
         : handle.baseUri.queryParameters['token'] ?? '',
   );
 }
@@ -42,7 +42,7 @@ final class CockpitWebRemoteSessionBridgeServer {
     this.recordingAdapter,
     CockpitBridgeArtifactTempFileFactory? artifactTempFileFactory,
     this.requestTimeout = const Duration(seconds: 20),
-    this.authToken = '',
+    this.password = '',
     this.allowedOrigin,
     this.maxConnections = 4,
   }) : _artifactTempFileFactory =
@@ -57,7 +57,7 @@ final class CockpitWebRemoteSessionBridgeServer {
   final String routePrefix;
   final CockpitHostRecordingAdapter? recordingAdapter;
   final Duration requestTimeout;
-  final String authToken;
+  final String password;
   final String? allowedOrigin;
   final int maxConnections;
   final CockpitBridgeArtifactTempFileFactory _artifactTempFileFactory;
@@ -78,9 +78,9 @@ final class CockpitWebRemoteSessionBridgeServer {
   Uri get connectUri => baseUri.replace(
     scheme: baseUri.scheme == 'https' ? 'wss' : 'ws',
     path: _joinPath(_normalizedRoutePrefix, 'connect'),
-    queryParameters: authToken.isEmpty
+    queryParameters: password.isEmpty
         ? null
-        : <String, String>{'token': authToken},
+        : <String, String>{'token': password},
   );
 
   Future<void> start() async {
@@ -178,7 +178,7 @@ final class CockpitWebRemoteSessionBridgeServer {
         return false;
       }
     }
-    if (authToken.isEmpty) return true;
+    if (password.isEmpty) return true;
     // Browsers cannot attach headers to a WebSocket upgrade, so the page
     // authenticates through the handshake query string on /connect only.
     // Every other endpoint accepts header credentials, matching the in-app
@@ -191,7 +191,7 @@ final class CockpitWebRemoteSessionBridgeServer {
     final provided =
         headerToken ??
         (allowQueryToken ? request.uri.queryParameters['token'] : null);
-    return _constantTimeEquals(provided ?? '', authToken);
+    return _constantTimeEquals(provided ?? '', password);
   }
 
   Future<void> _unauthorizedResponse(HttpResponse response) {

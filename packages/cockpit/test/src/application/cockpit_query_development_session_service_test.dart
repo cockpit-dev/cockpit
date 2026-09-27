@@ -28,7 +28,7 @@ void main() {
       final service = CockpitQueryDevelopmentSessionService(
         sessionReferenceResolver:
             const CockpitDevelopmentSessionReferenceResolver(),
-        statusReader: (supervisorBaseUri, {String authToken = ''}) async {
+        statusReader: (supervisorBaseUri, {String password = ''}) async {
           expect(supervisorBaseUri, handle.supervisorBaseUri);
           return CockpitDevelopmentSessionSupervisorResponse(
             status: _readyStatus(handle),
@@ -54,7 +54,7 @@ void main() {
     () async {
       final handle = _handle();
       final service = CockpitQueryDevelopmentSessionService(
-        statusReader: (_, {String authToken = ''}) async =>
+        statusReader: (_, {String password = ''}) async =>
             CockpitDevelopmentSessionSupervisorResponse(
               status: CockpitDevelopmentSessionStatus(
                 developmentSessionId: handle.developmentSessionId,

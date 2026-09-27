@@ -54,9 +54,9 @@ final class CockpitAppHandle {
 
   CockpitRemoteEndpoint get endpoint => cockpitResolveRemoteEndpoint(
     baseUri: Uri.parse(_baseUrl),
-    authTokens: <String?>[
-      remoteSession?.authToken,
-      developmentSession?.remoteSessionHandle?.authToken,
+    passwords: <String?>[
+      remoteSession?.password,
+      developmentSession?.remoteSessionHandle?.password,
     ],
     path: r'$.baseUrl',
   );
@@ -65,15 +65,15 @@ final class CockpitAppHandle {
 
   Uri get baseUri => endpoint.baseUri;
 
-  String get authToken => endpoint.authToken;
+  String get password => endpoint.password;
 
   bool get supportsHotReload => mode == CockpitAppMode.development;
 
-  Map<String, Object?> toJson() => _toJson(includeAuthToken: false);
+  Map<String, Object?> toJson() => _toJson(includePassword: false);
 
-  Map<String, Object?> toPrivateJson() => _toJson(includeAuthToken: true);
+  Map<String, Object?> toPrivateJson() => _toJson(includePassword: true);
 
-  Map<String, Object?> _toJson({required bool includeAuthToken}) =>
+  Map<String, Object?> _toJson({required bool includePassword}) =>
       <String, Object?>{
         'appId': appId,
         'mode': mode.jsonValue,
@@ -100,11 +100,11 @@ final class CockpitAppHandle {
               .toUtc()
               .toIso8601String(),
         if (developmentSession != null)
-          'developmentSession': includeAuthToken
+          'developmentSession': includePassword
               ? developmentSession!.toPrivateJson()
               : developmentSession!.toJson(),
         if (remoteSession != null)
-          'remoteSession': includeAuthToken
+          'remoteSession': includePassword
               ? remoteSession!.toPrivateJson()
               : remoteSession!.toJson(),
       };

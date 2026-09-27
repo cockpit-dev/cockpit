@@ -57,12 +57,12 @@ void main() {
       final connectedUris = <Uri>[];
       final buildClient = _buildRecordingClient(connectedUris);
 
-      final unauthenticated = buildClient(authToken: '');
+      final unauthenticated = buildClient(password: '');
       await unauthenticated.start();
       expect(connectedUris.single.queryParameters, isEmpty);
 
       connectedUris.clear();
-      final authenticated = buildClient(authToken: 'bridge-secret');
+      final authenticated = buildClient(password: 'bridge-secret');
       await authenticated.start();
       expect(connectedUris.single.queryParameters['token'], 'bridge-secret');
       expect(authenticated.publicBaseUri.hasQuery, isFalse);
@@ -73,7 +73,7 @@ void main() {
 _CockpitRemoteSessionBridgeClientFactory _buildRecordingClient(
   List<Uri> connectedUris,
 ) {
-  return ({required String authToken}) {
+  return ({required String password}) {
     final client = CockpitRemoteSessionBridgeClient(
       configuration: CockpitRemoteSessionConfiguration(
         enabled: true,
@@ -81,7 +81,7 @@ _CockpitRemoteSessionBridgeClientFactory _buildRecordingClient(
         host: '127.0.0.1',
         port: 59331,
         routePrefix: '/cockpit',
-        authToken: authToken,
+        password: password,
       ),
       protocol: CockpitRemoteSessionBridgeProtocol(
         requestHandler: (_) async {
@@ -98,7 +98,7 @@ _CockpitRemoteSessionBridgeClientFactory _buildRecordingClient(
 }
 
 typedef _CockpitRemoteSessionBridgeClientFactory =
-    CockpitRemoteSessionBridgeClient Function({required String authToken});
+    CockpitRemoteSessionBridgeClient Function({required String password});
 
 final class _FakeWebSocketChannel implements WebSocketChannel {
   _FakeWebSocketChannel({required this.ready});

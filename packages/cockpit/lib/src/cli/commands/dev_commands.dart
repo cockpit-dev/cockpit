@@ -1,3 +1,4 @@
+import 'package:args/args.dart';
 import 'package:args/command_runner.dart';
 import 'package:cockpit_protocol/cockpit_protocol.dart';
 
@@ -81,10 +82,15 @@ CockpitLeafCommand _start(CockpitCliRuntime runtime) => CockpitLeafCommand(
       ..addOption('platform')
       ..addOption('device')
       ..addOption('flavor')
-      ..addFlag(
+      ..addOption(
         'auth',
+        help: 'Require this password for the remote bridge.',
+        valueHelp: 'PASSWORD',
+      )
+      ..addFlag(
+        'no-auth',
         defaultsTo: false,
-        help: 'Require an authentication token for the remote bridge.',
+        help: 'Disable remote bridge authentication explicitly.',
       );
     cockpitAddFlutterLaunchConfigurationOptions(parser);
   },
@@ -94,6 +100,7 @@ CockpitLeafCommand _start(CockpitCliRuntime runtime) => CockpitLeafCommand(
         'dev start accepts at most one Flutter entrypoint.',
       );
     }
+    final authPassword = _readDevStartAuthPassword(arguments);
     return CockpitDevStartService(runtime).start(
       CockpitDevStartRequest(
         sessionReference: arguments.option('session'),
@@ -102,9 +109,7 @@ CockpitLeafCommand _start(CockpitCliRuntime runtime) => CockpitLeafCommand(
         deviceId: arguments.option('device'),
         flavor: arguments.option('flavor'),
         launchConfiguration: cockpitReadFlutterLaunchConfiguration(arguments),
-        authenticationEnabled: arguments.wasParsed('auth')
-            ? arguments.flag('auth')
-            : null,
+        authPassword: authPassword,
         launchTimeoutMilliseconds: runtime
             .operationBudget(maximum: const Duration(minutes: 30))
             .inMilliseconds,
@@ -445,4 +450,32 @@ int _integer(String value) {
 
 extension<T> on List<T> {
   T? get firstOrNull => isEmpty ? null : first;
+}
+
+/// Resolves the `dev start` auth selection.
+///
+/// Returns the chosen password for `--auth`, an empty string for an explicit
+/// `--no-auth`, and null when neither flag was passed so the active session's
+/// selection is inherited.
+String? _readDevStartAuthPassword(ArgResults arguments) {
+  final usedAuth = arguments.wasParsed('auth');
+  final usedNoAuth = arguments.wasParsed('no-auth');
+  if (usedAuth && usedNoAuth) {
+    throw const FormatException(
+      'Pass either --auth <password> or --no-auth, not both.',
+    );
+  }
+  if (usedNoAuth) return '';
+  if (!usedAuth) return null;
+  final password = arguments.option('auth')?.trim() ?? '';
+  if (password.isEmpty) {
+    throw const FormatException(
+      '--auth needs the password to require, for example '
+      '--auth my-session-password. Use --no-auth to disable authentication.',
+    );
+  }
+  if (password.length > 256) {
+    throw const FormatException('--auth passwords are limited to 256 bytes.');
+  }
+  return password;
 }

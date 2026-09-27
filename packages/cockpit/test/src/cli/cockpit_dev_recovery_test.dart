@@ -436,7 +436,7 @@ void main() {
       expect(resolved.ready, isTrue);
       expect(resolved.changed, 'relaunched');
       expect(resolved.session.handleId, session.handleId);
-      expect(launchInput, isNot(contains('authenticationEnabled')));
+      expect(launchInput, isNot(contains('authPassword')));
       expect(calls.where((kind) => kind == 'target.launch'), hasLength(1));
     },
   );
@@ -453,7 +453,7 @@ void main() {
       entrypoint: 'lib/main.dart',
       platform: 'macos',
       deviceId: 'macos',
-      authenticationEnabled: true,
+      authPassword: 'unit-dev-password',
     );
     Map<String, Object?>? launchInput;
     final dev = CockpitDevRuntime(
@@ -489,13 +489,11 @@ void main() {
     final resolved = await dev.reconcile(session, allowRelaunch: true);
 
     expect(resolved.ready, isTrue);
-    expect(launchInput?['authenticationEnabled'], isTrue);
-    expect(resolved.session.authenticationEnabled, isTrue);
+    expect(launchInput?['authPassword'], 'unit-dev-password');
+    expect(resolved.session.authPassword, 'unit-dev-password');
     expect(
-      (await runtime.resolveDevelopmentSession(
-        session.handleId,
-      )).authenticationEnabled,
-      isTrue,
+      (await runtime.resolveDevelopmentSession(session.handleId)).authPassword,
+      'unit-dev-password',
     );
   });
 
@@ -664,16 +662,18 @@ void main() {
     );
     expect(
       cockpitDevStartFailureNext(
-        request: const CockpitDevStartRequest(authenticationEnabled: true),
+        request: const CockpitDevStartRequest(
+          authPassword: 'unit-dev-password',
+        ),
         session: null,
       ),
-      'cockpit dev start --auth',
+      'cockpit dev start --auth <password>',
     );
     expect(
       cockpitDevStartFailureNext(
         request: const CockpitDevStartRequest(
           sessionReference: '1',
-          authenticationEnabled: false,
+          authPassword: '',
         ),
         session: session,
       ),

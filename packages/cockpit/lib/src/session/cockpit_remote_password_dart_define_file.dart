@@ -5,11 +5,11 @@ import 'package:path/path.dart' as p;
 
 import '../foundation/cockpit_permissions.dart';
 
-const String cockpitRemoteAuthDartDefineName =
-    'FLUTTER_COCKPIT_REMOTE_AUTH_TOKEN';
+const String cockpitRemotePasswordDartDefineName =
+    'FLUTTER_COCKPIT_REMOTE_PASSWORD';
 
-final class CockpitRemoteAuthDartDefineFile {
-  CockpitRemoteAuthDartDefineFile._({
+final class CockpitRemotePasswordDartDefineFile {
+  CockpitRemotePasswordDartDefineFile._({
     required this.path,
     required Directory directory,
   }) : _directory = directory;
@@ -19,15 +19,15 @@ final class CockpitRemoteAuthDartDefineFile {
   bool _deleted = false;
   Future<void>? _deleting;
 
-  static Future<CockpitRemoteAuthDartDefineFile> create(
-    String authToken, {
+  static Future<CockpitRemotePasswordDartDefineFile> create(
+    String password, {
     CockpitPermissionHardener? permissionHardener,
   }) async {
-    if (authToken.isEmpty) {
+    if (password.isEmpty) {
       throw ArgumentError.value(
-        authToken,
-        'authToken',
-        'Authentication token cannot be empty.',
+        password,
+        'password',
+        'The password cannot be empty.',
       );
     }
     final hardener =
@@ -42,11 +42,11 @@ final class CockpitRemoteAuthDartDefineFile {
       await hardener.hardenDirectory(directory);
       final file = File(p.join(directory.path, 'defines.json'));
       await file.writeAsString(
-        '${jsonEncode(<String, String>{cockpitRemoteAuthDartDefineName: authToken})}\n',
+        '${jsonEncode(<String, String>{cockpitRemotePasswordDartDefineName: password})}\n',
         flush: true,
       );
       await hardener.hardenFile(file);
-      return CockpitRemoteAuthDartDefineFile._(
+      return CockpitRemotePasswordDartDefineFile._(
         path: file.path,
         directory: directory,
       );

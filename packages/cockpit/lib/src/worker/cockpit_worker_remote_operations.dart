@@ -196,7 +196,7 @@ final class CockpitWorkerRemoteOperations {
         'targetId',
         'launchTimeoutMs',
         'launchConfiguration',
-        'authenticationEnabled',
+        'authPassword',
       },
       required: const <String>{'targetId'},
     );
@@ -251,7 +251,7 @@ final class CockpitWorkerRemoteOperations {
             sessionPort: port,
             launchTimeout: timeout,
             allowSessionPortFallback: false,
-            authenticationEnabled: values.boolean('authenticationEnabled'),
+            authPassword: values.optionalString('authPassword') ?? '',
             launchConfiguration: launchConfiguration,
           ),
         ),
