@@ -2142,6 +2142,15 @@ final class CockpitNativeTargetDiscovery {
     if (typeName.startsWith('_')) {
       return true;
     }
+    // Flutter's tooltip plumbing — the RawTooltip core on newer stable
+    // channels and the single-visible-tooltip SnapshotWidget dimmer on older
+    // ones — is framework implementation detail that varies across supported
+    // Flutter versions. The public Tooltip scope already carries the message,
+    // so match by name: the widget types themselves are not present on every
+    // supported Flutter version.
+    if (typeName == 'RawTooltip' || typeName == 'SnapshotWidget') {
+      return true;
+    }
     // Positioned is a ParentDataWidget, but it is also the branch boundary
     // that explains which Stack layer owns a target. Keep public branching
     // scopes before applying the generic ParentDataWidget noise filter.

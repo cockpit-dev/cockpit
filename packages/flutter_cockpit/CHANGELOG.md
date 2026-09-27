@@ -17,6 +17,9 @@
   waits on large widget trees.
 - Stopped double-invoking the native recording stop for a single recording
   session; concurrent stops now share one native call.
+- Filtered Flutter's tooltip plumbing (`RawTooltip`, `SnapshotWidget`) from
+  locator ancestors so ancestor scopes stay identical across supported
+  Flutter versions; the public `Tooltip` scope still carries the message.
 
 ## 4.9.0
 

@@ -276,6 +276,10 @@ void main() {
       'Focus',
       'Semantics',
       'AncestorScopeData',
+      // Flutter tooltip plumbing varies across supported Flutter versions:
+      // RawTooltip exists on newer channels, SnapshotWidget on older ones.
+      'RawTooltip',
+      'SnapshotWidget',
     };
     final leafATypeNames = leafA.locatorAncestors
         .map((ancestor) => ancestor.typeName)
@@ -292,9 +296,8 @@ void main() {
       'CustomMultiChildLayout',
       'Scaffold',
     ]);
-    expect(leafBTypeNames.take(7), <String>[
+    expect(leafBTypeNames.take(6), <String>[
       'OverlayPortal',
-      'RawTooltip',
       'Tooltip',
       'Positioned',
       'Stack',
@@ -357,7 +360,6 @@ void main() {
         .toList(growable: false);
     expect(tooltipAncestors.map((ancestor) => ancestor.typeName), <String>[
       'OverlayPortal',
-      'RawTooltip',
       'Tooltip',
     ]);
     for (final ancestor in tooltipAncestors) {
