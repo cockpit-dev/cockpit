@@ -522,6 +522,18 @@ void main() {
       );
     });
 
+    test('volume serial formatting stays unsigned at 64 bits', () {
+      // Volume serials with the high bit set load into Dart as negative
+      // integers; GitHub's Windows runners expose exactly that shape
+      // (observed probe output carried -0x739b206d9b208200).
+      expect(
+        formatWindowsVolumeSerialHex(-0x739b206d9b208200),
+        '8c64df9264df7e00',
+      );
+      expect(formatWindowsVolumeSerialHex(0x9b208200), '000000009b208200');
+      expect(formatWindowsVolumeSerialHex(0), '0000000000000000');
+    });
+
     test(
       'default probe returns a stable identity for a real directory',
       () async {

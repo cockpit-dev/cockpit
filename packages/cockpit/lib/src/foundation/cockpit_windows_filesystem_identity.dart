@@ -131,6 +131,17 @@ String _boundedWindowsDiagnostic(String value) {
   return text.length <= 256 ? text : '${text.substring(0, 256)}...';
 }
 
+/// Formats a Windows volume serial as its canonical 16-digit unsigned
+/// hexadecimal form.
+///
+/// `FILE_ID_INFO.VolumeSerialNumber` is an unsigned 64-bit value, so serials
+/// with the high bit set load into Dart as negative integers; a plain
+/// `toRadixString` prints those with a sign and breaks the fixed-width probe
+/// format.
+String formatWindowsVolumeSerialHex(int volumeSerialNumber) => BigInt.from(
+  volumeSerialNumber,
+).toUnsigned(64).toRadixString(16).padLeft(16, '0');
+
 bool _isFixedWidthHex(String value, int width) =>
     value.length == width &&
     value.codeUnits.every(
@@ -213,9 +224,7 @@ final class CockpitWindowsFileIdentityLease {
           OSError('GetFileInformationByHandleEx failed.', errorCode),
         );
       }
-      final volume = info.ref.volumeSerialNumber
-          .toRadixString(16)
-          .padLeft(16, '0');
+      final volume = formatWindowsVolumeSerialHex(info.ref.volumeSerialNumber);
       final fileId = StringBuffer();
       for (var index = 0; index < 16; index += 1) {
         fileId.write(info.ref.fileId[index].toRadixString(16).padLeft(2, '0'));

@@ -19,6 +19,10 @@
   their diagnostics flow through the redacted worker log.
 - Drained oversized control-plane requests before rejecting them so
   keep-alive connections survive 413 responses.
+- Fixed the Windows file identity probe on volumes whose serial number has
+  the high bit set (half of all machines statistically): the serial loaded
+  as a negative Dart integer and the probe output was rejected as invalid,
+  failing filesystem identity and directory authority checks.
 - Memoized locator ancestor chains and discovery transforms, coalesced
   per-step registry reads, and stopped the bridge shell scan once the shell
   is confirmed, keeping bridge-driven discovery linear on large trees.
