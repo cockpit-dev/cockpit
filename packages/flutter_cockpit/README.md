@@ -194,6 +194,14 @@ eight nesting levels and 64 KiB before it leaves the app process. Keep it to
 facts a test legitimately needs; a provider that throws or exceeds the bounds
 fails that command with a structured error instead of corrupting the session.
 
+Every `describeApp` report also carries the standard settings Cockpit derives
+from the live widget tree, so consumers learn the effective configuration even
+before an app wires a provider: `locale` (the resolved BCP-47 tag, for example
+`en_GB`), `brightness` (`light`/`dark`), `themeColor` (the effective primary
+color as `#RRGGBB`), `textScale`, and `platform`. Values are read at command
+time and follow theme or locale changes immediately; app-authored keys with
+the same names win over the derived ones.
+
 For nested navigators, create one observer per navigator so route state can return to the parent stack after a nested pop:
 
 ```dart

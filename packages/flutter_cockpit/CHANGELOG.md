@@ -10,6 +10,11 @@
   errors (`appStateInvalid`, `appStateProviderFailed`) instead of breaking the
   session; targets without a provider report `describeApp` as an unsupported
   capability.
+- Every `describeApp` report on a Flutter target now also carries the settings
+  derived live from the widget tree — `locale`, `brightness`, `themeColor`,
+  `textScale`, and `platform` — so tests and AI consumers learn the effective
+  locale and theme without any provider; app-authored keys with those names
+  win over the derived values.
 - Tightened the remote session authentication boundary: HTTP endpoints accept
   `x-cockpit-token` or `Authorization: Bearer` (case-insensitive scheme) only
   and answer unauthorized requests with stable structured JSON instead of a

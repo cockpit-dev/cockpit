@@ -91,7 +91,10 @@ Every surface maps these to the same protocol operations:
   `FlutterCockpitRoot` `appStateProvider`), evaluated at call time. The payload
   is normalized to JSON-safe values, redacted, and size-bounded before it
   leaves the app process; targets without a provider answer with an
-  unsupported-capability failure, which the runner reports as `blocked`. The
+  unsupported-capability failure, which the runner reports as `blocked`. On
+  Flutter targets every report also carries the settings derived live from the
+  widget tree — `locale`, `brightness`, `themeColor`, `textScale`, `platform` —
+  so no provider is needed to learn the effective locale and theme; the
   declarative `cockpit.test/v2` model exposes the same read as a `describeApp`
   action (no locator, no parameters) for shipped cases and suites.
 

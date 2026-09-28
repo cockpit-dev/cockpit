@@ -31,6 +31,7 @@ import '../recording/cockpit_recording_request.dart';
 import '../recording/cockpit_recording_result.dart';
 import '../recording/cockpit_recording_session.dart';
 import 'flutter_cockpit.dart';
+import 'cockpit_derived_app_state.dart';
 import 'cockpit_tap_feedback_overlay.dart';
 import 'cockpit_capabilities.dart';
 import 'cockpit_native_semantics.dart';
@@ -64,6 +65,11 @@ final class FlutterCockpitRoot extends StatefulWidget {
   /// environment, account tier — and the callback runs on demand, so the
   /// value always reflects the moment the command executes. Payloads are
   /// normalized, redacted, and size-bounded before leaving the app process.
+  ///
+  /// These values are layered over the standard settings Cockpit derives from
+  /// the widget tree (locale, brightness, theme color, text scale, platform),
+  /// so app-authored keys with those names win. `describeApp` also answers
+  /// with the derived settings alone when no provider is configured.
   final Map<String, Object?> Function(BuildContext context)? appStateProvider;
 
   @override
@@ -731,10 +737,18 @@ final class FlutterCockpitRootState extends State<FlutterCockpitRoot> {
   /// context-free executor signature. The callback runs on the root State's
   /// context on demand, never cached, so it observes the app state at command
   /// time.
-  CockpitAppStateProvider? get _rootAppStateProvider {
-    final provider = widget.appStateProvider;
-    if (provider == null) return null;
-    return () => provider(context);
+  ///
+  /// The payload always carries the standard settings derived from the widget
+  /// tree (locale, effective brightness, theme color, text scale, platform);
+  /// values from the app's [FlutterCockpitRoot.appStateProvider] are layered
+  /// on top, so app-authored keys win.
+  CockpitAppStateProvider get _rootAppStateProvider {
+    return () {
+      final derived = cockpitDerivedAppState(context as Element);
+      final provider = widget.appStateProvider;
+      if (provider == null) return derived;
+      return <String, Object?>{...derived, ...provider(context)};
+    };
   }
 
   Future<void> _startRemoteSessionIfEnabled() async {

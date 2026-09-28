@@ -176,6 +176,12 @@ payload 会被规范化为 JSON 安全的值；疑似敏感 key（password、tok
 值会被掩码；报告在离开应用进程前最多允许 8 层嵌套、64 KiB 大小。只放测试确实需要的
 事实；provider 抛出或超出限额时，该命令以结构化错误失败，不会破坏会话。
 
+此外，每份 `describeApp` 报告都携带 Cockpit 从当前组件树实时推导的标准设置，应用
+即使不配置 provider，消费端也能直接读到生效配置：`locale`（解析后的 BCP-47 标签，
+例如 `en_GB`）、`brightness`（`light`/`dark`，即当前明暗模式）、`themeColor`（生效
+的主题色，`#RRGGBB`）、`textScale` 与 `platform`。这些值在命令执行时读取，主题或
+语言切换后立即生效；应用通过 provider 提供的同名字段优先于推导值。
+
 嵌套 Navigator 需要各自使用独立 observer，这样嵌套路由 pop 后可以恢复当前父级路由：
 
 ```dart
