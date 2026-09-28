@@ -145,6 +145,80 @@ void main() {
     );
   });
 
+  test(
+    'appAction sends the name and arguments and returns the result',
+    () async {
+      final adapter = _FakeAutomationAdapter(
+        actionResult: const <String, Object?>{'themeMode': 'dark'},
+      );
+      final tester = CockpitAutomationTester(
+        automation: adapter,
+        initialLocale: CockpitLocaleProfile('en-US'),
+      );
+
+      final result = await tester.appAction(
+        'setThemeMode',
+        arguments: const <String, Object?>{'mode': 'dark'},
+      );
+
+      final command = adapter.commands.single;
+      expect(command.commandType, CockpitCommandType.appAction);
+      expect(command.parameters['action'], 'setThemeMode');
+      expect(command.parameters['arguments'], <String, Object?>{
+        'mode': 'dark',
+      });
+      expect(result, <String, Object?>{'themeMode': 'dark'});
+    },
+  );
+
+  test('appAction omits arguments when none are passed', () async {
+    final adapter = _FakeAutomationAdapter();
+    final tester = CockpitAutomationTester(
+      automation: adapter,
+      initialLocale: CockpitLocaleProfile('en-US'),
+    );
+
+    final result = await tester.appAction('resetOnboarding');
+
+    expect(adapter.commands.single.parameters, <String, Object?>{
+      'action': 'resetOnboarding',
+    });
+    expect(result, isNull);
+  });
+
+  test(
+    'appAction failures surface through the command exception contract',
+    () async {
+      final tester = CockpitAutomationTester(
+        automation: _FakeAutomationAdapter(
+          failures: <String, CockpitCommandError>{
+            'appAction': CockpitCommandError(
+              code: 'appActionNotFound',
+              message: 'The app has no registered action "setThemeMode".',
+            ),
+          },
+        ),
+        initialLocale: CockpitLocaleProfile('en-US'),
+      );
+
+      final result = await const CockpitProgrammaticTestRunner().run(
+        CockpitTestScenario(
+          id: 'invoke-app-action',
+          body: (tester) => tester.appAction('setThemeMode'),
+        ),
+        locale: CockpitLocaleProfile('en-US'),
+        createTester: (_) async => tester,
+      );
+
+      expect(result.status, CockpitTestRunStatus.failed);
+      expect(result.error?.details['commandType'], 'appAction');
+      await expectLater(
+        tester.appAction('setThemeMode'),
+        throwsA(isA<CockpitTestCommandException>()),
+      );
+    },
+  );
+
   test('typed command requirements use protocol command names', () async {
     var executed = false;
     final result = await const CockpitProgrammaticTestRunner().run(
@@ -378,6 +452,7 @@ final class _FakeAutomationAdapter implements CockpitAutomationAdapter {
     this.failures = const <String, CockpitCommandError>{},
     this.snapshot,
     this.appState,
+    this.actionResult,
   }) : _capabilities =
            capabilities ??
            CockpitCapabilities(
@@ -395,6 +470,7 @@ final class _FakeAutomationAdapter implements CockpitAutomationAdapter {
   final Map<String, CockpitCommandError> failures;
   final Map<String, Object?>? snapshot;
   final Map<String, Object?>? appState;
+  final Map<String, Object?>? actionResult;
   final commands = <CockpitCommand>[];
 
   @override
@@ -412,6 +488,7 @@ final class _FakeAutomationAdapter implements CockpitAutomationAdapter {
         durationMs: 0,
         snapshot: error == null ? snapshot : null,
         appState: error == null ? appState : null,
+        actionResult: error == null ? actionResult : null,
         error: error,
       ),
     );

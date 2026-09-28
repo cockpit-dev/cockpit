@@ -56,6 +56,18 @@ abstract interface class CockpitTester {
   /// runner reports as a blocked attempt.
   Future<Map<String, Object?>> describeApp();
 
+  /// Invokes an app-registered action by [name] with optional [arguments].
+  ///
+  /// Only actions the application registered through its app-actions map can
+  /// run; the handler's optional return value comes back normalized and
+  /// redacted, and handler failures surface as command errors. Targets
+  /// without registered actions answer with an unsupported-capability
+  /// failure, which the runner reports as a blocked attempt.
+  Future<Map<String, Object?>?> appAction(
+    String name, {
+    Map<String, Object?>? arguments,
+  });
+
   Future<CockpitCommandExecution> screenshot();
 
   Future<CockpitPerformanceReport> profile(

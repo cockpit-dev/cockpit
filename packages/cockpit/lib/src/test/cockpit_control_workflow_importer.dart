@@ -867,6 +867,9 @@ CockpitTestActionTemplate _action(
       }
     case CockpitTestActionKind.describeApp:
       break;
+    case CockpitTestActionKind.appAction:
+      take(CockpitTestActionField.appActionName);
+      take(CockpitTestActionField.appActionArguments);
   }
   if (parameters.isNotEmpty) {
     throw _migrationError(

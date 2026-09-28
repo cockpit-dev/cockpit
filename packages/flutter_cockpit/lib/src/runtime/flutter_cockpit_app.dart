@@ -11,6 +11,7 @@ final class FlutterCockpitApp extends StatefulWidget {
     this.ownsRuntime = false,
     this.rootKey,
     this.appStateProvider,
+    this.appActions,
     super.key,
   });
 
@@ -26,6 +27,9 @@ final class FlutterCockpitApp extends StatefulWidget {
 
   /// App-authored state forwarded to [FlutterCockpitRoot.appStateProvider].
   final Map<String, Object?> Function(BuildContext context)? appStateProvider;
+
+  /// App-registered actions forwarded to [FlutterCockpitRoot.appActions].
+  final Map<String, CockpitAppAction>? appActions;
 
   @override
   State<FlutterCockpitApp> createState() => _FlutterCockpitAppState();
@@ -61,6 +65,7 @@ final class _FlutterCockpitAppState extends State<FlutterCockpitApp> {
     return FlutterCockpitRoot(
       key: widget.rootKey,
       appStateProvider: widget.appStateProvider,
+      appActions: widget.appActions,
       child: widget.child,
     );
   }

@@ -48,4 +48,33 @@ void main() {
     expect(withoutState.appState, isNull);
     expect(withoutState == result, isFalse);
   });
+
+  test('command result carries appAction results and equality', () {
+    final result = CockpitCommandResult(
+      success: true,
+      commandId: 'action',
+      commandType: CockpitCommandType.appAction,
+      durationMs: 5,
+      actionResult: const <String, Object?>{
+        'applied': true,
+        'locale': 'zh_Hant_TW',
+        'nested': <String, Object?>{'brightness': 'dark'},
+      },
+    );
+
+    final decoded = CockpitCommandResult.fromJson(result.toJson());
+    expect(decoded, result);
+    expect(decoded.actionResult, result.actionResult);
+
+    final withoutResult = CockpitCommandResult.fromJson(
+      CockpitCommandResult(
+        success: true,
+        commandId: 'action',
+        commandType: CockpitCommandType.appAction,
+        durationMs: 5,
+      ).toJson(),
+    );
+    expect(withoutResult.actionResult, isNull);
+    expect(withoutResult == result, isFalse);
+  });
 }

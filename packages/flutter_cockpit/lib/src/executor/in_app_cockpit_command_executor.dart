@@ -89,6 +89,7 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
     CockpitNetworkIdleWaiter? waitForNetworkIdleHandler,
     CockpitBackNavigationHandler? backNavigationHandler,
     CockpitAppStateProvider? appStateProvider,
+    Map<String, CockpitAppActionHandler>? appActions,
     CockpitDismissActionResolver? dismissActionResolver,
     CockpitWaitTickHandler? waitTickHandler,
     CockpitKeyEventHandler? keyEventHandler,
@@ -100,6 +101,9 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
     String platform = 'flutter',
     String transportType = 'inApp',
   }) : _appStateProvider = appStateProvider,
+       _appActions = appActions == null || appActions.isEmpty
+           ? null
+           : Map<String, CockpitAppActionHandler>.unmodifiable(appActions),
        _context = CockpitInAppCommandContext(
          registry: registry,
          captureHandler: captureHandler,
@@ -203,6 +207,7 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
 
   final CockpitInAppCommandContext _context;
   final CockpitAppStateProvider? _appStateProvider;
+  final Map<String, CockpitAppActionHandler>? _appActions;
   late final CockpitPostActionSettleCoordinator _settleCoordinator;
   late final CockpitCaptureOrchestrator _captureOrchestrator;
   late final CockpitCommandRouter _commandRouter;
@@ -301,6 +306,7 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
       CockpitCommandType.waitFor,
       CockpitCommandType.collectSnapshot,
       if (_appStateProvider != null) CockpitCommandType.describeApp,
+      if (_appActions != null) CockpitCommandType.appAction,
       if (_captureHandler != null) CockpitCommandType.captureScreenshot,
     };
 
@@ -470,6 +476,9 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
       if (_appStateProvider case final provider?)
         CockpitCommandType.describeApp: (command, stopwatch) =>
             _executeDescribeApp(command, stopwatch, provider),
+      if (_appActions case final Map<String, CockpitAppActionHandler> actions)
+        CockpitCommandType.appAction: (command, stopwatch) =>
+            _executeAppAction(command, stopwatch, actions),
       CockpitCommandType.captureScreenshot: _executeCaptureScreenshot,
     };
   }
@@ -5243,6 +5252,12 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
   ) async {
     try {
       final appState = _normalizeAppState(provider());
+      // The registered action names are authoritative discovery metadata;
+      // they overwrite any app-authored key of the same name.
+      final actions = _appActions;
+      if (actions != null) {
+        appState['actions'] = actions.keys.toList(growable: false)..sort();
+      }
       return _successExecution(
         command: command,
         durationMs: stopwatch.elapsedMilliseconds,
@@ -5269,6 +5284,92 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
     }
   }
 
+  Future<CockpitCommandExecution> _executeAppAction(
+    CockpitCommand command,
+    Stopwatch stopwatch,
+    Map<String, CockpitAppActionHandler> actions,
+  ) async {
+    final name = command.parameters['action'];
+    if (name is! String || name.isEmpty) {
+      return _failureExecution(
+        command: command,
+        durationMs: stopwatch.elapsedMilliseconds,
+        error: CockpitCommandError(
+          code: 'appActionMissingName',
+          message:
+              'The appAction command requires a non-empty "action" name '
+              'parameter.',
+        ),
+      );
+    }
+    final handler = actions[name];
+    if (handler == null) {
+      final registered = actions.keys.toList(growable: false)..sort();
+      return _failureExecution(
+        command: command,
+        durationMs: stopwatch.elapsedMilliseconds,
+        error: CockpitCommandError(
+          code: 'appActionNotFound',
+          message:
+              'The app has no registered action "$name". Registered actions: '
+              '${registered.isEmpty ? '<none>' : registered.join(', ')}.',
+        ),
+      );
+    }
+    final rawArguments = command.parameters['arguments'];
+    if (rawArguments != null && rawArguments is! Map) {
+      return _failureExecution(
+        command: command,
+        durationMs: stopwatch.elapsedMilliseconds,
+        error: CockpitCommandError(
+          code: 'appActionInvalidArguments',
+          message: 'The appAction "arguments" parameter must be a JSON object.',
+        ),
+      );
+    }
+    final arguments = rawArguments == null
+        ? const <String, Object?>{}
+        : Map<String, Object?>.from(rawArguments as Map<Object?, Object?>);
+    Map<String, Object?>? actionResult;
+    try {
+      actionResult = await handler(arguments);
+    } on Object catch (error) {
+      return _failureExecution(
+        command: command,
+        durationMs: stopwatch.elapsedMilliseconds,
+        error: CockpitCommandError(
+          code: 'appActionFailed',
+          message: 'The app action "$name" threw: $error',
+        ),
+      );
+    }
+    try {
+      await _context.postActionSettler();
+    } on Object {
+      // Settling is best effort: the action itself already applied.
+    }
+    try {
+      return _successExecution(
+        command: command,
+        durationMs: stopwatch.elapsedMilliseconds,
+        actionResult: actionResult == null
+            ? null
+            : _normalizeAppState(actionResult),
+      );
+    } on FormatException catch (error) {
+      return _failureExecution(
+        command: command,
+        durationMs: stopwatch.elapsedMilliseconds,
+        error: CockpitCommandError(
+          code: 'appActionInvalidResult',
+          message:
+              'The app action "$name" returned a payload that is not '
+              'reportable: ${error.message}',
+        ),
+      );
+    }
+  }
+
   CockpitCommandExecution _successExecution({
     required CockpitCommand command,
     required int durationMs,
@@ -5280,6 +5381,7 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
     bool usedCaptureFallback = false,
     String? degradationReason,
     Map<String, Object?>? appState,
+    Map<String, Object?>? actionResult,
     bool? changed,
     Map<String, List<int>> artifactPayloads = const <String, List<int>>{},
   }) {
@@ -5297,6 +5399,7 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
         usedCaptureFallback: usedCaptureFallback,
         degradationReason: degradationReason,
         appState: appState,
+        actionResult: actionResult,
         changed: changed,
       ),
       artifactPayloads: artifactPayloads,

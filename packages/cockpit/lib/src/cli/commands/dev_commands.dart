@@ -10,6 +10,7 @@ import '../cockpit_dev_runtime.dart';
 import '../cockpit_dev_start.dart';
 import '../cockpit_flutter_launch_configuration_cli.dart';
 import 'dev_command_options.dart';
+import 'dev_app_commands.dart';
 import 'dev_interaction_commands.dart';
 import 'dev_screenshot_command.dart';
 
@@ -55,6 +56,8 @@ final class CockpitDevCommand extends Command<int> {
     for (final action in const <String>['reload', 'restart', 'stop']) {
       addSubcommand(_lifecycle(runtime, dev, action));
     }
+    addSubcommand(cockpitDevDescribeAppCommand(runtime, dev));
+    addSubcommand(cockpitDevAppActionCommand(runtime, dev));
     addSubcommand(_read(runtime, dev, name: 'diagnose'));
   }
 

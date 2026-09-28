@@ -178,6 +178,10 @@ Map<String, Object?> _sampleActionJson(CockpitTestActionKind kind) {
         },
       },
       CockpitTestActionKind.describeApp => const <String, Object?>{},
+      CockpitTestActionKind.appAction => <String, Object?>{
+        'action': 'setLocale',
+        'arguments': <String, Object?>{'locale': 'zh_Hant_TW'},
+      },
     },
   };
 }

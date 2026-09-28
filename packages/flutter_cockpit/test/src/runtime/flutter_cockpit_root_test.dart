@@ -987,6 +987,66 @@ void main() {
   );
 
   testWidgets(
+    'FlutterCockpitRoot executes registered app actions and lists them',
+    (tester) async {
+      FlutterCockpit.initialize(
+        const FlutterCockpitConfiguration(initialRouteName: '/'),
+      );
+
+      final rootKey = GlobalKey<FlutterCockpitRootState>();
+      var themeMode = 'light';
+      BuildContext? handlerContext;
+
+      await tester.pumpWidget(
+        FlutterCockpitRoot(
+          key: rootKey,
+          appStateProvider: (context) => <String, Object?>{
+            'themeMode': themeMode,
+          },
+          appActions: <String, CockpitAppAction>{
+            'setThemeMode': (context, arguments) {
+              handlerContext = context;
+              themeMode = arguments['mode'] as String;
+              return <String, Object?>{'themeMode': themeMode};
+            },
+          },
+          child: MaterialApp(
+            navigatorObservers: [FlutterCockpit.navigatorObserver],
+            home: const Scaffold(body: Center(child: Text('Cockpit Root'))),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final executor = rootKey.currentState!.createCommandExecutor();
+      final action = await executor.execute(
+        CockpitCommand(
+          commandId: 'action-set-theme-mode',
+          commandType: CockpitCommandType.appAction,
+          parameters: const <String, Object?>{
+            'action': 'setThemeMode',
+            'arguments': <String, Object?>{'mode': 'dark'},
+          },
+        ),
+      );
+      expect(action.success, isTrue, reason: action.error?.message);
+      expect(themeMode, 'dark');
+      expect(action.actionResult, <String, Object?>{'themeMode': 'dark'});
+      expect(handlerContext, isNotNull);
+
+      final describe = await executor.execute(
+        CockpitCommand(
+          commandId: 'describe-with-actions',
+          commandType: CockpitCommandType.describeApp,
+        ),
+      );
+      expect(describe.success, isTrue, reason: describe.error?.message);
+      expect(describe.appState?['actions'], <String>['setThemeMode']);
+      expect(describe.appState?['themeMode'], 'dark');
+    },
+  );
+
+  testWidgets(
     'FlutterCockpitRoot remote health publishes environment when flutter metadata is configured',
     (tester) async {
       FlutterCockpit.initialize(

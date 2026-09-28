@@ -23,12 +23,16 @@ final class CockpitCommandResult {
     this.degradationReason,
     Map<String, Object?>? surface,
     Map<String, Object?>? appState,
+    Map<String, Object?>? actionResult,
     this.changed,
     this.error,
   }) : artifacts = List.unmodifiable(artifacts),
        snapshot = snapshot == null ? null : Map.unmodifiable(snapshot),
        surface = surface == null ? null : Map.unmodifiable(surface),
-       appState = appState == null ? null : Map.unmodifiable(appState);
+       appState = appState == null ? null : Map.unmodifiable(appState),
+       actionResult = actionResult == null
+           ? null
+           : Map.unmodifiable(actionResult);
 
   final bool success;
   final String commandId;
@@ -47,6 +51,11 @@ final class CockpitCommandResult {
   /// decides what to expose; the payload is bounded and redacted before it
   /// leaves the app process.
   final Map<String, Object?>? appState;
+
+  /// Value returned by the app-registered handler of an `appAction` command.
+  /// Null when the handler returns nothing; the payload is bounded and
+  /// redacted before it leaves the app process.
+  final Map<String, Object?>? actionResult;
   final bool? changed;
   final CockpitCommandError? error;
 
@@ -73,6 +82,7 @@ final class CockpitCommandResult {
     if (degradationReason != null) 'degradationReason': degradationReason,
     if (surface != null) 'surface': surface,
     if (appState != null) 'appState': appState,
+    if (actionResult != null) 'actionResult': actionResult,
     if (changed != null) 'changed': changed,
     if (error != null) 'error': error!.toJson(),
   };
@@ -88,6 +98,7 @@ final class CockpitCommandResult {
     final snapshotJson = json['snapshot'] as Map<Object?, Object?>?;
     final surfaceJson = json['surface'] as Map<Object?, Object?>?;
     final appStateJson = json['appState'] as Map<Object?, Object?>?;
+    final actionResultJson = json['actionResult'] as Map<Object?, Object?>?;
     final requestedCaptureProfile = json['requestedCaptureProfile'];
     final resolvedCaptureKind = json['resolvedCaptureKind'];
 
@@ -129,6 +140,9 @@ final class CockpitCommandResult {
       appState: appStateJson == null
           ? null
           : Map<String, Object?>.from(appStateJson),
+      actionResult: actionResultJson == null
+          ? null
+          : Map<String, Object?>.from(actionResultJson),
       changed: json['changed'] as bool?,
       error: errorJson == null
           ? null
@@ -153,6 +167,7 @@ final class CockpitCommandResult {
             other.degradationReason == degradationReason &&
             _mapEquality.equals(other.surface, surface) &&
             _mapEquality.equals(other.appState, appState) &&
+            _mapEquality.equals(other.actionResult, actionResult) &&
             other.changed == changed &&
             other.error == error;
   }
@@ -172,6 +187,7 @@ final class CockpitCommandResult {
     degradationReason,
     surface == null ? null : _mapEquality.hash(surface!),
     appState == null ? null : _mapEquality.hash(appState!),
+    actionResult == null ? null : _mapEquality.hash(actionResult!),
     changed,
     error,
   );

@@ -101,6 +101,8 @@ cockpit dev tap 'FilledButton["Save"]'
 cockpit dev type "hello" --into '@message'
 cockpit dev scroll "Activity"
 cockpit dev open "myapp://tasks/42"
+cockpit dev describe-app
+cockpit dev app-action setThemeMode mode=dark
 cockpit dev wait
 cockpit dev screenshot
 cockpit dev reload

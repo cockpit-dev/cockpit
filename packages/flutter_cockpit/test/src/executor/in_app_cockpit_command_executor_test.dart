@@ -395,6 +395,314 @@ void main() {
         contains(CockpitCommandType.describeApp),
       );
     });
+
+    test('reports registered actions as a sorted list in app state', () async {
+      final executor = InAppCockpitCommandExecutor(
+        registry: CockpitTargetRegistry(routeName: '/home'),
+        appStateProvider: () => const <String, Object?>{
+          'actions': 'app-authored value that must be overwritten',
+        },
+        appActions: <String, CockpitAppActionHandler>{
+          'setThemeColor': (_) => null,
+          'setLocale': (_) => null,
+        },
+      );
+
+      final result = await executor.execute(
+        CockpitCommand(
+          commandId: 'describe-with-actions',
+          commandType: CockpitCommandType.describeApp,
+        ),
+      );
+
+      expect(result.success, isTrue, reason: result.error?.message);
+      expect(result.appState!['actions'], <String>[
+        'setLocale',
+        'setThemeColor',
+      ]);
+    });
+  });
+
+  group('appAction', () {
+    test('invokes the handler with arguments and returns its result', () async {
+      String? receivedLocale;
+      final executor = InAppCockpitCommandExecutor(
+        registry: CockpitTargetRegistry(routeName: '/home'),
+        appActions: <String, CockpitAppActionHandler>{
+          'setLocale': (arguments) {
+            receivedLocale = arguments['locale'] as String?;
+            return <String, Object?>{'locale': arguments['locale']};
+          },
+        },
+      );
+
+      final result = await executor.execute(
+        CockpitCommand(
+          commandId: 'action-set-locale',
+          commandType: CockpitCommandType.appAction,
+          parameters: <String, Object?>{
+            'action': 'setLocale',
+            'arguments': <String, Object?>{'locale': 'zh_Hant_TW'},
+          },
+        ),
+      );
+
+      expect(result.success, isTrue, reason: result.error?.message);
+      expect(receivedLocale, 'zh_Hant_TW');
+      expect(result.actionResult, <String, Object?>{'locale': 'zh_Hant_TW'});
+    });
+
+    test('supports sync and async handlers with empty arguments', () async {
+      final executor = InAppCockpitCommandExecutor(
+        registry: CockpitTargetRegistry(routeName: '/home'),
+        appActions: <String, CockpitAppActionHandler>{
+          'sync': (_) => <String, Object?>{'mode': 'sync'},
+          'async': (_) async => <String, Object?>{'mode': 'async'},
+          'void': (_) => null,
+        },
+      );
+
+      Future<CockpitCommandResult> run(String action) {
+        return executor.execute(
+          CockpitCommand(
+            commandId: 'action-$action',
+            commandType: CockpitCommandType.appAction,
+            parameters: <String, Object?>{'action': action},
+          ),
+        );
+      }
+
+      expect((await run('sync')).actionResult, <String, Object?>{
+        'mode': 'sync',
+      });
+      expect((await run('async')).actionResult, <String, Object?>{
+        'mode': 'async',
+      });
+      final voidResult = await run('void');
+      expect(voidResult.success, isTrue, reason: voidResult.error?.message);
+      expect(voidResult.actionResult, isNull);
+    });
+
+    test('normalizes nested results like app state', () async {
+      final executor = InAppCockpitCommandExecutor(
+        registry: CockpitTargetRegistry(routeName: '/home'),
+        appActions: <String, CockpitAppActionHandler>{
+          'inspect': (_) => <String, Object?>{
+            'profile': <Object, Object?>{'name': 'Ada', 7: true},
+          },
+        },
+      );
+
+      final result = await executor.execute(
+        CockpitCommand(
+          commandId: 'action-inspect',
+          commandType: CockpitCommandType.appAction,
+          parameters: const <String, Object?>{'action': 'inspect'},
+        ),
+      );
+
+      expect(result.success, isTrue, reason: result.error?.message);
+      expect(result.actionResult, <String, Object?>{
+        'profile': <String, Object?>{'name': 'Ada', '7': true},
+      });
+    });
+
+    test('redacts sensitive keys in returned results', () async {
+      final executor = InAppCockpitCommandExecutor(
+        registry: CockpitTargetRegistry(routeName: '/home'),
+        appActions: <String, CockpitAppActionHandler>{
+          'login': (_) => <String, Object?>{
+            'apiKey': 'k-123',
+            'note': 'token: ghp_supersecret',
+          },
+        },
+      );
+
+      final result = await executor.execute(
+        CockpitCommand(
+          commandId: 'action-login',
+          commandType: CockpitCommandType.appAction,
+          parameters: const <String, Object?>{'action': 'login'},
+        ),
+      );
+
+      expect(result.success, isTrue, reason: result.error?.message);
+      final encoded = jsonEncode(result.actionResult);
+      expect(encoded, isNot(contains('k-123')));
+      expect(encoded, isNot(contains('ghp_supersecret')));
+      expect(result.actionResult!['apiKey'], '********');
+      expect(result.actionResult!['note'], 'token: ********');
+    });
+
+    test('fails when the name is missing or not a string', () async {
+      final executor = InAppCockpitCommandExecutor(
+        registry: CockpitTargetRegistry(routeName: '/home'),
+        appActions: <String, CockpitAppActionHandler>{'noop': (_) => null},
+      );
+
+      Future<CockpitCommandResult> run(
+        String commandId,
+        Map<String, Object?> parameters,
+      ) {
+        return executor.execute(
+          CockpitCommand(
+            commandId: commandId,
+            commandType: CockpitCommandType.appAction,
+            parameters: parameters,
+          ),
+        );
+      }
+
+      final missing = await run('action-missing', const <String, Object?>{});
+      expect(missing.success, isFalse);
+      expect(missing.error?.code, 'appActionMissingName');
+
+      final empty = await run('action-empty', const <String, Object?>{
+        'action': '',
+      });
+      expect(empty.error?.code, 'appActionMissingName');
+
+      final wrongType = await run('action-wrong-type', const <String, Object?>{
+        'action': 42,
+      });
+      expect(wrongType.error?.code, 'appActionMissingName');
+    });
+
+    test('unknown actions list the registered names', () async {
+      final executor = InAppCockpitCommandExecutor(
+        registry: CockpitTargetRegistry(routeName: '/home'),
+        appActions: <String, CockpitAppActionHandler>{
+          'setBrightness': (_) => null,
+          'setLocale': (_) => null,
+        },
+      );
+
+      final result = await executor.execute(
+        CockpitCommand(
+          commandId: 'action-unknown',
+          commandType: CockpitCommandType.appAction,
+          parameters: const <String, Object?>{'action': 'setThemeColor'},
+        ),
+      );
+
+      expect(result.success, isFalse);
+      expect(result.error?.code, 'appActionNotFound');
+      expect(result.error?.message, contains('"setThemeColor"'));
+      expect(result.error?.message, contains('setBrightness, setLocale'));
+    });
+
+    test('rejects non-object arguments', () async {
+      final executor = InAppCockpitCommandExecutor(
+        registry: CockpitTargetRegistry(routeName: '/home'),
+        appActions: <String, CockpitAppActionHandler>{'noop': (_) => null},
+      );
+
+      final result = await executor.execute(
+        CockpitCommand(
+          commandId: 'action-bad-args',
+          commandType: CockpitCommandType.appAction,
+          parameters: const <String, Object?>{
+            'action': 'noop',
+            'arguments': <Object?>['locale', 'zh'],
+          },
+        ),
+      );
+
+      expect(result.success, isFalse);
+      expect(result.error?.code, 'appActionInvalidArguments');
+      expect(result.error?.message, contains('JSON object'));
+    });
+
+    test('reports handler failures with the thrown error', () async {
+      final executor = InAppCockpitCommandExecutor(
+        registry: CockpitTargetRegistry(routeName: '/home'),
+        appActions: <String, CockpitAppActionHandler>{
+          'boom': (_) => throw StateError('locale store unavailable'),
+        },
+      );
+
+      final result = await executor.execute(
+        CockpitCommand(
+          commandId: 'action-boom',
+          commandType: CockpitCommandType.appAction,
+          parameters: const <String, Object?>{'action': 'boom'},
+        ),
+      );
+
+      expect(result.success, isFalse);
+      expect(result.error?.code, 'appActionFailed');
+      expect(result.error?.message, contains('"boom"'));
+      expect(result.error?.message, contains('locale store unavailable'));
+    });
+
+    test('rejects results that are not reportable', () async {
+      Object? nested = <String, Object?>{'leaf': 'deep'};
+      for (var i = 0; i < 8; i++) {
+        nested = <String, Object?>{'level$i': nested};
+      }
+      final executor = InAppCockpitCommandExecutor(
+        registry: CockpitTargetRegistry(routeName: '/home'),
+        appActions: <String, CockpitAppActionHandler>{
+          'deep': (_) => <String, Object?>{'payload': nested},
+        },
+      );
+
+      final result = await executor.execute(
+        CockpitCommand(
+          commandId: 'action-too-deep',
+          commandType: CockpitCommandType.appAction,
+          parameters: const <String, Object?>{'action': 'deep'},
+        ),
+      );
+
+      expect(result.success, isFalse);
+      expect(result.error?.code, 'appActionInvalidResult');
+      expect(result.error?.message, contains('nests deeper than 8 levels'));
+    });
+
+    test(
+      'fails with unsupportedCapability without registered actions',
+      () async {
+        final executor = InAppCockpitCommandExecutor(
+          registry: CockpitTargetRegistry(routeName: '/home'),
+        );
+
+        final result = await executor.execute(
+          CockpitCommand(
+            commandId: 'action-missing-registry',
+            commandType: CockpitCommandType.appAction,
+            parameters: const <String, Object?>{'action': 'setLocale'},
+          ),
+        );
+
+        expect(result.success, isFalse);
+        expect(
+          result.error?.code,
+          CockpitCommandError.unsupportedCapabilityCode,
+        );
+        expect(result.error?.message, contains('appAction'));
+
+        final capabilities = await executor.describeCapabilities();
+        expect(
+          capabilities.supportedCommands,
+          isNot(contains(CockpitCommandType.appAction)),
+        );
+      },
+    );
+
+    test('advertises appAction when actions are registered', () async {
+      final executor = InAppCockpitCommandExecutor(
+        registry: CockpitTargetRegistry(routeName: '/home'),
+        appActions: <String, CockpitAppActionHandler>{'noop': (_) => null},
+      );
+
+      final capabilities = await executor.describeCapabilities();
+
+      expect(
+        capabilities.supportedCommands,
+        contains(CockpitCommandType.appAction),
+      );
+    });
   });
 
   testWidgets('tap selects a Radio through its direct onChanged handler', (

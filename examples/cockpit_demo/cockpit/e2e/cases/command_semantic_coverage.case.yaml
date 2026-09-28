@@ -280,6 +280,21 @@ steps:
   - stepId: describeAppSemantics
     timeoutMs: 12000
     action: {type: describeApp}
+  - stepId: applyThemeModeQuickAction
+    timeoutMs: 12000
+    action:
+      type: appAction
+      action: setThemeMode
+      arguments: {mode: dark}
+  - stepId: applyCompactModeQuickAction
+    timeoutMs: 12000
+    action:
+      type: appAction
+      action: setCompactMode
+      arguments: {enabled: false}
+  - stepId: describeAppAfterQuickActions
+    timeoutMs: 12000
+    action: {type: describeApp}
   - stepId: captureSemanticCoverage
     timeoutMs: 20000
     action:

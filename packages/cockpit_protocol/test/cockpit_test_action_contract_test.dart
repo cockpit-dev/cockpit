@@ -488,6 +488,11 @@ Map<String, Object?> _actionJson(CockpitTestActionKind kind) {
       'snapshotOptions': <String, Object?>{'profile': 'live', 'maxTargets': 20},
     },
     CockpitTestActionKind.describeApp => <String, Object?>{'type': kind.name},
+    CockpitTestActionKind.appAction => <String, Object?>{
+      'type': kind.name,
+      'action': 'setLocale',
+      'arguments': const <String, Object?>{'locale': 'zh_Hant_TW'},
+    },
   };
 }
 

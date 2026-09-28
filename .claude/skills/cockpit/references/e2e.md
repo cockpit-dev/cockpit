@@ -81,6 +81,9 @@ The schema includes:
 - back, keyboard dismissal, UI/network idle, waits
 - visible/text/screenshot assertions
 - screenshots, snapshots, recording start/stop
+- app-authored state reads (`describeApp`) and registered app actions
+  (`appAction`, name plus arguments, for quick operations such as theme or
+  locale switching)
 - bounded travel and advertised system actions
 
 Performance is a first-class case operation. A case may contain multiple

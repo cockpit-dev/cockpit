@@ -42,6 +42,7 @@ enum CockpitTestActionKind {
   captureScreenshot,
   collectSnapshot,
   describeApp,
+  appAction,
 }
 
 enum CockpitTestActionField {
@@ -87,6 +88,8 @@ enum CockpitTestActionField {
   captureOptions('captureOptions', CockpitTestValueType.json),
   systemName('name', CockpitTestValueType.string),
   systemParameters('parameters', CockpitTestValueType.json),
+  appActionName('action', CockpitTestValueType.string),
+  appActionArguments('arguments', CockpitTestValueType.json),
   snapshotOptions('snapshotOptions', CockpitTestValueType.json);
 
   /// Creates a CockpitTestActionField.
@@ -463,6 +466,17 @@ cockpitTestActionSpecs = <CockpitTestActionKind, CockpitTestActionSpec>{
     locator: CockpitTestLocatorRequirement.forbidden,
     allowedFields: <CockpitTestActionField>{},
     settlement: CockpitTestSettlement.none,
+  ),
+  CockpitTestActionKind.appAction: CockpitTestActionSpec(
+    locator: CockpitTestLocatorRequirement.forbidden,
+    allowedFields: <CockpitTestActionField>{
+      CockpitTestActionField.appActionName,
+      CockpitTestActionField.appActionArguments,
+    },
+    requiredFields: <CockpitTestActionField>{
+      CockpitTestActionField.appActionName,
+    },
+    settlement: CockpitTestSettlement.uiIdle,
   ),
 };
 

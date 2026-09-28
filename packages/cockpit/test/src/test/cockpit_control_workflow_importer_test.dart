@@ -435,6 +435,39 @@ steps:
       'durationMs': 400,
     });
   });
+
+  test('imports appAction commands with their name and arguments', () {
+    final source = _legacyScript()
+      ..remove('recording')
+      ..['steps'] = <Object?>[
+        <String, Object?>{
+          'stepId': 'applyLocale',
+          'stepType': 'command',
+          'command': <String, Object?>{
+            'commandId': 'apply-locale',
+            'commandType': 'appAction',
+            'parameters': <String, Object?>{
+              'action': 'setLocale',
+              'arguments': <String, Object?>{'locale': 'zh_Hant_TW'},
+            },
+          },
+        },
+      ];
+
+    final result = importer.import(_request(jsonEncode(source)));
+    final action =
+        (result.testCase.steps.single.operation
+                as CockpitTestActionOperationTemplate)
+            .action;
+    expect(action.kind, CockpitTestActionKind.appAction);
+    expect(action.toJson(), <String, Object?>{
+      'type': 'appAction',
+      'action': 'setLocale',
+      'arguments': <String, Object?>{'locale': 'zh_Hant_TW'},
+    });
+    final compiled = compiler.compile(jsonEncode(result.testCase.toJson()));
+    expect(compiled.isSuccess, isTrue, reason: _diagnostics(compiled));
+  });
 }
 
 CockpitTestImportRequest _request(String source) => CockpitTestImportRequest(

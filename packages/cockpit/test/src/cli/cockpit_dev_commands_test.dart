@@ -5,6 +5,7 @@ import 'package:cockpit/src/cli/cockpit_cli_runtime.dart';
 import 'package:cockpit/src/cli/cockpit_command_runner.dart';
 import 'package:cockpit/src/cli/cockpit_update_service.dart';
 import 'package:cockpit/src/application/cockpit_ui_locator_advisor.dart';
+import 'package:cockpit/src/cli/commands/dev_app_commands.dart';
 import 'package:cockpit/src/cli/commands/dev_interaction_commands.dart';
 import 'package:cockpit/src/cli/commands/skill_command.dart';
 import 'package:cockpit/src/foundation/cockpit_locked_json_store.dart';
@@ -81,11 +82,21 @@ void main() {
         'viewport',
         'reload',
         'restart',
+        'describe-app',
+        'app-action',
         'diagnose',
         'stop',
       }),
     );
     expect(dev.subcommands['tap']!.usage, contains('cockpit dev tap'));
+    expect(
+      dev.subcommands['app-action']!.invocation,
+      'cockpit dev app-action ACTION [KEY=VALUE...] | ACTION [JSON]',
+    );
+    expect(
+      dev.subcommands['describe-app']!.invocation,
+      'cockpit dev describe-app [arguments]',
+    );
     expect(
       dev.subcommands['tap']!.invocation,
       'cockpit dev tap [SELECTOR] [arguments]',
@@ -588,6 +599,145 @@ void main() {
     final error = jsonDecode(stderr.toString()) as Map<String, Object?>;
     expect((error['error']! as Map<String, Object?>)['code'], 'invalidInput');
     expect(stderr.toString(), contains('--body requires a request ID'));
+  });
+
+  test(
+    'dev app-action rejects invalid arguments before resolving a session',
+    () async {
+      Future<String> runAction(List<String> arguments) async {
+        final stderr = StringBuffer();
+        final runner = CockpitCommandRunner(
+          runtime: CockpitCliRuntime(
+            stdoutSink: StringBuffer(),
+            stderrSink: stderr,
+          ),
+        );
+        final exitCode = await runner.run(<String>[
+          'dev',
+          'app-action',
+          ...arguments,
+          '--format',
+          'json',
+        ]);
+        expect(exitCode, cockpitDataExitCode);
+        expect(
+          (jsonDecode(stderr.toString()) as Map<String, Object?>)['error']!
+              as Map<String, Object?>,
+          containsPair('code', 'invalidInput'),
+        );
+        return stderr.toString();
+      }
+
+      expect(await runAction(const <String>[]), contains('requires an action'));
+      expect(
+        await runAction(const <String>['setLocale', 'locale']),
+        contains('KEY=VALUE'),
+      );
+      expect(
+        await runAction(const <String>['setLocale', '{"locale":"zh"}', 'x=1']),
+        contains('only app-action argument'),
+      );
+      expect(
+        await runAction(const <String>['setLocale', '["zh"]']),
+        contains('KEY=VALUE'),
+      );
+    },
+  );
+
+  test('dev app-action parses key=value and JSON argument forms', () {
+    expect(cockpitParseAppActionArguments(const <String>[]), isNull);
+    expect(
+      cockpitParseAppActionArguments(const <String>[
+        'locale=zh_Hant_TW',
+        'dark=true',
+        'scale=1.5',
+        'count=3',
+        'nothing=null',
+      ]),
+      <String, Object?>{
+        'locale': 'zh_Hant_TW',
+        'dark': true,
+        'scale': 1.5,
+        'count': 3,
+        'nothing': null,
+      },
+    );
+    expect(
+      cockpitParseAppActionArguments(const <String>[
+        '{"locale":"zh_Hant_TW","nested":{"k":[1,2]},"dark":false}',
+      ]),
+      <String, Object?>{
+        'locale': 'zh_Hant_TW',
+        'nested': <String, Object?>{
+          'k': <Object?>[1, 2],
+        },
+        'dark': false,
+      },
+    );
+    expect(
+      cockpitParseAppActionArguments(const <String>[
+        'palette={"primary":"#2196F3"}',
+      ]),
+      <String, Object?>{
+        'palette': <String, Object?>{'primary': '#2196F3'},
+      },
+    );
+    expect(
+      cockpitParseAppActionArguments(const <String>['label=0042']),
+      <String, Object?>{'label': '0042'},
+      reason: 'leading zeros stay strings, not JSON numbers',
+    );
+    expect(
+      () => cockpitParseAppActionArguments(const <String>[
+        '{"locale":"zh"}',
+        'x=1',
+      ]),
+      throwsFormatException,
+    );
+    expect(
+      () => cockpitParseAppActionArguments(const <String>[
+        '{"locale":"zh"',
+        'x=1',
+      ]),
+      throwsFormatException,
+    );
+    expect(
+      () => cockpitParseAppActionArguments(const <String>['a=1', 'a=2']),
+      throwsA(
+        isA<FormatException>().having(
+          (error) => error.message,
+          'message',
+          contains('"a" was passed twice'),
+        ),
+      ),
+    );
+    expect(
+      () => cockpitParseAppActionArguments(const <String>['=1']),
+      throwsFormatException,
+    );
+  });
+
+  test('dev describe-app rejects positional arguments', () async {
+    final stderr = StringBuffer();
+    final runner = CockpitCommandRunner(
+      runtime: CockpitCliRuntime(
+        stdoutSink: StringBuffer(),
+        stderrSink: stderr,
+      ),
+    );
+
+    final exitCode = await runner.run(const <String>[
+      'dev',
+      'describe-app',
+      'extra',
+      '--format',
+      'json',
+    ]);
+
+    expect(exitCode, cockpitDataExitCode);
+    final error = jsonDecode(stderr.toString()) as Map<String, Object?>;
+    expect((error['error']! as Map<String, Object?>)['code'], 'invalidInput');
+    expect(stderr.toString(), contains('takes no arguments'));
   });
 
   test('session state errors remain actionable without a daemon', () async {

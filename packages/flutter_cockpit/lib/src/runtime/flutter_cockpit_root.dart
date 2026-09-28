@@ -51,10 +51,24 @@ import 'cockpit_visual_frame_driver.dart';
 const int _routeInformationImmediateDiscoveryRetries = 4;
 const Duration _routeInformationDiscoveryRetryDelay = Duration(seconds: 1);
 
+/// Handles one app-registered action invoked through the `appAction` command.
+///
+/// The application decides what each named action does — applying a setting,
+/// toggling a feature flag, preparing state for a test — and may return a
+/// result map that is normalized, redacted, and size-bounded before it leaves
+/// the app process. Handlers may be asynchronous; the command settles the UI
+/// once the returned future completes.
+typedef CockpitAppAction =
+    FutureOr<Map<String, Object?>?> Function(
+      BuildContext context,
+      Map<String, Object?> arguments,
+    );
+
 final class FlutterCockpitRoot extends StatefulWidget {
   const FlutterCockpitRoot({
     required this.child,
     this.appStateProvider,
+    this.appActions,
     super.key,
   });
 
@@ -71,6 +85,13 @@ final class FlutterCockpitRoot extends StatefulWidget {
   /// so app-authored keys with those names win. `describeApp` also answers
   /// with the derived settings alone when no provider is configured.
   final Map<String, Object?> Function(BuildContext context)? appStateProvider;
+
+  /// App-registered actions served to `appAction` commands on every execution
+  /// surface. Each entry maps an action name to its handler; `describeApp`
+  /// reports the registered names so callers can discover what is callable.
+  /// Only explicitly registered actions can be invoked — there is no generic
+  /// write surface — and unknown names fail with a structured command error.
+  final Map<String, CockpitAppAction>? appActions;
 
   @override
   State<FlutterCockpitRoot> createState() => FlutterCockpitRootState();
@@ -728,6 +749,7 @@ final class FlutterCockpitRootState extends State<FlutterCockpitRoot> {
       },
       dismissActionResolver: () => _surfaceStateOrNull?.resolveDismissAction(),
       appStateProvider: _rootAppStateProvider,
+      appActions: _rootAppActions,
       platform: platform,
       transportType: transportType,
     );
@@ -748,6 +770,25 @@ final class FlutterCockpitRootState extends State<FlutterCockpitRoot> {
       final provider = widget.appStateProvider;
       if (provider == null) return derived;
       return <String, Object?>{...derived, ...provider(context)};
+    };
+  }
+
+  /// Bridges the widget-level action handlers, which want a [BuildContext],
+  /// into the context-free executor registry. Invocations resolve through
+  /// `widget.appActions` on demand, so a rebuilt registration map keeps
+  /// serving current handlers under the names captured at executor creation.
+  Map<String, CockpitAppActionHandler>? get _rootAppActions {
+    final actions = widget.appActions;
+    if (actions == null || actions.isEmpty) return null;
+    return <String, CockpitAppActionHandler>{
+      for (final name in actions.keys)
+        name: (arguments) {
+          final handler = widget.appActions?[name];
+          if (handler == null) {
+            throw StateError('Action "$name" is no longer registered.');
+          }
+          return handler(context, arguments);
+        },
     };
   }
 

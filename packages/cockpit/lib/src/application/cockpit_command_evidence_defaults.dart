@@ -125,7 +125,8 @@ bool _isKeyOperation(CockpitCommandType commandType) {
     CockpitCommandType.dismiss ||
     CockpitCommandType.dismissKeyboard ||
     CockpitCommandType.system ||
-    CockpitCommandType.travel => true,
+    CockpitCommandType.travel ||
+    CockpitCommandType.appAction => true,
     CockpitCommandType.copyText ||
     CockpitCommandType.clearNetworkActivity ||
     CockpitCommandType.waitForNetworkIdle ||

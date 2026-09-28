@@ -149,6 +149,18 @@ class CockpitAutomationTester
   }
 
   @override
+  Future<Map<String, Object?>?> appAction(
+    String name, {
+    Map<String, Object?>? arguments,
+  }) async {
+    final execution = await _run(
+      CockpitCommandType.appAction,
+      parameters: <String, Object?>{'action': name, 'arguments': ?arguments},
+    );
+    return execution.result.actionResult;
+  }
+
+  @override
   Future<CockpitCommandExecution> screenshot() =>
       _run(CockpitCommandType.captureScreenshot);
 

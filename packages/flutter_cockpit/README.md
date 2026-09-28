@@ -202,6 +202,40 @@ color as `#RRGGBB`), `textScale`, and `platform`. Values are read at command
 time and follow theme or locale changes immediately; app-authored keys with
 the same names win over the derived ones.
 
+### Register app actions for quick operations
+
+`appActions` is the write-side counterpart: the application registers named
+actions that tests, assistants, and the `cockpit dev` CLI can invoke directly
+with arguments, without scripting UI navigation. Typical uses are quick
+settings such as switching theme, locale, or day/night mode:
+
+```dart
+return FlutterCockpitApp(
+  appActions: <String, CockpitAppAction>{
+    'setThemeMode': (context, arguments) async {
+      final mode = arguments['mode'] as String;
+      await settingsController.setThemeMode(
+        ThemeMode.values.byName(mode),
+      );
+      return <String, Object?>{'themeMode': mode};
+    },
+  },
+  child: MaterialApp(...),
+);
+```
+
+Handlers run on the app side with the live `BuildContext`, may be sync or
+async, and return an optional JSON object that is normalized, redacted, and
+size-bounded exactly like an app state report. Registered names are listed in
+the `actions` key of every `describeApp` report, so a caller can discover what
+is available before invoking. Only registered actions are invocable — an
+unknown name fails with `appActionNotFound`, an argument mismatch with
+`appActionInvalidArguments`, and a handler error with `appActionFailed`
+carrying the thrown error's message. Invoke them with the `appAction` command,
+the `appAction()` tester method, the `cockpit dev app-action NAME KEY=VALUE`
+CLI (which also accepts a raw JSON object for complex arguments), or the
+`appAction` action in `cockpit.test/v2` cases.
+
 For nested navigators, create one observer per navigator so route state can return to the parent stack after a nested pop:
 
 ```dart

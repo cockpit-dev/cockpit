@@ -55,6 +55,14 @@ cockpitExpectContains(await readLabels(snapshot), 'Saved');
 // 暴露什么，每次调用时实时求值。
 final appState = await tester.describeApp();
 cockpitExpectEquals(appState['environment'], 'staging');
+
+// 调用应用注册的具名动作并携带参数，再读回 handler 的返回值。
+// 已注册的动作名会列在 appState['actions'] 里。
+final result = await tester.appAction(
+  'setThemeMode',
+  arguments: <String, Object?>{'mode': 'dark'},
+);
+cockpitExpectEquals(result?['themeMode'], 'dark');
 ```
 
 宿主侧 helper 完整列表：`cockpitExpectEquals`（对数字、字符串、布尔、列表、集合和
@@ -63,6 +71,8 @@ Map 做深度相等）、`cockpitExpectTrue`、`cockpitExpectNotNull` 和
 
 没有注册 app state provider 的目标会让 `describeApp` 返回 unsupported
 capability 失败，runner 将其判定为 blocked —— 与其他能力缺失的语义一致。
+`appAction` 遵循同样的规则：未注册 app action 的目标返回 unsupported；动作名未知
+或 handler 执行失败时，命令以 failed 结束并携带执行器的结构化错误。
 
 ## 在 Flutter 上运行
 

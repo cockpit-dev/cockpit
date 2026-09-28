@@ -1203,6 +1203,9 @@ const String cockpitTestV2SchemaJson = r'''
         },
         {
           "$ref": "#/$defs/describeAppAction"
+        },
+        {
+          "$ref": "#/$defs/appActionAction"
         }
       ]
     },
@@ -2090,6 +2093,25 @@ const String cockpitTestV2SchemaJson = r'''
         "^x-[A-Za-z0-9][A-Za-z0-9._-]*$": true
       },
       "required": ["type"],
+      "additionalProperties": false
+    },
+    "appActionAction": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "appAction"
+        },
+        "action": {
+          "$ref": "#/$defs/stringTemplate"
+        },
+        "arguments": {
+          "$ref": "#/$defs/jsonTemplate"
+        }
+      },
+      "patternProperties": {
+        "^x-[A-Za-z0-9][A-Za-z0-9._-]*$": true
+      },
+      "required": ["type", "action"],
       "additionalProperties": false
     },
     "step": {

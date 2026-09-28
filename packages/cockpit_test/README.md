@@ -61,6 +61,14 @@ cockpitExpectContains(await readLabels(snapshot), 'Saved');
 // `appStateProvider`), evaluated at call time.
 final appState = await tester.describeApp();
 cockpitExpectEquals(appState['environment'], 'staging');
+
+// Invoke a registered app action with arguments, then read the result the
+// handler returned. Registered names are listed in appState['actions'].
+final result = await tester.appAction(
+  'setThemeMode',
+  arguments: <String, Object?>{'mode': 'dark'},
+);
+cockpitExpectEquals(result?['themeMode'], 'dark');
 ```
 
 The full helper set is `cockpitExpectEquals` (deep equality over numbers,
@@ -70,7 +78,10 @@ key membership).
 
 Targets without an app state provider answer `describeApp` with an
 unsupported-capability failure, which the runner reports as a blocked attempt —
-the same verdict as any other missing capability.
+the same verdict as any other missing capability. `appAction` follows the same
+rule: targets without registered app actions report it as unsupported, and an
+unknown action name or a failing handler surfaces as a failed command with the
+executor's structured error.
 
 ## Run it on Flutter
 

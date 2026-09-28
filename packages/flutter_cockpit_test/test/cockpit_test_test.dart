@@ -69,6 +69,48 @@ void main() {
     },
   );
 
+  cockpitTestWidgets(
+    'appAction invokes registered app actions and returns results',
+    app: () => FlutterCockpitRoot(
+      appStateProvider: (context) => <String, Object?>{
+        'themeMode': _testThemeMode.value,
+      },
+      appActions: <String, CockpitAppAction>{
+        'setThemeMode': (context, arguments) {
+          _testThemeMode.value = arguments['mode']! as String;
+          return <String, Object?>{'themeMode': _testThemeMode.value};
+        },
+      },
+      child: const _TestApp(),
+    ),
+    body: (cockpit) async {
+      _testThemeMode.value = 'light';
+      final describe = await cockpit.describeApp();
+      expect(describe['actions'], <String>['setThemeMode']);
+      expect(describe['themeMode'], 'light');
+
+      final result = await cockpit.appAction(
+        'setThemeMode',
+        arguments: const <String, Object?>{'mode': 'dark'},
+      );
+      expect(result, <String, Object?>{'themeMode': 'dark'});
+
+      final after = await cockpit.describeApp();
+      expect(after['themeMode'], 'dark');
+
+      await expectLater(
+        cockpit.appAction('unknownAction'),
+        throwsA(
+          isA<TestFailure>().having(
+            (error) => error.message,
+            'message',
+            allOf(contains('appAction'), contains('unknownAction')),
+          ),
+        ),
+      );
+    },
+  );
+
   cockpitScenarioWidgets(
     'runs a shared platform-neutral scenario',
     app: () => const _TestApp(),
@@ -999,6 +1041,14 @@ final class _TestApp extends StatefulWidget {
   @override
   State<_TestApp> createState() => _TestAppState();
 }
+
+/// Mutable holder so the appAction test's app builder can stay a const-safe
+/// closure while the registered handler still mutates observable state.
+final class _ThemeModeHolder {
+  String value = 'light';
+}
+
+final _testThemeMode = _ThemeModeHolder();
 
 final class _TestAppState extends State<_TestApp> {
   var _saved = false;

@@ -63,6 +63,15 @@ typedef CockpitBackNavigationHandler = Future<bool> Function();
 /// always reflects the moment the command runs. The payload is normalized,
 /// bounded, and redacted before it leaves the app process.
 typedef CockpitAppStateProvider = Map<String, Object?> Function();
+
+/// Handles one app-registered action for `appAction` commands.
+///
+/// Only actions the application explicitly registered are invoked. The
+/// handler may be asynchronous; the returned value is normalized, bounded,
+/// and redacted before it leaves the app process, and returning null reports
+/// the action as applied without a result payload.
+typedef CockpitAppActionHandler =
+    FutureOr<Map<String, Object?>?> Function(Map<String, Object?> arguments);
 typedef CockpitDismissActionResolver = CockpitSemanticActionHandler? Function();
 typedef CockpitWaitTickHandler = Future<void> Function(Duration duration);
 typedef CockpitRecordingActivityProbe = bool Function();

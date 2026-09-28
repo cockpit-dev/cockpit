@@ -182,6 +182,36 @@ payload 会被规范化为 JSON 安全的值；疑似敏感 key（password、tok
 的主题色，`#RRGGBB`）、`textScale` 与 `platform`。这些值在命令执行时读取，主题或
 语言切换后立即生效；应用通过 provider 提供的同名字段优先于推导值。
 
+### 注册应用动作，支持快捷操作
+
+`appActions` 是写入侧的对应能力：应用注册具名动作，测试、助手与 `cockpit dev` CLI
+可以直接携带参数调用，无需通过 UI 脚本导航。典型场景是快捷设置，例如切换主题、
+语言或日夜间模式：
+
+```dart
+return FlutterCockpitApp(
+  appActions: <String, CockpitAppAction>{
+    'setThemeMode': (context, arguments) async {
+      final mode = arguments['mode'] as String;
+      await settingsController.setThemeMode(
+        ThemeMode.values.byName(mode),
+      );
+      return <String, Object?>{'themeMode': mode};
+    },
+  },
+  child: MaterialApp(...),
+);
+```
+
+handler 在应用侧执行，可拿到当前 `BuildContext`，支持同步或异步，可返回一个可选的
+JSON 对象；返回值会像 app state 报告一样被规范化、脱敏并限制大小。所有已注册的动
+作名会列在每份 `describeApp` 报告的 `actions` 字段里，调用方可先发现再调用。只有
+已注册的动作可被调用——未知名称以 `appActionNotFound` 失败，参数不匹配以
+`appActionInvalidArguments` 失败，handler 抛错以 `appActionFailed` 失败并携带原始
+错误信息。调用入口包括 `appAction` 命令、`appAction()` tester 方法、`cockpit dev
+app-action NAME KEY=VALUE` CLI（复杂参数也支持直接传 JSON 对象），以及
+`cockpit.test/v2` 用例中的 `appAction` action。
+
 嵌套 Navigator 需要各自使用独立 observer，这样嵌套路由 pop 后可以恢复当前父级路由：
 
 ```dart

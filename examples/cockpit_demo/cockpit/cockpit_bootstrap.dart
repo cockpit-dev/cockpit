@@ -3,6 +3,7 @@ import 'package:flutter_cockpit/flutter_cockpit_flutter.dart';
 
 import 'package:cockpit_demo/src/app/todo_app_service.dart';
 import 'package:cockpit_demo/src/cockpit_demo_app.dart';
+import 'package:cockpit_demo/src/model/todo_settings.dart';
 
 import 'cockpit_launch_environment.dart';
 
@@ -95,7 +96,116 @@ Widget buildCockpitDemoDevelopmentApp() {
       httpNetworkObserverEnabled: enableHttpNetworkObserver,
       runtimeObserverEnabled: enableRuntimeObserver,
     ),
+    appActions: cockpitDemoAppActions(() => service),
     child: child,
+  );
+}
+
+/// App-registered quick operations surfaced through Cockpit's `appAction`
+/// command. Each handler validates its arguments, persists the setting, and
+/// answers with the values now in effect; invalid input throws so the
+/// executor reports `appActionFailed` with the message.
+Map<String, CockpitAppAction> cockpitDemoAppActions(
+  TodoAppService? Function() serviceResolver,
+) {
+  return <String, CockpitAppAction>{
+    'setThemeMode': (context, arguments) async {
+      final settings = _requireSettings(serviceResolver, 'setThemeMode');
+      final preference = _enumArgument<TodoThemePreference>(
+        arguments,
+        'mode',
+        TodoThemePreference.values,
+      );
+      await _updateSettings(
+        serviceResolver,
+        TodoSettings(
+          themePreference: preference,
+          sortMode: settings.sortMode,
+          showCompletedInInbox: settings.showCompletedInInbox,
+          compactMode: settings.compactMode,
+        ),
+      );
+      return <String, Object?>{'themeMode': preference.name};
+    },
+    'setSortMode': (context, arguments) async {
+      final settings = _requireSettings(serviceResolver, 'setSortMode');
+      final sortMode = _enumArgument<TodoSortMode>(
+        arguments,
+        'mode',
+        TodoSortMode.values,
+      );
+      await _updateSettings(
+        serviceResolver,
+        TodoSettings(
+          themePreference: settings.themePreference,
+          sortMode: sortMode,
+          showCompletedInInbox: settings.showCompletedInInbox,
+          compactMode: settings.compactMode,
+        ),
+      );
+      return <String, Object?>{'sortMode': sortMode.name};
+    },
+    'setCompactMode': (context, arguments) async {
+      final settings = _requireSettings(serviceResolver, 'setCompactMode');
+      final enabled = arguments['enabled'];
+      if (enabled is! bool) {
+        throw const FormatException(
+          'setCompactMode requires a boolean "enabled" argument.',
+        );
+      }
+      await _updateSettings(
+        serviceResolver,
+        TodoSettings(
+          themePreference: settings.themePreference,
+          sortMode: settings.sortMode,
+          showCompletedInInbox: settings.showCompletedInInbox,
+          compactMode: enabled,
+        ),
+      );
+      return <String, Object?>{'compactMode': enabled};
+    },
+  };
+}
+
+TodoSettings _requireSettings(
+  TodoAppService? Function() serviceResolver,
+  String action,
+) {
+  final service = serviceResolver();
+  if (service == null) {
+    throw StateError('The todo service is not ready yet; retry "$action".');
+  }
+  return service.settingsState.settings;
+}
+
+Future<void> _updateSettings(
+  TodoAppService? Function() serviceResolver,
+  TodoSettings settings,
+) {
+  final service = serviceResolver();
+  if (service == null) {
+    throw StateError('The todo service is not ready yet; retry the action.');
+  }
+  return service.updateSettings(settings);
+}
+
+T _enumArgument<T extends Enum>(
+  Map<String, Object?> arguments,
+  String name,
+  List<T> values,
+) {
+  final value = arguments[name];
+  if (value is! String) {
+    throw FormatException(
+      'Expected a "$name" string argument; got ${value.runtimeType}.',
+    );
+  }
+  for (final candidate in values) {
+    if (candidate.name == value) return candidate;
+  }
+  throw FormatException(
+    '"$name" must be one of ${values.map((value) => value.name).join(', ')}; '
+    'got "$value".',
   );
 }
 

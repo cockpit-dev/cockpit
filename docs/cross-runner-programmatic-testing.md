@@ -97,6 +97,17 @@ Every surface maps these to the same protocol operations:
   so no provider is needed to learn the effective locale and theme; the
   declarative `cockpit.test/v2` model exposes the same read as a `describeApp`
   action (no locator, no parameters) for shipped cases and suites.
+- `appAction(name, arguments: ...)` — invokes an app-registered named action
+  with a JSON object of arguments and returns the handler's optional result,
+  normalized and redacted like an app state report. Registered names are
+  listed in the `actions` key of every `describeApp` report. Typical uses are
+  quick settings — theme, locale, day/night mode — without scripting UI
+  navigation. Unknown names, invalid arguments, and handler failures surface
+  as structured command errors (`appActionNotFound`,
+  `appActionInvalidArguments`, `appActionFailed`); the declarative
+  `cockpit.test/v2` model exposes the same operation as an `appAction` action,
+  and `cockpit dev app-action NAME KEY=VALUE ...` (or a raw JSON object)
+  drives it from the CLI.
 
 Host-side helpers in `cockpit_test` — `cockpitExpectEquals` (deep equality),
 `cockpitExpectTrue`, `cockpitExpectNotNull`, `cockpitExpectContains` — throw

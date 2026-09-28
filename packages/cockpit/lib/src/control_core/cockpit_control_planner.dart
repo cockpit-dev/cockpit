@@ -154,6 +154,7 @@ final class CockpitControlPlanner {
       CockpitIntentAction.captureScreenshot ||
       CockpitIntentAction.collectSnapshot ||
       CockpitIntentAction.describeApp ||
+      CockpitIntentAction.appAction ||
       CockpitIntentAction.runShell => false,
     };
   }
@@ -196,6 +197,7 @@ final class CockpitControlPlanner {
         CockpitActionCapability.captureScreenshot,
       CockpitIntentAction.collectSnapshot ||
       CockpitIntentAction.describeApp ||
+      CockpitIntentAction.appAction ||
       CockpitIntentAction.clearNetworkActivity ||
       CockpitIntentAction.waitForNetworkIdle ||
       CockpitIntentAction.waitForUiIdle => CockpitActionCapability.readLogs,
