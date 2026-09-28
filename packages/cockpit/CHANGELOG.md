@@ -19,6 +19,10 @@
   their diagnostics flow through the redacted worker log.
 - Drained oversized control-plane requests before rejecting them so
   keep-alive connections survive 413 responses.
+- Rejected out-of-range pagination limits (`limit <= 0` or `> 100`) on the
+  daemon's supervisor HTTP routes with a structured `invalidRequest`
+  envelope, mirroring the protocol page bound so non-SDK clients cannot
+  page themselves into a cursor livelock.
 - Fixed the Windows file identity probe on volumes whose serial number has
   the high bit set (half of all machines statistically): the serial loaded
   as a negative Dart integer and the probe output was rejected as invalid,

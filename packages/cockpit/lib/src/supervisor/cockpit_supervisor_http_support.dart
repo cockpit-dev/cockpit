@@ -111,7 +111,9 @@ final class CockpitSupervisorHttpSupport {
     }
     final limitText = request.uri.queryParameters['limit'];
     final limit = limitText == null ? 50 : int.tryParse(limitText);
-    if (limit == null) {
+    // Mirrors cockpitFoundationPageSizeMaximum, which the protocol barrel
+    // does not export; rejecting here keeps the error message stable.
+    if (limit == null || limit < 1 || limit > 100) {
       throw _apiError(
         CockpitErrorCode.invalidRequest,
         CockpitErrorCategory.invalidInput,
