@@ -26,7 +26,8 @@ final class CockpitLaunchDevelopmentSessionRequest {
     this.flavor,
     this.launchTimeout = const Duration(seconds: 120),
     this.allowSessionPortFallback = true,
-    this.authPassword = '',
+    this.authenticationEnabled = false,
+    this.authToken = '',
     this.persistHandlePath,
     this.persistAppHandlePath,
     this.launchConfiguration = CockpitFlutterLaunchConfiguration.empty,
@@ -40,7 +41,11 @@ final class CockpitLaunchDevelopmentSessionRequest {
   final int sessionPort;
   final Duration launchTimeout;
   final bool allowSessionPortFallback;
-  final String authPassword;
+  final bool authenticationEnabled;
+
+  /// Operator-chosen token required by the session's remote boundary.
+  /// Non-empty exactly when [authenticationEnabled] is true.
+  final String authToken;
   final String? persistHandlePath;
   final String? persistAppHandlePath;
   final CockpitFlutterLaunchConfiguration launchConfiguration;
@@ -125,7 +130,8 @@ final class CockpitLaunchDevelopmentSessionService {
       sessionPort: resolvedSessionPort,
       launchTimeout: request.launchTimeout,
       allowSessionPortFallback: request.allowSessionPortFallback,
-      authPassword: request.authPassword,
+      authenticationEnabled: request.authenticationEnabled,
+      authToken: request.authToken,
       persistHandlePath: request.persistHandlePath,
       persistAppHandlePath: request.persistAppHandlePath,
       launchConfiguration: request.launchConfiguration,

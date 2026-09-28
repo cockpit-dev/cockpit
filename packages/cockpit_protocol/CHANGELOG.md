@@ -3,10 +3,8 @@
 ## 4.10.0
 
 - Separated public session identity from authentication credentials:
-  `CockpitRemoteSessionConfiguration.baseUri` never carries the password,
-  `toJson()` omits `password`, and only the owner-only `toPrivateJson()`
-  retains it. The password itself is chosen by the operator that starts the
-  session instead of being generated.
+  `CockpitRemoteSessionConfiguration.baseUri` never carries a token, `toJson()`
+  omits `authToken`, and only the owner-only `toPrivateJson()` retains it.
 - Added explicit string interpolation values (`$template` and `$var`); plain
   strings containing `${...}` now round-trip as literals without forced
   template interpretation.

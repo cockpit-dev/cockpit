@@ -20,7 +20,8 @@ final class CockpitDevStartRequest {
     this.deviceId,
     this.flavor,
     this.launchConfiguration,
-    this.authPassword,
+    this.authenticationEnabled,
+    this.authToken,
     this.launchTimeoutMilliseconds = 600000,
   });
 
@@ -30,7 +31,13 @@ final class CockpitDevStartRequest {
   final String? deviceId;
   final String? flavor;
   final Map<String, Object?>? launchConfiguration;
-  final String? authPassword;
+  final bool? authenticationEnabled;
+
+  /// Operator-chosen token required by the session's remote boundary.
+  ///
+  /// Non-null exactly when [authenticationEnabled] carries an explicit
+  /// selection; null inherits the active session's token.
+  final String? authToken;
   final int launchTimeoutMilliseconds;
 
   bool get hasExplicitSelection =>
@@ -39,7 +46,7 @@ final class CockpitDevStartRequest {
       deviceId != null ||
       flavor != null ||
       launchConfiguration != null ||
-      authPassword != null;
+      authenticationEnabled != null;
 }
 
 final class CockpitDevStartService {
@@ -110,7 +117,9 @@ final class CockpitDevStartService {
             deviceId: request.deviceId ?? active.deviceId,
             flavor: request.flavor ?? active.flavor,
             launchConfiguration: request.launchConfiguration,
-            authPassword: request.authPassword ?? active.authPassword,
+            authenticationEnabled:
+                request.authenticationEnabled ?? active.authenticationEnabled,
+            authToken: request.authToken ?? active.authToken,
             launchTimeoutMilliseconds: request.launchTimeoutMilliseconds,
           );
     runtime.progress('Preparing Flutter target...');
@@ -281,8 +290,19 @@ final class CockpitDevStartService {
       'Building and launching Flutter on ${device.id}; '
       'waiting for the Cockpit bridge...',
     );
-    final authPassword =
-        launchRequest.authPassword ?? active?.authPassword ?? '';
+    final authenticationEnabled =
+        launchRequest.authenticationEnabled ??
+        active?.authenticationEnabled ??
+        false;
+    final authToken = authenticationEnabled
+        ? (launchRequest.authToken ?? active?.authToken ?? '')
+        : '';
+    if (authenticationEnabled && authToken.isEmpty) {
+      throw const FormatException(
+        'Authentication is enabled for this session but no token is stored; '
+        'pass --auth <token> to set one.',
+      );
+    }
     final launched = await _invokeWorkspace(
       client,
       workspace.workspaceId,
@@ -291,7 +311,8 @@ final class CockpitDevStartService {
         'targetId': target.targetId,
         'mode': 'development',
         'launchTimeoutMs': request.launchTimeoutMilliseconds,
-        if (authPassword.isNotEmpty) 'authPassword': authPassword,
+        if (authenticationEnabled) 'authenticationEnabled': true,
+        if (authenticationEnabled) 'authToken': authToken,
         'launchConfiguration': ?launchConfiguration,
       },
     );
@@ -328,7 +349,8 @@ final class CockpitDevStartService {
             deviceId: device.id,
             flavor: launchRequest.flavor,
             recoverable: recoverable,
-            authPassword: authPassword,
+            authenticationEnabled: authenticationEnabled,
+            authToken: authToken,
             launchTimeoutMilliseconds: launchRequest.launchTimeoutMilliseconds,
             replaceLaunchIdentity: true,
           )
@@ -344,7 +366,8 @@ final class CockpitDevStartService {
             deviceId: device.id,
             flavor: launchRequest.flavor,
             recoverable: recoverable,
-            authPassword: authPassword,
+            authenticationEnabled: authenticationEnabled,
+            authToken: authToken,
             launchTimeoutMilliseconds: launchRequest.launchTimeoutMilliseconds,
             replaceLaunchIdentity: true,
           );
@@ -605,12 +628,10 @@ String? cockpitDevStartFailureNext({
   required CockpitCliSessionHandle? session,
 }) {
   if (request.launchConfiguration != null) return null;
-  // The password itself stays out of the suggested command; it is a
-  // secret, and the stored session already remembers the selection.
-  final authenticationOption = switch (request.authPassword) {
+  final authenticationOption = switch (request.authenticationEnabled) {
+    true => ' --auth <token>',
+    false => ' --no-auth',
     null => '',
-    '' => ' --no-auth',
-    _ => ' --auth <password>',
   };
   if (session != null) {
     return 'cockpit dev start --session ${session.handleId}'

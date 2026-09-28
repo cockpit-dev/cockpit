@@ -436,7 +436,7 @@ void main() {
       expect(resolved.ready, isTrue);
       expect(resolved.changed, 'relaunched');
       expect(resolved.session.handleId, session.handleId);
-      expect(launchInput, isNot(contains('authPassword')));
+      expect(launchInput, isNot(contains('authenticationEnabled')));
       expect(calls.where((kind) => kind == 'target.launch'), hasLength(1));
     },
   );
@@ -453,7 +453,8 @@ void main() {
       entrypoint: 'lib/main.dart',
       platform: 'macos',
       deviceId: 'macos',
-      authPassword: 'unit-dev-password',
+      authenticationEnabled: true,
+      authToken: 'stored-dev-auth-token',
     );
     Map<String, Object?>? launchInput;
     final dev = CockpitDevRuntime(
@@ -489,11 +490,13 @@ void main() {
     final resolved = await dev.reconcile(session, allowRelaunch: true);
 
     expect(resolved.ready, isTrue);
-    expect(launchInput?['authPassword'], 'unit-dev-password');
-    expect(resolved.session.authPassword, 'unit-dev-password');
+    expect(launchInput?['authenticationEnabled'], isTrue);
+    expect(launchInput?['authToken'], 'stored-dev-auth-token');
+    expect(resolved.session.authenticationEnabled, isTrue);
+    expect(resolved.session.authToken, 'stored-dev-auth-token');
     expect(
-      (await runtime.resolveDevelopmentSession(session.handleId)).authPassword,
-      'unit-dev-password',
+      (await runtime.resolveDevelopmentSession(session.handleId)).authToken,
+      'stored-dev-auth-token',
     );
   });
 
@@ -663,17 +666,18 @@ void main() {
     expect(
       cockpitDevStartFailureNext(
         request: const CockpitDevStartRequest(
-          authPassword: 'unit-dev-password',
+          authenticationEnabled: true,
+          authToken: 'unit-dev-auth-token',
         ),
         session: null,
       ),
-      'cockpit dev start --auth <password>',
+      'cockpit dev start --auth <token>',
     );
     expect(
       cockpitDevStartFailureNext(
         request: const CockpitDevStartRequest(
           sessionReference: '1',
-          authPassword: '',
+          authenticationEnabled: false,
         ),
         session: session,
       ),

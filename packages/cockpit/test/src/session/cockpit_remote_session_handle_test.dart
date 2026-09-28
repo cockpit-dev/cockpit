@@ -26,7 +26,7 @@ CockpitRemoteSessionStatus _status({required String sessionId}) {
 
 CockpitRemoteSessionHandle _handle({
   String baseUrl = 'http://127.0.0.1:57331',
-  String password = '',
+  String authToken = '',
 }) {
   return CockpitRemoteSessionHandle(
     platform: 'macos',
@@ -39,7 +39,7 @@ CockpitRemoteSessionHandle _handle({
     devicePort: 57331,
     baseUrl: baseUrl,
     launchedAt: DateTime.utc(2026, 9, 10),
-    password: password,
+    authToken: authToken,
   );
 }
 
@@ -55,10 +55,10 @@ void main() {
       devicePort: 57331,
       status: _status(sessionId: 'app-session-id'),
       launchedAt: DateTime.utc(2026, 9, 10),
-      password: 'launch-token-9',
+      authToken: 'launch-token-9',
     );
 
-    expect(handle.password, 'launch-token-9');
+    expect(handle.authToken, 'launch-token-9');
     expect(handle.baseUri, Uri.parse('http://127.0.0.1:57331'));
     expect(handle.baseUrl, 'http://127.0.0.1:57331');
   });
@@ -76,22 +76,22 @@ void main() {
       launchedAt: DateTime.utc(2026, 9, 10),
     );
 
-    expect(handle.password, isEmpty);
+    expect(handle.authToken, isEmpty);
     expect(handle.baseUri, Uri.parse('http://127.0.0.1:57331'));
   });
 
   test('public JSON omits credentials and private JSON restores them', () {
-    final handle = _handle(password: 'launch-token-9');
+    final handle = _handle(authToken: 'launch-token-9');
 
     final publicJson = handle.toJson();
-    expect(publicJson.containsKey('password'), isFalse);
+    expect(publicJson.containsKey('authToken'), isFalse);
     expect(publicJson['baseUrl'], 'http://127.0.0.1:57331');
     expect(publicJson.toString(), isNot(contains('launch-token-9')));
 
     final privateJson = handle.toPrivateJson();
-    expect(privateJson['password'], 'launch-token-9');
+    expect(privateJson['authToken'], 'launch-token-9');
     final restored = CockpitRemoteSessionHandle.fromJson(privateJson);
-    expect(restored.password, 'launch-token-9');
+    expect(restored.authToken, 'launch-token-9');
     expect(restored.baseUri, Uri.parse('http://127.0.0.1:57331'));
   });
 
@@ -102,7 +102,7 @@ void main() {
           'http://127.0.0.1:57331/cockpit?channel=stable&token=legacy-token',
     });
 
-    expect(handle.password, 'legacy-token');
+    expect(handle.authToken, 'legacy-token');
     expect(
       handle.baseUri,
       Uri.parse('http://127.0.0.1:57331/cockpit?channel=stable'),
@@ -114,10 +114,10 @@ void main() {
     final handle = CockpitRemoteSessionHandle.fromJson(<String, Object?>{
       ..._handle().toJson(),
       'baseUrl': 'http://127.0.0.1:57331?token=legacy-token',
-      'password': 'legacy-token',
+      'authToken': 'legacy-token',
     });
 
-    expect(handle.password, 'legacy-token');
+    expect(handle.authToken, 'legacy-token');
     expect(handle.baseUri, Uri.parse('http://127.0.0.1:57331'));
   });
 
@@ -126,7 +126,7 @@ void main() {
       () => CockpitRemoteSessionHandle.fromJson(<String, Object?>{
         ..._handle().toJson(),
         'baseUrl': 'http://127.0.0.1:57331?token=query-token',
-        'password': 'field-token',
+        'authToken': 'field-token',
       }),
       throwsA(
         isA<FormatException>().having(

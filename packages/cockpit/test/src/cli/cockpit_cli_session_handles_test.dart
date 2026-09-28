@@ -219,12 +219,14 @@ void main() {
         deviceId: 'iphone-1',
         flavor: 'staging',
         recoverable: false,
-        authPassword: 'unit-dev-password',
+        authenticationEnabled: true,
+        authToken: 'stored-dev-auth-token',
         launchTimeoutMilliseconds: 123456,
       );
 
       expect(handle.recoverable, isFalse);
-      expect(handle.authPassword, 'unit-dev-password');
+      expect(handle.authenticationEnabled, isTrue);
+      expect(handle.authToken, 'stored-dev-auth-token');
       expect(handle.launchTimeoutMilliseconds, 123456);
       final persisted = await File(
         p.join(temporaryDirectory.path, 'sessions.json'),
@@ -244,10 +246,49 @@ void main() {
       );
       expect(rebound.handleId, handle.handleId);
       expect(rebound.recoverable, isFalse);
-      expect(rebound.authPassword, 'unit-dev-password');
+      expect(rebound.authenticationEnabled, isTrue);
+      expect(rebound.authToken, 'stored-dev-auth-token');
       expect(rebound.launchTimeoutMilliseconds, 123456);
     },
   );
+
+  test('disabling authentication clears the stored token', () async {
+    final checkout = p.normalize(temporaryDirectory.path);
+    final handle = await store.bindDevelopment(
+      checkoutIdentity: 'e' * 64,
+      checkoutPath: checkout,
+      projectPath: checkout,
+      workspaceId: 'workspace-clearing',
+      sessionId: 'session-clearing',
+      targetId: 'target-clearing',
+      appId: 'app-clearing',
+      entrypoint: 'lib/main.dart',
+      platform: 'macos',
+      deviceId: 'macos',
+      authenticationEnabled: true,
+      authToken: 'stored-dev-auth-token',
+    );
+    expect(handle.authToken, 'stored-dev-auth-token');
+
+    final disabled = await store.bindDevelopment(
+      checkoutIdentity: 'e' * 64,
+      checkoutPath: checkout,
+      projectPath: checkout,
+      workspaceId: 'workspace-clearing',
+      sessionId: 'session-cleared',
+      targetId: 'target-clearing',
+      appId: 'app-cleared',
+      authenticationEnabled: false,
+    );
+    expect(disabled.handleId, handle.handleId);
+    expect(disabled.authenticationEnabled, isFalse);
+    expect(disabled.authToken, isEmpty);
+
+    final persisted = await File(
+      p.join(temporaryDirectory.path, 'sessions.json'),
+    ).readAsString();
+    expect(persisted, isNot(contains('stored-dev-auth-token')));
+  });
 
   test('legacy session state defaults authentication to disabled', () async {
     final checkout = p.normalize(temporaryDirectory.path);
@@ -262,14 +303,14 @@ void main() {
       entrypoint: 'lib/main.dart',
       platform: 'macos',
       deviceId: 'macos',
-      authPassword: 'unit-dev-password',
+      authenticationEnabled: true,
     );
     final stateFile = File(p.join(temporaryDirectory.path, 'sessions.json'));
     final state =
         jsonDecode(await stateFile.readAsString()) as Map<String, Object?>;
     final handles = state['handles']! as List<Object?>;
     final persistedHandle = handles.single! as Map<String, Object?>;
-    persistedHandle.remove('authPassword');
+    persistedHandle.remove('authenticationEnabled');
     await stateFile.writeAsString('${jsonEncode(state)}\n', flush: true);
 
     final reopened = CockpitCliSessionHandleStore.file(
@@ -278,7 +319,46 @@ void main() {
       directorySyncer: const _NoopDirectorySyncer(),
     );
 
-    expect((await reopened.find(handle.handleId))?.authPassword, isEmpty);
+    expect(
+      (await reopened.find(handle.handleId))?.authenticationEnabled,
+      isFalse,
+    );
+    expect((await reopened.find(handle.handleId))?.authToken, isEmpty);
+  });
+
+  test('legacy authenticated state decodes without a stored token', () async {
+    final checkout = p.normalize(temporaryDirectory.path);
+    final handle = await store.bindDevelopment(
+      checkoutIdentity: 'f' * 64,
+      checkoutPath: checkout,
+      projectPath: checkout,
+      workspaceId: 'workspace-legacy-token',
+      sessionId: 'session-legacy-token',
+      targetId: 'target-legacy-token',
+      appId: 'app-legacy-token',
+      entrypoint: 'lib/main.dart',
+      platform: 'macos',
+      deviceId: 'macos',
+      authenticationEnabled: true,
+      authToken: 'legacy-dev-auth-token',
+    );
+    final stateFile = File(p.join(temporaryDirectory.path, 'sessions.json'));
+    final state =
+        jsonDecode(await stateFile.readAsString()) as Map<String, Object?>;
+    final persistedHandle =
+        (state['handles']! as List<Object?>).single! as Map<String, Object?>;
+    persistedHandle.remove('authToken');
+    await stateFile.writeAsString('${jsonEncode(state)}\n', flush: true);
+
+    final reopened = CockpitCliSessionHandleStore.file(
+      path: stateFile.path,
+      permissionHardener: const _NoopPermissionHardener(),
+      directorySyncer: const _NoopDirectorySyncer(),
+    );
+
+    final decoded = await reopened.find(handle.handleId);
+    expect(decoded?.authenticationEnabled, isTrue);
+    expect(decoded?.authToken, isEmpty);
   });
 
   test('keeps implicit selection isolated across checkouts', () async {

@@ -149,7 +149,7 @@ void main() {
       devicePort: 57331,
       baseUrl: 'http://127.0.0.1:57331',
       launchedAt: DateTime.utc(2026, 4, 5),
-      password: 'launch-token-1',
+      authToken: 'launch-token-1',
     );
     final handle = CockpitAppHandle(
       appId: 'dev.example.app',
@@ -163,11 +163,11 @@ void main() {
       remoteSession: remoteSession,
     );
 
-    // The secret is exposed through password only; URIs and persisted
+    // The secret is exposed through authToken only; URIs and persisted
     // values stay clean.
     expect(handle.baseUri, Uri.parse('http://127.0.0.1:57331'));
     expect(handle.baseUrl, 'http://127.0.0.1:57331');
-    expect(handle.password, 'launch-token-1');
+    expect(handle.authToken, 'launch-token-1');
   });
 
   test('app handle strips a legacy tokenized base URL on resolve', () {
@@ -182,7 +182,7 @@ void main() {
       devicePort: 47331,
       baseUrl: 'http://127.0.0.1:57331',
       launchedAt: DateTime.utc(2026, 4, 5),
-      password: 'launch-token-1',
+      authToken: 'launch-token-1',
     );
     final tokenized = CockpitAppHandle(
       appId: 'dev.example.app',
@@ -209,8 +209,8 @@ void main() {
     // Legacy tokenized URLs resolve clean; a duplicate token would instead
     // surface as a FormatException from the endpoint resolver.
     expect(tokenized.baseUri, Uri.parse('http://127.0.0.1:57331'));
-    expect(tokenized.password, 'launch-token-1');
+    expect(tokenized.authToken, 'launch-token-1');
     expect(unauthenticated.baseUri, Uri.parse('http://127.0.0.1:57331'));
-    expect(unauthenticated.password, isEmpty);
+    expect(unauthenticated.authToken, isEmpty);
   });
 }

@@ -32,7 +32,8 @@ final class CockpitLaunchAppRequest {
     this.mode = CockpitAppMode.development,
     this.launchTimeout = const Duration(seconds: 600),
     this.allowSessionPortFallback = true,
-    this.authPassword = '',
+    this.authenticationEnabled = false,
+    this.authToken = '',
     this.appHandlePath,
     this.launchConfiguration = CockpitFlutterLaunchConfiguration.empty,
   });
@@ -46,7 +47,11 @@ final class CockpitLaunchAppRequest {
   final CockpitAppMode mode;
   final Duration launchTimeout;
   final bool allowSessionPortFallback;
-  final String authPassword;
+  final bool authenticationEnabled;
+
+  /// Operator-chosen token required by the session's remote boundary.
+  /// Non-empty exactly when [authenticationEnabled] is true.
+  final String authToken;
   final String? appHandlePath;
   final CockpitFlutterLaunchConfiguration launchConfiguration;
 }
@@ -123,7 +128,8 @@ final class CockpitLaunchAppService {
           sessionPort: request.sessionPort,
           launchTimeout: request.launchTimeout,
           allowSessionPortFallback: request.allowSessionPortFallback,
-          authPassword: request.authPassword,
+          authenticationEnabled: request.authenticationEnabled,
+          authToken: request.authToken,
           persistAppHandlePath: request.appHandlePath,
           launchConfiguration: request.launchConfiguration,
         ),
@@ -209,7 +215,7 @@ final class CockpitLaunchAppService {
     try {
       return await _remoteStatusReader(
         remoteSessionHandle.baseUri,
-        password: remoteSessionHandle.password,
+        authToken: remoteSessionHandle.authToken,
       );
     } on Object {
       return null;
@@ -229,7 +235,8 @@ final class CockpitLaunchAppService {
         sessionPort: request.sessionPort,
         launchTimeout: request.launchTimeout,
         allowSessionPortFallback: request.allowSessionPortFallback,
-        authPassword: request.authPassword,
+        authenticationEnabled: request.authenticationEnabled,
+        authToken: request.authToken,
         launchConfiguration: request.launchConfiguration,
       ),
     );

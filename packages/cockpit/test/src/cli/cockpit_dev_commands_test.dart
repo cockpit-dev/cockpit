@@ -98,14 +98,14 @@ void main() {
     final implicitAuthentication = startParser.parse(const <String>[]);
     final enabledAuthentication = startParser.parse(const <String>[
       '--auth',
-      'unit-password',
+      'unit-dev-auth-token',
     ]);
     final disabledAuthentication = startParser.parse(const <String>[
       '--no-auth',
     ]);
     expect(implicitAuthentication.option('auth'), isNull);
     expect(implicitAuthentication.wasParsed('auth'), isFalse);
-    expect(enabledAuthentication.option('auth'), 'unit-password');
+    expect(enabledAuthentication.option('auth'), 'unit-dev-auth-token');
     expect(enabledAuthentication.wasParsed('auth'), isTrue);
     expect(disabledAuthentication.option('auth'), isNull);
     expect(disabledAuthentication.wasParsed('no-auth'), isTrue);

@@ -174,12 +174,12 @@ void main() {
   test('remote auth token stays out of the public base URI', () {
     const configuration = CockpitRemoteSessionConfiguration(
       enabled: true,
-      password: 'session-secret',
+      authToken: 'session-secret',
       allowedOrigin: 'https://runner.example',
     );
 
     expect(configuration.baseUri.hasQuery, isFalse);
-    expect(configuration.toJson().containsKey('password'), isFalse);
+    expect(configuration.toJson().containsKey('authToken'), isFalse);
     expect(
       CockpitRemoteSessionConfiguration.resolve(
         fallback: configuration,

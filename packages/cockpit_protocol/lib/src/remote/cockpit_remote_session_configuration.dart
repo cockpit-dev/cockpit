@@ -7,7 +7,7 @@ final class CockpitRemoteSessionConfiguration {
     this.port = 47331,
     this.routePrefix = '',
     this.launchId = '',
-    this.password = '',
+    this.authToken = '',
     this.allowedOrigin,
   });
 
@@ -17,11 +17,7 @@ final class CockpitRemoteSessionConfiguration {
   final int port;
   final String routePrefix;
   final String launchId;
-
-  /// Password the remote boundary requires, chosen by the operator that
-  /// started the session. Empty means the boundary accepts unauthenticated
-  /// requests.
-  final String password;
+  final String authToken;
   final String? allowedOrigin;
 
   static const String _defaultHost = '127.0.0.1';
@@ -33,7 +29,7 @@ final class CockpitRemoteSessionConfiguration {
   static const String _routePrefixDefine =
       'FLUTTER_COCKPIT_REMOTE_ROUTE_PREFIX';
   static const String _launchIdDefine = 'FLUTTER_COCKPIT_REMOTE_LAUNCH_ID';
-  static const String _passwordDefine = 'FLUTTER_COCKPIT_REMOTE_PASSWORD';
+  static const String _authTokenDefine = 'FLUTTER_COCKPIT_REMOTE_AUTH_TOKEN';
   static const String _allowedOriginDefine =
       'FLUTTER_COCKPIT_REMOTE_ALLOWED_ORIGIN';
 
@@ -56,12 +52,12 @@ final class CockpitRemoteSessionConfiguration {
   }
 
   /// Encodes this CockpitRemoteSessionConfiguration as a public JSON object.
-  Map<String, Object?> toJson() => _toJson(includePassword: false);
+  Map<String, Object?> toJson() => _toJson(includeAuthToken: false);
 
-  /// Encodes owner-only runtime state, including the password.
-  Map<String, Object?> toPrivateJson() => _toJson(includePassword: true);
+  /// Encodes owner-only runtime state, including the authentication token.
+  Map<String, Object?> toPrivateJson() => _toJson(includeAuthToken: true);
 
-  Map<String, Object?> _toJson({required bool includePassword}) =>
+  Map<String, Object?> _toJson({required bool includeAuthToken}) =>
       <String, Object?>{
         'enabled': enabled,
         'autoStart': autoStart,
@@ -69,7 +65,7 @@ final class CockpitRemoteSessionConfiguration {
         'port': port,
         'routePrefix': routePrefix,
         if (launchId.isNotEmpty) 'launchId': launchId,
-        if (includePassword && password.isNotEmpty) 'password': password,
+        if (includeAuthToken && authToken.isNotEmpty) 'authToken': authToken,
         if (allowedOrigin != null) 'allowedOrigin': allowedOrigin,
       };
 
@@ -84,7 +80,7 @@ final class CockpitRemoteSessionConfiguration {
       port: json['port'] as int? ?? _defaultPort,
       routePrefix: json['routePrefix'] as String? ?? _defaultRoutePrefix,
       launchId: json['launchId'] as String? ?? '',
-      password: json['password'] as String? ?? '',
+      authToken: json['authToken'] as String? ?? '',
       allowedOrigin: json['allowedOrigin'] as String?,
     );
   }
@@ -99,7 +95,7 @@ final class CockpitRemoteSessionConfiguration {
         defines.containsKey(_portDefine) ||
         defines.containsKey(_routePrefixDefine) ||
         defines.containsKey(_launchIdDefine) ||
-        defines.containsKey(_passwordDefine) ||
+        defines.containsKey(_authTokenDefine) ||
         defines.containsKey(_allowedOriginDefine);
     if (!hasAnyOverrides) {
       return fallback;
@@ -121,8 +117,8 @@ final class CockpitRemoteSessionConfiguration {
           _defaultRoutePrefix,
       launchId:
           _readString(defines[_launchIdDefine]) ?? fallback?.launchId ?? '',
-      password:
-          _readString(defines[_passwordDefine]) ?? fallback?.password ?? '',
+      authToken:
+          _readString(defines[_authTokenDefine]) ?? fallback?.authToken ?? '',
       allowedOrigin:
           _readString(defines[_allowedOriginDefine]) ?? fallback?.allowedOrigin,
     );
@@ -141,7 +137,7 @@ final class CockpitRemoteSessionConfiguration {
       _portDefine: const String.fromEnvironment(_portDefine),
       _routePrefixDefine: const String.fromEnvironment(_routePrefixDefine),
       _launchIdDefine: const String.fromEnvironment(_launchIdDefine),
-      _passwordDefine: const String.fromEnvironment(_passwordDefine),
+      _authTokenDefine: const String.fromEnvironment(_authTokenDefine),
       _allowedOriginDefine: const String.fromEnvironment(_allowedOriginDefine),
     };
     values.removeWhere((_, value) => value.isEmpty);
@@ -187,7 +183,7 @@ final class CockpitRemoteSessionConfiguration {
             other.port == port &&
             other.routePrefix == routePrefix &&
             other.launchId == launchId &&
-            other.password == password &&
+            other.authToken == authToken &&
             other.allowedOrigin == allowedOrigin;
   }
 
@@ -199,7 +195,7 @@ final class CockpitRemoteSessionConfiguration {
     port,
     routePrefix,
     launchId,
-    password,
+    authToken,
     allowedOrigin,
   );
 }

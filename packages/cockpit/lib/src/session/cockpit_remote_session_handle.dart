@@ -19,9 +19,9 @@ final class CockpitRemoteSessionHandle {
     required this.devicePort,
     required String baseUrl,
     required this.launchedAt,
-    String password = '',
+    String authToken = '',
   }) : _baseUrl = baseUrl,
-       _password = password;
+       _authToken = authToken;
 
   final String platform;
   final String deviceId;
@@ -36,11 +36,11 @@ final class CockpitRemoteSessionHandle {
   final int devicePort;
   final String _baseUrl;
   final DateTime launchedAt;
-  final String _password;
+  final String _authToken;
 
   CockpitRemoteEndpoint get endpoint => cockpitResolveRemoteEndpoint(
     baseUri: Uri.parse(_baseUrl),
-    passwords: <String?>[_password],
+    authTokens: <String?>[_authToken],
     path: r'$.baseUrl',
   );
 
@@ -48,7 +48,7 @@ final class CockpitRemoteSessionHandle {
 
   Uri get baseUri => endpoint.baseUri;
 
-  String get password => endpoint.password;
+  String get authToken => endpoint.authToken;
 
   String? get effectivePlatformAppId {
     if (!platformAppIdKnown) {
@@ -62,11 +62,11 @@ final class CockpitRemoteSessionHandle {
     return fallback.isEmpty ? null : fallback;
   }
 
-  Map<String, Object?> toJson() => _toJson(includePassword: false);
+  Map<String, Object?> toJson() => _toJson(includeAuthToken: false);
 
-  Map<String, Object?> toPrivateJson() => _toJson(includePassword: true);
+  Map<String, Object?> toPrivateJson() => _toJson(includeAuthToken: true);
 
-  Map<String, Object?> _toJson({required bool includePassword}) {
+  Map<String, Object?> _toJson({required bool includeAuthToken}) {
     final resolvedEndpoint = endpoint;
     return <String, Object?>{
       'platform': platform,
@@ -82,15 +82,15 @@ final class CockpitRemoteSessionHandle {
       'devicePort': devicePort,
       'baseUrl': resolvedEndpoint.baseUri.toString(),
       'launchedAt': launchedAt.toUtc().toIso8601String(),
-      if (includePassword && resolvedEndpoint.password.isNotEmpty)
-        'password': resolvedEndpoint.password,
+      if (includeAuthToken && resolvedEndpoint.authToken.isNotEmpty)
+        'authToken': resolvedEndpoint.authToken,
     };
   }
 
   factory CockpitRemoteSessionHandle.fromJson(Map<String, Object?> json) {
     final endpoint = cockpitResolveRemoteEndpoint(
       baseUri: Uri.parse(json['baseUrl']! as String),
-      passwords: <String?>[json['password'] as String?],
+      authTokens: <String?>[json['authToken'] as String?],
       path: r'$.baseUrl',
     );
     return CockpitRemoteSessionHandle(
@@ -107,7 +107,7 @@ final class CockpitRemoteSessionHandle {
       devicePort: json['devicePort']! as int,
       baseUrl: endpoint.baseUri.toString(),
       launchedAt: DateTime.parse(json['launchedAt']! as String).toUtc(),
-      password: endpoint.password,
+      authToken: endpoint.authToken,
     );
   }
 
@@ -125,7 +125,7 @@ final class CockpitRemoteSessionHandle {
     int? devicePort,
     String? baseUrl,
     DateTime? launchedAt,
-    String? password,
+    String? authToken,
   }) {
     return CockpitRemoteSessionHandle(
       platform: platform ?? this.platform,
@@ -146,7 +146,7 @@ final class CockpitRemoteSessionHandle {
       devicePort: devicePort ?? this.devicePort,
       baseUrl: baseUrl ?? this.baseUrl,
       launchedAt: launchedAt ?? this.launchedAt,
-      password: password ?? this.password,
+      authToken: authToken ?? this.authToken,
     );
   }
 
@@ -163,7 +163,7 @@ final class CockpitRemoteSessionHandle {
     required int devicePort,
     required CockpitRemoteSessionStatus status,
     DateTime? launchedAt,
-    String? password,
+    String? authToken,
   }) {
     return CockpitRemoteSessionHandle(
       platform: status.platform.toLowerCase(),
@@ -179,7 +179,7 @@ final class CockpitRemoteSessionHandle {
       devicePort: devicePort,
       baseUrl: Uri(scheme: 'http', host: host, port: hostPort).toString(),
       launchedAt: (launchedAt ?? DateTime.now()).toUtc(),
-      password: password ?? '',
+      authToken: authToken ?? '',
     );
   }
 }

@@ -127,9 +127,9 @@ final class CockpitRemoteSessionBridgeClient {
     return baseUri.replace(
       scheme: baseUri.scheme == 'https' ? 'wss' : 'ws',
       path: path,
-      queryParameters: _configuration.password.isEmpty
+      queryParameters: _configuration.authToken.isEmpty
           ? null
-          : <String, String>{'token': _configuration.password},
+          : <String, String>{'token': _configuration.authToken},
     );
   }
 }

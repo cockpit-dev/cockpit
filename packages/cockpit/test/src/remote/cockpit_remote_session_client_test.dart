@@ -1407,7 +1407,7 @@ void main() {
 
       final client = CockpitRemoteSessionClient(
         baseUri: Uri.parse('http://127.0.0.1:${server.port}'),
-        password: 'secret-token',
+        authToken: 'secret-token',
         origin: 'https://runner.example',
       );
       expect(await client.ping(), isTrue);
@@ -1453,7 +1453,7 @@ void main() {
       expect(
         () => CockpitRemoteSessionClient(
           baseUri: Uri.parse('http://127.0.0.1:47331?token=query-token'),
-          password: 'explicit-token',
+          authToken: 'explicit-token',
         ),
         throwsA(isA<FormatException>()),
       );

@@ -111,7 +111,7 @@ final class CockpitMacosRemoteSessionLauncher
             port: options.sessionPort,
             flutterVersion: flutterVersion,
             launchId: options.launchId,
-            passwordDartDefineFile: options.passwordDartDefineFile,
+            authTokenDartDefineFile: options.authTokenDartDefineFile,
           ),
         ),
       ],
@@ -152,7 +152,7 @@ final class CockpitMacosRemoteSessionLauncher
         statusReader: _statusReader,
         expectedSessionId: options.launchId,
         expectedPlatform: options.platform,
-        password: options.password,
+        authToken: options.authToken,
       );
       return CockpitRemoteSessionHandle.fromRemoteStatus(
         projectDir: options.projectDir,
@@ -165,7 +165,7 @@ final class CockpitMacosRemoteSessionLauncher
         devicePort: options.sessionPort,
         status: status,
         launchedAt: _now(),
-        password: options.password,
+        authToken: options.authToken,
       );
     } on Object {
       await _bestEffortStopRunningApp(

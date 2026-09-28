@@ -406,7 +406,7 @@ List<String> cockpitBuildRemoteControlDartDefineArguments({
   required int port,
   required String flutterVersion,
   String? launchId,
-  String? passwordDartDefineFile,
+  String? authTokenDartDefineFile,
   bool disableHttpNetworkObserver = false,
   bool disableRuntimeObserver = false,
 }) {
@@ -416,7 +416,7 @@ List<String> cockpitBuildRemoteControlDartDefineArguments({
     '--dart-define=FLUTTER_COCKPIT_REMOTE_PORT=$port',
     if (launchId case final value? when value.isNotEmpty)
       '--dart-define=FLUTTER_COCKPIT_REMOTE_LAUNCH_ID=$value',
-    if (passwordDartDefineFile case final value? when value.isNotEmpty)
+    if (authTokenDartDefineFile case final value? when value.isNotEmpty)
       '--dart-define-from-file=$value',
     if (disableHttpNetworkObserver)
       '--dart-define=FLUTTER_COCKPIT_ENABLE_HTTP_NETWORK_OBSERVER=false',

@@ -396,7 +396,8 @@ final class CockpitWorkerLifecycleOperations {
       const Duration(minutes: 10),
     );
     final launchConfiguration = _launchConfiguration(values);
-    final authPassword = values.optionalString('authPassword') ?? '';
+    final authenticationEnabled = values.boolean('authenticationEnabled');
+    final authToken = values.optionalString('authToken') ?? '';
     final portGrant = requireForwardedPortGrant(
       workspaceId: workspaceId,
       grants: grants,
@@ -410,7 +411,8 @@ final class CockpitWorkerLifecycleOperations {
         timeout: timeout,
         sanitizer: sanitizer,
         launchConfiguration: launchConfiguration,
-        authPassword: authPassword,
+        authenticationEnabled: authenticationEnabled,
+        authToken: authToken,
       );
     }
     return runWorkerTransactionalPortLaunch<
@@ -435,7 +437,8 @@ final class CockpitWorkerLifecycleOperations {
               mode: mode,
               launchTimeout: timeout,
               allowSessionPortFallback: false,
-              authPassword: authPassword,
+              authenticationEnabled: authenticationEnabled,
+              authToken: authToken,
               launchConfiguration: launchConfiguration,
             ),
           );
@@ -460,7 +463,8 @@ final class CockpitWorkerLifecycleOperations {
     final values = _launchInput(input);
     final target = await _launchTargetBinding(values, context, grants);
     final launchConfiguration = _launchConfiguration(values);
-    final authPassword = values.optionalString('authPassword') ?? '';
+    final authenticationEnabled = values.boolean('authenticationEnabled');
+    final authToken = values.optionalString('authToken') ?? '';
     if (target.registration.usesSystemControl) {
       if (values.optionalString('mode', maximum: 32) != null) {
         throw const FormatException(
@@ -473,9 +477,14 @@ final class CockpitWorkerLifecycleOperations {
           'target launches.',
         );
       }
-      if (authPassword.isNotEmpty) {
+      if (authenticationEnabled && authToken.isEmpty) {
         throw const FormatException(
-          'authPassword applies only to entrypoint-backed Flutter '
+          'authenticationEnabled requires a non-empty authToken.',
+        );
+      }
+      if (authenticationEnabled) {
+        throw const FormatException(
+          'authenticationEnabled applies only to entrypoint-backed Flutter '
           'target launches.',
         );
       }
@@ -542,7 +551,8 @@ final class CockpitWorkerLifecycleOperations {
         sanitizer: sanitizer,
         includeTarget: true,
         launchConfiguration: launchConfiguration,
-        authPassword: authPassword,
+        authenticationEnabled: authenticationEnabled,
+        authToken: authToken,
       );
     }
     return runWorkerTransactionalPortLaunch<
@@ -568,7 +578,8 @@ final class CockpitWorkerLifecycleOperations {
               mode: mode,
               launchTimeout: timeout,
               allowSessionPortFallback: false,
-              authPassword: authPassword,
+              authenticationEnabled: authenticationEnabled,
+              authToken: authToken,
               launchConfiguration: launchConfiguration,
             ),
           );
@@ -676,7 +687,8 @@ final class CockpitWorkerLifecycleOperations {
     final target = await _launchTargetBinding(values, context, grants);
     final timeout = _launchTimeout(values, context, const Duration(minutes: 2));
     final launchConfiguration = _launchConfiguration(values);
-    final authPassword = values.optionalString('authPassword') ?? '';
+    final authenticationEnabled = values.boolean('authenticationEnabled');
+    final authToken = values.optionalString('authToken') ?? '';
     final portGrant = requireForwardedPortGrant(
       workspaceId: workspaceId,
       grants: grants,
@@ -689,7 +701,8 @@ final class CockpitWorkerLifecycleOperations {
       timeout: timeout,
       sanitizer: sanitizer,
       launchConfiguration: launchConfiguration,
-      authPassword: authPassword,
+      authenticationEnabled: authenticationEnabled,
+      authToken: authToken,
     );
   }
 
@@ -886,7 +899,7 @@ final class CockpitWorkerLifecycleOperations {
       'targetId',
       'launchTimeoutMs',
       'launchConfiguration',
-      'authPassword',
+      'authenticationEnabled',
       if (allowMode) 'mode',
     },
     required: const <String>{'targetId'},
@@ -986,7 +999,8 @@ final class CockpitWorkerLifecycleOperations {
     required Duration timeout,
     required CockpitWorkerResultSanitizer sanitizer,
     required CockpitFlutterLaunchConfiguration launchConfiguration,
-    required String authPassword,
+    required bool authenticationEnabled,
+    required String authToken,
     bool includeTarget = false,
   }) =>
       runWorkerTransactionalPortLaunch<
@@ -1008,7 +1022,8 @@ final class CockpitWorkerLifecycleOperations {
               sessionPort: port,
               launchTimeout: timeout,
               allowSessionPortFallback: false,
-              authPassword: authPassword,
+              authenticationEnabled: authenticationEnabled,
+              authToken: authToken,
               launchConfiguration: launchConfiguration,
             ),
           ),

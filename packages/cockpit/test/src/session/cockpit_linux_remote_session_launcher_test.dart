@@ -41,7 +41,7 @@ void main() {
               );
               return 5101;
             },
-        statusReader: (baseUri, {String password = ''}) async =>
+        statusReader: (baseUri, {String authToken = ''}) async =>
             CockpitRemoteSessionStatus(
               sessionId: 'linux-bootstrap-session',
               platform: 'linux',
@@ -127,7 +127,7 @@ void main() {
               Map<String, String>? environment,
               required Duration timeout,
             }) async => 5101,
-        statusReader: (baseUri, {String password = ''}) async =>
+        statusReader: (baseUri, {String authToken = ''}) async =>
             CockpitRemoteSessionStatus(
               sessionId: 'linux-sdk-session',
               platform: 'linux',
@@ -260,7 +260,7 @@ void main() {
               launchedExecutable = executablePath;
               return 9002;
             },
-        statusReader: (baseUri, {String password = ''}) async =>
+        statusReader: (baseUri, {String authToken = ''}) async =>
             CockpitRemoteSessionStatus(
               sessionId: 'linux-bootstrap-session',
               platform: 'linux',
@@ -329,7 +329,7 @@ void main() {
               runtimeEnvironment = environment;
               return 5101;
             },
-        statusReader: (baseUri, {String password = ''}) async =>
+        statusReader: (baseUri, {String authToken = ''}) async =>
             CockpitRemoteSessionStatus(
               sessionId: 'linux-launch-config',
               platform: 'linux',

@@ -16,7 +16,7 @@ typedef CockpitBridgeArtifactTempFileFactory =
 
 CockpitWebRemoteSessionBridgeServer? cockpitCreateWebRemoteSessionBridgeServer({
   required CockpitDevelopmentSessionHandle handle,
-  String password = '',
+  String authToken = '',
 }) {
   if (handle.platform != 'web') {
     return null;
@@ -28,8 +28,8 @@ CockpitWebRemoteSessionBridgeServer? cockpitCreateWebRemoteSessionBridgeServer({
     recordingAdapter: cockpitResolveBrowserRecordingAdapter(
       deviceId: handle.deviceId,
     ),
-    password: password.isNotEmpty
-        ? password
+    authToken: authToken.isNotEmpty
+        ? authToken
         : handle.baseUri.queryParameters['token'] ?? '',
   );
 }
@@ -42,7 +42,7 @@ final class CockpitWebRemoteSessionBridgeServer {
     this.recordingAdapter,
     CockpitBridgeArtifactTempFileFactory? artifactTempFileFactory,
     this.requestTimeout = const Duration(seconds: 20),
-    this.password = '',
+    this.authToken = '',
     this.allowedOrigin,
     this.maxConnections = 4,
   }) : _artifactTempFileFactory =
@@ -57,7 +57,7 @@ final class CockpitWebRemoteSessionBridgeServer {
   final String routePrefix;
   final CockpitHostRecordingAdapter? recordingAdapter;
   final Duration requestTimeout;
-  final String password;
+  final String authToken;
   final String? allowedOrigin;
   final int maxConnections;
   final CockpitBridgeArtifactTempFileFactory _artifactTempFileFactory;
@@ -78,9 +78,9 @@ final class CockpitWebRemoteSessionBridgeServer {
   Uri get connectUri => baseUri.replace(
     scheme: baseUri.scheme == 'https' ? 'wss' : 'ws',
     path: _joinPath(_normalizedRoutePrefix, 'connect'),
-    queryParameters: password.isEmpty
+    queryParameters: authToken.isEmpty
         ? null
-        : <String, String>{'token': password},
+        : <String, String>{'token': authToken},
   );
 
   Future<void> start() async {
@@ -169,7 +169,7 @@ final class CockpitWebRemoteSessionBridgeServer {
     // The origin allowlist is enforced only when it is configured, and only
     // against requests that carry a browser origin. The development bridge
     // serves pages launched by the Flutter tool whose origins are not known
-    // up front, and host-side probes authenticate with the session password, so
+    // up front, and host-side probes authenticate with the session token, so
     // the credential remains the gate whenever no allowlist applies.
     final expectedOrigin = allowedOrigin;
     if (expectedOrigin != null) {
@@ -178,7 +178,7 @@ final class CockpitWebRemoteSessionBridgeServer {
         return false;
       }
     }
-    if (password.isEmpty) return true;
+    if (authToken.isEmpty) return true;
     // Browsers cannot attach headers to a WebSocket upgrade, so the page
     // authenticates through the handshake query string on /connect only.
     // Every other endpoint accepts header credentials, matching the in-app
@@ -191,7 +191,7 @@ final class CockpitWebRemoteSessionBridgeServer {
     final provided =
         headerToken ??
         (allowQueryToken ? request.uri.queryParameters['token'] : null);
-    return _constantTimeEquals(provided ?? '', password);
+    return _constantTimeEquals(provided ?? '', authToken);
   }
 
   Future<void> _unauthorizedResponse(HttpResponse response) {

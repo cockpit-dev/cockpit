@@ -254,7 +254,7 @@ void main() {
       final server = CockpitWebRemoteSessionBridgeServer(
         bindHost: '127.0.0.1',
         bindPort: 0,
-        password: 'bridge-secret',
+        authToken: 'bridge-secret',
         allowedOrigin: 'https://trusted.example',
         maxConnections: 1,
         recordingAdapter: _FakeHostRecordingAdapter(
@@ -335,7 +335,7 @@ void main() {
       final server = CockpitWebRemoteSessionBridgeServer(
         bindHost: '127.0.0.1',
         bindPort: 0,
-        password: 'bridge-secret',
+        authToken: 'bridge-secret',
       );
       await server.start();
       addTearDown(server.close);
@@ -408,12 +408,12 @@ void main() {
 
     final bridge = cockpitCreateWebRemoteSessionBridgeServer(
       handle: handle,
-      password: 'launch-token-9',
+      authToken: 'launch-token-9',
     )!;
     await bridge.start();
     addTearDown(bridge.close);
 
-    expect(bridge.password, 'launch-token-9');
+    expect(bridge.authToken, 'launch-token-9');
     expect(bridge.connectUri.queryParameters['token'], 'launch-token-9');
 
     final nativeHandle = CockpitDevelopmentSessionHandle(

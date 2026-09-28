@@ -151,7 +151,7 @@ void main() {
         host: '::',
         port: 47331,
         flutterVersion: '3.32.0',
-        passwordDartDefineFile: '/tmp/cockpit/auth.json',
+        authTokenDartDefineFile: '/tmp/cockpit/auth.json',
       ),
       contains('--dart-define-from-file=/tmp/cockpit/auth.json'),
     );

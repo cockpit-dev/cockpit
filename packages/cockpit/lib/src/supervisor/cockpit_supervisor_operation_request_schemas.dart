@@ -614,7 +614,8 @@ Map<String, Object?> _launchRequest({bool allowMode = false}) => _object(
     if (allowMode) 'mode': _enum(<String>['development', 'automation']),
     'launchTimeoutMs': _positiveTimeout,
     'launchConfiguration': _launchConfiguration,
-    'authPassword': <String, Object?>{
+    'authenticationEnabled': <String, Object?>{..._boolean, 'default': false},
+    'authToken': <String, Object?>{
       'type': 'string',
       'minLength': 1,
       'maxLength': 256,

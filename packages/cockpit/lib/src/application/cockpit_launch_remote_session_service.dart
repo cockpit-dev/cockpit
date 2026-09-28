@@ -10,7 +10,7 @@ import '../platform/android/cockpit_android_device_readiness.dart';
 import '../remote/cockpit_android_port_forwarder.dart';
 import '../remote/cockpit_local_session_port_resolver.dart';
 import '../session/cockpit_flutter_launch_configuration.dart';
-import '../session/cockpit_remote_password_dart_define_file.dart';
+import '../session/cockpit_remote_auth_dart_define_file.dart';
 import '../session/cockpit_remote_session_handle.dart';
 import '../session/cockpit_remote_session_launch_options.dart';
 import '../session/cockpit_remote_session_launcher.dart';
@@ -29,7 +29,8 @@ final class CockpitLaunchRemoteSessionRequest {
     this.flavor,
     this.launchTimeout = const Duration(seconds: 120),
     this.allowSessionPortFallback = true,
-    this.authPassword = '',
+    this.authenticationEnabled = false,
+    this.authToken = '',
     this.persistHandlePath,
     this.launchConfiguration = CockpitFlutterLaunchConfiguration.empty,
   });
@@ -42,10 +43,11 @@ final class CockpitLaunchRemoteSessionRequest {
   final int sessionPort;
   final Duration launchTimeout;
   final bool allowSessionPortFallback;
+  final bool authenticationEnabled;
 
-  /// Operator-chosen password for the session's remote boundary. Empty means
-  /// the boundary accepts unauthenticated requests.
-  final String authPassword;
+  /// Operator-chosen token required by the session's remote boundary.
+  /// Non-empty exactly when [authenticationEnabled] is true.
+  final String authToken;
   final String? persistHandlePath;
   final CockpitFlutterLaunchConfiguration launchConfiguration;
 }
@@ -131,21 +133,26 @@ final class CockpitLaunchRemoteSessionService {
           )
         : _flutterVersionForExecutableReader(flutterExecutable));
     final launchId = _tokenGenerator.nextResourceId('r');
-    final password = request.authPassword;
-    if (password.isNotEmpty) {
-      _sensitiveValueRegistrar?.call(password);
+    final authToken = request.authToken;
+    if (request.authenticationEnabled && authToken.isEmpty) {
+      throw const FormatException(
+        'authenticationEnabled requires a non-empty authToken.',
+      );
+    }
+    if (authToken.isNotEmpty) {
+      _sensitiveValueRegistrar?.call(authToken);
     }
     final prepared = await _prepareAppEnvironment(
       platform: request.platform,
       hostPort: resolvedSessionPort,
       configuration: request.launchConfiguration,
     );
-    CockpitRemotePasswordDartDefineFile? authFile;
+    CockpitRemoteAuthDartDefineFile? authFile;
     late final CockpitRemoteSessionHandle sessionHandle;
     try {
-      if (password.isNotEmpty) {
-        authFile = await CockpitRemotePasswordDartDefineFile.create(
-          password,
+      if (authToken.isNotEmpty) {
+        authFile = await CockpitRemoteAuthDartDefineFile.create(
+          authToken,
           permissionHardener: _authFilePermissionHardener,
         );
       }
@@ -161,8 +168,8 @@ final class CockpitLaunchRemoteSessionService {
           flutterExecutable: flutterExecutable,
           flutterVersion: flutterVersion,
           launchId: launchId,
-          password: password,
-          passwordDartDefineFile: authFile?.path,
+          authToken: authToken,
+          authTokenDartDefineFile: authFile?.path,
           launchConfiguration: request.launchConfiguration,
           appEnvironment: prepared.environment,
         ),
@@ -184,7 +191,7 @@ final class CockpitLaunchRemoteSessionService {
     }
     final health = await _statusReader(
       sessionHandle.baseUri,
-      password: sessionHandle.password,
+      authToken: sessionHandle.authToken,
     );
     final persistedHandlePath = await _persistHandleIfRequested(
       path: request.persistHandlePath,
@@ -239,9 +246,7 @@ final class CockpitLaunchRemoteSessionService {
     }
   }
 
-  Future<void> _deleteAuthFile(
-    CockpitRemotePasswordDartDefineFile? file,
-  ) async {
+  Future<void> _deleteAuthFile(CockpitRemoteAuthDartDefineFile? file) async {
     if (file == null) return;
     try {
       await file.delete();

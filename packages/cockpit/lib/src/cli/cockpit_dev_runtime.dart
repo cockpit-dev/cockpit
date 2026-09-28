@@ -300,12 +300,29 @@ final class CockpitDevRuntime {
         ],
       );
     }
+    if (previous.authenticationEnabled && previous.authToken.isEmpty) {
+      return CockpitDevSessionResolution(
+        session: previous,
+        ready: false,
+        changed: 'none',
+        state: priorState,
+        errors: <Object?>[
+          <String, Object?>{
+            'code': 'authTokenMissing',
+            'message':
+                'This session requires an authentication token that is not '
+                'stored. Re-run `cockpit dev start --session '
+                '${previous.handleId} --auth <token>`.',
+          },
+        ],
+      );
+    }
     final launched = await invoke(previous, 'target.launch', <String, Object?>{
       'targetId': previous.targetId,
       'mode': 'development',
       'launchTimeoutMs': previous.launchTimeoutMilliseconds,
-      if (previous.authPassword.isNotEmpty)
-        'authPassword': previous.authPassword,
+      if (previous.authenticationEnabled) 'authenticationEnabled': true,
+      if (previous.authenticationEnabled) 'authToken': previous.authToken,
     });
     if (!_operationSucceeded(launched)) {
       final crashed = await _setLifecycle(previous, 'crashed');
@@ -330,7 +347,8 @@ final class CockpitDevRuntime {
       appId: output['appId'] as String,
       lifecycle: 'ready',
       recoverable: previous.recoverable,
-      authPassword: previous.authPassword,
+      authenticationEnabled: previous.authenticationEnabled,
+      authToken: previous.authenticationEnabled ? previous.authToken : '',
       launchTimeoutMilliseconds: previous.launchTimeoutMilliseconds,
     );
     return CockpitDevSessionResolution(

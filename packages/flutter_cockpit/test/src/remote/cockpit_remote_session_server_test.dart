@@ -708,7 +708,7 @@ void main() {
           enabled: true,
           autoStart: false,
           port: 0,
-          password: 'remote-secret',
+          authToken: 'remote-secret',
           allowedOrigin: 'https://trusted.example',
         ),
         statusProvider: () async => throw StateError('status should not run'),

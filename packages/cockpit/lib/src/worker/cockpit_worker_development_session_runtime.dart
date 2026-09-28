@@ -23,7 +23,7 @@ import '../infrastructure/cockpit_sdk_environment.dart';
 import '../remote/cockpit_android_port_forwarder.dart';
 import '../remote/cockpit_ios_port_forwarder.dart';
 import '../remote/cockpit_remote_session_client.dart';
-import '../session/cockpit_remote_password_dart_define_file.dart';
+import '../session/cockpit_remote_auth_dart_define_file.dart';
 import '../session/cockpit_remote_session_launcher.dart';
 import '../session/cockpit_flutter_launch_configuration.dart';
 import '../session/cockpit_session_process_runner.dart';
@@ -127,9 +127,9 @@ final class CockpitWorkerDevelopmentSessionRuntime {
       target: request.target,
     );
     final developmentSessionId = _tokenGenerator.nextResourceId('s');
-    final password = request.authPassword;
-    if (password.isNotEmpty) {
-      _sensitiveValueRegistrar?.call(password);
+    final authToken = request.authToken;
+    if (authToken.isNotEmpty) {
+      _sensitiveValueRegistrar?.call(authToken);
     }
     final supervisorLogPath = _sessionLogStore?.pathFor(developmentSessionId);
     CockpitDevelopmentSessionSupervisor? startupSupervisor;
@@ -172,11 +172,11 @@ final class CockpitWorkerDevelopmentSessionRuntime {
               devicePort: request.sessionPort,
             )
           : request.sessionPort;
-      final passwordDartDefineFile = password.isEmpty
+      final authTokenDartDefineFile = authToken.isEmpty
           ? null
-          : await _writePasswordDartDefineFile(
+          : await _writeAuthTokenDartDefineFile(
               developmentSessionId: developmentSessionId,
-              password: password,
+              authToken: authToken,
             );
       final endpointRequest = CockpitLaunchDevelopmentMachineSessionRequest(
         projectDir: projectDir,
@@ -190,8 +190,8 @@ final class CockpitWorkerDevelopmentSessionRuntime {
         flutterExecutable: flutterExecutable,
         flutterVersion: flutterVersion,
         launchId: developmentSessionId,
-        password: password,
-        passwordDartDefineFile: passwordDartDefineFile,
+        authToken: authToken,
+        authTokenDartDefineFile: authTokenDartDefineFile,
         launchConfiguration: request.launchConfiguration,
       );
       final endpoint = await _machineLauncher.resolveRemoteSessionEndpoint(
@@ -226,8 +226,8 @@ final class CockpitWorkerDevelopmentSessionRuntime {
         flutterExecutable: flutterExecutable,
         flutterVersion: flutterVersion,
         launchId: developmentSessionId,
-        password: password,
-        passwordDartDefineFile: passwordDartDefineFile,
+        authToken: authToken,
+        authTokenDartDefineFile: authTokenDartDefineFile,
         launchConfiguration: await _launchConfiguration(
           developmentSessionId: developmentSessionId,
           platform: request.platform,
@@ -263,7 +263,7 @@ final class CockpitWorkerDevelopmentSessionRuntime {
           hostPort: hostPort,
           devicePort: request.sessionPort,
           baseUri: baseUri,
-          password: password,
+          authToken: authToken,
           readiness: false,
         ),
         remoteControlReadinessProbe: (baseUri) => _probe(
@@ -272,14 +272,14 @@ final class CockpitWorkerDevelopmentSessionRuntime {
           hostPort: hostPort,
           devicePort: request.sessionPort,
           baseUri: baseUri,
-          password: password,
+          authToken: authToken,
           readiness: true,
         ),
         appReachabilityProbe: _appReachabilityProbe,
         webBridgeServerFactory: ({required handle}) =>
             cockpitCreateWebRemoteSessionBridgeServer(
               handle: handle,
-              password: password,
+              authToken: authToken,
             ),
         logger: (message) => _logSession(developmentSessionId, message),
         vmServiceObserver: (uri) {
@@ -496,9 +496,9 @@ final class CockpitWorkerDevelopmentSessionRuntime {
         message: 'Development session has no remote runtime identity.',
       );
     }
-    final recoveredPassword = handle.password;
-    if (recoveredPassword.isNotEmpty) {
-      _sensitiveValueRegistrar?.call(recoveredPassword);
+    final recoveredAuthToken = handle.authToken;
+    if (recoveredAuthToken.isNotEmpty) {
+      _sensitiveValueRegistrar?.call(recoveredAuthToken);
     }
     await _logSession(
       handle.developmentSessionId,
@@ -516,7 +516,7 @@ final class CockpitWorkerDevelopmentSessionRuntime {
       webBridgeServerFactory: ({required handle}) =>
           cockpitCreateWebRemoteSessionBridgeServer(
             handle: handle,
-            password: recoveredPassword,
+            authToken: recoveredAuthToken,
           ),
       appReachabilityProbe: _appReachabilityProbe,
       logger: (message) => _logSession(handle.developmentSessionId, message),
@@ -653,36 +653,36 @@ final class CockpitWorkerDevelopmentSessionRuntime {
         port: remote.devicePort,
         flutterVersion: flutterVersion,
         launchId: handle.developmentSessionId,
-        passwordDartDefineFile: await _existingPasswordDartDefineFile(handle),
+        authTokenDartDefineFile: await _existingAuthTokenDartDefineFile(handle),
         disableHttpNetworkObserver: disableIpv6UnsafeObservers,
         disableRuntimeObserver: disableIpv6UnsafeObservers,
       ),
     ];
   }
 
-  Future<String> _writePasswordDartDefineFile({
+  Future<String> _writeAuthTokenDartDefineFile({
     required String developmentSessionId,
-    required String password,
+    required String authToken,
   }) => _appTempStore.writePrivateJson(
     developmentSessionId,
     fileName: 'remote-auth-defines.json',
-    value: <String, String>{cockpitRemotePasswordDartDefineName: password},
+    value: <String, String>{cockpitRemoteAuthDartDefineName: authToken},
   );
 
-  Future<String?> _existingPasswordDartDefineFile(
+  Future<String?> _existingAuthTokenDartDefineFile(
     CockpitDevelopmentSessionHandle handle,
   ) async {
-    final password = handle.password;
-    if (password.isEmpty) return null;
+    final authToken = handle.authToken;
+    if (authToken.isEmpty) return null;
     final path = p.join(
       _appTempStore.root,
       handle.developmentSessionId,
       'remote-auth-defines.json',
     );
     if (await File(path).exists()) return path;
-    return _writePasswordDartDefineFile(
+    return _writeAuthTokenDartDefineFile(
       developmentSessionId: handle.developmentSessionId,
-      password: password,
+      authToken: authToken,
     );
   }
 
@@ -730,7 +730,7 @@ final class CockpitWorkerDevelopmentSessionRuntime {
       hostPort: remote.hostPort,
       devicePort: remote.devicePort,
       baseUri: baseUri,
-      password: handle.password,
+      authToken: handle.authToken,
       readiness: readiness,
     );
   }
@@ -760,7 +760,7 @@ final class CockpitWorkerDevelopmentSessionRuntime {
     required int hostPort,
     required int devicePort,
     required Uri baseUri,
-    required String password,
+    required String authToken,
     required bool readiness,
   }) async {
     if (platform == 'android') {
@@ -780,7 +780,7 @@ final class CockpitWorkerDevelopmentSessionRuntime {
     try {
       final client = CockpitRemoteSessionClient(
         baseUri: baseUri,
-        password: password,
+        authToken: authToken,
       );
       return readiness ? await client.ready() : await client.ping();
     } on Object {

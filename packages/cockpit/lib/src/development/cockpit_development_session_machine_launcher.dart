@@ -64,8 +64,8 @@ final class CockpitLaunchDevelopmentMachineSessionRequest {
     this.flavor,
     this.flutterExecutable,
     this.launchId,
-    this.password = '',
-    this.passwordDartDefineFile,
+    this.authToken = '',
+    this.authTokenDartDefineFile,
     this.launchConfiguration = CockpitFlutterLaunchConfiguration.empty,
   });
 
@@ -80,8 +80,8 @@ final class CockpitLaunchDevelopmentMachineSessionRequest {
   final String? flavor;
   final String? flutterExecutable;
   final String? launchId;
-  final String password;
-  final String? passwordDartDefineFile;
+  final String authToken;
+  final String? authTokenDartDefineFile;
   final CockpitFlutterLaunchConfiguration launchConfiguration;
 }
 
@@ -366,7 +366,7 @@ final class CockpitDevelopmentSessionMachineLauncher {
       devicePort: request.sessionPort,
       status: status,
       launchedAt: _now(),
-      password: request.password,
+      authToken: request.authToken,
     );
   }
 
@@ -381,7 +381,7 @@ final class CockpitDevelopmentSessionMachineLauncher {
       port: request.sessionPort,
       flutterVersion: request.flutterVersion,
       launchId: request.launchId,
-      passwordDartDefineFile: request.passwordDartDefineFile,
+      authTokenDartDefineFile: request.authTokenDartDefineFile,
       disableHttpNetworkObserver: disableIpv6UnsafeObservers,
       disableRuntimeObserver: disableIpv6UnsafeObservers,
     );
@@ -480,7 +480,7 @@ final class CockpitDevelopmentSessionMachineLauncher {
       try {
         final status = await _statusReader(
           baseUri,
-          password: request.password,
+          authToken: request.authToken,
         ).timeout(remaining);
         if (_remoteStatusMatchesRequest(request: request, status: status)) {
           await _logDiagnostic(
@@ -650,7 +650,7 @@ final class CockpitDevelopmentSessionMachineLauncher {
       devicePort: request.sessionPort,
       status: status,
       launchedAt: _now(),
-      password: request.password,
+      authToken: request.authToken,
     );
   }
 

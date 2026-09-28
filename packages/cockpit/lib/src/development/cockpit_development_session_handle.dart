@@ -65,7 +65,7 @@ final class CockpitDevelopmentSessionHandle {
 
   CockpitRemoteEndpoint get endpoint => cockpitResolveRemoteEndpoint(
     baseUri: Uri.parse(_appBaseUrl),
-    passwords: <String?>[remoteSessionHandle?.password],
+    authTokens: <String?>[remoteSessionHandle?.authToken],
     path: r'$.appBaseUrl',
   );
 
@@ -73,15 +73,15 @@ final class CockpitDevelopmentSessionHandle {
 
   Uri get baseUri => endpoint.baseUri;
 
-  String get password => endpoint.password;
+  String get authToken => endpoint.authToken;
 
   Uri get supervisorBaseUri => Uri.parse(supervisorBaseUrl);
 
-  Map<String, Object?> toJson() => _toJson(includePassword: false);
+  Map<String, Object?> toJson() => _toJson(includeAuthToken: false);
 
-  Map<String, Object?> toPrivateJson() => _toJson(includePassword: true);
+  Map<String, Object?> toPrivateJson() => _toJson(includeAuthToken: true);
 
-  Map<String, Object?> _toJson({required bool includePassword}) =>
+  Map<String, Object?> _toJson({required bool includeAuthToken}) =>
       <String, Object?>{
         'developmentSessionId': developmentSessionId,
         'platform': platform,
@@ -97,7 +97,7 @@ final class CockpitDevelopmentSessionHandle {
         if (bindHost != null) 'bindHost': bindHost,
         'reloadRecoverable': reloadRecoverable,
         if (remoteSessionHandle != null)
-          'remoteSessionHandle': includePassword
+          'remoteSessionHandle': includeAuthToken
               ? remoteSessionHandle!.toPrivateJson()
               : remoteSessionHandle!.toJson(),
         if (vmServiceUri != null) 'vmServiceUri': vmServiceUri!.toString(),

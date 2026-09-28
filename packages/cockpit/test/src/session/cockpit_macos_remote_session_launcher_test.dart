@@ -12,7 +12,7 @@ void main() {
     'macos remote session launcher builds, opens, and returns a handle',
     () async {
       final invocations = <String>[];
-      final readerPasswords = <String>[];
+      final readerAuthTokens = <String>[];
       Map<String, Object?>? startInvocation;
       final launcher = CockpitMacosRemoteSessionLauncher(
         flutterVersionReader: () async => '3.38.9',
@@ -47,8 +47,8 @@ void main() {
               };
               return null;
             },
-        statusReader: (baseUri, {String password = ''}) async {
-          readerPasswords.add(password);
+        statusReader: (baseUri, {String authToken = ''}) async {
+          readerAuthTokens.add(authToken);
           return CockpitRemoteSessionStatus(
             sessionId: 'launch-token-9',
             platform: 'macos',
@@ -82,7 +82,7 @@ void main() {
           deviceId: 'macos',
           sessionPort: 47331,
           launchId: 'launch-token-9',
-          password: 'auth-token-9',
+          authToken: 'auth-token-9',
         ),
       );
 
@@ -92,9 +92,12 @@ void main() {
       expect(handle.baseUrl, 'http://127.0.0.1:47331');
       // Readiness probes and the returned handle must authenticate with the
       // independent auth token, never with the public launch id.
-      expect(readerPasswords, isNotEmpty);
-      expect(readerPasswords.every((token) => token == 'auth-token-9'), isTrue);
-      expect(handle.password, 'auth-token-9');
+      expect(readerAuthTokens, isNotEmpty);
+      expect(
+        readerAuthTokens.every((token) => token == 'auth-token-9'),
+        isTrue,
+      );
+      expect(handle.authToken, 'auth-token-9');
       expect(
         invocations,
         contains(
@@ -142,7 +145,7 @@ void main() {
                 '$projectDir/build/macos/Build/Products/Debug/cockpit_demo.app',
         bundleIdResolver: ({required String appBundlePath}) async =>
             'dev.cockpit.cockpitDemo',
-        statusReader: (baseUri, {String password = ''}) async =>
+        statusReader: (baseUri, {String authToken = ''}) async =>
             CockpitRemoteSessionStatus(
               sessionId: 'macos-sdk-session',
               platform: 'macos',
@@ -222,7 +225,7 @@ void main() {
                 '$projectDir/build/macos/Build/Products/Debug/cockpit_demo.app',
         bundleIdResolver: ({required String appBundlePath}) async =>
             'dev.cockpit.cockpitDemo',
-        statusReader: (baseUri, {String password = ''}) async =>
+        statusReader: (baseUri, {String authToken = ''}) async =>
             CockpitRemoteSessionStatus(
               sessionId: 'macos-cache-retry-session',
               platform: 'macos',
@@ -340,7 +343,7 @@ void main() {
           resolvedBundlePath = appBundlePath;
           return 'dev.cockpit.orbitStaging';
         },
-        statusReader: (baseUri, {String password = ''}) async =>
+        statusReader: (baseUri, {String authToken = ''}) async =>
             CockpitRemoteSessionStatus(
               sessionId: 'macos-staging-session',
               platform: 'macos',
@@ -424,7 +427,7 @@ void main() {
           resolvedBundlePath = appBundlePath;
           return 'dev.cockpit.cockpitDemo';
         },
-        statusReader: (baseUri, {String password = ''}) async =>
+        statusReader: (baseUri, {String authToken = ''}) async =>
             CockpitRemoteSessionStatus(
               sessionId: 'macos-latest-session',
               platform: 'macos',
@@ -511,7 +514,7 @@ void main() {
           resolvedBundlePath = appBundlePath;
           return 'dev.cockpit.orbit';
         },
-        statusReader: (baseUri, {String password = ''}) async =>
+        statusReader: (baseUri, {String authToken = ''}) async =>
             CockpitRemoteSessionStatus(
               sessionId: 'macos-nested-session',
               platform: 'macos',
@@ -588,7 +591,7 @@ void main() {
               };
               return 6101;
             },
-        statusReader: (baseUri, {String password = ''}) async =>
+        statusReader: (baseUri, {String authToken = ''}) async =>
             CockpitRemoteSessionStatus(
               sessionId: 'macos-launch-config',
               platform: 'macos',

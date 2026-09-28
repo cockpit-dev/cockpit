@@ -29,7 +29,8 @@ final class CockpitCliSessionHandle {
     this.flavor,
     this.lifecycle = 'ready',
     this.recoverable = true,
-    this.authPassword = '',
+    this.authenticationEnabled = false,
+    this.authToken = '',
     this.launchTimeoutMilliseconds = 600000,
   });
 
@@ -48,10 +49,8 @@ final class CockpitCliSessionHandle {
   final String? flavor;
   final String lifecycle;
   final bool recoverable;
-
-  /// Operator-chosen password for the session's remote boundary; empty means
-  /// authentication is off.
-  final String authPassword;
+  final bool authenticationEnabled;
+  final String authToken;
   final int launchTimeoutMilliseconds;
 
   bool get isDevelopment => checkoutIdentity != null;
@@ -71,7 +70,8 @@ final class CockpitCliSessionHandle {
     String? flavor,
     String? lifecycle,
     bool? recoverable,
-    String? authPassword,
+    bool? authenticationEnabled,
+    String? authToken,
     int? launchTimeoutMilliseconds,
     bool replaceLaunchIdentity = false,
   }) => CockpitCliSessionHandle(
@@ -92,7 +92,8 @@ final class CockpitCliSessionHandle {
     flavor: replaceLaunchIdentity ? flavor : flavor ?? this.flavor,
     lifecycle: lifecycle ?? this.lifecycle,
     recoverable: recoverable ?? this.recoverable,
-    authPassword: authPassword ?? this.authPassword,
+    authenticationEnabled: authenticationEnabled ?? this.authenticationEnabled,
+    authToken: authToken ?? this.authToken,
     launchTimeoutMilliseconds:
         launchTimeoutMilliseconds ?? this.launchTimeoutMilliseconds,
   );
@@ -112,7 +113,8 @@ final class CockpitCliSessionHandle {
     if (flavor != null) 'flavor': flavor,
     'lifecycle': lifecycle,
     'recoverable': recoverable,
-    if (authPassword.isNotEmpty) 'authPassword': authPassword,
+    'authenticationEnabled': authenticationEnabled,
+    if (authToken.isNotEmpty) 'authToken': authToken,
     'launchTimeoutMilliseconds': launchTimeoutMilliseconds,
     'updatedAt': updatedAt.toUtc().toIso8601String(),
   };
@@ -184,7 +186,8 @@ final class CockpitCliSessionHandleStore {
     String? flavor,
     String lifecycle = 'ready',
     bool? recoverable,
-    String? authPassword,
+    bool? authenticationEnabled,
+    String? authToken,
     int? launchTimeoutMilliseconds,
     bool replaceLaunchIdentity = false,
     String? handleId,
@@ -255,7 +258,8 @@ final class CockpitCliSessionHandleStore {
         flavor: flavor,
         lifecycle: lifecycle,
         recoverable: recoverable ?? true,
-        authPassword: authPassword ?? '',
+        authenticationEnabled: authenticationEnabled ?? false,
+        authToken: authToken ?? '',
         launchTimeoutMilliseconds: launchTimeoutMilliseconds ?? 600000,
       );
     } else {
@@ -290,7 +294,8 @@ final class CockpitCliSessionHandleStore {
         flavor: flavor,
         lifecycle: lifecycle,
         recoverable: recoverable,
-        authPassword: authPassword,
+        authenticationEnabled: authenticationEnabled,
+        authToken: authenticationEnabled == false ? '' : authToken,
         launchTimeoutMilliseconds: launchTimeoutMilliseconds,
         replaceLaunchIdentity: replaceLaunchIdentity,
         updatedAt: _utcNow().toUtc(),
@@ -435,7 +440,8 @@ final class CockpitCliSessionHandleStore {
     String? flavor,
     String lifecycle = 'ready',
     bool recoverable = true,
-    String authPassword = '',
+    bool authenticationEnabled = false,
+    String authToken = '',
     int launchTimeoutMilliseconds = 600000,
   }) {
     if (state.handles.length >= maximumHandles) {
@@ -465,7 +471,8 @@ final class CockpitCliSessionHandleStore {
       flavor: flavor,
       lifecycle: lifecycle,
       recoverable: recoverable,
-      authPassword: authPassword,
+      authenticationEnabled: authenticationEnabled,
+      authToken: authenticationEnabled ? authToken : '',
       launchTimeoutMilliseconds: launchTimeoutMilliseconds,
       updatedAt: _utcNow().toUtc(),
     );
@@ -611,10 +618,8 @@ final class _SessionHandleStateCodec
           'flavor',
           'lifecycle',
           'recoverable',
-          'authPassword',
-          // Pre-4.10.0 development builds persisted a bool here; keep the
-          // legacy key recognized so those state files still load.
           'authenticationEnabled',
+          'authToken',
           'launchTimeoutMilliseconds',
           'updatedAt',
         },
@@ -629,10 +634,8 @@ final class _SessionHandleStateCodec
           'platform',
           'deviceId',
           'flavor',
-          'authPassword',
-          // Legacy pre-4.10.0 development-build key; optional on read and
-          // ignored in favour of authPassword above.
           'authenticationEnabled',
+          'authToken',
         },
       );
       final handleId = _identifier(item['handleId'], '$path.handleId');
@@ -680,9 +683,13 @@ final class _SessionHandleStateCodec
       if (recoverable is! bool) {
         throw FormatException('Invalid recoverable state at $path.');
       }
-      final authPassword = item['authPassword'] ?? '';
-      if (authPassword is! String || authPassword.length > 256) {
+      final authenticationEnabled = item['authenticationEnabled'] ?? false;
+      if (authenticationEnabled is! bool) {
         throw FormatException('Invalid authentication state at $path.');
+      }
+      final authToken = _authToken(item['authToken'], '$path.authToken');
+      if (!authenticationEnabled && authToken.isNotEmpty) {
+        throw FormatException('Unexpected authentication token at $path.');
       }
       final launchTimeoutMilliseconds = _launchTimeout(
         item['launchTimeoutMilliseconds'],
@@ -728,7 +735,8 @@ final class _SessionHandleStateCodec
           flavor: flavor,
           lifecycle: lifecycle,
           recoverable: recoverable,
-          authPassword: authPassword,
+          authenticationEnabled: authenticationEnabled,
+          authToken: authToken,
           launchTimeoutMilliseconds: launchTimeoutMilliseconds,
           updatedAt: updatedAt,
         ),
@@ -826,6 +834,19 @@ String _launchValue(Object? value, String path) {
 String _lifecycle(Object? value, String path) {
   if (value is! String || !cockpitCliSessionLifecycles.contains(value)) {
     throw FormatException('Invalid session lifecycle at $path.');
+  }
+  return value;
+}
+
+String _authToken(Object? value, String path) {
+  if (value == null) return '';
+  if (value is! String ||
+      value.isEmpty ||
+      value.length > 256 ||
+      value.contains('\u0000') ||
+      value.contains('\n') ||
+      value.contains('\r')) {
+    throw FormatException('Invalid authentication token at $path.');
   }
   return value;
 }
