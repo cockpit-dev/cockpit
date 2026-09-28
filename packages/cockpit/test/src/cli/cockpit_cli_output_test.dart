@@ -283,6 +283,41 @@ void main() {
     expect(error, isNot(contains('retry')));
   });
 
+  test('failed operation receipts keep the daemon failure details', () {
+    const renderer = CockpitCliOutputRenderer();
+    const data = <String, Object?>{
+      'operationId': 'operation-2',
+      'kind': 'target.register',
+      'lifecycle': 'completed',
+      'outcome': 'failed',
+      'failure': <String, Object?>{
+        'primary': <String, Object?>{
+          'code': 'targetOutsideWorkspace',
+          'message': 'Target path is outside its workspace.',
+          'redactedDetails': <String, Object?>{
+            'path': '/tmp/project/entrypoint.dart',
+          },
+        },
+      },
+    };
+
+    final value =
+        lon.decode(
+              renderer.renderAi(
+                command: 'target.register',
+                data: data,
+                view: CockpitCliOutputView.brief,
+              ),
+            )!
+            as Map<Object?, Object?>;
+    final error = value['error']! as Map<Object?, Object?>;
+    expect(error['code'], 'targetOutsideWorkspace');
+    expect(
+      error['info'],
+      <Object?, Object?>{'path': '/tmp/project/entrypoint.dart'},
+    );
+  });
+
   test('session output omits the internal checkout identity hash', () {
     const renderer = CockpitCliOutputRenderer();
     final hash = 'c' * 64;

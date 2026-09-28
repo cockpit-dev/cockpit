@@ -55,31 +55,37 @@ extension CockpitWorkspaceRegistrationOperations on CockpitWorkspaceRegistry {
     CockpitDirectoryAttestation target,
   ) {
     if (matches.length != 1) {
-      throw const CockpitRegistryException(
+      throw CockpitRegistryException(
         code: 'ambiguousWorkspace',
-        message: 'Multiple workspace records target the same path.',
+        message:
+            'Multiple workspace records target ${target.directory.path}.',
       );
     }
     final workspace = matches.single;
     if (workspace.state != CockpitWorkspaceState.active) {
-      throw const CockpitRegistryException(
+      throw CockpitRegistryException(
         code: 'workspaceNotActive',
-        message: 'A retired or draining workspace cannot be reauthorized.',
+        message:
+            'Workspace ${workspace.workspaceId} (${workspace.canonicalPath}) '
+            'is not active and cannot be reauthorized.',
       );
     }
     if (marker == null || !_markerMatches(workspace, marker)) {
-      throw const CockpitRegistryException(
+      throw CockpitRegistryException(
         code: 'workspaceMarkerConflict',
-        message: 'Workspace marker does not match its registry record.',
+        message:
+            'Workspace marker at ${target.directory.path} does not match its '
+            'registry record ${workspace.workspaceId}.',
       );
     }
     if (workspace.identityQuality.isStrong &&
         (target.identity.quality != workspace.identityQuality ||
             target.identity.value != workspace.filesystemIdentity)) {
-      throw const CockpitRegistryException(
+      throw CockpitRegistryException(
         code: 'workspaceIdentityChanged',
         message:
-            'Workspace filesystem identity changed at its registered path.',
+            'Workspace ${workspace.workspaceId} filesystem identity changed '
+            'at its registered path ${workspace.canonicalPath}.',
       );
     }
     return CockpitLockedJsonUpdate.readOnly(
@@ -159,18 +165,21 @@ extension CockpitWorkspaceRegistrationOperations on CockpitWorkspaceRegistry {
       );
     }
     if (candidates.length != 1 || !_markerMatches(candidates.single, marker)) {
-      throw const CockpitRegistryException(
+      throw CockpitRegistryException(
         code: 'ambiguousWorkspace',
         message:
-            'Marker identity conflicts with live registry records; '
+            'Marker identity ${marker.workspaceId} at '
+            '${target.directory.path} conflicts with live registry records; '
             'explicit rebind is required.',
       );
     }
     final source = candidates.single;
     if (source.state != CockpitWorkspaceState.active) {
-      throw const CockpitRegistryException(
+      throw CockpitRegistryException(
         code: 'workspaceNotActive',
-        message: 'A retired or draining identity cannot be reauthorized.',
+        message:
+            'Workspace ${source.workspaceId} (${source.canonicalPath}) is '
+            'not active and cannot be reauthorized.',
       );
     }
     final sourceType = await FileSystemEntity.type(
@@ -179,9 +188,12 @@ extension CockpitWorkspaceRegistrationOperations on CockpitWorkspaceRegistry {
     );
     if (sourceType == FileSystemEntityType.notFound) {
       if (!_isStrongSameIdentity(source, target.identity)) {
-        throw const CockpitRegistryException(
+        throw CockpitRegistryException(
           code: 'workspaceMoveRequiresRebind',
-          message: 'Missing source cannot be proven to have moved here.',
+          message:
+              'Registered path ${source.canonicalPath} is missing and cannot '
+              'be proven to have moved to ${target.directory.path}; explicit '
+              'rebind is required.',
         );
       }
       final now = _clock.now().toUtc();
@@ -199,9 +211,11 @@ extension CockpitWorkspaceRegistrationOperations on CockpitWorkspaceRegistry {
       );
     }
     if (sourceType != FileSystemEntityType.directory) {
-      throw const CockpitRegistryException(
+      throw CockpitRegistryException(
         code: 'workspaceSourceConflict',
-        message: 'Registered workspace path no longer names a directory.',
+        message:
+            'Registered workspace path ${source.canonicalPath} no longer '
+            'names a directory.',
       );
     }
     final sourceAttestation = await _attestDirectory(source.canonicalPath);
@@ -211,9 +225,11 @@ extension CockpitWorkspaceRegistrationOperations on CockpitWorkspaceRegistry {
       code: 'workspaceSourceIdentityChanged',
     );
     if (sourceAttestation.identity.value == target.identity.value) {
-      throw const CockpitRegistryException(
+      throw CockpitRegistryException(
         code: 'ambiguousWorkspaceIdentity',
-        message: 'Two live paths report the same filesystem identity.',
+        message:
+            'Paths ${source.canonicalPath} and ${target.directory.path} '
+            'report the same filesystem identity.',
       );
     }
     return _copy(state, rootId, target, source.projectId);

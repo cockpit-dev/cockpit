@@ -713,9 +713,12 @@ final class CockpitCliRuntime {
             (workspace) =>
                 p.equals(workspace.canonicalPath, selected.canonicalPath),
           )) {
-        throw const CockpitSupervisorClientException(
+        throw CockpitSupervisorClientException(
           code: 'workspaceAmbiguous',
-          message: 'Current project has duplicate active workspaces.',
+          message:
+              'Current project has duplicate active workspaces for '
+              '${selected.canonicalPath}: '
+              '${containing.map((workspace) => workspace.workspaceId).join(', ')}.',
         );
       }
       return selected.workspaceId;
@@ -731,9 +734,12 @@ final class CockpitCliRuntime {
     throw CockpitSupervisorClientException(
       code: descendants.isEmpty ? 'workspaceNotFound' : 'workspaceAmbiguous',
       message: descendants.isEmpty
-          ? 'Current directory does not resolve to an active workspace.'
-          : 'Multiple project workspaces are active below this directory; '
-                'run inside one project or pass --workspace-id.',
+          ? 'Current directory $canonicalCwd does not resolve to an active '
+                'workspace. Register one with `cockpit workspace register`.'
+          : 'Multiple project workspaces are active below '
+                '$canonicalCwd: '
+                '${descendants.map((workspace) => '${workspace.workspaceId} (${workspace.canonicalPath})').join(', ')}. '
+                'Run inside one project or pass --workspace-id.',
     );
   }
 

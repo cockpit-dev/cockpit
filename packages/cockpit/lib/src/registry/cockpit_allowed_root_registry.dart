@@ -54,9 +54,11 @@ final class CockpitAllowedRootRegistry {
           if (root.identityQuality.isStrong &&
               (identity.quality != root.identityQuality ||
                   identity.value != root.filesystemIdentity)) {
-            throw const CockpitRegistryException(
+            throw CockpitRegistryException(
               code: 'rootIdentityChanged',
-              message: 'Allowed root filesystem identity changed.',
+              message:
+                  'Allowed root ${root.rootId} filesystem identity changed '
+                  'at ${directory.path}.',
             );
           }
           return CockpitLockedJsonUpdate.readOnly(state, root.toResource());
@@ -67,7 +69,9 @@ final class CockpitAllowedRootRegistry {
             code: root.state == CockpitRootState.retired
                 ? 'rootRetiredOverlap'
                 : 'rootOverlap',
-            message: 'Allowed roots cannot be nested or overlap.',
+            message:
+                'Allowed roots cannot be nested or overlap: ${directory.path} '
+                'conflicts with root ${root.rootId} (${root.canonicalPath}).',
           );
         }
       }
@@ -95,9 +99,9 @@ final class CockpitAllowedRootRegistry {
     final state = await _database.read();
     final matches = state.roots.where((value) => value.rootId == rootId);
     if (matches.isEmpty) {
-      throw const CockpitRegistryException(
+      throw CockpitRegistryException(
         code: 'rootNotFound',
-        message: 'Allowed root was not found.',
+        message: 'Allowed root $rootId was not found.',
       );
     }
     return matches.single.toResource();

@@ -87,61 +87,86 @@ final class CockpitCommandRunner {
     );
     try {
       return await _runner.run(arguments) ?? cockpitSuccessExitCode;
-    } on UsageException catch (error) {
-      runtime.error(code: 'usage', message: error.message);
-      return cockpitUsageExitCode;
-    } on CockpitSupervisorClientException catch (error) {
-      final api = error.apiError;
-      runtime.error(
-        code: error.code,
-        message: error.message,
-        retryable: api?.retryable ?? false,
-        category: api?.category.name,
-        responsibleLayer: api?.responsibleLayer.name,
-        details: api?.redactedDetails ?? const <String, Object?>{},
-      );
-      return api == null
-          ? _clientExitCode(error.code)
-          : cockpitExitCodeFor(api);
-    } on CockpitDaemonException catch (error) {
-      runtime.error(code: error.code, message: error.message);
-      return cockpitUnavailableExitCode;
-    } on CockpitCliTimeoutException catch (error) {
-      runtime.error(
-        code: 'timeout',
-        message: error.toString(),
-        retryable: true,
-      );
-      return cockpitTemporaryExitCode;
-    } on FileSystemException catch (error) {
-      runtime.error(
-        code: 'fileSystemError',
-        message: error.message,
-        details: <String, Object?>{'path': ?error.path},
-      );
-      return cockpitNoInputExitCode;
-    } on CockpitStorageException catch (error) {
-      runtime.error(
-        code: error.code,
-        message: 'Cockpit state is unreadable: ${error.diagnostic}',
-        details: <String, Object?>{'path': error.path},
-      );
-      return cockpitNoInputExitCode;
-    } on FormatException catch (error) {
-      runtime.error(code: 'invalidInput', message: error.message);
-      return cockpitDataExitCode;
-    } on ArgumentError catch (error) {
-      runtime.error(
-        code: 'invalidArgument',
-        message: error.message?.toString() ?? error.toString(),
-      );
-      return cockpitDataExitCode;
-    } on Object {
-      runtime.error(
-        code: 'internalError',
-        message: 'Cockpit client failed unexpectedly.',
-      );
-      return cockpitUnavailableExitCode;
+    } on Object catch (error) {
+      return reportFailure(error);
+    }
+  }
+
+  /// Reports [error] through the CLI error channel and returns its exit code.
+  ///
+  /// Every failure surface keeps the underlying cause: operating-system error
+  /// text, format offsets, and unexpected error types all reach the envelope
+  /// instead of a generic placeholder.
+  int reportFailure(Object error) {
+    switch (error) {
+      case UsageException _:
+        runtime.error(code: 'usage', message: error.message);
+        return cockpitUsageExitCode;
+      case CockpitSupervisorClientException _:
+        final api = error.apiError;
+        runtime.error(
+          code: error.code,
+          message: error.message,
+          retryable: api?.retryable ?? false,
+          category: api?.category.name,
+          responsibleLayer: api?.responsibleLayer.name,
+          details: api?.redactedDetails ?? const <String, Object?>{},
+        );
+        return api == null
+            ? _clientExitCode(error.code)
+            : cockpitExitCodeFor(api);
+      case CockpitDaemonException _:
+        runtime.error(code: error.code, message: error.message);
+        return cockpitUnavailableExitCode;
+      case CockpitCliTimeoutException _:
+        runtime.error(
+          code: 'timeout',
+          message: error.toString(),
+          retryable: true,
+        );
+        return cockpitTemporaryExitCode;
+      case FileSystemException _:
+        runtime.error(
+          code: 'fileSystemError',
+          message:
+              '${error.message}'
+              '${error.osError == null ? '' : ': ${error.osError!.message} (errno ${error.osError!.errorCode})'}',
+          details: <String, Object?>{
+            'path': ?error.path,
+            if (error.osError case final osError?)
+              'osError': '${osError.message} (errno ${osError.errorCode})',
+          },
+        );
+        return cockpitNoInputExitCode;
+      case CockpitStorageException _:
+        runtime.error(
+          code: error.code,
+          message: 'Cockpit state is unreadable: ${error.diagnostic}',
+          details: <String, Object?>{'path': error.path},
+        );
+        return cockpitNoInputExitCode;
+      case FormatException _:
+        runtime.error(
+          code: 'invalidInput',
+          message:
+              error.offset == null
+                  ? error.message
+                  : '${error.message} (at offset ${error.offset})',
+        );
+        return cockpitDataExitCode;
+      case ArgumentError _:
+        runtime.error(
+          code: 'invalidArgument',
+          message: error.message?.toString() ?? error.toString(),
+        );
+        return cockpitDataExitCode;
+      default:
+        runtime.error(
+          code: 'internalError',
+          message: 'Cockpit client failed unexpectedly: '
+              '${error.runtimeType}: $error',
+        );
+        return cockpitUnavailableExitCode;
     }
   }
 }

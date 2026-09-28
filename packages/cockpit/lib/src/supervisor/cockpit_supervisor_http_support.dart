@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:cockpit_protocol/cockpit_protocol.dart';
 
 import '../application/cockpit_application_service_exception.dart';
+import '../foundation/cockpit_canonical_paths.dart';
 import '../foundation/cockpit_locked_json_store.dart';
 import '../registry/cockpit_registry_models.dart';
 import '../worker/cockpit_json_rpc_peer.dart';
@@ -249,9 +250,40 @@ final class CockpitSupervisorHttpSupport {
       CockpitStorageException() => CockpitApiError(
         code: error.code,
         category: CockpitErrorCategory.internal,
-        message: 'Supervisor durable storage failed.',
+        message: _boundedMessage(
+          'Supervisor durable storage failed: ${error.diagnostic} '
+          '(${error.path})',
+        ),
         retryable: true,
         responsibleLayer: CockpitResponsibleLayer.supervisor,
+        redactedDetails: _boundedDetails(<String, Object?>{
+          'path': error.path,
+          'storageCode': error.code,
+        }),
+      ),
+      CockpitPathException() => CockpitApiError(
+        code: error.code,
+        category: CockpitErrorCategory.invalidInput,
+        message: _boundedMessage('${error.message} Path: ${error.path}.'),
+        retryable: false,
+        responsibleLayer: CockpitResponsibleLayer.supervisor,
+        redactedDetails: _boundedDetails(<String, Object?>{'path': error.path}),
+      ),
+      FileSystemException() => CockpitApiError(
+        code: 'filesystemAccessFailed',
+        category: CockpitErrorCategory.internal,
+        message: _boundedMessage(
+          'Supervisor filesystem access failed: ${error.message}'
+          '${error.osError == null ? '' : ': ${error.osError!.message} (errno ${error.osError!.errorCode})'}'
+          '${error.path == null || error.path!.isEmpty ? '' : '. Path: ${error.path}'}',
+        ),
+        retryable: true,
+        responsibleLayer: CockpitResponsibleLayer.supervisor,
+        redactedDetails: _boundedDetails(<String, Object?>{
+          'path': ?error.path,
+          if (error.osError case final osError?)
+            'osError': '${osError.message} (errno ${osError.errorCode})',
+        }),
       ),
       FormatException() => CockpitApiError(
         code: CockpitErrorCode.invalidRequest,
@@ -270,13 +302,14 @@ final class CockpitSupervisorHttpSupport {
       _ => CockpitApiError(
         code: CockpitErrorCode.internalError,
         category: CockpitErrorCategory.internal,
-        message: 'Supervisor request failed.',
+        message: _boundedMessage(
+          'Supervisor request failed: ${error.runtimeType}: $error',
+        ),
         retryable: true,
         responsibleLayer: CockpitResponsibleLayer.supervisor,
       ),
     };
-    if ((api.code == CockpitErrorCode.internalError ||
-            error is CockpitStorageException) &&
+    if (api.category == CockpitErrorCategory.internal &&
         error is! CockpitApiException) {
       onInternalError?.call(request, error, stackTrace);
     }

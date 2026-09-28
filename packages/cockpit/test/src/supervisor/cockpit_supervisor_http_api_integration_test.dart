@@ -562,6 +562,75 @@ void main() {
     expect(ids, hasLength(baseline + 5));
   });
 
+  test('registration failures name the offending paths and roots', () async {
+    // A root registration against a missing directory reports pathNotFound
+    // with the requested path instead of a generic internal error.
+    final missingPath = p.join(
+      harness.scratchDirectory.path,
+      'registration-missing',
+    );
+    final missing = await harness.request(
+      'POST',
+      '/api/v2/roots',
+      body: <String, Object?>{'path': missingPath},
+    );
+    expect(missing.status, HttpStatus.notFound);
+    expect(_errorCode(missing), 'pathNotFound');
+    expect(_errorMessage(missing), contains('registration-missing'));
+    final missingDetails =
+        _errorBody(missing)['redactedDetails'] as Map<Object?, Object?>?;
+    expect(missingDetails?['path'], contains('registration-missing'));
+
+    // Overlapping roots report both the requested and the existing paths.
+    final rootDirectory = await harness.createDirectory(
+      'failure-explained-root',
+    );
+    final rootId = await harness.registerRoot(rootDirectory.path);
+    addTearDown(() async {
+      await harness.removeRootAtPath(rootDirectory.path);
+    });
+    final nested = Directory(p.join(rootDirectory.path, 'nested'))
+      ..createSync(recursive: true);
+    final overlap = await harness.request(
+      'POST',
+      '/api/v2/roots',
+      body: <String, Object?>{'path': nested.path},
+    );
+    expect(overlap.status, HttpStatus.badRequest);
+    expect(_errorCode(overlap), 'rootOverlap');
+    expect(_errorMessage(overlap), contains(nested.path));
+    expect(_errorMessage(overlap), contains(rootDirectory.path));
+
+    // A workspace outside its declared root reports both paths.
+    final outside = await harness.createDirectory(
+      'failure-outside-workspace',
+    );
+    final outsideResponse = await harness.request(
+      'POST',
+      '/api/v2/workspaces/register',
+      body: <String, Object?>{'rootId': rootId, 'path': outside.path},
+    );
+    expect(outsideResponse.status, HttpStatus.badRequest);
+    expect(_errorCode(outsideResponse), 'workspaceOutsideRoot');
+    expect(_errorMessage(outsideResponse), contains(outside.path));
+    expect(_errorMessage(outsideResponse), contains(rootDirectory.path));
+
+    // An unknown root id is named in the failure.
+    final inside = Directory(p.join(rootDirectory.path, 'workspace'))
+      ..createSync(recursive: true);
+    final unknownRoot = await harness.request(
+      'POST',
+      '/api/v2/workspaces/register',
+      body: <String, Object?>{
+        'rootId': 'root-does-not-exist',
+        'path': inside.path,
+      },
+    );
+    expect(unknownRoot.status, HttpStatus.notFound);
+    expect(_errorCode(unknownRoot), 'rootNotFound');
+    expect(_errorMessage(unknownRoot), contains('root-does-not-exist'));
+  });
+
   test(
     'the production supervisor client interoperates with the served api',
     () async {

@@ -1862,7 +1862,8 @@ Map<String, Object?> _compactOperationResult(
       )
     else
       'output': ?output,
-    if (failure != null) 'failure': _compactFailure(failure, more: more),
+    if (failure != null)
+      'failure': _compactFailure(failure, more: more, includeDetails: true),
   };
 }
 
@@ -3089,12 +3090,14 @@ Map<String, Object?> _compactFailure(
 }) {
   final primary = failure['primary'];
   final source = primary is Map<Object?, Object?> ? primary : failure;
+  final details = source['redactedDetails'] is Map<Object?, Object?>
+      ? source['redactedDetails']
+      : source['details'];
   return <String, Object?>{
     ..._pick(source, const <String>['code', 'message']),
     if (source['retryable'] == true) 'retryable': true,
     if (more) ..._pick(source, const <String>['category', 'responsibleLayer']),
-    if (includeDetails && source['details'] != null)
-      'details': source['details'],
+    if (includeDetails && details != null) 'details': details,
   };
 }
 

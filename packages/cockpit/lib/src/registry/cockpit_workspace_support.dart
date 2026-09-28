@@ -63,22 +63,26 @@ extension _CockpitWorkspaceRegistrySupport on CockpitWorkspaceRegistry {
   ) {
     final matches = state.roots.where((value) => value.rootId == rootId);
     if (matches.isEmpty) {
-      throw const CockpitRegistryException(
+      throw CockpitRegistryException(
         code: 'rootNotFound',
-        message: 'Allowed root was not found.',
+        message: 'Allowed root $rootId was not found.',
       );
     }
     final root = matches.single;
     if (root.state != CockpitRootState.active) {
-      throw const CockpitRegistryException(
+      throw CockpitRegistryException(
         code: 'rootNotActive',
-        message: 'Allowed root does not grant mutation authority.',
+        message:
+            'Allowed root ${root.rootId} (${root.canonicalPath}) does not '
+            'grant mutation authority.',
       );
     }
     if (!_lexicalPaths.contains(root.canonicalPath, canonicalPath)) {
-      throw const CockpitRegistryException(
+      throw CockpitRegistryException(
         code: 'workspaceOutsideRoot',
-        message: 'Workspace path is outside its allowed root.',
+        message:
+            'Workspace path $canonicalPath is outside its allowed root '
+            '${root.rootId} (${root.canonicalPath}).',
       );
     }
     return root;
@@ -104,15 +108,19 @@ extension _CockpitWorkspaceRegistrySupport on CockpitWorkspaceRegistry {
     String targetPath,
   ) async {
     if (root.state != CockpitRootState.active) {
-      throw const CockpitRegistryException(
+      throw CockpitRegistryException(
         code: 'rootNotActive',
-        message: 'Allowed root does not grant mutation authority.',
+        message:
+            'Allowed root ${root.rootId} (${root.canonicalPath}) does not '
+            'grant mutation authority.',
       );
     }
     if (!_lexicalPaths.contains(root.canonicalPath, targetPath)) {
-      throw const CockpitRegistryException(
+      throw CockpitRegistryException(
         code: 'workspaceOutsideRoot',
-        message: 'Workspace path is outside its allowed root.',
+        message:
+            'Workspace path $targetPath is outside its allowed root '
+            '${root.rootId} (${root.canonicalPath}).',
       );
     }
     final attestation = await _directoryAttestor.attest(
@@ -134,9 +142,11 @@ extension _CockpitWorkspaceRegistrySupport on CockpitWorkspaceRegistry {
       targetPath,
     );
     if (!_sameRootRecord(current, expected.root)) {
-      throw const CockpitRegistryException(
+      throw CockpitRegistryException(
         code: 'rootAuthorityChanged',
-        message: 'Allowed root authority changed during workspace admission.',
+        message:
+            'Allowed root ${expected.root.rootId} authority changed during '
+            'workspace admission.',
       );
     }
   }

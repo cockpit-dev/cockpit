@@ -156,7 +156,7 @@ final class CockpitDaemonLifecycleClient {
     final identity = await const CockpitSystemProcessIdentityProbe()
         .readStartIdentity(discovery.processId);
     final running = identity == discovery.processStartIdentity;
-    final server = running ? await _health(discovery) : null;
+    final server = running ? (await _health(discovery)).server : null;
     return CockpitDaemonStatus(
       running: running,
       healthy: server != null,
@@ -202,7 +202,7 @@ final class CockpitDaemonLifecycleClient {
     final identity = await const CockpitSystemProcessIdentityProbe()
         .readStartIdentity(discovery.processId);
     if (identity != discovery.processStartIdentity) {
-      if (await _health(discovery) != null) {
+      if ((await _health(discovery)).server != null) {
         throw const CockpitDaemonException(
           'discoveryIdentityMismatch',
           'A responsive endpoint does not match the recorded process identity.',
@@ -354,24 +354,39 @@ final class CockpitDaemonLifecycleClient {
     if (discovery == null) return null;
     final identity = await const CockpitSystemProcessIdentityProbe()
         .readStartIdentity(discovery.processId);
-    final server = identity == discovery.processStartIdentity
-        ? await _healthUntilReady(
-            discovery,
-            timeout: deadline == null
-                ? const Duration(seconds: 8)
-                : _boundedRemaining(deadline, const Duration(seconds: 8)),
-          )
-        : await _health(
-            discovery,
-            timeout: deadline == null
-                ? const Duration(seconds: 2)
-                : _boundedRemaining(deadline, const Duration(seconds: 2)),
-          );
+    String? healthFailure;
+    CockpitServerInfo? server;
+    if (identity == discovery.processStartIdentity) {
+      server = await _healthUntilReady(
+        discovery,
+        timeout: deadline == null
+            ? const Duration(seconds: 8)
+            : _boundedRemaining(deadline, const Duration(seconds: 8)),
+      );
+      if (server == null) {
+        final probe = await _health(discovery, timeout: const Duration(seconds: 2));
+        server = probe.server;
+        healthFailure = probe.failure;
+      }
+    } else {
+      final probe = await _health(
+        discovery,
+        timeout: deadline == null
+            ? const Duration(seconds: 2)
+            : _boundedRemaining(deadline, const Duration(seconds: 2)),
+      );
+      server = probe.server;
+      healthFailure = probe.failure;
+    }
     if (identity == discovery.processStartIdentity) {
       if (server == null) {
-        throw const CockpitDaemonException(
+        throw CockpitDaemonException(
           'activeDaemonUnhealthy',
-          'The recorded daemon process is active but its endpoint is unhealthy.',
+          healthFailure == null
+              ? 'The recorded daemon process is active but its endpoint is '
+                    'unhealthy.'
+              : 'The recorded daemon process is active but its endpoint is '
+                    'unhealthy: $healthFailure',
         );
       }
       if (server.apiVersion.major != requiredApiMajor) {
@@ -414,7 +429,7 @@ final class CockpitDaemonLifecycleClient {
     }
   }
 
-  Future<CockpitServerInfo?> _health(
+  Future<({CockpitServerInfo? server, String? failure})> _health(
     CockpitDaemonDiscovery discovery, {
     Duration timeout = const Duration(seconds: 2),
   }) async {
@@ -430,7 +445,7 @@ final class CockpitDaemonLifecycleClient {
       final response = await request.close().timeout(timeout);
       if (response.statusCode != HttpStatus.ok) {
         await response.drain<void>();
-        return null;
+        return (server: null, failure: 'health returned HTTP ${response.statusCode}');
       }
       final bytes = await response
           .fold<List<int>>(<int>[], (all, chunk) {
@@ -440,9 +455,12 @@ final class CockpitDaemonLifecycleClient {
             return all..addAll(chunk);
           })
           .timeout(timeout);
-      return CockpitServerInfo.fromJson(jsonDecode(utf8.decode(bytes)));
-    } on Object {
-      return null;
+      return (
+        server: CockpitServerInfo.fromJson(jsonDecode(utf8.decode(bytes))),
+        failure: null,
+      );
+    } on Object catch (error) {
+      return (server: null, failure: '$error');
     } finally {
       client.close(force: true);
     }
@@ -456,13 +474,13 @@ final class CockpitDaemonLifecycleClient {
     while (true) {
       final remaining = deadline.difference(DateTime.now().toUtc());
       if (remaining <= Duration.zero) return null;
-      final server = await _health(
+      final probe = await _health(
         discovery,
         timeout: remaining < const Duration(seconds: 2)
             ? remaining
             : const Duration(seconds: 2),
       );
-      if (server != null) return server;
+      if (probe.server != null) return probe.server;
       final delay = deadline.difference(DateTime.now().toUtc());
       if (delay <= Duration.zero) return null;
       await Future<void>.delayed(
@@ -538,19 +556,27 @@ final class CockpitDaemonLifecycleClient {
         'Daemon executable paths are not configured.',
       );
     }
-    final process = await Process.start(
-      executable,
-      <String>[
-        ...daemonArguments,
-        '--home=${paths.home}',
-        '--auth=${authorizationMode.name}',
-      ],
-      environment: <String, String>{
-        ...Platform.environment,
-        'COCKPIT_HOME': paths.home,
-      },
-      mode: ProcessStartMode.detached,
-    );
+    final Process process;
+    try {
+      process = await Process.start(
+        executable,
+        <String>[
+          ...daemonArguments,
+          '--home=${paths.home}',
+          '--auth=${authorizationMode.name}',
+        ],
+        environment: <String, String>{
+          ...Platform.environment,
+          'COCKPIT_HOME': paths.home,
+        },
+        mode: ProcessStartMode.detached,
+      );
+    } on Object catch (error) {
+      throw CockpitDaemonException(
+        'daemonLaunchFailed',
+        'Could not start the daemon process ($executable): $error',
+      );
+    }
     return process.pid;
   }
 
@@ -572,7 +598,9 @@ final class CockpitDaemonLifecycleClient {
       if (processIdentity == null) {
         throw CockpitDaemonException(
           'daemonStartFailed',
-          'Daemon process exited before becoming healthy. Inspect ${paths.daemonLog}.',
+          'Daemon process exited before becoming healthy. Inspect '
+          '${paths.daemonLog}'
+          '${lastError == null ? '' : '. Last error: $lastError'}',
         );
       }
       await Future<void>.delayed(const Duration(milliseconds: 50));

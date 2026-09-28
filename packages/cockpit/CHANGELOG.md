@@ -10,6 +10,14 @@
   shipped cases, suites, queued runs, and MCP `case_run`/`suite_run`
   documents read the same app state; the safety policy classifies it
   read-only and legacy command documents migrate to it.
+- Made registration and daemon failures self-explaining end to end: root and
+  workspace registry errors name the offending paths and ids, path and
+  filesystem failures keep their code, path, and OS error instead of a
+  generic 500, storage failures keep their diagnostic, malformed supervisor
+  error bodies surface the HTTP status and a body excerpt, an unhealthy
+  daemon names the health probe failure, failed operation receipts keep the
+  daemon's failure details, and the CLI catch-all reports the unexpected
+  error type and message.
 - Raised the Flutter bridge shell preflight scan bound from 8,192 to 65,536
   files so large monorepo entrypoints validate without tripping
   `flutterBridgeShellScanLimit`; the scan still stops as soon as the shell is

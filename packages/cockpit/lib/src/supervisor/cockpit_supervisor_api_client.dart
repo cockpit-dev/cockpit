@@ -1324,12 +1324,25 @@ CockpitSupervisorClientException _decodeApiError(
     );
   } on CockpitSupervisorClientException {
     rethrow;
-  } on Object {
+  } on Object catch (error) {
     return CockpitSupervisorClientException(
       code: 'invalidErrorResponse',
-      message: 'Supervisor returned malformed error JSON (HTTP $statusCode).',
+      message:
+          'Supervisor returned malformed error JSON (HTTP $statusCode): '
+          '$error ${_boundedErrorBody(value)}',
     );
   }
+}
+
+String _boundedErrorBody(Object? value) {
+  final String body;
+  try {
+    body = jsonEncode(value);
+  } on Object {
+    return '';
+  }
+  const bound = 512;
+  return body.length <= bound ? 'Body: $body' : 'Body: ${body.substring(0, bound)}...';
 }
 
 CockpitRetirementResponse _decodeRetirement(Object? value) {
