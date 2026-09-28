@@ -327,3 +327,9 @@ finally:
     action:
       type: waitFor
       condition: {type: route, route: /inbox}
+  - stepId: restoreThemeModeQuickAction
+    timeoutMs: 12000
+    action:
+      type: appAction
+      action: setThemeMode
+      arguments: {mode: light}
