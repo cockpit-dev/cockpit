@@ -1,5 +1,12 @@
 # Changelog
 
+## 4.11.0
+
+- Added `appAction()` to the in-app tester: it invokes a registered app action
+  by name with optional arguments and returns the handler's result map,
+  checking command success and surfacing the executor's structured error on
+  failure.
+
 ## 4.10.0
 
 - Switched to the published `cockpit_test` package for the shared

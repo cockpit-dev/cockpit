@@ -1,5 +1,19 @@
 # Changelog
 
+## 4.11.0
+
+- Added `appAction()` to `CockpitAutomationTester`: programmatic scenarios
+  invoke registered app actions by name with optional arguments on remote,
+  system, and in-app surfaces; unsupported targets block the attempt.
+- Added the `appAction` action to the `cockpit.test/v2` declarative model
+  (`action` name plus optional `arguments` object, no locator) and to the
+  workflow importer, so shipped cases and suites can apply quick settings
+  such as theme or locale switches without scripting UI navigation.
+- Added the `cockpit dev app-action ACTION [KEY=VALUE ...]` CLI command with
+  a raw JSON object form for complex arguments, plus `cockpit dev
+  describe-app` for reading the app-authored state from a development
+  session.
+
 ## 4.10.0
 
 - Added `describeApp()` to `CockpitAutomationTester`: programmatic scenarios

@@ -1,5 +1,13 @@
 # Changelog
 
+## 4.11.0
+
+- Added `appAction()` to the shared `CockpitTester` contract: it invokes a
+  registered app action by name with an optional arguments object and returns
+  the handler's result map. Targets without registered app actions answer
+  with an unsupported-capability failure, which the runner reports as a
+  blocked attempt.
+
 ## 4.10.0
 
 - Published the package for public use instead of `publish_to: none`, closing

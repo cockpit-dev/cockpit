@@ -1,5 +1,16 @@
 # Changelog
 
+## 4.11.0
+
+- Added the `appAction` command with the `actionResult` command-result field:
+  an application can register named actions that any Cockpit surface invokes
+  with a JSON object of arguments, and the handler's optional return value
+  travels back normalized, redacted, and size-bounded exactly like an app
+  state report. The `cockpit.test/v2` action model gains a matching
+  `appAction` action kind (`action` name plus optional `arguments` object, no
+  locator) so declarative cases and suites can perform the same quick
+  operations.
+
 ## 4.10.0
 
 - Added the `describeApp` command and the `appState` command-result field,

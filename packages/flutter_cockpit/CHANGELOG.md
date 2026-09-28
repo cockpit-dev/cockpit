@@ -1,5 +1,23 @@
 # Changelog
 
+## 4.11.0
+
+- Added the app actions surface: `FlutterCockpitApp` and `FlutterCockpitRoot`
+  accept `appActions`, a registry of named `CockpitAppAction` handlers (sync
+  or async, evaluated with the live `BuildContext`) that the `appAction`
+  command invokes with an arguments object — the write-side counterpart of
+  `describeApp` for quick operations such as theme, locale, or day/night
+  switching. A handler may return a JSON object that is carried back in the
+  command's `actionResult`, normalized, redacted, and size-bounded like an
+  app state report; unknown names, non-object arguments, handler failures,
+  and malformed results answer with structured errors (`appActionNotFound`,
+  `appActionInvalidArguments`, `appActionFailed`, `appActionInvalidResult`)
+  instead of breaking the session.
+- Registered action names are now listed in the `actions` key of every
+  `describeApp` report, so callers can discover what a target supports before
+  invoking; targets without registered app actions report `appAction` as an
+  unsupported capability.
+
 ## 4.10.0
 
 - Added the app state provider surface: `FlutterCockpitApp` and
