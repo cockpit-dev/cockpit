@@ -364,7 +364,10 @@ final class CockpitDaemonLifecycleClient {
             : _boundedRemaining(deadline, const Duration(seconds: 8)),
       );
       if (server == null) {
-        final probe = await _health(discovery, timeout: const Duration(seconds: 2));
+        final probe = await _health(
+          discovery,
+          timeout: const Duration(seconds: 2),
+        );
         server = probe.server;
         healthFailure = probe.failure;
       }
@@ -445,7 +448,10 @@ final class CockpitDaemonLifecycleClient {
       final response = await request.close().timeout(timeout);
       if (response.statusCode != HttpStatus.ok) {
         await response.drain<void>();
-        return (server: null, failure: 'health returned HTTP ${response.statusCode}');
+        return (
+          server: null,
+          failure: 'health returned HTTP ${response.statusCode}',
+        );
       }
       final bytes = await response
           .fold<List<int>>(<int>[], (all, chunk) {
@@ -599,8 +605,8 @@ final class CockpitDaemonLifecycleClient {
         throw CockpitDaemonException(
           'daemonStartFailed',
           'Daemon process exited before becoming healthy. Inspect '
-          '${paths.daemonLog}'
-          '${lastError == null ? '' : '. Last error: $lastError'}',
+              '${paths.daemonLog}'
+              '${lastError == null ? '' : '. Last error: $lastError'}',
         );
       }
       await Future<void>.delayed(const Duration(milliseconds: 50));

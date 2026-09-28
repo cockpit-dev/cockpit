@@ -148,10 +148,9 @@ final class CockpitCommandRunner {
       case FormatException _:
         runtime.error(
           code: 'invalidInput',
-          message:
-              error.offset == null
-                  ? error.message
-                  : '${error.message} (at offset ${error.offset})',
+          message: error.offset == null
+              ? error.message
+              : '${error.message} (at offset ${error.offset})',
         );
         return cockpitDataExitCode;
       case ArgumentError _:
@@ -163,7 +162,8 @@ final class CockpitCommandRunner {
       default:
         runtime.error(
           code: 'internalError',
-          message: 'Cockpit client failed unexpectedly: '
+          message:
+              'Cockpit client failed unexpectedly: '
               '${error.runtimeType}: $error',
         );
         return cockpitUnavailableExitCode;

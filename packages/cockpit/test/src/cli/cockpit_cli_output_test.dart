@@ -312,10 +312,9 @@ void main() {
             as Map<Object?, Object?>;
     final error = value['error']! as Map<Object?, Object?>;
     expect(error['code'], 'targetOutsideWorkspace');
-    expect(
-      error['info'],
-      <Object?, Object?>{'path': '/tmp/project/entrypoint.dart'},
-    );
+    expect(error['info'], <Object?, Object?>{
+      'path': '/tmp/project/entrypoint.dart',
+    });
   });
 
   test('session output omits the internal checkout identity hash', () {

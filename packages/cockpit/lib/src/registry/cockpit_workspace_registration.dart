@@ -57,8 +57,7 @@ extension CockpitWorkspaceRegistrationOperations on CockpitWorkspaceRegistry {
     if (matches.length != 1) {
       throw CockpitRegistryException(
         code: 'ambiguousWorkspace',
-        message:
-            'Multiple workspace records target ${target.directory.path}.',
+        message: 'Multiple workspace records target ${target.directory.path}.',
       );
     }
     final workspace = matches.single;

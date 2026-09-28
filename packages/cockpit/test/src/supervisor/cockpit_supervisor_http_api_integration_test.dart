@@ -602,9 +602,7 @@ void main() {
     expect(_errorMessage(overlap), contains(rootDirectory.path));
 
     // A workspace outside its declared root reports both paths.
-    final outside = await harness.createDirectory(
-      'failure-outside-workspace',
-    );
+    final outside = await harness.createDirectory('failure-outside-workspace');
     final outsideResponse = await harness.request(
       'POST',
       '/api/v2/workspaces/register',

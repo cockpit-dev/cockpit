@@ -1342,7 +1342,9 @@ String _boundedErrorBody(Object? value) {
     return '';
   }
   const bound = 512;
-  return body.length <= bound ? 'Body: $body' : 'Body: ${body.substring(0, bound)}...';
+  return body.length <= bound
+      ? 'Body: $body'
+      : 'Body: ${body.substring(0, bound)}...';
 }
 
 CockpitRetirementResponse _decodeRetirement(Object? value) {

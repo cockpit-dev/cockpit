@@ -24,7 +24,9 @@ void main() {
     final created = await Directory.systemTemp.createTemp(
       'cockpit_client_error_home',
     );
-    homeDirectory = Directory(p.normalize(await created.resolveSymbolicLinks()));
+    homeDirectory = Directory(
+      p.normalize(await created.resolveSymbolicLinks()),
+    );
     paths = CockpitHomePaths(homeDirectory.path);
     server = await _FlakyServer.start();
   });
@@ -73,19 +75,22 @@ void main() {
     );
   }
 
-  test('malformed supervisor error bodies surface status and body excerpt', () async {
-    server.mode = _FlakyServerMode.malformedError;
-    final client = await buildClient();
-    try {
-      await client.workspaces();
-      fail('workspaces must not succeed against a malformed error body.');
-    } on CockpitSupervisorClientException catch (error) {
-      expect(error.code, 'invalidErrorResponse');
-      expect(error.message, contains('HTTP 500'));
-      expect(error.message, contains('Body:'));
-      expect(error.message, contains('proxy-reason'));
-    }
-  });
+  test(
+    'malformed supervisor error bodies surface status and body excerpt',
+    () async {
+      server.mode = _FlakyServerMode.malformedError;
+      final client = await buildClient();
+      try {
+        await client.workspaces();
+        fail('workspaces must not succeed against a malformed error body.');
+      } on CockpitSupervisorClientException catch (error) {
+        expect(error.code, 'invalidErrorResponse');
+        expect(error.message, contains('HTTP 500'));
+        expect(error.message, contains('Body:'));
+        expect(error.message, contains('proxy-reason'));
+      }
+    },
+  );
 
   test('an unhealthy daemon names the health probe failure', () async {
     server.mode = _FlakyServerMode.unhealthy;
