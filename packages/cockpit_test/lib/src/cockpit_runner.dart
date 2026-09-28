@@ -79,7 +79,7 @@ final class CockpitSuiteRunResult {
 abstract interface class CockpitTestRunner {
   Future<CockpitTestRunResult> run(
     CockpitTestScenario scenario, {
-    required CockpitLocaleProfile locale,
+    CockpitLocaleProfile? locale,
     required Future<CockpitTester> Function(CockpitLocaleProfile locale)
     createTester,
   });
@@ -92,12 +92,13 @@ final class CockpitProgrammaticTestRunner implements CockpitTestRunner {
   @override
   Future<CockpitTestRunResult> run(
     CockpitTestScenario scenario, {
-    required CockpitLocaleProfile locale,
+    CockpitLocaleProfile? locale,
     required Future<CockpitTester> Function(CockpitLocaleProfile locale)
     createTester,
   }) async {
+    final effectiveLocale = locale ?? CockpitLocaleProfile('en-US');
     try {
-      final tester = await createTester(locale);
+      final tester = await createTester(effectiveLocale);
       final missing = await _missingRequirements(scenario.requirements, tester);
       if (missing.isNotEmpty) {
         final names = missing
@@ -106,7 +107,7 @@ final class CockpitProgrammaticTestRunner implements CockpitTestRunner {
         return CockpitTestRunResult(
           status: CockpitTestRunStatus.blocked,
           scenarioId: scenario.id,
-          locale: locale,
+          locale: effectiveLocale,
           error: CockpitTestError(
             code: CockpitTestErrorCode.targetMismatch,
             message: 'The target does not support: $names.',
@@ -119,14 +120,14 @@ final class CockpitProgrammaticTestRunner implements CockpitTestRunner {
       return CockpitTestRunResult(
         status: CockpitTestRunStatus.passed,
         scenarioId: scenario.id,
-        locale: locale,
+        locale: effectiveLocale,
         metadata: scenario.metadata,
       );
     } on CockpitTestCapabilityException catch (error) {
       return CockpitTestRunResult(
         status: CockpitTestRunStatus.blocked,
         scenarioId: scenario.id,
-        locale: locale,
+        locale: effectiveLocale,
         error: CockpitTestError(
           code: CockpitTestErrorCode.targetMismatch,
           message: _safeMessage(error),
@@ -135,10 +136,19 @@ final class CockpitProgrammaticTestRunner implements CockpitTestRunner {
         metadata: scenario.metadata,
       );
     } on CockpitTestCommandException catch (error) {
+      // A target that answers "unsupported capability" while the body runs is
+      // the same phenomenon preflight reports up front: the scenario cannot
+      // run faithfully on this target. Classify it as blocked so a scenario
+      // without declared requirements degrades exactly like a declared one.
+      final unsupported =
+          error.execution.result.error?.code ==
+          CockpitCommandError.unsupportedCapabilityCode;
       return CockpitTestRunResult(
-        status: CockpitTestRunStatus.failed,
+        status: unsupported
+            ? CockpitTestRunStatus.blocked
+            : CockpitTestRunStatus.failed,
         scenarioId: scenario.id,
-        locale: locale,
+        locale: effectiveLocale,
         error: _commandError(error),
         metadata: scenario.metadata,
       );
@@ -146,12 +156,15 @@ final class CockpitProgrammaticTestRunner implements CockpitTestRunner {
       return CockpitTestRunResult(
         status: CockpitTestRunStatus.failed,
         scenarioId: scenario.id,
-        locale: locale,
+        locale: effectiveLocale,
         error: CockpitTestError(
           code: error is CockpitTestException
               ? CockpitTestErrorCode.assertionFailed
               : CockpitTestErrorCode.internalFailure,
           message: _safeMessage(error),
+          details: error is CockpitTestAssertionException
+              ? error.details
+              : const <String, Object?>{},
         ),
         metadata: scenario.metadata,
       );

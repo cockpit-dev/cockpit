@@ -31,9 +31,24 @@ abstract interface class CockpitTester {
 
   Future<CockpitCommandExecution> waitForUi();
 
+  /// Waits until [target] is present, or until it is gone when [absent] is
+  /// true. Waiting for absence is the shared way to assert that something
+  /// disappeared: every runner surfaces it as the same protocol wait.
+  Future<CockpitCommandExecution> waitFor(Object target, {bool absent});
+
   Future<CockpitCommandExecution> expectVisible(Object target);
 
-  Future<CockpitCommandExecution> expectText(Object target, Object expected);
+  /// Asserts [target]'s text matches [expected] using [match]; the localized
+  /// text form resolves against the active locale first.
+  Future<CockpitCommandExecution> expectText(
+    Object target,
+    Object expected, {
+    CockpitTextMatchMode match,
+  });
+
+  /// Reads the current target tree back as a [CockpitSnapshot] so scenario
+  /// code can inspect real state instead of only issuing assertions.
+  Future<CockpitSnapshot> collectSnapshot({CockpitSnapshotOptions options});
 
   Future<CockpitCommandExecution> screenshot();
 

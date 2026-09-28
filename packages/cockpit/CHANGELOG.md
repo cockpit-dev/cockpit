@@ -30,6 +30,10 @@
 - Memoized locator ancestor chains and discovery transforms, coalesced
   per-step registry reads, and stopped the bridge shell scan once the shell
   is confirmed, keeping bridge-driven discovery linear on large trees.
+- Exposed absence waits (`waitFor` with `absent`), text match modes
+  (`expectText` with `match`), and snapshot read-back (`collectSnapshot`) on
+  the automation tester shared by the remote and system surfaces, matching
+  the expanded `cockpit_test` contract.
 
 ## 4.9.0
 

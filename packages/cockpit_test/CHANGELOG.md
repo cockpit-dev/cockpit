@@ -17,6 +17,27 @@
 - Fixed `CockpitLocaleProfile` to parse and canonicalize BCP-47 language,
   script, and region subtags (`en-US`, `zh-Hant-TW`) with immutable metadata
   and equality/hash contracts built on the canonical tag.
+- Added host-side assertion helpers — `cockpitExpectEquals` (deep equality
+  over numbers, strings, booleans, lists, sets, and maps),
+  `cockpitExpectTrue`, `cockpitExpectNotNull`, and `cockpitExpectContains` —
+  throwing `CockpitTestAssertionException` with bounded, frozen actual and
+  expected details that the runner reports as `failed` attempts instead of
+  internal errors.
+- Extended the shared `CockpitTester` contract with `waitFor(target, absent:)`
+  absence waits, `expectText(..., match:)` text match modes, and
+  `collectSnapshot()` UI read-back; every surface maps them to the same
+  protocol operations.
+- Aligned late capability discovery with preflight: a target that answers
+  "unsupported capability" while a scenario body runs now blocks the attempt
+  exactly like a declared-requirement mismatch.
+- Simplified authoring: suites accept bare `scenarios:` that each become a
+  case named after the scenario id, and `run()`/`runSuite()` treat the locale
+  as optional, defaulting to `en-US`.
+- Rewrote the README (English and Chinese), the cross-runner guide, and the
+  runnable example around the simplest scenario first — no requirements,
+  cross-surface text locators — with requirements demoted to an advanced
+  preflight topic, and kept the example executable under a compile-and-run
+  test.
 
 ## 4.9.0
 

@@ -156,7 +156,11 @@ void cockpitScenarioWidgets(
             createTester: (_) async => tester,
           );
       if (result.status != shared_test.CockpitTestRunStatus.passed) {
-        fail(result.error!.message);
+        final error = result.error!;
+        fail(
+          'Scenario "${scenario.id}" ${result.status.name} (${error.code}): '
+          '${error.message}',
+        );
       }
     },
   );
@@ -2304,6 +2308,7 @@ final class CockpitTester
   );
 
   /// Waits until a target is present, or absent when [absent] is true.
+  @override
   Future<CockpitCommandExecution> waitFor(
     Object target, {
     bool absent = false,
@@ -2489,6 +2494,7 @@ final class CockpitTester
   ///
   /// Unlike [snapshot], this records a command step for integration-test
   /// reports and failure diagnostics.
+  @override
   Future<CockpitSnapshot> collectSnapshot({
     CockpitSnapshotOptions options = const CockpitSnapshotOptions.baseline(),
     Duration? timeout,

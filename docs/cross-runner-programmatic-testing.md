@@ -16,21 +16,17 @@ at the platform boundary:
   `cockpitScenarioWidgets`, which reuses `cockpitTestWidgets` and Flutter's
   official `integration_test` lifecycle.
 
+A scenario is an id and a body; requirements and metadata are optional. Text,
+tooltip, type, and path locators resolve on every surface, so they keep the
+scenario portable:
+
 ```dart
 final smoke = CockpitTestScenario(
   id: 'save-settings',
-  requirements: CockpitTestRequirements(
-    commands: const {
-      CockpitCommandType.tap,
-      CockpitCommandType.enterText,
-      CockpitCommandType.assertText,
-    },
-    locators: const {CockpitLocatorKind.cockpitId},
-  ),
   body: (tester) async {
-    await tester.tap('#settings');
-    await tester.type('Alice', into: '#name');
-    await tester.tap('#save');
+    await tester.tap('Settings');
+    await tester.type('Alice', into: 'Name');
+    await tester.tap('Save');
     await tester.expectText(
       '#status',
       CockpitLocalizedText(
@@ -42,7 +38,12 @@ final smoke = CockpitTestScenario(
 );
 ```
 
-The same scenario can run as a locale matrix:
+`#cockpitId` and `@key` locators resolve only inside Flutter apps (in-app and
+bridge surfaces); a black-box target sees the accessibility tree, not Flutter
+keys.
+
+The same scenario can run as a locale matrix — bare scenarios each become a
+case named after the scenario id:
 
 ```dart
 final suite = CockpitTestSuiteProgram(
@@ -51,7 +52,7 @@ final suite = CockpitTestSuiteProgram(
     CockpitLocaleProfile('en-US'),
     CockpitLocaleProfile('zh-Hant-TW'),
   ],
-  cases: [CockpitTestCaseProgram(id: 'save', scenario: smoke)],
+  scenarios: [smoke],
 );
 
 final result = await const CockpitProgrammaticTestRunner().runSuite(
@@ -74,6 +75,23 @@ cockpitScenarioWidgets(
 );
 ```
 
+## Assertions and read-back
+
+Every surface maps these to the same protocol operations:
+
+- `expectText(target, expected, match: ...)` — exact match by default, plus
+  `contains`, `fuzzy`, and `regex` modes.
+- `waitFor(target)` / `waitFor(target, absent: true)` — bounded presence and
+  absence waits; the absent form is the shared way to assert that something
+  disappeared.
+- `collectSnapshot()` — reads real UI state (route name, visible targets) back
+  for host-side comparison.
+
+Host-side helpers in `cockpit_test` — `cockpitExpectEquals` (deep equality),
+`cockpitExpectTrue`, `cockpitExpectNotNull`, `cockpitExpectContains` — throw
+structured failures the runner reports as `failed` with the actual/expected
+values attached, not as internal errors.
+
 ## Capability preflight
 
 Commands and locator strategies use `CockpitCommandType` and
@@ -81,9 +99,13 @@ Commands and locator strategies use `CockpitCommandType` and
 `CockpitTestFeature` enum. This keeps method names such as `type()` from being
 mistaken for protocol command names such as `enterText`.
 
-Unsupported requirements return a `blocked` result with a structured
-`CockpitTestError` before the body runs. A supported scenario that throws returns
-`failed`; a completed scenario returns `passed`. Empty suites are rejected.
+Declaring requirements is optional. Unsupported requirements return a `blocked`
+result with a structured `CockpitTestError` before the body runs. Without
+declared requirements, a target that answers "unsupported capability" while the
+body runs blocks the attempt with the same semantics — declared requirements
+simply move that verdict earlier and report every gap at once. A supported
+scenario that throws returns `failed`; a completed scenario returns `passed`.
+Empty suites are rejected.
 
 ## Locale behavior
 

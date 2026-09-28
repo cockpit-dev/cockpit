@@ -95,19 +95,51 @@ class CockpitAutomationTester
       _run(CockpitCommandType.waitForUiIdle);
 
   @override
+  Future<CockpitCommandExecution> waitFor(
+    Object target, {
+    bool absent = false,
+  }) => _run(
+    CockpitCommandType.waitFor,
+    target: target,
+    parameters: <String, Object?>{if (absent) 'absent': true},
+  );
+
+  @override
   Future<CockpitCommandExecution> expectVisible(Object target) =>
       _run(CockpitCommandType.assertVisible, target: target);
 
   @override
-  Future<CockpitCommandExecution> expectText(Object target, Object expected) {
+  Future<CockpitCommandExecution> expectText(
+    Object target,
+    Object expected, {
+    CockpitTextMatchMode match = CockpitTextMatchMode.exact,
+  }) {
     final resolved = expected is CockpitLocalizedText
         ? expected.resolve(locale)
         : expected.toString();
     return _run(
       CockpitCommandType.assertText,
       target: target,
-      parameters: <String, Object?>{'text': resolved},
+      parameters: <String, Object?>{
+        'text': resolved,
+        if (match != CockpitTextMatchMode.exact) 'matchMode': match.name,
+      },
     );
+  }
+
+  @override
+  Future<CockpitSnapshot> collectSnapshot({
+    CockpitSnapshotOptions options = const CockpitSnapshotOptions.baseline(),
+  }) async {
+    final execution = await _run(
+      CockpitCommandType.collectSnapshot,
+      snapshotOptions: options,
+    );
+    final snapshot = execution.result.snapshot;
+    if (snapshot == null) {
+      throw StateError('Cockpit snapshot command returned no snapshot.');
+    }
+    return CockpitSnapshot.fromJson(snapshot);
   }
 
   @override
@@ -158,12 +190,14 @@ class CockpitAutomationTester
     CockpitCommandType type, {
     Object? target,
     Map<String, Object?> parameters = const <String, Object?>{},
+    CockpitSnapshotOptions? snapshotOptions,
   }) async {
     final command = CockpitCommand(
       commandId: 'programmatic-${++_sequence}-${type.name}',
       commandType: type,
       locator: _locator(target),
       parameters: parameters,
+      snapshotOptions: snapshotOptions,
     );
     final execution = await execute(command);
     if (!execution.result.success) {

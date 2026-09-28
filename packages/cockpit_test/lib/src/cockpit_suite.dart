@@ -22,17 +22,32 @@ final class CockpitTestCaseProgram {
 }
 
 final class CockpitTestSuiteProgram {
+  /// Composes a suite from [cases] and/or bare [scenarios].
+  ///
+  /// Each entry of [scenarios] becomes a case named after the scenario id,
+  /// which keeps single-purpose suites to one id instead of three. Pass
+  /// [cases] instead when a scenario needs a case-specific id or metadata.
   CockpitTestSuiteProgram({
     required String id,
-    required Iterable<CockpitTestCaseProgram> cases,
+    Iterable<CockpitTestCaseProgram> cases = const <CockpitTestCaseProgram>[],
+    Iterable<CockpitTestScenario> scenarios = const <CockpitTestScenario>[],
     Iterable<CockpitLocaleProfile> locales = const <CockpitLocaleProfile>[],
     Map<String, Object?> metadata = const <String, Object?>{},
   }) : id = _validatedId(id),
-       cases = List<CockpitTestCaseProgram>.unmodifiable(cases),
+       cases =
+           List<CockpitTestCaseProgram>.unmodifiable(<CockpitTestCaseProgram>[
+             ...cases,
+             for (final scenario in scenarios)
+               CockpitTestCaseProgram(id: scenario.id, scenario: scenario),
+           ]),
        locales = List<CockpitLocaleProfile>.unmodifiable(locales),
        metadata = freezeCockpitJson(metadata, path: r'$.metadata') {
     if (this.cases.isEmpty) {
-      throw ArgumentError.value(cases, 'cases', 'Must not be empty.');
+      throw ArgumentError.value(
+        this.cases,
+        'cases',
+        'A suite needs at least one case or scenario.',
+      );
     }
     _unique(this.cases.map((item) => item.id), 'case');
     _unique(this.locales.map((item) => item.toLanguageTag()), 'locale');

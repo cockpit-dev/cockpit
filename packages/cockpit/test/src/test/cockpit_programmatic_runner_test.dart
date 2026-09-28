@@ -26,6 +26,76 @@ void main() {
     expect(adapter.commands[1].parameters['text'], '已保存');
   });
 
+  test(
+    'automation tester exposes match modes, absence waits, and snapshots',
+    () async {
+      final adapter = _FakeAutomationAdapter(
+        snapshot: CockpitSnapshot(routeName: 'settings').toJson(),
+      );
+      final tester = CockpitAutomationTester(
+        automation: adapter,
+        initialLocale: CockpitLocaleProfile('en-US'),
+      );
+
+      await tester.expectText(
+        '#status',
+        'Saved',
+        match: CockpitTextMatchMode.contains,
+      );
+      await tester.waitFor('#drawer', absent: true);
+      final snapshot = await tester.collectSnapshot(
+        options: const CockpitSnapshotOptions(
+          maxTargets: 5,
+          includeStyleDetails: true,
+        ),
+      );
+
+      expect(adapter.commands[0].parameters['matchMode'], 'contains');
+      expect(adapter.commands[1].commandType, CockpitCommandType.waitFor);
+      expect(adapter.commands[1].parameters['absent'], isTrue);
+      expect(
+        adapter.commands[2].commandType,
+        CockpitCommandType.collectSnapshot,
+      );
+      expect(adapter.commands[2].snapshotOptions?.maxTargets, 5);
+      expect(adapter.commands[2].snapshotOptions?.includeStyleDetails, isTrue);
+      expect(snapshot.routeName, 'settings');
+    },
+  );
+
+  test(
+    'collectSnapshot fails through the command exception contract',
+    () async {
+      final tester = CockpitAutomationTester(
+        automation: _FakeAutomationAdapter(
+          failures: <String, CockpitCommandError>{
+            'collectSnapshot': CockpitCommandError(
+              code: CockpitCommandError.unsupportedCapabilityCode,
+              message: 'The target exposes no UI tree.',
+            ),
+          },
+        ),
+        initialLocale: CockpitLocaleProfile('en-US'),
+      );
+
+      final result = await const CockpitProgrammaticTestRunner().run(
+        CockpitTestScenario(
+          id: 'read-tree',
+          body: (tester) => tester.collectSnapshot(),
+        ),
+        locale: CockpitLocaleProfile('en-US'),
+        createTester: (_) async => tester,
+      );
+
+      expect(result.status, CockpitTestRunStatus.blocked);
+      expect(result.error?.details['commandType'], 'collectSnapshot');
+      await expectLater(
+        tester.collectSnapshot(),
+        throwsA(isA<CockpitTestCommandException>()),
+      );
+    },
+  );
+
   test('typed command requirements use protocol command names', () async {
     var executed = false;
     final result = await const CockpitProgrammaticTestRunner().run(
@@ -254,21 +324,26 @@ void main() {
 }
 
 final class _FakeAutomationAdapter implements CockpitAutomationAdapter {
-  _FakeAutomationAdapter({CockpitCapabilities? capabilities})
-    : _capabilities =
-          capabilities ??
-          CockpitCapabilities(
-            platform: 'flutter',
-            transportType: 'test',
-            supportsInAppControl: true,
-            supportsFlutterViewCapture: true,
-            supportsNativeScreenCapture: false,
-            supportsHostAutomation: false,
-            supportedCommands: CockpitCommandType.values,
-            supportedLocatorStrategies: CockpitLocatorKind.values,
-          );
+  _FakeAutomationAdapter({
+    CockpitCapabilities? capabilities,
+    this.failures = const <String, CockpitCommandError>{},
+    this.snapshot,
+  }) : _capabilities =
+           capabilities ??
+           CockpitCapabilities(
+             platform: 'flutter',
+             transportType: 'test',
+             supportsInAppControl: true,
+             supportsFlutterViewCapture: true,
+             supportsNativeScreenCapture: false,
+             supportsHostAutomation: false,
+             supportedCommands: CockpitCommandType.values,
+             supportedLocatorStrategies: CockpitLocatorKind.values,
+           );
 
   final CockpitCapabilities _capabilities;
+  final Map<String, CockpitCommandError> failures;
+  final Map<String, Object?>? snapshot;
   final commands = <CockpitCommand>[];
 
   @override
@@ -277,12 +352,15 @@ final class _FakeAutomationAdapter implements CockpitAutomationAdapter {
   @override
   Future<CockpitCommandExecution> execute(CockpitCommand command) async {
     commands.add(command);
+    final error = failures[command.commandType.name];
     return CockpitCommandExecution(
       result: CockpitCommandResult(
-        success: true,
+        success: error == null,
         commandId: command.commandId,
         commandType: command.commandType,
         durationMs: 0,
+        snapshot: error == null ? snapshot : null,
+        error: error,
       ),
     );
   }

@@ -15,36 +15,53 @@ final _savedStatus = CockpitLocalizedText(
   values: const <String, String>{'en-US': 'Saved', 'zh-CN': '已保存'},
 );
 
-/// A scenario only uses selectors, protocol values, and the active locale.
+/// The simplest scenario: an id and a body. Text, tooltip, type, and path
+/// locators resolve on every surface, so this runs in-app, over the bridge,
+/// and against native black-box targets unchanged.
 final saveSettings = CockpitTestScenario(
   id: 'save-settings',
-  requirements: CockpitTestRequirements(
-    commands: const <CockpitCommandType>{
-      CockpitCommandType.tap,
-      CockpitCommandType.enterText,
-      CockpitCommandType.assertText,
-    },
-    locators: const <CockpitLocatorKind>{CockpitLocatorKind.cockpitId},
-  ),
   metadata: const <String, Object?>{'surface': 'settings'},
   body: (tester) async {
-    await tester.tap('#settings');
-    await tester.type('Alice', into: '#name');
-    await tester.tap('#save');
-    await tester.expectText('#status', _savedStatus);
+    await tester.tap('Settings');
+    await tester.type('Alice', into: 'Name');
+    await tester.tap('Save');
+    await tester.expectText(
+      'Saved',
+      _savedStatus,
+      match: CockpitTextMatchMode.contains,
+    );
   },
 );
 
-/// The same scenario is crossed with a locale matrix once, not per target.
+/// A scenario can also assert absence and read real UI state back. Host-side
+/// helpers throw structured failures the runner reports as `failed` attempts.
+/// Unlike the first scenario, this one reaches for `#spinner`, which only
+/// resolves inside Flutter apps — in-app and bridge surfaces, not black-box.
+final saveSettingsAndVerify = CockpitTestScenario(
+  id: 'save-settings-verified',
+  body: (tester) async {
+    await tester.tap('Settings');
+    await tester.waitFor('Save');
+    await tester.tap('Save');
+    await tester.waitFor('#spinner', absent: true);
+    final snapshot = await tester.collectSnapshot();
+    cockpitExpectEquals(snapshot.routeName, 'settings');
+    cockpitExpectContains(
+      snapshot.visibleTargets.map((target) => target.text),
+      _savedStatus.resolve(CockpitLocaleProfile('en-US')),
+    );
+  },
+);
+
+/// Bare scenarios each become a case named after the scenario id; crossing the
+/// locale matrix happens once, not per target.
 final settingsSmokeSuite = CockpitTestSuiteProgram(
   id: 'settings-smoke',
   locales: <CockpitLocaleProfile>[
     CockpitLocaleProfile('en-US'),
     CockpitLocaleProfile('zh-CN'),
   ],
-  cases: <CockpitTestCaseProgram>[
-    CockpitTestCaseProgram(id: 'save', scenario: saveSettings),
-  ],
+  scenarios: <CockpitTestScenario>[saveSettings],
 );
 
 void main() {

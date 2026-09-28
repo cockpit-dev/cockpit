@@ -13,40 +13,75 @@ lifecycle remain in dependent packages.
 
 ## Author a scenario
 
+A scenario is an id and a body. Nothing else is required:
+
 ```dart
 import 'package:cockpit_test/cockpit_test.dart';
 
 final smoke = CockpitTestScenario(
   id: 'save-settings',
-  requirements: CockpitTestRequirements(
-    commands: const {
-      CockpitCommandType.tap,
-      CockpitCommandType.enterText,
-      CockpitCommandType.assertText,
-    },
-    locators: const {CockpitLocatorKind.cockpitId},
-  ),
   body: (tester) async {
-    await tester.tap('#settings');
-    await tester.type('Alice', into: '#name');
-    await tester.tap('#save');
-    await tester.expectText(
-      '#status',
-      CockpitLocalizedText(
-        'settings.saved',
-        values: const {'en-US': 'Saved', 'zh-CN': '已保存'},
-      ),
-    );
+    await tester.tap('Settings');
+    await tester.type('Alice', into: 'Name');
+    await tester.tap('Save');
+    await tester.expectText('#status', 'Saved');
   },
 );
 ```
 
-Requirements use protocol enums, so the tester method `type()` correctly
-preflights `CockpitCommandType.enterText`; string aliases cannot drift from the
-wire contract. Commands, locator strategies, and the small set of non-command
-features are separate typed sets.
+The body only uses selectors, protocol values, plain Dart, and the active
+locale — never `WidgetTester`, `BuildContext`, or a native SDK — so the same
+closure runs on every surface.
 
-Compose scenarios into a non-empty locale matrix:
+## Assert, wait, and read back
+
+Target-side assertions and waits cover the common UI checks, and every method
+below means the same protocol operation on all three surfaces:
+
+```dart
+// Text matching: exact by default, plus contains / fuzzy / regex.
+await tester.expectText('#status', 'Saved');
+await tester.expectText('#title', 'Settings', match: CockpitTextMatchMode.contains);
+
+// Presence and, just as importantly, absence — the shared way to assert that
+// something disappeared.
+await tester.waitFor('#drawer');
+await tester.waitFor('#spinner', absent: true);
+
+// Read the real UI state back instead of only asserting, then compare it in
+// plain Dart. These host-side helpers throw structured assertion failures the
+// runner reports as failed tests, not internal errors.
+final snapshot = await tester.collectSnapshot();
+cockpitExpectEquals(snapshot.visibleTargets.length, 2);
+cockpitExpectTrue(snapshot.routeName == 'settings');
+cockpitExpectContains(await readLabels(snapshot), 'Saved');
+```
+
+The full helper set is `cockpitExpectEquals` (deep equality over numbers,
+strings, booleans, lists, sets, and maps), `cockpitExpectTrue`,
+`cockpitExpectNotNull`, and `cockpitExpectContains` (string, iterable, or map
+key membership).
+
+## Run it on Flutter
+
+`flutter_cockpit_test` reuses Flutter's official `integration_test` runner and
+mount/teardown lifecycle:
+
+```dart
+cockpitScenarioWidgets(
+  'saves settings',
+  app: buildDevelopmentApp,
+  scenario: smoke,
+);
+```
+
+Use `cockpitTestWidgets` instead when a test intentionally needs Flutter-only
+APIs in addition to the shared `CockpitTester` surface.
+
+## Cross a locale matrix once
+
+Wrap scenarios in a suite — bare scenarios are enough, each becomes a case
+named after its scenario id:
 
 ```dart
 final suite = CockpitTestSuiteProgram(
@@ -55,11 +90,13 @@ final suite = CockpitTestSuiteProgram(
     CockpitLocaleProfile('en-US'),
     CockpitLocaleProfile('zh-Hant-TW'),
   ],
-  cases: [CockpitTestCaseProgram(id: 'save', scenario: smoke)],
+  scenarios: [smoke],
 );
 ```
 
-Run it with any concrete tester:
+Pass `cases: [CockpitTestCaseProgram(id: ..., scenario: ...)]` only when a
+scenario needs a case-specific id or metadata. Run the matrix with any concrete
+tester; the locale is also optional for single runs and defaults to `en-US`:
 
 ```dart
 import 'package:cockpit/cockpit.dart';
@@ -75,25 +112,40 @@ final result = await const CockpitProgrammaticTestRunner().runSuite(
 ```
 
 Every attempt is `passed`, `failed`, or `blocked` and carries a structured
-`CockpitTestError`. Unsupported typed requirements block the attempt before its
-body runs. Empty suites are rejected, and an empty attempt collection never
-reports success.
+`CockpitTestError`. An empty suite cannot be constructed, and an empty attempt
+collection never reports success.
 
-## Flutter integration tests
+## Selectors across surfaces
 
-`flutter_cockpit_test` reuses Flutter's official `integration_test` runner and
-mount/teardown lifecycle:
+`#cockpitId` and `@key` selectors resolve inside Flutter apps (in-app and
+bridge surfaces). Black-box targets only see the accessibility tree, so
+scenarios that must run there should stick to the shared locator kinds: text
+(`'Save'` or `["text*="Save"]`), tooltip, widget type, and path. Use
+`CockpitSelector.format` to see how a locator encodes.
+
+## Capability preflight (advanced)
+
+Declaring typed requirements is optional. When present, the runner checks them
+against the target before the body runs and reports every gap at once:
 
 ```dart
-cockpitScenarioWidgets(
-  'saves settings',
-  app: buildDevelopmentApp,
-  scenario: smoke,
-);
+CockpitTestRequirements(
+  commands: const {
+    CockpitCommandType.tap,
+    CockpitCommandType.enterText,
+  },
+  locators: const {CockpitLocatorKind.text},
+)
 ```
 
-Use `cockpitTestWidgets` instead when a test intentionally needs Flutter-only
-APIs in addition to the shared `CockpitTester` surface.
+Requirements use protocol enums, so the tester method `type()` correctly
+preflights `CockpitCommandType.enterText`; string aliases cannot drift from
+the wire contract. Even without declared requirements, a target that answers
+"unsupported capability" mid-run blocks the attempt exactly like a preflight
+mismatch — declared requirements simply move that verdict earlier and list
+everything missing in one shot. Preflight matters most for black-box targets
+and apps with optional integrations (network observer, semantic commands);
+default-mounted Flutter apps support the shared surface in full.
 
 ## Locale behavior
 

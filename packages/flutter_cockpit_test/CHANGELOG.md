@@ -7,6 +7,10 @@
 - Kept `cockpitTestWidgets` as the thin Flutter entry that mounts the app,
   runs shared scenarios unchanged, and reports through the common result
   model.
+- Conformed the in-app tester to the expanded shared contract — absence
+  waits, `expectText` match modes, and `collectSnapshot` read-back — and made
+  `cockpitScenarioWidgets` report the structured status, error code, and
+  message when a scenario fails or blocks.
 
 ## 4.9.0
 

@@ -12,11 +12,15 @@ export 'package:cockpit_protocol/cockpit_protocol.dart'
         CockpitLocatorKind,
         CockpitPerformanceReport,
         CockpitSelector,
+        CockpitSnapshot,
+        CockpitSnapshotOptions,
         CockpitTestError,
         CockpitTestErrorCode,
+        CockpitTextMatchMode,
         CockpitTextInputAction;
 
 export 'src/cockpit_errors.dart';
+export 'src/cockpit_expect.dart';
 export 'src/cockpit_locale.dart';
 export 'src/cockpit_requirements.dart';
 export 'src/cockpit_runner.dart';

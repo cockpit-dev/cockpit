@@ -40,6 +40,21 @@ final class CockpitTestCommandException extends CockpitTestException {
   final CockpitCommandExecution execution;
 }
 
+/// Raised when a `cockpitExpect*` host-side assertion fails.
+///
+/// The programmatic runner classifies it as a test assertion failure, not an
+/// internal error, so scenario authors get the same structured reporting for
+/// plain Dart value checks as for target-side command assertions.
+final class CockpitTestAssertionException extends CockpitTestException {
+  CockpitTestAssertionException({
+    required String message,
+    this.details = const <String, Object?>{},
+  }) : super(message);
+
+  /// Bounded, JSON-safe context captured by the failed assertion.
+  final Map<String, Object?> details;
+}
+
 /// Preserves the primary action failure when cleanup also fails.
 final class CockpitTestCleanupException extends CockpitTestException {
   CockpitTestCleanupException({
