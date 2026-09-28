@@ -240,6 +240,49 @@ void main() {
     );
   });
 
+  test(
+    'dev start validates the auth selection before resolving a session',
+    () async {
+      Future<String> runAuth(List<String> arguments) async {
+        final stderr = StringBuffer();
+        final runner = CockpitCommandRunner(
+          runtime: CockpitCliRuntime(
+            stdoutSink: StringBuffer(),
+            stderrSink: stderr,
+          ),
+        );
+        final exitCode = await runner.run(<String>[
+          'dev',
+          'start',
+          ...arguments,
+          '--format',
+          'json',
+        ]);
+        expect(exitCode, cockpitDataExitCode);
+        expect(
+          (jsonDecode(stderr.toString()) as Map<String, Object?>)['error']!
+              as Map<String, Object?>,
+          containsPair('code', 'invalidInput'),
+        );
+        return stderr.toString();
+      }
+
+      expect(
+        await runAuth(<String>['--auth', 'unit-dev-auth-token', '--no-auth']),
+        contains('not both'),
+      );
+      expect(
+        await runAuth(<String>['--auth', '']),
+        contains('needs the authentication token'),
+      );
+      expect(
+        await runAuth(<String>['--auth', '   ']),
+        contains('needs the authentication token'),
+      );
+      expect(await runAuth(<String>['--auth', 'x' * 257]), contains('256'));
+    },
+  );
+
   test('session-bound next commands keep the exact handle', () {
     for (final path in const <String>[
       'lib/src/cli/cockpit_dev_runtime.dart',

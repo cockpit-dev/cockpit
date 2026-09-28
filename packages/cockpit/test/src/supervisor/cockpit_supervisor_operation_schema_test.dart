@@ -517,4 +517,52 @@ void main() {
       );
     }
   });
+  test('launch request schemas carry the authentication pair contract', () {
+    final definitions = Map<String, Object?>.from(
+      CockpitSupervisorOperationSchema.document()[r'$defs']!
+          as Map<Object?, Object?>,
+    );
+    for (final kind in <String>[
+      'app.launch',
+      'target.launch',
+      'session.remote.launch',
+      'session.development.launch',
+    ]) {
+      final schema = JsonSchema.create(
+        Map<String, Object?>.from(
+          definitions['$kind.request']! as Map<Object?, Object?>,
+        ),
+      );
+      final bare = <String, Object?>{'targetId': 'target-1'};
+      expect(schema.validate(bare).isValid, isTrue, reason: kind);
+      expect(
+        schema.validate(<String, Object?>{
+          ...bare,
+          'authenticationEnabled': true,
+          'authToken': 'wire-dev-auth-token',
+        }).isValid,
+        isTrue,
+        reason: kind,
+      );
+      for (final token in <Object?>['', 42, 'x' * 257]) {
+        expect(
+          schema.validate(<String, Object?>{
+            ...bare,
+            'authenticationEnabled': true,
+            'authToken': token,
+          }).isValid,
+          isFalse,
+          reason: '$kind authToken=$token',
+        );
+      }
+      expect(
+        schema.validate(<String, Object?>{
+          ...bare,
+          'authToken': 'wire-dev-auth-token',
+        }).isValid,
+        isTrue,
+        reason: '$kind token without the flag stays structurally valid',
+      );
+    }
+  });
 }

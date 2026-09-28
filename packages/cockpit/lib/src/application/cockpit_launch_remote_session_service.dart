@@ -139,6 +139,11 @@ final class CockpitLaunchRemoteSessionService {
         'authenticationEnabled requires a non-empty authToken.',
       );
     }
+    if (!request.authenticationEnabled && authToken.isNotEmpty) {
+      throw const FormatException(
+        'authToken requires authenticationEnabled to be true.',
+      );
+    }
     if (authToken.isNotEmpty) {
       _sensitiveValueRegistrar?.call(authToken);
     }

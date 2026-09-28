@@ -361,6 +361,95 @@ void main() {
     expect(decoded?.authToken, isEmpty);
   });
 
+  test('session state rejects inconsistent authentication pairs', () async {
+    final checkout = p.normalize(temporaryDirectory.path);
+    await store.bindDevelopment(
+      checkoutIdentity: 'a' * 64,
+      checkoutPath: checkout,
+      projectPath: checkout,
+      workspaceId: 'workspace-consistency',
+      sessionId: 'session-consistency',
+      targetId: 'target-consistency',
+      appId: 'app-consistency',
+      entrypoint: 'lib/main.dart',
+      platform: 'macos',
+      deviceId: 'macos',
+      authenticationEnabled: true,
+      authToken: 'stored-dev-auth-token',
+    );
+    final stateFile = File(p.join(temporaryDirectory.path, 'sessions.json'));
+    final pristine = await stateFile.readAsString();
+
+    Future<Object?> reopenTampered(
+      void Function(Map<String, Object?> handle) tamper,
+    ) async {
+      final state = jsonDecode(pristine) as Map<String, Object?>;
+      final handle =
+          (state['handles']! as List<Object?>).single! as Map<String, Object?>;
+      tamper(handle);
+      await stateFile.writeAsString('${jsonEncode(state)}\n', flush: true);
+      final reopened = CockpitCliSessionHandleStore.file(
+        path: stateFile.path,
+        permissionHardener: const _NoopPermissionHardener(),
+        directorySyncer: const _NoopDirectorySyncer(),
+      );
+      return reopened.list();
+    }
+
+    Matcher rejectsPair(String diagnostic) => throwsA(
+      isA<CockpitStorageException>()
+          .having((error) => error.code, 'code', 'storageCorrupt')
+          .having(
+            (error) => error.diagnostic,
+            'diagnostic',
+            contains(diagnostic),
+          ),
+    );
+
+    await expectLater(
+      reopenTampered((handle) => handle['authenticationEnabled'] = false),
+      rejectsPair('Unexpected authentication token'),
+    );
+    await expectLater(
+      reopenTampered((handle) => handle.remove('authenticationEnabled')),
+      rejectsPair('Unexpected authentication token'),
+    );
+    for (final invalid in <Object?>[42, '', 'x' * 257, 'token\nvalue']) {
+      await expectLater(
+        reopenTampered((handle) => handle['authToken'] = invalid),
+        rejectsPair('Invalid authentication token'),
+        reason: '$invalid',
+      );
+    }
+  });
+
+  test('the stored token survives reopening the store', () async {
+    final checkout = p.normalize(temporaryDirectory.path);
+    await store.bindDevelopment(
+      checkoutIdentity: 'b' * 64,
+      checkoutPath: checkout,
+      projectPath: checkout,
+      workspaceId: 'workspace-reopen',
+      sessionId: 'session-reopen',
+      targetId: 'target-reopen',
+      appId: 'app-reopen',
+      entrypoint: 'lib/main.dart',
+      platform: 'macos',
+      deviceId: 'macos',
+      authenticationEnabled: true,
+      authToken: 'stored-dev-auth-token',
+    );
+    final reopened = CockpitCliSessionHandleStore.file(
+      path: p.join(temporaryDirectory.path, 'sessions.json'),
+      permissionHardener: const _NoopPermissionHardener(),
+      directorySyncer: const _NoopDirectorySyncer(),
+    );
+
+    final handle = (await reopened.list()).single;
+    expect(handle.authenticationEnabled, isTrue);
+    expect(handle.authToken, 'stored-dev-auth-token');
+  });
+
   test('keeps implicit selection isolated across checkouts', () async {
     final firstIdentity = 'a' * 64;
     final secondIdentity = 'b' * 64;

@@ -121,6 +121,16 @@ final class CockpitWorkerDevelopmentSessionRuntime {
   Future<CockpitLaunchDevelopmentSessionResult> launch(
     CockpitLaunchDevelopmentSessionRequest request,
   ) async {
+    if (request.authenticationEnabled && request.authToken.isEmpty) {
+      throw const FormatException(
+        'authenticationEnabled requires a non-empty authToken.',
+      );
+    }
+    if (!request.authenticationEnabled && request.authToken.isNotEmpty) {
+      throw const FormatException(
+        'authToken requires authenticationEnabled to be true.',
+      );
+    }
     final projectDir = cockpitNormalizeProjectDir(request.projectDir);
     final target = _entrypointResolver.resolve(
       projectDir: projectDir,

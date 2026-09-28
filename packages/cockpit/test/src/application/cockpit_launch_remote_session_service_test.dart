@@ -381,6 +381,71 @@ void main() {
     },
   );
 
+  test(
+    'remote launch rejects enabled authentication without a token',
+    () async {
+      final service = CockpitLaunchRemoteSessionService(
+        tokenGenerator: _RecordingTokenGenerator(),
+        entrypointResolver: CockpitEntrypointResolver(exists: (_) => true),
+        flutterVersionForExecutableReader: (_) async => '3.44.0',
+        sessionPortAvailabilityChecker: (_) async => true,
+        launcher: const _ThrowingRemoteSessionLauncher(),
+      );
+
+      await expectLater(
+        service.launch(
+          const CockpitLaunchRemoteSessionRequest(
+            projectDir: '/workspace/example',
+            platform: 'macos',
+            deviceId: 'macos',
+            sessionPort: 47331,
+            authenticationEnabled: true,
+          ),
+        ),
+        throwsA(
+          isA<FormatException>().having(
+            (error) => error.message,
+            'message',
+            'authenticationEnabled requires a non-empty authToken.',
+          ),
+        ),
+      );
+    },
+  );
+
+  test(
+    'remote launch rejects a token without enabled authentication',
+    () async {
+      final service = CockpitLaunchRemoteSessionService(
+        tokenGenerator: _RecordingTokenGenerator(),
+        entrypointResolver: CockpitEntrypointResolver(exists: (_) => true),
+        flutterVersionForExecutableReader: (_) async => '3.44.0',
+        sessionPortAvailabilityChecker: (_) async => true,
+        launcher: const _ThrowingRemoteSessionLauncher(),
+      );
+
+      await expectLater(
+        service.launch(
+          const CockpitLaunchRemoteSessionRequest(
+            projectDir: '/workspace/example',
+            platform: 'macos',
+            deviceId: 'macos',
+            sessionPort: 47331,
+            authenticationEnabled: false,
+            authToken: 'operator-token',
+          ),
+        ),
+        throwsA(
+          isA<FormatException>().having(
+            (error) => error.message,
+            'message',
+            'authToken requires authenticationEnabled to be true.',
+          ),
+        ),
+      );
+    },
+  );
+
   test('auth cleanup failure does not replace a successful launch', () async {
     final diagnostics = <String>[];
     String? blockedAuthPath;

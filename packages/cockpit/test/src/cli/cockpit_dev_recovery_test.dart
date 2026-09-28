@@ -500,6 +500,59 @@ void main() {
     );
   });
 
+  test('automatic relaunch reports a missing stored token', () async {
+    final checkout = await runtime.checkoutIdentity();
+    session = await runtime.bindDevelopmentSession(
+      checkout: checkout,
+      projectPath: checkout.canonicalRoot,
+      workspaceId: 'workspace-missing-token',
+      sessionId: 'session-missing-token',
+      targetId: 'target-missing-token',
+      appId: 'app-missing-token',
+      entrypoint: 'lib/main.dart',
+      platform: 'macos',
+      deviceId: 'macos',
+      authenticationEnabled: true,
+    );
+    Map<String, Object?>? launchInput;
+    final dev = CockpitDevRuntime(
+      runtime,
+      operationInvoker: (_, kind, input) async {
+        if (kind == 'session.development.get') {
+          return _result(
+            kind,
+            output: const <String, Object?>{
+              'status': <String, Object?>{
+                'state': 'failed',
+                'appReachable': false,
+                'remoteSessionReachable': false,
+              },
+            },
+          );
+        }
+        if (kind == 'target.launch') {
+          launchInput = Map<String, Object?>.from(input);
+          throw StateError('Unexpected target.launch');
+        }
+        throw StateError('Unexpected operation $kind');
+      },
+    );
+
+    final resolved = await dev.reconcile(session, allowRelaunch: true);
+
+    expect(resolved.ready, isFalse);
+    expect(resolved.changed, 'none');
+    expect(launchInput, isNull);
+    expect(
+      (resolved.errors.single! as Map<String, Object?>)['code'],
+      'authTokenMissing',
+    );
+    expect(
+      (resolved.errors.single! as Map<String, Object?>)['message'],
+      contains('--auth <token>'),
+    );
+  });
+
   test('custom launch values require an explicit restart after exit', () async {
     final checkout = await runtime.checkoutIdentity();
     session = await runtime.bindDevelopmentSession(

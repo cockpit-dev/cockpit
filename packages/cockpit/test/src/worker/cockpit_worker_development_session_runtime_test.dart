@@ -119,6 +119,57 @@ void main() {
     );
   });
 
+  test(
+    'development launch rejects inconsistent authentication pairs',
+    () async {
+      final project = await Directory.systemTemp.createTemp(
+        'cockpit-worker-launch-pair-',
+      );
+      addTearDown(() => project.delete(recursive: true));
+      final runtime = CockpitWorkerDevelopmentSessionRuntime(
+        appTempStore: _appTempStore(project),
+      );
+
+      await expectLater(
+        runtime.launch(
+          const CockpitLaunchDevelopmentSessionRequest(
+            projectDir: '/workspace/example',
+            platform: 'macos',
+            deviceId: 'macos',
+            sessionPort: 47331,
+            authenticationEnabled: true,
+          ),
+        ),
+        throwsA(
+          isA<FormatException>().having(
+            (error) => error.message,
+            'message',
+            'authenticationEnabled requires a non-empty authToken.',
+          ),
+        ),
+      );
+      await expectLater(
+        runtime.launch(
+          const CockpitLaunchDevelopmentSessionRequest(
+            projectDir: '/workspace/example',
+            platform: 'macos',
+            deviceId: 'macos',
+            sessionPort: 47331,
+            authenticationEnabled: false,
+            authToken: 'worker-dev-auth-token',
+          ),
+        ),
+        throwsA(
+          isA<FormatException>().having(
+            (error) => error.message,
+            'message',
+            'authToken requires authenticationEnabled to be true.',
+          ),
+        ),
+      );
+    },
+  );
+
   test('launch exposes the Flutter machine failure', () async {
     final project = await Directory.systemTemp.createTemp(
       'cockpit-worker-launch-failure-',

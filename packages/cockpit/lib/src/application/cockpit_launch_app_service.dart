@@ -107,6 +107,16 @@ final class CockpitLaunchAppService {
   final CockpitExistingDesktopAppStopper _stopExistingDesktopApp;
 
   Future<CockpitLaunchAppResult> launch(CockpitLaunchAppRequest request) async {
+    if (request.authenticationEnabled && request.authToken.isEmpty) {
+      throw const FormatException(
+        'authenticationEnabled requires a non-empty authToken.',
+      );
+    }
+    if (!request.authenticationEnabled && request.authToken.isNotEmpty) {
+      throw const FormatException(
+        'authToken requires authenticationEnabled to be true.',
+      );
+    }
     await _maybeStopExistingDesktopApp(request);
     return switch (request.mode) {
       CockpitAppMode.development => _launchDevelopment(request),

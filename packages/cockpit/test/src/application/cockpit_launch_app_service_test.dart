@@ -18,6 +18,48 @@ void main() {
     expect(request.launchTimeout, const Duration(seconds: 600));
   });
 
+  test('launch-app rejects inconsistent authentication pairs', () async {
+    final service = CockpitLaunchAppService();
+
+    await expectLater(
+      service.launch(
+        const CockpitLaunchAppRequest(
+          projectDir: '/workspace/examples/cockpit_demo',
+          platform: 'macos',
+          deviceId: 'macos',
+          sessionPort: 57331,
+          authenticationEnabled: true,
+        ),
+      ),
+      throwsA(
+        isA<FormatException>().having(
+          (error) => error.message,
+          'message',
+          'authenticationEnabled requires a non-empty authToken.',
+        ),
+      ),
+    );
+    await expectLater(
+      service.launch(
+        const CockpitLaunchAppRequest(
+          projectDir: '/workspace/examples/cockpit_demo',
+          platform: 'macos',
+          deviceId: 'macos',
+          sessionPort: 57331,
+          authenticationEnabled: false,
+          authToken: 'operator-token',
+        ),
+      ),
+      throwsA(
+        isA<FormatException>().having(
+          (error) => error.message,
+          'message',
+          'authToken requires authenticationEnabled to be true.',
+        ),
+      ),
+    );
+  });
+
   test(
     'launch-app stops an existing desktop app from the same workspace before relaunching',
     () async {
