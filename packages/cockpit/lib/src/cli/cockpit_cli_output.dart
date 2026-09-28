@@ -1267,6 +1267,15 @@ Object? _compactDevState(
     'reload' || 'restart' || 'stop' => _compactDevLifecycle(state),
     'screenshot' => _compactDevScreenshot(state, more: more),
     'network' => _compactDevNetwork(state, more: more),
+    'describe-app' => <String, Object?>{
+      'appState': ?state['appState'],
+      if (more)
+        ..._pick(state, const <String>[
+          'snapshotRef',
+          'effectiveSnapshotOptions',
+        ]),
+    },
+    'app-action' => <String, Object?>{'actionResult': ?state['actionResult']},
     _ =>
       more
           ? Map<String, Object?>.from(state)

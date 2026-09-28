@@ -99,6 +99,71 @@ void main() {
       expect(result.toJson()['selectedPlane'], 'flutterSemanticPlane');
     });
 
+    test('projects app state and action results into the envelope', () async {
+      final handle = _sessionHandle();
+      final service = CockpitExecuteRemoteCommandService(
+        executeCommand: (_, command) async {
+          final isDescribeApp =
+              command.commandType == CockpitCommandType.describeApp;
+          return CockpitCommandExecution(
+            result: CockpitCommandResult(
+              success: true,
+              commandId: command.commandId,
+              commandType: command.commandType,
+              durationMs: 40,
+              appState: isDescribeApp
+                  ? const <String, Object?>{
+                      'locale': 'en_GB',
+                      'actions': <String>['setThemeMode'],
+                    }
+                  : null,
+              actionResult: isDescribeApp
+                  ? null
+                  : const <String, Object?>{'themeMode': 'dark'},
+            ),
+          );
+        },
+      );
+
+      final describe = await service.execute(
+        CockpitExecuteRemoteCommandRequest(
+          sessionHandle: handle,
+          command: CockpitCommand(
+            commandId: 'describe-1',
+            commandType: CockpitCommandType.describeApp,
+          ),
+          resultProfile: const CockpitInteractiveResultProfile.minimal(),
+        ),
+      );
+      expect(describe.appState, <String, Object?>{
+        'locale': 'en_GB',
+        'actions': <String>['setThemeMode'],
+      });
+      expect(describe.actionResult, isNull);
+      expect(describe.toJson()['appState'], <String, Object?>{
+        'locale': 'en_GB',
+        'actions': <String>['setThemeMode'],
+      });
+      expect(describe.toJson().containsKey('actionResult'), isFalse);
+
+      final action = await service.execute(
+        CockpitExecuteRemoteCommandRequest(
+          sessionHandle: handle,
+          command: CockpitCommand(
+            commandId: 'action-1',
+            commandType: CockpitCommandType.appAction,
+          ),
+          resultProfile: const CockpitInteractiveResultProfile.minimal(),
+        ),
+      );
+      expect(action.actionResult, <String, Object?>{'themeMode': 'dark'});
+      expect(action.appState, isNull);
+      expect(action.toJson()['actionResult'], <String, Object?>{
+        'themeMode': 'dark',
+      });
+      expect(action.toJson().containsKey('appState'), isFalse);
+    });
+
     test('injects a default timeout when the command omits one', () async {
       CockpitCommand? capturedCommand;
       final service = CockpitExecuteRemoteCommandService(

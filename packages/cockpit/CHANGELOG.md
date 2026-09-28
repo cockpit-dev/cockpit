@@ -12,7 +12,9 @@
 - Added the `cockpit dev app-action ACTION [KEY=VALUE ...]` CLI command with
   a raw JSON object form for complex arguments, plus `cockpit dev
   describe-app` for reading the app-authored state from a development
-  session.
+  session. Interactive command envelopes now project the command's `appState`
+  and `actionResult` payloads, so both leaves print their results in brief and
+  full output views.
 
 ## 4.10.0
 

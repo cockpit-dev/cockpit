@@ -74,6 +74,8 @@ final class CockpitExecuteRemoteCommandResult {
     this.artifactDownloads = const <CockpitRemoteArtifactDownload>[],
     this.sessionHandle,
     this.effectiveSnapshotOptions,
+    this.appState,
+    this.actionResult,
   });
 
   final CockpitInteractiveCommandCore command;
@@ -92,6 +94,8 @@ final class CockpitExecuteRemoteCommandResult {
   final List<CockpitRemoteArtifactDownload> artifactDownloads;
   final CockpitRemoteSessionHandle? sessionHandle;
   final CockpitSnapshotOptions? effectiveSnapshotOptions;
+  final Map<String, Object?>? appState;
+  final Map<String, Object?>? actionResult;
 
   Map<String, Object?> toJson() => <String, Object?>{
     'command': command.toJson(),
@@ -114,6 +118,8 @@ final class CockpitExecuteRemoteCommandResult {
     if (sessionHandle != null) 'sessionHandle': sessionHandle!.toJson(),
     if (effectiveSnapshotOptions != null)
       'effectiveSnapshotOptions': effectiveSnapshotOptions!.toJson(),
+    if (appState != null) 'appState': appState,
+    if (actionResult != null) 'actionResult': actionResult,
   };
 }
 
@@ -243,6 +249,8 @@ final class CockpitExecuteRemoteCommandService {
             const <CockpitRemoteArtifactDownload>[],
         sessionHandle: resolved.sessionHandle,
         effectiveSnapshotOptions: effectiveSnapshotOptions,
+        appState: evidenceExecution.result.appState,
+        actionResult: evidenceExecution.result.actionResult,
       );
     });
     final cancellation = request.cancellation;

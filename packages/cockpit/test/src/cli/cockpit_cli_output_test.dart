@@ -745,6 +745,60 @@ void main() {
     expect(value, isNot(contains('_meta')));
   });
 
+  test(
+    'dev describe-app and app-action brief outputs carry their payloads',
+    () {
+      const renderer = CockpitCliOutputRenderer();
+      final describe =
+          lon.decode(
+                renderer.renderAi(
+                  command: 'dev.describe-app',
+                  data: const <String, Object?>{
+                    'ok': true,
+                    'action': 'describe-app',
+                    'session': '5',
+                    'state': <String, Object?>{
+                      'appState': <String, Object?>{
+                        'locale': 'en_GB',
+                        'actions': <String>['setThemeMode'],
+                      },
+                      'snapshotRef': 'snap-1',
+                    },
+                  },
+                  view: CockpitCliOutputView.brief,
+                ),
+              )!
+              as Map<Object?, Object?>;
+
+      expect(describe['appState'], <String, Object?>{
+        'locale': 'en_GB',
+        'actions': <String>['setThemeMode'],
+      });
+      expect(describe, isNot(contains('snapshotRef')));
+
+      final action =
+          lon.decode(
+                renderer.renderAi(
+                  command: 'dev.app-action',
+                  data: const <String, Object?>{
+                    'ok': true,
+                    'action': 'app-action',
+                    'session': '5',
+                    'state': <String, Object?>{
+                      'actionResult': <String, Object?>{'themeMode': 'dark'},
+                      'runtimeSteps': <String>[],
+                    },
+                  },
+                  view: CockpitCliOutputView.brief,
+                ),
+              )!
+              as Map<Object?, Object?>;
+
+      expect(action['actionResult'], <String, Object?>{'themeMode': 'dark'});
+      expect(action, isNot(contains('runtimeSteps')));
+    },
+  );
+
   test('dev scroll brief output confirms that the target is visible', () {
     const renderer = CockpitCliOutputRenderer();
     final value =
