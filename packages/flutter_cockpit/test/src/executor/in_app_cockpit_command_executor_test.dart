@@ -236,6 +236,167 @@ void main() {
     },
   );
 
+  group('describeApp', () {
+    test('returns provider state as normalized JSON-safe data', () async {
+      final executor = InAppCockpitCommandExecutor(
+        registry: CockpitTargetRegistry(routeName: '/home'),
+        appStateProvider: () => <String, Object?>{
+          'route': '/home',
+          'loggedIn': true,
+          'cartItems': 3,
+          'pendingSync': null,
+          'filters': <String>['alpha', 'beta'],
+          'profile': <Object, Object?>{'name': 'Ada', 42: 'answer'},
+        },
+      );
+
+      final result = await executor.execute(
+        CockpitCommand(
+          commandId: 'describe-home',
+          commandType: CockpitCommandType.describeApp,
+        ),
+      );
+
+      expect(result.success, isTrue, reason: result.error?.message);
+      expect(result.appState, <String, Object?>{
+        'route': '/home',
+        'loggedIn': true,
+        'cartItems': 3,
+        'pendingSync': null,
+        'filters': <Object?>['alpha', 'beta'],
+        'profile': <String, Object?>{'name': 'Ada', '42': 'answer'},
+      });
+    });
+
+    test('redacts sensitive keys and credential-looking strings', () async {
+      final executor = InAppCockpitCommandExecutor(
+        registry: CockpitTargetRegistry(routeName: '/home'),
+        appStateProvider: () => <String, Object?>{
+          'password': 'hunter2',
+          'authHeader': 'Bearer abc123def456',
+          'note': 'token: ghp_supersecret',
+          'account': <String, Object?>{'apiKey': 'k-123'},
+        },
+      );
+
+      final result = await executor.execute(
+        CockpitCommand(
+          commandId: 'describe-redacted',
+          commandType: CockpitCommandType.describeApp,
+        ),
+      );
+
+      expect(result.success, isTrue, reason: result.error?.message);
+      final encoded = jsonEncode(result.appState);
+      expect(encoded, isNot(contains('hunter2')));
+      expect(encoded, isNot(contains('abc123def456')));
+      expect(encoded, isNot(contains('ghp_supersecret')));
+      expect(encoded, isNot(contains('k-123')));
+      expect(result.appState!['password'], '********');
+      final account = result.appState!['account']! as Map<String, Object?>;
+      expect(account['apiKey'], '********');
+      expect(result.appState!['authHeader'], 'Bearer ********');
+      expect(result.appState!['note'], 'token: ********');
+    });
+
+    test('rejects state that nests deeper than eight levels', () async {
+      Object? nested = <String, Object?>{'leaf': 'deep'};
+      for (var i = 0; i < 8; i++) {
+        nested = <String, Object?>{'level$i': nested};
+      }
+      final executor = InAppCockpitCommandExecutor(
+        registry: CockpitTargetRegistry(routeName: '/home'),
+        appStateProvider: () => <String, Object?>{'payload': nested},
+      );
+
+      final result = await executor.execute(
+        CockpitCommand(
+          commandId: 'describe-too-deep',
+          commandType: CockpitCommandType.describeApp,
+        ),
+      );
+
+      expect(result.success, isFalse);
+      expect(result.error?.code, 'appStateInvalid');
+      expect(result.error?.message, contains('nests deeper than 8 levels'));
+    });
+
+    test('rejects state beyond the character budget', () async {
+      final executor = InAppCockpitCommandExecutor(
+        registry: CockpitTargetRegistry(routeName: '/home'),
+        appStateProvider: () => <String, Object?>{
+          'blob': 'x' * (64 * 1024 + 1),
+        },
+      );
+
+      final result = await executor.execute(
+        CockpitCommand(
+          commandId: 'describe-too-large',
+          commandType: CockpitCommandType.describeApp,
+        ),
+      );
+
+      expect(result.success, isFalse);
+      expect(result.error?.code, 'appStateInvalid');
+      expect(result.error?.message, contains('report budget'));
+    });
+
+    test('reports provider failures as command errors', () async {
+      final executor = InAppCockpitCommandExecutor(
+        registry: CockpitTargetRegistry(routeName: '/home'),
+        appStateProvider: () => throw StateError('store unavailable'),
+      );
+
+      final result = await executor.execute(
+        CockpitCommand(
+          commandId: 'describe-crashed',
+          commandType: CockpitCommandType.describeApp,
+        ),
+      );
+
+      expect(result.success, isFalse);
+      expect(result.error?.code, 'appStateProviderFailed');
+      expect(result.error?.message, contains('store unavailable'));
+    });
+
+    test('fails with unsupportedCapability without a provider', () async {
+      final executor = InAppCockpitCommandExecutor(
+        registry: CockpitTargetRegistry(routeName: '/home'),
+      );
+
+      final result = await executor.execute(
+        CockpitCommand(
+          commandId: 'describe-missing-provider',
+          commandType: CockpitCommandType.describeApp,
+        ),
+      );
+
+      expect(result.success, isFalse);
+      expect(result.error?.code, CockpitCommandError.unsupportedCapabilityCode);
+      expect(result.error?.message, contains('describeApp'));
+
+      final capabilities = await executor.describeCapabilities();
+      expect(
+        capabilities.supportedCommands,
+        isNot(contains(CockpitCommandType.describeApp)),
+      );
+    });
+
+    test('advertises describeApp when a provider is registered', () async {
+      final executor = InAppCockpitCommandExecutor(
+        registry: CockpitTargetRegistry(routeName: '/home'),
+        appStateProvider: () => const <String, Object?>{},
+      );
+
+      final capabilities = await executor.describeCapabilities();
+
+      expect(
+        capabilities.supportedCommands,
+        contains(CockpitCommandType.describeApp),
+      );
+    });
+  });
+
   testWidgets('tap selects a Radio through its direct onChanged handler', (
     tester,
   ) async {

@@ -1200,6 +1200,9 @@ const String cockpitTestV2SchemaJson = r'''
         },
         {
           "$ref": "#/$defs/collectSnapshotAction"
+        },
+        {
+          "$ref": "#/$defs/describeAppAction"
         }
       ]
     },
@@ -2068,6 +2071,19 @@ const String cockpitTestV2SchemaJson = r'''
         },
         "snapshotOptions": {
           "$ref": "#/$defs/snapshotOptionsTemplate"
+        }
+      },
+      "patternProperties": {
+        "^x-[A-Za-z0-9][A-Za-z0-9._-]*$": true
+      },
+      "required": ["type"],
+      "additionalProperties": false
+    },
+    "describeAppAction": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "describeApp"
         }
       },
       "patternProperties": {

@@ -2,6 +2,14 @@
 
 ## 4.10.0
 
+- Added the app state provider surface: `FlutterCockpitApp` and
+  `FlutterCockpitRoot` accept an `appStateProvider` that the `describeApp`
+  command evaluates at call time. Reports are normalized to JSON-safe values,
+  redacted (sensitive-looking keys and inline credentials are masked), capped
+  at eight nesting levels and 64 KiB, and answer with structured command
+  errors (`appStateInvalid`, `appStateProviderFailed`) instead of breaking the
+  session; targets without a provider report `describeApp` as an unsupported
+  capability.
 - Tightened the remote session authentication boundary: HTTP endpoints accept
   `x-cockpit-token` or `Authorization: Bearer` (case-insensitive scheme) only
   and answer unauthorized requests with stable structured JSON instead of a

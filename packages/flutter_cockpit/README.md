@@ -171,6 +171,29 @@ the `FLUTTER_COCKPIT_REMOTE_*` dart-defines, so
 the production bootstrap.
 Only wire `FlutterCockpit.navigatorObserver` from the standalone shell entrypoint. `FlutterCockpitApp` automatically discovers the public `RouteInformationProvider` used by Flutter Router, `RouterConfig`, `go_router`, and other Router-based libraries, so an app-owned router normally needs no additional route bridge.
 
+### Expose app state for test judgments
+
+`appStateProvider` lets the application decide what runtime facts a test may
+read back through the `describeApp` command on any surface. It is evaluated at
+call time, so the report is always current:
+
+```dart
+return FlutterCockpitApp(
+  appStateProvider: (context) => <String, Object?>{
+    'environment': AppEnvironment.current.name,
+    'featureFlags': FeatureFlags.all,
+    'account': <String, Object?>{'plan': session.plan.name},
+  },
+  child: MaterialApp(...),
+);
+```
+
+The payload is normalized to JSON-safe values, values under sensitive-looking
+keys (passwords, tokens, API keys) are masked, and the report is capped at
+eight nesting levels and 64 KiB before it leaves the app process. Keep it to
+facts a test legitimately needs; a provider that throws or exceeds the bounds
+fails that command with a structured error instead of corrupting the session.
+
 For nested navigators, create one observer per navigator so route state can return to the parent stack after a nested pop:
 
 ```dart

@@ -2515,6 +2515,19 @@ final class CockpitTester
     return CockpitSnapshot.fromJson(snapshot);
   }
 
+  @override
+  Future<Map<String, Object?>> describeApp({Duration? timeout}) async {
+    final execution = await execute(
+      CockpitCommand(
+        commandId: _nextId('describeApp'),
+        commandType: CockpitCommandType.describeApp,
+        timeoutMs: _timeoutMs(timeout),
+      ),
+      check: true,
+    );
+    return execution.result.appState ?? const <String, Object?>{};
+  }
+
   /// Clears the in-app HTTP/SSE/WebSocket activity index before a flow.
   Future<CockpitCommandExecution> clearNetworkActivity({Duration? timeout}) =>
       _run(CockpitCommandType.clearNetworkActivity, timeout: timeout);

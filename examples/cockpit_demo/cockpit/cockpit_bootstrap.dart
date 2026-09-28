@@ -1,6 +1,7 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter_cockpit/flutter_cockpit_flutter.dart';
 
+import 'package:cockpit_demo/src/app/todo_app_service.dart';
 import 'package:cockpit_demo/src/cockpit_demo_app.dart';
 
 import 'cockpit_launch_environment.dart';
@@ -26,6 +27,7 @@ Widget buildCockpitDemoDevelopmentApp() {
     defaultValue: true,
   );
 
+  TodoAppService? service;
   final configuration = FlutterCockpitConfiguration(
     initialRouteName: '/inbox',
     httpNetworkObserver: !enableHttpNetworkObserver
@@ -52,6 +54,7 @@ Widget buildCockpitDemoDevelopmentApp() {
     navigatorObservers: <NavigatorObserver>[
       FlutterCockpit.createNavigatorObserver(),
     ],
+    onServiceReady: (ready) => service = ready,
   );
   if (acceptance) {
     final exposesRuntimeEnvironment = const <String>{
@@ -84,6 +87,50 @@ Widget buildCockpitDemoDevelopmentApp() {
   }
   return FlutterCockpitApp(
     config: FlutterCockpitConfig.fromRuntimeConfiguration(configuration),
+    appStateProvider: (context) => cockpitDemoAppState(
+      service: service,
+      acceptance: acceptance,
+      acceptancePlatform: acceptancePlatform,
+      defineFile: defineFileValue,
+      httpNetworkObserverEnabled: enableHttpNetworkObserver,
+      runtimeObserverEnabled: enableRuntimeObserver,
+    ),
     child: child,
   );
+}
+
+/// The app-authored state surfaced through Cockpit's `describeApp` command:
+/// launch configuration plus the live todo service summary. Values under
+/// sensitive-looking keys would be masked before leaving the app process, so
+/// only non-secret facts belong here.
+Map<String, Object?> cockpitDemoAppState({
+  required TodoAppService? service,
+  required bool acceptance,
+  required String acceptancePlatform,
+  required String defineFile,
+  required bool httpNetworkObserverEnabled,
+  required bool runtimeObserverEnabled,
+}) {
+  final sync = service?.syncState;
+  final settings = service?.settingsState.settings;
+  return <String, Object?>{
+    'acceptance': acceptance,
+    'acceptancePlatform': acceptancePlatform,
+    'httpNetworkObserverEnabled': httpNetworkObserverEnabled,
+    'runtimeObserverEnabled': runtimeObserverEnabled,
+    'defineFile': defineFile,
+    if (service != null) ...<String, Object?>{
+      'syncStatus': sync?.status.name,
+      'pendingTaskCount': sync?.pendingTaskCount,
+      'failedTaskCount': sync?.failedTaskCount,
+      'conflictTaskCount': sync?.conflictTaskCount,
+      'taskCount': service.listState.tasks.length,
+      'activeTaskCount': service.listState.tasks
+          .where((task) => !task.isCompleted)
+          .length,
+      'themeMode': settings?.themePreference.name,
+      'sortMode': settings?.sortMode.name,
+      'compactMode': settings?.compactMode,
+    },
+  };
 }

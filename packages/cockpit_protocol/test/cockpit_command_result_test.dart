@@ -19,4 +19,33 @@ void main() {
 
     expect(CockpitCommandResult.fromJson(result.toJson()), result);
   });
+
+  test('command result carries describeApp state and equality', () {
+    final result = CockpitCommandResult(
+      success: true,
+      commandId: 'describe',
+      commandType: CockpitCommandType.describeApp,
+      durationMs: 3,
+      appState: const <String, Object?>{
+        'environment': 'staging',
+        'buildNumber': 42,
+        'flags': <Object?>{'darkMode', 'newCheckout'},
+      },
+    );
+
+    final decoded = CockpitCommandResult.fromJson(result.toJson());
+    expect(decoded, result);
+    expect(decoded.appState, result.appState);
+
+    final withoutState = CockpitCommandResult.fromJson(
+      CockpitCommandResult(
+        success: true,
+        commandId: 'describe',
+        commandType: CockpitCommandType.describeApp,
+        durationMs: 3,
+      ).toJson(),
+    );
+    expect(withoutState.appState, isNull);
+    expect(withoutState == result, isFalse);
+  });
 }

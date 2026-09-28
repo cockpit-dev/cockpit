@@ -40,7 +40,8 @@ enum CockpitCommandType {
   travel,
   system,
   captureScreenshot,
-  collectSnapshot;
+  collectSnapshot,
+  describeApp;
 
   static CockpitCommandType fromJson(
     Object? json, {

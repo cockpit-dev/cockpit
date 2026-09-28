@@ -55,12 +55,22 @@ final snapshot = await tester.collectSnapshot();
 cockpitExpectEquals(snapshot.visibleTargets.length, 2);
 cockpitExpectTrue(snapshot.routeName == 'settings');
 cockpitExpectContains(await readLabels(snapshot), 'Saved');
+
+// Read app-authored state: whatever the application chose to expose through
+// its app state provider (FlutterCockpitApp/FlutterCockpitRoot
+// `appStateProvider`), evaluated at call time.
+final appState = await tester.describeApp();
+cockpitExpectEquals(appState['environment'], 'staging');
 ```
 
 The full helper set is `cockpitExpectEquals` (deep equality over numbers,
 strings, booleans, lists, sets, and maps), `cockpitExpectTrue`,
 `cockpitExpectNotNull`, and `cockpitExpectContains` (string, iterable, or map
 key membership).
+
+Targets without an app state provider answer `describeApp` with an
+unsupported-capability failure, which the runner reports as a blocked attempt —
+the same verdict as any other missing capability.
 
 ## Run it on Flutter
 

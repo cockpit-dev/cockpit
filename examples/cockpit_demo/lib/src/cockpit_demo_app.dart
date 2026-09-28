@@ -26,12 +26,18 @@ final class CockpitDemoApp extends StatefulWidget {
     this.navigatorObservers = const <NavigatorObserver>[],
     this.database,
     this.syncGateway,
+    this.onServiceReady,
     super.key,
   });
   final String initialRouteName;
   final List<NavigatorObserver> navigatorObservers;
   final CockpitDemoDatabase? database;
   final TodoSyncGatewayClient? syncGateway;
+
+  /// Reports the live [TodoAppService] once it is constructed, so hosts such
+  /// as the development shell can surface app state through Cockpit's
+  /// `describeApp` command.
+  final void Function(TodoAppService service)? onServiceReady;
 
   @override
   State<CockpitDemoApp> createState() => _CockpitDemoAppState();
@@ -56,6 +62,7 @@ final class _CockpitDemoAppState extends State<CockpitDemoApp> {
   @override
   void initState() {
     super.initState();
+    widget.onServiceReady?.call(_service);
     unawaited(_service.loadSettings());
     unawaited(_service.loadTags());
   }

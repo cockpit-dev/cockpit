@@ -11,6 +11,9 @@
   waits, `expectText` match modes, and `collectSnapshot` read-back — and made
   `cockpitScenarioWidgets` report the structured status, error code, and
   message when a scenario fails or blocks.
+- Added `describeApp()` to the in-app tester, returning the app-authored state
+  from the app state provider mounted on `FlutterCockpitRoot` /
+  `FlutterCockpitApp`.
 
 ## 4.9.0
 

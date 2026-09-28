@@ -277,6 +277,9 @@ steps:
   - stepId: collectSemanticSnapshot
     timeoutMs: 12000
     action: {type: collectSnapshot}
+  - stepId: describeAppSemantics
+    timeoutMs: 12000
+    action: {type: describeApp}
   - stepId: captureSemanticCoverage
     timeoutMs: 20000
     action:

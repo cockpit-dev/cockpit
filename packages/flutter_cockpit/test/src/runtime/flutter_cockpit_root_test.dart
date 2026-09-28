@@ -940,6 +940,53 @@ void main() {
   );
 
   testWidgets(
+    'FlutterCockpitRoot serves describeApp from its app state provider',
+    (tester) async {
+      FlutterCockpit.initialize(
+        const FlutterCockpitConfiguration(initialRouteName: '/'),
+      );
+
+      final rootKey = GlobalKey<FlutterCockpitRootState>();
+      var environment = 'staging';
+
+      await tester.pumpWidget(
+        FlutterCockpitRoot(
+          key: rootKey,
+          appStateProvider: (context) => <String, Object?>{
+            'environment': environment,
+            'routeName': rootKey.currentState!.snapshot().routeName,
+          },
+          child: MaterialApp(
+            navigatorObservers: [FlutterCockpit.navigatorObserver],
+            home: const Scaffold(body: Center(child: Text('Cockpit Root'))),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final executor = rootKey.currentState!.createCommandExecutor();
+      final first = await executor.execute(
+        CockpitCommand(
+          commandId: 'describe-staging',
+          commandType: CockpitCommandType.describeApp,
+        ),
+      );
+      expect(first.success, isTrue, reason: first.error?.message);
+      expect(first.appState?['environment'], 'staging');
+      expect(first.appState?['routeName'], '/');
+
+      environment = 'production';
+      final second = await executor.execute(
+        CockpitCommand(
+          commandId: 'describe-production',
+          commandType: CockpitCommandType.describeApp,
+        ),
+      );
+      expect(second.appState?['environment'], 'production');
+    },
+  );
+
+  testWidgets(
     'FlutterCockpitRoot remote health publishes environment when flutter metadata is configured',
     (tester) async {
       FlutterCockpit.initialize(

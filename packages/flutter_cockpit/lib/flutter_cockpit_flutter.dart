@@ -4,6 +4,7 @@ export 'flutter_cockpit.dart';
 export 'src/capture/flutter_view_capture.dart';
 export 'src/capture/cockpit_native_capture.dart';
 export 'src/capture/cockpit_screenshot_inspector.dart';
+export 'src/executor/in_app/cockpit_command_context.dart';
 export 'src/executor/in_app_cockpit_command_executor.dart';
 export 'src/gesture/cockpit_gesture_action.dart';
 export 'src/gesture/cockpit_gesture_anchor.dart';

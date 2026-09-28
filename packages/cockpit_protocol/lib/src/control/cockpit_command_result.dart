@@ -22,11 +22,13 @@ final class CockpitCommandResult {
     this.usedCaptureFallback = false,
     this.degradationReason,
     Map<String, Object?>? surface,
+    Map<String, Object?>? appState,
     this.changed,
     this.error,
   }) : artifacts = List.unmodifiable(artifacts),
        snapshot = snapshot == null ? null : Map.unmodifiable(snapshot),
-       surface = surface == null ? null : Map.unmodifiable(surface);
+       surface = surface == null ? null : Map.unmodifiable(surface),
+       appState = appState == null ? null : Map.unmodifiable(appState);
 
   final bool success;
   final String commandId;
@@ -40,6 +42,11 @@ final class CockpitCommandResult {
   final bool usedCaptureFallback;
   final String? degradationReason;
   final Map<String, Object?>? surface;
+
+  /// App-authored state returned by `describeApp` commands. The application
+  /// decides what to expose; the payload is bounded and redacted before it
+  /// leaves the app process.
+  final Map<String, Object?>? appState;
   final bool? changed;
   final CockpitCommandError? error;
 
@@ -65,6 +72,7 @@ final class CockpitCommandResult {
     'usedCaptureFallback': usedCaptureFallback,
     if (degradationReason != null) 'degradationReason': degradationReason,
     if (surface != null) 'surface': surface,
+    if (appState != null) 'appState': appState,
     if (changed != null) 'changed': changed,
     if (error != null) 'error': error!.toJson(),
   };
@@ -79,6 +87,7 @@ final class CockpitCommandResult {
     final errorJson = json['error'] as Map<Object?, Object?>?;
     final snapshotJson = json['snapshot'] as Map<Object?, Object?>?;
     final surfaceJson = json['surface'] as Map<Object?, Object?>?;
+    final appStateJson = json['appState'] as Map<Object?, Object?>?;
     final requestedCaptureProfile = json['requestedCaptureProfile'];
     final resolvedCaptureKind = json['resolvedCaptureKind'];
 
@@ -117,6 +126,9 @@ final class CockpitCommandResult {
       surface: surfaceJson == null
           ? null
           : Map<String, Object?>.from(surfaceJson),
+      appState: appStateJson == null
+          ? null
+          : Map<String, Object?>.from(appStateJson),
       changed: json['changed'] as bool?,
       error: errorJson == null
           ? null
@@ -140,6 +152,7 @@ final class CockpitCommandResult {
             other.usedCaptureFallback == usedCaptureFallback &&
             other.degradationReason == degradationReason &&
             _mapEquality.equals(other.surface, surface) &&
+            _mapEquality.equals(other.appState, appState) &&
             other.changed == changed &&
             other.error == error;
   }
@@ -158,6 +171,7 @@ final class CockpitCommandResult {
     usedCaptureFallback,
     degradationReason,
     surface == null ? null : _mapEquality.hash(surface!),
+    appState == null ? null : _mapEquality.hash(appState!),
     changed,
     error,
   );

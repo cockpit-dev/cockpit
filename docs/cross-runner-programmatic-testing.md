@@ -86,6 +86,14 @@ Every surface maps these to the same protocol operations:
   disappeared.
 - `collectSnapshot()` — reads real UI state (route name, visible targets) back
   for host-side comparison.
+- `describeApp()` — reads app-authored state: whatever the application chose to
+  expose through its app state provider (`FlutterCockpitApp` /
+  `FlutterCockpitRoot` `appStateProvider`), evaluated at call time. The payload
+  is normalized to JSON-safe values, redacted, and size-bounded before it
+  leaves the app process; targets without a provider answer with an
+  unsupported-capability failure, which the runner reports as `blocked`. The
+  declarative `cockpit.test/v2` model exposes the same read as a `describeApp`
+  action (no locator, no parameters) for shipped cases and suites.
 
 Host-side helpers in `cockpit_test` — `cockpitExpectEquals` (deep equality),
 `cockpitExpectTrue`, `cockpitExpectNotNull`, `cockpitExpectContains` — throw

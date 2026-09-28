@@ -27,6 +27,10 @@
   absence waits, `expectText(..., match:)` text match modes, and
   `collectSnapshot()` UI read-back; every surface maps them to the same
   protocol operations.
+- Added `describeApp()` to the shared `CockpitTester` contract: it returns the
+  app-authored state the application exposes through its app state provider,
+  and targets without one block the attempt with an unsupported-capability
+  error.
 - Added ICU MessageFormat support to `CockpitLocalizedText` via opt-in
   `params`, powered by `intl`'s CLDR rules: placeholders, `plural` with exact
   `=N` precedence over categories, `select`, nesting, `#`, and apostrophe

@@ -11,6 +11,7 @@ import '../capture/cockpit_capture_profile.dart';
 import '../capture/cockpit_capture_fallback_exception.dart';
 import '../capture/cockpit_capture_result.dart';
 import '../control/cockpit_screenshot_request.dart';
+import '../executor/in_app/cockpit_command_context.dart';
 import '../executor/in_app_cockpit_command_executor.dart';
 import '../gesture/cockpit_gesture_action.dart';
 import '../gesture/cockpit_gesture_engine.dart';
@@ -50,9 +51,20 @@ const int _routeInformationImmediateDiscoveryRetries = 4;
 const Duration _routeInformationDiscoveryRetryDelay = Duration(seconds: 1);
 
 final class FlutterCockpitRoot extends StatefulWidget {
-  const FlutterCockpitRoot({required this.child, super.key});
+  const FlutterCockpitRoot({
+    required this.child,
+    this.appStateProvider,
+    super.key,
+  });
 
   final Widget child;
+
+  /// App-authored state served to `describeApp` commands on every execution
+  /// surface. The application decides what to expose — feature flags,
+  /// environment, account tier — and the callback runs on demand, so the
+  /// value always reflects the moment the command executes. Payloads are
+  /// normalized, redacted, and size-bounded before leaving the app process.
+  final Map<String, Object?> Function(BuildContext context)? appStateProvider;
 
   @override
   State<FlutterCockpitRoot> createState() => FlutterCockpitRootState();
@@ -709,9 +721,20 @@ final class FlutterCockpitRootState extends State<FlutterCockpitRoot> {
         return cockpitMaybePopCurrentNavigator(context as Element);
       },
       dismissActionResolver: () => _surfaceStateOrNull?.resolveDismissAction(),
+      appStateProvider: _rootAppStateProvider,
       platform: platform,
       transportType: transportType,
     );
+  }
+
+  /// Bridges the widget-level provider, which wants a [BuildContext], into the
+  /// context-free executor signature. The callback runs on the root State's
+  /// context on demand, never cached, so it observes the app state at command
+  /// time.
+  CockpitAppStateProvider? get _rootAppStateProvider {
+    final provider = widget.appStateProvider;
+    if (provider == null) return null;
+    return () => provider(context);
   }
 
   Future<void> _startRemoteSessionIfEnabled() async {

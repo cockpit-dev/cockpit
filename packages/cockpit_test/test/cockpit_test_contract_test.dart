@@ -165,6 +165,16 @@ void main() {
     expect(tester.commands.single.commandType, CockpitCommandType.tap);
   });
 
+  test('tester contract exposes describeApp app state', () async {
+    final tester = _StubTester(
+      appState: const <String, Object?>{'environment': 'staging'},
+    );
+
+    expect(await tester.describeApp(), <String, Object?>{
+      'environment': 'staging',
+    });
+  });
+
   group('host-side cockpitExpect assertions', () {
     test('equals compares primitives and JSON shapes deeply', () {
       cockpitExpectEquals(1, 1);
@@ -404,9 +414,13 @@ void main() {
 
 /// Minimal tester double that records commands and can fail them by type.
 final class _StubTester implements CockpitTester {
-  _StubTester({this.failures = const <String, CockpitCommandError>{}});
+  _StubTester({
+    this.failures = const <String, CockpitCommandError>{},
+    this.appState,
+  });
 
   final Map<String, CockpitCommandError> failures;
+  final Map<String, Object?>? appState;
 
   @override
   CockpitLocaleProfile get locale => CockpitLocaleProfile('en-US');
@@ -420,6 +434,7 @@ final class _StubTester implements CockpitTester {
         commandId: command.commandId,
         commandType: command.commandType,
         durationMs: 0,
+        appState: error == null ? appState : null,
         error: error,
       ),
     );
@@ -427,6 +442,12 @@ final class _StubTester implements CockpitTester {
       throw CockpitTestCommandException(command: command, execution: execution);
     }
     return execution;
+  }
+
+  @override
+  Future<Map<String, Object?>> describeApp() async {
+    final execution = await _run(CockpitCommandType.describeApp, null);
+    return execution.result.appState ?? const <String, Object?>{};
   }
 
   @override

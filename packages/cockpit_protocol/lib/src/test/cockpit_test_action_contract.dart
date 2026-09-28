@@ -41,6 +41,7 @@ enum CockpitTestActionKind {
   system,
   captureScreenshot,
   collectSnapshot,
+  describeApp,
 }
 
 enum CockpitTestActionField {
@@ -456,6 +457,11 @@ cockpitTestActionSpecs = <CockpitTestActionKind, CockpitTestActionSpec>{
     allowedFields: <CockpitTestActionField>{
       CockpitTestActionField.snapshotOptions,
     },
+    settlement: CockpitTestSettlement.none,
+  ),
+  CockpitTestActionKind.describeApp: CockpitTestActionSpec(
+    locator: CockpitTestLocatorRequirement.forbidden,
+    allowedFields: <CockpitTestActionField>{},
     settlement: CockpitTestSettlement.none,
   ),
 };

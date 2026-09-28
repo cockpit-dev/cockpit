@@ -50,6 +50,12 @@ abstract interface class CockpitTester {
   /// code can inspect real state instead of only issuing assertions.
   Future<CockpitSnapshot> collectSnapshot({CockpitSnapshotOptions options});
 
+  /// Reads app-authored state — whatever the application chose to expose
+  /// through its app state provider, evaluated at call time. Targets without
+  /// a provider answer with an unsupported-capability failure, which the
+  /// runner reports as a blocked attempt.
+  Future<Map<String, Object?>> describeApp();
+
   Future<CockpitCommandExecution> screenshot();
 
   Future<CockpitPerformanceReport> profile(

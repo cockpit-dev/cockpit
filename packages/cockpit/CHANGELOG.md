@@ -2,6 +2,14 @@
 
 ## 4.10.0
 
+- Added `describeApp()` to `CockpitAutomationTester`: programmatic scenarios
+  read the app-authored state behind the application's app state provider on
+  remote, system, and in-app surfaces, with unsupported targets blocking the
+  attempt.
+- Added the `describeApp` action to the `cockpit.test/v2` declarative model:
+  shipped cases, suites, queued runs, and MCP `case_run`/`suite_run`
+  documents read the same app state; the safety policy classifies it
+  read-only and legacy command documents migrate to it.
 - Added opt-in remote bridge authentication with `cockpit dev start --auth
   <token>` (default off; `--no-auth` forces it off). The token is chosen by
   the operator that starts the session, never generated or derived from the

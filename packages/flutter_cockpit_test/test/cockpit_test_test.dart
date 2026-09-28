@@ -5,7 +5,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:cockpit_protocol/cockpit_protocol.dart';
+import 'package:flutter_cockpit/flutter_cockpit_flutter.dart';
 import 'package:flutter_cockpit_test/flutter_cockpit_test.dart';
 
 void main() {
@@ -47,6 +47,25 @@ void main() {
       final tap = await cockpit.tap('Save');
       expect(tap.result.success, isTrue, reason: tap.result.error?.message);
       await cockpit.expectText('Saved', 'Saved');
+    },
+  );
+
+  cockpitTestWidgets(
+    'describeApp returns app state from the root provider',
+    app: () => FlutterCockpitRoot(
+      appStateProvider: (context) => const <String, Object?>{
+        'environment': 'staging',
+        'featureFlags': <Object?>['checkout-v2'],
+        'account': <String, Object?>{'plan': 'pro'},
+      },
+      child: const _TestApp(),
+    ),
+    body: (cockpit) async {
+      final state = await cockpit.describeApp();
+
+      expect(state['environment'], 'staging');
+      expect(state['featureFlags'], <Object?>['checkout-v2']);
+      expect(state['account'], <String, Object?>{'plan': 'pro'});
     },
   );
 

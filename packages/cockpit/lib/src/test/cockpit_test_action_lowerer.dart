@@ -402,6 +402,7 @@ CockpitCommandType _commandType(
   CockpitTestActionKind.captureScreenshot =>
     CockpitCommandType.captureScreenshot,
   CockpitTestActionKind.collectSnapshot => CockpitCommandType.collectSnapshot,
+  CockpitTestActionKind.describeApp => CockpitCommandType.describeApp,
   CockpitTestActionKind.waitFor => throw StateError(
     'waitFor is lowered through its condition.',
   ),

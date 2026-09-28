@@ -2,6 +2,11 @@
 
 ## 4.10.0
 
+- Added the `describeApp` command and the `appState` command-result field,
+  letting an application publish a bounded, redacted snapshot of its own
+  runtime state to every Cockpit surface. The `cockpit.test/v2` action model
+  gains a matching `describeApp` action kind (no locator, no parameters) so
+  declarative cases and suites can read the same state.
 - Separated public session identity from authentication credentials:
   `CockpitRemoteSessionConfiguration.baseUri` never carries a token, `toJson()`
   omits `authToken`, and only the owner-only `toPrivateJson()` retains it.

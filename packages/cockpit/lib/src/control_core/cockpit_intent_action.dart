@@ -35,6 +35,7 @@ enum CockpitIntentAction {
   dismissKeyboard,
   captureScreenshot,
   collectSnapshot,
+  describeApp,
   waitFor,
   assertVisible,
   assertText,
@@ -83,6 +84,7 @@ enum CockpitIntentAction {
       CockpitCommandType.captureScreenshot =>
         CockpitIntentAction.captureScreenshot,
       CockpitCommandType.collectSnapshot => CockpitIntentAction.collectSnapshot,
+      CockpitCommandType.describeApp => CockpitIntentAction.describeApp,
       CockpitCommandType.waitFor => CockpitIntentAction.waitFor,
       CockpitCommandType.assertVisible => CockpitIntentAction.assertVisible,
       CockpitCommandType.assertText => CockpitIntentAction.assertText,

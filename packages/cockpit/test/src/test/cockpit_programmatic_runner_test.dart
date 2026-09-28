@@ -96,6 +96,55 @@ void main() {
     },
   );
 
+  test('describeApp returns app-authored state', () async {
+    final adapter = _FakeAutomationAdapter(
+      appState: const <String, Object?>{
+        'environment': 'staging',
+        'flags': <Object?>['checkout-v2'],
+      },
+    );
+    final tester = CockpitAutomationTester(
+      automation: adapter,
+      initialLocale: CockpitLocaleProfile('en-US'),
+    );
+
+    final state = await tester.describeApp();
+
+    expect(adapter.commands.single.commandType, CockpitCommandType.describeApp);
+    expect(state['environment'], 'staging');
+    expect(state['flags'], <Object?>['checkout-v2']);
+  });
+
+  test('describeApp fails through the command exception contract', () async {
+    final tester = CockpitAutomationTester(
+      automation: _FakeAutomationAdapter(
+        failures: <String, CockpitCommandError>{
+          'describeApp': CockpitCommandError(
+            code: CockpitCommandError.unsupportedCapabilityCode,
+            message: 'No app state provider is registered.',
+          ),
+        },
+      ),
+      initialLocale: CockpitLocaleProfile('en-US'),
+    );
+
+    final result = await const CockpitProgrammaticTestRunner().run(
+      CockpitTestScenario(
+        id: 'read-app-state',
+        body: (tester) => tester.describeApp(),
+      ),
+      locale: CockpitLocaleProfile('en-US'),
+      createTester: (_) async => tester,
+    );
+
+    expect(result.status, CockpitTestRunStatus.blocked);
+    expect(result.error?.details['commandType'], 'describeApp');
+    await expectLater(
+      tester.describeApp(),
+      throwsA(isA<CockpitTestCommandException>()),
+    );
+  });
+
   test('typed command requirements use protocol command names', () async {
     var executed = false;
     final result = await const CockpitProgrammaticTestRunner().run(
@@ -328,6 +377,7 @@ final class _FakeAutomationAdapter implements CockpitAutomationAdapter {
     CockpitCapabilities? capabilities,
     this.failures = const <String, CockpitCommandError>{},
     this.snapshot,
+    this.appState,
   }) : _capabilities =
            capabilities ??
            CockpitCapabilities(
@@ -344,6 +394,7 @@ final class _FakeAutomationAdapter implements CockpitAutomationAdapter {
   final CockpitCapabilities _capabilities;
   final Map<String, CockpitCommandError> failures;
   final Map<String, Object?>? snapshot;
+  final Map<String, Object?>? appState;
   final commands = <CockpitCommand>[];
 
   @override
@@ -360,6 +411,7 @@ final class _FakeAutomationAdapter implements CockpitAutomationAdapter {
         commandType: command.commandType,
         durationMs: 0,
         snapshot: error == null ? snapshot : null,
+        appState: error == null ? appState : null,
         error: error,
       ),
     );

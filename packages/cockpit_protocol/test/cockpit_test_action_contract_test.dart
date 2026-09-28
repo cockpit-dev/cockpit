@@ -487,6 +487,7 @@ Map<String, Object?> _actionJson(CockpitTestActionKind kind) {
       'type': kind.name,
       'snapshotOptions': <String, Object?>{'profile': 'live', 'maxTargets': 20},
     },
+    CockpitTestActionKind.describeApp => <String, Object?>{'type': kind.name},
   };
 }
 

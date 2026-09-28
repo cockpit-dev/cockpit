@@ -865,6 +865,8 @@ CockpitTestActionTemplate _action(
               expectedType: CockpitTestValueType.json,
             );
       }
+    case CockpitTestActionKind.describeApp:
+      break;
   }
   if (parameters.isNotEmpty) {
     throw _migrationError(

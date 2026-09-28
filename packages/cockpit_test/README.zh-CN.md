@@ -49,11 +49,20 @@ final snapshot = await tester.collectSnapshot();
 cockpitExpectEquals(snapshot.visibleTargets.length, 2);
 cockpitExpectTrue(snapshot.routeName == 'settings');
 cockpitExpectContains(await readLabels(snapshot), 'Saved');
+
+// 读取应用自述状态：应用通过 app state provider
+// （FlutterCockpitApp/FlutterCockpitRoot 的 `appStateProvider`）自行决定
+// 暴露什么，每次调用时实时求值。
+final appState = await tester.describeApp();
+cockpitExpectEquals(appState['environment'], 'staging');
 ```
 
 宿主侧 helper 完整列表：`cockpitExpectEquals`（对数字、字符串、布尔、列表、集合和
 Map 做深度相等）、`cockpitExpectTrue`、`cockpitExpectNotNull` 和
 `cockpitExpectContains`（字符串、可迭代对象或 Map key 的成员判断）。
+
+没有注册 app state provider 的目标会让 `describeApp` 返回 unsupported
+capability 失败，runner 将其判定为 blocked —— 与其他能力缺失的语义一致。
 
 ## 在 Flutter 上运行
 

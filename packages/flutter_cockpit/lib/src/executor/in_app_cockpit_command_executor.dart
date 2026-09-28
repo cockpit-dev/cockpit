@@ -88,6 +88,7 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
     CockpitNetworkActivityClearer? clearNetworkActivityHandler,
     CockpitNetworkIdleWaiter? waitForNetworkIdleHandler,
     CockpitBackNavigationHandler? backNavigationHandler,
+    CockpitAppStateProvider? appStateProvider,
     CockpitDismissActionResolver? dismissActionResolver,
     CockpitWaitTickHandler? waitTickHandler,
     CockpitKeyEventHandler? keyEventHandler,
@@ -98,7 +99,8 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
     CockpitRouteNameSynchronizer? routeNameSynchronizer,
     String platform = 'flutter',
     String transportType = 'inApp',
-  }) : _context = CockpitInAppCommandContext(
+  }) : _appStateProvider = appStateProvider,
+       _context = CockpitInAppCommandContext(
          registry: registry,
          captureHandler: captureHandler,
          snapshotProvider:
@@ -200,6 +202,7 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
   }
 
   final CockpitInAppCommandContext _context;
+  final CockpitAppStateProvider? _appStateProvider;
   late final CockpitPostActionSettleCoordinator _settleCoordinator;
   late final CockpitCaptureOrchestrator _captureOrchestrator;
   late final CockpitCommandRouter _commandRouter;
@@ -297,6 +300,7 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
       CockpitCommandType.assertText,
       CockpitCommandType.waitFor,
       CockpitCommandType.collectSnapshot,
+      if (_appStateProvider != null) CockpitCommandType.describeApp,
       if (_captureHandler != null) CockpitCommandType.captureScreenshot,
     };
 
@@ -335,7 +339,21 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
 
     try {
       final commandTimeout = _hardCommandTimeout(command);
-      final execution = _commandRouter.execute(command, stopwatch);
+      // Commands the target never advertised must answer with the structured
+      // unsupported-capability error hosts preflight on, never a raw
+      // UnsupportedError that the transport would surface as a 500.
+      final Future<CockpitCommandExecution> execution;
+      try {
+        execution = _commandRouter.execute(command, stopwatch);
+      } on UnsupportedError catch (error) {
+        return _failureExecution(
+          command: command,
+          durationMs: stopwatch.elapsedMilliseconds,
+          error: CockpitCommandError.unsupportedCapability(
+            message: '$error'.replaceFirst('Unsupported operation: ', ''),
+          ),
+        );
+      }
       if (commandTimeout == null) {
         return await execution;
       }
@@ -449,6 +467,9 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
           ).toJson(),
         );
       },
+      if (_appStateProvider case final provider?)
+        CockpitCommandType.describeApp: (command, stopwatch) =>
+            _executeDescribeApp(command, stopwatch, provider),
       CockpitCommandType.captureScreenshot: _executeCaptureScreenshot,
     };
   }
@@ -5215,6 +5236,39 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
     return '$primary; $secondary';
   }
 
+  Future<CockpitCommandExecution> _executeDescribeApp(
+    CockpitCommand command,
+    Stopwatch stopwatch,
+    CockpitAppStateProvider provider,
+  ) async {
+    try {
+      final appState = _normalizeAppState(provider());
+      return _successExecution(
+        command: command,
+        durationMs: stopwatch.elapsedMilliseconds,
+        appState: appState,
+      );
+    } on FormatException catch (error) {
+      return _failureExecution(
+        command: command,
+        durationMs: stopwatch.elapsedMilliseconds,
+        error: CockpitCommandError(
+          code: 'appStateInvalid',
+          message: 'The app state payload is not reportable: ${error.message}',
+        ),
+      );
+    } on Object catch (error) {
+      return _failureExecution(
+        command: command,
+        durationMs: stopwatch.elapsedMilliseconds,
+        error: CockpitCommandError(
+          code: 'appStateProviderFailed',
+          message: 'The app state provider threw: $error',
+        ),
+      );
+    }
+  }
+
   CockpitCommandExecution _successExecution({
     required CockpitCommand command,
     required int durationMs,
@@ -5225,6 +5279,7 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
     CockpitCaptureKind? resolvedCaptureKind,
     bool usedCaptureFallback = false,
     String? degradationReason,
+    Map<String, Object?>? appState,
     bool? changed,
     Map<String, List<int>> artifactPayloads = const <String, List<int>>{},
   }) {
@@ -5241,6 +5296,7 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
         resolvedCaptureKind: resolvedCaptureKind,
         usedCaptureFallback: usedCaptureFallback,
         degradationReason: degradationReason,
+        appState: appState,
         changed: changed,
       ),
       artifactPayloads: artifactPayloads,
@@ -7123,4 +7179,80 @@ final class _CockpitQueuedCommand {
 
   final Future<void> Function() operation;
   final Zone zone;
+}
+
+const int _appStateMaxDepth = 8;
+const int _appStateMaxChars = 64 * 1024;
+
+/// Normalizes an app state payload into bounded, redacted JSON. Values under
+/// sensitive-looking keys are masked outright and remaining strings and map
+/// keys pass through the network redactor, so credentials a provider
+/// accidentally exposes never leave the app process; depth and total size are
+/// capped so a runaway provider cannot balloon a report or the bridge frame.
+Map<String, Object?> _normalizeAppState(Map<String, Object?> value) {
+  final budget = _AppStateBudget();
+  return Map<String, Object?>.from(
+    _redactAppStateValue(value, const CockpitNetworkRedactor(), budget, 0)
+        as Map<Object?, Object?>,
+  );
+}
+
+final class _AppStateBudget {
+  int remaining = _appStateMaxChars;
+
+  void spend(String text) {
+    remaining -= text.length;
+    if (remaining < 0) {
+      throw const FormatException(
+        'App state exceeds the $_appStateMaxChars-character report budget; '
+        'expose a smaller summary.',
+      );
+    }
+  }
+}
+
+Object? _redactAppStateValue(
+  Object? value,
+  CockpitNetworkRedactor redactor,
+  _AppStateBudget budget,
+  int depth,
+) {
+  if (depth > _appStateMaxDepth) {
+    throw const FormatException(
+      'App state nests deeper than $_appStateMaxDepth levels.',
+    );
+  }
+  if (value == null || value is bool || value is num) return value;
+  if (value is String) {
+    final redacted = redactor.text(value);
+    budget.spend(redacted);
+    return redacted;
+  }
+  if (value is Map) {
+    final result = <String, Object?>{};
+    for (final entry in value.entries) {
+      final key = redactor.text('${entry.key}');
+      budget.spend(key);
+      if (redactor.isSensitiveName('${entry.key}')) {
+        result[key] = CockpitNetworkRedactor.masked;
+        continue;
+      }
+      result[key] = _redactAppStateValue(
+        entry.value,
+        redactor,
+        budget,
+        depth + 1,
+      );
+    }
+    return result;
+  }
+  if (value is Iterable) {
+    return <Object?>[
+      for (final item in value)
+        _redactAppStateValue(item, redactor, budget, depth + 1),
+    ];
+  }
+  final text = redactor.text('$value');
+  budget.spend(text);
+  return text;
 }

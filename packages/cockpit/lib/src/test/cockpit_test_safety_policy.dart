@@ -116,7 +116,8 @@ bool cockpitTestActionIsMutation(CockpitTestActionKind kind) => switch (kind) {
   CockpitTestActionKind.assertText ||
   CockpitTestActionKind.assertScreenshot ||
   CockpitTestActionKind.captureScreenshot ||
-  CockpitTestActionKind.collectSnapshot => false,
+  CockpitTestActionKind.collectSnapshot ||
+  CockpitTestActionKind.describeApp => false,
   _ => true,
 };
 

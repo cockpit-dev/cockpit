@@ -135,6 +135,7 @@ bool _isKeyOperation(CockpitCommandType commandType) {
     CockpitCommandType.assertText ||
     CockpitCommandType.assertScreenshot ||
     CockpitCommandType.captureScreenshot ||
-    CockpitCommandType.collectSnapshot => false,
+    CockpitCommandType.collectSnapshot ||
+    CockpitCommandType.describeApp => false,
   };
 }

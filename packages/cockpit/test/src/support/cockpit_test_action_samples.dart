@@ -177,6 +177,7 @@ Map<String, Object?> _sampleActionJson(CockpitTestActionKind kind) {
           'maxTargets': 20,
         },
       },
+      CockpitTestActionKind.describeApp => const <String, Object?>{},
     },
   };
 }

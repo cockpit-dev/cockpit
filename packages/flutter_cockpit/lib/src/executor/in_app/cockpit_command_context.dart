@@ -55,6 +55,14 @@ typedef CockpitNetworkIdleWaiter =
       required Duration timeout,
     });
 typedef CockpitBackNavigationHandler = Future<bool> Function();
+
+/// Supplies app-authored state for `describeApp` commands.
+///
+/// The application decides what to expose — feature flags, environment,
+/// account tier, experiment buckets — and the value is read on demand, so it
+/// always reflects the moment the command runs. The payload is normalized,
+/// bounded, and redacted before it leaves the app process.
+typedef CockpitAppStateProvider = Map<String, Object?> Function();
 typedef CockpitDismissActionResolver = CockpitSemanticActionHandler? Function();
 typedef CockpitWaitTickHandler = Future<void> Function(Duration duration);
 typedef CockpitRecordingActivityProbe = bool Function();

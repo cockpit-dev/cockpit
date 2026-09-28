@@ -156,6 +156,26 @@ Widget buildCockpitDevelopmentApp() {
 `resolveFromEnvironment(...)` 可以在不接管生产入口的前提下启用远程控制面。
 只从独立 shell 的 `main.dart` 接入 `FlutterCockpit.navigatorObserver`。`FlutterCockpitApp` 会自动发现 Flutter Router、`RouterConfig`、`go_router` 及其他 Router 类库使用的公开 `RouteInformationProvider`，所以业务 app 自有 router 通常不需要额外 route bridge。
 
+### 暴露应用状态供测试判断
+
+`appStateProvider` 由应用自行决定哪些运行时事实可以通过 `describeApp` 命令被测试
+读回，在所有执行面上语义一致。provider 在每次调用时实时求值，报告永远是当前状态：
+
+```dart
+return FlutterCockpitApp(
+  appStateProvider: (context) => <String, Object?>{
+    'environment': AppEnvironment.current.name,
+    'featureFlags': FeatureFlags.all,
+    'account': <String, Object?>{'plan': session.plan.name},
+  },
+  child: MaterialApp(...),
+);
+```
+
+payload 会被规范化为 JSON 安全的值；疑似敏感 key（password、token、API key 等）下的
+值会被掩码；报告在离开应用进程前最多允许 8 层嵌套、64 KiB 大小。只放测试确实需要的
+事实；provider 抛出或超出限额时，该命令以结构化错误失败，不会破坏会话。
+
 嵌套 Navigator 需要各自使用独立 observer，这样嵌套路由 pop 后可以恢复当前父级路由：
 
 ```dart
