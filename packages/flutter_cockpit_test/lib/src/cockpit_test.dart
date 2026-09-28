@@ -2538,10 +2538,7 @@ final class CockpitTester
       CockpitCommand(
         commandId: _nextId('appAction'),
         commandType: CockpitCommandType.appAction,
-        parameters: <String, Object?>{
-          'action': name,
-          'arguments': ?arguments,
-        },
+        parameters: <String, Object?>{'action': name, 'arguments': ?arguments},
         timeoutMs: _timeoutMs(timeout),
       ),
       check: true,
