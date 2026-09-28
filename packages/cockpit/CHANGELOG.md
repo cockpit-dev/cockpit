@@ -10,6 +10,10 @@
   shipped cases, suites, queued runs, and MCP `case_run`/`suite_run`
   documents read the same app state; the safety policy classifies it
   read-only and legacy command documents migrate to it.
+- Raised the Flutter bridge shell preflight scan bound from 8,192 to 65,536
+  files so large monorepo entrypoints validate without tripping
+  `flutterBridgeShellScanLimit`; the scan still stops as soon as the shell is
+  confirmed.
 - Added opt-in remote bridge authentication with `cockpit dev start --auth
   <token>` (default off; `--no-auth` forces it off). The token is chosen by
   the operator that starts the session, never generated or derived from the

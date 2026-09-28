@@ -8,7 +8,7 @@ import '../supervisor/cockpit_supervisor_api_client.dart';
 final class CockpitFlutterBridgeShellInspector {
   const CockpitFlutterBridgeShellInspector({
     this.fileSystem = const LocalCockpitFileSystem(),
-    this.maximumFiles = 8192,
+    this.maximumFiles = 65536,
     this.maximumDepth = 256,
     this.maximumSourceBytes = 2 * 1024 * 1024,
   }) : assert(maximumFiles > 0),
