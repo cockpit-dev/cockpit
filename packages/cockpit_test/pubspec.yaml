@@ -18,6 +18,7 @@ resolution: workspace
 
 dependencies:
   cockpit_protocol: ^4.10.0
+  intl: ^0.20.0
 
 dev_dependencies:
   lints: ^6.1.0

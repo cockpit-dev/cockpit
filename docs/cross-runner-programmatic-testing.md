@@ -114,6 +114,15 @@ script, and region subtags. Translation fallback is exact tag, then
 language-script, then language. Flutter conversion preserves `Locale.scriptCode`,
 so `zh-Hant-TW` does not degrade to `zh-TW`.
 
+`CockpitLocalizedText` accepts optional `params` to format ICU MessageFormat
+messages — placeholders, `plural` (exact `=N` before CLDR categories),
+`select`, nesting, and `#` — using the same CLDR rules the app renders with.
+Without `params` a value resolves verbatim. `CockpitArbCatalog` and
+`CockpitJsonCatalog` load the app's own `gen_l10n` ARB files or `slang` /
+`easy_localization` JSON as the single source of expected text, and
+`validateMatrix` checks coverage across the locale matrix before a suite runs.
+See the `cockpit_test` README for details.
+
 ## Persistence boundary
 
 `CockpitTestScenario.body` is executable Dart code and is intentionally not a

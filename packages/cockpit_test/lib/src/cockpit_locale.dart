@@ -1,4 +1,5 @@
 import 'cockpit_errors.dart';
+import 'cockpit_icu.dart';
 
 enum CockpitTextDirection { auto, ltr, rtl }
 
@@ -50,6 +51,11 @@ final class CockpitLocaleProfile {
 
   String toLanguageTag() => languageTag;
 
+  /// The canonical tag followed by its fallback tags: language-script, then
+  /// language. Translation lookups walk this chain, so `zh-Hant-TW` resolves
+  /// against `zh-Hant-TW`, then `zh-Hant`, then `zh`.
+  List<String> get fallbackTags => _parsed.fallbackTags;
+
   CockpitLocaleProfile copyWith({
     String? languageTag,
     String? region,
@@ -90,10 +96,17 @@ final class CockpitLocaleProfile {
 
 /// A lazily resolved translated value. It never snapshots a locale at
 /// scenario construction time, so language switches are observed naturally.
+///
+/// [params] opts the value into ICU MessageFormat formatting: the translation
+/// looked up for the active locale is parsed as an ICU message (placeholders,
+/// `plural`, `select` with the `intl` CLDR rule engine) and resolved against
+/// the parameters. Without [params] the raw translation is returned verbatim,
+/// so literal braces in expected text keep working.
 final class CockpitLocalizedText {
   factory CockpitLocalizedText(
     String key, {
     Map<String, String> values = const <String, String>{},
+    Map<String, Object?> params = const <String, Object?>{},
     CockpitTextResolver? resolver,
   }) {
     final normalizedKey = key.trim();
@@ -101,6 +114,7 @@ final class CockpitLocalizedText {
     return CockpitLocalizedText._(
       key: normalizedKey,
       values: _normalizedTranslations(values),
+      params: Map<String, Object?>.unmodifiable(params),
       resolver: resolver,
     );
   }
@@ -108,14 +122,31 @@ final class CockpitLocalizedText {
   CockpitLocalizedText._({
     required this.key,
     required this.values,
+    required this.params,
     required this.resolver,
   });
 
   final String key;
   final Map<String, String> values;
+  final Map<String, Object?> params;
   final CockpitTextResolver? resolver;
 
   String resolve(CockpitLocaleProfile locale) {
+    final template = _templateFor(locale);
+    if (params.isEmpty) return template;
+    try {
+      return CockpitIcuMessage.parse(template).format(params, locale: locale);
+    } on FormatException catch (error) {
+      throw CockpitTestLocalizationException(
+        key: key,
+        message:
+            'Malformed ICU message for "$key" in locale '
+            '${locale.toLanguageTag()}: ${error.message} (${error.offset})',
+      );
+    }
+  }
+
+  String _templateFor(CockpitLocaleProfile locale) {
     final resolvedByResolver = resolver?.resolve(key, locale);
     if (resolvedByResolver != null) return resolvedByResolver;
 

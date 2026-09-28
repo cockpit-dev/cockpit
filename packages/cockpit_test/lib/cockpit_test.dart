@@ -19,8 +19,10 @@ export 'package:cockpit_protocol/cockpit_protocol.dart'
         CockpitTextMatchMode,
         CockpitTextInputAction;
 
+export 'src/cockpit_catalog.dart';
 export 'src/cockpit_errors.dart';
 export 'src/cockpit_expect.dart';
+export 'src/cockpit_icu.dart';
 export 'src/cockpit_locale.dart';
 export 'src/cockpit_requirements.dart';
 export 'src/cockpit_runner.dart';

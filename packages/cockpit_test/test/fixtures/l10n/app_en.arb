@@ -1,0 +1,10 @@
+{
+  "@@locale": "en",
+  "app.title": "Settings",
+  "app.itemCount": "{count, plural, =1{1 item} other{# items}}",
+  "@app.itemCount": {
+    "placeholders": {
+      "count": {"type": "num"}
+    }
+  }
+}

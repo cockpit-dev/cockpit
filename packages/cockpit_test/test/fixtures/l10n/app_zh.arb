@@ -1,0 +1,5 @@
+{
+  "@@locale": "zh",
+  "app.title": "设置",
+  "app.itemCount": "{count, plural, other{# 项}}"
+}

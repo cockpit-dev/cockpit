@@ -148,6 +148,59 @@ requirements，目标在运行途中回答"不支持该能力"时，attempt 也�
 
 缺少翻译会抛出 `CockpitTestLocalizationException`，不会静默选择无关语言。
 
+## 本地化消息格式化
+
+传入 `params` 即可把值当作 ICU MessageFormat 消息格式化。复数类别使用与应用一致的
+CLDR 规则（规则引擎是 `intl`），因此格式化出的期望文本与应用渲染结果对齐：
+
+```dart
+CockpitLocalizedText(
+  'cart.items',
+  values: const {
+    'en': '{count, plural, =0 {Empty cart} =1 {One item} other {# items}}',
+    'zh': '{count, plural, other {# 件商品}}',
+  },
+  params: const {'count': 3},
+)
+```
+
+不传 `params` 时，值按原文解析 —— 字面大括号保持字面，普通期望文本不受影响。解析器
+覆盖占位符、`plural`（精确 `=N` 分支优先于 CLDR 类别）、`select` 与 gender 式关键词
+结构、嵌套消息、绑定最内层复数的 `#`，以及 ICU 撇号引用（`'{'` 转义大括号，`''`
+是字面撇号）。格式错误的消息会带偏移抛出，而不是渲染出乱码；`selectordinal` 被显式
+拒绝，因为 `intl` 不携带序数规则。
+
+### 翻译目录
+
+直接从应用的真实翻译文件编写期望，而不是内联 Map。`CockpitArbCatalog` 读取 ARB ——
+Flutter 官方 `gen_l10n` 的格式，含 `@key` 占位符元数据；`CockpitJsonCatalog` 读取
+`slang` 与 `easy_localization` 使用的嵌套 JSON：
+
+```dart
+import 'package:cockpit_test/catalog_io.dart';
+
+final arb = loadCockpitArbCatalog({
+  'en': '../app/lib/l10n/app_en.arb',
+  'zh': '../app/lib/l10n/app_zh.arb',
+});
+await tester.expectText(
+  '#cart-caption',
+  arb.text('cart.items', params: {'count': 3}),
+);
+
+final json = loadCockpitJsonCatalog({
+  'en': 'assets/strings_en.json',
+  'zh': 'assets/strings_zh.json',
+});
+```
+
+两类 catalog 都在构造时立即校验：格式错误的 ICU 消息、ARB 元数据未声明的占位符、
+重复 key 和非字符串叶子都会连同完整问题列表一起失败。`validateMatrix(locales)` 按
+运行时相同的 完整标签 → language-script → language 回退链报告覆盖缺口，因此缺失的
+`zh-Hant` 条目若被 `zh` 覆盖不会误报。加载器仅在 VM 上可用（宿主侧场景代码）；Web
+宿主自行解码资源后直接使用 `CockpitArbCatalog.fromArb` /
+`CockpitJsonCatalog.fromJson`。
+
 ## 进程内边界
 
 场景体是 Dart closure。`toManifestJson()` 只是 ID、requirements、语言矩阵与 metadata 的

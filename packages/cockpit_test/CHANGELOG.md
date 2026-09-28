@@ -27,6 +27,15 @@
   absence waits, `expectText(..., match:)` text match modes, and
   `collectSnapshot()` UI read-back; every surface maps them to the same
   protocol operations.
+- Added ICU MessageFormat support to `CockpitLocalizedText` via opt-in
+  `params`, powered by `intl`'s CLDR rules: placeholders, `plural` with exact
+  `=N` precedence over categories, `select`, nesting, `#`, and apostrophe
+  quoting; without params, values keep resolving verbatim.
+- Added `CockpitArbCatalog` and `CockpitJsonCatalog` — eager, fail-loud
+  catalogs over the app's own `gen_l10n` ARB files or `slang` /
+  `easy_localization` JSON — plus `validateMatrix` coverage reports through
+  the runtime fallback chain and VM file loaders in
+  `package:cockpit_test/catalog_io.dart`.
 - Aligned late capability discovery with preflight: a target that answers
   "unsupported capability" while a scenario body runs now blocks the attempt
   exactly like a declared-requirement mismatch.

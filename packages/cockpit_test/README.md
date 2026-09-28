@@ -162,6 +162,66 @@ translation maps are copied into immutable values.
 A missing translation raises `CockpitTestLocalizationException`; it never
 silently selects an unrelated language.
 
+## Localized message formatting
+
+Pass `params` to format a value as an ICU MessageFormat message. Plural
+categories follow the same CLDR rules the app itself uses (`intl` is the rule
+engine), so formatted expectations line up with what the app renders:
+
+```dart
+CockpitLocalizedText(
+  'cart.items',
+  values: const {
+    'en': '{count, plural, =0 {Empty cart} =1 {One item} other {# items}}',
+    'zh': '{count, plural, other {# 件商品}}',
+  },
+  params: const {'count': 3},
+)
+```
+
+Without `params`, a value resolves verbatim — literal braces stay literal, so
+plain expected text keeps working. The parser covers placeholders, `plural`
+with exact `=N` cases taking precedence over CLDR categories, `select` and
+gender-style keyword constructs, nested messages, `#` bound to the innermost
+plural, and ICU apostrophe quoting (`'{'` escapes a brace, `''` is a literal
+apostrophe). Malformed messages throw with the offset instead of rendering
+garbage, and `selectordinal` is rejected explicitly because `intl` ships no
+ordinal rules.
+
+### Catalogs
+
+Author expectations from the app's real translation files instead of inline
+maps. `CockpitArbCatalog` reads ARB — the format of Flutter's official
+`gen_l10n` — including `@key` placeholder metadata; `CockpitJsonCatalog` reads
+the nested JSON used by `slang` and `easy_localization`:
+
+```dart
+import 'package:cockpit_test/catalog_io.dart';
+
+final arb = loadCockpitArbCatalog({
+  'en': '../app/lib/l10n/app_en.arb',
+  'zh': '../app/lib/l10n/app_zh.arb',
+});
+await tester.expectText(
+  '#cart-caption',
+  arb.text('cart.items', params: {'count': 3}),
+);
+
+final json = loadCockpitJsonCatalog({
+  'en': 'assets/strings_en.json',
+  'zh': 'assets/strings_zh.json',
+});
+```
+
+Both catalogs validate eagerly at construction: malformed ICU messages,
+placeholders the ARB metadata does not declare, duplicate keys, and non-string
+leaves fail with the full problem list. `validateMatrix(locales)` reports
+coverage gaps using the same exact → language-script → language fallback the
+runtime resolves with, so a missing `zh-Hant` entry covered by `zh` is not a
+false alarm. The loaders are VM-only (host-side scenario code); web hosts
+decode assets themselves and use `CockpitArbCatalog.fromArb` /
+`CockpitJsonCatalog.fromJson` directly.
+
 ## In-process boundary
 
 A scenario body is a Dart closure. `toManifestJson()` is only a diagnostic
