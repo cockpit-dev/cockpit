@@ -1667,6 +1667,81 @@ void main() {
       });
     });
 
+    test('failed target task receipts keep the failure envelope', () {
+      const renderer = CockpitCliOutputRenderer();
+      const data = <String, Object?>{
+        'operationId': 'o0000000001',
+        'workspaceId': 'w0000000001',
+        'kind': 'target.launch',
+        'lifecycle': 'completed',
+        'outcome': 'failed',
+        'idempotencyKey': 'launch-1',
+        'submittedAt': '2026-08-11T00:00:00Z',
+        'failure': <String, Object?>{
+          'primary': <String, Object?>{
+            'code': 'opaqueReferenceNotFound',
+            'message': 'Worker-owned target reference was not found.',
+          },
+        },
+      };
+      final brief =
+          lon.decode(
+                renderer.renderAi(
+                  command: 'target.launch',
+                  data: data,
+                  view: CockpitCliOutputView.brief,
+                ),
+              )!
+              as Map<Object?, Object?>;
+      expect(brief['error'], containsPair('code', 'opaqueReferenceNotFound'));
+      expect(brief, isNot(contains('outcome')));
+
+      final more =
+          lon.decode(
+                renderer.renderAi(
+                  command: 'target.launch',
+                  data: data,
+                  view: CockpitCliOutputView.more,
+                ),
+              )!
+              as Map<Object?, Object?>;
+      expect(more['outcome'], 'failed');
+      expect(more['error'], containsPair('code', 'opaqueReferenceNotFound'));
+    });
+
+    test('run get keeps the failure when the run failed', () {
+      const renderer = CockpitCliOutputRenderer();
+      final value =
+          lon.decode(
+                renderer.renderAi(
+                  command: 'run.get',
+                  data: const <String, Object?>{
+                    'runId': 'run-1',
+                    'documentKind': 'case',
+                    'documentId': 'doc-1',
+                    'lifecycle': 'completed',
+                    'outcome': 'failed',
+                    'stability': 'unknown',
+                    'caseIds': <String>['case-1'],
+                    'failure': <String, Object?>{
+                      'primary': <String, Object?>{
+                        'code': 'workerUnavailable',
+                        'message':
+                            'Worker became unavailable before publishing.',
+                        'retryable': true,
+                      },
+                    },
+                  },
+                  view: CockpitCliOutputView.brief,
+                ),
+              )!
+              as Map<Object?, Object?>;
+
+      expect(value['outcome'], 'failed');
+      expect(value['error'], containsPair('code', 'workerUnavailable'));
+      expect(value['error'], containsPair('retry', true));
+    });
+
     test('prioritizes failing report rows and reports omissions', () {
       const renderer = CockpitCliOutputRenderer(moreMaximumBytes: 2400);
       final cases = <Map<String, Object?>>[
