@@ -742,7 +742,7 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
         actionBuilder: () => CockpitGestureAction.hover(
           origin: coordinateOrigin,
           anchor: _gestureAnchorParameter(command),
-          pointerDeviceKind: _pointerDeviceKindParameter(command),
+          pointerDeviceKind: _hoverPointerDeviceKind(command),
         ),
       );
     }
@@ -775,8 +775,17 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
         target: resolution.target,
         origin: _pointParameter(command),
         anchor: _gestureAnchorParameter(command),
-        pointerDeviceKind: _pointerDeviceKindParameter(command),
+        pointerDeviceKind: _hoverPointerDeviceKind(command),
       ),
+    );
+  }
+
+  /// Hover is a mouse/stylus-only concept: MouseTracker drops hover events
+  /// from touch devices, so an implicit touch default would silently no-op.
+  PointerDeviceKind _hoverPointerDeviceKind(CockpitCommand command) {
+    return _pointerDeviceKindParameter(
+      command,
+      fallback: PointerDeviceKind.mouse,
     );
   }
 
@@ -6722,10 +6731,11 @@ final class InAppCockpitCommandExecutor implements CockpitCommandExecutor {
   PointerDeviceKind _pointerDeviceKindParameter(
     CockpitCommand command, {
     bool allowTrackpad = false,
+    PointerDeviceKind? fallback,
   }) {
     final rawValue = command.parameters['deviceKind'];
     if (rawValue == null) {
-      return _defaultPointerDeviceKindForPlatform();
+      return fallback ?? _defaultPointerDeviceKindForPlatform();
     }
     final value = switch (rawValue) {
       PointerDeviceKind() => rawValue,

@@ -1707,7 +1707,7 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
 
     final actionTarget = closest.single;
     return CockpitTargetResolutionResult.success(
-      target: _mergeProbeIdentity(probeTarget, actionTarget),
+      target: _mergeProbeIdentity(probeTarget, actionTarget, requiredCommand),
       matches: closest,
     );
   }
@@ -1818,7 +1818,17 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
     return result;
   }
 
-  CockpitTarget _mergeProbeIdentity(CockpitTarget probe, CockpitTarget action) {
+  CockpitTarget _mergeProbeIdentity(
+    CockpitTarget probe,
+    CockpitTarget action,
+    CockpitCommandType? requiredCommand,
+  ) {
+    // Hover is purely positional: the locator-matched element is the address,
+    // and enclosing hover regions — for example a desktop Scrollbar's tracker
+    // MouseRegion — still receive the event through hit testing. Anchoring at
+    // an inferred ancestor would move the pointer to the ancestor's center,
+    // which regularly lies outside the matched region and never enters it.
+    final anchorAtProbe = requiredCommand == CockpitCommandType.hover;
     return CockpitTarget(
       registrationId: action.registrationId,
       cockpitId: probe.cockpitId ?? action.cockpitId,
@@ -1849,8 +1859,12 @@ final class CockpitSurfaceState extends State<CockpitSurface> {
       onSemanticIncrease: action.onSemanticIncrease,
       onSemanticDecrease: action.onSemanticDecrease,
       onSemanticDismiss: action.onSemanticDismiss,
-      diagnosticNodeProvider: action.diagnosticNodeProvider,
-      geometryProvider: action.geometryProvider,
+      diagnosticNodeProvider: anchorAtProbe
+          ? probe.diagnosticNodeProvider
+          : action.diagnosticNodeProvider,
+      geometryProvider: anchorAtProbe
+          ? probe.geometryProvider
+          : action.geometryProvider,
     );
   }
 
