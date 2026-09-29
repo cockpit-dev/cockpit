@@ -918,25 +918,20 @@ final class CockpitCliAiPresenter {
     }
     if (data is Map<Object?, Object?> && command == 'target.inspect') {
       final output = data['output'];
-      if (output is Map<Object?, Object?>) {
-        return projection.value(<String, Object?>{
-          ..._compactTargetInspection(
-            output,
+      final inspection = output is Map<Object?, Object?> ? output : data;
+      return projection.value(<String, Object?>{
+        ..._compactTargetInspection(
+          inspection,
+          more: view == CockpitCliOutputView.more,
+        ),
+        if (data['outcome'] != null && data['outcome'] != 'succeeded')
+          'outcome': data['outcome'],
+        if (data['failure'] is Map<Object?, Object?>)
+          'failure': _compactFailure(
+            data['failure']! as Map<Object?, Object?>,
             more: view == CockpitCliOutputView.more,
           ),
-          if (data['outcome'] != null && data['outcome'] != 'succeeded')
-            'outcome': data['outcome'],
-          if (data['failure'] is Map<Object?, Object?>)
-            'failure': _compactFailure(
-              data['failure']! as Map<Object?, Object?>,
-              more: view == CockpitCliOutputView.more,
-            ),
-        }, path);
-      }
-      return projection.value(
-        _compactTargetInspection(data, more: view == CockpitCliOutputView.more),
-        path,
-      );
+      }, path);
     }
     if (data is Map<Object?, Object?> && command == 'run.get') {
       return projection.value(

@@ -1291,6 +1291,35 @@ void main() {
     );
   });
 
+  test('target inspect keeps the failure when the operation failed', () {
+    const renderer = CockpitCliOutputRenderer();
+    const data = <String, Object?>{
+      'kind': 'target.inspect',
+      'lifecycle': 'completed',
+      'outcome': 'failed',
+      'operationId': 'o1',
+      'submittedAt': '2026-09-29T00:00:00Z',
+      'failure': <String, Object?>{
+        'primary': <String, Object?>{
+          'code': 'opaqueReferenceNotFound',
+          'message': 'Worker-owned target reference was not found.',
+        },
+      },
+    };
+
+    final brief =
+        lon.decode(
+              renderer.renderAi(
+                command: 'target.inspect',
+                data: data,
+                view: CockpitCliOutputView.brief,
+              ),
+            )!
+            as Map<Object?, Object?>;
+    expect(brief['outcome'], 'failed');
+    expect(brief['error'], containsPair('code', 'opaqueReferenceNotFound'));
+  });
+
   test('more and full listings omit integrity digests', () {
     const renderer = CockpitCliOutputRenderer();
     const data = <String, Object?>{
