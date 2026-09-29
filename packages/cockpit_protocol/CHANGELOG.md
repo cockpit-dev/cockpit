@@ -1,5 +1,9 @@
 # Changelog
 
+## 4.11.1
+
+- Synchronized the protocol package with the Cockpit 4.11.1 release.
+
 ## 4.11.0
 
 - Added the `appAction` command with the `actionResult` command-result field:

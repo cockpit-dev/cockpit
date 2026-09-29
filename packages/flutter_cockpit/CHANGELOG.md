@@ -1,5 +1,11 @@
 # Changelog
 
+## 4.11.1
+
+- Fixed in-app hover after scrolling: the pointer now moves with a mouse
+  device kind and anchors on the matched element's region, so hovered
+  feedback triggers reliably for targets revealed below the fold.
+
 ## 4.11.0
 
 - Added the app actions surface: `FlutterCockpitApp` and `FlutterCockpitRoot`

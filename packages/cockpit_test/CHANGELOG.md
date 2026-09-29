@@ -1,5 +1,9 @@
 # Changelog
 
+## 4.11.1
+
+- Synchronized the shared tester package with the Cockpit 4.11.1 release.
+
 ## 4.11.0
 
 - Added `appAction()` to the shared `CockpitTester` contract: it invokes a

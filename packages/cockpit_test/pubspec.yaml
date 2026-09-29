@@ -1,6 +1,6 @@
 name: cockpit_test
 description: Platform-neutral programmatic test scenarios for Cockpit runners.
-version: 4.11.0
+version: 4.11.1
 homepage: https://github.com/cockpit-dev/cockpit
 repository: https://github.com/cockpit-dev/cockpit
 issue_tracker: https://github.com/cockpit-dev/cockpit/issues
@@ -17,7 +17,7 @@ environment:
 resolution: workspace
 
 dependencies:
-  cockpit_protocol: ^4.11.0
+  cockpit_protocol: ^4.11.1
   intl: ^0.20.0
 
 dev_dependencies:

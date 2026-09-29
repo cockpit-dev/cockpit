@@ -1,5 +1,9 @@
 # Changelog
 
+## 4.11.1
+
+- Synchronized the Flutter test facade with the Cockpit 4.11.1 release.
+
 ## 4.11.0
 
 - Added `appAction()` to the in-app tester: it invokes a registered app action

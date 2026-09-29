@@ -1,5 +1,13 @@
 # Changelog
 
+## 4.11.1
+
+- Fixed `cockpit target inspect`: when the underlying operation failed, the
+  compact CLI output dropped the outcome and failure envelope and printed an
+  empty object; brief and detailed views now keep the structured failure.
+- Locked the failure-envelope contract for `run get` and target task receipts
+  (launch, discover, register) behind regression tests.
+
 ## 4.11.0
 
 - Added `appAction()` to `CockpitAutomationTester`: programmatic scenarios
