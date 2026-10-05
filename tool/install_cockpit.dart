@@ -210,10 +210,9 @@ Future<void> _installManagedRuntime({
 }
 
 Future<void> _verifyManagedRuntime(File executable) async {
-  final probe = await Process.run(
-    executable.path,
-    const <String>['--version'],
-  ).timeout(const Duration(seconds: 10));
+  final probe = await Process.run(executable.path, const <String>[
+    '--version',
+  ]).timeout(const Duration(seconds: 10));
   if (probe.exitCode != 0 ||
       '${probe.stdout}'.trim() != 'cockpit $cockpitVersion') {
     throw ProcessException(

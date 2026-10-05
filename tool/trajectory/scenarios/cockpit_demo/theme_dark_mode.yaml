@@ -1,0 +1,25 @@
+# Happy-path trajectory: navigate into settings and switch the theme.
+# Teaches: enter a screen, act, verify state, capture evidence, stop.
+schema: cockpit.training/scenario-v1
+id: theme_dark_mode
+app:
+  name: cockpit_demo
+  directory: examples/cockpit_demo/cockpit
+  platform: macos
+goal: 把应用主题切换成深色模式
+paraphrases:
+  - 帮我把主题换成 Dark
+  - switch the app theme to dark mode
+completion: 深色模式已开启：进入 Settings，点击 Dark，inspect 确认 Dark 选中并截图留证。
+includeSetup: false
+steps:
+  - action: tap
+    selector: Settings
+    expect: {ok: true}
+  - action: tap
+    selector: Dark
+    expect: {ok: true}
+  - action: inspect
+    selector: Dark
+    expect: {ok: true}
+  - action: screenshot
