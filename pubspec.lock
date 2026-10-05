@@ -50,7 +50,7 @@ packages:
     source: hosted
     version: "4.0.9"
   args:
-    dependency: transitive
+    dependency: "direct dev"
     description:
       name: args
       sha256: d0481093c50b1da8910eb0bb301626d4d8eb7284aa739614d2b394ee09e3ea04
@@ -242,7 +242,7 @@ packages:
     source: hosted
     version: "0.3.5+4"
   crypto:
-    dependency: transitive
+    dependency: "direct dev"
     description:
       name: crypto
       sha256: c8ea0233063ba03258fbcf2ca4d6dadfefe14f02fab57702265467a19f27fadf
@@ -685,7 +685,7 @@ packages:
     source: hosted
     version: "2.2.0"
   path:
-    dependency: transitive
+    dependency: "direct dev"
     description:
       name: path
       sha256: "75cca69d1490965be98c73ceaea117e8a04dd21217b37b292c9ddbec0d955bc5"
@@ -1170,7 +1170,7 @@ packages:
     source: hosted
     version: "7.0.1"
   yaml:
-    dependency: transitive
+    dependency: "direct dev"
     description:
       name: yaml
       sha256: b9da305ac7c39faa3f030eccd175340f968459dae4af175130b3fc47e40d76ce

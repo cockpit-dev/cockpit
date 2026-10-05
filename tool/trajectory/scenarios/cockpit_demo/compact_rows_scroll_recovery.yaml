@@ -1,0 +1,38 @@
+# Recovery trajectory: act on below-the-fold controls. The first tap on
+# `Save settings` is expected to fail (element present in the tree but not
+# hittable), teaching the agent to scroll-reveal and retry.
+# Note: expectations may need tuning per platform/window size; a failure
+# outcome from this scenario means the app layout differs — adjust the
+# step order rather than deleting the recovery teaching step.
+schema: cockpit.training/scenario-v1
+id: compact_rows_scroll_recovery
+app:
+  name: cockpit_demo
+  directory: examples/cockpit_demo/cockpit
+  platform: macos
+goal: 开启紧凑任务行并保存设置
+paraphrases:
+  - 把任务列表切换成紧凑样式然后保存
+  - enable compact task rows and save the settings
+completion: 紧凑任务行已开启并保存：滚动定位开关，点击后滚动到 Save settings 保存，滚动即揭示不可见元素的恢复手段。
+includeSetup: false
+steps:
+  - action: tap
+    selector: Settings
+    expect: {ok: true}
+  - action: scroll
+    selector: Use compact task rows
+    expect: {ok: true}
+  - action: tap
+    selector: Use compact task rows
+    expect: {ok: true}
+  - action: tap
+    selector: Save settings
+    expect: {ok: false}
+    onFailure: continue
+  - action: scroll
+    selector: Save settings
+    expect: {ok: true}
+  - action: tap
+    selector: Save settings
+    expect: {ok: true}

@@ -1,0 +1,40 @@
+# Ambiguity trajectory: in the task editor, `Today` matches both the
+# bottom-navigation tab and the due-date chip. The first tap fails with
+# ambiguousTarget; the agent inspects to see the candidates and picks the
+# unambiguous `Tomorrow` chip instead.
+schema: cockpit.training/scenario-v1
+id: task_create_ambiguity_recovery
+app:
+  name: cockpit_demo
+  directory: examples/cockpit_demo/cockpit
+  platform: macos
+goal: 创建一个明天到期的任务 Review PR
+paraphrases:
+  - 新建任务 Review PR，截止日期设为明天
+  - create a task named Review PR that is due tomorrow
+completion: 任务已创建：填写标题后，`Today` 选择器命中多个目标（底部导航与日期选项），inspect 确认候选后改用 Tomorrow，保存并验证 Review PR 已出现。
+includeSetup: false
+steps:
+  - action: tap
+    selector: New task
+    expect: {ok: true}
+  - action: type
+    text: Review PR
+    into: Task title
+    expect: {ok: true}
+  - action: tap
+    selector: Today
+    expect: {ok: false, code: ambiguousTarget}
+    onFailure: continue
+  - action: inspect
+    selector: Today
+    expect: {ok: true}
+  - action: tap
+    selector: Tomorrow
+    expect: {ok: true}
+  - action: tap
+    selector: Save task
+    expect: {ok: true}
+  - action: inspect
+    selector: Review PR
+    expect: {ok: true}

@@ -37,3 +37,7 @@ coverage/
 # OS-generated junk
 .DS_Store
 /third/
+
+# Agent training data tooling (recorded datasets and generated pattern apps)
+/tool/trajectory/datasets/
+/tool/trajectory/apps/
