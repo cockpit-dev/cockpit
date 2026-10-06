@@ -111,6 +111,24 @@ void main() {
     },
   );
 
+  cockpitTestWidgets(
+    'screenshot falls back to in-process capture without a host',
+    app: () => const _TestApp(),
+    body: (cockpit) async {
+      // No Cockpit native plugin or host bridge is registered in this run,
+      // so the acceptance capture must degrade to the in-process Flutter
+      // view capture instead of failing.
+      final shot = await cockpit.screenshot(name: 'hostless');
+      expect(shot.result.success, isTrue, reason: shot.result.error?.message);
+      final bytes = shot.artifactPayloads.values.single;
+      expect(bytes.length, greaterThan(64));
+      // PNG magic number.
+      expect(bytes.sublist(0, 8), const <int>[
+        0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A,
+      ]);
+    },
+  );
+
   cockpitScenarioWidgets(
     'runs a shared platform-neutral scenario',
     app: () => const _TestApp(),
