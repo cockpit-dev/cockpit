@@ -22,7 +22,7 @@ const _workspaceRefreshConcurrency = 6;
 const _sessionRefreshConcurrency = 4;
 const _detailEquality = DeepCollectionEquality();
 
-final class SessionMonitorNotifier extends Notifier<SessionMonitorState> {
+base class SessionMonitorNotifier extends Notifier<SessionMonitorState> {
   Timer? _refreshTimer;
   bool _refreshing = false;
   bool _forceProbePending = false;

@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:cockpit_console/i18n/console_localization.dart';
 import 'package:cockpit_console/i18n/strings.g.dart';
 import 'package:cockpit_console/src/providers/interaction_recorder_provider.dart';
@@ -5,6 +7,7 @@ import 'package:cockpit_console/src/theme/console_theme.dart';
 import 'package:cockpit_console/src/ui/app_shell.dart';
 import 'package:cockpit_console/src/ui/widgets/interaction_recorder_views.dart';
 import 'package:cockpit_protocol/cockpit_protocol.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -231,6 +234,228 @@ void main() {
     });
   });
 
+  group('InteractionRecorderControls status line', () {
+    testWidgets('connection errors render inline next to command errors', (
+      tester,
+    ) async {
+      await _pumpControls(
+        tester,
+        _state(
+          phase: CockpitRecorderPhase.idle,
+          endpoint: null,
+          connectionError: 'Bad state: bridge unavailable',
+        ),
+      );
+
+      expect(find.text('Bad state: bridge unavailable'), findsOneWidget);
+      expect(find.text('Idle · 0 steps · 0 unresolved'), findsOneWidget);
+    });
+
+    testWidgets('the status line uses singular forms for one step', (
+      tester,
+    ) async {
+      await _pumpControls(
+        tester,
+        _state(
+          phase: CockpitRecorderPhase.recording,
+          stepCount: 1,
+          unresolvedCount: 1,
+          endpoint: _endpoint,
+        ),
+      );
+
+      expect(find.text('Recording · 1 step · 1 unresolved'), findsOneWidget);
+    });
+  });
+
+  group('InteractionRecorderTimeline kinds', () {
+    testWidgets('every step kind gets its badge', (tester) async {
+      final kinds = <CockpitInteractionStepKind, String>{
+        CockpitInteractionStepKind.tap: 'Tap',
+        CockpitInteractionStepKind.longPress: 'Long press',
+        CockpitInteractionStepKind.text: 'Text',
+        CockpitInteractionStepKind.scroll: 'Scroll',
+        CockpitInteractionStepKind.routeChange: 'Route change',
+        CockpitInteractionStepKind.back: 'Back',
+        CockpitInteractionStepKind.marker: 'Marker',
+        CockpitInteractionStepKind.note: 'Note',
+      };
+      await tester.pumpWidget(
+        _wrap(
+          SizedBox(
+            height: 600,
+            child: InteractionRecorderTimeline(
+              steps: <CockpitInteractionStep>[
+                for (final entry in kinds.entries)
+                  CockpitInteractionStep(
+                    stepId: 's${entry.key.name}',
+                    kind: entry.key,
+                    locatorCandidates: <CockpitLocatorCandidate>[
+                      CockpitLocatorCandidate(
+                        kind: 'key',
+                        selector: 'key:${entry.key.name}',
+                        score: 4,
+                      ),
+                    ],
+                    phase: CockpitRecorderPhase.recording,
+                    segments: const <String>['checkout'],
+                    recordedAt: DateTime.utc(2026, 10, 7, 9),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      );
+
+      for (final label in kinds.values) {
+        expect(find.text(label), findsOneWidget);
+      }
+    });
+  });
+
+  group('InteractionRecorderTimeline auto-follow', () {
+    testWidgets(
+      'appending steps keeps the newest visible, even after scrolling up',
+      (tester) async {
+        await _pumpTimeline(tester, 20);
+        final controller = _timelineController(tester);
+        expect(controller.position.pixels, 0); // First paint stays at top.
+        expect(controller.position.maxScrollExtent, greaterThan(0));
+
+        // Growth auto-scrolls to the newest step; the lazily built list
+        // settles its extent over two frames.
+        await _pumpTimeline(tester, 30);
+        await tester.pump();
+        await tester.pump();
+        expect(controller.position.pixels, controller.position.maxScrollExtent);
+
+        // The user scrolls back up to inspect history…
+        await tester.drag(find.byType(ListView), const Offset(0, 400));
+        await tester.pump();
+        expect(
+          controller.position.pixels,
+          lessThan(controller.position.maxScrollExtent),
+        );
+
+        // …a new step still force-follows to the bottom.
+        await _pumpTimeline(tester, 40);
+        await tester.pump();
+        await tester.pump();
+        expect(controller.position.pixels, controller.position.maxScrollExtent);
+      },
+    );
+
+    testWidgets('a timeline restart (shrink) does not jump', (tester) async {
+      await _pumpTimeline(tester, 30);
+      await _pumpTimeline(tester, 40);
+      await tester.pump();
+      await tester.pump();
+      final controller = _timelineController(tester);
+      expect(controller.position.pixels, controller.position.maxScrollExtent);
+
+      // A new recording session restarts the list with fewer steps; the
+      // viewport stays where the user is instead of jumping.
+      await _pumpTimeline(tester, 5);
+      await tester.pump();
+      await tester.pump();
+      expect(controller.position.pixels, controller.position.maxScrollExtent);
+      expect(find.text('key:s4'), findsOneWidget);
+      expect(find.text('key:s39'), findsNothing);
+    });
+  });
+
+  group('InteractionRecorderExportPane save', () {
+    const channel = MethodChannel('miguelruivo.flutter.plugins.filepicker');
+
+    setUp(FilePickerMacOS.registerWith);
+
+    testWidgets('saving writes the document and confirms', (tester) async {
+      final destination = Directory.systemTemp.createTempSync('recorder_save');
+      addTearDown(() => destination.deleteSync(recursive: true));
+      final path = '${destination.path}/recorded-r1.yaml';
+      final calls = <Map<Object?, Object?>>[];
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        channel,
+        _saveDialogHandler(calls, destination: path),
+      );
+
+      await _pumpExport(
+        tester,
+        document: 'kind: case\nid: recorded-r1\n',
+        canExport: true,
+      );
+      // Real file I/O: settle the write in a real async zone, then show the
+      // snackbar in the fake zone.
+      await tester.runAsync(() async {
+        await tester.tap(find.text('Save'));
+        await Future<void>.delayed(const Duration(milliseconds: 200));
+      });
+      await tester.pump();
+      await tester.pump();
+
+      expect(File(path).readAsStringSync(), 'kind: case\nid: recorded-r1\n\n');
+      expect(calls.single['fileName'], 'recorded-r1.yaml');
+      expect(find.text('Saved $path'), findsOneWidget);
+    });
+
+    testWidgets('cancelling the dialog writes nothing and stays quiet', (
+      tester,
+    ) async {
+      final calls = <Map<Object?, Object?>>[];
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        channel,
+        _saveDialogHandler(calls, destination: null),
+      );
+
+      await _pumpExport(tester, document: 'kind: case\n', canExport: true);
+      await tester.tap(find.text('Save'));
+      await tester.pump();
+      await tester.pump();
+
+      expect(calls, hasLength(1));
+      expect(find.byType(SnackBar), findsNothing);
+    });
+
+    testWidgets('a failed write surfaces the error', (tester) async {
+      const path = '/nonexistent-recorder-dir/recorded-r1.yaml';
+      final calls = <Map<Object?, Object?>>[];
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        channel,
+        _saveDialogHandler(calls, destination: path),
+      );
+
+      await _pumpExport(tester, document: 'kind: case\n', canExport: true);
+      await tester.runAsync(() async {
+        await tester.tap(find.text('Save'));
+        await Future<void>.delayed(const Duration(milliseconds: 200));
+      });
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.textContaining('Could not save:'), findsOneWidget);
+    });
+
+    testWidgets('copy failure flips the button to a failure label', (
+      tester,
+    ) async {
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        (call) async {
+          if (call.method == 'Clipboard.setData') {
+            throw PlatformException(code: 'clipboard-unavailable');
+          }
+          return null;
+        },
+      );
+
+      await _pumpExport(tester, document: 'kind: case\n', canExport: true);
+      await tester.tap(find.text('Copy YAML'));
+      await tester.pump();
+
+      expect(find.text('Could not copy'), findsOneWidget);
+    });
+  });
+
   group('registration and localization', () {
     testWidgets('the recorder page is reachable from the shell navigation', (
       tester,
@@ -264,6 +489,13 @@ void main() {
         '录制中 · 2 步 · 1 个未解析',
       );
       expect(t.recorder.unresolvedStep, '（未解析）');
+      expect(t.recorder.settledAfter(ms: 320), '已稳定 · 320 毫秒');
+      expect(t.recorder.saveDocument, '保存用例文档');
+      expect(t.recorder.documentSaved(path: '/tmp/a.yaml'), '已保存到 /tmp/a.yaml');
+      expect(t.recorder.saveFailed(error: 'boom'), '保存失败：boom');
+      expect(t.recorder.kind.routeChange, '路由切换');
+      expect(t.recorder.phase.stopped, '已停止');
+      expect(t.recorder.noSessionsTitle, '没有实时会话');
     });
   });
 }
@@ -275,6 +507,7 @@ InteractionRecorderState _state({
   int unresolvedCount = 0,
   bool commandBusy = false,
   String? commandError,
+  String? connectionError,
 }) => InteractionRecorderState(
   endpoint: endpoint,
   phase: phase,
@@ -282,6 +515,7 @@ InteractionRecorderState _state({
   unresolvedCount: unresolvedCount,
   commandBusy: commandBusy,
   commandError: commandError,
+  connectionError: connectionError,
   sessionId: phase == CockpitRecorderPhase.idle ? null : 'r1',
 );
 
@@ -334,6 +568,43 @@ Widget _wrap(Widget child) => TranslationProvider(
     home: Scaffold(body: child),
   ),
 );
+
+ScrollController _timelineController(WidgetTester tester) =>
+    tester.widget<ListView>(find.byType(ListView)).controller!;
+
+List<CockpitInteractionStep> _timelineSteps(int count) =>
+    <CockpitInteractionStep>[
+      for (var i = 0; i < count; i++)
+        CockpitInteractionStep(
+          stepId: 's$i',
+          kind: CockpitInteractionStepKind.tap,
+          locatorCandidates: <CockpitLocatorCandidate>[
+            CockpitLocatorCandidate(kind: 'key', selector: 'key:s$i', score: 4),
+          ],
+          phase: CockpitRecorderPhase.recording,
+          recordedAt: DateTime.utc(2026, 10, 7, 9),
+        ),
+    ];
+
+Future<void> _pumpTimeline(WidgetTester tester, int count) => tester.pumpWidget(
+  _wrap(
+    SizedBox(
+      height: 300,
+      child: InteractionRecorderTimeline(steps: _timelineSteps(count)),
+    ),
+  ),
+);
+
+Future<Object?> Function(MethodCall) _saveDialogHandler(
+  List<Map<Object?, Object?>> calls, {
+  required Object? destination,
+}) => (call) async {
+  if (call.method == 'saveFile') {
+    calls.add(Map<Object?, Object?>.from(call.arguments as Map));
+    return destination;
+  }
+  return null;
+};
 
 bool _isEnabled(WidgetTester tester, String label) =>
     tester
