@@ -20,6 +20,19 @@ void main() {
       );
     });
 
+    test('an exact horizontal center docks right (strictly-less tie)', () {
+      // The ball center sits exactly at the bounds middle: docksLeft is
+      // strictly-less, so the tie resolves to the right edge.
+      expect(
+        cockpitRecorderSnapBallPosition(const Offset(374, 100), bounds, ball),
+        const Offset(748, 100),
+      );
+      expect(
+        cockpitRecorderSnapBallPosition(const Offset(373.9, 100), bounds, ball),
+        const Offset(0, 100),
+      );
+    });
+
     test('clamps vertically into bounds', () {
       expect(
         cockpitRecorderSnapBallPosition(const Offset(300, 700), bounds, ball),
@@ -36,6 +49,15 @@ void main() {
         cockpitRecorderSnapBallPosition(
           const Offset(10, 10),
           const Size(40, 40),
+          ball,
+        ),
+        Offset.zero,
+      );
+      // A zero-size bound docks at the origin whatever the input.
+      expect(
+        cockpitRecorderSnapBallPosition(
+          const Offset(500, 500),
+          Size.zero,
           ball,
         ),
         Offset.zero,
@@ -106,6 +128,83 @@ void main() {
 
       expect(tester.widget<AnimatedPositioned>(ball).top, 548.0);
       expect(tester.widget<AnimatedPositioned>(ball).left, 748.0);
+    });
+
+    testWidgets('drag up docks at the top edge', (tester) async {
+      final controller = newController();
+      await tester.pumpWidget(
+        CockpitRecorderScope(
+          controller: controller,
+          child: CockpitRecorderHost(controller: controller),
+        ),
+      );
+      final ball = find.byKey(const ValueKey<String>('cockpit_recorder_ball'));
+
+      await tester.drag(ball, const Offset(0, -500));
+      await tester.pumpAndSettle();
+
+      expect(tester.widget<AnimatedPositioned>(ball).top, 0.0);
+      expect(tester.widget<AnimatedPositioned>(ball).left, 748.0);
+    });
+
+    testWidgets('a small wiggle still taps; a real drag does not', (
+      tester,
+    ) async {
+      final controller = newController();
+      await tester.pumpWidget(
+        CockpitRecorderScope(
+          controller: controller,
+          child: CockpitRecorderHost(controller: controller),
+        ),
+      );
+      final ball = find.byKey(const ValueKey<String>('cockpit_recorder_ball'));
+      final sheet = find.byKey(
+        const ValueKey<String>('cockpit_recorder_sheet'),
+      );
+
+      // Below the touch slop the tap recognizer wins the arena.
+      final wiggle = await tester.startGesture(tester.getCenter(ball));
+      await tester.pump();
+      await wiggle.moveBy(const Offset(3, 0));
+      await tester.pump();
+      await wiggle.up();
+      await tester.pumpAndSettle();
+
+      expect(sheet, findsOneWidget);
+
+      // Close, then drag well past the slop: the pan recognizer wins and
+      // the sheet stays closed.
+      await tester.tap(find.text('Close'));
+      await tester.pumpAndSettle();
+      expect(sheet, findsNothing);
+
+      final drag = await tester.startGesture(tester.getCenter(ball));
+      await tester.pump();
+      await drag.moveBy(const Offset(-60, 0));
+      await tester.pump();
+      await drag.up();
+      await tester.pumpAndSettle();
+
+      expect(sheet, findsNothing);
+      // The pan happened (still right of center, so it re-docked right).
+      expect(tester.widget<AnimatedPositioned>(ball).left, 748.0);
+    });
+
+    testWidgets('the host subtree installs the exclusion marker object', (
+      tester,
+    ) async {
+      final controller = newController();
+      await tester.pumpWidget(
+        CockpitRecorderScope(
+          controller: controller,
+          child: CockpitRecorderHost(controller: controller),
+        ),
+      );
+
+      final marker = tester.renderObject<RenderObject>(
+        find.byType(CockpitRecorderExclude),
+      );
+      expect(marker, isA<CockpitRecorderExcludeRenderObject>());
     });
 
     testWidgets('tap expands the panel sheet and close collapses it', (

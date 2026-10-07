@@ -74,6 +74,44 @@ void main() {
 
     await expectLater(gateway.persist(bundle), throwsStateError);
   });
+
+  test('the default resolver writes into the system temp directory', () async {
+    // No injected resolver: the gateway must fall back to Directory.systemTemp
+    // and write <caseId>.yaml there.
+    final gateway = CockpitRecorderFileExportGateway();
+    final path = await gateway.persist(
+      _bundle(
+        'recorded-default-r1',
+        'schemaVersion: cockpit.test/v2\nid: recorded-default-r1\n',
+      ),
+    );
+
+    final file = File(path);
+    expect(file.parent.path, Directory.systemTemp.path);
+    expect(file.existsSync(), isTrue);
+    addTearDown(() => file.delete().ignore);
+  });
+
+  test('an unwritable directory surfaces the file-system error', () async {
+    // A regular file where the directory should be: creating the directory
+    // must fail, and the failure must escape persist instead of being
+    // swallowed.
+    final blockingFile = File(
+      '${Directory.systemTemp.path}${Platform.pathSeparator}'
+      'cockpit_gateway_blocker_${DateTime.now().microsecondsSinceEpoch}',
+    );
+    await blockingFile.writeAsString('not a directory');
+    addTearDown(() => blockingFile.delete().ignore);
+
+    final gateway = CockpitRecorderFileExportGateway(
+      directoryResolver: () => blockingFile.path,
+    );
+
+    await expectLater(
+      gateway.persist(_bundle('recorded-r1', 'schemaVersion: x\n')),
+      throwsA(isA<FileSystemException>()),
+    );
+  });
 }
 
 CockpitRecordedFlowBundle _bundle(String caseId, String yaml) {

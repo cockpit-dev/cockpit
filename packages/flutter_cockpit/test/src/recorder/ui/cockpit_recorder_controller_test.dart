@@ -1,8 +1,24 @@
-import 'package:cockpit_protocol/cockpit_protocol.dart';
+import 'dart:async';
+
 import 'package:flutter_cockpit/flutter_cockpit_flutter.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'panel_helpers.dart';
+
+/// Gateway whose persist waits on a gate, counting how often it ran.
+final class _GatedGateway implements CockpitRecorderExportGateway {
+  _GatedGateway(this._gate, this.onPersist);
+
+  final Completer<void> _gate;
+  final void Function() onPersist;
+
+  @override
+  Future<String> persist(CockpitRecordedFlowBundle bundle) async {
+    onPersist();
+    await _gate.future;
+    return '/tmp/recorded-r1.yaml';
+  }
+}
 
 void main() {
   group('delegation and derived state', () {
@@ -186,6 +202,80 @@ void main() {
 
       expect(controller.savedPath, isNull);
       expect(controller.lastError, contains('disk on fire'));
+    });
+
+    test('a successful verifyReplay clears a previous error', () async {
+      final controller = newController(recorder: replayableRecorder());
+      controller.pause();
+      expect(controller.lastError, isNotNull);
+
+      controller.start();
+      controller.recorder.recordInteractionStep(_tapStep('s1'));
+      await controller.verifyReplay();
+
+      expect(controller.replayReports, hasLength(1));
+      expect(controller.lastError, isNull);
+    });
+
+    test('verifyReplay while a pass is running is ignored', () async {
+      final idleGate = Completer<bool>();
+      final registry = CockpitTargetRegistry()
+        ..register(
+          const CockpitTarget(
+            registrationId: 'replay-zone',
+            keyValue: 'replay-zone',
+            routeName: '/',
+          ),
+        );
+      final recorder = CockpitInteractionRecorder(
+        registry: registry,
+        waitForIdle:
+            ({required Duration quietWindow, required Duration timeout}) =>
+                idleGate.future,
+        gesturePerformer: (_) async {},
+      );
+      final controller = newController(recorder: recorder);
+      controller.start();
+      controller.recorder.recordInteractionStep(_tapStep('s1'));
+
+      final first = controller.verifyReplay();
+      expect(controller.isReplaying, isTrue);
+
+      // The racing call must return without replacing the in-flight pass.
+      await controller.verifyReplay();
+      expect(controller.isReplaying, isTrue);
+      expect(controller.replayReports, isNull);
+
+      idleGate.complete(true);
+      await first;
+      expect(controller.isReplaying, isFalse);
+      expect(controller.replayReports, hasLength(1));
+    });
+
+    test('saveBundle while a save is in flight is ignored', () async {
+      final saveGate = Completer<void>();
+      var persists = 0;
+      final gateway = _GatedGateway(saveGate, () => persists += 1);
+      final controller = newController(gateway: gateway);
+      controller.start();
+      controller.recorder.recordInteractionStep(_tapStep('s1'));
+      controller.exportBundle();
+
+      final first = controller.saveBundle();
+      expect(controller.isSaving, isTrue);
+      // The first persist is already in flight (gated, not finished).
+      expect(persists, 1);
+
+      // The racing call must not start a second persist.
+      await controller.saveBundle();
+      expect(controller.isSaving, isTrue);
+      expect(persists, 1);
+
+      saveGate.complete();
+      await first;
+      expect(persists, 1);
+      expect(controller.isSaving, isFalse);
+      expect(controller.savedPath, isNotNull);
     });
   });
 

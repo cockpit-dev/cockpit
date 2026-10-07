@@ -2,6 +2,7 @@ import 'package:cockpit_protocol/cockpit_protocol.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_cockpit/flutter_cockpit_flutter.dart';
+import 'package:flutter_cockpit/src/recorder/ui/cockpit_recorder_timeline.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'panel_helpers.dart';
@@ -81,6 +82,26 @@ void main() {
 
       expect(controller.openSegments, isEmpty);
       expect(isButtonEnabled(tester, 'End segment'), isFalse);
+    });
+
+    testWidgets('submitting the segment field begins the segment', (
+      tester,
+    ) async {
+      final controller = await pumpPanel(tester);
+      controller.start();
+      await tester.pump();
+
+      await tester.enterText(find.byType(EditableText), 'via-keyboard');
+      // Drive the field's submit wiring (what a keyboard done action fires).
+      tester.widget<EditableText>(find.byType(EditableText)).onSubmitted!(
+        'via-keyboard',
+      );
+      await tester.pump();
+
+      expect(controller.openSegments, <String>['via-keyboard']);
+      // The field cleared itself after submitting.
+      final field = tester.widget<EditableText>(find.byType(EditableText));
+      expect(field.controller.text, isEmpty);
     });
 
     testWidgets('illegal commands surface inline errors', (tester) async {
@@ -176,6 +197,70 @@ void main() {
       expect(find.text('note: first tap'), findsOneWidget);
     });
 
+    testWidgets('toggling annotate closed drops the inline editor', (
+      tester,
+    ) async {
+      final controller = await pumpPanel(tester);
+      controller.start();
+      controller.recorder.recordInteractionStep(
+        stepWithCandidates(CockpitInteractionStepKind.tap),
+      );
+      await tester.pump();
+
+      final row = find.byKey(const ValueKey<String>('s1'));
+      final annotateButton = find.descendant(
+        of: row,
+        matching: find.text('Annotate'),
+      );
+      await tester.tap(annotateButton);
+      await tester.pump();
+      expect(
+        find.descendant(of: row, matching: find.byType(EditableText)),
+        findsOneWidget,
+      );
+
+      // Tapping Annotate while open closes the editor without saving.
+      await tester.tap(annotateButton);
+      await tester.pump();
+
+      expect(
+        find.descendant(of: row, matching: find.byType(EditableText)),
+        findsNothing,
+      );
+      expect(controller.steps.single.annotation, isNull);
+    });
+
+    testWidgets('rows show settle markers and open segments', (tester) async {
+      final controller = await pumpPanel(tester);
+      controller.start();
+      controller.beginSegment('checkout');
+      controller.recorder.recordInteractionStep(
+        stepWithCandidates(CockpitInteractionStepKind.tap),
+      );
+      controller.recorder.markStepSettled('s1', 320);
+      await tester.pump();
+
+      final row = find.byKey(const ValueKey<String>('s1'));
+      expect(
+        find.descendant(of: row, matching: find.text('settled 320ms')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: row, matching: find.text('checkout')),
+        findsOneWidget,
+      );
+      controller.endSegment();
+      controller.recorder.recordInteractionStep(
+        stepWithCandidates(CockpitInteractionStepKind.tap),
+      );
+      await tester.pump();
+      final secondRow = find.byKey(const ValueKey<String>('s2'));
+      expect(
+        find.descendant(of: secondRow, matching: find.text('checkout')),
+        findsNothing,
+      );
+    });
+
     testWidgets('auto-scrolls to the newest step', (tester) async {
       final controller = await pumpPanel(tester);
       controller.start();
@@ -191,6 +276,92 @@ void main() {
       expect(find.text('s12'), findsOneWidget);
       expect(find.text('s12').hitTestable(), findsOneWidget);
       expect(find.text('s1'), findsNothing);
+    });
+
+    testWidgets('follows a controller swap', (tester) async {
+      final first = newController();
+      first.start();
+      first.recorder.recordInteractionStep(
+        stepWithCandidates(CockpitInteractionStepKind.tap),
+      );
+      final second = newController();
+      second.start();
+      second.recorder.recordInteractionStep(
+        stepWithCandidates(CockpitInteractionStepKind.tap),
+      );
+      second.recorder.recordInteractionStep(
+        stepWithCandidates(CockpitInteractionStepKind.tap),
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Center(
+            child: SizedBox(
+              width: 480,
+              height: 320,
+              child: CockpitRecorderTimeline(controller: first),
+            ),
+          ),
+        ),
+      );
+      expect(find.text('s1'), findsOneWidget);
+
+      // Swapping controllers re-targets the timeline and its listener.
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Center(
+            child: SizedBox(
+              width: 480,
+              height: 320,
+              child: CockpitRecorderTimeline(controller: second),
+            ),
+          ),
+        ),
+      );
+
+      expect(find.byKey(const ValueKey<String>('s1')), findsOneWidget);
+      expect(find.byKey(const ValueKey<String>('s2')), findsOneWidget);
+
+      // The first controller no longer drives the timeline: appending there
+      // leaves it untouched, while appending to the second appends a row.
+      first.recorder.recordInteractionStep(
+        stepWithCandidates(CockpitInteractionStepKind.tap),
+      );
+      second.recorder.recordInteractionStep(
+        stepWithCandidates(CockpitInteractionStepKind.tap),
+      );
+      await tester.pump();
+      expect(find.byKey(const ValueKey<String>('s3')), findsOneWidget);
+      expect(find.byKey(const ValueKey<String>('s2')), findsOneWidget);
+    });
+
+    testWidgets('renders value and route fallbacks for candidate-less rows', (
+      tester,
+    ) async {
+      final controller = await pumpPanel(tester);
+      controller.start();
+      controller.recorder.recordInteractionStep(
+        CockpitInteractionStep(
+          stepId: 'pending',
+          kind: CockpitInteractionStepKind.text,
+          resolvedValue: 'typed draft',
+          phase: CockpitRecorderPhase.recording,
+          recordedAt: DateTime.utc(2026, 10, 7, 9),
+        ),
+      );
+      controller.recorder.recordInteractionStep(
+        CockpitInteractionStep(
+          stepId: 'pending',
+          kind: CockpitInteractionStepKind.routeChange,
+          routeName: '/checkout',
+          phase: CockpitRecorderPhase.recording,
+          recordedAt: DateTime.utc(2026, 10, 7, 9),
+        ),
+      );
+      await tester.pump();
+
+      expect(find.text('typed draft'), findsOneWidget);
+      expect(find.text('/checkout'), findsOneWidget);
     });
   });
 
@@ -253,6 +424,13 @@ void main() {
 
       expect(clipboardText, controller.lastBundle!.caseYaml);
       expect(find.text('Copied!'), findsOneWidget);
+
+      // The confirmation label resets after two seconds.
+      await tester.pump(const Duration(seconds: 1));
+      expect(find.text('Copied!'), findsOneWidget);
+      await tester.pump(const Duration(seconds: 1));
+      expect(find.text('Copied!'), findsNothing);
+      expect(find.text('Copy YAML'), findsOneWidget);
     });
 
     testWidgets('save shows the gateway path', (tester) async {

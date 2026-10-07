@@ -105,6 +105,26 @@ void main() {
       final session = await _get(handler, '/recorder/session');
       expect(session.statusCode, HttpStatus.notFound);
       expect(session.jsonBody?['error'], 'notFound');
+
+      // Every recorder route answers 404 the same way.
+      for (final path in <String>[
+        '/recorder/pause',
+        '/recorder/resume',
+        '/recorder/stop',
+      ]) {
+        final response = await _post(handler, path);
+        expect(response.statusCode, HttpStatus.notFound, reason: path);
+        expect(response.jsonBody?['error'], 'notFound', reason: path);
+      }
+      for (final path in <String>[
+        '/recorder/steps',
+        '/recorder/steps?after=0',
+        '/recorder/export',
+      ]) {
+        final response = await _get(handler, path);
+        expect(response.statusCode, HttpStatus.notFound, reason: path);
+        expect(response.jsonBody?['error'], 'notFound', reason: path);
+      }
     }
   });
 
@@ -127,6 +147,10 @@ void main() {
     expect(malformed.statusCode, HttpStatus.badRequest);
     expect(malformed.jsonBody?['error'], 'invalidPayload');
 
+    final fraction = await _get(handler, '/recorder/steps?after=1.5');
+    expect(fraction.statusCode, HttpStatus.badRequest);
+    expect(fraction.jsonBody?['error'], 'invalidPayload');
+
     final negative = await _get(handler, '/recorder/steps?after=-1');
     expect(negative.statusCode, HttpStatus.badRequest);
 
@@ -136,6 +160,81 @@ void main() {
       stale.jsonBody?['message'],
       contains('must not exceed the recorded step count'),
     );
+  });
+
+  test(
+    'recorder steps answer an exhausted cursor with an empty list',
+    () async {
+      final recorder = CockpitInteractionRecorder();
+      final handler = _handler(recorderProvider: () => recorder);
+      recorder.start();
+      recorder.recordInteractionStep(_tapStep('save'));
+
+      // after == total: the client consumed everything; still 200 with the
+      // authoritative total so the cursor stays stateless.
+      final response = await _get(handler, '/recorder/steps?after=1');
+
+      expect(response.statusCode, HttpStatus.ok);
+      expect(response.jsonBody?['total'], 1);
+      expect(
+        (response.jsonBody?['steps'] as List<Object?>?) ?? <Object?>[],
+        isEmpty,
+      );
+    },
+  );
+
+  test('recorder steps reject a cursor the session shrank below', () async {
+    // discardLastStep can shrink the list below a cursor the client already
+    // holds; the endpoint must reject it as stale (400), never re-send.
+    final recorder = CockpitInteractionRecorder();
+    final handler = _handler(recorderProvider: () => recorder);
+    recorder.start();
+    recorder.recordInteractionStep(_tapStep('save'));
+    recorder.recordInteractionStep(_tapStep('submit'));
+    recorder.discardLastStep();
+
+    final response = await _get(handler, '/recorder/steps?after=2');
+
+    expect(response.statusCode, HttpStatus.badRequest);
+    expect(response.jsonBody?['error'], 'invalidPayload');
+    expect(
+      response.jsonBody?['message'],
+      contains('must not exceed the recorded step count (1)'),
+    );
+  });
+
+  test(
+    'recorder export with nothing exportable answers the error envelope',
+    () async {
+      final recorder = CockpitInteractionRecorder();
+      final handler = _handler(recorderProvider: () => recorder);
+      recorder.start();
+      // An unresolved step is not exportable: the converter throws
+      // ArgumentError, which surfaces through the 500 serverError envelope.
+      recorder.recordInteractionStep(_unresolvedStep());
+
+      final response = await _get(handler, '/recorder/export');
+
+      expect(response.statusCode, HttpStatus.internalServerError);
+      expect(response.jsonBody?['error'], 'serverError');
+      expect(
+        response.jsonBody?['message'],
+        isA<String>().having((message) => message.isEmpty, 'isEmpty', isFalse),
+      );
+    },
+  );
+
+  test('recorder double start answers the error envelope', () async {
+    final recorder = CockpitInteractionRecorder();
+    final handler = _handler(recorderProvider: () => recorder);
+
+    final first = await _post(handler, '/recorder/start');
+    expect(first.statusCode, HttpStatus.ok);
+
+    final second = await _post(handler, '/recorder/start');
+    expect(second.statusCode, HttpStatus.internalServerError);
+    expect(second.jsonBody?['error'], 'serverError');
+    expect(second.jsonBody?['message'], contains('Cannot start'));
   });
 
   test('recorder start rejects invalid request bodies', () async {
@@ -213,6 +312,14 @@ CockpitInteractionStep _tapStep(String key) => CockpitInteractionStep(
       score: 4,
     ),
   ],
+  phase: CockpitRecorderPhase.recording,
+  recordedAt: DateTime.utc(2026, 10, 7, 9),
+);
+
+CockpitInteractionStep _unresolvedStep() => CockpitInteractionStep(
+  stepId: 'pending',
+  kind: CockpitInteractionStepKind.tap,
+  unresolved: true,
   phase: CockpitRecorderPhase.recording,
   recordedAt: DateTime.utc(2026, 10, 7, 9),
 );

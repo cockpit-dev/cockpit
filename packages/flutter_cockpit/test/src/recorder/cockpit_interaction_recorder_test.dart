@@ -431,4 +431,104 @@ void main() {
       expect(recorder.exclusions.isEmpty, isTrue);
     });
   });
+
+  group('beforeStopHook', () {
+    test('the latest hook runs and its steps land in the result', () {
+      final recorder = CockpitInteractionRecorder(now: FakeClock().call);
+      recorder.start();
+      var firstRuns = 0;
+      var secondRuns = 0;
+      recorder.beforeStopHook = () {
+        firstRuns += 1;
+        recorder.recordInteractionStep(incomingStep());
+      };
+      // Replacing the single slot mid-session: only the latest hook runs.
+      recorder.beforeStopHook = () {
+        secondRuns += 1;
+        recorder.recordInteractionStep(incomingStep());
+      };
+
+      final result = recorder.stop();
+
+      expect(firstRuns, 0);
+      expect(secondRuns, 1);
+      // The hook ran while the session still accepted steps.
+      expect(result.steps, hasLength(1));
+      expect(result.session.stepCount, 1);
+    });
+
+    test('clearing the hook with null stops it from running', () {
+      final recorder = CockpitInteractionRecorder(now: FakeClock().call);
+      recorder.start();
+      var runs = 0;
+      recorder.beforeStopHook = () => runs += 1;
+      recorder.beforeStopHook = null;
+
+      recorder.stop();
+
+      expect(runs, 0);
+    });
+
+    test('a throwing hook aborts stop and keeps the session open', () {
+      final recorder = CockpitInteractionRecorder(now: FakeClock().call);
+      recorder.start();
+      recorder.beforeStopHook = () => throw StateError('hook exploded');
+
+      expect(recorder.stop, throwsStateError);
+      // The phase machine never reached stopped, so a fixed hook can retry.
+      expect(recorder.phase, CockpitRecorderPhase.recording);
+      recorder.beforeStopHook = null;
+      final result = recorder.stop();
+      expect(result.session.phase, CockpitRecorderPhase.stopped);
+    });
+  });
+
+  group('annotate and discard interplay', () {
+    test('discardLastStep removes the annotated step', () {
+      final recorder = CockpitInteractionRecorder(now: FakeClock().call);
+      recorder.start();
+      recorder.recordInteractionStep(incomingStep());
+      recorder.annotate('s1', 'keep me not');
+
+      recorder.discardLastStep();
+
+      expect(recorder.steps, isEmpty);
+      // The id of the discarded step is never resurrected.
+      expect(() => recorder.annotate('s1', 'note'), throwsStateError);
+    });
+  });
+
+  group('isActionable', () {
+    test('only actionable kinds with locator candidates replay', () {
+      CockpitInteractionStep step(
+        CockpitInteractionStepKind kind, {
+        bool unresolved = false,
+      }) => CockpitInteractionStep(
+        stepId: 's1',
+        kind: kind,
+        unresolved: unresolved,
+        phase: CockpitRecorderPhase.recording,
+        recordedAt: DateTime.utc(2026, 10, 7, 9),
+      );
+
+      for (final kind in CockpitInteractionStepKind.values) {
+        final actionable =
+            kind == CockpitInteractionStepKind.tap ||
+            kind == CockpitInteractionStepKind.longPress ||
+            kind == CockpitInteractionStepKind.scroll ||
+            kind == CockpitInteractionStepKind.text;
+        expect(
+          CockpitInteractionRecorder.isActionable(step(kind)),
+          actionable,
+          reason: kind.name,
+        );
+        // Unresolved noise never replays, whatever its kind.
+        expect(
+          CockpitInteractionRecorder.isActionable(step(kind, unresolved: true)),
+          isFalse,
+          reason: '${kind.name} unresolved',
+        );
+      }
+    });
+  });
 }
