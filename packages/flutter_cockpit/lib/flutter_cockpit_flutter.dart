@@ -13,6 +13,7 @@ export 'src/gesture/cockpit_gesture_profile.dart';
 export 'src/network/cockpit_http_network_observer.dart';
 export 'src/network/cockpit_http_network_observer_configuration.dart';
 export 'src/recording/cockpit_native_recording.dart';
+export 'src/recorder/cockpit_recorder_exclusion.dart';
 export 'src/runtime/flutter_cockpit.dart';
 export 'src/runtime/flutter_cockpit_app.dart';
 export 'src/runtime/flutter_cockpit_binding.dart';
