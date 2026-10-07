@@ -5,6 +5,7 @@ import 'package:drift/drift.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_cockpit/flutter_cockpit_flutter.dart';
+import 'package:flutter_cockpit_test/flutter_cockpit_test.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:cockpit_demo/src/data/cockpit_demo_database.dart';
 import 'package:cockpit_demo/src/cockpit_demo_app.dart';
@@ -89,6 +90,18 @@ Future<void> pumpTodoApp(
   await tester.pump(const Duration(milliseconds: 120));
   await tester.pumpAndSettle();
 }
+
+/// Harness options for interaction-recorder integration tests: the recorder
+/// runs in guest mode, so no floating ball overlays the app under test.
+CockpitTestOptions cockpitDemoRecorderTestOptions() => CockpitTestOptions(
+  config: const FlutterCockpitConfig.production().copyWith(
+    initialRouteName: '/inbox',
+    recorder: const FlutterCockpitRecorderConfig(
+      enabled: true,
+      host: CockpitRecorderHostMode.guest,
+    ),
+  ),
+);
 
 Widget buildCockpitDemoApp({
   FlutterCockpitConfiguration? configuration,
