@@ -304,11 +304,30 @@ final class _CockpitInteractionCaptureState
     watch = CockpitInteractionSettleWatcher(
       quietWindow: Duration(milliseconds: defaults.settleQuietWindowMs),
       timeout: Duration(milliseconds: defaults.settleTimeoutMs),
-      onSettled: (settledAfterMs) => _markStepSettled(stepId, settledAfterMs),
+      onSettled: (settledAfterMs) {
+        _markStepSettled(stepId, settledAfterMs);
+        _refreshRouteDiscovery();
+      },
       onFinished: () => _settleWatches.remove(watch),
     );
     _settleWatches.add(watch);
     watch.start();
+  }
+
+  /// Refreshes route discovery once a recorded action settles.
+  ///
+  /// Route-name discovery is read-driven: this registry read re-runs tree
+  /// discovery, which syncs the binding's route name and rebuilds this widget
+  /// with the new route, emitting a `routeChange` step in [didUpdateWidget].
+  /// A gesture can navigate on pointer-up (a back button pops a route), and
+  /// the pointer-down read only saw the pre-action route, so without this
+  /// refresh the change stays undiscovered until the next unrelated read.
+  void _refreshRouteDiscovery() {
+    if (widget.recorder.phase != CockpitRecorderPhase.recording ||
+        widget.recorder.isReplaying) {
+      return;
+    }
+    widget.registry.visibleTargets;
   }
 
   void _markStepSettled(String stepId, int settledAfterMs) {

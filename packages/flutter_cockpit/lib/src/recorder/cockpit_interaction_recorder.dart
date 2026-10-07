@@ -282,6 +282,7 @@ final class CockpitInteractionRecorder extends ChangeNotifier {
     for (final candidate in step.locatorCandidates) {
       final resolution = registry.resolve(
         CockpitSelector.parse(candidate.selector),
+        requiredCommand: _commandForStep(step),
       );
       if (resolution.isSuccess) {
         target = resolution.target;
@@ -382,6 +383,26 @@ final class CockpitInteractionRecorder extends ChangeNotifier {
       timeout: timeout,
       waitTick: (duration) => Future<void>.delayed(duration),
     );
+  }
+
+  /// The command a replayed [step] dispatches, so resolution prefers targets
+  /// that can actually perform it. Replaying a recorded flow mutates app
+  /// state, and a locator that was unique at record time can later match
+  /// several passive look-alikes (two labels sharing the recorded text, for
+  /// example); requiring the step's command resolves toward the actionable
+  /// control instead of failing on the tie. Targets that support nothing
+  /// fall back to plain locator matches inside the registry.
+  static CockpitCommandType? _commandForStep(CockpitInteractionStep step) {
+    return switch (step.kind) {
+      CockpitInteractionStepKind.tap => CockpitCommandType.tap,
+      CockpitInteractionStepKind.longPress => CockpitCommandType.longPress,
+      CockpitInteractionStepKind.scroll => CockpitCommandType.swipe,
+      CockpitInteractionStepKind.text => CockpitCommandType.enterText,
+      CockpitInteractionStepKind.routeChange ||
+      CockpitInteractionStepKind.back ||
+      CockpitInteractionStepKind.marker ||
+      CockpitInteractionStepKind.note => null,
+    };
   }
 
   /// Whether [step] is replayable in-process: an actionable kind (`tap`,

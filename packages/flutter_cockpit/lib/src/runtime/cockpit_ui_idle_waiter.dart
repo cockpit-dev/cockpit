@@ -143,3 +143,42 @@ bool _isTestBinding(WidgetsBinding widgetsBinding) {
     'TestWidgetsFlutterBinding',
   );
 }
+
+/// Pumps a Flutter test binding until its frame queue settles, bounded by
+/// [timeout]. Returns whether the queue settled.
+///
+/// A test binding renders only frames somebody pumps, and
+/// [waitForCockpitUiIdle] intentionally skips its scheduler-quiet sampling
+/// there because the test clock governs. App-side flows that settle through
+/// production idle waits (for example interaction-recorder replay) still
+/// need navigation and animation transitions to render between their steps,
+/// so they call this first. Bindings expose no `pumpAndSettle` (that lives
+/// on `WidgetTester`), so this drives `binding.pump` in a loop the same way
+/// the tester does. Production bindings have nothing to pump and complete
+/// immediately with `true`.
+Future<bool> settleCockpitTestBindingFrames({
+  Duration timeout = const Duration(seconds: 10),
+}) async {
+  WidgetsBinding widgetsBinding;
+  try {
+    widgetsBinding = WidgetsBinding.instance;
+  } on Object {
+    return true;
+  }
+  if (!_isTestBinding(widgetsBinding)) {
+    return true;
+  }
+  final dynamic dynamicBinding = widgetsBinding;
+  final stopwatch = Stopwatch()..start();
+  try {
+    do {
+      if (stopwatch.elapsed > timeout) {
+        return false;
+      }
+      await dynamicBinding.pump(const Duration(milliseconds: 100));
+    } while (SchedulerBinding.instance.hasScheduledFrame);
+    return true;
+  } on Object {
+    return false;
+  }
+}

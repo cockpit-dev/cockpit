@@ -566,6 +566,45 @@ void main() {
       expect(routeSteps.single.routeName, '/details');
     });
 
+    testWidgets('records a gesture-driven route change without an observer', (
+      tester,
+    ) async {
+      // Apps that do not pass FlutterCockpit.navigatorObserver surface route
+      // names only through read-driven discovery. The capture layer must
+      // refresh discovery after the action settles, or a route change caused
+      // by the recorded gesture itself stays undiscovered until the next
+      // unrelated registry read.
+      final recorder = await pumpRecordingApp(
+        tester,
+        child: MaterialApp(
+          routes: <String, WidgetBuilder>{
+            '/': (context) => Scaffold(
+              body: Center(
+                child: ElevatedButton(
+                  onPressed: () => Navigator.of(context).pushNamed('/details'),
+                  child: const Text('Open details'),
+                ),
+              ),
+            ),
+            '/details': (_) =>
+                const Scaffold(body: Center(child: Text('Details'))),
+          },
+        ),
+      );
+
+      recorder.start();
+      await tester.tap(find.text('Open details'));
+      await tester.pumpAndSettle();
+      await pumpSettleWindow(tester);
+
+      final routeSteps = recorder.steps
+          .where((step) => step.kind == CockpitInteractionStepKind.routeChange)
+          .toList();
+      expect(routeSteps, hasLength(1));
+      expect(routeSteps.single.fromRouteName, '/');
+      expect(routeSteps.single.routeName, '/details');
+    });
+
     testWidgets('suppresses route changes while paused', (tester) async {
       final recorder = await pumpRecordingApp(
         tester,

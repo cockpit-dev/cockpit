@@ -675,10 +675,23 @@ final class FlutterCockpitRootState extends State<FlutterCockpitRoot> {
         _interactionRecorder = CockpitInteractionRecorder(
           registry: FlutterCockpit.binding.registry,
           // Replay settles through the root's idle wait (network-aware)
-          // rather than the recorder's scheduler-only default.
+          // rather than the recorder's scheduler-only default. That wait is
+          // a no-op under a Flutter test binding by design, so pump the
+          // binding's frame queue first — otherwise replay resolves steps
+          // against routes the replayed gestures pushed but never rendered.
+          // Production bindings have nothing to pump, so only the network
+          // wait runs there.
           waitForIdle:
-              ({required Duration quietWindow, required Duration timeout}) =>
-                  waitForUiIdle(quietWindow: quietWindow, timeout: timeout),
+              ({
+                required Duration quietWindow,
+                required Duration timeout,
+              }) async {
+                await settleCockpitTestBindingFrames(timeout: timeout);
+                return waitForUiIdle(
+                  quietWindow: quietWindow,
+                  timeout: timeout,
+                );
+              },
         );
         _recorderController = CockpitRecorderController(
           recorder: _interactionRecorder!,

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_cockpit/flutter_cockpit_flutter.dart';
+import 'package:flutter_cockpit/src/runtime/cockpit_ui_idle_waiter.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// Pumps [child] under a [FlutterCockpitRoot] whose recorder is enabled and
@@ -67,11 +68,13 @@ CockpitInteractionStep _pendingStep(
   List<CockpitLocatorCandidate> candidates = const <CockpitLocatorCandidate>[],
   bool unresolved = false,
   String? routeName,
+  String? resolvedValue,
 }) => CockpitInteractionStep(
   stepId: 'pending',
   kind: kind,
   locatorCandidates: candidates,
   routeName: routeName,
+  resolvedValue: resolvedValue,
   unresolved: unresolved,
   phase: CockpitRecorderPhase.recording,
   recordedAt: DateTime.utc(2026, 10, 7, 9),
@@ -249,6 +252,214 @@ void main() {
       expect(presses, 2);
       expect(recorder.phase, CockpitRecorderPhase.stopped);
     });
+
+    testWidgets('replays steps recorded on a route the flow pushed to', (
+      tester,
+    ) async {
+      // No navigator observer: like apps that rely on read-driven route
+      // discovery, the registry's route scope can lag the route a replayed
+      // step just navigated to, which used to make that route's steps
+      // unresolvable.
+      final controller = TextEditingController();
+      addTearDown(controller.dispose);
+      FlutterCockpit.initialize(
+        FlutterCockpitConfiguration(
+          recorder: const FlutterCockpitRecorderConfig(enabled: true),
+        ),
+      );
+      final rootKey = GlobalKey<FlutterCockpitRootState>();
+      await tester.pumpWidget(
+        FlutterCockpitRoot(
+          key: rootKey,
+          child: MaterialApp(
+            routes: <String, WidgetBuilder>{
+              '/': (context) => Scaffold(
+                body: Center(
+                  child: ElevatedButton(
+                    key: const ValueKey<String>('open-editor'),
+                    onPressed: () => Navigator.of(context).pushNamed('/editor'),
+                    child: const Text('Open editor'),
+                  ),
+                ),
+              ),
+              '/editor': (context) => Scaffold(
+                appBar: AppBar(title: const Text('Editor')),
+                body: Center(
+                  child: TextField(
+                    key: const ValueKey<String>('title-field'),
+                    controller: controller,
+                  ),
+                ),
+              ),
+            },
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // A manually wired recorder: replay runs against the live binding
+      // registry, and the idle wait mirrors the root's production wiring: a
+      // test-binding frame settle first (the network-aware wait is a no-op
+      // under a fake clock), so a replayed navigation mounts its route.
+      final recorder = CockpitInteractionRecorder(
+        registry: FlutterCockpit.binding.registry,
+        waitForIdle:
+            ({required Duration quietWindow, required Duration timeout}) async {
+              await settleCockpitTestBindingFrames(timeout: timeout);
+              return waitForCockpitUiIdle(
+                quietWindow: quietWindow,
+                timeout: timeout,
+                waitTick: (duration) => Future<void>.delayed(duration),
+              );
+            },
+      );
+      recorder.start();
+      recorder.recordInteractionStep(
+        _pendingStep(
+          CockpitInteractionStepKind.tap,
+          candidates: <CockpitLocatorCandidate>[_keyCandidate('open-editor')],
+          routeName: '/',
+        ),
+      );
+      recorder.recordInteractionStep(
+        _pendingStep(
+          CockpitInteractionStepKind.text,
+          candidates: <CockpitLocatorCandidate>[_keyCandidate('title-field')],
+          routeName: '/editor',
+          resolvedValue: 'recorded value',
+        ),
+      );
+
+      final reports = await recorder.verifyReplay();
+      await tester.pumpAndSettle();
+
+      expect(
+        reports.where(
+          (report) => report.status == CockpitReplayStatus.deviated,
+        ),
+        isEmpty,
+        reason: reports
+            .map((report) => '${report.stepId}: ${report.reason}')
+            .join('\n'),
+      );
+      expect(
+        reports
+            .where((report) => report.status == CockpitReplayStatus.passed)
+            .length,
+        2,
+      );
+      // The replayed push really mounted the editor route, and the replayed
+      // text entry reached the live field.
+      expect(find.text('Editor'), findsOneWidget);
+      expect(controller.text, 'recorded value');
+    });
+
+    testWidgets(
+      'replay resolves a recorded locator that became ambiguous toward the '
+      'actionable control',
+      (tester) async {
+        // Replaying mutates app state, so a text locator that was unique at
+        // record time can later match passive look-alikes as well (a status
+        // label that now reads the same). Replay resolution must prefer the
+        // control that can perform the step's command instead of failing on
+        // the tie.
+        var completed = false;
+        var toggles = 0;
+        StateSetter? updateState;
+        FlutterCockpit.initialize(
+          FlutterCockpitConfiguration(
+            recorder: const FlutterCockpitRecorderConfig(enabled: true),
+          ),
+        );
+        final rootKey = GlobalKey<FlutterCockpitRootState>();
+        await tester.pumpWidget(
+          FlutterCockpitRoot(
+            key: rootKey,
+            child: MaterialApp(
+              home: Scaffold(
+                body: StatefulBuilder(
+                  builder: (context, setState) {
+                    updateState ??= setState;
+                    return Column(
+                      children: <Widget>[
+                        Text(completed ? 'Completed' : 'In progress'),
+                        CheckboxListTile(
+                          title: const Text('Completed'),
+                          // The subtitle makes the merged row text differ
+                          // from the recorded locator, so the row only
+                          // contains-matches and cannot outscore the
+                          // exact-match labels.
+                          subtitle: const Text(
+                            'Mark this once the outcome is stable.',
+                          ),
+                          value: completed,
+                          onChanged: (value) {
+                            toggles += 1;
+                            setState(() => completed = value ?? false);
+                          },
+                        ),
+                      ],
+                    );
+                  },
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        final recorder = CockpitInteractionRecorder(
+          registry: FlutterCockpit.binding.registry,
+          waitForIdle:
+              ({
+                required Duration quietWindow,
+                required Duration timeout,
+              }) async {
+                await settleCockpitTestBindingFrames(timeout: timeout);
+                return waitForCockpitUiIdle(
+                  quietWindow: quietWindow,
+                  timeout: timeout,
+                  waitTick: (duration) => Future<void>.delayed(duration),
+                );
+              },
+        );
+        recorder.start();
+        // Recorded while the status label still read 'In progress', so the
+        // text locator only matched the checkbox row.
+        recorder.recordInteractionStep(
+          _pendingStep(
+            CockpitInteractionStepKind.tap,
+            candidates: <CockpitLocatorCandidate>[
+              CockpitLocatorCandidate(
+                kind: 'text',
+                selector: CockpitSelector.format(
+                  CockpitLocator(text: 'Completed'),
+                ),
+                score: 3,
+              ),
+            ],
+            routeName: '/',
+          ),
+        );
+        recorder.stop();
+
+        // The flow itself completed the task between recording and replay:
+        // the status label now reads 'Completed' too, so the locator matches
+        // two passive labels plus the actionable checkbox row.
+        updateState!(() => completed = true);
+        await tester.pumpAndSettle();
+
+        final reports = await recorder.verifyReplay();
+        await tester.pumpAndSettle();
+
+        expect(
+          reports.single.status,
+          CockpitReplayStatus.passed,
+          reason: reports.single.reason,
+        );
+        expect(toggles, 1);
+      },
+    );
 
     testWidgets('deviates when no locator candidate resolves', (tester) async {
       final recorder = await pumpRecordingApp(
