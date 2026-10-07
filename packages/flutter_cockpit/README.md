@@ -32,6 +32,8 @@ It provides:
 - structured Widget, Element, RenderObject, semantics, route, focus, log,
   runtime error, HTTP/SSE/WebSocket network, and rebuild state
 - snapshot, artifact, recording, and bundle models
+- an opt-in in-app interaction recorder that turns real user interaction
+  into replayable `cockpit.test/v2` cases
 - an explicit bounded `CockpitPerformanceCollector` for engine frame timings,
   display-aware budgets, cache peaks, and action-level profiling
 - target, plane, surface, and fallback-aware runtime models for AI-first summaries
@@ -264,7 +266,34 @@ flutter run --target main.dart
   profiles, including bounded mounted Element trees
 - accessibility, network, runtime, and rebuild signals
 - screenshot and recording requests
+- interaction recording with in-app verify replay and case export
 - remote session status and command endpoints
+
+### Interaction recorder
+
+The interaction recorder captures real user interaction — taps, long presses,
+committed text, scrolls, and route changes — resolves each hit to locator
+candidates, and exports a replayable `cockpit.test/v2` case with weak
+assertions. It is opt-in, unavailable in release builds, and needs no UI code
+on the app side:
+
+```dart
+FlutterCockpitApp(
+  config: const FlutterCockpitConfig.production().copyWith(
+    recorder: const FlutterCockpitRecorderConfig(enabled: true),
+  ),
+  child: app,
+)
+```
+
+The default `floatingBall` host mounts a draggable ball that expands into the
+recorder panel; `guest` and `headless` modes mount nothing, for apps that host
+the panel in their own floating window or drive recording remotely through
+`cockpit record`, the Console screen, or the `recorder_*` MCP tools. Every
+surface shares the same session commands, and a recording can be verified
+in-app with replay before export. See the
+[host integration guide](https://github.com/cockpit-dev/cockpit/blob/main/docs/recorder/host-integration.md)
+for the four public surfaces and the exclusion tiers.
 
 ### Frame timing capture
 

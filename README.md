@@ -26,6 +26,9 @@ targets.
 - **A short development session.** Start once, reuse a short lowercase base-36 handle,
   then inspect, tap, type, scroll, open links, reload, diagnose, and
   capture evidence in the same loop.
+- **Recorded interaction.** The in-app interaction recorder captures real user
+  interaction and exports replayable `cockpit.test/v2` cases from the CLI,
+  Console, or MCP.
 - **Real boundary coverage.** Cross system dialogs, native screens, platform
   views, WebViews, deep links, logs, runtime errors, and network evidence on
   Android, iOS, macOS, Linux, Windows, and Web black-box targets.

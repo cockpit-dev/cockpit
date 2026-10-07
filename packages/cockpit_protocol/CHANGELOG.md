@@ -1,5 +1,20 @@
 # Changelog
 
+## 4.12.0
+
+- Added the `cockpit.recording/v1` interaction recorder contracts: recording
+  session, phase machine, interaction steps with ordered locator candidates,
+  and the recorded-flow bundle artifact every recorder surface exports
+  identically.
+- Added `CockpitRecordedFlowConverter`: converts recorded steps into
+  replayable `cockpit.test/v2` case documents — unresolved noise steps are
+  dropped, remaining locator candidates become fallback chains, scroll-then-
+  tap preludes are folded, a `setup` segment delimits the setup block, and
+  weak `waitFor`/`waitForRoute` assertions keep exported cases
+  replay-verifiable.
+- Added `CockpitTestDocumentYamlWriter`, a write-only renderer that emits
+  test-case documents as YAML without adding a dependency.
+
 ## 4.11.1
 
 - Synchronized the protocol package with the Cockpit 4.11.1 release.

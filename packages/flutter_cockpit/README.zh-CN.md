@@ -30,6 +30,8 @@
 - 结构化 Widget、Element、RenderObject、semantics、route、focus、log、runtime
   error、HTTP/SSE/WebSocket network 与 rebuild 状态
 - snapshot、artifact、recording 和 bundle 模型
+- 可选启用的应用内交互录制器，把真实用户操作转换为可回放的
+  `cockpit.test/v2` 用例
 - 显式且有界的 `CockpitPerformanceCollector`，用于引擎帧耗时、按屏幕刷新率计算的预算、
   cache 峰值和动作级性能采集
 - 面向 AI 摘要的 target / plane / surface / fallback 运行时模型
@@ -240,7 +242,30 @@ flutter run --target main.dart
   Element 树
 - accessibility、network、runtime、rebuild 信号
 - 截图和录屏请求
+- 交互录制、replay 验证与用例导出
 - 远程会话状态与命令端点
+
+### 交互录制器
+
+交互录制器捕获真实用户操作——点击、长按、提交文本、滚动与路由切换——把每次
+命中解析为 locator 候选，并导出带弱断言、可回放的 `cockpit.test/v2` 用例。
+该能力默认关闭，release 构建下不可用，应用侧无需编写任何 UI 代码：
+
+```dart
+FlutterCockpitApp(
+  config: const FlutterCockpitConfig.production().copyWith(
+    recorder: const FlutterCockpitRecorderConfig(enabled: true),
+  ),
+  child: app,
+)
+```
+
+默认的 `floatingBall` 宿主挂载一个可拖拽悬浮球，展开即为录制面板；`guest` 与
+`headless` 模式不挂载任何入口，适合已有自研悬浮窗的应用，或通过 `cockpit
+record`、Console 录制页与 `recorder_*` MCP 工具远程驱动录制。所有执行面共享
+同一套会话命令，导出前可在应用内通过 replay 验证录制。四个公开接入面与
+排除机制的说明详见
+[宿主接入指南](https://github.com/cockpit-dev/cockpit/blob/main/docs/recorder/host-integration.md)。
 
 ### 帧耗时采集
 

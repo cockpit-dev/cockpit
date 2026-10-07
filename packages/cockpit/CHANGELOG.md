@@ -1,5 +1,18 @@
 # Changelog
 
+## 4.12.0
+
+- Added remote-session client methods covering the interaction recorder
+  lifecycle (start, pause, resume, stop, session, steps, export) against
+  the `/recorder/*` endpoints exposed by `flutter_cockpit`.
+- Added `CockpitInteractionRecordingService`, the shared recorder facade
+  used by the CLI, MCP, and Console surfaces.
+- Added the `cockpit record` command group: `start`, `pause`, `resume`,
+  `stop`, `status`, `steps`, and `export` drive a recording session on a
+  live development target.
+- Added seven `recorder_*` MCP tools (disabled by default) so an agent can
+  drive a recording session end to end and receive the exported case YAML.
+
 ## 4.11.1
 
 - Fixed `cockpit target inspect`: when the underlying operation failed, the

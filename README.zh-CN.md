@@ -22,6 +22,8 @@ Cockpit 让 AI 操作正在运行的应用，而不是对截图猜测。Flutter 
   选择器，操作自定义组件并展开懒加载内容，不要求业务页面添加 `Semantics` 标签。
 - **一条短开发链路。** 启动一次并复用短小写 base-36 handle，持续检查、点击、输入、
   滚动、打开链接、reload、诊断和截图。
+- **录制真实交互。** 应用内交互录制器记录真实用户操作，并通过 CLI、Console
+  或 MCP 导出可回放的 `cockpit.test/v2` 用例。
 - **覆盖真实边界。** 支持系统弹窗、原生页面、platform view、WebView、deep link、日志、
   运行时错误和 network evidence，覆盖 Android、iOS、macOS、Linux、Windows 与 Web。
 - **为 AI 节省上下文。** 默认输出简洁 LON；需要解析时再用 JSON 或 YAML。大树和证据只

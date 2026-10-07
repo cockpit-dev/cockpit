@@ -1,5 +1,22 @@
 # Changelog
 
+## 4.12.0
+
+- Added the in-app interaction recorder: a capture layer listens to real
+  user interaction (tap, long press, committed text, scroll, route changes)
+  and resolves every hit to ordered locator candidates instead of
+  coordinates.
+- Added the session engine with a phase machine and segment stack, three
+  tiers of exclusion that keep recorder and host chrome out of recordings
+  and evidence, and verify replay, which replays recorded steps in-process
+  through the existing automation path and reports per-step deviations.
+- Added embeddable panel widgets (panel, entry button, indicator) plus the
+  default floating-ball host; `FlutterCockpitConfig.recorder` selects
+  `floatingBall`, `guest`, or `headless` mode so any floating-window system
+  can host the recorder.
+- Added in-app case export and the `/recorder/*` remote endpoints, enabling
+  remote-driven recording from the CLI, Console, and MCP surfaces.
+
 ## 4.11.1
 
 - Fixed in-app hover after scrolling: the pointer now moves with a mouse
