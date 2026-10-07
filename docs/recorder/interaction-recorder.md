@@ -263,9 +263,11 @@ the document is schema-valid by construction):
   changed. This gives every exported case replay-verifiable liveness without
   inventing semantics the recorder cannot know.
 - Known interruption patterns (a native-plane observation between two
-  steps, e.g. a permission dialog) export as a guard step:
-  `if visible('Allow') then tap('Allow')` — an `if` with no `else`, exactly
-  the schema's optional-step semantics.
+  steps, e.g. a permission dialog) export as a guard step: `if
+  visible('Allow') then tap('Allow')` — an `if` with no `else`. The
+  trigger data comes from native-plane observation capture, which lands
+  with dual-plane capture support; until then the pattern table is empty
+  and no guards are emitted (documented v1 limitation, not a stub).
 - The converter never guesses branches beyond the known-pattern table; the
   document metadata records `origin: recorded` with the session id so
   consumers know a human/agent should strengthen assertions.
@@ -326,7 +328,7 @@ controls, export preview. Follows the existing console page patterns.
 | Verify replay | Recorded steps replayed against the demo app in `testWidgets`; deviation reporting on a broken selector |
 | Remote | Handler route table incl. absent-provider 404s; client methods against a local `HttpServer` (existing pattern) |
 | CLI / MCP | Output envelope and args tests mirroring existing command tests |
-| E2E proof | `examples/cockpit_demo/cockpit/integration_test/`: record a scripted flow on the demo app, convert, and assert the produced document compiles via `CockpitTestDocumentCompiler` |
+| E2E proof | `flutter_cockpit` widget test drives a full record → stop → export cycle on a Material app and asserts the bundle; a `packages/cockpit` test feeds realistic recorded steps through the converter and asserts the emitted YAML compiles via `CockpitTestDocumentCompiler` (the compiler lives in `cockpit`, so the schema-validity proof lives there) |
 
 ## Release
 
