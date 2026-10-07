@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:cockpit_protocol/cockpit_protocol.dart';
+
 import '../control/cockpit_command.dart';
 import '../control/cockpit_command_execution.dart';
 import '../control/cockpit_command_result.dart';
@@ -12,6 +14,7 @@ import '../model/cockpit_step_record.dart';
 import '../recording/cockpit_recording_request.dart';
 import '../recording/cockpit_recording_result.dart';
 import '../recording/cockpit_recording_session.dart';
+import '../recorder/cockpit_interaction_recorder.dart';
 import '../runtime/cockpit_snapshot.dart';
 import '../runtime/cockpit_snapshot_options.dart';
 import 'cockpit_remote_artifact_download.dart';
@@ -49,6 +52,8 @@ typedef CockpitRemotePerformanceStopper =
     Future<CockpitPerformanceReport> Function();
 typedef CockpitRemoteArtifactTempFileFactory =
     Future<File> Function(String basename);
+typedef CockpitRemoteInteractionRecorderProvider =
+    CockpitInteractionRecorder? Function();
 
 const Duration _defaultCommandExecutionTimeout = Duration(seconds: 30);
 // Strictly larger than the executor's 250ms hard-timeout grace so the
@@ -147,6 +152,7 @@ final class CockpitRemoteSessionEndpointHandler {
     CockpitRemoteRuntimeStepDrainer? runtimeStepDrainer,
     required CockpitRemoteRecordingStarter startRecording,
     required CockpitRemoteRecordingStopper stopRecording,
+    CockpitRemoteInteractionRecorderProvider? recorderProvider,
     CockpitRemotePerformanceStarter? startPerformance,
     CockpitRemotePerformanceStopper? stopPerformance,
     CockpitRemoteArtifactTempFileFactory? artifactTempFileFactory,
@@ -159,6 +165,7 @@ final class CockpitRemoteSessionEndpointHandler {
        _runtimeStepDrainer = runtimeStepDrainer,
        _startRecording = startRecording,
        _stopRecording = stopRecording,
+       _recorderProvider = recorderProvider,
        _startPerformance = startPerformance,
        _stopPerformance = stopPerformance,
        _artifactTempFileFactory =
@@ -173,6 +180,7 @@ final class CockpitRemoteSessionEndpointHandler {
   final CockpitRemoteRuntimeStepDrainer? _runtimeStepDrainer;
   final CockpitRemoteRecordingStarter _startRecording;
   final CockpitRemoteRecordingStopper _stopRecording;
+  final CockpitRemoteInteractionRecorderProvider? _recorderProvider;
   final CockpitRemotePerformanceStarter? _startPerformance;
   final CockpitRemotePerformanceStopper? _stopPerformance;
   final CockpitRemoteArtifactTempFileFactory _artifactTempFileFactory;
@@ -293,6 +301,88 @@ final class CockpitRemoteSessionEndpointHandler {
           final result = await _handleStopRecording();
           final response = await _recordingResponseFor(result);
           return CockpitRemoteSessionEndpointResponse.json(response.toJson());
+        // Interaction recorder routes. The recorder engine's StateErrors
+        // (illegal phase, no session) surface through the generic handler
+        // error envelope (500 serverError), the established convention for
+        // engine state failures.
+        case ('POST', '/recorder/start'):
+          final recorder = _recorderProvider?.call();
+          if (recorder == null) {
+            return _recorderUnavailableResponse();
+          }
+          final recordingRequest = _decodePayload(
+            () => CockpitInteractionRecordingRequest.fromJson(request.jsonBody),
+          );
+          recorder.start(recordingRequest);
+          return CockpitRemoteSessionEndpointResponse.json(
+            recorder.sessionSnapshot().toJson(),
+          );
+        case ('POST', '/recorder/pause'):
+          final recorder = _recorderProvider?.call();
+          if (recorder == null) {
+            return _recorderUnavailableResponse();
+          }
+          recorder.pause();
+          return CockpitRemoteSessionEndpointResponse.json(
+            recorder.sessionSnapshot().toJson(),
+          );
+        case ('POST', '/recorder/resume'):
+          final recorder = _recorderProvider?.call();
+          if (recorder == null) {
+            return _recorderUnavailableResponse();
+          }
+          recorder.resume();
+          return CockpitRemoteSessionEndpointResponse.json(
+            recorder.sessionSnapshot().toJson(),
+          );
+        case ('POST', '/recorder/stop'):
+          final recorder = _recorderProvider?.call();
+          if (recorder == null) {
+            return _recorderUnavailableResponse();
+          }
+          return CockpitRemoteSessionEndpointResponse.json(
+            recorder.stop().toJson(),
+          );
+        case ('GET', '/recorder/session'):
+          final recorder = _recorderProvider?.call();
+          if (recorder == null) {
+            return _recorderUnavailableResponse();
+          }
+          // Before the first start the engine has no session. Answer with a
+          // minimal idle payload (a 204 would break the JSON-only response
+          // contract the client enforces), never an error: polling from a
+          // cold app must succeed.
+          final session = recorder.activeSession;
+          if (session == null) {
+            return const CockpitRemoteSessionEndpointResponse.json(
+              <String, Object?>{'phase': 'idle'},
+            );
+          }
+          return CockpitRemoteSessionEndpointResponse.json(session.toJson());
+        case ('GET', '/recorder/steps'):
+          final recorder = _recorderProvider?.call();
+          if (recorder == null) {
+            return _recorderUnavailableResponse();
+          }
+          final total = recorder.steps.length;
+          final after = _recorderStepsCursor(
+            request.uri.queryParameters,
+            total,
+          );
+          return CockpitRemoteSessionEndpointResponse.json(<String, Object?>{
+            'steps': <Object?>[
+              for (final step in recorder.steps.skip(after)) step.toJson(),
+            ],
+            'total': total,
+          });
+        case ('GET', '/recorder/export'):
+          final recorder = _recorderProvider?.call();
+          if (recorder == null) {
+            return _recorderUnavailableResponse();
+          }
+          return CockpitRemoteSessionEndpointResponse.json(
+            recorder.export().toJson(),
+          );
         case ('POST', '/performance/start'):
           final starter = _startPerformance;
           if (starter == null) {
@@ -344,6 +434,34 @@ final class CockpitRemoteSessionEndpointHandler {
     } on ArgumentError catch (error) {
       throw FormatException('$error');
     }
+  }
+
+  /// Recorder routes answer 404 when no recorder is wired (the feature is
+  /// disabled at the root), reusing the unknown-route envelope shape.
+  CockpitRemoteSessionEndpointResponse _recorderUnavailableResponse() {
+    return const CockpitRemoteSessionEndpointResponse.json(<String, Object?>{
+      'error': 'notFound',
+      'message': 'Interaction recording is unavailable in this session.',
+    }, statusCode: HttpStatus.notFound);
+  }
+
+  /// Parses the client-driven steps cursor: `after` is the number of steps
+  /// the client already consumed. Recorded steps are never cleared
+  /// mid-session, so the cursor is stateless; a value beyond the recorded
+  /// total means a stale cursor from an earlier session and is rejected.
+  int _recorderStepsCursor(Map<String, String> queryParameters, int total) {
+    final raw = queryParameters['after'];
+    if (raw == null || raw.isEmpty) {
+      return 0;
+    }
+    final after = _parseNonNegativeQueryInt('after', raw);
+    if (after > total) {
+      throw FormatException(
+        'Query parameter "after" must not exceed the recorded step count '
+        '($total).',
+      );
+    }
+    return after;
   }
 
   Future<CockpitCommandExecution> _executeCommandWithinBudget(

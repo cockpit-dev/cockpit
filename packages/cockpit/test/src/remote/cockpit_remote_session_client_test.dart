@@ -1459,4 +1459,220 @@ void main() {
       );
     },
   );
+
+  test('remote session client drives an interaction recording flow', () async {
+    Object? startBody;
+    final recordedSteps = <CockpitInteractionStep>[
+      CockpitInteractionStep(
+        stepId: 's1',
+        kind: CockpitInteractionStepKind.tap,
+        locatorCandidates: <CockpitLocatorCandidate>[
+          CockpitLocatorCandidate(
+            kind: 'key',
+            selector: CockpitSelector.format(const CockpitLocator(key: 'save')),
+            score: 4,
+          ),
+        ],
+        phase: CockpitRecorderPhase.recording,
+        recordedAt: DateTime.utc(2026, 10, 7, 9),
+      ),
+      CockpitInteractionStep(
+        stepId: 's2',
+        kind: CockpitInteractionStepKind.tap,
+        locatorCandidates: <CockpitLocatorCandidate>[
+          CockpitLocatorCandidate(
+            kind: 'key',
+            selector: CockpitSelector.format(
+              const CockpitLocator(key: 'submit'),
+            ),
+            score: 4,
+          ),
+        ],
+        phase: CockpitRecorderPhase.recording,
+        recordedAt: DateTime.utc(2026, 10, 7, 9, 0, 30),
+      ),
+    ];
+    CockpitInteractionRecordingSession session(
+      CockpitRecorderPhase phase, {
+      String? pausedAt,
+    }) => CockpitInteractionRecordingSession(
+      sessionId: 'r1',
+      phase: phase,
+      startedAt: DateTime.utc(2026, 10, 7, 9),
+      pausedAt: pausedAt == null ? null : DateTime.utc(2026, 10, 7, 9, 1),
+      stepCount: recordedSteps.length,
+    );
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() async => server.close(force: true));
+
+    server.listen((request) async {
+      request.response.headers.contentType = ContentType.json;
+      switch ((request.method, request.uri.path)) {
+        case ('POST', '/recorder/start'):
+          startBody = jsonDecode(await utf8.decoder.bind(request).join());
+          request.response.write(
+            jsonEncode(session(CockpitRecorderPhase.recording).toJson()),
+          );
+        case ('POST', '/recorder/pause'):
+          request.response.write(
+            jsonEncode(
+              session(CockpitRecorderPhase.paused, pausedAt: 'paused').toJson(),
+            ),
+          );
+        case ('POST', '/recorder/resume'):
+          request.response.write(
+            jsonEncode(session(CockpitRecorderPhase.recording).toJson()),
+          );
+        case ('POST', '/recorder/stop'):
+          request.response.write(
+            jsonEncode(
+              CockpitInteractionRecordingResult(
+                session: session(CockpitRecorderPhase.stopped),
+                steps: recordedSteps,
+              ).toJson(),
+            ),
+          );
+        case ('GET', '/recorder/session'):
+          request.response.write(
+            jsonEncode(session(CockpitRecorderPhase.recording).toJson()),
+          );
+        case ('GET', '/recorder/steps'):
+          final after = int.parse(request.uri.queryParameters['after'] ?? '0');
+          request.response.write(
+            jsonEncode(<String, Object?>{
+              'steps': recordedSteps
+                  .skip(after)
+                  .map((step) => step.toJson())
+                  .toList(),
+              'total': recordedSteps.length,
+            }),
+          );
+        case ('GET', '/recorder/export'):
+          request.response.write(
+            jsonEncode(
+              CockpitRecordedFlowBundle(
+                session: session(CockpitRecorderPhase.recording),
+                steps: recordedSteps,
+                caseDocument: const <String, Object?>{
+                  'id': 'recorded-r1',
+                  'schemaVersion': 'cockpit.test/v2',
+                },
+                caseYaml: 'schemaVersion: cockpit.test/v2\nid: recorded-r1\n',
+              ).toJson(),
+            ),
+          );
+        default:
+          request.response.statusCode = HttpStatus.notFound;
+          request.response.write(
+            jsonEncode(const <String, Object?>{'error': 'notFound'}),
+          );
+      }
+      await request.response.close();
+    });
+
+    final client = CockpitRemoteSessionClient(
+      baseUri: Uri.parse('http://127.0.0.1:${server.port}'),
+    );
+
+    final started = await client.startInteractionRecording(name: 'demo flow');
+    expect(started.phase, CockpitRecorderPhase.recording);
+    expect(started.sessionId, 'r1');
+    expect(startBody, <String, Object?>{'name': 'demo flow'});
+
+    final current = await client.interactionRecordingSession();
+    expect(current?.stepCount, recordedSteps.length);
+
+    final firstPage = await client.interactionRecordingSteps();
+    expect(firstPage.total, 2);
+    expect(firstPage.steps.map((step) => step.stepId), <String>['s1', 's2']);
+    final nextPage = await client.interactionRecordingSteps(after: 1);
+    expect(nextPage.total, 2);
+    expect(nextPage.steps.map((step) => step.stepId), <String>['s2']);
+
+    final paused = await client.pauseInteractionRecording();
+    expect(paused.phase, CockpitRecorderPhase.paused);
+    final resumed = await client.resumeInteractionRecording();
+    expect(resumed.phase, CockpitRecorderPhase.recording);
+
+    final bundle = await client.exportInteractionRecording();
+    expect(bundle.caseDocument['id'], 'recorded-r1');
+    expect(bundle.caseYaml, contains('id: recorded-r1'));
+    expect(bundle.steps, hasLength(recordedSteps.length));
+
+    final result = await client.stopInteractionRecording();
+    expect(result.session.phase, CockpitRecorderPhase.stopped);
+    expect(result.steps, hasLength(recordedSteps.length));
+  });
+
+  test('remote session client maps the idle session to null', () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() async => server.close(force: true));
+    server.listen((request) async {
+      request.response.headers.contentType = ContentType.json;
+      request.response.write(
+        jsonEncode(const <String, Object?>{'phase': 'idle'}),
+      );
+      await request.response.close();
+    });
+
+    final client = CockpitRemoteSessionClient(
+      baseUri: Uri.parse('http://127.0.0.1:${server.port}'),
+    );
+
+    expect(await client.interactionRecordingSession(), isNull);
+  });
+
+  test('remote session client propagates interaction recorder errors', () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() async => server.close(force: true));
+    server.listen((request) async {
+      request.response.headers.contentType = ContentType.json;
+      if (request.uri.path == '/recorder/start') {
+        request.response.statusCode = HttpStatus.notFound;
+        request.response.write(
+          jsonEncode(const <String, Object?>{
+            'error': 'notFound',
+            'message': 'Interaction recording is unavailable in this session.',
+          }),
+        );
+      } else {
+        request.response.statusCode = HttpStatus.internalServerError;
+        request.response.write(
+          jsonEncode(const <String, Object?>{
+            'error': 'serverError',
+            'message':
+                'Bad state: Cannot pause while the interaction recording is idle.',
+          }),
+        );
+      }
+      await request.response.close();
+    });
+
+    final client = CockpitRemoteSessionClient(
+      baseUri: Uri.parse('http://127.0.0.1:${server.port}'),
+    );
+
+    await expectLater(
+      client.startInteractionRecording,
+      throwsA(
+        isA<CockpitApplicationServiceException>()
+            .having((error) => error.code, 'code', 'notFound')
+            .having(
+              (error) => error.message,
+              'message',
+              'Interaction recording is unavailable in this session.',
+            ),
+      ),
+    );
+    await expectLater(
+      client.pauseInteractionRecording,
+      throwsA(
+        isA<CockpitApplicationServiceException>().having(
+          (error) => error.code,
+          'code',
+          'serverError',
+        ),
+      ),
+    );
+  });
 }

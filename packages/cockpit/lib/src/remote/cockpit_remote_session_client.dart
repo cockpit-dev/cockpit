@@ -421,6 +421,99 @@ final class CockpitRemoteSessionClient {
     );
   }
 
+  /// Starts an interaction recording session on the remote app.
+  Future<CockpitInteractionRecordingSession> startInteractionRecording({
+    String? name,
+  }) async {
+    final payload = await _send(
+      method: 'POST',
+      path: '/recorder/start',
+      body: CockpitInteractionRecordingRequest(name: name).toJson(),
+    );
+    return CockpitInteractionRecordingSession.fromJson(payload);
+  }
+
+  /// Pauses the active interaction recording session.
+  Future<CockpitInteractionRecordingSession> pauseInteractionRecording() async {
+    final payload = await _send(
+      method: 'POST',
+      path: '/recorder/pause',
+      body: const <String, Object?>{},
+    );
+    return CockpitInteractionRecordingSession.fromJson(payload);
+  }
+
+  /// Resumes a paused interaction recording session.
+  Future<CockpitInteractionRecordingSession>
+  resumeInteractionRecording() async {
+    final payload = await _send(
+      method: 'POST',
+      path: '/recorder/resume',
+      body: const <String, Object?>{},
+    );
+    return CockpitInteractionRecordingSession.fromJson(payload);
+  }
+
+  /// Stops the interaction recording session and returns its final result.
+  Future<CockpitInteractionRecordingResult> stopInteractionRecording() async {
+    final payload = await _send(
+      method: 'POST',
+      path: '/recorder/stop',
+      body: const <String, Object?>{},
+    );
+    return CockpitInteractionRecordingResult.fromJson(payload);
+  }
+
+  /// Reads the current interaction recording session, or `null` while no
+  /// session has started — the endpoint answers a minimal
+  /// `{"phase":"idle"}` payload in that state.
+  Future<CockpitInteractionRecordingSession?> interactionRecordingSession() {
+    return _send(method: 'GET', path: '/recorder/session').then((payload) {
+      return payload.containsKey('sessionId')
+          ? CockpitInteractionRecordingSession.fromJson(payload)
+          : null;
+    });
+  }
+
+  /// Reads the recorded interaction steps from cursor [after] — the number
+  /// of steps the caller already consumed. The returned `total` is the
+  /// session's full step count and the next cursor.
+  Future<({List<CockpitInteractionStep> steps, int total})>
+  interactionRecordingSteps({int after = 0}) async {
+    final payload = await _send(
+      method: 'GET',
+      path: Uri(
+        path: '/recorder/steps',
+        queryParameters: <String, String>{'after': after.toString()},
+      ).toString(),
+    );
+    final rawSteps = payload['steps'];
+    if (rawSteps is! List<Object?>) {
+      throw const FormatException(
+        'Remote interaction steps response is missing its steps.',
+      );
+    }
+    final total = payload['total'];
+    if (total is! int) {
+      throw const FormatException(
+        'Remote interaction steps response is missing its total.',
+      );
+    }
+    return (
+      steps: <CockpitInteractionStep>[
+        for (var index = 0; index < rawSteps.length; index += 1)
+          CockpitInteractionStep.fromJson(rawSteps[index]),
+      ],
+      total: total,
+    );
+  }
+
+  /// Exports the recorded interaction flow as a replayable bundle.
+  Future<CockpitRecordedFlowBundle> exportInteractionRecording() async {
+    final payload = await _send(method: 'GET', path: '/recorder/export');
+    return CockpitRecordedFlowBundle.fromJson(payload);
+  }
+
   Future<Map<String, String>> downloadArtifactsToFiles(
     Iterable<CockpitRemoteArtifactDownload> downloads, {
     Future<void>? cancellation,

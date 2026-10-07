@@ -920,6 +920,7 @@ final class FlutterCockpitRootState extends State<FlutterCockpitRoot> {
       },
       startRecording: startRecording,
       stopRecording: stopRecording,
+      recorderProvider: () => _interactionRecorder,
       startPerformance: startPerformance,
       stopPerformance: stopPerformance,
     );
@@ -951,6 +952,7 @@ final class FlutterCockpitRootState extends State<FlutterCockpitRoot> {
       },
       startRecording: startRecording,
       stopRecording: stopRecording,
+      recorderProvider: () => _interactionRecorder,
       startPerformance: startPerformance,
       stopPerformance: stopPerformance,
     );
