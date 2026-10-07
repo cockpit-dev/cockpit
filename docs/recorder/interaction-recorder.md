@@ -218,8 +218,9 @@ not re-record itself) and restores the prior phase afterwards.
 The four public host surfaces (documented in the host integration guide):
 
 ```dart
-CockpitRecorder.bootstrap();            // engine only, no UI
-final c = CockpitRecorderController.of(context); // state + steps + commands
+// Engine enablement is config-driven (no separate bootstrap call):
+// FlutterCockpitApp(config: ...copyWith(recorder: ...enabled), child: app)
+final c = CockpitRecorderScope.of(context); // state + steps + commands
 const CockpitRecorderPanel();           // full panel content widget
 const CockpitRecorderEntryButton();     // entry icon for host panels
 const CockpitRecorderIndicator();       // passive REC indicator
@@ -289,8 +290,8 @@ Following the existing string-route pattern in
 | `/recorder/pause` | POST | → session |
 | `/recorder/resume` | POST | → session |
 | `/recorder/stop` | POST | → `CockpitInteractionRecordingResult` |
-| `/recorder/session` | GET | → session (phase, counts) |
-| `/recorder/steps` | GET | → drained new steps (pull model, mirrors runtime-step drain) |
+| `/recorder/session` | GET | → session JSON; `{"phase":"idle"}` before the first start (204 was rejected: the handler only speaks JSON bodies) |
+| `/recorder/steps` | GET | → `?after=<n>` cursor — client-driven (recorded steps are never cleared server-side); response `{"steps":[…], "total":<n>}`; `after > total` → 400 |
 | `/recorder/export` | GET | → `CockpitRecordedFlowBundle` |
 
 Injected as one optional `recorderProvider` constructor parameter (nullable;
@@ -301,21 +302,33 @@ Injected as one optional `recorderProvider` constructor parameter (nullable;
 
 `cockpit record` command group under `CockpitCommandRunner`, following
 `CockpitLeafCommand` conventions: `record start [--name]`, `record pause`,
-`record resume`, `record stop`, `record status`, `record steps`, `record
-export [--out <file>] [--format yaml|json]` — all targeting a live session
-endpoint (same target resolution as `cockpit dev` commands), output through
-`runtime.success`/error envelopes.
+`record resume`, `record stop`, `record status`, `record steps [--after]`,
+`record export [--out <file>] [--output-format yaml|json]` — all resolving
+their target through `session.development.get` exactly like the
+`cockpit dev` commands (shared service:
+`CockpitInteractionRecordingService`), output through
+`runtime.success`/error envelopes. The format flag is `--output-format`
+because every leaf already owns a global `--format` output-encoding option.
 
 ### MCP
 
-`cockpitMcpDevelopmentTools` gains `recorder_start`, `recorder_stop`,
-`recorder_status`, `recorder_steps`, `recorder_export` tools wrapping the
-same client methods — an agent can drive a recording session end to end.
+`cockpitMcpDevelopmentTools` gains seven tools — `recorder_start`,
+`recorder_pause`, `recorder_resume`, `recorder_stop`, `recorder_status`,
+`recorder_steps`, `recorder_export` — wrapping the same shared service
+(session resolution via `session.development.get`). They are disabled by
+default (`isEnabledByDefault: false`, e2e + session-management categories);
+`recorder_export` returns the case YAML in the response and never writes
+files. An agent can drive a recording session end to end.
 
 ## Console (`cockpit_console`)
 
-A recorder page: connection to a live session endpoint, live timeline,
-controls, export preview. Follows the existing console page patterns.
+A recorder screen (implemented): binds to the console-wide session-monitor
+selection (reusing the session picker), resolves the recorder endpoint
+through the same `session.development.get` → base-uri path as CLI/MCP, and
+provides controls (phase matrix + optional recording name), a live timeline
+(cursor polling), and an export pane (YAML preview, copy, save via the
+console's established `FilePicker.saveFile` flow). Strings are localized
+(en + zh-CN) through the slang workflow.
 
 ## Testing strategy
 
